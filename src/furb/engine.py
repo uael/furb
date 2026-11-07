@@ -308,7 +308,7 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
               x[1] * operated(x[2])
               for x in transcript(id)
               if (x[3:5] == (id, "None") and operated(x[2]))
-              or (x[0] == "prompt" and x[6] == OPERATOR and under(x[2], id))
+              or (get(x[1]) is x and prompted(x[1]) and x[6] == OPERATOR and under(x[2], id))
               or (x[:3:2] == ("rung", id) and not over(x[1]))
             ],
           )[-1]
@@ -338,9 +338,10 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
   )
 
   def ear(id):
-    t = transcript(source or ROOT)
-    h = [(x[0] == "tell" and x[3][0][:6]) or x[0] for x in t] + ["chain(", "#chain", "setup"]
-    hi = h.index("#chain", lo := h.index("chain("))
+    t = transcript(o := source or ROOT)
+    h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
+    hi = h.index("#" + o, lo := h.index("chain()"))
+    hi *= hi < len(t)
     blocked, running, waiting, last, heard, seen = set(), {}, {}, standing(), [], set()
     step = news = ran = reply = note = to = mute = loud = dull = stuck = names = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
@@ -638,10 +639,8 @@ def gathered(define, floor):
   def number(called):
     return int(re.sub("^[a-z_]+", "", called) or 0)
 
-  chains = []
-  while get(f"chain{len(chains) + 1}"):
-    chains.append(f"chain{len(chains) + 1}")
-  asked = [get(h) for h in chains] + [x for h in chains for x in transcript(h) if question(x) and x[0] != "chain"]
+  chains = [x for x in listening() if question(("chain", x))]
+  asked = [*map(get, chains)] + [x for h in chains for x in transcript(h) if x is get(x[1])]
   cut = sorted((x[1] for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=number)
   gone = {x[4] for x in asked if x[0] == "wants" and x[2] in cut and prompted(x[4]) and not over(x[1])}
   asks = [x[1] for x in asked if x[0] == "prompt" and not over(x[1]) and x[1] not in gone]
@@ -745,8 +744,8 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
 def bash(
   command: str, stdin: str | None = "", timeout=TIMEOUT, ok=None, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
-  if callable(ok):
-    raise Refused("no callable ok")
+  if any(map(callable, (ok, show, show_err))):
+    raise Refused("no callable")
 
   def ear(id):
     yield opened(id, "Exit", command="" if show == HIDDEN else command)
@@ -776,7 +775,7 @@ def bash(
     stdin,
     timeout,
     ok,
-    *[None if callable(one) else one for one in (show, show_err)] * ((show, show_err) != (TAIL, None)),
+    *(show, show_err) * ((show, show_err) != (TAIL, None)),
   )
 
 

@@ -139,3 +139,34 @@ async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_se
     assert (here["big"], here["ran"], here["small"], here["raised"]) == (big, ran, 1, None)
     assert all(len(str(x).encode()) < LARGEST // 8 for x in log if x[0] == "tell")
     assert not [x for x in log if x[0] == "tell" and " raised" in x[3][0].split("\n")[0]]
+
+
+async def test_chains_holds_each_chain_whose_ear_still_hears_after_a_number_that_no_chain_of_the_life_holds_too() -> (
+  None
+):
+  """chains holds each chain whose ear still hears, after a number that no chain of the life holds too."""
+  _, _, root = born()
+  engine.chain("lost", on=root)
+  await settle()
+  data = engine.gathered(lambda word: word, {})
+  data["chains"] = [c for c in data["chains"] if c["id"] != "chain2"]
+  life(sown(), engine.seed(data))
+  await settle()
+  assert engine.get("chain2") is None
+  kept = engine.chain("kept", on=root)
+  engine.prompt(str, "Which?", to=OPERATOR, on=kept)
+  await settle()
+  assert kept in [c["id"] for c in engine.gathered(lambda word: word, {})["chains"]]
+
+
+async def test_gathered_reads_the_questions_of_the_life_alone_so_the_fact_of_an_act_of_an_earlier_life_that_a_carried_turn_holds_raises_nothing() -> (
+  None
+):
+  """gathered reads the questions of the life alone, so the fact of an act of an earlier life that a carried turn holds raises nothing."""
+  _, _, root = born()
+  await settle()
+  earlier = ("prompt", "prompt99", OPERATOR, "chain9", "str", "Which?", "")
+  engine.say("prefix", root, [*engine.transcript(root), earlier])
+  data = engine.gathered(lambda word: word, {})
+  assert [c["id"] for c in data["chains"]] == [root]
+  assert "prompt99" not in [a["id"] for a in data["acts"]]
