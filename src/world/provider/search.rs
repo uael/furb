@@ -9,6 +9,7 @@ use std::{future::Future, io, process::ExitStatus, process::Stdio, sync::Arc, ti
 use futures::{FutureExt, future::BoxFuture};
 use reqwest::StatusCode;
 use rig_core::http_client::ReqwestClient;
+use serde::{Deserialize, de::IgnoredAny};
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 
@@ -261,37 +262,129 @@ fn items<'a>(value: &'a Value, key: &str) -> &'a [Value] {
 /// searches.
 fn anthropic(got: &Value) -> Option<String> {
   let (mut texts, mut cited, mut found) = (String::new(), Vec::new(), Vec::new());
-  for block in items(got, "content") {
-    match block.get("type").and_then(Value::as_str) {
-      Some("text") => {
-        texts.push_str(&text(block, "text"));
-        let citations = items(block, "citations").iter();
-        cited.extend(citations.map(|one| (text(one, "title"), text(one, "url"))));
+  for block in Messages::deserialize(got).ok()?.content {
+    match block {
+      Block::Text { text, citations } => {
+        texts.push_str(&text);
+        cited.extend(citations.into_iter().map(Source::pair));
       }
-      Some("web_search_tool_result") => {
-        let results = items(block, "content").iter();
-        found.extend(results.map(|one| (text(one, "title"), text(one, "url"))));
+      Block::WebSearchToolResult { content: Results::Found(results) } => {
+        found.extend(results.into_iter().map(Source::pair));
       }
-      _ => {}
+      Block::WebSearchToolResult { content: Results::Failed(_) } | Block::Other => {}
     }
   }
   (!texts.trim().is_empty())
     .then(|| sourced(&texts, if cited.is_empty() { &found } else { &cited }))
 }
 
+/// A response of the Messages API, as far as a search reads it.
+#[derive(Deserialize)]
+struct Messages {
+  #[serde(default)]
+  content: Vec<Block>,
+}
+
+/// A block of a response of the Messages API: a text with the sources it cites, the results of a
+/// search, or a block that a search does not read.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Block {
+  Text {
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    citations: Vec<Source>,
+  },
+  WebSearchToolResult {
+    content: Results,
+  },
+  #[serde(other)]
+  Other,
+}
+
+/// What a search of the Messages API found: its results, or the error of a search that failed.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Results {
+  Found(Vec<Source>),
+  Failed(IgnoredAny),
+}
+
+/// A page that an answer cites or that a search found, by its title and its address.
+#[derive(Deserialize)]
+struct Source {
+  #[serde(default)]
+  title: String,
+  #[serde(default)]
+  url: String,
+}
+
+impl Source {
+  fn pair(self) -> (String, String) {
+    (self.title, self.url)
+  }
+}
+
 /// The answer of a response of the Responses API: the text of its messages, then the sources it cites.
 fn responses(got: &Value) -> Option<String> {
   let (mut texts, mut cited) = (Vec::new(), Vec::new());
-  for item in items(got, "output").iter().filter(|one| text(one, "type") == "message") {
-    for part in items(item, "content").iter().filter(|one| text(one, "type") == "output_text") {
-      texts.push(text(part, "text"));
-      let citations =
-        items(part, "annotations").iter().filter(|one| text(one, "type") == "url_citation");
-      cited.extend(citations.map(|one| (text(one, "title"), text(one, "url"))));
+  for item in Responses::deserialize(got).ok()?.output {
+    let Item::Message { content } = item else { continue };
+    for part in content {
+      let Part::OutputText { text, annotations } = part else { continue };
+      texts.push(text);
+      let citations = annotations.into_iter().filter_map(|one| match one {
+        Annotation::UrlCitation(source) => Some(source.pair()),
+        Annotation::Other => None,
+      });
+      cited.extend(citations);
     }
   }
   let texts = texts.join("\n\n");
   (!texts.trim().is_empty()).then(|| sourced(&texts, &cited))
+}
+
+/// A response of the Responses API, as far as a search reads it.
+#[derive(Deserialize)]
+struct Responses {
+  #[serde(default)]
+  output: Vec<Item>,
+}
+
+/// An item of the output of the Responses API: a message, or an item that a search does not read.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Item {
+  Message {
+    #[serde(default)]
+    content: Vec<Part>,
+  },
+  #[serde(other)]
+  Other,
+}
+
+/// A part of a message of the Responses API: its text with its annotations, or another part.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Part {
+  OutputText {
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    annotations: Vec<Annotation>,
+  },
+  #[serde(other)]
+  Other,
+}
+
+/// An annotation of a text of the Responses API: the page that it cites, or another annotation.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Annotation {
+  UrlCitation(Source),
+  #[serde(other)]
+  Other,
 }
 
 /// The answer of a generation of Gemini: the text of its first candidate, then the pages that grounded it.
