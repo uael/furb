@@ -103,6 +103,7 @@ fn the_keys_of_furb_come_first_with_their_defaults_and_each_object_with_its_name
       ("gate".to_owned(), json!(false), Some(Layer::Project)),
       ("max_thinking_tokens".to_owned(), json!(32768), None),
       ("automatic".to_owned(), json!([]), None),
+      ("scratch_days".to_owned(), json!(7), None),
       ("classes".to_owned(), json!({}), None),
       ("providers".to_owned(), json!({"b": false}), None),
       ("providers.b".to_owned(), json!(false), Some(Layer::Project)),

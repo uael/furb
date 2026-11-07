@@ -245,6 +245,7 @@ impl Opening {
           .flatten();
         let scratch = kept.unwrap_or_else(Scratch::own);
         scratch.remade(record, &told);
+        scratch.reap(&places.config, Path::new(&self.directory));
         Ok(scratch)
       })
       .transpose()?;
