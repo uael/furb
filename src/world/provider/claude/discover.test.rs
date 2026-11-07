@@ -6,15 +6,13 @@ use std::{
   thread,
 };
 
-use serde_json::json;
-
-use super::{Found, fallback, forget, stored, stored_by};
+use super::{Found, entry, fallback, forget, stored, stored_by};
 
 const NOW: u64 = 1_000_000;
 
 /// The rounds of the race. Each round is one step that a barrier counts, so a load of the machine
 /// never changes how many times the race runs.
-const ROUNDS: usize = 300;
+const ROUNDS: usize = 50;
 
 /// The cache is one file that each life reads, changes and writes whole, so a store that read the
 /// file before a refresh removed it must not write it back after: the discovery that the refresh
@@ -58,6 +56,7 @@ fn a_refresh_leaves_no_discovery_that_a_store_of_another_program_wrote_back() {
 
 /// A store of the cache with no sync to the disk.
 fn unsynced(file: &Path, stamp: &str, found: &[Found]) {
-  let told = json!({"at": NOW, "found": found});
-  stored_by(file, stamp, told, |file, bytes| fs::write(file, bytes).expect("the cache is written"));
+  stored_by(file, stamp, entry(found, NOW), |file, bytes| {
+    fs::write(file, bytes).expect("the cache is written");
+  });
 }

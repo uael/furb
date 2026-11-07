@@ -2,9 +2,9 @@
 //! and answers prompts whose model writes its reply in many small parts, and the heap of the
 //! process is read at the sizes of `SMALL`, with the events and the bytes that a reader who
 //! attaches at the start of the log reads. With the argument `--ignored` it is the measure of the
-//! bench, at the sizes of `LARGE`, with the budget `BUDGET` of its heap. The test counts each byte
-//! that the process allocates, so it runs in a process of its own, with no harness, and its
-//! argument takes the place of an ignored test.
+//! bench, at the sizes of `LARGE`, with the budget of its heap, `memory_heap_mib` of
+//! `script/budgets.toml`. The test counts each byte that the process allocates, so it runs in a
+//! process of its own, with no harness, and its argument takes the place of an ignored test.
 
 #![expect(
   clippy::disallowed_methods,
@@ -74,15 +74,32 @@ unsafe impl GlobalAlloc for Counted {
 static COUNTED: Counted = Counted;
 
 /// The sizes of a life, in facts, at which the suite reads the heap: two sizes that run in a few
-/// seconds, which show what a reader reads and how the heap grows from one to the other.
-/// `FURB_MEMORY_SIZES` may name others, as numbers apart by commas.
+/// seconds, which show what a reader reads. `FURB_MEMORY_SIZES` may name others, as numbers apart
+/// by commas.
 const SMALL: [usize; 2] = [2_000, 6_000];
 
-/// The sizes of the measure of the bench, which the argument `--ignored` runs.
+/// The sizes of the measure of the bench, which the argument `--ignored` runs. The suite reads the
+/// budget of that run as well, so a key that is gone from `script/budgets.toml` fails each run.
 const LARGE: [usize; 3] = [10_000, 40_000, 160_000];
 
-/// The most heap that a life of the last large size may hold, in MiB: the budget of the bench.
-const BUDGET: usize = 1024;
+/// The limits of the benches, whose home is `script/budgets.toml`.
+const LIMITS: &str = include_str!("../../script/budgets.toml");
+
+/// The most heap that a life of the last large size may hold, in MiB: the budget of the bench,
+/// which the key `memory_heap_mib` of `script/budgets.toml` gives.
+fn budget() -> usize {
+  let mut table = "";
+  for line in LIMITS.lines().map(str::trim) {
+    if let Some(name) = line.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')) {
+      table = name;
+    } else if let (Some((key, value)), "bench") = (line.split_once('='), table)
+      && key.trim() == "memory_heap_mib"
+    {
+      return value.split('#').next().unwrap_or("").trim().parse().expect("a limit is a number");
+    }
+  }
+  panic!("the table [bench] of script/budgets.toml gives memory_heap_mib")
+}
 
 /// How many events a reader may stand behind the life and still hear each of them, as the life
 /// says.
@@ -211,17 +228,23 @@ fn main() {
   let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
   let runtime = runtime.expect("the test has a runtime");
   let large = std::env::args().any(|one| one == "--ignored");
+  let budget = budget();
   let sizes: Vec<usize> = std::env::var("FURB_MEMORY_SIZES").map_or_else(
     |_| if large { LARGE.to_vec() } else { SMALL.to_vec() },
     |named| named.split(',').map(|one| one.trim().parse().expect("a size is a number")).collect(),
   );
-  runtime.block_on(the_heap_of_a_life_grows_with_its_facts_and_no_more(&sizes, large));
+  runtime
+    .block_on(the_heap_of_a_life_grows_with_its_facts_and_no_more(&sizes, large.then_some(budget)));
+  // The window of the slow reader, as its facts, its most bytes and its seconds of wait.
   let window = if large { (40_000, 16 << 20, 3) } else { (10_000, 6 << 20, 1) };
   runtime.block_on(a_window_that_reads_slowly_holds_no_copy_of_the_log(window));
 }
 
 /// The heap of a life at each size, and what a reader that attaches reads, printed as a table.
-async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(sizes: &[usize], large: bool) {
+async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(
+  sizes: &[usize],
+  budget: Option<usize>,
+) {
   let at = yard::Yard::new(format!("furb-host-memory-{}", std::process::id()));
   let base = LIVE.load(Ordering::Relaxed);
   std::fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
@@ -266,17 +289,17 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(sizes: &[usize], la
     biggest = (facts, heap);
   }
   life.send(Command::End).await.ok();
-  checked(&rows, biggest, large);
+  checked(&rows, biggest, budget);
 }
 
-/// What each size showed: what a reader that attaches read and, for the bench, the budget of the
-/// heap of the last size, as its facts and its bytes.
-fn checked(rows: &[(usize, usize, usize, usize)], last: (usize, usize), large: bool) {
-  if large {
+/// What each size showed: what a reader that attaches read and, for the bench, the budget in MiB of
+/// the heap of the last size, as its facts and its bytes.
+fn checked(rows: &[(usize, usize, usize, usize)], last: (usize, usize), budget: Option<usize>) {
+  if let Some(most) = budget {
     let (facts, heap) = last;
     assert!(
-      heap >> 20 <= BUDGET,
-      "a life of {facts} facts holds {} MiB of heap, past the budget of {BUDGET} MiB",
+      heap >> 20 <= most,
+      "a life of {facts} facts holds {} MiB of heap, past the budget of {most} MiB",
       heap >> 20
     );
   }
