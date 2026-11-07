@@ -204,7 +204,7 @@ class Sand:
   the readings of its clock and the chances it drew, so a later life reads what the life before it read. `outs`
   holds each command it runs: whether its stderr flows into its stdout, which it writes into its stdout then, and
   its two streams as they came. `gone`
-  names the directories that are not there, which a cd into is refused; every other directory is there. `home` is
+  names the directories that are not there, which a cd into is refused; every other directory is there. `quiet` names the kinds of question that it hears silent, as a life that inspects its record hears the clock, so nothing takes them. `home` is
   the home of its user, which a cd, a read or a write of a path that is ~ or starts with ~/ resolves against, and which
   each path that it gives under the home names as ~. `timers`
   holds the timer of each wait that it took, which a done of that wait stops. `cut` holds each command that the record
@@ -228,6 +228,7 @@ class Sand:
   home: str = "/h"
   timers: dict[str, asyncio.TimerHandle] = field(default_factory=dict)
   cut: dict[str, tuple] = field(default_factory=dict)
+  quiet: frozenset[str] = frozenset()
   loop: asyncio.AbstractEventLoop = field(init=False, repr=False, compare=False)
 
   def writes(self, about: str, text: str, stream: str) -> None:
@@ -250,6 +251,8 @@ class Sand:
     self.loop = asyncio.get_running_loop()
     while True:
       a = yield
+      if a[0] in self.quiet:
+        continue
       if a[0] in ("bash", "wait", "prompt", "reply", "stand", "cd", "read", "write", "clock", "chance"):
         self.calls.append(a)
       yield from self.hear(a)

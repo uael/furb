@@ -662,7 +662,7 @@ def seed(data: object) -> list[Entry]:
   A birth tells no turn of its own: the turns of a chain after it are its turns at the tip, and each act that a life word made lives again under a rung whose word is that life word.
   A birth makes again each life word whose act left an act of its own open or keeps a lasting ear after its done.
   A done prompt that a module names pauses no chain at a birth, so a word on it runs with no wake.
-  A birth makes again a life word that asks an act that no question of the record matches and that no ear takes, as the clock of a life that inspects its record: that act ends as it did in the life before, and the journal reads no drift, because the record holds no fact of it.
+  A birth makes again each life word that asks the clock, and a life that inspects its record hears the clock silent: that clock ends as nothing takes it and the journal reads no drift, because the record holds no fact of it, so the turns are those of a life that answers the clock.
   """
 
 def gathered(define: Callable[[str], str], floor: dict[str, int]) -> dict:

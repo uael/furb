@@ -1,6 +1,5 @@
 import type { BoxRenderable, KeyEvent } from "@opentui/core";
 import { asksOperator, type ChainThread } from "furb/life";
-import { clipboardImage } from "../clipboard.ts";
 import { type Action, bindings, shown } from "../keys.ts";
 import { commentStart, type Hunk, lines, scopeLabels, scopes } from "../review.ts";
 import { type View, views } from "../session.ts";
@@ -479,7 +478,7 @@ export const input = part({
       sidebar: () => this.toggleSidebar(),
       details: () => this.details(),
       editor: () => void this.editDraft().catch(this.report),
-      image: () => void clipboardImage((path) => this.session.attachImage(path)).catch(this.report),
+      image: () => void this.pasteImage().catch(this.report),
       search: () => this.openSearch(),
       scroll: (key) =>
         this.scroll.scrollBy(
