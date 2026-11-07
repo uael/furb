@@ -199,6 +199,10 @@ export class App {
   /** Whether the keys move in the sidebar, after ⌥T, and the row that they stand on: a workspace, a session, or a
    * thread, by the id that the row gets in railOrder. */
   railKeys = false;
+  /** The thread that the key of the fold folded last, which its next press opens again. */
+  keyFolded?: string;
+  /** The place of the feed when that key folded it. */
+  keyFoldedAt?: number;
   railAt?: string;
   /** The ids of the rows of the sidebar, in the order that it shows them, which the keys move through, and what the
    * keys do on each. */

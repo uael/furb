@@ -18,6 +18,8 @@ test("the walk of the audit drives a life with keys to the end of its journey, a
     expect(findings.filter((one) => one.probe === "stuck" || one.probe === "input")).toEqual([]);
     // A key that is a toggle undoes itself: ⌥D, the details.
     expect(findings.filter((one) => one.detail.includes("⌥D"))).toEqual([]);
+    // ⌥C, the fold of the thread in view, undoes itself too.
+    expect(findings.filter((one) => one.detail.includes("⌥C"))).toEqual([]);
     expect(steps.at(-1)?.action).toBe(END);
     expect(steps.length).toBeGreaterThan(40);
     const missing = steps.flatMap(({ name }) =>
