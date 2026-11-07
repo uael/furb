@@ -50,7 +50,7 @@ fn extension(at: &path::Path, name: &str, keys: &Value) {
   fs::write(root.join(format!("{name}.py")), "").unwrap();
   fs::write(root.join("keys.json"), keys.to_string()).unwrap();
   let config = at.join("project/.furb/config.json");
-  fs::write(config, json!({"extensions": {name: name}}).to_string()).unwrap();
+  fs::write(config, json!({"skills": {name: name}}).to_string()).unwrap();
 }
 
 /// A change kept as a life keeps it, which a test of no runtime waits for.
@@ -72,7 +72,7 @@ fn the_configs_give_each_key_with_the_value_and_the_layer_that_win_for_it() {
   .unwrap();
   fs::write(
     at.join("project/.furb/config.json"),
-    json!({"providers": {"b": false}, "extensions": {"x": "x"}}).to_string(),
+    json!({"providers": {"b": false}, "skills": {"x": "x"}}).to_string(),
   )
   .unwrap();
   fs::write(
@@ -83,7 +83,7 @@ fn the_configs_give_each_key_with_the_value_and_the_layer_that_win_for_it() {
   let got = layers.get().unwrap();
   assert!(got.contains(&setting(&["providers", "a"], json!(true), Layer::User)), "{got:?}");
   assert!(got.contains(&setting(&["providers", "b"], json!(false), Layer::Project)), "{got:?}");
-  assert!(got.contains(&setting(&["extensions", "x"], json!("x"), Layer::Project)), "{got:?}");
+  assert!(got.contains(&setting(&["skills", "x"], json!("x"), Layer::Project)), "{got:?}");
   let thinking = got.iter().find(|one| one.key == ["max_thinking_tokens"]).unwrap();
   assert_eq!((&thinking.value, thinking.layer), (&json!(2), Some(Layer::Local)));
   fs::remove_dir_all(at).unwrap();
@@ -106,7 +106,7 @@ fn the_keys_of_furb_come_first_with_their_defaults_and_each_object_with_its_name
       ("classes".to_owned(), json!({}), None),
       ("providers".to_owned(), json!({"b": false}), None),
       ("providers.b".to_owned(), json!(false), Some(Layer::Project)),
-      ("extensions".to_owned(), json!({}), None),
+      ("skills".to_owned(), json!({}), None),
       ("other".to_owned(), json!(1), Some(Layer::Project)),
     ]
   );
@@ -257,9 +257,9 @@ fn an_extension_whose_file_of_keys_is_missing_or_no_schema_names_no_key_and_a_co
       None => fs::remove_file(&file).unwrap(),
     }
     assert!(layers.get().unwrap().iter().all(|one| one.extension.is_none()));
-    set(&layers, change(&["extensions", name], Some(json!(false)), Layer::Project)).unwrap();
+    set(&layers, change(&["skills", name], Some(json!(false)), Layer::Project)).unwrap();
     let config = at.join("project/.furb/config.json");
-    assert_eq!(text(&config), json!({"extensions": {name: false}}));
+    assert_eq!(text(&config), json!({"skills": {name: false}}));
     assert!(layers.get().is_ok());
   }
 }

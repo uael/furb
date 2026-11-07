@@ -81,7 +81,7 @@ mod kills {
       for folder in ["work", "fake", "config"] {
         fs::create_dir_all(root.join(folder)).unwrap();
       }
-      fs::write(root.join("config/config.json"), r#"{"extensions": {"naming": false}}"#).unwrap();
+      fs::write(root.join("config/config.json"), r#"{"skills": {"naming": false}}"#).unwrap();
       let claude = root.join("fake/claude");
       fs::write(&claude, FAKE).unwrap();
       fs::set_permissions(&claude, fs::Permissions::from_mode(0o755)).unwrap();

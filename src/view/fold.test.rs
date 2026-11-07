@@ -72,3 +72,34 @@ fn a_chain_with_a_source_takes_each_message_of_the_operator_that_its_prefix_carr
   assert_eq!(chain.taken, ["prompt1", "prompt3"], "each message of the operator, once, in order");
   assert!(last.iter().all(|act| act.id != "chain1"), "the source takes nothing: {last:?}");
 }
+
+#[test]
+fn a_chain_with_a_source_takes_the_messages_of_the_operator_that_its_fact_names_with_no_prefix() {
+  let mut fold = Fold::default();
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "first", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "x = 1", "", ""]),
+    json!(["prompt", "prompt2", "rung1", "chain1", "str", "a worker", ""]),
+    json!(["prompt", "prompt3", "operator", "chain1", "str", "second", ""]),
+    json!([
+      "chain",
+      "chain2",
+      "rung1",
+      "chain1",
+      "branch",
+      "chain1",
+      ["prompt1", "rung1", "prompt2"]
+    ]),
+  ];
+  let mut last = Vec::new();
+  for fact in &facts {
+    last = fold.recorded(fact);
+  }
+  let chain = last.iter().find(|act| act.id == "chain2").expect("the chain");
+  assert_eq!(
+    chain.taken,
+    ["prompt1"],
+    "the messages of the operator that the chain carries, as a record holds them"
+  );
+}

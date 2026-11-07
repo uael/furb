@@ -51,7 +51,7 @@ async def test_the_world_answers_skills_with_the_skills_of_the_folders_of_the_ch
   skilled(tmp_path / "config" / "skills", "f", "description: Five.")
   skilled(tmp_path / "work" / ".furb" / "skills", "g", "description: Six.\nmetadata:\n  furb-word: g.py")
   skilled(tmp_path / "there", "h", "description: Seven.\nmetadata:\n  furb-word: h.py")
-  (tmp_path / "work" / ".furb" / "config.json").write_text('{"extensions": {"h": "../../there/h"}}', encoding="utf-8")
+  (tmp_path / "work" / ".furb" / "config.json").write_text('{"skills": {"h": "../../there/h"}}', encoding="utf-8")
   skilled(tmp_path / "work" / ".furb" / "skills", "memory", "description: Mine.\nmetadata:\n  furb-word: m.py")
   skilled(tmp_path / "work" / "skills", "e", "description: Not a folder of skills.")
   found = ["a: One.", "b: Two.", "c: Three.", "d: Four.", "f: Five.", "g (code): Six.", "h (code): Seven."]

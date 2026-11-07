@@ -136,11 +136,10 @@ struct Named {
 /// The objects of furb that each reader merges name by name, which the settings give with each of
 /// their names after them.
 const PROVIDERS: &str = "providers";
-const EXTENSIONS: &str = "extensions";
 
 /// The keys that furb reads.
-/// Whether a name is a key of furb at the top of the configs, which no extension takes as its name,
-/// since the configs hold the keys of an extension under its name.
+/// Whether a name is a key of furb at the top of the configs, which no skill that gives keys of
+/// its own takes as its name, since the configs hold those keys under its name.
 pub(crate) fn furb_key(name: &str) -> bool {
   own().iter().any(|one| one.key[0] == name)
 }
@@ -170,10 +169,10 @@ fn own() -> Vec<Named> {
     one(KEY_CLASSES, Kind::Object, json!({}), "The class, cheap or dear, of each model it names."),
     one(PROVIDERS, Kind::Object, json!({}), "The providers of models, each by its name."),
     one(
-      EXTENSIONS,
+      skill::KEY,
       Kind::Object,
       json!({}),
-      "The extensions that a life runs, each by its name: true, false, or the path of its folder.",
+      "The skills that a life runs, each by its name: true, false, or the path of its folder.",
     ),
   ]
 }
@@ -208,9 +207,9 @@ pub enum Error {
   Refused(#[source] catalog::Error),
   #[error("The change was not kept: {refused}, and its config was not put back: {source}")]
   Restore { refused: catalog::Error, source: disk::Error },
-  #[error("The keys of the extensions were not read: {0}")]
-  Extensions(#[source] Fault),
-  #[error("The keys of the extension {name} are no schema of keys: {source}")]
+  #[error("The keys of the skills were not read: {0}")]
+  Skills(#[source] Fault),
+  #[error("The keys of the skill {name} are no schema of keys: {source}")]
   Schema { name: String, source: serde_json::Error },
   #[error("The key {key} takes {wanted}, and {value} is not")]
   Value { key: String, wanted: String, value: Value },
@@ -296,7 +295,7 @@ impl Layers {
   fn schema(&self) -> Result<Vec<Named>, Error> {
     let places = Places { config: self.user.clone(), home: Places::here().home };
     let mut named = own();
-    for (name, text) in skill::contributed(&places, &self.project).map_err(Error::Extensions)? {
+    for (name, text) in skill::contributed(&places, &self.project).map_err(Error::Skills)? {
       if furb_key(&name) {
         continue;
       }

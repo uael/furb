@@ -665,9 +665,9 @@ session keeps its name in its saved view, and a workspace in the list of workspa
 
 ![Rename a session](screenshots/50-rename-session.png)
 
-## Extensions
+## Skills
 
-`/extensions` opens a dialog of the extensions that the life runs, each with what its part for the TUI gives, or the
+`/skills` opens a dialog of the skills that the life runs, each with what its part for the TUI gives, or the
 error that stopped its load. `/run` runs a word of one. The demo runs none.
 
 ![Extension command](screenshots/42-extension-command.png)
@@ -717,7 +717,7 @@ operator tells the model, and the panel draws again from the file that the model
 
 ![The panel mended](screenshots/75c-extend-fixed.png)
 
-`/extensions` says what each part gives.
+`/skills` says what each part gives.
 
 ![The extensions of a life](screenshots/75d-extensions.png)
 

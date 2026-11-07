@@ -204,7 +204,9 @@ mod daemon {
     async fn identify(&self, stream: &Accepted) -> Result<Who, TransportError> {
       let who = self.local.identify(stream).await?;
       let at = self.next.fetch_add(1, Ordering::SeqCst);
-      Ok(Who { login: self.names[at].to_owned(), ..who })
+      let login =
+        self.names.get(at).unwrap_or_else(|| panic!("no login for dial {at} of {:?}", self.names));
+      Ok(Who { login: (*login).to_owned(), ..who })
     }
   }
 
@@ -218,7 +220,7 @@ mod daemon {
   }
 
   #[tokio::test]
-  async fn the_seen_of_each_operator_is_a_fact_of_his_own_that_a_reopen_keeps() {
+  async fn the_seen_of_each_operator_is_said_under_his_login_and_a_reopen_keeps_each() {
     let at = place();
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
@@ -242,7 +244,7 @@ mod daemon {
     assert_eq!(
       seen_by(&mut bob, &life, "chain1").await,
       ["operator/alice"],
-      "the seen of alice is hers, so bob has not seen chain1"
+      "the seen of alice is said under her login, and no seen of bob stands"
     );
     assert_eq!(bob.ask(seen("chain1")).await, Ok(Answer::Done));
     assert_eq!(seen_by(&mut alice, &life, "chain1").await, ["operator/alice", "operator/bob"]);
@@ -901,8 +903,7 @@ mod daemon {
     I: Identity<Stream = Accepted> + Clone + Send + Sync + 'static,
   {
     fs::create_dir_all(at.join(".furb")).unwrap();
-    fs::write(at.join(".furb").join("config.json"), r#"{"extensions": {"ouroboros": true}}"#)
-      .unwrap();
+    fs::write(at.join(".furb").join("config.json"), r#"{"skills": {"ouroboros": true}}"#).unwrap();
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
     let opening = Opening { extensions: None, ..opening(at) };

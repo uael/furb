@@ -17,7 +17,7 @@ use crate::{
   engine::ROOT,
   fact::Fact,
   skill::{
-    CONFIG, DEFAULT, ENABLE, Extension, INTERFACE, MANIFEST, PROCESS, Places, WORD, copy, enabled,
+    CONFIG, DEFAULT, ENABLE, INTERFACE, MANIFEST, PROCESS, Places, Skill, WORD, copy, enabled,
     frontmatter, imports_furb, load, manifested, manifests, shipped, turned_on, word,
   },
   value::{Fault, Object, Text, entry},
@@ -52,7 +52,7 @@ enum Place {
 
 /// One skill that the ear found: its name, what it is for, the file of its word when it has code,
 /// whether it plays by default, the text of its manifest, and where its files stand.
-struct Skill {
+struct Found {
   name: String,
   description: String,
   word: Option<String>,
@@ -61,7 +61,7 @@ struct Skill {
   place: Place,
 }
 
-impl Skill {
+impl Found {
   /// The skill that the text of a manifest gives, under the name of its folder when the frontmatter
   /// gives none.
   fn of(text: &str, folder: &str, place: Place) -> Self {
@@ -86,7 +86,7 @@ impl Skill {
 
   /// The extension of a skill with code, as its manifest and the files of its folder give it, with
   /// the copy of its word in the config directory of these places.
-  fn extension(&self, places: &Places) -> Result<Extension, Fault> {
+  fn extension(&self, places: &Places) -> Result<Skill, Fault> {
     let read = |file: &str| filed(self, file, "").map(|got| got.content).map_err(|no| no.message());
     let mut one = manifested(&self.manifest, read).map_err(Fault::refused)?;
     one.file = copy(&one.name, &one.file, &one.word, places);
@@ -105,20 +105,20 @@ impl Skill {
 /// extensions that the life runs, and the places of the user and of the project.
 struct Seen {
   chain: String,
-  found: Vec<Skill>,
-  runs: Vec<Extension>,
+  found: Vec<Found>,
+  runs: Vec<Skill>,
   places: Places,
   project: PathBuf,
 }
 
 impl Seen {
   /// Whether the life runs a skill on the chain.
-  fn on(&self, one: &Skill) -> bool {
+  fn on(&self, one: &Found) -> bool {
     self.runs.iter().any(|two| two.name == one.name && (!two.root || self.chain == ROOT))
   }
 
   /// The skill of a name, or the refusal that names it.
-  fn named(&self, name: &str) -> Result<&Skill, Fault> {
+  fn named(&self, name: &str) -> Result<&Found, Fault> {
     let found = self.found.iter().find(|one| one.name == name);
     found.ok_or_else(|| Fault::refused(format!("There is no skill {name}.")))
   }
@@ -242,7 +242,7 @@ fn json(value: &Value) -> String {
 /// the line of each default skill, once each that the life does not run plays.
 fn loaded(co: &mut Co, seen: &Seen, name: &str) -> Result<Text, Fault> {
   if name.is_empty() {
-    let defaults: Vec<&Skill> =
+    let defaults: Vec<&Found> =
       seen.found.iter().filter(|one| one.default && one.word.is_some()).collect();
     for one in &defaults {
       if !seen.runs.iter().any(|two| two.name == one.name) {
@@ -308,7 +308,7 @@ fn written(co: &mut Co, seen: &Seen, name: &str, content: &str) -> Result<Text, 
 
 /// Each file of the folder of a skill, and the files that the crate carries of an official one,
 /// copied in a folder.
-fn copied(one: &Skill, target: &Path) -> Result<(), Fault> {
+fn copied(one: &Found, target: &Path) -> Result<(), Fault> {
   let failed = |no: io::Error| Fault::refused(format!("{no}: {}", target.display()));
   fs::create_dir_all(target).map_err(failed)?;
   match &one.place {
@@ -344,7 +344,7 @@ async fn project(co: &mut Co) -> Result<Option<PathBuf>, Fault> {
 }
 
 /// The extensions that the life runs, as the enable facts of the root say them.
-async fn enables(co: &mut Co) -> Result<Vec<Extension>, Fault> {
+async fn enables(co: &mut Co) -> Result<Vec<Skill>, Fault> {
   let of = [ROOT, ENABLE].map(Object::string).to_vec();
   let got = co.call("transcript", of, vec![]).await?;
   let facts: Vec<Fact> =
@@ -354,7 +354,7 @@ async fn enables(co: &mut Co) -> Result<Vec<Extension>, Fault> {
 
 /// The word of a skill with code: the word that the life last enabled for it, or else the word of
 /// its file.
-fn worded(one: &Skill, runs: &[Extension], path: &str) -> Result<Text, Fault> {
+fn worded(one: &Found, runs: &[Skill], path: &str) -> Result<Text, Fault> {
   if let Some(two) = runs.iter().rev().find(|two| two.name == one.name) {
     return Ok(Text::new(path, two.word.clone()));
   }
@@ -364,7 +364,7 @@ fn worded(one: &Skill, runs: &[Extension], path: &str) -> Result<Text, Fault> {
 
 /// A file of the folder of a skill, at the path that the chain read, and a refusal for a file that
 /// leaves the folder or that the folder does not hold.
-fn filed(one: &Skill, file: &str, path: &str) -> Result<Text, Fault> {
+fn filed(one: &Found, file: &str, path: &str) -> Result<Text, Fault> {
   let missing = || Fault::refused(format!("The skill {} holds no file {file}.", one.name));
   if !Path::new(file).components().all(|part| matches!(part, Component::Normal(_))) {
     return Err(missing());
@@ -412,15 +412,15 @@ fn tilded(path: &Path, places: &Places) -> String {
 /// a SKILL.md file in the folders of skills, then the extensions of the project and of the configs,
 /// then the official ones. A name that an earlier
 /// place holds wins.
-fn found(here: &Path, project: &Path, places: &Places) -> Vec<Skill> {
+fn found(here: &Path, project: &Path, places: &Places) -> Vec<Found> {
   let roots =
     here.ancestors().flat_map(|one| [one.join(".furb"), one.join(".agents"), one.join(".claude")]);
   let roots = roots.map(|one| one.join("skills")).chain([places.config.join("skills")]);
   let mut folders: Vec<PathBuf> = roots.flat_map(|root| inside(&root)).collect();
-  let configured = turned_on(places, project).unwrap_or_default().into_iter();
+  let configured = turned_on(places, project).map(|got| got.0).unwrap_or_default().into_iter();
   folders.extend(configured.filter_map(|(_, root)| root));
-  let mut out: Vec<Skill> = Vec::new();
-  let mut keep = |one: Skill| {
+  let mut out: Vec<Found> = Vec::new();
+  let mut keep = |one: Found| {
     if !out.iter().any(|two| two.name == one.name) {
       out.push(one);
     }
@@ -428,11 +428,11 @@ fn found(here: &Path, project: &Path, places: &Places) -> Vec<Skill> {
   for folder in folders {
     let Ok(text) = read(&folder.join(MANIFEST)) else { continue };
     let name = folder.file_name().map(|one| one.to_string_lossy().into_owned()).unwrap_or_default();
-    keep(Skill::of(&text.content, &name, Place::Folder(folder)));
+    keep(Found::of(&text.content, &name, Place::Folder(folder)));
   }
   for manifest in manifests() {
     let name = frontmatter(manifest).field("name").unwrap_or_default().to_owned();
-    keep(Skill::of(manifest, &name, Place::Shipped(shipped(&name).unwrap_or_default())));
+    keep(Found::of(manifest, &name, Place::Shipped(shipped(&name).unwrap_or_default())));
   }
   out.sort_by(|one, two| one.name.cmp(&two.name));
   out

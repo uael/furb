@@ -310,7 +310,7 @@ export declare function configSet(directory: string, change: string, config?: st
 export declare function decodeRecord(line: string): unknown
 
 /** The extensions that a life runs, in the order it enabled them, as the facts of its root say them. */
-export declare function enabled(root: unknown[][]): Array<Extension>
+export declare function enabled(root: unknown[][]): Array<Skill>
 
 /**
  * The engine: the one file the sandbox runs, and the whole system prompt of a model.
@@ -321,29 +321,10 @@ export declare function enabled(root: unknown[][]): Array<Extension>
 export declare const ENGINE: string
 
 /**
- * An extension: its name, its word, its life word, which is empty when it has none, whether it
- * plays on the root
- * alone, and the path of the file of its word, with `~` for the home of the user as the World
- * writes a path for a
- * model, which each chain reads as a turn of its setup, and which is empty when no file stands for
- * the word. An
- * extension that plays on the root alone plays on no other chain but one whose source had it,
- * since that chain makes
- * the rung of its source again; any other extension plays on every chain.
- */
-export interface Extension {
-  name: string
-  word: string
-  life: string
-  root: boolean
-  file: string
-}
-
-/**
  * The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
  * unless the record enables it, and plays each as a rung on each chain.
  */
-export declare function extensions(given: Array<Extension>): NativeEar
+export declare function extensions(given: Array<Skill>): NativeEar
 
 /**
  * The ear of the files, which reads and writes a path, a path of `scratch://` in the scratch
@@ -477,7 +458,7 @@ export interface Named {
 }
 
 /** The official extensions, in the order a life runs them. */
-export declare function official(): Array<Extension>
+export declare function official(): Array<Skill>
 
 /**
  * Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
@@ -630,6 +611,13 @@ export interface ProviderInfo {
 }
 
 /**
+ * Each quote of a word, in order: of a word that ran, each that closes, and of a word that a model
+ * still writes, `open`, the last one too while its close mark has not come. Each window reads the
+ * quotes of a word here, as the fold reads them.
+ */
+export declare function quotes(text: string, open?: boolean | undefined | null): Array<{ start: number; name: string; body: string; end: number; closed: boolean; binding: string }>
+
+/**
  * Acts each in the state that the crate gives it, and each chain in the state that the acts that
  * stand in it give, as a daemon tells them: what a window that makes acts of its own, as a test
  * does, reads in place of a state of its own.
@@ -692,6 +680,25 @@ export declare function shapes(): Array<string>
 /** The POSIX shell that runs a command of this machine, which a host runs its own commands in too. */
 export declare function shell(): string
 
+/**
+ * A skill: its name, its word, its life word, which is empty when it has none, whether it
+ * plays on the root
+ * alone, and the path of the file of its word, with `~` for the home of the user as the World
+ * writes a path for a
+ * model, which each chain reads as a turn of its setup, and which is empty when no file stands for
+ * the word. An
+ * extension that plays on the root alone plays on no other chain but one whose source had it,
+ * since that chain makes
+ * the rung of its source again; any other extension plays on every chain.
+ */
+export interface Skill {
+  name: string
+  word: string
+  life: string
+  root: boolean
+  file: string
+}
+
 /** The ear of the skills extension, which finds skills in the folders of a chain and in the config directory. */
 export declare function skills(config: string): NativeEar
 
@@ -724,3 +731,10 @@ export declare function walkedFiles(root: string): Array<string>
 
 /** WINDOW is the window, in tokens, of a model whose roster entry does not say one. */
 export declare const WINDOW: number
+
+/**
+ * What a model writes while its word has not come yet, from the text of its word that came and
+ * the text that it thinks: the lines of the word that it finished, the line that it still writes,
+ * the line of the word where each line starts, and the count of the lines of the word.
+ */
+export declare function writing(text: string, thinking: string): { lines: string; tail: string; numbers: number[]; count: number }

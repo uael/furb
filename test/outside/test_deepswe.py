@@ -166,10 +166,10 @@ def test_deepswe_enables_compaction_without_dropping_local_config(
   deepswe = rig(monkeypatch)
   config = tmp_path / ".furb" / "config.local.json"
   config.parent.mkdir()
-  config.write_text(json.dumps({"actor": "fixture:model", "extensions": {"skills": False}}))
+  config.write_text(json.dumps({"actor": "fixture:model", "skills": {"skills": False}}))
   deepswe.enable_compaction(tmp_path)
   got = json.loads(config.read_text())
-  assert got == {"actor": "fixture:model", "extensions": {"skills": False, "compaction": True}}
+  assert got == {"actor": "fixture:model", "skills": {"skills": False, "compaction": True}}
 
 
 async def test_task_context_under_a_262144_token_window_triggers_compaction(

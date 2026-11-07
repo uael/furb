@@ -304,8 +304,8 @@ test("file and shell shortcuts, an external editor, and a safe standalone share 
       ),
     ).toBe("edited outside the TUI");
     expect(transitions).toEqual(["suspend", "resume"]);
-    await session.command("/extensions");
-    expect(session.notice).toBe("This life runs no extension.");
+    await session.command("/skills");
+    expect(session.notice).toBe("This life runs no skill.");
     session.sessionName = '<script>alert("name")</script>';
     await session.submit('<script>alert("message")</script> [bad link](javascript:alert(1))');
     await idle(session);
@@ -329,13 +329,13 @@ test("file and shell shortcuts, an external editor, and a safe standalone share 
   }
 });
 
-test("/extensions lists what a life runs, and a cancel of a word of the operator leaves the watcher of its memory", async () => {
+test("/skills lists what a life runs, and a cancel of a word of the operator leaves the watcher of its memory", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-extensions-"));
   try {
     const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
     await composing(
       async ({ session, frame, click }) => {
-        await session.command("/extensions");
+        await session.command("/skills");
         expect(session.notice).toBe(
           "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction with compacted(); fitted(), naming with name_session(). Run a word of one with /run.",
         );

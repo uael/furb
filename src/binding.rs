@@ -45,8 +45,8 @@ use crate::gate::checked;
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   life::Opening,
-  skill::{self, Extension, Part},
-  view::{Act as ViewAct, Fold, Held, Pause, restate},
+  skill::{self, Part, Skill},
+  view::{Act as ViewAct, Fold, Held, Pause, quotes as quotes_of, restate, writing as writing_of},
   wire,
   world::{self, images},
 };
@@ -487,14 +487,14 @@ pub fn gate(sheet: String) -> Result<Vec<(i64, String)>, Fault> {
 /// The official extensions, in the order a life runs them.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn official() -> Vec<Extension> {
+pub fn official() -> Vec<Skill> {
   skill::official()
 }
 
 /// The extensions that a life runs, in the order it enabled them, as the facts of its root say them.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_args_type = "root: unknown[][]"))]
-pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
+pub fn enabled(root: Vec<Said>) -> Vec<Skill> {
   let words = root.into_iter().filter_map(|one| one.0);
   let facts: Vec<Fact> =
     words.map(|words| Fact(Object::tuple(words.iter().map(Object::string)))).collect();
@@ -505,7 +505,7 @@ pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
 /// unless the record enables it, and plays each as a rung on each chain.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn extensions(given: Vec<Extension>) -> NativeEar {
+pub fn extensions(given: Vec<Skill>) -> NativeEar {
   NativeEar::of(skill::extensions(given, skill::Places::here()))
 }
 
@@ -941,6 +941,30 @@ impl Meaning {
   pub fn moments(&self, on: Option<String>) -> Result<Value, Fault> {
     meant(&self.held.moments(on.as_deref()))
   }
+}
+
+/// Each quote of a word, in order: of a word that ran, each that closes, and of a word that a model
+/// still writes, `open`, the last one too while its close mark has not come. Each window reads the
+/// quotes of a word here, as the fold reads them.
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_return_type = "Array<{ start: number; name: string; body: string; end: number; closed: boolean; binding: string }>"
+  )
+)]
+pub fn quotes(text: String, open: Option<bool>) -> Result<Value, Fault> {
+  meant(&quotes_of(&text, open.unwrap_or(false)))
+}
+
+/// What a model writes while its word has not come yet, from the text of its word that came and
+/// the text that it thinks: the lines of the word that it finished, the line that it still writes,
+/// the line of the word where each line starts, and the count of the lines of the word.
+#[cfg_attr(
+  feature = "typescript",
+  napi(ts_return_type = "{ lines: string; tail: string; numbers: number[]; count: number }")
+)]
+pub fn writing(text: String, thinking: String) -> Result<Value, Fault> {
+  meant(&writing_of(&text, &thinking))
 }
 
 /// Acts each in the state that the crate gives it, and each chain in the state that the acts that
