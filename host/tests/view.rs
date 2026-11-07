@@ -2,6 +2,10 @@
 //! threads, the spend, and the acts as they stood at a moment, each with the values that the views
 //! of TypeScript give.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::collections::HashMap;
 use std::iter;
 

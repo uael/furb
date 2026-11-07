@@ -11,6 +11,10 @@
 //! So an instance of a class of the engine goes in as its name and its fields, in a map marked `is`, and the
 //! engine makes the instance in the sandbox. That is the one rule of the crossing that is not monty's own.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
 

@@ -1,6 +1,10 @@
 //! The ears that a host hands a life, the functions it hands it, and how the life steps each ear as
 //! a generator of the sandbox and lends itself to the code of the host.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "a verb of the host API takes each argument that the host gives it"
+)]
 use std::{
   cell::RefCell,
   collections::HashMap,

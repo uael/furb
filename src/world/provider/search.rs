@@ -315,14 +315,15 @@ enum Results {
 #[derive(Deserialize)]
 struct Source {
   #[serde(default)]
-  title: String,
+  title: Option<String>,
   #[serde(default)]
-  url: String,
+  url: Option<String>,
 }
 
 impl Source {
+  /// The title and the address, each empty when the API gives none or null.
   fn pair(self) -> (String, String) {
-    (self.title, self.url)
+    (self.title.unwrap_or_default(), self.url.unwrap_or_default())
   }
 }
 

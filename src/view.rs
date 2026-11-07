@@ -4,6 +4,7 @@
 //! each window stays its own.
 
 mod act;
+mod context;
 mod desk;
 mod fold;
 mod held;
@@ -15,6 +16,7 @@ mod threads;
 mod time;
 
 pub use act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, WATCH, operator};
+pub use context::{Part, Share, breakdown};
 pub use desk::{Ask, Desk, Tick, choices, desk, hint, takes_nothing, ticks, wants};
 pub use fold::{Fold, followed};
 pub use held::{Held, Threads};

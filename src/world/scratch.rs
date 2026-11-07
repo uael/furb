@@ -1,6 +1,10 @@
 //! The scratch directory of a life: a folder of the machine for the notes and the scratch files of its words, which a
 //! word names as `scratch://` and a command as `$TMPDIR`, so no text that the World answers names its place.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::HashMap,
   fs, io,

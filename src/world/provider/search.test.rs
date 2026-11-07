@@ -65,6 +65,15 @@ fn a_search_of_the_messages_api_that_failed_or_a_block_it_does_not_read_leaves_t
   let text = json!({"type": "text", "text": "an answer"});
   let got = json!({"content": [thought, failed, text]});
   assert_eq!(anthropic(&got).as_deref(), Some("an answer"));
+  let untitled = json!({"type": "text", "text": "cited", "citations": [{"type": "web_search_result_location", "url": "https://u", "title": null}]});
+  assert_eq!(
+    anthropic(&json!({"content": [untitled]})),
+    anthropic(
+      &json!({"content": [{"type": "text", "text": "cited", "citations": [{"url": "https://u", "title": ""}]}]})
+    ),
+    "a citation whose title is null reads as one with no title"
+  );
+  assert!(anthropic(&json!({"content": [untitled]})).is_some_and(|one| one.contains("https://u")));
   assert_eq!(
     anthropic(&json!({"content": "no list"})),
     None,

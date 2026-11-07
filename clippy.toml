@@ -1,5 +1,6 @@
 # The bar of the Rust of furb, beside the lints of Cargo.toml, which the skill rust says.
 too-many-lines-threshold = 60
+too-many-arguments-threshold = 4
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 disallowed-methods = [

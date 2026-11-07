@@ -3,6 +3,10 @@
 //! comes out as the instance of `furb.python` it is, an exception as the one object it is for the life, a generator
 //! of python goes in as an ear, and a function as one the sandbox calls back.
 #![deny(clippy::needless_pass_by_value, clippy::map_err_ignore)]
+#![expect(
+  clippy::too_many_arguments,
+  reason = "a verb of the host API takes each argument that the host gives it"
+)]
 
 use indexmap::IndexMap;
 use std::{

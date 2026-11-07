@@ -33,6 +33,10 @@
 //! The ear says the fact `("mcp_changed", "chain1", "mcp", server)` of its own accord when a server changes with no
 //! act that asked: a list that the server says has changed, a connection that ends, and one that comes back.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 pub mod binding;
 mod config;
 mod content;
