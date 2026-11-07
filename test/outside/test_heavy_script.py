@@ -42,7 +42,7 @@ def machine(tmp: Path, free: int, *, swap: int = 6000, grows: bool = False) -> N
 
 
 def env(tmp: Path, **more: str) -> dict[str, str]:
-  kept = {n: v for n, v in os.environ.items() if not n.startswith("FURB_HEAVY_")}
+  kept = {n: v for n, v in os.environ.items() if not n.startswith("FURB_HEAVY_") and n != "CI"}
   path = f"{tmp / 'shim'}{os.pathsep}{os.environ['PATH']}"
   return {**kept, "PATH": path, "FURB_HEAVY_DIR": str(tmp / "slots"), "FURB_HEAVY_POLL": "0.05", **more}
 
@@ -133,3 +133,10 @@ def test_a_step_that_waits_past_its_limit_runs_nothing_and_exits_75(tmp_path: Pa
   got = run(tmp_path, "touch", str(mark), FURB_HEAVY_WAIT="1")
   assert got.returncode == 75 and "no step started in 1s, with memory 10% free" in got.stderr
   assert not mark.exists()
+
+
+def test_a_step_on_a_runner_of_ci_takes_no_slot_and_waits_for_no_memory(tmp_path: Path) -> None:
+  machine(tmp_path, 10)
+  got = run(tmp_path, "echo", "ran", CI="true", FURB_HEAVY_WAIT="1")
+  assert (got.returncode, got.stdout) == (0, "ran\n")
+  assert not (tmp_path / "slots").exists()
