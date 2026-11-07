@@ -20,8 +20,13 @@ def hooks() -> dict[str, dict]:
 def test_the_hooks_of_the_tests_give_all_the_files_of_the_commit_to_the_reach_in_one_call() -> None:
   for name, kind in (("pytest", "pytest"), ("cargo-test", "cargo")):
     hook = hooks()[name]
-    assert hook["entry"] == f"sh script/heavy.sh python3 script/hooks/reach.py {kind}"
+    assert hook["entry"] == f"python3 script/hooks/reach.py {kind}"
     assert hook.get("pass_filenames", True) and hook["require_serial"]
+
+
+def test_only_the_watcher_reads_the_memory() -> None:
+  readers = [p.name for p in (ROOT / "script").rglob("*") if p.is_file() and b"memorystatus" in p.read_bytes()]
+  assert readers == ["memwatch.sh"]
 
 
 def test_a_file_of_the_engine_of_the_crate_or_of_a_manifest_reaches_the_whole_suite() -> None:
