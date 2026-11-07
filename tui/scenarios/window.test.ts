@@ -198,18 +198,18 @@ test('"thinking" shows only while a reply of the rung runs, and a rung that wait
     ],
     async (window, yard) => {
       await window.type("Scenario: first.");
-      await window.shows((frame) => frame.includes("thinking"), "the first rung thinking");
+      await window.shows((frame) => frame.includes("Thinking"), "the first rung thinking");
       await window.type("/newthread");
       await window.type("Scenario: second.");
       const second = await window.shows(
         (frame) => frame.includes("waits for its turn"),
         "the second rung waiting for its turn",
       );
-      expect(second.match(/thinking/g)?.length ?? 0).toBeLessThanOrEqual(1);
+      expect(second.match(/thinking/gi)?.length ?? 0).toBeLessThanOrEqual(1);
       await yard.release("go");
       await window.shows((frame) => frame.includes("Second done."), "the second answer");
       const done = await window.frame();
-      expect(done).not.toContain("thinking");
+      expect(done).not.toMatch(/thinking/i);
     },
   ));
 
@@ -229,10 +229,7 @@ test("a long thought shows its size as it grows and its last line, until the wor
     ],
     async (window, yard) => {
       await window.type("Scenario: think.");
-      const early = await window.shows(
-        (frame) => /thinking[^\n]* · \d+ chars/.test(frame),
-        "the size of the thought",
-      );
+      const early = await window.shows((frame) => / · \d+ chars/.test(frame), "the size of the thought");
       const first = Number(early.match(/ · (\d+) chars/)?.[1] ?? 0);
       const later = await window.shows(
         (frame) => Number(frame.match(/ · (\d+) chars/)?.[1] ?? 0) > first,

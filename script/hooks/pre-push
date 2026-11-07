@@ -2,14 +2,19 @@
 # Refuses each push that moves or deletes the branch main of a remote: main changes only through the merge of a pull
 # request, which gh pr merge makes on GitHub and which runs no hook here. A test that runs git in the clone with the
 # variables of a hook can push its own commits, and main is not protected on GitHub, so this hook is the last guard.
+# It also has script/hooks/pre-commit check each pushed tip, which runs the hooks of the commits that skipped them.
 refused=
-while read -r _ _ remote _; do
+tips=
+while read -r _ local remote _; do
   if [ "$remote" = refs/heads/main ]; then
     refused=1
   fi
+  case $local in *[!0]*) tips="$tips $local" ;; esac
 done
 if [ -n "$refused" ]; then
   echo "The push to main of $1 is refused: main changes only through a pull request. Push a branch of your own." >&2
   exit 1
 fi
-exit 0
+for tip in $tips; do
+  sh "$(dirname "$0")/pre-commit" check "$tip" >&2 || exit 1
+done

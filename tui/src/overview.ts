@@ -3,7 +3,7 @@ import type { Measure, Owed, Row, State, Tone } from "furb/life";
 import { asksOperator, busy, gist, type Loom } from "furb/life";
 import { clip } from "./format.ts";
 import type { ActRow } from "./session.ts";
-import { theme as c, rowMark, spin } from "./theme.ts";
+import { theme as c, rowMark } from "./theme.ts";
 import { bold, mix, type Part } from "./ui.ts";
 
 /** The views of a life that the TUI holds side by side, which a key, a command and a setting switch at run time: the
@@ -177,7 +177,7 @@ export class LoomPane {
     const count = row.cells.length;
     const cells: Part[] = row.cells.map((cell, index) =>
       index === count - 1 && busy(row.state) && !frozen
-        ? [spin(), c.accent]
+        ? [live, c.accent]
         : [cell.mark, mix(c.background, toneColor(cell.tone), 0.45 + (0.55 * (index + 1)) / count)],
     );
     const owed = row.id === "operator" ? loom.owed.length : 0;

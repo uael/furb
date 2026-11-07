@@ -825,3 +825,14 @@ async def test_the_chain_acknowledges_no_done_that_a_word_of_the_chain_caused_wi
   (asked,) = [a[1] for a in said(log, "prompt") if a[5] == "seven"]
   assert engine.peek(asked) == 7
   assert [a[5] for a in said(log, "prompt") if a[5] == f"{asked} done"] == []
+
+
+async def test_a_prompt_reads_the_facts_of_the_acts_of_its_own_life_alone_so_the_fact_of_a_prompt_of_an_earlier_life_that_a_carried_turn_holds_in_the_shape_of_its_build_raises_nothing() -> (
+  None
+):
+  """A prompt reads the facts of the acts of its own life alone, so the fact of a prompt of an earlier life that a carried turn holds, in the shape of its build, raises nothing."""
+  _, _, root = born("n = 1", "close('ok')")
+  await settle()
+  earlier = ("prompt", "prompt99", OPERATOR, root, "str", "Which?")
+  engine.say("prefix", root, [*engine.transcript(root), earlier])
+  assert await engine.prompt(str, "Reply.", on=root) == "ok"

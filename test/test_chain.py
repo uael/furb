@@ -1638,3 +1638,28 @@ async def test_the_chain_asks_a_prompt_no_more_after_two_words_in_a_row_that_mad
     await settle()
     await settle()
   assert (len([a for a in said(log, "reply") if a[3] == root]), engine.peek(one)) == (3, 4)
+
+
+async def test_a_root_that_holds_no_open_after_its_paragraph_chain_as_a_root_whose_compaction_kept_no_setup_gives_no_setup_to_such_a_chain_so_the_chain_holds_no_open_rung_of_the_root_and_its_own_rungs_run() -> (
+  None
+):
+  """A root that holds no open after its paragraph chain(), as a root whose compaction kept no setup, gives no setup to such a chain, so the chain holds no open rung of the root and its own rungs run."""
+  _, _, root = born(
+    stands=[*STANDS, "/w/DOCTRINE.md", []], files={"/w/a.txt": "one\n", "/w/DOCTRINE.md": "Read first.\n"}
+  )
+  await settle()
+  engine.rung("await wait(3600, __name__)", to="m/low", on=root)
+  await settle()
+  opening = [
+    x for x in engine.transcript(root) if x[0] == "tell" and isinstance(x[3], list) and x[3][0].startswith("#chain")
+  ]
+  assert opening and [x for x in engine.transcript(root) if x[0] == "tell" and x[3] == ["chain()"]]
+  engine.say("prefix", root, [x for x in engine.transcript(root) if x not in opening and x[0] != "setup"])
+  engine.pause(root)
+  engine.wake(root)
+  await settle()
+  kid = engine.chain("kid", on=root)
+  await settle()
+  ran = engine.rung("close(7)", on=kid)
+  await settle()
+  assert engine.peek(ran) == 7

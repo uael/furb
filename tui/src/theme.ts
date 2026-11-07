@@ -1,6 +1,7 @@
 import { RGBA, SyntaxStyle, type ThemeMode } from "@opentui/core";
 import type { State } from "furb/life";
 import { clock } from "./clock.ts";
+import { mix } from "./ui.ts";
 
 /** The roles of a palette. Surfaces go from the background up: the panel of the sidebars and the composer, then the
  * raised surface of a dialog. Text goes from the text down: muted for what supports it, faint for what frames it. */
@@ -476,6 +477,20 @@ export function markOf(
   // operator or that ended stands still.
   const shown = state === "thinks" ? spin(now) : state === "runs" ? turn(now) : one.glyph;
   return [shown, theme[one.role], one.attributes];
+}
+/** Whether the mark of a state moves with time: a model that thinks, and work that runs. */
+export const moves = (state: MarkState) => state === "thinks" || state === "runs";
+/** The word of a state that works, under a light that sweeps over it from its first letter to its last and starts
+ * again: the letters under the light take the accent, and the others the color of the text. A view that holds still
+ * shows the word in the color of the text. */
+export function shimmer(word: string, now = clock()): (readonly [text: string, fg: RGBA])[] {
+  if (motion.still) return [[word, theme.text]];
+  const reach = 3;
+  const at = (Math.floor(now / frame) % (word.length + 2 * reach)) - reach;
+  return [...word].map((letter, index) => [
+    letter,
+    mix(theme.text, theme.accent, Math.max(0, 1 - Math.abs(index - at) / reach)),
+  ]);
 }
 const spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 /** The frames of work that runs, as a command or a word that awaits one: a circle that turns at half the pace of the
