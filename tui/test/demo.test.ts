@@ -59,6 +59,11 @@ test("the moment that the feed shows steps back through the chain, the stage ste
     await session.travel(1);
     expect(session.moment).toBeUndefined();
     expect(session.at(session.activity)).toEqual(now);
+    // Two steps asked at once each count, the second from the moment that the first reached.
+    const steps = await session.host.moments(session.selected);
+    await Promise.all([session.travel(-1), session.travel(-1)]);
+    expect(session.moment).toBe(steps.at(-3));
+    await session.showAt(undefined);
     await session.travel(-1);
     await session.travel(-1);
     // The stage steps on over the moments of the life from the moment of the feed.
