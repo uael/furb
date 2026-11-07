@@ -26,12 +26,18 @@ use std::{
 
 use furb::{
   Object,
-  life::{Answer, Opening},
+  life::{Answer as Answered, Opening},
   view::Phase,
   world::Told,
 };
-use furb_host::{Command, Event, Life, LifeHandle, Reply, Seq};
-use futures::{Stream, StreamExt};
+use furb_host::{
+  Command, Event, GRACE, Life, LifeHandle, Reply, STALL, Seq, Settings,
+  protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
+  run,
+  transport::{Dialer, Local},
+};
+use futures::{SinkExt, Stream, StreamExt};
+use tokio_util::codec::{Framed, LinesCodec};
 
 /// The events of a life, each under its place in the log.
 type Logged = (Seq, Arc<Event>);
@@ -92,7 +98,7 @@ const FILE: usize = 8_000;
 /// A life that keeps its record, with no extension, whose model writes each reply in parts and
 /// closes it with a word.
 fn opening(at: &Path) -> Opening {
-  let answer = Answer(Arc::new(move |_, told: Told| {
+  let answer = Answered(Arc::new(move |_, told: Told| {
     let part = "a word ".to_owned();
     for _ in 0..PARTS {
       told(&part, "");
@@ -175,6 +181,7 @@ fn main() {
   let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
   let runtime = runtime.expect("the test has a runtime");
   runtime.block_on(the_heap_of_a_life_grows_with_its_facts_and_no_more());
+  runtime.block_on(a_window_that_reads_slowly_holds_no_copy_of_the_log());
 }
 
 /// The heap of a life at each size, and what a reader that attaches reads, printed as a table.
@@ -229,4 +236,131 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more() {
       "at {facts} facts, a reader who attaches reads {events} events of {acts} acts: the log keeps each state of each act"
     );
   }
+}
+
+/// The size of the life that a slow window attaches, in facts.
+const ATTACHED: usize = 40_000;
+
+/// The most bytes that the daemon may take for a window that attaches at the start of the log of
+/// a life and reads nothing.
+const SLOW: usize = 16 << 20;
+
+/// A peer of the daemon: its stream and the id of its next request.
+struct Peer {
+  lines: Framed<<Local as Dialer>::Stream, LinesCodec>,
+  next: u64,
+}
+
+impl Peer {
+  /// A window that dialed the daemon and said its hello.
+  async fn dialed(local: &Local) -> Self {
+    let lines = Framed::new(local.dial().await.expect("the daemon listens"), LinesCodec::new());
+    let mut peer = Self { lines, next: 0 };
+    let hello =
+      Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None });
+    let welcome = peer.ask(hello).await;
+    assert!(matches!(welcome, Answer::Welcome { .. }), "{welcome:?}");
+    peer
+  }
+
+  /// A request said, whose answer the peer reads later or never.
+  async fn said(&mut self, verb: Verb) -> u64 {
+    let id = self.next;
+    self.next += 1;
+    let line = serde_json::to_string(&Request { id, verb }).expect("a request is JSON");
+    self.lines.send(line).await.expect("the daemon hears");
+    id
+  }
+
+  /// The next frame of the daemon.
+  async fn read(&mut self) -> Frame {
+    let line = tokio::time::timeout(Duration::from_secs(300), self.lines.next()).await;
+    let line = line.expect("the daemon says a frame in time").expect("the daemon is up");
+    serde_json::from_str(&line.expect("a line")).expect("a frame is JSON")
+  }
+
+  /// The answer of the daemon to a verb, past each frame that it pushed before it.
+  async fn ask(&mut self, verb: Verb) -> Answer {
+    let id = self.said(verb).await;
+    loop {
+      match self.read().await {
+        Frame::Reply { id: got, answer } if got == id => return answer,
+        Frame::Refused { id: Some(got), error, .. } if got == id => panic!("refused: {error:?}"),
+        _ => {}
+      }
+    }
+  }
+
+  /// The facts that the daemon pushed until an act is done.
+  async fn until_done(&mut self, id: &str) -> usize {
+    let mut facts = 0;
+    loop {
+      match self.read().await {
+        Frame::Event { event: Event::Fact(_), .. } => facts += 1,
+        Frame::Event { event: Event::Act(act), .. }
+          if act.id == id && matches!(act.phase, Phase::Done(_)) =>
+        {
+          return facts;
+        }
+        _ => {}
+      }
+    }
+  }
+}
+
+/// A daemon whose life told many facts, and a window that attaches at the start of its log and
+/// reads nothing: the daemon pushes it the events of the life no faster than it reads them, so it
+/// holds no copy of the log for it.
+async fn a_window_that_reads_slowly_holds_no_copy_of_the_log() {
+  let at = yard::Yard::new(format!("furb-host-slow-{}", std::process::id()));
+  std::fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
+  let local = Local::new(at.join("sock"));
+  let listener = local.listen().await.expect("the daemon listens");
+  let settings = Settings {
+    opening: opening(&at),
+    grace: GRACE,
+    stall: STALL,
+    tailnet: None,
+    door: None,
+    host: None,
+  };
+  let served = local.clone();
+  tokio::spawn(async move { run(&served, listener, settings).await });
+  let mut driver = Peer::dialed(&local).await;
+  let life = at.join("slow.jsonl").display().to_string();
+  let open = Verb::Open {
+    life: life.clone(),
+    cwd: Some(at.display().to_string()),
+    actor: None,
+    roster: None,
+    skills: None,
+    config: None,
+    claude: None,
+    answers: false,
+    attach: None,
+  };
+  assert_eq!(driver.ask(open).await, Answer::Done);
+  assert_eq!(driver.ask(Verb::Attach { life: life.clone(), from: 0 }).await, Answer::Done);
+  let mut facts = 0;
+  while facts < ATTACHED {
+    let word =
+      format!("for i in range({DRAWS}):\n  chance()\nfor i in range({READS}):\n  read('big.txt')");
+    let Answer::Act(rung) = driver.ask(Verb::Run { life: life.clone(), word, on: None }).await
+    else {
+      panic!("the word made no rung")
+    };
+    facts += driver.until_done(&rung).await;
+  }
+  tokio::time::sleep(Duration::from_millis(500)).await;
+  let before = LIVE.load(Ordering::Relaxed);
+  let mut slow = Peer::dialed(&local).await;
+  slow.said(Verb::Attach { life: life.clone(), from: 0 }).await;
+  tokio::time::sleep(Duration::from_secs(3)).await;
+  let taken = LIVE.load(Ordering::Relaxed).saturating_sub(before);
+  println!("a slow window on a life of {facts} facts: the daemon took {} KiB", taken >> 10);
+  assert!(
+    taken < SLOW,
+    "a window that reads nothing on a life of {facts} facts took {taken} bytes of the daemon, past {SLOW}: the daemon copies the log for it"
+  );
+  drop(slow);
 }
