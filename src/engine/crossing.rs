@@ -1,6 +1,10 @@
 //! How each value crosses between the sandbox and the host, both ways, and the numbers by which the
 //! host holds what has no way back.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "a verb of the host API takes each argument that the host gives it"
+)]
 use std::{
   collections::{HashMap, HashSet},
   sync::atomic::{AtomicI64, Ordering},

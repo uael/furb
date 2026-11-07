@@ -1,6 +1,10 @@
 //! The reading of a sheet: the checker of this thread on the modules of its program, and each
 //! finding of the gate on what it read.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use monty_type_checking::{SourceFile, TypeChecker};

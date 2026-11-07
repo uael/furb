@@ -80,6 +80,7 @@ async def test_one_that_raises_while_it_hears_is_dropped_at_once_and_the_one_tha
   # monty knows no CancelledError, so there the close ends the act with the refusal of that fault.
   assert engine.peek(closed) == 7 or "CancelledError is no class" in str(engine.peek(closed))
   assert [a for a in log if a[0] == "dropped"] == [drop]
+  await raises_again()
 
 
 async def test_a_generator_brought_to_life_under_a_name_and_nothing_more() -> None:
@@ -136,7 +137,6 @@ async def test_a_generator_that_yields_a_saying_is_given_the_fact_as_the_bus_sai
   engine.bash("echo hi", on=root)
   await settle()
   assert got[1:] == log[at:]
-  await raises_again()
 
 
 async def raises_again() -> None:
@@ -158,7 +158,6 @@ async def raises_again() -> None:
   assert live["modules"] == later["modules"]
   assert {k: later["outcomes"].get(k) for k in live["outcomes"]} == live["outcomes"]
   cut = next(n for n, (e,) in enumerate(probe.record) if e[:2] == ("done", b))
-  await relived(Sand(), list(probe.record)[: cut + 1])
   door, _, top = born()
   await engine.rung(
     "def touchy(id):\n  yield 'started', id\n  yield {'read'}\n  raise TypeError('touchy')\nt = act('touchy', '', touchy)",
@@ -181,18 +180,7 @@ async def raises_again() -> None:
   record = [((*e, "x", "y") if e[0] == "read" and e[2] == OPERATOR else e,) for (e,) in sand.record]
   with pytest.raises(TypeError):
     await relived(Sand(), record)
-  tip, _, top = born()
-  word = (
-    "b = bash('echo hi')\n"
-    "def noisy(id):\n  yield 'started', id\n  while True:\n    a = yield {b}\n"
-    "    if a[0] == 'done':\n      raise TypeError('noisy')\n"
-    "n = act('noisy', '', noisy)\nawait wait(0.05, b)\nlast = bash('echo after')\nawait last"
-  )
-  await engine.rung(word, on=top)
-  await settle()
-  b = engine.module(top)["b"]
-  cut = next(n for n, (e,) in enumerate(tip.record) if e[:2] == ("done", b))
-  first, second = list(tip.record)[: cut + 1], Sand()
+  first, second = list(probe.record)[: cut + 1], Sand()
   _, again = await relived(second, first)
   live = viewed(again)
   _, over = await relived(Sand(), [*first, *second.record])

@@ -805,7 +805,7 @@ class Text:
 
   def replace(self, old: str, new: str, count=-1) -> Text:
     if old not in self.content:
-      raise Refused(self.path + " no " + repr(min(old.splitlines(), key=self.content.count)))
+      raise Refused(self.path + " no " + repr(min(old.splitlines(), key=lambda line: self.content.count(line))))  # noqa: PLW0108
     (made := Text(self.path, self.content.replace(old, new, count))).before = self
     return made
 

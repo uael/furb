@@ -29,7 +29,7 @@ def test_a_test_of_a_skill_sees_no_skill_of_a_folder_above_the_temporary_folder(
       "-n",
       "0",
       "--no-cov",
-      ".agents/skills/skills/test",
+      ".agents/skills/skills/test/test_skills.py::test_the_skills_of_a_chain_as_a_text_that_the_chain_reads",
     ],
     env={**env, "TMPDIR": str(temp)},
     cwd=ROOT,
@@ -38,6 +38,7 @@ def test_a_test_of_a_skill_sees_no_skill_of_a_folder_above_the_temporary_folder(
     check=False,
   )
   assert ran.returncode == 0, ran.stdout[-4000:]
+  assert "2 passed" in ran.stdout, ran.stdout[-4000:]
 
 
 def test_a_conftest_of_another_folder_does_not_shadow_the_harness() -> None:

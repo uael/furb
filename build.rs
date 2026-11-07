@@ -12,7 +12,6 @@
   clippy::semicolon_if_nothing_returned,
   reason = "debt: a unit expression with no semicolon"
 )]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
 use std::{env, fs, path::Path};
 
