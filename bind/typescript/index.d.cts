@@ -235,8 +235,8 @@ export declare class Meaning {
   rail(hidden?: Array<string> | undefined | null, at?: number | undefined | null): Array<import("./dist/protocol.js").ThreadNode>
   /**
    * The ladder of a chain, now or as it stood just after a moment, as the daemon folds it: the
-   * folds that the window opened, the prompts that the operator owes, the only acts at its top when
-   * `taken` names them, and how many last prompts and rungs show.
+   * folds that the window opened, the prompts that the operator owes, the only acts at its top
+   * when `taken` names them, and how many last prompts and rungs show.
    */
   ladder(chain: string, at?: number, opened?: string[], owed?: string[], taken?: string[], shown?: import("./dist/protocol.js").Shown): Array<import("./dist/protocol.js").Rung>
   /** The acts as they stood just after a moment. */
