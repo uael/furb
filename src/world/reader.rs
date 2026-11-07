@@ -195,6 +195,8 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   if !logged {
     let mut facts = fs::File::open(&body).map_err(failed)?;
     io::copy(&mut facts, &mut file).map_err(failed)?;
+    // A body that cannot go costs only its disk: the next retelling writes it again whole,
+    // and no reader reads it.
     fs::remove_file(&body).ok();
   }
   file.into_inner().map_err(|no| failed(no.into_error()))?.sync_data().map_err(failed)?;

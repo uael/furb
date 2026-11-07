@@ -265,6 +265,8 @@ impl Log {
     let fresh = beside(record, ".log.new");
     let earlier = checkpoint::last(held)
       .and_then(|at| earlier(&path, &held[..at]).map(|(text, seen)| (at, text, seen)));
+    // A log that cannot be opened is not written: the record holds each fact, and a later
+    // life writes the log again from it, so the life goes on with no log and loses nothing.
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
     let entries = held.len();
     let mut log = Self {
