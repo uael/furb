@@ -495,7 +495,7 @@ impl Conversation {
           reply.settled(&message.content);
         }
         Event::Result(result) => return self.concluded(&result, reply, process),
-        Event::Other => {}
+        Event::ControlResponse { .. } | Event::Other => {}
       }
     };
     let (no, missing) = exited(code, &mut process.tail, run.program, spoke).await;
