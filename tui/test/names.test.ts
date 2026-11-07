@@ -90,13 +90,26 @@ test("a name that one build gave shows in the list of another build, when the re
     }
   }));
 
-test("a name that an older release kept beside the record shows in the list until the record holds one", () =>
+test("a name that an older release kept beside the record shows in the list and in the session that opens it, moves into the record once, and shows in the list after it", () =>
   withLibraries(async (directory, open) => {
     const record = await saved(directory, open);
     const path = `${record}.ui.json`;
     const held = () => JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
     await writeFile(path, JSON.stringify({ ...held(), sessionName: "pf-1193" }));
     const library = open();
-    const row = (await library.add(directory)).sessions.find((entry) => entry.path === record);
+    const group = await library.add(directory);
+    const row = group.sessions.find((entry) => entry.path === record);
     await until(library, () => row?.name === "pf-1193");
+    // The session that opens the record moves the name into it, so the old home holds it no more and no save loses it.
+    await library.import(record, group);
+    const session = library.current?.session;
+    if (!session) throw new Error("The record did not open.");
+    await until(library, () => session.sessionName === "pf-1193");
+    await until(library, () => !("sessionName" in held()));
+    await library.dispose();
+    await ended(record);
+    const again = open();
+    const listed = (await again.add(directory)).sessions.find((entry) => entry.path === record);
+    await until(again, () => listed?.name === "pf-1193");
+    expect("sessionName" in held()).toBe(false);
   }));

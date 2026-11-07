@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { isDone, outcomeOf } from "furb/life";
@@ -147,5 +148,35 @@ test("a rename of a session that rests gives its first thread the new name, with
     expect(session.promptsVersion).toBe(prompts);
   } finally {
     await session.dispose();
+  }
+});
+
+test("a name that an older ui.json holds moves into a record with no rename once, shows after a reopen, and no save loses it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-name-"));
+  const record = join(directory, "life.jsonl");
+  const path = `${record}.ui.json`;
+  const held = () => JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+  let session: Session | undefined;
+  try {
+    session = await demoSession({ record });
+    await session.dispose();
+    await writeFile(path, JSON.stringify({ ...held(), sessionName: "Old name" }));
+    session = await demoSession({ record });
+    // The first save of the session keeps the name in its old home until the record holds it.
+    session.save();
+    for (let tries = 0; tries < 400 && "sessionName" in held(); tries++) await Bun.sleep(25);
+    expect("sessionName" in held()).toBe(false);
+    await session.refresh();
+    expect([session.sessionName, renames(session)]).toEqual(["Old name", ["Old name"]]);
+    await session.dispose();
+    // A reopen reads it from the record, and a stale name of the old home does not replace it.
+    await writeFile(path, JSON.stringify({ ...held(), sessionName: "Stale name" }));
+    session = await demoSession({ record });
+    for (let tries = 0; tries < 400 && "sessionName" in held(); tries++) await Bun.sleep(25);
+    await session.refresh();
+    expect([session.sessionName, renames(session)]).toEqual(["Old name", ["Old name"]]);
+  } finally {
+    await session?.dispose();
+    await rm(directory, { recursive: true, force: true });
   }
 });
