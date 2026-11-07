@@ -96,6 +96,13 @@ pub(super) enum Error {
   /// asks again.
   #[error("{0}")]
   SignedOut(String),
+  /// An account with no token to give the command line, which a token or another account ends,
+  /// as it ends a failed sign in.
+  #[error(transparent)]
+  NoToken(#[from] Token),
+  /// Every account signed out.
+  #[error("Every account of the claude command line is signed out. Sign one in, then run /reload.")]
+  Exhausted,
   /// The program was missing or did not run, as while an update of claude replaces it, which
   /// passes.
   #[error("No program to run: {0}")]
@@ -481,10 +488,7 @@ impl Claude {
   fn exhausted(&self, now: SystemTime) -> CompletionError {
     refused(match self.program.accounts.earliest(now) {
       Some(end) => Error::Limit { until: Some(end) },
-      None => Error::SignedOut(
-        "Every account of the claude command line is signed out. Sign one in, then run /reload."
-          .to_owned(),
-      ),
+      None => Error::Exhausted,
     })
   }
 
@@ -502,7 +506,9 @@ impl Claude {
       Some(Error::Limit { until }) => {
         (Some(until.unwrap_or(now + super::LIMIT_POLL)), "its usage limit")
       }
-      Some(Error::SignedOut(_)) => (None, "its sign in failed"),
+      Some(Error::SignedOut(_) | Error::NoToken(_) | Error::Exhausted) => {
+        (None, "its sign in failed")
+      }
       _ => return no,
     };
     accounts.park(at, until);

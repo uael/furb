@@ -1266,3 +1266,19 @@ fn a_process_gets_no_flag_that_its_command_line_does_not_list() {
   let args = yard.args(&yard.pids()[0]);
   assert!(!args.iter().any(|one| one == "--system-prompt-snapshot"), "{args:?}");
 }
+
+#[test]
+fn a_missing_token_and_every_account_signed_out_are_failures_of_their_own_with_the_words_that_a_person_reads()
+ {
+  let token = super::Token::EmptyEnv { name: "a".to_owned(), var: "T".to_owned() };
+  let missing = super::Error::from(token);
+  assert!(matches!(missing, super::Error::NoToken(_)));
+  assert_eq!(
+    missing.to_string(),
+    "The account a has no token: its token variable T is empty or not set"
+  );
+  assert_eq!(
+    super::Error::Exhausted.to_string(),
+    "Every account of the claude command line is signed out. Sign one in, then run /reload."
+  );
+}
