@@ -107,6 +107,28 @@ test("/mcp reconnect all reconnects each server that is down in one word, and th
   );
 });
 
+test("/mcp reload reconnects each server, the connected ones too, in one word, so a changed tool is listed again", async () => {
+  const session = await demoSession({ cwd: project() });
+  await composing(
+    async ({ app, frame, screen }) => {
+      await session.command(`/run ${WORD}\nmcp_servers()`);
+      await shows(frame, "MCP: 2 servers, 1 failed");
+      app.composer.setText("/mcp reload");
+      await app.submit();
+      const control = () => session.acts.filter((act) => act.kind === "mcp_control").map((act) => act.words);
+      await until(() => control().length > 1);
+      expect(control()).toEqual([
+        ["reconnect", "github"],
+        ["reconnect", "slack"],
+      ]);
+      await shows(frame, "MCP servers", (now) => !now.includes("failed"));
+      await pressEscape(screen);
+    },
+    { width: 180, height: 50 },
+    session,
+  );
+});
+
 test("the menu of a server lists its tools, each with its signature, and the parameters of a tool", async () => {
   const session = await demoSession({ cwd: project() });
   await composing(
