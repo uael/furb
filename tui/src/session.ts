@@ -1249,6 +1249,14 @@ export class Session extends EventEmitter {
     this.threadsRead.set(chain, { got, ids, threads });
     return threads;
   }
+  /** What the threads of the session say to the operator, as the crate counts them on the tree of the root, which nests
+   * the threads of every chain under it: a question anywhere, and a failure or a pause only on a thread that he
+   * started. None until the crate gave the threads of the root. */
+  get attention(): { asks: number; failed: number; paused: number } | undefined {
+    const root = this.engine.root;
+    if (!this.threadsFresh(root)) void this.readThreads(root).catch(this.threadFault);
+    return this.crateThreads.get(root)?.got.attention;
+  }
   /** A read of the threads that failed says so, as a failure of the session. */
   private readonly threadFault = (error: unknown): void => {
     this.error = error instanceof Error ? error.message : String(error);

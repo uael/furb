@@ -63,7 +63,14 @@ export const rail = part({
       const asks = entry.session ? entry.session.desk.asks.filter((ask) => !ask.notice).length : 0;
       if (asks) out.asks += asks;
       else if (entry.status === "asks") out.asks += 1;
-      if (entry.status === "paused") out.paused += 1;
+      // An open session counts what concerns the operator as the crate counts it, so a failure, a pause or a wake of a
+      // chain that he did not start marks nothing; a session that is not open keeps the state that its record gave.
+      const counted = entry.session?.attention;
+      if (counted) {
+        if (counted.paused) out.paused += 1;
+        else if (counted.failed) out.failed += 1;
+        else if (entry.status === "unread") out.unread += 1;
+      } else if (entry.status === "paused") out.paused += 1;
       else if (entry.status === "failed") out.failed += 1;
       else if (entry.status === "unread") out.unread += 1;
     }
