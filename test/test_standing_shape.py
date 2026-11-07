@@ -10,7 +10,7 @@ ROSTER = STANDS[0]
 
 
 async def test_what_a_chain_stands_on() -> None:
-  """What a chain stands on: the actors the World offers, the directory the chain starts in, the actor a prompt goes to when it names none, and the path of the doctrine, which the root reads in the first turn of its setup, then the extensions that the root crafts the rest of its setup from, each as [name, file, life word, root alone], and a World that gives no doctrine leaves both unsaid."""
+  """What a chain stands on: the actors the World offers, the directory the chain starts in, the actor a prompt goes to when it names none, and the path of the doctrine, which the root reads in the first turn of its setup, then the extensions that the root crafts the rest of its setup from, each as [name, file, life word, root alone], then the absolute home of the user, which a path under the home hides as ~, and a World that gives no doctrine leaves the doctrine, the extensions and the home unsaid."""
   _, log, root = born("close(1)", files={"/w/b.txt": "here\n"})
   assert await engine.prompt(int, "count", on=root) == 1
   assert engine.standing() == STANDS and engine.standing()[0] == ROSTER
@@ -20,6 +20,11 @@ async def test_what_a_chain_stands_on() -> None:
   doctrine = "/w/.furb/DOCTRINE.md"
   born(stands=[*STANDS, doctrine, []], files={doctrine: "Look first.\n"})
   assert engine.standing() == [*STANDS, doctrine, []]
+  home = "/Users/a"
+  _, _, deep = born(stands=[*STANDS, doctrine, [], home], files={doctrine: "Look first.\n"})
+  assert engine.standing()[5] == home
+  await engine.rung("got = standing()[5]", on=deep)
+  assert engine.module(deep)["got"] == home
 
 
 async def test_the_roster_the_directory_and_the_actor_that_a_model_reads_are_in_the_transcript() -> None:
