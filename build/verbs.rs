@@ -537,9 +537,21 @@ pub(crate) fn scripted(verbs: &[Verb]) -> String {
   out
 }
 
+/// The words of a method of the door to JavaScript.
+struct Script {
+  /// Each word that its Rust takes.
+  given: Vec<String>,
+  /// Each word that its TypeScript names.
+  typed: Vec<String>,
+  /// The name of its star parameter, or `None`.
+  rest: String,
+  /// The name of its options, or `None`.
+  options: &'static str,
+}
+
 /// The words of a method of the door to JavaScript: each word that its Rust takes, each that its
 /// TypeScript names, the name of its star parameter, and the name of its options.
-fn script_words(verb: &Verb) -> (Vec<String>, Vec<String>, String, &'static str) {
+fn script_words(verb: &Verb) -> Script {
   let mut given: Vec<String> =
     verb.needed.iter().map(|one| format!("{}: Unknown<'env>", one.name)).collect();
   let mut typed: Vec<String> =
@@ -562,12 +574,12 @@ fn script_words(verb: &Verb) -> (Vec<String>, Vec<String>, String, &'static str)
     }
     None => "None",
   };
-  (given, typed, rest, options)
+  Script { given, typed, rest, options }
 }
 
 /// The method of one verb on the door to JavaScript.
 fn scripted_verb(out: &mut String, verb: &Verb) {
-  let (given, typed, rest, options) = script_words(verb);
+  let Script { given, typed, rest, options } = script_words(verb);
   let words: Vec<String> =
     verb.needed.iter().map(|one| format!("({}, {})", one.name, one.kind.carried())).collect();
   let keys: Vec<String> = verb
@@ -633,9 +645,21 @@ pub(crate) fn pythonic(verbs: &[Verb]) -> String {
   out
 }
 
+/// The words of a method of the door to python.
+struct Python {
+  /// Its signature for pyo3.
+  signature: Vec<String>,
+  /// Each word that its Rust takes.
+  given: Vec<String>,
+  /// The words that it gives the engine by place.
+  words: Vec<String>,
+  /// The words that it gives the engine by name.
+  keys: Vec<String>,
+}
+
 /// The words of a method of the door to python: its signature, each word that its Rust takes, the
 /// words that it gives the engine by place, and the words that it gives by name.
-fn python_words(verb: &Verb) -> [Vec<String>; 4] {
+fn python_words(verb: &Verb) -> Python {
   let mut signature: Vec<String> = verb.needed.iter().map(|one| one.name.clone()).collect();
   let mut given: Vec<String> =
     verb.needed.iter().map(|one| format!("{}: Value", one.name)).collect();
@@ -673,18 +697,19 @@ fn python_words(verb: &Verb) -> [Vec<String>; 4] {
       _ => format!("({0:?}, {0})", one.name),
     })
     .collect();
-  [signature, given, words, keys]
+  Python { signature, given, words, keys }
 }
 
 /// The method of one verb on the door to python.
 fn pythonic_verb(out: &mut String, verb: &Verb) {
-  let [signature, given, words, keys] = python_words(verb);
+  let Python { signature, given, words, keys } = python_words(verb);
   let (answer, made) = match verb.answer {
     Answer::Act(_) => ("PyAct", "PyAct::of(slf, &got)?"),
     _ => ("Value", "Value(got)"),
   };
   out!(out, "  /// {}", verb.doc);
   out!(out, "  #[pyo3(signature = ({}))]", signature.join(", "));
+  // 4 is the too-many-arguments-threshold of clippy.toml, the one home of the bound.
   if given.len() + 1 > 4 {
     out!(
       out,
