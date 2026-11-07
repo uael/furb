@@ -1,9 +1,13 @@
 //! The scratch directory, proved where no life reaches it: its place, the paths of its scheme, and the files that a
 //! record makes again in it. The tests of the World drive it in a life.
 
-use std::{fs, path::PathBuf};
+use std::{
+  fs,
+  path::PathBuf,
+  time::{Duration, SystemTime},
+};
 
-use super::{SCRATCH, Scratch, WHOLE};
+use super::{SCRATCH, Scratch, WHOLE, reaped};
 use crate::testing::Yard;
 use crate::value::{Object, Text};
 use crate::world;
@@ -12,6 +16,7 @@ use std::ffi;
 #[cfg(unix)]
 use std::os::unix::fs as unix_fs;
 use std::process;
+use std::slice;
 use std::sync;
 
 /// A directory of its own for one test, which does not stand yet.
@@ -196,4 +201,39 @@ fn a_scratch_directory_of_its_own_has_a_short_name_and_goes_with_the_last_ear_th
   assert!(at.is_dir());
   drop(held);
   assert!(!at.exists());
+}
+
+#[test]
+fn a_reap_removes_the_scratch_of_a_record_past_its_days_that_no_life_holds_and_a_reopen_makes_it_again()
+ {
+  let at = place("reap");
+  let root = at.join("scratch");
+  let named = |one: char| root.join(one.to_string().repeat(16));
+  let (old, held, recent, reopened) = (named('a'), named('b'), named('c'), named('d'));
+  let record = [wrote("write1", "notes.md", "kept")];
+  Scratch::at(&old).unwrap().remade(&record, &quiet);
+  Scratch::at(&reopened).unwrap().remade(&record, &quiet);
+  // A life that opens again on a whole directory holds it too.
+  let again = Scratch::at(&reopened).unwrap();
+  again.remade(&record, &quiet);
+  Scratch::at(&recent).unwrap().remade(&record, &quiet);
+  let life = Scratch::at(&held).unwrap();
+  life.remade(&record, &quiet);
+  fs::write(old.join("made"), "a file that a command made").unwrap();
+  let later = SystemTime::now() + Duration::from_hours(24 * 8);
+  let mark = fs::File::options().write(true).open(recent.join(WHOLE)).unwrap();
+  mark.set_modified(later).unwrap();
+  let gone = reaped(&root, Duration::from_hours(24 * 7), later);
+  assert_eq!(
+    gone,
+    slice::from_ref(&old),
+    "only the directory that no life holds and no use kept goes"
+  );
+  assert!(held.join("notes.md").is_file() && recent.join("notes.md").is_file());
+  assert!(reopened.join("notes.md").is_file(), "a life that reopened a whole directory holds it");
+  Scratch::at(&old).unwrap().remade(&record, &quiet);
+  assert_eq!(fs::read_to_string(old.join("notes.md")).unwrap(), "kept", "a reopen writes it again");
+  assert!(!old.join("made").exists(), "a file that a command made is lost");
+  drop((life, again));
+  fs::remove_dir_all(&at).unwrap();
 }
