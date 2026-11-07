@@ -3029,50 +3029,87 @@ fn a_version_is_compared_by_its_numbers() {
   assert_eq!(super::numbers("claude-2.1.119"), vec![2, 1, 119]);
 }
 
+/// A life on the claude command line of the tests, as one account whose config dir is `dir` in
+/// the yard, and that yard.
+#[cfg(unix)]
+fn on_claude(name: &str) -> (Engine, super::claude::test::Yard) {
+  use super::claude::{Account, Source, Switch, test::Yard};
+  let yard = Yard::new(name);
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir) }];
+  let claude = yard.claude_as(accounts, Switch::Failover);
+  let (engine, _) = life(&format!("claude-{name}"), on_reactor(claude.models()));
+  (engine, yard)
+}
+
+/// The entries of the conversation that the last process of the command line resumed.
+#[cfg(unix)]
+fn resumed(yard: &super::claude::test::Yard) -> Vec<Value> {
+  let pids = yard.pids();
+  let id = super::claude::test::after(&yard.args(pids.last().expect("a process")), "--resume")
+    .expect("the last process resumes a conversation");
+  let projects: Vec<_> = fs::read_dir(yard.at.join("dir/projects")).unwrap().flatten().collect();
+  let file = projects[0].path().join(format!("{id}.jsonl"));
+  let text = fs::read_to_string(file).unwrap();
+  text.lines().map(|one| serde_json::from_str(one).unwrap()).collect()
+}
+
+/// The answer of a prompt of the root that says this.
+fn answer(engine: &mut Engine, said: &str) -> Object {
+  let root = engine.root().to_owned();
+  let with = verbs::Prompt { message: Some(said.into()), on: on(&root), ..Default::default() };
+  block_on(engine.prompt(Object::string("str"), with).expect("a prompt is made"))
+    .expect("an answer")
+}
+
+/// A compaction as the skill compaction makes it: the chain keeps each fact but what it was told,
+/// and a rung tells it the summary, so its next turn begins a new conversation.
+const CUT: &str = r#"here = scope(acting())
+say('prefix', here, [x for x in transcript(here) if x[0] != 'tell'])
+rung("<s:summary>\nThe chain asked first.</s:summary>\nsummary", on=here)"#;
+
+/// The signed thought that the command line of the tests writes for a line that holds THINK.
+fn signed() -> Value {
+  json!({"type": "thinking", "thinking": "hmm", "signature": "sig"})
+}
+
 #[cfg(unix)]
 #[test]
 fn a_signed_thought_of_a_reply_after_a_compaction_reaches_the_next_conversation_whole() {
-  use super::claude::{
-    Account, Source, Switch,
-    test::{Yard, after},
-  };
-  let yard = Yard::new("compacted");
-  let dir = yard.at.join("dir");
-  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
-  let claude = yard.claude_as(accounts, Switch::Failover);
-  let (mut engine, _) = life("claude-compacted", on_reactor(claude.models()));
-  let root = engine.root().to_owned();
-  let with =
-    verbs::Prompt { message: Some("THINK first".into()), on: on(&root), ..Default::default() };
-  let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
-  assert_eq!(block_on(act).expect("the first answer").py_repr(), "'reply 1'");
-  // A compaction cuts what the chain was told, and keeps the reply, so the next turn begins a new
-  // conversation.
-  let cut =
-    "here = scope(acting())\nsay('prefix', here, [x for x in transcript(here) if x[0] != 'tell'])";
-  let rung = verbs::Rung { word: Some(cut.to_owned()), on: on(&root), ..Default::default() };
-  block_on(engine.rung(rung).expect("a rung is made")).expect("the cut runs");
-  let with = verbs::Prompt { message: Some("second".into()), on: on(&root), ..Default::default() };
-  block_on(engine.prompt(Object::string("str"), with).expect("a prompt is made"))
-    .expect("the second answer");
-  let pids = yard.pids();
-  let id = after(&yard.args(pids.last().expect("a process")), "--resume")
-    .expect("the turn after the cut resumes a new conversation");
-  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
-  let file = projects[0].path().join(format!("{id}.jsonl"));
-  let entries: Vec<Value> = fs::read_to_string(&file)
-    .unwrap()
-    .lines()
-    .map(|one| serde_json::from_str(one).unwrap())
-    .collect();
-  let said: Vec<&Value> = entries
+  let (mut engine, yard) = on_claude("compacted");
+  assert_eq!(answer(&mut engine, "THINK first").py_repr(), "'reply 1'");
+  closed(&mut engine, CUT).expect("the cut runs");
+  answer(&mut engine, "second");
+  let entries = resumed(&yard);
+  let said =
+    entries.iter().find(|one| one["type"] == "assistant").map(|one| &one["message"]["content"]);
+  // The first turn of the model is the reply before the cut; the chain wrote the turns after it.
+  assert_eq!(said, Some(&json!([signed(), {"type": "text", "text": "close(\"reply 1\")"}])));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_signed_thought_written_after_a_compaction_reaches_the_next_turn_whole() {
+  let (mut engine, yard) = on_claude("thought-after");
+  answer(&mut engine, "first");
+  closed(&mut engine, CUT).expect("the cut runs");
+  answer(&mut engine, "THINK after the cut");
+  // A process of the command line keeps its own turns, so a turn reads the thought from the
+  // conversation that furb writes only when it begins a new one: a second compaction makes it.
+  closed(&mut engine, CUT).expect("the second cut runs");
+  answer(&mut engine, "third");
+  let thought = signed();
+  let held = resumed(&yard)
     .iter()
     .filter(|one| one["type"] == "assistant")
-    .map(|one| &one["message"]["content"])
-    .collect();
-  let thought = json!({"type": "thinking", "thinking": "hmm", "signature": "sig"});
-  // The first turn of the model is the reply before the cut; the chain wrote the turns after it.
-  assert_eq!(said[0], &json!([thought, {"type": "text", "text": "close(\"reply 1\")"}]));
+    .filter(|one| {
+      one["message"]["content"].as_array().is_some_and(|blocks| blocks.contains(&thought))
+    })
+    .count();
+  assert_eq!(
+    held, 1,
+    "the conversation of the third turn holds the thought written after the first cut, once"
+  );
 }
 
 #[test]
