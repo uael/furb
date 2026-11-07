@@ -2,27 +2,38 @@
 # Runs a heavy step, as a build, a test run or a capture, only while the machine has the memory for it. With no cap the
 # steps of the worktrees add up: 28 rustc processes took 13.8 GB, and twice the swap and the compressor filled and the
 # machine died. A step takes one of the slots that all the worktrees share, a folder of FURB_HEAVY_DIR that holds the pid
-# of its holder, and takes it only while the memory is free and the swap does not grow. With no command, the script
+# of its holder, and takes it only while the memory is free, the swap does not grow and the memory is not tight: on macOS,
+# while the pressure level of the kernel is normal, its own signal before the compressor and the swap fill; on Linux,
+# while the swap in use stays under a share of its total. macOS grows the total of the swap just above its use and keeps
+# the pages of idle processes in it, so the share means nothing on macOS. With no command, the script
 # prints the memory that it reads and exits 0 when a step can start, or 75 when it cannot: the desk of the conductor
 # reads the same numbers so.
 # FURB_HEAVY_SLOTS: the slots, one for each 9 GB of memory and at least 1. FURB_HEAVY_FREE: the percent of the memory that
 # stays free, 20. FURB_HEAVY_SWAP_MB: the MB that the swap may grow by in the last minute, 256. FURB_HEAVY_WAIT: the
 # seconds to wait for a slot, 1200, and then exit 75. FURB_HEAVY_POLL: the seconds between two looks, 1.
+# FURB_HEAVY_SWAP_SHARE: on Linux, the percent of the total of the swap that may be in use, 80.
 floor=${FURB_HEAVY_FREE:-20}
+share=${FURB_HEAVY_SWAP_SHARE:-80}
 growth=${FURB_HEAVY_SWAP_MB:-256}
 limit=${FURB_HEAVY_WAIT:-1200}
 poll=${FURB_HEAVY_POLL:-1}
-# reading: the percent of free memory and the MB of swap in use, in free and swap. macOS gives them through
-# memory_pressure and sysctl, and Linux through /proc/meminfo.
+# reading: the percent of free memory and the MB of swap in use, in free and swap, and whether the memory is tight, in
+# tight, which strain says. macOS gives them through memory_pressure and sysctl, and Linux through /proc/meminfo.
 reading() {
   if command -v memory_pressure >/dev/null 2>&1; then
     free=$(memory_pressure -Q | sed -n 's/.*free percentage: \([0-9]*\)%.*/\1/p')
     swap=$(sysctl -n vm.swapusage | sed -n 's/.*used = \([0-9]*\).*/\1/p')
+    # A level that sysctl does not give holds, as a level of critical.
+    level=$(sysctl -n kern.memorystatus_vm_pressure_level 2>/dev/null)
+    level=${level:-4}
+    tight=$((level >= 2)) strain="pressure level $level"
   else
-    read -r free swap <<EOF
+    read -r free swap total <<EOF
 $(awk '/^(MemTotal|MemAvailable|SwapTotal|SwapFree):/ { v[$1] = $2 }
-  END { print int(100 * v["MemAvailable:"] / v["MemTotal:"]), int((v["SwapTotal:"] - v["SwapFree:"]) / 1024) }' /proc/meminfo)
+  END { print int(100 * v["MemAvailable:"] / v["MemTotal:"]), int((v["SwapTotal:"] - v["SwapFree:"]) / 1024), int(v["SwapTotal:"] / 1024) }' /proc/meminfo)
 EOF
+    used=$((total > 0 ? 100 * swap / total : 0))
+    tight=$((used >= share)) strain="swap $used% of its total"
   fi
   free=${free:-0} swap=${swap:-0}
 }
@@ -39,9 +50,9 @@ room() {
   { echo "$now $swap"; cat "$dir/swap" 2>/dev/null; } | awk -v now="$now" '$1 > now - 60' >"$dir/swap.$$"
   grew=$((swap - $(awk 'NR == 1 || $2 < low { low = $2 } END { print low }' "$dir/swap.$$")))
   mv "$dir/swap.$$" "$dir/swap"
-  [ "$free" -ge "$floor" ] && [ "$grew" -le "$growth" ]
+  [ "$free" -ge "$floor" ] && [ "$grew" -le "$growth" ] && [ "$tight" -eq 0 ]
 }
-said() { echo "memory $free% free, swap $swap MB in use, grown $grew MB in the last minute"; }
+said() { echo "memory $free% free, swap $swap MB in use, grown $grew MB in the last minute, $strain"; }
 room
 sleep "$poll"
 if [ $# -eq 0 ]; then
