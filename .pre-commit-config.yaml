@@ -96,7 +96,8 @@ repos:
         pass_filenames: false
       - id: workflows
         name: the workflows parse and keep their shape
-        # Each commit runs it, a merge commit too, since a bad merge of a workflow shows in CI only after minutes.
+        # Each commit runs it, and a merge commit with new content, since a bad merge of a workflow shows in CI only after
+        # minutes.
         entry: uv run --no-sync python script/workflows.py
         language: system
         always_run: true

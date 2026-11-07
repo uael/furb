@@ -349,8 +349,9 @@ fix what your change broke, and report what was broken before.
   `--files <files>` to run some files. In a new worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs
   the old `pre-commit` of the system, which cannot read the config, so do not use it there. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout in `bash` of twice the time that it took last. The hook
-  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks on
-  each file that it changes against its first parent, as a commit does. Run the
+  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks only on
+  each file whose content differs from its version in every parent: a file that it takes whole from one parent passed the
+  hooks of that parent, and the gates check the whole tree. Run the
   push as its own command after the commit, so that its result stands in the tail of that command. The hook `cargo test` runs only when a file that the crate
   or its tests read changed, and the gates run every hook on every file. The hook of the links runs only for a README or
   a manifest, and reads git alone. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file. The hook `paths` runs on
@@ -396,7 +397,7 @@ fix what your change broke, and report what was broken before.
 - `uv run --no-sync python script/workflows.py`: parse each file of `.github/workflows/` with PyYAML, in a second, with no
   build. It fails on a syntax fault, on a key that a mapping holds twice, on a marker of a conflict, on a job with
   neither `runs-on` nor `uses`, on a step with neither `run` nor `uses`, and on a `needs` that names no job. Run it
-  after a merge or a rebase that touched a workflow. The hooks run it on every commit, a merge commit too.
+  after a merge or a rebase that touched a workflow. The hooks run it on every commit, and on a merge commit with new content.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `tui/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
