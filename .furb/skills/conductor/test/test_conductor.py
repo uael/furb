@@ -432,8 +432,6 @@ async def test_a_part_of_the_owner_that_no_item_holds_reaches_the_lead_at_once(c
 
 async def test_a_restart_before_and_after_the_fourth_merge_keeps_the_queue_and_audits_each_range_of_w_converge_and_main_once(tmp_path: Path) -> None:
   names = ("desk_time", "desk_text", "desk_queue", "desk_live")
-  (tmp_path / "0").mkdir()
-  life = Round(tmp_path / "0")
 
   async def restart(old: Round, n: int) -> Round:
     kept = "\n".join(f"{name} = {old.ns[name]!r}" for name in names)
@@ -446,6 +444,8 @@ async def test_a_restart_before_and_after_the_fourth_merge_keeps_the_queue_and_a
   def audits(one: Round) -> list[tuple[str, str, str]]:
     return [(x["key"], x["model"], x["brief"].split("in the ranges ")[1].split(", each range")[0]) for x in one.ns["desk_queue"]["review"]]
 
+  (tmp_path / "0").mkdir()
+  life = Round(tmp_path / "0")
   await life.load(TEST)
   for n in range(3):
     await life.word(f"merges_step('head h{n}\\nmain m0')")
@@ -459,5 +459,15 @@ async def test_a_restart_before_and_after_the_fourth_merge_keeps_the_queue_and_a
   life = await restart(life, 2)
   await life.word("merges_step('head h6\\nmain m1')\nmerges_step('head h7\\nmain m1')\nmerges_step('head h8\\nmain m2')")
   assert audits(life) == m4
-  await life.word("desk_queue['review'].clear()\nmerges_step('head h8\\nmain m2')\nmerges_step('head h8\\nmain m2')")
-  assert audits(life) == [("align-audit-m8", OPUS, "h4..h8 of w/converge and m1..m2 of main")]
+  await life.beat()
+  ((failed, *_),) = [x for x in life.asked() if x[1] == "review"]
+  await life.end(failed, RuntimeError("the audit fell"))
+  await life.beat()
+  await life.word("merges_step('head h8\\nmain m2')")
+  assert audits(life) == [("align-audit-m8", OPUS, "h0..h8 of w/converge and m0..m2 of main")]
+  await life.beat()
+  (ran,) = [x[0] for x in life.asked() if x[1] == "review" and x[0] != failed]
+  await life.end(ran, "clean at h8 and m2")
+  await life.beat()
+  await life.word("\n".join(f"merges_step('head h{n}\\nmain m3')" for n in range(9, 13)))
+  assert audits(life) == [("align-audit-m12", "codex:gpt-6-astra/high", "h8..h12 of w/converge and m2..m3 of main")]
