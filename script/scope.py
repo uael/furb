@@ -18,7 +18,7 @@ EVERY = ["ubuntu-latest", "macos-latest", "windows-latest"]
 # A path that no job needs on another system: prose, the tools of the repository, and the workflows that hold their
 # own proof.
 INERT = re.compile(
-  r"(.*\.md|docs/(?!examples/).*|LICENSE|\.gitignore|\.furb/(?!extensions/|config\.json$).*|\.agents/.*|\.claude/.*|script/.*|reserve/.*"
+  r"(.*\.md|docs/(?!examples/).*|LICENSE|\.gitignore|\.furb/(?!skills/|config\.json$).*|\.agents/(?!skills/).*|\.claude/.*|script/.*|reserve/.*"
   r"|\.github/(ISSUE_TEMPLATE/.*|budgets\.json|workflows/(publish|release|titles|contract)\.yml)"
   r"|release-please-config\.json|\.release-please-manifest\.json)"
 )
@@ -29,8 +29,8 @@ TYPESCRIPT = re.compile(
   r"((tui|bind/typescript)/.*|package\.json|bun\.lock|biome\.json|tsconfig.*\.json|docs/examples/typescript/.*)"
 )
 # A path that the suite of python reads on Linux alone: the extensions of the project and the config that enables
-# them, whose suite in .furb/extensions gates each word as a chain plays it.
-PROJECT = re.compile(r"\.furb/(extensions/.*|config\.json)")
+# them, whose suite in .furb/skills gates each word as a chain plays it.
+PROJECT = re.compile(r"\.furb/(skills/.*|config\.json)")
 # A path of pure logic that every job reads, but that behaves the same on each system: the engine and the code that
 # monty runs beside it, whose sandbox gives them no access to the machine, and the corpus of the records. The World
 # alone speaks to the machine. A change of these runs every job on Linux alone. In 36 hours of main, 19 of 125 commits

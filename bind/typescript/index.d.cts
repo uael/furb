@@ -211,6 +211,12 @@ export declare class Meaning {
    */
   hear(fact: unknown[], covered?: string[], born?: unknown[] | null): Array<import("./dist/protocol.js").Act>
   /**
+   * A fact of a record, as the JSON of its line, which the meaning folds as [`Meaning::hear`]
+   * does with neither `covered` nor `born`, and gives back nothing: a window that reads a record
+   * asks the meaning later for what it draws, so no act crosses the door again for each fact.
+   */
+  told(line: string): void
+  /**
    * The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
    * that one holds.
    */
@@ -229,8 +235,8 @@ export declare class Meaning {
   rail(hidden?: Array<string> | undefined | null, at?: number | undefined | null): Array<import("./dist/protocol.js").ThreadNode>
   /** The acts as they stood just after a moment. */
   asOf(at: number): Array<import("./dist/protocol.js").Act>
-  /** Each moment at which an act began or ended, in order. */
-  moments(): number[]
+  /** Each moment at which an act began or ended, in order, of the life or of the acts of one chain. */
+  moments(on?: string | undefined | null): number[]
 }
 
 /**
@@ -315,10 +321,14 @@ export declare function enabled(root: unknown[][]): Array<Extension>
 export declare const ENGINE: string
 
 /**
- * An extension: its name, its word, its life word, which is empty when it has none, whether it plays on the root
- * alone, and the path of the file of its word, with `~` for the home of the user as the World writes a path for a
- * model, which each chain reads as a turn of its setup, and which is empty when no file stands for the word. An
- * extension that plays on the root alone plays on no other chain but one whose source had it, since that chain makes
+ * An extension: its name, its word, its life word, which is empty when it has none, whether it
+ * plays on the root
+ * alone, and the path of the file of its word, with `~` for the home of the user as the World
+ * writes a path for a
+ * model, which each chain reads as a turn of its setup, and which is empty when no file stands for
+ * the word. An
+ * extension that plays on the root alone plays on no other chain but one whose source had it,
+ * since that chain makes
  * the rung of its source again; any other extension plays on every chain.
  */
 export interface Extension {
@@ -587,9 +597,12 @@ export interface Outcome {
 }
 
 /**
- * The part of an extension that a TUI loads: the name of the extension, the path of its module of TypeScript, which
- * the manifest names under `tui`, beside the word, and the text of that module when the crate carries it. The crate
- * carries the part of an official extension, so a TUI loads it from the text where no checkout of furb stands, as in
+ * The part of an extension that a TUI loads: the name of the extension, the path of its module of
+ * TypeScript, which
+ * the manifest names under `tui`, beside the word, and the text of that module when the crate
+ * carries it. The crate
+ * carries the part of an official extension, so a TUI loads it from the text where no checkout of
+ * furb stands, as in
  * an installed package, and the path is then its place in the repository of furb.
  */
 export interface Part {
@@ -615,6 +628,13 @@ export interface ProviderInfo {
   /** Whether the provider settings enable this provider. */
   enabled: boolean
 }
+
+/**
+ * Acts each in the state that the crate gives it, and each chain in the state that the acts that
+ * stand in it give, as a daemon tells them: what a window that makes acts of its own, as a test
+ * does, reads in place of a state of its own.
+ */
+export declare function restated(acts: Array<import("./dist/protocol.js").Act>): Array<import("./dist/protocol.js").Act>
 
 /**
  * What the record at a path tells, read with no life, so no word runs again and a record of any

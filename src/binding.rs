@@ -44,9 +44,9 @@ use serde::Serialize;
 use crate::gate::checked;
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
-  extension::{self, Extension, Part},
   life::Opening,
-  view::{Fold, Held, Pause},
+  skill::{self, Extension, Part},
+  view::{Act as ViewAct, Fold, Held, Pause, restate},
   wire,
   world::{self, images},
 };
@@ -356,7 +356,7 @@ pub struct Inspection {
 #[cfg_attr(feature = "python", pyo3(signature = (scratch, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn files(scratch: String, config: Option<String>) -> Result<NativeEar, Fault> {
-  let config = config.map_or_else(|| extension::Places::here().config, Into::into);
+  let config = config.map_or_else(|| skill::Places::here().config, Into::into);
   Ok(NativeEar::of(world::files(world::Scratch::at(scratch)?, config, None)))
 }
 
@@ -488,7 +488,7 @@ pub fn gate(sheet: String) -> Result<Vec<(i64, String)>, Fault> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn official() -> Vec<Extension> {
-  extension::official()
+  skill::official()
 }
 
 /// The extensions that a life runs, in the order it enabled them, as the facts of its root say them.
@@ -498,7 +498,7 @@ pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
   let words = root.into_iter().filter_map(|one| one.0);
   let facts: Vec<Fact> =
     words.map(|words| Fact(Object::tuple(words.iter().map(Object::string)))).collect();
-  extension::enabled(&facts)
+  skill::enabled(&facts)
 }
 
 /// The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
@@ -506,7 +506,7 @@ pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn extensions(given: Vec<Extension>) -> NativeEar {
-  NativeEar::of(extension::extensions(given, extension::Places::here()))
+  NativeEar::of(skill::extensions(given, skill::Places::here()))
 }
 
 /// The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
@@ -514,14 +514,14 @@ pub fn extensions(given: Vec<Extension>) -> NativeEar {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn parts(project: String) -> Result<Vec<Part>, Fault> {
-  extension::parts(&extension::Places::here(), path::Path::new(&project))
+  skill::parts(&skill::Places::here(), path::Path::new(&project))
 }
 
 /// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn skills(config: String) -> NativeEar {
-  NativeEar::of(extension::skills::skills(config.into()))
+  NativeEar::of(world::skills::skills(config.into()))
 }
 
 /// The config directory of the user for this process, where the configs, the extensions of the user and the
@@ -529,7 +529,7 @@ pub fn skills(config: String) -> NativeEar {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn config_directory() -> String {
-  extension::Places::here().config.display().to_string()
+  skill::Places::here().config.display().to_string()
 }
 
 /// The POSIX shell that runs a command of this machine, which a host runs its own commands in too.
@@ -876,6 +876,21 @@ impl Meaning {
     meant(&acts)
   }
 
+  /// A fact of a record, as the JSON of its line, which the meaning folds as [`Meaning::hear`]
+  /// does with neither `covered` nor `born`, and gives back nothing: a window that reads a record
+  /// asks the meaning later for what it draws, so no act crosses the door again for each fact.
+  #[cfg_attr(feature = "typescript", napi)]
+  pub fn told(&mut self, line: String) -> Result<(), Fault> {
+    // A line of a record is plain JSON, which serde reads as the sandbox would give it out, but for
+    // the last digit of a float, so the fact takes no pass through the values of the sandbox.
+    let fact: serde_json::Value = serde_json::from_str(&line)
+      .map_err(|no| Fault::refused(format!("the line is no JSON: {no}")))?;
+    for act in &self.fold.recorded(&fact) {
+      self.held.heard(act);
+    }
+    Ok(())
+  }
+
   /// The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
   /// that one holds.
   #[cfg_attr(feature = "typescript", napi)]
@@ -921,11 +936,29 @@ impl Meaning {
     meant(&self.held.as_of(moment(at)?))
   }
 
-  /// Each moment at which an act began or ended, in order.
+  /// Each moment at which an act began or ended, in order, of the life or of the acts of one chain.
   #[cfg_attr(feature = "typescript", napi(ts_return_type = "number[]"))]
-  pub fn moments(&self) -> Result<Value, Fault> {
-    meant(&self.held.moments())
+  pub fn moments(&self, on: Option<String>) -> Result<Value, Fault> {
+    meant(&self.held.moments(on.as_deref()))
   }
+}
+
+/// Acts each in the state that the crate gives it, and each chain in the state that the acts that
+/// stand in it give, as a daemon tells them: what a window that makes acts of its own, as a test
+/// does, reads in place of a state of its own.
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_args_type = "acts: Array<import(\"./dist/protocol.js\").Act>",
+    ts_return_type = "Array<import(\"./dist/protocol.js\").Act>"
+  )
+)]
+pub fn restated(acts: Value) -> Result<Value, Fault> {
+  let json = wire::outward(acts.0.as_ref());
+  let mut acts: Vec<ViewAct> = serde_json::from_value(json)
+    .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
+  restate(&mut acts);
+  meant(&acts)
 }
 
 /// A meaning as a value of the engine, which crosses each door as JSON would.

@@ -115,7 +115,8 @@ test("⌥V switches the view of the life between main, the loom and the graph, w
       screen.mockInput.pressArrow("down");
       await soon(() => session.selected !== first);
       screen.mockInput.pressKey("[");
-      expect(app.cursor).toBeDefined();
+      // The step back shows once the crate gave the acts as they stood then.
+      await soon(() => app.cursor !== undefined);
       expect(await frame()).toContain("then");
       screen.mockInput.pressEscape();
       await soon(() => app.cursor === undefined);

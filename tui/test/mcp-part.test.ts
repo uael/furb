@@ -12,7 +12,7 @@ afterAll(() => {
 });
 
 /** The part of the extension mcp, and a word that answers its acts as the ear of mcp answers them, from two servers. */
-const PART = resolve(import.meta.dir, "..", "..", "extensions", "mcp", "tui.ts");
+const PART = resolve(import.meta.dir, "..", "..", ".agents", "skills", "mcp", "tui.ts");
 const fixture = resolve(import.meta.dir, "..", "fixtures", "mcp");
 const WORD = readFileSync(join(fixture, "servers.py"), "utf8").replace(
   /^from furb\.engine import .*\n+/m,
@@ -23,14 +23,11 @@ const WORD = readFileSync(join(fixture, "servers.py"), "utf8").replace(
 function project(): string {
   const directory = mkdtempSync(join(tmpdir(), "furb-mcp-"));
   made.push(directory);
-  const folder = join(directory, ".furb", "extensions", "servers");
+  const folder = join(directory, ".furb", "skills", "servers");
   mkdirSync(folder, { recursive: true });
   cpSync(fixture, folder, { recursive: true });
   cpSync(PART, join(folder, "tui.ts"));
-  writeFileSync(
-    join(directory, ".furb", "config.json"),
-    '{"extensions": {"servers": "extensions/servers"}}\n',
-  );
+  writeFileSync(join(directory, ".furb", "config.json"), '{"extensions": {"servers": "skills/servers"}}\n');
   return directory;
 }
 

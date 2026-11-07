@@ -12,5 +12,5 @@
     "jsx": "react-jsx",
     "types": ["bun"]
   },
-  "include": ["bind/typescript/**/*.ts", "tui/**/*.ts", "docs/examples/**/*.ts", "extensions/**/*.ts"]
+  "include": ["bind/typescript/**/*.ts", "tui/**/*.ts", "docs/examples/**/*.ts", ".agents/skills/**/*.ts"]
 }

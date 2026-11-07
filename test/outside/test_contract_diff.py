@@ -239,13 +239,30 @@ def test_a_kit_that_goes_since_the_release_is_a_break_and_a_kit_that_is_more_is_
   git(tmp_path, "commit", "-q", "-m", "kit")
   git(tmp_path, "tag", "v0.2.0")
   kit.unlink()
-  new = tmp_path / "extensions" / "mcp" / "mcp.pyi"
-  new.parent.mkdir()
+  new = tmp_path / ".agents" / "skills" / "mcp" / "mcp.pyi"
+  new.parent.mkdir(parents=True)
   new.write_text("def mcp_call() -> int: ...\n", encoding="utf-8")
   assert contract.main([], root=tmp_path) == 1
   out = capsys.readouterr().out
-  assert "break: extensions/web/web.pyi: the contract goes" in out
-  assert "minor: extensions/mcp/mcp.pyi: the contract is more" in out
+  assert "break: .agents/skills/web/web.pyi: the contract goes" in out
+  assert "minor: .agents/skills/mcp/mcp.pyi: the contract is more" in out
+
+
+def test_a_kit_that_moved_from_extensions_to_the_skills_with_the_same_interface_is_no_change(
+  tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+  tagged(tmp_path, "def a() -> int: ...\n")
+  kit = tmp_path / "extensions" / "web" / "web.pyi"
+  kit.parent.mkdir(parents=True)
+  kit.write_text("def web_fetch(url: str) -> int: ...\n", encoding="utf-8")
+  git(tmp_path, "add", "-A")
+  git(tmp_path, "commit", "-q", "-m", "kit")
+  git(tmp_path, "tag", "v0.2.0")
+  moved = tmp_path / ".agents" / "skills" / "web" / "web.pyi"
+  moved.parent.mkdir(parents=True)
+  kit.rename(moved)
+  assert contract.main([], root=tmp_path) == 0
+  assert ".agents/skills/web/web.pyi" not in capsys.readouterr().out
 
 
 def test_a_break_that_the_base_holds_already_fails_no_later_pull_request(

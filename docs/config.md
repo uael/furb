@@ -2,7 +2,7 @@
 
 furb reads `config.json` in the config directory of the user (`~/.config/furb` by default), then `.furb/config.json`
 and `.furb/config.local.json` of the project, which git ignores. A later config wins for each key that it gives.
-[`models.md`](models.md) says the keys of the models and the providers, and [`extensions.md`](extensions.md) the key
+[`models.md`](models.md) says the keys of the models and the providers, and [`skills.md`](skills.md) the key
 `extensions`. In the TUI, `/config` shows each key with its value and the layer that gives it, and changes it.
 `/config <key> <value>` sets a key in the layer that gives it now, else in the config of the project, and
 `/config <key>` with no value takes it out of that layer. A key in an object of furb or of a skill takes a dot, as

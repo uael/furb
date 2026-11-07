@@ -27,9 +27,9 @@ use crate::{
   Ear, Engine, Fault, Object, ObjectRef, checkpoint,
   ear::{hear, hearing, lasting},
   engine::OPERATOR,
-  extension::{self, Places, skills::skills},
   gate, minify,
-  world::{self, Catalog, Mode, Retries, Scratch, Writes, mcp::mcp},
+  skill::{self, Places},
+  world::{self, Catalog, Mode, Retries, Scratch, Writes, mcp::mcp, skills::skills},
 };
 
 /// The ears of a life, each under the name the engine hears it by, in the order of boot.
@@ -38,7 +38,7 @@ pub type Ears = Vec<(String, Box<dyn Ear>)>;
 /// What a life waits for before it boots, as [`Opening::prepared`] gives it.
 struct Prepared {
   places: Places,
-  extensions: Vec<extension::Extension>,
+  extensions: Vec<skill::Extension>,
   /// The line that tells why each extension that the configs turn on does not play.
   refused: Vec<String>,
   provider: world::Provider,
@@ -257,7 +257,7 @@ impl Opening {
     let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let ears = vec![
       ("provider", provider),
-      ("extensions", extension::telling(extensions, refused, places)),
+      ("extensions", skill::telling(extensions, refused, places)),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       (
         "mcp",
@@ -292,6 +292,9 @@ impl Opening {
   /// host with a runtime waits for it on a blocking thread.
   fn prepared(&self) -> Result<Prepared, Fault> {
     let works = self.works();
+    if self.keeps() {
+      self.crossed()?;
+    }
     // A record of another major of its schema is refused before any build reads it whole or writes
     // on it, and the models of a life on a record that holds another engine read that engine.
     let mut system = None;
@@ -310,7 +313,7 @@ impl Opening {
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
     let (extensions, refused) = match self.extensions != Some(false) && works {
-      true => extension::configured(&places, self.directory.as_ref())?,
+      true => skill::configured(&places, self.directory.as_ref())?,
       false => (Vec::new(), Vec::new()),
     };
     // The standing gives each extension whose word or life word plays, with the file of a word that is not blank.
@@ -455,6 +458,35 @@ impl Opening {
       engine.resume()?;
     }
     Ok((engine, record))
+  }
+
+  /// Carries a record whose last life ran another engine of the major across to this build, so a
+  /// life never dies on a fault that this build fixed in the kernel: a life that inspects the
+  /// record, born on the engine that its fact made holds, writes its checkpoint after its last
+  /// entry, as a life that ends writes one, and the life opens from that checkpoint on the engine
+  /// of this build. A record of this build, or of a build whose fact made holds no texts, stays as
+  /// it is.
+  fn crossed(&self) -> Result<(), Fault> {
+    let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) else {
+      return Ok(());
+    };
+    let marks = world::marks(path)?;
+    world::readable(&marks.heads)?;
+    let segment = checkpoint::segment(&marks.heads);
+    let (source, _) = world::texts(segment)?;
+    if source == crate::ENGINE || segment.is_empty() {
+      return Ok(());
+    }
+    let record = checkpoint::booted(world::kept(path)?);
+    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
+    let prepared = inspects.prepared()?;
+    let gated = prepared.gated;
+    let ears = inspects.eared(prepared, &record)?;
+    let mut engine = Engine::gated(record, ears, gated)?;
+    if let Some(no) = engine.raised() {
+      return Err(no.clone());
+    }
+    checkpoint::keep(Path::new(path), checkpoint::written(&mut engine)?)
   }
 
   /// Proves each checkpoint of the record: a life that inspects the entries before it, born on them

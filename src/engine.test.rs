@@ -2099,3 +2099,81 @@ fn an_ear_that_hears_with_no_work_takes_again_an_act_that_an_earlier_life_took()
   second.wake(&root).unwrap();
   assert!(block_on(Act::<Object>::of(&mut second, "wait1")).is_ok(), "the ear took the wait again");
 }
+
+#[test]
+fn a_replay_takes_the_answer_of_each_question_that_the_record_holds_and_a_live_word_past_the_bound_is_refused()
+ {
+  bounded_at(Duration::from_secs(30));
+  // A word that asks the clock again and again in one step, well within the bound of its life.
+  let word = "n = 0\nfor i in range(3000):\n  n += clock() > 0\nclose(8)";
+  let (root, facts, took, _yard) = {
+    let mut first = Lived::new("settled", &[word], true).unwrap();
+    let root = first.root();
+    let with = verbs::Prompt { on: on(&root), ..Default::default() };
+    let began = Instant::now();
+    let act = first.engine.prompt(Object::string("int"), with).unwrap();
+    assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8), "the life runs its word");
+    let took = began.elapsed();
+    let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+    (root, facts.iter().filter_map(said).collect::<Vec<_>>(), took, first.end())
+  };
+  assert!(took > Duration::from_millis(40), "the word runs long enough to pass a bound: {took:?}");
+  // A machine under load runs the replay slower than the life ran it: a bound of a twentieth of the
+  // word stands for it.
+  bounded_at(took / 20);
+  let spin = "while True:\n  pass";
+  let mut second = Lived::new("settled", &[spin, "close(9)"], false).expect("the replay opens");
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert!(second.engine.stopped().is_none(), "{:?}", second.engine.stopped());
+  let again = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let again = again.iter().filter_map(said).collect::<Vec<_>>();
+  let ends: Vec<_> = facts.iter().filter(|one| one.starts_with("done")).collect();
+  let missing: Vec<_> = ends.iter().filter(|one| !again.contains(one)).collect();
+  assert!(missing.is_empty(), "the replay ends each act as the record does: {missing:?}");
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = second.engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(9), "the chain asks again");
+  let read = second.read.borrow();
+  assert!(
+    read.iter().any(|one| one.contains("TimeoutError('turn time limit exceeded")),
+    "a live word past the bound is refused: {read:?}"
+  );
+  drop(read);
+  drop(second);
+  // The record keeps the end that the bound gave the word that spins, so its replay ends it so.
+  let third = Lived::new("settled", &[], false).expect("the replay of the spin opens");
+  assert!(third.engine.raised().is_none(), "{:?}", third.engine.raised());
+  assert!(third.engine.stopped().is_none(), "{:?}", third.engine.stopped());
+}
+
+#[test]
+fn a_run_of_the_record_that_goes_on_live_after_the_replay_is_bounded() {
+  bounded_at(Duration::from_secs(2));
+  // The word waits, and the life ends while it waits: the record holds the run but not its end.
+  let word = "await wait(1.5, __name__)\nwhile True:\n  pass";
+  let (root, _yard) = {
+    let mut first = Lived::new("held-live", &[word], true).unwrap();
+    let root = first.root();
+    let with = verbs::Prompt { on: on(&root), ..Default::default() };
+    let _asked = first.engine.prompt(Object::string("int"), with).unwrap();
+    let pause = first
+      .engine
+      .wait(&[root.as_str()], verbs::Wait { seconds: Some(0.3), on: on(&root) })
+      .unwrap();
+    block_on(pause).unwrap();
+    (root, first.end())
+  };
+  let mut second =
+    Lived::new("held-live", &["close(9)", "close(9)"], false).expect("the replay opens");
+  second.engine.wake(&root).unwrap();
+  let pause = second
+    .engine
+    .wait(&[root.as_str()], verbs::Wait { seconds: Some(8.0), on: on(&root) })
+    .unwrap();
+  block_on(pause).unwrap();
+  let read = second.read.borrow();
+  assert!(
+    read.iter().any(|one| one.contains("TimeoutError('turn time limit exceeded")),
+    "the word that spins after its wait is refused by the bound: {read:?}"
+  );
+}

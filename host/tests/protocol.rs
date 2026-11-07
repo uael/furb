@@ -21,7 +21,7 @@ mod protocol {
   };
 
   use furb_host::{
-    Host, Outbox, ProtocolError,
+    Host, Outbox, ProtocolError, fixed,
     protocol::{
       Answer, Axis, BOUND, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Layer, Mount,
       Node, PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect,
@@ -141,7 +141,7 @@ mod protocol {
       Verb::Desk { life: life(), notices: vec![id()] },
       Verb::Threads { life: life(), on: on(), at: Some(3), read: Some(2) },
       Verb::AsOf { life: life(), at: 3 },
-      Verb::Moments { life: life() },
+      Verb::Moments { life: life(), on: None },
       Verb::Answered {
         life: life(),
         ask: 1,
@@ -297,7 +297,7 @@ mod protocol {
   fn served(role: Role) -> Client<DuplexStream> {
     let (ours, theirs) = duplex(1 << 16);
     let who = Who { login: "uael".to_owned(), role };
-    tokio::spawn(async move { serve(&Echo, theirs, who).await });
+    tokio::spawn(async move { serve(&Echo, theirs, who, fixed(role)).await });
     Client { lines: BufReader::new(ours) }
   }
 
@@ -428,6 +428,7 @@ mod protocol {
     "43cd8affad009b9de1c73c355ae4822f1de6149d95d919a5f02171f8c7072604",
     "3d67e6b3dc718819064aae275d0f84cdd16c0f39b92d2a82a945461a19589713",
     "b7fcc6ef6baf1e729e50bc4c81bd3ea06e83a906a66e62709d6aa40607e5a2cf",
+    "31c217c979811fbf74d11684749ed59de0ca097e387b59820826b22478069d41",
   ];
 
   /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
@@ -521,7 +522,8 @@ mod protocol {
     tokio::spawn(async move {
       let stream = listener.accept().await.unwrap();
       let who = door.identify(&stream).await.unwrap();
-      serve(&Echo, stream, who).await
+      let granted = fixed(who.role);
+      serve(&Echo, stream, who, granted).await
     });
     let mut client = Client { lines: BufReader::new(local.dial().await.unwrap()) };
     let Frame::Reply { answer: Answer::Welcome { peer, .. }, .. } = client.hello(PROTOCOL).await

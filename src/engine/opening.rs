@@ -53,7 +53,18 @@ def __bounding(step):
       return step(*args, **kwargs)
     finally:
       __turn(was)
+      __bounded(args[1])
   return bounded
+
+def __bounded(job):
+  # The bound of a turn ended the word of a live run: the record keeps that end, so a later life
+  # takes it and never steps the word, whose replay holds no bound.
+  if isinstance(__engine["peek"](job), TimeoutError):
+    token = __engine["site"].set("journal")
+    try:
+      __engine["say"]("keep", "", tuple(x for x in __engine["transcript"](job, "done") if x[1] == job))
+    finally:
+      __engine["site"].reset(token)
 
 for __step in ("starts", "carry"):
   setattr(__kernel["Running"], __step, __bounding(getattr(__kernel["Running"], __step)))

@@ -1,13 +1,4 @@
-import {
-  busy,
-  type ChainThread,
-  isDone,
-  type Loom,
-  momentsOf,
-  owedAt,
-  type ThreadNode,
-  weave,
-} from "furb/life";
+import { busy, type ChainThread, isDone, type Loom, owedAt, type ThreadNode, weave } from "furb/life";
 import type { Stage } from "../graph.ts";
 import { actorOf, joined, type LifeView, LoomPane, lifeViews } from "../overview.ts";
 import { styled } from "../ui.ts";
@@ -235,8 +226,10 @@ export const stage = part({
   /** The time cursor moves back or forward by a count of the moments of the life, and past the last moment it stands
    * at the present again. */
   travel(by: number): void {
-    this.session.travel(by, momentsOf(this.session.acts));
-    this.render();
+    void this.session
+      .travel(by, true)
+      .then(() => this.render())
+      .catch(() => {});
   },
 
   /** Whether a verb that changes the life can act: none acts in the past. */

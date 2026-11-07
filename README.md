@@ -33,7 +33,7 @@ time, open the record again, and the work goes on from where it stopped.
 - **You stay in control.** The model can ask you a question and wait for your answer. You can pause any work, set a
   dollar ceiling, rewind a chain to an earlier point, or change the plan of a model while it works.
 - **Extensions are Python too.** An extension is a word that each chain runs, so the model reads it as it reads its
-  own work. furb comes with [eight extensions](https://github.com/uael/furb/blob/main/docs/extensions.md): what
+  own work. furb comes with [eight extensions](https://github.com/uael/furb/blob/main/docs/skills.md): what
   changed on the machine since the last run, the memory of a project, its skills, compaction, the name of a session, a guide to
   extend furb, the web, and the servers of MCP.
 
@@ -105,7 +105,7 @@ same program in TypeScript and in Rust, and four more.
 | Choose a model, or use a local one | [Models](https://github.com/uael/furb/blob/main/docs/models.md) |
 | Use furb from a program | [The examples](https://github.com/uael/furb/blob/main/docs/examples/README.md), [Python](https://github.com/uael/furb/blob/main/bind/python/README.md), [TypeScript](https://github.com/uael/furb/blob/main/bind/typescript/README.md) |
 | Use the command line | [The command line](https://github.com/uael/furb/blob/main/cli/README.md), and [its protocol](https://github.com/uael/furb/blob/main/docs/protocol.md) |
-| Extend furb | [Extensions](https://github.com/uael/furb/blob/main/docs/extensions.md) |
+| Extend furb | [Extensions](https://github.com/uael/furb/blob/main/docs/skills.md) |
 | See what may come | [Ideas for later](https://github.com/uael/furb/blob/main/docs/ideas.md) |
 | Check a record that someone gave you | [The audit](https://github.com/uael/furb/blob/main/docs/audit.md) |
 | Change furb | [Contributing](https://github.com/uael/furb/blob/main/CONTRIBUTING.md), and [the contract](https://github.com/uael/furb/blob/main/src/furb/engine.pyi), every law of the engine |

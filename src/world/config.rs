@@ -1,7 +1,7 @@
 //! The one writer of the configs of a life, in their layers: `config.json` in the config directory
 //! of the user, then `.furb/config.json` of the project, which git keeps, then
 //! `.furb/config.local.json` beside it, which git ignores. Each reader reads them in this order,
-//! as [`crate::extension::configs`] gives them, and a later layer wins for a key. A change that
+//! as [`crate::skill::configs`] gives them, and a later layer wins for a key. A change that
 //! the catalog cannot read stays on no disk: the writer puts its file back as it was.
 //!
 //! A schema names the keys, as the settings of VS Code do: furb names the keys that it reads, and
@@ -25,8 +25,8 @@ use super::{
   provider::{KEY_AUTOMATIC, KEY_CLASSES, KEY_THINKING, THINKING, catalog::switched},
 };
 use crate::{
-  extension::{self, Places, configs},
   gate,
+  skill::{self, Places, configs},
   value::Fault,
 };
 
@@ -292,11 +292,11 @@ impl Layers {
   /// configs turn on adds under its name, in the order a life runs them. A file of keys that is no
   /// schema names no key, so the configs stay readable and a config can turn its extension off,
   /// and the read of `settings://` and the name of that extension says why. An extension that
-  /// takes the name of a key of furb plays not, as [`extension::load`] says, and names no key.
+  /// takes the name of a key of furb plays not, as [`skill::load`] says, and names no key.
   fn schema(&self) -> Result<Vec<Named>, Error> {
     let places = Places { config: self.user.clone(), home: Places::here().home };
     let mut named = own();
-    for (name, text) in extension::contributed(&places, &self.project).map_err(Error::Extensions)? {
+    for (name, text) in skill::contributed(&places, &self.project).map_err(Error::Extensions)? {
       if furb_key(&name) {
         continue;
       }
