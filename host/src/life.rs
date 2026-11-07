@@ -19,7 +19,7 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
-  view::{Act, Desk, Fold, Held, Named, ThreadNode, Threads},
+  view::{Act, Desk, Fold, Held, Named, Phase, ThreadNode, Threads},
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -214,12 +214,14 @@ enum Message {
   Since(Seq, oneshot::Sender<Vec<Logged>>),
 }
 
-/// The log of a life on its thread: each event that it told, the readers that hear each next one,
-/// what the ears and the provider told that is not in the log yet, how many facts it told and the
-/// place of each by its digest, the place in the log of each fact that the engine of this birth
-/// heard, and what the actor watches to know when the life is born again.
+/// The log of a life on its thread: each event that it told, less those that a later event replaced
+/// (see [`Spent`]), the readers that hear each next one, what the ears and the provider told that
+/// is not in the log yet, how many facts it told and the place of each by its digest, the place in
+/// the log of each fact that the engine of this birth heard, and what the actor watches to know
+/// when the life is born again.
 pub struct Life {
-  log: Vec<Arc<Event>>,
+  log: Vec<Option<Arc<Event>>>,
+  spent: Spent,
   readers: broadcast::Sender<Logged>,
   heard: UnboundedReceiver<Event>,
   said: Seq,
@@ -233,6 +235,49 @@ pub struct Life {
   /// The name of the session, folded from each fact of the life, and where the handle reads it.
   named: Named,
   name: Arc<Mutex<Option<String>>>,
+}
+
+/// The places of the log whose event a later event replaced, which the log drops once each reader
+/// that stands within [`BEHIND`] of the life heard the event that replaced them: an event of an act
+/// replaces each earlier event of that act, and the act of a rung that has its word, or is done,
+/// replaces each part that a model wrote for it. A life that holds an act for each fact, and a part
+/// for each few words that a model streams, would else hold every state of each act and every part
+/// of each reply for its whole life.
+#[derive(Default)]
+struct Spent {
+  /// The place of the last event of each act.
+  acts: HashMap<String, Seq>,
+  /// The places of the parts that a model wrote for each rung that has no word yet.
+  parts: HashMap<String, Vec<Seq>>,
+  /// Each place that a later event replaced, under the place of that event, in order.
+  replaced: VecDeque<(Seq, Seq)>,
+}
+
+impl Spent {
+  /// An event heard at a place of the log, and the places that the log may drop now.
+  fn heard(&mut self, seq: Seq, event: &Event) -> Vec<Seq> {
+    match event {
+      Event::Act(act) => {
+        if let Some(before) = self.acts.insert(act.id.clone(), seq) {
+          self.replaced.push_back((seq, before));
+        }
+        if act.word.is_some() || matches!(act.phase, Phase::Done(_)) {
+          let parts = self.parts.remove(&act.id).unwrap_or_default();
+          self.replaced.extend(parts.into_iter().map(|part| (seq, part)));
+        }
+      }
+      Event::Text { rung, .. } => self.parts.entry(rung.clone()).or_default().push(seq),
+      _ => {}
+    }
+    let mut dropped = Vec::new();
+    while let Some(&(by, at)) = self.replaced.front()
+      && by + BEHIND as Seq <= seq
+    {
+      self.replaced.pop_front();
+      dropped.push(at);
+    }
+    dropped
+  }
 }
 
 /// The handle of a life, which any thread holds: it says a command to the life and reads its
@@ -279,8 +324,14 @@ impl Life {
     if let Event::Act(act) = &event {
       self.held.heard(act);
     }
-    let (seq, event) = (self.log.len() as Seq, Arc::new(event));
-    self.log.push(Arc::clone(&event));
+    let seq = self.log.len() as Seq;
+    for at in self.spent.heard(seq, &event) {
+      if let Some(slot) = usize::try_from(at).ok().and_then(|at| self.log.get_mut(at)) {
+        *slot = None;
+      }
+    }
+    let event = Arc::new(event);
+    self.log.push(Some(Arc::clone(&event)));
     self.readers.send((seq, event)).ok();
     if let Some(queued) = queued {
       self.put(queued);
@@ -407,7 +458,7 @@ impl Life {
   fn since(&self, from: Seq) -> Vec<Logged> {
     let from = usize::try_from(from).unwrap_or(usize::MAX);
     let since = self.log.iter().enumerate().skip(from);
-    since.map(|(at, one)| (at as Seq, Arc::clone(one))).collect()
+    since.filter_map(|(at, one)| Some((at as Seq, Arc::clone(one.as_ref()?)))).collect()
   }
 }
 
@@ -449,6 +500,7 @@ async fn run(
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from));
   let mut life = Life {
     log: Vec::new(),
+    spent: Spent::default(),
     readers,
     heard,
     said: 0,
@@ -876,9 +928,10 @@ impl LifeHandle {
     replied.await.unwrap_or(Err(LifeError::Ended))
   }
 
-  /// The events of the life from a place in its log, each once, in order and with no gap, until the
-  /// event that ends the life. A reader that stands too far behind the life reads again from the
-  /// log of the life.
+  /// The events of the life from a place in its log, each once and in order, until the event that
+  /// ends the life. A reader that stands too far behind the life reads again from the log of the
+  /// life, which holds no event that a later one replaced: of each act its last event, and no part
+  /// that a model wrote for a rung that has its word. Such a reader may find a gap in the places.
   pub fn events(&self, from: Seq) -> impl Streams<Item = Logged> + Send + 'static {
     let reader = Reader {
       life: self.clone(),
@@ -916,7 +969,7 @@ impl Reader {
   async fn next(mut self) -> Option<(Logged, Self)> {
     while !self.over {
       if let Some(logged) = self.read.pop_front() {
-        if logged.0 == self.next {
+        if logged.0 >= self.next {
           return Some(self.given(logged));
         }
       } else if self.behind {

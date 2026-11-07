@@ -73,3 +73,9 @@ harness = false
 # sets a limit of the process.
 name = "unkept"
 harness = false
+
+[[test]]
+# The test of the memory of a life runs in a process of its own, with no harness, since it counts
+# each byte that the process allocates.
+name = "memory"
+harness = false
