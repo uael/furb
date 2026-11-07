@@ -40,7 +40,7 @@ function still(chain: string): Seen {
     chain,
     acts: [],
     compactions: [],
-    extensions: async () => [],
+    skills: async () => [],
     of: () => [],
     run: async () => undefined,
     say: () => {},
