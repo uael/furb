@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { restated } from "../../index.cjs";
+import { laddered, restated } from "../../index.cjs";
 import type { Act, Measure } from "../../src/life/acts.ts";
 import { isDone } from "../../src/life/acts.ts";
-import { thread } from "../../src/life/ladder.ts";
+import { thread as drawn } from "../../src/life/ladder.ts";
 import {
   commandDoing,
   doingOf,
@@ -18,6 +18,28 @@ import {
   weave,
 } from "../../src/life/loom.ts";
 import { act, actIndex, changed, type More } from "./acts.ts";
+
+/** The thread of a chain from the ladder that the crate folds of the acts of an index, in the states that the crate
+ * gives them, as a host draws it. */
+const thread = (
+  chain: string,
+  word: (rung: Act) => string,
+  streams: ReadonlyMap<string, { text: string; thinking: string }>,
+  owed: ReadonlySet<string>,
+  opened: ReadonlySet<string>,
+  index: Parameters<typeof drawn>[5],
+  shown?: { prompts: number; rungs: number },
+) => {
+  const acts = restated([...index.ids.values()]);
+  return drawn(
+    laddered(acts, chain, [...opened], [...owed], undefined, shown),
+    chain,
+    word,
+    streams,
+    owed,
+    index,
+  );
+};
 
 /** A loom woven from acts in the states that the crate gives them, as a host tells them, and the index of the host
  * with those states. */

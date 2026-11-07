@@ -41,7 +41,7 @@ import {
   type ThreadNode,
   threadWork,
 } from "furb/life";
-import type { ThreadNode as CrateNode, FollowUp, Layer, Threads } from "furb/protocol";
+import type { ThreadNode as CrateNode, FollowUp, Layer, Rung, Threads } from "furb/protocol";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { typed } from "./configs.ts";
@@ -1133,6 +1133,45 @@ export class Session extends EventEmitter {
   threadsFresh(chain: string): boolean {
     const kept = this.crateThreads.get(chain);
     return kept?.stamp === this.threadStamp(chain) && kept.owed === this.owedNow;
+  }
+  /** The ladders that the crate last gave, by the chain and whether a branch took them, with what they were read of. */
+  private readonly crateLadders = new Map<string, { key: string; of: unknown; got: Rung[] }>();
+  /** The reads of a ladder that the session waits for, one for each slot. */
+  private readonly askingLadders = new Map<string, Promise<void>>();
+  /** Once each ladder that the session asked the crate for came, as a test waits for before it reads a frame. */
+  async laddersRead(): Promise<void> {
+    await Promise.allSettled([...this.askingLadders.values()]);
+  }
+  /** The ladder of a chain as the crate folds it, now or as it stood just after a moment: the steps that show and the
+   * folds of the others, with the folds that the operator opened, the prompts that the operator owes, and the only acts
+   * at its top when `taken` names them. The session asks the crate once at a time and draws again once it comes, and
+   * shows the ladder that the crate gave until it gives one of the acts of now. */
+  ladderOf(
+    chain: string,
+    opened: readonly string[],
+    at?: number,
+    taken?: readonly string[],
+  ): readonly Rung[] {
+    const owed = [...this.host.prompts.keys()];
+    const key = JSON.stringify([chain, opened, owed, at ?? null, taken ?? null]);
+    const slot = taken ? `taken:${chain}` : chain;
+    const kept = this.crateLadders.get(slot);
+    // The mark of the snapshot that the acts came in moves with each change of them, which are changed in place.
+    if ((kept?.key !== key || kept.of !== this.held) && !this.askingLadders.has(slot)) {
+      const of = this.held;
+      const read = (async () => {
+        try {
+          const got = await this.host.ladder(chain, at, [...opened], owed, taken && [...taken]);
+          this.crateLadders.set(slot, { key, of, got });
+          this.emit("change");
+        } finally {
+          this.askingLadders.delete(slot);
+        }
+      })();
+      this.askingLadders.set(slot, read);
+      read.catch(this.threadFault);
+    }
+    return kept?.key === key || kept?.key.startsWith(`["${chain}"`) ? kept.got : [];
   }
   /** The crate folds the threads of a chain, which the session asks for once at a time, and draws again once they
    * come. */

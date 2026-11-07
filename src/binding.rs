@@ -46,7 +46,10 @@ use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   life::Opening,
   skill::{self, Part, Skill},
-  view::{Act as ViewAct, Fold, Held, Pause, quotes as quotes_of, restate, writing as writing_of},
+  view::{
+    Act as ViewAct, Fold, Held, Pause, SHOWN, Shown, ladder, quotes as quotes_of, restate,
+    writing as writing_of,
+  },
   wire,
   world::{self, images},
 };
@@ -928,6 +931,30 @@ impl Meaning {
     meant(&self.held.rail(&hidden.unwrap_or_default(), at))
   }
 
+  /// The ladder of a chain, now or as it stood just after a moment, as the daemon folds it: the
+  /// folds that the window opened, the prompts that the operator owes, the only acts at its top
+  /// when `taken` names them, and how many last prompts and rungs show.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(
+      ts_args_type = "chain: string, at?: number, opened?: string[], owed?: string[], taken?: string[], shown?: import(\"./dist/protocol.js\").Shown",
+      ts_return_type = "Array<import(\"./dist/protocol.js\").Rung>"
+    )
+  )]
+  pub fn ladder(
+    &self,
+    chain: String,
+    at: Option<i64>,
+    opened: Option<Vec<String>>,
+    owed: Option<Vec<String>>,
+    taken: Option<Vec<String>>,
+    shown: Option<Value>,
+  ) -> Result<Value, Fault> {
+    let at = at.map(moment).transpose()?;
+    let (opened, owed) = (opened.unwrap_or_default(), owed.unwrap_or_default());
+    meant(&self.held.ladder(&chain, at, &opened, &owed, taken.as_deref(), counted(shown)?))
+  }
+
   /// The acts as they stood just after a moment.
   #[cfg_attr(
     feature = "typescript",
@@ -984,6 +1011,40 @@ pub fn restated(acts: Value) -> Result<Value, Fault> {
     .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
   restate(&mut acts);
   meant(&acts)
+}
+
+/// The ladder of a chain from acts in the state that the crate gives them, as [`Meaning::ladder`]
+/// folds it from the acts that it heard: what a window that makes acts of its own, as a test does,
+/// reads in place of a ladder of its own.
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_args_type = "acts: Array<import(\"./dist/protocol.js\").Act>, chain: string, opened?: string[], owed?: string[], taken?: string[], shown?: import(\"./dist/protocol.js\").Shown",
+    ts_return_type = "Array<import(\"./dist/protocol.js\").Rung>"
+  )
+)]
+pub fn laddered(
+  acts: Value,
+  chain: String,
+  opened: Option<Vec<String>>,
+  owed: Option<Vec<String>>,
+  taken: Option<Vec<String>>,
+  shown: Option<Value>,
+) -> Result<Value, Fault> {
+  let json = wire::outward(acts.0.as_ref());
+  let mut acts: Vec<ViewAct> = serde_json::from_value(json)
+    .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
+  acts.sort_by_key(|act| act.began);
+  let (opened, owed) = (opened.unwrap_or_default(), owed.unwrap_or_default());
+  meant(&ladder(&acts, &chain, &opened, &owed, taken.as_deref(), counted(shown)?))
+}
+
+/// How many last steps of each level a ladder shows: the count given, or [`SHOWN`].
+fn counted(shown: Option<Value>) -> Result<Shown, Fault> {
+  shown.map_or(Ok(SHOWN), |shown| {
+    serde_json::from_value(wire::outward(shown.0.as_ref()))
+      .map_err(|no| Fault::refused(format!("this is no count of steps: {no}")))
+  })
 }
 
 /// A meaning as a value of the engine, which crosses each door as JSON would.

@@ -1108,6 +1108,72 @@
             "life": {
               "type": "string"
             },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "at": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "opened": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "owed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "taken": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              },
+              "default": null
+            },
+            "shown": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Shown"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "ladder"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The ladder of a chain, now or as it stood just after a moment: the steps that show and the\nfolds of the others, with the folds that the window opened, the prompts that the operator\nowes, the only acts at its top when `taken` names them, and how many last steps show."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "at": {
               "type": "integer",
               "format": "uint64",
@@ -1421,6 +1487,26 @@
         "local"
       ],
       "description": "A layer of the configs, from the one that wins least to the one that wins most."
+    },
+    "Shown": {
+      "type": "object",
+      "properties": {
+        "prompts": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "rungs": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "prompts",
+        "rungs"
+      ],
+      "description": "How many of the last prompts of a thread, and of the last rungs of each ladder, show."
     },
     "Slot": {
       "oneOf": [
@@ -2503,6 +2589,26 @@
           "properties": {
             "answer": {
               "type": "string",
+              "const": "ladder"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Rung"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The ladder of a chain."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
               "const": "acts"
             },
             "data": {
@@ -3009,6 +3115,104 @@
         "paused"
       ],
       "description": "What a tree of threads says to the operator, counted by thread."
+    },
+    "Rung": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "step"
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "depth"
+          ],
+          "description": "A step, with the steps under it after it, each one level deeper."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "rungs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "depth": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "ear"
+            }
+          },
+          "required": [
+            "type",
+            "rungs",
+            "depth"
+          ],
+          "description": "The rungs in a row that one maker wrote on the chain with no word of its own, as the words of\nthe skills and the setup of a chain."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "head": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "of": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "heads": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "more"
+            }
+          },
+          "required": [
+            "type",
+            "head",
+            "depth",
+            "count",
+            "of",
+            "key",
+            "heads"
+          ],
+          "description": "A fold of `count` earlier steps of a level, from the step `head`, with the kinds of the steps\nthat it holds in the order they first come. `key` opens it: prompts: or rungs: and the act\nthat the steps stand under, or the chain at the top."
+        }
+      ],
+      "description": "One line of a ladder, in the order that the window draws it."
     },
     "Act": {
       "type": "object",
@@ -3901,5 +4105,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 5
+  "x-protocol": 6
 }

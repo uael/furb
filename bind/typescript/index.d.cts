@@ -233,6 +233,12 @@ export declare class Meaning {
    * of the list of the threads, now or as they stood just after a moment.
    */
   rail(hidden?: Array<string> | undefined | null, at?: number | undefined | null): Array<import("./dist/protocol.js").ThreadNode>
+  /**
+   * The ladder of a chain, now or as it stood just after a moment, as the daemon folds it: the
+   * folds that the window opened, the prompts that the operator owes, the only acts at its top when
+   * `taken` names them, and how many last prompts and rungs show.
+   */
+  ladder(chain: string, at?: number, opened?: string[], owed?: string[], taken?: string[], shown?: import("./dist/protocol.js").Shown): Array<import("./dist/protocol.js").Rung>
   /** The acts as they stood just after a moment. */
   asOf(at: number): Array<import("./dist/protocol.js").Act>
   /** Each moment at which an act began or ended, in order, of the life or of the acts of one chain. */
@@ -393,6 +399,13 @@ export interface Inspection {
 
 /** What the store kept at a path, read with no lease and changed in nothing. */
 export declare function kept(path: string): unknown[]
+
+/**
+ * The ladder of a chain from acts in the state that the crate gives them, as [`Meaning::ladder`]
+ * folds it from the acts that it heard: what a window that makes acts of its own, as a test does,
+ * reads in place of a ladder of its own.
+ */
+export declare function laddered(acts: Array<import("./dist/protocol.js").Act>, chain: string, opened?: string[], owed?: string[], taken?: string[], shown?: import("./dist/protocol.js").Shown): Array<import("./dist/protocol.js").Rung>
 
 /** LARGEST is the largest number of bytes that a read tells of the lines that its show picks. */
 export declare const LARGEST: number

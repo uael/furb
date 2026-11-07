@@ -318,7 +318,14 @@ export const feed = part({
       );
       const owed = new Set(w.host.prompts.keys());
       const word = (rung: ActRow) => this.subject(rung);
-      const own = thread(w.selected, word, w.host.streams, owed, opened, index);
+      const own = thread(
+        w.ladderOf(w.selected, [...opened], w.moment),
+        w.selected,
+        word,
+        w.host.streams,
+        owed,
+        index,
+      );
       // A branch takes from its source the messages that its prefix carries, as the crate folds them, with what
       // answered them. Its feed shows these threads as they stood when the branch began, after the line that names the
       // source and before its own acts, since its model reads them as its own turns.
@@ -329,12 +336,17 @@ export const feed = part({
       // other step of its source stands at their top.
       const frozen = branch && taken.size ? w.ladderAt(source, branch.began - 1) : undefined;
       const takenMade = () => frozen?.made ?? new Map<string, readonly ActRow[]>();
-      const takenLines = frozen
-        ? thread(source, word, w.host.streams, owed, opened, {
-            ...frozen,
-            on: frozen.on.filter((one) => taken.has(one.id)),
-          })
-        : [];
+      const takenLines =
+        frozen && branch
+          ? thread(
+              w.ladderOf(source, [...opened], branch.began - 1, [...taken]),
+              source,
+              word,
+              w.host.streams,
+              owed,
+              frozen,
+            )
+          : [];
       // The words that retell the source stand first in the feed of the branch, as the acts that the branch made.
       const retelling = own.findIndex((line) => line.depth === 0 && line.act.by !== w.selected);
       const after = retelling < 0 ? own.length : retelling;

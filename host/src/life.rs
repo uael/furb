@@ -19,7 +19,7 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
-  view::{Act, Desk, Fold, Held, Named, Phase, ThreadNode, Threads},
+  view::{Act, Desk, Fold, Held, Named, Phase, Rung, SHOWN, Shown, ThreadNode, Threads},
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -136,6 +136,16 @@ pub enum Command {
   /// The threads of every chain of the life but those it names, as one tree in the order of the
   /// list of the threads, now or as they stood just after a moment.
   Rail { hidden: Vec<String>, at: Option<u64> },
+  /// The ladder of a chain, as [`furb::view::ladder`] folds it, now or as it stood just after a
+  /// moment.
+  Ladder {
+    on: Option<String>,
+    at: Option<u64>,
+    opened: Vec<String>,
+    owed: Vec<String>,
+    taken: Option<Vec<String>>,
+    shown: Option<Shown>,
+  },
   /// The acts as they stood just after a moment, each with its meaning then.
   AsOf { at: u64 },
   /// Each moment at which an act began or ended, in order, of the life or of the acts of one
@@ -188,13 +198,18 @@ pub enum Reply {
   /// The items that a query gives, each as JSON.
   Values(Vec<Value>),
   /// A name of a module: the name of its type, its representation, and its value as JSON.
-  Inspected { kind: String, repr: String, value: Value },
+  Inspected {
+    kind: String,
+    repr: String,
+    value: Value,
+  },
   /// What waits for the operator.
   Desk(Desk),
   /// The threads of a chain.
   Threads(Threads),
   /// The threads of every chain of the life, as one tree.
   Rail(Vec<ThreadNode>),
+  Ladder(Vec<Rung>),
   /// The acts as they stood at a moment.
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.
@@ -738,6 +753,10 @@ async fn commanded(
       Ok(Reply::Threads(held.threads(&chain(on), at, read.unwrap_or_default())))
     }
     Command::Rail { hidden, at } => Ok(Reply::Rail(held.rail(&hidden, at))),
+    Command::Ladder { on, at, opened, owed, taken, shown } => {
+      let shown = shown.unwrap_or(SHOWN);
+      Ok(Reply::Ladder(held.ladder(&chain(on), at, &opened, &owed, taken.as_deref(), shown)))
+    }
     Command::AsOf { at } => Ok(Reply::Acts(held.as_of(at))),
     Command::Moments { on } => Ok(Reply::Moments(held.moments(on.as_deref()))),
     Command::Settings => {
