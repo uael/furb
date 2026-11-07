@@ -417,7 +417,7 @@ fn found(here: &Path, project: &Path, places: &Places) -> Vec<Found> {
     here.ancestors().flat_map(|one| [one.join(".furb"), one.join(".agents"), one.join(".claude")]);
   let roots = roots.map(|one| one.join("skills")).chain([places.config.join("skills")]);
   let mut folders: Vec<PathBuf> = roots.flat_map(|root| inside(&root)).collect();
-  let configured = turned_on(places, project).unwrap_or_default().into_iter();
+  let configured = turned_on(places, project).map(|got| got.0).unwrap_or_default().into_iter();
   folders.extend(configured.filter_map(|(_, root)| root));
   let mut out: Vec<Found> = Vec::new();
   let mut keep = |one: Found| {

@@ -138,8 +138,8 @@ struct Named {
 const PROVIDERS: &str = "providers";
 
 /// The keys that furb reads.
-/// Whether a name is a key of furb at the top of the configs, which no extension takes as its name,
-/// since the configs hold the keys of an extension under its name.
+/// Whether a name is a key of furb at the top of the configs, which no skill that gives keys of
+/// its own takes as its name, since the configs hold those keys under its name.
 pub(crate) fn furb_key(name: &str) -> bool {
   own().iter().any(|one| one.key[0] == name)
 }
@@ -209,7 +209,7 @@ pub enum Error {
   Restore { refused: catalog::Error, source: disk::Error },
   #[error("The keys of the skills were not read: {0}")]
   Skills(#[source] Fault),
-  #[error("The keys of the extension {name} are no schema of keys: {source}")]
+  #[error("The keys of the skill {name} are no schema of keys: {source}")]
   Schema { name: String, source: serde_json::Error },
   #[error("The key {key} takes {wanted}, and {value} is not")]
   Value { key: String, wanted: String, value: Value },

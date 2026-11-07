@@ -43,7 +43,7 @@ impl Life {
     Ok(Self { engine, root, held })
   }
 
-  /// The extensions that the life runs, in the order it enabled them.
+  /// The skills that the life runs, in the order it enabled them.
   pub(crate) fn skills(&mut self) -> Result<Vec<Skill>, CliError> {
     let root = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None });
     Ok(skill::enabled(&root?))

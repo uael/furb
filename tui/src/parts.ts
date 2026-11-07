@@ -361,7 +361,7 @@ export class Parts {
     }
     const loaded = await Promise.all(found.map((one) => loadPart(one.name, one.file, one.text)));
     if (asked !== this.asked || this.closed) return;
-    this.loaded = error ? [bare("skills", join(this.project, ".furb"), error), ...loaded] : loaded;
+    this.loaded = error ? [bare("config", join(this.project, ".furb"), error), ...loaded] : loaded;
     this.follow(found);
     this.version++;
     this.changed();

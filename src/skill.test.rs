@@ -12,7 +12,7 @@ use std::{
 
 use super::{
   Enabled, Part, Places, Skill, configs, configured, definitions, enabled, enabled_by, extensions,
-  frontmatter, load, parts, projected, reloads, telling, word,
+  frontmatter, load, parts, projected, reloads, telling, turned, word,
 };
 use crate::testing::Yard;
 use crate::value::{ObjectRef, Text, entry};
@@ -211,7 +211,7 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
   );
   assert_eq!(
     refused(r#"{"skills": {"note": true}}"#),
-    format!("No config gives the folder of the extension note: {shown}")
+    format!("No config gives the folder of the skill note: {shown}")
   );
   assert!(refused("{").ends_with(&format!(": {shown}")));
 }
@@ -559,7 +559,7 @@ fn an_extension_of_a_config_that_does_not_load_does_not_play_and_the_others_do()
   assert_eq!(
     refused,
     [format!(
-      "The extension near does not play: The word note.py binds filled of the engine at its top, \
+      "The skill near does not play: The word note.py binds filled of the engine at its top, \
        which each word of a chain reads: give each a name of its own: {manifest}"
     )]
   );
@@ -580,7 +580,7 @@ fn an_extension_of_the_config_of_the_user_goes_through_the_same_check_and_a_refu
   assert_eq!(
     refused,
     [format!(
-      "The extension mine does not play: The word note.py binds filled of the engine at its top, \
+      "The skill mine does not play: The word note.py binds filled of the engine at its top, \
        which each word of a chain reads: give each a name of its own: {file}"
     )]
   );
@@ -599,7 +599,7 @@ fn the_ear_tells_the_root_once_why_each_extension_that_does_not_play_does_not_pl
   let yard = place("told");
   let at: &Path = &yard;
   let (record, store) = world::store(at.join("record.jsonl")).unwrap();
-  let why = ["The extension a does not play: one", "The extension b does not play: two"];
+  let why = ["The skill a does not play: one", "The skill b does not play: two"];
   let ears = [
     ("extensions", telling(vec![], why.map(str::to_owned).to_vec(), places(at))),
     ("stand", standing(at.to_owned())),
@@ -1057,6 +1057,17 @@ fn a_config_that_gives_the_former_key_turns_nothing_on_and_says_that_the_key_is_
   let (on, refused) = configured(&places(&at), &at).expect("the configs read");
   assert!(on.iter().any(|one| one.name == "memory"), "{on:?}");
   assert!(!on.iter().any(|one| one.name == "notes"), "{on:?}");
+  let told =
+    format!("The key extensions of {} is now skills, so it turns nothing on", file.display());
+  assert_eq!(refused, [told]);
+}
+
+#[test]
+fn a_write_of_a_config_with_the_former_key_turns_nothing_on_and_says_that_the_key_is_now_skills() {
+  let at = Yard::new("former-write");
+  let file = at.join(".furb").join("config.local.json");
+  let (on, refused) = turned(&file, r#"{"extensions": {"note": "skills/note"}}"#, &places(&at));
+  assert!(on.is_empty(), "{on:?}");
   let told =
     format!("The key extensions of {} is now skills, so it turns nothing on", file.display());
   assert_eq!(refused, [told]);

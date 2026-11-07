@@ -17,7 +17,7 @@ function skill(directory: string, name: string, detail: string): void {
   writeFileSync(join(folder, "SKILL.md"), `---\nname: ${name}\ndescription: ${detail}\n---\nSteps.\n`);
 }
 
-test("a skill added on the disk shows in the list of / commands after /skills, and its command loads the skill", async () => {
+test("a skill added on the disk shows in the list of / commands after /reload-skills, and its command loads the skill", async () => {
   const directory = mkdtempSync(join(tmpdir(), "furb-skills-"));
   made.push(directory);
   skill(directory, "brew", "Brew a pot of tea");

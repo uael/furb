@@ -1,7 +1,7 @@
 //! furb, the command line: the TUI, and one command of the operator on one life.
 //!
 //! With no command, furb hands the terminal to the TUI. `prompt`, `turns`, `run` and
-//! `extensions` each open one life and print what it came to, and `facts` prints a record as
+//! `skills` each open one life and print what it came to, and `facts` prints a record as
 //! it is. Every life runs on the engine of the crate, on the ears of the World that the
 //! crate writes, the extensions among them, and on the provider of the model of its default
 //! actor and of the models that `--roster` names, or of every model that the
@@ -157,7 +157,8 @@ enum Command {
     #[command(subcommand)]
     then: Option<Hosting>,
   },
-  /// Print each extension that a life on the record runs: those it enables, then those that the configs of the user
+  /// Print each skill that a life on the record runs: those it enables, then those that the
+  /// configs of the user
   /// and of the directory turn on, each with its life word.
   Skills {
     #[command(flatten)]
@@ -365,7 +366,8 @@ async fn checkpoint(opening: Opening, record: &Path) -> Result<(), CliError> {
   Ok(checkpoint::keep(record, written)?)
 }
 
-/// Each extension that a life on the record runs, as its name and its life word, or its name alone when it has none,
+/// Each skill that a life on the record runs, as its name and its life word, or its name alone
+/// when it has none,
 /// one on each line.
 async fn skills(opening: Opening) -> Result<(), CliError> {
   let mut life = Life::lived(opening).await?;

@@ -50,7 +50,7 @@ async def test_extend_writes_the_words_of_the_rungs_it_names(tmp_path: Path) -> 
 
 
 async def test_extend_writes_tui_as_the_part_that_the_tui_loads(tmp_path: Path) -> None:
-  """extend writes tui, when it is given, as tui.ts in the folder of the extension, the part that the TUI loads, and the manifest names tui.ts under furb-view of its metadata whenever the folder holds that file."""
+  """extend writes tui, when it is given, as tui.ts in the folder of the skill, the part that the TUI loads, and the manifest names tui.ts under furb-view of its metadata whenever the folder holds that file."""
   _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
   f, g = engine.rung(F, on=root), engine.rung(G, on=root)
   await g

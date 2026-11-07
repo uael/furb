@@ -205,7 +205,7 @@ What the notes are for.
 - `furb-view` is the file of the [part for the TUI](#a-part-for-the-tui). It can be absent.
 - `furb-process` is the file of the process of the extension, relative to the folder: a module of TypeScript or of
   JavaScript, which bun runs, or any other program. When a life plays the extension, the daemon of the machine starts
-  it in the folder of the extension, at the end of the replay of the record, and ends it when the life ends or when
+  it in the folder of the skill, at the end of the replay of the record, and ends it when the life ends or when
   the life plays a new word of the extension. Its variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` give the folder
   where the daemon listens, the record of the life and the name of the extension, so it dials the daemon and attaches
   the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
@@ -355,7 +355,7 @@ and a key or a command that throws shows its error in the footer.
 
 A model adds a part to a life that runs with `extend(name, *rungs, tui=module)` of `ouroboros`, whose skill
 teaches it. The write lands in `.furb`, so the TUI loads the part at once. The config turns the extension on in
-the same life. A config that sets the extension to `false` takes its part away again. `/extensions` opens a dialog of
+the same life. A config that sets the extension to `false` takes its part away again. `/skills` opens a dialog of
 the extensions that the life runs, each with what its part gives, or with the error that stopped its load. Only the
 operator sees an error of a part, so the skill tells the model to check its module with `bun build --no-bundle` and to
 read the error that the operator gives it.
@@ -395,7 +395,7 @@ life gets the same answer from the record. So a replay is exact, and the World i
 
 - The command line: `furb skills` prints each skill that a life on a record runs, with its life word. The
   `state` of the protocol names them.
-- The TUI: `/extensions` lists what the life runs, and `/run` runs a word of one on the chain on screen, as
+- The TUI: `/skills` lists what the life runs, and `/run` runs a word of one on the chain on screen, as
   `/run skill("pdf")`.
 - TypeScript: `Session` takes `extensions`, false to enable nothing new, and `config`, the config directory of the
   user.

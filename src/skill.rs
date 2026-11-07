@@ -60,6 +60,18 @@ pub(crate) const KEY: &str = "skills";
 /// the config.
 const FORMER_KEY: &str = "extensions";
 
+/// The name of each skill that the configs turn on, with the path of its folder when it is not
+/// official, and the line of each config that still gives [`FORMER_KEY`].
+pub(crate) type Turned = (Vec<(String, Option<PathBuf>)>, Vec<String>);
+
+/// The line that tells that a config gives [`FORMER_KEY`], which turns nothing on.
+fn former(file: &Path, read: &Value) -> Option<String> {
+  let at = file.display();
+  read
+    .get(FORMER_KEY)
+    .map(|_| format!("The key {FORMER_KEY} of {at} is now {KEY}, so it turns nothing on"))
+}
+
 /// The kind of the fact that enables an extension in a life, which [`extensions`] says and reads.
 pub const ENABLE: &str = "enable";
 
@@ -520,16 +532,9 @@ pub(crate) fn manifested<T: AsRef<str>>(
 /// that the key is now [`KEY`].
 pub fn configured(places: &Places, project: &Path) -> Result<(Vec<Skill>, Vec<String>), Fault> {
   let official = officials(places);
-  let mut out = (Vec::new(), Vec::new());
-  for file in configs(&places.config, project) {
-    let read =
-      fs::read_to_string(&file).ok().and_then(|text| serde_json::from_str::<Value>(&text).ok());
-    if read.is_some_and(|read| read.get(FORMER_KEY).is_some()) {
-      let at = file.display();
-      out.1.push(format!("The key {FORMER_KEY} of {at} is now {KEY}, so it turns nothing on"));
-    }
-  }
-  for (name, path) in turned_on(places, project)? {
+  let (turned, moved) = turned_on(places, project)?;
+  let mut out = (Vec::new(), moved);
+  for (name, path) in turned {
     // A copy of an official extension in the folder of the skills of the project prevails over the
     // one that furb carries, for its word and for the file that a chain reads. A skill of that name
     // with no word is a skill of the project alone, and the official one plays.
@@ -555,20 +560,19 @@ pub fn configured(places: &Places, project: &Path) -> Result<(Vec<Skill>, Vec<St
 fn loaded(name: &str, root: &Path, places: &Places, (on, refused): &mut (Vec<Skill>, Vec<String>)) {
   match load(name, root, places) {
     Ok(one) => on.push(one),
-    Err(no) => refused.push(format!("The extension {name} does not play: {}", no.message())),
+    Err(no) => refused.push(format!("The skill {name} does not play: {}", no.message())),
   }
 }
 
 /// The name of each extension that the configs turn on, in the order a life runs them, with the
 /// path of its folder,
-/// which an official extension has not.
-pub(crate) fn turned_on(
-  places: &Places,
-  project: &Path,
-) -> Result<Vec<(String, Option<PathBuf>)>, Fault> {
+/// which an official extension has not. The second list tells each config that still gives
+/// [`FORMER_KEY`].
+pub(crate) fn turned_on(places: &Places, project: &Path) -> Result<Turned, Fault> {
   let official = names();
   let mut named: Vec<(String, Option<PathBuf>, bool)> =
     official.iter().map(|(name, on)| (name.clone(), None, *on)).collect();
+  let mut moved = Vec::new();
   for file in configs(&places.config, project) {
     let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
     let text = match fs::read_to_string(&file) {
@@ -576,12 +580,13 @@ pub(crate) fn turned_on(
       got => got.map_err(|no| refused(no.to_string()))?,
     };
     let read: Value = serde_json::from_str(&text).map_err(|no| refused(no.to_string()))?;
-    let extensions = match read.get(KEY) {
-      Some(Value::Object(extensions)) => extensions,
+    moved.extend(former(&file, &read));
+    let skills = match read.get(KEY) {
+      Some(Value::Object(skills)) => skills,
       None if read.is_object() => continue,
       _ => return Err(refused("A config is a map, whose skills is a map".to_owned())),
     };
-    for (name, form) in extensions {
+    for (name, form) in skills {
       let at = named.iter().position(|one| &one.0 == name).unwrap_or_else(|| {
         named.push((name.clone(), None, false));
         named.len() - 1
@@ -590,7 +595,7 @@ pub(crate) fn turned_on(
       let theirs = at >= official.len();
       match form {
         Value::Bool(true) if theirs && one.1.is_none() => {
-          return Err(refused(format!("No config gives the folder of the extension {name}")));
+          return Err(refused(format!("No config gives the folder of the skill {name}")));
         }
         Value::Bool(on) => one.2 = *on,
         Value::String(path) if theirs => (one.1, one.2) = (Some(beside(&file, path, places)), true),
@@ -602,7 +607,8 @@ pub(crate) fn turned_on(
     }
   }
   // The official extensions stand first, and each other one that is on has the path of its folder.
-  Ok(named.into_iter().filter(|one| one.2).map(|(name, path, _)| (name, path)).collect())
+  let on = named.into_iter().filter(|one| one.2).map(|(name, path, _)| (name, path)).collect();
+  Ok((on, moved))
 }
 
 /// The part of an extension that a TUI loads: the name of the extension, the path of its module of
@@ -628,7 +634,7 @@ pub struct Part {
 /// folder is read again, so a part that a later write names is found.
 pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
   let mut out = Vec::new();
-  for (name, root) in turned_on(places, project)? {
+  for (name, root) in turned_on(places, project)?.0 {
     let Some(root) = root else {
       out.extend(carried(&name));
       continue;
@@ -650,7 +656,7 @@ pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
 /// can turn that extension off.
 pub(crate) fn contributed(places: &Places, project: &Path) -> Result<Vec<(String, String)>, Fault> {
   let mut out = Vec::new();
-  for (name, root) in turned_on(places, project)? {
+  for (name, root) in turned_on(places, project)?.0 {
     let Some(root) = root else { continue };
     let Ok(text) = fs::read_to_string(root.join(MANIFEST)) else { continue };
     let keys = frontmatter(&text).meta(CONFIG).map(|keys| root.join(keys));
@@ -693,12 +699,14 @@ fn beside(file: &Path, path: &str, places: &Places) -> PathBuf {
 /// A folder whose extension does not load turns on nothing, and the second list says why.
 fn turned(file: &Path, text: &str, places: &Places) -> (Vec<Skill>, Vec<String>) {
   let mut out = (Vec::new(), Vec::new());
-  let Some(Value::Object(extensions)) =
-    serde_json::from_str::<Value>(text).ok().and_then(|one| one.get(KEY).cloned())
-  else {
+  let Ok(read) = serde_json::from_str::<Value>(text) else {
     return out;
   };
-  for (name, form) in &extensions {
+  out.1.extend(former(file, &read));
+  let Some(Value::Object(skills)) = read.get(KEY) else {
+    return out;
+  };
+  for (name, form) in skills {
     if let Some(path) = form.as_str() {
       loaded(name, &beside(file, path, places), places, &mut out);
     }
@@ -979,7 +987,8 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
             tell(&mut co, &refused);
             found.into_iter().filter(|one| !runs(one)).collect()
           } else {
-            let folders = turned_on(&places, &project).unwrap_or_default().into_iter();
+            let folders =
+              turned_on(&places, &project).map(|got| got.0).unwrap_or_default().into_iter();
             let mine =
               folders.filter(|(name, root)| root.as_deref() == file.parent() && runs_name(name));
             let mut found = (Vec::new(), Vec::new());

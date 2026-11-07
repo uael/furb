@@ -96,7 +96,7 @@ test("a life gains the panel of a part of a project extension, which draws again
       // A change of the file of the part draws again, with no restart.
       writeFileSync(file, PART.replace('"Todo"', '"Todo list"'));
       await shows(frame, "Todo list");
-      // A write that the life makes in the folder of the extension lands, and the part loads again.
+      // A write that the life makes in the folder of the skill lands, and the part loads again.
       const word = `write(Text(".furb/skills/todo/tui.ts", ${JSON.stringify(PART.replace('"Todo"', '"Plan"'))}))`;
       await session.command(`/run ${word}`);
       await shows(frame, "Plan");
@@ -162,7 +162,7 @@ test("the parts load the part of each extension that the configs give, and a con
   expect(parts.command("todos")?.detail).toBe("Say how many items are open");
   writeFileSync(join(directory, ".furb", "config.json"), '{"skills": []}\n');
   await parts.load();
-  expect(parts.loaded.map((one) => one.name)).toEqual(["skills"]);
+  expect(parts.loaded.map((one) => one.name)).toEqual(["config"]);
   expect(parts.loaded[0]?.error).toContain("A config is a map, whose skills is a map");
   expect(changes).toBe(2);
   parts.dispose();

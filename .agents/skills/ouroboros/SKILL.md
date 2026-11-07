@@ -113,7 +113,7 @@ its extension, and only the operator sees it. A module that has a syntax error, 
 function that throws when it runs all show there. So run `bun build --no-bundle .furb/skills/todo/tui.ts`, which
 finds a syntax error, and read your code again for each name that `seen` and `furb` do not have. When the operator
 tells you an error, read the file again, change it with `replace`, and write it: the panel draws again at once.
-`/extensions` in the TUI lists what each part gives. To take an extension away, set it to `false` in
+`/skills` in the TUI lists what each part gives. To take an extension away, set it to `false` in
 `.furb/config.json`, and its part goes with it.
 
 An official extension of furb also has a contract, `notes.pyi`, a suite, `test/`, and, when it reads the disk, an ear
