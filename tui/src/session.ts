@@ -27,8 +27,6 @@ import {
   type ChainAside,
   type ChainThread,
   cancelled,
-  chainNotes,
-  chainSorted,
   type Desk,
   desk,
   failed,
@@ -42,9 +40,10 @@ import {
   reasonOf,
   rollUp,
   type State,
+  type ThreadNode,
   threadWork,
 } from "furb/life";
-import type { FollowUp, Layer } from "furb/protocol";
+import type { ThreadNode as CrateNode, FollowUp, Layer, Threads } from "furb/protocol";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { typed } from "./configs.ts";
@@ -58,6 +57,31 @@ import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } fr
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { isThemeChoice, palettes, type ThemeChoice, type ThemeName, themeOf } from "./theme.ts";
 import { branchNotice } from "./watching.ts";
+
+/** The acts of a list of ids, each that the session holds, in order. */
+function rowsOf(list: readonly string[], ids: ReadonlyMap<string, ActRow>): ActRow[] {
+  return list.flatMap((id) => ids.get(id) ?? []);
+}
+/** A thread as the crate gives it, with the act of each id that the session holds, or nothing when it holds no act of
+ * its prompt yet. */
+function threadOf(one: CrateNode["thread"], ids: ReadonlyMap<string, ActRow>): ChainThread | undefined {
+  const act = ids.get(one.prompt);
+  if (!act) return undefined;
+  const { prompt: _, messages, asked, ...rest } = one;
+  return { ...rest, act, messages: rowsOf(messages, ids), asked: rowsOf(asked, ids) };
+}
+/** A tree of threads as the crate gives it, with the act of each id: a thread whose prompt the session does not hold
+ * yet leaves the tree with its agents, until the acts come. */
+export function nodesOf(tree: readonly CrateNode[], ids: ReadonlyMap<string, ActRow>): ThreadNode[] {
+  return tree.flatMap((node): ThreadNode[] => {
+    const thread = threadOf(node.thread, ids);
+    return thread ? [{ thread, agents: nodesOf(node.agents, ids), state: node.state }] : [];
+  });
+}
+/** Each thread of a tree, its agents after it. */
+export function flatThreads(tree: readonly ThreadNode[]): ChainThread[] {
+  return tree.flatMap((node) => [node.thread, ...flatThreads(node.agents)]);
+}
 
 /** The views of a chain: the feed of what it did, the transcript that the model reads, and the files it changed. */
 export const views = ["feed", "transcript", "changes"] as const;
@@ -172,6 +196,8 @@ interface Index {
    * a chain depend on its prompts alone, so an act of another kind reads no thread again. */
   threaded: Map<string, number>;
   prompts: number;
+  /** How many times an act that names the session came or changed. */
+  named: number;
   /** The chain of each act that came or changed, once each time, which tells the board which chains to read again. */
   touched: string[];
   /** The writes that are done, in the order that the session saw them done. */
@@ -225,6 +251,8 @@ function placed(index: Index, act: ActRow): void {
   index.stamps.set(act.by, (index.stamps.get(act.by) ?? 0) + 1);
   index.chained.set(act.chain, (index.chained.get(act.chain) ?? 0) + 1);
   if (act.kind === "prompt") index.threaded.set(act.chain, ++index.prompts);
+  // A name of the session names the first thread of the operator in the crate, so it reads the threads again.
+  if (act.kind === "name_session" || act.kind === "rename_session") index.named++;
   index.touched.push(act.chain);
   const latest = index.latest.get(act.chain);
   if (
@@ -262,6 +290,7 @@ function indexOf(acts: readonly ActRow[], prompts = 0): Index {
     stamps: new Map(),
     chained: new Map(),
     threaded: new Map(),
+    named: 0,
     prompts,
     touched: [],
     written: [],
@@ -882,6 +911,14 @@ export class Session extends EventEmitter {
           if (moved) this.version++;
         }
         this.counted = count;
+        // The threads of the chain shown and the tree of the sidebar come from the crate with the acts that they read,
+        // so a frame draws the threads of the acts that it shows.
+        // A read that began before these acts came gives the threads of before them, so the read goes again.
+        for (let tries = 0; tries < 3 && !(this.threadsFresh(selected) && this.railFresh); tries++)
+          await Promise.all([
+            this.threadsFresh(selected) ? undefined : this.readThreads(selected),
+            this.railFresh ? undefined : this.readRail(),
+          ]);
         this.named();
         this.carryQueue();
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
@@ -1070,20 +1107,55 @@ export class Session extends EventEmitter {
       (thread) => thread.over && thread.yours && this.unreadThread(thread.act.id, threadWork(thread)),
     );
   }
-  /** What the threads of the chains keep of each prompt that they read. */
-  private readonly threadsKnown = new WeakMap<Act, { message: string | undefined; title: string }>();
-  /** The threads of a chain, in the order they began, each by its id, with the thread of each message and of each
-   * question, and its asides, read again only when a prompt on the chain or a question that waits changes. */
+  /** The threads of each chain as the crate last gave them, with the stamp of the prompts of the chain and the
+   * questions that waited when it gave them. */
+  private readonly crateThreads = new Map<string, { stamp: number; owed: string; got: Threads }>();
+  /** The reads of the threads of a chain that the session waits for, one for each chain. */
+  private readonly askingThreads = new Map<string, Promise<void>>();
+  /** What the threads read beside the prompts of a chain: the questions that wait now, and the acts that name the
+   * session, whose name the crate gives the first thread of the operator. */
+  private get owedNow(): string {
+    return `${[...this.host.prompts.keys()].join(" ")}\n${this.indexed().named}`;
+  }
+  /** Whether the threads that the crate gave of a chain are of the prompts and the questions of now. */
+  threadsFresh(chain: string): boolean {
+    const kept = this.crateThreads.get(chain);
+    return kept?.stamp === this.threadStamp(chain) && kept.owed === this.owedNow;
+  }
+  /** The crate folds the threads of a chain, which the session asks for once at a time, and draws again once they
+   * come. */
+  readThreads(chain: string): Promise<void> {
+    const asking = this.askingThreads.get(chain);
+    if (asking) return asking;
+    const [stamp, owed] = [this.threadStamp(chain), this.owedNow];
+    const read = (async () => {
+      try {
+        const got = await this.host.threads(chain, undefined, this.read(chain));
+        this.crateThreads.set(chain, { stamp, owed, got });
+        this.emit("change");
+      } finally {
+        this.askingThreads.delete(chain);
+      }
+    })();
+    this.askingThreads.set(chain, read);
+    return read;
+  }
+  /** The threads of a chain as the crate folds them, each by its id, with the thread of each message and of each
+   * question, its asides and the runs of its notes. A chain whose prompts changed since the crate gave them shows the
+   * threads it gave until it gives them again. */
   threadsOf(chain: string): ThreadList {
-    const stamp = this.threadStamp(chain);
-    const owed = [...this.host.prompts.keys()].join(" ");
+    if (!this.threadsFresh(chain)) void this.readThreads(chain).catch(this.threadFault);
+    const got = this.crateThreads.get(chain)?.got;
     const kept = this.threadsRead.get(chain);
-    if (kept?.stamp === stamp && kept.owed === owed) return kept.threads;
-    const on = this.activityByChain.get(chain) ?? [];
-    const owes = new Set(this.host.prompts.keys());
     const ids = this.indexed().ids;
-    const sorted = chainSorted(on, ids, owes, this.threadsKnown);
-    const { threads: list, asides } = sorted;
+    if (kept && kept.got === got && kept.ids === ids) return kept.threads;
+    const own = flatThreads(nodesOf(got?.threads ?? [], ids)).filter((one) => one.act.chain === chain);
+    const list = own.sort((one, other) => one.act.began - other.act.began);
+    const asides = (got?.asides ?? []).flatMap((one): ChainAside[] => {
+      const act = ids.get(one.prompt);
+      return act ? [{ act, aside: one.aside, messages: rowsOf(one.messages, ids) }] : [];
+    });
+    const runs = (got?.notes ?? []).map((run): NoteRun => ({ ...run, prompts: rowsOf(run.prompts, ids) }));
     const threads: ThreadList = {
       list,
       by: new Map(list.map((one) => [one.act.id, one])),
@@ -1095,16 +1167,55 @@ export class Session extends EventEmitter {
       aside: new Map(
         asides.flatMap((one) => one.messages.map((message): [string, ChainAside] => [message.id, one])),
       ),
-      runs: new Map(
-        chainNotes(on, ids, sorted).flatMap((run) =>
-          run.prompts.map((act): [string, NoteRun] => [act.id, run]),
-        ),
-      ),
+      runs: new Map(runs.flatMap((run) => run.prompts.map((act): [string, NoteRun] => [act.id, run]))),
     };
-    this.threadsRead.set(chain, { stamp, owed, threads });
+    this.threadsRead.set(chain, { got, ids, threads });
     return threads;
   }
-  private readonly threadsRead = new Map<string, { stamp: number; owed: string; threads: ThreadList }>();
+  /** A read of the threads that failed says so, as a failure of the session. */
+  private readonly threadFault = (error: unknown): void => {
+    this.error = error instanceof Error ? error.message : String(error);
+    this.emit("change");
+  };
+  private readonly threadsRead = new Map<
+    string,
+    { got: Threads | undefined; ids: ReadonlyMap<string, ActRow>; threads: ThreadList }
+  >();
+  /** The threads of every chain of the session but those that name it, as one tree in the order of the sidebar, as the
+   * crate last gave them, with the version of the prompts and the questions that waited then. */
+  private railRead?: { version: number; owed: string; tree: CrateNode[] };
+  private railAsking?: Promise<void>;
+  /** The crate folds the threads of every chain as one tree, which the session asks for once at a time. */
+  readRail(): Promise<void> {
+    if (this.railAsking) return this.railAsking;
+    const [version, owed] = [this.promptsVersion, this.owedNow];
+    const hidden = [...this.activityByChain.keys()].filter((chain) => this.naming(chain));
+    this.railAsking = (async () => {
+      try {
+        this.railRead = { version, owed, tree: await this.host.rail(hidden) };
+        this.emit("change");
+      } finally {
+        this.railAsking = undefined;
+      }
+    })();
+    return this.railAsking;
+  }
+  /** The threads of the session as the sidebar shows them, as the crate orders them: the closed ones first and the
+   * open ones last, each with the agents that its ladder made under it. */
+  /** Whether the tree that the crate gave of the threads is of the prompts and the questions of now. */
+  private get railFresh(): boolean {
+    return this.railRead?.version === this.promptsVersion && this.railRead.owed === this.owedNow;
+  }
+  get rail(): ThreadNode[] {
+    if (!this.railFresh) void this.readRail().catch(this.threadFault);
+    const tree = this.railRead?.tree ?? [];
+    const ids = this.indexed().ids;
+    if (this.railNodes?.tree === tree && this.railNodes.ids === ids) return this.railNodes.nodes;
+    const nodes = nodesOf(tree, ids);
+    this.railNodes = { tree, ids, nodes };
+    return nodes;
+  }
+  private railNodes?: { tree: CrateNode[]; ids: ReadonlyMap<string, ActRow>; nodes: ThreadNode[] };
   /** The threads of the chain shown. */
   get threads(): ThreadList {
     return this.threadsOf(this.selected);
@@ -2037,8 +2148,11 @@ export class Session extends EventEmitter {
                   models: { [id || ""]: { window: Number(window) } },
                 }
               : true;
-        if (!(await this.host.config({ action: "set", key: ["providers", name], value, layer: "project" }))) {
-          this.notice = "Codex sign-in canceled.";
+        try {
+          await this.host.config({ action: "set", key: ["providers", name], value, layer: "project" });
+        } catch (error) {
+          if (name !== "codex" || !(error instanceof Error) || error.name !== "Refused") throw error;
+          this.notice = error.message;
           break;
         }
         this.emit("configured");

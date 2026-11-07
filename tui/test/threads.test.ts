@@ -270,7 +270,7 @@ test("a line that awaits a command lights the line that made it, names it, and s
       keep("awaits", rows.join("\n"));
       expect(ready()).toBe(true);
       expect(rows.find((row) => row.includes("b = await build"))).toMatch(
-        /(?:\d|[\u2800-\u28ff✻]) {2}b = await build/,
+        /(?:\d|[\u2800-\u28ff✻]) {3}b = await build/,
       );
       await session.engine.cancel(rung);
     },
@@ -667,7 +667,8 @@ test("the agents that a thread hires fold under it to their count in the sidebar
       expect(rows.filter((row) => row.includes("Think until I cancel"))).toHaveLength(0);
       await railClick(use, "Agents");
       rows = rail(session, await frame());
-      const agents = rows.filter((row) => row.includes("Think until I cancel"));
+      // The crate names the first thread of a chain under the root that no operator made by the label of its chain.
+      const agents = rows.filter((row) => / w\/\d+ *$/.test(row));
       expect(agents).toHaveLength(8);
       const lead = rows.find((row) => row.includes("Hire eight workers")) ?? "";
       expect((agents[0] ?? "").search(/\S/)).toBeGreaterThan(lead.search(/\S/));

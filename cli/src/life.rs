@@ -35,12 +35,12 @@ impl Life {
   ///
   /// The journal says the whole record again before boot returns, so the life stands whole on its record here, and a
   /// life whose record drifted is refused, since it would keep nothing more.
-  pub(crate) async fn lived(opening: Opening) -> Result<Life, CliError> {
+  pub(crate) async fn lived(opening: Opening) -> Result<Self, CliError> {
     let (engine, held) = opening.open([("console", console::terminal())]).await?;
     let root = engine.root().to_owned();
     let held: Vec<Fact> =
       held.iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?)).collect();
-    Ok(Life { engine, root, held })
+    Ok(Self { engine, root, held })
   }
 
   /// The extensions that the life runs, in the order it enabled them.
@@ -75,7 +75,7 @@ impl Life {
   /// runs, or work that an earlier life left and that the act awaits alone, which no wake runs while one command
   /// runs.
   pub(crate) async fn settled(&mut self, id: &str) -> Result<Object, CliError> {
-    let Life { engine, root, .. } = self;
+    let Self { engine, root, .. } = self;
     poll_fn(|cx| {
       if let Poll::Ready(got) = Pin::new(&mut Act::<Object>::of(engine, id)).poll(cx) {
         return Poll::Ready(got.map_err(CliError::from));

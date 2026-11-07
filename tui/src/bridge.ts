@@ -6,7 +6,6 @@ import { createTwoFilesPatch } from "diff";
 import {
   actorParts,
   attachImage,
-  codexAuth,
   ENGINE,
   type Fact,
   type FileChange,
@@ -27,7 +26,7 @@ import {
   WINDOW,
 } from "furb";
 import { type Act, type Compaction, type Exit, isPaused, type Measure, type Spend } from "furb/life";
-import type { Config, FollowUp } from "furb/protocol";
+import type { Config, FollowUp, ThreadNode, Threads } from "furb/protocol";
 import { type Choices, daemon, type Listener, Refused, RemoteLife } from "./client.ts";
 import { clock } from "./clock.ts";
 import type { Setting } from "./configs.ts";
@@ -168,6 +167,14 @@ class ReadLife extends EventEmitter {
   scope(id: string): string {
     return this.reader.activity.scope(id);
   }
+  /** The threads of a chain as the crate folds them from the record, as the daemon folds them for a life that runs. */
+  async threads(on: string, at?: number, read?: number): Promise<Threads> {
+    return this.reader.meaning.threads(on, at, read);
+  }
+  /** The threads of every chain of the record but those that `hidden` names, as one tree, as the crate folds them. */
+  async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
+    return this.reader.meaning.rail(hidden, at);
+  }
   get seenAt(): ReadonlyMap<string, number> {
     return this.reader.activity.seen;
   }
@@ -212,6 +219,7 @@ class ReadLife extends EventEmitter {
   grant = this.refuse;
   stand = this.refuse;
   config = this.refuse;
+  cancelSignIn = this.refuse;
   settings = this.refuse;
   pause = this.refuse;
   wake = this.refuse;
@@ -436,6 +444,7 @@ export class HostView extends EventEmitter {
     const facts = () => this.heard();
     const change = () => this.update();
     const log = (line: string) => this.emit("log", line);
+    const authentication = (status: unknown) => this.emit("authentication", status);
     const ended = (why: string) => {
       this.lost = why;
       this.emit("fault", new Error(why));
@@ -450,6 +459,7 @@ export class HostView extends EventEmitter {
       ["facts", facts],
       ["change", change],
       ["log", log],
+      ["authentication", authentication],
       ["ended", ended],
       ["reset", reset],
     ];
@@ -747,23 +757,9 @@ export class HostView extends EventEmitter {
   private get demo(): boolean {
     return Boolean(this.options.demo || this.options.watch);
   }
-  private async refreshCodex(): Promise<void> {
-    const { claude, config } = this.options;
-    if (
-      this.demo ||
-      !setup(claude, this.directory, config).providers.some((one) => one.provider === "codex" && one.enabled)
-    )
-      return;
-    let status = codexAuth("refresh", config);
-    while (status.state === "connecting") {
-      await Bun.sleep(200);
-      status = codexAuth("status", config);
-    }
-  }
   /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
   async catalog(): Promise<Roster> {
     if (this.demo) return [];
-    await this.refreshCodex();
     return models(this.options.claude, this.directory, this.options.config).map(
       ({ name, efforts, window }) => [name, efforts, window],
     );
@@ -786,38 +782,17 @@ export class HostView extends EventEmitter {
       offered.push({ name: "local", enabled: true, models: found.local?.offered ?? 0 });
     return offered.sort((a, b) => a.name.localeCompare(b.name));
   }
-  /** The sign-in of codex that a change of its provider asks: a cancel when it turns codex off, and a sign-in, which
-   * waits for the browser, when it turns codex on. False when the operator canceled the sign-in. */
-  private async codexSigned(value: unknown): Promise<boolean> {
-    const { config } = this.options;
-    if (value === false) codexAuth("cancel", config);
-    if (value !== true) return true;
-    let status = codexAuth("refresh", config);
-    if (["disconnected", "needs-login", "failed", "canceled"].includes(status.state))
-      status = codexAuth("start", config);
-    this.emit("authentication", status);
-    while (["waiting", "connecting"].includes(status.state)) {
-      await Bun.sleep(200);
-      const next = codexAuth("status", config);
-      if (next.state !== status.state) this.emit("authentication", next);
-      status = next;
-    }
-    if (status.state === "canceled") return false;
-    if (status.state !== "connected") throw new Error(status.message || "OpenAI sign-in did not complete.");
-    return true;
+  /** A cancel of the sign-in of codex that the daemon runs, which refuses the config that asked it. */
+  async cancelSignIn(): Promise<void> {
+    await this.life.cancelSignIn();
   }
-  codexAuth = async (action = "status") => codexAuth(action, this.options.config);
   /** A change of a key of a layer of the configs, which the World writes in the daemon, or a reload of them, each then
-   * a stand of the life. False when the operator canceled the sign-in that the change asked. */
-  async config(config: Config): Promise<boolean> {
+   * a stand of the life. The daemon drives the sign-in that a change of codex asks, and refuses the change when the
+   * operator cancels it or it fails, as the frames of the sign-in tell the window. */
+  async config(config: Config): Promise<void> {
     if (this.demo) throw new Error("Provider settings are not available in the demo.");
     if (config.action === "get") throw new Error("A window reads the configs from the host.");
-    if (config.action === "set") {
-      const [group, name] = config.key;
-      if (group === "providers" && name === "codex" && !(await this.codexSigned(config.value))) return false;
-    }
     await this.life.result(await this.life.config(config));
-    return true;
   }
   /** Each key of the configs of the folder of the life, with the value that wins for it and the property that a schema
    * gives it, as the host reads them, and none in the demo. */
@@ -826,7 +801,6 @@ export class HostView extends EventEmitter {
   }
   /** A stand of the life on the configs as the disk holds them, which asks again each model that waits to retry. */
   async stand(): Promise<void> {
-    await this.refreshCodex();
     await this.life.result(await this.life.stand());
   }
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
@@ -897,6 +871,16 @@ export class HostView extends EventEmitter {
     }
   }
   /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
+  /** The threads of a chain as the crate folds them, now or as they stood just after a moment, with the runs of its
+   * notes counted past the place up to which the window read it. */
+  async threads(chain: string, at?: number, read?: number): Promise<Threads> {
+    return await this.life.threads(chain, at, read);
+  }
+  /** The threads of every chain of the life but those that `hidden` names, as one tree in the order of the list of
+   * the threads, as the crate folds them, now or as they stood just after a moment. */
+  async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
+    return await this.life.rail(hidden, at);
+  }
   async act(id: string): Promise<Act | undefined> {
     if (!(this.life instanceof ReadLife)) return this.life.acts.get(id);
     const whole = this.life.reader.act(id);

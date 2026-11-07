@@ -3,8 +3,11 @@
 //! reads the text that a write replaces before the files take the write, and it keeps the change
 //! once the write is done. It says nothing, so each write goes on to the ear that takes it.
 
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::{
   collections::HashMap,
+  env,
   fs::{self, OpenOptions},
   io::{self, Write},
   path::{Path, PathBuf},
@@ -20,6 +23,7 @@ use tokio::sync::{
   mpsc::{self, UnboundedReceiver, UnboundedSender},
   oneshot,
 };
+use tokio::task;
 
 use crate::{ears::json_of, error::JournalError, event::Event};
 
@@ -62,7 +66,7 @@ impl Journal {
   fn appending(folder: PathBuf, at: PathBuf, told: UnboundedSender<Event>, append: Append) -> Self {
     let (lines, heard) = mpsc::unbounded_channel();
     tokio::spawn(written(at, heard, told, append));
-    Journal { folder, lines }
+    Self { folder, lines }
   }
 
   /// Each change said before it on the disk, or what the disk lost since the last flush.
@@ -123,7 +127,7 @@ async fn written(
       }
     };
     let (path, append) = (at.clone(), Arc::clone(&append));
-    let fault = match tokio::task::spawn_blocking(move || append(&path, &change)).await {
+    let fault = match task::spawn_blocking(move || append(&path, &change)).await {
       // The chain of the write hears that its changes changed only now: a window that read the
       // journal at the fact of the write could find it without the change, and hear nothing after.
       Ok(Ok(())) => {
@@ -189,7 +193,7 @@ fn before(file: &Path) -> Value {
 
 /// A path that the World writes with `~` for the home of the user, as a path of the machine.
 fn homed(path: &str) -> PathBuf {
-  match (path.strip_prefix('~'), std::env::home_dir()) {
+  match (path.strip_prefix('~'), env::home_dir()) {
     (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with('/') => {
       home.join(rest.trim_start_matches('/'))
     }
@@ -205,7 +209,7 @@ fn appended(at: &Path, line: &str) -> io::Result<()> {
   let mut options = OpenOptions::new();
   options.create(true).append(true);
   #[cfg(unix)]
-  std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+  OpenOptionsExt::mode(&mut options, 0o600);
   let mut file = options.open(at)?;
   file.write_all(format!("{line}\n").as_bytes())?;
   file.sync_all()

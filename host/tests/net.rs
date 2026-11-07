@@ -15,7 +15,10 @@ mod yard;
 mod net {
   use super::yard::Yard;
   use std::{
+    fs, future,
     net::SocketAddr,
+    path::Path,
+    process,
     sync::atomic::{AtomicU32, Ordering},
     time::Duration,
   };
@@ -29,10 +32,13 @@ mod net {
     transport::{Dialer, Identity, Local, LocalApi, Tailscale, Tcp, WebSocket, upgraded},
   };
   use serde_json::json;
+  use tokio::net::TcpStream;
   use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     net::TcpListener,
     sync::mpsc,
+    task::JoinHandle,
+    time,
   };
 
   /// A host that answers each verb with the verb itself, as JSON.
@@ -45,7 +51,7 @@ mod net {
       verb: Verb,
       _: &Outbox,
     ) -> impl Future<Output = Result<Answer, ProtocolError>> + Send {
-      std::future::ready(Ok(Answer::Value(serde_json::to_value(&verb).unwrap())))
+      future::ready(Ok(Answer::Value(serde_json::to_value(&verb).unwrap())))
     }
   }
 
@@ -79,7 +85,7 @@ mod net {
   fn folder() -> Yard {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    Yard::new(format!("fn{}-{n}", std::process::id()))
+    Yard::new(format!("fn{}-{n}", process::id()))
   }
 
   /// A fake of the local API of Tailscale on a port of loopback, which gives one login for each
@@ -228,7 +234,7 @@ mod net {
       "tailnet": {"tcp": 7860, "websocket": 7861},
       "roles": {"alice@github": "write", "bob@github": "read"},
     });
-    std::fs::write(&path, written.to_string()).unwrap();
+    fs::write(&path, written.to_string()).unwrap();
     let config = Config::load(&path).unwrap();
     assert_eq!(config.tailnet, Some(Ports { tcp: Some(7860), websocket: Some(7861) }));
     assert_eq!(config.roles.role("bob@github").unwrap(), Role::Read);
@@ -265,7 +271,7 @@ mod net {
       match Tcp::new(at(ports.tcp)).dial().await {
         Ok(stream) => break Client { lines: BufReader::new(stream) },
         Err(no) if tries.next().is_none() => panic!("the daemon never listened: {no}"),
-        Err(_) => tokio::time::sleep(Duration::from_millis(20)).await,
+        Err(_) => time::sleep(Duration::from_millis(20)).await,
       }
     };
     let ws = WebSocket::new(at(ports.websocket)).dial().await.unwrap();
@@ -303,7 +309,7 @@ mod net {
   }
 
   /// A daemon with no tailnet, which opens its door in `file`.
-  async fn daemon(yard: &Yard, file: &std::path::Path) -> tokio::task::JoinHandle<()> {
+  async fn daemon(yard: &Yard, file: &Path) -> JoinHandle<()> {
     let opening = Opening { extensions: Some(false), ..Opening::default() };
     let settings = Settings {
       opening,
@@ -321,16 +327,16 @@ mod net {
   }
 
   /// The address that the file of the door says once it says another than `before`.
-  async fn said(file: &std::path::Path, before: Option<&str>) -> String {
+  async fn said(file: &Path, before: Option<&str>) -> String {
     for _ in 0..250 {
-      if let Ok(bytes) = std::fs::read(file) {
+      if let Ok(bytes) = fs::read(file) {
         let said: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         let url = said["url"].as_str().unwrap().to_owned();
         if before != Some(url.as_str()) {
           return url;
         }
       }
-      tokio::time::sleep(Duration::from_millis(20)).await;
+      time::sleep(Duration::from_millis(20)).await;
     }
     panic!("the daemon never opened its door in {}", file.display());
   }
@@ -345,7 +351,7 @@ mod net {
   /// Whether the door at an address answers the upgrade with a refusal of HTTP.
   async fn refused(url: &str) -> bool {
     let addr = url.trim_start_matches("ws://").split('/').next().unwrap().to_owned();
-    let Ok(stream) = tokio::net::TcpStream::connect(&addr).await else { return true };
+    let Ok(stream) = TcpStream::connect(&addr).await else { return true };
     match tokio_tungstenite::client_async(url, stream).await {
       Ok(_) => false,
       Err(no) => no.to_string().contains("403"),
@@ -358,7 +364,7 @@ mod net {
     use tokio_tungstenite::tungstenite::Message;
 
     let addr = url.trim_start_matches("ws://").split('/').next().unwrap().to_owned();
-    let stream = tokio::net::TcpStream::connect(&addr).await.unwrap();
+    let stream = TcpStream::connect(&addr).await.unwrap();
     let (mut socket, _) = tokio_tungstenite::client_async(url, stream).await.unwrap();
     let hello =
       Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None });
@@ -386,7 +392,7 @@ mod net {
     #[cfg(unix)]
     {
       use std::os::unix::fs::PermissionsExt;
-      let mode = |path: &std::path::Path| std::fs::metadata(path).unwrap().permissions().mode();
+      let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode();
       assert_eq!(mode(&file) & 0o777, 0o600);
       assert_eq!(mode(file.parent().unwrap()) & 0o777, 0o700);
     }

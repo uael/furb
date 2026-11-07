@@ -12,6 +12,7 @@ mod yard;
 
 use std::{
   path::Path,
+  process,
   sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -27,6 +28,8 @@ use furb::{
 };
 use furb_host::{Command, Event, Life, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
+use tokio::runtime::Builder;
+use tokio::time;
 
 /// The events of a life, each under its place in the log.
 type Logged = (Seq, Arc<Event>);
@@ -35,7 +38,7 @@ type Logged = (Seq, Arc<Event>);
 const TAIL: usize = 10_000;
 
 fn main() {
-  let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
+  let runtime = Builder::new_current_thread().enable_all().build();
   runtime.expect("the test has a runtime").block_on(async {
     a_life_goes_on_through_each_rebirth().await;
     a_rebirth_waits_for_each_word_that_runs().await;
@@ -65,7 +68,7 @@ fn the_check_of_a_held_rebirth_fails_on_an_early_rebirth_and_passes_a_later_one(
 
 /// A directory of the test, empty, under a name of its own.
 fn place(name: &str) -> yard::Yard {
-  yard::Yard::new(format!("furb-host-rebirth-{name}-{}", std::process::id()))
+  yard::Yard::new(format!("furb-host-rebirth-{name}-{}", process::id()))
 }
 
 /// A life that keeps its record, with no extension, whose model closes each request with None.
@@ -100,7 +103,7 @@ async fn until(
 ) -> Vec<Logged> {
   let mut got = Vec::new();
   loop {
-    let next = tokio::time::timeout(Duration::from_secs(120), events.next()).await;
+    let next = time::timeout(Duration::from_secs(120), events.next()).await;
     let Ok(Some(logged)) = next else {
       let last: Vec<String> =
         got.iter().rev().take(20).map(|one| format!("{:.300}", format!("{one:?}"))).collect();

@@ -86,8 +86,8 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(ids).toContain("program-prompt1");
       expect(ids.some((id) => /^(rung|bash|read)\d+$/.test(id))).toBe(false);
       const program = await drawn(frame, screen.renderer.root);
-      expect(program).toMatch(/ 1 {2}notes = read\("README\.md"\) +7 lines/);
-      expect(program).toMatch(/ 2 {2}check = await bash\(.* +exit 0, 3 lines/);
+      expect(program).toMatch(/ 1 {3}notes = read\("README\.md"\) +7 lines/);
+      expect(program).toMatch(/ 2 {3}check = await bash\(.* +exit 0, 3 lines/);
       // A command that is over shows its output no more: its hint says what it came to.
       expect(program).not.toMatch(/# {3}✓ search/);
       // The control on the header of a thread folds it to its header, and a click on that header opens it again.
@@ -138,7 +138,7 @@ test("a click on a line of a program opens it in place, with its whole text and 
       await seedDemo(session);
       const row = async () => {
         const rows = (await drawn(frame, screen.renderer.root)).split("\n");
-        const y = rows.findIndex((one) => / 2 {2}check = await bash\(/.test(one));
+        const y = rows.findIndex((one) => / 2 {3}check = await bash\(/.test(one));
         return { rows, y, x: rows[y]?.indexOf("check") ?? -1 };
       };
       await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
@@ -415,7 +415,7 @@ test("each word stands in a block under its label, with the mark of the line tha
       // The gate of the daemon answers the word after the verb that sent it, and the session reads its findings then.
       await until(session, () => session.findings.length > 0);
       let shown = await frame();
-      expect(shown).toMatch(/2✗ next = = 2/);
+      expect(shown).toMatch(/2 ✗ next = = 2/);
       expect(shown).toMatch(/┃ +operator +$/m);
       expect(shown).not.toMatch(/word · rung\d+/);
       void session.command('/run build = bash("sleep 3")\nsize = 1\nbuilt = await build').catch(() => {});
@@ -426,10 +426,10 @@ test("each word stands in a block under its label, with the mark of the line tha
       }
       const rows = shown.split("\n");
       const waits = rows.find((row) => row.includes("built = await build")) ?? "";
-      expect(waits).toMatch(/(?:\d|[\u2800-\u28ff✻]) {2}built = await build +waits on bash\d+/);
+      expect(waits).toMatch(/(?:\d|[\u2800-\u28ff✻]) {3}built = await build +waits on bash\d+/);
       expect(waits).not.toContain("#");
       const runs = rows.find((row) => row.includes('build = bash("sleep 3")')) ?? "";
-      expect(runs).toMatch(/1 {2}build = bash\("sleep 3"\) {4,}runs/);
+      expect(runs).toMatch(/1 {3}build = bash\("sleep 3"\) {4,}runs/);
       await idle(session);
     },
     { width: 120, height: 40 },
@@ -1039,9 +1039,9 @@ test("each line of a word says what its acts did as a quiet hint: a read its lin
         () => session.acts.filter((act) => act.kind === "write" && act.lines).length === 2,
       );
       const shown = await drawn(frame, screen.renderer.root);
-      expect(shown).toMatch(/ 1 {2}write\(Text\("notes\.md".* +\+2 -0/);
-      expect(shown).toMatch(/ 2 {2}write\(read\("notes\.md"\).* +2 lines {2}\+2 -1/);
-      expect(shown).toMatch(/ 3 {2}await bash\("true"\) +exit 0/);
+      expect(shown).toMatch(/ 1 {3}write\(Text\("notes\.md".* +\+2 -0/);
+      expect(shown).toMatch(/ 2 {3}write\(read\("notes\.md"\).* +2 lines {2}\+2 -1/);
+      expect(shown).toMatch(/ 3 {3}await bash\("true"\) +exit 0/);
     },
     { width: 160, height: 40 },
   ));
@@ -1069,9 +1069,9 @@ test("one gutter of furb draws the cells of each block of code: the number, the 
           setSystemTime(new Date(base + index * 100));
           const rows = (await frame()).split("\n");
           const y = rows.findIndex((row) => row.includes(text));
-          const x = (rows[y] ?? "").indexOf(`  ${text}`) - 1;
+          const x = (rows[y] ?? "").indexOf(`   ${text}`) - 1;
           const spans = screen.captureSpans();
-          return { text: rows[y]?.[x] ?? "", state: rows[y]?.[x + 1], x, fg: cellAt(spans, x, y).fg };
+          return { text: rows[y]?.[x] ?? "", state: rows[y]?.[x + 2], x, fg: cellAt(spans, x, y).fg };
         };
         const near = (got: RGBA | undefined, want: RGBA) =>
           expect([got?.r, got?.g, got?.b].map((one) => Math.round((one ?? -1) * 255))).toEqual(
@@ -1107,7 +1107,7 @@ test("one gutter of furb draws the cells of each block of code: the number, the 
     { width: 120, height: 40 },
   ));
 
-test("the blocks of a word and of a code block of markdown stand alike in each palette: one background, and their numbers in one column with the code two cells after them", () =>
+test("the blocks of a word and of a code block of markdown stand alike in each palette: one background, and their numbers in one column with the code three cells after them", () =>
   composing(
     async ({ session, screen, frame }) => {
       await session.command("/run alpha = 1\nbeta = 2");
@@ -1128,14 +1128,14 @@ test("the blocks of a word and of a code block of markdown stand alike in each p
         const find = (text: string) => {
           const y = rows.findIndex((one) => one.includes(text));
           const x = (rows[y] ?? "").indexOf(text);
-          return { x, number: (rows[y] ?? "").slice(x - 3, x), bg: cellAt(spans, x - 3, y).bg };
+          return { x, number: (rows[y] ?? "").slice(x - 4, x), bg: cellAt(spans, x - 4, y).bg };
         };
         const word = find("alpha = 1");
         const block = find("gamma = 3");
         expect(word.x).toBeGreaterThan(0);
         expect(block.x).toBe(word.x);
         for (const one of [word, block]) {
-          expect(one.number).toMatch(/^\d {2}$/);
+          expect(one.number).toMatch(/^\d {3}$/);
           expect(one.bg?.equals(RGBA.fromHex(palettes[name].raised))).toBe(true);
         }
       }
@@ -1193,8 +1193,8 @@ test("a word and a code block of markdown take one ground, one label, one gutter
           const one = cells(word + at);
           const other = cells(block + at);
           const number = (cell: (typeof one)[number] | undefined) => ({ fg: cell?.fg, bg: cell?.bg });
-          expect(number(other[x - 3])).toEqual(number(one[x - 3]));
-          expect(one[x - 3]?.fg).toBe(RGBA.fromHex(palettes[name].faint).toString());
+          expect(number(other[x - 4])).toEqual(number(one[x - 4]));
+          expect(one[x - 4]?.fg).toBe(RGBA.fromHex(palettes[name].faint).toString());
           for (let k = 0; k < line.length; k++) {
             if (line[k] === " ") continue;
             expect(other[x + k], `${name} row ${at} column ${k}`).toEqual(one[x + k]);

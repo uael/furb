@@ -222,6 +222,11 @@ export declare class Meaning {
    * which the window read the chain, from which its runs of notes count the notes not yet read.
    */
   threads(chain: string, at?: number | undefined | null, read?: number | undefined | null): import("./dist/protocol.js").Threads
+  /**
+   * The threads of every chain of the life but those that `hidden` names, as one tree in the order
+   * of the list of the threads, now or as they stood just after a moment.
+   */
+  rail(hidden?: Array<string> | undefined | null, at?: number | undefined | null): Array<import("./dist/protocol.js").ThreadNode>
   /** The acts as they stood just after a moment. */
   asOf(at: number): Array<import("./dist/protocol.js").Act>
   /** Each moment at which an act began or ended, in order. */

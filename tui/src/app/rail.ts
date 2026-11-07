@@ -1,19 +1,11 @@
 import { basename } from "node:path";
 import type { BoxOptions, BoxRenderable } from "@opentui/core";
-import {
-  type Ask,
-  busy,
-  type ChainThread,
-  nestThreads,
-  orderThreads,
-  type ThreadNode,
-  threadWork,
-} from "furb/life";
+import { type Ask, busy, type ChainThread, type ThreadNode, threadWork } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
 import { shortenHomes } from "../files.ts";
 import { dollars, recordLabel } from "../format.ts";
-import { statusLabels } from "../session.ts";
+import { flatThreads, statusLabels } from "../session.ts";
 import { theme as c, glyph, type MarkState, markOf, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain } from "../ui.ts";
 import type { SessionEntry, Workspace } from "../workspaces.ts";
@@ -124,38 +116,36 @@ export const rail = part({
    * the chain that it stands on is a detail of it. */
   railThreads(): ChainThread[] {
     const w = this.session;
-    const owed = [...w.host.prompts.keys()].join(" ");
+    // The tree that the crate last gave keys the list: a new tree reads the list and its rows again.
+    const tree = w.rail;
     const kept = this.railThreadCache;
-    if (kept && kept.session === w && kept.version === w.promptsVersion && kept.owed === owed)
-      return kept.list;
-    const list: ChainThread[] = [];
+    if (kept && kept.session === w && kept.tree === tree) return kept.list;
+    // The threads come from the one tree that the crate folds of every chain, so a chain that is not shown holds the
+    // threads of now too, and each chain keeps what the keys of the sidebar read of its list while that list stands.
+    const list = flatThreads(tree);
     const reads = kept?.chains ?? new Map<string, ChainRead>();
+    const by = new Map<string, ChainThread[]>();
+    for (const one of list) by.set(one.act.chain, [...(by.get(one.act.chain) ?? []), one]);
     const chains = new Map<string, ChainRead>();
-    for (const [chain, acts] of w.activityByChain) {
-      if (!acts.length || w.naming(chain)) continue;
-      const threads = w.threadsOf(chain).list;
+    for (const [chain, threads] of by) {
       const read = reads.get(chain);
-      // A chain whose list of threads stands keeps what the keys of the sidebar read of it.
-      chains.set(chain, read?.list === threads ? read : { list: threads });
-      list.push(...threads);
+      const same =
+        read && read.list.length === threads.length && read.list.every((one, n) => one === threads[n]);
+      chains.set(chain, same ? read : { list: threads });
     }
     const ordered = list
       .map((one): [number, ChainThread] => [numbered(one), one])
       .sort((a, b) => a[0] - b[0])
       .map(([, one]) => one);
-    this.railThreadCache = { session: w, version: w.promptsVersion, owed, list: ordered, chains };
+    this.railThreadCache = { session: w, tree, list: ordered, chains };
     return ordered;
   },
 
   /** The threads of the session shown as the sidebar shows them: each thread with the agents that its ladder made
-   * nested under it, the closed ones first and the open ones last, each by the time of its last message. The tree is
-   * made once for each list of the threads, and the sidebar and the stage both read it. */
+   * nested under it, the closed ones first and the open ones last, each by the time of its last message, as the crate
+   * folds and orders them. The sidebar and the stage both read it. */
   railTree(): ThreadNode[] {
-    const list = this.railThreads();
-    const kept = this.railThreadCache;
-    const tree = kept?.tree ?? orderThreads(nestThreads(list, this.session.boardIndex.ids));
-    if (kept) kept.tree = tree;
-    return tree;
+    return this.session.rail;
   },
 
   /** The title of a thread on its row of the sidebar: its message as the feed reads it, with each home folder short,
@@ -477,7 +467,8 @@ export const rail = part({
     // A thread of the session shown, on one row.
     const threadRow = (thread: ChainThread, indent: number, state = thread.state) => {
       const id = `th:${thread.act.id}`;
-      const lit = active === thread;
+      // The thread of the session and the row of the sidebar come from two reads of the crate, so they match by id.
+      const lit = active?.act.id === thread.act.id;
       const [mark, tone] = threadMarks(thread, state, this.unreadThread(thread));
       order(id, {
         enter: () => this.chooseThread(thread),
@@ -585,7 +576,7 @@ export const rail = part({
 
     // A thread on its row, with the agents that its ladder made folded under it to a count, which a click opens, each
     // agent one step deeper on its row. A question that waits in an agent marks the thread over it, since
-    // `nestThreads` rolls it into the state of that thread.
+    // the crate rolls it into the state of that thread.
     const nodeRow = (node: ThreadNode, indent: number) => {
       threadRow(node.thread, indent, node.state);
       if (!node.agents.length) return;

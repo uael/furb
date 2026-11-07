@@ -299,7 +299,8 @@ fix what your change broke, and report what was broken before.
   `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any case. This build,
   `cargo test` and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them,
   so a word runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the
-  release.
+  release. A build keeps no incremental state (`.cargo/config.toml`), so no folder grows in a worktree;
+  a rebuild of the crate takes about 45 s.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
   `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
@@ -313,16 +314,6 @@ fix what your change broke, and report what was broken before.
   `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
-- `sh script/build-slot.sh <command> [argument...]`: run a command that builds, as `cargo`, `bun run build`, `uv sync`,
-  `uv run pytest` or `git commit` (its hooks run cargo and the suite), in one of the slots of builds that all the
-  worktrees of the machine share, with at most 4 jobs of cargo. A slot is a folder of `/tmp/furb-build-slots-<uid>`
-  that holds the pid of its holder. A build in a slot keeps no incremental state of cargo, which no copy on write shares
-  and which filled the disk, unless `CARGO_INCREMENTAL` asks for it: a warm build of the crate takes 14 s, against 4 s.
-  The slot of a holder that ended, or whose pid went to another process, goes to
-  the next build. `FURB_BUILD_SLOTS` sets the slots (one for each 9 GB of memory, at least 1; `FURB_BUILD_MEM_GB`
-  replaces the memory the machine reports), `FURB_BUILD_JOBS` the cap of jobs (4), `FURB_BUILD_WAIT` the seconds to
-  wait for a slot (1200, then exit 75) and `FURB_BUILD_DIR` the folder. The workers of the conductor build only through it: with no cap, 28 rustc processes took
-  13.8 GB, and the machine ran out of memory.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
@@ -415,12 +406,13 @@ fix what your change broke, and report what was broken before.
   in the root and in each package gives a plain run the limit of thirty seconds and the folders of the runner.
   `FURB_TEST_OUTPUT=1` shows all that each run wrote. The tests read the built package, so a build older than its
   sources, as after a switch of branch, fails them as they fail on main: the runner warns before the run and after a
-  failure, and `bun run build` makes the build again. The tests read the configs and the cache of `.furb/tests` of the
-  root, from any folder, not those of the machine. A plain `bun test` gives them that folder in process.env, which the
-  native part, reading the environment that the process started with, never sees: so each test that builds Preferences
-  or Workspaces gives them a config directory of its own, and the preload fails a test that changes a file of the config
-  directory of the machine, and names the file. As root, the test of a folder that cannot be read fails, since
-  root reads every folder.
+  failure, and `bun run build` makes the build again. The tests read the configs of `.furb/tests` of the root, and
+  their cache in `/tmp/furb-cache-<the first 8 hex digits of the sha256 of the root>`, or in the temporary folder on
+  Windows, from any folder, not those of the machine. A plain `bun test` gives them those folders in process.env,
+  which the native part, reading the environment that the process started with, never sees: so each test that builds
+  Preferences or Workspaces gives them a config directory of its own, and the preload fails a test that changes a file
+  of the config directory of the machine, and names the file. As root, the test of a folder that cannot be read fails,
+  since root reads every folder.
   A script of bun in `$TMPDIR` cannot import the package `furb`, so write a quick check in the worktree, where
   `node_modules` stands.
 - `bun run test scenarios`: the scenarios of `tui/scenarios`, the path of the owner end to end. A scripted claude

@@ -214,11 +214,9 @@ export class App {
    * the tree of them that the sidebar shows, nested once for each list. */
   railThreadCache?: {
     session: unknown;
-    version: number;
-    owed: string;
+    tree: readonly ThreadNode[];
     list: ChainThread[];
     chains: Map<string, ChainRead>;
-    tree?: ThreadNode[];
   };
   /** The key of the rows of the threads of the sidebar, by the list that it came from and the minute. */
   railThreadKey?: { list: ChainThread[]; minute: number; parts: string[]; count: number; text: string };

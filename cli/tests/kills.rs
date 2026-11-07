@@ -20,11 +20,12 @@ mod yard;
 #[cfg(test)]
 mod kills {
   use std::{
-    fs,
+    fs, io,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
     process::{self, Stdio},
     sync::atomic::{AtomicU32, Ordering},
+    thread,
     time::Duration,
   };
 
@@ -72,7 +73,7 @@ mod kills {
   }
 
   impl Yard {
-    fn new() -> Yard {
+    fn new() -> Self {
       static NEXT: AtomicU32 = AtomicU32::new(0);
       let n = NEXT.fetch_add(1, Ordering::Relaxed);
       let base = super::yard::Yard::new(format!("fk{}-{n}", process::id()));
@@ -84,7 +85,7 @@ mod kills {
       let claude = root.join("fake/claude");
       fs::write(&claude, FAKE).unwrap();
       fs::set_permissions(&claude, fs::Permissions::from_mode(0o755)).unwrap();
-      Yard { root, _base: base }
+      Self { root, _base: base }
     }
 
     fn life(&self) -> String {
@@ -153,21 +154,21 @@ mod kills {
   impl Lifeline {
     /// The FIFO made beside the fake, read, and held open by the test until the moment that it
     /// waits for, so that it ends with the processes of the life alone.
-    fn new(yard: &Yard) -> Lifeline {
+    fn new(yard: &Yard) -> Self {
       let at = yard.fake("lifeline");
       let made = process::Command::new("mkfifo").args(["-m", "600"]).arg(&at).status().unwrap();
       assert!(made.success(), "the FIFO is made");
       // The end of the test opens first, for reading and writing, which waits for no other end, so
       // the end for reading opens with no wait too.
       let own = Some(fs::OpenOptions::new().read(true).write(true).open(&at).unwrap());
-      let read = std::io::BufReader::new(fs::File::open(&at).unwrap());
+      let read = io::BufReader::new(fs::File::open(&at).unwrap());
       let (says, lines) = mpsc::unbounded_channel();
-      std::thread::spawn(move || {
-        for line in std::io::BufRead::lines(read).map_while(Result::ok) {
+      thread::spawn(move || {
+        for line in io::BufRead::lines(read).map_while(Result::ok) {
           says.send(line).ok();
         }
       });
-      Lifeline { at, lines, own }
+      Self { at, lines, own }
     }
 
     /// The path that a command writes to.
@@ -202,18 +203,18 @@ mod kills {
 
   impl Daemon {
     /// `furb host`, once it listens.
-    async fn started(yard: &Yard) -> Daemon {
-      Daemon::spawned(yard.furb(&["host"]), true).await
+    async fn started(yard: &Yard) -> Self {
+      Self::spawned(yard.furb(&["host"]), true).await
     }
 
-    async fn spawned(mut command: Command, listens: bool) -> Daemon {
+    async fn spawned(mut command: Command, listens: bool) -> Self {
       let mut child = command.spawn().unwrap();
       if listens {
         let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
         let line = timeout(PATIENCE, lines.next_line()).await.expect("the daemon listens");
         assert!(line.unwrap().is_some_and(|line| line.starts_with("furb host listens")));
       }
-      Daemon { child }
+      Self { child }
     }
 
     /// The daemon once it ended by itself.
@@ -241,8 +242,8 @@ mod kills {
 
   impl Window {
     /// A window that said its hello, opened the life of the yard and attached it from its start.
-    async fn attached(yard: &Yard) -> Window {
-      let mut window = Window::dialed(yard).await;
+    async fn attached(yard: &Yard) -> Self {
+      let mut window = Self::dialed(yard).await;
       window.hello().await;
       let open = Verb::Open {
         life: window.life.clone(),
@@ -261,9 +262,9 @@ mod kills {
       window
     }
 
-    async fn dialed(yard: &Yard) -> Window {
+    async fn dialed(yard: &Yard) -> Self {
       let stream = timeout(PATIENCE, yard.local().dial()).await.unwrap().unwrap();
-      Window {
+      Self {
         lines: Framed::new(stream, LinesCodec::new()),
         next: 0,
         pushed: Vec::new(),

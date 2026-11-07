@@ -96,7 +96,6 @@ def test_fetch_runs_again_when_another_fetch_holds_a_ref_lock(tmp_path: Path) ->
 
 def python_tree(root: Path) -> Path:
   main = clone_with_origin(root)
-  shutil.copy(SCRIPT.parent / "build-slot.sh", main / "script" / "build-slot.sh")
   (main / "pyproject.toml").write_text(
     '[project]\nname = "furb"\nversion = "0"\nrequires-python = ">=3.9"\n\n'
     '[build-system]\nrequires = ["uv_build>=0.9.26,<0.10.0"]\nbuild-backend = "uv_build"\n',

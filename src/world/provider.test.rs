@@ -194,6 +194,21 @@ fn the_provider_answers_a_stand_with_its_roster_its_directory_its_default_actor_
 }
 
 #[test]
+fn a_standing_that_gives_extensions_ends_with_the_absolute_home_of_the_user() {
+  let at = yard("home");
+  let memory = ("memory".to_owned(), "memory.py".to_owned(), String::new(), false);
+  let model = scripted(&MockCompletionModel::new([]));
+  let provider = Provider::new(at.display().to_string(), vec![model]).advertises(vec![memory]);
+  let mut engine = lived(provider);
+  let standing = engine.standing().expect("the life stands").py_repr();
+  // A path under the home shows as ~, so the standing is where a chain learns the folders above
+  // the home. Python shows each backslash of a path of Windows twice.
+  let home =
+    env::home_dir().expect("the user has a home").display().to_string().replace('\\', "\\\\");
+  assert!(standing.ends_with(&format!(", '{home}']")), "{standing}");
+}
+
+#[test]
 fn the_operator_entry_lists_its_members_and_a_prompt_asks_one_of_them_as_operator_and_its_login() {
   // A word reads the window that the roster offers to `operator/ana`, as a prompt with that `to`
   // finds its actor, and -1 when the roster offers none.

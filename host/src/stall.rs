@@ -58,7 +58,7 @@ struct Chain {
 
 impl Chain {
   fn new(last: Instant) -> Self {
-    Chain { last, told: Told::No, state: State::Idle }
+    Self { last, told: Told::No, state: State::Idle }
   }
 }
 
@@ -82,7 +82,7 @@ enum Told {
 impl Quiet {
   pub(crate) fn new(bound: Duration) -> Self {
     let (last, acts, ours, chains) = (Instant::now(), Vec::new(), HashSet::new(), HashMap::new());
-    Quiet { bound, last, acts, told: Told::No, ours, chains }
+    Self { bound, last, acts, told: Told::No, ours, chains }
   }
 
   /// One event of the life. After a rebirth, the new open tells again each act that lives.

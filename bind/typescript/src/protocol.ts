@@ -201,6 +201,10 @@ export type Request1 =
     }
   | {
       life: string;
+      verb: "cancel_sign_in";
+    }
+  | {
+      life: string;
       about: string;
       verb: "seen";
     }
@@ -233,6 +237,12 @@ export type Request1 =
       at?: number | null;
       read?: number | null;
       verb: "threads";
+    }
+  | {
+      life: string;
+      hidden?: string[];
+      at?: number | null;
+      verb: "rail";
     }
   | {
       life: string;
@@ -455,6 +465,12 @@ export type Frame =
       frame: "stalled";
     }
   | {
+      state: string;
+      url?: string | null;
+      message?: string | null;
+      frame: "sign_in";
+    }
+  | {
       life: string;
       ask: number;
       request: unknown;
@@ -528,6 +544,10 @@ export type Answer =
   | {
       answer: "threads";
       data: Threads;
+    }
+  | {
+      answer: "rail";
+      data: ThreadNode[];
     }
   | {
       answer: "acts";
@@ -1065,4 +1085,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 1;
+export const PROTOCOL = 3;

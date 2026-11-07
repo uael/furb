@@ -15,16 +15,20 @@
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 
 use std::{
+  panic,
   path::{Path, PathBuf},
   sync::Arc,
   time::Duration,
 };
+
+use tokio::task;
 
 use crate::{
   Ear, Engine, Fault, Object, ObjectRef, checkpoint,
   ear::{hear, hearing, lasting},
   engine::OPERATOR,
   extension::{self, Places, skills::skills},
+  gate, minify,
   world::{self, Catalog, Mode, Retries, Scratch, Writes, mcp::mcp},
 };
 
@@ -300,7 +304,7 @@ impl Opening {
       let (source, _) = world::texts(checkpoint::segment(&marks.heads))?;
       if source != crate::ENGINE {
         let unread = || Fault::refused("this build cannot minify the engine that the record holds");
-        system = Some(crate::minify::minified(&source).ok_or_else(unread)?);
+        system = Some(minify::minified(&source).ok_or_else(unread)?);
       }
     }
     let here = Places::here();
@@ -326,7 +330,7 @@ impl Opening {
       Some(one) => self.provider(advertised, actor, roster)?.system(one.into()),
       None => self.provider(advertised, actor, roster)?,
     };
-    let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
+    let gated = gate::configured(&places.config, Path::new(&self.directory));
     Ok(Prepared { places, extensions, refused, provider, gated })
   }
 
@@ -414,14 +418,14 @@ impl Opening {
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<(Engine, Vec<Object>), Fault> {
-    let waited = tokio::task::spawn_blocking(move || {
+    let waited = task::spawn_blocking(move || {
       let prepared = self.prepared();
       (self, prepared)
     });
     let (opening, prepared) = match waited.await {
       Ok(both) => both,
       Err(no) => match no.try_into_panic() {
-        Ok(panic) => std::panic::resume_unwind(panic),
+        Ok(panic) => panic::resume_unwind(panic),
         Err(no) => return Err(Fault::refused(format!("the life did not open: {no}"))),
       },
     };
@@ -460,8 +464,7 @@ impl Opening {
       return Ok(());
     };
     let record = world::kept(path)?;
-    let inspects =
-      Opening { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
+    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     for at in checkpoint::all(&record) {
       let before = checkpoint::booted(record[..at].to_vec());
       let prepared = inspects.prepared()?;

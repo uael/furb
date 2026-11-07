@@ -19,7 +19,7 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
-  view::{Act, Desk, Fold, Held, Named, Threads},
+  view::{Act, Desk, Fold, Held, Named, ThreadNode, Threads},
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -133,6 +133,9 @@ pub enum Command {
   /// moment. `read` is the place up to which the window read the chain, from which the runs of
   /// notes count the ones not yet read; none reads nothing.
   Threads { on: Option<String>, at: Option<u64>, read: Option<u64> },
+  /// The threads of every chain of the life but those it names, as one tree in the order of the
+  /// list of the threads, now or as they stood just after a moment.
+  Rail { hidden: Vec<String>, at: Option<u64> },
   /// The acts as they stood just after a moment, each with its meaning then.
   AsOf { at: u64 },
   /// Each moment at which an act began or ended, in order.
@@ -143,7 +146,7 @@ pub enum Command {
   End,
   /// A command of the engine said by a speaker of the life other than the operator, as the process
   /// of a skill under its name: each act and each fact that the command says is of that speaker.
-  By { speaker: String, command: Box<Command> },
+  By { speaker: String, command: Box<Self> },
 }
 
 impl Command {
@@ -187,6 +190,8 @@ pub enum Reply {
   Desk(Desk),
   /// The threads of a chain.
   Threads(Threads),
+  /// The threads of every chain of the life, as one tree.
+  Rail(Vec<ThreadNode>),
   /// The acts as they stood at a moment.
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.
@@ -674,6 +679,7 @@ async fn commanded(
     Command::Threads { on, at, read } => {
       Ok(Reply::Threads(held.threads(&chain(on), at, read.unwrap_or_default())))
     }
+    Command::Rail { hidden, at } => Ok(Reply::Rail(held.rail(&hidden, at))),
     Command::AsOf { at } => Ok(Reply::Acts(held.as_of(at))),
     Command::Moments => Ok(Reply::Moments(held.moments())),
     Command::Settings => {
@@ -902,7 +908,7 @@ struct Reader {
 
 impl Reader {
   /// The next event, and the reader after it.
-  async fn next(mut self) -> Option<(Logged, Reader)> {
+  async fn next(mut self) -> Option<(Logged, Self)> {
     while !self.over {
       if let Some(logged) = self.read.pop_front() {
         if logged.0 == self.next {
@@ -924,7 +930,7 @@ impl Reader {
   }
 
   /// One event given, and the reader after it.
-  fn given(mut self, logged: Logged) -> (Logged, Reader) {
+  fn given(mut self, logged: Logged) -> (Logged, Self) {
     self.next = logged.0 + 1;
     self.over = matches!(*logged.1, Event::Ended(_));
     (logged, self)

@@ -28,10 +28,14 @@ export async function ownDaemon(
       served.kill();
       process.exit(128 + (signal === "SIGHUP" ? 1 : signal === "SIGINT" ? 2 : 15));
     });
+  // The run holds one peer of its daemon for as long as it lives, so that the daemon ends once its grace passed after
+  // the run is gone, even by a kill that no handler hears.
+  let held: Awaited<ReturnType<typeof dialed>>;
   for (const until = Date.now() + PATIENCE; ; ) {
-    const socket = await dialed(place);
-    if (socket) {
-      socket.destroy();
+    held = await dialed(place);
+    if (held) {
+      held.on("error", () => {});
+      held.unref();
       break;
     }
     if (served.exitCode !== null || Date.now() > until) {
@@ -41,6 +45,7 @@ export async function ownDaemon(
     await Bun.sleep(25);
   }
   return async () => {
+    held?.destroy();
     served.kill();
     await served.exited;
   };

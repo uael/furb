@@ -1,8 +1,9 @@
 //! The one protocol of the host: what a peer says to the daemon, and what the daemon says to a
 //! peer, each frame one line of JSON.
 
-use furb::view::{Act, Desk, Threads};
+use furb::view::{Act, Desk, ThreadNode, Threads};
 use schemars::JsonSchema;
+use schemars::generate::SchemaSettings;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -12,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 3;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -268,6 +269,11 @@ pub enum Verb {
     life: String,
     config: Config,
   },
+  /// A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config
+  /// that asked it. It writes no config.
+  CancelSignIn {
+    life: String,
+  },
   /// The fact that the operator read a chain or a thread up to now, which each window and each
   /// later life reads in the record.
   Seen {
@@ -309,6 +315,14 @@ pub enum Verb {
     at: Option<u64>,
     #[serde(default)]
     read: Option<u64>,
+  },
+  /// The threads of every chain of a life but those it names, as one tree in the order of the
+  /// list of the threads, now or as they stood just after a moment.
+  Rail {
+    life: String,
+    #[serde(default)]
+    hidden: Vec<String>,
+    at: Option<u64>,
   },
   /// The acts of a life as they stood just after a moment, each with its meaning then.
   AsOf {
@@ -374,6 +388,7 @@ impl Verb {
         | Self::Queued { .. }
         | Self::Desk { .. }
         | Self::Threads { .. }
+        | Self::Rail { .. }
         | Self::AsOf { .. }
         | Self::Moments { .. }
         | Self::Names { .. }
@@ -430,6 +445,10 @@ pub enum Frame {
   /// of its windows by the watch of the daemon, which no word of the life runs: each open act, and
   /// the notice that a window shows as it stands.
   Stalled { life: String, acts: Vec<Open>, notice: String },
+  /// The state of the sign-in of codex that this peer asked with a config of its provider, pushed
+  /// at each change of the state, so no window asks it again: the word of the state, the browser
+  /// address while it waits, and what to tell the operator when it needs him or failed.
+  SignIn { state: String, url: Option<String>, message: Option<String> },
   /// A request of a model of a life that the peer answers: its number, and the request with the
   /// actor, the chain, the messages and the settings.
   Ask { life: String, ask: u64, request: Value },
@@ -448,7 +467,7 @@ pub enum Frame {
 impl Frame {
   /// The refusal of a request, or of a frame with no id.
   pub fn refused(id: Option<u64>, error: ProtocolError) -> Self {
-    Frame::Refused { id, why: error.to_string(), error }
+    Self::Refused { id, why: error.to_string(), error }
   }
 }
 
@@ -480,6 +499,8 @@ pub enum Answer {
   Desk(Desk),
   /// The threads of a chain.
   Threads(Threads),
+  /// The threads of every chain of a life, as one tree.
+  Rail(Vec<ThreadNode>),
   /// The acts as they stood at a moment.
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.
@@ -618,7 +639,7 @@ pub struct Node {
 impl Node {
   /// The node as a window that only reads gets it: each node that acts, inert.
   #[must_use]
-  pub fn inert(self) -> Node {
+  pub fn inert(self) -> Self {
     let shape = match self.shape {
       Shape::Input { value, hint, .. } => Shape::Input { value, hint, inert: true },
       Shape::Button { label, .. } => Shape::Button { label, inert: true },
@@ -635,7 +656,7 @@ impl Node {
       | Shape::Diff { .. }
       | Shape::Markdown { .. }) => shape,
     };
-    Node { shape, ..self }
+    Self { shape, ..self }
   }
 }
 
@@ -735,7 +756,7 @@ struct Wire {
 /// The JSON Schema of the protocol: a request and a frame, with the version of the protocol under
 /// the key `x-protocol`.
 pub fn schema() -> Value {
-  let generator = schemars::generate::SchemaSettings::draft07().into_generator();
+  let generator = SchemaSettings::draft07().into_generator();
   let mut schema = generator.into_root_schema_for::<Wire>();
   schema.insert("x-protocol".to_owned(), PROTOCOL.into());
   schema.to_value()

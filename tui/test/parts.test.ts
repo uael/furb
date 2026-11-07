@@ -445,7 +445,8 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
       await session.command('/run skill("ouroboros")');
       await session.command(`/run <s:part>\n${PART}</s:part>\nextend("todo", ${word}, tui=part)`);
       await session.command('/run todo("write the part")\ntodo("read the capture", done=True)');
-      const shown = await shows(frame, "○ write the part");
+      // The two calls of the word land one after the other, so the frame that shows the first may not hold the second.
+      const shown = await shows(frame, "○ write the part", (rows) => rows.includes("✓ read the capture"));
       expect(shown).toContain("✓ read the capture");
       expect(app.parts.loaded.map((one) => [one.name, one.error])).toEqual([
         ["compaction", undefined],

@@ -708,9 +708,11 @@ def gathered(define, floor):
         "cut": [x for x in cut if scope(x) == c],
         "lives": [
           *dict.fromkeys(
-            m[4]
-            for x in transcript(c)
-            if question(x) and not over(x[1]) and question(("rung", x[2])) and (m := get(x[2])) and m[4] in words
+            get(r)[4]
+            for x in listening()
+            if scope(x) == c
+            for r in lineage(x)
+            if question(("rung", r)) and get(r)[4] in words
           )
         ],
       }
@@ -1030,7 +1032,7 @@ def controlled(ear, lasting=False):
 
 
 def boot(record=(), **outside):
-  global say, act, drive, get, peek, transcript
+  global say, act, drive, get, peek, transcript, listening
   get_running_loop()
   made, known, done, held, log, alive, born, busy, left, heed = Counter(), {}, {}, {}, [], {}, {}, set(), [], {}
   first, owned, taken = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
@@ -1246,6 +1248,9 @@ def boot(record=(), **outside):
     alive[name] = g
     hear(name, g, None)
     dispatch()
+
+  def listening():
+    return alive
 
   def get(about):
     return known.get(about)

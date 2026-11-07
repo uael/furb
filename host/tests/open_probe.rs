@@ -14,6 +14,8 @@
   reason = "the test blocks on the runtime that tokio starts for it"
 )]
 
+use std::env;
+use std::process;
 use std::time::Instant;
 
 use furb::life::Opening;
@@ -22,10 +24,9 @@ use furb_host::{Command, Life};
 #[tokio::test]
 #[ignore = "a probe: FURB_PROBE_RECORD names a copy of a record, FURB_PROBE_DIRECTORY its folder"]
 async fn the_time_to_open_a_life_on_a_record() {
-  let record = std::env::var("FURB_PROBE_RECORD").expect("FURB_PROBE_RECORD names a record");
-  let directory =
-    std::env::var("FURB_PROBE_DIRECTORY").expect("FURB_PROBE_DIRECTORY names a folder");
-  let config = std::env::temp_dir().join(format!("furb-open-probe-{}", std::process::id()));
+  let record = env::var("FURB_PROBE_RECORD").expect("FURB_PROBE_RECORD names a record");
+  let directory = env::var("FURB_PROBE_DIRECTORY").expect("FURB_PROBE_DIRECTORY names a folder");
+  let config = env::temp_dir().join(format!("furb-open-probe-{}", process::id()));
   let opening = Opening {
     directory,
     record: Some(record),

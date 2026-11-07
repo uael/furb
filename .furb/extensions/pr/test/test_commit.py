@@ -1,15 +1,11 @@
 """commit makes one commit of the named paths with a QA trailer for each thing to test, on the real engine."""
 
-import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
 from extensions.conftest import Bench
 from furb.engine import Refused
-
-REPO = Path(__file__).resolve().parents[4]
 
 
 def git(made: Bench, *args: str) -> str:
@@ -21,13 +17,12 @@ def repo(made: Bench) -> None:
   git(made, "config", "user.email", "t@example.com")
   git(made, "config", "user.name", "t")
   git(made, "config", "commit.gpgsign", "false")
-  shutil.copy(REPO / "script" / "build-slot.sh", made.tmp / "script")
   (made.tmp / "a.txt").write_text("a\n", encoding="utf-8")
   (made.tmp / "b.txt").write_text("b\n", encoding="utf-8")
 
 
 async def test_commit_gives_one_qa_trailer_for_each_entry_and_the_sha(pulling: Bench) -> None:
-  """commit(title, paths) commits the named paths alone, in the worktree at where, through sh script/build-slot.sh git commit with every hook, and gives a tuple of the short sha and the QA trailers of the commit."""
+  """commit(title, paths) commits the named paths alone, in the worktree at where, with git commit and every hook, and gives a tuple of the short sha and the QA trailers of the commit."""
   repo(pulling)
   sha, trailers = await pulling.value('await commit("chore(pr): Add a", ["a.txt"], "Why.", qa=["open the TUI", "press q"])')
   assert trailers == ["open the TUI", "press q"]

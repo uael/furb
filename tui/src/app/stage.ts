@@ -1,4 +1,13 @@
-import { busy, isDone, type Loom, momentsOf, owedAt, type ThreadNode, weave } from "furb/life";
+import {
+  busy,
+  type ChainThread,
+  isDone,
+  type Loom,
+  momentsOf,
+  owedAt,
+  type ThreadNode,
+  weave,
+} from "furb/life";
 import type { Stage } from "../graph.ts";
 import { actorOf, joined, type LifeView, LoomPane, lifeViews } from "../overview.ts";
 import { styled } from "../ui.ts";
@@ -163,14 +172,14 @@ export const stage = part({
     const active = this.session.activeThread;
     const then = this.cursor;
     const stood = (node: ThreadNode) => then === undefined || node.thread.act.began <= then;
-    const find = (nodes: readonly ThreadNode[]): ThreadNode | undefined => {
+    const find = (nodes: readonly ThreadNode[], active: ChainThread): ThreadNode | undefined => {
       for (const node of nodes) {
-        const found = node.thread === active ? node : find(node.agents);
+        const found = node.thread.act.id === active.act.id ? node : find(node.agents, active);
         if (found) return found;
       }
       return undefined;
     };
-    const node = active && find(this.railTree());
+    const node = active && find(this.railTree(), active);
     if (!node || !stood(node)) return undefined;
     const chains = new Set<string>();
     const visit = (one: ThreadNode): void => {

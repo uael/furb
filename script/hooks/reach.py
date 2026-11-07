@@ -33,7 +33,7 @@ HARNESS = {
   ".furb/extensions/conftest.py",
 }
 HOOK = {"script/hooks/pre-commit": "test/outside/test_hook_script.py"}
-CONTRACT = re.compile(r"(test/(?!outside/)|extensions/[^/]+/test/|\\.furb/extensions/[^/]+/test/)")
+CONTRACT = re.compile(r"(test/(?!outside/)|extensions/[^/]+/test/|\.furb/extensions/[^/]+/test/)")
 TEST = re.compile(r"(test|extensions/[^/]+/test|\.furb/extensions(/[^/]+/test)?)/(.+/)?test_[^/]*\.py$")
 EXTENSION = re.compile(r"((?:\.furb/)?extensions/[^/]+)/")
 SCRIPT = re.compile(r"script/(?:hooks/)?([^/]+)\.(?:py|sh)$")
