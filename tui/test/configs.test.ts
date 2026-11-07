@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
-import { shown, typed } from "../src/configs.ts";
+import { rowsOf, type Setting, shown, typed } from "../src/configs.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
 import { composing } from "./composing.ts";
@@ -67,4 +67,28 @@ test("/config shows each key with its schema, flips a flag, takes a key out and 
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("the rows of a key with an enum give its values on a row of their own, and each key its layer", () => {
+  const key: Setting = {
+    key: ["mode"],
+    value: "a",
+    layer: "project",
+    property: { type: "string", default: "a", description: "How it runs.", enum: ["a", "b"] },
+  };
+  expect(rowsOf(key, "project config")).toEqual([
+    ["type", "string"],
+    ["values", '"a"  "b"'],
+    ["default", '"a"'],
+    ["layer", "project config"],
+  ]);
+  const flag: Setting = {
+    key: ["gate"],
+    value: true,
+    property: { type: "boolean", default: true, description: "" },
+  };
+  expect(rowsOf(flag, "default").map(([name]) => name)).toEqual(["type", "default", "layer"]);
+  expect(rowsOf({ key: ["other"], value: 1, layer: "user" }, "user config")).toEqual([
+    ["layer", "user config"],
+  ]);
 });
