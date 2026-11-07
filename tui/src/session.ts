@@ -194,8 +194,6 @@ interface Index {
    * a chain depend on its prompts alone, so an act of another kind reads no thread again. */
   threaded: Map<string, number>;
   prompts: number;
-  /** How many times an act that names the session came or changed. */
-  named: number;
   /** The chain of each act that came or changed, once each time, which tells the board which chains to read again. */
   touched: string[];
   /** The writes that are done, in the order that the session saw them done. */
@@ -251,8 +249,6 @@ function placed(index: Index, act: ActRow): void {
   // A prompt tells that a thread changed, and so does a step that works for one, whose model thinks while it asks.
   if (act.kind === "prompt" || (act.kind === "rung" && index.ids.get(act.by)?.kind === "prompt"))
     index.threaded.set(act.chain, ++index.prompts);
-  // A name of the session names the first thread of the operator in the crate, so it reads the threads again.
-  if (act.kind === "name_session" || act.kind === "rename_session") index.named++;
   index.touched.push(act.chain);
   const latest = index.latest.get(act.chain);
   if (
@@ -290,7 +286,6 @@ function indexOf(acts: readonly ActRow[], prompts = 0): Index {
     stamps: new Map(),
     chained: new Map(),
     threaded: new Map(),
-    named: 0,
     prompts,
     touched: [],
     written: [],
@@ -1156,10 +1151,9 @@ export class Session extends EventEmitter {
   private readonly crateThreads = new Map<string, { stamp: number; owed: string; got: Threads }>();
   /** The reads of the threads of a chain that the session waits for, one for each chain. */
   private readonly askingThreads = new Map<string, Promise<void>>();
-  /** What the threads read beside the prompts of a chain: the questions that wait now, and the acts that name the
-   * session, whose name the crate gives the first thread of the operator. */
+  /** What the threads read beside the prompts of a chain: the questions that wait now. */
   private get owedNow(): string {
-    return `${[...this.host.prompts.keys()].join(" ")}\n${this.indexed().named}`;
+    return [...this.host.prompts.keys()].join(" ");
   }
   /** Whether the threads that the crate gave of a chain are of the prompts and the questions of now. */
   threadsFresh(chain: string): boolean {
