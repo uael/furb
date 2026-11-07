@@ -16,6 +16,10 @@
 //! A replay starts no process before the tip, since the record answers each act that a process
 //! said. Code plays only by a fact enable, never because a folder holds a skill.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::{HashMap, VecDeque},
   ffi::OsStr,

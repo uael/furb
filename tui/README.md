@@ -265,7 +265,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
 | ⌃PageUp / ⌃PageDown | Previous / next scope of file changes: this turn, this chain, the life, the branch |
 | ⌥R / ⌥J | Repair the journal of file changes / start a new journal, once the view of changes finds it damaged |
-| ⌃C | Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input) |
+| ⌃C | Clear the input, close a dialog, refuse the question that waits, or cancel what you sent last (a message goes back to the input) |
 | Esc | Close a dialog or pause current model work |
 | F1 / ⌃Q / ⌃D twice | Help / save and quit / save and quit from an empty input |
 

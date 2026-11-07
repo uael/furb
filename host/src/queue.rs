@@ -3,6 +3,10 @@
 //! the queue as it stood. The life sends the first follow-up of a chain as a prompt once the chain
 //! rests: no pause holds it, it asks the operator nothing, and no work of it lives.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::collections::{BTreeMap, HashMap};
 
 use schemars::JsonSchema;

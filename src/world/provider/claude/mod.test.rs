@@ -326,6 +326,16 @@ fn a_turn_of_many_requests_says_the_usage_of_its_last_request() {
 }
 
 #[test]
+fn a_message_settled_after_its_delta_leaves_the_tokens_out_that_the_delta_said() {
+  let yard = Yard::new("late");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let got = asked(&model, &[user("LATE")], json!({"session": "chain"})).unwrap();
+  let spent = got.usage;
+  let counts = (spent.input_tokens, spent.output_tokens, spent.cached_input_tokens);
+  assert_eq!(counts, (10, 5, 20));
+}
+
+#[test]
 fn the_next_turn_of_a_conversation_writes_to_its_process_only_what_it_has_not_heard() {
   let yard = Yard::new("next");
   let model = yard.claude(10_000).completion_model("sonnet");
@@ -1265,4 +1275,20 @@ fn a_process_gets_no_flag_that_its_command_line_does_not_list() {
   asked(&model, &[user("first")], json!({"session": "chain"})).unwrap();
   let args = yard.args(&yard.pids()[0]);
   assert!(!args.iter().any(|one| one == "--system-prompt-snapshot"), "{args:?}");
+}
+
+#[test]
+fn a_missing_token_and_every_account_signed_out_are_failures_of_their_own_with_the_words_that_a_person_reads()
+ {
+  let token = super::Token::EmptyEnv { name: "a".to_owned(), var: "T".to_owned() };
+  let missing = super::Error::from(token);
+  assert!(matches!(missing, super::Error::NoToken(_)));
+  assert_eq!(
+    missing.to_string(),
+    "The account a has no token: its token variable T is empty or not set"
+  );
+  assert_eq!(
+    super::Error::Exhausted.to_string(),
+    "Every account of the claude command line is signed out. Sign one in, then run /reload."
+  );
 }

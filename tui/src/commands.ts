@@ -133,6 +133,23 @@ export const slashes = Object.entries<readonly [string, string, string, string?]
   }),
 );
 
+/** The one entry of the table that a skill gives: each skill of the read of skills:// is a command that loads it on the
+ * chain and sends its text as the message that uses it, in the shape of the entries above, but for the commands of the
+ * TUI that already hold its name. */
+export const skillSlashes = (skills: readonly { name: string; detail: string }[]) =>
+  skills
+    .filter(({ name }) => !slashes.some((one) => one.name === name || one.alias === name))
+    .map(({ name, detail }) => ({
+      name,
+      label: name,
+      argument: "[text]",
+      detail: `${detail} (skill)`,
+      alias: "",
+      usage: typed(name, "[text]"),
+      aliasUsage: "",
+      forms: typed(name, "[text]"),
+    }));
+
 /** The text with the other name of a command, when it starts with one, written as the name of the command. */
 export const canonical = (text: string): string => {
   const [, word = "", rest = ""] = text.match(/^\/([\w-]+)( .*|)$/s) ?? [];

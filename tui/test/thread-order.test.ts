@@ -91,9 +91,9 @@ test("the sidebar lists the closed threads at the top and the open ones last, ne
       const at = (text: string) => rows.findIndex((line) => line.includes(text));
       // The threads stand under the row of the session that holds them, which bears the name of its record.
       expect(at("conductor")).toBeGreaterThan(0);
-      expect(at("Have an agent loading")).toBeGreaterThan(at("conductor"));
-      expect(at("This one is a bit more")).toBeGreaterThan(at("Have an agent loading"));
-      expect(at("You are the orchestrator")).toBeGreaterThan(at("This one is a bit more"));
+      expect(at("Have a worker loading")).toBeGreaterThan(at("conductor"));
+      expect(at("A second task is a bit more")).toBeGreaterThan(at("Have a worker loading"));
+      expect(at("You are the conductor")).toBeGreaterThan(at("A second task is a bit more"));
     },
     tall,
     await recorded(),
@@ -141,6 +141,49 @@ test("a click on the left edge of a line in the middle of a thread folds nothing
     await recorded(),
   ));
 
+// The fold of a thread works from any line of it: ⌥C folds it from the top, the middle and the end of a long thread.
+test("⌥C folds a long thread from its top, its middle and its end, and the click on its row then shows its end from each scroll", async () => {
+  for (const place of ["top", "middle", "end"] as const) {
+    await composing(
+      async (use) => {
+        const { session, app, screen } = use;
+        await session.refresh();
+        await session.select("chain1");
+        await settled(use);
+        const cards = () => app.threadCards().filter((one) => one.thread === "prompt1");
+        expect(cards().length).toBeGreaterThan(2);
+        const at = { top: 1, middle: Math.floor(cards().length / 2), end: cards().length - 1 }[place];
+        const card = cards()[at]?.node;
+        if (!card) throw new Error(`no card at the ${place} of prompt1`);
+        const { viewport } = app.scroll;
+        // The line stands in the middle of the view, so the thread in view is the one that the key folds.
+        app.scroll.scrollTo(
+          app.scroll.scrollTop + card.y - (viewport.y + Math.floor(viewport.height / 2)) + 1,
+        );
+        await settled(use);
+        expect(app.threadInView()).toBe("prompt1");
+        expect(session.folds["thread:prompt1"]).not.toBe(true);
+        screen.mockInput.pressKey("c", { meta: true });
+        const folded = await settled(use);
+        expect(session.folds["thread:prompt1"]).toBe(true);
+        expect(folded).toContain("▸ Expand");
+        // The key again opens it, and a click on the row of the thread in the sidebar shows its end, from this scroll.
+        screen.mockInput.pressKey("c", { meta: true });
+        await settled(use);
+        expect(session.folds["thread:prompt1"]).not.toBe(true);
+        await railClick(use, "You are the conductor", short.width);
+        await until(session, () => session.thread === "prompt1");
+        const shown = await settled(use);
+        const end = app.threadEnd("prompt1");
+        expect(end ? end.y + end.height : Number.NaN).toBe(viewport.y + viewport.height);
+        expect(shown).toContain("↳ Replying here");
+      },
+      short,
+      await recorded(),
+    );
+  }
+});
+
 // Before, main brought the header of the thread into view, and the end of a long thread stayed under the view.
 test("a click on a thread in the sidebar moves the feed to the end of that thread, its last message in view", async () =>
   composing(
@@ -157,7 +200,7 @@ test("a click on a thread in the sidebar moves the feed to the end of that threa
         return end ? end.y + end.height : Number.NaN;
       };
       expect(bottom()).toBeGreaterThan(viewport.y + viewport.height);
-      await railClick(use, "You are the orchestrator", short.width);
+      await railClick(use, "You are the conductor", short.width);
       await until(session, () => session.thread === "prompt1");
       const shown = await settled(use);
       keep("click-to-the-end", shown);

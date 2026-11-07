@@ -1,6 +1,10 @@
 //! How each value crosses between the sandbox and the host, both ways, and the numbers by which the
 //! host holds what has no way back.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::{HashMap, HashSet},
   sync::atomic::{AtomicI64, Ordering},

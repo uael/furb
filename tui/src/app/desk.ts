@@ -194,18 +194,29 @@ export const desk = part({
    * then the fold of the rest. */
   renderDock(): void {
     const w = this.session;
-    const shown: { title: string; lines: readonly PartLine[]; error?: string }[] = [];
+    const shown: { title: string; lines: readonly PartLine[]; error?: string; said?: string }[] = [];
     if (w.view === "feed" && !this.tree) {
       const seen = this.seen();
       for (const part of this.parts.loaded) {
-        if (part.error) shown.push({ title: part.name, lines: [], error: part.error });
+        if (part.error)
+          shown.push({
+            title: part.name,
+            lines: [],
+            error: part.error,
+            said: `The part ${part.name} did not load, so it shows nothing.`,
+          });
         for (const panel of part.panels)
           try {
             const lines = panel.draw(seen);
             if (!Array.isArray(lines)) throw new Error("Its panel gives no list of lines.");
             shown.push({ title: panel.name, lines });
           } catch (error) {
-            shown.push({ title: panel.name, lines: [], error: plainError(error) });
+            shown.push({
+              title: panel.name,
+              lines: [],
+              error: plainError(error),
+              said: `The panel ${panel.name} of ${part.name} failed while it drew its lines.`,
+            });
           }
       }
     }
@@ -227,7 +238,9 @@ export const desk = part({
       const box = this.box();
       const mark: Part[] = one.error ? [[`${glyph.failed} `, c.danger]] : [];
       box.add(this.line([...mark, [one.title, c.text, bold]], c.text, { truncate: true }));
-      if (one.error) box.add(this.text(one.error, c.danger));
+      if (one.said) box.add(this.text(one.said, c.danger));
+      // The raw message of the engine stands on a second, faint line.
+      if (one.error) box.add(this.text(one.error, one.said ? c.faint : c.danger));
       const fold = `dock:${one.title}`;
       const hide = w.folds[fold] === false ? 0 : foldOf(one.lines.length);
       for (const line of one.lines.slice(0, one.lines.length - hide))

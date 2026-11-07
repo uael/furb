@@ -1,8 +1,13 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { RGBA } from "@opentui/core";
 import { setRendererCapabilities } from "@opentui/core/testing";
+import { imageReferences } from "furb";
 import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
+import type { clipboardImage } from "../src/clipboard.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { emojis } from "../src/emoji.ts";
 import { count } from "../src/format.ts";
@@ -160,9 +165,12 @@ test("the shape picker marks the shape of the next prompt and runs /shape, and /
       // The prompt of the operator and a prompt that a rung made each hold a program once the model answers it.
       await session.command('/run prompt("str", message="Summarize the notes.")');
       // The program of a prompt comes in a read of its own, which a slow runner gives after the prompt is done, and the
-      // picker offers only the prompts that hold a program when it opens.
+      // picker offers only the prompts that hold a program when it opens. It marks prompt2 done once the model answered
+      // it, which a loaded runner gives after the program, so the test waits on that mark too.
       await until(session, () =>
-        session.activity.some((act) => act.id === "prompt2" && session.editable(act)),
+        session.activity.some(
+          (act) => act.id === "prompt2" && act.phase.phase === "done" && session.editable(act),
+        ),
       );
       await idle(session);
       app.ladders();
@@ -925,4 +933,39 @@ test("The input draws the rest of a line from the history in grey, and Right, Ct
     app.composer.setText("");
     await screen.mockInput.typeText("something else");
     expect(await frame()).not.toContain("tell me about");
+  }));
+
+const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
+
+test("a pasted image takes the name image-N and its mark goes into the text at the caret, so the message keeps the order of its text and its images", () =>
+  composing(async ({ app, session, frame }) => {
+    const directory = await mkdtemp(join(tmpdir(), "furb-paste-"));
+    try {
+      // The clipboard writes the image to a file named by the stem that the paste hands it, as the real one does.
+      const clipboard: typeof clipboardImage = async (use, stem = "image") => {
+        const file = join(directory, `${stem}.png`);
+        await writeFile(file, Buffer.from(PIXEL, "base64"));
+        return await use(file);
+      };
+      const paste = () => app.pasteImage(undefined, clipboard);
+      app.composer.setText("see  and  now");
+      app.composer.cursorOffset = 4;
+      await paste();
+      app.composer.cursorOffset = app.composer.plainText.indexOf(" now");
+      await paste();
+      const text = app.composer.plainText;
+      const named = imageReferences(text);
+      // Two images in the middle of one line: the text and the marks stand in the order of the paste.
+      expect(named.map((one) => one.name)).toEqual(["image-1.png", "image-2.png"]);
+      expect(text).toBe(`see ${named[0]?.text} and ${named[1]?.text} now`);
+      // The mark stands in the text, and no row above the input lists the image.
+      expect(await frame()).not.toMatch(/\d+ images? attached/);
+      await app.submit();
+      const prompts = await session.engine.transcript({ on: session.selected, of: "prompt" });
+      const sent = String(prompts.at(-1)?.[5]);
+      expect(sent).toBe(text);
+      expect(imageReferences(sent).map((one) => one.name)).toEqual(["image-1.png", "image-2.png"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }));

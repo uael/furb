@@ -30,11 +30,15 @@
 //!
 //! [`local`]: super::local
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 mod config;
 mod error;
 mod update;
 
-pub use error::Error;
+pub use error::{Error, Unreached};
 pub use update::{Source, Status, keep_fresh, status, updated};
 
 use std::{
@@ -806,7 +810,7 @@ impl Listed {
   /// of Amazon and Google read their credentials themselves: those of Google are its key of an API, or its
   /// credentials of an application where its client finds them, under the application data on Windows and under
   /// the home elsewhere.
-  fn credential(&self, env: &impl Fn(&str) -> Option<String>) -> Result<Credential, String> {
+  fn credential(&self, env: &impl Fn(&str) -> Option<String>) -> Result<Credential, Unreached> {
     if let Some(key) = &self.key {
       return Ok(Credential::bare(key.clone()));
     }
@@ -826,9 +830,7 @@ impl Listed {
       }
       (Client::Vertex, None) if adc() => Ok(Credential::bare(String::new())),
       (_, Some((name, key))) => Ok(Credential { key, bearer: self.bearer.contains(name) }),
-      (_, None) => {
-        Err(format!("no credential of it stands in the environment: set {}", self.env.join(" or ")))
-      }
+      (_, None) => Err(Unreached::NoCredential { env: self.env.clone() }),
     }
   }
 
@@ -842,7 +844,7 @@ impl Listed {
     client: Client,
     credential: Credential,
     env: &impl Fn(&str) -> Option<String>,
-  ) -> Result<Reach, String> {
+  ) -> Result<Reach, Unreached> {
     let own = listing.provider.as_ref().and_then(|own| own.api.clone());
     let based = env("AZURE_OPENAI_BASE_URL").filter(|_| client == Client::Azure);
     let api = match based {
@@ -860,8 +862,7 @@ impl Listed {
     let project = match client {
       Client::Vertex => {
         let project = env("GOOGLE_CLOUD_PROJECT").or_else(|| env("GCLOUD_PROJECT"));
-        let project = project
-          .ok_or("no project of Google stands in the environment: set GOOGLE_CLOUD_PROJECT")?;
+        let project = project.ok_or(Unreached::NoProject)?;
         Some((project, env("GOOGLE_CLOUD_LOCATION").unwrap_or_else(|| "global".to_owned())))
       }
       _ => None,
@@ -874,14 +875,13 @@ impl Listed {
   /// An address with each place `${NAME}` filled from the environment, which reads the name of pi-ai for the place
   /// before the name itself; or the first name that the environment does not hold. Each place is filled once, after
   /// the value of the place before it, so a value that names a place stands as it is.
-  fn filled(&self, api: &str, env: &impl Fn(&str) -> Option<String>) -> Result<String, String> {
+  fn filled(&self, api: &str, env: &impl Fn(&str) -> Option<String>) -> Result<String, Unreached> {
     let (mut filled, mut from) = (api.to_owned(), 0);
     while let Some(at) = filled[from..].find("${").map(|at| from + at) {
       let Some(end) = filled[at..].find('}').map(|end| at + end) else { break };
       let name = filled[at + 2..end].to_owned();
       let value = self.aliases.get(&name).and_then(|alias| env(alias)).or_else(|| env(&name));
-      let value =
-        value.ok_or_else(|| format!("its address needs {name}: set it in the environment"))?;
+      let value = value.ok_or_else(|| Unreached::Unfilled { name: name.clone() })?;
       filled.replace_range(at..=end, &value);
       from = at + value.len();
     }
@@ -913,7 +913,7 @@ fn model(
   id: &str,
   listing: &Listing,
   client: Client,
-  reach: Result<Reach, String>,
+  reach: Result<Reach, Unreached>,
 ) -> Model {
   let dialect = client.dialect(id);
   let mut model = reached(format!("{provider}:{id}"), listing.limit.context, client, reach);
@@ -948,7 +948,7 @@ pub(super) fn reached(
   name: String,
   window: u64,
   client: Client,
-  reach: Result<Reach, String>,
+  reach: Result<Reach, Unreached>,
 ) -> Model {
   let made: Arc<OnceLock<Result<Streams, clients::Error>>> = Arc::default();
   let search = reach.as_ref().ok().and_then(|one| search::native(client, one));

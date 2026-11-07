@@ -24,7 +24,7 @@ use super::{
     },
     model::Asked,
   },
-  Catalog, DOCTRINE, SNAPSHOT, clamp, doctrine_in, listed, parsed,
+  Catalog, DOCTRINE, SNAPSHOT, Unreached, clamp, doctrine_in, listed, parsed,
   update::{MODELS, PI},
 };
 use crate::testing;
@@ -422,6 +422,32 @@ fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_plac
     "the credentials of an application stand where the client of Google finds them"
   );
   assert!(offered(&["RADIUS_API_KEY"], "radius:balanced"));
+}
+
+#[test]
+fn why_a_model_cannot_be_reached_is_a_failure_of_its_own_for_each_cause() {
+  let listed = parsed(LISTED, None);
+  let held = |names: &'static [&'static str]| {
+    move |name: &str| names.contains(&name).then(|| "key".to_owned())
+  };
+  let reach = |provider: &str, id: &str, env: &'static [&'static str]| {
+    let one = &listed[provider];
+    let listing = &one.models[id];
+    let client = listing.client(one.rig).expect("a client");
+    let env = held(env);
+    one.credential(&env).and_then(|key| one.reach(id, listing, client, key, &env)).err()
+  };
+  let none = reach("google", "gemini-flash", &[]).expect("no credential");
+  let names = vec!["GOOGLE_API_KEY".to_owned(), "GEMINI_API_KEY".to_owned()];
+  assert_eq!(none, Unreached::NoCredential { env: names });
+  assert_eq!(
+    none.to_string(),
+    "no credential of it stands in the environment: set GOOGLE_API_KEY or GEMINI_API_KEY"
+  );
+  let unfilled = reach("azure", "gpt-5-mini", &["AZURE_OPENAI_API_KEY"]).expect("no place");
+  assert_eq!(unfilled, Unreached::Unfilled { name: "AZURE_RESOURCE_NAME".to_owned() });
+  let project = reach("google-vertex", "gemini-pro", &["GOOGLE_CLOUD_API_KEY"]);
+  assert_eq!(project, Some(Unreached::NoProject));
 }
 
 #[test]

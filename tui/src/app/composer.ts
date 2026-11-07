@@ -1,6 +1,7 @@
 import { FilePicker, shapes } from "furb";
 import { isDone, takesNothing, unfinished, WORK } from "furb/life";
-import { canonical, slashes } from "../commands.ts";
+import { clipboardImage } from "../clipboard.ts";
+import { canonical, skillSlashes, slashes } from "../commands.ts";
 import { emojiNamed, emojis } from "../emoji.ts";
 import { shortenHome } from "../files.ts";
 import { clip, count, dollars, graphemes, modelName, share } from "../format.ts";
@@ -142,6 +143,20 @@ export const composer = part({
   unsent(key: string, content: string): void {
     if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);
     else if (this.draftKey !== key && !this.session.drafts[key]) this.session.drafts[key] = content;
+  },
+
+  /** An image that the operator attaches, from a file or the clipboard: its mark goes into the text where the caret is,
+   * so the message keeps the order of its text and its images. The clipboard names it image-N. */
+  async pasteImage(path?: string, clipboard = clipboardImage): Promise<void> {
+    const mark = path
+      ? await this.session.attachImage(path)
+      : await clipboard(
+          (file) => this.session.attachImage(file),
+          this.session.imageStem(this.composer.plainText),
+        );
+    this.composer.insertText(mark);
+    this.composer.focus();
+    this.render();
   },
 
   async submit(): Promise<void> {
@@ -464,15 +479,11 @@ export const composer = part({
             }),
         )
         .concat(
-          this.session.skills
-            .filter(
-              (one) =>
-                one.name.startsWith(token.text) &&
-                !slashes.some(({ name, alias }) => name === one.name || alias === one.name),
-            )
+          skillSlashes(this.session.skills)
+            .filter((one) => one.name.startsWith(token.text))
             .map((one) => ({
               label: `/${one.name}`,
-              detail: `${one.detail} (skill)`,
+              detail: one.detail,
               text: `/${one.name} `,
               submit: () => {
                 this.composer.setText("");

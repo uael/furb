@@ -269,7 +269,7 @@ test("a click on a fold row of a window of code opens it in a block that fits it
     async ({ session, app, screen, frame }) => {
       await session.refresh();
       await session.select(
-        session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "",
+        session.chains.find((chain) => session.labelOf(chain.id) === "lane/feed")?.id ?? "",
       );
       // The fold row of a window stands inside the card of its program, and not in the fold of a reply.
       const inside = (y: number) =>

@@ -284,7 +284,7 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
     shape if isinstance(shape, str) else re.sub(r"""<class '|'>|('[^']*'|"[^"]*")|[\w.:/]*\.""", r"\1", repr(shape))
   )
   thread = on * prompted(on)
-  to = to or (thread and (*get(thread)[6:], "")[0])
+  to = to or (thread and "".join(get(thread)[6:]))
   asks = (to or module(on).get("actor")) != OPERATOR
   says = asks and thread and named == "None" and not over(thread)
 
@@ -295,7 +295,6 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
         yield {"rung"}
     yield opened(id, named, message=message, thread=thread)
     a: tuple = ()
-    reminded = set()
     while not says:
       got = a[:1] == ("done",) and get(a[1])
       heard = got and prompted(a[1]) and got[3:5] == (id, "None")
@@ -314,8 +313,6 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
             ],
           )[-1]
         )
-        and owed not in reminded
-        and (reminded := reminded | {owed})
         and prompt(None, owed + " unanswered", on=id)
       )
       asks and not (
@@ -346,7 +343,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
     blocked, running, waiting, last, heard = set(), {}, {}, standing(), []
-    step = news = ran = reply = note = to = hush = hushed = ""
+    step = news = ran = reply = note = to = hush = dull = stuck = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(went):
@@ -432,10 +429,11 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         case ("done", about, _, value) if running.get(maker := r[2]) in (
           False,
           isinstance(value, Exception) and r[0] != "reply" and "",
-        ) and about not in {y for x in transcript(id, "wants") for y in x[1::3]} | {
-          x[1] for x in transcript(id, "close") if scope(x[2]) == id != x[2]
-        }:
+        ) and repr(about) not in str(
+          transcript(id, "wants") + [x[1] for x in transcript(id, "close") if scope(x[2]) == id != x[2]]
+        ):
           scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
+          dull = stuck = ""
           value is None or isinstance(value, CancelledError) or (
             news := (about + " done", maker, isinstance(value, Exception))
           )
@@ -456,17 +454,14 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         or (
           question(("rung", m := r[2]))
           and not running.get(m)
-          and not (
-            get(m)[4]
-            or isinstance(a[3], CancelledError | None)
-            or (r[0] == "reply" and not isinstance(a[3], Exception))
-          )
+          and not (get(m)[4] or isinstance(a[3], CancelledError | None | tuple))
         )
       ):
-        hush = ""
-      if a[0] == "done" and a[1] == ran and prompted(r[2]) and r[2] == hush != hushed:
-        hushed = hush
-        yield "tell", get(hush)[2], [headed(hush, "asked no more until a fact comes")]
+        hush = dull = stuck = ""
+      if a[0] == "done" and prompted(r[2]) and a[1] in (ran, *blocked) and not over(r[2]):
+        if hush == r[2] or (stuck := dull):
+          ran = yield "tell", get(r[2])[2], [headed(r[2], "asked no more until a fact comes")]
+        dull = 1
       match a:
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
@@ -495,16 +490,20 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           prompted(by) or (hush := "")
         case ("tell", about, by, notes) if notes not in (["chain()"], [*r[4:5]]):
           heard.append("\n".join(notes))
-          ran = ""
           if a is note:
             note = bind(step)
           elif not (
-            (by == id and hushed and about == get(hushed)[2])
+            a is ran
             or (not over(about) and question(("rung", r[2])))
             or r[0] == "write"
+            or (
+              prompted(by) and prompted(get(by)[2]) and [x[5] for x in transcript(id, "prompt")].count(get(by)[5]) > 1
+            )
           ):
             hush = ""
-        case ("done", about, *_) if about == note and get(step) and not over(step):
+            by == id or (dull := (stuck := ""))
+          ran = ""
+        case ("done", about, *_) if about == note and step in waiting:
           with site.set(step):
             reply = act("reply", id, controlled(idle), to)
         case ("ready", rid, _, word):
@@ -528,35 +527,35 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         running[get(r[2])[4]] = a[0] != "started"
       if any(running.values()):
         continue
-      if (step not in waiting or paused(step)) and (
-        (
-          got := next(
-            (
-              x
-              for x in waiting
-              if not (
-                paused(x)
-                or over(x)
-                or x in {y[2] for y in transcript(id, "reply") if not over(y[1])}
-                or get(x)[2] == hush
-              )
-            ),
-            "",
-          )
-        ),
-        step := got or step * (step in waiting),
-      )[0]:
+      waits = [c for *_, c in transcript(id, "wants") if not over(c)]
+      if (
+        (step not in waiting or paused(step))
+        and not stuck
+        and (
+          (
+            got := next(
+              (
+                x
+                for x in waiting
+                if not (
+                  paused(x)
+                  or over(x)
+                  or x in {y[2] for y in transcript(id, "reply") if not over(y[1])}
+                  or get(x)[2] == hush
+                )
+              ),
+              "",
+            )
+          ),
+          step := got or step * (step in waiting),
+        )[0]
+      ):
         maker, to = get(step)[2::4]
         if offered(last[0], to) is None:
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
-          hush, hushed = maker, ""
-          note = yield told(
-            step,
-            "advance on " + maker,
-            share=filled(reply) or None,
-            waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
-          )
+          hush = maker
+          note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=waits or None)
           news = ""
       if news and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
         ours = get(news[1])[2]
@@ -708,7 +707,7 @@ def gathered(define, floor):
         "paused": paused(c),
         "turns": [x for x in saved if x[0] not in ("started", "done") or x[1] in held],
         "definitions": "\n\n".join(
-          filter(None, [define(w) for r, w in program(c).items() if (get(r) or [0] * 3)[2] != "extensions"])
+          filter(None, [define(w) for r, w in program(c).items() if get(r) and get(r)[2] != "extensions"])
         ),
         "values": values[c],
         "lost": lost[c],
@@ -806,7 +805,7 @@ class Text:
 
   def replace(self, old: str, new: str, count=-1) -> Text:
     if old not in self.content:
-      raise Refused(self.path + " no " + repr(min(old.splitlines(), key=self.content.count)))
+      raise Refused(self.path + " no " + repr(min(old.splitlines(), key=lambda line: self.content.count(line))))  # noqa: PLW0108
     (made := Text(self.path, self.content.replace(old, new, count))).before = self
     return made
 

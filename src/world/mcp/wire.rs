@@ -8,6 +8,10 @@
 //! request that waits for it, and hands each notification on. A wire that drops ends what it holds: the process and
 //! every process that it started, and each stream.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::{HashMap, VecDeque},
   path::Path,

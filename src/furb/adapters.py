@@ -90,6 +90,39 @@ ADAPTERS = {
       "70bb886877d9f53861b4332df552cac163b13e6a8ece5eeedf35ef8ce33cdddd",  # 7ba1825fc
     )
   },
+  # c63db8af says again, under the journal and not under its speaker, each fact of the outside that a record holds,
+  # and holds no started of an act that the outside took. So a transcript of a speaker of the outside, as a word reads
+  # it by transcript(of="bash") or the Kernel by transcript(rung, "bash"), holds fewer facts than in the life that wrote
+  # the record, the word goes another way, and the life drifts at the next reply. Each such fact comes again under its
+  # speaker, which the journal keeps no second time, and the started is held, as repeat of 93eba807f says it. An act
+  # that the outside made, as a merged, comes again in no replay.
+  "c63db8af4ec512a95feb33266b300b99f464641341022414a2b57d98db93e689": [
+    # Its boot ends on stand(ROOT), which asks the World and raises when the stand is not done at once, as at the tip
+    # of a record that a later life opens before the World answered: the stand of 07f64ac21 (#1004) says the act and
+    # tells what it came to once it is done.
+    (
+      'def stand(on=""):\n  got = ask("stand", on)\n  tell(on, roster=got[0], actor=got[2])\n  return got\n',
+      'def stand(on=""):\n'
+      '  isinstance(got := peek(a := act("stand", on, None)), list) and tell(on, roster=got[0], actor=got[2])\n'
+      "  return a\n",
+    ),
+    ("  def journal(a=(), last=None):\n    try:\n", "  def journal(a=(), last=None):\n    again = {}\n    try:\n"),
+    (
+      "            case (kind, about, _, *words) if scope(about):\n              yield kind, about, *words\n",
+      "            case (kind, about, by, *words) if scope(about):\n"
+      "              with site.set(by):\n"
+      "                said = say(kind, about, *words)\n"
+      "              again[id(said)] = said\n",
+    ),
+    (
+      '            (q := get(about)) and by != "journal"',
+      '            id(a) not in again and (q := get(about)) and by != "journal"',
+    ),
+    (
+      "            else:\n              taken[name] = True\n",
+      "            else:\n              taken[name] = True\n              holds(scope(on), [f])\n",
+    ),
+  ],
 }
 
 

@@ -5,6 +5,10 @@
 //! [`JsAct`], a name that JavaScript awaits. The ears of an engine are generators of JavaScript and the ears the
 //! crate writes, each a [`NativeEar`], in the order the engine offers them a question.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "a verb of the host API takes each argument that the host gives it"
+)]
 mod host;
 
 use indexmap::IndexMap;
@@ -135,6 +139,15 @@ impl FromNapiValue for Stream {
       let said = (rung.to_owned(), chain.to_owned(), text.to_owned(), thinking.to_owned());
       told.call(said, ThreadsafeFunctionCallMode::NonBlocking);
     })))
+  }
+}
+
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
+impl FromNapiValue for world::Members {
+  /// An array of logins of JavaScript, as a home that the life alone changes.
+  unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
+    // SAFETY: napi gives the value in its env, where it is read at once.
+    Ok(Self::new(unsafe { Vec::<String>::from_napi_value(env, value) }?))
   }
 }
 

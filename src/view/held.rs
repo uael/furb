@@ -2,7 +2,14 @@
 //! window asks the life for the meaning that it draws: the desk, the threads of a chain, the acts
 //! as they stood at a moment, and the moments.
 
-use std::collections::HashMap;
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
+use std::{
+  borrow::Cow,
+  collections::{BTreeSet, HashMap},
+};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -10,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use super::{
   act::{Act, Kind},
   desk::{Desk, desk},
-  ladder::{Rung, Shown, ladder},
+  ladder::{Index, Rung, Shown, folded, lives},
   state::State,
   threads::{
     Attention, ChainAside, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
@@ -35,17 +42,48 @@ pub struct Threads {
 pub struct Held {
   acts: Vec<Act>,
   at: HashMap<String, usize>,
+  /// The places of the acts of each maker, and of each chain, in the order they were first told.
+  made: HashMap<String, Vec<usize>>,
+  on: HashMap<String, Vec<usize>>,
+  /// The places of the acts that live: not done, or a rung whose word runs.
+  live: BTreeSet<usize>,
 }
 
 impl Held {
   /// An act of the life heard as a host tells it: it takes the place of the earlier one of the same
   /// id.
   pub fn heard(&mut self, act: &Act) {
-    if let Some(&at) = self.at.get(&act.id) {
-      self.acts[at] = act.clone();
+    self.took(act.clone());
+  }
+
+  /// An act of the life heard as a host tells it, which the life gives up to it: the fold of a
+  /// record tells some hundred thousand of them, each with its words and its value, so it takes no
+  /// copy of each.
+  pub fn took(&mut self, act: Act) {
+    let live = lives(&act);
+    let at = if let Some(&at) = self.at.get(&act.id) {
+      self.acts[at] = act;
+      at
     } else {
-      self.at.insert(act.id.clone(), self.acts.len());
-      self.acts.push(act.clone());
+      let at = self.acts.len();
+      // A read of now takes the acts in place as the order they began, so an act first told begins
+      // after each act held.
+      debug_assert!(
+        self.acts.last().is_none_or(|last| last.began <= act.began),
+        "{} began before {}, which was told first",
+        act.id,
+        self.acts.last().map_or("", |last| last.id.as_str()),
+      );
+      self.at.insert(act.id.clone(), at);
+      self.made.entry(act.by.clone()).or_default().push(at);
+      self.on.entry(act.chain.clone()).or_default().push(at);
+      self.acts.push(act);
+      at
+    };
+    if live {
+      self.live.insert(at);
+    } else {
+      self.live.remove(&at);
     }
   }
 
@@ -61,17 +99,27 @@ impl Held {
     taken: Option<&[String]>,
     shown: Shown,
   ) -> Vec<Rung> {
-    ladder(&self.then(at), chain, opened, owed, taken, shown)
+    let Some(at) = at else {
+      let index =
+        Index { acts: &self.acts, at: &self.at, made: &self.made, on: &self.on, live: &self.live };
+      return folded(&index, chain, opened, owed, taken, shown);
+    };
+    // A moment of the past folds the acts as they stood then, in the order they began.
+    let mut then = Self::default();
+    for act in self.then(Some(at)).iter() {
+      then.heard(act);
+    }
+    then.ladder(chain, None, opened, owed, taken, shown)
   }
 
-  /// The acts now, or as they stood just after a moment.
-  fn then(&self, at: Option<u64>) -> Vec<Act> {
-    let mut acts = match at {
-      Some(at) => as_of(&self.acts, at),
-      None => self.acts.clone(),
-    };
+  /// The acts now, or as they stood just after a moment, in the order they began. The acts now
+  /// stand in the order they were first told, which is the order they began, so they are read in
+  /// place: a read of the threads, the rail or the desk takes no copy of the life.
+  fn then(&self, at: Option<u64>) -> Cow<'_, [Act]> {
+    let Some(at) = at else { return Cow::Borrowed(&self.acts) };
+    let mut acts = as_of(&self.acts, at);
     acts.sort_by_key(|act| act.began);
-    acts
+    Cow::Owned(acts)
   }
 
   /// What waits for the operator, with each notice that the window still shows.
@@ -122,7 +170,7 @@ impl Held {
 
   /// The acts as they stood just after a moment.
   pub fn as_of(&self, at: u64) -> Vec<Act> {
-    self.then(Some(at))
+    self.then(Some(at)).into_owned()
   }
 
   /// Each moment at which an act began or ended, of the life or of the acts of one chain.

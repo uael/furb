@@ -173,14 +173,14 @@ fn each_worker_nests_under_the_thread_that_made_it_and_takes_the_label_of_its_ch
     .map(|(_, id, name)| (id.as_str(), name.as_str()))
     .collect();
   let labels = [
-    ("prompt3", "life3/thought"),
-    ("prompt4", "life3/fabricated"),
-    ("prompt5", "life3/qwen"),
-    ("prompt6", "life3/citime"),
-    ("prompt12", "w/fix295"),
-    ("prompt31", "life3/feed"),
+    ("prompt3", "lane/panels"),
+    ("prompt4", "lane/labels"),
+    ("prompt5", "lane/colors"),
+    ("prompt6", "lane/checks"),
+    ("prompt12", "w/fix-board"),
+    ("prompt31", "lane/feed"),
     ("prompt59", "w/literal"),
-    ("prompt94", "literal/monty"),
+    ("prompt94", "literal/parser"),
     ("prompt79", "w/wheels"),
     ("prompt86", "w/bench-replay"),
     ("prompt35", "untitled"),
@@ -215,7 +215,7 @@ fn a_worker_that_a_round_made_nests_under_the_thread_that_started_the_round() {
   let acts = folded(facts);
   let got: Vec<(usize, String, String)> = tree(&acts, "chain1");
   let expected = [
-    (0, "prompt1", "Resume the crashed Nov 5 session"),
+    (0, "prompt1", "Open the life that died."),
     (0, "prompt24", "Fix it for each life."),
     (1, "prompt98", "w/fix1296"),
     (1, "prompt100", "promise/grant-cancelled-reply"),
@@ -228,25 +228,31 @@ fn a_worker_that_a_round_made_nests_under_the_thread_that_started_the_round() {
 }
 
 #[test]
-fn the_name_that_the_operator_gave_the_session_wins_over_the_name_that_naming_gave() {
-  let named = |more: Vec<Value>| {
-    let mut facts = vec![
-      json!(["chain", "chain1", "operator", "", "root", ""]),
-      json!(["name_session", "name_session1", "rung1", "chain1"]),
-      json!(["done", "name_session1", "name_session1", "A given name"]),
-    ];
-    facts.extend(more);
-    let acts = folded(facts);
-    let on: Vec<&Act> = acts.iter().filter(|act| act.chain == "chain1").collect();
-    crate::view::Named::of_acts(&on).name().map(|one| one.trim().to_owned())
-  };
-  assert_eq!(named(vec![]).as_deref(), Some("A given name"));
-  let said = |id: &str, name: &str| {
-    [json!(["rename_session", id, "rung2", "chain1"]), json!(["done", id, id, name])]
-  };
-  assert_eq!(named(said("rename_session1", "Mine").to_vec()).as_deref(), Some("Mine"));
-  let both = [said("rename_session1", "Mine"), said("rename_session2", "")].concat();
-  assert_eq!(named(both).as_deref(), Some(""));
+fn the_first_thread_of_a_named_session_is_titled_by_its_own_message() {
+  // The name of the session stands on its own row: the thread keeps the first line of its message.
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["rename_session", "rename_session1", "rung1", "chain1"]),
+    json!(["done", "rename_session1", "rename_session1", "Release 0.4"]),
+    json!([
+      "prompt",
+      "prompt1",
+      "operator",
+      "chain1",
+      "str",
+      "Explore this project, run its checks and tell me what fails.",
+      ""
+    ]),
+  ];
+  let acts = folded(facts);
+  assert_eq!(
+    tree(&acts, "chain1"),
+    vec![(
+      0,
+      "prompt1".to_owned(),
+      "Explore this project, run its checks and tell me what fails.".to_owned()
+    )]
+  );
 }
 
 /// The meaning that a window reads of the facts of a record: each act heard as the fold of the
@@ -440,4 +446,41 @@ fn an_open_thread_thinks_while_a_model_writes_a_word_for_it_and_else_runs() {
   // A command that the word runs runs.
   let bash = json!(["bash", "bash1", "rung1", "chain1", "sleep 9", "", 120.0, null]);
   assert_eq!(states(vec![bash]), [State::Runs]);
+}
+
+#[test]
+fn a_stall_that_the_watch_tells_and_the_naming_of_the_session_are_notices_and_no_threads() {
+  // The facts of a record of the QA, scrubbed: the watch of the daemon tells a stall as a prompt
+  // of None that it speaks itself, and the naming skill asks a name on a chain of its own.
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["rung", "rung12", "chain1", "chain1", "name_session()", "", ""]),
+    json!(["name_session", "name_session1", "rung12", "chain1"]),
+    json!(["prompt", "prompt1", "operator/uael", "chain1", "str", "Reply with pong.", ""]),
+    json!(["chain", "chain2", "name_session1", "chain1", "naming", ""]),
+    json!(["prompt", "prompt2", "name_session1", "chain2", "str", "Give a name.", ""]),
+    json!(["prompt", "prompt5", "watch", "chain1", "None", "The chain chain1 had no change.", ""]),
+    // A prompt of None that the operator sends on the chain, with no thread over it, is a thread
+    // of his: a model answers it.
+    json!(["prompt", "prompt6", "operator/uael", "chain1", "None", "Look at the logs.", ""]),
+  ];
+  let acts = folded(facts.clone());
+  let (threads, asides) = listed(&acts, "chain1");
+  assert_eq!(threads, names(&["prompt1", "prompt6"]));
+  assert_eq!(asides, vec![("prompt5".to_owned(), Aside::Notice)]);
+  assert_eq!(listed(&acts, "chain2"), (vec![], vec![("prompt2".to_owned(), Aside::Notice)]));
+  let rail: Vec<String> =
+    shape(&held(facts).rail(&[], None)).into_iter().map(|one| one.0).collect();
+  assert!(rail.iter().all(|one| one == "prompt1" || one == "prompt6"), "{rail:?}");
+  // A worker of a round that a word of the operator started on the root stays a thread of its
+  // chain: only the act that names the session asks a notice.
+  let round = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["rung", "rung3", "operator/uael", "chain1", "conduct()", "", ""]),
+    json!(["chain", "chain4", "rung3", "chain1", "round", ""]),
+    json!(["conduct", "conduct1", "rung3", "chain4"]),
+    json!(["chain", "chain5", "conduct1", "chain4", "w/item", ""]),
+    json!(["prompt", "prompt9", "conduct1", "chain5", "str", "You fix an item.", ""]),
+  ];
+  assert_eq!(listed(&folded(round), "chain5").0, names(&["prompt9"]));
 }

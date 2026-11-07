@@ -1,6 +1,5 @@
 import { imageContent, imagePath, WORK } from "furb";
 import { asksOperator, isDone, outcomeOf, unfinished } from "furb/life";
-import { clipboardImage } from "../clipboard.ts";
 import { externalEditor, openFile } from "../editor.ts";
 import { shortenHome } from "../files.ts";
 import { kibibytes } from "../format.ts";
@@ -66,14 +65,15 @@ export const actions = part({
       else throw new Error(`Choose ${lifeViews.join(", ")}.`);
       return true;
     }
-    if (name === "inspect" && argument) {
-      await this.inspect(argument);
+    if (name === "inspect") {
+      // With no name, the command lists the names that it can inspect, as ⌃G does, in place of doing nothing.
+      if (argument) await this.inspect(argument);
+      else await this.names();
       return true;
     }
     if (text === "/image" || text.startsWith("/image ")) {
       const path = text.slice(6).trim();
-      if (path) await this.session.attachImage(path);
-      else await clipboardImage((path) => this.session.attachImage(path));
+      await this.pasteImage(path || undefined);
       return true;
     }
     if (text === "/delete") {
@@ -141,28 +141,12 @@ export const actions = part({
   imageActions(uri: string): void {
     const content = imageContent(this.session.host.imageDirectory, uri);
     const file = imagePath(this.session.host.imageDirectory, uri).path;
-    const pending = this.session.images[this.session.selected]?.find((image) => image.uri === uri);
-    this.openPalette(pending?.name ?? "Image attachment", [
+    this.openPalette("Image attachment", [
       {
         label: "Open image",
         detail: `${content.mimeType}  ${kibibytes(Buffer.byteLength(content.data, "base64"))}`,
         run: () => openFile(file),
       },
-      ...(pending
-        ? [
-            {
-              label: "Remove from this draft",
-              detail: "Keep the saved image file",
-              run: () => {
-                this.session.images[this.session.selected] = (
-                  this.session.images[this.session.selected] ?? []
-                ).filter((image) => image.uri !== uri);
-                this.session.save();
-                this.render();
-              },
-            },
-          ]
-        : []),
     ]);
   },
 

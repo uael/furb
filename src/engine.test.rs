@@ -1413,7 +1413,8 @@ fn a_word_that_never_yields_on_another_chain_raises_and_the_root_goes_on() {
 #[test]
 fn an_ear_that_spins_past_the_bound_is_dropped_as_an_ear_that_raises_and_the_life_goes_on() {
   bounded();
-  let word = "def spin():\n  yield\n  while True:\n    pass\ndrive(spin(), 'spin')\ndebug(t'go')";
+  let word =
+    "def spin():\n  yield\n  while True:\n    pass\ndrive(spin(), 'spin')\ndebug(t'driven')";
   let again =
     "def calm():\n  yield\ntry:\n  drive(calm(), 'spin')\n  close(8)\nexcept Refused:\n  close(0)";
   let mut lived = Lived::new("ear", &[word, again], true).unwrap();
@@ -2177,5 +2178,33 @@ fn a_run_of_the_record_that_goes_on_live_after_the_replay_is_bounded() {
   assert!(
     read.iter().any(|one| one.contains("TimeoutError('turn time limit exceeded")),
     "the word that spins after its wait is refused by the bound: {read:?}"
+  );
+}
+
+#[test]
+fn a_record_of_an_older_engine_opens_through_its_adapter_and_keeps_no_fact_of_its_record_again() {
+  // The adapter of c63db8af says each fact of the outside again under its speaker, which the
+  // journal of that engine hears as a new fact unless it knows that it said it.
+  let at = Yard::new(format!("furb-engine-c63db8af-{}", std::process::id()));
+  let path = at.join("record.jsonl");
+  fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/replay/speaker.jsonl"), &path).unwrap();
+  let before = fs::read_to_string(&path).unwrap().lines().count();
+  let (record, store) = world::store(path.clone()).unwrap();
+  let scratch = world::Scratch::own();
+  let ears = [
+    ("provider", provider(at.to_path_buf(), Rc::default(), Rc::default())),
+    ("files", world::files(scratch.clone(), at.join("config"), None)),
+    ("bash", world::bash(scratch)),
+    ("time", world::time()),
+    ("store", store),
+  ];
+  let engine = Engine::boot(record, ears).unwrap();
+  assert!(engine.raised().is_none(), "{:?}", engine.raised());
+  drop(engine);
+  let text = fs::read_to_string(&path).unwrap();
+  let added: Vec<&str> = text.lines().skip(before).collect();
+  assert!(
+    added.iter().all(|one| one.contains(r#""stand2""#)),
+    "only the stand of this life is new: {added:?}"
   );
 }

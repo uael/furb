@@ -1,6 +1,10 @@
 //! The ears that a host hands a life, the functions it hands it, and how the life steps each ear as
 //! a generator of the sandbox and lends itself to the code of the host.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   cell::RefCell,
   collections::HashMap,

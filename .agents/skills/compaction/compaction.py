@@ -141,7 +141,7 @@ def choice(to: str = "", on: str = "") -> Act:
     + example
   )
   side = chain("chosen", on=here)
-  asked: Act = prompt(tuple[list[str], str], brief, to=to or CHOOSER or automatic(), on=side)
+  asked: Act = prompt("tuple[list[str], str]", brief, to=to or CHOOSER or automatic(), on=side)
   bound = 4
 
   def ear(id):
@@ -213,7 +213,7 @@ def supersede(keep: Filter | None = None, on: str = "") -> str:
     match x:
       case (str(kind), str(name), str(by), str(where), *words) if question(x):
         acts.append((kind, name, by, where, *words))
-  for one in (keep or list)(acts):
+  for one in keep(acts) if keep else acts:
     name = one[1]
     while name not in kin and (b := get(name)):
       kin.add(name)
@@ -267,7 +267,7 @@ def compacted(on: str = "") -> Act:
         case ("done", about, _, value) if about == pending:
           chose = (None, "")
           match value:
-            case (list() as listed, str() as summary):
+            case ([*listed], str() as summary):
               chose = ([keeping([i for i in listed if isinstance(i, str) and scope(i)], set(seen)), latest()], summary)
         case ("done", about, *_) if (
           question(("reply", about)) and scope(about) == here and not (pending or chose or refused)
@@ -302,7 +302,7 @@ async def condense(to: str = "", on: str = "") -> str:
   here = on or scope(acting())
   before = {fact[1] for fact in transcript(here) if question(fact)}
   match await choice(to, here):
-    case (list() as listed, str() as summary):
+    case ([*listed], str() as summary):
       ids = [i for i in listed if isinstance(i, str) and scope(i)]
 
       def chose(acts: list) -> list:

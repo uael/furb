@@ -10,6 +10,10 @@
 //! the life drops it, or when the connection of its peer ends; a turn or a write that comes after
 //! is refused, and the peer is not told that the life dropped the request.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::sync::MutexGuard;
 use std::{
   collections::HashMap,

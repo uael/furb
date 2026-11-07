@@ -11,6 +11,10 @@
 //! as one the sandbox calls back. Each door hands the ears and the functions over to the life the value comes into,
 //! and a verb that a host says while a life hears it goes to that life.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "a verb of the host API takes each argument that the host gives it"
+)]
 // This tree pays these lints already, so they hold here ahead of the workspace.
 #![deny(clippy::absolute_paths, clippy::use_self)]
 #![expect(
@@ -889,8 +893,8 @@ impl Meaning {
     // the last digit of a float, so the fact takes no pass through the values of the sandbox.
     let fact: serde_json::Value = serde_json::from_str(&line)
       .map_err(|no| Fault::refused(format!("the line is no JSON: {no}")))?;
-    for act in &self.fold.recorded(&fact) {
-      self.held.heard(act);
+    for act in self.fold.recorded(&fact) {
+      self.held.took(act);
     }
     Ok(())
   }
@@ -1032,9 +1036,9 @@ pub fn laddered(
   shown: Option<Value>,
 ) -> Result<Value, Fault> {
   let json = wire::outward(acts.0.as_ref());
-  let mut acts: Vec<ViewAct> = serde_json::from_value(json)
+  // The acts stand in the order given, as a host tells them, and as the daemon folds them.
+  let acts: Vec<ViewAct> = serde_json::from_value(json)
     .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
-  acts.sort_by_key(|act| act.began);
   let (opened, owed) = (opened.unwrap_or_default(), owed.unwrap_or_default());
   meant(&ladder(&acts, &chain, &opened, &owed, taken.as_deref(), counted(shown)?))
 }

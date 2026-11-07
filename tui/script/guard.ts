@@ -1,6 +1,6 @@
-import { lstatSync, readdirSync } from "node:fs";
+import { lstatSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 /** The folder of the config directory where the engine installs the words that it ships, which no test chooses. */
 const installed = "words";
@@ -55,21 +55,35 @@ export function realConfigs(
   );
 }
 
-/** The paths that this process saved through saveFile since the guard last looked. The preload gives the tests a
- * saveFile that records here. So the guard can tell a write of the run from a write of another process. */
+/** A path as the files of the machine name it: its folder with the links followed, since a config directory is often
+ * reached through a link, as /var is on macOS. A path whose folder is not there stays as it is. */
+export function real(path: string): string {
+  const full = resolve(path);
+  try {
+    return join(realpathSync(dirname(full)), basename(full));
+  } catch {
+    return full;
+  }
+}
+
+/** Whether a path is the draft that a save writes before it renames it over the file. */
+const draft = (path: string): boolean => path.endsWith(".tmp");
+
+/** The paths that this process saved through saveFile since the guard last looked. */
 export const saved = new Set<string>();
 
 /** The saveFile that notes each path that it saves in `saved`, and saves it as `save` does. */
 export function recording(save: (path: string, text: string) => void): (path: string, text: string) => void {
   return (path, text) => {
-    saved.add(resolve(path));
+    saved.add(real(path));
     save(path, text);
   };
 }
 
 /** A function that gives the files of the folders that the run wrote since the last call, or since the start. A file
- * that appeared or went is a write of the run. A file that changed is a write of the run only if the run saved it
- * through saveFile. Other processes write files in these folders while the tests run. */
+ * that appeared or went is a write of the run, but for the draft of a save, which another process of the machine
+ * makes and renames in the time between two looks. A file that changed is a write of the run only if the run saved it
+ * through saveFile. Each watcher owns the saves it reads when it is given its own set. */
 export function watch(folders: string[], saves: Set<string> = saved): () => string[] {
   let before = folders.map(snapshot);
   return () => {
@@ -77,7 +91,7 @@ export function watch(folders: string[], saves: Set<string> = saved): () => stri
     const found = after.flatMap((now, at) => {
       const was = before[at] ?? new Map();
       return changed(was, now).filter(
-        (path) => !(was.has(path) && now.has(path)) || saves.has(resolve(path)),
+        (path) => !draft(path) && (!(was.has(path) && now.has(path)) || saves.has(real(path))),
       );
     });
     saves.clear();

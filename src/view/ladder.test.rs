@@ -100,3 +100,19 @@ fn a_step_under_which_the_operator_is_asked_stays_shown_and_a_fold_holds_two_ste
   let branch = lines(&ladder(&acts, "chain1", &[], &owed, Some(taken.as_slice()), shown));
   assert_eq!(branch, ["0 prompt7", "1 rung7"]);
 }
+
+#[test]
+fn an_act_told_before_the_act_that_made_it_stands_under_its_maker() {
+  // An ear that a rung starts can make an act before the life tells that rung: the ladder holds
+  // the acts in the order they were told, and the act stands under its maker all the same.
+  let acts = folded(eight());
+  let mut told: Vec<Act> = acts.iter().filter(|act| act.id != "rung8").cloned().collect();
+  let at = told.iter().position(|act| act.id == "prompt8").unwrap_or_default();
+  let rung = acts.iter().find(|act| act.id == "rung8").cloned();
+  told.extend(rung);
+  let last = told.len() - 1;
+  told.swap(at + 1, last);
+  let none: Vec<String> = Vec::new();
+  let got = lines(&ladder(&told, "chain1", &none, &none, None, SHOWN));
+  assert_eq!(&got[got.len() - 2..], ["0 prompt8", "1 rung8"]);
+}

@@ -3,6 +3,10 @@
 //! comes out as the instance of `furb.python` it is, an exception as the one object it is for the life, a generator
 //! of python goes in as an ear, and a function as one the sandbox calls back.
 #![deny(clippy::needless_pass_by_value, clippy::map_err_ignore)]
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 
 use indexmap::IndexMap;
 use std::{
@@ -37,6 +41,7 @@ use crate::{
   engine::{Life, handed, lending},
   life::{Answer, Log, Opening, Retrying, Stream},
   value::{IS, entry, field, marked, templated},
+  world::Members,
 };
 use tokio::task;
 
@@ -256,6 +261,15 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Stream {
         }
       });
     })))
+  }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Members {
+  type Error = PyErr;
+
+  /// A list of logins of python, as a home that the life alone changes.
+  fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+    Ok(Self::new(value.extract()?))
   }
 }
 

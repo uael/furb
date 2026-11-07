@@ -54,7 +54,7 @@ import { type TreePart, tree, treeBound } from "./app/tree.ts";
 import { type ValuesPart, values, valuesBound } from "./app/values.ts";
 import { type ViewPart, view } from "./app/view.ts";
 import { type WelcomePart, welcome, welcomeBound } from "./app/welcome.ts";
-import { graphemes, kibibytes } from "./format.ts";
+import { graphemes } from "./format.ts";
 import { Graph } from "./graph.ts";
 import type { Action } from "./keys.ts";
 import { LoomPane } from "./overview.ts";
@@ -199,6 +199,10 @@ export class App {
   /** Whether the keys move in the sidebar, after ⌥T, and the row that they stand on: a workspace, a session, or a
    * thread, by the id that the row gets in railOrder. */
   railKeys = false;
+  /** The thread that the key of the fold folded last, which its next press opens again. */
+  keyFolded?: string;
+  /** The place of the feed when that key folded it. */
+  keyFoldedAt?: number;
   railAt?: string;
   /** The ids of the rows of the sidebar, in the order that it shows them, which the keys move through, and what the
    * keys do on each. */
@@ -255,7 +259,6 @@ export class App {
   choice = { id: "", at: 0, other: false, ticked: [] as number[] };
   pickKey = "";
   readonly queueBox: BoxRenderable;
-  readonly imageBox: BoxRenderable;
   /** The suggestions for a `/command` or an `@path` typed in the input, drawn above it while the input keeps focus. */
   readonly suggestionBox: BoxRenderable;
   suggestions: Suggestion[] = [];
@@ -362,6 +365,8 @@ export class App {
    * view, once the scroll box has laid out its cards. */
   scrollTarget?: Scroll | { card: string } | { end: string };
   overlay?: BoxRenderable;
+  /** The dialog of the details, which the key that opens it closes again. */
+  detailsOverlay?: BoxRenderable;
   /** The veil behind the dialog that the overlay holds. */
   backdrop?: BoxRenderable;
   paletteInput?: InputRenderable;
@@ -541,6 +546,8 @@ export class App {
     // The ScrollBar constructor resets manual visibility; set it after construction.
     this.scroll.verticalScrollBar.visible = false;
     this.scroll.horizontalScrollBar.visible = false;
+    // A click on the feed must not take the keys from the input.
+    this.scroll.focusable = false;
     center.add(this.scroll);
     // The pin stands in the viewport of the feed beside its content, so the cards scroll under it and it stays.
     this.pin = this.box({
@@ -578,8 +585,6 @@ export class App {
       onMouseUp: this.click(() => this.queuePicker()),
     });
     center.add(this.queueBox);
-    this.imageBox = this.row({ id: "attached-images", gap: space.between, visible: false });
-    center.add(this.imageBox);
     this.suggestionBox = this.box({ id: "suggestions", visible: false, backgroundColor: c.raised });
     center.add(this.suggestionBox);
     this.modeBox = this.row();
@@ -690,6 +695,8 @@ export class App {
       backgroundColor: c.panel,
       contentOptions: { paddingBottom: space.section },
     });
+    // A list that took the focus on a click would leave the typed keys with it: the keys of the sidebar go through ⌥T.
+    this.railSpaces.focusable = false;
     this.railSpaces.verticalScrollBar.visible = false;
     this.railSpaces.horizontalScrollBar.visible = false;
     this.rail.add(this.railSpaces);
@@ -991,40 +998,6 @@ export class App {
     this.railBack.visible = this.drawerOpen;
     this.renderTop();
     const pending = w.operatorPrompt;
-    const images = w.images[w.selected] ?? [];
-    this.imageBox.visible = images.length > 0;
-    if (this.paneChanged(this.imageBox, [images, this.theme])) {
-      this.clear(this.imageBox);
-      this.imageBox.add(
-        this.line(
-          [
-            [`${glyph.chip} `, c.accent],
-            [`${images.length} ${images.length === 1 ? "image" : "images"} attached  `, c.text],
-            [
-              images
-                .map((image) => image.name)
-                .join("  ")
-                .replace(/\s+/g, " "),
-              c.muted,
-            ],
-          ],
-          c.muted,
-          {
-            truncate: true,
-            flexShrink: 1,
-            run: () =>
-              this.openPalette(
-                "Image attachments",
-                images.map((image) => ({
-                  label: image.name,
-                  detail: `${image.mimeType}  ${kibibytes(image.size)}`,
-                  run: () => this.imageActions(image.uri),
-                })),
-              ),
-          },
-        ),
-      );
-    }
     const queued = w.queued.filter((entry) => entry.chain === w.selected);
     this.queueBox.visible = w.queued.length > 0;
     // A send that failed holds the queue of its chain until the operator takes the follow-up out.
@@ -1075,7 +1048,8 @@ export class App {
               ? [
                   "Prompt",
                   c.danger,
-                  "No model answers yet. Fix the setup above, or watch a life, which needs none.",
+                  // The check of the setup stands in the welcome, which a feed that holds work covers.
+                  `No model answers yet. ${this.welcoming ? "Fix the setup above" : "Add a provider with /providers"}, or watch a life, which needs none.`,
                 ]
               : w.target
                 ? ["Prompt", threadTone(w.target), "Reply to the thread, or type / for commands"]

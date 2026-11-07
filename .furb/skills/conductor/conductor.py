@@ -28,6 +28,7 @@ from furb.engine import (
   peek,
   prompt,
   question,
+  read,
   scope,
   standing,
   transcript,
@@ -60,10 +61,10 @@ STALL, STUCK, STUCK_RUNNING, ROUNDS, MERGES = 600.0, 1200.0, 2700.0, 3, 4
 DISK_FLOOR = 60
 ROOM_WHY, FIX_WHY = "past the room of its class", "a fix of the CI of w/converge runs first on this topic"
 DF = "df -k ~ | tail -1"
-MEM = "sh ~/src/github.com/uael/furb/script/heavy.sh"
+WATCH = "sh ~/src/github.com/uael/furb/script/memwatch.sh"
 REGROUND, REGROUND_TOKENS, REGROUND_GROWTH = 0.5, 300000, 150000
 NO_VERIFY = '^(audit|review|qa-run|words-audit|perf-|libs-audit|align-audit|fold)'
-URGENT_NOTE = '(?m)The disk|The memory runs low|not applied|\\bP0\\b|checks of CI of w/converge pass'
+URGENT_NOTE = '(?m)The disk|The watcher of the memory|not applied|\\bP0\\b|checks of CI of w/converge pass'
 CI_PROBE = 'gh run list --repo uael/furb --branch w/converge --workflow gates.yml --limit 1 --json headSha,status,conclusion,databaseId --jq \'.[0] | "\\(.headSha) \\(.status) \\(.conclusion) \\(.databaseId)"\''
 QA_WRAP = 'The lead: a cycle of the aggregator starts now, and its merges and its build change the worktree that you read. Run no new command: close at once with the rows of what you found, and name what you did not reach.'
 CLAIM = " Judge the row against main first: it is a claim of an audit."
@@ -111,6 +112,7 @@ desk_verified: list[tuple] = globals().setdefault("desk_verified", [])
 desk_flagged: set[str] = globals().setdefault("desk_flagged", set())
 desk_seen_len: dict[str, tuple] = globals().setdefault("desk_seen_len", {})
 desk_item_seen: dict[str, tuple] = globals().setdefault("desk_item_seen", {})
+desk_ledger: list[dict] = globals().setdefault("desk_ledger", [])
 triage_inbox: list[dict] = globals().setdefault("triage_inbox", [])
 triage_batch: list[dict] = globals().setdefault("triage_batch", [])
 qa_handed: set[str] = globals().setdefault("qa_handed", set())
@@ -206,8 +208,6 @@ def review_cut(acts: list[tuple]) -> list[tuple]:
 
 def pick() -> tuple[str, dict] | None:
   """The hardest ready item of a topic with room, on a seat of its class, or of the class above when its class is full and no ready item of that class waits."""
-  if desk_text.get("mem_low"):
-    return None
   done, used = merged_keys(), seats_used()
   ready = [(t, x) for t in TOPICS if t != QA and not desk_fixing.get(t) and len(desk_live[t]) < desk_width.get(t, 0) for x in desk_queue[t] if all(a in done for a in afters_of(x))]
   kinds = {kind(str(x["model"])) for _, x in ready}
@@ -268,7 +268,7 @@ def admit() -> None:
     t, item = got
     if t == REVIEW and not desk_live[REVIEW]:
       compact([review_cut], summary="This chain is the review of the converge. It is cut before each item to its charter, which its setup shows, and its open items: each item reads again the files that its brief names. Its charter, scratch://converge/review.md, holds its rules.", on=chain_of(REVIEW))
-    desk_live[t][str(prompt(str, item_text(t, item), to=item["model"], on=chain_of(t)))] = item
+    desk_live[t][str(prompt(str, item_text(t, item), to=item["model"], on=chain_of(t)))] = {**item, "at": clock()}
 
 
 def room_step() -> list[str]:
@@ -347,6 +347,7 @@ def ends_step() -> None:
       key = str(item["key"])
       desk_ended.append((t, key, p))
       desk_end_at[key] = clock()
+      desk_ledger.append(ledger_row(t, key, p, item))
       if key.startswith("align-audit") and ended_whole(p):
         desk_text["audited"], desk_text["audited_main"] = str(item.get("to", "")), str(item.get("to_main", ""))
       if key.startswith("words-audit") and (wc := re.search(r"\d+ (?:asks|request rows)[^.\n]*", str(peek(p)))):
@@ -354,6 +355,46 @@ def ends_step() -> None:
       desk_notes.append(f"{t}: the item {key} ({p}, {item['model']}) ended: {str(peek(p))[:3000]}" + skip_note(p) + route_needs(t, key, p) + found_rows(t, p))
       if t in CODE and not re.match(NO_VERIFY, key):
         verify_start(t, key, p, str(item["model"]), str(item["brief"]))
+
+
+def ledger_row(t: str, key: str, p: str, item: dict) -> dict:
+  """The row of an ended item: the sums of the usage that each answer of a model on its chains carries, as (tokens in,
+  tokens out, tokens read from the cache, tokens written to it, dollars), never an estimate, its steps and its seconds.
+  A reply that the life wrote itself, as the seat of a new chain, carries no usage and is no step."""
+  chains, walked = [scope(p)], 0
+  while walked < len(chains):
+    chains += [x[1] for x in transcript(chains[walked], "chain") if question(x) and under(x[1], p)]
+    walked += 1
+  uses = [got[2] for c in chains for x in transcript(c, "reply") if question(x) and under(x[1], p) and isinstance(got := peek(x[1]), tuple) and got[2]]
+  tokens_in, tokens_out, cached, _, cost = (sum(use[i] for use in uses) for i in range(5))
+  end = desk_end_at[key]
+  return {"key": key, "topic": t, "class": kind(str(item["model"])), "in": tokens_in, "out": tokens_out, "cached": cached, "cost": cost, "steps": len(uses), "seconds": end - item.get("at", end)}
+
+
+def ledger_step() -> list[str]:
+  """The cost per landed item of each class and each topic, and the share of the tokens in that the cache gave, over the
+  rows of the items that ended since desk_time["ledger_since"], which the lead sets, and before the last merge of a cycle,
+  so each of them landed or not: told once for each change. An item lands when its commit merged into w/converge, and
+  the cost of the items that did not land counts in their group."""
+  done, since, upto = merged_keys(), desk_time.get("ledger_since", 0.0), desk_time.get("merged_upto", 0.0)
+  rows = [r for r in desk_ledger if since <= desk_end_at[r["key"]] <= upto]
+
+  def per(field: str) -> str:
+    groups: dict[str, list[dict]] = {}
+    for r in rows:
+      groups.setdefault(r[field], []).append(r)
+    return ", ".join(
+      f"{name} ${sum(r['cost'] for r in rs) / n:.2f} ({n} of {len(rs)} landed)" if (n := sum(r["key"] in done for r in rs)) else f"{name} none of {len(rs)} landed"
+      for name, rs in sorted(groups.items())
+    )
+
+  tokens = sum(r["in"] for r in rows)
+  text = f"Cost per landed item since {since:.0f}: by class {per('class')}; by topic {per('topic')}; the cache gave {sum(r['cached'] for r in rows) / tokens:.0%} of {tokens} tokens in." if tokens else ""
+  if text == desk_text.get("ledger", ""):
+    return []
+  desk_text["ledger"] = text
+  desk_notes[:] = [n for n in desk_notes if not n.startswith("Cost per landed item")]
+  return [text] if text else []
 
 
 def merges_step(seen: str) -> None:
@@ -552,22 +593,25 @@ def verify_step() -> list[str]:
 
 
 def mem_step() -> list[str]:
+  """No item waits on the memory: the desk runs the watcher beside the work, and tells each process that it ended."""
   live = desk_text.get("mem_live", "")
   notes = []
-  if live and over(live):
-    desk_text["mem_live"] = ""
-    got = peek(live)
-    # The guard of the heavy steps reads the memory, and exits 75 when no step can start: no item starts then either.
-    low = isinstance(got, Exit) and got.code == 75
-    desk_text["mem_last"] = got.stdout.content.strip() if isinstance(got, Exit) else ""
-    desk_text["mem_low"] = "low" * low
-    if not isinstance(got, Exit) or got.code not in (0, 75):
-      notes.append(f"The guard of the memory did not run, so no item waits for the memory: {got.stderr.content[-300:] if isinstance(got, Exit) else got}")
-    elif low:
-      notes.append(f"The memory runs low: {desk_text['mem_last']}. No new item starts until it frees. Find the processes that hold it (ps by rss) and tell the owner.")
-  elif not live and clock() - desk_time.get("mem_at", 0.0) >= CI_EVERY:
+  if live:
+    out = read(live + "/stdout", HIDDEN).content
+    new = out[int(desk_text.get("mem_seen", "0")) :].strip()
+    desk_text["mem_seen"] = str(len(out))
+    if new:
+      notes.append(f"The watcher of the memory ended a test process, as the memory was tight:\n{new}")
+    if over(live):
+      desk_text["mem_live"] = ""
+      got = peek(live)
+      if not isinstance(got, Exit) or got.code not in (None, 0):
+        why = got.stderr.content[-300:] if isinstance(got, Exit) else got
+        notes.append(f"The watcher of the memory did not run, so no test process ends while the memory is tight: {why}")
+  elif clock() - desk_time.get("mem_at", 0.0) >= CI_EVERY:
     desk_time["mem_at"] = clock()
-    desk_text["mem_live"] = str(bash(MEM, show=HIDDEN, ok=True, timeout=30))
+    desk_text["mem_seen"] = "0"
+    desk_text["mem_live"] = str(bash(WATCH, show=HIDDEN, ok=True, timeout=HOUR))
   return notes
 
 
@@ -873,6 +917,7 @@ def desk_beat(every: float, floor: float) -> Generator[set[str], object, None]:
     desk_text["triage_last"] = said
     "not applied" in said and desk_notes.append(said)
   admit()
+  desk_notes.extend(ledger_step())
   desk_notes.extend(idle_step())
   if desk_notes and (clock() - desk_time.get("notes_at", 0.0) >= HOUR or any(re.search(URGENT_NOTE, n) for n in desk_notes)):
     prompt(None, "Desk:\n" + "\n\n".join(desk_notes), on=ROOT)

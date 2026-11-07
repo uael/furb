@@ -59,6 +59,29 @@ fn the_messages_api_answers_with_its_texts_and_the_sources_they_cite_or_else_the
 }
 
 #[test]
+fn a_search_of_the_messages_api_that_failed_or_a_block_it_does_not_read_leaves_the_text_alone() {
+  let failed = json!({"type": "web_search_tool_result", "content": {"type": "web_search_tool_result_error", "error_code": "too_many_requests"}});
+  let thought = json!({"type": "server_tool_use", "id": "s", "name": "web_search", "input": {}});
+  let text = json!({"type": "text", "text": "an answer"});
+  let got = json!({"content": [thought, failed, text]});
+  assert_eq!(anthropic(&got).as_deref(), Some("an answer"));
+  let untitled = json!({"type": "text", "text": "cited", "citations": [{"type": "web_search_result_location", "url": "https://u", "title": null}]});
+  assert_eq!(
+    anthropic(&json!({"content": [untitled]})),
+    anthropic(
+      &json!({"content": [{"type": "text", "text": "cited", "citations": [{"url": "https://u", "title": ""}]}]})
+    ),
+    "a citation whose title is null reads as one with no title"
+  );
+  assert!(anthropic(&json!({"content": [untitled]})).is_some_and(|one| one.contains("https://u")));
+  assert_eq!(
+    anthropic(&json!({"content": "no list"})),
+    None,
+    "a response of another shape gives no answer"
+  );
+}
+
+#[test]
 fn the_responses_api_answers_with_the_text_of_its_messages_and_the_sources_it_cites() {
   let got = json!({"output": [
     {"type": "web_search_call", "status": "completed"},

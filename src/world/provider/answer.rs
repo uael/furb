@@ -1,5 +1,9 @@
 //! The call of a model for a reply, and the turn that its answer gives.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::HashSet,
   time::{Duration, SystemTime},
@@ -305,7 +309,10 @@ impl Waits {
       let retry = Retry { attempt: self.attempt + 1, most, wait, why };
       return Ok((retry, !mem::replace(&mut self.limited, true)));
     }
-    if let Some(claude::Error::SignedOut(_)) = claude::error(&no) {
+    if let Some(
+      claude::Error::SignedOut(_) | claude::Error::NoToken(_) | claude::Error::Exhausted,
+    ) = claude::error(&no)
+    {
       let why = "signed out, sign in again".to_owned();
       let retry = Retry { attempt: self.attempt + 1, most, wait: SIGN_POLL, why };
       return Ok((retry, !mem::replace(&mut self.signed, true)));

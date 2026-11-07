@@ -119,6 +119,24 @@ test("a life gains the panel of a part of a project extension, which draws again
   );
 });
 
+test("a panel that throws names its part and panel in plain words, with the raw message on a second line", async () => {
+  const { directory } = project(
+    'export default (furb) => { furb.panel("Broken", (seen) => seen.todos.sort()); }\n',
+  );
+  const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ frame }) => {
+      const shown = await shows(frame, "The panel Broken of todo failed while it drew its lines.");
+      const rows = shown.split("\n");
+      const at = rows.findIndex((row) => row.includes("The panel Broken of todo failed"));
+      // The raw message of the engine stands on the next line, under the plain one.
+      expect(rows[at + 1]).toMatch(/seen\.todos|undefined/);
+    },
+    { width: 132, height: 44 },
+    session,
+  );
+});
+
 test("a part loads from a file in a folder that a link names, and so does each file that the folder gets after the first", async () => {
   const folder = mkdtempSync(join(tmpdir(), "furb-parts-"));
   const link = `${folder}-link`;
@@ -527,6 +545,8 @@ test("the model of the demo adds a component to a life that runs: it reads the t
       await idle(session);
       shown = await shows(frame, "evaluating 'seen.todos");
       expect(shown).not.toContain("2 open of 3");
+      // The panel says in plain words which panel failed and in which call, with the raw message under it.
+      expect(shown).toContain("The panel Todo list of todo failed while it drew its lines.");
       // The operator tells the model, and the panel draws again from the file that it mends.
       await session.submit("The Todo panel shows an error. Fix it.");
       await idle(session);

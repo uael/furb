@@ -56,7 +56,8 @@ test("a message goes to the thread that the view shows by default, also once the
       const second = prompts.find((fact) => fact[5] === "Scenario: second.");
       expect(second?.[3]).toBe(first?.id);
       // The key of a new thread starts a thread of its own on the chain.
-      window.session.aim();
+      await window.click("+ New thread");
+      expect(window.session.target).toBeUndefined();
       await window.type("Scenario: third.");
       await window.shows((frame) => frame.includes("Third answer."), "the third answer");
       const third = (await window.engine.transcript({ on: window.root, of: "prompt" })).find(

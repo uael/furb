@@ -1,18 +1,24 @@
 //! The scratch directory of a life: a folder of the machine for the notes and the scratch files of its words, which a
 //! word names as `scratch://` and a command as `$TMPDIR`, so no text that the World answers names its place.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::HashMap,
   fs, io,
   path::{Path, PathBuf},
-  sync::Arc,
-  time::{SystemTime, UNIX_EPOCH},
+  sync::{Arc, OnceLock},
+  thread,
+  time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use sha2::{Digest, Sha256};
 
 use super::{
   cache,
+  config::Layers,
   disk::{self, Access},
   files::{filed, text},
   resolved,
@@ -31,16 +37,32 @@ pub const SCRATCH: &str = "scratch://";
 /// shows it, and a directory without it is made again.
 const WHOLE: &str = ".furb-scratch";
 
+/// The key of a config that says after how many days with no use the scratch directory of a record
+/// that no life holds is removed, as `{"scratch_days": 7}`.
+pub(super) const KEY: &str = "scratch_days";
+
+/// The days of [`KEY`] when no config names it.
+pub(super) const DAYS: u64 = 7;
+
+/// The file beside the scratch directories of the records whose time says when they were last
+/// reaped, so a life reaps them at most once a day.
+const REAPED: &str = ".reaped";
+
+/// How long a reap of the scratch directories of the records stands before the next one.
+const DAY: Duration = Duration::from_hours(24);
+
 /// The scratch directory of a life, which its files and its commands share: the one of its record, which outlives
 /// the life, or one of its own, which goes with the last ear that holds it. Nothing makes it until a write or a
 /// command needs it, or until a life makes it again from its record.
 #[derive(Clone)]
 pub struct Scratch(Arc<Held>);
 
-/// The directory, and whether it goes with the last ear that holds it.
+/// The directory, whether it goes with the last ear that holds it, and the mark of the directory,
+/// which a life holds locked while it lives, so no reap removes the directory of a live life.
 struct Held {
   at: PathBuf,
   owned: bool,
+  lock: OnceLock<fs::File>,
 }
 
 impl Drop for Held {
@@ -61,7 +83,7 @@ impl Scratch {
 
   /// The scratch directory at an absolute path, which outlives the life.
   fn kept(at: PathBuf) -> Self {
-    Self(Arc::new(Held { at, owned: false }))
+    Self(Arc::new(Held { at, owned: false, lock: OnceLock::new() }))
   }
 
   /// The scratch directory of a record: in the cache of furb, under the digest of the canonical path of the record,
@@ -90,7 +112,7 @@ impl Scratch {
       drawn = (process::id() ^ now).to_le_bytes();
     }
     let at = env::temp_dir().join(format!("furb-{}", hex(&drawn)));
-    Self(Arc::new(Held { at, owned: true }))
+    Self(Arc::new(Held { at, owned: true, lock: OnceLock::new() }))
   }
 
   /// The directory on the machine.
@@ -105,7 +127,57 @@ impl Scratch {
     if !mark.exists() {
       fs::create_dir_all(&self.0.at).and_then(|()| fs::write(&mark, "")).map_err(failed)?;
     }
+    self.hold();
     Ok(&self.0.at)
+  }
+
+  /// The mark of the directory locked for as long as the life lives, once the mark stands, and its
+  /// time set to now, so a reap counts each life as a use. A mark that a reap locks or removes now,
+  /// or that cannot be locked, is not held: the next make holds the mark that it makes again.
+  fn hold(&self) {
+    if self.0.lock.get().is_some() {
+      return;
+    }
+    let mark = self.0.at.join(WHOLE);
+    let Ok(file) = fs::OpenOptions::new().write(true).open(&mark) else { return };
+    if file.try_lock_shared().is_ok() && mark.exists() {
+      // A time that cannot be set only lets the bound of days count from the last make.
+      drop(file.set_modified(SystemTime::now()));
+      drop(self.0.lock.set(file));
+    }
+  }
+
+  /// The days of the configs of the user and of the project, a later layer winning, after which a
+  /// reap removes the scratch directory of a record that no life holds: [`DAYS`] unless [`KEY`]
+  /// says another number.
+  fn days(user: &Path, project: &Path) -> u64 {
+    let layers = Layers::new(project, Some(user.to_path_buf()));
+    layers.values().ok().and_then(|values| values.get(KEY)?.as_u64()).unwrap_or(DAYS)
+  }
+
+  /// The scratch directories beside this one, of the records, reaped in the background when no
+  /// reap ran for a day: each that no life holds and that no write or command used for the days
+  /// that the configs of the user and of the project say.
+  /// What a reap loses: a reopen of the record makes the directory again with each file that a
+  /// write of the record left, but the files that a command made in it are gone. A process that a
+  /// life left running holds no lock, so the bound is its margin. A directory of its own goes with
+  /// its life, and a reap leaves it alone.
+  pub fn reap(&self, user: &Path, project: &Path) {
+    let bound = DAY * u32::try_from(Self::days(user, project)).unwrap_or(u32::MAX);
+    let Some(root) = self.0.at.parent().filter(|_| !self.0.owned).map(Path::to_path_buf) else {
+      return;
+    };
+    let stamp = root.join(REAPED);
+    let last = fs::metadata(&stamp).and_then(|one| one.modified()).ok();
+    if last.and_then(|one| one.elapsed().ok()).is_some_and(|since| since < DAY) {
+      return;
+    }
+    // The stamp is written once the reap ends, so a life that ends first leaves the reap to the
+    // next life; a stamp that cannot be written only lets the next life reap again.
+    thread::spawn(move || {
+      reaped(&root, bound, SystemTime::now());
+      drop(fs::write(&stamp, ""));
+    });
   }
 
   /// What a read or a write of a path of the scheme came to: the file at that path, with the content of the write
@@ -140,6 +212,7 @@ impl Scratch {
       return;
     }
     if at.join(WHOLE).exists() {
+      self.hold();
       return;
     }
     let mut last: HashMap<String, (usize, String)> = HashMap::new();
@@ -171,7 +244,59 @@ impl Scratch {
       log(&format!("the scratch directory of the record was not made again: {no}"));
       gone(beside.path(), log);
     }
+    self.hold();
   }
+}
+
+/// The scratch directories of the records under `root` that no life holds and whose last use is
+/// older than `bound` at `now`, removed; it gives the ones that it removed. A directory is one
+/// whose name is the digest of a record, or such a name with `.new` that a remake left. Its last
+/// use is the latest time of a change of any entry of the directory, at any depth, and of the
+/// directory itself, so a process that still writes in it keeps it; each life that holds it sets
+/// the time of its mark. A directory that the system refuses to remove, as one that holds an open
+/// file on Windows, stays, and the reap goes on with the others.
+pub(crate) fn reaped(root: &Path, bound: Duration, now: SystemTime) -> Vec<PathBuf> {
+  let Ok(entries) = fs::read_dir(root) else { return Vec::new() };
+  let mut gone = Vec::new();
+  for entry in entries.flatten() {
+    let name = entry.file_name().to_string_lossy().into_owned();
+    let digest = name.get(..16).is_some_and(|one| one.bytes().all(|b| b.is_ascii_hexdigit()));
+    if !digest || !matches!(&name[16..], "" | ".new") {
+      continue;
+    }
+    let at = entry.path();
+    let mark = at.join(WHOLE);
+    if latest(&at).is_none_or(|used| now.duration_since(used).unwrap_or_default() < bound) {
+      continue;
+    }
+    // The lock of the mark, held while the directory goes: a life that opens on it meanwhile
+    // takes no lock, and its next make makes the directory again.
+    let free = fs::File::open(&mark).map_or(Ok(None), |file| file.try_lock().map(|()| Some(file)));
+    let Ok(_free) = free else { continue };
+    if fs::remove_dir_all(&at).is_ok() {
+      gone.push(at);
+    }
+  }
+  gone
+}
+
+/// The latest time of a change of a directory and of each entry under it, at any depth, never
+/// through a link; none when the directory cannot be read.
+fn latest(at: &Path) -> Option<SystemTime> {
+  let mut latest = fs::symlink_metadata(at).and_then(|one| one.modified()).ok()?;
+  let mut folders = vec![at.to_path_buf()];
+  while let Some(folder) = folders.pop() {
+    for entry in fs::read_dir(&folder).into_iter().flatten().flatten() {
+      let Ok(info) = entry.metadata() else { continue };
+      if let Ok(changed) = info.modified() {
+        latest = latest.max(changed);
+      }
+      if info.is_dir() {
+        folders.push(entry.path());
+      }
+    }
+  }
+  Some(latest)
 }
 
 fn gone(at: &Path, log: &dyn Fn(&str)) {

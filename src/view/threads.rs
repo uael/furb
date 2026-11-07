@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-  act::{Act, Kind, operator},
+  act::{Act, Kind, WATCH, operator},
   fold::followed,
-  named::Named,
+  named::NAME,
   state::{State, working},
 };
 
@@ -111,7 +111,8 @@ pub fn thread_of<'a>(act: &Act, rows: &Rows<'a>) -> Option<&'a str> {
 #[serde(tag = "aside", content = "from", rename_all = "snake_case")]
 pub enum Aside {
   /// A notice of the round: a prompt of None that a rung or a chain made, which no one answers, as
-  /// the acknowledgment of an act that stands in no thread of the chain.
+  /// the acknowledgment of an act that stands in no thread of the chain, a stall that the watch of
+  /// the daemon tells, or the question of the act that names the session.
   Notice,
   /// What a word of the operator told the chain: a prompt of None that a rung of his made, or the
   /// acknowledgment of a rung that stands in no thread.
@@ -144,7 +145,8 @@ enum Verdict<'a> {
 /// What a prompt to a model is: a message of a thread when it stands on one, the acknowledgment of
 /// an act that a chain made, which belongs to the thread of that act, a notice, a word of the
 /// operator, a wake or a question of another chain, and else a thread of its own, as each prompt
-/// that the operator made himself.
+/// that the operator made himself. What the watch of the daemon tells of a stall, and what the act
+/// that names the session asks, are notices: no one of the operator made them.
 fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
   if act.thread().is_some() {
     return Verdict::Message(root_of(act, rows));
@@ -153,6 +155,8 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
   let none = act.words.first().is_some_and(|shape| shape == "None");
   match maker {
     Some(maker) if none && maker.kind == Kind::Chain => acknowledged(act, rows),
+    _ if act.by == WATCH => Verdict::Aside(Aside::Notice),
+    Some(maker) if maker.kind.as_str() == NAME => Verdict::Aside(Aside::Notice),
     _ if operator(&act.by) => Verdict::Own,
     Some(maker) if none && maker.kind == Kind::Rung && operator(&maker.by) => {
       Verdict::Aside(Aside::Rung)
@@ -309,7 +313,7 @@ fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
   }
   asides.sort_by_key(|one| one.0);
   let asides = asides.into_iter().map(|one| one.1).collect();
-  named(&mut out, on, rows);
+  named(&mut out, rows);
   for thread in &mut out {
     let acts = std::iter::once(&thread.prompt).chain(&thread.messages);
     let open = acts.filter_map(|id| rows.get(id.as_str())).rfind(|act| !act.done());
@@ -345,25 +349,25 @@ fn work_of<'a>(prompt: &str, on: &[&'a Act]) -> Vec<&'a Act> {
     .collect()
 }
 
-/// Each thread of a chain takes its name: the first thread that no operator made on a chain under
-/// the root takes the label of that chain, and the first thread of the operator on the root the
-/// name of the session, when each stands. Any other keeps the first line of its message.
-fn named(out: &mut [ChainThread], on: &[&Act], rows: &Rows<'_>) {
+/// The first thread that no operator made on a chain under the root takes the label of that chain.
+/// Any other thread keeps the first line of its own message, also each thread of the root: the
+/// name of the session stands on the row of the session alone, and a thread never takes it.
+fn named(out: &mut [ChainThread], rows: &Rows<'_>) {
   let Some(chain) = out.first().and_then(|one| rows.get(one.prompt.as_str())).map(|act| &act.chain)
   else {
     return;
   };
   let Some(chain) = rows.get(chain.as_str()).filter(|act| act.kind == Kind::Chain) else { return };
-  let root = chain.on.is_empty();
-  let name = if root {
-    Named::of_acts(on).name().map(|one| one.trim().to_owned())
-  } else {
-    chain.words.first().and_then(Value::as_str).map(str::trim).map(str::to_owned)
+  if chain.on.is_empty() {
+    return;
+  }
+  let Some(name) =
+    chain.words.first().and_then(Value::as_str).map(str::trim).filter(|one| !one.is_empty())
+  else {
+    return;
   };
-  let Some(name) = name.filter(|one| !one.is_empty()) else { return };
-  let first = out.iter_mut().find(|one| (one.origin == Origin::Operator) == root);
-  if let Some(first) = first {
-    first.title = name;
+  if let Some(first) = out.iter_mut().find(|one| one.origin != Origin::Operator) {
+    name.clone_into(&mut first.title);
   }
 }
 

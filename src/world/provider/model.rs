@@ -1,6 +1,10 @@
 //! The models of the provider, their class in the configs, and what a chain stands on and asks of a
 //! model.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use futures::future::BoxFuture;

@@ -76,7 +76,6 @@ const VIEWS = new Set([
   "themes",
   "workspaces",
   "search",
-  "python",
   "ladders",
   "names",
   "help",
@@ -85,7 +84,8 @@ const VIEWS = new Set([
 ]);
 
 /** The actions that a second press undoes. */
-const TOGGLES = new Set(["sidebar", "details", "foldHere"]);
+// ⌃R is a mode of the input, which a second ⌃R leaves, as it leaves it in the table of keys, and Esc keeps.
+const TOGGLES = new Set(["sidebar", "details", "foldHere", "python"]);
 
 /** A long answer in markdown, with a paragraph past the width of the feed, a block of code and a list. */
 const LONG = [
@@ -183,6 +183,9 @@ export class Walk {
   async step(action: string, act: () => unknown = () => {}): Promise<string> {
     const name = `${this.journey}-${String(this.steps.length + 1).padStart(2, "0")}`;
     console.log(`${name}: ${action}`);
+    // The steps of a person stand further apart than the time in which a second Escape rewinds, so no Escape of a step
+    // counts as the first of a pair with the Escape of the step before.
+    this.view.app().escapedAt = 0;
     try {
       await act();
     } catch (error) {
@@ -201,6 +204,13 @@ export class Walk {
       await writeFile(`${shot}.txt`, action);
     }
     return frame;
+  }
+  /** A click on the first place of the frame that shows a text, as the pointer of the owner does. */
+  async click(text: string): Promise<void> {
+    const rows = (await this.drawn()).split("\n");
+    const y = rows.findIndex((row) => row.includes(text));
+    if (y < 0) throw new Error(`no ${JSON.stringify(text)} to click`);
+    await this.view.screen.mockMouse.click(rows[y]?.indexOf(text) ?? 0, y);
   }
   press(on: string): void {
     const { key, modifiers } = chord(on);
@@ -279,7 +289,12 @@ export async function lived(walk: Walk, window: Window, yard: Yard): Promise<voi
     "send Walk: a long answer. and look while it streams",
     ask("Walk: a long answer.", "A long answer"),
   );
-  await walk.step("wait for the end of the long answer", () => walk.shows("The end of the long answer."));
+  // A long answer folds past its rows, so the owner reads its end by a click on its fold row.
+  await walk.step("wait for the long answer to end, folded", () => walk.shows("more lines"));
+  await walk.step("click the fold row and read the end of the long answer", async () => {
+    await walk.click("more lines");
+    await walk.shows("The end of the long answer.");
+  });
   await walk.step("send Walk: ask me. and wait for the question", ask("Walk: ask me.", "Walk: which color?"));
   await walk.step("answer blue in the input", ask("blue", "You said blue."));
   await walk.step(
@@ -304,11 +319,26 @@ export async function lived(walk: Walk, window: Window, yard: Yard): Promise<voi
     await window.type("Walk: hold.");
     await Bun.sleep(1500);
   });
-  await walk.step("send Walk: queued. while the model works", () => window.type("Walk: queued."));
+  await walk.step("queue Walk: queued. with ⌥Enter while the model works", async () => {
+    await window.screen.mockInput.typeText("Walk: queued.");
+    walk.press("meta+return");
+    await walk.shows("Queued 1");
+  });
   await walk.step("let the model answer, then the message that queued", async () => {
     await yard.release("go");
-    await walk.shows("Held, then done.");
     await walk.shows("Queued, then answered.");
+    // The feed shows the thread of the last message, so the first answer is read from the life, not from the frame.
+    const answers = async () =>
+      Promise.all(
+        (await window.engine.transcript({ on: window.root, of: "prompt" })).map((fact) =>
+          window.engine.peek(String(fact[1])),
+        ),
+      );
+    await until(
+      async () => (await answers()).includes("Held, then done."),
+      "the answer of the held message",
+      BOUND,
+    );
   });
   await walk.step("open a new thread with /newthread", () => window.type("/newthread"));
   await walk.step(

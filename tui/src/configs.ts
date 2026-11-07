@@ -31,3 +31,19 @@ export const typed = (text: string, property?: Setting["property"]): unknown => 
     return text;
   }
 };
+
+/** The rows that describe a key under the pointer in /config: its type, the values of its enum on a row of their own,
+ * its default, and the layer that gives its value, each as a name and its text. */
+export function rowsOf(one: Setting, from: string): [name: string, value: string][] {
+  const { property } = one;
+  const json = (value: unknown) => {
+    const text = JSON.stringify(value) ?? "none";
+    return text.length > 48 ? `${text.slice(0, 47)}…` : text;
+  };
+  return [
+    ...(property ? ([["type", property.type]] as [string, string][]) : []),
+    ...(property?.enum ? ([["values", property.enum.map(json).join("  ")]] as [string, string][]) : []),
+    ...(property ? ([["default", json(property.default)]] as [string, string][]) : []),
+    ["layer", from || "an object of furb"],
+  ];
+}

@@ -408,6 +408,9 @@ impl Fold {
         self.acts.entry(id.clone()).and_modify(|act| act.state = state);
       }
     }
+    // A chain is read once, however many of its acts moved.
+    let mut read = HashSet::new();
+    chains.retain(|chain| read.insert(chain.clone()));
     for chain in chains {
       let state = self.chain_state(&chain);
       let Some(act) = self.acts.get_mut(&chain).filter(|act| act.kind == Kind::Chain) else {

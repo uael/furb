@@ -3,6 +3,10 @@
 //! lacks it fails the turn. A kind of event, of block or of delta that this does not read is
 //! `Other`, and it is ignored. The reply of a turn is made of these events as they come.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::collections::HashMap;
 
 use rig_core::{
@@ -26,6 +30,8 @@ pub(super) enum Event {
   Assistant { message: Said },
   /// The end of the turn.
   Result(Finished),
+  /// The answer of a control request, which the probe of the models sends.
+  ControlResponse { response: Control },
   #[serde(other)]
   Other,
 }
@@ -39,6 +45,22 @@ impl Event {
     }
     serde_json::from_value(value)
   }
+}
+
+/// The answer of a control request, by the id of the request: what it gave, or that it failed.
+#[derive(Deserialize)]
+#[serde(tag = "subtype", rename_all = "snake_case")]
+pub(super) enum Control {
+  Success {
+    request_id: String,
+    #[serde(default)]
+    response: Value,
+  },
+  Error {
+    request_id: String,
+  },
+  #[serde(other)]
+  Other,
 }
 
 /// An event of the message that streams.
@@ -56,6 +78,11 @@ pub(super) enum Streamed {
   },
   ContentBlockStop {
     index: u64,
+  },
+  /// The end of a message, with what its request spent in all. The usage of the assistant events
+  /// before it is the usage of the start of the message.
+  MessageDelta {
+    usage: Spent,
   },
   #[serde(other)]
   Other,
@@ -130,6 +157,16 @@ pub(super) struct Spent {
   pub(super) cache_read: u64,
   #[serde(rename = "cache_creation_input_tokens")]
   pub(super) cache_creation: u64,
+}
+
+impl Spent {
+  /// The counts of a later usage of the same message, which only grow.
+  fn grow(&mut self, later: &Self) {
+    self.input = self.input.max(later.input);
+    self.output = self.output.max(later.output);
+    self.cache_read = self.cache_read.max(later.cache_read);
+    self.cache_creation = self.cache_creation.max(later.cache_creation);
+  }
 }
 
 /// The end of a turn. Only a turn that fails has an error, a subtype and a status, so the fields
@@ -265,6 +302,7 @@ impl<'a> Reply<'a> {
     if matches!(update, Streamed::MessageStart) {
       self.streamed = Some(HashMap::new());
       self.settled = 0;
+      self.spent = None;
     }
     let places = self.streamed.get_or_insert_default();
     match update {
@@ -298,8 +336,19 @@ impl<'a> Reply<'a> {
           self.closed(at);
         }
       }
+      Streamed::MessageDelta { usage } => self.spent.get_or_insert_default().grow(usage),
       Streamed::MessageStart | Streamed::Other => {}
     }
+  }
+
+  /// A message that the command line says whole: its blocks, and its usage, which grows what the
+  /// reply holds, since the command line settles a message with the usage of its start, and may do
+  /// so after the delta that says the whole usage.
+  pub(super) fn said(&mut self, message: &Said) {
+    if let Some(usage) = &message.usage {
+      self.spent.get_or_insert_default().grow(usage);
+    }
+    self.settled(&message.content);
   }
 
   /// The blocks of a message that the command line says whole. It says each block again, once it is

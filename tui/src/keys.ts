@@ -123,7 +123,7 @@ export const keys = [
     chord: "⌥D / ⌥E",
     action: "Fold or expand details / external editor",
     bindings: [
-      { on: ["meta+d"], run: "details", chord: "⌥D", command: "details" },
+      { on: ["meta+d"], run: "details", chord: "⌥D", command: "details", always: true },
       { on: ["meta+e"], run: "editor", chord: "⌥E", command: "editor" },
     ],
   },
@@ -278,7 +278,7 @@ export const keys = [
   {
     chord: "⌃C",
     action:
-      "Clear the input, close a dialog, or cancel what you sent last (a message goes back to the input)",
+      "Clear the input, close a dialog, refuse the question that waits, or cancel what you sent last (a message goes back to the input)",
     bindings: [{ on: ["ctrl+c"], run: "takeBack", hint: "take back" }],
   },
   {

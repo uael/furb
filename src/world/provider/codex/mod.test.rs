@@ -1,4 +1,7 @@
 use crate::testing::on_reactor;
+use serde_json::json;
+
+use super::super::catalog;
 use std::{
   io::{BufRead, BufReader, Write},
   net::TcpListener,
@@ -45,4 +48,12 @@ fn subscription_events_stream_when_the_response_has_no_content_type() {
   });
   assert_eq!(text, "close(3)");
   server.join().expect("server");
+}
+
+#[test]
+fn settings_of_codex_that_do_not_hold_fail_with_their_own_cause() {
+  let zero = super::offered(None, &json!({"model_context_window": 0})).err();
+  assert!(matches!(zero, Some(catalog::Error::CodexWindow)), "{zero:?}");
+  let unknown = super::offered(None, &json!({"window": 1})).err();
+  assert!(matches!(unknown, Some(catalog::Error::CodexSettings(_))), "{unknown:?}");
 }

@@ -1,5 +1,6 @@
 //! The Responses API of a `ChatGPT` subscription, on the sign-in that furb keeps.
 
+use super::catalog;
 use std::path::{Path, PathBuf};
 
 use rig_core::{
@@ -108,14 +109,17 @@ struct Settings {
   model_context_window: Option<u64>,
 }
 
-pub(super) fn offered(config: Option<&Path>, form: &Value) -> Result<Vec<super::Model>, String> {
+pub(super) fn offered(
+  config: Option<&Path>,
+  form: &Value,
+) -> Result<Vec<super::Model>, catalog::Error> {
   let settings: Settings = if *form == Value::Bool(true) {
     Settings::default()
   } else {
-    serde_json::from_value(form.clone()).map_err(|no| format!("Invalid codex settings: {no}"))?
+    serde_json::from_value(form.clone()).map_err(catalog::Error::CodexSettings)?
   };
   if settings.model_context_window == Some(0) {
-    return Err("The codex model_context_window must be positive".to_owned());
+    return Err(catalog::Error::CodexWindow);
   }
   let directory = auth::directory(config);
   Ok(
@@ -131,7 +135,7 @@ pub(super) fn offered(config: Option<&Path>, form: &Value) -> Result<Vec<super::
           .saturating_mul(one.effective_context_window_percent.unwrap_or(95).min(100))
           / 100;
         // Codex says no price, so the catalog gives the class of each model of its account.
-        let class = super::catalog::family(NAME, &one.slug);
+        let class = catalog::family(NAME, &one.slug);
         let mut model = super::Model::new(
           format!("{NAME}:{}", one.slug),
           window.max(1),
@@ -143,7 +147,7 @@ pub(super) fn offered(config: Option<&Path>, form: &Value) -> Result<Vec<super::
         }
         model.images = one.input_modalities.iter().any(|one| one == "image");
         for effort in one.supported_reasoning_levels {
-          if super::catalog::LEVELS.contains(&effort.effort.as_str()) {
+          if catalog::LEVELS.contains(&effort.effort.as_str()) {
             model = model.effort(
               &effort.effort,
               json!({"reasoning": {"effort": effort.effort, "summary": "auto"}}),

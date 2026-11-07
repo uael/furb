@@ -81,6 +81,10 @@ impl fmt::Display for Kind {
   }
 }
 
+/// The speaker of the watch of the daemon, which tells a chain that stalled: a notice that no one
+/// of the operator made.
+pub const WATCH: &str = "watch";
+
 /// Whether a name is the operator: [`OPERATOR`] itself, or one of his sessions under it.
 pub fn operator(name: &str) -> bool {
   name.strip_prefix(OPERATOR).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))

@@ -21,7 +21,10 @@ use tokio::{
   process::{ChildStdin, ChildStdout},
 };
 
-use super::{EFFORTS, Program};
+use super::{
+  EFFORTS, Program,
+  protocol::{Control, Event},
+};
 use crate::world;
 use crate::world::{
   child,
@@ -127,6 +130,20 @@ fn exclusive() -> MutexGuard<'static, ()> {
 }
 
 fn store(file: &path::Path, stamp: &str, found: &[Found], now: u64) {
+  // A cache that cannot be written costs the next life one probe more, so the failure ends here.
+  stored_by(file, stamp, entry(found, now), |file, bytes| {
+    drop(disk::write(file, bytes, Access::Shared));
+  });
+}
+
+/// A discovery as the cache holds it, which [`stored`] reads: [`Told`] as JSON.
+fn entry(found: &[Found], now: u64) -> Value {
+  json!({"at": now, "found": found})
+}
+
+/// [`store`] of a discovery as the cache holds it, with the write of the file given, so a test of
+/// the race writes with no sync to the disk, whose time grows with the load of the machine.
+fn stored_by(file: &path::Path, stamp: &str, told: Value, write: impl FnOnce(&path::Path, &[u8])) {
   let _held = exclusive();
   let mut map: serde_json::Map<String, Value> = fs::read_to_string(file)
     .ok()
@@ -135,13 +152,12 @@ fn store(file: &path::Path, stamp: &str, found: &[Found], now: u64) {
   // One entry for each program: an older stamp of it goes.
   let program = stamp.splitn(3, '\0').take(2).collect::<Vec<_>>().join("\0");
   map.retain(|key, _| !key.starts_with(&program));
-  map.insert(stamp.to_owned(), json!({"at": now, "found": found}));
+  map.insert(stamp.to_owned(), told);
   while map.len() > 16 {
     let Some(oldest) = map.keys().next().cloned() else { break };
     map.shift_remove(&oldest);
   }
-  // A cache that cannot be written costs the next life one probe more, so the failure ends here.
-  drop(disk::write(file, Value::Object(map).to_string().as_bytes(), Access::Shared));
+  write(file, Value::Object(map).to_string().as_bytes());
 }
 
 /// The cache gone, so the next models ask the command line again.
@@ -264,38 +280,62 @@ async fn asked(
     stdin.flush().await.ok()?;
     loop {
       let line = lines.next_line().await.ok()??;
-      let Ok(event) = serde_json::from_str::<Value>(&line) else { continue };
-      let response = &event["response"];
-      if event["type"] == "control_response" && response["request_id"] == id.as_str() {
-        return (response["subtype"] == "success").then(|| response["response"].clone());
+      let Ok(Event::ControlResponse { response }) =
+        serde_json::from_str(&line).and_then(Event::read)
+      else {
+        continue;
+      };
+      match response {
+        Control::Success { request_id, response } if request_id == id => return Some(response),
+        Control::Error { request_id } if request_id == id => return None,
+        _ => {}
       }
     }
   };
-  let init = ask(json!({"subtype": "initialize"})).await?;
+  let Init { models } =
+    serde_json::from_value(ask(json!({"subtype": "initialize"})).await?).ok()?;
   let mut found: Vec<Found> = Vec::new();
-  for one in init["models"].as_array()? {
-    let Some(alias) = one["value"].as_str().filter(|one| plain(one)) else { continue };
-    if found.iter().any(|one| one.alias == alias) {
+  for one in models {
+    if !plain(&one.value) || found.iter().any(|known| known.alias == one.value) {
       continue;
     }
-    let efforts = match (one["supportsEffort"].as_bool(), one["supportedEffortLevels"].as_array()) {
+    let efforts = match (one.supports_effort, one.supported_effort_levels) {
       (Some(false), _) => Vec::new(),
-      (_, Some(levels)) => {
-        levels.iter().filter_map(|one| one.as_str().map(str::to_owned)).collect()
-      }
+      (_, Some(levels)) => levels,
       _ => EFFORTS.iter().map(|one| (*one).to_owned()).collect(),
     };
-    if ask(json!({"subtype": "set_model", "model": alias})).await.is_none() {
+    if ask(json!({"subtype": "set_model", "model": one.value.as_str()})).await.is_none() {
       continue;
     }
-    let Some(window) =
-      ask(json!({"subtype": "get_context_usage"})).await.and_then(|one| one["maxTokens"].as_u64())
-    else {
+    let usage = ask(json!({"subtype": "get_context_usage"})).await;
+    let Some(Usage { max_tokens }) = usage.and_then(|one| serde_json::from_value(one).ok()) else {
       continue;
     };
-    found.push(Found { alias: alias.to_owned(), window, efforts });
+    found.push(Found { alias: one.value, window: max_tokens, efforts });
   }
   (!found.is_empty()).then_some(found)
+}
+
+/// The answer of the request `initialize`: the models that the command line offers.
+#[derive(Deserialize)]
+struct Init {
+  models: Vec<Offered>,
+}
+
+/// A model that the command line offers, by its alias, with the efforts that it takes.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Offered {
+  value: String,
+  supports_effort: Option<bool>,
+  supported_effort_levels: Option<Vec<String>>,
+}
+
+/// The answer of the request `get_context_usage`: the window of the model that is set.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Usage {
+  max_tokens: u64,
 }
 
 #[cfg(test)]
