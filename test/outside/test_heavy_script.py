@@ -12,9 +12,9 @@ SCRIPT = Path(__file__).resolve().parents[2] / "script" / "heavy.sh"
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="the script runs in sh")
 
 
-def machine(tmp: Path, free: int, *, swap: int = 6000, grows: bool = False) -> None:
+def machine(tmp: Path, free: int, *, swap: int = 6000, grows: bool = False, level: int = 1) -> None:
   """A fake reading of memory_pressure and of sysctl, in files that the test changes while the script runs: grows makes
-  the swap grow by 300 MB at each read."""
+  the swap grow by 300 MB at each read, and level is the pressure level of the kernel."""
   shim = tmp / "shim"
   shim.mkdir(exist_ok=True)
   # The swap grows before the free memory changes, and a read of the swap that saw it grow ends before the test writes
@@ -28,12 +28,13 @@ def machine(tmp: Path, free: int, *, swap: int = 6000, grows: bool = False) -> N
   (tmp / "swap").write_text(f"{swap}\n")
   if stops:
     (tmp / "slots" / "swap").unlink(missing_ok=True)
+  (tmp / "level").write_text(f"{level}\n")
   (tmp / "free").write_text(f"{free}\n")
   pressure, sysctl = shim / "memory_pressure", shim / "sysctl"
   pressure.write_text(f'#!/bin/sh\necho "System-wide memory free percentage: $(cat {tmp}/free)%"\n')
   sysctl.write_text(
     "#!/bin/sh\n"
-    'case "$2" in hw.memsize) echo 38654705664 ;;\n'
+    f'case "$2" in hw.memsize) echo 38654705664 ;;\nkern.memorystatus_vm_pressure_level) cat {tmp}/level ;;\n'
     f"*) s=$(cat {tmp}/swap); [ ! -e {tmp}/grows ] || {{ s=$((s + 300)); echo $s > {tmp}/swap; }}\n"
     '   echo "total = 7168.00M  used = $s.00M  free = 1.00M  (encrypted)" ;;\nesac\n'
   )
@@ -57,7 +58,10 @@ def run(tmp: Path, *command: str, **more: str) -> subprocess.CompletedProcess[st
   return subprocess.run(args, env=env(tmp, **more), text=True, capture_output=True, timeout=60, check=False)
 
 
-@pytest.mark.parametrize(("given", "code"), [({"free": 50}, 0), ({"free": 19}, 75), ({"free": 50, "grows": True}, 75)])
+@pytest.mark.parametrize(
+  ("given", "code"),
+  [({"free": 50}, 0), ({"free": 19}, 75), ({"free": 50, "grows": True}, 75), ({"free": 50, "level": 2}, 75)],
+)
 def test_with_no_command_it_says_the_memory_and_whether_a_step_can_start(
   tmp_path: Path, given: dict, code: int
 ) -> None:
@@ -140,3 +144,10 @@ def test_a_step_on_a_runner_of_ci_takes_no_slot_and_waits_for_no_memory(tmp_path
   got = run(tmp_path, "echo", "ran", CI="true", FURB_HEAVY_WAIT="1")
   assert (got.returncode, got.stdout) == (0, "ran\n")
   assert not (tmp_path / "slots").exists()
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the share of the swap is the rule of Linux")
+@pytest.mark.parametrize(("share", "code"), [("0", 75), ("101", 0)])
+def test_on_linux_a_step_waits_while_the_swap_in_use_passes_its_share(tmp_path: Path, share: str, code: int) -> None:
+  got = run(tmp_path, FURB_HEAVY_FREE="0", FURB_HEAVY_SWAP_MB="1000000", FURB_HEAVY_SWAP_SHARE=share)
+  assert got.returncode == code and "% of its total" in got.stdout
