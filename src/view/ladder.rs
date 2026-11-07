@@ -3,9 +3,10 @@
 //! opens. At the top and under a rung, a step is a prompt, or another act that heads lines of its
 //! own, and the last prompts show; under a prompt, a step is a rung, and the last rungs show. A
 //! step under which a prompt or a rung asks the operator or works stays shown, and a fold holds
-//! two steps in a row at least.
+//! two steps in a row at least. It reads the lists of the acts that the window holds by maker and
+//! by chain, and the acts that live, so it takes the time of what it shows and not of the life.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ use serde_json::Value;
 use super::{
   act::{Act, Kind, RunState, operator},
   fold::followed,
+  held::Held,
   state::State,
 };
 
@@ -40,6 +42,39 @@ pub enum Rung {
   /// that it holds in the order they first come. `key` opens it: prompts: or rungs: and the act
   /// that the steps stand under, or the chain at the top.
   More { head: String, depth: usize, count: usize, of: String, key: String, heads: Vec<String> },
+}
+
+/// The acts that a ladder reads, as a window holds them: each act in the order it was first told,
+/// its place by its id, the places of the acts of each maker and of each chain, and the places of
+/// the acts that live, an act that is not done or a rung whose word still runs.
+pub(super) struct Index<'a> {
+  pub acts: &'a [Act],
+  pub at: &'a HashMap<String, usize>,
+  pub made: &'a HashMap<String, Vec<usize>>,
+  pub on: &'a HashMap<String, Vec<usize>>,
+  pub live: &'a BTreeSet<usize>,
+}
+
+impl<'a> Index<'a> {
+  fn get(&self, id: &str) -> Option<&'a Act> {
+    self.at.get(id).map(|place| &self.acts[*place])
+  }
+
+  /// The acts of a list of places, in order, but the questions on the way to what an act does,
+  /// which no person follows.
+  fn list(&self, places: Option<&'a Vec<usize>>) -> impl Iterator<Item = &'a Act> + use<'a> {
+    let acts = self.acts;
+    places
+      .into_iter()
+      .flatten()
+      .map(move |place| &acts[*place])
+      .filter(|act| followed(act.kind.as_str()))
+  }
+}
+
+/// Whether an act lives, as a ladder reads it: it is not done, or it is a rung whose word runs.
+pub(super) fn lives(act: &Act) -> bool {
+  !act.done() || act.run == Some(RunState::Running)
 }
 
 /// What a ladder takes of an act of a level: a step, a rung of an ear, or nothing.
@@ -87,7 +122,7 @@ fn listed<'a>(acts: impl IntoIterator<Item = &'a Act>, take: impl Fn(&Act) -> Ta
 /// What a ladder reads to fold a chain.
 struct Walk<'a, 's> {
   chain: &'s str,
-  made: HashMap<&'a str, Vec<&'a Act>>,
+  index: &'s Index<'a>,
   alive: HashMap<&'a str, Vec<&'a str>>,
   opened: HashSet<&'s str>,
   shown: Shown,
@@ -98,7 +133,7 @@ impl<'a> Walk<'a, '_> {
   /// The steps under a step: each act that a prompt made, and each prompt that a rung made on the
   /// chain.
   fn under(&self, act: &Act) -> Listed<'a> {
-    let made = self.made.get(act.id.as_str()).into_iter().flatten().copied();
+    let made = self.index.list(self.index.made.get(act.id.as_str()));
     match act.kind {
       Kind::Prompt => listed(made, |_| Take::Step),
       Kind::Rung => listed(made, |child| {
@@ -184,29 +219,36 @@ pub fn ladder(
   taken: Option<&[String]>,
   shown: Shown,
 ) -> Vec<Rung> {
-  let opened: HashSet<&str> = opened.iter().map(String::as_str).collect();
-  let taken: Option<HashSet<&str>> = taken.map(|taken| taken.iter().map(String::as_str).collect());
-  let ids: HashMap<&str, &Act> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+  let mut held = Held::default();
+  for act in acts {
+    held.heard(act);
+  }
+  held.ladder(chain, None, opened, owed, taken, shown)
+}
+
+/// The ladder of a chain from the index of the acts that a window holds, as [`ladder`] gives it.
+pub(super) fn folded(
+  index: &Index<'_>,
+  chain: &str,
+  opened: &[String],
+  owed: &[String],
+  taken: Option<&[String]>,
+  shown: Shown,
+) -> Vec<Rung> {
   let local =
-    |id: &str| ids.get(id).is_some_and(|act| act.chain == chain && act.kind != Kind::Chain);
+    |id: &str| index.get(id).is_some_and(|act| act.chain == chain && act.kind != Kind::Chain);
   // A rung that no act wrote: an ear of the outside wrote it, or the chain wrote it on itself and
   // it retells no word of another rung.
   let ear = |act: &Act| {
     act.kind == Kind::Rung
       && !operator(&act.by)
-      && (!ids.contains_key(act.by.as_str()) || (act.by == act.chain && blank(act.words.get(1))))
+      && (index.get(&act.by).is_none() || (act.by == act.chain && blank(act.words.get(1))))
   };
-  let mut made: HashMap<&str, Vec<&Act>> = HashMap::new();
-  // The questions on the way to what an act does, which no person follows, are no steps.
-  let steps = || acts.iter().filter(|act| followed(act.kind.as_str()));
-  for act in steps() {
-    made.entry(act.by.as_str()).or_default().push(act);
-  }
   // A step stays shown when a prompt or a rung under it asks the operator or works: each such act
   // marks each step from it up to the top, in the level of the step above it.
   let mut alive: HashMap<&str, Vec<&str>> = HashMap::new();
-  let live = acts.iter().filter(|act| !act.done() || act.run == Some(RunState::Running));
-  let asked = owed.iter().filter_map(|id| ids.get(id.as_str()).copied());
+  let live = index.live.iter().map(|place| &index.acts[*place]);
+  let asked = owed.iter().filter_map(|id| index.get(id));
   for act in live.chain(asked) {
     let working = matches!(act.state, State::Asks | State::Thinks | State::Runs | State::Idle);
     if !matches!(act.kind, Kind::Prompt | Kind::Rung) || !working {
@@ -214,7 +256,7 @@ pub fn ladder(
     }
     let mut path: Vec<&str> = Vec::new();
     let mut at = Some(act);
-    while let Some(now) = at.filter(|_| path.len() <= ids.len()) {
+    while let Some(now) = at.filter(|_| path.len() <= index.acts.len()) {
       path.push(&now.id);
       if now.chain == chain && now.kind != Kind::Chain && !local(&now.by) {
         if !ear(now) {
@@ -227,15 +269,16 @@ pub fn ladder(
         }
         break;
       }
-      let maker = ids.get(now.by.as_str()).copied();
-      at = maker.filter(|maker| {
+      at = index.get(&now.by).filter(|maker| {
         maker.kind == Kind::Prompt
           || (maker.kind == Kind::Rung && now.kind == Kind::Prompt && now.chain == chain)
       });
     }
   }
-  let on = steps()
-    .filter(|act| act.chain == chain && act.kind != Kind::Chain)
+  let taken: Option<HashSet<&str>> = taken.map(|taken| taken.iter().map(String::as_str).collect());
+  let on = index
+    .list(index.on.get(chain))
+    .filter(|act| act.kind != Kind::Chain)
     .filter(|act| taken.as_ref().is_none_or(|taken| taken.contains(act.id.as_str())));
   let top = listed(on, |act| match (local(&act.by), ear(act)) {
     (true, _) => Take::No,
@@ -243,7 +286,8 @@ pub fn ladder(
     (false, false) => Take::Step,
   });
   let key = format!("prompts:{}", top.steps.first().map_or("", |one| one.0.chain.as_str()));
-  let mut walk = Walk { chain, made, alive, opened, shown, out: Vec::new() };
+  let opened = opened.iter().map(String::as_str).collect();
+  let mut walk = Walk { chain, index, alive, opened, shown, out: Vec::new() };
   walk.level(&top, 0, &key, "");
   walk.out
 }
