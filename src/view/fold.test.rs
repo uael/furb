@@ -41,3 +41,34 @@ fn a_record_folds_each_pause_and_wake_and_each_act_born_under_a_pause_as_its_liv
     "the pause holds the prompt and the rung born under it"
   );
 }
+
+#[test]
+fn a_chain_with_a_source_takes_each_message_of_the_operator_that_its_prefix_carries() {
+  let mut fold = Fold::default();
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "first", ""]),
+    json!(["prompt", "prompt2", "rung1", "chain1", "str", "a worker", ""]),
+    json!(["prompt", "prompt3", "operator/tui", "chain1", "str", "second", ""]),
+    json!(["chain", "chain2", "operator", "chain1", "branch", "chain1"]),
+    json!([
+      "prefix",
+      "chain2",
+      "chain2",
+      [
+        ["prompt", "prompt1", "operator", "chain1", "str", "first", ""],
+        ["started", "prompt1", "chain1"],
+        ["prompt", "prompt2", "rung1", "chain1", "str", "a worker", ""],
+        ["prompt", "prompt3", "operator/tui", "chain1", "str", "second", ""],
+        ["prompt", "prompt1", "operator", "chain1", "str", "first", ""]
+      ]
+    ]),
+  ];
+  let mut last = Vec::new();
+  for fact in &facts {
+    last = fold.recorded(fact);
+  }
+  let chain = last.iter().find(|act| act.id == "chain2").expect("the prefix moves its chain");
+  assert_eq!(chain.taken, ["prompt1", "prompt3"], "each message of the operator, once, in order");
+  assert!(last.iter().all(|act| act.id != "chain1"), "the source takes nothing: {last:?}");
+}

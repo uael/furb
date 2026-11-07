@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { isDone, outcomeOf } from "furb/life";

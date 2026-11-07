@@ -27,14 +27,14 @@ API of its own:
   the World of the one that has one, `skills.rs`. `docs/skills.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
-  A host adds only its own ears, as the console of its operator. A life on a record replays the tail after its last
-  checkpoint word by word on the engine and the Kernel that its fact made holds, and goes on with them, so it opens
-  at the exact state of its tip whatever build of the major runs it, as `src/checkpoint.rs` says. Its models read that
-  engine, and the gate reads each word on it. `script/engines.py` gives a copy of a record of a build before the texts
-  the texts of its engine from git. `tests/replay` holds the records that each build must
-  replay on their own engines with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
-  `tests/corpus/README.md` says. Each door gives it as
-  `opened` and as `Engine.open`.
+  A host adds only its own ears, as the console of its operator. When the last segment of its record holds the texts of
+  another engine, a life that inspects the record, on that engine, first writes a checkpoint after its last entry. The
+  life then opens from its last checkpoint and goes on with the engine and the Kernel of this build, so it opens at the
+  exact state of its tip whatever build of the major runs it, as `src/checkpoint.rs` says. Its models read the engine of
+  this build, and the gate reads each word on it. `script/engines.py` gives a copy of a record of a build before the
+  texts of its engine from git. `tests/replay` holds the records that each build must replay on their own engines with
+  no drift. `tests/corpus` holds the records of each release, which each later build must open, as
+  `tests/corpus/README.md` says. Each door gives it as `opened` and as `Engine.open`.
 - `src/view.rs` and `src/view/` fold the facts of a life into its meaning, which every window shows the same way: the
   state of each act and of each chain, the desk of the operator, the threads of a chain, the spend, and the acts as
   they stood at a moment. It depends on the crate alone, so the host and each door read one fold. `Fold` hears each
@@ -44,9 +44,11 @@ API of its own:
   boot, while `gathered` and `seed` of `engine.py` write and read its data. A life ends with one through
   `Engine::checkpoint`, which its store keeps as it keeps each fact, as the TUI does at a handover, and
   `furb checkpoint` writes one on a record that no life holds. A life boots on the last checkpoint of its record,
-  whatever engine wrote it, and replays the entries after it word by word on the engine that their fact made holds,
-  so it opens at the exact state of its tip. A tail that a build cannot replay with no drift is a defect, which #988
-  tracks: the record then opens to read only, and nothing forks it into a new life.
+  whatever engine wrote it, and replays the entries after it word by word. When those entries hold the texts of another
+  engine, a life that inspects the record replays them on that engine and writes a checkpoint after them, so the life
+  replays no word on another engine, goes on with the engine and the Kernel of this build, and opens at the exact state
+  of its tip. A tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
+  read only, and nothing forks it into a new life.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
   engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
@@ -299,7 +301,8 @@ fix what your change broke, and report what was broken before.
   `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any case. This build,
   `cargo test` and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them,
   so a word runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the
-  release.
+  release. A build keeps no incremental state (`.cargo/config.toml`), so no folder grows in a worktree;
+  a rebuild of the crate takes about 45 s.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
   `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest

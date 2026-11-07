@@ -59,3 +59,10 @@ engine it drifts at `rung3230`, since that engine says the first started or done
 facts that the record holds before it. The adapter of that engine in `src/furb/adapters.py` carries the ranks of #1329,
 so the record replays with no drift. The test `a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter`
 in `src/life.test.rs` proves the drift without the adapter.
+
+`lives.jsonl.zst` is a life of the engine `0a11688b` of the commit `d5550efda`, with the default extensions. Its root
+runs a word that makes an act whose ear makes an act of its own, as compaction makes the prompt of its chooser. The
+gathered of that engine reads slot 4 of the maker of each open act, which that inner act has not, so it raises
+IndexError and the life writes no checkpoint. The adapter of that engine in `src/furb/adapters.py` gives it the lives
+of a later engine. The test `a_life_of_an_engine_whose_gathered_raised_on_an_act_that_no_rung_made_writes_its_checkpoint_through_its_adapter`
+writes its checkpoint, which carries the life word of compaction.

@@ -34,7 +34,10 @@ mod opening;
 mod plain;
 mod record;
 
-use std::{collections::HashMap, task::Waker};
+use std::{
+  collections::{HashMap, HashSet},
+  task::Waker,
+};
 
 use monty_types::{ExcType, MontyUuid, NamedValues};
 
@@ -50,7 +53,7 @@ pub use self::{
 };
 pub(crate) use self::{
   opening::Opened,
-  record::{left, looping},
+  record::{left, looping, settled},
 };
 use crate::{
   SHEET,
@@ -168,6 +171,9 @@ struct Outside {
   /// The question that the host refused in this step of a word, past the bound of a turn, and its
   /// maker.
   past: Option<(String, String)>,
+  /// The questions of the record that the life opened on, as [`settled`] gives them: while boot
+  /// replays the record, no bound of a turn holds a step of the word of such a run.
+  settled: HashSet<String>,
 }
 
 impl Host for Outside {
@@ -192,6 +198,8 @@ impl Host for Outside {
           Some(job) => self.stepping.push(job),
           None => drop(self.stepping.pop()),
         }
+        let bounded =
+          bounded && !self.stepping.last().is_some_and(|job| self.settled.contains(job));
         // Each step of a word starts a stretch of the bound, and a round trip to the host
         // starts none.
         crate::sand::step(bounded && !self.stepping.is_empty());
@@ -251,6 +259,7 @@ impl Outside {
       gating: true,
       stepping: Vec::new(),
       past: None,
+      settled: HashSet::new(),
     })
   }
 
@@ -609,6 +618,7 @@ impl Engine {
     outside.source = source;
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
     let record = seeded(&mut sand, &mut outside, record)?;
+    outside.settled = settled(&record);
     let mut engine = Engine::new(sand, outside, &record, String::new());
     let names_parked = Object::list(engine.parked.iter().map(|(id, _)| Object::string(id)));
     let parks = !engine.parked.is_empty();
@@ -652,6 +662,9 @@ impl Engine {
       Ok(opened)
     })?;
     engine.sand.bound(true);
+    // The replay ends with boot: a run of the record that goes on after it is live, and the bound
+    // holds it.
+    engine.outside.settled.clear();
     engine.root = root;
     engine.raised = raised;
     Ok(engine)

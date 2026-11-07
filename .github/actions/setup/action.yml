@@ -54,15 +54,9 @@ runs:
     # set, at the same values, so the key of the cache stays the same. That action installed a bash of brew on each
     # macOS job before its own scripts, in 12 s to 47 s, and these steps run in the bash of the system. The cache is
     # the step after them, so that its key holds this rust alone.
-    # CARGO_INCREMENTAL 0 pays in a gate by size: a gate builds once and saves its target in a cache of 10 GB, and the
-    # incremental state is a fifth of a target that nothing reads again. Measured on a clean target, twice, with
-    # CARGO_PROFILE_DEV_DEBUG=0 in both runs: cargo test --no-run -p furb --lib left 1790 and 1846 MB with
-    # CARGO_INCREMENTAL=0 and CARGO_PROFILE_DEV_INCREMENTAL=false, and 2131 and 2159 MB with the defaults of cargo,
-    # whose target held 502 and 510 MB of incremental state. The times of the runs do not decide, since other builds
-    # shared the machine: 244 s against 286 s once, and 380 s against 247 s the other time.
+    # CARGO_INCREMENTAL is not one of them: .cargo/config.toml turns incremental compilation off for each build.
     - run: |
         set_default() { if [ -z "$(printenv "$1")" ]; then echo "$1=$2" >> "$GITHUB_ENV"; fi; }
-        set_default CARGO_INCREMENTAL 0
         set_default CARGO_PROFILE_DEV_DEBUG 0
         set_default CARGO_TERM_COLOR always
         set_default RUST_BACKTRACE short

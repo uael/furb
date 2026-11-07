@@ -112,6 +112,10 @@ pub struct Act {
   /// reply that runs waits for its turn.
   #[serde(default)]
   pub asking: bool,
+  /// The messages of the operator that a chain with a source took from it, in their order: each
+  /// prompt of the operator that the prefix of the chain carries, with the id it has on the source.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub taken: Vec<String>,
   /// How many facts the life had said when the act was made, which is its place in time.
   pub began: u64,
   /// How many facts the life had said when the act was done.

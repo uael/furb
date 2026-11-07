@@ -46,7 +46,7 @@ use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   life::Opening,
   skill::{self, Part, Skill},
-  view::{Fold, Held, Pause},
+  view::{Act as ViewAct, Fold, Held, Pause, restate},
   wire,
   world::{self, images},
 };
@@ -876,6 +876,21 @@ impl Meaning {
     meant(&acts)
   }
 
+  /// A fact of a record, as the JSON of its line, which the meaning folds as [`Meaning::hear`]
+  /// does with neither `covered` nor `born`, and gives back nothing: a window that reads a record
+  /// asks the meaning later for what it draws, so no act crosses the door again for each fact.
+  #[cfg_attr(feature = "typescript", napi)]
+  pub fn told(&mut self, line: String) -> Result<(), Fault> {
+    // A line of a record is plain JSON, which serde reads as the sandbox would give it out, but for
+    // the last digit of a float, so the fact takes no pass through the values of the sandbox.
+    let fact: serde_json::Value = serde_json::from_str(&line)
+      .map_err(|no| Fault::refused(format!("the line is no JSON: {no}")))?;
+    for act in &self.fold.recorded(&fact) {
+      self.held.heard(act);
+    }
+    Ok(())
+  }
+
   /// The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
   /// that one holds.
   #[cfg_attr(feature = "typescript", napi)]
@@ -921,11 +936,29 @@ impl Meaning {
     meant(&self.held.as_of(moment(at)?))
   }
 
-  /// Each moment at which an act began or ended, in order.
+  /// Each moment at which an act began or ended, in order, of the life or of the acts of one chain.
   #[cfg_attr(feature = "typescript", napi(ts_return_type = "number[]"))]
-  pub fn moments(&self) -> Result<Value, Fault> {
-    meant(&self.held.moments())
+  pub fn moments(&self, on: Option<String>) -> Result<Value, Fault> {
+    meant(&self.held.moments(on.as_deref()))
   }
+}
+
+/// Acts each in the state that the crate gives it, and each chain in the state that the acts that
+/// stand in it give, as a daemon tells them: what a window that makes acts of its own, as a test
+/// does, reads in place of a state of its own.
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_args_type = "acts: Array<import(\"./dist/protocol.js\").Act>",
+    ts_return_type = "Array<import(\"./dist/protocol.js\").Act>"
+  )
+)]
+pub fn restated(acts: Value) -> Result<Value, Fault> {
+  let json = wire::outward(acts.0.as_ref());
+  let mut acts: Vec<ViewAct> = serde_json::from_value(json)
+    .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
+  restate(&mut acts);
+  meant(&acts)
 }
 
 /// A meaning as a value of the engine, which crosses each door as JSON would.

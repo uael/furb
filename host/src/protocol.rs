@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 4;
+pub const PROTOCOL: u32 = 5;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -332,6 +332,9 @@ pub enum Verb {
   /// Each moment of a life at which an act began or ended, in order.
   Moments {
     life: String,
+    /// The chain whose acts give the moments; none gives those of the whole life.
+    #[serde(default)]
+    on: Option<String>,
   },
   /// The turn that the peer gave for a request of a model of a life that it answers, written as
   /// the record writes a value, or why it gives none.

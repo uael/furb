@@ -4,7 +4,7 @@
 //! local API of Tailscale gives for its address, with the role that the access list gives it.
 
 use std::{
-  fs, io,
+  fs, io, mem,
   net::{IpAddr, Ipv4Addr, SocketAddr},
   path::{Path, PathBuf},
   pin::Pin,
@@ -50,6 +50,7 @@ use crate::{
   access::Access,
   error::{AccessError, TransportError},
   protocol::{BOUND, Role},
+  serve::Granted,
 };
 
 /// The transport of TCP at an address on loopback or on the tailnet. A listener of WebSocket is a
@@ -348,6 +349,24 @@ impl Tailscale {
   /// The access list as it changes.
   pub fn changes(&self) -> watch::Receiver<Access> {
     self.access.subscribe()
+  }
+
+  /// The role that the access list gives a peer, as it changes: its login's role stands until the
+  /// list says otherwise, and none once the list drops the login.
+  pub fn follow(&self, who: &Who) -> Granted {
+    let (told, granted) = watch::channel(Some(who.role));
+    let (mut access, login) = (self.changes(), who.login.clone());
+    tokio::spawn(async move {
+      loop {
+        let role = access.borrow_and_update().role(&login).ok();
+        told.send_if_modified(|held| mem::replace(held, role) != role);
+        tokio::select! {
+          () = told.closed() => return,
+          Ok(()) = access.changed() => {}
+        }
+      }
+    });
+    granted
   }
 
   /// The addresses of this machine on the tailnet.

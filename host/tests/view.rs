@@ -33,6 +33,7 @@ fn act(id: &str, kind: &str, on: &str, by: &str, began: u64, ended: Option<u64>)
     }),
     word: None,
     asking: false,
+    taken: Vec::new(),
     began,
     ended,
     spend: None,

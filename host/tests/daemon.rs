@@ -190,6 +190,76 @@ mod daemon {
     }
   }
 
+  /// The identity of a test whose peers that dial in turn are the logins of a list, each a writer.
+  #[derive(Clone)]
+  struct Logins {
+    local: Local,
+    next: Arc<AtomicUsize>,
+    names: Arc<[&'static str]>,
+  }
+
+  impl Identity for Logins {
+    type Stream = Accepted;
+
+    async fn identify(&self, stream: &Accepted) -> Result<Who, TransportError> {
+      let who = self.local.identify(stream).await?;
+      let at = self.next.fetch_add(1, Ordering::SeqCst);
+      Ok(Who { login: self.names[at].to_owned(), ..who })
+    }
+  }
+
+  /// Who said each fact seen of a life about a chain, in the order of the record.
+  async fn seen_by(window: &mut Window, life: &str, about: &str) -> Vec<String> {
+    let of = Some("seen".to_owned());
+    let verb = Verb::Transcript { life: life.to_owned(), on: None, of };
+    let Ok(Answer::Values(facts)) = window.ask(verb).await else { panic!("no transcript") };
+    let about = facts.iter().filter(|one| one[1] == about);
+    about.filter_map(|one| one[2].as_str().map(str::to_owned)).collect()
+  }
+
+  #[tokio::test]
+  async fn the_seen_of_each_operator_is_a_fact_of_his_own_that_a_reopen_keeps() {
+    let at = place();
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let settings = Settings {
+      opening: opening(&at),
+      grace: SHORT,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
+    let logins: Arc<[&str]> = ["alice", "bob", "alice"].into();
+    let identity = Logins { local: local.clone(), next: Arc::default(), names: logins };
+    tokio::spawn(async move { run(&identity, listener, settings).await });
+    let (mut alice, mut bob) = (Window::dialed(&local).await, Window::dialed(&local).await);
+    let life = opened(&mut alice, &at, "a.jsonl").await;
+    alice.attach(&life).await;
+    bob.attach(&life).await;
+    let seen = |about: &str| Verb::Seen { life: life.clone(), about: about.to_owned() };
+    assert_eq!(alice.ask(seen("chain1")).await, Ok(Answer::Done));
+    assert_eq!(
+      seen_by(&mut bob, &life, "chain1").await,
+      ["operator/alice"],
+      "the seen of alice is hers, so bob has not seen chain1"
+    );
+    assert_eq!(bob.ask(seen("chain1")).await, Ok(Answer::Done));
+    assert_eq!(seen_by(&mut alice, &life, "chain1").await, ["operator/alice", "operator/bob"]);
+    for window in [&mut alice, &mut bob] {
+      assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    }
+    time::sleep(PAST).await;
+    assert!(!alice.lives(&life).await, "the life ended after its grace");
+    let mut again = Window::dialed(&local).await;
+    opened(&mut again, &at, "a.jsonl").await;
+    assert_eq!(
+      seen_by(&mut again, &life, "chain1").await,
+      ["operator/alice", "operator/bob"],
+      "a reopen keeps the seen of each operator apart"
+    );
+  }
+
   /// A daemon that gives each peer that dials, in turn, the role of a list.
   async fn started_as(at: &Path, roles: &[Role]) -> Local {
     let local = Local::new(at.join("sock"));
@@ -797,32 +867,62 @@ mod daemon {
     }
   }
 
-  #[tokio::test]
-  async fn a_kit_of_a_session_gives_its_view_to_each_window_in_each_life_of_its_record() {
-    let at = place();
+  /// The text that the view of a kit shows.
+  fn said(text: &str) -> String {
+    format!(r#"view = {{"id": "todo", "node": "text", "runs": [{{"text": "{text}"}}]}}"#)
+  }
+
+  /// The view of the kit `todo` that a window mounts in the footer of a life.
+  fn viewing(life: &str, viewer: &str) -> Verb {
+    let (viewer, life, skill) = (viewer.to_owned(), life.to_owned(), "todo".to_owned());
+    Verb::ViewMount(Mount { viewer, life, slot: Slot::Footer, skill })
+  }
+
+  /// The identity of a test that counts the peers that dialed the daemon.
+  #[derive(Clone)]
+  struct Counted {
+    local: Local,
+    dialed: Arc<AtomicUsize>,
+  }
+
+  impl Identity for Counted {
+    type Stream = Accepted;
+
+    async fn identify(&self, stream: &Accepted) -> Result<Who, TransportError> {
+      self.dialed.fetch_add(1, Ordering::SeqCst);
+      self.local.identify(stream).await
+    }
+  }
+
+  /// A daemon on the identity that `identity` makes from its transport, and a window that holds a
+  /// life of `a.jsonl` whose record holds the kit `todo` of a session, which shows `first`.
+  async fn kitted<I>(at: &Path, identity: impl FnOnce(Local) -> I) -> (Local, Window, String)
+  where
+    I: Identity<Stream = Accepted> + Clone + Send + Sync + 'static,
+  {
     fs::create_dir_all(at.join(".furb")).unwrap();
     fs::write(at.join(".furb").join("config.json"), r#"{"skills": {"ouroboros": true}}"#).unwrap();
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let opening = Opening { skills: None, ..opening(&at) };
+    let opening = Opening { skills: None, ..opening(at) };
     let host = Some(at.join("sock"));
     let settings =
       Settings { opening, grace: SHORT, stall: STALL, tailnet: None, door: None, host };
-    let served = local.clone();
+    let served = identity(local.clone());
     tokio::spawn(async move { run(&served, listener, settings).await });
     let mut window = Window::dialed(&local).await;
-    let life = opened(&mut window, &at, "a.jsonl").await;
+    let life = opened(&mut window, at, "a.jsonl").await;
     window.attach(&life).await;
-    let said = |text: &str| {
-      format!(r#"view = {{"id": "todo", "node": "text", "runs": [{{"text": "{text}"}}]}}"#)
-    };
     let word = window.ran(&life, &said("first")).await;
     window.ran(&life, &format!("extend('todo', '{word}', session=True, view='view')")).await;
-    let mount = |viewer: &str| {
-      let (viewer, life, skill) = (viewer.to_owned(), life.clone(), "todo".to_owned());
-      Verb::ViewMount(Mount { viewer, life, slot: Slot::Footer, skill })
-    };
-    mounted(&mut window, &mount("v1")).await;
+    (local, window, life)
+  }
+
+  #[tokio::test]
+  async fn a_kit_of_a_session_gives_its_view_to_each_window_in_each_life_of_its_record() {
+    let at = place();
+    let (local, mut window, life) = kitted(&at, |local| local).await;
+    mounted(&mut window, &viewing(&life, "v1")).await;
     window.until(shows("first")).await;
     window.ran(&life, &said("second")).await;
     window.until(shows("second")).await;
@@ -832,9 +932,20 @@ mod daemon {
     let mut later = Window::dialed(&local).await;
     opened(&mut later, &at, "a.jsonl").await;
     later.attach(&life).await;
-    mounted(&mut later, &mount("v2")).await;
+    mounted(&mut later, &viewing(&life, "v2")).await;
     later.until(shows("second")).await;
     assert!(!at.join(".furb").join("skills").exists(), "the kit writes no file");
+  }
+
+  #[tokio::test]
+  async fn a_kit_of_a_session_opens_no_connection_to_the_socket_of_its_own_daemon() {
+    let at = place();
+    let dialed = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&dialed);
+    let (_, mut window, life) = kitted(&at, |local| Counted { local, dialed: counted }).await;
+    mounted(&mut window, &viewing(&life, "v1")).await;
+    window.until(shows("first")).await;
+    assert_eq!(dialed.load(Ordering::SeqCst), 1, "only the window dialed the daemon");
   }
 
   /// The view of a skill that a window mounts in the footer of a life.
