@@ -185,7 +185,7 @@ test("a spinner moves with the clock of the TUI", async () => {
     if (!(wait instanceof TextRenderable)) throw new Error("No spinner.");
     const first = wait.plainText;
     setSystemTime(new Date(1_000_000 + frame));
-    life.app.tickViews();
+    life.app.tickMoving();
     expect(wait.plainText).toBe(spin());
     expect(wait.plainText).not.toBe(first);
   } finally {

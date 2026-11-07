@@ -24,7 +24,7 @@ import { clip, dollars, modelLabel, plainFailure } from "../format.ts";
 import type { Mark as PartMark } from "../parts.ts";
 import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
-import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
+import { theme as c, glyph, markOf, spacing as space, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
 import { branchStart, branchTakes } from "../watching.ts";
 import { part } from "./part.ts";
@@ -1529,7 +1529,7 @@ export const feed = part({
     const { height } = this.scroll.viewport;
     if (!items && w.loading && !w.error) {
       const loading = (): Part[] => [
-        [`${spin()} `, c.accent],
+        [`${markOf("runs")[0]} `, c.accent],
         [`Loading the ${viewLabels[w.view].toLowerCase()}`, c.muted],
       ];
       add(

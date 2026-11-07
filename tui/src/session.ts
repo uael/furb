@@ -248,7 +248,9 @@ function placed(index: Index, act: ActRow): void {
   else index.live.delete(act.id);
   index.stamps.set(act.by, (index.stamps.get(act.by) ?? 0) + 1);
   index.chained.set(act.chain, (index.chained.get(act.chain) ?? 0) + 1);
-  if (act.kind === "prompt") index.threaded.set(act.chain, ++index.prompts);
+  // A prompt tells that a thread changed, and so does a step that works for one, whose model thinks while it asks.
+  if (act.kind === "prompt" || (act.kind === "rung" && index.ids.get(act.by)?.kind === "prompt"))
+    index.threaded.set(act.chain, ++index.prompts);
   // A name of the session names the first thread of the operator in the crate, so it reads the threads again.
   if (act.kind === "name_session" || act.kind === "rename_session") index.named++;
   index.touched.push(act.chain);
@@ -1066,6 +1068,18 @@ export class Session extends EventEmitter {
     return (this.liveOn().get(chain) ?? []).some(
       (act) => act.kind === "rung" && !isDone(act) && !this.program[act.id],
     );
+  }
+  /** When the work of a chain began, as the first of its rungs, commands and waits that are not done began, and how many
+   * characters its models streamed for it: the progress that the loader of the footer shows. */
+  progress(chain: string): { began?: number; streamed: number } {
+    const began = (this.liveOn().get(chain) ?? [])
+      .filter((act) => act.kind === "rung" || act.kind === "bash" || act.kind === "wait")
+      .map((act) => this.started[act.id])
+      .filter((at): at is number => at !== undefined);
+    let streamed = 0;
+    for (const stream of this.host.streams.values())
+      if (stream.chain === chain) streamed += stream.thinking.length + stream.text.length;
+    return { began: began.length ? Math.min(...began) : undefined, streamed };
   }
   /** The state of the acts of each chain, or of every chain, as actStatus read it at a version of the acts. */
   private states = { version: -1, of: new Map<string, Status>() };

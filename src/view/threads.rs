@@ -11,7 +11,7 @@ use super::{
   act::{Act, Kind, operator},
   fold::followed,
   named::Named,
-  state::State,
+  state::{State, working},
 };
 
 /// The acts of a life by their names.
@@ -316,11 +316,33 @@ fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
     thread.over = open.is_none();
     thread.state = match open.or_else(|| rows.get(thread.prompt.as_str())) {
       _ if !thread.asks.is_empty() => State::Asks,
-      Some(act) => State::of(act),
+      Some(act) => match State::of(act) {
+        // A model that writes a word for the thread thinks, as the chain and the session say.
+        State::Runs
+          if act.kind == Kind::Prompt && working(&work_of(&act.id, on), &[]) == State::Thinks =>
+        {
+          State::Thinks
+        }
+        state => state,
+      },
       None => State::Idle,
     };
   }
   (out, asides)
+}
+
+/// The acts that work for a prompt: the rungs that advance on it, and the acts that those rungs
+/// made, as the commands and the waits of their words.
+fn work_of<'a>(prompt: &str, on: &[&'a Act]) -> Vec<&'a Act> {
+  let rungs: HashSet<&str> = on
+    .iter()
+    .filter(|act| act.kind == Kind::Rung && act.by == prompt)
+    .map(|act| act.id.as_str())
+    .collect();
+  on.iter()
+    .copied()
+    .filter(|act| rungs.contains(act.id.as_str()) || rungs.contains(act.by.as_str()))
+    .collect()
 }
 
 /// Each thread of a chain takes its name: the first thread that no operator made on a chain under

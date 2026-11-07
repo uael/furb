@@ -2,7 +2,7 @@ import type { RGBA } from "@opentui/core";
 import { busy, type Loom, type Row, type Tone } from "furb/life";
 import { clip } from "./format.ts";
 import { measureParts, pad, questionOf, shortActor } from "./overview.ts";
-import { theme as c, rowMark, spin, markOf as stateMark } from "./theme.ts";
+import { theme as c, rowMark, markOf as stateMark } from "./theme.ts";
 import { bold, mix, type Part } from "./ui.ts";
 
 /** What the panel of the chains reads to draw itself. */
@@ -291,7 +291,7 @@ function ribbon(row: Row, width: number): Part[] {
     const fade = 0.45 + (0.55 * (index + 1)) / cells.length;
     out[offset + index] =
       index === cells.length - 1 && busy(row.state)
-        ? [spin(), c.accent]
+        ? [stateMark(row.state)[0], c.accent]
         : [glyph, mix(c.background, ink[cell.tone](), fade)];
   }
   return out;
