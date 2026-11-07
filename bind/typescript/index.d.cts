@@ -176,6 +176,25 @@ export declare class Engine {
 export type JsEngine = Engine
 
 /**
+ * The picker of the files of a window, which walks its folder once as it opens, in the
+ * background: each key gives it the query and reads the first rows that stand then, so no key
+ * waits for the walk or the match.
+ */
+export declare class FilePicker {
+  /** A picker of the files of a directory, whose walk starts now. */
+  constructor(directory: string)
+  /**
+   * The picker opened again on a directory, for a new `@`: the walks of the last open stop now,
+   * and a walk of the directory starts.
+   */
+  open(directory: string): void
+  /** Takes the query that the operator typed after `@`, and gives the first rows that stand now. */
+  find(query: string, most: number): Rows
+  /** The first rows of the last query as they stand now, which a window reads again while they run. */
+  rows(most: number): Rows
+}
+
+/**
  * The meaning of a life that each window draws, folded in the crate from the facts of the life in
  * the order of its log, as a daemon folds it: the acts, the desk, the threads of a chain, the acts
  * as they stood at a moment, and the moments. A window that reads a record with no daemon folds it
@@ -586,12 +605,6 @@ export interface Part {
 export declare function parts(project: string): Array<Part>
 
 /**
- * The files that a query after `@` picks from the directory, best first: from the files of the
- * project that a walk gave, or from the folder that a query starting with `/`, `~` or `../` names.
- */
-export declare function pickedFiles(directory: string, query: string, project: Array<string>): Array<string>
-
-/**
  * A provider as a first run checks it: its name, the names of its credential in the environment, whether the
  * settings enable it, and how many of its models the catalog offers.
  */
@@ -618,6 +631,15 @@ export declare function retold(path: string): { made: string | null; engine: str
 
 /** ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life. */
 export declare const ROOT: string
+
+/**
+ * What a key of the picker shows: the first rows that the query picks, best first, and whether the
+ * walk or the match still runs, so later rows may come.
+ */
+export interface Rows {
+  paths: Array<string>
+  running: boolean
+}
 
 /**
  * The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
