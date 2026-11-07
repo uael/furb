@@ -2,6 +2,7 @@
 // number of the line that works, and the footer each change between two moments half a second apart, each state turns
 // its own frames, and a session shows the mark of its thread.
 import { expect } from "bun:test";
+import { basename } from "node:path";
 import { theme } from "../src/theme.ts";
 import { cellAt } from "../test/composing.ts";
 import { scenario, test, type Window } from "./harness.ts";
@@ -9,15 +10,15 @@ import { scenario, test, type Window } from "./harness.ts";
 const runs = /[◐◓◑◒]/;
 const thinks = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/;
 
-/** What a frame shows of the work: the mark of each row of the sidebar that holds the text, the cell of the
+/** What a frame shows of the work: the mark of each row of the sidebar that holds one of the texts, the cell of the
  * number of the row of the feed that holds the line, and the footer. */
-async function read(window: Window, line: string, row: string) {
+async function read(window: Window, line: string, rows: string[]) {
   const frame = await window.frame();
   const lines = frame.split("\n");
   const left = window.width - window.session.preferences.sidebarWidth;
   const rail = lines
     .map((one) => one.slice(left))
-    .filter((one) => one.includes(row))
+    .filter((one) => rows.some((row) => one.includes(row)))
     .map((one) => one.match(/▎ (\S) /)?.[1] ?? "");
   const y = lines.findIndex((one) => one.slice(0, left).includes(line));
   const cell = (lines[y] ?? "").slice(0, 7);
@@ -38,15 +39,17 @@ test("the marks of a command that runs and of a thought turn in the sidebar, the
       },
     ],
     async (window, yard) => {
+      // The yard names no session, so the session bears the name of its record, and its thread the first message.
+      const session = basename(yard.record, ".jsonl");
       await window.type("Scenario: run long.");
       await window.shows((frame) => frame.includes('bash("sleep 10"'), "the command that runs");
       const ran = [];
       for (let n = 0; n < 7; n++) {
         await Bun.sleep(500);
-        ran.push(await read(window, 'bash("sleep 10"', "Scenario: run long"));
+        ran.push(await read(window, 'bash("sleep 10"', [session, "Scenario: run long"]));
       }
       for (const [at, one] of ran.entries()) {
-        // The session, named as its first message, and its thread show the one mark of work that runs.
+        // The session, named as its record, and its thread show the one mark of work that runs.
         expect(one.rail).toHaveLength(2);
         expect(one.rail[0]).toMatch(runs);
         expect(one.rail[1]).toBe(one.rail[0]);
@@ -67,20 +70,23 @@ test("the marks of a command that runs and of a thought turn in the sidebar, the
         (frame) => frame.includes("Ran.") && !/sleep 10.* runs /.test(frame),
         "the end of the command",
       );
-      const ended = await read(window, 'bash("sleep 10"', "Scenario: run long");
+      const ended = await read(window, 'bash("sleep 10"', [session, "Scenario: run long"]);
       expect(ended.ground?.equals(theme.raised)).toBe(true);
 
       await window.type("/newthread");
       await window.type("Scenario: think.");
       await window.shows((frame) => frame.includes("The last notes"), "the thought");
-      const first = await read(window, "The last notes", "Scenario: think");
+      const first = await read(window, "The last notes", [session, "Scenario: think"]);
       await Bun.sleep(500);
-      const second = await read(window, "The last notes", "Scenario: think");
+      const second = await read(window, "The last notes", [session, "Scenario: think"]);
       for (const one of [first, second]) {
         // The cell of the number of the line that a model writes turns the loader of a thought, which no still mark of
         // a thought stands for, and the line says no word that the loader already says.
         expect(one.cell).toMatch(thinks);
+        // The session and its thread that thinks show the one mark of a thought.
+        expect(one.rail).toHaveLength(2);
         expect(one.rail[0]).toMatch(thinks);
+        expect(one.rail[1]).toBe(one.rail[0]);
         expect(one.footer).toMatch(/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Thinking/);
         expect(one.frame).not.toContain("✻");
         expect(one.frame).not.toContain("· thinking");

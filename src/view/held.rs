@@ -2,7 +2,7 @@
 //! window asks the life for the meaning that it draws: the desk, the threads of a chain, the acts
 //! as they stood at a moment, and the moments.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use super::{
   act::{Act, Kind},
   desk::{Desk, desk},
-  ladder::{Rung, Shown, ladder},
+  ladder::{Index, Rung, Shown, folded, lives},
   state::State,
   threads::{
     Attention, ChainAside, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
@@ -35,17 +35,32 @@ pub struct Threads {
 pub struct Held {
   acts: Vec<Act>,
   at: HashMap<String, usize>,
+  /// The places of the acts of each maker, and of each chain, in the order they were first told.
+  made: HashMap<String, Vec<usize>>,
+  on: HashMap<String, Vec<usize>>,
+  /// The places of the acts that live: not done, or a rung whose word runs.
+  live: BTreeSet<usize>,
 }
 
 impl Held {
   /// An act of the life heard as a host tells it: it takes the place of the earlier one of the same
   /// id.
   pub fn heard(&mut self, act: &Act) {
-    if let Some(&at) = self.at.get(&act.id) {
+    let at = if let Some(&at) = self.at.get(&act.id) {
       self.acts[at] = act.clone();
+      at
     } else {
-      self.at.insert(act.id.clone(), self.acts.len());
+      let at = self.acts.len();
+      self.at.insert(act.id.clone(), at);
+      self.made.entry(act.by.clone()).or_default().push(at);
+      self.on.entry(act.chain.clone()).or_default().push(at);
       self.acts.push(act.clone());
+      at
+    };
+    if lives(act) {
+      self.live.insert(at);
+    } else {
+      self.live.remove(&at);
     }
   }
 
@@ -61,7 +76,17 @@ impl Held {
     taken: Option<&[String]>,
     shown: Shown,
   ) -> Vec<Rung> {
-    ladder(&self.then(at), chain, opened, owed, taken, shown)
+    let Some(at) = at else {
+      let index =
+        Index { acts: &self.acts, at: &self.at, made: &self.made, on: &self.on, live: &self.live };
+      return folded(&index, chain, opened, owed, taken, shown);
+    };
+    // A moment of the past folds the acts as they stood then, in the order they began.
+    let mut then = Self::default();
+    for act in &self.then(Some(at)) {
+      then.heard(act);
+    }
+    then.ladder(chain, None, opened, owed, taken, shown)
   }
 
   /// The acts now, or as they stood just after a moment.

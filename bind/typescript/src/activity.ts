@@ -139,7 +139,9 @@ export class Activity {
       this.acts.get(act.id)?.unfinished && act.phase.phase !== "done"
         ? { ...act, pause: act.pause ?? { by: "" } }
         : act;
-    const states = new Map(restated([...out.values()].map(held)).map((act) => [act.id, act.state]));
+    // The state of a chain comes from the acts that stand in it, read below, so this call takes the other acts alone.
+    const alone = [...out.values()].filter((act) => act.kind !== "chain").map(held);
+    const states = new Map(restated(alone).map((act) => [act.id, act.state]));
     const chains = new Set([
       ...acts.map((act) => act.on),
       ...acts.flatMap((act) => (act.kind === "chain" ? [act.id] : [])),
