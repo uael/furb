@@ -21,6 +21,16 @@ test("a file that appears or goes in a watched folder shows by its path, once", 
   expect(written()).toEqual([join(folder, "sub", "one"), join(folder, "ui.json")]);
 });
 
+test("a draft that another process makes and renames is no write of the run", () => {
+  const folder = mkdtempSync(join(tmpdir(), "furb-guard-"));
+  const written = watch([folder], new Set());
+  writeFileSync(join(folder, "workspaces.json.tmp"), "{}");
+  expect(written()).toEqual([]);
+  rmSync(join(folder, "workspaces.json.tmp"));
+  expect(written()).toEqual([]);
+  rmSync(folder, { recursive: true, force: true });
+});
+
 test("a file that another process changed is no write of the run, and one that the run saved is", () => {
   const folder = mkdtempSync(join(tmpdir(), "furb-guard-"));
   writeFileSync(join(folder, "ui.json"), "{}");
