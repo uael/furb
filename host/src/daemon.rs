@@ -76,7 +76,9 @@ pub const GRACE: Duration = Duration::from_secs(30);
 
 /// How many frames of the events of a life may wait for a window before the daemon reads the next
 /// event: a window that reads slowly stands behind the life, and reads the log of the life again
-/// once it reads on, in the place of a copy of each event in its outbox.
+/// once it reads on, in the place of a copy of each event in its outbox. That read holds a place
+/// and a reference for each event of the rest of the log, and keeps each such event until the
+/// window has it.
 const WAITING: usize = 256;
 
 /// What the daemon opens each life on.

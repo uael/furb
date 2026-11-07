@@ -237,10 +237,11 @@ pub struct Life {
   name: Arc<Mutex<Option<String>>>,
 }
 
-/// The places of the log whose event a later event replaced, which the log drops once each reader
-/// that stands within [`BEHIND`] of the life heard the event that replaced them: an event of an act
-/// replaces each earlier event of that act, and the act of a rung that has its word, or is done,
-/// replaces each part that a model wrote for it. A life that holds an act for each fact, and a part
+/// The places of the log whose event a later event replaced, which the log drops once the life told
+/// [`BEHIND`] events after the event that replaced them, so a reader that stands no further behind,
+/// and reads the log, still hears each event: an event of an act replaces each earlier event of
+/// that act, and the act of a rung that has its word, or is done, replaces each part that a model
+/// wrote for it. A life that holds an act for each fact, and a part
 /// for each few words that a model streams, would else hold every state of each act and every part
 /// of each reply for its whole life.
 #[derive(Default)]
