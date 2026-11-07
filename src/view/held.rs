@@ -54,6 +54,14 @@ impl Held {
       at
     } else {
       let at = self.acts.len();
+      // A read of now takes the acts in place as the order they began, so an act first told begins
+      // after each act held.
+      debug_assert!(
+        self.acts.last().is_none_or(|last| last.began <= act.began),
+        "{} began before {}, which was told first",
+        act.id,
+        self.acts.last().map_or("", |last| last.id.as_str()),
+      );
       self.at.insert(act.id.clone(), at);
       self.made.entry(act.by.clone()).or_default().push(at);
       self.on.entry(act.chain.clone()).or_default().push(at);
