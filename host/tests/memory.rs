@@ -2,9 +2,9 @@
 //! and answers prompts whose model writes its reply in many small parts, and the heap of the
 //! process is read at the sizes of `SMALL`, with the events and the bytes that a reader who
 //! attaches at the start of the log reads. With the argument `--ignored` it is the measure of the
-//! bench, at the sizes of `LARGE`, with the budget `BUDGET` of its heap. The test counts each byte
-//! that the process allocates, so it runs in a process of its own, with no harness, and its
-//! argument takes the place of an ignored test.
+//! bench, at the sizes of `LARGE`, with the budget of its heap, `memory_heap_mib` of
+//! `script/budgets.toml`. The test counts each byte that the process allocates, so it runs in a
+//! process of its own, with no harness, and its argument takes the place of an ignored test.
 
 #![expect(
   clippy::disallowed_methods,
@@ -81,8 +81,15 @@ const SMALL: [usize; 2] = [2_000, 6_000];
 /// The sizes of the measure of the bench, which the argument `--ignored` runs.
 const LARGE: [usize; 3] = [10_000, 40_000, 160_000];
 
-/// The most heap that a life of the last large size may hold, in MiB: the budget of the bench.
-const BUDGET: usize = 1024;
+/// The limits of the benches, whose home is `script/budgets.toml`.
+const LIMITS: &str = include_str!("../../script/budgets.toml");
+
+/// The most heap that a life of the last large size may hold, in MiB: the budget of the bench,
+/// which the key `memory_heap_mib` of `script/budgets.toml` gives.
+fn budget() -> usize {
+  let key = LIMITS.lines().find_map(|line| line.strip_prefix("memory_heap_mib = "));
+  key.and_then(|key| key.parse().ok()).expect("script/budgets.toml gives memory_heap_mib")
+}
 
 /// How many events a reader may stand behind the life and still hear each of them, as the life
 /// says.
@@ -275,9 +282,10 @@ fn checked(rows: &[(usize, usize, usize, usize)], last: (usize, usize), large: b
   if large {
     let (facts, heap) = last;
     assert!(
-      heap >> 20 <= BUDGET,
-      "a life of {facts} facts holds {} MiB of heap, past the budget of {BUDGET} MiB",
-      heap >> 20
+      heap >> 20 <= budget(),
+      "a life of {facts} facts holds {} MiB of heap, past the budget of {} MiB",
+      heap >> 20,
+      budget()
     );
   }
   for &(facts, parts, events, acts) in rows {
