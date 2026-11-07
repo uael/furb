@@ -453,12 +453,12 @@ fix what your change broke, and report what was broken before.
   machine, and which the gates hold on Linux. `FURB_BENCH_JSON` names a file that takes the measures of each run, and
   `FURB_BENCH_FACTS` sets the size of the long life.
 - `bun run screenshots` and `bun run animation`: draw `docs/screenshots/` and `docs/furb.gif` again from the real
-  renderer. Run both after a change that a screen shows, and read each capture. Do not commit them: after each push to
-  `w/converge`, `.github/workflows/gallery.yml` draws both again on a runner of CI and keeps one pull request of the
-  branch `w/gallery` into `w/converge` open, whose body names the head that it shows. One run at a time holds its home
-  in `/tmp`, and `FURB_GALLERY_ROOT` names another folder for it, and a root so long that the socket of the daemon in
-  the home would pass 100 bytes gives the run a short private cache in `/tmp` for that daemon; `tui/script/stage.ts`
-  says how long a run waits.
+  renderer. Run both after a change that a screen shows, and read each capture. Do not commit them: at most once an hour,
+  on a new head of `w/converge`, `.github/workflows/gallery.yml` draws both again on a runner of CI and keeps one pull
+  request of the branch `w/gallery` into `w/converge` open, whose body names the head that it shows. One run at a time
+  holds its home in `/tmp`, and `FURB_GALLERY_ROOT` names another folder for it, and a root so long that the socket of
+  the daemon in the home would pass 100 bytes gives the run a short private cache in `/tmp` for that daemon;
+  `tui/script/stage.ts` says how long a run waits.
   `FURB_GALLERY_ONLY=<pattern>` writes only the captures whose names match, `FURB_GALLERY_TEXT=<folder>` writes the text
   of each capture, which a model that cannot see an image reads, `FURB_GALLERY_CELLS=<folder>` writes the cells of each
   capture as JSON, which the skill `converge-tui` of the project reads, and `FURB_STILL_CLOCK` sets the time of the

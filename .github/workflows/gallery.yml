@@ -1,29 +1,63 @@
 name: gallery
 
-# The gallery of the TUI, docs/screenshots and docs/furb.gif, drawn from each head of w/converge that the aggregator
-# pushes, so the owner follows the screens of each build and the QA judges the same pictures of the same head. The run
-# renders both as `bun run screenshots` and `bun run animation` do on a machine, with the watcher of memory beside them,
-# and pushes the head with the render on top to one fixed branch, w/gallery. One pull request of w/gallery into
-# w/converge stands, and each later run updates its branch and its body in place, with the head that it shows. The diff
-# of that pull request is what the screens of the head changed against the gallery that the head holds.
+# The gallery of the TUI, docs/screenshots and docs/furb.gif, drawn from the head of w/converge, so the owner follows
+# the screens of the builds and the QA judges the same pictures of the same head. The run renders both as
+# `bun run screenshots` and `bun run animation` do on a machine, with the watcher of memory beside them, and pushes the
+# head with the render on top to one fixed branch, w/gallery. One pull request of w/gallery into w/converge stands, and
+# each later run updates its branch and its body in place, with the head that it shows. The diff of that pull request
+# is what the screens of the head changed against the gallery that the head holds.
+# It renders at most once an hour, and never on a push, so it takes no runner from the gates: the desk of the conductor
+# dispatches it on w/converge once an hour on a new head, and a schedule each hour renders the head only when it
+# changed since the last render. test/outside/test_gallery_workflow.py holds this rule.
 on:
-  push:
-    branches: [w/converge]
   workflow_dispatch:
+  schedule:
+    - cron: "41 * * * *"
 
-# A push while a render runs waits for it, and a newer push replaces the one that waits: a render that a newer push
-# ended would leave no gallery at all, since the aggregator pushes more often than a render ends.
+# A request while a render runs waits for it, and a newer request replaces the one that waits: a render that a newer
+# request ended would leave no gallery at all. The group is fixed, since a schedule runs on main and a dispatch on
+# w/converge, and both render the same branch.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
+  # The head of w/converge to render, and whether to render it. A dispatch on w/converge renders its head. The schedule
+  # renders the head only when it changed since the last render, whose head is the parent of the tip of w/gallery.
+  head:
+    name: the head to render
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      render: ${{ steps.look.outputs.render }}
+      sha: ${{ steps.look.outputs.sha }}
+    steps:
+      - id: look
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/w/converge" --jq .sha)
+          last=$(gh api "repos/$GITHUB_REPOSITORY/commits/w/gallery" --jq '.parents[0].sha' 2>/dev/null || true)
+          render=false
+          if [ "$EVENT" = workflow_dispatch ]; then
+            [ "$REF" = refs/heads/w/converge ] && render=true
+          elif [ "$sha" != "$last" ]; then
+            render=true
+          fi
+          echo "w/converge at $sha, last render of $last: render $render"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "render=$render" >> "$GITHUB_OUTPUT"
+
   render:
     name: the render
-    if: github.ref == 'refs/heads/w/converge'
+    needs: head
+    if: needs.head.outputs.render == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     # This job pushes w/gallery and edits its pull request as github-actions[bot], with GITHUB_TOKEN, whose push and
@@ -37,6 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.head.outputs.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup
         with:
@@ -97,7 +132,7 @@ jobs:
           - This branch shows the gallery of w/converge at $head: docs/screenshots and docs/furb.gif.
           - Against the gallery that this head holds: files added: $added. Files changed: $changed. Files removed: $removed.
           - A runner of CI drew them with bun run screenshots and bun run animation, in $run.
-          - Each push to w/converge draws the gallery again on this branch and in this body. No other pull request of the gallery opens.
+          - Each new head of w/converge, at most once an hour, draws the gallery again on this branch and in this body. No other pull request of the gallery opens.
           - A merge of this pull request puts these files in w/converge, and so in main at its next release.
 
           ---
