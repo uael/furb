@@ -123,9 +123,8 @@ test("a rename that the record does not take keeps the old name and says why in 
   }
 });
 
-// Before, the threads of a chain were read again only when a prompt or a question changed, so a rename of a session
-// that rests kept the old title on its first thread.
-test("a rename of a session that rests gives its first thread the new name, with no prompt more", async () => {
+// The name of a session stands on its own row: a rename gives its first thread no new title, which stays its message.
+test("a rename of a session that rests leaves its first thread titled by its message", async () => {
   const session = await demoSession({ skills: true });
   try {
     await session.submit("Look at the readme.");
@@ -136,16 +135,13 @@ test("a rename of a session that rests gives its first thread the new name, with
       return session.threadsOf(root).list.find((one) => one.origin === "operator");
     };
     for (let tries = 0; tries < 400 && !(await first())?.over; tries++) await Bun.sleep(25);
-    const prompts = session.promptsVersion;
     expect(await session.rename("New name")).toBe(true);
-    let title: string | undefined;
-    for (let tries = 0; tries < 400 && title !== "New name"; tries++) {
-      await Bun.sleep(25);
-      await session.refresh();
-      title = session.threadsOf(root).list.find((one) => one.origin === "operator")?.title;
-    }
-    expect(title).toBe("New name");
-    expect(session.promptsVersion).toBe(prompts);
+    await session.refresh();
+    await session.readThreads(root);
+    expect(session.threadsOf(root).list.find((one) => one.origin === "operator")?.title).toBe(
+      "Look at the readme.",
+    );
+    expect(session.sessionName).toBe("New name");
   } finally {
     await session.dispose();
   }

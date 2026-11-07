@@ -889,8 +889,8 @@ impl Meaning {
     // the last digit of a float, so the fact takes no pass through the values of the sandbox.
     let fact: serde_json::Value = serde_json::from_str(&line)
       .map_err(|no| Fault::refused(format!("the line is no JSON: {no}")))?;
-    for act in &self.fold.recorded(&fact) {
-      self.held.heard(act);
+    for act in self.fold.recorded(&fact) {
+      self.held.took(act);
     }
     Ok(())
   }

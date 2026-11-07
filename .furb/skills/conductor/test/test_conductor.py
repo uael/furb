@@ -26,7 +26,7 @@ CODE = ("a", "b")
 FINGER = "cat finger.txt 2>/dev/null; true"
 CI_PROBE = "cat ci.txt 2>/dev/null; true"
 DF = "cat df.txt 2>/dev/null; true"
-MEM = "cat mem.txt 2>/dev/null; exit $(cat code.txt 2>/dev/null || echo 0)"
+WATCH = "cat watch.txt 2>/dev/null; true"
 desk_time.update(review_at=1e12, ci_at=1e12, disk_at=1e12)
 SIDE = []
 
@@ -392,14 +392,12 @@ async def test_news_is_done_with_the_next_prompt_of_the_root(conductor: Round) -
   assert conductor.engine.peek(conductor.ns["heard"]) == told
 
 
-async def test_the_lane_of_memory_reads_its_guard_and_holds_each_new_item_while_the_memory_runs_low(conductor: Round) -> None:
-  conductor.file("mem.txt", "memory 9% free, swap 6000 MB in use, grown 0 MB in 1s\n")
-  conductor.file("code.txt", "75\n")
+async def test_the_lane_of_memory_runs_the_watcher_and_tells_what_it_ended(conductor: Round) -> None:
+  conductor.file("watch.txt", "memwatch: pressure level 2, ended pid 7 (2048 MB): bun test ./a.test.ts\n")
   await conductor.word("SIDE[:] = [mem_step]\ndesk_time.update(mem_at=-1e9)")
   await conductor.beat()
   await conductor.beat()
-  assert "The memory runs low: memory 9% free" in "\n".join(conductor.notes(conductor.root))
-  assert conductor.ns["pick"]() is None
+  assert "ended pid 7 (2048 MB): bun test ./a.test.ts" in "\n".join(conductor.notes(conductor.root))
 
 
 async def test_a_scripted_round_fills_each_free_seat_with_ready_work_hard_first_and_records_the_cause_of_each_seat_left_free(conductor: Round) -> None:
@@ -475,11 +473,12 @@ async def test_a_restart_before_and_after_the_fourth_merge_keeps_the_queue_and_a
   assert audits(life) == [("align-audit-m12", "codex:gpt-6-astra/high", "h8..h12 of w/converge and m2..m3 of main")]
 
 
-async def test_the_ledger_holds_the_cost_of_each_ended_item_from_its_replies_and_gives_the_cost_per_landed_item(conductor: Round) -> None:
+async def test_the_ledger_holds_the_cost_of_each_ended_item_from_the_answers_on_its_chains_and_gives_the_cost_per_landed_item(conductor: Round) -> None:
   await conductor.word('desk_queue["a"].extend([item("one"), item("two", "claude-cli:opus/medium")])\ndesk_queue["b"].append(item("three"))')
   await conductor.beat()
   keys = dict(zip([x[0] for x in conductor.asked()], conductor.keys(), strict=True))
-  uses = {"one": [(1000, 100, 600, 0, 0.5), (2000, 200, 1500, 0, 1.0)], "two": [(4000, 400, 1000, 0, 3.0)], "three": [(500, 50, 0, 0, 0.5)]}
+  uses = {"one": [None, (1000, 100, 600, 0, 0.5), (2000, 200, 1500, 0, 1.0)], "two": [(4000, 400, 1000, 0, 3.0)], "three": [(500, 50, 0, 0, 0.5)]}
+  # A reply that the life writes itself, as the seat of a new chain, carries no usage: it is no step and costs nothing.
   ends = {"one": "done one", "two": "blocked: two", "three": "done three"}
   chains = set(conductor.ns["topic_chain"].values())
   while held := [x[1] for x in said(conductor.log, "reply") if x[3] in chains and not conductor.engine.over(x[1])]:

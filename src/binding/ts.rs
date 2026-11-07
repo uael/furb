@@ -139,6 +139,15 @@ impl FromNapiValue for Stream {
 }
 
 #[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
+impl FromNapiValue for world::Members {
+  /// An array of logins of JavaScript, as a home that the life alone changes.
+  unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
+    // SAFETY: napi gives the value in its env, where it is read at once.
+    Ok(Self::new(unsafe { Vec::<String>::from_napi_value(env, value) }?))
+  }
+}
+
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Retrying {
   /// A function of JavaScript, told on its own thread, which keeps no host alive that has nothing else to do.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {

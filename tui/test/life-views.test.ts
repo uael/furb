@@ -95,7 +95,7 @@ test("⌥V switches the view of the life between main, the loom and the graph, w
       screen.mockInput.pressKey("v", { meta: true });
       expect(app.lifeView).toBe("graph");
       // The title of the map names the open thread of the conductor, whose ladder hired 10 of the 23 chains.
-      expect(await frame()).toMatch(/You are the orchestrator of the work on furb.* {3}11 of 23/);
+      expect(await frame()).toMatch(/You are the conductor of a scripted life.* {3}11 of 23/);
       screen.mockInput.pressKey("v", { meta: true });
       expect(app.lifeView).toBe("main");
       // The command.

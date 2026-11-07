@@ -305,7 +305,10 @@ impl Waits {
       let retry = Retry { attempt: self.attempt + 1, most, wait, why };
       return Ok((retry, !mem::replace(&mut self.limited, true)));
     }
-    if let Some(claude::Error::SignedOut(_)) = claude::error(&no) {
+    if let Some(
+      claude::Error::SignedOut(_) | claude::Error::NoToken(_) | claude::Error::Exhausted,
+    ) = claude::error(&no)
+    {
       let why = "signed out, sign in again".to_owned();
       let retry = Retry { attempt: self.attempt + 1, most, wait: SIGN_POLL, why };
       return Ok((retry, !mem::replace(&mut self.signed, true)));

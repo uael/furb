@@ -46,7 +46,7 @@ repos:
       - id: pytest
         name: pytest
         # The tests that the files of the commit reach, which script/hooks/reach.py names; the gates give every file.
-        entry: sh script/heavy.sh python3 script/hooks/reach.py pytest
+        entry: python3 script/budget.py pytest -- python3 script/hooks/reach.py pytest
         language: system
         # The suite drives the engine through furb-monty, which builds the crate, so a change of the Rust is read too.
         types_or: [python, pyi, toml, json, rust]
@@ -69,13 +69,13 @@ repos:
         name: clippy
         # With the feature of the bindings of TypeScript, so the one run holds the code that the feature adds: the gates
         # run no other clippy on Linux.
-        entry: sh script/heavy.sh cargo clippy --workspace --all-targets --features furb/typescript -- -D warnings
+        entry: cargo clippy --workspace --all-targets --features furb/typescript -- -D warnings
         language: system
         types_or: [rust]
         pass_filenames: false
       - id: cargo-test
         name: cargo test
-        entry: sh script/heavy.sh python3 script/hooks/reach.py cargo
+        entry: python3 script/hooks/reach.py cargo
         language: system
         # The files that the crate and its tests read. The gates run every hook on every file.
         files: ^(src|cli|host|\.agents/skills|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$

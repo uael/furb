@@ -12,12 +12,12 @@ use rig_core::completion::CompletionError;
 use tokio::sync::{mpsc, watch as holding};
 
 use super::{
-  Advertised, Mode, Provider, Refresh, Retries, Search, Settings, Told, Writes,
+  Advertised, Mode, Provider, Refresh, Retries, Search, Settings, Told, Unrefreshed, Writes,
   answer::{Answering, answered, cut},
   images::Images,
   model::{Ask, Model, requested, standing},
   retry::{Backoff, OVERFLOW, Retry, failure, overflows, recoverable},
-  search::free,
+  search::{Error as Unsearched, free},
   thinking::{Thinking, thinks},
   watch::{self, Watch},
   word::{AFTER, Found, RAN, STOPPED, afterward, ending, judged, kept, unquoted, writing},
@@ -50,7 +50,7 @@ pub(super) struct Hearer {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  members: Vec<String>,
+  members: super::Members,
   mode: Mode,
   /// The system prompt of each request, as [`Provider::system`] sets it.
   system: Arc<str>,
@@ -151,7 +151,7 @@ impl Hearer {
       co.take(
         a.about(),
         stream::once(read.map(move |got| {
-          let got = got.map_err(|no| no.to_string()).and_then(|got| got);
+          let got = got.map_err(Unrefreshed::from).and_then(|got| got);
           Replied::Refreshed { about, got }
         })),
       );
@@ -169,7 +169,7 @@ impl Hearer {
     &mut self,
     co: &mut Co<Replied>,
     about: String,
-    got: Result<Settings, String>,
+    got: Result<Settings, Unrefreshed>,
   ) {
     match got {
       Ok((fresh, default, budget)) => {
@@ -182,7 +182,7 @@ impl Hearer {
         self.thinking = budget;
         self.stands = Some((about, false));
       }
-      Err(why) => say(co, Fact::says("done", &about, [Fault::refused(why).object()])),
+      Err(why) => say(co, Fact::says("done", &about, [Fault::refused(why.to_string()).object()])),
     }
   }
 
@@ -197,7 +197,7 @@ impl Hearer {
       &self.directory,
       &self.actor,
       self.skills.as_deref(),
-      &self.members,
+      &self.members.logins(),
       &self.config.clone().unwrap_or_else(|| skill::Places::here().config),
     );
     say(co, Fact::says("done", &about, [given]));
@@ -445,10 +445,7 @@ impl Hearer {
     let id = about.clone();
     let asked = async move {
       let got = search(query.clone()).await;
-      Replied::Searched {
-        id,
-        got: got.map(|answer| value::Text::new(query, answer)).map_err(|no| no.to_string()),
-      }
+      Replied::Searched { id, got: got.map(|answer| value::Text::new(query, answer)) }
     };
     co.take(&about, stream::once(asked));
   }
@@ -532,8 +529,8 @@ pub(super) struct Call {
 }
 
 /// What a search came to: its text, or why it gives none.
-pub(super) fn searched(co: &mut Co<Replied>, id: &str, got: Result<value::Text, String>) {
-  let got = got.map_or_else(|no| Fault::refused(no).object(), |one| one.object());
+pub(super) fn searched(co: &mut Co<Replied>, id: &str, got: Result<value::Text, Unsearched>) {
+  let got = got.map_or_else(|no| Fault::refused(no.to_string()).object(), |one| one.object());
   say(co, Fact::says("done", id, [got]));
 }
 
@@ -559,8 +556,8 @@ pub(super) enum Replied {
   Wrote(Wrote),
   Retried(Retried),
   Came(Came),
-  Refreshed { about: String, got: Result<Settings, String> },
-  Searched { id: String, got: Result<value::Text, String> },
+  Refreshed { about: String, got: Result<Settings, Unrefreshed> },
+  Searched { id: String, got: Result<value::Text, Unsearched> },
 }
 
 /// A part that the model of a reply wrote: the id of the reply, and what the part added to its
