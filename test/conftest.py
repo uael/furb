@@ -652,6 +652,23 @@ async def counted() -> tuple[list[tuple], str, Act, Act[int], str]:
   return log, root, laid, act, step
 
 
+def viewed(root: str) -> dict[str, dict]:
+  """What a word reads of a life: each view of each chain by kind and by speaker, the outcome of each act, and each
+  plain name of each module, which a module fact holds with the functions of its life."""
+  facts: dict[tuple[str, str], list[str]] = {}
+  outcomes: dict[str, str] = {}
+  modules: dict[str, dict[str, str]] = {}
+  kinds = (str, int, float, tuple, list, dict, engine.Text, engine.Exit, type(None))
+  for one in [root, *[a[1] for a in engine.transcript(root, "chain")]]:
+    every = engine.transcript(one)
+    for of in {"", *(x[0] for x in every), *(x[2] for x in every)}:
+      facts[one, of] = [repr(x[:3] if x[0] == "module" else x) for x in engine.transcript(one, of)]
+    outcomes |= {x[1]: repr(engine.peek(x[1], ...)) for x in every if engine.question(x)}
+    held = engine.module(one).items()
+    modules[one] = {k: repr(v) for k, v in held if not k.startswith("__") and isinstance(v, kinds)}
+  return {"facts": facts, "outcomes": outcomes, "modules": modules}
+
+
 async def relived(sand: Sand, record: Sequence[tuple]) -> tuple[list[tuple], str]:
   """A later life on a kept record, with the World it is given."""
   log, root = life(sand, record)
