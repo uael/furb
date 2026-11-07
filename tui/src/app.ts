@@ -541,6 +541,8 @@ export class App {
     // The ScrollBar constructor resets manual visibility; set it after construction.
     this.scroll.verticalScrollBar.visible = false;
     this.scroll.horizontalScrollBar.visible = false;
+    // A click on the feed must not take the keys from the input.
+    this.scroll.focusable = false;
     center.add(this.scroll);
     // The pin stands in the viewport of the feed beside its content, so the cards scroll under it and it stays.
     this.pin = this.box({
@@ -690,6 +692,8 @@ export class App {
       backgroundColor: c.panel,
       contentOptions: { paddingBottom: space.section },
     });
+    // A list that took the focus on a click would leave the typed keys with it: the keys of the sidebar go through ⌥T.
+    this.railSpaces.focusable = false;
     this.railSpaces.verticalScrollBar.visible = false;
     this.railSpaces.horizontalScrollBar.visible = false;
     this.rail.add(this.railSpaces);

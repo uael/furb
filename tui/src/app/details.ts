@@ -916,6 +916,8 @@ export const details = part({
   /** A text of a dialog, which scrolls past the rows it takes. */
   document(node: Renderable, options: ScrollBoxOptions): ScrollBoxRenderable {
     const document = new ScrollBoxRenderable(this.renderer, { scrollX: false, scrollY: true, ...options });
+    // A click on a text must not take the keys from the input, as a click on the feed does not.
+    document.focusable = false;
     document.add(node);
     return document;
   },
