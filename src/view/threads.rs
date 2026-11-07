@@ -39,6 +39,9 @@ pub struct ChainThread {
   pub origin: Origin,
   /// Whether the operator started it, himself or by a word of his own.
   pub yours: bool,
+  /// The actor whose model answers the thread: the one that the last rung of its prompts runs on,
+  /// else the one that its prompt names.
+  pub model: Option<String>,
 }
 
 /// Who made the prompt of a thread: the operator, a rung of a word, or an ear.
@@ -315,9 +318,18 @@ fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
   let asides = asides.into_iter().map(|one| one.1).collect();
   named(&mut out, rows);
   for thread in &mut out {
-    let acts = std::iter::once(&thread.prompt).chain(&thread.messages);
-    let open = acts.filter_map(|id| rows.get(id.as_str())).rfind(|act| !act.done());
+    let ids: Vec<&String> = std::iter::once(&thread.prompt).chain(&thread.messages).collect();
+    let open = ids.iter().filter_map(|id| rows.get(id.as_str())).rfind(|act| !act.done());
     thread.over = open.is_none();
+    // Only a rung that advances on the thread names its model, not one that a word of it made.
+    thread.model = ids
+      .iter()
+      .flat_map(|id| work_of(id, on))
+      .filter(|act| act.kind == Kind::Rung && ids.iter().any(|id| **id == act.by))
+      .filter_map(|act| actor(act))
+      .next_back()
+      .or_else(|| rows.get(thread.prompt.as_str()).copied().and_then(actor))
+      .map(str::to_owned);
     thread.state = match open.or_else(|| rows.get(thread.prompt.as_str())) {
       _ if !thread.asks.is_empty() => State::Asks,
       Some(act) => match State::of(act) {
@@ -404,6 +416,11 @@ fn aside_of(act: &Act, aside: Aside) -> ChainAside {
   ChainAside { prompt: act.id.clone(), aside, messages: Vec::new() }
 }
 
+/// The actor that a prompt or a rung names, the third of its words.
+fn actor(act: &Act) -> Option<&str> {
+  act.words.get(2).and_then(Value::as_str).filter(|one| !one.is_empty())
+}
+
 /// A thread of its own, from its prompt, before its messages and its questions join it.
 fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
   let maker = rows.get(act.by.as_str());
@@ -424,6 +441,7 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
     over: true,
     origin,
     yours: mine || (origin == Origin::Rung && maker.is_some_and(|one| operator(&one.by))),
+    model: None,
   }
 }
 
