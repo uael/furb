@@ -1,7 +1,7 @@
 #!/bin/sh
-# Make a git worktree whose build starts warm: its build directories are a copy on write of those of the main
-# checkout, or of the worktree of this clone whose commit stands nearest, so cargo, maturin and bun build only what
-# changed.
+# Make a git worktree whose build starts warm: its `target` is the one that each worktree of the clone shares, and its
+# other build directories are a copy on write of those of the main checkout, or of the worktree of this clone whose
+# commit stands nearest, so cargo, maturin and bun build only what changed.
 # Usage: script/worktree.sh <path> <branch> [base, origin/main by default]
 # A branch that stands on origin, or in this clone, is checked out and not made again: a local branch that only lags
 # behind origin moves up to it, and a local branch with work that origin lacks stays as it is. The base is the start
@@ -86,6 +86,14 @@ if [ $opened != new ]; then
   fi
 fi
 
+step="share the target"
+# One target for each worktree of the clone, beside the main checkout: a dependency builds once and a worktree adds only
+# its own crates, where a copy on write of a target splits from its source at the first build and fills the disk.
+# FURB_TREE of .cargo/config.toml makes a build rebuild a crate that another worktree built last.
+shared=$main-target
+mkdir -p "$shared"
+ln -sfn "$shared" "$path/target"
+
 step="copy the build"
 # What the python side needs, said at each end of the script.
 python_note() {
@@ -149,9 +157,8 @@ if ! clone "$src/Cargo.toml" "$path/.worktree-probe" 2>/dev/null; then
 fi
 rm -f "$path/.worktree-probe"
 
-# The output of cargo, which maturin and napi share, the packages of bun, the build of the TypeScript package, and
-# the cache of the tests of the TUI.
-for dir in target node_modules bind/typescript/node_modules tui/node_modules bind/typescript/dist .furb/tests; do
+# The packages of bun, the build of the TypeScript package, and the cache of the tests of the TUI.
+for dir in node_modules bind/typescript/node_modules tui/node_modules bind/typescript/dist .furb/tests; do
   if [ -e "$src/$dir" ] && [ ! -e "$path/$dir" ]; then
     mkdir -p "$(dirname "$path/$dir")"
     clone "$src/$dir" "$path/$dir"
@@ -162,11 +169,6 @@ for node in "$src"/bind/typescript/*.node "$src"/bind/typescript/index.cjs; do
     clone "$node" "$path/bind/typescript/"
   fi
 done
-# Each member of the workspace builds again in a new path, so its incremental state is of no use.
-if [ -d "$path/target" ]; then
-  find "$path/target" -type d -name incremental -prune -exec rm -rf {} +
-fi
-
 # The copied dist and native module are those of the source, whose commit may differ from the base. Link the
 # workspace from the copied cache, then build the native module and the TypeScript package of this tree on the warm
 # target, so that bun run check and bun run test run at once.

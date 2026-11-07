@@ -52,6 +52,16 @@ def test_failure_names_the_path_and_the_step(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
+def test_each_worktree_links_its_target_to_the_one_that_the_clone_shares(tmp_path: Path) -> None:
+  main = clone_with_origin(tmp_path)
+  assert run(main, tmp_path / "one", "first").returncode == 0
+  assert run(main, tmp_path / "two", "second").returncode == 0
+  shared = tmp_path / "main-target"
+  assert (tmp_path / "one" / "target").resolve() == shared.resolve()
+  assert (tmp_path / "two" / "target").resolve() == shared.resolve()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
 def test_success_says_bun_run_build_suffices(tmp_path: Path) -> None:
   main = clone_with_origin(tmp_path)
   got = run(main, tmp_path / "new", "fresh")

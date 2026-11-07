@@ -301,19 +301,23 @@ fix what your change broke, and report what was broken before.
   `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any case. This build,
   `cargo test` and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them,
   so a word runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the
-  release. A build keeps no incremental state (`.cargo/config.toml`), so no folder grows in a worktree;
-  a rebuild of the crate takes about 45 s.
+  release. A build keeps no incremental state and no debug information of a dependency (`.cargo/config.toml`,
+  `Cargo.toml`), which holds a target to about a third of its bytes; a rebuild of the crate takes about 45 s.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
-  `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
-  to the new commit, so cargo builds only the crates of the workspace again: the `target` of cargo, the `node_modules`
-  of bun, the build of the TypeScript package and the cache of the tests of the TUI. Then it runs
+  `base`, `origin/main` by default. It links `target` to `furb-target` beside the main checkout, which each worktree of the
+  clone shares, so a dependency builds once and a worktree adds only its crates of the workspace. The build script of
+  furb reads `FURB_TREE`, so a build rebuilds a crate that another worktree built last: cargo would call it fresh by
+  the time of its files and test the code of the other worktree. A branch
+  that lacks this stamp must merge `origin/w/converge` before its first build there. It copies on write the build directories of the
+  checkout whose build stands nearest to the new commit: the `node_modules` of bun, the build of the TypeScript
+  package and the cache of the tests of the TUI. Then it runs
   `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value
   stands, so that the hooks of each worktree print only what fails. It copies no `.venv`: it makes the `.venv` of the new tree with
   `uv sync --locked` on the warm target, so the python of its hooks imports its own tree. That takes about 52 s in a new
   tree, and next to no time when uv holds the wheel in its cache. If `uv` is missing or the sync fails, the script says
-  so and names the command to run. A first build takes about 6 minutes, against about 35 in a worktree of
-  `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
+  so and names the command to run. A first build takes about a minute when the shared target holds the
+  dependencies, against about 35 in a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
