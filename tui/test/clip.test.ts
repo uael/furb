@@ -38,6 +38,7 @@ test("the renderer draws a clipped row in the cells of its width, none past them
   // that the renderer draws then lacks the end of the line that was clipped.
   const lines = [
     "abcdefghijklmnop",
+    "ab\tcdefghijkl",
     "日本語のテキストです",
     "a👍🏽b👨‍👩‍👧c日本語😀😀",
     "e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301",
