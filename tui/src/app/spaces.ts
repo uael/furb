@@ -25,7 +25,8 @@ export const spaces = part({
     parts: {
       lead: Part[];
       name: Part;
-      state?: Part;
+      /** The mark of the state, read again at each tick when it is a function, as a mark that moves. */
+      state?: Part | (() => Part);
       after?: boolean;
       /** What stands at the right of the name, before the buttons: the badges of what needs a look. */
       tail?: Part[];
@@ -70,7 +71,9 @@ export const spaces = part({
           : {},
       ),
     );
-    const state = parts.state && this.line([parts.state], c.muted);
+    const read = parts.state;
+    const state = read && this.line([typeof read === "function" ? read() : read], c.muted);
+    if (state && typeof read === "function") this.moving.set(state, () => [read()]);
     if (state && !parts.after) row.add(state);
     if (renaming) {
       const input = new InputRenderable(this.renderer, {

@@ -86,7 +86,7 @@ impl Found {
 
   /// The extension of a skill with code, as its manifest and the files of its folder give it, with
   /// the copy of its word in the config directory of these places.
-  fn extension(&self, places: &Places) -> Result<Skill, Fault> {
+  fn loaded(&self, places: &Places) -> Result<Skill, Fault> {
     let read = |file: &str| filed(self, file, "").map(|got| got.content).map_err(|no| no.message());
     let mut one = manifested(&self.manifest, read).map_err(Fault::refused)?;
     one.file = copy(&one.name, &one.file, &one.word, places);
@@ -246,7 +246,7 @@ fn loaded(co: &mut Co, seen: &Seen, name: &str) -> Result<Text, Fault> {
       seen.found.iter().filter(|one| one.default && one.word.is_some()).collect();
     for one in &defaults {
       if !seen.runs.iter().any(|two| two.name == one.name) {
-        say(co, one.extension(&seen.places)?.played(&one.program(&seen.places)));
+        say(co, one.loaded(&seen.places)?.played(&one.program(&seen.places)));
       }
     }
     let lines = defaults.iter().map(|one| one.line(true)).collect::<Vec<_>>().join("\n");
@@ -257,13 +257,13 @@ fn loaded(co: &mut Co, seen: &Seen, name: &str) -> Result<Text, Fault> {
   if one.word.is_none() {
     return answered(seen, name);
   }
-  let extension = one.extension(&seen.places)?;
-  if !seen.runs.iter().any(|two| two.name == name && two.word == extension.word) {
-    say(co, extension.played(&one.program(&seen.places)));
+  let loaded = one.loaded(&seen.places)?;
+  if !seen.runs.iter().any(|two| two.name == name && two.word == loaded.word) {
+    say(co, loaded.played(&one.program(&seen.places)));
   }
   let shown = match frontmatter(&one.manifest).meta(INTERFACE) {
     Some(file) => filed(one, file, &path)?.content,
-    None => extension.word,
+    None => loaded.word,
   };
   let prose = body(&one.manifest).trim().to_owned();
   Ok(Text::new(

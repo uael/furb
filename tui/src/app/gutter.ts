@@ -6,7 +6,7 @@ import {
   type RenderContext,
   type RGBA,
 } from "@opentui/core";
-import { theme as c, pulse, spin } from "../theme.ts";
+import { theme as c, markOf, pulse } from "../theme.ts";
 import { mix, type Part } from "../ui.ts";
 import { gutterWidth, STATE } from "./shared.ts";
 
@@ -28,10 +28,9 @@ export interface GutterOptions extends RenderableOptions<Gutter> {
   colors?: ReadonlyMap<number, RGBA>;
   /** The mark of each line in the column of the states, as the line that failed. */
   states?: ReadonlyMap<number, Part>;
-  /** The lines whose cell of the state turns the loader, as the line that a model writes. */
-  loaders?: ReadonlySet<number>;
-  /** The lines that run, whose number fades out into the loader and back. */
-  running?: ReadonlySet<number>;
+  /** The lines that work, by the state of their work: a line that runs, whose number fades out into the loader of work
+   * that runs and back, or the line that a model writes, which shows the loader of a thought in place of its number. */
+  working?: ReadonlyMap<number, "thinks" | "runs">;
 }
 
 /** The gutter of a block of code, which furb draws in each cell that it owns: at the left edge the number of each line
@@ -47,15 +46,14 @@ export class Gutter extends Renderable {
   private readonly fg: () => RGBA;
   private readonly colors: ReadonlyMap<number, RGBA>;
   private readonly states: ReadonlyMap<number, Part>;
-  private readonly loaders: ReadonlySet<number>;
-  private readonly running: ReadonlySet<number>;
+  private readonly working: ReadonlyMap<number, "thinks" | "runs">;
   private readonly moved = () => {
     this.fit();
     this.requestRender();
   };
 
   constructor(ctx: RenderContext, options: GutterOptions) {
-    const { target, digits, numbers, offset, fg, colors, states, loaders, running, ...rest } = options;
+    const { target, digits, numbers, offset, fg, colors, states, working, ...rest } = options;
     super(ctx, { ...rest, flexDirection: "row", height: "auto" });
     this.target = target;
     this.digits = digits ?? 1;
@@ -64,8 +62,7 @@ export class Gutter extends Renderable {
     this.fg = fg ?? (() => c.faint);
     this.colors = colors ?? new Map();
     this.states = states ?? new Map();
-    this.loaders = loaders ?? new Set();
-    this.running = running ?? new Set();
+    this.working = working ?? new Map();
     target.flexGrow = 1;
     target.flexShrink = 1;
     this.add(target);
@@ -125,15 +122,20 @@ export class Gutter extends Renderable {
       if (light) buffer.fillRect(this.x, at, this.width, 1, light);
       if (line !== last) {
         const number = this.numberOf(line);
-        if (number !== undefined) {
-          const [loader, share] = this.running.has(line) ? pulse() : [false, 1];
-          const text = loader ? spin() : String(number);
+        const work = this.working.get(line);
+        if (number !== undefined || work) {
+          const [loader, share] = !work
+            ? [false, 1]
+            : work === "runs" && number !== undefined
+              ? pulse()
+              : [true, 1];
+          const text = loader && work ? markOf(work)[0] : String(number);
           const color =
             share < 1 ? mix(light ?? c.panel, loader ? c.accent : fg, share) : loader ? c.accent : fg;
           buffer.drawText(text, this.x + column - Bun.stringWidth(text), at, color, light);
         }
-        const [mark, tone] = this.states.get(line) ?? (this.loaders.has(line) ? [spin(), c.accent] : [""]);
-        if (mark) buffer.drawText(mark, this.x + gutterWidth(column), at, tone ?? fg, light);
+        const [mark, tone] = this.states.get(line) ?? [""];
+        if (mark) buffer.drawText(mark, this.x + gutterWidth(column) + 1, at, tone ?? fg, light);
       }
       last = line;
     }

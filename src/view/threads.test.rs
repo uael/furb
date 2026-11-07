@@ -17,7 +17,7 @@ use crate::view::{Act, Fold, Held, State};
 fn conductor() -> Vec<Act> {
   let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tui/fixtures/conductor.jsonl");
   let Ok(record) = std::fs::read_to_string(path) else { panic!("no record at {path}") };
-  let wake = "The ask A27 of the owner is missing, and no item carries it now.";
+  let wake = "An ask of the ledger is missing, and no item carries it now.";
   let more = [
     json!(["prompt", "prompt9001", "quiet2602", "chain1", "None", wake, ""]),
     json!(["rung", "rung9001", "operator", "chain1", "prompt(None, 'Look at #295.')", "", ""]),
@@ -416,4 +416,58 @@ fn the_rail_holds_the_closed_threads_first_and_the_open_ones_last_each_by_its_la
     early.iter().map(|node| node.thread.prompt.as_str()).collect::<Vec<_>>(),
     ["prompt1", "prompt2"]
   );
+}
+
+#[test]
+fn an_open_thread_thinks_while_a_model_writes_a_word_for_it_and_else_runs() {
+  let states = |more: Vec<Value>| {
+    let mut facts = vec![
+      json!(["chain", "chain1", "operator", "", "root", ""]),
+      asked("prompt1"),
+      json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude"]),
+    ];
+    facts.extend(more);
+    let acts = folded(facts);
+    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+    let on: Vec<&Act> = acts.iter().filter(|act| act.chain == "chain1").collect();
+    chain_threads(&on, &rows).into_iter().map(|one| one.state).collect::<Vec<_>>()
+  };
+  // A model that writes the word of the rung of the thread thinks, as the session does.
+  assert_eq!(
+    states(vec![json!(["reply", "reply1", "rung1", "chain1", "claude"])]),
+    [State::Thinks]
+  );
+  // A command that the word runs runs.
+  let bash = json!(["bash", "bash1", "rung1", "chain1", "sleep 9", "", 120.0, null]);
+  assert_eq!(states(vec![bash]), [State::Runs]);
+}
+
+#[test]
+fn a_stall_that_the_watch_tells_and_the_naming_of_the_session_are_notices_and_no_threads() {
+  // The facts of a record of the QA, scrubbed: the watch of the daemon tells a stall as a prompt
+  // of None in the name of the operator, and the naming skill asks a name on a chain of its own.
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["rung", "rung12", "chain1", "chain1", "name_session()", "", ""]),
+    json!(["name_session", "name_session1", "rung12", "chain1"]),
+    json!(["prompt", "prompt1", "operator/uael", "chain1", "str", "Reply with pong.", ""]),
+    json!(["chain", "chain2", "name_session1", "chain1", "naming", ""]),
+    json!(["prompt", "prompt2", "name_session1", "chain2", "str", "Give a name to a session.", ""]),
+    json!([
+      "prompt",
+      "prompt5",
+      "operator",
+      "chain1",
+      "None",
+      "The chain chain1 had no change.",
+      ""
+    ]),
+  ];
+  let acts = folded(facts.clone());
+  let (threads, asides) = listed(&acts, "chain1");
+  assert_eq!(threads, names(&["prompt1"]));
+  assert_eq!(asides, vec![("prompt5".to_owned(), Aside::Notice)]);
+  assert_eq!(listed(&acts, "chain2"), (vec![], vec![("prompt2".to_owned(), Aside::Notice)]));
+  let rail = held(facts).rail(&[], None);
+  assert_eq!(shape(&rail), vec![("prompt1".to_owned(), vec![])]);
 }

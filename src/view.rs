@@ -7,6 +7,7 @@ mod act;
 mod desk;
 mod fold;
 mod held;
+mod ladder;
 mod named;
 mod quote;
 mod state;
@@ -17,6 +18,7 @@ pub use act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, operator};
 pub use desk::{Ask, Desk, Tick, choices, desk, hint, takes_nothing, ticks, wants};
 pub use fold::{Fold, followed};
 pub use held::{Held, Threads};
+pub use ladder::{Rung, SHOWN, Shown, ladder};
 #[cfg(any(test, feature = "test-support"))]
 pub use named::word;
 pub use named::{NAME, Named, RENAME, said};

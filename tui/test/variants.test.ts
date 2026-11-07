@@ -23,12 +23,13 @@ test("the current view is the default, a switch at run time shows each variant, 
     async ({ session, app, screen, frame }) => {
       await session.refresh();
       expect(app.lifeView).toBe("main");
-      // A card shows its markdown only once its highlighting ends, and the spinner and the hint beside it change with
-      // time alone.
+      // A card shows its markdown only once its highlighting ends, and the loaders of work, as the footer and the marks
+      // of the sidebar turn them, change with time alone.
       const still = (text: string) =>
         text
           .split("\n")
           .filter((line) => !line.includes("Working"))
+          .map((line) => line.replace(/[◐◓◑◒⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/g, "·"))
           .join("\n");
       const before = await drawn(frame, screen.renderer.root, still);
       const seen = new Map<string, string>();

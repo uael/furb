@@ -214,7 +214,6 @@ export const desk = part({
     if (this.dock.visible !== visible) this.dock.visible = visible;
     if (!visible) {
       this.dockKey = "";
-      this.viewSpinners.clear();
       return;
     }
     // A spinner moves at the tick of the App, so the key holds no frame of it, and an input keeps its focus.
@@ -224,7 +223,6 @@ export const desk = part({
     this.dockKey = key;
     this.dock.backgroundColor = c.panel;
     this.clear(this.dock);
-    this.viewSpinners.clear();
     for (const one of shown) {
       const box = this.box();
       const mark: Part[] = one.error ? [[`${glyph.failed} `, c.danger]] : [];

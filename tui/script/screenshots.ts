@@ -1209,7 +1209,7 @@ try {
   // ouroboros, writes an extension with a part for the TUI, and the panel stands over the input with no restart. A
   // change that it gets wrong shows its error in the panel, the operator tells it, and the panel draws again. The
   // dialog of /skills says what each part gives.
-  await show(await demoSession({ cwd: await project("extend"), extensions: true }));
+  await show(await demoSession({ cwd: await project("extend"), skills: true }));
   const shows = async (text: string, yes = true) => {
     for (let tries = 0; tries < 400 && test.captureCharFrame().includes(text) !== yes; tries++) {
       await Bun.sleep(25);

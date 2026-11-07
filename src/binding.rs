@@ -46,7 +46,10 @@ use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   life::Opening,
   skill::{self, Part, Skill},
-  view::{Act as ViewAct, Fold, Held, Pause, quotes as quotes_of, restate, writing as writing_of},
+  view::{
+    Act as ViewAct, Fold, Held, Pause, SHOWN, Shown, ladder, quotes as quotes_of, restate,
+    writing as writing_of,
+  },
   wire,
   world::{self, images},
 };
@@ -320,12 +323,12 @@ pub struct ImagePath {
   pub digest: String,
 }
 
-/// The type of an image: its media type and its extension.
+/// The type of an image: its media type and the suffix of the name of its file.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct ImageType {
   pub mime_type: String,
-  pub extension: String,
+  pub suffix: String,
 }
 
 /// What an act came to, and whether it is done: nothing while it lives.
@@ -484,14 +487,14 @@ pub fn gate(sheet: String) -> Result<Vec<(i64, String)>, Fault> {
   )
 }
 
-/// The official extensions, in the order a life runs them.
+/// The official skills, in the order a life runs them.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn official() -> Vec<Skill> {
   skill::official()
 }
 
-/// The extensions that a life runs, in the order it enabled them, as the facts of its root say them.
+/// The skills that a life runs, in the order it enabled them, as the facts of its root say them.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_args_type = "root: unknown[][]"))]
 pub fn enabled(root: Vec<Said>) -> Vec<Skill> {
@@ -501,12 +504,12 @@ pub fn enabled(root: Vec<Said>) -> Vec<Skill> {
   skill::enabled(&facts)
 }
 
-/// The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
+/// The ear that plays each skill that the life runs: it enables each at the tip of the life,
 /// unless the record enables it, and plays each as a rung on each chain.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn extensions(given: Vec<Skill>) -> NativeEar {
-  NativeEar::of(skill::extensions(given, skill::Places::here()))
+pub fn played(given: Vec<Skill>) -> NativeEar {
+  NativeEar::of(skill::played(given, skill::Places::here()))
 }
 
 /// The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
@@ -809,12 +812,13 @@ pub fn image_references(message: String) -> Vec<images::Named> {
   images::references(&message)
 }
 
-/// The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP.
+/// The type of an image by its first bytes: its media type and the suffix of the name of its
+/// file, for a PNG, a JPEG, a GIF or a WebP.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {
-  let (media, extension) = images::kind(data).map_err(|no| Fault::refused(no.to_string()))?;
-  Ok(ImageType { mime_type: media.to_owned(), extension: extension.to_owned() })
+  let (media, suffix) = images::kind(data).map_err(|no| Fault::refused(no.to_string()))?;
+  Ok(ImageType { mime_type: media.to_owned(), suffix: suffix.to_owned() })
 }
 
 /// The words of a call that a host gave, by position and by name, as the engine takes them.
@@ -927,6 +931,30 @@ impl Meaning {
     meant(&self.held.rail(&hidden.unwrap_or_default(), at))
   }
 
+  /// The ladder of a chain, now or as it stood just after a moment, as the daemon folds it: the
+  /// folds that the window opened, the prompts that the operator owes, the only acts at its top
+  /// when `taken` names them, and how many last prompts and rungs show.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(
+      ts_args_type = "chain: string, at?: number, opened?: string[], owed?: string[], taken?: string[], shown?: import(\"./dist/protocol.js\").Shown",
+      ts_return_type = "Array<import(\"./dist/protocol.js\").Rung>"
+    )
+  )]
+  pub fn ladder(
+    &self,
+    chain: String,
+    at: Option<i64>,
+    opened: Option<Vec<String>>,
+    owed: Option<Vec<String>>,
+    taken: Option<Vec<String>>,
+    shown: Option<Value>,
+  ) -> Result<Value, Fault> {
+    let at = at.map(moment).transpose()?;
+    let (opened, owed) = (opened.unwrap_or_default(), owed.unwrap_or_default());
+    meant(&self.held.ladder(&chain, at, &opened, &owed, taken.as_deref(), counted(shown)?))
+  }
+
   /// The acts as they stood just after a moment.
   #[cfg_attr(
     feature = "typescript",
@@ -983,6 +1011,40 @@ pub fn restated(acts: Value) -> Result<Value, Fault> {
     .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
   restate(&mut acts);
   meant(&acts)
+}
+
+/// The ladder of a chain from acts in the state that the crate gives them, as [`Meaning::ladder`]
+/// folds it from the acts that it heard: what a window that makes acts of its own, as a test does,
+/// reads in place of a ladder of its own.
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_args_type = "acts: Array<import(\"./dist/protocol.js\").Act>, chain: string, opened?: string[], owed?: string[], taken?: string[], shown?: import(\"./dist/protocol.js\").Shown",
+    ts_return_type = "Array<import(\"./dist/protocol.js\").Rung>"
+  )
+)]
+pub fn laddered(
+  acts: Value,
+  chain: String,
+  opened: Option<Vec<String>>,
+  owed: Option<Vec<String>>,
+  taken: Option<Vec<String>>,
+  shown: Option<Value>,
+) -> Result<Value, Fault> {
+  let json = wire::outward(acts.0.as_ref());
+  // The acts stand in the order given, as a host tells them, and as the daemon folds them.
+  let acts: Vec<ViewAct> = serde_json::from_value(json)
+    .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
+  let (opened, owed) = (opened.unwrap_or_default(), owed.unwrap_or_default());
+  meant(&ladder(&acts, &chain, &opened, &owed, taken.as_deref(), counted(shown)?))
+}
+
+/// How many last steps of each level a ladder shows: the count given, or [`SHOWN`].
+fn counted(shown: Option<Value>) -> Result<Shown, Fault> {
+  shown.map_or(Ok(SHOWN), |shown| {
+    serde_json::from_value(wire::outward(shown.0.as_ref()))
+      .map_err(|no| Fault::refused(format!("this is no count of steps: {no}")))
+  })
 }
 
 /// A meaning as a value of the engine, which crosses each door as JSON would.

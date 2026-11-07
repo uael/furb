@@ -414,7 +414,7 @@ test("the list of saved sessions comes before their replays, and a row shows its
     // checkpoint, which cuts it. So a life of this process, which ends with no checkpoint, makes the record.
     const record = join(directory, ".furb/sessions/held.jsonl");
     await mkdir(dirname(record), { recursive: true });
-    const life = boot({ record, cwd: directory, extensions: false });
+    const life = boot({ record, cwd: directory, skills: false });
     life.engine.bash("sleep 60", { on: life.engine.root });
     await life.dispose();
     const library = open();

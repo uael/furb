@@ -63,7 +63,7 @@ mod protocol {
         cwd: None,
         actor: Some("claude-cli:opus/high".to_owned()),
         roster: None,
-        extensions: Some(false),
+        skills: Some(false),
         config: Some("config".to_owned()),
         claude: Some("claude".to_owned()),
         answers: true,
@@ -429,6 +429,8 @@ mod protocol {
     "3d67e6b3dc718819064aae275d0f84cdd16c0f39b92d2a82a945461a19589713",
     "b7fcc6ef6baf1e729e50bc4c81bd3ea06e83a906a66e62709d6aa40607e5a2cf",
     "31c217c979811fbf74d11684749ed59de0ca097e387b59820826b22478069d41",
+    "3bf734627359e905bb82818100a056d1000631abb9650b1d8adda626e84fe3b8",
+    "ab1e26ad2062fc235028a54bc0b393b108885469e2e7e4a7fd414e325d13b340",
   ];
 
   /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

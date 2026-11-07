@@ -866,7 +866,7 @@ pub fn enabled_by(a: &Fact) -> Option<Enabled> {
 /// state that it holds keeps its value, and its life word does not run again. The ear plays the
 /// rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
-pub fn extensions(given: Vec<Skill>, places: Places) -> Box<dyn Ear> {
+pub fn played(given: Vec<Skill>, places: Places) -> Box<dyn Ear> {
   telling(given, Vec::new(), places)
 }
 
@@ -914,7 +914,10 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
         // each enable, and
         // it plays the setup once it heard them, as the journal of a later life says them again.
         "done" if named(a.about(), "stand") && a.by() != JOURNAL => {
-          tell(&mut co, &refused);
+          // An open replays the note that the record holds, and makes no new one.
+          if !told(&mut co, &refused.join("\n")).await? {
+            tell(&mut co, &refused);
+          }
           refused.clear();
           let new: Vec<Skill> =
             given.iter().filter(|one| !enabled.contains(one)).cloned().collect();
@@ -1044,11 +1047,26 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
   })
 }
 
-/// Tells the root why each extension of these lines does not play, in one note, when there is one.
+/// Tells the root why each skill of these lines does not play, in one note, when there is one.
 fn tell(co: &mut Co, refused: &[String]) {
   if !refused.is_empty() {
     say(co, Fact::says("tell", ROOT, [Object::list([Object::string(refused.join("\n"))])]));
   }
+}
+
+/// Whether a fact of the root holds this note already: a life that opens again on its record
+/// replays that fact, so an open never makes the note again.
+async fn told(co: &mut Co, note: &str) -> Result<bool, Fault> {
+  let of = [ROOT, "tell"].map(Object::string).to_vec();
+  let got = co.call("transcript", of, vec![]).await?;
+  let facts = got.as_ref();
+  Ok((0..).map_while(|at| entry(&facts, at)).filter_map(|one| Fact::of(one)).any(|one| {
+    one
+      .word(0)
+      .and_then(|notes| entry(&notes, 0))
+      .and_then(|one| one.as_str().map(|one| one == note))
+      == Some(true)
+  }))
 }
 
 /// One extension played on a chain as a rung: its word then its life word, or its life word alone

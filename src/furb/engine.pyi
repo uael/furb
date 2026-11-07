@@ -866,7 +866,7 @@ What a prompt names is one of these names and one effort of that range.
 An actor takes an effort of its own, and any actor takes the effort that is not named.
 """
 type Standing = list[list[Actor] | str | list[list[str | bool]]]
-"""What a chain stands on: the actors the World offers, the directory the chain starts in, the actor a prompt goes to when it names none, and the path of the doctrine, which the root reads in the first turn of its setup, then the extensions that the root crafts the rest of its setup from, each as [name, file, life word, root alone], and a World that gives no doctrine leaves both unsaid.
+"""What a chain stands on: the actors the World offers, the directory the chain starts in, the actor a prompt goes to when it names none, and the path of the doctrine, which the root reads in the first turn of its setup, then the extensions that the root crafts the rest of its setup from, each as [name, file, life word, root alone], then the absolute home of the user, which a path under the home hides as ~, and a World that gives no doctrine leaves the doctrine, the extensions and the home unsaid, and a World that gives no extensions leaves the home unsaid.
 The roster, the directory and the actor that a model reads are in the transcript of its chain.
 A standing holds no source: the engine is one file the model imports, and a record replays only on an engine that makes each of its acts again, and else drifts.
 """

@@ -180,6 +180,18 @@ fn the_message_of_a_chain_tells_nothing_new_until_an_act_that_it_did_not_make_ch
   quiet.heard(&Event::Fact(json!(["rung", "rung10", "prompt9", "chain2", "", "", ""])));
   heard(&mut quiet, rung("rung10", "chain2"));
   assert!(quiet.due().is_none(), "an act that the message made is no new fact");
+  quiet.heard(&Event::Fact(json!([
+    "run",
+    "run11",
+    "chain2",
+    "chain2",
+    "rung10",
+    "close(None)",
+    ""
+  ])));
+  heard(&mut quiet, act("run", "run11", "chain2", &[json!("rung10")]));
+  heard(&mut quiet, finished(act("run", "run11", "chain2", &[json!("rung10")])));
+  assert!(quiet.due().is_none(), "the run of the word of the answer is of the message too");
   heard(&mut quiet, finished(ask));
   heard(&mut quiet, finished(rung("rung10", "chain2")));
   assert!(quiet.due().is_none());

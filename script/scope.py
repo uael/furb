@@ -40,8 +40,8 @@ LOGIC = re.compile(r"src/furb/(engine\.pyi?|sheet\.py|kernel\.py)|tests/corpus/.
 RUST = re.compile(
   r"((src|cli|tests|extensions|\.cargo)/.*|Cargo\.(toml|lock)|build\.rs|rust-toolchain\.toml|docs/examples/rust/.*)"
 )
-# A render of the gallery changes only these files, which no gate reads, so it runs no gate, by the ruling of the owner
-# on 10-29. The job of the gates alone reports on it.
+# A render of the gallery changes only these files, which no gate reads, so it runs no gate. The job of the gates alone
+# reports on it.
 GALLERY = re.compile(r"docs/(screenshots/.*|furb[.]gif)")
 
 

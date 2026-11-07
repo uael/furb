@@ -8,9 +8,9 @@
 
 use std::{
   collections::HashMap,
-  fs,
-  process::Stdio,
-  sync::{Mutex, OnceLock, PoisonError},
+  env, fs,
+  process::{self, Stdio},
+  sync::{Mutex, MutexGuard, OnceLock, PoisonError},
   time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -93,8 +93,15 @@ fn stamp(program: &Program) -> String {
   format!("{}\0{}\0{time}\0{size}", program.bin.display(), program.args.join("\u{1f}"))
 }
 
+/// The file of the cache. A test run owns one of its own, so no other process of the machine, as
+/// another test binary or a furb that runs, writes back an entry that a refresh of the test forgot.
 fn cached() -> Option<path::PathBuf> {
-  world::cache().map(|at| at.join(FILE))
+  let at = if cfg!(test) {
+    Some(env::temp_dir().join(format!("furb-test-{}", process::id())))
+  } else {
+    world::cache()
+  };
+  at.map(|at| at.join(FILE))
 }
 
 /// A discovery as the cache holds it: what the command line said, and the second that it said it.
@@ -104,16 +111,24 @@ struct Told {
   found: Vec<Found>,
 }
 
-fn stored(stamp: &str, now: u64) -> Option<Vec<Found>> {
-  let text = fs::read_to_string(cached()?).ok()?;
+fn stored(file: &path::Path, stamp: &str, now: u64) -> Option<Vec<Found>> {
+  let text = fs::read_to_string(file).ok()?;
   let map: serde_json::Map<String, Value> = serde_json::from_str(&text).ok()?;
   let told: Told = serde_json::from_value(map.get(stamp)?.clone()).ok()?;
   (!told.found.is_empty() && now.saturating_sub(told.at) < LASTS).then_some(told.found)
 }
 
-fn store(stamp: &str, found: &[Found], now: u64) {
-  let Some(file) = cached() else { return };
-  let mut map: serde_json::Map<String, Value> = fs::read_to_string(&file)
+/// Holds a store of the cache and a refresh of it apart: the file is read, changed and written
+/// whole, so a store that read it before a refresh removed it would write back what the refresh
+/// forgot.
+fn exclusive() -> MutexGuard<'static, ()> {
+  static LOCK: Mutex<()> = Mutex::new(());
+  LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn store(file: &path::Path, stamp: &str, found: &[Found], now: u64) {
+  let _held = exclusive();
+  let mut map: serde_json::Map<String, Value> = fs::read_to_string(file)
     .ok()
     .and_then(|text| serde_json::from_str(&text).ok())
     .unwrap_or_default();
@@ -126,7 +141,13 @@ fn store(stamp: &str, found: &[Found], now: u64) {
     map.shift_remove(&oldest);
   }
   // A cache that cannot be written costs the next life one probe more, so the failure ends here.
-  drop(disk::write(&file, Value::Object(map).to_string().as_bytes(), Access::Shared));
+  drop(disk::write(file, Value::Object(map).to_string().as_bytes(), Access::Shared));
+}
+
+/// The cache gone, so the next models ask the command line again.
+fn forget(file: &path::Path) {
+  let _held = exclusive();
+  fs::remove_file(file).unwrap_or_default();
 }
 
 /// The models that the program says, from memory, from the cache, or from the program itself;
@@ -149,12 +170,13 @@ pub(super) async fn models_at(program: &Program, now: u64) -> Option<Vec<Found>>
   if let Some(held) = held {
     return held;
   }
-  let found = if let Some(found) = stored(&stamp, now) {
+  let file = cached();
+  let found = if let Some(found) = file.as_deref().and_then(|file| stored(file, &stamp, now)) {
     Some(found)
   } else {
     let found = probe(program).await;
-    if let Some(found) = &found {
-      store(&stamp, found, now);
+    if let (Some(found), Some(file)) = (&found, &file) {
+      store(file, &stamp, found, now);
     }
     found
   };
@@ -201,7 +223,7 @@ pub fn refresh() {
   seen().lock().unwrap_or_else(PoisonError::into_inner).clear();
   // A cache that cannot go stays, and the next models read it until the program makes a new stamp.
   if let Some(file) = cached() {
-    fs::remove_file(file).unwrap_or_default();
+    forget(&file);
   }
 }
 
@@ -275,3 +297,7 @@ async fn asked(
   }
   (!found.is_empty()).then_some(found)
 }
+
+#[cfg(test)]
+#[path = "discover.test.rs"]
+mod test;

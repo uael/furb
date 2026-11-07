@@ -24,7 +24,7 @@ import { clip, dollars, modelLabel, plainFailure } from "../format.ts";
 import type { Mark as PartMark } from "../parts.ts";
 import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
-import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
+import { theme as c, glyph, markOf, spacing as space, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
 import { branchStart, branchTakes } from "../watching.ts";
 import { part } from "./part.ts";
@@ -304,7 +304,6 @@ export const feed = part({
       }
       // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now. Its fold
       // reads them from the index of the session, which spares the fold a pass over every act in each frame.
-      const shown = w.at(w.acts);
       const past = w.moment !== undefined;
       const index = w.ladderIndex;
       const rows = index.ids;
@@ -319,7 +318,14 @@ export const feed = part({
       );
       const owed = new Set(w.host.prompts.keys());
       const word = (rung: ActRow) => this.subject(rung);
-      const own = thread(w.selected, word, w.host.streams, owed, opened, index);
+      const own = thread(
+        w.ladderOf(w.selected, [...opened], w.moment),
+        w.selected,
+        word,
+        w.host.streams,
+        owed,
+        index,
+      );
       // A branch takes from its source the messages that its prefix carries, as the crate folds them, with what
       // answered them. Its feed shows these threads as they stood when the branch began, after the line that names the
       // source and before its own acts, since its model reads them as its own turns.
@@ -330,12 +336,17 @@ export const feed = part({
       // other step of its source stands at their top.
       const frozen = branch && taken.size ? w.ladderAt(source, branch.began - 1) : undefined;
       const takenMade = () => frozen?.made ?? new Map<string, readonly ActRow[]>();
-      const takenLines = frozen
-        ? thread(source, word, w.host.streams, owed, opened, {
-            ...frozen,
-            on: frozen.on.filter((one) => taken.has(one.id)),
-          })
-        : [];
+      const takenLines =
+        frozen && branch
+          ? thread(
+              w.ladderOf(source, [...opened], branch.began - 1, [...taken]),
+              source,
+              word,
+              w.host.streams,
+              owed,
+              frozen,
+            )
+          : [];
       // The words that retell the source stand first in the feed of the branch, as the acts that the branch made.
       const retelling = own.findIndex((line) => line.depth === 0 && line.act.by !== w.selected);
       const after = retelling < 0 ? own.length : retelling;
@@ -1530,14 +1541,19 @@ export const feed = part({
     const { height } = this.scroll.viewport;
     if (!items && w.loading && !w.error) {
       const loading = (): Part[] => [
-        [`${spin()} `, c.accent],
+        [`${markOf("runs")[0]} `, c.accent],
         [`Loading the ${viewLabels[w.view].toLowerCase()}`, c.muted],
       ];
       add(
         "view-loading",
         `${w.view}:${height}`,
         [],
-        (box) => this.centered(box, height, this.text(loading())),
+        (box) => {
+          // The loader turns at the frame of the clock, as every loader does.
+          const text = this.text(loading());
+          this.moving.set(text, loading);
+          return this.centered(box, height, text);
+        },
         {
           title: loading,
           heading: false,

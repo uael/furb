@@ -74,15 +74,15 @@ pub fn kind(bytes: &[u8]) -> Result<(&'static str, &'static str), Error> {
   let webp = bytes.get(8..12) == Some(b"WEBP");
   KINDS
     .iter()
-    .find(|(_, extension, head)| {
+    .find(|(_, suffix, head)| {
       bytes.starts_with(head)
-        && match *extension {
+        && match *suffix {
           "gif" => gif,
           "webp" => webp,
           _ => true,
         }
     })
-    .map(|(media, extension, _)| (*media, *extension))
+    .map(|(media, suffix, _)| (*media, *suffix))
     .ok_or(Error::NotImage)
 }
 
@@ -103,8 +103,8 @@ pub fn keep(directory: &Path, bytes: &[u8]) -> Result<(String, &'static str), Er
   if bytes.len() as u64 > LARGEST {
     return Err(Error::TooLarge);
   }
-  let (media, extension) = kind(bytes)?;
-  let file = format!("{}.{extension}", digest(bytes));
+  let (media, suffix) = kind(bytes)?;
+  let file = format!("{}.{suffix}", digest(bytes));
   let at = directory.join(&file);
   // An image is named by the digest of its bytes, and lands whole, so a file that stands under that
   // name is that image.
@@ -186,10 +186,10 @@ fn placed(message: &str) -> Vec<(usize, Named)> {
 
 /// The digest and the extension a uri names, when it is the uri of an image.
 fn parts(uri: &str) -> Option<(&str, &str)> {
-  let (digest, extension) = uri.strip_prefix(SCHEME)?.split_once('.')?;
+  let (digest, suffix) = uri.strip_prefix(SCHEME)?.split_once('.')?;
   let hex =
     digest.len() == 64 && digest.bytes().all(|one| matches!(one, b'0'..=b'9' | b'a'..=b'f'));
-  (hex && KINDS.iter().any(|(_, known, _)| *known == extension)).then_some((digest, extension))
+  (hex && KINDS.iter().any(|(_, known, _)| *known == suffix)).then_some((digest, suffix))
 }
 
 /// The digest of bytes, as lowercase hex.

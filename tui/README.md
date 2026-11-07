@@ -335,7 +335,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/exit or /quit` | Save every session and quit: each life goes on while a window or a pin holds it |
 | `/compact` | Compact this chain now: a model keeps what the work still needs and sums up the rest (the extension compaction) |
 | `/clear or /reset` | Clear this chain: its model reads from zero, and the chain keeps its name, its prompts and its module (the extension compaction) |
-| `/mcp` | Manage the MCP servers: state, tools, resources, prompts, login (the extension mcp) |
+| `/mcp` | Manage the MCP servers: state, tools, resources, prompts, login; /mcp reload connects each again (the extension mcp) |
 
 <!-- commands:end -->
 

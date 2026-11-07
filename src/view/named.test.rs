@@ -14,7 +14,7 @@ fn folded(facts: &[Value], words: bool) -> Named {
 }
 
 #[test]
-fn the_name_that_the_operator_said_wins_over_the_name_that_the_extension_gave() {
+fn the_name_that_the_operator_said_wins_over_the_name_that_the_skill_gave() {
   let named = folded(
     &[
       json!(["rename_session", "rename_session1", "run1", "chain1"]),

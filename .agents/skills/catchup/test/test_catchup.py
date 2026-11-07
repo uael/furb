@@ -9,7 +9,7 @@ CAP = number(CATCHUP, "CAP")
 BUDGET = number(CATCHUP, "BUDGET")
 
 
-async def test_the_life_word_of_the_extension_is_catchup() -> None:
+async def test_the_life_word_of_the_skill_is_catchup() -> None:
   """The life word of the extension is catchup(), and the extension plays on every chain, so every chain catches up from its birth."""
   assert CATCHUP["life"] == "catchup()" and not CATCHUP["root"]
   sand, log, root = await caught_up()

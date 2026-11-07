@@ -40,7 +40,7 @@ function still(chain: string): Seen {
     chain,
     acts: [],
     compactions: [],
-    extensions: async () => [],
+    skills: async () => [],
     of: () => [],
     run: async () => undefined,
     say: () => {},
@@ -330,7 +330,7 @@ test("the command /compact tells that a life that does not run the extension com
 
 test("the command /compact of the part of compaction asks a model what the chain on screen keeps, compacts it with the summary, and says so", async () => {
   const { directory } = project();
-  const session = await demoSession({ cwd: directory, extensions: true });
+  const session = await demoSession({ cwd: directory, skills: true });
   await composing(
     async ({ app, frame }) => {
       for (let tries = 0; tries < 400 && !app.parts.command("compact"); tries++) await Bun.sleep(25);
@@ -382,7 +382,7 @@ test("the command /compact of the part of compaction asks a model what the chain
 
 test("the commands /clear and /reset of the part of compaction cut the chain on screen to nothing, and the rule of each cut says Cleared", async () => {
   const { directory } = project();
-  const session = await demoSession({ cwd: directory, extensions: true });
+  const session = await demoSession({ cwd: directory, skills: true });
   await composing(
     async ({ app, frame }) => {
       for (let tries = 0; tries < 400 && !app.parts.command("clear"); tries++) await Bun.sleep(25);
@@ -435,7 +435,7 @@ async function hides(frame: () => Promise<string>, text: string): Promise<string
 test("a word that writes an extension with extend() gives the TUI its part in a life that runs, with no restart, and a config that turns the extension off takes the part away", async () => {
   const directory = mkdtempSync(join(tmpdir(), "furb-parts-"));
   made.push(directory);
-  const session = await demoSession({ cwd: directory, extensions: true });
+  const session = await demoSession({ cwd: directory, skills: true });
   await composing(
     async ({ app, frame, screen }) => {
       await app.partsReady;
@@ -507,7 +507,7 @@ test("/skills opens a dialog of the skills that the life runs, each with what it
 test("the model of the demo adds a component to a life that runs: it reads the teaching, writes the extension, and its panel stands, fails and mends with no restart", async () => {
   const directory = mkdtempSync(join(tmpdir(), "furb-parts-"));
   made.push(directory);
-  const session = await demoSession({ cwd: directory, extensions: true });
+  const session = await demoSession({ cwd: directory, skills: true });
   await composing(
     async ({ app, frame }) => {
       await session.submit(

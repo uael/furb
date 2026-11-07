@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { handedOver } from "../script/daemon.ts";
 import { daemonFolder, daemonPlace, dialed } from "../src/client.ts";
 
 test("a run of the tests that a kill ends leaves no daemon of it", async () => {
-  // A short folder, since the path of a socket has a bound.
-  const cache = mkdtempSync("/tmp/fr");
+  // A short folder, since the path of a socket has a bound; Windows has no /tmp, and its daemon listens on a pipe.
+  const cache = mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", "fr"));
   const env = { ...process.env, XDG_CACHE_HOME: cache };
   const place = daemonPlace(daemonFolder(env));
   const script = `import { ownDaemon } from ${JSON.stringify(join(import.meta.dir, "../script/daemon.ts"))};

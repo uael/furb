@@ -61,7 +61,7 @@ export interface SessionOptions {
   ears?: Array<[string, Ear | NativeEar]>;
   /** Whether the life enables at its start the extensions that the configs of the user and of the directory turn
    * on; true when unsaid. A life runs what its record enables either way. */
-  extensions?: boolean;
+  skills?: boolean;
   /** The config directory of the user, in place of the one of this process. */
   config?: string;
 }
@@ -167,7 +167,7 @@ export class Session extends EventEmitter {
         directory: this.directory,
         record: this.record,
         inspecting: !working,
-        extensions: this.options.extensions,
+        skills: this.options.skills,
         config: this.options.config,
         actor: [this.options.model, this.options.effort].filter(Boolean).join("/") || undefined,
         roster: this.options.roster,

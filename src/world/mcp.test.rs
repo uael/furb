@@ -469,7 +469,7 @@ fn a_later_life_that_replays_a_record_with_acts_of_mcp_asks_no_server() {
     record: Some(at.join("record.jsonl").display().to_string()),
     config: Some(at.join("config").display().to_string()),
     roster: Some(Vec::new()),
-    extensions: Some(false),
+    skills: Some(false),
     ..Opening::default()
   };
   let (mut first, _) = opening().boot::<String>([]).unwrap();
@@ -523,7 +523,7 @@ fn a_call_that_a_crash_cut_ends_as_interrupted_at_the_wake_and_runs_no_more() {
     record: Some(at.join("record.jsonl").display().to_string()),
     config: Some(at.join("config").display().to_string()),
     roster: Some(Vec::new()),
-    extensions: Some(false),
+    skills: Some(false),
     ..Opening::default()
   };
   let (mut first, _) = opening().boot::<String>([]).unwrap();

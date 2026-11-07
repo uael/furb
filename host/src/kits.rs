@@ -10,13 +10,14 @@
 use std::{collections::HashMap, pin::pin};
 
 use futures::StreamExt;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot;
 
 use crate::{
   daemon::Inside,
   event::{Event, Seq},
   life::{Command, LifeHandle, Reply},
   protocol::{Frame, Kind, Node, Peer, Role, Slot, Tree, Verb},
+  serve::Outbox,
 };
 
 /// A kit of a session whose view the daemon serves: the life, its handle, the name of the kit,
@@ -42,7 +43,7 @@ impl Kit {
   /// kit attaches the life as the skill of its name and hears no event of the life there, since it
   /// reads the changes of the life from its handle.
   pub(crate) async fn served(self, end: oneshot::Receiver<()>) {
-    let (outbox, mut frames) = mpsc::unbounded_channel();
+    let (outbox, mut frames) = Outbox::new();
     let peer = Peer {
       login: String::new(),
       role: Role::Write,
@@ -60,15 +61,21 @@ impl Kit {
       let mut told = Vec::new();
       tokio::select! {
         _ = &mut end => return,
-        heard = frames.recv() => match heard {
-          Some(Frame::ViewMount(mount)) => {
-            shown.insert(mount.viewer.clone(), Shown { slot: mount.slot, version: 0, tree: None });
-            told.push(mount.viewer);
+        heard = frames.recv() => {
+          if heard.is_some() {
+            outbox.read();
           }
-          Some(Frame::ViewDispose(gone)) => {
-            shown.remove(&gone.viewer);
+          match heard {
+            Some(Frame::ViewMount(mount)) => {
+              let viewer = mount.viewer.clone();
+              shown.insert(viewer, Shown { slot: mount.slot, version: 0, tree: None });
+              told.push(mount.viewer);
+            }
+            Some(Frame::ViewDispose(gone)) => {
+              shown.remove(&gone.viewer);
+            }
+            _ => {}
           }
-          _ => {}
         },
         event = events.next() => match event.as_ref().map(|one| &*one.1) {
           Some(Event::Changed(_)) => told.extend(shown.keys().cloned()),

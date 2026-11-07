@@ -41,7 +41,7 @@ import {
   type ThreadNode,
   threadWork,
 } from "furb/life";
-import type { ThreadNode as CrateNode, FollowUp, Layer, Threads } from "furb/protocol";
+import type { ThreadNode as CrateNode, FollowUp, Layer, Rung, Threads } from "furb/protocol";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { typed } from "./configs.ts";
@@ -248,7 +248,9 @@ function placed(index: Index, act: ActRow): void {
   else index.live.delete(act.id);
   index.stamps.set(act.by, (index.stamps.get(act.by) ?? 0) + 1);
   index.chained.set(act.chain, (index.chained.get(act.chain) ?? 0) + 1);
-  if (act.kind === "prompt") index.threaded.set(act.chain, ++index.prompts);
+  // A prompt tells that a thread changed, and so does a step that works for one, whose model thinks while it asks.
+  if (act.kind === "prompt" || (act.kind === "rung" && index.ids.get(act.by)?.kind === "prompt"))
+    index.threaded.set(act.chain, ++index.prompts);
   // A name of the session names the first thread of the operator in the crate, so it reads the threads again.
   if (act.kind === "name_session" || act.kind === "rename_session") index.named++;
   index.touched.push(act.chain);
@@ -1067,6 +1069,18 @@ export class Session extends EventEmitter {
       (act) => act.kind === "rung" && !isDone(act) && !this.program[act.id],
     );
   }
+  /** When the work of a chain began, as the first of its rungs, commands and waits that are not done began, and how many
+   * characters its models streamed for it: the progress that the loader of the footer shows. */
+  progress(chain: string): { began?: number; streamed: number } {
+    const began = (this.liveOn().get(chain) ?? [])
+      .filter((act) => act.kind === "rung" || act.kind === "bash" || act.kind === "wait")
+      .map((act) => this.started[act.id])
+      .filter((at): at is number => at !== undefined);
+    let streamed = 0;
+    for (const stream of this.host.streams.values())
+      if (stream.chain === chain) streamed += stream.thinking.length + stream.text.length;
+    return { began: began.length ? Math.min(...began) : undefined, streamed };
+  }
   /** The state of the acts of each chain, or of every chain, as actStatus read it at a version of the acts. */
   private states = { version: -1, of: new Map<string, Status>() };
   private statusOf(chain?: string): Status {
@@ -1119,6 +1133,47 @@ export class Session extends EventEmitter {
   threadsFresh(chain: string): boolean {
     const kept = this.crateThreads.get(chain);
     return kept?.stamp === this.threadStamp(chain) && kept.owed === this.owedNow;
+  }
+  /** The ladders that the crate last gave, by the chain and whether a branch took them, with what they were read of. */
+  private readonly crateLadders = new Map<string, { key: string; of: unknown; at?: number; got: Rung[] }>();
+  /** The reads of a ladder that the session waits for, one for each slot. */
+  private readonly askingLadders = new Map<string, Promise<void>>();
+  /** Once each ladder that the session asked the crate for came, as a test waits for before it reads a frame. */
+  async laddersRead(): Promise<void> {
+    await Promise.allSettled([...this.askingLadders.values()]);
+  }
+  /** The ladder of a chain as the crate folds it, now or as it stood just after a moment: the steps that show and the
+   * folds of the others, with the folds that the operator opened, the prompts that the operator owes, and the only acts
+   * at its top when `taken` names them. The session asks the crate once at a time and draws again once it comes, and
+   * shows the ladder that the crate gave of the same moment until it gives one of the acts of now. A ladder of a
+   * moment of the past holds while the acts change, since that moment does not. */
+  ladderOf(
+    chain: string,
+    opened: readonly string[],
+    at?: number,
+    taken?: readonly string[],
+  ): readonly Rung[] {
+    const owed = [...this.host.prompts.keys()];
+    const key = JSON.stringify([chain, opened, owed, at ?? null, taken ?? null]);
+    const slot = taken ? `taken:${chain}` : chain;
+    const kept = this.crateLadders.get(slot);
+    // The mark of the snapshot that the acts came in moves with each change of them, which are changed in place.
+    const stale = kept?.key !== key || (at === undefined && kept.of !== this.held);
+    if (stale && !this.askingLadders.has(slot)) {
+      const of = this.held;
+      const read = (async () => {
+        try {
+          const got = await this.host.ladder(chain, at, [...opened], owed, taken && [...taken]);
+          this.crateLadders.set(slot, { key, of, at, got });
+          this.emit("change");
+        } finally {
+          this.askingLadders.delete(slot);
+        }
+      })();
+      this.askingLadders.set(slot, read);
+      read.catch(this.threadFault);
+    }
+    return kept?.key === key || (kept?.key.startsWith(`["${chain}"`) && kept.at === at) ? kept.got : [];
   }
   /** The crate folds the threads of a chain, which the session asks for once at a time, and draws again once they
    * come. */
@@ -2252,9 +2307,7 @@ export class Session extends EventEmitter {
         await this.cancel(argument);
         break;
       case "skills": {
-        const each = (await this.skillsRun()).map(({ name, life }) =>
-          life ? `${name} with ${life}` : name,
-        );
+        const each = (await this.skillsRun()).map(({ name, life }) => (life ? `${name} with ${life}` : name));
         this.notice = each.length
           ? `This life runs ${each.join(", ")}. Run a word of one with /run.`
           : "This life runs no skill.";

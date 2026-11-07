@@ -6,11 +6,11 @@ import { clock } from "../clock.ts";
 import { shortenHomes } from "../files.ts";
 import { dollars, recordLabel } from "../format.ts";
 import { flatThreads, statusLabels } from "../session.ts";
-import { theme as c, glyph, type MarkState, markOf, spacing as space, threadTone } from "../theme.ts";
+import { theme as c, glyph, type MarkState, markOf, moves, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain } from "../ui.ts";
 import type { SessionEntry, Workspace } from "../workspaces.ts";
 import { part } from "./part.ts";
-import { type ChainRead, statusMark, threadMarks } from "./shared.ts";
+import { type ChainRead, statusMark, statusState, threadState } from "./shared.ts";
 
 /** What waits in a part of the library, counted where the operator should look. */
 export interface Attention {
@@ -250,7 +250,7 @@ export const rail = part({
   /** A row of the sidebar in two parts, its head, which the room cuts and a hover shows whole, and its tail, which
    * stays. */
   railSplit(
-    head: Part[],
+    head: Part[] | (() => Part[]),
     tail: Part[],
     run: () => void,
     options: BoxOptions = {},
@@ -265,14 +265,13 @@ export const rail = part({
       this.sideWidth -
       margins.reduce<number>((sum, one) => sum + (typeof one === "number" ? one : 0), 0) -
       (tail.length ? Bun.stringWidth(plain(tail)) + space.between : 0);
-    const fits = Bun.stringWidth(plain(head)) <= room;
-    row.add(
-      this.text(fits ? head : this.clipParts(head, room), c.muted, {
-        truncate: true,
-        flexGrow: 1,
-        flexShrink: 1,
-      }),
-    );
+    const read = typeof head === "function" ? head : () => head;
+    const fits = Bun.stringWidth(plain(read())) <= room;
+    const shown = () => (fits ? read() : this.clipParts(read(), room));
+    const text = this.text(shown(), c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 });
+    // A head that is read again holds a mark that moves, which the tick draws again.
+    if (typeof head === "function") this.moving.set(text, shown);
+    row.add(text);
     if (tail.length) row.add(this.text(tail, c.muted, { marginLeft: space.between, flexShrink: 0 }));
     return row;
   },
@@ -469,20 +468,21 @@ export const rail = part({
       const id = `th:${thread.act.id}`;
       // The thread of the session and the row of the sidebar come from two reads of the crate, so they match by id.
       const lit = active?.act.id === thread.act.id;
-      const [mark, tone] = threadMarks(thread, state, this.unreadThread(thread));
+      const shown = threadState(thread, state, this.unreadThread(thread));
       order(id, {
         enter: () => this.chooseThread(thread),
         space: () => this.foldThread(thread.act.id),
         thread,
       });
       const title = this.railTitle(thread);
+      const head = (): Part[] => [
+        [glyph.mark, threadTone(thread.act.id)],
+        [" "],
+        [`${markOf(shown)[0]} `, markOf(shown)[1]],
+        [title, lit ? c.text : thread.over ? c.faint : c.muted, lit ? bold : 0],
+      ];
       const row = this.railSplit(
-        [
-          [glyph.mark, threadTone(thread.act.id)],
-          [" "],
-          [`${mark} `, tone],
-          [title, lit ? c.text : thread.over ? c.faint : c.muted, lit ? bold : 0],
-        ],
+        moves(shown) ? head : head(),
         this.threadMeta(thread, state),
         () => this.chooseThread(thread),
         { paddingLeft: indent, paddingRight: RIGHT },
@@ -531,7 +531,7 @@ export const rail = part({
         entry,
         {
           lead: [[" "], [mine ? glyph.mark : " ", c.accent], [" "]],
-          state: statusMark(entry.status),
+          state: moves(statusState(entry.status)) ? () => statusMark(entry.status) : statusMark(entry.status),
           name: [label, mine ? c.text : entry.archived ? c.faint : c.muted, mine ? bold : 0],
           tail,
         },

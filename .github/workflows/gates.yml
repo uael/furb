@@ -11,13 +11,15 @@ on:
   schedule:
     - cron: "30 2 * * *"
 
-# One run of the gates for one branch: a push that follows another ends the run before it. On main, it ends only a run
-# that waits, since a group holds one run that waits at most, and the run in progress goes to its end. Only a run of
-# main that passes saves the caches of rust, and a run that a push ends during its save leaves a key that no later run
-# can save: a cancel on main made the bindings on Windows build their dependencies again on each run, in 12 minutes.
+# One run of the gates for one branch: a push that follows another ends the run before it. On main, and on the pull
+# request of w/converge (the head_ref of a pull request is its branch), it ends only a run that waits, since a group
+# holds one run that waits at most, and the run in progress goes to its end. Only a run of main that passes saves the
+# caches of rust, and a run that a push ends during its save leaves a key that no later run can save: a cancel on main
+# made the bindings on Windows build their dependencies again on each run, in 12 minutes. A run takes 30 to 40 minutes
+# and the aggregator pushes w/converge every 15 to 25, so a cancel at each push left no head of it with a verdict.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ !(github.ref == 'refs/heads/main' || github.head_ref == 'w/converge') }}
 
 permissions:
   contents: read
@@ -41,8 +43,8 @@ jobs:
     # one commit in under 40 seconds.
     # A job that a push to main skips saves no cache of rust, and the cache that it saved before stays valid: its key
     # holds each manifest and the lock of cargo, and a change of them runs every job.
-    # A render of the gallery changes only files that no gate reads, so it runs this job and the job of the gates, by
-    # the ruling of the owner on 10-29, which script/scope.py holds.
+    # A render of the gallery changes only files that no gate reads, so it runs this job and the job of the gates, as
+    # script/scope.py holds.
     name: the scope
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -75,7 +77,10 @@ jobs:
     needs: scope
     if: needs.scope.outputs.hooks == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The clippy and the tests of the workspace are two builds of each crate. Main saves the cache of rust only from a
+    # job that passes, so a limit shorter than the two builds from nothing fails each later run too, since none finds
+    # a cache. The jobs of the crate and of the bindings hold 60 for the same cause.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

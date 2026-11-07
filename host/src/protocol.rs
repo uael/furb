@@ -1,7 +1,7 @@
 //! The one protocol of the host: what a peer says to the daemon, and what the daemon says to a
 //! peer, each frame one line of JSON.
 
-use furb::view::{Act, Desk, ThreadNode, Threads};
+use furb::view::{Act, Desk, Rung, Shown, ThreadNode, Threads};
 use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 4;
+pub const PROTOCOL: u32 = 6;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -95,7 +95,7 @@ pub enum Verb {
     cwd: Option<String>,
     actor: Option<String>,
     roster: Option<Vec<String>>,
-    extensions: Option<bool>,
+    skills: Option<bool>,
     #[serde(default)]
     config: Option<String>,
     #[serde(default)]
@@ -324,6 +324,22 @@ pub enum Verb {
     hidden: Vec<String>,
     at: Option<u64>,
   },
+  /// The ladder of a chain, now or as it stood just after a moment: the steps that show and the
+  /// folds of the others, with the folds that the window opened, the prompts that the operator
+  /// owes, the only acts at its top when `taken` names them, and how many last steps show.
+  Ladder {
+    life: String,
+    on: Option<String>,
+    at: Option<u64>,
+    #[serde(default)]
+    opened: Vec<String>,
+    #[serde(default)]
+    owed: Vec<String>,
+    #[serde(default)]
+    taken: Option<Vec<String>>,
+    #[serde(default)]
+    shown: Option<Shown>,
+  },
   /// The acts of a life as they stood just after a moment, each with its meaning then.
   AsOf {
     life: String,
@@ -392,6 +408,7 @@ impl Verb {
         | Self::Desk { .. }
         | Self::Threads { .. }
         | Self::Rail { .. }
+        | Self::Ladder { .. }
         | Self::AsOf { .. }
         | Self::Moments { .. }
         | Self::Names { .. }
@@ -504,6 +521,8 @@ pub enum Answer {
   Threads(Threads),
   /// The threads of every chain of a life, as one tree.
   Rail(Vec<ThreadNode>),
+  /// The ladder of a chain.
+  Ladder(Vec<Rung>),
   /// The acts as they stood at a moment.
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.

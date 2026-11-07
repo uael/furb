@@ -21,7 +21,7 @@ export type Request1 =
       cwd?: string | null;
       actor?: string | null;
       roster?: string[] | null;
-      extensions?: boolean | null;
+      skills?: boolean | null;
       config?: string | null;
       claude?: string | null;
       answers?: boolean;
@@ -243,6 +243,16 @@ export type Request1 =
       hidden?: string[];
       at?: number | null;
       verb: "rail";
+    }
+  | {
+      life: string;
+      on?: string | null;
+      at?: number | null;
+      opened?: string[];
+      owed?: string[];
+      taken?: string[] | null;
+      shown?: Shown | null;
+      verb: "ladder";
     }
   | {
       life: string;
@@ -554,6 +564,10 @@ export type Answer =
       data: ThreadNode[];
     }
   | {
+      answer: "ladder";
+      data: Rung[];
+    }
+  | {
       answer: "acts";
       data: Act[];
     }
@@ -599,6 +613,29 @@ export type Aside =
   | {
       aside: "question";
       from: string;
+    };
+/**
+ * One line of a ladder, in the order that the window draws it.
+ */
+export type Rung =
+  | {
+      id: string;
+      depth: number;
+      type: "step";
+    }
+  | {
+      rungs: string[];
+      depth: number;
+      type: "ear";
+    }
+  | {
+      head: string;
+      depth: number;
+      count: number;
+      of: string;
+      key: string;
+      heads: string[];
+      type: "more";
     };
 /**
  * Where an act stands: asked, started by the ear that owns it, or done, with what it came to.
@@ -791,6 +828,13 @@ export interface Hello {
   kind: Kind;
   name?: string | null;
   role?: Role | null;
+}
+/**
+ * How many of the last prompts of a thread, and of the last rungs of each ladder, show.
+ */
+export interface Shown {
+  prompts: number;
+  rungs: number;
 }
 /**
  * A view that a window mounts in a slot of a life, which the process of a skill serves.
@@ -1094,4 +1138,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 4;
+export const PROTOCOL = 6;

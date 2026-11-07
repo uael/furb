@@ -11,7 +11,7 @@ use super::{
   act::{Act, Kind, operator},
   fold::followed,
   named::Named,
-  state::State,
+  state::{State, working},
 };
 
 /// The acts of a life by their names.
@@ -144,7 +144,9 @@ enum Verdict<'a> {
 /// What a prompt to a model is: a message of a thread when it stands on one, the acknowledgment of
 /// an act that a chain made, which belongs to the thread of that act, a notice, a word of the
 /// operator, a wake or a question of another chain, and else a thread of its own, as each prompt
-/// that the operator made himself.
+/// that the operator made himself. A prompt of None is never a thread, whoever made it, since no
+/// one answers it: the watch of the daemon tells a stall so, in the name of the operator. A prompt
+/// that a skill made with no thread over it, as the naming of the session, is a notice too.
 fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
   if act.thread().is_some() {
     return Verdict::Message(root_of(act, rows));
@@ -153,6 +155,7 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
   let none = act.words.first().is_some_and(|shape| shape == "None");
   match maker {
     Some(maker) if none && maker.kind == Kind::Chain => acknowledged(act, rows),
+    _ if none && operator(&act.by) => Verdict::Aside(Aside::Notice),
     _ if operator(&act.by) => Verdict::Own,
     Some(maker) if none && maker.kind == Kind::Rung && operator(&maker.by) => {
       Verdict::Aside(Aside::Rung)
@@ -163,6 +166,9 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
     _ if none => Verdict::Aside(Aside::Wake),
     Some(maker) if maker.chain != act.chain && !within(&act.chain, &maker.chain, rows) => {
       Verdict::Aside(Aside::Question(maker.chain.clone()))
+    }
+    Some(maker) if matches!(maker.kind, Kind::Other(_)) && thread_of(act, rows).is_none() => {
+      Verdict::Aside(Aside::Notice)
     }
     _ => Verdict::Own,
   }
@@ -316,11 +322,33 @@ fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
     thread.over = open.is_none();
     thread.state = match open.or_else(|| rows.get(thread.prompt.as_str())) {
       _ if !thread.asks.is_empty() => State::Asks,
-      Some(act) => State::of(act),
+      Some(act) => match State::of(act) {
+        // A model that writes a word for the thread thinks, as the chain and the session say.
+        State::Runs
+          if act.kind == Kind::Prompt && working(&work_of(&act.id, on), &[]) == State::Thinks =>
+        {
+          State::Thinks
+        }
+        state => state,
+      },
       None => State::Idle,
     };
   }
   (out, asides)
+}
+
+/// The acts that work for a prompt: the rungs that advance on it, and the acts that those rungs
+/// made, as the commands and the waits of their words.
+fn work_of<'a>(prompt: &str, on: &[&'a Act]) -> Vec<&'a Act> {
+  let rungs: HashSet<&str> = on
+    .iter()
+    .filter(|act| act.kind == Kind::Rung && act.by == prompt)
+    .map(|act| act.id.as_str())
+    .collect();
+  on.iter()
+    .copied()
+    .filter(|act| rungs.contains(act.id.as_str()) || rungs.contains(act.by.as_str()))
+    .collect()
 }
 
 /// Each thread of a chain takes its name: the first thread that no operator made on a chain under

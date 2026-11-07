@@ -179,10 +179,9 @@ mod tests {
 
   use furb::world::Told;
   use serde_json::json;
-  use tokio::sync::mpsc;
 
   use super::{Answerer, GONE};
-  use crate::{error::ProtocolError, protocol::Frame};
+  use crate::{error::ProtocolError, protocol::Frame, serve::Outbox};
 
   const LIFE: &str = "/a.jsonl";
 
@@ -206,7 +205,7 @@ mod tests {
 
   #[tokio::test]
   async fn a_request_that_the_life_drops_before_its_turn_takes_no_later_turn() {
-    let (outbox, mut pushed) = mpsc::unbounded_channel();
+    let (outbox, mut pushed) = Outbox::new();
     let answerer = Answerer::new(LIFE.to_owned(), outbox.clone());
     let (told, count) = counted();
     let waiting = answerer.hosted()(json!({}), told);
@@ -220,7 +219,7 @@ mod tests {
 
   #[tokio::test]
   async fn a_write_or_a_turn_after_the_turn_of_a_request_is_refused() {
-    let (outbox, mut pushed) = mpsc::unbounded_channel();
+    let (outbox, mut pushed) = Outbox::new();
     let answerer = Answerer::new(LIFE.to_owned(), outbox.clone());
     let (told, count) = counted();
     let waiting = answerer.hosted()(json!({}), told);
@@ -234,7 +233,7 @@ mod tests {
 
   #[tokio::test]
   async fn a_request_fails_and_leaves_the_broker_once_its_peer_is_gone() {
-    let (outbox, mut pushed) = mpsc::unbounded_channel();
+    let (outbox, mut pushed) = Outbox::new();
     let answerer = Answerer::new(LIFE.to_owned(), outbox);
     let waiting = answerer.hosted()(json!({}), counted().0);
     asked(pushed.recv().await);
@@ -247,13 +246,13 @@ mod tests {
 
   #[tokio::test]
   async fn a_peer_that_takes_the_place_of_one_that_is_gone_cannot_speak_for_its_requests() {
-    let (gone, mut pushed) = mpsc::unbounded_channel();
+    let (gone, mut pushed) = Outbox::new();
     let answerer = Answerer::new(LIFE.to_owned(), gone);
     let (told, count) = counted();
     let waiting = answerer.hosted()(json!({}), told);
     let ask = asked(pushed.recv().await);
     drop(pushed);
-    let (next, _heard) = mpsc::unbounded_channel();
+    let (next, _heard) = Outbox::new();
     assert_eq!(answerer.taken_by(&next), Ok(()));
     assert_eq!(answerer.wrote(&next, ask, "taken", ""), unasked(ask));
     assert_eq!(answerer.answered(&next, ask, Err("taken".to_owned())), unasked(ask));
@@ -264,8 +263,8 @@ mod tests {
 
   #[tokio::test]
   async fn a_peer_that_does_not_answer_the_life_cannot_speak_for_its_request() {
-    let (outbox, mut pushed) = mpsc::unbounded_channel();
-    let (other, _heard) = mpsc::unbounded_channel();
+    let (outbox, mut pushed) = Outbox::new();
+    let (other, _heard) = Outbox::new();
     let answerer = Answerer::new(LIFE.to_owned(), outbox.clone());
     let (told, count) = counted();
     let waiting = answerer.hosted()(json!({}), told);

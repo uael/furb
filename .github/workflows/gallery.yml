@@ -9,10 +9,10 @@ name: gallery
 # and opens a draft, which the round of the conductor does not merge.
 on:
   workflow_dispatch:
-  # Once a day, at an hour when the owner sleeps and the gates have no queue. A render takes about fifteen minutes of a
-  # runner, and a render every three hours took eight such runs a day from the gates, as a render on each push to main
-  # did before it. A day is often enough: the open pull request holds the newest render, and the owner merges it early
-  # when he wants it, or runs this workflow by hand.
+  # Once a day, at an hour when the gates have no queue. A render takes about fifteen minutes of a runner, and a render
+  # every three hours took eight such runs a day from the gates, as a render on each push to main did before it. A day
+  # is often enough: the open pull request holds the newest render, and a maintainer merges it early when it is needed,
+  # or runs this workflow by hand.
   schedule:
     - cron: "17 4 * * *"
 
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     # This job opens the pull request of the gallery as github-actions[bot], with GITHUB_TOKEN, whose push and pull
-    # request start no workflow: a render of screenshots runs no gate, by the ruling of the owner on 10-29.
+    # request start no workflow: a render of screenshots runs no gate.
     permissions:
       contents: write
       pull-requests: write

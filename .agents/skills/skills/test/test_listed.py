@@ -18,7 +18,7 @@ async def test_the_skills_of_a_chain_read_where_its_word_runs(tmp_path: Path) ->
   assert "Make tea." in "\n".join(of(engine.turns(on=root), "read"))
 
 
-async def test_the_life_word_of_the_extension_is_await_listed(tmp_path: Path) -> None:
+async def test_the_life_word_of_the_skill_is_await_listed(tmp_path: Path) -> None:
   """The life word of the extension is await listed(), so the setup of the root reads the skills in the turn of the life words of the extensions, and each chain with no source holds that read in its setup."""
   skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
   _, root = extended("skills", tmp_path, _monty.skills, lives=True, doctrine="Read first.\n")

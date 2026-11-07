@@ -30,7 +30,7 @@ test("/config shows each key with its schema, flips a flag, takes a key out and 
     record: join(directory, "life.jsonl"),
     config: join(directory, "user"),
     roster: [],
-    extensions: false,
+    skills: false,
   });
   const session = new Session(opened.engine, opened.host, false, new Preferences(join(directory, "ui.json")));
   try {

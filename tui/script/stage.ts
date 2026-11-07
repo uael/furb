@@ -9,6 +9,7 @@ import { demoLibrary } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
 import type { Workspaces } from "../src/workspaces.ts";
 import { handedOver } from "./daemon.ts";
+import { heavy } from "./environment.ts";
 
 /** The longest time, in seconds, that a script of the gallery waits for one screen, that a run of it lasts, and that it
  * waits for another run to end. */
@@ -139,7 +140,10 @@ export async function home(name: string, environment: Record<string, string> = {
     // A cache that the caller names holds a daemon of the caller, which this run never ends.
     const given = environment.XDG_CACHE_HOME || process.env.XDG_CACHE_HOME;
     if (short || !given) place = daemonPlace(join(short ?? cacheOf(real, environment), "furb", "host"));
-    child = Bun.spawn([process.execPath, Bun.main], {
+    // The run is a heavy step, which starts only while the machine has the memory for it: script/heavy.sh holds it for
+    // up to WAIT seconds, which the limit of the run adds.
+    const most = heavy.length ? LIMIT + WAIT : LIMIT;
+    child = Bun.spawn([...heavy, process.execPath, Bun.main], {
       env: {
         ...process.env,
         ...environment,
@@ -148,13 +152,14 @@ export async function home(name: string, environment: Record<string, string> = {
         ...(short ? { XDG_CACHE_HOME: short } : {}),
         FURB_GALLERY_HOME: real,
         FURB_GALLERY_PARENT: String(process.pid),
+        FURB_HEAVY_WAIT: String(WAIT),
       },
       stdio: ["inherit", "inherit", "inherit"],
     });
     const limit = setTimeout(() => {
-      console.error(`${Bun.main} ran for ${LIMIT} seconds, so it is stopped.`);
+      console.error(`${Bun.main} ran for ${most} seconds, so it is stopped.`);
       child?.kill("SIGKILL");
-    }, LIMIT * 1000);
+    }, most * 1000);
     const code = await child.exited;
     clearTimeout(limit);
     process.exitCode = code || (child.signalCode ? 1 : 0);

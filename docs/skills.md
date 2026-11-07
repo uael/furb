@@ -397,7 +397,7 @@ life gets the same answer from the record. So a replay is exact, and the World i
   `state` of the protocol names them.
 - The TUI: `/skills` lists what the life runs, and `/run` runs a word of one on the chain on screen, as
   `/run skill("pdf")`.
-- TypeScript: `Session` takes `extensions`, false to enable nothing new, and `config`, the config directory of the
+- TypeScript: `Session` takes `skills`, false to enable nothing new, and `config`, the config directory of the
   user.
-- Both doors: `opened` gives the record and the ears of the crate, and `extensions` false enables nothing new.
+- Both doors: `opened` gives the record and the ears of the crate, and `skills` false enables nothing new.
   `enabled`, on the facts of the root, gives the extensions that a life runs, in the order that it enabled them.

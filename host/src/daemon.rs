@@ -74,6 +74,13 @@ use crate::{
 /// How long a life with no holder lives, unless the settings of the daemon say otherwise.
 pub const GRACE: Duration = Duration::from_secs(30);
 
+/// How many frames of the events of a life may wait for a window before the daemon reads the next
+/// event: a window that reads slowly stands behind the life, and reads the log of the life again
+/// once it reads on, in the place of a copy of each event in its outbox. That read holds a place
+/// and a reference for each event of the rest of the log, and keeps each such event until the
+/// window has it.
+const WAITING: usize = 256;
+
 /// What the daemon opens each life on.
 #[derive(Clone)]
 pub struct Settings {
@@ -500,6 +507,9 @@ fn routed(verb: Verb) -> Routed {
     Verb::Desk { life, notices } => (life, Command::Desk { notices }),
     Verb::Threads { life, on, at, read } => (life, Command::Threads { on, at, read }),
     Verb::Rail { life, hidden, at } => (life, Command::Rail { hidden, at }),
+    Verb::Ladder { life, on, at, opened, owed, taken, shown } => {
+      (life, Command::Ladder { on, at, opened, owed, taken, shown })
+    }
     Verb::AsOf { life, at } => (life, Command::AsOf { at }),
     Verb::Moments { life, on } => (life, Command::Moments { on }),
     other => return Routed::Daemon(other),
@@ -528,6 +538,7 @@ impl From<Reply> for Answer {
       Reply::Desk(desk) => Self::Desk(desk),
       Reply::Threads(threads) => Self::Threads(threads),
       Reply::Rail(threads) => Self::Rail(threads),
+      Reply::Ladder(rungs) => Self::Ladder(rungs),
       Reply::Acts(acts) => Self::Acts(acts),
       Reply::Moments(moments) => Self::Moments(moments),
     }
@@ -544,7 +555,7 @@ struct Birth {
   cwd: String,
   actor: Option<String>,
   roster: Option<Vec<String>>,
-  extensions: Option<bool>,
+  skills: Option<bool>,
   config: Option<String>,
   claude: Option<String>,
   answerer: Option<Answerer>,
@@ -725,11 +736,11 @@ impl Lives {
 
   fn verb(&mut self, peer: Peer, verb: Verb, outbox: &Outbox, reply: Replied) {
     let answer = match verb {
-      Verb::Open { life, cwd, actor, roster, extensions, config, claude, answers, attach } => {
+      Verb::Open { life, cwd, actor, roster, skills, config, claude, answers, attach } => {
         let answerer = answers.then(|| Answerer::new(life.clone(), outbox.clone()));
         let holder = attach.map(|from| Holder { peer, outbox: outbox.clone(), from });
         let cwd = cwd.unwrap_or_default();
-        let birth = Birth { cwd, actor, roster, extensions, config, claude, answerer, holder };
+        let birth = Birth { cwd, actor, roster, skills, config, claude, answerer, holder };
         return self.open(life, birth, reply);
       }
       Verb::List { config } => Ok(Answer::Lives(self.listed(config))),
@@ -832,7 +843,7 @@ impl Lives {
 
   /// A life born on a thread of its own, with no holder yet, and watched for its end.
   fn opened(&mut self, life: String, birth: Birth) -> Result<(), ProtocolError> {
-    let Birth { cwd, actor, roster, extensions, config, claude, answerer, holder: _ } = birth;
+    let Birth { cwd, actor, roster, skills, config, claude, answerer, holder: _ } = birth;
     let base = &self.settings.opening;
     let config = config.or_else(|| base.config.clone());
     let answer = answerer.as_ref().map(|one| Answered(one.hosted()));
@@ -841,7 +852,7 @@ impl Lives {
       directory: cwd.clone(),
       actor: actor.or_else(|| base.actor.clone()),
       roster: roster.or_else(|| base.roster.clone()),
-      extensions: extensions.or(base.extensions),
+      skills: skills.or(base.skills),
       config: config.clone(),
       claude: claude.or_else(|| base.claude.clone()),
       answer: answer.or_else(|| base.answer.clone()),
@@ -1140,8 +1151,8 @@ async fn woken(
   }
 }
 
-/// The events of a life pushed to the peer of a window, until the life ends or the peer is gone,
-/// which the daemon hears.
+/// The events of a life pushed to the peer of a window, no more than [`WAITING`] of them ahead of
+/// what the peer read, until the life ends or the peer is gone, which the daemon hears.
 async fn told(
   life: String,
   events: impl Stream<Item = (Seq, Arc<Event>)>,
@@ -1154,6 +1165,7 @@ async fn told(
       () = outbox.closed() => break,
       next = events.next() => match next {
         Some((seq, event)) => {
+          outbox.room(WAITING).await;
           let frame = Frame::Event { life: life.clone(), seq, event: Event::clone(&event) };
           if outbox.send(frame).is_err() {
             break;

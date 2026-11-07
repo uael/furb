@@ -101,7 +101,8 @@ impl Quiet {
   }
 
   /// One fact, which shows that the life lives. The fact of the prompt of a message of the watch
-  /// names that prompt, and each act that an act of a message made is of the message too.
+  /// names that prompt, and each act that an act of a message made is of the message too, as is
+  /// the run of the word of a rung of a message, which its chain makes.
   fn fact(&mut self, fact: &Value) {
     let word = |at: usize| fact.get(at).and_then(Value::as_str).unwrap_or_default();
     let (kind, about, by) = (word(0), word(1), word(2));
@@ -115,7 +116,9 @@ impl Quiet {
     } else if let Some(chain) = self.chains.values_mut().find(|one| sent(&one.told)) {
       chain.told = asking();
       self.ours.insert(about.to_owned());
-    } else if self.ours.contains(by) && question(kind, about) {
+    } else if question(kind, about)
+      && (self.ours.contains(by) || kind == "run" && self.ours.contains(word(4)))
+    {
       self.ours.insert(about.to_owned());
     }
   }

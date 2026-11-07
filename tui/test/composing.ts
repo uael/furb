@@ -78,6 +78,11 @@ export async function composing(
     workspaces: library,
   });
   const frame = async () => {
+    // The crate folds the ladder of the chain shown, which a frame draws once it came.
+    for (let pass = 0; pass < 3; pass++) {
+      app.render();
+      await session.laddersRead();
+    }
     app.render();
     await screen.flush();
     return screen.captureCharFrame();

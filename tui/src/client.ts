@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -16,11 +16,13 @@ import type {
   Listed,
   Peer,
   Role,
+  Rung,
   ThreadNode,
   Threads,
   Request1 as Verb,
 } from "furb/protocol";
 import { PROTOCOL } from "furb/protocol";
+import { program } from "../../bind/typescript/program.ts";
 import type { Setting } from "./configs.ts";
 
 export type { Verb };
@@ -46,18 +48,10 @@ export function daemonPlace(folder = daemonFolder()): string {
     : join(folder, "host.sock");
 }
 
-/** The program furb that serves the daemon: the one that FURB_BIN names, else the newest that `bun run build` made in
- * the target folder of this clone, else furb on the PATH. */
+/** The program furb that serves the daemon: the one that FURB_BIN names, else the one that `bun run build` made for
+ * this tree, else furb on the PATH. */
 export function furbProgram(env: Record<string, string | undefined> = process.env): string {
-  if (env.FURB_BIN) return env.FURB_BIN;
-  const target = env.CARGO_TARGET_DIR || join(import.meta.dir, "..", "..", "target");
-  const name = process.platform === "win32" ? "furb.exe" : "furb";
-  const triple = env.CARGO_BUILD_TARGET ? [env.CARGO_BUILD_TARGET] : [];
-  const built = ["debug", "release"]
-    .map((profile) => join(target, ...triple, profile, name))
-    .filter((path) => existsSync(path))
-    .sort((one, other) => statSync(other).mtimeMs - statSync(one).mtimeMs);
-  return built[0] ?? "furb";
+  return env.FURB_BIN || (existsSync(program) ? program : "furb");
 }
 
 /** How long a window waits for the end of a life that it let go, in milliseconds: the grace of the daemon, 30 s, and
@@ -358,7 +352,7 @@ export interface Choices {
   cwd?: string;
   actor?: string;
   roster?: string[];
-  extensions?: boolean;
+  skills?: boolean;
   /** The folder of the settings of the user and the claude command line that the window reads, which the life reads
    * too. */
   config?: string;
@@ -494,7 +488,7 @@ export class RemoteLife extends EventEmitter {
     if (!this.held) this.daemon.hold();
     this.held = true;
     await this.daemon.connect();
-    const { cwd, actor, roster, extensions, config, claude, models } = this.choices;
+    const { cwd, actor, roster, skills, config, claude, models } = this.choices;
     const told = new Promise<void>((resolve) => {
       const heard = () => {
         this.off("facts", heard);
@@ -530,7 +524,7 @@ export class RemoteLife extends EventEmitter {
         cwd,
         actor,
         roster,
-        extensions,
+        skills,
         config,
         claude,
         answers,
@@ -942,6 +936,28 @@ export class RemoteLife extends EventEmitter {
       read: read ?? null,
     });
     if (got.answer !== "threads") throw new Error(`The daemon gave ${got.answer}, and no threads.`);
+    return got.data;
+  }
+  /** The ladder of a chain as the crate folds it in the daemon, now or as it stood just after a moment: the steps that
+   * show and the folds of the others, with the folds that the window opened, the prompts that the operator owes, and
+   * the only acts at its top when `taken` names them. */
+  async ladder(
+    on: string,
+    at?: number,
+    opened: string[] = [],
+    owed: string[] = [],
+    taken?: string[],
+  ): Promise<Rung[]> {
+    const got = await this.verb({
+      verb: "ladder",
+      life: this.record,
+      on,
+      at: at ?? null,
+      opened,
+      owed,
+      taken: taken ?? null,
+    });
+    if (got.answer !== "ladder") throw new Error(`The daemon gave ${got.answer}, and no ladder.`);
     return got.data;
   }
   /** The threads of every chain of the life but those that `hidden` names, as one tree in the order of the list of

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { frame, markOf, marks, motion, palettes, setTheme, theme } from "../src/theme.ts";
+import { frame, markOf, marks, motion, palettes, setTheme, shimmer, theme } from "../src/theme.ts";
 
 test("one table gives each state its one mark, its color and its weight, and the spinner stands still as ✻", () => {
   setTheme("ink");
@@ -50,4 +50,24 @@ test("only the states that move move: a model that thinks spins, work that runs 
     "idle",
   ] as const)
     expect(new Set(at(state)).size).toBe(1);
+});
+
+test("the light over the word of work sweeps over it one letter a frame, and a view that holds still shows the word plain", () => {
+  const word = "Working";
+  const lit = (now: number) =>
+    shimmer(word, now).findIndex(
+      ([, fg]) => fg.r === theme.accent.r && fg.g === theme.accent.g && fg.b === theme.accent.b,
+    );
+  for (let tick = 0; tick < word.length + 6; tick++) {
+    const parts = shimmer(word, tick * frame);
+    expect(parts.map(([text]) => text).join("")).toBe(word);
+    // The light enters before the first letter, stands on one letter a frame, and leaves after the last.
+    expect(lit(tick * frame)).toBe(tick >= 3 && tick < word.length + 3 ? tick - 3 : -1);
+  }
+  motion.still = true;
+  try {
+    expect(shimmer(word, 5 * frame)).toEqual([[word, theme.text]]);
+  } finally {
+    motion.still = false;
+  }
 });

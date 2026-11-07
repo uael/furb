@@ -159,7 +159,7 @@ engine does not serve its meaning, the name is wrong, and the name changes.
 - started or done is ownership, and the owner of an act answers it. The life refuses an act that no ear owns.
 - A view reads the life, and makes nothing and keeps nothing: get, peek and transcript, and all that is derived
   from them.
-- No hidden control flow and no magic, which is a hard rule of the owner: a model can rebuild the whole flow of what it
+- No hidden control flow and no magic, which is a hard rule: a model can rebuild the whole flow of what it
   read from the exact code that ran. Each change of the module of a chain comes from a word that the transcript of that
   chain shows as a turn, and the transcript is the whole of what ran: no run is made on the side, and no control flow
   is hidden. furb hosts itself with its own verbs. Only the Kernel and the World stand outside `src/furb/engine.py`,
@@ -190,11 +190,11 @@ commits, PRs or issues: state the rule they carry, in plain English.
 
 Before you write or change a Rust file, read the skill rust.
 
-## Questions of the owner
+## Questions about a state or a delay
 
-A question of the owner about a state or a delay, as "Why is it not built yet?", "Is it fine?" or "Why is this chain
-paused?", most often points at a defect of the agent that he asks, and he wants that defect fixed durably. Read it as
-that request. Fix the state at once, find the cause in your own work, make its durable fix at once (a change of the
+A question about a state or a delay, such as why something is not built yet, whether a state is fine, or why a chain is
+paused, most often points at a defect of the agent that is asked, and it calls for a durable fix of that defect. Read it
+as that request. Fix the state at once, find the cause in your own work, make its durable fix at once (a change of the
 instructions, of a tool or of a test, in a pull request), read the state again to verify, and only then answer, with
 the fix and its proof. An answer that only explains is not done.
 
@@ -308,7 +308,10 @@ fix what your change broke, and report what was broken before.
   `base`, `origin/main` by default. It links `target` to `furb-target` beside the main checkout, which each worktree of the
   clone shares, so a dependency builds once and a worktree adds only its crates of the workspace. The build script of
   furb reads `FURB_TREE`, so a build rebuilds a crate that another worktree built last: cargo would call it fresh by
-  the time of its files and test the code of the other worktree. A tree
+  the time of its files and test the code of the other worktree. The programs keep no such
+  stamp: the program `furb` of the last build of any tree stands in the shared target, so `bun run build` copies it
+  to `bind/typescript/furb` of its tree (`bind/typescript/program.ts`), and the TUI and its tests serve the daemon from
+  that copy, never from the target. A tree
   that lacks this stamp keeps its own target until it merges `origin/w/converge`: the hooks `post-merge` and
   `post-commit` run `script/share-target.sh`, which drops that target and links the shared one, when no build runs in it. It copies on write the build directories of the
   checkout whose build stands nearest to the new commit: the `node_modules` of bun, the build of the TypeScript
@@ -321,6 +324,7 @@ fix what your change broke, and report what was broken before.
   dependencies, against about 35 in a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
+- `sh script/heavy.sh <command> [argument...]`: run a heavy step (a build, a test run, a capture) only while the machine has the memory for it: at most one for each 9 GB of memory at once, and none while less than 20% of the memory is free, the swap grows, or the memory is tight (on macOS the pressure level of the kernel is warn or critical, on Linux 80% of the swap is in use); the hooks, `script/worktree.sh`, `bun run test`, the gallery and the desk of the conductor go through it, and a runner of CI (`CI=true`) skips it. A step that waits past `FURB_HEAVY_WAIT` (1200 s) exits 75.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
@@ -356,7 +360,7 @@ fix what your change broke, and report what was broken before.
   `--files <files>` to run some files. In a new worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs
   the old `pre-commit` of the system, which cannot read the config, so do not use it there. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout in `bash` of twice the time that it took last. The hook
-  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks only on
+  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. It also runs the hooks once on the files of each pushed commit that no remote holds and whose change did not pass them, as after `--no-verify`, an amend or a rebase, and passes a commit that shares no history with `origin/main`, as a branch of captures, and refuses the push when they fail or when the branch is not checked out with a clean work tree, so a checked commit runs no hook a second time. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks only on
   each file whose content differs from its version in every parent: a file that it takes whole from one parent passed the
   hooks of that parent, and the gates check the whole tree. Run the
   push as its own command after the commit, so that its result stands in the tail of that command. The hook `cargo test` runs only when a file that the crate
