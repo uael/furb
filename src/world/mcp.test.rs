@@ -384,26 +384,20 @@ fn a_server_lists_the_tools_that_its_file_holds_when_it_lists_and_a_changed_tool
   let at = place("tools-file");
   let file = at.join("tools.txt");
   fs::write(&file, "first\n").unwrap();
-  let env = json!({FIXTURE: "1", STARTS: at.join("starts").display().to_string(), TOOLS: file.display().to_string()});
-  config(
-    &at.join("config").join("mcp.json"),
-    &json!({"mcpServers": {"fixture": stdio(&at, &json!({"env": env}))}}),
-  );
+  let mut fixture = stdio(&at, &json!({}));
+  fixture["env"][TOOLS] = json!(file.display().to_string());
+  config(&at.join("config").join("mcp.json"), &json!({"mcpServers": {"fixture": fixture}}));
   let mut engine = life(&at, &[]);
   let names = |engine: &mut Engine| -> Vec<String> {
     let tools = server(engine, "fixture")["tools"].clone();
     tools.as_array().unwrap().iter().map(|one| one["name"].as_str().unwrap().to_owned()).collect()
   };
-  assert!(names(&mut engine).contains(&"first".to_owned()));
-  assert!(!names(&mut engine).contains(&"fresh".to_owned()));
+  let before = names(&mut engine);
+  assert!(before.contains(&"first".to_owned()) && !before.contains(&"fresh".to_owned()));
   fs::write(&file, "first\nfresh\n").unwrap();
-  // The server ends and connects again, as a reload of its connection does, and lists the file as
-  // it stands.
-  asked(&mut engine, "mcp_call", "'fixture', 'crash'").unwrap_err();
-  until(&mut engine, |engine| {
-    server(engine, "fixture")["state"] == "connected" && names(engine).contains(&"fresh".to_owned())
-  });
-  assert_eq!(starts(&at), 2);
+  let again = asked(&mut engine, "mcp_control", "'reconnect', 'fixture'").unwrap();
+  assert_eq!(again["state"], "connected");
+  assert!(names(&mut engine).contains(&"fresh".to_owned()));
   assert_eq!(asked(&mut engine, "mcp_call", "'fixture', 'fresh'").unwrap()["text"], "called fresh");
 }
 

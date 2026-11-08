@@ -20,7 +20,7 @@ import {
 } from "furb/life";
 import { clock } from "../clock.ts";
 import { fromDirectory, shortenHomes } from "../files.ts";
-import { clip, dollars, modelLabel, plainFailure } from "../format.ts";
+import { clip, dollars, plainFailure } from "../format.ts";
 import type { Mark as PartMark } from "../parts.ts";
 import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
@@ -719,15 +719,12 @@ export const feed = part({
             key: `${value}\n${model}\n${w.folds[`reply:${id}`]}\n${this.feedWidth}\n${this.theme}`,
             apart: true,
             body: (box) => {
-              const { name, effort } = this.model(model);
               const row = this.box({ flexDirection: "row" });
               // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
               const answer = this.box({ flexGrow: 1, flexShrink: 1 });
               this.bounded(answer, value, `reply:${id}`);
               row.add(answer);
-              row.add(
-                this.text([[modelLabel(name, effort), c.muted]], c.faint, { marginLeft: space.between }),
-              );
+              row.add(this.text([[this.actorLabel(model), c.muted]], c.faint, { marginLeft: space.between }));
               box.add(row);
             },
           };
@@ -1201,15 +1198,13 @@ export const feed = part({
                 box.add(answer);
                 return;
               }
-              const { name, effort } = this.model(String(act.words[2] ?? ""));
+              const model = String(act.words[2] ?? "");
               const row = this.box({ flexDirection: "row" });
               // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
               const answer = this.box({ flexGrow: 1, flexShrink: 1 });
               this.bounded(answer, value, `reply:${act.id}`);
               row.add(answer);
-              row.add(
-                this.text([[modelLabel(name, effort), c.muted]], c.faint, { marginLeft: space.between }),
-              );
+              row.add(this.text([[this.actorLabel(model), c.muted]], c.faint, { marginLeft: space.between }));
               this.panel(box, tone).add(row);
             },
             {

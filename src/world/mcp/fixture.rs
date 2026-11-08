@@ -45,7 +45,6 @@ fn named() -> Vec<String> {
   text
     .iter()
     .flat_map(|text| text.lines())
-    .map(str::trim)
     .filter(|one| !one.is_empty())
     .map(str::to_owned)
     .collect()
