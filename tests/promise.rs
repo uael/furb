@@ -594,12 +594,7 @@ impl Drop for Reaped {
 /// kill again as a cut of the record.
 fn killed(Reaped(child): &mut Reaped, record: &Path, fact: usize) {
   let begun = std::time::Instant::now();
-  // shortcut: a kill between the gate of the first stand and its done drifts at gate1, the
-  // defect of the journal that the Needs of promise-proofs-a74 names (seed 860273 of the torn
-  // test), so the kill waits for that done too; delete the second clause with the fix.
-  let reached =
-    |text: &str| text.matches('\n').count() >= fact && text.contains("[[\"done\",\"gate1\"");
-  while !fs::read_to_string(record).is_ok_and(|text| reached(&text)) {
+  while !fs::read_to_string(record).is_ok_and(|text| text.matches('\n').count() >= fact) {
     assert!(child.try_wait().unwrap().is_none(), "the life ended before its kill");
     assert!(
       begun.elapsed() < std::time::Duration::from_secs(120),
@@ -682,6 +677,33 @@ fn placed(engine: &mut Engine, at: &[&Path]) -> String {
   placing(state(engine), at)
 }
 
+/// The state of a life over the facts that the text of a record holds, with each of these
+/// directories written as <at>: an open stands its root again, a fact of that open and not of the
+/// life that it opens.
+fn recorded(engine: &mut Engine, text: &str, at: &[&Path]) -> String {
+  let facts = text.lines().filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok());
+  let names: Vec<Object> = facts.filter_map(|one| one[0][1].as_str().map(Object::string)).collect();
+  let word = STATE.replace("transcript(c) if", "transcript(c) if x[1] in __names and");
+  let held = engine.word(&word, vec![("__names", Object::list(names))]).unwrap().as_ref().py_repr();
+  placing(format!("{held}\n{}", modules(engine)), at)
+}
+
+#[test]
+fn a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_held_live() {
+  let at = place("unchecked");
+  for n in 0..3 {
+    let mut life = scripted(&at, false, &SCRIPT).boot::<String>([]).unwrap().0;
+    woke(&mut life);
+    closed(&mut life, &kept(n));
+    let held = placed(&mut life, &[&at]);
+    drop(life);
+    let text = fs::read_to_string(at.join("record.jsonl")).unwrap();
+    assert!(!text.contains("[[\"checkpoint\""), "no life of the record wrote a checkpoint");
+    let opened = recorded(&mut inspected(&at).unwrap(), &text, &[&at]);
+    assert!(opened == held, "life {n}: its replay holds the transcript of the live life");
+  }
+}
+
 /// A state with each of these directories written as <at>, in each form that python shows it in: a
 /// path of Windows has its backslashes doubled by the repr of a text, and again by the repr of that
 /// repr, as a module value that holds a path is shown.
@@ -744,28 +766,19 @@ fn a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entrie
     .chain(text.match_indices('\n').map(|(at, _)| at + 1))
     .filter(|at| *at < text.len())
     .collect();
-  // shortcut: a cut between the gate of the first stand and its done drifts at gate1, since a
-  // replay makes that gate before the teach of the extensions that the record holds before it, a
-  // defect of the journal of src/furb/engine.py that the Needs of promise-proofs-a74 names with the
-  // seed 860273. The test steps over that cut and asserts its drift, so the fix turns it red: then
-  // delete `gated`, its filter and its check.
-  let gated = text.find("[[\"done\",\"gate1\"").unwrap();
-  let known = place("torn-gated");
-  fs::write(known.join("record.jsonl"), &text[..gated]).unwrap();
-  let drift = inspected(&known).err().map(|why| why.to_string()).unwrap_or_default();
-  assert!(
-    drift.contains("gate1 drifts"),
-    "the known drift at gate1 stands, else delete its step over: {drift:?}"
-  );
-  let starts: Vec<usize> = starts.into_iter().filter(|at| *at != gated).collect();
   let picked = starts[usize::try_from(draw(&mut points)).unwrap() % starts.len()];
-  for (name, start) in [("line", picked), ("checkpoint", text.rfind("[[\"checkpoint\"").unwrap())] {
+  // The cut between the gate of the first stand and its done, which the teach of the extensions
+  // before that gate orders, is cut each time.
+  let gated = text.find("[[\"done\",\"gate1\"").unwrap();
+  let cuts =
+    [("line", picked), ("gate1", gated), ("checkpoint", text.rfind("[[\"checkpoint\"").unwrap())];
+  for (name, start) in cuts {
     let line = text[start..].find('\n').map_or(text.len(), |end| start + end) - start;
     // A third of the cuts fall at the end of the line, which leaves it whole and not ended, so the
-    // store reads it as an entry and ends it at its next keep; but not at the line of gate1,
-    // which then stands with no done. The others fall inside the line.
+    // store reads it as an entry and ends it at its next keep; but none at the done of gate1, whose
+    // gate then stands with no done. The others fall inside the line.
     let at = usize::try_from(draw(&mut points)).unwrap();
-    let unended = at % 3 == 0 && start + line + 1 != gated;
+    let unended = at % 3 == 0 && start != gated;
     let cut = if unended { start + line } else { start + 1 + at / 3 % (line - 1) };
     let kept_at = if cut == start + line { (start + line + 1).min(text.len()) } else { start };
     let (torn, clean) = (place(&format!("torn-{name}")), place(&format!("clean-{name}")));
@@ -825,10 +838,8 @@ fn kept_in(at: &Path) -> String {
 /// Lives of [`kept`] in the directory of an origin, each second one ended by a checkpoint, and the
 /// length of its record and its state at the end of each.
 fn lived_for_a_fork(origin: &Path, lives: u64) -> Vec<(usize, String)> {
-  // shortcut: the record of the origin and its open at the end of each life, the state of the
-  // origin at a fork there: its own open, since a replay of a life with no checkpoint orders the
-  // gate of its first stand otherwise than the live life, the defect that the Needs of
-  // promise-proofs-a74 names.
+  // A life born from a checkpoint holds, live, the facts of the word that seeds it otherwise than
+  // its open, so the state of the origin at a fork is its open, which each later life reads.
   let mut ends = Vec::new();
   for n in 0..lives {
     let mut life = scripted(origin, false, &SCRIPT).boot::<String>([]).unwrap().0;
