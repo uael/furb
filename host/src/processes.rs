@@ -7,7 +7,7 @@
 //! the folder that [`HOST`] gives, says its hello as a skill under the name that [`SKILL`] gives,
 //! and attaches the life that [`LIFE`] gives.
 //!
-//! A process says each act under the name that [`speaker`] gives its skill. A process that ends
+//! A process says each act under the name that `speaker` gives its skill. A process that ends
 //! before its life tells the operator once, under that name, with its exit and the last lines of
 //! its stderr, and starts again at the next fact enable of its skill. The end of the life and a
 //! reload kill the process with each process that it started, its group on Unix, and so does the

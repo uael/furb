@@ -1,5 +1,6 @@
 # ruff: noqa: S603
 import importlib.util
+import re
 import subprocess
 import sys
 import tomllib
@@ -63,3 +64,12 @@ def test_each_job_that_publishes_waits_for_the_proofs_and_each_package_ships_the
   assert "/docs/promise.md" in cargo["package"]["include"]
   python = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
   assert "docs/promise.md" in python["tool"]["uv"]["build-backend"]["source-include"]
+
+
+def test_a_page_that_names_a_proof_by_a_path_of_windows_gives_it_and_its_line_of_pytest_matches() -> None:
+  page = "## The proofs that a machine runs (R4)\n\n- `C:\\Users\\x\\test_proof.py::test_holds`\n\nWhat no machine proves yet\n"
+  found = promise.proofs(page)
+  assert found == [("C:\\Users\\x\\test_proof.py", "test_holds")]
+  _, patterns, _ = promise.runs(found)[0]
+  assert re.search(patterns[0], "PASSED C:\\Users\\x\\test_proof.py::test_holds", re.MULTILINE)
+  assert re.search(patterns[0], "PASSED ../x/test_proof.py::test_holds [case]", re.MULTILINE)
