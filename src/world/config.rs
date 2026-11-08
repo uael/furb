@@ -360,7 +360,7 @@ impl Layers {
       .map_err(|source| Error::Parse { path: path.clone(), source })?;
     text.push(b'\n');
     disk::write(&path, &text, Access::Owner)?;
-    let configured = Catalog::loaded().await.configure(&self.project, Some(&self.user)).await;
+    let configured = Catalog::loaded(None).await.configure(&self.project, Some(&self.user)).await;
     let Err(refused) = configured else { return Ok(()) };
     match restored(&path, before.as_deref()) {
       Ok(()) => Err(Error::Refused(refused)),

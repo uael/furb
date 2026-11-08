@@ -591,8 +591,9 @@ fn configured_catalog(
   let directory =
     directory.map_or_else(|| env::current_dir().unwrap_or_default(), path::PathBuf::from);
   let config = config.map(path::PathBuf::from);
-  world::Catalog::load()
-    .claude(claude.map(Into::into), None)
+  let claude: Option<path::PathBuf> = claude.map(Into::into);
+  world::Catalog::load(claude.clone())
+    .claude(claude, None)
     .configured(&directory, config.as_deref())
     .map_err(|no| Fault::refused(no.to_string()))
 }

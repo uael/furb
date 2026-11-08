@@ -128,7 +128,7 @@ pub(crate) struct Actor {
 /// the effort moved to the nearest one that model takes; or the name as it is, and no model, when
 /// the catalog knows no model by it, the operator among them.
 pub(crate) async fn actor(to: &str) -> Actor {
-  match Catalog::loaded().await.rostered(Some(&[]), Some(to)).await {
+  match Catalog::loaded(None).await.rostered(Some(&[]), Some(to)).await {
     Ok((models, actor)) => Actor {
       name: actor.unwrap_or_else(|| to.to_owned()),
       model: models.first().map(|one| one.name().to_owned()),
