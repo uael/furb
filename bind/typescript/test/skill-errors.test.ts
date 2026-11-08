@@ -71,7 +71,7 @@ test("an idle connection keeps the process alive only while a life holds it, and
   const refs = (connection: Connection) =>
     state.get((connection as unknown as { socket: Socket }).socket) ?? true;
   try {
-    const idle = await Connection.dial(place, "window", undefined, true);
+    const idle = await Connection.dial(place, "window", undefined, { idle: true });
     expect(refs(idle)).toBe(false);
     idle.hold();
     expect(refs(idle)).toBe(true);
@@ -89,6 +89,38 @@ test("an idle connection keeps the process alive only while a life holds it, and
     plain.close();
   } finally {
     [Socket.prototype.ref, Socket.prototype.unref] = [ref, unref];
+    server.close();
+  }
+});
+
+test("a connection that dials again redials the place when the daemon goes, and tells reconnected, and a plain one does not", async () => {
+  const place = join(tmpdir(), `furb-again-${process.pid}.sock`);
+  const sockets: Socket[] = [];
+  const server = createServer((socket) => {
+    sockets.push(socket);
+    socket.on("data", (chunk) => {
+      for (const line of String(chunk).split("\n").filter(Boolean)) {
+        const { id, verb } = JSON.parse(line) as { id: number; verb: string };
+        const answer = verb === "hello" ? { answer: "welcome", data: { peer: {} } } : { answer: "done" };
+        socket.write(`${JSON.stringify({ frame: "reply", id, answer })}\n`);
+      }
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(place, resolve));
+  try {
+    const connection = await Connection.dial(place, "window", undefined, { idle: true, again: true });
+    const back = new Promise<void>((resolve) => connection.once("reconnected", () => resolve()));
+    sockets[0]?.destroy();
+    await back;
+    expect(sockets.length).toBe(2);
+    expect((await connection.ask({ verb: "list" })).answer).toBe("done");
+    const plain = await Connection.dial(place, "skill", "k");
+    sockets.at(-1)?.destroy();
+    await plain.closed;
+    expect(sockets.length).toBe(3);
+    connection.close();
+    await connection.closed;
+  } finally {
     server.close();
   }
 });

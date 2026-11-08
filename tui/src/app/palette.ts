@@ -90,12 +90,15 @@ export const palette = part({
     {
       selected = 0,
       note = "",
+      empty = "",
       rich = false,
       at,
       actions = [],
     }: {
       selected?: number;
       note?: string | string[];
+      /** What the picker says when it has no row, and the reason why, as no name to inspect in this chain yet. */
+      empty?: string;
       rich?: boolean;
       at?: { x: number; y: number };
       actions?: readonly { key: string; label: string; run: (choice: Choice) => unknown }[];
@@ -114,7 +117,7 @@ export const palette = part({
     this.paletteWidth = stage.width;
     const width = this.paletteWidth;
     // The rows of a menu: its inset, its title with the space under it, and its choices.
-    const rows = space.inset * 2 + space.bar + space.section + choices.length;
+    const rows = space.inset * 2 + space.bar + space.section + (choices.length || (empty ? 1 : 0));
     // A veil dims the screen behind the dialog, and a click on it closes the dialog. The veil of a menu is clear, and a
     // right click on it closes the menu too.
     this.backdrop = this.box({
@@ -163,6 +166,7 @@ export const palette = part({
         ? [clip(note, this.paletteWidth - 8)]
         : [];
     this.paletteNote = notes.length * space.bar;
+    this.paletteEmpty = choices.length ? "" : empty;
     for (const line of notes)
       this.overlay.add(this.inset(space.between, this.line(clip(line, this.paletteWidth - 8), c.muted)));
     // A short list shows its filter only once the operator types in it, and until then the filter takes no row.
@@ -480,7 +484,10 @@ export const palette = part({
         for (const line of choice.lines.slice(0, 10))
           this.paletteList.add(this.inset(space.between, this.line(line, c.text, { truncate: true })));
     }
-    if (!this.filtered.length && this.paletteInput?.value)
+    // A picker that opened with no row gives its reason, and a filter that matches none of its rows says so.
+    if (this.paletteEmpty)
+      this.paletteList.add(this.inset(space.between, this.text(this.paletteEmpty, c.muted)));
+    else if (!this.filtered.length && this.paletteInput?.value)
       this.paletteList.add(this.inset(space.between, this.text("Nothing matches this filter.", c.muted)));
     else if (shown.length < this.filtered.length)
       this.paletteList.add(
