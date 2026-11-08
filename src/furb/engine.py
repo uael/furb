@@ -342,8 +342,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
-    blocked, running, waiting, last, heard = set(), {}, {}, standing(), []
-    step = news = ran = reply = note = to = hush = dull = stuck = past = ""
+    blocked, running, waiting, last, heard, past = set(), {}, {}, standing(), [], []
+    step = news = ran = reply = note = to = hush = dull = stuck = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(went):
@@ -465,7 +465,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       match a:
         case ("carried", *_):
           past = a
-        case ("rung", *_) if past and a[2] == OPERATOR:
+        case ("rung", *_) if "carried" in past[:1]:
           top = ""
           yield (
             "prefix",
@@ -479,7 +479,10 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
               a,
             ],
           )
-          past = ""
+          past = a[1], past[3]
+        case ("done", *_) if a[1] in past[:1]:
+          yield "prefix", id, [x for x in transcript(id) if x[0] != "tell" or x[1] == past[0] or x in past[1]]
+          past = []
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if prompted(path) and scope(path) == id:
@@ -608,12 +611,6 @@ def seeded(id, last, to):
       y[3] == k and y[2] and rung(y[2], to=to)
 
 
-KEPT = (
-  "with site.set(scope(acting())): say('prefix', site.get(), "
-  "[x for x in transcript() if x[0] != 'tell' or x in transcript(of='carried')[-1][3]])"
-)
-
-
 def seed(data):
   entries, numbers = [], Counter()
 
@@ -644,7 +641,6 @@ def seed(data):
     put(kind, f"{kind}{most + 1}")
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
-    loud = bool(c["lost"] or cut)
     note = [
       f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")'
     ]
@@ -656,9 +652,7 @@ def seed(data):
           for named, text in c["values"].items()
         ),
         *(f"await rung({one!r})" for one in c.get("lives", ())),
-        *note[loud:],
-        KEPT,
-        *note[:loud],
+        *note * bool(c["lost"] or cut),
       ]
     )
     seat = f"rung{numbers['rung'] + 1}"
