@@ -1112,6 +1112,7 @@ try {
     was = watched.moment;
     await watched.travel(-1);
   }
+  if (asks()) throw new Error("65-watch-earlier: the first moment of the watched demo still asks a model");
   await capture("65-watch-earlier");
   // The bar of the watch stays over the feed on the smallest terminal.
   test.resize(80, 24);
