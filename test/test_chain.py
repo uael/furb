@@ -606,6 +606,18 @@ async def test_a_chain_with_no_source_whose_standing_names_a_doctrine_tells_its_
   _, _, _ = born(stands=[*STANDS, "/w/DOCTRINE.md", []], files=TAUGHT_FILES)
   bare = await chained("bare")
   assert heads(engine.turns(on=bare)) == ["chain()", "#stand2", "#cd1", "#rung2 debugged", "#read1", f"#{bare}"]
+  # A root that a checkpoint carried holds no stand in its setup, so a chain with no source born of it plays its own.
+  files, stands = {"/w/DOCTRINE.md": "Read first.\n"}, [*STANDS, "/w/DOCTRINE.md", []]
+  born(stands=stands, files=files)
+  await settle()
+  life(sown(stands=stands, files=files), engine.seed(engine.gathered(lambda word: word, {})))
+  await settle()
+  kid = await chained("kid")
+  await settle()
+  [(_, _, by, *_)] = engine.transcript(kid, "stand")
+  made = engine.get(by)
+  assert made is not None and made[3] == kid and str(made[4]).startswith("stand()")
+  assert engine.cwd(on=kid) == "/w"
 
 
 async def test_a_chain_that_hears_a_prefix_that_another_said_on_it_tells_no_open_of_its_own() -> None:

@@ -137,7 +137,7 @@ export function modelName(name: string): { provider: string; id: string } {
 }
 
 /** The label of a model in each place that names it, as opus/high: the model by its id, and its effort after a slash
- * when it has one. The header of a word, the tag of a reply and the line under the input all read it. */
+ * when it has one. The header of a word and the tag of a reply read it through actorLabel, and the line under the input directly. */
 export function modelLabel(id: string, effort = ""): string {
   return effort && effort !== "off" ? `${id}/${effort}` : id;
 }

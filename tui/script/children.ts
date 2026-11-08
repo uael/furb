@@ -1,6 +1,6 @@
-/** How a child of the test script ended: the code that it exited with, and whether the watcher of memory
- * (script/memwatch.sh) ended it, which it does with SIGKILL on the largest test process while the memory is tight. A
- * child ended so is no failure of its test. */
+/** How a child of the test script ended: the code that it exited with, and whether SIGKILL ended it, as the watcher of
+ * memory (script/memwatch.sh) ends the largest test process while the memory is tight, and as the kernel ends a process
+ * when the memory runs out. The run of such a child still fails. */
 export interface Ended {
   code: number | null;
   memory: boolean;
@@ -13,6 +13,6 @@ export async function endOf(child: { exited: Promise<number>; signalCode: string
   return { code: memory ? null : code, memory };
 }
 
-/** The line that names a child that the watcher ended, in place of the output of a failure. */
+/** The line that names a child that SIGKILL ended, after the output of its failure. */
 export const endedByMemory = (name: string): string =>
-  `${name} was ended by the watcher of memory (SIGKILL), which is no failure of its test: run it again.`;
+  `${name} was ended by SIGKILL, as the watcher of memory or the kernel ends a process when the memory runs low: run it alone again.`;

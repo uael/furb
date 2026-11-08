@@ -715,9 +715,11 @@ async def test_a_record_whose_last_fact_made_names_a_schema_before_1_1_holds_no_
     for (e,) in plain(sand.record)
     if not (e[0] in ("rung", "run") and engine.question(e) and engine.get(e[2]))  # ty: ignore[redundant-condition]
   ]
-  again, _ = await relived(Sand(), [(("made", "chain1", "store", "e", None, "1.0", "0.4.2"),), *kept])
-  assert {(e[0], e[1]) for e in again if engine.question(e) and e[0] != "stand"} <= set(made)
-  assert [a[1] for a in said(again, "rung")] == [a[1] for a in said(log, "rung")] == ["rung1", "rung2", "rung3"]
+  # A fact made whose schema is null names a schema before 1.1 as well.
+  for schema in ("1.0", None):
+    again, _ = await relived(Sand(), [(("made", "chain1", "store", "e", None, schema, "0.4.2"),), *kept])
+    assert {(e[0], e[1]) for e in again if engine.question(e) and e[0] != "stand"} <= set(made)
+    assert [a[1] for a in said(again, "rung")] == [a[1] for a in said(log, "rung")] == ["rung1", "rung2", "rung3"]
   with pytest.raises(Drift, match=r"^reply1 drifts: the life made no act, "):
     life(Sand(), [(("made", "chain1", "store", "e", None, "1.1", "0.4.2"),), *kept])
 
