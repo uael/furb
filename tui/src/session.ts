@@ -1635,7 +1635,7 @@ export class Session extends EventEmitter {
   }
   /** A control of the life that a restart of the daemon cut: the daemon says nothing of it, since a control is never
    * said again after a reconnect, so the notice tells the operator to say it again. False when it was cut. */
-  private async cut(verb: string, control: () => Promise<unknown>): Promise<boolean> {
+  private async went(verb: string, control: () => Promise<unknown>): Promise<boolean> {
     try {
       await control();
       return true;
@@ -2325,7 +2325,7 @@ export class Session extends EventEmitter {
         void this.rename(argument);
         break;
       case "pause":
-        if (await this.cut("pause", () => this.engine.pause(argument || this.selected)))
+        if (await this.went("pause", () => this.engine.pause(argument || this.selected)))
           this.notice = "Paused. In-flight work can finish.";
         break;
       case "wake": {
@@ -2340,7 +2340,7 @@ export class Session extends EventEmitter {
               ]),
             ];
         let woke = true;
-        for (const id of stopped) if (woke) woke = await this.cut("wake", () => this.engine.wake(id));
+        for (const id of stopped) if (woke) woke = await this.went("wake", () => this.engine.wake(id));
         if (woke)
           this.notice = stopped.length > 1 ? `Work resumed on ${stopped.length} chains.` : "Work resumed.";
         break;

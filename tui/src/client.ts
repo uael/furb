@@ -202,9 +202,13 @@ export class Daemon extends EventEmitter {
     );
   }
 
-  /** How many windows hold the life now, as the daemon says its peers, and none when no life of the daemon holds it. */
+  /** How many windows hold the life now, as the daemon says its peers, and none when no life of the daemon holds it.
+   * A lost connection is no count: it throws, so a caller refuses what it would do on the count. */
   async windows(life: string): Promise<number> {
-    const heard = await this.ask({ verb: "presence", life }).catch(() => undefined);
+    const heard = await this.ask({ verb: "presence", life }).catch((error: unknown) => {
+      if (error instanceof Refused && error.kind === "closed") return undefined;
+      throw error;
+    });
     return heard?.answer === "presence" ? heard.data.filter((one) => one.kind === "window").length : 0;
   }
 
