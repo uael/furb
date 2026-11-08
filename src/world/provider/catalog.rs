@@ -70,6 +70,18 @@ use crate::world::{
 /// The levels of effort, from least to most, which an actor names after its model, as `claude-cli:opus/low`.
 pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
+/// An actor as its words say it: its model, and the level after its last slash when that word is
+/// one of [`LEVELS`]. A slash before any other word is a part of the name of the model, as in the
+/// id of a model of a local server. A caller that knows a model whose whole name is the actor
+/// reads that model first, as [`Catalog`], the names of a local model and the maker of an act in
+/// the view do.
+pub fn leveled(actor: &str) -> (&str, Option<&str>) {
+  match actor.rsplit_once('/') {
+    Some((model, level)) if LEVELS.contains(&level) => (model, Some(level)),
+    _ => (actor, None),
+  }
+}
+
 /// The level of an actor that names none.
 pub const LEVEL: &str = "high";
 
@@ -477,23 +489,22 @@ impl Catalog {
   /// The model and the level an actor names: a model alone, or a model and a level after a slash, among the models of
   /// the claude command line and of the network first, and then among those of the local server.
   async fn actor<'a>(&self, actor: &'a str) -> Option<(Model, Option<&'a str>)> {
-    let split = actor.rsplit_once('/');
+    let (name, level) = leveled(actor);
     {
       let known = self.known();
       if let Some(model) = named(&known, actor) {
         return Some((model.clone(), None));
       }
-      if let Some((name, level)) = split
+      if level.is_some()
         && let Some(model) = named(&known, name)
       {
-        return Some((model.clone(), Some(level)));
+        return Some((model.clone(), level));
       }
     }
     if let Some(model) = self.served(actor).await {
       return Some((model, None));
     }
-    // A model of the local server is named by its id, so a word after its slash is a level of effort or no name of it.
-    let (name, level) = split.filter(|(_, level)| LEVELS.contains(level))?;
+    let level = level?;
     Some((self.served(name).await?, Some(level)))
   }
 

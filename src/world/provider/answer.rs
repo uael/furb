@@ -217,14 +217,14 @@ pub(super) fn answered(call: Answering) -> impl Stream<Item = Replied> {
       Ok((model, asked)) => waits.attempted(&model, &asked, again).await,
       Err(no) => Err(no),
     };
-    let (got, dropped) = match got {
-      Ok((turn, dropped)) => (Ok(turn), dropped),
-      Err(no) => (Err(no), None),
+    let (got, dropped, account) = match got {
+      Ok(Served { turn, dropped, account }) => (Ok(turn), dropped, account),
+      Err(no) => (Err(no), None, None),
     };
     let Waits { id, tells, .. } = waits;
     // The stream holds the receiver, so a send that fails means the stream is going.
     // The stream then gives the reply itself.
-    tells.send(Replied::Came(Came { id, got, dropped })).err().map(|no| no.0)
+    tells.send(Replied::Came(Came { id, got, dropped, account })).err().map(|no| no.0)
   };
   // The reply comes through the channel alone, so it comes after all that its model wrote before
   // it.
@@ -268,14 +268,16 @@ impl Waits {
     model: &Model,
     asked: &Asked,
     again: bool,
-  ) -> Result<(Object, Option<String>), CompletionError> {
+  ) -> Result<Served, CompletionError> {
     if again {
       released(&mut self.hold).await?;
     }
     loop {
       let no = match (model.answers)(asked.clone()).await {
         Ok(Answer::Response(response)) => return turn(model, &response),
-        Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()).map(|one| (one, None)),
+        Ok(Answer::Turn(turn)) => {
+          return hosted(turn.as_ref()).map(|turn| Served { turn, dropped: None, account: None });
+        }
         Err(no) => no,
       };
       let (retry, limit) = self.retry(no)?;
@@ -324,6 +326,15 @@ impl Waits {
   }
 }
 
+/// What a call of a model gave: its turn, the note of the marks that the turn lost, and the name of
+/// the account that served it when the provider names one, which is never a token. The name stands
+/// beside the turn and not in its usage, whose items are numbers, the last of them the cost.
+pub(super) struct Served {
+  pub(super) turn: Object,
+  pub(super) dropped: Option<String>,
+  pub(super) account: Option<String>,
+}
+
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the
 /// blocks it gave.
 ///
@@ -342,7 +353,7 @@ impl Waits {
 pub(super) fn turn(
   model: &Model,
   response: &CompletionResponse,
-) -> Result<(Object, Option<String>), CompletionError> {
+) -> Result<Served, CompletionError> {
   let cut = match response.finish_reason() {
     _ if !model.ends => None,
     None => Some(format!("the stream of {} stopped before its end", model.name)),
@@ -383,16 +394,12 @@ pub(super) fn turn(
   let blocks = serde_json::to_value(&choice).map_err(|no| failed(no.to_string()))?;
   let blocks = wire::inward(&blocks).map_err(|fault| failed(fault.message()))?;
   let count = |n: u64| Object::int(i64::try_from(n).unwrap_or(i64::MAX));
-  let mut usage =
-    vec![count(input), count(output), count(read), count(wrote), Object::float(dollars)];
-  // A provider that serves a reply through one of several accounts names it, never its token.
-  if let Some(account) = response.raw.get("account").and_then(Value::as_str) {
-    usage.push(Object::string(account));
-  }
-  let usage = Object::tuple(usage);
+  let usage =
+    Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
   let turn =
     Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]);
-  Ok((turn, dropped))
+  let account = response.raw.get("account").and_then(Value::as_str).map(str::to_owned);
+  Ok(Served { turn, dropped, account })
 }
 
 /// These blocks with the word as their one text, at the place of their first text.

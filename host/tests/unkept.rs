@@ -61,7 +61,7 @@ mod unix {
   /// after which a life is born again.
   const DRAWS: usize = 2800;
 
-  /// A life that keeps its record, with no extension, whose model closes each request with None.
+  /// A life that keeps its record, with no skill, whose model closes each request with None.
   fn opening(at: &Path) -> Opening {
     let asked = AtomicUsize::new(0);
     let answer = Answer(Arc::new(move |_, _| {

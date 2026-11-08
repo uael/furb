@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 11;
+pub const PROTOCOL: u32 = 12;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -549,7 +549,7 @@ pub struct Handed {
 /// A record of the machine: the main checkout of the workspace whose sessions hold it, when the
 /// list names one, whether a life of the daemon holds it now, whether that life lives and does not
 /// end, whether a window holds that life, and the name of its session while a life holds it: the
-/// one that the operator said last on the root, which wins, else the one that the extension naming
+/// one that the operator said last on the root, which wins, else the one that the skill naming
 /// gave. An empty name takes the default name again.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Listed {

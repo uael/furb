@@ -108,6 +108,8 @@ async def test_a_rung_of_the_operator_on_each_chain_binds_its_definitions_and_it
   assert [x[1] for x in said(log, "prefix") for f in x[3] if f[0] == "carried" and f[1] != x[1]] == []
   engine.wake("chain3")
   await settle()
+  kept = [x for x in said(log, "prefix") if x[1] == "chain3"][-1][3]
+  assert [f for f in kept if f[0] == "tell" and "It lost ['gone']" in f[3][0]], "the chain keeps the note in its turns"
   assert "late" not in engine.module("chain3")
   assert [x for x in engine.transcript("chain3", "rung") if x[2] == "prompt1"]
 
@@ -143,7 +145,11 @@ async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_
   await settle()
   assert [x for x in said(log, "prefix") if x[1] == "chain1"]
   told = [x[3][0] for x in said(log, "tell") if x[1].startswith("rung")]
-  assert any("It lost no name" in x for x in told) and any(" raised" in x.split("\\n")[0] for x in told), told
+  assert not any("It lost" in x for x in told) and any(" raised" in x.split("\\n")[0] for x in told), told
+  kept = [x for x in said(log, "prefix") if x[1] == "chain1"][-1][3]
+  assert [f for f in kept if f[0] == "tell" and " raised" in f[3][0].split("\\n")[0]], (
+    "the chain keeps the raise in its turns"
+  )
   assert "SIZE" not in engine.module("chain1")
 
 

@@ -159,9 +159,9 @@ pub enum Command {
   /// each fact that it said yet, as on a full disk, keeps the end, tells why in a notice, and ends
   /// once the record holds them: the reply comes then.
   End,
-  /// A command of the engine said by a speaker other than the life itself, a skill as skill/<name>
-  /// or a window as operator/<login>: each act and each fact that the command says is of that
-  /// speaker, so a fact seen names the person who read.
+  /// A command of the engine said by a speaker other than the life itself, a skill as
+  /// `skill/<name>` or a window as `operator/<login>`: each act and each fact that the command
+  /// says is of that speaker, so a fact seen names the person who read.
   By { speaker: String, command: Box<Self> },
 }
 
@@ -234,7 +234,7 @@ enum Message {
 }
 
 /// The log of a life on its thread: each event that it told, less those that a later event replaced
-/// (see [`Spent`]), the readers that hear each next one, what the ears and the provider told that
+/// (see `Spent`), the readers that hear each next one, what the ears and the provider told that
 /// is not in the log yet, how many facts it told and the place of each by its digest, the place in
 /// the log of each fact that the engine of this birth heard, and what the actor watches to know
 /// when the life is born again.
@@ -937,7 +937,7 @@ fn sent(engine: &mut Engine, follow: &FollowUp) -> Result<String, LifeError> {
 
 impl LifeHandle {
   /// The name of the session of the life, as its facts fold it: the one that the operator said last
-  /// on the root, which wins, else the one that the extension naming gave, and nothing while it
+  /// on the root, which wins, else the one that the skill naming gave, and nothing while it
   /// holds neither.
   pub fn name(&self) -> Option<String> {
     self.name.lock().ok().and_then(|name| name.clone())

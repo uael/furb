@@ -41,7 +41,7 @@ use url::Url;
 
 use super::{
   Model,
-  catalog::{LEVELS, reached},
+  catalog::{leveled, reached},
   clients::{Client, Reach},
 };
 use tokio::task;
@@ -438,8 +438,7 @@ fn names(name: &str, id: &str) -> bool {
   let is = |one: &str| {
     one == id || one.strip_prefix(LOCAL).and_then(|rest| rest.strip_prefix(':')) == Some(id)
   };
-  let leveled = |(model, level): (&str, &str)| LEVELS.contains(&level) && is(model);
-  is(name) || name.rsplit_once('/').is_some_and(leveled)
+  is(name) || matches!(leveled(name), (model, Some(_)) if is(model))
 }
 
 /// The settings that ask a model of a local server again with its thought off, once its thought passed the most of a
