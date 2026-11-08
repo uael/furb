@@ -30,6 +30,12 @@ export { Closed, Refused };
 /** Whether a prefix cuts its chain, as a word that compacts or clears it says one: a chain says its own prefix at its
  * birth, and the checkpoint word of a record made before the chain said that prefix itself began with the prefix that
  * it said, which was the birth of its chain. */
+/** Whether an out fact of an act adds to its output so far: a command that runs, or one that the window has not heard
+ * yet. */
+function printing(act: Act | undefined, id: string): boolean {
+  return act ? act.kind === "bash" && !isDone(act) : /^bash\d+$/.test(id);
+}
+
 export function cuts([, id, by]: readonly unknown[], word: string): boolean {
   return by !== id && !word.startsWith("say('prefix', scope(acting()), ");
 }
@@ -567,7 +573,9 @@ export class RemoteLife extends EventEmitter {
     else if (kind === "prefix" && cuts(fact, String(this.acts.get(by)?.words[0] ?? "")))
       this.compactions.push({ chain: id, by, at });
     else if (kind === "started" && this.outputs.has(id)) this.outputs.set(id, { stdout: "", stderr: "" });
-    else if (kind === "out" && this.acts.get(id)?.kind === "bash" && !isDone(this.acts.get(id) as Act)) {
+    // A window that attaches late hears the out facts of a command before the act: the log keeps of an act its last
+    // event alone, which comes after them.
+    else if (kind === "out" && printing(this.acts.get(id), id)) {
       const output = this.outputs.get(id) ?? { stdout: "", stderr: "" };
       if (fact[4] === "stderr") output.stderr += String(fact[3]);
       else output.stdout += String(fact[3]);
