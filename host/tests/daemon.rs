@@ -161,10 +161,14 @@ mod daemon {
   /// seconds to answer where one is installed. Where no script runs, as on Windows, it is the plain
   /// opening.
   fn mute(at: &Path) -> Opening {
-    let mut opening = opening(at);
+    #[cfg(not(unix))]
+    {
+      opening(at)
+    }
     #[cfg(unix)]
     {
       use std::os::unix::fs::PermissionsExt;
+      let mut opening = opening(at);
       let program = at.join("claude");
       fs::write(
         &program,
@@ -175,8 +179,8 @@ exit 0
       .unwrap();
       fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
       opening.claude = Some(program.display().to_string());
+      opening
     }
-    opening
   }
 
   /// A daemon that listens in a folder, served on a task of the test.
