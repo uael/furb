@@ -47,7 +47,7 @@ export const tree = part({
       ? `${commands} ${commands === 1 ? "command" : "commands"} ran after it: a change that a command made is not restored.`
       : "A change that a command made is not restored.";
     this.openPalette(
-      `Rewind to ${act.id}`,
+      `Rewind to ${act.kind === "rung" ? clip(this.subject(act).split("\n")[0] ?? "", 40) : act.id}`,
       [
         {
           label: "Restore the conversation",

@@ -150,18 +150,22 @@ export const details = part({
 
   /** The label of the block of a word: the model that wrote it with its effort, as opus/high, by the name that the line
    * under the input gives it, or the operator. */
-  writer(step?: { kind: string; by?: string; words: readonly unknown[] }): string {
-    const actor = step?.kind === "rung" && typeof step.words[2] === "string" ? step.words[2] : "";
-    if (!step || !actor || operated(step.by ?? "")) return "operator";
+  writer(step: { kind: string; by?: string; words: readonly unknown[] }): string {
+    const actor = step.kind === "rung" && typeof step.words[2] === "string" ? step.words[2] : "";
+    return !actor || operated(step.by ?? "") ? "operator" : this.actorLabel(actor);
+  },
+
+  /** The one label of a model in the feed, as opus/high: the model by its name alone and its effort. The block of a
+   * word, the header of a thread and the tag of a reply read it. */
+  actorLabel(actor: string): string {
     const { name, effort } = this.model(actor);
-    return name === "operator" ? "operator" : modelLabel(name, effort);
+    return modelLabel(name, effort);
   },
 
   /** The model that a prompt that is not a message of the operator asks, as one label with its effort, opus/high, which
    * the block of its reply names the same way. No id of a rung and no second model stand in it. */
   sender(act: ActRow): string {
-    const { name, effort } = this.model(String(act.words[2] ?? ""));
-    return modelLabel(name, effort);
+    return this.actorLabel(String(act.words[2] ?? ""));
   },
 
   /** The message of a prompt as a reader reads it. The chain tells a model that an act is done or paused with the id
@@ -344,7 +348,7 @@ export const details = part({
     const label: Part[] = done
       ? []
       : [
-          [this.writer(act), c.muted, bold],
+          [act ? this.writer(act) : "operator", c.muted, bold],
           [
             waits
               ? " · waits for its turn"
