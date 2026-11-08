@@ -7,7 +7,7 @@ from conftest import STANDS, plain, settle
 from furb import engine
 from furb.engine import site
 from furb_monty import _monty
-from skills.conftest import naming
+from skills.conftest import Refusing, extended, naming
 
 NAMING = next(x for x in _monty.official() if x["name"] == "naming")
 BRIEF = next(
@@ -79,6 +79,28 @@ async def test_it_asks_the_name_of_the_actor_that_automatic_gives(tmp_path: Path
   (asked,) = [a for a in engine.transcript("chain2") if a[0] == "prompt" and a[3] == "chain2"]
   assert made[4:6] == ("naming", "") and made[2] == "name_session1"
   assert asked[4:7] == ("str", f"{BRIEF}the login form fails", "h")
+
+
+async def test_when_that_model_refuses_its_reply_it_asks_the_next_actor_of_automatic_work(tmp_path: Path) -> None:
+  """When that model refuses its reply, it asks the next actor of automatic work, automatic(1), then the next, each on a new chain labelled naming, until one answers or the list ends."""
+  roster = [*STANDS[0], ["h", ["low"], 200000, "cheap", 0], ["k", ["low"], 200000, "cheap", 1]]
+  sand, root = extended("naming", tmp_path, sand=Refusing(), lives=True, doctrine="Read first.\n", roster=roster)
+  sand.script.update({root: ["close(1)"], "chain3": ["close('Fix the login form')"]})
+  await engine.prompt(int, "the login form fails", on=root)
+  await settle(300)
+  asked = [
+    (a[3], a[6]) for one in ("chain2", "chain3") for a in engine.transcript(one) if a[0] == "prompt" and a[3] == one
+  ]
+  assert asked == [("chain2", "h"), ("chain3", "k")]
+  assert names(root) == ["Fix the login form"]
+  (tmp_path / "all").mkdir()
+  sand, root = extended(
+    "naming", tmp_path / "all", sand=Refusing(), lives=True, doctrine="Read first.\n", roster=roster[:-1]
+  )
+  sand.script[root] = ["close(1)"]
+  await engine.prompt(int, "the logout", on=root)
+  await settle(300)
+  assert names(root) == ["the logout"]
 
 
 async def test_with_no_such_actor_the_name_is_name_of_the_message(tmp_path: Path) -> None:

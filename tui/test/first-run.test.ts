@@ -61,14 +61,17 @@ test.skipIf(process.platform === "win32")(
     // words of the default skills started the watchers, and the welcome shows all the same. The extension naming plays
     // on the root alone, so its life word comes after the others.
     const own = acts.filter((line) => line.endsWith(" chain1")).map((line) => line.split(" ")[0]);
-    // The debug, the read of the doctrine and the read of the word of each default skill come first, each on the root.
+    // The stand and the cd, the debug, the read of the doctrine and the read of the word of each default skill come first, each on the root.
+    // The last of the reads of a word of a skill and a life word of the root start at the same time, so it holds a place
+    // among the first seven and no other.
     expect(own.slice(0, 6)).toEqual([1, 2, 3, 4, 5, 6].map((n) => `rung${n}`));
+    expect(own.slice(0, 8)).toContain("rung7");
     // Each read of a word of a skill made the rung that plays the word, the four of the default skills first and the
     // extension naming after them, and each life word is a rung of the root that the watchers it started name.
     const nested = acts
       .filter((line) => /^rung\d+ rung\d+$/.test(line))
       .map((line) => line.split(" ")[1] ?? "");
-    expect(nested.slice(0, 4)).toEqual(["rung3", "rung4", "rung5", "rung6"]);
+    expect(nested.slice(0, 4)).toEqual(["rung4", "rung5", "rung6", "rung7"]);
     expect(nested.every((maker) => own.includes(maker))).toBe(true);
     const maker = (name: string) => acts.find((line) => line.startsWith(`${name} `))?.split(" ")[1] ?? "";
     for (const name of ["catchup1", "remember1", "compacted1", "fitted1", "name_session1"])

@@ -394,10 +394,10 @@ test("the setup of the root stands as code: a comment that names the setup, then
           Array(setup.length).fill(["", setup[0]?.words[2]]),
         );
         const words = setup.map((act) => act.word ?? "");
-        expect(words[0]).toBe('debug(t"{standing()[4]=}")');
+        expect(words[0]).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+        expect(words[1]).toBe('debug(t"{standing()[4]=}")');
         // A path of Windows stands with its separators doubled, as python shows a backslash.
-        expect(words[1]).toMatch(/^read\('.*[/\\]DOCTRINE\.md'\)$/);
-        expect(words.at(-1)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+        expect(words[2]).toMatch(/^read\('.*[/\\]DOCTRINE\.md'\)$/);
         // The word of each extension is read in the order of the life, an extension that plays on the root alone
         // after the others, and each life word stands as a rung of its own.
         const reads = words.filter((word) => /^rung\(read\('.*', HIDDEN\)\.content\)$/.test(word));
@@ -408,13 +408,15 @@ test("the setup of the root stands as code: a comment that names the setup, then
           "compaction",
           "naming",
         ]);
-        expect(words.slice(2, -1).filter((word) => !reads.includes(word))).toEqual([
-          "catchup()",
-          "await recall()",
-          "await listed()",
-          "compacted(); fitted()",
-          "name_session()",
-        ]);
+        // The word of the naming plays on the root alone, so its life word comes in no fixed place among the others.
+        expect(
+          words
+            .slice(3)
+            .filter((word) => !reads.includes(word))
+            .sort(),
+        ).toEqual(
+          ["catchup()", "await recall()", "await listed()", "compacted(); fitted()", "name_session()"].sort(),
+        );
         let rows = (await frame()).split("\n");
         for (let step = 0; step < 80 && !rows.some((row) => /earlier steps/.test(row)); step++) {
           await Bun.sleep(25);
@@ -442,30 +444,31 @@ test("the setup of the root stands as code: a comment that names the setup, then
           )
           .filter((row) => /^\d+ /.test(row))
           .slice(0, 18);
-        expect(shown[0]).toBe('1 debug(t"{standing()[4]=}")');
+        // The stand and the cd come first, each on its line.
+        expect(shown[0]).toBe("1 stand()");
+        expect(shown[1]).toMatch(/^2 cd\('.*'\)$/);
+        expect(shown[2]).toBe('3 debug(t"{standing()[4]=}")');
         // The path of the doctrine is cut to the width of the card, so only its call shows whole.
-        expect(shown[1]).toMatch(/^2 read\('.*'\)$/);
+        expect(shown[3]).toMatch(/^4 read\('.*'\)$/);
         // A word whose file path is long breaks into more lines, as ruff format lays it out, so a path of a longer checkout
         // splits the word of each extension: the test reads the call that each line starts, not the width of the path.
-        expect(shown.slice(2, 6).map((row) => /^\d+ rung\(/.test(row))).toEqual(Array(4).fill(true));
+        expect(shown.slice(4, 8).map((row) => /^\d+ rung\(/.test(row))).toEqual(Array(4).fill(true));
         // The card holds each read that a row starts, with its HIDDEN, whatever the lines that the call breaks into.
         const card = rows.slice(at + 1).join("\n");
         // The columns of a row stand right of its code, so a call that breaks over rows has them on its first row and
         // its read on the next: the test counts each row that holds a read with its HIDDEN, not a rung( beside a read(.
         expect(card.match(/read\('[^\n]*HIDDEN/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
         expect(card.match(/HIDDEN/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
-        // The life words stand as the calls that end their one word, each on its line, then the stand and the cd,
-        // and the card ends there.
-        expect(shown.slice(6, 10)).toEqual([
-          "7 catchup()",
-          "8 await recall()",
-          "9 await listed()",
-          "10 compacted(); fitted()",
+        // The life words stand as the calls that end their one word, each on its line, and the card ends there.
+        expect(shown.slice(8, 12)).toEqual([
+          "9 catchup()",
+          "10 await recall()",
+          "11 await listed()",
+          "12 compacted(); fitted()",
         ]);
         // The extension naming plays on the root alone, so its word and its life word come after the others.
-        expect(shown[10]).toMatch(/^11 rung\(/);
-        expect(shown.slice(11, 13)).toEqual(["12 name_session()", "13 stand()"]);
-        expect(shown[13]).toMatch(/^14 cd\('.*'\)$/);
+        expect(shown[12]).toMatch(/^13 rung\(/);
+        expect(shown[13]).toBe("14 name_session()");
         expect(shown[14] ?? "").not.toMatch(/^15 /);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },

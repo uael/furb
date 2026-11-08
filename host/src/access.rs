@@ -26,6 +26,11 @@ pub struct Config {
   /// stalled, [`crate::STALL`] when none is given.
   #[serde(default)]
   pub stall: Option<u64>,
+  /// The bound of the heap of the daemon, in MiB, past whose [`crate::SHARE`] the life that said
+  /// the most facts since it opened is born again: half the memory of the machine when none is
+  /// given.
+  #[serde(default)]
+  pub heap: Option<u64>,
 }
 
 /// The port of each transport of the network that the daemon listens on, if it does.

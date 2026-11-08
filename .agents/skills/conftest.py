@@ -242,6 +242,19 @@ FULL = (300000, 0, 0, 0, 0.0)
 """An answer that reads three quarters of the window of the default actor of the suite, which is 400000 tokens."""
 
 
+class Refusing(Sand):
+  """A World whose model h refuses each reply, as a model at the limit of its account does."""
+
+  def hear(self, a: tuple) -> World:
+    """A reply to h is refused, and every other fact goes to the Sand."""
+    match a:
+      case ("reply", about, _, _, to) if str(to).split("/")[0] == "h":
+        yield "started", about
+        self.loop.call_soon(engine.say, "done", about, Refused("h answered nothing: the account is at its limit"))
+      case _:
+        yield from super().hear(a)
+
+
 def compacting(at: Path) -> tuple[Sand, str, str]:
   """A life that runs the extension compaction, whose folder work holds a.txt: the World, the root and the folder."""
   sand, root = extended("compaction", at)

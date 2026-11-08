@@ -1,4 +1,19 @@
-from furb.engine import Act, act, automatic, chain, controlled, operated, over, peek, prompt, scope, transcript
+from furb.engine import (
+  Act,
+  Refused,
+  act,
+  automatic,
+  cancel,
+  chain,
+  controlled,
+  operated,
+  over,
+  peek,
+  prompt,
+  question,
+  scope,
+  transcript,
+)
 
 naming = """name_session() names the session once, at the first message of the operator. It asks a name of the actor that
 automatic() gives, on a chain of its own labelled naming, and with no such actor, or
@@ -28,13 +43,19 @@ def name_session(on: str = "") -> Act:
       said = yield {id, "prompt"}
       first = said if said[0] == "prompt" and operated(said[2]) else None
     message = str(first[5])
-    actor_of = automatic()
-    given = None
-    if actor_of:
-      asked = prompt(str, NAME_BRIEF + message, to=actor_of, on=chain("naming", on=here))
+    given, n = None, 0
+    # Each actor of automatic work in turn, the next when its model refuses the reply of its prompt.
+    while given is None and (actor_of := automatic(n)):
+      side = chain("naming", on=here)
+      asked = prompt(str, NAME_BRIEF + message, to=actor_of, on=side)
+      refused = False
       while not over(asked):
-        yield {asked}
-      given = peek(asked)
+        match (yield {asked, side}):
+          case ("done", about, _, Refused()) if question(("reply", about)) and scope(about) == side:
+            refused = True
+            cancel(asked)
+      given = None if refused else peek(asked)
+      n += 1
     yield "done", id, (isinstance(given, str) and name_of(given)) or name_of(message)
 
   return act("name_session", on, controlled(ear))

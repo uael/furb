@@ -1,8 +1,9 @@
 """compacted, a chain that compacts itself and goes on under its name."""
 
+from collections.abc import Callable
 from pathlib import Path
 
-from conftest import settle
+from conftest import until
 from furb import engine
 from furb.engine import Act, Text
 from skills.conftest import FULL, compacting
@@ -13,7 +14,9 @@ ONCE = "SHARE = 2\ny = 2\ndebug(t'{y}')"
 """ONCE is a word that binds y and rebinds SHARE past any share, so the chain compacts once."""
 
 
-async def wrapped(tmp_path: Path, *words: str, chooser: str = GIST) -> tuple[str, Act[int]]:
+async def wrapped(
+  tmp_path: Path, *words: str, chooser: str = GIST, ends: Callable[[str], bool] | None = None
+) -> tuple[str, Act[int]]:
   """A life whose root compacted wraps, after the words given, whose model answers x = 1, then ONCE, then close(x + y),
   and whose model of the choice answers with the chooser: the root and the prompt go, which it awaited."""
   sand, root, _ = compacting(tmp_path)
@@ -24,13 +27,28 @@ async def wrapped(tmp_path: Path, *words: str, chooser: str = GIST) -> tuple[str
   sand.script.update({root: ["x = 1\ndebug(t'{x}')", ONCE, "close(x + y)"], "chain2": [chooser]})
   act = engine.prompt(int, "go", on=root)
   await act
-  await settle()
+  await until(lambda: (ends or compacted_on)(root))
   return root, act
 
 
 def made(root: str, by: str = "compacted1") -> list[str]:
   """The words of the rungs that an act made on a chain."""
   return [str(a[4]) for a in engine.transcript(root) if a[0] == "rung" and a[2] == by]
+
+
+def compacted_on(root: str, by: str = "compacted1") -> bool:
+  """Whether a rung that an act made on a chain ran to its end: the fact that ends a step of compaction."""
+  return any(engine.over(str(a[1])) for a in engine.transcript(root) if a[0] == "rung" and a[2] == by)
+
+
+def told_kept(root: str) -> bool:
+  """Whether the chain was told that it was kept as it is: the fact that ends a refused choice."""
+  return any(a[0] == "tell" and "kept the chain as it is" in str(a[3]) for a in engine.transcript(root))
+
+
+def opened(chain: str, message: str) -> bool:
+  """Whether a prompt of a message is open on a chain."""
+  return any(a[0] == "prompt" and a[5] == message and not engine.over(str(a[1])) for a in engine.transcript(chain))
 
 
 def asked(chain: str, message: str) -> str:
@@ -60,7 +78,7 @@ async def test_the_chain_keeps_the_acts_that_the_model_chose(tmp_path: Path) -> 
   chooser = f"close(([{held['c.txt']!r}, {held['a.txt']!r}], 'gist'))"
   sand.script.update({root: ["read('a.txt')\nx = 1", ONCE, "close(x + y)"], "chain2": [chooser]})
   assert await engine.prompt(int, "go", on=root) == 3
-  await settle()
+  await until(lambda: compacted_on(root))
   told = {a[1] for a in engine.transcript(root) if a[0] == "tell"}
   again = [a[1] for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt" and a[1] != held["a.txt"]]
   assert held["c.txt"] in told and held["d.txt"] not in told and held["a.txt"] not in told
@@ -84,9 +102,9 @@ async def test_it_moves_stops_and_pauses_nothing(tmp_path: Path) -> None:
   worker = "v = await prompt(int, 'w?', to=OPERATOR)\nclose(v)"
   sand.script.update({root: [word, "close(None)"], "chain2": [GIST], "chain3": [worker]})
   act = engine.prompt(int, "go", on=root)
-  await settle()
+  await until(lambda: opened(root, "n") and opened("chain3", "w?"))
   engine.prompt(None, "poke", on=root)
-  await settle()
+  await until(lambda: compacted_on(root))
   assert made(root) == ["<s:summary>\ngist</s:summary>\nreground()"]
   ran = next(str(a[4]) for a in engine.transcript(root) if a[0] == "run" and a[5] == word)
   assert not engine.over(ran) and not engine.over(act)
@@ -107,16 +125,15 @@ async def test_it_never_completes(tmp_path: Path) -> None:
     }
   )
   assert await engine.prompt(int, "go", on=root) == 1
-  await settle()
   watcher = engine.module(root)["w"]
+  await until(lambda: compacted_on(root, watcher))
   assert made(root, watcher) == ["<s:summary>\ngist</s:summary>\nreground()"]
   assert engine.peek(watcher, "open") == "open"
 
 
 async def test_when_the_choice_ends_refused_it_keeps_the_chain_as_it_is(tmp_path: Path) -> None:
   """When the choice ends refused, it keeps the chain as it is, tells why, and asks no choice again."""
-  root, act = await wrapped(tmp_path, chooser="x = 1")
+  root, act = await wrapped(tmp_path, chooser="x = 1", ends=told_kept)
   assert engine.peek(act) == 3
   assert made(root) == []
-  assert [a for a in engine.transcript(root) if a[0] == "tell" and "kept the chain as it is" in str(a[3])] != []
   assert engine.get("chain3") is None

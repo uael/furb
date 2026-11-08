@@ -1516,6 +1516,30 @@ fn notices(engine: &mut Engine) -> Vec<String> {
     .collect()
 }
 
+/// An ear of the test that answers each probe with an Overflow, as the provider does past a window.
+fn overflowing() -> Box<dyn Ear> {
+  hearing(&["probe"], move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if a.kind() == "probe" && a.question() {
+        let why = Fault::new("Overflow", vec![Object::string("m answered nothing: too long")]);
+        say(&mut co, done(a.about(), why.object()));
+      }
+    }
+  })
+}
+
+#[test]
+fn an_overflow_that_an_ear_gives_comes_into_the_life_as_the_class_of_the_engine_that_is_a_refused()
+{
+  let (_yard, mut engine, root) = probed("overflow", vec![("probe", overflowing())]);
+  let no = probe(&mut engine, &root).unwrap_err();
+  assert_eq!(no.name, "Overflow");
+  assert!(no.message().contains("too long"), "{no}");
+  let kept = engine.word("issubclass(Overflow, Refused)", vec![]).unwrap();
+  assert_eq!(kept.as_ref().as_bool(), Some(true));
+}
+
 #[test]
 fn an_ear_of_the_crate_that_raises_refuses_that_act_starts_again_and_tells_the_operator_once() {
   let count = Rc::new(RefCell::new(0));
