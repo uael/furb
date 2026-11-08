@@ -441,6 +441,8 @@ try {
   await capture("14-theme-picker");
   app().closeOverlay();
   session.theme = "github";
+  // The loom draws its cells over the moments that the crate gives, which the session reads when a loom asks for them.
+  await session.readMoments();
   app().chains();
   await capture("15-chains");
   app().askChains(1);

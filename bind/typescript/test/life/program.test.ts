@@ -519,3 +519,23 @@ test("the acts of a word stand on the lines that call their verbs, and a loop pu
     ["bash1", "bash2", "bash3"],
   ]);
 });
+
+test("a word of an ear that only defines stands as one quiet row that counts its words and names no rung", () => {
+  const ear = act("rung1", "rung", "chain1", "extensions", 1, 9);
+  const rungs = [
+    act("rung33", "rung", "chain1", "extensions", 2, 3),
+    act("rung34", "rung", "chain1", "extensions", 4, 5),
+  ];
+  const row = (given: ReturnType<typeof act>[]) =>
+    earProgram(
+      ear,
+      given,
+      [],
+      () => [],
+      () => "def helper():\n  return 1",
+      new Set(),
+      label,
+    ).map((line) => line.text);
+  expect(row(rungs)).toEqual(["# extensions  2 words"]);
+  expect(row(rungs.slice(1))).toEqual(["# extensions  1 word"]);
+});
