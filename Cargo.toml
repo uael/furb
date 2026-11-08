@@ -12,6 +12,7 @@ readme = "README.md"
 include = [
   "/build.rs",
   "/build/*.rs",
+  "/docs/promise.md",
   "/src/**",
   "/.agents/skills/catchup/SKILL.md",
   "/.agents/skills/catchup/catchup.py*",

@@ -191,7 +191,7 @@ fn an_actor_names_its_model_and_its_effort_unless_the_roster_holds_its_whole_nam
 }
 
 #[test]
-fn the_account_that_served_an_answer_stands_in_the_spend_of_its_rung_and_its_chain() {
+fn the_account_in_the_sixth_item_of_a_usage_of_an_older_record_stands_in_the_spend_of_its_chain() {
   let mut fold = Fold::default();
   let usage = json!([10, 2, 0, 0, 0.5, "b"]);
   let facts = [
@@ -209,5 +209,29 @@ fn the_account_that_served_an_answer_stands_in_the_spend_of_its_rung_and_its_cha
   for id in ["chain1", "rung1"] {
     let spend = spends.get(id).cloned().flatten().expect("a spend");
     assert_eq!(spend.account.as_deref(), Some("b"), "{id}");
+  }
+}
+
+#[test]
+fn the_account_that_a_fact_names_stands_in_the_spend_of_its_rung_and_its_chain() {
+  let mut fold = Fold::default();
+  let usage = json!([10, 2, 0, 0, 0.5]);
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["rung", "rung1", "chain1", "chain1", "", "", "claude-cli:opus"]),
+    json!(["reply", "reply1", "rung1", "chain1", "claude-cli:opus"]),
+    json!(["account", "reply1", "claude-cli", "b"]),
+    json!(["done", "reply1", "journal", ["assistant", "x = 1", usage, []]]),
+  ];
+  let mut spends = HashMap::new();
+  for fact in &facts {
+    for act in fold.recorded(fact) {
+      spends.insert(act.id, act.spend);
+    }
+  }
+  for id in ["chain1", "rung1"] {
+    let spend = spends.get(id).cloned().flatten().expect("a spend");
+    assert_eq!(spend.account.as_deref(), Some("b"), "{id}");
+    assert!((spend.dollars - 0.5).abs() < 1e-9, "{id}");
   }
 }

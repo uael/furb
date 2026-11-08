@@ -44,6 +44,8 @@ struct Reply {
   chain: String,
   actor: String,
   maker: String,
+  /// The account that served it, once a fact says so.
+  account: Option<String>,
 }
 
 /// The acts of a life, folded from its facts in the order of its log. It reads from each fact what
@@ -193,7 +195,8 @@ impl Fold {
         self.runs.insert(id.to_owned(), rung);
       }
       Kind::Reply => {
-        let reply = Reply { chain: on.clone(), actor: text(1), maker: by.to_owned() };
+        let reply =
+          Reply { chain: on.clone(), actor: text(1), maker: by.to_owned(), account: None };
         if let Some(maker) = self.acts.get_mut(by).filter(|act| act.kind == Kind::Rung) {
           maker.asking = true;
           self.moved.push(by.to_owned());
@@ -326,6 +329,12 @@ impl Fold {
           self.moved.push(about.to_owned());
         }
       }
+      "account" => {
+        let name = fact.get(3).and_then(Value::as_str);
+        if let Some(reply) = self.replies.get_mut(about) {
+          reply.account = name.map(str::to_owned);
+        }
+      }
       "done" => self.done(about, fact.get(3).cloned().unwrap_or_default()),
       "ready" => {
         let word = fact.get(3).and_then(Value::as_str);
@@ -378,7 +387,10 @@ impl Fold {
       let usage = value.get(2).and_then(Value::as_array);
       if let Some(usage) = usage {
         let part = |at: usize| usage.get(at).and_then(Value::as_f64).unwrap_or_default();
-        let account = usage.get(5).and_then(Value::as_str).map(str::to_owned);
+        // A record of fdc46c95b holds the account as the sixth item of the usage: it is read
+        // there too.
+        let legacy = || usage.get(5).and_then(Value::as_str).map(str::to_owned);
+        let account = reply.account.or_else(legacy);
         let usage = [part(0), part(1), part(2), part(3), part(4)];
         let answer = Answer { actor: reply.actor, usage, account };
         for id in [reply.chain, reply.maker] {
