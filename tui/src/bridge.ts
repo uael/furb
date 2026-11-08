@@ -529,6 +529,8 @@ export class HostView extends EventEmitter {
     this.measured.clear();
     this.given = undefined;
     this.unread = [];
+    // An act that was open before the window attached again ends in the replay, which times nothing.
+    this.began.clear();
   }
 
   /** A record that a build of another engine made drifts on a replay, so it opens to read in its place, with the
