@@ -2,7 +2,7 @@
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
-use furb::view::{Act, Kind, Phase, State};
+use furb::view::{Act, Kind, Maker, Phase, State};
 use serde_json::{Value, json};
 
 use super::{TAIL, Watch};
@@ -13,7 +13,7 @@ fn act(kind: &str, id: &str, by: &str, words: &[Value], phase: Phase) -> Event {
     kind: Kind::from(kind),
     id: id.to_owned(),
     by: by.to_owned(),
-    maker: furb::view::Role::Engine,
+    maker: Maker::Engine,
     on: "chain1".to_owned(),
     chain: "chain1".to_owned(),
     words: words.to_vec(),

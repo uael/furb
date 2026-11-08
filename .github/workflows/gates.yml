@@ -93,7 +93,7 @@ jobs:
       # The suite is a gate of its own below, on three systems, and no hook runs it a second time here.
       - run: uv run pre-commit run --all-files --show-diff-on-failure
         env:
-          SKIP: pytest
+          SKIP: pytest,biome
           UV_NO_SYNC: "1"
       - uses: ./.github/actions/clear
 

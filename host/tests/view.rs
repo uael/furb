@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::iter;
 
 use furb::view::{
-  Act, Answer, Attention, ChainThread, Concern, Kind, NoteRun, Origin, Pause, Phase, Rows,
+  Act, Answer, Attention, ChainThread, Concern, Kind, Maker, NoteRun, Origin, Pause, Phase, Rows,
   RunState, Spend, State, ThreadNode, Tick, as_of, attention, chain_notes, chain_threads, choices,
   concerns, desk, hint, moments_of, nest_threads, open, operator, order_threads, restate,
   takes_nothing, ticks, wants, working,
@@ -24,7 +24,7 @@ fn act(id: &str, kind: &str, on: &str, by: &str, began: u64, ended: Option<u64>)
     kind: Kind::from(kind),
     id: id.to_owned(),
     by: by.to_owned(),
-    maker: furb::view::Role::Engine,
+    maker: Maker::Engine,
     on: if kind == "chain" { id } else { on }.to_owned(),
     chain: if kind == "chain" { id } else { on }.to_owned(),
     words: Vec::new(),

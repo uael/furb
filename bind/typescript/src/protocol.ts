@@ -672,9 +672,9 @@ export type Rung =
     };
 /**
  * Who made an act, as a window names it: the operator, a member who answers as him by his login,
- * a model with its effort, a skill, or the engine itself.
+ * a model with its effort when its actor names one, a skill, or the engine itself.
  */
-export type Role2 =
+export type Maker =
   | {
       role: "operator";
     }
@@ -684,7 +684,7 @@ export type Role2 =
     }
   | {
       model: string;
-      effort: string;
+      effort?: string | null;
       role: "model";
     }
   | {
@@ -1066,7 +1066,7 @@ export interface Act {
    * Who made the act: for a rung that waits for the word of an actor, that actor; for any
    * other act, the role of the act or the person that made it.
    */
-  maker?: Role2;
+  maker?: Maker;
   /**
    * What the act is on: a chain, or the prompt of a thread for a prompt on a thread.
    */
@@ -1138,7 +1138,7 @@ export interface Spend {
   answers: number;
   actor?: string | null;
   /**
-   * The account of the last answer that named one.
+   * The account of the last answer, none when that answer named none.
    */
   account?: string | null;
 }
@@ -1170,4 +1170,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 11;
+export const PROTOCOL = 12;

@@ -55,6 +55,10 @@ use crate::{
 /// path of its folder.
 pub(crate) const KEY: &str = "skills";
 
+/// The name of the ear of the skills, which a record holds as the maker of the rungs of their
+/// words.
+pub const EAR: &str = "extensions";
+
 /// The key that a config gave in place of [`KEY`] before the rename of extension to skill. It
 /// turns nothing on, and the life tells the root that the key is now [`KEY`], with the path of
 /// the config.
