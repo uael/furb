@@ -49,7 +49,7 @@ notes = ["small ideas", "ideas about travel and ideas about food", "budget", "an
 words = ["ideas"]
 ranked = sorted(notes, key=lambda n: score(n, words), reverse=True)
 for number, note in enumerate(ranked, 1):
-  print(number, note, score(note, words))`;
+  debug(t"{number} {note} {score(note, words)}")`;
 
 const rankingEnd = `close("A note ranks higher for each time it holds a word of the query, and lower for each 40 characters of length. The two notes that hold ideas rank first.")`;
 

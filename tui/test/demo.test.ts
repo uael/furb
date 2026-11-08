@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { isDone, outcomeOf } from "furb/life";
+import { side } from "../src/demo/side.ts";
 import { demoSession, removeDemoDirectories, tour } from "../src/demo.ts";
 
 test("the temporary directory of a demo goes when the process that made it removes its demo directories", async () => {
@@ -97,3 +98,21 @@ test("the moment that the feed shows steps back through the chain, the stage ste
     await removeDemoDirectories();
   }
 });
+
+test("each word of a side session of the demo that a later word follows tells something, so the chain asks its next word and the watch of the daemon never asks", async () => {
+  for (const { cue } of side.filter(({ steps }) => steps.length > 1)) {
+    const session = await demoSession();
+    try {
+      await session.engine.result(
+        await session.engine.prompt("str", { message: cue, on: session.engine.root }),
+      );
+      await session.refresh();
+      expect([cue, session.acts.filter((act) => act.kind === "prompt" && act.by === "watch").length]).toEqual(
+        [cue, 0],
+      );
+    } finally {
+      await session.dispose();
+    }
+  }
+  await removeDemoDirectories();
+}, 120_000);
