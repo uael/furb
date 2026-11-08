@@ -1100,9 +1100,13 @@ def boot(record=(), **outside):
     return ahead.pop(at)[0]
 
   def owed():
-    while due and question(due[-1]) and due[-1][1] in known:
+    while due and question(x := due[-1]) and x[1] in known:
       due.pop()
     return due
+
+  def upto(entry):
+    while owed() and not question(x := due[-1]) and ranks[id(x)] < ranks.get(id(entry), 0):
+      recount(due.pop())
 
   def repeat(kind, about, by, *words):
     with site.set(by):
@@ -1115,15 +1119,13 @@ def boot(record=(), **outside):
       case (kind, name, by, on, *words) if question((kind, name)):
         if (
           by in saved
-          or (name not in first and re.fullmatch(r"\w+?\d+", by))
+          or (name not in first and by[-1:].isdigit())
           or (on and not get(on))
           or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on))]))
         ):
           born.setdefault(kind, {})[name] = name
           return
-        if by not in outside and (
-          not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by)
-        ):
+        if by not in outside and (not callable(verb := (module(on) or globals()).get(kind)) or by[-1:].isdigit()):
           raise drift(name)
         with site.set(by):
           try:
@@ -1203,6 +1205,7 @@ def boot(record=(), **outside):
       names[key] = matched(kind, by, on, *words) if stable else kind + str(len(names) + 1)
     a = (kind, name := names[key], by, on, *words)
     if known.setdefault(name, a) is a:
+      upto(saved.get(name))
       holds(scope(on), [a])
       log.append((a, heard := set(outside) - busy))
       busy.add(id(a))
@@ -1215,8 +1218,7 @@ def boot(record=(), **outside):
         if saved.get(name, a) == a:
           if name not in taken and (f := first.get(name)):
             taken[name] = f[0] == "started"
-            while owed() and not question(due[-1]) and ranks[id(due[-1])] < ranks[id(f)]:
-              recount(due.pop())
+            upto(f)
             repeat(*f)
             while taken[name] and owed() and due[-1][0] == "joined" and due.pop() and due:
               recount(due.pop())

@@ -50,7 +50,9 @@ R1, no drift on the same engine:
 - `src/life.test.rs::each_record_of_the_replays_replays_on_its_own_engine_with_no_drift`
 - `src/life.test.rs::a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts`
 - `tests/promise.rs::a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entries_written_whole`, at a
-  random byte of a random line and of the last checkpoint, from a seed that it prints
+  random byte of a random line, of the done of the gate of the first stand and of the last checkpoint, from a seed
+  that it prints
+- `tests/promise.rs::a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_held_live`
 
 R2, the exact tip, with a checkpoint and without one (resume and reopen):
 
@@ -97,9 +99,6 @@ names is gone. `script/contract.py` fails on a break of the contract that this p
 
 What no machine proves yet, so the promise does not hold there until a proof lands:
 
-- A record cut between the gate of the first stand and its done: it drifts at gate1, since a replay makes that gate
-  before the teach of the extensions that the record holds before it. The torn and kill proofs step over that cut, and
-  the fork proof compares with the open of its origin rather than the live origin, until the journal is fixed.
 - A rollback: `test/outside/test_promise_rollback.py::test_each_record_of_next_opens_on_the_last_release_of_its_major_once_that_release_holds_a_corpus`
   opens each record of the corpus on the last release of its major, but it skips until a release of the major holds a
   folder of the corpus (P8).
