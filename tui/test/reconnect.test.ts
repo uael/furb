@@ -339,3 +339,32 @@ test("a pause and a wake that the daemon left when it went are not sent again, s
   expect(seen.filter(([, verb]) => verb === "pause")).toEqual([[0, "pause"]]);
   await life.detach();
 });
+
+test("a window keeps the seen of its own login and of the journal, and a seen of another login clears no mark of it", async () => {
+  const { folder, place, server } = served((asked, socket) => {
+    if (asked.verb === "open") {
+      reply(socket, asked, { answer: "done" });
+      const facts = [
+        ["seen", "chain1", "operator/test"],
+        ["seen", "chain2", "operator/other"],
+        ["seen", "chain3", "journal"],
+      ];
+      for (const [seq, fact] of facts.entries())
+        socket.write(
+          `${JSON.stringify({ frame: "event", life: asked.life, seq, event: { event: "fact", data: fact } })}\n`,
+        );
+      socket.write(
+        `${JSON.stringify({ frame: "event", life: asked.life, seq: facts.length, event: { event: "changed" } })}\n`,
+      );
+    } else if (asked.verb === "pending") reply(socket, asked, { answer: "values", data: [] });
+    else if (asked.verb === "detach") reply(socket, asked, { answer: "done" });
+  });
+  const daemon = new Daemon(folder, place);
+  made.push({ folder, server, daemon });
+  const life = new RemoteLife(daemon, join(folder, "life.jsonl"));
+  const told = new Promise<void>((resolve) => life.once("facts", () => resolve()));
+  await life.open();
+  await told;
+  expect([...life.seenAt.keys()].sort()).toEqual(["chain1", "chain3"]);
+  await life.detach();
+});

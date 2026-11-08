@@ -348,6 +348,13 @@ export class RemoteLife extends EventEmitter {
   /** The place up to which the operator read each chain or thread, by its name: the place of the last fact seen that
    * he said of it, which covers each change that the record holds before it. */
   readonly seenAt = new Map<string, number>();
+  /** Whether a fact seen of a site is the seen of this window: its own login, the operator alone as the records before
+   * logins say it, or the journal of a later life that says it again. The seen of another login clears no mark here. */
+  private saw(by: string): boolean {
+    if (by === "journal" || by === "operator") return true;
+    const login = this.daemon.peer?.login;
+    return login === undefined ? operated(by) : by === `operator/${login}`;
+  }
   /** Each compaction of a chain, in the order of the record. */
   readonly compactions: Compaction[] = [];
   /** What each command that is not done printed on each stream so far, by the command. */
@@ -560,7 +567,7 @@ export class RemoteLife extends EventEmitter {
     const at = this.facts.length;
     // A later life says each fact of its record again as the journal, which names no speaker, and only the operator
     // says seen. A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.
-    if (kind === "seen" && (operated(by) || by === "journal")) this.seenAt.set(id, at);
+    if (kind === "seen" && this.saw(by)) this.seenAt.set(id, at);
     else if (kind === "prefix" && cuts(fact, String(this.acts.get(by)?.words[0] ?? "")))
       this.compactions.push({ chain: id, by, at });
     else if (kind === "started" && this.outputs.has(id)) this.outputs.set(id, { stdout: "", stderr: "" });
