@@ -26,7 +26,7 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
-  collections::{HashMap, HashSet},
+  collections::HashMap,
   fmt::Display,
   net::{IpAddr, SocketAddr},
   path::{Path, PathBuf},
@@ -422,7 +422,7 @@ impl Daemon {
     let mut lives = Lives {
       changes,
       weigh,
-      asked: HashSet::new(),
+      asked: HashMap::new(),
       members: Members::default(),
       settings,
       held: HashMap::new(),
@@ -606,9 +606,9 @@ struct Lives {
   /// Whether the daemon holds no life, which the listener reads to end the daemon.
   empty: watch::Sender<bool>,
   /// The clock at which the daemon reads its heap, and each life that it asked to be born again
-  /// since the heap passed its share.
+  /// since the heap passed its share, with its weight at the ask.
   weigh: Interval,
-  asked: HashSet<String>,
+  asked: HashMap<String, u64>,
 }
 
 /// The next change of the access list, or never when there is no list.
@@ -728,24 +728,39 @@ impl Lives {
   }
 
   /// The heap of the daemon weighed: past its share, the life that said the most facts since it
-  /// opened, of those that the daemon did not ask yet, is asked to be born again, and at the next
-  /// weigh the next one, until the heap falls under the share. A life that holds work is born
-  /// again once that work ends, as at its tail.
+  /// opened, of those that the daemon did not ask yet, is asked to be born again, and the next one
+  /// only once that life is born again or ended, while the heap stays past the share. A life that
+  /// holds work is born again once that work ends, as at its tail. Once the heap falls under the
+  /// share, each life asked and not yet born again is spared.
   fn weighed(&mut self) {
     let Some(heap) = self.settings.heap else { return };
     if !heap.over() {
-      self.asked.clear();
+      for life in std::mem::take(&mut self.asked).into_keys() {
+        if let Some(Held { handle, stage: Stage::Living(_), .. }) = self.held.get(&life) {
+          handle.reborn(false);
+        }
+      }
+      return;
+    }
+    // A life asked and not born again yet weighs as much as at its ask, or more: a rebirth sets
+    // its weight to what its new birth said.
+    let waits = self.asked.iter().any(|(life, at)| {
+      self
+        .held
+        .get(life)
+        .is_some_and(|held| matches!(held.stage, Stage::Living(_)) && held.handle.weight() >= *at)
+    });
+    if waits {
       return;
     }
     let living = self.held.iter().filter(|(life, held)| {
       matches!(held.stage, Stage::Living(_))
-        && !self.asked.contains(*life)
+        && !self.asked.contains_key(*life)
         && held.handle.weight() > 0
     });
     let Some((life, held)) = living.max_by_key(|(_, held)| held.handle.weight()) else { return };
-    self.asked.insert(life.clone());
-    let handle = held.handle.clone();
-    tokio::spawn(async move { handle.send(Command::Rebirth).await.ok() });
+    self.asked.insert(life.clone(), held.handle.weight());
+    held.handle.reborn(true);
   }
 
   /// Each life that lives told to stand again, so that its roster names the members that the

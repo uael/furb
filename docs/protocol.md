@@ -46,10 +46,15 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   its role, and the daemon closes the peer of a login that it does not name, before its hello.
 - `stall` gives the seconds after which the daemon tells that a life with an open act and no new fact stalled, as
   the section on attach says. With no `stall`, the bound is 1200 seconds.
+- `heap` gives the bound of the heap of the daemon in MiB, which the allocator of `furb` counts: half the memory of
+  the machine with no `heap`, and no bound with `0`. Each second, past 75 percent of that bound, the daemon asks the
+  life that said the most facts since it opened to write its checkpoint and be born again, as at its tail, then the
+  next one once that one is born again, until the heap falls under the share. Its log lets go of each fact that the
+  record holds, and a window that attaches before them reads them again from the record.
 - The daemon reads `host.json` when it starts and at each change of the file, and a file that does not parse keeps
   the list before. A change of `roles` takes effect at once on each connected peer: a login that the file drops gets
   a refusal and loses its connection, and a login whose role changes holds the new role from its next verb. A change
-  of `tailnet` or `stall` takes effect at the next start or upgrade.
+  of `tailnet`, `stall` or `heap` takes effect at the next start or upgrade.
 - The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
   standalone download. It does not find the app of the App Store.
 - Plain TCP listens only on loopback or on the tailnet, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, since no other

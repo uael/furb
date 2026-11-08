@@ -50,11 +50,12 @@ pub struct Heap {
 
 impl Heap {
   /// The heap that [`Counted`] reads, bound by a number of MiB, or by half the memory of the
-  /// machine when none is given. None when the bound is no size, or the machine does not say its
-  /// memory.
+  /// machine when none is given. None when the bound is zero or no size, or the machine does not
+  /// say its memory.
   #[must_use]
   pub fn counted(mib: Option<u64>) -> Option<Self> {
     let bound = match mib {
+      Some(0) => return None,
       Some(mib) => usize::try_from(mib).ok()?.checked_mul(1 << 20)?,
       None => machine()? / 2,
     };
@@ -91,15 +92,21 @@ impl Counted {
 // the bytes.
 unsafe impl GlobalAlloc for Counted {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-    LIVE.fetch_add(layout.size(), Ordering::Relaxed);
     // SAFETY: the caller keeps the contract of alloc, which is that of the system.
-    unsafe { System.alloc(layout) }
+    let at = unsafe { System.alloc(layout) };
+    if !at.is_null() {
+      LIVE.fetch_add(layout.size(), Ordering::Relaxed);
+    }
+    at
   }
 
   unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-    LIVE.fetch_add(layout.size(), Ordering::Relaxed);
     // SAFETY: the caller keeps the contract of alloc_zeroed, which is that of the system.
-    unsafe { System.alloc_zeroed(layout) }
+    let at = unsafe { System.alloc_zeroed(layout) };
+    if !at.is_null() {
+      LIVE.fetch_add(layout.size(), Ordering::Relaxed);
+    }
+    at
   }
 
   unsafe fn dealloc(&self, at: *mut u8, layout: Layout) {
@@ -197,9 +204,10 @@ impl Watch {
     (self.facts >= TAIL || self.asked) && self.held.is_empty()
   }
 
-  /// The ask of the daemon, whose heap passed its share, that the life be born again.
-  pub(crate) fn ask(&mut self) {
-    self.asked = true;
+  /// The ask of the daemon, whose heap passed its share, that the life be born again, or the ask
+  /// taken back once the heap fell under the share.
+  pub(crate) fn ask(&mut self, asked: bool) {
+    self.asked = asked;
   }
 
   /// The facts that the life said since it opened, by which the daemon weighs it.
