@@ -451,7 +451,8 @@ fix what your change broke, and report what was broken before.
   and one of a tenth of that: the cost of a new fact, the first frame, the frames while the feed scrolls and a command
   streams, and the memory on Linux. It fails over its budgets, which the docstring of `tui/script/bench.ts` gives in paces of the
   machine, and which the gates hold on Linux. `FURB_BENCH_JSON` names a file that takes the measures of each run, and
-  `FURB_BENCH_FACTS` sets the size of the long life.
+  `FURB_BENCH_FACTS` sets the size of the long life. It measures the crate in the release profile alone, and refuses
+  another: run `bun run build --release` before it.
 - `bun run screenshots` and `bun run animation`: draw `docs/screenshots/` and `docs/furb.gif` again from the real
   renderer. Run both after a change that a screen shows, and read each capture. Do not commit them: at most once an hour,
   on a new head of `w/converge`, `.github/workflows/gallery.yml` draws both again on a runner of CI and keeps one pull
