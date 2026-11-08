@@ -15,6 +15,8 @@ SPEC.loader.exec_module(private)
 TRACED = [
   ["stand", "stand1", "provider", [[["operator", [], 200000]], "/Users/someone/src/furb", "m/low"]],
   ["read", "read1", "rung1", "chain1", "/home/someone/notes.md"],
+  ["read", "read3", "rung1", "chain1", "/Users/first.last/src/furb"],
+  ["rung", "rung3", "operator/someone", "chain1", "a word that a member typed", "", ""],
   ["read", "read2", "rung1", "chain1", "~/src/github.com/someone/furb-w6/DOCTRINE.md"],
   ["bash", "bash1", "rung1", "chain1", "ls /Users/x/Library/Caches/furb/scratch/3bcaab2537057c07"],
   ["tell", "rung1", "chain1", ["session 0c16d8e3-6726-4650-aac1-a3161707af0e of uael"]],
@@ -22,6 +24,10 @@ TRACED = [
   ["prompt", "prompt1", "operator", "chain1", "None", "Are the other lives of the sample stopped?", ""],
   ["prompt", "prompt2", "operator/tui", "chain1", "None", "a word that no script wrote", ""],
 ]
+
+
+# The rows that a scrub makes private: each but the words that no script wrote, which no stand-in replaces.
+KEPT = [one for one in TRACED if "a word that" not in json.dumps(one)]
 
 
 def run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -43,7 +49,6 @@ def test_each_trace_of_a_person_in_a_record_is_named(tmp_path: Path) -> None:
   assert named == {
     "a path of a home",
     "a checkout of an account",
-    "a scratch folder of a home",
     "the scratch folder of a session",
     "the id of a session",
     "the handle of the owner",
@@ -51,18 +56,19 @@ def test_each_trace_of_a_person_in_a_record_is_named(tmp_path: Path) -> None:
     "an address of mail",
     "an operator by his login",
   }
-  assert "a word that no script wrote" in got.stdout
+  assert "a word that no script wrote" in got.stdout and "a word that a member typed" in got.stdout
+  assert "a path of a home: /Users/first.last\n" in got.stdout
 
 
 def test_a_scrub_puts_each_trace_to_its_stand_in_and_keeps_the_public_repositories(tmp_path: Path) -> None:
   record = tmp_path / "record.jsonl"
   public = ["tell", "rung2", "chain1", ["see https://github.com/uael/furb and uael/monty"]]
-  record.write_text("".join(json.dumps(one) + "\n" for one in [*TRACED[:-1], public]), encoding="utf-8")
+  record.write_text("".join(json.dumps(one) + "\n" for one in [*KEPT, public]), encoding="utf-8")
   assert run("--scrub", str(record)).returncode == 0
   text = record.read_text(encoding="utf-8")
   assert run(str(record)).stdout == "private: no record holds a trace\n"
   assert "github.com/uael/furb and uael/monty" in text
-  assert [json.loads(line)[0] for line in text.splitlines()] == [one[0] for one in [*TRACED[:-1], public]]
+  assert [json.loads(line)[0] for line in text.splitlines()] == [one[0] for one in [*KEPT, public]]
 
 
 def test_a_scrub_numbers_the_stand_ins_so_two_sessions_stay_two(tmp_path: Path) -> None:

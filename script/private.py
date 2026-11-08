@@ -25,14 +25,9 @@ KINDS = ("*.jsonl", "*.jsonl.zst", "*.modules", "*.log")
 # {n} is numbered by the order in which each distinct trace comes first, so two sessions of a record stay two.
 TRACES: list[tuple[str, re.Pattern[str], str]] = [
   (
-    "a scratch folder of a home",
-    re.compile(r"/Users/[^/\s\"'\\]+/Library/Caches/furb/scratch/[0-9a-f]{16}"),
-    "/home/example/.cache/furb/scratch/{n:016d}",
-  ),
-  (
     "a path of a home",
     re.compile(
-      r"/Users/(?!Shared\b)[^/\s\"'\\.]+(?=[/\s\"'\\]|$)|/home/(?!example\b)[^/\s\"'\\]+|/root(?=/)|[A-Za-z]:\\\\+Users\\\\+[^\\\s\"']+"
+      r"/Users/(?!Shared\b|(?:AGENTS|CLAUDE)(?:\.local)?\.md\b)[^/\s\"'\\]+(?=[/\s\"'\\]|$)|/home/(?!example\b)[^/\s\"'\\]+|/root(?=/)|[A-Za-z]:\\+Users\\+[^\\\s\"']+"
     ),
     "/home/example",
   ),
@@ -42,7 +37,7 @@ TRACES: list[tuple[str, re.Pattern[str], str]] = [
     "~/src/github.com/example/furb",
   ),
   ("the handle of the owner", re.compile(r"\buael\b(?!/(?:furb|monty)(?![\w-]))"), "example"),
-  ("an operator by his login", re.compile(r"\boperator/(?!tui\b)[\w-]+"), "operator/tui"),
+  ("an operator by his login", re.compile(r"\boperator/(?!tui\b|member[0-9]+\b)[\w-]+"), "operator/member{n}"),
   (
     "an address of mail",
     re.compile(r"\b[\w.+-]+@(?!example\.)[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\b"),
@@ -66,8 +61,9 @@ SCRIPTED = {
   "Hold on.",
 }
 HARNESS = re.compile(r"confidence level [0-9.]+ is too low, continue|- Update the `display` style property to accept")
-# The place of the maker and of the message in a prompt: ("prompt", id, by, on, shape, message, to).
-BY, MESSAGE = 2, 5
+# The place of the maker, of the word of a rung and of the message of a prompt: ("rung", id, by, on, word, ...) and
+# ("prompt", id, by, on, shape, message, to).
+BY, WORD, MESSAGE = 2, 4, 5
 
 
 def scripted_of_the_tui() -> set[str]:
@@ -91,6 +87,10 @@ def operator_prompts(line: str) -> list[str]:
       operated = len(one) > MESSAGE and str(one[BY]).split("/")[0] == "operator"
       if operated and one[0] == "prompt" and isinstance(one[MESSAGE], str):
         found.append(one[MESSAGE])
+      # A member of the operator types the word of a rung; the seed of a checkpoint writes its rungs as the bare operator,
+      # in the words of the engine.
+      if len(one) > WORD and one[0] == "rung" and str(one[BY]).startswith("operator/") and isinstance(one[WORD], str):
+        found.append(one[WORD])
       stack.extend(one)
     elif isinstance(one, dict):
       stack.extend(one.values())
