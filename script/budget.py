@@ -25,6 +25,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable
 from ctypes import wintypes
@@ -40,6 +41,31 @@ HOME = Path(os.environ.get("FURB_BUDGETS") or Path(__file__).with_name("budgets.
 TIME = re.compile(
   r"^\s*(?P<lead>\d+\.\d+)s\s+\w+\s+(?P<a>\S+)|^(?:\s*\d+\.\d+ )?test (?P<b>\S+) \.\.\. \w+ <(?P<trail>\d+\.\d+)s>"
 )
+
+
+# The log of the guard of memory, script/memwatch.sh: a line for each process that it ended, as its time in seconds of
+# the epoch, its pid and its command. It is the one evidence that the guard ended a process, and not the kernel, a
+# timeout or a crash, which end it by the same signal.
+WATCH_LOG = Path(os.environ.get("FURB_WATCH_LOG") or Path(tempfile.gettempdir()) / "furb-memwatch.log")
+
+
+def watched(since: float, until: float, root: Path, said: str) -> list[str]:
+  """The processes of this run that the log of the guard of memory says it ended between two times of the epoch: each
+  whose program lies under the folder of the run, or whose absolute path the output of the run names as a whole word,
+  as cargo names a test binary that a signal ended. A bare name, as bun, is no evidence."""
+  try:
+    text = WATCH_LOG.read_text(encoding="utf-8")
+  except OSError:
+    return []
+  found = []
+  for line in text.splitlines():
+    when, pid, command = [*line.split(" ", 2), "", ""][:3]
+    program = command.split(" ", 1)[0]
+    named = Path(program).is_absolute() and re.search(rf"(?<![\w/.-]){re.escape(program)}(?![\w/.-])", said)
+    ours = program.startswith(f"{root}{os.sep}") or bool(named)
+    if when.isdigit() and since - 1 <= int(when) <= until + 1 and ours:
+      found.append(f"pid {pid}: {command}")
+  return found
 
 
 def slowest(lines: list[str], count: int = 10) -> list[tuple[float, str]]:
@@ -130,7 +156,7 @@ def main(argv: list[str]) -> int:
   counts = resource is not None or job is not None
   cpu_limit = table.get(part + "_cpu", 0) if counts else 0
   cores, busy = os.cpu_count() or 1, load()
-  start, used = time.monotonic(), cpu(job)
+  start, began, used = time.monotonic(), time.time(), cpu(job)
   lines: list[str] = []
   with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as run:  # noqa: S603
     assert run.stdout is not None
@@ -145,6 +171,10 @@ def main(argv: list[str]) -> int:
     said += f" and {worked:.0f} s of CPU" + (f" of {cpu_limit} s" if cpu_limit else "")
   print(said + ("" if wall_limit or cpu_limit else ", with no limit yet"), flush=True)
   if run.returncode:
+    if ended := watched(began, time.time(), Path.cwd(), "".join(lines)):
+      print(f"budget: the guard of memory, script/memwatch.sh, ended a test process of {part}, by its log {WATCH_LOG}:")
+      for one in ended:
+        print(f"  {one}")
     return run.returncode
   over_cpu = cpu_limit > 0 and worked > cpu_limit
   over_wall = wall_limit > 0 and took > wall_limit

@@ -55,9 +55,7 @@ use super::{
   local::Server,
   messages::{messages, tail},
   model::{CHEAP, Class, standing},
-  retry::{
-    Backoff, Limit, OVERFLOW, Retry, Transient, limited, overflows, passing, recoverable, resets,
-  },
+  retry::{Backoff, Limit, Retry, Transient, limited, overflows, passing, recoverable, resets},
   search::Searches,
   thinking::{Thinking, budgeted, thinking},
 };
@@ -66,6 +64,8 @@ use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 #[cfg(unix)]
 use crate::testing::on_reactor;
 use crate::testing::{Yard, block_on, park, pause, waker};
+#[cfg(unix)]
+use crate::value::entry;
 use crate::wire;
 use futures::future;
 use futures::stream;
@@ -1222,10 +1222,7 @@ fn a_model_whose_prompt_is_always_too_long_pauses_the_chain_with_why_after_two_r
   let first =
     said(&mut engine).into_iter().find(|(kind, about, _)| kind == "done" && about == "reply1");
   let (_, _, refused) = first.expect("the first reply is done");
-  assert!(
-    refused.contains(&format!("{OVERFLOW}: ")),
-    "the refusal says the cause first: {refused}"
-  );
+  assert!(refused.starts_with("Overflow("), "the refusal is an Overflow: {refused}");
   let more = within(&mut engine, Duration::from_millis(300), |_| calls.load(Ordering::SeqCst) > 2);
   assert!(!more, "the paused chain asks the model no more: {}", calls.load(Ordering::SeqCst));
 }
@@ -3156,8 +3153,10 @@ fn a_reply_of_a_named_account_has_numbers_alone_in_its_usage_and_a_fact_that_nam
     Some("a")
   );
   let replies = facts(&mut engine, "reply");
-  let turn = engine.peek(replies[0].about(), verbs::Peek::default()).unwrap().py_repr();
-  assert!(!turn.contains("'a')"), "the usage holds numbers alone: {turn}");
+  let turn = engine.peek(replies[0].about(), verbs::Peek::default()).unwrap();
+  let usage = entry(&turn.as_ref(), 2).and_then(|one| one.items()).unwrap();
+  assert_eq!(usage.len(), 5, "the usage holds the five counts");
+  assert!(usage.iter().all(|one| one.as_str().is_none()), "the usage holds numbers alone");
 }
 
 #[test]

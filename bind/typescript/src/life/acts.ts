@@ -31,6 +31,10 @@ export const followed = (kind: string): boolean => !STEPS.has(kind);
  * as operated of the engine reads it. */
 export const operated = (site: string): boolean => site.split("/")[0] === "operator";
 
+/** Whether the operator, or a member who answers as him, made an act, as the crate says in its maker. */
+export const byOperator = (act: { maker?: Act["maker"] }): boolean =>
+  act.maker?.role === "operator" || act.maker?.role === "member";
+
 export type { Act, Pause, Phase, RunState, Spend } from "../protocol.js";
 /** What a pause carries, as the fact pause holds it: who said it, and the cause that it gave. */
 export type PauseCause = Pause;

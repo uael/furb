@@ -72,7 +72,7 @@ fn place(name: &str) -> yard::Yard {
   yard::Yard::new(format!("furb-host-rebirth-{name}-{}", process::id()))
 }
 
-/// A life that keeps its record, with no extension, whose model closes each request with None.
+/// A life that keeps its record, with no skill, whose model closes each request with None.
 fn opening(at: &Path) -> Opening {
   let asked = AtomicUsize::new(0);
   let answer = Answer(Arc::new(move |_, _| {
@@ -187,6 +187,35 @@ fn restated(log: &[Logged]) -> Vec<String> {
   restated
 }
 
+/// The last moment at which an act of the life began or ended.
+async fn moment(life: &LifeHandle) -> u64 {
+  let Ok(Reply::Moments(all)) = life.send(Command::Moments { on: None }).await else {
+    panic!("the life gave no moments")
+  };
+  *all.last().expect("the life has a moment")
+}
+
+/// A read of a moment after a rebirth gives each act that it gave before, but one that the open of
+/// the next birth made again, as the chain that its seed makes and its stand, which the read places
+/// at the moment of that open.
+async fn kept(life: &LifeHandle, then: u64, before: &[(String, u64)]) {
+  let (after, again) = (looked(life, then).await, looked(life, u64::MAX).await);
+  let gone: Vec<&(String, u64)> = before
+    .iter()
+    .filter(|one| !after.iter().any(|other| other.0 == one.0))
+    .filter(|one| !again.iter().any(|other| other.0 == one.0 && other.1 > then))
+    .collect();
+  assert!(gone.is_empty(), "a read of a moment before the rebirth lost these acts: {gone:?}");
+}
+
+/// The name and the beginning of each act as it stood just after a moment.
+async fn looked(life: &LifeHandle, at: u64) -> Vec<(String, u64)> {
+  let Ok(Reply::Acts(acts)) = life.send(Command::AsOf { at }).await else {
+    panic!("the life gave no acts")
+  };
+  acts.into_iter().map(|one| (one.id, one.began)).collect()
+}
+
 async fn a_life_goes_on_through_each_rebirth() {
   let at = place("tail");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
@@ -210,8 +239,13 @@ async fn a_life_goes_on_through_each_rebirth() {
   log.extend(until(&mut events, |event| {
     matches!(event, Event::Act(act) if act.id == asked && act.phase == Phase::Done("red".into()))
   }).await);
+  let then = moment(&life).await;
+  let before = looked(&life, then).await;
   ran(&life, "for i in range(2600):\n  chance()").await;
   log.extend(until(&mut events, reborn(false)).await);
+  // The log let go of each fact before the checkpoint, and a read of an earlier moment still
+  // gives each act that stood then.
+  kept(&life, then, &before).await;
   assert_eq!(named(&life, "n").await, Ok("1".to_owned()), "the life goes on past its tail");
 
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));

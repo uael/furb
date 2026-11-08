@@ -50,8 +50,10 @@ pub struct Held {
   /// Whether an act was told that began before the last one held, so the order of the acts is not
   /// the order they began.
   unordered: bool,
-  /// The place of each act or chain at which the operator last said that he saw it.
-  seen: HashMap<String, u64>,
+  /// The place of each act or chain at which each operator last said that he saw it, by the site
+  /// that said it: `operator` alone, or `operator/<login>` for the window of a member. A seen that
+  /// a later life says again as the journal names no site, so it stands for each of them.
+  seen: HashMap<String, HashMap<String, u64>>,
 }
 
 impl Held {
@@ -60,7 +62,7 @@ impl Held {
   pub fn noted(&mut self, fact: &serde_json::Value, at: u64) {
     let text = |n: usize| fact.get(n).and_then(serde_json::Value::as_str).unwrap_or_default();
     if text(0) == "seen" && (super::act::operator(text(2)) || text(2) == "journal") {
-      self.seen.insert(text(1).to_owned(), at);
+      self.seen.entry(text(2).to_owned()).or_default().insert(text(1).to_owned(), at);
     }
   }
 
@@ -101,7 +103,7 @@ impl Held {
 
   /// The ladder of a chain, now or as it stood just after a moment, with the folds that the window
   /// opened, the prompts that the operator owes, and the only acts at its top when `taken` names
-  /// them, as [`ladder`] folds it.
+  /// them.
   pub fn ladder(
     &self,
     chain: &str,
@@ -151,6 +153,23 @@ impl Held {
   /// each, now or as they stood just after a moment. `read` is the place up to which the window
   /// read the chain, from which its runs of notes count the notes not yet read.
   pub fn threads(&self, chain: &str, at: Option<u64>, read: u64) -> Threads {
+    self.threads_as("operator", chain, at, read)
+  }
+
+  /// What one site saw: its own seen and those of the journal, the later for each act, so a seen
+  /// of another site clears nothing of its marks.
+  fn seen_by(&self, site: &str) -> HashMap<String, u64> {
+    let mut seen = self.seen.get("journal").cloned().unwrap_or_default();
+    for (id, at) in self.seen.get(site).into_iter().flatten() {
+      let place = seen.entry(id.clone()).or_default();
+      *place = (*place).max(*at);
+    }
+    seen
+  }
+
+  /// The threads of a chain as the window of a site reads them: the mark of what it has not seen
+  /// counts the seen of that site alone.
+  pub fn threads_as(&self, site: &str, chain: &str, at: Option<u64>, read: u64) -> Threads {
     let acts = self.then(at);
     let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
     let all: Vec<&Act> = acts.iter().collect();
@@ -159,7 +178,13 @@ impl Held {
     let state =
       rows.get(chain).filter(|act| act.kind == Kind::Chain).map_or(State::Idle, |act| act.state);
     let (asides, notes) = (chain_asides(&on, &rows), chain_notes(&on, &rows, read));
-    Threads { attention: attention(&threads, &rows, &self.seen), asides, notes, threads, state }
+    Threads {
+      attention: attention(&threads, &rows, &self.seen_by(site)),
+      asides,
+      notes,
+      threads,
+      state,
+    }
   }
 
   /// The threads of every chain of the life but those that `hidden` names, as one tree in the

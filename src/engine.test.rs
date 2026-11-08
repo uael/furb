@@ -42,16 +42,6 @@ fn done(about: &str, value: Object) -> Fact {
   Fact::says("done", about, [value])
 }
 
-thread_local! {
-  /// The bound of a turn for each word after the first of a scripted life, when the test
-  /// cuts its first word alone.
-  static THEN: std::cell::Cell<Option<Duration>> = const { std::cell::Cell::new(None) };
-}
-
-/// The bound of a turn for the words that a test does not cut: a step of a word that a
-/// loaded machine runs in a minute still holds under it.
-const LOADED: Duration = Duration::from_secs(120);
-
 /// The provider of the test: it answers what the chains stand on, and each reply with the next word of its script,
 /// but for the word WAIT, which leaves the reply started and not done.
 fn provider(
@@ -86,12 +76,7 @@ fn provider(
           say(&mut co, Fact::says("started", a.about(), []));
           let turns = co.call("turns", vec![], vec![("on", Object::string(a.on()))]).await?;
           read.borrow_mut().push(turns.py_repr());
-          // Each word after the first, which the test cuts, runs under LOADED.
-          if read.borrow().len() > 1
-            && let Some(then) = THEN.get()
-          {
-            crate::sand::BOUND.set(then);
-          }
+          crate::testing::answering(read.borrow().len());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
           if word == "WAIT" {
             continue;
@@ -1398,11 +1383,11 @@ fn said(fact: &Fact) -> Option<String> {
 }
 
 /// Each sandbox that this thread makes from now on, with a turn bound short enough for a
-/// test, which the first word of the script meets; each word after it runs under [`LOADED`],
+/// test, which the first word of the script meets; each word after it runs under
+/// [`crate::testing::LOADED`],
 /// since the test proves what the first word did, not how fast the machine runs the others.
 fn bounded() {
-  crate::sand::BOUND.set(Duration::from_millis(500));
-  THEN.set(Some(LOADED));
+  crate::testing::cut_first(Duration::from_millis(500));
 }
 
 #[test]
@@ -1529,6 +1514,30 @@ fn notices(engine: &mut Engine) -> Vec<String> {
     .into_iter()
     .map(|one| one.as_str().unwrap_or_default().to_owned())
     .collect()
+}
+
+/// An ear of the test that answers each probe with an Overflow, as the provider does past a window.
+fn overflowing() -> Box<dyn Ear> {
+  hearing(&["probe"], move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if a.kind() == "probe" && a.question() {
+        let why = Fault::new("Overflow", vec![Object::string("m answered nothing: too long")]);
+        say(&mut co, done(a.about(), why.object()));
+      }
+    }
+  })
+}
+
+#[test]
+fn an_overflow_that_an_ear_gives_comes_into_the_life_as_the_class_of_the_engine_that_is_a_refused()
+{
+  let (_yard, mut engine, root) = probed("overflow", vec![("probe", overflowing())]);
+  let no = probe(&mut engine, &root).unwrap_err();
+  assert_eq!(no.name, "Overflow");
+  assert!(no.message().contains("too long"), "{no}");
+  let kept = engine.word("issubclass(Overflow, Refused)", vec![]).unwrap();
+  assert_eq!(kept.as_ref().as_bool(), Some(true));
 }
 
 #[test]
@@ -1837,8 +1846,7 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
 /// Each sandbox that this thread makes from now on, and each that holds the bound again after
 /// the work of the engine, with this bound of the turn.
 fn bounded_at(bound: Duration) {
-  crate::sand::BOUND.set(bound);
-  THEN.set(None);
+  crate::testing::bound_all(bound);
 }
 
 /// The bound of the replay and the bound of the checkpoint that the test proves, from `gather`,

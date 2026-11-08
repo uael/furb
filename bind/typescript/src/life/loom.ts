@@ -55,6 +55,9 @@ export interface Weave {
   folds: ReadonlySet<string>;
   /** The columns that the cells of a row take. */
   width: number;
+  /** The moments of the life, each start and each end of an act, in order, as the crate gives them: the loom computes
+   * none, so a loom given none has no cells. */
+  moments?: readonly number[];
   label(id: string): string;
   /** What a host already holds of the acts, which a loom of no width reads in place of a pass over every act: each act
    * by its name, the acts on each chain, the chains, and each act that is not done. */
@@ -157,7 +160,7 @@ export function waitsOn(
 
 /** The loom of a life: the operator, then each chain in the order of the tree, with its cells over the moments of the
  * life, its state, what it waits on and its measure. A moment is the start or the end of an act. */
-export function weave({ acts, prompts, measures, folds, width, label, index }: Weave): Loom {
+export function weave({ acts, prompts, measures, folds, width, label, index, moments: given }: Weave): Loom {
   // A loom of no width shows no cell, so it reads the index of a host when it has one, in the time of the chains and of
   // the work that is not done, and not of every act.
   if (index && width <= 0) return board({ prompts, measures, folds, label }, index);
@@ -171,7 +174,7 @@ export function weave({ acts, prompts, measures, folds, width, label, index }: W
     .sort((one, other) => one.began - other.began);
   const owing = new Set(owed.map((prompt) => prompt.chain));
   // A loom of no width, as the board weaves it, has no cells, and reads no moment.
-  const moments = width > 0 ? momentsOf(acts) : [];
+  const moments = width > 0 ? (given ?? []) : [];
   // A short life stretches each moment over as many as three columns, so that its rows fill the loom.
   const stretch = Math.max(1, Math.min(3, Math.floor(width / Math.max(1, moments.length))));
   const times = spans(moments, Math.floor(width / stretch));
@@ -510,13 +513,6 @@ export function owedAt(acts: readonly Act[]): { id: string; shape: string; messa
   return acts
     .filter((act) => asksOperator(act) && !isDone(act))
     .map((act) => ({ id: act.id, shape: String(act.words[0] ?? ""), message: String(act.words[1] ?? "") }));
-}
-
-/** The moments of a life, in order: each start and each end of an act. */
-export function momentsOf(acts: readonly Act[]): number[] {
-  return [...new Set(acts.flatMap((act) => [act.began, ...(act.ended == null ? [] : [act.ended])]))]
-    .filter((moment) => moment > 0)
-    .sort((one, other) => one - other);
 }
 
 /** What a chain does now, in one line: the question that it asks the operator, the act that it waits on while it

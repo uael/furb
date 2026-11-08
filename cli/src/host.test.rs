@@ -38,7 +38,7 @@ async fn a_change_of_host_json_gives_its_logins_and_a_file_that_does_not_parse_k
   let mut changes = identity.changes();
   fs::write(&path, written(&["ann", "bob", "cat"])).unwrap();
   timeout(Duration::from_secs(20), changes.changed()).await.expect("the list changes").unwrap();
-  assert!(identity.access().role("cat").is_ok(), "the door gives the new login its role");
+  assert!(changes.borrow().role("cat").is_ok(), "the door gives the new login its role");
   assert_eq!(identity.logins(), ["ann", "bob", "cat"], "a life opened after it names the login");
   fs::write(&path, "{ not json").unwrap();
   let why = heard.recv_timeout(Duration::from_secs(20)).expect("the daemon says why");

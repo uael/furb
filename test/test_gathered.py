@@ -90,7 +90,13 @@ async def test_acts_holds_the_last_stand_the_last_clock_and_each_act_of_a_verb_t
   root, data = await gather()
   acts = {x["id"]: x for x in data["acts"]}
   shell, asked, later = (value(root, name) for name in ("shell", "asked", "later"))
-  assert acts[shell] == {"kind": "bash", "id": shell, "on": root, "value": engine.peek(shell)}
+  assert acts[shell] == {
+    "kind": "bash",
+    "id": shell,
+    "on": root,
+    "words": engine.get(shell)[4:],
+    "value": engine.peek(shell),
+  }
   held = acts[asked]
   assert (held["kind"], held["shape"], held["message"], held["to"]) == ("prompt", "str", "Which?", OPERATOR)
   cut = acts[later]["value"]

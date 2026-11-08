@@ -15,16 +15,16 @@ mod state;
 mod threads;
 mod time;
 
-pub use act::{Act, Answer, Kind, Pause, Phase, Role, RunState, Spend, WATCH, operator};
+pub use act::{Act, Answer, Kind, Maker, Pause, Phase, RunState, Spend, WATCH, operator};
 pub use context::{Part, Share, breakdown};
 pub use desk::{Ask, Desk, Tick, choices, desk, hint, takes_nothing, ticks, wants};
 pub use fold::{Fold, followed};
 pub use held::{Held, Threads};
-pub use ladder::{Rung, SHOWN, Shown, ladder};
+pub use ladder::{Rung, SHOWN, Shown};
 #[cfg(any(test, feature = "test-support"))]
 pub use named::word;
 pub use named::{NAME, Named, RENAME, said};
-pub use quote::{Quote, Writing, python_string, quote_at, quotes, writing};
+pub use quote::{Quote, Writing, quotes, writing};
 pub use state::{State, chain_state, restate, working};
 pub use threads::{
   Aside, Attention, ChainAside, ChainThread, Concern, NoteRun, Origin, Rows, ThreadNode, attention,

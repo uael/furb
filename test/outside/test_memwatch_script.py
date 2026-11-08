@@ -36,7 +36,8 @@ def machine(tmp: Path, level: int, rows: list[Row], *, mac: bool = True) -> None
 
 def env(tmp: Path, **more: str) -> dict[str, str]:
   kept = {n: v for n, v in os.environ.items() if not n.startswith("FURB_WATCH_")}
-  return {**kept, "PATH": f"{tmp / 'shim'}{os.pathsep}{os.environ['PATH']}", **more}
+  log = {"FURB_WATCH_LOG": str(tmp / "watch.log")}
+  return {**kept, "PATH": f"{tmp / 'shim'}{os.pathsep}{os.environ['PATH']}", **log, **more}
 
 
 def watch(tmp: Path, **more: str) -> subprocess.CompletedProcess[str]:
@@ -147,3 +148,44 @@ def test_the_loop_ends_one_test_process_at_each_look_while_the_memory_stays_tigh
     finally:
       loop.kill()
       loop.communicate()
+
+
+def test_a_linker_that_writes_a_test_binary_is_no_test_process(tmp_path: Path) -> None:
+  link = (
+    "/usr/bin/ld -demangle -o /w/target/debug/deps/furb-3bfcea354560c7bc /w/target/debug/deps/furb-3bfcea354560c7bc.o"
+  )
+  with fakes(2) as procs:
+    machine(
+      tmp_path,
+      2,
+      [
+        (procs[0].pid, 2500 * MB, link, MINE),
+        (procs[1].pid, 600 * MB, "/w/target/debug/deps/furb-3bfcea354560c7bc --test-threads 4", MINE),
+      ],
+    )
+    got = watch(tmp_path)
+  assert (
+    got.stdout
+    == f"memwatch: pressure level 2, ended pid {procs[1].pid} (600 MB): /w/target/debug/deps/furb-3bfcea354560c7bc --test-threads 4\n"
+  )
+
+
+def test_a_hook_or_a_shell_that_names_pytest_is_no_test_process(tmp_path: Path) -> None:
+  pytest_run = "/w/furb/.venv/bin/python3 /w/furb/.venv/bin/pytest -q test/boot"
+  drivers = ["python3 script/budget.py pytest -- uv run pytest -q", "sh -c uv run pytest -q", "uv run pytest -q"]
+  with fakes(4) as procs:
+    rows = [
+      (one.pid, (3000 - n) * MB, command, MINE) for n, (one, command) in enumerate(zip(procs, drivers, strict=False))
+    ]
+    machine(tmp_path, 2, [*rows, (procs[3].pid, 400 * MB, pytest_run, MINE)])
+    got = watch(tmp_path)
+  assert got.stdout == f"memwatch: pressure level 2, ended pid {procs[3].pid} (400 MB): {pytest_run}\n"
+
+
+def test_each_process_that_it_ends_is_a_line_of_its_log_with_its_time_and_pid(tmp_path: Path) -> None:
+  with fakes(1) as procs:
+    machine(tmp_path, 2, [(procs[0].pid, 500 * MB, "bun test ./a.test.ts", MINE)])
+    before = int(time.time())
+    watch(tmp_path)
+  when, pid, command = (tmp_path / "watch.log").read_text(encoding="utf-8").rstrip("\n").split(" ", 2)
+  assert before <= int(when) <= time.time() and int(pid) == procs[0].pid and command == "bun test ./a.test.ts"

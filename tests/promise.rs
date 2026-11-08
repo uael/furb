@@ -275,6 +275,7 @@ fn make_the_corpus() {
     }
     let record = at.join("record.jsonl");
     scrubbed(&record, &at);
+    private(&record);
     // The module is read as the test reads it: from the record alone, with no log beside it, and
     // before the tail names another engine, which this build cannot inspect.
     let alone = place(&format!("made-{name}"));
@@ -316,6 +317,15 @@ fn scrubbed(record: &Path, at: &Path) {
       text.replace(&held, &format!("\"path\":{},\"content\":{}", quoted(&path), quoted(&below)));
   }
   fs::write(record, text).unwrap();
+}
+
+/// Puts each trace of the machine that made a record, the paths of its home and the name of its
+/// account, to the stand-ins of `script/private.py`, which holds the rule of each record.
+fn private(record: &Path) {
+  let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("script").join("private.py");
+  let status =
+    std::process::Command::new("python3").arg(script).arg("--scrub").arg(record).status().unwrap();
+  assert!(status.success(), "script/private.py scrubs {}", record.display());
 }
 
 /// Each record of each folder of the corpus, as its folder and its name.
@@ -513,4 +523,395 @@ fn each_proof_that_the_page_of_the_promise_names_stands_in_its_file() {
     };
     assert!(runs, "{path}: {name} is no test that runs");
   }
+}
+
+/// The seed of the random points of a test: `FURB_PROMISE_SEED` plays one again, and else the clock
+/// draws one, which the test prints, so a failure says the seed that plays it again.
+fn seeded(name: &str) -> u64 {
+  let drawn = || {
+    let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+    since.map_or(1, |one| u64::try_from(one.as_micros() % 1_000_000).unwrap_or(0) + 1)
+  };
+  let seed = std::env::var("FURB_PROMISE_SEED").ok().and_then(|one| one.parse().ok());
+  let seed = seed.unwrap_or_else(drawn);
+  eprintln!("{name} plays the seed {seed}: FURB_PROMISE_SEED={seed} plays it again");
+  seed
+}
+
+/// The next number that a seed draws, by xorshift, as the soak of the window draws its points.
+fn draw(state: &mut u64) -> u64 {
+  let mut one = (*state).max(1);
+  one ^= one << 13;
+  one ^= one >> 7;
+  one ^= one << 17;
+  *state = one;
+  one
+}
+
+/// The word of the root of the n-th life of a test, which adds n to what the lives before it kept.
+fn kept(n: u64) -> String {
+  format!("kept = globals().get('kept', []) + [{n}]\nclose(len(kept))")
+}
+
+/// How many values the root of a life kept.
+fn holds_kept(engine: &mut Engine) -> i64 {
+  engine.word("len(module('chain1').get('kept', []))", vec![]).unwrap().as_ref().as_int().unwrap()
+}
+
+/// The life that the test of a kill runs in a process of its own, in the directory that
+/// `FURB_PROMISE_KILLED` names: lives of [`kept`] one after the other, each second one born again
+/// from its checkpoint, until the test kills the process.
+#[test]
+#[ignore = "the test of a kill runs it in a process of its own"]
+fn a_life_that_a_test_kills() {
+  let Ok(at) = std::env::var("FURB_PROMISE_KILLED") else { return };
+  let at = Path::new(&at);
+  // More lives than the few seconds before the kill can hold.
+  for n in 0..10_000 {
+    let mut life = scripted(at, false, &SCRIPT).boot::<String>([]).unwrap().0;
+    woke(&mut life);
+    closed(&mut life, &kept(n));
+    if n % 2 == 0 {
+      life.checkpoint().unwrap();
+    }
+  }
+}
+
+/// The process of a life that a test kills, which ends with its guard, so a test that fails before
+/// its kill leaves no process.
+struct Reaped(std::process::Child);
+
+impl Drop for Reaped {
+  fn drop(&mut self) {
+    self.0.kill().ok();
+    self.0.wait().ok();
+  }
+}
+
+/// Kills the process of a life at the first look at its record at or after the fact `fact`, the
+/// first life among them, while the life still runs, and prints the length of the record at the
+/// kill: the seed fixes only the fact that the kill comes at or after, and that length plays the
+/// kill again as a cut of the record.
+fn killed(Reaped(child): &mut Reaped, record: &Path, fact: usize) {
+  let begun = std::time::Instant::now();
+  while !fs::read_to_string(record).is_ok_and(|text| text.matches('\n').count() >= fact) {
+    assert!(child.try_wait().unwrap().is_none(), "the life ended before its kill");
+    assert!(
+      begun.elapsed() < std::time::Duration::from_secs(120),
+      "the life never reached fact {fact}"
+    );
+    std::thread::sleep(std::time::Duration::from_millis(2));
+  }
+  assert!(child.try_wait().unwrap().is_none(), "the life still runs at its kill");
+  child.kill().unwrap();
+  let ended = child.wait().unwrap();
+  #[cfg(unix)]
+  assert_eq!(
+    std::os::unix::process::ExitStatusExt::signal(&ended),
+    Some(9),
+    "the kill ended the life"
+  );
+  #[cfg(not(unix))]
+  assert!(!ended.success(), "the kill ended the life");
+  let text = fs::read_to_string(record).unwrap();
+  eprintln!(
+    "the kill came at {} lines and {} bytes of the record",
+    text.lines().count(),
+    text.len()
+  );
+}
+
+#[test]
+fn a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without_one_and_goes_on() {
+  let mut points = seeded("kill");
+  let at = place("killed");
+  let record = at.join("record.jsonl");
+  let mut child = Reaped(
+    std::process::Command::new(std::env::current_exe().unwrap())
+      .args(["a_life_that_a_test_kills", "--exact", "--ignored", "--nocapture"])
+      .env("FURB_PROMISE_KILLED", &*at)
+      .stdout(std::process::Stdio::null())
+      .spawn()
+      .unwrap(),
+  );
+  killed(&mut child, &record, 1 + usize::try_from(draw(&mut points) % 300).unwrap());
+  let text = fs::read_to_string(&record).unwrap();
+  let expected = i64::try_from(
+    text
+      .lines()
+      .filter(|one| one.starts_with("[[\"rung\",") && one.contains("kept = globals()"))
+      .count(),
+  )
+  .unwrap();
+  let mut opened = inspected(&at).unwrap_or_else(|why| panic!("the killed life opens: {why}"));
+  assert_eq!(
+    holds_kept(&mut opened),
+    expected,
+    "the killed life holds each word that its record holds"
+  );
+  let tip = text.rfind("[[\"checkpoint\"").unwrap_or(0);
+  assert_eq!(
+    missing(&mut opened, &text[tip..]),
+    "[]",
+    "each question of the record stands in the life"
+  );
+  let fast = placed(&mut opened, &[&at]);
+  let whole = inspected_whole(&at)
+    .unwrap_or_else(|why| panic!("the killed life opens from its first entry: {why}"));
+  assert!(
+    placed(&mut { whole }, &[&at]) == fast,
+    "it opens from its last checkpoint and from its first entry to one state"
+  );
+  let mut later = scripted(&at, false, &SCRIPT).boot::<String>([]).unwrap().0;
+  woke(&mut later);
+  assert_eq!(
+    closed(&mut later, &kept(99)).as_ref().as_int(),
+    Some(expected + 1),
+    "the killed life goes on"
+  );
+}
+
+/// The state of a life at its tip, with each of these directories written as <at>, so lives in
+/// two directories, a fork and its origin among them, compare.
+fn placed(engine: &mut Engine, at: &[&Path]) -> String {
+  placing(state(engine), at)
+}
+
+/// The state of a life over the facts that the text of a record holds, with each of these
+/// directories written as <at>: an open stands its root again, a fact of that open and not of the
+/// life that it opens.
+fn recorded(engine: &mut Engine, text: &str, at: &[&Path]) -> String {
+  let facts = text.lines().filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok());
+  let names: Vec<Object> = facts.filter_map(|one| one[0][1].as_str().map(Object::string)).collect();
+  let word = STATE.replace("transcript(c) if", "transcript(c) if x[1] in __names and");
+  let held = engine.word(&word, vec![("__names", Object::list(names))]).unwrap().as_ref().py_repr();
+  placing(format!("{held}\n{}", modules(engine)), at)
+}
+
+#[test]
+fn a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_held_live() {
+  let at = place("unchecked");
+  for n in 0..3 {
+    let mut life = scripted(&at, false, &SCRIPT).boot::<String>([]).unwrap().0;
+    woke(&mut life);
+    closed(&mut life, &kept(n));
+    let held = placed(&mut life, &[&at]);
+    drop(life);
+    let text = fs::read_to_string(at.join("record.jsonl")).unwrap();
+    assert!(!text.contains("[[\"checkpoint\""), "no life of the record wrote a checkpoint");
+    let opened = recorded(&mut inspected(&at).unwrap(), &text, &[&at]);
+    assert!(opened == held, "life {n}: its replay holds the transcript of the live life");
+  }
+}
+
+/// A state with each of these directories written as <at>, in each form that python shows it in: a
+/// path of Windows has its backslashes doubled by the repr of a text, and again by the repr of that
+/// repr, as a module value that holds a path is shown.
+fn placing(shown: String, at: &[&Path]) -> String {
+  let home = std::env::var("HOME").unwrap_or_default();
+  at.iter().fold(shown, |shown, one| {
+    let path = one.display().to_string();
+    let tilded = path.strip_prefix(&home).map_or_else(|| path.clone(), |rest| format!("~{rest}"));
+    (0..4).rev().fold(shown, |shown, doubled| {
+      let said =
+        |text: &str| (0..doubled).fold(text.to_owned(), |text, _| text.replace('\\', "\\\\"));
+      shown.replace(&said(&path), "<at>").replace(&said(&tilded), "<at>")
+    })
+  })
+}
+
+#[test]
+fn a_directory_that_python_shows_with_its_backslashes_doubled_is_placed_as_at() {
+  let at = Path::new(r"C:\Users\x\furb-torn");
+  let shown =
+    r"[('C:\\Users\\x\\furb-torn', 'C:\\\\Users\\\\x\\\\furb-torn', 'C:\Users\x\furb-torn')]";
+  assert_eq!(placing(shown.to_owned(), &[at]), "[('<at>', '<at>', '<at>')]");
+}
+
+/// The names of the questions that the text of a record holds, each a fact whose name is its kind
+/// and a number.
+fn questions(text: &str) -> Vec<Object> {
+  let facts = text.lines().filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok());
+  facts
+    .filter_map(|one| {
+      let (kind, name) = (one[0][0].as_str()?.to_owned(), one[0][1].as_str()?.to_owned());
+      let number = name.strip_prefix(&kind)?;
+      (!number.is_empty() && number.bytes().all(|one| one.is_ascii_digit()))
+        .then(|| Object::string(name))
+    })
+    .collect()
+}
+
+/// The questions of a record that a life which opens it does not hold.
+fn missing(engine: &mut Engine, text: &str) -> String {
+  let names = Object::list(questions(text));
+  engine
+    .word("[n for n in __names if not get(n)]", vec![("__names", names)])
+    .unwrap()
+    .as_ref()
+    .py_repr()
+}
+
+/// How many entries the store of a directory reads of its record.
+fn read_entries(at: &Path) -> usize {
+  world::store(at.join("record.jsonl")).unwrap().0.len()
+}
+
+#[test]
+fn a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entries_written_whole() {
+  let mut points = seeded("torn");
+  let (_, text) = thrice("torn-made");
+  let starts: Vec<usize> = [0]
+    .into_iter()
+    .chain(text.match_indices('\n').map(|(at, _)| at + 1))
+    .filter(|at| *at < text.len())
+    .collect();
+  let picked = starts[usize::try_from(draw(&mut points)).unwrap() % starts.len()];
+  // The cut between the gate of the first stand and its done, which the teach of the extensions
+  // before that gate orders, is cut each time.
+  let gated = text.find("[[\"done\",\"gate1\"").unwrap();
+  let cuts =
+    [("line", picked), ("gate1", gated), ("checkpoint", text.rfind("[[\"checkpoint\"").unwrap())];
+  for (name, start) in cuts {
+    let line = text[start..].find('\n').map_or(text.len(), |end| start + end) - start;
+    // A third of the cuts fall at the end of the line, which leaves it whole and not ended, so the
+    // store reads it as an entry and ends it at its next keep; but none at the done of gate1, whose
+    // gate then stands with no done. The others fall inside the line.
+    let at = usize::try_from(draw(&mut points)).unwrap();
+    let unended = at % 3 == 0 && start != gated;
+    let cut = if unended { start + line } else { start + 1 + at / 3 % (line - 1) };
+    let kept_at = if cut == start + line { (start + line + 1).min(text.len()) } else { start };
+    let (torn, clean) = (place(&format!("torn-{name}")), place(&format!("clean-{name}")));
+    fs::write(torn.join("record.jsonl"), &text[..cut]).unwrap();
+    fs::write(clean.join("record.jsonl"), &text[..kept_at]).unwrap();
+    assert_eq!(
+      read_entries(&torn),
+      text[..kept_at].lines().count(),
+      "{name}: the store reads each line written whole and no torn one"
+    );
+    let opened = |at: &Path| {
+      inspected(at)
+        .unwrap_or_else(|why| panic!("{name}: the record cut at byte {cut} opens: {why}"))
+    };
+    let whole = placed(&mut opened(&clean), &[&clean]);
+    assert!(
+      placed(&mut opened(&torn), &[&torn]) == whole,
+      "{name}: a record torn at byte {cut} opens as its entries written whole"
+    );
+    let born = inspected_whole(&torn)
+      .unwrap_or_else(|why| panic!("{name}: the torn record opens from its first entry: {why}"));
+    assert!(placed(&mut { born }, &[&torn]) == whole, "{name}: and from its first entry");
+    let born_at = text[..kept_at].rfind("[[\"checkpoint\"").unwrap_or(0);
+    assert_eq!(
+      missing(&mut opened(&torn), &text[born_at..kept_at]),
+      "[]",
+      "{name}: each question written whole stands"
+    );
+    let mut later = scripted(&torn, false, &SCRIPT).boot::<String>([]).unwrap().0;
+    woke(&mut later);
+    closed(&mut later, &kept(7));
+    drop(later);
+    let after = fs::read_to_string(torn.join("record.jsonl")).unwrap();
+    assert!(
+      after.starts_with(&text[..kept_at])
+        && after.lines().all(|one| serde_json::from_str::<serde_json::Value>(one).is_ok()),
+      "{name}: the life that goes on cut the torn line and kept each line whole"
+    );
+  }
+}
+
+/// Asserts that the root of the life of a directory goes on in that directory.
+fn stands_in(at: &Path) {
+  let mut life = inspected(at).unwrap();
+  let cwd = life.word("cwd('chain1')", vec![]).unwrap().as_ref().as_str().map(str::to_owned);
+  let (home, ours) = (std::env::var("HOME").unwrap_or_default(), at.display().to_string());
+  let tilded = ours.strip_prefix(&home).map(|rest| format!("~{rest}"));
+  assert!(cwd == Some(ours) || cwd == tilded, "the life goes on in its own directory: {cwd:?}");
+}
+
+/// What the root of the life of a directory kept, as python shows it.
+fn kept_in(at: &Path) -> String {
+  let mut life = inspected(at).unwrap();
+  life.word("repr(module('chain1').get('kept'))", vec![]).unwrap().as_ref().py_repr()
+}
+
+/// Lives of [`kept`] in the directory of an origin, each second one ended by a checkpoint, and the
+/// length of its record and its state at the end of each.
+fn lived_for_a_fork(origin: &Path, lives: u64) -> Vec<(usize, String)> {
+  // A life born from a checkpoint holds, live, the facts of the word that seeds it otherwise than
+  // its open, so the state of the origin at a fork is its open, which each later life reads.
+  let mut ends = Vec::new();
+  for n in 0..lives {
+    let mut life = scripted(origin, false, &SCRIPT).boot::<String>([]).unwrap().0;
+    woke(&mut life);
+    closed(&mut life, &kept(n));
+    if n % 2 == 1 {
+      life.checkpoint().unwrap();
+    } else {
+      drop(life);
+    }
+    let text = fs::read_to_string(origin.join("record.jsonl")).unwrap();
+    ends.push((text.len(), placed(&mut inspected(origin).unwrap(), &[origin])));
+  }
+  ends
+}
+
+#[test]
+fn a_fork_of_a_life_opens_at_the_state_of_its_origin_at_the_fork_and_goes_on_by_its_own_facts() {
+  let mut points = seeded("fork");
+  let origin = place("origin");
+  let lives = 2 + draw(&mut points) % 2;
+  let forked = draw(&mut points) % lives;
+  let mut ends = lived_for_a_fork(&origin, lives);
+  let text = fs::read_to_string(origin.join("record.jsonl")).unwrap();
+  let (point, at_fork) = ends.swap_remove(usize::try_from(forked).unwrap());
+  // A fork is the record of its origin up to a fact, in a directory of its own.
+  let fork = place("fork");
+  fs::write(fork.join("record.jsonl"), &text[..point]).unwrap();
+  // The fork opens on the directory of its origin, which the World gives and the record does not
+  // hold, so the open differs by no stand of its own; it goes on in its own directory after.
+  let on_origin = Opening {
+    inspecting: Some(true),
+    record: Some(fork.join("record.jsonl").display().to_string()),
+    ..scripted(&origin, true, &SCRIPT)
+  };
+  let opened = placed(&mut on_origin.boot::<String>([]).unwrap().0, &[&origin]);
+  assert!(opened == at_fork, "the fork opens at the state of its origin after life {forked}");
+  // In its own directory it holds each question and each value of its origin at the fork.
+  let born_at = text[..point].rfind("[[\"checkpoint\"").unwrap_or(0);
+  assert_eq!(
+    missing(&mut inspected(&fork).unwrap(), &text[born_at..point]),
+    "[]",
+    "the fork holds each question of its origin"
+  );
+  let upto = |last: u64| (0..last).map(|n| n.to_string()).collect::<Vec<_>>().join(", ");
+  assert_eq!(
+    kept_in(&fork),
+    format!("'[{}]'", upto(forked + 1)),
+    "the fork holds the values of its origin at the fork"
+  );
+  for (at, n) in [(&origin, 50), (&fork, 60)] {
+    let mut life = scripted(at, false, &SCRIPT).boot::<String>([]).unwrap().0;
+    woke(&mut life);
+    closed(&mut life, &kept(n));
+  }
+  assert_eq!(
+    kept_in(&origin),
+    format!("'[{}, 50]'", upto(lives)),
+    "the origin holds none of the facts of its fork"
+  );
+  assert_eq!(
+    kept_in(&fork),
+    format!("'[{}, 60]'", upto(forked + 1)),
+    "the fork holds the facts of its origin up to the fork and its own"
+  );
+  let (ours, theirs) = (
+    fs::read_to_string(fork.join("record.jsonl")).unwrap(),
+    fs::read_to_string(origin.join("record.jsonl")).unwrap(),
+  );
+  assert!(
+    ours.starts_with(&text[..point]) && theirs.starts_with(&text),
+    "each record goes on from where it stood"
+  );
+  stands_in(&fork);
 }

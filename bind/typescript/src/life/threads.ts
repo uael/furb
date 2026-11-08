@@ -49,9 +49,6 @@ export function threadWork(thread: Pick<ChainThread, "act" | "messages" | "asked
   return [thread.act, ...thread.messages, ...thread.asked];
 }
 
-/** How a thread concerns the operator: a question waits for them in it, or they started it and it failed or is held. */
-export type Concern = "asks" | "failed" | "paused" | "unread";
-
 /** A run of notes: the asides of a chain that are no question and follow one another in its feed with no card of
  * another kind between them, which a window draws as one block. The view model of the host says the same in
  * `chain_notes` of `src/view/threads.rs`. */

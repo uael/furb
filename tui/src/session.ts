@@ -4,12 +4,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { FileChange, SetupInfo, Turn } from "furb";
 import {
-  actorParts,
   decodeRecord,
   enabled,
   furbDirectory,
   imageReference,
   imageReferences,
+  leveled,
   ROOT,
   saveFile,
   shapes,
@@ -22,6 +22,7 @@ import {
   type Ask,
   aimed,
   beside,
+  byOperator,
   type ChainAside,
   type ChainThread,
   cancelled,
@@ -41,6 +42,7 @@ import {
   threadWork,
 } from "furb/life";
 import type { ThreadNode as CrateNode, FollowUp, Layer, Rung, Threads } from "furb/protocol";
+import { Closed } from "furb/skill";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { skillSlashes } from "./commands.ts";
@@ -265,13 +267,22 @@ function placed(index: Index, act: ActRow): void {
     const past = index.skills;
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
   }
-  if (act.kind !== "rung" || !operated(act.by)) return;
+  // A word of his own: the operator made it, and no act made it.
+  if (act.kind !== "rung" || !mine(act, (id) => index.ids.has(id))) return;
   const word = index.words.get(act.chain);
   if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.chain, act);
 }
 
 /** The index of a list of acts, each placed in its order, which goes on from the count of prompts of the index
  * before it. */
+/** Whether the operator made an act himself: the crate says him in its maker, and no act that `known` holds made it.
+ * The acts of a record open to read come from the fold of the binding, which gives no maker, so those read the site;
+ * the two agree but for a rung of the operator that waits for the word of an actor, which he never makes himself. */
+function mine(act: { by?: string; maker?: ActRow["maker"] }, known: (id: string) => boolean): boolean {
+  if (act.maker === undefined) return operated(act.by ?? "");
+  return byOperator(act) && (act.by === undefined || !known(act.by));
+}
+
 function indexOf(acts: readonly ActRow[], prompts = 0): Index {
   const index: Index = {
     of: acts,
@@ -1133,7 +1144,8 @@ export class Session extends EventEmitter {
     if (id === this.selected) return false;
     const index = this.indexed();
     const chain = index.ids.get(id);
-    const mine = operated(chain?.by ?? "") || operated(this.actOf(chain?.by ?? "")?.by ?? "");
+    const maker = this.actOf(chain?.by ?? "");
+    const mine = (chain !== undefined && this.own(chain)) || (maker !== undefined && this.own(maker));
     if (!mine) return false;
     const on = this.activityByChain.get(id) ?? [];
     // A notice to the operator on the chain itself, out of any thread, is unread until a fact seen of the chain covers it.
@@ -1554,10 +1566,11 @@ export class Session extends EventEmitter {
     return this.labelOf(this.selected);
   }
   get actorChoice(): { model: string; effort: string } {
-    return actorParts(
+    const [model, effort] = leveled(
       this.actor,
       this.roster.map(([name]) => name),
     );
+    return { model, effort };
   }
   /** The ask that the operator points at on the desk, which the input answers while its chain is shown. */
   pointed?: string;
@@ -1629,8 +1642,26 @@ export class Session extends EventEmitter {
     const rest = this.desk.asks.length;
     this.notice = `${said} ${rest ? `${rest} more ${rest === 1 ? "waits" : "wait"}.` : "Nothing else waits."}`;
   }
+  /** A control of the life that a restart of the daemon cut: the daemon says nothing of it, since a control is never
+   * said again after a reconnect, so the notice tells the operator to say it again. False when it was cut. */
+  private async went(verb: string, control: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await control();
+      return true;
+    } catch (error) {
+      if (!(error instanceof Closed)) throw error;
+      this.notice = `The daemon restarted before the ${verb} went: ${verb} again.`;
+      return false;
+    }
+  }
+  /** Whether the operator made an act himself: the crate says him in its maker, and no act made it. The maker names who
+   * made the work in the end, so a prompt or a rung that a word of his made has him as its maker too, and is his work
+   * but no message or word of his own. */
+  own(act: { by?: string; maker?: ActRow["maker"] }): boolean {
+    return mine(act, (id) => this.actOf(id) !== undefined);
+  }
   isUserPrompt(act: ActRow): boolean {
-    return act.kind === "prompt" && operated(act.by);
+    return act.kind === "prompt" && this.own(act);
   }
   /** Whether a prompt has a program that an edit changes and replays: one of its rungs holds a word the gate let run
    * on this chain. */
@@ -1960,6 +1991,29 @@ export class Session extends EventEmitter {
     await this.restoreFiles(found);
     this.notice = `${this.restored(found)} The conversation goes on as it stands.`;
   }
+  /** The moments of the life as the crate last gave them, with the version of the acts that it read. */
+  private momentsRead?: { version: number; moments: number[] };
+  /** The crate gives each moment of the life, each start and each end of an act, which the session holds per version. */
+  async readMoments(): Promise<void> {
+    const version = this.version;
+    this.momentsRead = { version, moments: await this.host.moments() };
+    this.emit("change");
+  }
+  private momentsAsking?: Promise<void>;
+  /** The moments of the life as the crate gives them, up to the moment that the feed shows. */
+  get moments(): readonly number[] {
+    // The moments are read only for a loom that draws cells, which asks for them, and not at each new act: a read walks
+    // every act of the life, so a read per act made a new act cost more as the life grew.
+    if (this.momentsRead?.version !== this.version && !this.momentsAsking)
+      this.momentsAsking = this.readMoments()
+        .catch(this.threadFault)
+        .finally(() => {
+          this.momentsAsking = undefined;
+        });
+    const all = this.momentsRead?.moments ?? [];
+    const moment = this.moment;
+    return moment === undefined ? all : all.filter((one) => one <= moment);
+  }
   /** The acts as they stood at the moment that the feed shows: an act that began later is not there yet, and an act
    * that ended later still runs, with no value yet. */
   at(acts: ActRow[]): ActRow[] {
@@ -2053,7 +2107,9 @@ export class Session extends EventEmitter {
   /** The last act that the operator made on the chain shown and that is not over: the message, the word or the
    * command of his that the feed shows last. A cancel that names no act ends it. */
   get lastOwn(): ActRow | undefined {
-    return this.activity.findLast((act) => operated(act.by) && !isDone(act) && WORK.includes(act.kind));
+    // The crate gives the maker of an act as who made the work in the end, so what a word of his made is his too: his own
+    // command is the one that no act made.
+    return this.activity.findLast((act) => this.own(act) && !isDone(act) && WORK.includes(act.kind));
   }
   /** The running work that a cancel of an act ends besides the act: each act under it that is not over and whose work
    * takes time, on any chain, with the chains that they stand on. The rungs of a prompt are its own answer, and no
@@ -2313,8 +2369,8 @@ export class Session extends EventEmitter {
         void this.rename(argument);
         break;
       case "pause":
-        await this.engine.pause(argument || this.selected);
-        this.notice = "Paused. In-flight work can finish.";
+        if (await this.went("pause", () => this.engine.pause(argument || this.selected)))
+          this.notice = "Paused. In-flight work can finish.";
         break;
       case "wake": {
         // With no chain named, the wake goes to the whole life: a pause of one chain holds the chains it made, and the
@@ -2327,8 +2383,10 @@ export class Session extends EventEmitter {
                 ...this.chains.filter((chain) => isPaused(chain) && !isDone(chain)).map((chain) => chain.id),
               ]),
             ];
-        for (const id of stopped) await this.engine.wake(id);
-        this.notice = stopped.length > 1 ? `Work resumed on ${stopped.length} chains.` : "Work resumed.";
+        let woke = true;
+        for (const id of stopped) if (woke) woke = await this.went("wake", () => this.engine.wake(id));
+        if (woke)
+          this.notice = stopped.length > 1 ? `Work resumed on ${stopped.length} chains.` : "Work resumed.";
         break;
       }
       case "cancel":

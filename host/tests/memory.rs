@@ -121,7 +121,7 @@ const PARTS: usize = 1_000;
 const READS: usize = 10;
 const FILE: usize = 8_000;
 
-/// A life that keeps its record, with no extension, whose model writes each reply in parts and
+/// A life that keeps its record, with no skill, whose model writes each reply in parts and
 /// closes it with a word.
 fn opening(at: &Path) -> Opening {
   let answer = Answered(Arc::new(move |_, told: Told| {
@@ -238,6 +238,91 @@ fn main() {
   // The window of the slow reader, as its facts, its most bytes and its seconds of wait.
   let window = if large { (40_000, 16 << 20, 3) } else { (10_000, 6 << 20, 1) };
   runtime.block_on(a_window_that_reads_slowly_holds_no_copy_of_the_log(window));
+  runtime.block_on(a_rebirth_lets_go_of_each_fact_that_the_record_holds());
+}
+
+/// The most heap that a birth of about [`TAIL`] facts adds past the rebirth before it: 21.3 MiB
+/// with the facts kept in the log, 14.7 MiB with them let go (11-08), whose rest is the engine
+/// born again on a checkpoint that carries more, and the acts that the life holds.
+const BIRTH: usize = 18 << 20;
+
+/// The facts that a life says after it opened before it is born again, as the host counts them.
+const TAIL: usize = 10_000;
+
+/// A life grown past its tail twice: at each rebirth its log lets go of each fact that the record
+/// holds, and a reader that comes later reads each of those facts again, from the record. The heap
+/// that a birth adds is what the next engine and the acts of the birth hold: with the facts kept,
+/// it adds more than [`BIRTH`].
+async fn a_rebirth_lets_go_of_each_fact_that_the_record_holds() {
+  let at = yard::Yard::new(format!("furb-host-memory-tail-{}", std::process::id()));
+  std::fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
+  let life = Life::spawn(opening(&at)).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  let (mut facts, mut since, mut heaps, mut last) = (0, 0, Vec::new(), 0);
+  let mut heard = Vec::new();
+  while heaps.len() < 2 {
+    // Large words up to near the tail, then small ones, so each birth says about TAIL facts.
+    let word = if since + 2_500 < TAIL {
+      format!("for i in range({DRAWS}):\n  chance()\nfor i in range({READS}):\n  read('big.txt')")
+    } else {
+      "for i in range(50):\n  chance()".to_owned()
+    };
+    let rung = made(&life, Command::Rung { word, on: None }).await;
+    let ended = done(rung);
+    let (seq, born) = loop {
+      let next = tokio::time::timeout(Duration::from_secs(300), events.next()).await;
+      let Ok(Some((seq, event))) = next else { panic!("the life told no event in time") };
+      if let Event::Fact(fact) = &*event {
+        (facts, since) = (facts + 1, since + 1);
+        heard.push((seq, hashed(fact)));
+      }
+      let born = matches!(&*event, Event::Reborn(None));
+      if born || ended(&event) {
+        break (seq, born);
+      }
+    };
+    if born {
+      tokio::time::sleep(Duration::from_secs(1)).await;
+      heaps.push(LIVE.load(Ordering::Relaxed));
+      (since, last) = (0, seq);
+    }
+  }
+  let added = heaps[1].saturating_sub(heaps[0]);
+  println!(
+    "two rebirths at {facts} facts: the heap after the first {} KiB, after the second {} KiB, so a birth added {} KiB",
+    heaps[0] >> 10,
+    heaps[1] >> 10,
+    added >> 10
+  );
+  assert!(added < BIRTH, "a birth added {added} bytes, past {BIRTH}: the log keeps its facts");
+  heard.retain(|one| one.0 < last);
+  // Two readers that come later at once, each of which reads the record again.
+  let started = Instant::now();
+  let (one, other) = tokio::join!(late(&life, last), late(&life, last));
+  println!("two late readers read the life in {:?}", started.elapsed());
+  assert!(one == heard, "a reader that comes later reads each fact at its place, as it was told");
+  assert!(other == heard, "a second reader that comes later at once reads the same");
+  life.send(Command::End).await.ok();
+}
+
+/// The digest of a fact, which a test keeps in the place of the fact, so it holds little heap.
+fn hashed(fact: &serde_json::Value) -> u64 {
+  let mut hasher = std::hash::DefaultHasher::new();
+  std::hash::Hash::hash(&fact.to_string(), &mut hasher);
+  std::hash::Hasher::finish(&hasher)
+}
+
+/// The facts that a reader that attaches at the start of the log reads up to a place, each with
+/// its place.
+async fn late(life: &LifeHandle, last: Seq) -> Vec<(Seq, u64)> {
+  let events = life.events(0).take_while(|one| std::future::ready(one.0 < last));
+  let facts = events.filter_map(|one| {
+    std::future::ready(match &*one.1 {
+      Event::Fact(fact) => Some((one.0, hashed(fact))),
+      _ => None,
+    })
+  });
+  facts.collect().await
 }
 
 /// The heap of a life at each size, and what a reader that attaches reads, printed as a table.
@@ -394,6 +479,7 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(window: (usize, usi
     tailnet: None,
     door: None,
     host: None,
+    heap: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });

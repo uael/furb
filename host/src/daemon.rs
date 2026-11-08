@@ -52,7 +52,7 @@ use tokio::{
   net::{TcpListener, TcpStream},
   sync::{mpsc, oneshot, watch},
   task::JoinSet,
-  time::{Instant, sleep_until},
+  time::{Instant, Interval, MissedTickBehavior, interval, sleep_until},
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
@@ -68,6 +68,7 @@ use crate::{
     Answer, BOUND, Config, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer,
     Request, Verb,
   },
+  rebirth::{Asks, Heap},
   records,
   serve::{Host, Outbox, fixed, serve},
   stall::{Quiet, Stall},
@@ -86,6 +87,9 @@ pub const GRACE: Duration = Duration::from_secs(30);
 /// and a reference for each event of the rest of the log, and keeps each such event until the
 /// window has it.
 const WAITING: usize = 256;
+
+/// How often the daemon reads its heap, when it watches one.
+const WEIGH: Duration = Duration::from_secs(1);
 
 /// What the daemon opens each life on.
 #[derive(Clone)]
@@ -106,6 +110,9 @@ pub struct Settings {
   /// The folder of the local transport, where the process of each skill that a life plays dials
   /// the daemon. With none, the daemon starts no process.
   pub host: Option<PathBuf>,
+  /// The heap of the daemon, past whose share the life that weighs the most is born again. With
+  /// none, only the tail of a life makes it be born again.
+  pub heap: Option<Heap>,
 }
 
 /// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
@@ -410,8 +417,12 @@ impl Daemon {
     let (leave, leaving) = oneshot::channel();
     let (empty, emptied) = watch::channel(handed.is_empty());
     let changes = settings.tailnet.as_ref().map(|one| one.identity.changes());
+    let mut weigh = interval(WEIGH);
+    weigh.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut lives = Lives {
       changes,
+      weigh,
+      rebirths: Asks::default(),
       members: Members::default(),
       settings,
       held: HashMap::new(),
@@ -513,7 +524,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Unqueue { life, entry } => (life, Command::Unqueue { entry }),
     Verb::Queued { life, on } => (life, Command::Queued { on }),
     Verb::Desk { life, notices } => (life, Command::Desk { notices }),
-    Verb::Threads { life, on, at, read } => (life, Command::Threads { on, at, read }),
+    Verb::Threads { life, on, at, read } => (life, Command::Threads { on, at, read, site: None }),
     Verb::Rail { life, hidden, at } => (life, Command::Rail { hidden, at }),
     Verb::Ladder { life, on, at, opened, owed, taken, shown } => {
       (life, Command::Ladder { on, at, opened, owed, taken, shown })
@@ -554,7 +565,7 @@ impl From<Reply> for Answer {
 }
 
 /// What an open names of the life that it makes: its folder, the actor, the roster, the
-/// extensions, the folder of the settings of the user and the claude command line that its peer
+/// skills, the folder of the settings of the user and the claude command line that its peer
 /// chose, and the peer that answers its models, when one does. A choice that is unsaid takes the
 /// one of the settings of the daemon, and an actor or a roster that both leave unsaid takes the
 /// one that the record of the life stood on last, as [`Opening`] says.
@@ -594,6 +605,10 @@ struct Lives {
   views: Views,
   /// Whether the daemon holds no life, which the listener reads to end the daemon.
   empty: watch::Sender<bool>,
+  /// The clock at which the daemon reads its heap, and each life that it asked to be born again
+  /// since the heap passed its share.
+  weigh: Interval,
+  rebirths: Asks,
 }
 
 /// The next change of the access list, or never when there is no list.
@@ -695,6 +710,10 @@ impl Lives {
           self.restand();
           continue;
         }
+        _ = self.weigh.tick(), if self.settings.heap.is_some() => {
+          self.weighed();
+          continue;
+        }
       };
       match asked {
         None => return,
@@ -705,6 +724,33 @@ impl Lives {
       }
       let empty = self.held.is_empty();
       self.empty.send_if_modified(|was| std::mem::replace(was, empty) != empty);
+    }
+  }
+
+  /// The heap of the daemon weighed: past its share, the life that said the most facts since it
+  /// opened, of those that the daemon did not ask yet, is asked to be born again, and the next one
+  /// once that life is born again, ended, or did not in [`crate::rebirth::PATIENCE`] weighs, while
+  /// the heap stays past the share. A life that holds work is born again once that work ends, as at
+  /// its tail. Once the heap falls under the share, each life asked is spared.
+  fn weighed(&mut self) {
+    let Some(heap) = self.settings.heap else { return };
+    let living = |held: &Held| matches!(held.stage, Stage::Living(_));
+    if !heap.over() {
+      for life in self.rebirths.spared() {
+        if let Some(held) = self.held.get(&life).filter(|one| living(one)) {
+          held.handle.reborn(false);
+        }
+      }
+      return;
+    }
+    let weighed: Vec<(String, u64, u64)> = self
+      .held
+      .iter()
+      .filter(|(_, held)| living(held))
+      .map(|(life, held)| (life.clone(), held.handle.weight(), held.handle.births()))
+      .collect();
+    if let Some(held) = self.rebirths.next(&weighed).and_then(|life| self.held.get(&life)) {
+      held.handle.reborn(true);
     }
   }
 

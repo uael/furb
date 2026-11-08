@@ -5,7 +5,6 @@ import { join, sep } from "node:path";
 import { FileChanges } from "../src/changes.ts";
 import {
   Activity,
-  actorParts,
   boot,
   DamagedJournal,
   type Ear,
@@ -13,6 +12,7 @@ import {
   type Fact,
   inspectRecord,
   Life,
+  leveled,
   ROOT,
   Session,
   saveFile,
@@ -118,12 +118,9 @@ test("the act table holds an act paused while the last pause or wake that covers
 });
 
 test("an actor names its model and its effort after the last slash that follows the name of a model", () => {
-  expect(actorParts("claude-cli:org/plain")).toEqual({ model: "claude-cli:org/plain", effort: "off" });
-  expect(actorParts("claude-cli:org/plain/high")).toEqual({ model: "claude-cli:org/plain", effort: "high" });
-  expect(actorParts("claude-cli:org/high", ["claude-cli:org/high"])).toEqual({
-    model: "claude-cli:org/high",
-    effort: "off",
-  });
+  expect(leveled("claude-cli:org/plain")).toEqual(["claude-cli:org/plain", "off"]);
+  expect(leveled("claude-cli:org/plain/high")).toEqual(["claude-cli:org/plain", "high"]);
+  expect(leveled("claude-cli:org/high", ["claude-cli:org/high"])).toEqual(["claude-cli:org/high", "off"]);
 });
 
 test("a session offers the models its host names, and keeps the model and the effort chosen last as a preference", async () => {
@@ -241,10 +238,18 @@ test("what a model writes streams into the session under its rung until its repl
         // tell, then the open of the root and the prompt.
         messages: [
           turn("user", "chain()"),
+          // The stand and the cd come first, a turn of their own, whose user turn holds what they tell.
+          turn("assistant", expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/)),
+          turn(
+            "user",
+            expect.stringMatching(
+              /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1\ncd1_path = '.*'$/,
+            ),
+          ),
           turn("assistant", 'debug(t"{standing()[4]=}")'),
           turn(
             "user",
-            expect.stringMatching(/^#rung1 debugged\nrung1_debug = "standing\(\)\[4\]=\[\['catchup', /),
+            expect.stringMatching(/^#rung2 debugged\nrung2_debug = "standing\(\)\[4\]=\[\['catchup', /),
           ),
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           turn("assistant", expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/)),
@@ -280,17 +285,10 @@ test("what a model writes streams into the session under its rung until its repl
           ),
           turn("user", expect.stringMatching(/^(?!#)[\s\S]*\ndef \w+\(/)),
           turn("assistant", "name_session()"),
-          turn("assistant", expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/)),
           // The open of the root goes as a block of its own after the setup, which ends the block before it.
           expect.objectContaining({
             role: "user",
             content: [
-              {
-                type: "text",
-                text: expect.stringMatching(
-                  /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1\ncd1_path = '.*'$/,
-                ),
-              },
               {
                 type: "text",
                 text: expect.stringMatching(
@@ -1093,13 +1091,14 @@ test("a session enables the skills of the configs, and a later session on its re
     );
     const read = found?.[1];
     expect(read).toMatch(/^read\d+$/);
-    // The stand and the cd come after the life words, each a turn of its own, and the extension naming, which plays on
+    // The stand and the cd come first, a turn of their own, and the extension naming, which plays on
     // the root alone, comes after the others with its life word.
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
     expect(
       turns.filter((turn) => /^(catchup\(\)|await recall\(\)|await listed\(\)|compacted\()/.test(turn)),
     ).toEqual(["catchup()", "await recall()", "await listed()", "compacted(); fitted()"]);
-    expect(turns.at(-2)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+    expect(turns[1]).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+    expect(turns.at(-2)).toBe("name_session()");
     // The turn writes the path with the separators of the platform, and the transcript keeps its last one as `/`.
     expect(turns.find((turn) => turn.startsWith(`#${read}\n`))?.replaceAll("\\\\", "/")).toContain(
       `#${read}\n${read}_path = '${String(found?.[4]).replaceAll("\\", "/")}'\n${read}_text = 'Use two spaces.'`,

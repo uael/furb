@@ -657,7 +657,7 @@ def seed(data: object) -> list[Entry]:
   Each chain of the data is made again under its name, on its parent and with its label, as the operator makes it, and each name of a kind up to the highest that the data takes, which no entry carries, stays taken.
   Each open prompt of the data is made again through prompt under its name, and each chain that the data says paused is paused.
   Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
-  Each act of the data with a value stands known on its chain with that value and runs nothing.
+  Each act of the data with a value stands known on its chain with the words that made it and with that value and runs nothing.
   Each act of the data with a value is made before each open prompt, so a message that the operator sent on a done prompt while its chain was paused reads that prompt, and its model is asked once a wake comes in the later life.
   A rung of the operator on each chain binds its definitions and its values, awaits a rung of each life word whose act was open on it at the tip, and tells what the checkpoint lost and cut when it lost or cut one, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain itself says its turns as its prefix when that rung comes, and again with each fact since but a tell when the rung ends, so a reader reads each as a birth and as no clear.
   The rung binds the definitions and the values of the chain after the chain says the prefix, so a value that raises as it is bound leaves the turns of the chain whole.
@@ -825,6 +825,9 @@ class Refused(Exception):
   A word that awaits a command whose code the command does not accept is refused where it waited, with a message that names the command and how it ended, as bash3 exited 1, or bash3 timed out after 5.0s.
   A word that catches that refusal reads the Exit of the command with peek, as peek(bash3).
   """
+
+class Overflow(Refused):
+  """What a reply is refused with when its prompt passes the window of its model, so the chain can cut its acts before its next reply."""
 
 class Drift(Exception):
   """What a life fails with when an act of it is not the one the record holds, which the journal raises, so that it comes out of the entry the operator went in by and the life goes on with nothing.
@@ -1066,9 +1069,10 @@ def under(name: str, of: str) -> bool:
   Nothing is under a name of nothing.
   """
 
-def automatic() -> str:
-  """automatic gives the actor of automatic work: the model of the roster of the standing with the first place in the list of automatic work, which the entry of each model of that list gives as its fifth field, else the first cheap model of the roster, else an empty str.
+def automatic(n: int = 0) -> str:
+  """automatic gives the actor of automatic work: the name at place n of the list of automatic work, which holds the models of the roster of the standing that have a place in that list, which the entry of each model gives as its fifth field, in the order of their places, then each cheap model of the roster, each name once.
   The operator is no such model.
+  Past the end of the list it gives an empty str, so a use whose model refuses it asks automatic(1), then the next, until the list ends.
   """
 
 def operated(site: str) -> bool:

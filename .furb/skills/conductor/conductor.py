@@ -1,6 +1,7 @@
 """The conductor of the converge: one home for each rule of the round that the desk of the lead ran."""
 
 import re
+from collections import Counter
 from collections.abc import Callable, Generator
 from typing import Any
 
@@ -27,6 +28,7 @@ from furb.engine import (
   paused,
   peek,
   prompt,
+  prompted,
   question,
   read,
   scope,
@@ -63,6 +65,7 @@ ROOM_WHY, FIX_WHY = "past the room of its class", "a fix of the CI of w/converge
 DF = "df -k ~ | tail -1"
 WATCH = "sh ~/src/github.com/uael/furb/script/memwatch.sh"
 REGROUND, REGROUND_TOKENS, REGROUND_GROWTH = 0.5, 300000, 150000
+WOKE = r"The chain \S+ had no change"
 NO_VERIFY = '^(audit|review|qa-run|words-audit|perf-|libs-audit|align-audit|fold)'
 URGENT_NOTE = '(?m)The disk|The watcher of the memory|not applied|\\bP0\\b|checks of CI of w/converge pass'
 CI_PROBE = 'gh run list --repo uael/furb --branch w/converge --workflow gates.yml --limit 1 --json headSha,status,conclusion,databaseId --jq \'.[0] | "\\(.headSha) \\(.status) \\(.conclusion) \\(.databaseId)"\''
@@ -113,6 +116,8 @@ desk_flagged: set[str] = globals().setdefault("desk_flagged", set())
 desk_seen_len: dict[str, tuple] = globals().setdefault("desk_seen_len", {})
 desk_item_seen: dict[str, tuple] = globals().setdefault("desk_item_seen", {})
 desk_ledger: list[dict] = globals().setdefault("desk_ledger", [])
+desk_asks: list[dict] = globals().setdefault("desk_asks", [])
+desk_asked: set[str] = globals().setdefault("desk_asked", set())
 triage_inbox: list[dict] = globals().setdefault("triage_inbox", [])
 triage_batch: list[dict] = globals().setdefault("triage_batch", [])
 qa_handed: set[str] = globals().setdefault("qa_handed", set())
@@ -357,25 +362,109 @@ def ends_step() -> None:
         verify_start(t, key, p, str(item["model"]), str(item["brief"]))
 
 
+def ask_kind(t: str, key: str) -> str:
+  if t == QA:
+    return "QA"
+  for head, name in (("words-audit", "words audit"), ("align-audit", "alignment audit")):
+    if key.startswith(head):
+      return name
+  return "review" if t == REVIEW else "reopen" if re.search(r"-r\d+$", key) else "item"
+
+
+def ask_of(r: str, items: dict[str, tuple[str, str]]) -> tuple[str, str]:
+  """The kind of the ask that a reply serves, and its key, by the nearest prompt above the reply that the desk knows. A prompt
+  on a prompt (a note, a nudge, a wrap) counts as that prompt, and a prompt that a word of an ask makes counts as that ask."""
+  lanes = {topic_chain.get("triage"): "triage", topic_chain.get("words"): "words", topic_chain.get(AGG): "cycle"}
+  n = r
+  while made := get(n):
+    m, n = n, str(made[2])
+    while prompted(m) and (asked := get(m)):
+      c = scope(m)
+      if m in items:
+        return ask_kind(*items[m]), items[m][1]
+      if prompted(on := str(asked[3])):
+        m = on
+        continue
+      if (label := str((get(c) or ("",) * 5)[4])).startswith("verify "):
+        return "judge", label.removeprefix("verify ")
+      if c in lanes:
+        return lanes[c], m
+      if str(asked[5]).startswith(FIX_HEAD):
+        return "CI fix", m
+      if operated(str(asked[2])):
+        return ("stall wake", c) if re.match(WOKE, str(asked[5])) else ("lead", "")
+      if (by := get(str(asked[2]))) and by[0] == "desk":
+        return "desk note", m
+      break
+  return "lead", ""
+
+
+def asks_step() -> None:
+  """Each reply that a model answered, once, as one row of its ask: its kind, its key, its chain, the usage that its answer
+  carries (tokens in, out, read from the cache, dollars), never an estimate, and the clock of the beat that saw it. A reply
+  that the life wrote itself, as the seat of a new chain, carries no usage and is no row. The record gives a reply no clock,
+  so the first beat after a load stamps each reply that the life already holds, and a life holds only its own replies."""
+  items = {p: (t, str(x["key"])) for t in TOPICS for p, x in desk_live[t].items()} | {p: (t, k) for t, k, p in desk_ended}
+  chains, seen, now = [ROOT], {ROOT}, clock()
+  for c in chains:
+    for x in transcript(c, "chain"):
+      if question(x) and x[1] not in seen:
+        seen.add(x[1])
+        chains.append(x[1])
+    for x in transcript(c, "reply"):
+      if question(x) and x[1] not in desk_asked and isinstance(got := peek(x[1]), tuple) and len(got) > 2 and got[2]:
+        desk_asked.add(x[1])
+        sort, key = ask_of(x[1], items)
+        desk_asks.append({"reply": x[1], "kind": sort, "key": key, "chain": c, "in": got[2][0], "out": got[2][1], "cached": got[2][2], "cost": got[2][-1], "at": now})
+
+
 def ledger_row(t: str, key: str, p: str, item: dict) -> dict:
-  """The row of an ended item: the sums of the usage that each answer of a model on its chains carries, as (tokens in,
-  tokens out, tokens read from the cache, tokens written to it, dollars), never an estimate, its steps and its seconds.
-  A reply that the life wrote itself, as the seat of a new chain, carries no usage and is no step."""
-  chains, walked = [scope(p)], 0
-  while walked < len(chains):
-    chains += [x[1] for x in transcript(chains[walked], "chain") if question(x) and under(x[1], p)]
-    walked += 1
-  uses = [got[2] for c in chains for x in transcript(c, "reply") if question(x) and under(x[1], p) and isinstance(got := peek(x[1]), tuple) and got[2]]
-  tokens_in, tokens_out, cached, _, cost = (sum(use[i] for use in uses) for i in range(5))
+  """The row of an ended item: the sums of the rows of the asks of its key, but its judge, and its seconds."""
+  uses = [a for a in desk_asks if a["key"] == key and a["kind"] != "judge"]
   end = desk_end_at[key]
-  return {"key": key, "topic": t, "class": kind(str(item["model"])), "in": tokens_in, "out": tokens_out, "cached": cached, "cost": cost, "steps": len(uses), "seconds": end - item.get("at", end)}
+  sums = {f: sum(a[f] for a in uses) for f in ("in", "out", "cached", "cost")}
+  return {"key": key, "topic": t, "class": kind(str(item["model"])), **sums, "steps": len(uses), "seconds": end - item.get("at", end)}
+
+
+KEYED = ("item", "reopen", "judge", "QA", "words audit", "alignment audit", "review")
+
+
+def asks_line(since: float, done: set[str]) -> str:
+  """The spend of each kind of ask since the mark of the lead: its replies, tokens, dollars and the items that it landed. A
+  cycle lands each item that merged since the mark, the triage each of them that it ruled, a kind with keys each of its keys
+  that merged. Each kind that spent and landed nothing is named with its share and one cause from its facts."""
+  rows = [a for a in desk_asks if a["at"] >= since]
+  total = sum(a["cost"] for a in rows)
+  if not rows:
+    return ""
+  ended = {k for k in done if desk_end_at.get(k, 0.0) >= since}
+  live = {str(x["key"]) for t in TOPICS for x in desk_live[t].values()}
+  groups: dict[str, list[dict]] = {}
+  for a in rows:
+    groups.setdefault(a["kind"], []).append(a)
+  parts, idle = [], []
+  for name, rs in sorted(groups.items(), key=lambda g: (-sum(a["cost"] for a in g[1]), g[0])):
+    keys, cost = {a["key"] for a in rs}, sum(a["cost"] for a in rs)
+    landed = ended if name == "cycle" else ended & set(desk_prio) if name == "triage" else keys & done if name in KEYED else set()
+    parts.append(f"{name} {len(rs)} replies, {sum(a['in'] for a in rs)} in, {sum(a['out'] for a in rs)} out, {sum(a['cached'] for a in rs)} cached, ${cost:.2f}, {len(landed)} landed")
+    if cost and not landed:
+      if name == "stall wake":
+        why = "wakes of the watch, which serve no item, on " + ", ".join(f"{c} ({n})" for c, n in sorted(Counter(a["key"] for a in rs).items()))
+      elif name == "cycle":
+        why = f"its {len(keys)} cycles merged no item that ended in the window"
+      elif name in KEYED:
+        why = f"of its {len(keys)} items, {len(keys - whole_keys() - live)} ended not whole, {len(keys & live)} still run and the rest wait for a merge"
+      else:
+        why = "it serves no item of its own" if name != "triage" else "no item that it ruled merged in the window"
+      idle.append(f"{name} ${cost:.2f} ({cost / total:.0%}): {why}")
+  return f"The asks since {since:.0f}: " + "; ".join(parts) + f"; in all ${total:.2f}." + (" Landed nothing: " + "; ".join(idle) + "." if idle else "")
 
 
 def ledger_step() -> list[str]:
   """The cost per landed item of each class and each topic, and the share of the tokens in that the cache gave, over the
   rows of the items that ended since desk_time["ledger_since"], which the lead sets, and before the last merge of a cycle,
-  so each of them landed or not: told once for each change. An item lands when its commit merged into w/converge, and
-  the cost of the items that did not land counts in their group."""
+  so each of them landed or not; then the spend of each kind of ask since that mark: told once for each change. An item
+  lands when its commit merged into w/converge, and the cost of the items that did not land counts in their group."""
   done, since, upto = merged_keys(), desk_time.get("ledger_since", 0.0), desk_time.get("merged_upto", 0.0)
   rows = [r for r in desk_ledger if since <= desk_end_at[r["key"]] <= upto]
 
@@ -389,12 +478,12 @@ def ledger_step() -> list[str]:
     )
 
   tokens = sum(r["in"] for r in rows)
-  text = f"Cost per landed item since {since:.0f}: by class {per('class')}; by topic {per('topic')}; the cache gave {sum(r['cached'] for r in rows) / tokens:.0%} of {tokens} tokens in." if tokens else ""
-  if text == desk_text.get("ledger", ""):
+  lines = [f"Cost per landed item since {since:.0f}: by class {per('class')}; by topic {per('topic')}; the cache gave {sum(r['cached'] for r in rows) / tokens:.0%} of {tokens} tokens in." if tokens else "", asks_line(since, done)]
+  if (text := "\n".join(lines)) == desk_text.get("ledger", ""):
     return []
   desk_text["ledger"] = text
-  desk_notes[:] = [n for n in desk_notes if not n.startswith("Cost per landed item")]
-  return [text] if text else []
+  desk_notes[:] = [n for n in desk_notes if not n.startswith(("Cost per landed item", "The asks since"))]
+  return [x for x in lines if x]
 
 
 def merges_step(seen: str) -> None:
@@ -897,6 +986,7 @@ def queue_reviews() -> list[str]:
 
 
 def desk_beat(every: float, floor: float) -> Generator[set[str], object, None]:
+  asks_step()
   ends_step()
   desk_notes.extend(room_step())
   admit()

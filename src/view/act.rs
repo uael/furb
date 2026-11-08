@@ -3,7 +3,7 @@
 use std::fmt;
 
 use crate::engine::OPERATOR;
-use crate::world::catalog::LEVELS;
+use crate::world::catalog::leveled;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -22,6 +22,7 @@ pub enum Kind {
   Run,
   Bash,
   Wait,
+  Stand,
   Other(String),
 }
 
@@ -36,6 +37,7 @@ impl Kind {
       Kind::Run => "run",
       Kind::Bash => "bash",
       Kind::Wait => "wait",
+      Kind::Stand => "stand",
       Kind::Other(kind) => kind,
     }
   }
@@ -56,6 +58,7 @@ impl From<&str> for Kind {
       "run" => Kind::Run,
       "bash" => Kind::Bash,
       "wait" => Kind::Wait,
+      "stand" => Kind::Stand,
       other => Kind::Other(other.to_owned()),
     }
   }
@@ -92,50 +95,50 @@ pub fn operator(name: &str) -> bool {
 }
 
 /// Who made an act, as a window names it: the operator, a member who answers as him by his login,
-/// a model with its effort, a skill, or the engine itself.
+/// a model with its effort when its actor names one, a skill, or the engine itself.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "role", rename_all = "snake_case")]
-pub enum Role {
+pub enum Maker {
   Operator,
   Member {
     login: String,
   },
   Model {
     model: String,
-    effort: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    effort: Option<String>,
   },
   Skill,
   #[default]
   Engine,
 }
 
-impl Role {
-  /// The role of an actor, as a chain or a reply names it: the operator, a member when the login
-  /// after `operator/` is one of these members, else the operator in one of his sessions, and a
-  /// model else, with the level after its last slash as its effort, or `off` when no level ends
-  /// it or the models hold the whole name. No actor is the engine.
+impl Maker {
+  /// The maker that an actor names, as a chain or a reply names it: the operator, a member when
+  /// the login after `operator/` is one of these members, else the operator in one of his
+  /// sessions; a model else, read as [`leveled`] reads it, unless the models hold the whole
+  /// name. No actor is the engine.
   pub fn of(actor: &str, models: &[String], members: &[String]) -> Self {
-    if actor.is_empty() {
-      return Self::Engine;
-    }
-    if operator(actor) {
-      let login = actor.strip_prefix(OPERATOR).and_then(|rest| rest.strip_prefix('/'));
-      return match login {
-        Some(login) if members.iter().any(|one| one == login) => {
-          Self::Member { login: login.to_owned() }
-        }
-        _ => Self::Operator,
-      };
-    }
-    let (model, effort) = match actor.rsplit_once('/') {
-      Some((model, effort))
-        if LEVELS.contains(&effort) && !models.iter().any(|one| one == actor) =>
-      {
-        (model, effort)
-      }
-      _ => (actor, "off"),
+    let model = |model: &str, effort: Option<&str>| Self::Model {
+      model: model.to_owned(),
+      effort: effort.map(str::to_owned),
     };
-    Self::Model { model: model.to_owned(), effort: effort.to_owned() }
+    match actor {
+      "" => Self::Engine,
+      _ if operator(actor) => {
+        match actor.strip_prefix(OPERATOR).and_then(|rest| rest.strip_prefix('/')) {
+          Some(login) if members.iter().any(|one| one == login) => {
+            Self::Member { login: login.to_owned() }
+          }
+          _ => Self::Operator,
+        }
+      }
+      _ if models.iter().any(|one| one == actor) => model(actor, None),
+      _ => {
+        let (name, effort) = leveled(actor);
+        model(name, effort)
+      }
+    }
   }
 }
 
@@ -149,7 +152,7 @@ pub struct Act {
   /// Who made the act: for a rung that waits for the word of an actor, that actor; for any
   /// other act, the role of the act or the person that made it.
   #[serde(default)]
-  pub maker: Role,
+  pub maker: Maker,
   /// What the act is on: a chain, or the prompt of a thread for a prompt on a thread.
   pub on: String,
   /// The chain that the act stands in.
@@ -229,7 +232,7 @@ pub struct Spend {
   pub dollars: f64,
   pub answers: u32,
   pub actor: Option<String>,
-  /// The account of the last answer that named one.
+  /// The account of the last answer, none when that answer named none.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub account: Option<String>,
 }
@@ -249,9 +252,7 @@ impl Spend {
     self.dollars += answer.usage[4];
     self.answers += 1;
     self.actor = Some(answer.actor.clone());
-    if answer.account.is_some() {
-      self.account.clone_from(&answer.account);
-    }
+    self.account.clone_from(&answer.account);
   }
 }
 

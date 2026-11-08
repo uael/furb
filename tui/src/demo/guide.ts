@@ -17,7 +17,7 @@ Press Ctrl+K and type one word that the note holds. The newest notes come first.
 Close the app when you want. The next start reads your notes again.
 """
 write(Text("docs/guide.md", GUIDE))
-print(len(GUIDE.splitlines()), "lines written")`;
+debug(t"{len(GUIDE.splitlines())} lines written")`;
 
 const more = String.raw`readme = read("README.md")
 if "docs/guide.md" not in readme.content:

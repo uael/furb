@@ -259,7 +259,7 @@ impl Opening {
     let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let ears = vec![
       ("provider", provider),
-      ("extensions", skill::telling(played, refused, places)),
+      (skill::EAR, skill::telling(played, refused, places)),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       (
         "mcp",
@@ -355,7 +355,7 @@ impl Opening {
     let config = self.config.as_ref().map(PathBuf::from);
     let directory = self.directory.clone();
     let user = config.clone().unwrap_or_else(|| Places::here().config);
-    let catalog = Catalog::load()
+    let catalog = Catalog::load(claude.clone())
       .claude(claude.clone(), stall)
       .configured(Path::new(&directory), config.as_deref())
       .map_err(|no| Fault::refused(no.to_string()))?;
@@ -374,7 +374,7 @@ impl Opening {
       let (names, preferred, answer) = (names.clone(), preferred.clone(), answer.clone());
       Box::pin(async move {
         world::claude::refresh();
-        let fresh = Catalog::loaded()
+        let fresh = Catalog::loaded(claude.clone())
           .await
           .discovered(claude, stall)
           .await

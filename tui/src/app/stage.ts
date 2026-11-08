@@ -70,6 +70,7 @@ export const stage = part({
       measures: w.host.measures,
       folds: this.loom.folds,
       width,
+      moments: w.moments,
       label: (id) => w.labelOf(id),
     });
     return this.stageLoom;

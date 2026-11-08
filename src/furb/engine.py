@@ -145,12 +145,19 @@ def standing():
   return answer("stand", ROOT, [])
 
 
-def automatic():
-  models = [one for one in (standing()[:1] or [[]])[0] if one[0] != OPERATOR]
-  placed = {}
-  for entry in models:
-    isinstance(place := (entry[4:] or [None])[0], int) and placed.setdefault(place, entry[0])
-  return next(iter([placed[k] for k in sorted(placed)] + [two[0] for two in models if two[3:4] == ["cheap"]]), "")
+def automatic(n=0):
+  models = (standing()[:1] or [[]])[0]
+  return (
+    [
+      *dict.fromkeys(
+        one[0]
+        for one in sorted((p for p in models if isinstance(p[4:5] and p[4], int)), key=lambda p: p[4])
+        + [c for c in models if c[3:4] == ["cheap"]]
+        if one[0] != OPERATOR
+      )
+    ][n:]
+    or [""]
+  )[0]
 
 
 def operated(where):
@@ -342,8 +349,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
-    blocked, running, waiting, last, heard = set(), {}, {}, standing(), []
-    step = news = ran = reply = note = to = hush = dull = stuck = past = ""
+    blocked, running, waiting, last, heard, past = set(), {}, {}, standing(), [], []
+    step = news = ran = reply = note = to = hush = dull = stuck = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(went):
@@ -466,7 +473,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       match a:
         case ("carried", *_):
           past = a
-        case ("rung", *_) if past and a[2] == OPERATOR:
+        case ("rung", *_) if "carried" in past[:1]:
           top = ""
           yield (
             "prefix",
@@ -480,7 +487,10 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
               a,
             ],
           )
-          past = ""
+          past = a[1], past[3]
+        case ("done", *_) if a[1] in past[:1]:
+          yield "prefix", id, [x for x in transcript(id) if x[0] != "tell" or x[1] == past[0] or x in past[1]]
+          past = []
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if prompted(path) and scope(path) == id:
@@ -609,12 +619,6 @@ def seeded(id, last, to):
       y[3] == k and y[2] and rung(y[2], to=to)
 
 
-KEPT = (
-  "with site.set(scope(acting())): say('prefix', site.get(), "
-  "[x for x in transcript() if x[0] != 'tell' or x in transcript(of='carried')[-1][3]])"
-)
-
-
 def seed(data):
   entries, numbers = [], Counter()
 
@@ -633,7 +637,7 @@ def seed(data):
     (c["paused"] or c["id"] in asking) and entries.append((("pause", c["id"], OPERATOR),))
   for x in data["acts"]:
     "value" in x and (
-      put(x["kind"], i := x["id"], "journal", x["on"]),
+      put(x["kind"], i := x["id"], "journal", x["on"], *x.get("words", ())),
       entries.extend([(("started", i, "journal"),), (("done", i, "journal", x["value"]),)]),
     )
   for x in data["acts"]:
@@ -645,7 +649,6 @@ def seed(data):
     put(kind, f"{kind}{most + 1}")
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
-    loud = bool(c["lost"] or cut)
     note = [
       f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")'
     ]
@@ -657,9 +660,7 @@ def seed(data):
           for named, text in c["values"].items()
         ),
         *(f"await rung({one!r})" for one in c.get("lives", ())),
-        *note[loud:],
-        KEPT,
-        *note[:loud],
+        *note * bool(c["lost"] or cut),
       ]
     )
     seat = f"rung{numbers['rung'] + 1}"
@@ -711,7 +712,7 @@ def gathered(define, floor):
       held = next((x[2] for x in transcript(scope(one), "started") if x[1] == one and get(x[2]) is None), "")
       acts.append({**d, "shape": a[4], "message": a[5], "to": a[6], "held": held})
     elif over(one):
-      literal(peek(one), set()) and acts.append({**d, "value": peek(one)})
+      literal(peek(one), set()) and acts.append({**d, "words": a[4:], "value": peek(one)})
     else:
       cut.append(one)
       acts.append({**d, "value": Refused(one + " was interrupted: the life that ran it ended before it did")})
@@ -882,6 +883,9 @@ class Act[T = object](str):
 
 
 class Refused(Exception): ...
+
+
+class Overflow(Refused): ...
 
 
 class Drift(Exception): ...
@@ -1096,9 +1100,13 @@ def boot(record=(), **outside):
     return ahead.pop(at)[0]
 
   def owed():
-    while due and question(due[-1]) and due[-1][1] in known:
+    while due and question(x := due[-1]) and x[1] in known:
       due.pop()
     return due
+
+  def upto(entry):
+    while owed() and not question(x := due[-1]) and ranks[id(x)] < ranks.get(id(entry), 0):
+      recount(due.pop())
 
   def repeat(kind, about, by, *words):
     with site.set(by):
@@ -1111,15 +1119,13 @@ def boot(record=(), **outside):
       case (kind, name, by, on, *words) if question((kind, name)):
         if (
           by in saved
-          or (name not in first and re.fullmatch(r"\w+?\d+", by))
+          or (name not in first and by[-1:].isdigit())
           or (on and not get(on))
-          or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on))]))
+          or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on, *words))]))
         ):
           born.setdefault(kind, {})[name] = name
           return
-        if by not in outside and (
-          not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by)
-        ):
+        if by not in outside and (not callable(verb := (module(on) or globals()).get(kind)) or by[-1:].isdigit()):
           raise drift(name)
         with site.set(by):
           try:
@@ -1199,6 +1205,7 @@ def boot(record=(), **outside):
       names[key] = matched(kind, by, on, *words) if stable else kind + str(len(names) + 1)
     a = (kind, name := names[key], by, on, *words)
     if known.setdefault(name, a) is a:
+      upto(saved.get(name))
       holds(scope(on), [a])
       log.append((a, heard := set(outside) - busy))
       busy.add(id(a))
@@ -1211,8 +1218,7 @@ def boot(record=(), **outside):
         if saved.get(name, a) == a:
           if name not in taken and (f := first.get(name)):
             taken[name] = f[0] == "started"
-            while owed() and not question(due[-1]) and ranks[id(due[-1])] < ranks[id(f)]:
-              recount(due.pop())
+            upto(f)
             repeat(*f)
             while taken[name] and owed() and due[-1][0] == "joined" and due.pop() and due:
               recount(due.pop())

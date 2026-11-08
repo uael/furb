@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { exitOf, isDone, operated } from "furb/life";
+import { Closed } from "furb/skill";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
 import { daemon } from "../src/client.ts";
@@ -345,11 +346,10 @@ test("a follow-up that the operator takes out of the queue is not sent", async (
       "First follow-up on main",
     ]);
     // The other chain holds only the rungs that run again the words of the setup of the root that its prefix holds,
-    // the debug of the extensions and what it told, the read of the doctrine and what that read told, then the stand and the cd that it
-    // plays on itself, as the root played its own.
+    // the stand and the cd and what they told, the debug of the extensions and what it told, then the read of the doctrine,
+    // as the root played its own.
     const setup = session.acts.filter((act) => act.kind === "rung" && act.by === session.engine.root);
-    const [first, read] = setup;
-    const stood = setup.at(-1);
+    const [stood, first, read] = setup;
     expect(first?.word).toBe('debug(t"{standing()[4]=}")');
     expect(read?.word).toMatch(/^read\('.*DOCTRINE\.md'\)$/);
     expect(stood?.word).toMatch(/^stand\(\)\ncd\('.*'\)$/);
@@ -358,11 +358,11 @@ test("a follow-up that the operator takes out of the queue is not sent", async (
         .filter((act) => act.chain === other && act.kind === "rung")
         .map((act) => [act.by, act.words]),
     ).toEqual([
+      [other, [stood?.word, stood?.id, ""]],
+      [other, [expect.stringMatching(/^#stand2\n[\s\S]*#cd1\ncd1_path = /), `${first?.id}_told`, ""]],
       [other, [first?.word, first?.id, ""]],
-      [other, ["#rung1 debugged\nrung1_debug = 'standing()[4]=[]'", `${read?.id}_told`, ""]],
+      [other, ["#rung2 debugged\nrung2_debug = 'standing()[4]=[]'", `${read?.id}_told`, ""]],
       [other, [read?.word, read?.id, ""]],
-      [other, [expect.stringMatching(/^#read1\nread1_path = '.*DOCTRINE\.md'\n/), `${stood?.id}_told`, ""]],
-      [other, [stood?.word, "", "claude-cli:sonnet/high"]],
     ]);
   } finally {
     await session.dispose();
@@ -470,6 +470,7 @@ test("a message of a member of the operator is a message of the operator", () =>
       id: "prompt90",
       kind: "prompt",
       by: "operator/a",
+      maker: { role: "member" as const, login: "a" },
       on: session.selected,
       chain: session.selected,
       words: ["str", "Hello", ""],
@@ -479,4 +480,33 @@ test("a message of a member of the operator is a message of the operator", () =>
       state: "runs" as const,
     };
     expect(session.isUserPrompt(message)).toBe(true);
+    // The maker that the crate gives says who made it, whatever the site that the fact names.
+    expect(session.isUserPrompt({ ...message, by: "operator", maker: { role: "operator" } })).toBe(true);
+    expect(
+      session.isUserPrompt({
+        ...message,
+        by: "rung3",
+        maker: { role: "model", model: "opus", effort: "high" },
+      }),
+    ).toBe(false);
+    expect(session.isUserPrompt({ ...message, by: "rung4", maker: { role: "skill" } })).toBe(false);
+    // An act that the crate gave no maker, as a record open to read gives it, reads its site.
+    expect(session.isUserPrompt({ ...message, by: "operator/a", maker: undefined })).toBe(true);
+    expect(session.isUserPrompt({ ...message, by: "rung3", maker: undefined })).toBe(false);
+  }));
+
+test("a pause or a wake that a restart of the daemon cut tells the operator to say it again, and throws nothing", () =>
+  withDemo(async (session) => {
+    const engine = session.engine as unknown as Record<"pause" | "wake", (id: string) => Promise<void>>;
+    const { pause, wake } = engine;
+    try {
+      engine.pause = () => Promise.reject(new Closed("pause"));
+      await session.command("/pause");
+      expect(session.notice).toBe("The daemon restarted before the pause went: pause again.");
+      engine.wake = () => Promise.reject(new Closed("wake"));
+      await session.command(`/wake ${session.selected}`);
+      expect(session.notice).toBe("The daemon restarted before the wake went: wake again.");
+    } finally {
+      Object.assign(engine, { pause, wake });
+    }
   }));

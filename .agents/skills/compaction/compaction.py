@@ -3,11 +3,13 @@ from furb.engine import (
   Act,
   Exit,
   Filter,
+  Overflow,
   Refused,
   Text,
   act,
   acting,
   automatic,
+  cancel,
   chain,
   close,
   controlled,
@@ -15,6 +17,7 @@ from furb.engine import (
   filled,
   get,
   over,
+  pause,
   peek,
   program,
   prompt,
@@ -55,7 +58,6 @@ CHOOSER = ""
 
 
 LISTED = 40
-OVERFLOW = "the prompt passes the window of the model"
 OVERFLOWED = """The model refused the last reply of this chain, since its prompt passed the window of the model,
 so compaction cut the chain to its open prompts: read again what the work still needs."""
 BRIEF = """The chain below grows past its window, and it goes on with what the work still needs.
@@ -141,21 +143,33 @@ def choice(to: str = "", on: str = "") -> Act:
     + example
   )
   side = chain("chosen", on=here)
-  asked: Act = prompt("tuple[list[str], str]", brief, to=to or CHOOSER or automatic(), on=side)
+  given = to or CHOOSER
+  asked: Act = prompt("tuple[list[str], str]", brief, to=given or automatic(), on=side)
   bound = 4
 
   def ear(id):
     yield "started", id
-    replies, maker = 0, get(asked)[2]
+    replies, maker, n, now, place = 0, get(asked)[2], 0, asked, side
     while not over(asked):
-      match (yield {id, side, asked, maker}):
-        case ("done", about, _, _) if question(("reply", about)) and scope(about) == side:
+      match (yield {id, place, now, asked, maker}):
+        # A model of automatic work that refuses its reply gives its place to the next one, and the last one's refusal ends the prompt.
+        case ("done", about, _, Refused() as why) if question(("reply", about)) and scope(about) == place and not given:
+          # The first prompt stays open for the close of the one after it, so it only asks no more.
+          (pause if now == asked else cancel)(now)
+          if then := automatic(n := n + 1):
+            place = chain("chosen", on=here)
+            now = prompt("tuple[list[str], str]", brief, to=then, on=place)
+          else:
+            close(why, asked)
+        case ("done", about, _, value) if about == now != asked:
+          close(value, asked)
+        case ("done", about, _, _) if question(("reply", about)) and scope(about) == place:
           replies += 1
           if replies >= bound and not over(asked):
-            close(Refused(f"{asked}: the model of choice wrote {replies} words on {side} and closed none"), asked)
+            close(Refused(f"{asked}: the model of choice wrote {replies} words on {place} and closed none"), asked)
         # The chain of choice tells the maker of the prompt only that it asks it no more, after a word that made nothing new, so it ends refused.
-        case ("tell", about, by, _) if about == maker and by == side and not over(asked):
-          close(Refused(f"{asked}: the model of choice wrote {replies} words on {side} that made nothing new"), asked)
+        case ("tell", about, by, _) if about == maker and by == place and not over(asked):
+          close(Refused(f"{asked}: the model of choice wrote {replies} words on {place} that made nothing new"), asked)
     yield "done", id, None
 
   act("bounded", side, controlled(ear))
@@ -289,9 +303,9 @@ def fitted(on: str = "") -> Act:
     while True:
       match (yield {id, here}):
         case ("done", about, _, Refused() as why) if question(("reply", about)) and scope(about) == here:
-          if OVERFLOW in str(why) and not row:
+          if isinstance(why, Overflow) and not row:
             compact([lambda acts: [a for a in acts if a[0] == "prompt" and not over(a[1])]], OVERFLOWED, here)
-          row = OVERFLOW in str(why)
+          row = isinstance(why, Overflow)
         case ("done", about, _, tuple()) if question(("reply", about)) and scope(about) == here:
           row = False
 

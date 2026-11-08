@@ -130,7 +130,7 @@ mod daemon {
     }
   }
 
-  /// The opening of each life of a daemon of a test: no extension, and a model that closes each
+  /// The opening of each life of a daemon of a test: no skill, and a model that closes each
   /// prompt with None.
   fn opening(at: &Path) -> Opening {
     let asked = AtomicUsize::new(0);
@@ -147,10 +147,30 @@ mod daemon {
     Opening {
       config: Some(at.join("config").display().to_string()),
       roster: Some(vec!["claude-cli:opus".to_owned()]),
+      // A stand reads the settings again, and a command line of this machine would answer it
+      // in seconds.
+      claude: Some(at.join("no-claude").display().to_string()),
       skills: Some(false),
       answer: Some(answer),
       ..Opening::default()
     }
+  }
+
+  /// The opening of a life whose claude command line says nothing and ends at once, so a stand
+  /// that reads the settings again does not ask the command line of the machine, which takes
+  /// seconds to answer where one is installed. Where no script runs, as on Windows, it is the plain
+  /// opening.
+  fn mute(at: &Path) -> Opening {
+    let opening = opening(at);
+    #[cfg(unix)]
+    let opening = {
+      use std::os::unix::fs::PermissionsExt;
+      let program = at.join("claude");
+      fs::write(&program, "#!/bin/sh\nexit 0\n").unwrap();
+      fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+      Opening { claude: Some(program.display().to_string()), ..opening }
+    };
+    opening
   }
 
   /// A daemon that listens in a folder, served on a task of the test.
@@ -166,7 +186,8 @@ mod daemon {
   ) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings = Settings { opening, grace, stall: STALL, tailnet: None, door: None, host: None };
+    let settings =
+      Settings { opening, grace, stall: STALL, tailnet: None, door: None, host: None, heap: None };
     let served = local.clone();
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
@@ -231,6 +252,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let logins: Arc<[&str]> = ["alice", "bob", "alice"].into();
     let identity = Logins { local: local.clone(), next: Arc::default(), names: logins };
@@ -273,6 +295,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let identity = Grants { local: local.clone(), next: Arc::default(), roles: roles.into() };
     tokio::spawn(async move { run(&identity, listener, settings).await });
@@ -359,7 +382,13 @@ mod daemon {
     async fn ran(&mut self, life: &str, word: &str) -> String {
       let verb = Verb::Run { life: life.to_owned(), word: word.to_owned(), on: None };
       let Ok(Answer::Act(rung)) = self.ask(verb).await else { panic!("no rung") };
-      self.until(done(&rung)).await;
+      // Each birth names its rungs anew, so a rung of an earlier birth that a window reads late
+      // may hold the same name: the done of this one holds this word.
+      let this = |frame: &Frame| {
+        matches!(frame, Frame::Event { event: Event::Act(act), .. }
+          if act.id == rung && matches!(act.phase, Phase::Done(_)) && act.word.as_deref() == Some(word))
+      };
+      self.until(this).await;
       rung
     }
 
@@ -623,7 +652,13 @@ mod daemon {
     later.ran(&life, "y = 1").await;
     let facts_of = |window: &Window| -> Vec<Value> {
       let facts = window.pushed.iter().filter_map(|frame| match frame {
-        Frame::Event { event: Event::Fact(fact), .. } if fact[0] != "keep" => Some(fact.clone()),
+        // The extensions teach when they load, which a birth may do after the rung that the test
+        // runs, so the test counts none of their facts.
+        Frame::Event { event: Event::Fact(fact), .. }
+          if fact[0] != "keep" && fact[2] != "extensions" =>
+        {
+          Some(fact.clone())
+        }
         _ => None,
       });
       facts.collect()
@@ -764,11 +799,13 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let next = local.clone();
     let new = tokio::spawn(async move { upgrade(&next, settings).await });
     assert!(window.closed().await);
     assert!(matches!(old.await, Ok(Ok(()))));
+    listening(&local).await;
     let mut window = Window::dialed(&local).await;
     window.attach(&life).await;
     let inspect = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
@@ -779,6 +816,15 @@ mod daemon {
     time::sleep(PAST).await;
     assert!(window.lives(&life).await);
     assert!(!new.is_finished());
+  }
+
+  /// The new daemon of a handover, once it listens: the old one ends before the new one binds.
+  async fn listening(local: &Local) {
+    let start = Instant::now();
+    while local.dial().await.is_err() {
+      assert!(start.elapsed() < PATIENCE, "the new daemon listens");
+      time::sleep(SHORT).await;
+    }
   }
 
   /// The opening of a test whose model blocks the thread of its life: it tells the test that it
@@ -811,6 +857,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     let old = tokio::spawn(async move { run(&served, listener, settings).await });
@@ -830,6 +877,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let next = local.clone();
     let new = tokio::spawn(async move { upgrade(&next, settings).await });
@@ -843,6 +891,7 @@ mod daemon {
     drop(hold);
     let gone = timeout(PATIENCE, old).await.expect("the handover ends once each life ended");
     assert!(matches!(gone, Ok(Ok(()))));
+    listening(&local).await;
     let mut window = Window::dialed(&local).await;
     window.attach(&life).await;
     window.ran(&life, "y = x").await;
@@ -909,7 +958,7 @@ mod daemon {
     let opening = Opening { skills: None, ..opening(at) };
     let host = Some(at.join("sock"));
     let settings =
-      Settings { opening, grace: SHORT, stall: STALL, tailnet: None, door: None, host };
+      Settings { opening, grace: SHORT, stall: STALL, tailnet: None, door: None, host, heap: None };
     let served = identity(local.clone());
     tokio::spawn(async move { run(&served, listener, settings).await });
     let mut window = Window::dialed(&local).await;
@@ -1150,12 +1199,13 @@ mod daemon {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
     let settings = Settings {
-      opening: opening(&at),
+      opening: mute(&at),
       grace: GRACE,
       stall: STALL,
       tailnet,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     let _daemon = tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1460,6 +1510,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1540,6 +1591,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1589,6 +1641,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1619,6 +1672,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1652,6 +1706,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1705,6 +1760,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1860,6 +1916,19 @@ mod daemon {
     id
   }
 
+  /// The port of the browser callback of a sign-in, once no process holds it: another run of the
+  /// tests on this machine may hold it for a while, and a sign-in that finds it busy fails.
+  async fn claimed() -> std::net::TcpListener {
+    let start = Instant::now();
+    loop {
+      match std::net::TcpListener::bind(("127.0.0.1", 1455)) {
+        Ok(port) => return port,
+        Err(no) => assert!(start.elapsed() < PATIENCE, "no process lets go of the port: {no}"),
+      }
+      time::sleep(SHORT).await;
+    }
+  }
+
   fn signed_in(state: &'static str) -> impl Fn(&Frame) -> bool {
     move |frame| matches!(frame, Frame::SignIn { state: got, .. } if got == state)
   }
@@ -1874,7 +1943,7 @@ mod daemon {
     window.life = opened(&mut window, &at, "a.jsonl").await;
     let life = window.life.clone();
     window.attach(&life).await;
-    let taken = std::net::TcpListener::bind(("127.0.0.1", 1455)).unwrap();
+    let taken = claimed().await;
     let id = signing(&mut window).await;
     let Frame::SignIn { url, message, .. } = window.keeping(signed_in("failed")).await else {
       unreachable!()
@@ -1897,6 +1966,7 @@ mod daemon {
     window.life = opened(&mut window, &at, "a.jsonl").await;
     let life = window.life.clone();
     window.attach(&life).await;
+    drop(claimed().await);
     let id = signing(&mut window).await;
     let Frame::SignIn { url, .. } = window.keeping(signed_in("waiting")).await else {
       unreachable!()

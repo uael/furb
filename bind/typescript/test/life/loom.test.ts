@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { laddered, restated } from "../../index.cjs";
+import { Meaning, restated } from "../../index.cjs";
 import type { Act, Measure } from "../../src/life/acts.ts";
 import { isDone } from "../../src/life/acts.ts";
 import { thread as drawn } from "../../src/life/ladder.ts";
@@ -8,7 +8,6 @@ import {
   doingOf,
   duration,
   type Loom,
-  momentsOf,
   nowOf,
   orderOf,
   owedAt,
@@ -19,8 +18,34 @@ import {
 } from "../../src/life/loom.ts";
 import { act, actIndex, changed, type More } from "./acts.ts";
 
-/** The thread of a chain from the ladder that the crate folds of the acts of an index, in the states that the crate
- * gives them, as a host draws it. */
+/** A fault of the engine as a record holds it, of a class and with its reason. */
+const fault = (reason: string) => {
+  const [is = "Exception", ...why] = reason.split(": ");
+  return { is: /^\w+$/.test(is) ? is : "Exception", args: [why.join(": ") || reason] };
+};
+
+/** The facts of a record that tell these acts, each at the moment it began and at the moment it ended: the fact
+ * that asks the act and its done, and for a rung whose word ran, the run of its word between them. */
+const factsOf = (acts: readonly Act[]): unknown[][] => {
+  const facts: [number, number, unknown[]][] = [];
+  for (const [place, one] of acts.entries()) {
+    const asked = [one.kind, one.id, one.by, one.kind === "chain" ? "" : one.on, ...one.words];
+    facts.push([one.began, 0, asked]);
+    const end = one.ended ?? one.began;
+    if (one.kind === "rung" && one.run && one.run.run !== "running") {
+      const run = `run${10_000 + place}`;
+      const reason = "reason" in one.run ? one.run.reason : "";
+      const value = one.run.run === "done" ? null : fault(reason);
+      facts.push([one.began, 1, ["run", run, one.chain, one.chain, one.id, "", ""]]);
+      facts.push([end, 2, ["done", run, one.chain, value]]);
+    }
+    if (one.phase.phase === "done") facts.push([end, 3, ["done", one.id, one.by, one.phase.value]]);
+  }
+  return facts.sort((one, other) => one[0] - other[0] || one[1] - other[1]).map(([, , fact]) => fact);
+};
+
+/** The thread of a chain from the ladder that the crate folds of the facts of the acts of an index, read through
+ * Meaning, the door that a window reads, and drawn as a host draws it. */
 const thread = (
   chain: string,
   word: (rung: Act) => string,
@@ -30,9 +55,10 @@ const thread = (
   index: Parameters<typeof drawn>[5],
   shown?: { prompts: number; rungs: number },
 ) => {
-  const acts = restated([...index.ids.values()]);
+  const meaning = new Meaning();
+  for (const fact of factsOf([...index.ids.values()])) meaning.hear(fact);
   return drawn(
-    laddered(acts, chain, [...opened], [...owed], undefined, shown),
+    meaning.ladder(chain, undefined, [...opened], [...owed], undefined, shown),
     chain,
     word,
     streams,
@@ -40,6 +66,12 @@ const thread = (
     index,
   );
 };
+
+/** The moments of acts as the crate gives them to a window: each start and each end, in order. */
+const momentsIn = (acts: readonly Act[]): number[] =>
+  [...new Set(acts.flatMap((one) => [one.began, ...(one.ended == null ? [] : [one.ended])]))]
+    .filter((moment) => moment > 0)
+    .sort((one, other) => one - other);
 
 /** A loom woven from acts in the states that the crate gives them, as a host tells them, and the index of the host
  * with those states. */
@@ -50,7 +82,7 @@ const woven = (given: Weave): Loom => {
     ...given.index,
     ids: new Map([...given.index.ids].map(([id, one]) => [id, byId.get(id) ?? one])),
   };
-  return weave({ ...given, acts, index });
+  return weave({ ...given, acts, index, moments: given.moments ?? momentsIn(acts) });
 };
 
 const loomOf = (
@@ -458,7 +490,11 @@ test("the moments of the acts are each start and end, in order, and a prompt tha
     }),
     act("read1", "read", "chain1", "rung2", 7, 7),
   ];
-  expect(momentsOf(acts)).toEqual([1, 2, 3, 4, 5, 7, 8, 9]);
+  // The loom reads the moments that the crate gives, and computes none from the acts.
+  const loom = (moments?: number[]) =>
+    weave({ acts, prompts: [], measures: {}, folds: new Set(), width: 12, label: (id) => id, moments });
+  expect(loom().folded).toBe(0);
+  expect(loom([1, 2, 3, 4, 5, 7, 8, 9]).folded).toBeGreaterThan(0);
   expect(owedAt(acts)).toEqual([]);
   const asking = act("prompt2", "prompt", "chain1", "rung1", 10, undefined, {
     words: ["str", "Why?", "operator"],

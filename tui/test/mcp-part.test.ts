@@ -241,3 +241,23 @@ test("/status tells the budget and the servers that the session holds, and no ce
     await session.dispose();
   }
 });
+
+test("/status names the account that served the last answer of the chain, as the crate folds it into the spend", async () => {
+  const session = await demoSession({ cwd: project() });
+  const seen: [string, string][][] = [];
+  session.on("status", (rows: [string, string][]) => seen.push(rows));
+  try {
+    await session.command("/status");
+    expect(Object.keys(Object.fromEntries(seen[0] ?? []))).not.toContain("Account");
+    // The crate gives the account in the spend of the chain once a reply names one, and the window draws it as it is.
+    const chain = session.acts.find((act) => act.kind === "chain" && act.id === session.selected);
+    if (!chain) throw new Error("The demo shows no chain.");
+    chain.spend = { ...(chain.spend ?? { answers: 0, dollars: 0 }), account: "work" } as typeof chain.spend;
+    await session.command("/status");
+    const rows = seen[1] ?? [];
+    expect(rows.map(([name]) => name).slice(0, 2)).toEqual(["Actor", "Account"]);
+    expect(Object.fromEntries(rows).Account).toBe("work");
+  } finally {
+    await session.dispose();
+  }
+});

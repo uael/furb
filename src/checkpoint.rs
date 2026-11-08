@@ -8,13 +8,13 @@
 //! source, whether it is paused, its turns, the text of its definitions, its plain values by name,
 //! the names that it lost, and the acts that the checkpoint cut, each word that ran on it among
 //! them, which no later life runs again; and `acts`, each act that a value names, the last stand
-//! and the last clock, with its value, or, for an open prompt, with its shape, its message, its
-//! actor and the ear that held it. `gathered` of the engine gathers it and `seed` of the engine
-//! reads it, so the engine is the one home of its shape, and this file holds the fact, the store
-//! and the boot alone. It holds no word that the crate crafts and no word of a verb by its place:
-//! `seed` of the engine that opens it makes the entries that a life boots on, so any later engine
-//! of the major opens it. Each reader skips each field that it does not know, so a build opens a
-//! checkpoint of each minor of its schema, and refuses only one of another major.
+//! and the last clock, with its value and its words, or, for an open prompt, with its shape, its
+//! message, its actor and the ear that held it. `gathered` of the engine gathers it and `seed` of
+//! the engine reads it, so the engine is the one home of its shape, and this file holds the fact,
+//! the store and the boot alone. It holds no word that the crate crafts and no word of a verb by
+//! its place: `seed` of the engine that opens it makes the entries that a life boots on, so any
+//! later engine of the major opens it. Each reader skips each field that it does not know, so a
+//! build opens a checkpoint of each minor of its schema, and refuses only one of another major.
 //!
 //! A life ends with its checkpoint, which the ear of its store keeps, since a life born from a
 //! checkpoint makes acts of its own at its birth; [`keep`] writes one on a record that no life

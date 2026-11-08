@@ -51,7 +51,7 @@ use crate::{
   life::Opening,
   skill::{self, Part, Skill},
   view::{
-    Act as ViewAct, Fold, Held, Pause, SHOWN, Shown, ladder, quotes as quotes_of, restate,
+    Act as ViewAct, Fold, Held, Pause, SHOWN, Shown, quotes as quotes_of, restate,
     writing as writing_of,
   },
   wire,
@@ -591,8 +591,9 @@ fn configured_catalog(
   let directory =
     directory.map_or_else(|| env::current_dir().unwrap_or_default(), path::PathBuf::from);
   let config = config.map(path::PathBuf::from);
-  world::Catalog::load()
-    .claude(claude.map(Into::into), None)
+  let claude: Option<path::PathBuf> = claude.map(Into::into);
+  world::Catalog::load(claude.clone())
+    .claude(claude, None)
     .configured(&directory, config.as_deref())
     .map_err(|no| Fault::refused(no.to_string()))
 }
@@ -728,6 +729,18 @@ pub fn config_set(directory: String, change: String, config: Option<String>) -> 
 #[cfg_attr(feature = "typescript", napi)]
 pub fn levels() -> Vec<&'static str> {
   world::catalog::LEVELS.to_vec()
+}
+
+/// The model and the effort that an actor names, as the crate reads an actor: the model whole
+/// when `models` holds its whole name, else the model and the level after its last slash when
+/// that word is one of the levels. The effort is `off` when the actor names none.
+#[cfg_attr(feature = "typescript", napi)]
+pub fn leveled(actor: String, models: Option<Vec<String>>) -> Vec<String> {
+  if models.unwrap_or_default().contains(&actor) {
+    return vec![actor, "off".to_owned()];
+  }
+  let (model, level) = world::catalog::leveled(&actor);
+  vec![model.to_owned(), level.unwrap_or("off").to_owned()]
 }
 
 /// An image copied into a directory of images under the digest of its bytes, as a message attaches it.
@@ -1017,32 +1030,6 @@ pub fn restated(acts: Value) -> Result<Value, Fault> {
     .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
   restate(&mut acts);
   meant(&acts)
-}
-
-/// The ladder of a chain from acts in the state that the crate gives them, as [`Meaning::ladder`]
-/// folds it from the acts that it heard: what a window that makes acts of its own, as a test does,
-/// reads in place of a ladder of its own.
-#[cfg_attr(
-  feature = "typescript",
-  napi(
-    ts_args_type = "acts: Array<import(\"./dist/protocol.js\").Act>, chain: string, opened?: string[], owed?: string[], taken?: string[], shown?: import(\"./dist/protocol.js\").Shown",
-    ts_return_type = "Array<import(\"./dist/protocol.js\").Rung>"
-  )
-)]
-pub fn laddered(
-  acts: Value,
-  chain: String,
-  opened: Option<Vec<String>>,
-  owed: Option<Vec<String>>,
-  taken: Option<Vec<String>>,
-  shown: Option<Value>,
-) -> Result<Value, Fault> {
-  let json = wire::outward(acts.0.as_ref());
-  // The acts stand in the order given, as a host tells them, and as the daemon folds them.
-  let acts: Vec<ViewAct> = serde_json::from_value(json)
-    .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
-  let (opened, owed) = (opened.unwrap_or_default(), owed.unwrap_or_default());
-  meant(&ladder(&acts, &chain, &opened, &owed, taken.as_deref(), counted(shown)?))
 }
 
 /// How many last steps of each level a ladder shows: the count given, or [`SHOWN`].

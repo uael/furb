@@ -2,7 +2,7 @@
 //! who a peer is. On the machine, the transport is a Unix socket in a folder of mode 0700, or a
 //! named pipe that only the user reaches on Windows, and the identity of a peer is the login of the
 //! user. On the network, it is TCP or WebSocket on loopback or on the tailnet, and the identity
-//! of a peer is the login that Tailscale gives, as [`net`] says.
+//! of a peer is the login that Tailscale gives, as `net` says.
 
 use std::{
   future::{self, Future},

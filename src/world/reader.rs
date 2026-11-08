@@ -45,7 +45,9 @@ use super::{
 use crate::wire;
 use std::fs;
 use std::io;
+use std::process;
 use std::slice;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time;
 
 /// Who says each fact that the reader adds to the facts that a record kept, but a question.
@@ -150,6 +152,9 @@ impl Retold {
   }
 }
 
+/// The count of the retellings of this process, which names the files that each one writes.
+static WRITES: AtomicU64 = AtomicU64::new(0);
+
 /// What the record at a path tells, read with no lease and changed in nothing.
 ///
 /// The file of what the record tells is a cache: its first line names the size and the time of change of the record
@@ -181,26 +186,35 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   })?;
   let logged = agrees(path, entries, &asked);
   let last = last.as_ref().map(digest);
-  let fresh = beside(path, ".told.new");
-  let failed =
-    |no: io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
-  let body = beside(path, ".told.body");
-  let named = if logged { naming(&log)? } else { told_body(path, makers, &body)? };
-  let (said, given) = (named.said().map(str::to_owned), named.given().map(str::to_owned));
-  let head = serde_json::json!({
-    "stamp": stamp, "made": maker, "logged": logged, "entries": entries, "last": last, "said": said, "given": given,
-  });
-  let mut file = io::BufWriter::new(fs::File::create(&fresh).map_err(failed)?);
-  writeln!(file, "{head}").map_err(failed)?;
-  if !logged {
-    let mut facts = fs::File::open(&body).map_err(failed)?;
-    io::copy(&mut facts, &mut file).map_err(failed)?;
-    // A body that cannot go costs only its disk: the next retelling writes it again whole,
-    // and no reader reads it.
-    fs::remove_file(&body).ok();
-  }
-  file.into_inner().map_err(|no| failed(no.into_error()))?.sync_data().map_err(failed)?;
-  fs::rename(&fresh, &cache).map_err(failed)?;
+  // Each retelling writes under names of its own, so two readers that retell one record at once,
+  // as two windows of a life whose log let go of its facts, never write over each other.
+  let mine = WRITES.fetch_add(1, Ordering::Relaxed);
+  let fresh = beside(path, &format!(".told.new.{}.{mine}", process::id()));
+  let body = beside(path, &format!(".told.body.{}.{mine}", process::id()));
+  let write = || -> Result<(Option<String>, Option<String>), Fault> {
+    let failed =
+      |no: io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
+    let named = if logged { naming(&log)? } else { told_body(path, makers, &body)? };
+    let (said, given) = (named.said().map(str::to_owned), named.given().map(str::to_owned));
+    let head = serde_json::json!({
+      "stamp": stamp, "made": maker, "logged": logged, "entries": entries, "last": last, "said": said, "given": given,
+    });
+    let mut file = io::BufWriter::new(fs::File::create(&fresh).map_err(failed)?);
+    writeln!(file, "{head}").map_err(failed)?;
+    if !logged {
+      let mut facts = fs::File::open(&body).map_err(failed)?;
+      io::copy(&mut facts, &mut file).map_err(failed)?;
+      // A body that cannot go costs only its disk: the next retelling writes it again whole,
+      // and no reader reads it.
+      fs::remove_file(&body).ok();
+    }
+    file.into_inner().map_err(|no| failed(no.into_error()))?.sync_data().map_err(failed)?;
+    fs::rename(&fresh, &cache).map_err(failed)?;
+    Ok((said, given))
+  };
+  // A write that fails leaves no file of its own beside the record, which no later write takes.
+  let gone = |_: &Fault| [&fresh, &body].iter().for_each(|one| _ = fs::remove_file(one));
+  let (said, given) = write().inspect_err(gone)?;
   Ok(Retold {
     made: maker,
     logged,

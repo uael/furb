@@ -15,7 +15,7 @@ import shlex
 import shutil
 import sys
 import tempfile
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -35,6 +35,10 @@ CONFIG = Path(tempfile.mkdtemp(prefix="furb-config-"))
 process and each process that it starts: a provider, an extension or a memory file in the config directory of the
 machine changes no test. A test that needs a config of the user writes it in a directory of its own."""
 os.environ["FURB_CONFIG_DIR"] = str(CONFIG)
+# The tests find no claude command line and no local model, as on a machine that has none, as tui/script/environment.ts
+# says for the tests of the TUI: a World that opens a life asks the claude of the machine which models it has, and
+# that takes about ten seconds in each process of the run, for each of its tests that opens a life.
+os.environ["FURB_CLAUDE_BIN"] = ""
 
 
 @atexit.register
@@ -539,6 +543,17 @@ def world_says(kind: str, about: str, *words: object) -> tuple:
     return engine.say(kind, about, *words)
   finally:
     site.reset(token)
+
+
+async def until(fact: Callable[[], object], turns: int = 100_000) -> None:
+  """Room for the loop until the fact holds, so that a test reads a state once the step that makes it is done, never
+  after a count of turns that a slower engine or machine can leave short. The bound fails a step that never comes."""
+  for _ in range(turns):
+    if fact():
+      return
+    await asyncio.sleep(0)
+  said = f"the fact never held in {turns} turns of the loop"
+  raise AssertionError(said)
 
 
 async def settle(n: int = 80) -> None:

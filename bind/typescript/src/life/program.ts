@@ -1,4 +1,4 @@
-import { type Act, type Exit, failed, isDone, operated, outcomeOf } from "./acts.js";
+import { type Act, byOperator, type Exit, failed, isDone, outcomeOf } from "./acts.js";
 import { type Chip, tailOf, valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
 import { reason } from "./plain.js";
@@ -354,7 +354,7 @@ export function threadProgram(
   let last: Act | undefined;
   for (const step of steps) {
     const message = first(String(step.words[1] ?? ""));
-    if (step.kind === "prompt" && !operated(step.by)) {
+    if (step.kind === "prompt" && !byOperator(step)) {
       // The end of an act shows on its own line, so a notice that says only that an act is done tells nothing more.
       if (!/^\w+\d+ done$/.test(message)) notices.push(message);
       last = step;
@@ -436,10 +436,10 @@ export function earProgram(
   }
   // A word that only defines has no line to show, so the note stands alone, with the rungs and what they made.
   if (out.length === 1) {
-    const ids = rungs.map((rung) => rung.id);
-    const span = ids.length > 1 ? `${ids[0]}…${(ids.at(-1) ?? "").replace(/^\D+/, "")}` : (ids[0] ?? "");
+    // The row counts the words, and names no rung: an id of the engine is no word of a reader.
+    const words = `${rungs.length} ${rungs.length === 1 ? "word" : "words"}`;
     const acts = chips.map((chip) => chip.label).join(" ");
-    out[0] = { kind: "note", step: ear, text: `# ${who} ${span}  ${acts}`.trimEnd() };
+    out[0] = { kind: "note", step: ear, text: `# ${who}  ${words}  ${acts}`.trimEnd() };
   }
   return out;
 }

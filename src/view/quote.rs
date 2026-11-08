@@ -31,7 +31,7 @@ fn opening(line: &str) -> Option<(&str, &str)> {
 /// The quote that opens at a line of a word. A quote with no close mark is none, but in a word that
 /// a model still writes, `open`, where it runs to the end of what came, less the part of its close
 /// mark that came.
-pub fn quote_at(source: &[&str], index: usize, open: bool) -> Option<Quote> {
+fn quote_at(source: &[&str], index: usize, open: bool) -> Option<Quote> {
   let (name, head) = opening(source.get(index)?)?;
   let close = format!("</s:{name}>");
   let found = source.iter().skip(index).position(|one| one.ends_with(&close)).map(|at| at + index);
@@ -123,7 +123,7 @@ pub fn writing(text: &str, thinking: &str) -> Writing {
 
 /// A text as a string of python, as repr writes it: single marks, or double marks for a text that
 /// holds a single mark and no double mark.
-pub fn python_string(text: &str) -> String {
+fn python_string(text: &str) -> String {
   let mark = if text.contains('\'') && !text.contains('"') { '"' } else { '\'' };
   let mut out = String::with_capacity(text.len() + 2);
   out.push(mark);
