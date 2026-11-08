@@ -197,16 +197,31 @@ async fn heard<R: AsyncRead + Unpin>(
     return match lines.next().await {
       None => Ok(None),
       Some(Ok(line)) if line.trim().is_empty() => continue,
-      Some(Ok(line)) => Ok(Some(serde_json::from_str(&line).map_err(|no| {
-        let id = serde_json::from_str::<Value>(&line).ok().and_then(|one| one["id"].as_u64());
-        (id, ProtocolError::Unread { why: no.to_string() })
-      }))),
+      Some(Ok(line)) => Ok(Some(unread(&line))),
       Some(Err(LinesCodecError::MaxLineLengthExceeded)) => {
         Ok(Some(Err((None, ProtocolError::Large { bound: BOUND }))))
       }
       Some(Err(no)) => Err(no.into()),
     };
   }
+}
+
+/// The request that a line says, or its refusal under the id that the line gives when it gives one.
+/// An `open` that names `extensions`, the field that protocol 4 renamed `skills`, is refused, since
+/// the parse of a verb ignores a field that it does not know and would else open the life with the
+/// default of each skill.
+fn unread(line: &str) -> Result<Request, (Option<u64>, ProtocolError)> {
+  let id = || serde_json::from_str::<Value>(line).ok().and_then(|one| one["id"].as_u64());
+  if line.contains("\"extensions\"") {
+    let named = serde_json::from_str::<Value>(line).ok();
+    if named.is_some_and(|one| one["verb"] == "open" && one.get("extensions").is_some()) {
+      let why = format!(
+        "the verb open takes the field skills, which the protocol {PROTOCOL} says in the place of extensions"
+      );
+      return Err((id(), ProtocolError::Refused { why }));
+    }
+  }
+  serde_json::from_str(line).map_err(|no| (id(), ProtocolError::Unread { why: no.to_string() }))
 }
 
 /// Whether a peer may say a verb: it is of the kind that says it, and holds its role.

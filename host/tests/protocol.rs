@@ -511,6 +511,33 @@ mod protocol {
     assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
   }
 
+  #[tokio::test]
+  async fn an_open_that_names_extensions_is_refused_with_skills_and_the_version() {
+    let mut client = served(Role::Write);
+    client.hello(PROTOCOL).await;
+    client.say(r#"{"id": 1, "verb": "open", "life": "/a.jsonl", "extensions": false}"#).await;
+    let heard = client.heard().await;
+    let Some(Frame::Refused { id, why, .. }) = heard else { panic!("no refusal: {heard:?}") };
+    assert_eq!(id, Some(1), "the open that names extensions is refused to its request");
+    assert!(
+      why.contains("skills") && why.contains(&PROTOCOL.to_string()),
+      "the refusal names the new field and the version: {why}"
+    );
+    assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
+  }
+
+  #[tokio::test]
+  async fn an_open_that_names_skills_gets_its_skills() {
+    let mut client = served(Role::Write);
+    client.hello(PROTOCOL).await;
+    client.say(r#"{"id": 1, "verb": "open", "life": "/a.jsonl", "skills": false}"#).await;
+    let heard = client.heard().await;
+    let Some(Frame::Reply { id: 1, answer: Answer::Value(opened) }) = heard else {
+      panic!("no answer: {heard:?}")
+    };
+    assert_eq!(opened["skills"], json!(false), "the open holds the skills that it named");
+  }
+
   /// A folder of its own for the transport of one test, short enough for the path of a socket.
   fn folder() -> Yard {
     static NEXT: AtomicU32 = AtomicU32::new(0);

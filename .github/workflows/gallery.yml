@@ -15,8 +15,8 @@ on:
     - cron: "41 * * * *"
 
 # A request while a render runs waits for it, and a newer request replaces the one that waits: a render that a newer
-# request ended would leave no gallery at all. The group is fixed, since a schedule runs on main and a dispatch on
-# w/converge, and both render the same branch.
+# request ended would leave no gallery at all. The group is fixed, since a schedule and a dispatch of this workflow
+# both write the one branch of the gallery of w/converge, BRANCH below.
 # The branch of the gallery of w/converge has a name of its own: the workflow of main, which a schedule runs, writes w/gallery,
 # and two writers of one branch would show main on the pull request of w/converge. Each use below reads this one name.
 env:
