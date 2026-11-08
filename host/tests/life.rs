@@ -41,7 +41,7 @@ fn place(name: &str) -> yard::Yard {
   yard::Yard::new(format!("furb-host-{name}-{}", process::id()))
 }
 
-/// A life with no record and no extension, whose model answers each request with the next word of a
+/// A life with no record and no skill, whose model answers each request with the next word of a
 /// script, and with close(None) once the script runs out.
 fn scripted(at: &Path, words: &[&str]) -> Opening {
   let words: Vec<String> = words.iter().map(|one| (*one).to_owned()).collect();
@@ -610,7 +610,7 @@ async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
   while events.next().await.is_some() {}
 }
 
-/// A life that keeps its record at a place, with no extension, whose model closes each request.
+/// A life that keeps its record at a place, with no skill, whose model closes each request.
 fn kept(at: &Path) -> Opening {
   Opening { record: Some(at.join("record.jsonl").display().to_string()), ..scripted(at, &[]) }
 }

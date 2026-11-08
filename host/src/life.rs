@@ -937,7 +937,7 @@ fn sent(engine: &mut Engine, follow: &FollowUp) -> Result<String, LifeError> {
 
 impl LifeHandle {
   /// The name of the session of the life, as its facts fold it: the one that the operator said last
-  /// on the root, which wins, else the one that the extension naming gave, and nothing while it
+  /// on the root, which wins, else the one that the skill naming gave, and nothing while it
   /// holds neither.
   pub fn name(&self) -> Option<String> {
     self.name.lock().ok().and_then(|name| name.clone())

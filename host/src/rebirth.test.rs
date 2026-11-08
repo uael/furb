@@ -31,7 +31,7 @@ fn act(kind: &str, id: &str, by: &str, words: &[Value], phase: Phase) -> Event {
   }))
 }
 
-/// The stand of a life whose one extension says the life word `seed()`.
+/// The stand of a life whose one skill says the life word `seed()`.
 fn stood() -> Event {
   Event::Fact(json!([
     "done",
