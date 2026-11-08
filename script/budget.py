@@ -2,10 +2,19 @@
 
 Usage: python3 script/budget.py <part> -- <command> [argument...]
 
-The limits stand in script/budgets.toml, one for each part, and the hooks and the gates read them there: the table
-[local] holds those of this machine and [ci] those of a runner of the gates. A part with no limit only reports its time.
-A run past its limit exits with 1 and names its slowest tests, as its runner prints them with their times (pytest with
---durations, cargo test with --report-time). A command that fails gives its own exit code.
+The limits stand in script/budgets.toml, and the hooks and the gates read them there: the table [local] holds those of
+this machine and [ci] those of a runner of the gates. A part has a limit of wall time, <part>, in seconds, and may have
+a limit of CPU time, <part>_cpu, in seconds, that the command and its children use together. A part with no limit only
+reports its time.
+
+The wall time stretches with the load of the machine, and the CPU time that a run needs does not: a hook that ran beside
+the builds of other chains kept its work and failed its clock (pytest: 37 s of wall and 160 s of CPU alone, 74 to 80 s
+of wall and 160 s of CPU beside 28 busy processes). So a run that passes its wall limit while the machine is loaded, with
+a load average at its start over a time and a half the cores, is judged by its CPU time, when the part has a limit of it.
+On a quiet machine, and for a part with no limit of CPU, the wall time judges: a test that waits on a clock shows only
+there. A run past its CPU limit fails whatever the load. A run that fails names its slowest tests, as its runner prints
+them with their times (pytest with --durations, cargo test with --report-time). A command that fails gives its own exit
+code. FURB_BUDGET_LOAD gives the load, for a test.
 """
 # ruff: noqa: T201
 
@@ -15,6 +24,11 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+try:
+  import resource
+except ImportError:  # Windows counts no CPU time of children, so a part there has a limit of wall time alone.
+  resource = None
 
 HOME = Path(os.environ.get("FURB_BUDGETS") or Path(__file__).with_name("budgets.toml"))
 # A line of a test with its time: pytest gives `12.34s call path::name`, cargo test `test name ... ok <1.234s>`.
@@ -40,22 +54,55 @@ def limits(text: str, table: str) -> dict[str, int]:
   return found
 
 
+def cpu() -> float:
+  """The CPU seconds that the children of this process, waited for, have used."""
+  if resource is None:
+    return 0.0
+  use = resource.getrusage(resource.RUSAGE_CHILDREN)
+  return use.ru_utime + use.ru_stime
+
+
+def load() -> float:
+  """The load average of the last minute, or the one that FURB_BUDGET_LOAD gives."""
+  if given := os.environ.get("FURB_BUDGET_LOAD"):
+    return float(given)
+  return os.getloadavg()[0] if hasattr(os, "getloadavg") else 0.0
+
+
 def main(argv: list[str]) -> int:
   part, command = argv[0], argv[2:]
-  limit = limits(HOME.read_text(encoding="utf-8"), "ci" if os.environ.get("CI") else "local").get(part)
-  start = time.monotonic()
+  table = limits(HOME.read_text(encoding="utf-8"), "ci" if os.environ.get("CI") else "local")
+  wall_limit = table.get(part, 0)
+  cpu_limit = table.get(part + "_cpu", 0) if resource is not None else 0
+  cores, busy = os.cpu_count() or 1, load()
+  start, used = time.monotonic(), cpu()
   lines: list[str] = []
   with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as run:  # noqa: S603
     assert run.stdout is not None
     for line in run.stdout:
       sys.stdout.write(line)
       lines.append(line)
-  took = time.monotonic() - start
-  print(f"budget: {part} took {took:.0f} s" + (f" of {limit} s" if limit else ", with no limit yet"), flush=True)
-  if run.returncode or not limit or took <= limit:
+  took, worked = time.monotonic() - start, cpu() - used
+  said = f"budget: {part} took {took:.0f} s" + (f" of {wall_limit} s" if wall_limit else "")
+  if resource is not None:
+    said += f" and {worked:.0f} s of CPU" + (f" of {cpu_limit} s" if cpu_limit else "")
+  print(said + ("" if wall_limit or cpu_limit else ", with no limit yet"), flush=True)
+  if run.returncode:
     return run.returncode
-  print(f"budget: {part} passed its limit by {took - limit:.0f} s. Make it faster, and never raise the limit.")
-  print("budget: its slowest tests:")
+  over_cpu = cpu_limit > 0 and worked > cpu_limit
+  over_wall = wall_limit > 0 and took > wall_limit
+  if over_wall and cpu_limit and not over_cpu and busy > 1.5 * cores:
+    print(
+      f"budget: {part} passed its wall limit while the load was {busy:.0f} on {cores} cores, and its CPU time fits."
+    )
+    over_wall = False
+  if not (over_cpu or over_wall):
+    return 0
+  if over_cpu:
+    print(f"budget: {part} used {worked:.0f} s of CPU, {worked - cpu_limit:.0f} s over its limit.")
+  if over_wall:
+    print(f"budget: {part} passed its wall limit by {took - wall_limit:.0f} s.")
+  print("budget: make the run faster, and never raise a limit. Its slowest tests:")
   for seconds, name in slowest(lines) or [(0.0, "none named: run the part with the times of its tests")]:
     print(f"  {seconds:>7.2f} s  {name}")
   return 1
