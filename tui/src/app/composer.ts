@@ -653,7 +653,11 @@ export const composer = part({
         mark: this.current(Boolean(one.current)),
         run: () => this.action(`/${command} ${one.value}`),
       })),
-      { selected: values.findIndex((one) => one.current), note },
+      {
+        selected: values.findIndex((one) => one.current),
+        note,
+        empty: "No value to choose for this command.",
+      },
     );
   },
 });

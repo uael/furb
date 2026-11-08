@@ -376,6 +376,8 @@ export class App {
   paletteWidth = 80;
   /** The rows of the note under the title of the palette. */
   paletteNote = 0;
+  /** What a picker with no row says, with the reason that its caller gave. */
+  paletteEmpty = "";
   paletteList?: BoxRenderable;
   filtered: Choice[] = [];
   selection = 0;
