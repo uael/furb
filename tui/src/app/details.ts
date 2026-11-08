@@ -152,7 +152,7 @@ export const details = part({
    * under the input gives it, or the operator. */
   writer(step: { kind: string; by?: string; words: readonly unknown[] }): string {
     const actor = step.kind === "rung" && typeof step.words[2] === "string" ? step.words[2] : "";
-    return !actor || operated(step.by ?? "") ? "operator" : this.actorLabel(actor);
+    return !actor || operated(step.by ?? "") || operated(actor) ? "operator" : this.actorLabel(actor);
   },
 
   /** The one label of a model in the feed, as opus/high: the model by its name alone and its effort. The block of a
