@@ -436,10 +436,10 @@ export function earProgram(
   }
   // A word that only defines has no line to show, so the note stands alone, with the rungs and what they made.
   if (out.length === 1) {
-    const ids = rungs.map((rung) => rung.id);
-    const span = ids.length > 1 ? `${ids[0]}…${(ids.at(-1) ?? "").replace(/^\D+/, "")}` : (ids[0] ?? "");
+    // The row counts the words, and names no rung: an id of the engine is no word of a reader.
+    const words = `${rungs.length} ${rungs.length === 1 ? "word" : "words"}`;
     const acts = chips.map((chip) => chip.label).join(" ");
-    out[0] = { kind: "note", step: ear, text: `# ${who} ${span}  ${acts}`.trimEnd() };
+    out[0] = { kind: "note", step: ear, text: `# ${who}  ${words}  ${acts}`.trimEnd() };
   }
   return out;
 }
