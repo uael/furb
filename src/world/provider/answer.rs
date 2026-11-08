@@ -398,7 +398,6 @@ pub(super) fn turn(
     Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
   let turn =
     Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]);
-  // A provider that serves a reply through one of several accounts names it, never its token.
   let account = response.raw.get("account").and_then(Value::as_str).map(str::to_owned);
   Ok(Served { turn, dropped, account })
 }
