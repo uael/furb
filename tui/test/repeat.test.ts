@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 const root = join(import.meta.dir, "../..");
 
-async function repeat(runs: number, fail: number) {
+async function repeat(runs: number, fail: number, name = "fails on a chosen run") {
   const place = await mkdtemp(join(tmpdir(), "furb-repeat-"));
   try {
     const child = Bun.spawn(
@@ -16,7 +16,7 @@ async function repeat(runs: number, fail: number) {
         process.execPath,
         "tui/script/repeat.ts",
         "tui/test/repeat-fixture.ts",
-        "fails on a chosen run",
+        name,
         "--runs",
         String(runs),
         "--keep",
@@ -64,6 +64,17 @@ test("a test that never fails passes each run of the loop and keeps nothing", as
     expect(code).toBe(0);
     expect(out).toContain("3 runs of fails on a chosen run passed");
     expect(existsSync(kept)).toBe(false);
+  } finally {
+    await cleanup();
+  }
+}, 60000);
+
+test("a name that matches no test stops the loop with its count, and no run passes", async () => {
+  const { out, code, cleanup } = await repeat(3, 99, "fails on a");
+  try {
+    expect(code).toBe(2);
+    expect(out).toContain("run 1 of 3: 0 tests ran for the name fails on a, and one test should");
+    expect(out).not.toContain("run 2 of 3");
   } finally {
     await cleanup();
   }
