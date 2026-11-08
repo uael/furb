@@ -33,6 +33,7 @@ import {
   isPaused,
   type NoteRun,
   onThread,
+  operated,
   outcomeOf,
   reasonOf,
   rollUp,
@@ -41,6 +42,7 @@ import {
   threadWork,
 } from "furb/life";
 import type { ThreadNode as CrateNode, FollowUp, Layer, Rung, Threads } from "furb/protocol";
+import { Closed } from "furb/skill";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { skillSlashes } from "./commands.ts";
@@ -265,13 +267,22 @@ function placed(index: Index, act: ActRow): void {
     const past = index.skills;
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
   }
-  if (act.kind !== "rung" || !byOperator(act)) return;
+  // A word of his own: the operator made it, and no act made it.
+  if (act.kind !== "rung" || !mine(act, (id) => index.ids.has(id))) return;
   const word = index.words.get(act.chain);
   if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.chain, act);
 }
 
 /** The index of a list of acts, each placed in its order, which goes on from the count of prompts of the index
  * before it. */
+/** Whether the operator made an act himself: the crate says him in its maker, and no act that `known` holds made it.
+ * The acts of a record open to read come from the fold of the binding, which gives no maker, so those read the site;
+ * the two agree but for a rung of the operator that waits for the word of an actor, which he never makes himself. */
+function mine(act: { by?: string; maker?: ActRow["maker"] }, known: (id: string) => boolean): boolean {
+  if (act.maker === undefined) return operated(act.by ?? "");
+  return byOperator(act) && (act.by === undefined || !known(act.by));
+}
+
 function indexOf(acts: readonly ActRow[], prompts = 0): Index {
   const index: Index = {
     of: acts,
@@ -1135,7 +1146,7 @@ export class Session extends EventEmitter {
     const index = this.indexed();
     const chain = index.ids.get(id);
     const maker = this.actOf(chain?.by ?? "");
-    const mine = (chain !== undefined && byOperator(chain)) || (maker !== undefined && byOperator(maker));
+    const mine = (chain !== undefined && this.own(chain)) || (maker !== undefined && this.own(maker));
     if (!mine) return false;
     const on = this.activityByChain.get(id) ?? [];
     // A notice to the operator on the chain itself, out of any thread, is unread until a fact seen of the chain covers it.
@@ -1632,8 +1643,26 @@ export class Session extends EventEmitter {
     const rest = this.desk.asks.length;
     this.notice = `${said} ${rest ? `${rest} more ${rest === 1 ? "waits" : "wait"}.` : "Nothing else waits."}`;
   }
+  /** A control of the life that a restart of the daemon cut: the daemon says nothing of it, since a control is never
+   * said again after a reconnect, so the notice tells the operator to say it again. False when it was cut. */
+  private async went(verb: string, control: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await control();
+      return true;
+    } catch (error) {
+      if (!(error instanceof Closed)) throw error;
+      this.notice = `The daemon restarted before the ${verb} went: ${verb} again.`;
+      return false;
+    }
+  }
+  /** Whether the operator made an act himself: the crate says him in its maker, and no act made it. The maker names who
+   * made the work in the end, so a prompt or a rung that a word of his made has him as its maker too, and is his work
+   * but no message or word of his own. */
+  own(act: { by?: string; maker?: ActRow["maker"] }): boolean {
+    return mine(act, (id) => this.actOf(id) !== undefined);
+  }
   isUserPrompt(act: ActRow): boolean {
-    return act.kind === "prompt" && byOperator(act);
+    return act.kind === "prompt" && this.own(act);
   }
   /** Whether a prompt has a program that an edit changes and replays: one of its rungs holds a word the gate let run
    * on this chain. */
@@ -2050,9 +2079,7 @@ export class Session extends EventEmitter {
   get lastOwn(): ActRow | undefined {
     // The crate gives the maker of an act as who made the work in the end, so what a word of his made is his too: his own
     // command is the one that no act made.
-    return this.activity.findLast(
-      (act) => byOperator(act) && this.actOf(act.by) === undefined && !isDone(act) && WORK.includes(act.kind),
-    );
+    return this.activity.findLast((act) => this.own(act) && !isDone(act) && WORK.includes(act.kind));
   }
   /** The running work that a cancel of an act ends besides the act: each act under it that is not over and whose work
    * takes time, on any chain, with the chains that they stand on. The rungs of a prompt are its own answer, and no
@@ -2312,8 +2339,8 @@ export class Session extends EventEmitter {
         void this.rename(argument);
         break;
       case "pause":
-        await this.engine.pause(argument || this.selected);
-        this.notice = "Paused. In-flight work can finish.";
+        if (await this.went("pause", () => this.engine.pause(argument || this.selected)))
+          this.notice = "Paused. In-flight work can finish.";
         break;
       case "wake": {
         // With no chain named, the wake goes to the whole life: a pause of one chain holds the chains it made, and the
@@ -2326,8 +2353,10 @@ export class Session extends EventEmitter {
                 ...this.chains.filter((chain) => isPaused(chain) && !isDone(chain)).map((chain) => chain.id),
               ]),
             ];
-        for (const id of stopped) await this.engine.wake(id);
-        this.notice = stopped.length > 1 ? `Work resumed on ${stopped.length} chains.` : "Work resumed.";
+        let woke = true;
+        for (const id of stopped) if (woke) woke = await this.went("wake", () => this.engine.wake(id));
+        if (woke)
+          this.notice = stopped.length > 1 ? `Work resumed on ${stopped.length} chains.` : "Work resumed.";
         break;
       }
       case "cancel":

@@ -9,6 +9,7 @@ import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
+import { Closed, daemon, Refused } from "../src/client.ts";
 import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session, savedView } from "../src/session.ts";
@@ -1046,4 +1047,62 @@ test("Add a workspace in the sidebar works while the session shown is open to re
     await shown.screen.mockInput.typeText(join(directory, "other"));
     shown.screen.mockInput.pressEnter();
     await until(library, () => library.groupOf()?.name === "other");
+  }));
+
+test("deleting a session that another window holds is refused before this window leaves it, and the session stays open here", () =>
+  withLibrary(async ({ directory, open }) => {
+    const library = open();
+    const group = await library.add(directory);
+    const first = await library.create(group, "Shared");
+    const second = await library.create(group, "Other");
+    if (!first.session || !second.session) throw new Error("Missing live sessions.");
+    await library.select(first);
+    const engine = first.session.engine;
+    // Another window holds the same life, in a process of its own, as a second terminal does.
+    const holder = Bun.spawn([process.execPath, join(import.meta.dir, "hold.ts"), directory, first.path], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env },
+    });
+    try {
+      const said = await holder.stdout.getReader().read();
+      if (!new TextDecoder().decode(said.value).includes("held"))
+        throw new Error(`The other window held nothing: ${await new Response(holder.stderr).text()}`);
+      const error = await library.delete(first).catch((error: unknown) => error);
+      expect(String(error)).toContain("Another window holds the life");
+      // This window did not leave the session or let it go, and the record stays.
+      expect(library.current).toBe(first);
+      expect(first.session?.engine).toBe(engine);
+      expect((await stat(first.path)).isFile()).toBe(true);
+    } finally {
+      holder.stdin.end();
+      await holder.exited;
+    }
+  }));
+
+test("a delete refuses when the daemon gives no count of the windows of the life, and goes on when no life holds it", () =>
+  withLibrary(async ({ directory, open }) => {
+    const library = open();
+    const group = await library.add(directory);
+    const first = await library.create(group, "Kept");
+    await library.create(group, "Other");
+    await library.select(first);
+    const link = daemon();
+    const ask = link.ask.bind(link);
+    const answering = (fault: Error) =>
+      ((verb: { verb: string }) =>
+        verb.verb === "presence" ? Promise.reject(fault) : ask(verb as never)) as typeof link.ask;
+    try {
+      link.ask = answering(new Closed("presence"));
+      const error = await library.delete(first).catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(Closed);
+      expect(library.current).toBe(first);
+      expect((await stat(first.path)).isFile()).toBe(true);
+      link.ask = answering(new Refused("closed", "no life holds it"));
+      await library.delete(first);
+      expect(await stat(first.path).catch(() => null)).toBeNull();
+    } finally {
+      link.ask = ask;
+    }
   }));

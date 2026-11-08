@@ -139,7 +139,9 @@ pub enum Command {
   /// The threads of a chain, as [`furb::view::Threads`], now or as they stood just after a
   /// moment. `read` is the place up to which the window read the chain, from which the runs of
   /// notes count the ones not yet read; none reads nothing.
-  Threads { on: Option<String>, at: Option<u64>, read: Option<u64> },
+  /// The threads of a chain as the window of `site` reads them: the mark of what it has not seen
+  /// counts the seen of that site alone, and of the operator alone when none is given.
+  Threads { on: Option<String>, at: Option<u64>, read: Option<u64>, site: Option<String> },
   /// The threads of every chain of the life but those it names, as one tree in the order of the
   /// list of the threads, now or as they stood just after a moment.
   Rail { hidden: Vec<String>, at: Option<u64> },
@@ -192,6 +194,8 @@ impl Command {
       | Self::Write { .. }
       | Self::Seen { .. }
       | Self::Stand => Self::By { speaker, command: Box::new(self) },
+      // A read of the threads tells the window of the speaker what it has not seen.
+      Self::Threads { on, at, read, .. } => Self::Threads { on, at, read, site: Some(speaker) },
       other => other,
     }
   }
@@ -937,8 +941,9 @@ async fn commanded(
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
     Command::Desk { notices } => Ok(Reply::Desk(held.desk(&notices))),
-    Command::Threads { on, at, read } => {
-      Ok(Reply::Threads(held.threads(&chain(on), at, read.unwrap_or_default())))
+    Command::Threads { on, at, read, site } => {
+      let site = site.as_deref().unwrap_or("operator");
+      Ok(Reply::Threads(held.threads_as(site, &chain(on), at, read.unwrap_or_default())))
     }
     Command::Rail { hidden, at } => Ok(Reply::Rail(held.rail(&hidden, at))),
     Command::Ladder { on, at, opened, owed, taken, shown } => {
