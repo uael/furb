@@ -55,9 +55,7 @@ use super::{
   local::Server,
   messages::{messages, tail},
   model::{CHEAP, Class, standing},
-  retry::{
-    Backoff, Limit, OVERFLOW, Retry, Transient, limited, overflows, passing, recoverable, resets,
-  },
+  retry::{Backoff, Limit, Retry, Transient, limited, overflows, passing, recoverable, resets},
   search::Searches,
   thinking::{Thinking, budgeted, thinking},
 };
@@ -1224,10 +1222,7 @@ fn a_model_whose_prompt_is_always_too_long_pauses_the_chain_with_why_after_two_r
   let first =
     said(&mut engine).into_iter().find(|(kind, about, _)| kind == "done" && about == "reply1");
   let (_, _, refused) = first.expect("the first reply is done");
-  assert!(
-    refused.contains(&format!("{OVERFLOW}: ")),
-    "the refusal says the cause first: {refused}"
-  );
+  assert!(refused.starts_with("Overflow("), "the refusal is an Overflow: {refused}");
   let more = within(&mut engine, Duration::from_millis(300), |_| calls.load(Ordering::SeqCst) > 2);
   assert!(!more, "the paused chain asks the model no more: {}", calls.load(Ordering::SeqCst));
 }

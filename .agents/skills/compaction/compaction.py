@@ -3,6 +3,7 @@ from furb.engine import (
   Act,
   Exit,
   Filter,
+  Overflow,
   Refused,
   Text,
   act,
@@ -55,7 +56,6 @@ CHOOSER = ""
 
 
 LISTED = 40
-OVERFLOW = "the prompt passes the window of the model"
 OVERFLOWED = """The model refused the last reply of this chain, since its prompt passed the window of the model,
 so compaction cut the chain to its open prompts: read again what the work still needs."""
 BRIEF = """The chain below grows past its window, and it goes on with what the work still needs.
@@ -289,9 +289,9 @@ def fitted(on: str = "") -> Act:
     while True:
       match (yield {id, here}):
         case ("done", about, _, Refused() as why) if question(("reply", about)) and scope(about) == here:
-          if OVERFLOW in str(why) and not row:
+          if isinstance(why, Overflow) and not row:
             compact([lambda acts: [a for a in acts if a[0] == "prompt" and not over(a[1])]], OVERFLOWED, here)
-          row = OVERFLOW in str(why)
+          row = isinstance(why, Overflow)
         case ("done", about, _, tuple()) if question(("reply", about)) and scope(about) == here:
           row = False
 

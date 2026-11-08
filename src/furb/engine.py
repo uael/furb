@@ -878,6 +878,9 @@ class Act[T = object](str):
 class Refused(Exception): ...
 
 
+class Overflow(Refused): ...
+
+
 class Drift(Exception): ...
 
 
