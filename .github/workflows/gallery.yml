@@ -49,7 +49,7 @@ jobs:
           REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/w/converge" --jq .sha)
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BASE" --jq .sha)
           last=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq '.parents[0].sha' 2>/dev/null || true)
           render=false
           if [ "$EVENT" = workflow_dispatch ]; then
@@ -150,10 +150,9 @@ jobs:
           EOF
           number=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number // empty')
           if [ -z "$number" ]; then
-            gh pr create --base "$BASE" --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            number=$(gh pr create --base "$BASE" --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md" | sed 's#.*/##')
           else
             gh pr edit "$number" --title "$title" --body-file "$RUNNER_TEMP/body.md"
           fi
-          new=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number')
           gh pr list --head "$RETIRED" --base "$BASE" --state open --json number --jq '.[].number' |
-            while read -r old; do gh pr close "$old" --comment "🤖 The gallery of w/converge moved to #$new, on the branch $BRANCH, which the workflow of main never writes."; done
+            while read -r old; do gh pr close "$old" --comment "🤖 The gallery of w/converge moved to #$number, on the branch $BRANCH, which the workflow of main never writes."; done
