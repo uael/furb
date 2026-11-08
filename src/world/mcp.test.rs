@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 use super::{
   CHANGED, Filed, Places, Settings,
-  fixture::{self, FIXTURE, PICTURE, STARTS},
+  fixture::{self, FIXTURE, PICTURE, STARTS, TOOLS},
   mcp, valued,
 };
 use crate::testing;
@@ -376,6 +376,35 @@ fn a_server_that_changes_a_list_or_ends_tells_the_root_chain_and_connects_again(
     asked(&mut engine, "mcp_call", "'fixture', 'echo', {'text': 'back'}").unwrap()["text"],
     "echo: back"
   );
+}
+
+#[test]
+fn a_server_lists_the_tools_that_its_file_holds_when_it_lists_and_a_changed_tool_is_called_after_it_connects_again()
+ {
+  let at = place("tools-file");
+  let file = at.join("tools.txt");
+  fs::write(&file, "first\n").unwrap();
+  let env = json!({FIXTURE: "1", STARTS: at.join("starts").display().to_string(), TOOLS: file.display().to_string()});
+  config(
+    &at.join("config").join("mcp.json"),
+    &json!({"mcpServers": {"fixture": stdio(&at, &json!({"env": env}))}}),
+  );
+  let mut engine = life(&at, &[]);
+  let names = |engine: &mut Engine| -> Vec<String> {
+    let tools = server(engine, "fixture")["tools"].clone();
+    tools.as_array().unwrap().iter().map(|one| one["name"].as_str().unwrap().to_owned()).collect()
+  };
+  assert!(names(&mut engine).contains(&"first".to_owned()));
+  assert!(!names(&mut engine).contains(&"fresh".to_owned()));
+  fs::write(&file, "first\nfresh\n").unwrap();
+  // The server ends and connects again, as a reload of its connection does, and lists the file as
+  // it stands.
+  asked(&mut engine, "mcp_call", "'fixture', 'crash'").unwrap_err();
+  until(&mut engine, |engine| {
+    server(engine, "fixture")["state"] == "connected" && names(engine).contains(&"fresh".to_owned())
+  });
+  assert_eq!(starts(&at), 2);
+  assert_eq!(asked(&mut engine, "mcp_call", "'fixture', 'fresh'").unwrap()["text"], "called fresh");
 }
 
 #[test]
