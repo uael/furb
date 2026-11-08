@@ -313,8 +313,8 @@ impl Catalog {
   }
 
   /// The catalog of this machine, as [`Catalog::loaded_on`] gives it, for a caller that blocks.
-  pub fn load_on(bin: Option<PathBuf>) -> Self {
-    blocking(Self::loaded_on(bin))
+  pub fn load_on(named: Option<&Path>) -> Self {
+    blocking(Self::loaded_on(named))
   }
 
   /// The catalog of this machine, as [`Catalog::load`] gives it, for a caller that awaits.
@@ -322,16 +322,15 @@ impl Catalog {
     Self::loaded_on(None).await
   }
 
-  /// The catalog of this machine, whose claude command line is the program at a path when one is
-  /// given, and else the one that this machine holds, so a life that names its command line asks
-  /// no other.
-  pub async fn loaded_on(bin: Option<PathBuf>) -> Self {
+  /// The catalog of this machine, which asks the claude command line of the machine for its
+  /// models unless a program is named: [`Catalog::discovered`] asks a named program.
+  pub async fn loaded_on(named: Option<&Path>) -> Self {
     static SERVER: OnceLock<Option<Arc<Server>>> = OnceLock::new();
     let env = |name: &str| env::var(name).ok();
     let server = SERVER.get_or_init(|| Server::named(env).map(Arc::new)).clone();
     let cached = cache().map(|at| at.join(update::MODELS));
     let listed = listed(cached.as_ref());
-    let claude = match bin.map(|bin| Claude::with(Some(bin), None)).or_else(Claude::found) {
+    let claude = match named.map_or_else(Claude::found, |_| None) {
       Some(claude) => {
         let models = claude.models().await;
         Some((claude, models))
