@@ -48,6 +48,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import { PROFILE } from "furb";
 import { type Exit, isDone, outcomeOf } from "furb/life";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
@@ -170,6 +171,13 @@ function percentile(values: readonly number[], share: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(share * sorted.length))] ?? 0;
 }
 
+// The bench measures the speed that a user gets, so it refuses a build of the crate in the dev profile, whose crates of
+// the workspace run with no optimization: build it with bun run build --release.
+if (PROFILE !== "release") {
+  console.error(`The crate was built in the ${PROFILE} profile, and the bench measures a release build alone: run bun run build --release.`);
+  process.exit(1);
+}
+console.log(`The crate was built in the ${PROFILE} profile.`);
 // A local bench waits for the lock of the other benches of the machine, and refuses under a load over the cores.
 const release = await settle();
 const loaded = load();

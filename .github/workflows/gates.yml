@@ -266,11 +266,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The job builds from the dependencies that the bindings on Linux built and saved.
+      # The job keeps a cache of its own, since it builds in the release profile, which the cache of the bindings on
+      # Linux does not hold.
       - uses: ./.github/actions/setup
         with:
           python: none
-          shared: typescript
           hashed: bind/typescript/build.ts
       - run: |
           echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
@@ -278,7 +278,9 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
-      - run: bun run build
+      # The bench measures the speed that a user gets, so it builds the crate in the release profile, and refuses a
+      # build in the dev profile, whose crates of the workspace run with no optimization.
+      - run: bun run build --release
       # The measures of the run stay as an artifact, so an audit reads the exact numbers of each run and not the rounded
       # lines of its log, and a run that goes over a budget keeps them too.
       - env:

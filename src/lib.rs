@@ -43,6 +43,11 @@ pub use crate::{
 #[cfg_attr(feature = "typescript", napi_derive::napi)]
 pub const ENGINE: &str = include_str!("furb/engine.py");
 
+/// The profile that built the crate: `release`, or `debug` when the checks of a debug build are
+/// on, as in the dev profile of the workspace. A measure of speed holds for a release build alone.
+#[cfg_attr(feature = "typescript", napi_derive::napi)]
+pub const PROFILE: &str = if cfg!(debug_assertions) { "debug" } else { "release" };
+
 /// The system prompt of every model: the engine minified with its program kept as it is, and nothing else.
 ///
 /// The build makes it from [`ENGINE`], and stops unless it is the same program.
