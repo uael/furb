@@ -12,6 +12,7 @@ mod yard;
 #[cfg(test)]
 mod protocol {
   use super::yard::Yard;
+  use std::collections::BTreeSet;
 
   use std::{
     env, fs, future,
@@ -31,8 +32,9 @@ mod protocol {
     transport::{Dialer, Identity, Local, Who},
   };
   use serde_json::{Value, json};
-  use tokio::io::DuplexStream;
-  use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, duplex};
+  use tokio::io::{
+    AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, DuplexStream, duplex,
+  };
 
   /// A host that answers each verb with the verb itself, as JSON.
   struct Echo;
@@ -472,7 +474,7 @@ mod protocol {
       Some(digest.as_str()),
       "the schema of the protocol changed: raise PROTOCOL and end SCHEMAS with {digest}"
     );
-    let distinct: std::collections::BTreeSet<_> = SCHEMAS.iter().collect();
+    let distinct: BTreeSet<_> = SCHEMAS.iter().collect();
     assert_eq!(distinct.len(), SCHEMAS.len(), "each version has a schema of its own");
   }
 

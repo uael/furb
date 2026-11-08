@@ -23,6 +23,7 @@ use monty_types::{
 };
 
 use crate::value::{Fault, Object};
+use std::{cell::Cell, time::Instant};
 
 /// How many allocations the collector of cycles lets pass between two of its runs. Monty runs it after 100000
 /// allocations by default, and each run walks every candidate of a cycle and all that it reaches, which in a life
@@ -42,7 +43,7 @@ pub(crate) const TURN: Duration = Duration::from_secs(30);
 #[cfg(test)]
 thread_local! {
   /// The bound of each sandbox that this thread makes, which a test sets short.
-  pub(crate) static BOUND: std::cell::Cell<Duration> = const { std::cell::Cell::new(TURN) };
+  pub(crate) static BOUND: Cell<Duration> = const { Cell::new(TURN) };
 }
 
 /// The name of the function of the host that an entry calls first, whose answer is the body of the entry.
@@ -154,7 +155,7 @@ impl Sand {
   pub(crate) fn enter<H: Host, T>(
     &mut self,
     host: &mut H,
-    body: impl FnOnce(&mut Sand, &mut H) -> T,
+    body: impl FnOnce(&mut Self, &mut H) -> T,
   ) -> Result<T, Fault> {
     let mut entering = Entering { body: Some(body), host, got: None };
     let mut inputs = NamedValues::new();
@@ -313,12 +314,12 @@ impl Sand {
 
 thread_local! {
   /// When the step of a word that runs on this thread began, while one runs under the bound.
-  static STEP: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+  static STEP: Cell<Option<Instant>> = const { Cell::new(None) };
 }
 
 /// A step of a word under the bound begins on this thread, or it ends when `on` is false.
 pub(crate) fn step(on: bool) {
-  STEP.set(on.then(std::time::Instant::now));
+  STEP.set(on.then(Instant::now));
 }
 
 /// Whether the step of a word that runs on this thread has run for longer than the bound of a

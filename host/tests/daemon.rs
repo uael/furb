@@ -12,10 +12,9 @@ mod yard;
 #[cfg(test)]
 mod daemon {
   use super::yard::Yard;
+  use std::net::TcpListener;
+  use tokio::sync;
 
-  use std::sync::mpsc::Receiver;
-  use std::sync::mpsc::Sender;
-  use std::sync::mpsc::channel;
   use std::{
     cell::RefCell,
     collections::VecDeque,
@@ -27,6 +26,7 @@ mod daemon {
     sync::{
       Arc, Mutex,
       atomic::{AtomicU32, AtomicUsize, Ordering},
+      mpsc::{Receiver, Sender, channel},
     },
     thread,
     time::{Duration, Instant},
@@ -49,11 +49,8 @@ mod daemon {
     upgrade,
   };
   use futures::{SinkExt, StreamExt};
-  use serde_json::Value;
-  use serde_json::json;
-  use tokio::task;
-  use tokio::time;
-  use tokio::{task::JoinHandle, time::timeout};
+  use serde_json::{Value, json};
+  use tokio::{task, task::JoinHandle, time, time::timeout};
   use tokio_util::codec::{Framed, LinesCodec};
 
   /// How long a test waits for a frame before it fails.
@@ -1877,7 +1874,7 @@ exit 0
   }
 
   /// One test at a time holds the port of the browser callback of a sign-in.
-  static PORT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+  static PORT: sync::Mutex<()> = sync::Mutex::const_new(());
 
   /// A folder of configs whose credential of codex ended, so that no account of this machine serves
   /// and no request goes out.
@@ -1913,7 +1910,7 @@ exit 0
     window.life = opened(&mut window, &at, "a.jsonl").await;
     let life = window.life.clone();
     window.attach(&life).await;
-    let taken = std::net::TcpListener::bind(("127.0.0.1", 1455)).unwrap();
+    let taken = TcpListener::bind(("127.0.0.1", 1455)).unwrap();
     let id = signing(&mut window).await;
     let Frame::SignIn { url, message, .. } = window.keeping(signed_in("failed")).await else {
       unreachable!()

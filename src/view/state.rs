@@ -31,51 +31,51 @@ pub enum State {
 
 impl State {
   /// Each state, in the order of the roll-up.
-  pub const ALL: [State; 10] = [
-    State::Asks,
-    State::Unread,
-    State::Failed,
-    State::Paused,
-    State::Thinks,
-    State::Runs,
-    State::Delegates,
-    State::Done,
-    State::Cancelled,
-    State::Idle,
+  pub const ALL: [Self; 10] = [
+    Self::Asks,
+    Self::Unread,
+    Self::Failed,
+    Self::Paused,
+    Self::Thinks,
+    Self::Runs,
+    Self::Delegates,
+    Self::Done,
+    Self::Cancelled,
+    Self::Idle,
   ];
 
   /// The state of a whole: the first state that any of its parts holds, and idle for no part.
-  pub fn roll_up(states: impl IntoIterator<Item = State>) -> State {
-    states.into_iter().min().unwrap_or(State::Idle)
+  pub fn roll_up(states: impl IntoIterator<Item = Self>) -> Self {
+    states.into_iter().min().unwrap_or(Self::Idle)
   }
 
   /// Whether the state is work that is not done: a model that thinks, a word or a command that
   /// runs, or a word that awaits another chain.
   pub fn busy(self) -> bool {
-    matches!(self, State::Thinks | State::Runs | State::Delegates)
+    matches!(self, Self::Thinks | Self::Runs | Self::Delegates)
   }
 
   /// The state of one act. A rung whose word has not come yet is its model that thinks while a
   /// reply of it runs, and rests while it waits for its turn, and an act that is no work and lives,
   /// as a chain or a grant, is work that waits on another chain.
-  pub fn of(act: &Act) -> State {
+  pub fn of(act: &Act) -> Self {
     let done = act.done();
     if act.owed() {
-      State::Asks
+      Self::Asks
     } else if act.pause.is_some() && !done {
-      State::Paused
+      Self::Paused
     } else if act.cancelled() {
-      State::Cancelled
+      Self::Cancelled
     } else if act.failed() {
-      State::Failed
+      Self::Failed
     } else if !done && !act.kind.work() {
-      State::Delegates
+      Self::Delegates
     } else if done && (act.kind != Kind::Rung || act.run != Some(RunState::Running)) {
-      State::Done
+      Self::Done
     } else if act.kind == Kind::Rung && !done && act.word.is_none() {
-      if act.asking { State::Thinks } else { State::Idle }
+      if act.asking { Self::Thinks } else { Self::Idle }
     } else {
-      State::Runs
+      Self::Runs
     }
   }
 }

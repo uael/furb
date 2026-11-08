@@ -1,7 +1,8 @@
 //! What the tests of the crate share.
 
-use crate::ear;
+use crate::{ear, sand::BOUND};
 use std::{
+  cell::Cell,
   future::Future,
   pin::pin,
   sync::Arc,
@@ -79,20 +80,20 @@ pub(crate) const LOADED: Duration = Duration::from_secs(120);
 
 thread_local! {
   /// Whether the scripted model of a test of this thread cuts its first word alone.
-  static FIRST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+  static FIRST: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Each sandbox of this thread with `bound` as the bound of a turn for the first word that a
 /// scripted model gives, and [`LOADED`] for each word after it, since a test proves what its first
 /// word did, not how fast a loaded machine runs the others.
 pub(crate) fn cut_first(bound: Duration) {
-  crate::sand::BOUND.set(bound);
+  BOUND.set(bound);
   FIRST.set(true);
 }
 
 /// Each sandbox of this thread with `bound` as the bound of a turn for every word.
 pub(crate) fn bound_all(bound: Duration) {
-  crate::sand::BOUND.set(bound);
+  BOUND.set(bound);
   FIRST.set(false);
 }
 
@@ -100,6 +101,6 @@ pub(crate) fn bound_all(bound: Duration) {
 /// bound of a test that cuts its first word alone becomes [`LOADED`].
 pub(crate) fn answering(nth: usize) {
   if nth > 1 && FIRST.get() {
-    crate::sand::BOUND.set(LOADED);
+    BOUND.set(LOADED);
   }
 }

@@ -76,6 +76,8 @@ multiple_unsafe_ops_per_block = "warn"
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
 dbg_macro = "deny"
+absolute_paths = "warn"
+use_self = "warn"
 
 [lints]
 workspace = true

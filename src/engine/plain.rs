@@ -12,6 +12,7 @@ use crate::{
   fact::Fact,
   value::{Exit, Fault, Given, Object, Text},
 };
+use std::fmt;
 
 /// What a verb gave or an act came to, read as the value a host of rust is given.
 pub trait Plain: Sized {
@@ -50,7 +51,7 @@ impl Plain for f64 {
     let one = got.as_ref();
     one
       .as_float()
-      .or_else(|| one.as_int().map(|n| n as f64))
+      .or_else(|| one.as_int().map(|n| n as Self))
       .ok_or_else(|| Fault::refused(format!("{} is no number", got.py_repr())))
   }
 }
@@ -116,8 +117,8 @@ impl<'a, T> Act<'a, T> {
   }
 }
 
-impl<T> std::fmt::Debug for Act<'_, T> {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T> fmt::Debug for Act<'_, T> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_tuple("Act").field(&self.id).finish()
   }
 }

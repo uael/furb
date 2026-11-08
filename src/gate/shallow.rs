@@ -3,6 +3,7 @@
 use ruff_python_ast::token::TokenKind;
 use ruff_python_parser::{Mode, ParseOptions, parse_unchecked};
 use ruff_text_size::{Ranged, TextRange, TextSize};
+use std::iter;
 
 /// The most brackets, one in another, that the checker reads in a literal. The checker takes time
 /// of about the fourth power of the depth of a literal, and more again when a part has no type that
@@ -73,7 +74,7 @@ pub(super) fn shallowed(sheet: &str) -> String {
     }
     text.push_str(&sheet[at..from]);
     text.push_str(first);
-    text.extend(std::iter::repeat_n('\n', sheet[from..to].matches('\n').count()));
+    text.extend(iter::repeat_n('\n', sheet[from..to].matches('\n').count()));
     text.push_str(last);
     at = to;
   }

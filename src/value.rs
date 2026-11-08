@@ -17,6 +17,7 @@
 )]
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
+use std::{error, fmt};
 
 /// The key of the one mark: a map whose `is` names a class of the engine is an instance of it, by its fields.
 pub const IS: &str = "is";
@@ -62,16 +63,16 @@ pub struct Text {
 
 impl Text {
   pub fn new(path: impl Into<String>, content: impl Into<String>) -> Self {
-    Text { path: path.into(), content: content.into() }
+    Self { path: path.into(), content: content.into() }
   }
 
   /// The text an object is, when it is an instance of `Text`, or a map that names it, as a text of the engine of
   /// python goes in.
-  pub fn of(said: ObjectRef<'_>) -> Option<Text> {
+  pub fn of(said: ObjectRef<'_>) -> Option<Self> {
     if said.type_name() != "Text" && field(&said, IS).and_then(|one| one.as_str()) != Some("Text") {
       return None;
     }
-    Some(Text {
+    Some(Self {
       path: field(&said, "path")?.as_str()?.to_owned(),
       content: field(&said, "content")?.as_str()?.to_owned(),
     })
@@ -99,11 +100,11 @@ pub struct Exit {
 
 impl Exit {
   /// The exit an object is, when it is an instance of `Exit`.
-  pub fn of(said: ObjectRef<'_>) -> Option<Exit> {
+  pub fn of(said: ObjectRef<'_>) -> Option<Self> {
     if said.type_name() != "Exit" {
       return None;
     }
-    Some(Exit {
+    Some(Self {
       code: field(&said, "code").and_then(|one| one.as_int()),
       stdout: Text::of(field(&said, "stdout")?)?,
       stderr: Text::of(field(&said, "stderr")?)?,
@@ -133,47 +134,47 @@ pub struct Fault {
 
 impl Fault {
   pub fn new(name: impl Into<String>, args: Vec<Object>) -> Self {
-    Fault { name: name.into(), args }
+    Self { name: name.into(), args }
   }
 
   /// A refusal of the engine, with why.
   pub fn refused(why: impl Into<String>) -> Self {
-    Fault::new("Refused", vec![Object::string(why.into())])
+    Self::new("Refused", vec![Object::string(why.into())])
   }
 
   /// A refusal that says no why.
   pub fn refusal() -> Self {
-    Fault::new("Refused", vec![])
+    Self::new("Refused", vec![])
   }
 
   /// The end of a generator of a host that is over.
   pub fn stop_iteration() -> Self {
-    Fault::new("StopIteration", vec![])
+    Self::new("StopIteration", vec![])
   }
 
   /// A key that no object of the host holds.
   pub fn key_error(key: i64) -> Self {
-    Fault::new("KeyError", vec![Object::int(key)])
+    Self::new("KeyError", vec![Object::int(key)])
   }
 
   /// A text that is no value of its kind.
   pub fn value_error(text: impl Into<String>) -> Self {
-    Fault::new("ValueError", vec![Object::string(text.into())])
+    Self::new("ValueError", vec![Object::string(text.into())])
   }
 
   /// A value of the wrong type, with why.
   pub fn type_error(why: impl Into<String>) -> Self {
-    Fault::new("TypeError", vec![Object::string(why.into())])
+    Self::new("TypeError", vec![Object::string(why.into())])
   }
 
   /// A cancel, with the reason that it was given, if any.
   pub fn cancelled(why: Option<Object>) -> Self {
-    Fault::new("CancelledError", why.into_iter().collect())
+    Self::new("CancelledError", why.into_iter().collect())
   }
 
   /// The fault an object is: an instance of an exception class of the sandbox, which carries its `args`, or a
   /// builtin exception, which monty carries by its type and its one message.
-  pub fn of(said: ObjectRef<'_>) -> Option<Fault> {
+  pub fn of(said: ObjectRef<'_>) -> Option<Self> {
     if said.type_name() == "Exception" {
       let owned = said.to_owned();
       let (graph, root) = unstable::graph_parts(&owned);
@@ -184,13 +185,13 @@ impl Fault {
       // Monty names some exceptions under their module, `asyncio.exceptions.CancelledError`, and a
       // name is bare on both sides of the boundary.
       let name = name.rsplit('.').next().unwrap_or(name);
-      return Some(Fault::new(name, arg.iter().map(Object::string).collect()));
+      return Some(Self::new(name, arg.iter().map(Object::string).collect()));
     }
     if matches!(said.type_name(), "dict" | "list" | "tuple") {
       return None;
     }
     let args = field(&said, "args")?.items()?.into_iter().map(|one| one.to_owned()).collect();
-    Some(Fault::new(said.type_name(), args))
+    Some(Self::new(said.type_name(), args))
   }
 
   /// The fault as it goes in: its name and what it was made with.
@@ -209,13 +210,13 @@ impl Fault {
   }
 }
 
-impl std::fmt::Display for Fault {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Fault {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}: {}", self.name, self.message())
   }
 }
 
-impl std::error::Error for Fault {}
+impl error::Error for Fault {}
 
 /// One field of an instance or a map, by its name.
 pub fn field<'a>(said: &ObjectRef<'a>, name: &str) -> Option<ObjectRef<'a>> {

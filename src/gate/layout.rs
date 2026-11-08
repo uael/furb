@@ -24,6 +24,8 @@ use ruff_text_size::Ranged;
 use super::{
   ACTS, MODULE, Parsed, WORDS, binds, deleted, named, shallow::shallowed, strings, worded,
 };
+use ruff_python_stdlib::builtins;
+use std::iter;
 
 /// The words of the program that one module of the checker holds. A module holds the words of a run
 /// of `CHUNK` words and stays the same while the program grows, so the checker infers each word of
@@ -325,7 +327,7 @@ fn rebinding_unit(lines: &[&str], bound: &mut HashSet<String>) -> (String, Rc<Un
 /// stands after a try of a word.
 pub(super) fn shortened(lines: &[&str], first: usize, tail: usize) -> String {
   let mut text = lines[..first].concat();
-  text.extend(std::iter::repeat_n('\n', tail - first - 4));
+  text.extend(iter::repeat_n('\n', tail - first - 4));
   text.push_str("  try:\n    acting()\n  except BaseException:\n    pass\n");
   text.push_str(&lines[tail..].concat());
   text
@@ -648,7 +650,7 @@ const BUILTINS: &str = "__builtins_of_the_gate";
 
 /// Whether python gives a name that no module binds from its builtins, as `sum`.
 pub(super) fn builtin(name: &str) -> bool {
-  ruff_python_stdlib::builtins::is_python_builtin(name, 14, false)
+  builtins::is_python_builtin(name, 14, false)
 }
 
 /// The statement that stands after the try of a word that deletes names at its top: it binds each

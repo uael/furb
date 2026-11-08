@@ -10,6 +10,7 @@ use std::fs;
 use std::path::Path;
 
 use furb::{Exit, life::Opening, verbs};
+use std::process;
 use tokio::task::LocalSet;
 
 /// The names of the threads of this process, which Linux gives in its proc file system.
@@ -39,7 +40,7 @@ fn opening(at: &Path) -> Opening {
 )]
 #[tokio::test(flavor = "current_thread")]
 async fn a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits_it() {
-  let at = yard::Yard::new(format!("furb-async-open-{}", std::process::id()));
+  let at = yard::Yard::new(format!("furb-async-open-{}", process::id()));
   LocalSet::new()
     .run_until(async {
       let (mut engine, _) = opening(&at).open::<String>([]).await.unwrap();

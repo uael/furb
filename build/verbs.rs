@@ -426,8 +426,8 @@ pub(crate) fn constants(source: &str) -> String {
   }
   out!(
     out,
-    "/// Each constant of the contract, added to the module of python.\n#[cfg(feature = \"python\")]\npub(crate) fn \
-     constants(module: &pyo3::Bound<'_, pyo3::types::PyModule>) -> pyo3::PyResult<()> {{\n  use \
+    "#[cfg(feature = \"python\")]\nuse pyo3::types::PyModule;\n\n/// Each constant of the contract, added to the module of python.\n#[cfg(feature = \"python\")]\npub(crate) fn \
+     constants(module: &pyo3::Bound<'_, PyModule>) -> pyo3::PyResult<()> {{\n  use \
      pyo3::types::PyModuleMethods;\n{python}  Ok(())\n}}"
   );
   out

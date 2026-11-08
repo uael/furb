@@ -54,6 +54,8 @@ use crate::{
   queue::{FollowUp, QUEUE, Queue},
   rebirth::{self, Watch},
 };
+use std::{mem, ops::Range};
+use tokio::task;
 
 /// How many events a reader may stand behind the life before it reads them again from the log of
 /// the life.
@@ -285,7 +287,7 @@ struct Gone {
   scanned: usize,
   /// The places of the log of what each open told, which the log keeps: the facts of the opening
   /// of a birth that the journal says again, which the file of the record does not hold.
-  opened: Vec<std::ops::Range<usize>>,
+  opened: Vec<Range<usize>>,
 }
 
 /// The places of the log whose event a later event replaced, which the log drops once the life told
@@ -514,7 +516,7 @@ impl Life {
   /// Each fact of the log let go, since the record holds it: those that a checkpoint of the record
   /// passed. The log keeps an empty place for each, which [`Life::since`] fills from the record.
   fn let_go(&mut self) {
-    let opened = std::mem::take(&mut self.gone.opened);
+    let opened = mem::take(&mut self.gone.opened);
     let kept = |at: usize| opened.iter().any(|one| one.contains(&at));
     for (at, slot) in self.log.iter_mut().enumerate().skip(self.gone.scanned) {
       if let Some(Event::Fact(fact)) = slot.as_deref().filter(|_| !kept(at)) {
@@ -603,7 +605,7 @@ impl Retell {
   /// no more than [`BEHIND`] of them ahead of what the reader read.
   fn spawned(self) -> mpsc::Receiver<Logged> {
     let (sender, receiver) = mpsc::channel(BEHIND);
-    tokio::task::spawn_blocking(move || self.told(&sender));
+    task::spawn_blocking(move || self.told(&sender));
     receiver
   }
 

@@ -15,6 +15,7 @@
 use std::{fs, path::Path};
 
 use furb::life::Opening;
+use std::{env, time::Instant};
 
 /// Each chain with its transcript and its turns, each act that a transcript names with its
 /// outcome, and each module.
@@ -28,9 +29,9 @@ const STATE: &str = "(lambda chains: (lambda names: '\\n'.join([*[repr(('transcr
 #[test]
 #[ignore = "a probe: FURB_PROBE_RECORD names a record, FURB_PROBE_OUT the file of its state"]
 fn the_state_at_the_tip() {
-  let record = std::env::var("FURB_PROBE_RECORD").unwrap();
-  let out = std::env::var("FURB_PROBE_OUT").unwrap();
-  let directory = std::env::var("FURB_PROBE_DIRECTORY").unwrap();
+  let record = env::var("FURB_PROBE_RECORD").unwrap();
+  let out = env::var("FURB_PROBE_OUT").unwrap();
+  let directory = env::var("FURB_PROBE_DIRECTORY").unwrap();
   let config = Path::new(&out).with_extension("config");
   fs::create_dir_all(&config).unwrap();
   let opening = Opening {
@@ -38,14 +39,12 @@ fn the_state_at_the_tip() {
     record: Some(record),
     keeps: Some(false),
     inspecting: Some(true),
-    whole: std::env::var_os("FURB_PROBE_WHOLE").map(|_| true),
-    skills: std::env::var("FURB_PROBE_SKILLS").map_or(Some(false), |_| None),
-    config: Some(
-      std::env::var("FURB_PROBE_CONFIG").unwrap_or_else(|_| config.display().to_string()),
-    ),
+    whole: env::var_os("FURB_PROBE_WHOLE").map(|_| true),
+    skills: env::var("FURB_PROBE_SKILLS").map_or(Some(false), |_| None),
+    config: Some(env::var("FURB_PROBE_CONFIG").unwrap_or_else(|_| config.display().to_string())),
     ..Opening::default()
   };
-  let started = std::time::Instant::now();
+  let started = Instant::now();
   let mut engine = match opening.boot::<String>([]) {
     Ok(one) => one.0,
     Err(why) => {

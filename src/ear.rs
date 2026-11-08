@@ -63,6 +63,8 @@ use crate::{
   fact::Fact,
   value::{Fault, Given, Object, ObjectRef},
 };
+use std::{future, mem};
+use tokio::runtime::Builder;
 
 /// What an ear is resumed with.
 #[derive(Debug)]
@@ -106,13 +108,13 @@ impl Step {
     not(any(feature = "python", feature = "typescript")),
     expect(dead_code, reason = "only a door calls it")
   )]
-  pub(crate) fn of(yielded: &Object) -> Result<Step, Fault> {
+  pub(crate) fn of(yielded: &Object) -> Result<Self, Fault> {
     let got = yielded.as_ref();
     if got.is_none() {
-      return Ok(Step::Wait(None));
+      return Ok(Self::Wait(None));
     }
     if matches!(got.type_name(), "set" | "frozenset") {
-      return Ok(Step::Wait(Some(yielded.clone())));
+      return Ok(Self::Wait(Some(yielded.clone())));
     }
     if let Some(pairs) = got.pairs() {
       let field =
@@ -125,7 +127,7 @@ impl Step {
       let kwargs =
         kwargs.iter().filter_map(|(key, one)| Some((key.as_str()?.to_owned(), one.to_owned())));
       let args = args.into_iter().map(|one| one.to_owned()).collect();
-      return Ok(Step::Call(Call { verb, args, kwargs: kwargs.collect() }));
+      return Ok(Self::Call(Call { verb, args, kwargs: kwargs.collect() }));
     }
     let items = got.items().ok_or_else(|| Fault::refused("an ear yields a saying or nothing"))?;
     let saying = Object::tuple(items.into_iter().map(|one| one.to_owned()));
@@ -321,7 +323,7 @@ impl<W: 'static> Co<W> {
       if let Some(fact) = self.heard.pop_front() {
         return Poll::Ready(self.noted(fact));
       }
-      if std::mem::take(&mut self.began) {
+      if mem::take(&mut self.began) {
         cx.waker().wake_by_ref();
       }
       // The life polls an ear again until it says no more, so the ear goes on once what it said landed.
@@ -424,7 +426,7 @@ impl Ear for Coroutine {
     if let Heard::Answer(got) = heard {
       self.tell(Event::Answer(got));
     } else if let Heard::Fact(fact) = heard
-      && !std::mem::take(&mut self.given)
+      && !mem::take(&mut self.given)
     {
       self.tell(Event::Heard(fact));
     }
@@ -634,14 +636,14 @@ pub(crate) fn spawned<T: Send + 'static>(
 pub fn reactor() -> &'static Handle {
   static REACTOR: OnceLock<Handle> = OnceLock::new();
   REACTOR.get_or_init(|| {
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    let runtime = Builder::new_current_thread()
       .enable_all()
       .build()
       .expect("the machine gives the ears a reactor");
     let handle = runtime.handle().clone();
     thread::Builder::new()
       .name("furb-reactor".to_owned())
-      .spawn(move || runtime.block_on(std::future::pending::<()>()))
+      .spawn(move || runtime.block_on(future::pending::<()>()))
       .expect("the machine gives the reactor a thread");
     handle
   })

@@ -6,6 +6,7 @@ use ruff_python_ast::{
 };
 use ruff_python_parser::parse_module;
 use ruff_text_size::Ranged;
+use std::mem;
 
 /// One logical line of the engine: how deep it stands, and its parts, each the text of one token as
 /// the engine writes it and the kind of that token. A string that holds expressions is one part,
@@ -113,7 +114,7 @@ fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
     let broken = tokens.get(at).map(Token::kind) == Some(TokenKind::NonLogicalNewline);
     match token.kind() {
       TokenKind::Newline if !parts.is_empty() => {
-        lines.push(Line { depth, parts: std::mem::take(&mut parts) });
+        lines.push(Line { depth, parts: mem::take(&mut parts) });
       }
       TokenKind::Comma
         if broken

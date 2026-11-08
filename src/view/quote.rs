@@ -5,6 +5,7 @@
 use std::fmt::Write as _;
 
 use serde::Serialize;
+use std::iter;
 
 /// A quote of a word: the line where it opens, its name, its text, the line of its close mark, or
 /// the last line of what came of a quote with no close mark yet, whether its close mark came, and
@@ -40,10 +41,8 @@ fn quote_at(source: &[&str], index: usize, open: bool) -> Option<Quote> {
   }
   let end = found.unwrap_or(source.len() - 1);
   // The word binds the text between the marks, less the line break that follows the opening mark.
-  let mut body = std::iter::once(head)
-    .chain(source[index + 1..=end].iter().copied())
-    .collect::<Vec<_>>()
-    .join("\n");
+  let mut body =
+    iter::once(head).chain(source[index + 1..=end].iter().copied()).collect::<Vec<_>>().join("\n");
   if body.starts_with('\n') {
     body.remove(0);
   }

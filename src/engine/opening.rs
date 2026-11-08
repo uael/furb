@@ -196,16 +196,16 @@ pub(crate) struct Opened {
 
 impl Default for Opened {
   /// Nothing under each name, as a life of nothing holds it.
-  fn default() -> Opened {
-    let Ok(none) = Opened::of(|_| Ok::<_, Infallible>(Object::none()));
+  fn default() -> Self {
+    let Ok(none) = Self::of(|_| Ok::<_, Infallible>(Object::none()));
     none
   }
 }
 
 impl Opened {
   /// The callables of the opening, each by its name.
-  pub(super) fn of<E>(mut at: impl FnMut(&'static str) -> Result<Object, E>) -> Result<Opened, E> {
-    Ok(Opened {
+  pub(super) fn of<E>(mut at: impl FnMut(&'static str) -> Result<Object, E>) -> Result<Self, E> {
+    Ok(Self {
       names: at("names")?,
       call: at("call")?,
       kernel: at("kernel")?,

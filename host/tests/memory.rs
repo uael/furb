@@ -39,6 +39,13 @@ use furb_host::{
   transport::{Dialer, Local},
 };
 use futures::{SinkExt, Stream, StreamExt};
+use std::{
+  cmp::Reverse,
+  env, fs, future,
+  hash::{DefaultHasher, Hash, Hasher},
+  process,
+};
+use tokio::{runtime::Builder, time};
 use tokio_util::codec::{Framed, LinesCodec};
 
 /// The events of a life, each under its place in the log.
@@ -155,7 +162,7 @@ async fn until(
 ) -> (Seq, usize) {
   let mut facts = 0;
   loop {
-    let next = tokio::time::timeout(Duration::from_secs(300), events.next()).await;
+    let next = time::timeout(Duration::from_secs(300), events.next()).await;
     let Ok(Some((seq, event))) = next else { panic!("the life told no event in time") };
     facts += usize::from(matches!(&*event, Event::Fact(_)));
     if wanted(&event) {
@@ -207,7 +214,7 @@ async fn attached(life: &LifeHandle, last: Seq) -> (usize, usize, usize, usize, 
   eprintln!("kinds {kinds:?}");
   let mut heavy: Vec<_> =
     kinds.iter().filter(|one| one.0.starts_with("fact") || one.0.starts_with("keep")).collect();
-  heavy.sort_by_key(|one| std::cmp::Reverse(one.1.1));
+  heavy.sort_by_key(|one| Reverse(one.1.1));
   eprintln!("heaviest facts {:?}", &heavy[..heavy.len().min(8)]);
   let facts: usize = heavy.iter().map(|one| one.1.0).sum();
   let of =
@@ -217,19 +224,19 @@ async fn attached(life: &LifeHandle, last: Seq) -> (usize, usize, usize, usize, 
 
 /// The footprint of this process, as the footprint tool of the system reads it.
 fn footprint() -> String {
-  let id = std::process::id().to_string();
-  let read = std::process::Command::new("footprint").arg(id).output();
+  let id = process::id().to_string();
+  let read = process::Command::new("footprint").arg(id).output();
   let text = read.map(|one| String::from_utf8_lossy(&one.stdout).into_owned()).unwrap_or_default();
   let line = text.lines().find(|one| one.contains("Footprint:")).unwrap_or_default();
   line.split("Footprint: ").nth(1).and_then(|one| one.split(" (").next()).unwrap_or("?").to_owned()
 }
 
 fn main() {
-  let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
+  let runtime = Builder::new_current_thread().enable_all().build();
   let runtime = runtime.expect("the test has a runtime");
-  let large = std::env::args().any(|one| one == "--ignored");
+  let large = env::args().any(|one| one == "--ignored");
   let budget = budget();
-  let sizes: Vec<usize> = std::env::var("FURB_MEMORY_SIZES").map_or_else(
+  let sizes: Vec<usize> = env::var("FURB_MEMORY_SIZES").map_or_else(
     |_| if large { LARGE.to_vec() } else { SMALL.to_vec() },
     |named| named.split(',').map(|one| one.trim().parse().expect("a size is a number")).collect(),
   );
@@ -254,8 +261,8 @@ const TAIL: usize = 10_000;
 /// that a birth adds is what the next engine and the acts of the birth hold: with the facts kept,
 /// it adds more than [`BIRTH`].
 async fn a_rebirth_lets_go_of_each_fact_that_the_record_holds() {
-  let at = yard::Yard::new(format!("furb-host-memory-tail-{}", std::process::id()));
-  std::fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
+  let at = yard::Yard::new(format!("furb-host-memory-tail-{}", process::id()));
+  fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
   let (mut facts, mut since, mut heaps, mut last) = (0, 0, Vec::new(), 0);
@@ -270,7 +277,7 @@ async fn a_rebirth_lets_go_of_each_fact_that_the_record_holds() {
     let rung = made(&life, Command::Rung { word, on: None }).await;
     let ended = done(rung);
     let (seq, born) = loop {
-      let next = tokio::time::timeout(Duration::from_secs(300), events.next()).await;
+      let next = time::timeout(Duration::from_secs(300), events.next()).await;
       let Ok(Some((seq, event))) = next else { panic!("the life told no event in time") };
       if let Event::Fact(fact) = &*event {
         (facts, since) = (facts + 1, since + 1);
@@ -282,7 +289,7 @@ async fn a_rebirth_lets_go_of_each_fact_that_the_record_holds() {
       }
     };
     if born {
-      tokio::time::sleep(Duration::from_secs(1)).await;
+      time::sleep(Duration::from_secs(1)).await;
       heaps.push(LIVE.load(Ordering::Relaxed));
       (since, last) = (0, seq);
     }
@@ -307,17 +314,17 @@ async fn a_rebirth_lets_go_of_each_fact_that_the_record_holds() {
 
 /// The digest of a fact, which a test keeps in the place of the fact, so it holds little heap.
 fn hashed(fact: &serde_json::Value) -> u64 {
-  let mut hasher = std::hash::DefaultHasher::new();
-  std::hash::Hash::hash(&fact.to_string(), &mut hasher);
-  std::hash::Hasher::finish(&hasher)
+  let mut hasher = DefaultHasher::new();
+  Hash::hash(&fact.to_string(), &mut hasher);
+  Hasher::finish(&hasher)
 }
 
 /// The facts that a reader that attaches at the start of the log reads up to a place, each with
 /// its place.
 async fn late(life: &LifeHandle, last: Seq) -> Vec<(Seq, u64)> {
-  let events = life.events(0).take_while(|one| std::future::ready(one.0 < last));
+  let events = life.events(0).take_while(|one| future::ready(one.0 < last));
   let facts = events.filter_map(|one| {
-    std::future::ready(match &*one.1 {
+    future::ready(match &*one.1 {
       Event::Fact(fact) => Some((one.0, hashed(fact))),
       _ => None,
     })
@@ -330,9 +337,9 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(
   sizes: &[usize],
   budget: Option<usize>,
 ) {
-  let at = yard::Yard::new(format!("furb-host-memory-{}", std::process::id()));
+  let at = yard::Yard::new(format!("furb-host-memory-{}", process::id()));
   let base = LIVE.load(Ordering::Relaxed);
-  std::fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
+  fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
   let (mut facts, mut last) = (0, 0);
@@ -360,7 +367,7 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(
       let (end, after) = until(&mut events, done(asked)).await;
       (facts, last) = (facts + more + after, seq.max(end));
     }
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    time::sleep(Duration::from_millis(200)).await;
     let heap = LIVE.load(Ordering::Relaxed).saturating_sub(base);
     let (count, bytes, parts, events, acts) = attached(&life, last).await;
     println!(
@@ -429,7 +436,7 @@ impl Peer {
 
   /// The next frame of the daemon.
   async fn read(&mut self) -> Frame {
-    let line = tokio::time::timeout(Duration::from_secs(300), self.lines.next()).await;
+    let line = time::timeout(Duration::from_secs(300), self.lines.next()).await;
     let line = line.expect("the daemon says a frame in time").expect("the daemon is up");
     serde_json::from_str(&line.expect("a line")).expect("a frame is JSON")
   }
@@ -468,8 +475,8 @@ impl Peer {
 /// holds no copy of the log for it.
 async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(window: (usize, usize, u64)) {
   let (attached, most, wait) = window;
-  let at = yard::Yard::new(format!("furb-host-slow-{}", std::process::id()));
-  std::fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
+  let at = yard::Yard::new(format!("furb-host-slow-{}", process::id()));
+  fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.expect("the daemon listens");
   let settings = Settings {
@@ -508,11 +515,11 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(window: (usize, usi
     };
     facts += driver.until_done(&rung).await;
   }
-  tokio::time::sleep(Duration::from_millis(500)).await;
+  time::sleep(Duration::from_millis(500)).await;
   let before = LIVE.load(Ordering::Relaxed);
   let mut slow = Peer::dialed(&local).await;
   slow.said(Verb::Attach { life: life.clone(), from: 0 }).await;
-  tokio::time::sleep(Duration::from_secs(wait)).await;
+  time::sleep(Duration::from_secs(wait)).await;
   let taken = LIVE.load(Ordering::Relaxed).saturating_sub(before);
   println!("a slow window on a life of {facts} facts: the daemon took {} KiB", taken >> 10);
   assert!(

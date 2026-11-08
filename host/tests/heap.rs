@@ -34,7 +34,8 @@ use furb_host::{
 };
 use futures::{SinkExt, StreamExt};
 use serde_json::json;
-use tokio::time;
+use std::path::Path;
+use tokio::{runtime::Builder, time};
 use tokio_util::codec::{Framed, LinesCodec};
 
 #[global_allocator]
@@ -56,13 +57,13 @@ fn heap() -> usize {
 const GRACE: Duration = Duration::from_secs(1);
 
 fn main() {
-  let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
+  let runtime = Builder::new_current_thread().enable_all().build();
   let runtime = runtime.expect("the test has a runtime");
   runtime.block_on(the_heaviest_life_is_born_again_when_the_heap_passes_its_share());
 }
 
 /// A life that keeps its record, with no skill, whose model closes each request.
-fn opening(at: &std::path::Path) -> Opening {
+fn opening(at: &Path) -> Opening {
   let answer = Answered(Arc::new(move |_, _| {
     let turn = Object::tuple([
       Object::string("assistant"),
@@ -165,7 +166,7 @@ impl Peer {
   }
 
   /// A life opened in a folder and attached from the start of its log.
-  async fn opened(&mut self, life: &str, cwd: &std::path::Path) {
+  async fn opened(&mut self, life: &str, cwd: &Path) {
     let open = Verb::Open {
       life: life.to_owned(),
       cwd: Some(cwd.display().to_string()),
@@ -235,7 +236,7 @@ async fn the_heaviest_life_is_born_again_when_the_heap_passes_its_share() {
 }
 
 /// A daemon of the test served in a folder, under the bound of its heap, and its transport.
-async fn served(at: &std::path::Path) -> Local {
+async fn served(at: &Path) -> Local {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.expect("the daemon listens");
   let settings = Settings {
@@ -254,7 +255,7 @@ async fn served(at: &std::path::Path) -> Local {
 
 impl Peer {
   /// Both lives let go until each ended, then opened again: each reaches the names of its tip.
-  async fn reopened(&mut self, at: &std::path::Path, big: &str, small: &str) {
+  async fn reopened(&mut self, at: &Path, big: &str, small: &str) {
     let peer = self;
     for life in [big, small] {
       assert_eq!(peer.ask(Verb::Detach { life: life.to_owned() }).await, Answer::Done);

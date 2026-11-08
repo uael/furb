@@ -16,6 +16,7 @@ use super::{
   named::NAME,
   state::{State, working},
 };
+use std::{iter, mem};
 
 /// The acts of a life by their names.
 pub type Rows<'a> = HashMap<&'a str, &'a Act>;
@@ -58,7 +59,7 @@ pub enum Origin {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ThreadNode {
   pub thread: ChainThread,
-  pub agents: Vec<ThreadNode>,
+  pub agents: Vec<Self>,
   pub state: State,
 }
 
@@ -330,7 +331,7 @@ fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
   let asides = asides.into_iter().map(|one| one.1).collect();
   named(&mut out, rows);
   for thread in &mut out {
-    let acts = std::iter::once(&thread.prompt).chain(&thread.messages);
+    let acts = iter::once(&thread.prompt).chain(&thread.messages);
     let open = acts.filter_map(|id| rows.get(id.as_str())).rfind(|act| !act.done());
     thread.over = open.is_none();
     thread.state = match open.or_else(|| rows.get(thread.prompt.as_str())) {
@@ -483,7 +484,7 @@ fn node(
 /// order.
 pub fn order_threads(mut nodes: Vec<ThreadNode>, rows: &Rows<'_>) -> Vec<ThreadNode> {
   for node in &mut nodes {
-    node.agents = order_threads(std::mem::take(&mut node.agents), rows);
+    node.agents = order_threads(mem::take(&mut node.agents), rows);
   }
   nodes.sort_by_key(|node| (open(node), last_message(&node.thread, rows)));
   nodes
@@ -497,7 +498,7 @@ pub fn open(node: &ThreadNode) -> bool {
 
 /// When the last message of a thread began: its prompt, or the last prompt on it.
 fn last_message(thread: &ChainThread, rows: &Rows<'_>) -> u64 {
-  let acts = std::iter::once(&thread.prompt).chain(&thread.messages);
+  let acts = iter::once(&thread.prompt).chain(&thread.messages);
   acts.filter_map(|id| rows.get(id.as_str())).map(|act| act.began).max().unwrap_or_default()
 }
 
@@ -528,7 +529,7 @@ fn unseen<S: BuildHasher>(
   if !(thread.yours && thread.over) {
     return false;
   }
-  let ids = std::iter::once(&thread.prompt).chain(&thread.messages).chain(&thread.asked);
+  let ids = iter::once(&thread.prompt).chain(&thread.messages).chain(&thread.asked);
   let work = ids
     .filter_map(|id| rows.get(id.as_str()))
     .map(|act| act.ended.unwrap_or(act.began).max(act.began))
