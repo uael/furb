@@ -161,6 +161,7 @@ mod daemon {
   /// seconds to answer where one is installed. Where no script runs, as on Windows, it is the plain
   /// opening.
   fn mute(at: &Path) -> Opening {
+    #[cfg_attr(not(unix), expect(unused_mut, reason = "no script runs where unix is not"))]
     let mut opening = opening(at);
     #[cfg(unix)]
     {
@@ -388,7 +389,13 @@ exit 0
     async fn ran(&mut self, life: &str, word: &str) -> String {
       let verb = Verb::Run { life: life.to_owned(), word: word.to_owned(), on: None };
       let Ok(Answer::Act(rung)) = self.ask(verb).await else { panic!("no rung") };
-      self.until(done(&rung)).await;
+      // Each birth names its rungs anew, so a rung of an earlier birth that a window reads late
+      // may hold the same name: the done of this one holds this word.
+      let this = |frame: &Frame| {
+        matches!(frame, Frame::Event { event: Event::Act(act), .. }
+          if act.id == rung && matches!(act.phase, Phase::Done(_)) && act.word.as_deref() == Some(word))
+      };
+      self.until(this).await;
       rung
     }
 
@@ -652,7 +659,13 @@ exit 0
     later.ran(&life, "y = 1").await;
     let facts_of = |window: &Window| -> Vec<Value> {
       let facts = window.pushed.iter().filter_map(|frame| match frame {
-        Frame::Event { event: Event::Fact(fact), .. } if fact[0] != "keep" => Some(fact.clone()),
+        // The extensions teach when they load, which a birth may do after the rung that the test
+        // runs, so the test counts none of their facts.
+        Frame::Event { event: Event::Fact(fact), .. }
+          if fact[0] != "keep" && fact[2] != "extensions" =>
+        {
+          Some(fact.clone())
+        }
         _ => None,
       });
       facts.collect()

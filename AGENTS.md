@@ -82,7 +82,8 @@ API of its own:
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
   holds: it says a command to the life and reads the events of the life in order, from any place of its log. The
   thread writes the checkpoint of a life that keeps its record at its end, and opens the life again from it for the
-  same handles when it said a tail of facts, as
+  same handles when it said a tail of facts, or when the daemon asks it as its heap passes its share, and its log
+  lets go of each fact that the record holds, as
   `host/src/rebirth.rs` says. A fault that stops the sandbox ends the life, and its record keeps each fact up to the
   fault. The
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear

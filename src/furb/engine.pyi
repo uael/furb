@@ -657,7 +657,7 @@ def seed(data: object) -> list[Entry]:
   Each chain of the data is made again under its name, on its parent and with its label, as the operator makes it, and each name of a kind up to the highest that the data takes, which no entry carries, stays taken.
   Each open prompt of the data is made again through prompt under its name, and each chain that the data says paused is paused.
   Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
-  Each act of the data with a value stands known on its chain with that value and runs nothing.
+  Each act of the data with a value stands known on its chain with the words that made it and with that value and runs nothing.
   Each act of the data with a value is made before each open prompt, so a message that the operator sent on a done prompt while its chain was paused reads that prompt, and its model is asked once a wake comes in the later life.
   A rung of the operator on each chain binds its definitions and its values, awaits a rung of each life word whose act was open on it at the tip, and tells what the checkpoint lost and cut when it lost or cut one, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain itself says its turns as its prefix when that rung comes, and again with each fact since but a tell when the rung ends, so a reader reads each as a birth and as no clear.
   The rung binds the definitions and the values of the chain after the chain says the prefix, so a value that raises as it is bound leaves the turns of the chain whole.
