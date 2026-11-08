@@ -98,10 +98,10 @@ def test_the_hooks_and_the_gates_run_pytest_through_the_one_home_of_its_limit() 
 
 
 def killed_after(log: Path, when: str, program: str) -> list[str]:
-  """A command that writes a line of the log of the guard of memory, at a time given as an expression, then ends by SIGKILL,
+  """A command that writes a line of the log of the guard of memory, at a time given as an expression, then ends at once with the code of a kill, 137, which every system gives,
   as a test binary that the guard ended does."""
   line = f"f'{{{when}}} 4242 {program} --test-threads 4\\n'"
-  body = f"import os, signal, time\nopen({str(log)!r}, 'a').write({line})\nos.kill(os.getpid(), signal.SIGKILL)"
+  body = f"import os, time\nopen({str(log)!r}, 'a').write({line})\nos._exit(137)"
   return [sys.executable, "-c", body]
 
 
@@ -124,7 +124,7 @@ def test_a_kill_that_the_log_holds_not_in_the_run_or_of_its_folder_names_no_guar
 
 
 def test_a_sigkill_with_no_line_of_the_guard_names_no_guard(tmp_path: Path) -> None:
-  command = "import os, signal; print('(signal: 9, SIGKILL: kill)', flush=True); os.kill(os.getpid(), signal.SIGKILL)"
+  command = "import os; print('(signal: 9, SIGKILL: kill)', flush=True); os._exit(137)"
   got = budget(tmp_path, "cargo", 100, sys.executable, "-c", command)
   assert got.returncode != 0 and "guard of memory" not in got.stdout
 
@@ -132,8 +132,8 @@ def test_a_sigkill_with_no_line_of_the_guard_names_no_guard(tmp_path: Path) -> N
 def test_a_line_of_the_guard_whose_program_is_a_bare_name_that_the_run_prints_names_no_guard(tmp_path: Path) -> None:
   line = "f'{int(time.time())} 4242 bun test ./a.test.ts\\n'"
   body = (
-    f"import os, signal, time\nopen({str(tmp_path / 'watch.log')!r}, 'a').write({line})\n"
-    "print('bun test v1.3.14', flush=True)\nos.kill(os.getpid(), signal.SIGKILL)"
+    f"import os, time\nopen({str(tmp_path / 'watch.log')!r}, 'a').write({line})\n"
+    "print('bun test v1.3.14', flush=True)\nos._exit(137)"
   )
   got = budget(tmp_path, "bun", 100, sys.executable, "-c", body)
   assert got.returncode != 0 and "bun test v1.3.14" in got.stdout and "guard of memory" not in got.stdout
