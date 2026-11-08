@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { createConnection, type Socket } from "node:net";
 import { join } from "node:path";
 import type {
@@ -51,26 +52,54 @@ function askedBy<E extends Error>(error: E, asked: Error): E {
   return error;
 }
 
+/** A socket to the daemon at a place, which fails when none listens there. */
+function dialing(place: string): Promise<Socket> {
+  return new Promise<Socket>((resolve, reject) => {
+    const socket = createConnection(place);
+    socket.once("connect", () => {
+      socket.removeListener("error", reject);
+      resolve(socket);
+    });
+    socket.once("error", reject);
+  });
+}
+
 /** One connection to the daemon, after its hello. Each verb takes a number and its answer, in any order, and each
- * frame that the daemon pushes goes to each listener of `pushed`. `closed` settles when the stream ends, from either
- * side, and each verb that waits then fails. */
-export class Connection {
+ * frame that the daemon pushes goes to each listener of `pushed`. `closed` settles when the stream ends for good, from
+ * either side, and each verb that waits when the socket ends fails. A connection dialed with `again` dials the place
+ * again when the daemon goes, as at a handover, and tells `reconnected` once the daemon in its place welcomed it, or
+ * `lost` with why it did not. */
+export class Connection extends EventEmitter {
   /** The peer as the daemon knows it after the hello. */
   peer!: Peer;
   readonly closed: Promise<void>;
+  private socket!: Socket;
   private next = 0;
   private readonly waiting = new Map<
     number,
     { resolve(answer: Answer): void; reject(error: Error): void; asked: Error }
   >();
-  private readonly listeners = new Set<(frame: Frame) => void>();
+  private readonly frameListeners = new Set<(frame: Frame) => void>();
   /** How many lives hold the connection, which an idle connection keeps the process alive for. */
   private held = 0;
+  private ending = false;
+  private reaching?: Promise<void>;
+  private finish!: () => void;
   private constructor(
-    private readonly socket: Socket,
+    socket: Socket,
     private readonly idle: boolean,
+    private readonly route?: { place: string; kind: Kind; name?: string },
   ) {
-    if (idle) socket.unref();
+    super();
+    this.closed = new Promise((resolve) => {
+      this.finish = resolve;
+    });
+    this.attach(socket);
+  }
+
+  private attach(socket: Socket): void {
+    this.socket = socket;
+    if (this.idle && this.held === 0) socket.unref();
     let held = "";
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
@@ -81,40 +110,67 @@ export class Connection {
         if (line.trim()) this.heard(JSON.parse(line) as Frame);
       }
     });
-    this.closed = new Promise((resolve) => {
-      socket.on("close", () => {
-        for (const waits of this.waiting.values())
-          waits.reject(askedBy(new Closed("The daemon closed the connection."), waits.asked));
-        this.waiting.clear();
-        resolve();
-      });
+    socket.on("close", () => {
+      if (this.socket !== socket) return;
+      for (const waits of this.waiting.values())
+        waits.reject(askedBy(new Closed("The daemon closed the connection."), waits.asked));
+      this.waiting.clear();
+      if (this.ending || !this.route || this.reaching) return this.finish();
+      this.reaching = this.hello(this.route.place).then(
+        () => {
+          this.reaching = undefined;
+          this.emit("reconnected");
+        },
+        (error: unknown) => {
+          this.reaching = undefined;
+          this.emit("lost", error instanceof Error ? error.message : String(error));
+          this.finish();
+        },
+      );
     });
     // An error of the stream closes it, which `closed` tells.
     socket.on("error", () => {});
   }
 
-  /** A connection to the daemon at a place, as a peer of a kind, with the name of a skill for a skill. */
-  static async dial(place: string, kind: Kind, name?: string, idle = false): Promise<Connection> {
-    const socket = await new Promise<Socket>((resolve, reject) => {
-      const dialing = createConnection(place);
-      dialing.once("connect", () => {
-        dialing.removeListener("error", reject);
-        resolve(dialing);
-      });
-      dialing.once("error", reject);
-    });
-    const connection = new Connection(socket, idle);
-    const welcome = await connection.ask({ verb: "hello", protocol: PROTOCOL, kind, name });
+  /** The hello on a socket to the place, which makes it the socket of the connection. */
+  private async hello(place: string, socket?: Socket): Promise<void> {
+    if (!socket) this.attach(await dialing(place));
+    const { kind, name } = this.route ?? { kind: "skill" as Kind };
+    const welcome = await this.send({ verb: "hello", protocol: PROTOCOL, kind, name });
     if (welcome.answer !== "welcome") throw new Error(`The daemon gave ${welcome.answer}, and no welcome.`);
-    connection.peer = welcome.data.peer;
+    this.peer = welcome.data.peer;
+  }
+
+  /** A connection to the daemon at a place, as a peer of a kind, with the name of a skill for a skill. */
+  static async dial(
+    place: string,
+    kind: Kind,
+    name?: string,
+    idle = false,
+    again = false,
+  ): Promise<Connection> {
+    const socket = await dialing(place);
+    const connection = new Connection(socket, idle, { place, kind, name });
+    if (!again) Reflect.set(connection, "route", undefined);
+    await connection.hello(place, socket);
     return connection;
   }
 
-  /** The answer of the daemon to a verb, or its refusal as a `Refused`. */
-  ask(verb: Verb): Promise<Answer> {
-    const id = this.next++;
+  /** The answer of the daemon to a verb, or its refusal as a `Refused`. A verb waits for the dial that follows a
+   * handover. */
+  async ask(verb: Verb): Promise<Answer> {
     const asked = new Error(verb.verb);
+    if (this.reaching) await this.reaching;
+    return this.send(verb, asked);
+  }
+
+  private send(verb: Verb, asked = new Error(verb.verb)): Promise<Answer> {
+    const id = this.next++;
     return new Promise<Answer>((resolve, reject) => {
+      if (this.ending || this.socket.destroyed) {
+        reject(askedBy(new Closed("This connection holds no socket to the daemon."), asked));
+        return;
+      }
       this.waiting.set(id, { resolve, reject, asked });
       this.socket.write(`${JSON.stringify({ id, ...verb })}\n`);
     });
@@ -122,8 +178,8 @@ export class Connection {
 
   /** Each frame that the daemon pushes from now on, heard until the call that this gives. */
   pushed(listener: (frame: Frame) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    this.frameListeners.add(listener);
+    return () => this.frameListeners.delete(listener);
   }
 
   /** A life that the connection serves. An idle connection, as the one of a window, keeps the process alive only
@@ -141,6 +197,7 @@ export class Connection {
   }
 
   close(): void {
+    this.ending = true;
     this.socket.end();
   }
 
@@ -153,7 +210,7 @@ export class Connection {
       else waits.reject(askedBy(new Refused(frame.error.error, frame.why), waits.asked));
       return;
     }
-    for (const listener of this.listeners) listener(frame);
+    for (const listener of this.frameListeners) listener(frame);
   }
 }
 
@@ -175,7 +232,7 @@ export class View {
   readonly slot: Slot;
   readonly disposed: Promise<void>;
   private version = 0;
-  private readonly listeners = new Set<(event: ViewEvent) => void>();
+  private readonly frameListeners = new Set<(event: ViewEvent) => void>();
   private ended = () => {};
   constructor(
     private readonly connection: Connection,
@@ -204,13 +261,13 @@ export class View {
   }
 
   events(listener: (event: ViewEvent) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    this.frameListeners.add(listener);
+    return () => this.frameListeners.delete(listener);
   }
 
   /** @internal */
   heard(event: ViewEvent): void {
-    for (const listener of this.listeners) listener(event);
+    for (const listener of this.frameListeners) listener(event);
   }
 
   /** @internal */
