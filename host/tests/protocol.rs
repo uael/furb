@@ -434,7 +434,7 @@ mod protocol {
     "ac081ea7adb80dcd8b017c2b13ccc2a191bedc76f48399ea4e4af332e8eebbfb",
     "0eba18a0cee335a618490601a27a6088e88594de3163b840fb38b5b587f774d4",
     "69e3c729852b81913c0d5b655b932779333b094b1d59b10e317f5aed228afeca",
-    "69f68a3229945922f23f2118c8e8115f716b126911ea1350f930118932209704",
+    "922f51d84f0b9d55e6e419b92a7e886fbc8c6e87e71f8d7a37fdc7bca746a269",
   ];
 
   /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
@@ -513,7 +513,7 @@ mod protocol {
   }
 
   #[tokio::test]
-  async fn an_open_that_names_extensions_is_refused_with_the_fields_that_it_takes() {
+  async fn an_open_that_names_the_old_field_is_refused_with_the_fields_that_it_takes() {
     let mut client = served(Role::Write);
     client.hello(PROTOCOL).await;
     client.say(r#"{"id": 1, "verb": "open", "life": "/a.jsonl", "extensions": false}"#).await;
@@ -537,6 +537,15 @@ mod protocol {
       panic!("no answer: {heard:?}")
     };
     assert_eq!(opened["skills"], json!(false), "the open holds the skills that it named");
+  }
+
+  #[test]
+  fn a_verb_of_a_view_that_names_a_field_that_it_does_not_take_is_refused() {
+    let line =
+      |extra: &str| format!(r#"{{"id": 1, "verb": "view.dispose", "viewer": "v"{extra}}}"#);
+    assert!(serde_json::from_str::<Request>(&line("")).is_ok());
+    let no = serde_json::from_str::<Request>(&line(r#", "viewr": "w""#)).unwrap_err();
+    assert!(no.to_string().contains("viewr"), "the refusal names the field: {no}");
   }
 
   /// A folder of its own for the transport of one test, short enough for the path of a socket.

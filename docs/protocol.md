@@ -178,7 +178,9 @@ it is not given. The daemon answers requests in any order.
   lives changes none of them.
   A verb that names a field that it does not take is refused, and does nothing: an `open` that names `extensions`, the
   field that protocol 4 renamed `skills`, is refused with a refusal that names `extensions` and the fields that the
-  verb takes, `skills` among them, and opens no life.
+  verb takes, `skills` among them, and opens no life. The hello alone takes a field that it does not know, so that a peer
+  of another protocol reaches the refusal that names both versions. The schema does not show this rule, since JSON
+  Schema cannot close the fields of a request that flattens its verb.
 - An `open` with `answers` makes its peer answer the models of the life in their place, as a demo or a test does. The
   daemon pushes each request of a model to that peer as a frame `ask`, with the `life`, the number `ask` and the
   `request`: its `actor`, `chain`, `messages` and `settings`. The peer tells what it writes with `wrote`, and gives the

@@ -566,6 +566,7 @@ pub struct Listed {
 
 /// A view that a window mounts in a slot of a life, which the process of a skill serves.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Mount {
   pub viewer: String,
   pub life: String,
@@ -575,6 +576,7 @@ pub struct Mount {
 
 /// The tree of a view, which takes the place of each tree of a lower version.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Tree {
   pub viewer: String,
   pub slot: Slot,
@@ -584,6 +586,7 @@ pub struct Tree {
 
 /// What a person did to a node of a view, with the value of an input.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ViewEvent {
   pub viewer: String,
   pub node: String,
@@ -593,6 +596,7 @@ pub struct ViewEvent {
 
 /// What a skill asks of the one window of a view.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ViewEffect {
   pub viewer: String,
   pub effect: Effect,
@@ -600,6 +604,7 @@ pub struct ViewEffect {
 
 /// The end of a view in its window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Dispose {
   pub viewer: String,
 }

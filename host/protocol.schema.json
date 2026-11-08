@@ -1291,88 +1291,132 @@
           "description": "The place of the daemon given to the daemon of a new build: each life written to its\ncheckpoint and ended, and the lives with their pins in the answer, once the daemon stopped to\nlisten."
         },
         {
-          "required": [
-            "verb"
-          ],
           "type": "object",
+          "description": "A view that a window mounts in a slot of a life, which the process of a skill serves.",
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "life": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "skill": {
+              "type": "string"
+            },
             "verb": {
               "type": "string",
               "const": "view.mount"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Mount"
-            }
+          "required": [
+            "verb",
+            "viewer",
+            "life",
+            "slot",
+            "skill"
           ]
         },
         {
-          "required": [
-            "verb"
-          ],
           "type": "object",
+          "description": "The tree of a view, which takes the place of each tree of a lower version.",
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "version": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "tree": {
+              "$ref": "#/definitions/Node"
+            },
             "verb": {
               "type": "string",
               "const": "view.tree"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Tree"
-            }
+          "required": [
+            "verb",
+            "viewer",
+            "slot",
+            "version",
+            "tree"
           ]
         },
         {
-          "required": [
-            "verb"
-          ],
           "type": "object",
+          "description": "What a person did to a node of a view, with the value of an input.",
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/definitions/Gesture"
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "verb": {
               "type": "string",
               "const": "view.event"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/ViewEvent"
-            }
+          "required": [
+            "verb",
+            "viewer",
+            "node",
+            "kind"
           ]
         },
         {
-          "required": [
-            "verb"
-          ],
           "type": "object",
+          "description": "What a skill asks of the one window of a view.",
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "effect": {
+              "$ref": "#/definitions/Effect"
+            },
             "verb": {
               "type": "string",
               "const": "view.effect"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/ViewEffect"
-            }
+          "required": [
+            "verb",
+            "viewer",
+            "effect"
           ]
         },
         {
-          "required": [
-            "verb"
-          ],
           "type": "object",
+          "description": "The end of a view in its window.",
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
             "verb": {
               "type": "string",
               "const": "view.dispose"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Dispose"
-            }
+          "required": [
+            "verb",
+            "viewer"
           ]
         }
       ],
@@ -1628,30 +1672,6 @@
         }
       ],
       "description": "Where a window shows a view. The dock follows the chain that it names, and the row, the detail\nand the mark follow the chain of the act that they name. The sidebar, the footer, a screen and\nan overlay follow the life."
-    },
-    "Mount": {
-      "type": "object",
-      "properties": {
-        "viewer": {
-          "type": "string"
-        },
-        "life": {
-          "type": "string"
-        },
-        "slot": {
-          "$ref": "#/definitions/Slot"
-        },
-        "skill": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "viewer",
-        "life",
-        "slot",
-        "skill"
-      ],
-      "description": "A view that a window mounts in a slot of a life, which the process of a skill serves."
     },
     "Node": {
       "type": "object",
@@ -1931,32 +1951,6 @@
       ],
       "description": "The tone of a run, which each window gives its own color."
     },
-    "Tree": {
-      "type": "object",
-      "properties": {
-        "viewer": {
-          "type": "string"
-        },
-        "slot": {
-          "$ref": "#/definitions/Slot"
-        },
-        "version": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "tree": {
-          "$ref": "#/definitions/Node"
-        }
-      },
-      "required": [
-        "viewer",
-        "slot",
-        "version",
-        "tree"
-      ],
-      "description": "The tree of a view, which takes the place of each tree of a lower version."
-    },
     "Gesture": {
       "type": "string",
       "enum": [
@@ -1965,32 +1959,6 @@
         "submit"
       ],
       "description": "What a person does to a node."
-    },
-    "ViewEvent": {
-      "type": "object",
-      "properties": {
-        "viewer": {
-          "type": "string"
-        },
-        "node": {
-          "type": "string"
-        },
-        "kind": {
-          "$ref": "#/definitions/Gesture"
-        },
-        "value": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "viewer",
-        "node",
-        "kind"
-      ],
-      "description": "What a person did to a node of a view, with the value of an input."
     },
     "Effect": {
       "oneOf": [
@@ -2044,34 +2012,6 @@
         }
       ],
       "description": "What a skill asks of a window."
-    },
-    "ViewEffect": {
-      "type": "object",
-      "properties": {
-        "viewer": {
-          "type": "string"
-        },
-        "effect": {
-          "$ref": "#/definitions/Effect"
-        }
-      },
-      "required": [
-        "viewer",
-        "effect"
-      ],
-      "description": "What a skill asks of the one window of a view."
-    },
-    "Dispose": {
-      "type": "object",
-      "properties": {
-        "viewer": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "viewer"
-      ],
-      "description": "The end of a view in its window."
     },
     "Frame": {
       "oneOf": [
@@ -2261,89 +2201,138 @@
           "description": "A request of a model of a life that the peer answers: its number, and the request with the\nactor, the chain, the messages and the settings."
         },
         {
-          "required": [
-            "frame"
-          ],
           "type": "object",
+          "additionalProperties": false,
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "life": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "skill": {
+              "type": "string"
+            },
             "frame": {
               "type": "string",
               "const": "view.mount"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Mount"
-            }
-          ]
+          "required": [
+            "frame",
+            "viewer",
+            "life",
+            "slot",
+            "skill"
+          ],
+          "description": "A view that a window mounts in a slot of a life, which the process of a skill serves."
         },
         {
-          "required": [
-            "frame"
-          ],
           "type": "object",
+          "additionalProperties": false,
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "version": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "tree": {
+              "$ref": "#/definitions/Node"
+            },
             "frame": {
               "type": "string",
               "const": "view.tree"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Tree"
-            }
-          ]
+          "required": [
+            "frame",
+            "viewer",
+            "slot",
+            "version",
+            "tree"
+          ],
+          "description": "The tree of a view, which takes the place of each tree of a lower version."
         },
         {
-          "required": [
-            "frame"
-          ],
           "type": "object",
+          "additionalProperties": false,
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/definitions/Gesture"
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "frame": {
               "type": "string",
               "const": "view.event"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/ViewEvent"
-            }
-          ]
+          "required": [
+            "frame",
+            "viewer",
+            "node",
+            "kind"
+          ],
+          "description": "What a person did to a node of a view, with the value of an input."
         },
         {
-          "required": [
-            "frame"
-          ],
           "type": "object",
+          "additionalProperties": false,
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "effect": {
+              "$ref": "#/definitions/Effect"
+            },
             "frame": {
               "type": "string",
               "const": "view.effect"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/ViewEffect"
-            }
-          ]
+          "required": [
+            "frame",
+            "viewer",
+            "effect"
+          ],
+          "description": "What a skill asks of the one window of a view."
         },
         {
-          "required": [
-            "frame"
-          ],
           "type": "object",
+          "additionalProperties": false,
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
             "frame": {
               "type": "string",
               "const": "view.dispose"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Dispose"
-            }
-          ]
+          "required": [
+            "frame",
+            "viewer"
+          ],
+          "description": "The end of a view in its window."
         }
       ],
       "description": "What the daemon says to a peer."
