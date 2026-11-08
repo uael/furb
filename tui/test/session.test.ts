@@ -469,6 +469,7 @@ test("a message of a member of the operator is a message of the operator", () =>
       id: "prompt90",
       kind: "prompt",
       by: "operator/a",
+      maker: { role: "member" as const, login: "a" },
       on: session.selected,
       chain: session.selected,
       words: ["str", "Hello", ""],
@@ -478,4 +479,15 @@ test("a message of a member of the operator is a message of the operator", () =>
       state: "runs" as const,
     };
     expect(session.isUserPrompt(message)).toBe(true);
+    // The maker that the crate gives says who made it, whatever the site that the fact names.
+    expect(session.isUserPrompt({ ...message, by: "operator", maker: { role: "operator" } })).toBe(true);
+    expect(
+      session.isUserPrompt({
+        ...message,
+        by: "rung3",
+        maker: { role: "model", model: "opus", effort: "high" },
+      }),
+    ).toBe(false);
+    expect(session.isUserPrompt({ ...message, by: "rung4", maker: { role: "skill" } })).toBe(false);
+    expect(session.isUserPrompt({ ...message, by: "operator/a", maker: undefined })).toBe(false);
   }));

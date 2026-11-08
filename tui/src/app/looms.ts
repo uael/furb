@@ -53,7 +53,7 @@ export const looms = part({
   /** The loom of the chains at a count of cells of time, woven again only when the life changed. */
   chainsLoom(panel: ChainsPanel, cells: number): Loom {
     const w = this.session;
-    const key = [w.version, cells, w.host.prompts.size].join(":");
+    const key = [w.version, cells, w.host.prompts.size, w.moments.length].join(":");
     if (panel.woven?.key !== key)
       panel.woven = {
         key,
@@ -63,6 +63,7 @@ export const looms = part({
           measures: w.host.measures,
           folds: new Set(),
           width: cells,
+          moments: w.moments,
           label: (id) => id,
         }),
       };
