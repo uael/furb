@@ -29,7 +29,7 @@ for query in ["ideas", "travel", "zebra"]:
   results.append((query, found, best))
   print(f"{query}: {found} found,", "fast" if best < 0.05 else "slow")
 slowest = max(results, key=lambda r: r[2])
-print("the slowest query is", slowest[0])`;
+debug(t"The slowest query is {slowest[0]}")`;
 
 const slow = `# The cold start reads the whole file, so I time a start in a fresh process and give it a bound.
 cold = await bash("sleep 5 && echo started", timeout=0.4)
@@ -87,7 +87,7 @@ try:
 except Refused:
   log = write(Text("CHANGELOG.md", "# Changelog\n"))
 head = re.search(r"^## (\S+)", log.content, re.M)
-print("last release in the log:", head[1] if head else "none")`;
+debug(t"The last release in the log is {head[1] if head else 'none'}")`;
 
 const notes = String.raw`SECTIONS = [
   ("Added", ["Notes survive a restart: they are kept in .notes/notes.jsonl.", "Ctrl+K opens the search.", "Search finds a note by any word in it, newest first."]),

@@ -13,7 +13,7 @@ use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher, recommended_watc
 
 use furb::{life::Opening, skill::Places, world};
 use furb_host::{
-  DaemonError, STALL, Settings, Tailnet,
+  DaemonError, Heap, STALL, Settings, Tailnet,
   access::Config,
   run,
   transport::{Local, LocalApi, Tailscale},
@@ -34,6 +34,7 @@ pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliErr
   let path = Places::here().config.join("host.json");
   let config = Config::load(&path)?;
   let stall = config.stall.map_or(STALL, Duration::from_secs);
+  let heap = Heap::counted(config.heap);
   let tailnet = tailnet(&path, config)?;
   let _followed = tailnet.as_ref().and_then(|one| {
     let said = |why: &str| eprintln!("furb host: {why}");
@@ -41,7 +42,7 @@ pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliErr
       .inspect_err(|no| eprintln!("furb host: no watch of {}: {no}", path.display()))
       .ok()
   });
-  let settings = Settings { opening: Opening::default(), grace, stall, tailnet, door, host };
+  let settings = Settings { opening: Opening::default(), grace, stall, tailnet, door, host, heap };
   let local = Local::new(&folder);
   if upgrading {
     return Ok(upgrade(&local, settings).await?);

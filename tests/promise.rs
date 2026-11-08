@@ -275,6 +275,7 @@ fn make_the_corpus() {
     }
     let record = at.join("record.jsonl");
     scrubbed(&record, &at);
+    private(&record);
     // The module is read as the test reads it: from the record alone, with no log beside it, and
     // before the tail names another engine, which this build cannot inspect.
     let alone = place(&format!("made-{name}"));
@@ -316,6 +317,15 @@ fn scrubbed(record: &Path, at: &Path) {
       text.replace(&held, &format!("\"path\":{},\"content\":{}", quoted(&path), quoted(&below)));
   }
   fs::write(record, text).unwrap();
+}
+
+/// Puts each trace of the machine that made a record, the paths of its home and the name of its
+/// account, to the stand-ins of `script/private.py`, which holds the rule of each record.
+fn private(record: &Path) {
+  let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("script").join("private.py");
+  let status =
+    std::process::Command::new("python3").arg(script).arg("--scrub").arg(record).status().unwrap();
+  assert!(status.success(), "script/private.py scrubs {}", record.display());
 }
 
 /// Each record of each folder of the corpus, as its folder and its name.
@@ -669,12 +679,31 @@ fn a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without
 /// The state of a life at its tip, with each of these directories written as <at>, so lives in
 /// two directories, a fork and its origin among them, compare.
 fn placed(engine: &mut Engine, at: &[&Path]) -> String {
+  placing(state(engine), at)
+}
+
+/// A state with each of these directories written as <at>, in each form that python shows it in: a
+/// path of Windows has its backslashes doubled by the repr of a text, and again by the repr of that
+/// repr, as a module value that holds a path is shown.
+fn placing(shown: String, at: &[&Path]) -> String {
   let home = std::env::var("HOME").unwrap_or_default();
-  at.iter().fold(state(engine), |shown, one| {
+  at.iter().fold(shown, |shown, one| {
     let path = one.display().to_string();
     let tilded = path.strip_prefix(&home).map_or_else(|| path.clone(), |rest| format!("~{rest}"));
-    shown.replace(&path, "<at>").replace(&tilded, "<at>")
+    (0..4).rev().fold(shown, |shown, doubled| {
+      let said =
+        |text: &str| (0..doubled).fold(text.to_owned(), |text, _| text.replace('\\', "\\\\"));
+      shown.replace(&said(&path), "<at>").replace(&said(&tilded), "<at>")
+    })
   })
+}
+
+#[test]
+fn a_directory_that_python_shows_with_its_backslashes_doubled_is_placed_as_at() {
+  let at = Path::new(r"C:\Users\x\furb-torn");
+  let shown =
+    r"[('C:\\Users\\x\\furb-torn', 'C:\\\\Users\\\\x\\\\furb-torn', 'C:\Users\x\furb-torn')]";
+  assert_eq!(placing(shown.to_owned(), &[at]), "[('<at>', '<at>', '<at>')]");
 }
 
 /// The names of the questions that the text of a record holds, each a fact whose name is its kind

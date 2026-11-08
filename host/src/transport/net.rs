@@ -336,11 +336,6 @@ impl Tailscale {
     });
   }
 
-  /// The access list as it stands now.
-  pub fn access(&self) -> Access {
-    self.access.borrow().clone()
-  }
-
   /// Each login that the access list names now.
   pub fn logins(&self) -> Vec<String> {
     self.access.borrow().logins()

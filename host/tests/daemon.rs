@@ -147,6 +147,9 @@ mod daemon {
     Opening {
       config: Some(at.join("config").display().to_string()),
       roster: Some(vec!["claude-cli:opus".to_owned()]),
+      // A stand reads the settings again, and a command line of this machine would answer it
+      // in seconds.
+      claude: Some(at.join("no-claude").display().to_string()),
       skills: Some(false),
       answer: Some(answer),
       ..Opening::default()
@@ -189,7 +192,8 @@ exit 0
   ) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings = Settings { opening, grace, stall: STALL, tailnet: None, door: None, host: None };
+    let settings =
+      Settings { opening, grace, stall: STALL, tailnet: None, door: None, host: None, heap: None };
     let served = local.clone();
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
@@ -254,6 +258,7 @@ exit 0
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let logins: Arc<[&str]> = ["alice", "bob", "alice"].into();
     let identity = Logins { local: local.clone(), next: Arc::default(), names: logins };
@@ -296,6 +301,7 @@ exit 0
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let identity = Grants { local: local.clone(), next: Arc::default(), roles: roles.into() };
     tokio::spawn(async move { run(&identity, listener, settings).await });
@@ -787,6 +793,7 @@ exit 0
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let next = local.clone();
     let new = tokio::spawn(async move { upgrade(&next, settings).await });
@@ -834,6 +841,7 @@ exit 0
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     let old = tokio::spawn(async move { run(&served, listener, settings).await });
@@ -853,6 +861,7 @@ exit 0
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let next = local.clone();
     let new = tokio::spawn(async move { upgrade(&next, settings).await });
@@ -932,7 +941,7 @@ exit 0
     let opening = Opening { skills: None, ..opening(at) };
     let host = Some(at.join("sock"));
     let settings =
-      Settings { opening, grace: SHORT, stall: STALL, tailnet: None, door: None, host };
+      Settings { opening, grace: SHORT, stall: STALL, tailnet: None, door: None, host, heap: None };
     let served = identity(local.clone());
     tokio::spawn(async move { run(&served, listener, settings).await });
     let mut window = Window::dialed(&local).await;
@@ -1172,8 +1181,15 @@ exit 0
     let tailnet = Some(Tailnet { identity: identity.clone(), ports: Ports::default() });
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings =
-      Settings { opening: mute(&at), grace: GRACE, stall: STALL, tailnet, door: None, host: None };
+    let settings = Settings {
+      opening: mute(&at),
+      grace: GRACE,
+      stall: STALL,
+      tailnet,
+      door: None,
+      host: None,
+      heap: None,
+    };
     let served = local.clone();
     let _daemon = tokio::spawn(async move { run(&served, listener, settings).await });
     let mut window = Window::dialed(&local).await;
@@ -1477,6 +1493,7 @@ exit 0
       tailnet: None,
       door: None,
       host,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1557,6 +1574,7 @@ exit 0
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1606,6 +1624,7 @@ exit 0
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1636,6 +1655,7 @@ exit 0
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1669,6 +1689,7 @@ exit 0
       tailnet: None,
       door: None,
       host: None,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1722,6 +1743,7 @@ exit 0
       tailnet: None,
       door: None,
       host,
+      heap: None,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });

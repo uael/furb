@@ -79,3 +79,9 @@ harness = false
 # each byte that the process allocates.
 name = "memory"
 harness = false
+
+[[test]]
+# The test of the heap of the daemon runs in a process of its own, with no harness, since it counts
+# each byte that the process allocates.
+name = "heap"
+harness = false
