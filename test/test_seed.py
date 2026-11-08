@@ -97,13 +97,15 @@ async def test_each_act_of_the_data_with_a_value_stands_known_on_its_chain_with_
 async def test_a_rung_of_the_operator_on_each_chain_binds_its_definitions_and_its_values_says_its_turns_as_its_prefix_and_tells_what_the_checkpoint_lost_and_cut_with_each_word_that_ran_on_it_in_the_data_of_schema_1_and_it_runs_no_word_again_so_the_model_of_the_chain_starts_a_cut_word_again_in_a_turn_that_shows() -> (
   None
 ):
-  """A rung of the operator on each chain says its turns as its prefix, binds its definitions and its values, awaits a rung of each life word whose act was open on it at the tip, says its turns as its prefix again with each fact since but a tell, and tells what the checkpoint lost and cut when it lost or cut one, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows."""
+  """A rung of the operator on each chain binds its definitions and its values, awaits a rung of each life word whose act was open on it at the tip, and tells what the checkpoint lost and cut when it lost or cut one, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain itself says its turns as its prefix when that rung comes, and again with each fact since but a tell when the rung ends, so a reader reads each as a birth and as no clear."""
   _, log = await seeded()
   root = engine.module("chain1")
   assert (root["f"](), root["shell"], engine.module("chain3").get("SIZE")) == (6, "bash2", None)
   told = [x[3][0] for x in said(log, "tell") if "debugged" in x[3][0] and x[1].startswith("rung")]
   assert any("It lost ['gone'], and it cut ['rung9']." in x for x in told), told
   assert [x for x in said(log, "prefix") if x[1] == "chain3"]
+  assert [x for x in said(log, "prefix") if x[2] != x[1]] == []
+  assert [x[1] for x in said(log, "prefix") for f in x[3] if f[0] == "carried" and f[1] != x[1]] == []
   engine.wake("chain3")
   await settle()
   assert "late" not in engine.module("chain3")
@@ -131,7 +133,7 @@ async def test_each_chain_with_an_open_prompt_opens_paused_while_the_seed_binds_
 async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_it_says_the_prefix_and_tells_what_the_checkpoint_lost_and_cut_so_a_value_that_raises_as_it_is_bound_leaves_the_turns_of_the_chain_whole() -> (
   None
 ):
-  """The rung binds the definitions and the values of the chain after it says the prefix, so a value that raises as it is bound leaves the turns of the chain whole."""
+  """The rung binds the definitions and the values of the chain after the chain says the prefix, so a value that raises as it is bound leaves the turns of the chain whole."""
   life(sown())
   data = {
     **DATA,

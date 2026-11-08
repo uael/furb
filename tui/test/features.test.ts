@@ -450,7 +450,9 @@ test("the setup of the root stands as code: a comment that names the setup, then
         expect(shown.slice(2, 6).map((row) => /^\d+ rung\(/.test(row))).toEqual(Array(4).fill(true));
         // The card holds each read that a row starts, with its HIDDEN, whatever the lines that the call breaks into.
         const card = rows.slice(at + 1).join("\n");
-        expect(card.match(/rung\(\s*\n?\s*read\(/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+        // The columns of a row stand right of its code, so a call that breaks over rows has them on its first row and
+        // its read on the next: the test counts each row that holds a read with its HIDDEN, not a rung( beside a read(.
+        expect(card.match(/read\('[^\n]*HIDDEN/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
         expect(card.match(/HIDDEN/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
         // The life words stand as the calls that end their one word, each on its line, then the stand and the cd,
         // and the card ends there.

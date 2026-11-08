@@ -1292,9 +1292,11 @@ export const feed = part({
               ? `wake from ${act.by}`
               : aside === "rung"
                 ? "your word"
-                : operated(act.by)
-                  ? ""
-                  : `from ${act.by}`;
+                : aside === "agent"
+                  ? "agent work"
+                  : operated(act.by)
+                    ? ""
+                    : `from ${act.by}`;
           const opened = w.folds[act.id] === false;
           const lines = message.split("\n").filter((one) => one.trim()).length;
           const more = !opened && lines > 1 ? `+${lines - 1} ${lines === 2 ? "line" : "lines"}` : "";

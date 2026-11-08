@@ -36,7 +36,14 @@ test("a redraw between a press and its release folds nothing, and no click on a 
     const other = await engine.prompt("str", { message: "Another thread", on: root });
     await until(() => listed(window).some((one) => one.act.id === other), "the second thread");
     const left = window.width - window.session.preferences.sidebarWidth;
-    const before = rail(window, await window.frame());
+    // The row of the thread stands in the state before it stands in the frame, so the press waits for the frame.
+    const before = rail(
+      window,
+      await window.shows(
+        (frame) => rail(window, frame).some((line) => line.includes("Another thread")),
+        "Another thread",
+      ),
+    );
     expect(before.some((line) => /Resolve/.test(line))).toBe(false);
     const x = (before.find((line) => line.includes("Collapse")) ?? "").indexOf("Collapse");
     // The press lands on the row of the other thread, in the column of the Collapse of the thread held open, whose

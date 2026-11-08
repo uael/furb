@@ -38,19 +38,28 @@ BIND = 3000
 type McpResult = dict
 
 
+def mcp_items(value: object) -> list[object] | None:
+  """The items of a value that is a list, or None for any other value. It reads no builtin, since a record from before
+  the gate refused such a name may bind list in the module of its chain."""
+  match value:
+    case [*items]:
+      return items
+  return None
+
+
 def mcp_type(schema: object) -> str:
   if not isinstance(schema, dict):
     return "Any"
   kind = schema.get("type")
-  options = schema.get("anyOf") or schema.get("oneOf")
-  if isinstance(options, list) and options:
+  options = mcp_items(schema.get("anyOf") or schema.get("oneOf"))
+  if options:
     found = " | ".join({mcp_type(x): 0 for x in options})
   elif "const" in schema:
     found = f"Literal[{schema['const']!r}]"
-  elif isinstance(schema.get("enum"), list) and schema["enum"]:
-    found = "Literal[" + ", ".join(repr(x) for x in schema["enum"]) + "]"
-  elif isinstance(kind, list):
-    found = " | ".join({mcp_type({**schema, "type": x}): 0 for x in kind}) or "Any"
+  elif enum := mcp_items(schema.get("enum")):
+    found = "Literal[" + ", ".join(repr(x) for x in enum) + "]"
+  elif (kinds := mcp_items(kind)) is not None:
+    found = " | ".join({mcp_type({**schema, "type": x}): 0 for x in kinds}) or "Any"
   elif kind == "array":
     found = f"list[{mcp_type(schema.get('items'))}]"
   else:
@@ -103,8 +112,9 @@ def mcp_line(server: dict) -> str:
 
 
 def mcp_closed(got: object, show: Show) -> dict:
-  if isinstance(got, list):
-    return {"servers": "\n".join(mcp_line(x) for x in got)}
+  match got:
+    case [*servers]:
+      return {"servers": "\n".join(mcp_line(x) for x in servers if isinstance(x, dict))}
   if isinstance(got, dict) and "name" in got:
     return {"server": mcp_line(got)}
   if isinstance(got, dict):
@@ -157,7 +167,7 @@ def mcp_bound(server: dict, on: str = "") -> str:
     return word
   calls = [f"mcp_call({json.dumps(server['name'])}", "mcp_call('" + str(server["name"]) + "'"]
   held = module(on)
-  words = list(program(on).values())
+  words = [*program(on).values()]
 
   def own(cls: str) -> bool:
     return any((f"class {cls}:" in w or f"class {cls}(" in w) and any(c in w for c in calls) for w in words)
@@ -262,9 +272,9 @@ def mcp_index(on: str = "") -> Act:
     while True:
       if pending and over(pending):
         got, pending = peek(pending), ""
-        if isinstance(got, list):
+        if (servers := mcp_items(got)) is not None:
           now = {}
-          for x in got:
+          for x in [one for one in servers if isinstance(one, dict)]:
             line, word = mcp_line(x), str(x.get("binding") or "")
             if x["state"] != "connected":
               word = ""

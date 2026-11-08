@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
-import { createConnection, type Socket } from "node:net";
+import type { Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Fact, Standing, Turn } from "furb";
@@ -21,9 +21,18 @@ import type {
   Threads,
   Request1 as Verb,
 } from "furb/protocol";
-import { PROTOCOL } from "furb/protocol";
+import { Closed, Connection, daemonPlace, dialed, Refused } from "furb/skill";
 import { program } from "../../bind/typescript/program.ts";
 import type { Setting } from "./configs.ts";
+
+export { Closed, Refused };
+
+/** Whether a prefix cuts its chain, as a word that compacts or clears it says one: a chain says its own prefix at its
+ * birth, and the checkpoint word of a record made before the chain said that prefix itself began with the prefix that
+ * it said, which was the birth of its chain. */
+export function cuts([, id, by]: readonly unknown[], word: string): boolean {
+  return by !== id && !word.startsWith("say('prefix', scope(acting()), ");
+}
 
 export type { Verb };
 
@@ -39,13 +48,6 @@ export function daemonFolder(env: Record<string, string | undefined> = process.e
         : join(homedir(), ".cache"));
   if (!base) throw new Error("This machine has no cache of furb, so no daemon has a place on it.");
   return join(base, "furb", "host");
-}
-
-/** Where a window dials the daemon of a folder: its socket, or its named pipe on Windows. */
-export function daemonPlace(folder = daemonFolder()): string {
-  return process.platform === "win32"
-    ? `\\\\.\\pipe\\furb-${folder.replace(/[\\/:]/g, "-")}`
-    : join(folder, "host.sock");
 }
 
 /** The program furb that serves the daemon: the one that FURB_BIN names, else the one that `bun run build` made for
@@ -102,51 +104,28 @@ function tail(path: string): string {
   }
 }
 
-/** A connection to a place, or nothing when no daemon answers there. */
-export function dialed(place: string): Promise<Socket | undefined> {
-  return new Promise((resolve) => {
-    const socket = createConnection(place);
-    socket.once("connect", () => {
-      socket.removeAllListeners("error");
-      resolve(socket);
-    });
-    socket.once("error", () => resolve(undefined));
-  });
+/** A refusal of the version is told as a daemon of another build. */
+function another(error: unknown): unknown {
+  if (!(error instanceof Refused) || error.kind !== "protocol") return error;
+  return new Error(
+    `The daemon of this machine is of another build (${error.message}). It ends once its windows quit and its grace passes, and the next window starts one of this build.`,
+  );
 }
 
-/** A refusal of the daemon, named by its kind, as `closed` or `role`. */
-export class Refused extends Error {
-  constructor(
-    readonly kind: string,
-    why: string,
-  ) {
-    super(why);
-    this.name = kind === "refused" ? "Refused" : kind;
-  }
-}
-
-/** A request that the daemon left with no answer when its socket closed, as when it ends or hands over to another
- * build: it takes the stack of the verb that asked it, which names its caller. */
-export class Closed extends Error {
-  override name = "Closed";
-}
-
-/** The connection of a window to the daemon of its machine, which it starts when none answers. Each request takes a
- * number and its answer, and each frame that the daemon pushes is an event of the connection: `event` with the life,
- * the place and the event, `presence` with the life and the peers, and `ask` with the life, the number and the request
- * of a model that the window answers. When the daemon goes, as at a handover, the connection dials again, and tells
- * `reconnected` once the daemon in its place welcomed it, or `lost` with why it did not. */
+/** The connection of a window to the daemon of its machine, which it starts when none answers: a Connection of
+ * furb/skill that dials again when the daemon goes, with the events of the daemon as its own. Each frame that the
+ * daemon pushes is an event of the connection: `event` with the life, the place and the event, `presence` with the life
+ * and the peers, and `ask` with the life, the number and the request of a model that the window answers. When the
+ * daemon goes, as at a handover, it tells `reconnected` once the daemon in its place welcomed it, or `lost` with why it
+ * did not. */
 export class Daemon extends EventEmitter {
   /** The peer of the window as the daemon knows it after its hello. */
   peer?: Peer;
-  private socket?: Socket;
-  private next = 0;
-  private readonly waiting = new Map<
-    number,
-    { resolve(answer: Answer): void; reject(error: Error): void; asked: Error }
-  >();
+  private link?: Connection;
   private closing = false;
   private reaching?: Promise<void>;
+  /** How many lives of the window the connection holds. */
+  private held = 0;
   constructor(
     readonly folder = daemonFolder(),
     readonly place = daemonPlace(folder),
@@ -158,107 +137,51 @@ export class Daemon extends EventEmitter {
 
   /** The daemon reached, or started and reached, and welcomed, once for each connection. */
   connect(): Promise<void> {
-    if (this.socket && !this.reaching) return Promise.resolve();
-    this.reaching ??= this.reach().finally(() => {
+    if (this.link && !this.reaching) return Promise.resolve();
+    this.reaching ??= this.reached().finally(() => {
       this.reaching = undefined;
     });
     return this.reaching;
   }
 
-  /** A daemon that closes before its welcome, as one that ends at its grace in the instant that this window dials it,
-   * is dialed again once, which starts a new daemon when none listens. */
-  private async reach(): Promise<void> {
-    try {
-      await this.reached();
-    } catch (error) {
-      if (!(error instanceof Closed)) throw error;
-      await this.reached();
-    }
-  }
-
   private async reached(): Promise<void> {
-    const socket = (await dialed(this.place)) ?? (await started(this.folder, this.place));
-    this.socket = socket;
-    let held = "";
-    socket.setEncoding("utf8");
-    socket.on("data", (chunk: string) => {
-      held += chunk;
-      for (let end = held.indexOf("\n"); end >= 0; end = held.indexOf("\n")) {
-        const line = held.slice(0, end);
-        held = held.slice(end + 1);
-        if (line.trim()) this.heard(JSON.parse(line) as Frame);
-      }
-    });
-    socket.on("error", () => {});
-    socket.on("close", () => this.gone(socket));
-    if (this.held === 0) socket.unref();
-    const welcome = await this.ask({
-      verb: "hello",
-      protocol: PROTOCOL,
-      kind: "window",
+    const link = await Connection.dial(this.place, "window", undefined, {
+      idle: true,
+      again: true,
       role: this.role,
-    }).catch((error: unknown) => {
-      // A refusal of the version is told as a daemon of another build.
-      if (!(error instanceof Refused) || error.kind !== "protocol") throw error;
-      throw new Error(
-        `The daemon of this machine is of another build (${error.message}). It ends once its windows quit and its grace passes, and the next window starts one of this build.`,
-      );
+      reach: async () => (await dialed(this.place)) ?? (await started(this.folder, this.place)),
+      heard: (frame) => this.heard(frame),
+      explain: another,
     });
-    if (welcome.answer !== "welcome") throw new Error("The daemon gave no welcome.");
-    this.peer = welcome.data.peer;
+    this.link = link;
+    this.peer = link.peer;
+    for (let n = 0; n < this.held; n++) link.hold();
+    link.on("reconnected", () => {
+      this.peer = link.peer;
+      this.emit("reconnected");
+    });
+    // A connection that is lost is let go, so that the next request of the window dials a new one.
+    link.on("lost", (why: string) => {
+      if (this.link === link) this.link = undefined;
+      this.emit("lost", why);
+    });
   }
 
   private heard(frame: Frame): void {
-    if (frame.frame === "reply" || frame.frame === "refused") {
-      const waits = this.waiting.get(frame.id ?? -1);
-      if (!waits) return;
-      this.waiting.delete(frame.id ?? -1);
-      if (frame.frame === "reply") waits.resolve(frame.answer);
-      else {
-        // A refusal comes on the socket, so it takes the stack of the verb that asked it, which names its caller.
-        const refused = new Refused(frame.error.error, frame.why);
-        refused.stack = `${refused.name}: ${refused.message}\n${waits.asked.stack?.split("\n").slice(1).join("\n") ?? ""}`;
-        waits.reject(refused);
-      }
-    } else if (frame.frame === "event") this.emit("event", frame.life, frame.seq, frame.event);
+    if (frame.frame === "event") this.emit("event", frame.life, frame.seq, frame.event);
     else if (frame.frame === "presence") this.emit("presence", frame.life, frame.peers);
     else if (frame.frame === "stalled") this.emit("stalled", frame.life, frame.notice);
     else if (frame.frame === "sign_in") this.emit("authentication", frame);
     else if (frame.frame === "ask") this.emit("ask", frame.life, frame.ask, frame.request);
   }
 
-  /** The socket closed: each request that waits fails, and a connection that the window did not close dials again. */
-  private gone(socket: Socket): void {
-    if (this.socket !== socket) return;
-    this.socket = undefined;
-    for (const waits of this.waiting.values()) {
-      const closed = new Closed("The daemon of this machine closed.");
-      closed.stack = `${closed.name}: ${closed.message}\n${waits.asked.stack?.split("\n").slice(1).join("\n") ?? ""}`;
-      waits.reject(closed);
-    }
-    this.waiting.clear();
-    // A socket that closes before its welcome fails the reach that dialed it, which dials again.
-    if (this.closing || this.reaching) return;
-    this.connect().then(
-      () => this.emit("reconnected"),
-      (error: unknown) => this.emit("lost", error instanceof Error ? error.message : String(error)),
-    );
-  }
-
   /** The answer of the daemon to a verb. */
   async ask(verb: Verb): Promise<Answer> {
-    if (verb.verb !== "hello") {
-      if (this.reaching) await this.reaching;
-      else if (!this.socket && !this.closing) await this.connect();
-    }
-    const socket = this.socket;
-    if (!socket || this.closing) throw new Error("This window holds no connection to the daemon.");
-    const id = this.next++;
-    const asked = new Error(verb.verb);
-    return new Promise<Answer>((resolve, reject) => {
-      this.waiting.set(id, { resolve, reject, asked });
-      socket.write(`${JSON.stringify({ id, ...verb } satisfies Request)}\n`);
-    });
+    if (this.reaching) await this.reaching;
+    else if (!this.link && !this.closing) await this.connect();
+    const link = this.link;
+    if (!link || this.closing) throw new Error("This window holds no connection to the daemon.");
+    return link.ask(verb);
   }
 
   /** The records of the sessions of each workspace of the list in a config folder, as the daemon reads them, and each
@@ -302,24 +225,20 @@ export class Daemon extends EventEmitter {
   /** The connection closed by the window: it dials no more. */
   close(): void {
     this.closing = true;
-    this.socket?.end();
+    this.link?.close();
   }
 
-  /** How many lives of the window the connection holds. */
-  private held = 0;
   hold(): void {
     this.held++;
-    this.socket?.ref();
+    this.link?.hold();
   }
   /** A life let go: with the last life that it held, the connection keeps the process of the window alive no more,
    * and stays open for the next life. */
   release(): void {
     this.held = Math.max(0, this.held - 1);
-    if (this.held === 0) this.socket?.unref();
+    this.link?.release();
   }
 }
-
-type Request = { id: number } & Verb;
 
 /** What hears an event of an emitter. */
 export type Listener = Parameters<EventEmitter["on"]>[1];
@@ -422,6 +341,10 @@ export class RemoteLife extends EventEmitter {
   readonly compactions: Compaction[] = [];
   /** What each command that is not done printed on each stream so far, by the command. */
   readonly outputs = new Map<string, { stdout: string; stderr: string }>();
+  /** The lines that a command printed before the window heard its act, which the log keeps before the act: the log
+   * keeps of an act its last event alone, so a window that attaches late hears its facts first. The act takes them
+   * when it comes. */
+  private readonly early = new Map<string, { stdout: string; stderr: string }>();
   /** How many acts of work are done, which grows as the daemon tells each end. */
   completed = 0;
   /** What the answers of the models cost each chain, by the chain, and all chains together, in dollars. */
@@ -505,6 +428,7 @@ export class RemoteLife extends EventEmitter {
     this.seenAt.clear();
     this.compactions.length = 0;
     this.outputs.clear();
+    this.early.clear();
     this.completed = 0;
     this.spends.clear();
     this.spendChanges++;
@@ -626,14 +550,19 @@ export class RemoteLife extends EventEmitter {
     // A later life says each fact of its record again as the journal, which names no speaker, and only the operator
     // says seen. A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.
     if (kind === "seen" && (operated(by) || by === "journal")) this.seenAt.set(id, at);
-    else if (kind === "prefix" && by !== id) this.compactions.push({ chain: id, by, at });
+    else if (kind === "prefix" && cuts(fact, String(this.acts.get(by)?.words[0] ?? "")))
+      this.compactions.push({ chain: id, by, at });
     else if (kind === "started" && this.outputs.has(id)) this.outputs.set(id, { stdout: "", stderr: "" });
-    else if (kind === "out" && this.acts.get(id)?.kind === "bash" && !isDone(this.acts.get(id) as Act)) {
-      const output = this.outputs.get(id) ?? { stdout: "", stderr: "" };
-      if (fact[4] === "stderr") output.stderr += String(fact[3]);
-      else output.stdout += String(fact[3]);
-      this.outputs.set(id, output);
-      this.mark(id);
+    else if (kind === "out") {
+      const act = this.acts.get(id);
+      const held = act ? this.outputs : this.early;
+      if (!act || (act.kind === "bash" && !isDone(act))) {
+        const output = held.get(id) ?? { stdout: "", stderr: "" };
+        if (fact[4] === "stderr") output.stderr += String(fact[3]);
+        else output.stdout += String(fact[3]);
+        held.set(id, output);
+        act && this.mark(id);
+      }
     }
     this.told(batch.acts);
   }
@@ -691,8 +620,12 @@ export class RemoteLife extends EventEmitter {
       const was = this.acts.get(act.id);
       this.acts.set(act.id, act);
       if (followed(act.kind)) this.mark(act.id);
-      if (act.kind === "bash" && !isDone(act) && !this.outputs.has(act.id))
-        this.outputs.set(act.id, { stdout: "", stderr: "" });
+      const early = this.early.get(act.id);
+      this.early.delete(act.id);
+      if (act.kind === "bash" && !isDone(act) && !this.outputs.has(act.id)) {
+        this.outputs.set(act.id, early ?? { stdout: "", stderr: "" });
+        early && this.mark(act.id);
+      }
       if (act.kind === "chain" && act.spend && act.spend !== was?.spend) {
         this.cost += act.spend.dollars - (this.spends.get(act.id)?.dollars ?? 0);
         this.spends.set(act.id, act.spend);

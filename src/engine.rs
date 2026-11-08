@@ -612,6 +612,7 @@ impl Engine {
     let record: Vec<Object> = record.into_iter().collect();
     // A record replays on the engine that the fact made of its last segment holds.
     let (source, kernel) = crate::world::texts(crate::checkpoint::segment(&record))?;
+    let unheld = crate::world::unheld(crate::checkpoint::segment(&record));
     let mut sand = Sand::new();
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
     // they run again.
@@ -658,7 +659,7 @@ impl Engine {
         Err(fault) => {
           let root = outside.named_call(sand, "get", vec![Object::string("chain1")], vec![])?;
           let root = if root.as_ref().is_none() { "" } else { "chain1" };
-          (root.to_owned(), Some(fault))
+          (root.to_owned(), Some(lacking(fault, unheld.as_deref())))
         }
       };
       // Boot binds the verbs of a life in place of those that stand before it.
@@ -967,6 +968,19 @@ impl std::fmt::Debug for Engine {
 /// the default of the engine.
 pub mod verbs {
   include!(concat!(env!("OUT_DIR"), "/verbs.rs"));
+}
+
+/// A fault that boot raised, with its cause when it is a drift of a record that names an
+/// engine whose texts it does not hold, since the record then replayed on this build's engine.
+fn lacking(mut fault: Fault, unheld: Option<&str>) -> Fault {
+  if let Some(named) = unheld.filter(|_| fault.name == "Drift") {
+    fault.args = vec![Object::string(format!(
+      "{} The record names the engine {named}, whose texts it does not hold, so it replayed on the \
+       engine of this build: python3 script/engines.py on a copy of the record gives them.",
+      fault.message()
+    ))];
+  }
+  fault
 }
 
 #[cfg(test)]

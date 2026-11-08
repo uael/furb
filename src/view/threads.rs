@@ -1,7 +1,10 @@
 //! The threads of a chain: each prompt to a model that is no message of another thread, with its
 //! messages and what it asks the operator, nested under the thread whose ladder made it.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+  collections::{HashMap, HashSet},
+  hash::BuildHasher,
+};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -67,6 +70,8 @@ pub enum Concern {
   Asks,
   Failed,
   Paused,
+  /// A thread that he started ended after the place up to which he saw it.
+  Unread,
 }
 
 /// What a tree of threads says to the operator, counted by thread.
@@ -75,6 +80,7 @@ pub struct Attention {
   pub asks: usize,
   pub failed: usize,
   pub paused: usize,
+  pub unread: usize,
 }
 
 /// The first prompt of the thread that a prompt stands in: the prompt itself, or the prompt that
@@ -122,6 +128,10 @@ pub enum Aside {
   /// A question of another chain to this one, a worker that asks its coordinator, with the chain
   /// that asks.
   Question(String),
+  /// The work of an agent: a prompt that a rung made on a chain under its own, when that rung
+  /// stands in no thread, as a command of the operator runs its word. It is no thread of the
+  /// operator and never takes an unread mark of his.
+  Agent,
 }
 
 /// A prompt of a chain that is no thread, with what it is and the prompts on it, in order.
@@ -167,6 +177,11 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
     _ if none => Verdict::Aside(Aside::Wake),
     Some(maker) if maker.chain != act.chain && !within(&act.chain, &maker.chain, rows) => {
       Verdict::Aside(Aside::Question(maker.chain.clone()))
+    }
+    Some(maker)
+      if maker.kind == Kind::Rung && maker.chain != act.chain && thread_of(act, rows).is_none() =>
+    {
+      Verdict::Aside(Aside::Agent)
     }
     _ => Verdict::Own,
   }
@@ -242,7 +257,7 @@ pub fn chain_notes(on: &[&Act], rows: &Rows<'_>, read: u64) -> Vec<NoteRun> {
   let (threads, asides) = sorted(on, rows);
   let notes: HashSet<&str> = asides
     .iter()
-    .filter(|one| !matches!(one.aside, Aside::Question(_)))
+    .filter(|one| !matches!(one.aside, Aside::Question(_) | Aside::Agent))
     .map(|one| one.prompt.as_str())
     .collect();
   let inside: HashSet<&str> = threads
@@ -488,27 +503,59 @@ fn last_message(thread: &ChainThread, rows: &Rows<'_>) -> u64 {
 
 /// How a thread concerns the operator, or none, from the state of its node. The failure of an agent
 /// does not concern him: it rolls into the thread that made it, and only a question escalates.
-pub fn concerns(node: &ThreadNode) -> Option<Concern> {
+pub fn concerns<S: BuildHasher>(
+  node: &ThreadNode,
+  rows: &Rows<'_>,
+  seen: &HashMap<String, u64, S>,
+) -> Option<Concern> {
   match node.state {
     State::Asks => Some(Concern::Asks),
     State::Failed if node.thread.yours => Some(Concern::Failed),
     State::Paused if node.thread.yours => Some(Concern::Paused),
+    State::Done | State::Idle if unseen(&node.thread, rows, seen) => Some(Concern::Unread),
     _ => None,
   }
+}
+
+/// Whether a thread that he started is over with work past the place up to which he saw it: the
+/// last place of its prompt, its messages and its questions, against the later of what he saw of
+/// the thread and of its chain.
+fn unseen<S: BuildHasher>(
+  thread: &ChainThread,
+  rows: &Rows<'_>,
+  seen: &HashMap<String, u64, S>,
+) -> bool {
+  if !(thread.yours && thread.over) {
+    return false;
+  }
+  let ids = std::iter::once(&thread.prompt).chain(&thread.messages).chain(&thread.asked);
+  let work = ids
+    .filter_map(|id| rows.get(id.as_str()))
+    .map(|act| act.ended.unwrap_or(act.began).max(act.began))
+    .max()
+    .unwrap_or_default();
+  let chain = rows.get(thread.prompt.as_str()).map(|act| act.chain.as_str()).unwrap_or_default();
+  let read = |id: &str| seen.get(id).copied().unwrap_or_default();
+  work > read(&thread.prompt).max(read(chain))
 }
 
 /// What a tree of threads says to the operator, counted by thread: a question counts once, in the
 /// thread where it waits, and the failure or the pause of a thread that he started counts in that
 /// thread.
-pub fn attention(tops: &[ThreadNode]) -> Attention {
+pub fn attention<S: BuildHasher>(
+  tops: &[ThreadNode],
+  rows: &Rows<'_>,
+  seen: &HashMap<String, u64, S>,
+) -> Attention {
   let mut count = Attention::default();
   let mut stack: Vec<&ThreadNode> = tops.iter().collect();
   while let Some(node) = stack.pop() {
-    match concerns(node) {
+    match concerns(node, rows, seen) {
       Some(Concern::Asks) if node.agents.iter().any(|one| one.state == State::Asks) => {}
       Some(Concern::Asks) => count.asks += 1,
       Some(Concern::Failed) => count.failed += 1,
       Some(Concern::Paused) => count.paused += 1,
+      Some(Concern::Unread) => count.unread += 1,
       None => {}
     }
     stack.extend(&node.agents);

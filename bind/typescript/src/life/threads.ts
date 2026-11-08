@@ -14,6 +14,7 @@ export type Aside =
   | { aside: "notice" }
   | { aside: "rung" }
   | { aside: "wake" }
+  | { aside: "agent" }
   | { aside: "question"; from: string };
 
 /** A prompt of a chain that is no thread, with what it is and the prompts on it, in order. */
@@ -49,7 +50,7 @@ export function threadWork(thread: Pick<ChainThread, "act" | "messages" | "asked
 }
 
 /** How a thread concerns the operator: a question waits for them in it, or they started it and it failed or is held. */
-export type Concern = "asks" | "failed" | "paused";
+export type Concern = "asks" | "failed" | "paused" | "unread";
 
 /** A run of notes: the asides of a chain that are no question and follow one another in its feed with no card of
  * another kind between them, which a window draws as one block. The view model of the host says the same in

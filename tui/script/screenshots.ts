@@ -1106,7 +1106,13 @@ try {
   await watched.select(watched.engine.root);
   // The moment goes back to the word as it began, before it asked any model.
   const asks = () => watched.at(watched.activity).some((act) => act.kind === "prompt" && act.words[2]);
-  while (asks()) watched.travel(-1);
+  // A step is async since the crate gives the moments, so each one is awaited, and the walk stops at the first moment,
+  // which can still ask: a step that does not await never moves the moment, and the loop never ends.
+  for (let was: number | undefined = Number.NaN; asks() && watched.moment !== was; ) {
+    was = watched.moment;
+    await watched.travel(-1);
+  }
+  if (asks()) throw new Error("65-watch-earlier: the first moment of the watched demo still asks a model");
   await capture("65-watch-earlier");
   // The bar of the watch stays over the feed on the smallest terminal.
   test.resize(80, 24);

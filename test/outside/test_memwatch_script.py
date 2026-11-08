@@ -1,6 +1,7 @@
 # ruff: noqa: S603, S607
 import contextlib
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -122,8 +123,12 @@ def test_on_linux_the_memory_is_tight_under_its_share_of_free_memory(
   with fakes(1) as procs:
     machine(tmp_path, 0, [(procs[0].pid, 500 * MB, "bun test ./a.test.ts", MINE)], mac=False)
     got = watch(tmp_path, FURB_WATCH_FREE=floor)
-    assert (procs[0].poll() is not None) == ended
-  assert ("% free, ended pid" in got.stdout) == ended
+    assert ("% free, ended pid" in got.stdout) == ended, got.stdout
+    # The kill is a signal, which the process takes when it next runs, so an ended process is waited for, not polled.
+    if ended:
+      assert procs[0].wait(timeout=10) == -signal.SIGKILL
+    else:
+      assert procs[0].poll() is None
 
 
 def test_the_loop_ends_one_test_process_at_each_look_while_the_memory_stays_tight(tmp_path: Path) -> None:
@@ -143,3 +148,57 @@ def test_the_loop_ends_one_test_process_at_each_look_while_the_memory_stays_tigh
     finally:
       loop.kill()
       loop.communicate()
+
+
+HEAVY = """import {{ test }} from "bun:test";
+
+test("holds", async () => {{
+  await Bun.write({pid!r}, String(process.pid));
+  await Bun.sleep({ms});
+}});
+"""
+
+# The runner of the bun tests, as tui/script/test.ts runs each of its files: a bun test child under runTest, and the line
+# of endedByMemory for each child that the watcher ended.
+DRIVER = """import {{ endedByMemory }} from {children!r};
+import {{ runTest }} from {run!r};
+
+const ran = await Promise.all(
+  ["./big.test.ts", "./small.test.ts"].map(async (file) => ({{ file, ...(await runTest(process.env, ["--timeout", "120000", file])) }})),
+);
+for (const {{ file, passed, memory }} of ran) console.log(`${{file}} passed=${{passed}} memory=${{memory}}`);
+for (const {{ file, memory }} of ran) if (memory) console.log(endedByMemory(file));
+"""
+
+
+@pytest.mark.skipif(shutil.which("bun") is None, reason="the runner of the bun tests runs on bun")
+def test_a_tight_memory_ends_the_larger_bun_test_child_and_the_runner_names_it_as_ended_by_memory(
+  tmp_path: Path,
+) -> None:
+  tui = Path(__file__).resolve().parents[2] / "tui" / "script"
+  big, small = tmp_path / "big.pid", tmp_path / "small.pid"
+  (tmp_path / "big.test.ts").write_text(HEAVY.format(pid=str(big), ms=60000), encoding="utf-8")
+  (tmp_path / "small.test.ts").write_text(HEAVY.format(pid=str(small), ms=4000), encoding="utf-8")
+  driver = DRIVER.format(children=str(tui / "children.ts"), run=str(tui / "run.ts"))
+  (tmp_path / "driver.ts").write_text(driver, encoding="utf-8")
+  with subprocess.Popen(["bun", "driver.ts"], cwd=tmp_path, stdout=subprocess.PIPE, text=True) as runner:
+    try:
+      deadline = time.monotonic() + 60
+      while not (big.exists() and small.exists() and big.read_text() and small.read_text()):
+        assert time.monotonic() < deadline, "the bun test children never started"
+        time.sleep(0.1)
+      pids = int(big.read_text()), int(small.read_text())
+      # The real ps would list each test process of the machine, so the fake one lists these two children alone.
+      table = [
+        (pids[0], 3000 * MB, "bun test ./big.test.ts", MINE),
+        (pids[1], 1000 * MB, "bun test ./small.test.ts", MINE),
+      ]
+      machine(tmp_path, 4, table)
+      got = watch(tmp_path)
+      out, _ = runner.communicate(timeout=60)
+    finally:
+      runner.kill()
+  assert got.stdout == f"memwatch: pressure level 4, ended pid {pids[0]} (3000 MB): bun test ./big.test.ts\n"
+  assert "./big.test.ts passed=false memory=true" in out
+  assert "./small.test.ts passed=true memory=false" in out
+  assert "./big.test.ts was ended by the watcher of memory" in out and "./small.test.ts was ended" not in out

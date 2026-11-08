@@ -432,6 +432,10 @@ mod protocol {
     "3bf734627359e905bb82818100a056d1000631abb9650b1d8adda626e84fe3b8",
     "ab1e26ad2062fc235028a54bc0b393b108885469e2e7e4a7fd414e325d13b340",
     "ac081ea7adb80dcd8b017c2b13ccc2a191bedc76f48399ea4e4af332e8eebbfb",
+    "0eba18a0cee335a618490601a27a6088e88594de3163b840fb38b5b587f774d4",
+    "69e3c729852b81913c0d5b655b932779333b094b1d59b10e317f5aed228afeca",
+    "d4701b917dda8f385353dc9a29459ac18d730319489ed375481c2631116b1b1d",
+    "5b29ad06731843e45d7c3605d43ddcdd15f50836129f7379fabb6c625eeea993",
   ];
 
   /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
@@ -507,6 +511,42 @@ mod protocol {
     assert_eq!(id, Some(1), "a verb that the daemon does not know is refused to its request");
     assert!(why.contains("fly"), "the refusal names the verb: {why}");
     assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
+  }
+
+  #[tokio::test]
+  async fn an_open_that_names_the_old_field_is_refused_with_the_fields_that_it_takes() {
+    let mut client = served(Role::Write);
+    client.hello(PROTOCOL).await;
+    client.say(r#"{"id": 1, "verb": "open", "life": "/a.jsonl", "extensions": false}"#).await;
+    let heard = client.heard().await;
+    let Some(Frame::Refused { id, why, .. }) = heard else { panic!("no refusal: {heard:?}") };
+    assert_eq!(id, Some(1), "the open that names extensions is refused to its request");
+    assert!(
+      why.contains("extensions") && why.contains("skills"),
+      "the refusal names the field that it does not take and the field skills: {why}"
+    );
+    assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
+  }
+
+  #[tokio::test]
+  async fn an_open_that_names_skills_gets_its_skills() {
+    let mut client = served(Role::Write);
+    client.hello(PROTOCOL).await;
+    client.say(r#"{"id": 1, "verb": "open", "life": "/a.jsonl", "skills": false}"#).await;
+    let heard = client.heard().await;
+    let Some(Frame::Reply { id: 1, answer: Answer::Value(opened) }) = heard else {
+      panic!("no answer: {heard:?}")
+    };
+    assert_eq!(opened["skills"], json!(false), "the open holds the skills that it named");
+  }
+
+  #[test]
+  fn a_verb_of_a_view_that_names_a_field_that_it_does_not_take_is_refused() {
+    let line =
+      |extra: &str| format!(r#"{{"id": 1, "verb": "view.dispose", "viewer": "v"{extra}}}"#);
+    assert!(serde_json::from_str::<Request>(&line("")).is_ok());
+    let no = serde_json::from_str::<Request>(&line(r#", "viewr": "w""#)).unwrap_err();
+    assert!(no.to_string().contains("viewr"), "the refusal names the field: {no}");
   }
 
   /// A folder of its own for the transport of one test, short enough for the path of a socket.

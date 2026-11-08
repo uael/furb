@@ -218,6 +218,9 @@ pub enum RunState {
 pub struct Answer {
   pub actor: String,
   pub usage: [f64; 5],
+  /// The account that served the reply, by its name alone, when the provider names one.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub account: Option<String>,
 }
 
 /// What the answers of models cost: their dollars, how many they are, and the actor of the last.
@@ -226,6 +229,9 @@ pub struct Spend {
   pub dollars: f64,
   pub answers: u32,
   pub actor: Option<String>,
+  /// The account of the last answer that named one.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub account: Option<String>,
 }
 
 impl Spend {
@@ -243,6 +249,9 @@ impl Spend {
     self.dollars += answer.usage[4];
     self.answers += 1;
     self.actor = Some(answer.actor.clone());
+    if answer.account.is_some() {
+      self.account.clone_from(&answer.account);
+    }
   }
 }
 

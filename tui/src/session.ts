@@ -1252,7 +1252,7 @@ export class Session extends EventEmitter {
   /** What the threads of the session say to the operator, as the crate counts them on the tree of the root, which nests
    * the threads of every chain under it: a question anywhere, and a failure or a pause only on a thread that he
    * started. None until the crate gave the threads of the root. */
-  get attention(): { asks: number; failed: number; paused: number } | undefined {
+  get attention(): { asks: number; failed: number; paused: number; unread: number } | undefined {
     const root = this.engine.root;
     if (!this.threadsFresh(root)) void this.readThreads(root).catch(this.threadFault);
     return this.crateThreads.get(root)?.got.attention;
@@ -1532,8 +1532,13 @@ export class Session extends EventEmitter {
     const servers = (
       ((listed ? outcomeOf(listed) : undefined) ?? []) as { name: string; state: string }[]
     ).map(({ name, state }) => `${name} ${state}`);
+    // The account that served the last answer, by its name alone, which a provider with several accounts gives as the
+    // sixth number of the usage.
+    const used = this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2];
+    const account = (used as readonly unknown[] | undefined)?.[5];
     return [
       ["Actor", this.actor],
+      ...(typeof account === "string" && account ? ([["Account", account]] as [string, string][]) : []),
       [
         "Context",
         known

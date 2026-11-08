@@ -1087,6 +1087,27 @@ fn a_usage_limit_parks_its_account_and_the_turn_that_asks_again_runs_as_the_next
 }
 
 #[test]
+fn a_reply_names_its_account_and_a_stand_with_the_order_swapped_makes_the_other_one_first() {
+  let yard = Yard::new("accounts-order");
+  let accounts = listed(&yard, &["a", "b"]);
+  let model = yard.claude_as(accounts.clone(), Switch::Failover).completion_model("sonnet");
+  let got = asked(&model, &[user("first")], json!({"session": "one"})).unwrap();
+  assert_eq!(got.raw["account"], json!("a"), "the first account serves, and the reply names it");
+  // The stand reads the config again, which builds the command line with the order swapped.
+  let swapped = vec![accounts[1].clone(), accounts[0].clone()];
+  let model = yard.claude_as(swapped, Switch::Failover).completion_model("sonnet");
+  let got = asked(&model, &[user("first")], json!({"session": "two"})).unwrap();
+  assert_eq!(got.raw["account"], json!("b"), "the next reply uses the new first account");
+  // A limit on that first account moves the next reply to the second one.
+  fs::write(yard.at.join("limited.tok-b"), "600").unwrap();
+  let no = asked(&model, &[user("first")], json!({"session": "three"})).unwrap_err();
+  assert_eq!(switched(&no), "from b to a: its usage limit");
+  let got = asked(&model, &[user("first")], json!({"session": "three"})).unwrap();
+  assert_eq!(got.raw["account"], json!("a"));
+  assert!(!got.raw.to_string().contains("tok-"), "a reply never holds a token");
+}
+
+#[test]
 fn a_failed_sign_in_parks_its_account_until_the_command_line_stands_again() {
   let yard = Yard::new("accounts-signed-out");
   let accounts = listed(&yard, &["a", "b"]);

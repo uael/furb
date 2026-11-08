@@ -284,21 +284,36 @@ export type Request1 =
   | {
       verb: "handover";
     }
-  | (Mount & {
+  | {
+      viewer: string;
+      life: string;
+      slot: Slot;
+      skill: string;
       verb: "view.mount";
-    })
-  | (Tree & {
+    }
+  | {
+      viewer: string;
+      slot: Slot;
+      version: number;
+      tree: Node;
       verb: "view.tree";
-    })
-  | (ViewEvent & {
+    }
+  | {
+      viewer: string;
+      node: string;
+      kind: Gesture;
+      value?: string | null;
       verb: "view.event";
-    })
-  | (ViewEffect & {
+    }
+  | {
+      viewer: string;
+      effect: Effect;
       verb: "view.effect";
-    })
-  | (Dispose & {
+    }
+  | {
+      viewer: string;
       verb: "view.dispose";
-    });
+    };
 /**
  * What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,
  * which asks the handover.
@@ -490,21 +505,36 @@ export type Frame =
       request: unknown;
       frame: "ask";
     }
-  | (Mount & {
+  | {
+      viewer: string;
+      life: string;
+      slot: Slot;
+      skill: string;
       frame: "view.mount";
-    })
-  | (Tree & {
+    }
+  | {
+      viewer: string;
+      slot: Slot;
+      version: number;
+      tree: Node;
       frame: "view.tree";
-    })
-  | (ViewEvent & {
+    }
+  | {
+      viewer: string;
+      node: string;
+      kind: Gesture;
+      value?: string | null;
       frame: "view.event";
-    })
-  | (ViewEffect & {
+    }
+  | {
+      viewer: string;
+      effect: Effect;
       frame: "view.effect";
-    })
-  | (Dispose & {
+    }
+  | {
+      viewer: string;
       frame: "view.dispose";
-    });
+    };
 /**
  * What a verb comes to.
  */
@@ -613,6 +643,9 @@ export type Aside =
   | {
       aside: "question";
       from: string;
+    }
+  | {
+      aside: "agent";
     };
 /**
  * One line of a ladder, in the order that the window draws it.
@@ -860,51 +893,11 @@ export interface Shown {
   rungs: number;
 }
 /**
- * A view that a window mounts in a slot of a life, which the process of a skill serves.
- */
-export interface Mount {
-  viewer: string;
-  life: string;
-  slot: Slot;
-  skill: string;
-}
-/**
- * The tree of a view, which takes the place of each tree of a lower version.
- */
-export interface Tree {
-  viewer: string;
-  slot: Slot;
-  version: number;
-  tree: Node;
-}
-/**
  * A run of a text, in a tone.
  */
 export interface Run {
   text: string;
   tone?: Tone & string;
-}
-/**
- * What a person did to a node of a view, with the value of an input.
- */
-export interface ViewEvent {
-  viewer: string;
-  node: string;
-  kind: Gesture;
-  value?: string | null;
-}
-/**
- * What a skill asks of the one window of a view.
- */
-export interface ViewEffect {
-  viewer: string;
-  effect: Effect;
-}
-/**
- * The end of a view in its window.
- */
-export interface Dispose {
-  viewer: string;
 }
 /**
  * A peer as the daemon knows it after its hello: the login that its transport proved, its role,
@@ -1060,6 +1053,7 @@ export interface Attention {
   asks: number;
   failed: number;
   paused: number;
+  unread: number;
 }
 /**
  * One act of a life with its meaning, as it stands after the last fact about it.
@@ -1143,6 +1137,10 @@ export interface Spend {
   dollars: number;
   answers: number;
   actor?: string | null;
+  /**
+   * The account of the last answer that named one.
+   */
+  account?: string | null;
 }
 /**
  * One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
@@ -1166,4 +1164,10 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 7;
+export type Mount = Omit<Extract<Request1, { verb: "view.mount" }>, "verb">;
+export type Tree = Omit<Extract<Request1, { verb: "view.tree" }>, "verb">;
+export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
+export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
+export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
+
+export const PROTOCOL = 11;

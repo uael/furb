@@ -303,6 +303,8 @@ export const tree = part({
         id: `tree-${row.id}`,
         // Each tree of chains stands apart from the one above it.
         marginTop: index && !row.lines ? space.section : 0,
+        lit: c.panel,
+        still: active,
         paddingX: space.inset,
         backgroundColor: active ? c.selected : c.background,
         onMouseUp: this.click((event) => {
@@ -314,7 +316,6 @@ export const tree = part({
           else this.pointTree(row.id);
         }),
       });
-      if (!active) this.hoverable(line, c.panel);
       const fold = row.parent ? `${row.folded ? glyph.closed : glyph.open} ` : "  ";
       const tag = row.tag ? `  ${row.tag}` : "";
       const room = Math.max(8, width - space.inset * 2 - Bun.stringWidth(row.lines + fold + tag));

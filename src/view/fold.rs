@@ -76,6 +76,11 @@ pub struct Fold {
 }
 
 impl Fold {
+  /// How many facts the fold heard, the place of the last one.
+  pub fn clock(&self) -> u64 {
+    self.clock
+  }
+
   /// The chain that an act stands in.
   pub fn chain_of(&self, id: &str) -> Option<&str> {
     self.acts.get(id).map(|act| act.chain.as_str())
@@ -373,8 +378,9 @@ impl Fold {
       let usage = value.get(2).and_then(Value::as_array);
       if let Some(usage) = usage {
         let part = |at: usize| usage.get(at).and_then(Value::as_f64).unwrap_or_default();
-        let answer =
-          Answer { actor: reply.actor, usage: [part(0), part(1), part(2), part(3), part(4)] };
+        let account = usage.get(5).and_then(Value::as_str).map(str::to_owned);
+        let usage = [part(0), part(1), part(2), part(3), part(4)];
+        let answer = Answer { actor: reply.actor, usage, account };
         for id in [reply.chain, reply.maker] {
           if let Some(act) =
             self.acts.get_mut(&id).filter(|act| matches!(act.kind, Kind::Chain | Kind::Rung))

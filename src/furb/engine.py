@@ -343,7 +343,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
     blocked, running, waiting, last, heard = set(), {}, {}, standing(), []
-    step = news = ran = reply = note = to = hush = dull = stuck = ""
+    step = news = ran = reply = note = to = hush = dull = stuck = past = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(went):
@@ -464,6 +464,23 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           ran = yield "tell", get(r[2])[2], [headed(r[2], "asked no more until a fact comes")]
         dull = 1
       match a:
+        case ("carried", *_):
+          past = a
+        case ("rung", *_) if past and a[2] == OPERATOR:
+          top = ""
+          yield (
+            "prefix",
+            id,
+            [
+              *transcript(id, "module")[-1:],
+              past,
+              *past[3],
+              *transcript(id, "stand")[-1:],
+              *transcript(id, "pause"),
+              a,
+            ],
+          )
+          past = ""
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if prompted(path) and scope(path) == id:
@@ -522,13 +539,23 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             close(Refused(*found), rid)
         case ("done", _, "", Refused() as why) if r[0] == "reply":
           pause(id, why)
+        case ("done", about, *_) if prompted(about):
+          owed = []
+          for fact in transcript(id):
+            owed = (
+              []
+              if fact[0] == "reply"
+              else owed + [fact[1]] * (fact is get(fact[1]) and fact[3:5] == (about, "None") and operated(fact[2]))
+            )
+          for message in owed:
+            with site.set(message):
+              rung(to=r[6])
       if r[0] == "run":
         running[r[4]] = a[0] != "done"
       elif r[0] == "wants":
         running[get(r[2])[4]] = a[0] != "started"
       if any(running.values()):
         continue
-      waits = [c for *_, c in transcript(id, "wants") if not over(c)]
       if (
         (step not in waiting or paused(step))
         and not stuck
@@ -556,7 +583,12 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
           hush = maker
-          note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=waits or None)
+          note = yield told(
+            step,
+            "advance on " + maker,
+            share=filled(reply) or None,
+            waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
+          )
           news = ""
       if news and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
         ours = get(news[1])[2]
@@ -577,13 +609,9 @@ def seeded(id, last, to):
       y[3] == k and y[2] and rung(y[2], to=to)
 
 
-HEARD = (
-  "say('prefix', scope(acting()), [*transcript(of='module')[-1:], *transcript(of='carried')[-1:], "
-  "*transcript(of='carried')[-1][3], *transcript(of='stand')[-1:], *transcript(of='pause'), "
-  "*[x for x in transcript() if acting() in x[1::3] and x[0] != 'tell']])"
-)
 KEPT = (
-  "say('prefix', scope(acting()), [x for x in transcript() if x[0] != 'tell' or x in transcript(of='carried')[-1][3]])"
+  "with site.set(scope(acting())): say('prefix', site.get(), "
+  "[x for x in transcript() if x[0] != 'tell' or x in transcript(of='carried')[-1][3]])"
 )
 
 
@@ -623,7 +651,6 @@ def seed(data):
     ]
     word = "\n".join(
       [
-        HEARD,
         c["definitions"],
         *(
           f"{named} = " + (f"eval(transcript(of='carried')[-1][4][{named!r}])" if text[LARGEST // 16 :] else text)
