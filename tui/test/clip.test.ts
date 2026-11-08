@@ -76,3 +76,11 @@ test("a line that Bun measures wider than another table does is cut by Bun's mea
   for (let n = 0; n < 20; n++) clip(long, 80, n % 2 ? "end" : "start");
   expect(performance.now() - began).toBeLessThan(500);
 });
+
+test("a line break stays in a clipped text, and the end cut at a wide bound costs little on a long line", () => {
+  expect(clip("one\ntwo\nthree", 40)).toBe("one\ntwo\nthree");
+  const long = "ab日本😀".repeat(20000);
+  const began = performance.now();
+  for (let n = 0; n < 3; n++) clip(long, 1000, "end");
+  expect(performance.now() - began).toBeLessThan(300);
+});

@@ -3,6 +3,7 @@
 use std::fmt;
 
 use crate::engine::OPERATOR;
+use crate::world::catalog::LEVELS;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -90,6 +91,54 @@ pub fn operator(name: &str) -> bool {
   name.strip_prefix(OPERATOR).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
 }
 
+/// Who made an act, as a window names it: the operator, a member who answers as him by his login,
+/// a model with its effort, a skill, or the engine itself.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "role", rename_all = "snake_case")]
+pub enum Role {
+  Operator,
+  Member {
+    login: String,
+  },
+  Model {
+    model: String,
+    effort: String,
+  },
+  Skill,
+  #[default]
+  Engine,
+}
+
+impl Role {
+  /// The role of an actor, as a chain or a reply names it: the operator, a member when the login
+  /// after `operator/` is one of these members, else the operator in one of his sessions, and a
+  /// model else, with the level after its last slash as its effort, or `off` when no level ends
+  /// it or the models hold the whole name. No actor is the engine.
+  pub fn of(actor: &str, models: &[String], members: &[String]) -> Self {
+    if actor.is_empty() {
+      return Self::Engine;
+    }
+    if operator(actor) {
+      let login = actor.strip_prefix(OPERATOR).and_then(|rest| rest.strip_prefix('/'));
+      return match login {
+        Some(login) if members.iter().any(|one| one == login) => {
+          Self::Member { login: login.to_owned() }
+        }
+        _ => Self::Operator,
+      };
+    }
+    let (model, effort) = match actor.rsplit_once('/') {
+      Some((model, effort))
+        if LEVELS.contains(&effort) && !models.iter().any(|one| one == actor) =>
+      {
+        (model, effort)
+      }
+      _ => (actor, "off"),
+    };
+    Self::Model { model: model.to_owned(), effort: effort.to_owned() }
+  }
+}
+
 /// One act of a life with its meaning, as it stands after the last fact about it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Act {
@@ -97,6 +146,10 @@ pub struct Act {
   pub kind: Kind,
   pub id: String,
   pub by: String,
+  /// Who made the act: for a rung that waits for the word of an actor, that actor; for any
+  /// other act, the role of the act or the person that made it.
+  #[serde(default)]
+  pub maker: Role,
   /// What the act is on: a chain, or the prompt of a thread for a prompt on a thread.
   pub on: String,
   /// The chain that the act stands in.

@@ -9,7 +9,7 @@ use crate::fact::named;
 use serde_json::Value;
 
 use super::{
-  act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, fault, operator},
+  act::{Act, Answer, Kind, Pause, Phase, Role, RunState, Spend, fault, operator},
   state::{State, chain_state},
 };
 use crate::world::CONSOLE;
@@ -34,6 +34,9 @@ struct Chain {
   prompt: Option<String>,
   remote: BTreeMap<u64, String>,
 }
+
+/// The ear of the skills, which makes the rungs of their words.
+const SKILLS: &str = "extensions";
 
 /// A reply that is not done: the chain that it stands on, the actor that answers it, and the rung
 /// that waits for the word that it writes.
@@ -66,6 +69,10 @@ pub struct Fold {
   /// Each pause and each wake that the fold heard, in order, which [`Fold::recorded`] reads to find
   /// what a pause or a wake covers and the pause that holds a new act.
   pauses: Vec<Value>,
+  /// The models of the roster and the logins of the members of the operator, as the last stand
+  /// gave them, which the role of an actor reads.
+  models: Vec<String>,
+  members: Vec<String>,
 }
 
 impl Fold {
@@ -190,11 +197,13 @@ impl Fold {
       }
       _ => {}
     }
+    let maker = self.maker(&kind, by, rest);
     let run = (kind == Kind::Rung).then_some(RunState::Running);
     let act = Act {
       kind,
       id: id.to_owned(),
       by: by.to_owned(),
+      maker,
       on,
       chain,
       words: rest.get(1..).unwrap_or_default().to_vec(),
@@ -215,6 +224,38 @@ impl Fold {
     self.placed(&act);
     self.moved.push(act.id.clone());
     self.acts.insert(act.id.clone(), act);
+  }
+
+  /// Who made a new act of a kind, by its maker and its words after its kind, its name and its
+  /// maker. A rung with no word that waits for an actor is the rung of that actor; else the
+  /// operator, a member or a skill made the act, or an act whose role it takes, as the word of a
+  /// rung takes the role of its rung, and the engine made any other.
+  fn maker(&self, kind: &Kind, by: &str, rest: &[Value]) -> Role {
+    let text = |at: usize| rest.get(at).and_then(Value::as_str).unwrap_or_default();
+    if *kind == Kind::Rung && text(1).is_empty() && !text(3).is_empty() {
+      return Role::of(text(3), &self.models, &self.members);
+    }
+    if operator(by) {
+      return Role::of(by, &self.models, &self.members);
+    }
+    if by == SKILLS {
+      return Role::Skill;
+    }
+    match self.acts.get(by) {
+      Some(made) if made.kind != Kind::Chain => made.maker.clone(),
+      _ => Role::Engine,
+    }
+  }
+
+  /// What a stand gave: the models of its roster, and the logins that the entry of the operator
+  /// lists in place of its efforts.
+  fn stood(&mut self, standing: &Value) {
+    let Some(roster) = standing.get(0).and_then(Value::as_array) else { return };
+    let name = |one: &Value| one.get(0).and_then(Value::as_str).unwrap_or_default().to_owned();
+    self.models = roster.iter().map(name).filter(|one| !operator(one)).collect();
+    let listed = roster.iter().filter(|one| operator(&name(one)));
+    let logins = listed.filter_map(|one| one.get(1).and_then(Value::as_array)).flatten();
+    self.members = logins.filter_map(Value::as_str).map(str::to_owned).collect();
   }
 
   /// The messages that a chain with a source takes from it: its fact names the acts of the source
@@ -321,6 +362,9 @@ impl Fold {
   /// The end of an act, with what it came to: the answer of a reply costs its chain and its rung,
   /// the run of a word ends its rung, and the act ends with its value.
   fn done(&mut self, about: &str, value: Value) {
+    if self.acts.get(about).is_some_and(|act| act.kind.as_str() == "stand") {
+      self.stood(&value);
+    }
     if let Some(reply) = self.replies.remove(about) {
       if let Some(maker) = self.acts.get_mut(&reply.maker).filter(|act| act.asking) {
         maker.asking = false;
