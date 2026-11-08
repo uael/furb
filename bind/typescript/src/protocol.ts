@@ -613,6 +613,9 @@ export type Aside =
   | {
       aside: "question";
       from: string;
+    }
+  | {
+      aside: "agent";
     };
 /**
  * One line of a ladder, in the order that the window draws it.
@@ -1166,4 +1169,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 7;
+export const PROTOCOL = 8;

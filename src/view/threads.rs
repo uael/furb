@@ -122,6 +122,10 @@ pub enum Aside {
   /// A question of another chain to this one, a worker that asks its coordinator, with the chain
   /// that asks.
   Question(String),
+  /// The work of an agent: a prompt that a rung made on a chain under its own, when that rung
+  /// stands in no thread, as a command of the operator runs its word. It is no thread of the
+  /// operator and never takes an unread mark of his.
+  Agent,
 }
 
 /// A prompt of a chain that is no thread, with what it is and the prompts on it, in order.
@@ -167,6 +171,11 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
     _ if none => Verdict::Aside(Aside::Wake),
     Some(maker) if maker.chain != act.chain && !within(&act.chain, &maker.chain, rows) => {
       Verdict::Aside(Aside::Question(maker.chain.clone()))
+    }
+    Some(maker)
+      if maker.kind == Kind::Rung && maker.chain != act.chain && thread_of(act, rows).is_none() =>
+    {
+      Verdict::Aside(Aside::Agent)
     }
     _ => Verdict::Own,
   }
@@ -242,7 +251,7 @@ pub fn chain_notes(on: &[&Act], rows: &Rows<'_>, read: u64) -> Vec<NoteRun> {
   let (threads, asides) = sorted(on, rows);
   let notes: HashSet<&str> = asides
     .iter()
-    .filter(|one| !matches!(one.aside, Aside::Question(_)))
+    .filter(|one| !matches!(one.aside, Aside::Question(_) | Aside::Agent))
     .map(|one| one.prompt.as_str())
     .collect();
   let inside: HashSet<&str> = threads

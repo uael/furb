@@ -506,3 +506,21 @@ fn acts_told_out_of_order_still_read_in_the_order_they_began() {
   let other = serde_json::to_value(reversed.threads("chain1", None, 0)).unwrap();
   assert_eq!(one, other);
 }
+
+#[test]
+fn a_rung_of_the_operator_forks_a_chooser_that_is_no_thread_and_no_unread_note() {
+  // /compact runs its word as a rung of the operator on the chain, and the word forks a chain that
+  // asks a model to choose: the prompt on that chain is the work of an agent, and no conversation.
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "Fix the setup.", ""]),
+    json!(["rung", "rung5", "operator", "chain1", "await condense()", "", ""]),
+    json!(["chain", "chain2", "rung5", "chain1", "chosen", ""]),
+    json!(["prompt", "prompt2", "rung5", "chain2", "list[str]", "Choose what stays.", ""]),
+  ];
+  let acts = folded(facts);
+  assert_eq!(listed(&acts, "chain2").0, Vec::<String>::new());
+  assert_eq!(listed(&acts, "chain2").1, vec![("prompt2".to_owned(), Aside::Agent)]);
+  assert_eq!(runs(&acts, "chain2", 0), Vec::<(Vec<String>, usize)>::new());
+  assert_eq!(tree(&acts, "chain1"), vec![(0, "prompt1".to_owned(), "Fix the setup.".to_owned())]);
+}

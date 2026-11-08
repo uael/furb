@@ -14,6 +14,7 @@ export type Aside =
   | { aside: "notice" }
   | { aside: "rung" }
   | { aside: "wake" }
+  | { aside: "agent" }
   | { aside: "question"; from: string };
 
 /** A prompt of a chain that is no thread, with what it is and the prompts on it, in order. */
