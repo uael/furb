@@ -16,7 +16,13 @@ export async function generated(): Promise<string> {
     additionalProperties: false,
     format: false,
   });
-  const made = `${types.trimEnd()}\n\nexport const PROTOCOL = ${Number(schema["x-protocol"])};\n`;
+  // The structs of the verbs of a view close their fields, so the schema inlines them in their verb: each keeps its name
+  // here, as the types that a skill and a window import.
+  const views = { Mount: "view.mount", Tree: "view.tree", ViewEvent: "view.event", ViewEffect: "view.effect", Dispose: "view.dispose" };
+  const aliases = Object.entries(views)
+    .map(([name, verb]) => `export type ${name} = Omit<Extract<Request1, { verb: "${verb}" }>, "verb">;`)
+    .join("\n");
+  const made = `${types.trimEnd()}\n\n${aliases}\n\nexport const PROTOCOL = ${Number(schema["x-protocol"])};\n`;
   const biome = join(root, "node_modules", ".bin", "biome");
   const formatted = Bun.spawnSync([biome, "format", `--stdin-file-path=${typesPath}`], {
     cwd: root,
