@@ -490,7 +490,9 @@ test("a message of a member of the operator is a message of the operator", () =>
       }),
     ).toBe(false);
     expect(session.isUserPrompt({ ...message, by: "rung4", maker: { role: "skill" } })).toBe(false);
-    expect(session.isUserPrompt({ ...message, by: "operator/a", maker: undefined })).toBe(false);
+    // An act that the crate gave no maker, as a record open to read gives it, reads its site.
+    expect(session.isUserPrompt({ ...message, by: "operator/a", maker: undefined })).toBe(true);
+    expect(session.isUserPrompt({ ...message, by: "rung3", maker: undefined })).toBe(false);
   }));
 
 test("a pause or a wake that a restart of the daemon cut tells the operator to say it again, and throws nothing", () =>

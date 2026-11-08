@@ -33,6 +33,7 @@ import {
   isPaused,
   type NoteRun,
   onThread,
+  operated,
   outcomeOf,
   reasonOf,
   rollUp,
@@ -266,7 +267,12 @@ function placed(index: Index, act: ActRow): void {
     const past = index.skills;
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
   }
-  if (act.kind !== "rung" || !byOperator(act)) return;
+  // A word of his own: the operator made it, and no act made it.
+  if (
+    act.kind !== "rung" ||
+    !(act.maker === undefined ? operated(act.by) : byOperator(act) && !index.ids.has(act.by))
+  )
+    return;
   const word = index.words.get(act.chain);
   if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.chain, act);
 }
@@ -1136,7 +1142,7 @@ export class Session extends EventEmitter {
     const index = this.indexed();
     const chain = index.ids.get(id);
     const maker = this.actOf(chain?.by ?? "");
-    const mine = (chain !== undefined && byOperator(chain)) || (maker !== undefined && byOperator(maker));
+    const mine = (chain !== undefined && this.own(chain)) || (maker !== undefined && this.own(maker));
     if (!mine) return false;
     const on = this.activityByChain.get(id) ?? [];
     // A notice to the operator on the chain itself, out of any thread, is unread until a fact seen of the chain covers it.
@@ -1645,8 +1651,16 @@ export class Session extends EventEmitter {
       return false;
     }
   }
+  /** Whether the operator made an act himself: the crate says him in its maker, and no act made it. The maker names who
+   * made the work in the end, so a prompt or a rung that a word of his made has him as its maker too, and is his work
+   * but no message or word of his own. */
+  own(act: { by?: string; maker?: ActRow["maker"] }): boolean {
+    // The acts of a record open to read come from the fold of the binding, which gives no maker: those read the site.
+    if (act.maker === undefined) return operated(act.by ?? "");
+    return byOperator(act) && (act.by === undefined || this.actOf(act.by) === undefined);
+  }
   isUserPrompt(act: ActRow): boolean {
-    return act.kind === "prompt" && byOperator(act);
+    return act.kind === "prompt" && this.own(act);
   }
   /** Whether a prompt has a program that an edit changes and replays: one of its rungs holds a word the gate let run
    * on this chain. */
@@ -2063,9 +2077,7 @@ export class Session extends EventEmitter {
   get lastOwn(): ActRow | undefined {
     // The crate gives the maker of an act as who made the work in the end, so what a word of his made is his too: his own
     // command is the one that no act made.
-    return this.activity.findLast(
-      (act) => byOperator(act) && this.actOf(act.by) === undefined && !isDone(act) && WORK.includes(act.kind),
-    );
+    return this.activity.findLast((act) => this.own(act) && !isDone(act) && WORK.includes(act.kind));
   }
   /** The running work that a cancel of an act ends besides the act: each act under it that is not over and whose work
    * takes time, on any chain, with the chains that they stand on. The rungs of a prompt are its own answer, and no
