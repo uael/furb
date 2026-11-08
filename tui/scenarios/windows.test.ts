@@ -85,3 +85,54 @@ test("a window that opens while a command runs shows the lines that the command 
       await writeFile(gate, "");
     }
   }));
+
+test("two windows on one life both read and write it, and neither ends the other", () =>
+  scenario(
+    [
+      { cue: "Scenario: say one.", word: 'close("One said.")' },
+      { cue: "Scenario: say two.", word: 'close("Two said.")' },
+    ],
+    async (first, yard) => {
+      // The second window is a process of its own, as a second terminal is. It writes the first line and reads its
+      // reply, then reads the reply to the line that the first window writes, so each window reads and writes.
+      const second = Bun.spawn(
+        [
+          process.execPath,
+          join(import.meta.dir, "second.ts"),
+          yard.root,
+          yard.work,
+          yard.model,
+          yard.record,
+          yard.cache,
+          "Scenario: say one.",
+          "One said.",
+          "Two said.",
+        ],
+        { stdout: "pipe", stderr: "pipe", env: { ...process.env } },
+      );
+      const reader = second.stdout.getReader();
+      const heard = new TextDecoder();
+      let said = "";
+      while (!said.includes("ready")) {
+        const got = await reader.read();
+        if (got.done)
+          throw new Error(
+            `The second window ended before it stood: ${await new Response(second.stderr).text()}`,
+          );
+        said += heard.decode(got.value);
+      }
+      await first.shows(
+        (frame) => frame.includes("One said."),
+        "the reply to the second window in the first",
+      );
+      await first.type("Scenario: say two.");
+      await first.shows((frame) => frame.includes("Two said."), "the reply in the first window");
+      const code = await second.exited;
+      if (code !== 0)
+        throw new Error(`The second window ended with ${code}: ${await new Response(second.stderr).text()}`);
+      // The first window goes on with the life after the second one is gone.
+      const { engine } = first;
+      await engine.result(await engine.rung({ word: "both_here = 9", on: engine.root }));
+      expect((await engine.inspect("both_here", first.session.selected)).value).toBe(9);
+    },
+  ));
