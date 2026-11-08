@@ -282,6 +282,8 @@ export interface Choices {
 
 /** The verbs that a window sends again when the daemon went before it answered: each reads, or says what a second time
  * says again. */
+// A verb that controls the life, as a pause, a wake or a seen, is never sent again after a reconnect: another window may
+// have said a newer one meanwhile, and the old one would override it.
 const AGAIN = new Set<Verb["verb"]>([
   "peek",
   "get",
@@ -295,10 +297,7 @@ const AGAIN = new Set<Verb["verb"]>([
   "inspect",
   "pending",
   "queued",
-  "seen",
   "queue",
-  "pause",
-  "wake",
 ]);
 
 /** The value of an act done with a fault, as an error with the name of its class. */
