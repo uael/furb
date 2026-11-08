@@ -22,6 +22,7 @@ import {
   type Ask,
   aimed,
   beside,
+  byOperator,
   type ChainAside,
   type ChainThread,
   cancelled,
@@ -32,7 +33,6 @@ import {
   isPaused,
   type NoteRun,
   onThread,
-  operated,
   outcomeOf,
   reasonOf,
   rollUp,
@@ -265,7 +265,7 @@ function placed(index: Index, act: ActRow): void {
     const past = index.skills;
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
   }
-  if (act.kind !== "rung" || !operated(act.by)) return;
+  if (act.kind !== "rung" || !byOperator(act)) return;
   const word = index.words.get(act.chain);
   if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.chain, act);
 }
@@ -1133,7 +1133,8 @@ export class Session extends EventEmitter {
     if (id === this.selected) return false;
     const index = this.indexed();
     const chain = index.ids.get(id);
-    const mine = operated(chain?.by ?? "") || operated(this.actOf(chain?.by ?? "")?.by ?? "");
+    const maker = this.actOf(chain?.by ?? "");
+    const mine = (chain !== undefined && byOperator(chain)) || (maker !== undefined && byOperator(maker));
     if (!mine) return false;
     const on = this.activityByChain.get(id) ?? [];
     // A notice to the operator on the chain itself, out of any thread, is unread until a fact seen of the chain covers it.
@@ -1630,7 +1631,7 @@ export class Session extends EventEmitter {
     this.notice = `${said} ${rest ? `${rest} more ${rest === 1 ? "waits" : "wait"}.` : "Nothing else waits."}`;
   }
   isUserPrompt(act: ActRow): boolean {
-    return act.kind === "prompt" && operated(act.by);
+    return act.kind === "prompt" && byOperator(act);
   }
   /** Whether a prompt has a program that an edit changes and replays: one of its rungs holds a word the gate let run
    * on this chain. */
@@ -2032,7 +2033,11 @@ export class Session extends EventEmitter {
   /** The last act that the operator made on the chain shown and that is not over: the message, the word or the
    * command of his that the feed shows last. A cancel that names no act ends it. */
   get lastOwn(): ActRow | undefined {
-    return this.activity.findLast((act) => operated(act.by) && !isDone(act) && WORK.includes(act.kind));
+    // The crate gives the maker of an act as who made the work in the end, so what a word of his made is his too: his own
+    // command is the one that no act made.
+    return this.activity.findLast(
+      (act) => byOperator(act) && this.actOf(act.by) === undefined && !isDone(act) && WORK.includes(act.kind),
+    );
   }
   /** The running work that a cancel of an act ends besides the act: each act under it that is not over and whose work
    * takes time, on any chain, with the chains that they stand on. The rungs of a prompt are its own answer, and no

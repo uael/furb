@@ -1,5 +1,5 @@
 import { isAbsolute, relative } from "node:path";
-import { asksOperator, operated } from "furb/life";
+import { asksOperator, byOperator } from "furb/life";
 import { shortenHome } from "../files.ts";
 import { clip } from "../format.ts";
 import type { ActRow } from "../session.ts";
@@ -84,7 +84,7 @@ export const tree = part({
     // A step that a skill plays is a rung that no act and no operator made, as the feed folds it: neither it nor what
     // it made is a point to go back to.
     const skill = (one: ActRow | undefined) =>
-      one?.kind === "rung" && !operated(one.by) && w.actOf(one.by) === undefined;
+      one?.kind === "rung" && !byOperator(one) && w.actOf(one.by) === undefined;
     return (
       !["chain", "grant"].includes(act.kind) &&
       (act.kind !== "rung" || w.actOf(act.by)?.kind !== "chain") &&
