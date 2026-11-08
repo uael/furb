@@ -275,6 +275,7 @@ fn make_the_corpus() {
     }
     let record = at.join("record.jsonl");
     scrubbed(&record, &at);
+    private(&record);
     // The module is read as the test reads it: from the record alone, with no log beside it, and
     // before the tail names another engine, which this build cannot inspect.
     let alone = place(&format!("made-{name}"));
@@ -316,6 +317,15 @@ fn scrubbed(record: &Path, at: &Path) {
       text.replace(&held, &format!("\"path\":{},\"content\":{}", quoted(&path), quoted(&below)));
   }
   fs::write(record, text).unwrap();
+}
+
+/// Puts each trace of the machine that made a record, the paths of its home and the name of its
+/// account, to the stand-ins of `script/private.py`, which holds the rule of each record.
+fn private(record: &Path) {
+  let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("script").join("private.py");
+  let status =
+    std::process::Command::new("python3").arg(script).arg("--scrub").arg(record).status().unwrap();
+  assert!(status.success(), "script/private.py scrubs {}", record.display());
 }
 
 /// Each record of each folder of the corpus, as its folder and its name.

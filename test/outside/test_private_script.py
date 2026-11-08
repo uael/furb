@@ -1,0 +1,62 @@
+# ruff: noqa: S603
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "script" / "private.py"
+SPEC = importlib.util.spec_from_file_location("private", SCRIPT)
+assert SPEC and SPEC.loader
+private = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(private)
+# A record that holds each trace of a person that the script names.
+TRACED = [
+  ["stand", "stand1", "provider", [[["operator", [], 200000]], "/Users/someone/src/furb", "m/low"]],
+  ["read", "read1", "rung1", "chain1", "/home/someone/notes.md"],
+  ["read", "read2", "rung1", "chain1", "~/src/github.com/someone/furb-w6/DOCTRINE.md"],
+  ["bash", "bash1", "rung1", "chain1", "ls /Users/x/Library/Caches/furb/scratch/3bcaab2537057c07"],
+  ["tell", "rung1", "chain1", ["session 0c16d8e3-6726-4650-aac1-a3161707af0e of uael"]],
+  ["prompt", "prompt1", "operator", "chain1", "None", "Are all other furb lifes than you dead ?", ""],
+  ["prompt", "prompt2", "operator", "chain1", "None", "a word that no script wrote", ""],
+]
+
+
+def run(*args: str) -> subprocess.CompletedProcess[str]:
+  return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, timeout=120, check=False)
+
+
+def test_no_record_of_the_repository_holds_a_trace_of_a_person() -> None:
+  got = run()
+  assert got.returncode == 0, got.stdout[-3000:]
+  assert got.stdout == "private: no record holds a trace\n"
+
+
+def test_each_trace_of_a_person_in_a_record_is_named(tmp_path: Path) -> None:
+  record = tmp_path / "record.jsonl"
+  record.write_text("".join(json.dumps(one) + "\n" for one in TRACED), encoding="utf-8")
+  got = run(str(record))
+  assert got.returncode == 1
+  named = {line.split(": ")[1] for line in got.stdout.splitlines() if line.startswith(str(record))}
+  assert named == {
+    "a path of a home",
+    "a checkout of an account",
+    "a scratch folder of a home",
+    "the scratch folder of a session",
+    "the id of a session",
+    "the handle of the owner",
+    "a prompt of the operator that no script wrote",
+  }
+  assert "a word that no script wrote" in got.stdout
+
+
+def test_a_scrub_puts_each_trace_to_its_stand_in_and_keeps_the_public_repositories(tmp_path: Path) -> None:
+  record = tmp_path / "record.jsonl"
+  public = ["tell", "rung2", "chain1", ["see https://github.com/uael/furb and uael/monty"]]
+  record.write_text("".join(json.dumps(one) + "\n" for one in [*TRACED[:-1], public]), encoding="utf-8")
+  assert run("--scrub", str(record)).returncode == 0
+  text = record.read_text(encoding="utf-8")
+  assert run(str(record)).stdout == "private: no record holds a trace\n"
+  assert "Are the other lives of the sample stopped?" in text and "github.com/uael/furb and uael/monty" in text
+  assert [json.loads(line)[0] for line in text.splitlines()] == [one[0] for one in [*TRACED[:-1], public]]
