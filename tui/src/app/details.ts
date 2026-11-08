@@ -10,7 +10,7 @@ import {
   type SimpleHighlight,
   type TextRenderable,
 } from "@opentui/core";
-import { actorParts, display, safeText, TIMEOUT, unmarked } from "furb";
+import { display, leveled, safeText, TIMEOUT, unmarked } from "furb";
 import {
   byOperator,
   type CodeRow,
@@ -141,7 +141,7 @@ export const details = part({
 
   /** The model of an actor by its name alone, with no provider, and its effort. */
   model(actor: string): { name: string; effort: string } {
-    const { model, effort } = actorParts(
+    const [model, effort] = leveled(
       actor || this.session.actor,
       this.session.roster.map(([name]) => name),
     );

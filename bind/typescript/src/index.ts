@@ -20,11 +20,11 @@ export {
 } from "./session.js";
 export type { Actor, Entry, Fact, Paragraph, Standing, Turn } from "./types.js";
 export {
-  actorParts,
   bound,
   display,
   efforts,
   isQuestion,
+  leveled,
   opens,
   paragraphs,
   plain,
