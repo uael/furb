@@ -19,7 +19,6 @@ use serde_json::Value;
 use super::{
   act::{Act, Kind, RunState, operator},
   fold::followed,
-  held::Held,
   state::State,
 };
 
@@ -209,25 +208,6 @@ impl<'a> Walk<'a, '_> {
 /// Whether a word is blank: none, an empty text or false.
 fn blank(word: Option<&Value>) -> bool {
   word.is_none_or(|word| word.is_null() || word == "" || word == false)
-}
-
-/// The ladder of a chain from the acts of a life in the order they began. `opened` holds the keys
-/// of the folds that the window opened, `owed` the prompts that the operator owes, and `taken`,
-/// when given, the only acts of the chain that stand at its top, as the messages that a branch took
-/// from its source.
-pub fn ladder(
-  acts: &[Act],
-  chain: &str,
-  opened: &[String],
-  owed: &[String],
-  taken: Option<&[String]>,
-  shown: Shown,
-) -> Vec<Rung> {
-  let mut held = Held::default();
-  for act in acts {
-    held.heard(act);
-  }
-  held.ladder(chain, None, opened, owed, taken, shown)
 }
 
 /// The ladder of a chain from the index of the acts that a window holds, as [`ladder`] gives it.
