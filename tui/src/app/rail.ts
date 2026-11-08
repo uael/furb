@@ -559,7 +559,8 @@ export const rail = part({
       );
       this.railSpaces.add(row);
       step(1, id);
-      if (lit) controls(thread, indent + 3);
+      // The controls close the block of the thread, after its agents, so they split no thread from its agents.
+      return lit ? () => controls(thread, indent + 3) : undefined;
     };
 
     // The sessions of a workspace that are worth a row: the one shown and each that lives, then the newest others.
@@ -647,13 +648,19 @@ export const rail = part({
     // agent one step deeper on its row. A question that waits in an agent marks the thread over it, since
     // the crate rolls it into the state of that thread.
     const nodeRow = (node: ThreadNode, indent: number) => {
-      threadRow(node.thread, indent, node.state);
-      if (!node.agents.length) return;
+      const controlsAfter = threadRow(node.thread, indent, node.state);
+      if (!node.agents.length) {
+        controlsAfter?.();
+        return;
+      }
       const fold = `agents:${node.thread.act.id}`;
-      const label = `${" ".repeat(indent + 2 - LEFT)}${node.agents.length === 1 ? "Agent" : "Agents"}`;
-      this.railSpaces.add(this.foldRow(fold, label, node.agents.length, padding));
+      const label = ` ${node.agents.length === 1 ? "Agent" : "Agents"}`;
+      this.railSpaces.add(
+        this.foldRow(fold, label, node.agents.length, { paddingLeft: indent, paddingRight: RIGHT }),
+      );
       step(1);
       if (this.unfolded.has(fold)) for (const one of node.agents) nodeRow(one, indent + 2);
+      controlsAfter?.();
     };
     // The threads that a session holds, in the order of the crate: those that are over first, then those that live,
     // nearest the input, each with its agents nested under it.

@@ -665,6 +665,8 @@ test("the agents that a thread hires fold under it to their count in the sidebar
       }
       const fold = rows.findIndex((row) => /▸ +Agents +8/.test(row));
       expect(fold).toBeGreaterThan(rows.findIndex((row) => row.includes("Hire eight workers")));
+      // The arrow stands in the column of the marks of the threads, not in the column of the workspace rule.
+      expect((rows[fold] ?? "").indexOf("▸")).toBe((rows[fold - 1] ?? "").search(/\S/));
       expect(rows.filter((row) => row.includes("Think until I cancel"))).toHaveLength(0);
       await railClick(use, "Agents");
       rows = rail(session, await frame());
