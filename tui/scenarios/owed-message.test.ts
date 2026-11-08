@@ -8,8 +8,12 @@ test("a message on a thread whose word closes it before the model read it still 
     ],
     async (window) => {
       await window.type("Scenario: first.");
-      // The first message stands in the feed, and its word streams for some seconds: the second goes while it is unanswered.
-      await window.shows((frame) => frame.includes("Scenario: first."), "the first message sent");
+      // The word of the first message streams for about 4 s, and the second goes once its first piece shows, while the
+      // first is unanswered.
+      await window.shows(
+        (frame) => frame.includes("close('Fi"),
+        "the word of the first message, as it streams",
+      );
       await window.type("Scenario: second.");
       await window.shows((frame) => frame.includes("First answered."), "the answer of the first message");
       await window.shows(
