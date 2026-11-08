@@ -500,14 +500,20 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record());
   let said = printed(turns, "");
+  // The root stands first, then reads the setup of its extensions (a93632945).
   assert!(
-    said.starts_with(
-      "[user] chain()\n[assistant] debug(t\"{standing()[4]=}\")\n[user] #rung1 debugged\n"
-    ),
-    "the setup of the root comes first, with the turn of its extensions: {said}"
+    said.starts_with("[user] chain()\n[assistant] stand()"),
+    "the stand of the root comes first: {said}"
+  );
+  assert!(
+    said.contains("\n[assistant] debug(t\"{standing()[4]=}\")\n[user] #rung"),
+    "then the setup of the root, with the turn of its extensions: {said}"
   );
   assert!(said.contains("\n[assistant] read('"), "then the read of the doctrine: {said}");
-  assert!(said.contains("\n\n#chain1\nchain1_label = 'root'\n"), "then the root itself: {said}");
+  assert!(
+    said.contains("\n[user] #chain1\nchain1_label = 'root'\n"),
+    "then the root itself: {said}"
+  );
   let paragraphs = "\n\n#prompt1\nprompt1_message = 'say a number'\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed by console\nprompt1_value = 7";
   assert!(said.contains(paragraphs), "the turns of a root as a model read them: {said}");
   assert!(said.contains(&format!("\n[assistant] {COUNT}\n")), "{said}");
