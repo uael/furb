@@ -40,6 +40,9 @@ export interface Waiting {
 const LEFT = space.inset;
 const RIGHT = space.inset;
 
+/** The cells that a row of the sidebar tries to leave its head: its marks and the start of its title. A tail that would leave less drops its last parts. */
+const HEAD_MIN = 16;
+
 /** The number in the name of an act, which orders the acts as they came. */
 const numberOf = (id: string) => Number(id.replace(/\D+/g, "")) || 0;
 
@@ -256,7 +259,8 @@ export const rail = part({
   },
 
   /** A row of the sidebar in two parts, its head, which the room cuts and a hover shows whole, and its tail, which
-   * stays. */
+   * stays. A tail that would leave the head fewer than HEAD_MIN cells drops its last parts, one by one, down to its
+   * first part, so that a thread keeps its state and loses its age before its title is cut. */
   railSplit(
     head: Part[] | (() => Part[]),
     tail: Part[],
@@ -271,10 +275,13 @@ export const rail = part({
       ...options,
     });
     const margins = [options.paddingLeft, options.paddingRight, options.marginLeft, options.marginRight];
-    const room =
+    const spare = (parts: Part[]) =>
       this.sideWidth -
       margins.reduce<number>((sum, one) => sum + (typeof one === "number" ? one : 0), 0) -
-      (tail.length ? Bun.stringWidth(plain(tail)) + space.between : 0);
+      (parts.length ? Bun.stringWidth(plain(parts)) + space.between : 0);
+    let kept = tail;
+    while (kept.length > 1 && spare(kept) < HEAD_MIN) kept = kept.slice(0, -1);
+    const room = spare(kept);
     const read = typeof head === "function" ? head : () => head;
     const fits = Bun.stringWidth(plain(read())) <= room;
     const shown = () => (fits ? read() : this.clipParts(read(), room));
@@ -282,7 +289,7 @@ export const rail = part({
     // A head that is read again holds a mark that moves, which the tick draws again.
     if (typeof head === "function") this.moving.set(text, shown);
     row.add(text);
-    if (tail.length) row.add(this.text(tail, c.muted, { marginLeft: space.between, flexShrink: 0 }));
+    if (kept.length) row.add(this.text(kept, c.muted, { marginLeft: space.between, flexShrink: 0 }));
     return row;
   },
 
