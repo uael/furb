@@ -145,8 +145,8 @@ pub enum Command {
   /// The threads of every chain of the life but those it names, as one tree in the order of the
   /// list of the threads, now or as they stood just after a moment.
   Rail { hidden: Vec<String>, at: Option<u64> },
-  /// The ladder of a chain, as [`furb::view::ladder`] folds it, now or as it stood just after a
-  /// moment.
+  /// The ladder of a chain, as [`furb::view::Held::ladder`] folds it, now or as it stood just
+  /// after a moment.
   Ladder {
     on: Option<String>,
     at: Option<u64>,

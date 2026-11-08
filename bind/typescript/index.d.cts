@@ -400,13 +400,6 @@ export interface Inspection {
 /** What the store kept at a path, read with no lease and changed in nothing. */
 export declare function kept(path: string): unknown[]
 
-/**
- * The ladder of a chain from acts in the state that the crate gives them, as [`Meaning::ladder`]
- * folds it from the acts that it heard: what a window that makes acts of its own, as a test does,
- * reads in place of a ladder of its own.
- */
-export declare function laddered(acts: Array<import("./dist/protocol.js").Act>, chain: string, opened?: string[], owed?: string[], taken?: string[], shown?: import("./dist/protocol.js").Shown): Array<import("./dist/protocol.js").Rung>
-
 /** LARGEST is the largest number of bytes that a read tells of the lines that its show picks. */
 export declare const LARGEST: number
 

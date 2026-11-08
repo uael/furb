@@ -20,7 +20,7 @@ pub use context::{Part, Share, breakdown};
 pub use desk::{Ask, Desk, Tick, choices, desk, hint, takes_nothing, ticks, wants};
 pub use fold::{Fold, followed};
 pub use held::{Held, Threads};
-pub use ladder::{Rung, SHOWN, Shown, ladder};
+pub use ladder::{Rung, SHOWN, Shown};
 #[cfg(any(test, feature = "test-support"))]
 pub use named::word;
 pub use named::{NAME, Named, RENAME, said};
