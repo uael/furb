@@ -86,7 +86,8 @@ runs:
     # made no new key, so main never saved the cache again and each job built the new crates each time.
     # Main saves the cache, and so does the pull request of w/converge, whose caches only its own runs read: its head
     # stands far from main, so with no save each of its runs built again the crates that changed since main, in up to
-    # 10 minutes. Any other pull request reads the cache of main.
+    # 10 minutes. A run on w/converge saves the cache of its own jobs too, such as the render of the gallery that the
+    # desk dispatches there. Any other pull request reads the cache of main.
     # Only a job that passes saves it. A job that fails or is cancelled holds part of the build, and a key that
     # matches whole is never saved again, so every later run would build again what that part lacks.
     # A script of the build that starts to build a new crate changes no manifest, so with no hash of it the key stayed
@@ -103,7 +104,7 @@ runs:
         workspaces: ${{ inputs.workspaces }}
         add-rust-environment-hash-key: true
         env-vars: FURB_CACHE
-        save-if: ${{ (github.ref == 'refs/heads/main' || github.head_ref == 'w/converge') && inputs.shared == '' }}
+        save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/w/converge' || github.head_ref == 'w/converge') && inputs.shared == '' }}
         cache-on-failure: false
     - run: echo "RUST_CACHE_HIT=${{ steps.rust.outputs.cache-hit }}" >> "$GITHUB_ENV"
       shell: bash

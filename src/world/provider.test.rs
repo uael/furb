@@ -3055,6 +3055,7 @@ fn resumed(yard: &super::claude::test::Yard) -> Vec<Value> {
 }
 
 /// The answer of a prompt of the root that says this.
+#[cfg(unix)]
 fn answer(engine: &mut Engine, said: &str) -> Object {
   let root = engine.root().to_owned();
   let with = verbs::Prompt { message: Some(said.into()), on: on(&root), ..Default::default() };
@@ -3064,11 +3065,13 @@ fn answer(engine: &mut Engine, said: &str) -> Object {
 
 /// A compaction as the skill compaction makes it: the chain keeps each fact but what it was told,
 /// and a rung tells it the summary, so its next turn begins a new conversation.
+#[cfg(unix)]
 const CUT: &str = r#"here = scope(acting())
 say('prefix', here, [x for x in transcript(here) if x[0] != 'tell'])
 rung("<s:summary>\nThe chain asked first.</s:summary>\nsummary", on=here)"#;
 
 /// The signed thought that the command line of the tests writes for a line that holds THINK.
+#[cfg(unix)]
 fn signed() -> Value {
   json!({"type": "thinking", "thinking": "hmm", "signature": "sig"})
 }

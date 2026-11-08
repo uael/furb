@@ -669,6 +669,7 @@ def gathered(define: Callable[[str], str], floor: dict[str, int]) -> dict:
   """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts.
   taken gives the highest number of each kind that an act of a chain took, and at least the number that floor gives, since a later life makes no act again that an ear of the outside made.
   chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose rung stands in the lineage of an act whose ear still hears on it at the tip, an open act or a done act with a lasting ear, as lives.
+  The definitions of a chain take only the words whose rung is an act, so no text that the chain heard, as a note in prose of a tell, and the word of a checkpoint parses, so a later life binds each value again.
   chains holds each chain whose ear still hears, after a number that no chain of the life holds too.
   gathered reads the questions of the life alone, so the fact of an act of an earlier life that a carried turn holds raises nothing.
   chains holds each plain value of a chain whatever its size, and seed binds a large one from the carried fact of its chain, so a later life holds it exactly and no turn tells it.
@@ -826,7 +827,7 @@ class Refused(Exception):
 class Drift(Exception):
   """What a life fails with when an act of it is not the one the record holds, which the journal raises, so that it comes out of the entry the operator went in by and the life goes on with nothing.
   An act whose words are not the ones the record holds under its name is a drift, which it raises.
-  Its message names the act that drifted, the fact that the life made under that name and the fact that the record holds under it, which is the act or else its first answer, each cut to 300 characters, so a drift says the fact that differs.
+  Its message names the act that drifted, the fact that the life made under that name and the fact that the record holds under it, which is the act or else its first answer, or None when the record holds no fact under that name, each cut to 300 characters, so a drift says the fact that differs.
   A drift breaks the journal, which keeps nothing more, and the life runs on with nothing kept.
   """
 

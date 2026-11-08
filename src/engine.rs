@@ -29,7 +29,7 @@
 )]
 #![expect(
   clippy::too_many_arguments,
-  reason = "a verb of the host API takes each argument that the host gives it"
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 
 mod crossing;

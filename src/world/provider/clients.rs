@@ -2,6 +2,7 @@
 //! gives, the chat completions of `OpenAI` at the address of a provider or of a local server, and
 //! the protocol of pi-ai.
 
+use super::catalog::Unreached;
 use std::future::Future;
 
 use bytes::Bytes;
@@ -86,7 +87,7 @@ pub(super) enum Error {
   #[error("{0}")]
   Vertex(String),
   #[error(transparent)]
-  Unreached(#[from] super::catalog::Unreached),
+  Unreached(#[from] Unreached),
 }
 
 impl From<http_client::Error> for Error {

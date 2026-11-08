@@ -462,3 +462,38 @@ fn the_record_of_the_language_holds_each_definition_that_a_word_uses() {
     assert!(shown.contains(&format!("('{name}', ")), "language.modules lacks {name}");
   }
 }
+
+/// Each proof that `docs/promise.md` names as `path::name` stands in its file as a test of that
+/// name that runs, so the page names no proof that is gone or skipped.
+#[test]
+fn each_proof_that_the_page_of_the_promise_names_stands_in_its_file() {
+  let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+  let page = fs::read_to_string(root.join("docs/promise.md")).unwrap();
+  let named: Vec<&str> =
+    page.split('`').skip(1).step_by(2).filter(|one| one.contains("::")).collect();
+  assert!(named.len() > 20, "the page names {} proofs", named.len());
+  for one in named {
+    let (path, name) = one.rsplit_once("::").unwrap();
+    let text = fs::read_to_string(root.join(path)).unwrap_or_else(|why| panic!("{one}: {why}"));
+    let lines: Vec<&str> = text.lines().collect();
+    let at = lines
+      .iter()
+      .position(|line| {
+        line.contains(&format!("fn {name}(")) || line.contains(&format!("def {name}("))
+      })
+      .unwrap_or_else(|| panic!("{path} holds no test {name}"));
+    let marks: Vec<&str> = lines[..at]
+      .iter()
+      .rev()
+      .map(|line| line.trim())
+      .take_while(|line| line.starts_with("#[") || line.starts_with("///") || line.starts_with('@'))
+      .collect();
+    let runs = if Path::new(path).extension().is_some_and(|kind| kind == "rs") {
+      marks.iter().any(|mark| mark.ends_with("test]"))
+        && !marks.iter().any(|mark| mark.starts_with("#[ignore"))
+    } else {
+      name.starts_with("test_") && !marks.iter().any(|mark| mark.contains("skip"))
+    };
+    assert!(runs, "{path}: {name} is no test that runs");
+  }
+}

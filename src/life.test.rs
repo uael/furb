@@ -434,6 +434,44 @@ fn a_life_whose_open_act_a_verb_of_no_words_made_ends_with_a_checkpoint_in_its_r
 }
 
 #[test]
+fn a_life_whose_module_binds_the_name_of_a_builtin_opens_from_its_checkpoint_with_the_module_of_its_replay()
+ {
+  let at = place("builtin");
+  let open = || Opening { skills: Some(false), ..opening(&at, true) };
+  let read = |life: &mut Engine| closed(life, "close([list, k, j])").as_ref().py_repr();
+  let mut first = open().boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut first, "globals()['list'] = 'ls -la'\nk = 1\nclose(1)").as_ref().as_int(),
+    Some(1)
+  );
+  // An ear tells the chain a note in prose, as the ear of the skills tells a change of a
+  // config, and the next word binds what the chain heard.
+  let note = "with site.set('extensions'):\n  say('tell', ROOT, ['The key extensions of a config is now skills.'])";
+  assert_eq!(closed(&mut first, &format!("{note}\nclose(1)")).as_ref().as_int(), Some(1));
+  assert_eq!(closed(&mut first, "j = 2\nclose(1)").as_ref().as_int(), Some(1));
+  drop(first);
+  let mut replayed = open().boot::<String>([]).unwrap().0;
+  let by_replay = read(&mut replayed);
+  drop(replayed);
+  assert_eq!(
+    by_replay, "['ls -la', 1, 2]",
+    "a replay binds the name of the builtin as the life bound it"
+  );
+  let mut inspected = Opening { inspecting: Some(true), ..open() }.boot::<String>([]).unwrap().0;
+  let written = checkpoint::written(&mut inspected).expect("the life gathers its checkpoint");
+  drop(inspected);
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  for _ in 0..2 {
+    let mut again = open().boot::<String>([]).unwrap().0;
+    assert_eq!(
+      read(&mut again),
+      by_replay,
+      "the open from the checkpoint reaches the module of the replay"
+    );
+  }
+}
+
+#[test]
 fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
   // A bound of 100 ms may pass before the loop enters its `try` on a loaded machine, and the
   // refusal then raises outside it, so no `finally` runs and no second excess stops the life.
@@ -918,7 +956,7 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
 #[test]
 fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
   use sha2::{Digest, Sha256};
-  for (record, first) in [("ranks.jsonl.zst", "rung3230"), ("speaker.jsonl", "reply4")] {
+  for (record, first) in [("ranks.jsonl", "bash2"), ("speaker.jsonl", "reply4")] {
     let at = place(&format!("unadapted-{first}"));
     laid(&replays().join(record), &at.join("record.jsonl"));
     let mut lines: Vec<String> =

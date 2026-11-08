@@ -438,21 +438,16 @@ fn why_a_model_cannot_be_reached_is_a_failure_of_its_own_for_each_cause() {
     one.credential(&env).and_then(|key| one.reach(id, listing, client, key, &env)).err()
   };
   let none = reach("google", "gemini-flash", &[]).expect("no credential");
-  assert!(
-    matches!(&none, Unreached::NoCredential { env } if *env == ["GOOGLE_API_KEY", "GEMINI_API_KEY"]),
-    "{none}"
-  );
+  let names = vec!["GOOGLE_API_KEY".to_owned(), "GEMINI_API_KEY".to_owned()];
+  assert_eq!(none, Unreached::NoCredential { env: names });
   assert_eq!(
     none.to_string(),
     "no credential of it stands in the environment: set GOOGLE_API_KEY or GEMINI_API_KEY"
   );
   let unfilled = reach("azure", "gpt-5-mini", &["AZURE_OPENAI_API_KEY"]).expect("no place");
-  assert!(
-    matches!(&unfilled, Unreached::Unfilled { name } if name == "AZURE_RESOURCE_NAME"),
-    "{unfilled}"
-  );
+  assert_eq!(unfilled, Unreached::Unfilled { name: "AZURE_RESOURCE_NAME".to_owned() });
   let project = reach("google-vertex", "gemini-pro", &["GOOGLE_CLOUD_API_KEY"]);
-  assert!(matches!(project, Some(Unreached::NoProject)), "{project:?}");
+  assert_eq!(project, Some(Unreached::NoProject));
 }
 
 #[test]
