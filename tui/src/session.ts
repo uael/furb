@@ -943,6 +943,7 @@ export class Session extends EventEmitter {
             this.threadsFresh(selected) ? undefined : this.readThreads(selected),
             this.railFresh ? undefined : this.readRail(),
           ]);
+        if (this.momentsRead?.version !== this.version) await this.readMoments().catch(this.threadFault);
         this.named();
         this.carryQueue();
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
@@ -1939,6 +1940,19 @@ export class Session extends EventEmitter {
     const found = files ?? (await this.filesAt(id));
     await this.restoreFiles(found);
     this.notice = `${this.restored(found)} The conversation goes on as it stands.`;
+  }
+  /** The moments of the life as the crate last gave them, with the version of the acts that it read. */
+  private momentsRead?: { version: number; moments: number[] };
+  /** The crate gives each moment of the life, each start and each end of an act, which the session holds per version. */
+  async readMoments(): Promise<void> {
+    const version = this.version;
+    this.momentsRead = { version, moments: await this.host.moments() };
+  }
+  /** The moments of the life as the crate gives them, up to the moment that the feed shows. */
+  get moments(): readonly number[] {
+    const all = this.momentsRead?.moments ?? [];
+    const moment = this.moment;
+    return moment === undefined ? all : all.filter((one) => one <= moment);
   }
   /** The acts as they stood at the moment that the feed shows: an act that began later is not there yet, and an act
    * that ended later still runs, with no value yet. */
