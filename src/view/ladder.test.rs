@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use serde_json::{Value, json};
 
-use super::{Rung, SHOWN, Shown, ladder};
-use crate::view::{Act, Fold};
+use super::{Rung, SHOWN, Shown};
+use crate::view::{Act, Fold, Held};
 
 fn folded(facts: impl IntoIterator<Item = Value>) -> Vec<Act> {
   let mut fold = Fold::default();
@@ -18,6 +18,23 @@ fn folded(facts: impl IntoIterator<Item = Value>) -> Vec<Act> {
   let mut all: Vec<Act> = acts.into_values().collect();
   all.sort_by_key(|act| act.began);
   all
+}
+
+/// The ladder of a chain from acts that the held meaning hears in the order they began, as a host
+/// tells them.
+fn ladder(
+  acts: &[Act],
+  chain: &str,
+  opened: &[String],
+  owed: &[String],
+  taken: Option<&[String]>,
+  shown: Shown,
+) -> Vec<Rung> {
+  let mut held = Held::default();
+  for act in acts {
+    held.heard(act);
+  }
+  held.ladder(chain, None, opened, owed, taken, shown)
 }
 
 /// Each line of a ladder as a short text: a step as its id, an ear as its rungs, and a fold as
