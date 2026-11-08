@@ -1143,6 +1143,10 @@ export interface Spend {
   dollars: number;
   answers: number;
   actor?: string | null;
+  /**
+   * The account of the last answer that named one.
+   */
+  account?: string | null;
 }
 /**
  * One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
@@ -1166,4 +1170,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 7;
+export const PROTOCOL = 8;

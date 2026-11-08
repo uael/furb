@@ -432,6 +432,7 @@ mod protocol {
     "3bf734627359e905bb82818100a056d1000631abb9650b1d8adda626e84fe3b8",
     "ab1e26ad2062fc235028a54bc0b393b108885469e2e7e4a7fd414e325d13b340",
     "ac081ea7adb80dcd8b017c2b13ccc2a191bedc76f48399ea4e4af332e8eebbfb",
+    "1cc07000eec850b0b90e1efbb334b933cf05f081d17a0a67a81bd5759375c232",
   ];
 
   /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

@@ -383,8 +383,13 @@ pub(super) fn turn(
   let blocks = serde_json::to_value(&choice).map_err(|no| failed(no.to_string()))?;
   let blocks = wire::inward(&blocks).map_err(|fault| failed(fault.message()))?;
   let count = |n: u64| Object::int(i64::try_from(n).unwrap_or(i64::MAX));
-  let usage =
-    Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
+  let mut usage =
+    vec![count(input), count(output), count(read), count(wrote), Object::float(dollars)];
+  // A provider that serves a reply through one of several accounts names it, never its token.
+  if let Some(account) = response.raw.get("account").and_then(Value::as_str) {
+    usage.push(Object::string(account));
+  }
+  let usage = Object::tuple(usage);
   let turn =
     Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]);
   Ok((turn, dropped))

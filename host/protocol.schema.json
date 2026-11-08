@@ -3575,6 +3575,13 @@
             "string",
             "null"
           ]
+        },
+        "account": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The account of the last answer that named one."
         }
       },
       "required": [
@@ -4193,5 +4200,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 7
+  "x-protocol": 8
 }
