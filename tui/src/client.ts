@@ -24,6 +24,7 @@ import type {
 import { Closed, Connection, daemonPlace, dialed, Refused } from "furb/skill";
 import { program } from "../../bind/typescript/program.ts";
 import type { Setting } from "./configs.ts";
+import { lean } from "./reading.ts";
 
 export { Closed, Refused };
 
@@ -331,7 +332,12 @@ function valued(answer: Answer): unknown {
 export class RemoteLife extends EventEmitter {
   readonly root = "chain1";
   disposed = false;
-  readonly facts: Fact[] = [];
+  /** How many facts the window heard of this birth of the life. It keeps none of them: a fact may carry a whole
+   * transcript, as a prefix or a checkpoint does, so a window that kept them held more with each hour of the life.
+   * Each listener of `fact` takes what it needs of a fact as it comes. */
+  count = 0;
+  /** How many times the window attached to the life from the start of its log. */
+  private births = 0;
   /** Each act as the daemon told it last. */
   readonly acts = new Map<string, Act>();
   /** The place up to which the operator read each chain or thread, by its name: the place of the last fact seen that
@@ -423,7 +429,9 @@ export class RemoteLife extends EventEmitter {
     });
     // The open attaches the window in the same step, from the start of the log, so the life has its holder before
     // the grace of the daemon passes, and the window lets go of what it held of an earlier birth.
-    this.facts.length = 0;
+    this.count = 0;
+    this.births++;
+    this.emit("forgot");
     this.acts.clear();
     this.seenAt.clear();
     this.compactions.length = 0;
@@ -544,9 +552,8 @@ export class RemoteLife extends EventEmitter {
     if (!batch) return;
     this.batch = undefined;
     const fact = batch.fact;
-    this.facts.push(fact);
+    const at = ++this.count;
     const [kind, id, by] = fact;
-    const at = this.facts.length;
     // A later life says each fact of its record again as the journal, which names no speaker, and only the operator
     // says seen. A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.
     if (kind === "seen" && (operated(by) || by === "journal")) this.seenAt.set(id, at);
@@ -565,6 +572,7 @@ export class RemoteLife extends EventEmitter {
       }
     }
     this.told(batch.acts);
+    this.emit("fact", fact);
   }
 
   /** The acts that changed after a count of changes, each that a person follows, in the order they began, and the
@@ -618,7 +626,9 @@ export class RemoteLife extends EventEmitter {
   private told(acts: Act[]): void {
     for (const act of acts) {
       const was = this.acts.get(act.id);
-      this.acts.set(act.id, act);
+      const kept = lean(act);
+      this.acts.set(act.id, kept);
+      if (kept !== act) this.leaned.add(kept);
       if (followed(act.kind)) this.mark(act.id);
       const early = this.early.get(act.id);
       this.early.delete(act.id);
@@ -641,6 +651,27 @@ export class RemoteLife extends EventEmitter {
       if (act.kind === "reply") this.streams.delete(act.by);
       this.settled(act.id, act.phase.value);
     }
+  }
+
+  /** The acts whose texts the window slimmed once they were done, which it reads whole from the daemon. */
+  private readonly leaned = new WeakSet<Act>();
+  /** An act whole: one whose texts the window slimmed takes its words and its value from the daemon. */
+  async whole(id: string): Promise<Act | undefined> {
+    const act = this.acts.get(id);
+    if (!act || !this.leaned.has(act)) return act;
+    const [opened, value] = await Promise.all([this.get(id), this.peek(id)]);
+    const words = Array.isArray(opened) ? opened.slice(4) : act.words;
+    return {
+      ...act,
+      words,
+      ...(act.kind === "rung" && typeof words[0] === "string" ? { word: words[0] } : {}),
+      phase: { ...act.phase, value } as Act["phase"],
+    };
+  }
+  /** The value of an act that is done, read whole from the daemon when the window slimmed it. */
+  private async valueOf(act: Act): Promise<unknown> {
+    if (act.phase.phase !== "done") return null;
+    return this.leaned.has(act) ? await this.peek(act.id) : act.phase.value;
   }
 
   /** The verbs that wait for the first fact of the act that they made, by the act. */
@@ -747,9 +778,10 @@ export class RemoteLife extends EventEmitter {
   async result(id: string): Promise<unknown> {
     const act = this.acts.get(id);
     if (act?.phase.phase === "done") {
-      const fault = faulted(act.phase.value);
+      const value = await this.valueOf(act);
+      const fault = faulted(value);
       if (fault) throw fault;
-      return act.phase.value;
+      return value;
     }
     const done = new Promise<unknown>((resolve, reject) => {
       const waits = this.waits.get(id) ?? [];
@@ -766,8 +798,7 @@ export class RemoteLife extends EventEmitter {
   }
   async outcome(id: string): Promise<{ done: boolean; value: unknown }> {
     const act = this.acts.get(id);
-    if (act)
-      return { done: act.phase.phase === "done", value: act.phase.phase === "done" ? act.phase.value : null };
+    if (act) return { done: act.phase.phase === "done", value: await this.valueOf(act) };
     try {
       return { done: true, value: await this.peek(id) };
     } catch {
@@ -785,19 +816,25 @@ export class RemoteLife extends EventEmitter {
   private async control(
     verb: Verb & { verb: "pause" | "wake" | "cancel" | "close"; act: string },
   ): Promise<void> {
-    const start = this.facts.length;
-    await this.verb(verb);
-    const heard = () =>
-      Boolean(this.lost) ||
-      this.facts.slice(start).some(([kind, about]) => kind === verb.verb && about === verb.act);
-    while (!heard() && this.facts.length >= start)
-      await new Promise<void>((resolve) => {
-        const told = () => {
-          for (const name of ["facts", "ended", "reset"]) this.off(name, told);
-          resolve();
-        };
-        for (const name of ["facts", "ended", "reset"]) this.on(name, told);
-      });
+    const birth = this.births;
+    let said = false;
+    const hear = ([kind, about]: Fact) => {
+      said ||= kind === verb.verb && about === verb.act;
+    };
+    this.on("fact", hear);
+    try {
+      await this.verb(verb);
+      while (!said && !this.lost && birth === this.births)
+        await new Promise<void>((resolve) => {
+          const told = () => {
+            for (const name of ["facts", "ended", "reset"]) this.off(name, told);
+            resolve();
+          };
+          for (const name of ["facts", "ended", "reset"]) this.on(name, told);
+        });
+    } finally {
+      this.off("fact", hear);
+    }
   }
   async pause(id: string, { why }: { why?: string } = {}): Promise<void> {
     await this.control({ verb: "pause", life: this.record, act: id, why });
