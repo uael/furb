@@ -8,6 +8,7 @@ from furb.engine import (
   act,
   acting,
   automatic,
+  cancel,
   chain,
   close,
   controlled,
@@ -15,6 +16,7 @@ from furb.engine import (
   filled,
   get,
   over,
+  pause,
   peek,
   program,
   prompt,
@@ -141,21 +143,33 @@ def choice(to: str = "", on: str = "") -> Act:
     + example
   )
   side = chain("chosen", on=here)
-  asked: Act = prompt("tuple[list[str], str]", brief, to=to or CHOOSER or automatic(), on=side)
+  given = to or CHOOSER
+  asked: Act = prompt("tuple[list[str], str]", brief, to=given or automatic(), on=side)
   bound = 4
 
   def ear(id):
     yield "started", id
-    replies, maker = 0, get(asked)[2]
+    replies, maker, n, now, place = 0, get(asked)[2], 0, asked, side
     while not over(asked):
-      match (yield {id, side, asked, maker}):
-        case ("done", about, _, _) if question(("reply", about)) and scope(about) == side:
+      match (yield {id, place, now, asked, maker}):
+        # A model of automatic work that refuses its reply gives its place to the next one, and the last one's refusal ends the prompt.
+        case ("done", about, _, Refused() as why) if question(("reply", about)) and scope(about) == place and not given:
+          # The first prompt stays open for the close of the one after it, so it only asks no more.
+          (pause if now == asked else cancel)(now)
+          if then := automatic(n := n + 1):
+            place = chain("chosen", on=here)
+            now = prompt("tuple[list[str], str]", brief, to=then, on=place)
+          else:
+            close(why, asked)
+        case ("done", about, _, value) if about == now != asked:
+          close(value, asked)
+        case ("done", about, _, _) if question(("reply", about)) and scope(about) == place:
           replies += 1
           if replies >= bound and not over(asked):
-            close(Refused(f"{asked}: the model of choice wrote {replies} words on {side} and closed none"), asked)
+            close(Refused(f"{asked}: the model of choice wrote {replies} words on {place} and closed none"), asked)
         # The chain of choice tells the maker of the prompt only that it asks it no more, after a word that made nothing new, so it ends refused.
-        case ("tell", about, by, _) if about == maker and by == side and not over(asked):
-          close(Refused(f"{asked}: the model of choice wrote {replies} words on {side} that made nothing new"), asked)
+        case ("tell", about, by, _) if about == maker and by == place and not over(asked):
+          close(Refused(f"{asked}: the model of choice wrote {replies} words on {place} that made nothing new"), asked)
     yield "done", id, None
 
   act("bounded", side, controlled(ear))
