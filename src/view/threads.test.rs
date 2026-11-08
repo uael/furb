@@ -484,3 +484,25 @@ fn a_stall_that_the_watch_tells_and_the_naming_of_the_session_are_notices_and_no
   ];
   assert_eq!(listed(&folded(round), "chain5").0, names(&["prompt9"]));
 }
+
+#[test]
+fn acts_told_out_of_order_still_read_in_the_order_they_began() {
+  // A window that makes acts of its own may tell one that began before the last, and a read of
+  // now still gives the threads in the order that the acts began, as when they are told in order.
+  let acts = folded([
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "First message.", ""]),
+    json!(["prompt", "prompt2", "operator", "chain1", "str", "Second message.", ""]),
+  ]);
+  let mut told = Held::default();
+  for act in &acts {
+    told.heard(act);
+  }
+  let mut reversed = Held::default();
+  for act in acts.iter().rev() {
+    reversed.heard(act);
+  }
+  let one = serde_json::to_value(told.threads("chain1", None, 0)).unwrap();
+  let other = serde_json::to_value(reversed.threads("chain1", None, 0)).unwrap();
+  assert_eq!(one, other);
+}

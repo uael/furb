@@ -1,25 +1,21 @@
 name: gallery
 
-# The gallery of the TUI, docs/screenshots and docs/furb.gif, rendered again from main. The README and docs/tui.md show
-# these files, so a change that a screen shows leaves them old until something renders them. This workflow renders
-# both on a runner of CI, as `bun run screenshots` and `bun run animation` do on a machine, and keeps one pull request
-# open on one fixed branch with the files that changed. The next run replaces the files of that branch, so only one
-# such pull request stands at a time, and it conflicts with nothing, since each run builds the branch again from the
-# commit that it renders. A run on a branch other than main does the same on a branch of its own, w/gallery-proof,
-# and opens a draft, which the round of the conductor does not merge.
+# The gallery of the TUI, docs/screenshots and docs/furb.gif, drawn from each head of w/converge that the aggregator
+# pushes, so the owner follows the screens of each build and the QA judges the same pictures of the same head. The run
+# renders both as `bun run screenshots` and `bun run animation` do on a machine, with the watcher of memory beside them,
+# and pushes the head with the render on top to one fixed branch, w/gallery. One pull request of w/gallery into
+# w/converge stands, and each later run updates its branch and its body in place, with the head that it shows. The diff
+# of that pull request is what the screens of the head changed against the gallery that the head holds.
 on:
+  push:
+    branches: [w/converge]
   workflow_dispatch:
-  # Once a day, at an hour when the gates have no queue. A render takes about fifteen minutes of a runner, and a render
-  # every three hours took eight such runs a day from the gates, as a render on each push to main did before it. A day
-  # is often enough: the open pull request holds the newest render, and a maintainer merges it early when it is needed,
-  # or runs this workflow by hand.
-  schedule:
-    - cron: "17 4 * * *"
 
-# A run on a newer commit ends the run before it: only the render of the newest commit is worth a pull request.
+# A push while a render runs waits for it, and a newer push replaces the one that waits: a render that a newer push
+# ended would leave no gallery at all, since the aggregator pushes more often than a render ends.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -27,17 +23,17 @@ permissions:
 jobs:
   render:
     name: the render
+    if: github.ref == 'refs/heads/w/converge'
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # This job opens the pull request of the gallery as github-actions[bot], with GITHUB_TOKEN, whose push and pull
-    # request start no workflow: a render of screenshots runs no gate.
+    # This job pushes w/gallery and edits its pull request as github-actions[bot], with GITHUB_TOKEN, whose push and
+    # pull request start no workflow: a render of screenshots runs no gate.
     permissions:
       contents: write
       pull-requests: write
     env:
-      # The round of the conductor merges a pull request only from a branch w/..., so the one fixed branch is one.
-      BRANCH: ${{ github.ref == 'refs/heads/main' && 'w/gallery' || 'w/gallery-proof' }}
-      DRAFT: ${{ github.ref == 'refs/heads/main' && 'false' || 'true' }}
+      BRANCH: w/gallery
+      BASE: w/converge
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,8 +48,12 @@ jobs:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun run screenshots
-      - run: bun run animation
+      # The watcher ends the largest capture when the memory of the runner is tight, and says so in the log.
+      - run: |
+          sh script/memwatch.sh & watch=$!
+          trap 'kill "$watch"' EXIT
+          bun run screenshots
+          bun run animation
       # The files of the render stay for a week, to read them without a checkout.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -62,45 +62,43 @@ jobs:
             docs/screenshots
             docs/furb.gif
           retention-days: 7
-      - name: open the pull request
+      - name: push the render and update the pull request
         env:
           GH_TOKEN: ${{ github.token }}
-          TITLE: "chore(tui): Render the gallery again"
         run: |
           set -euo pipefail
-          files="docs/screenshots docs/furb.gif"
+          head=$(git rev-parse HEAD)
+          short=$(git rev-parse --short HEAD)
+          title="chore(tui): Show the gallery of w/converge at $short"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch -q "$remote" "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
-          number=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
-          git add -A -- $files
-          if git diff --cached --quiet; then
-            echo "The gallery of main is the gallery that it shows."
-            if [ -n "$number" ]; then
-              gh pr close "$number" --delete-branch --comment "🤖 The gallery of $(git rev-parse --short HEAD) shows what main holds, so this pull request has nothing to change."
-            elif git rev-parse -q --verify "origin/$BRANCH" >/dev/null; then
-              git push "$remote" --delete "$BRANCH"
-            fi
-            exit 0
-          fi
+          git add -A -- docs/screenshots docs/furb.gif
           added=$(git diff --cached --name-only --diff-filter=A | wc -l | tr -d ' ')
           changed=$(git diff --cached --name-only --diff-filter=M | wc -l | tr -d ' ')
           removed=$(git diff --cached --name-only --diff-filter=D | wc -l | tr -d ' ')
-          sha=$(git rev-parse --short HEAD)
+          # A render that changes no file still moves the branch to the head, so the branch shows each head it rendered.
+          git switch -q -C "$BRANCH"
+          git commit -q --allow-empty -m "$title" -m "The render of $head in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+          # A pull request of w/gallery into another base, as the old one into main, would take all of this head.
+          gh pr list --head "$BRANCH" --state open --json number,baseRefName --jq ".[] | select(.baseRefName != \"$BASE\") | .number" |
+            while read -r stray; do gh pr close "$stray" --comment "🤖 The gallery follows w/converge now, on one pull request into it."; done
+          git push -q --force "$remote" "$BRANCH"
           run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           cat > "$RUNNER_TEMP/body.md" <<EOF
           🤖
 
           ## Why
 
-          A screen changed on main, and the files of the gallery did not. The README shows docs/furb.gif and docs/tui.md shows docs/screenshots, so a reader sees a TUI that main does not have.
+          The owner follows the screens of each build of w/converge here, and the QA judges the screens of the head from this branch. So both read the same pictures of the same head.
 
           ## Outcome
 
-          - docs/screenshots and docs/furb.gif show the TUI of main at $sha again. Files added: $added. Files changed: $changed. Files removed: $removed.
+          - This branch shows the gallery of w/converge at $head: docs/screenshots and docs/furb.gif.
+          - Against the gallery that this head holds: files added: $added. Files changed: $changed. Files removed: $removed.
           - A runner of CI drew them with bun run screenshots and bun run animation, in $run.
-          - One such pull request stands at a time. The next push to main that changes a screen draws the gallery again on this branch and in this body.
+          - Each push to w/converge draws the gallery again on this branch and in this body. No other pull request of the gallery opens.
+          - A merge of this pull request puts these files in w/converge, and so in main at its next release.
 
           ---
 
@@ -111,17 +109,9 @@ jobs:
           - [x] Every flaw I know of is fixed in this diff or named in \`## Outcome\`.
           - [x] I checked each statement above. I did not assume it.
           EOF
-          pushed=false
-          if [ -z "$number" ] || ! git rev-parse -q --verify "origin/$BRANCH" >/dev/null || ! git diff --cached --quiet "origin/$BRANCH" -- $files; then
-            git switch -q -C "$BRANCH"
-            git commit -q -m "$TITLE"
-            git push -q --force "$remote" "$BRANCH"
-            pushed=true
-          fi
+          number=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number // empty')
           if [ -z "$number" ]; then
-            draft=""
-            [ "$DRAFT" = true ] && draft="--draft"
-            gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md" $draft
+            gh pr create --base "$BASE" --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md"
           else
-            gh pr edit "$number" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
+            gh pr edit "$number" --title "$title" --body-file "$RUNNER_TEMP/body.md"
           fi
