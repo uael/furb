@@ -27,15 +27,28 @@ export function daemonPlace(folder: string): string {
     : join(folder, "host.sock");
 }
 
-/** A refusal of the daemon, named by its kind, as `closed`, `role` or `no_skill`. */
+/** A refusal of the daemon, named by its kind, as `closed`, `role` or `no_skill`. Its name is its kind, and
+ * `Refused` for the kind that says no more. */
 export class Refused extends Error {
   constructor(
     readonly kind: string,
     why: string,
   ) {
     super(why);
-    this.name = "Refused";
+    this.name = kind === "refused" ? "Refused" : kind;
   }
+}
+
+/** A request that the daemon left with no answer when its socket closed, as when it ends or hands over to another
+ * build. */
+export class Closed extends Error {
+  override name = "Closed";
+}
+
+/** An error that comes on the socket, with the stack of the verb that asked it, which names its caller. */
+function askedBy<E extends Error>(error: E, asked: Error): E {
+  error.stack = `${error.name}: ${error.message}\n${asked.stack?.split("\n").slice(1).join("\n") ?? ""}`;
+  return error;
 }
 
 /** One connection to the daemon, after its hello. Each verb takes a number and its answer, in any order, and each
@@ -46,9 +59,18 @@ export class Connection {
   peer!: Peer;
   readonly closed: Promise<void>;
   private next = 0;
-  private readonly waiting = new Map<number, { resolve(answer: Answer): void; reject(error: Error): void }>();
+  private readonly waiting = new Map<
+    number,
+    { resolve(answer: Answer): void; reject(error: Error): void; asked: Error }
+  >();
   private readonly listeners = new Set<(frame: Frame) => void>();
-  private constructor(private readonly socket: Socket) {
+  /** How many lives hold the connection, which an idle connection keeps the process alive for. */
+  private held = 0;
+  private constructor(
+    private readonly socket: Socket,
+    private readonly idle: boolean,
+  ) {
+    if (idle) socket.unref();
     let held = "";
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
@@ -62,7 +84,7 @@ export class Connection {
     this.closed = new Promise((resolve) => {
       socket.on("close", () => {
         for (const waits of this.waiting.values())
-          waits.reject(new Error("The daemon closed the connection."));
+          waits.reject(askedBy(new Closed("The daemon closed the connection."), waits.asked));
         this.waiting.clear();
         resolve();
       });
@@ -72,7 +94,7 @@ export class Connection {
   }
 
   /** A connection to the daemon at a place, as a peer of a kind, with the name of a skill for a skill. */
-  static async dial(place: string, kind: Kind, name?: string): Promise<Connection> {
+  static async dial(place: string, kind: Kind, name?: string, idle = false): Promise<Connection> {
     const socket = await new Promise<Socket>((resolve, reject) => {
       const dialing = createConnection(place);
       dialing.once("connect", () => {
@@ -81,7 +103,7 @@ export class Connection {
       });
       dialing.once("error", reject);
     });
-    const connection = new Connection(socket);
+    const connection = new Connection(socket, idle);
     const welcome = await connection.ask({ verb: "hello", protocol: PROTOCOL, kind, name });
     if (welcome.answer !== "welcome") throw new Error(`The daemon gave ${welcome.answer}, and no welcome.`);
     connection.peer = welcome.data.peer;
@@ -91,8 +113,9 @@ export class Connection {
   /** The answer of the daemon to a verb, or its refusal as a `Refused`. */
   ask(verb: Verb): Promise<Answer> {
     const id = this.next++;
+    const asked = new Error(verb.verb);
     return new Promise<Answer>((resolve, reject) => {
-      this.waiting.set(id, { resolve, reject });
+      this.waiting.set(id, { resolve, reject, asked });
       this.socket.write(`${JSON.stringify({ id, ...verb })}\n`);
     });
   }
@@ -101,6 +124,20 @@ export class Connection {
   pushed(listener: (frame: Frame) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** A life that the connection serves. An idle connection, as the one of a window, keeps the process alive only
+   * while a life holds it, and a connection that is not idle keeps it alive always. */
+  hold(): void {
+    this.held++;
+    this.socket.ref();
+  }
+
+  /** A life let go: with the last life that it held, an idle connection keeps the process alive no more and stays open
+   * for the next life. */
+  release(): void {
+    this.held = Math.max(0, this.held - 1);
+    if (this.idle && this.held === 0) this.socket.unref();
   }
 
   close(): void {
@@ -113,7 +150,7 @@ export class Connection {
       if (!waits) return;
       this.waiting.delete(frame.id ?? -1);
       if (frame.frame === "reply") waits.resolve(frame.answer);
-      else waits.reject(new Refused(frame.error.error, frame.why));
+      else waits.reject(askedBy(new Refused(frame.error.error, frame.why), waits.asked));
       return;
     }
     for (const listener of this.listeners) listener(frame);
