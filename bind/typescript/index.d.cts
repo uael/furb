@@ -615,6 +615,12 @@ export declare function parts(project: string): Array<Part>
 export declare function played(given: Array<Skill>): NativeEar
 
 /**
+ * The profile that built the crate: `release`, or `debug` when the checks of a debug build are
+ * on, as in the dev profile of the workspace. A measure of speed holds for a release build alone.
+ */
+export declare const PROFILE: string
+
+/**
  * A provider as a first run checks it: its name, the names of its credential in the environment, whether the
  * settings enable it, and how many of its models the catalog offers.
  */

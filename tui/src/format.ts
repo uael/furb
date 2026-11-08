@@ -61,15 +61,17 @@ export const graphemes = new Intl.Segmenter();
  * the end of a path. It fills the width to its last cell, and shows no ellipsis where none fits. */
 export function clip(raw: string, width: number, keep: "start" | "end" = "start"): string {
   // A tab and the other control characters measure 0 cells for Bun and a few or none for the renderer, so each is one cell.
-  const line = raw.replace(/\p{Cc}/gu, " ");
+  const line = raw.replace(/[^\P{Cc}\n]/gu, " ");
   if (Bun.stringWidth(line) <= width) return line;
   // One measure, Bun.stringWidth, says both the guard and the cut. The guard reads the whole line once, and the cut
   // then reads only the graphemes that it keeps, from the edge that stays, so it costs what the room shows.
   const parts =
     keep === "end"
       ? (function* () {
+          // One Segments object answers each containing(), so the walk costs the graphemes that it keeps.
+          const segments = graphemes.segment(line);
           for (let at = line.length; at > 0; ) {
-            const part = graphemes.segment(line).containing(at - 1);
+            const part = segments.containing(at - 1);
             if (!part) return;
             yield part.segment;
             at = part.index;

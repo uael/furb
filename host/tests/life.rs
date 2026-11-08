@@ -9,6 +9,7 @@
 #[path = "../../tests/common/yard.rs"]
 mod yard;
 
+use std::fmt::Write as _;
 use std::{
   collections::BTreeMap,
   fs,
@@ -740,4 +741,36 @@ async fn a_life_on_its_checkpoint_tells_the_acts_of_its_history_each_at_the_plac
   let earlier = acts.iter().rev().find(|act| act.words.first() == Some(&json!("x = 1")));
   let done = earlier.is_some_and(|act| act.kind == Kind::Rung && Act::done(act));
   assert!(done, "the rung of the first birth is told done at last: {earlier:?}");
+}
+
+#[tokio::test]
+async fn a_reader_that_attaches_late_reads_each_line_that_a_running_command_printed_so_far() {
+  let at = place("outsofar");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut first = Box::pin(life.events(0));
+  let command = "for i in $(seq 1 3000); do echo line$i; done; sleep 30".to_owned();
+  let id = made(&life, Command::Bash { command, stdin: None, on: None }).await;
+  let last = |event: &Event| matches!(event, Event::Fact(f) if f[0] == "out" && f[3].as_str().is_some_and(|t| t.contains("line3000")));
+  until(&mut first, last).await;
+  let mut late = Box::pin(life.events(0));
+  let got = until(&mut late, last).await;
+  let printed: String = got
+    .iter()
+    .filter_map(|(_, event)| match &**event {
+      Event::Fact(f) if f[0] == "out" && f[1] == id.as_str() && f[4] == "stdout" => f[3].as_str(),
+      _ => None,
+    })
+    .collect();
+  let mut wanted = String::new();
+  for n in 1..=3000 {
+    writeln!(wanted, "line{n}").unwrap();
+  }
+  assert_eq!(
+    printed, wanted,
+    "a reader at 0 reads the whole output so far, in the facts of the log"
+  );
+  let running = got.iter().any(
+    |(_, e)| matches!(&**e, Event::Act(a) if a.id == id && !matches!(a.phase, Phase::Done(_))),
+  );
+  assert!(running, "the command still runs while the reader reads");
 }
