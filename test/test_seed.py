@@ -32,7 +32,7 @@ DATA = {
   "acts": [
     {"kind": "prompt", "id": "prompt1", "on": "chain3", "shape": "str", "message": "Wait.", "to": "", "held": ""},
     {"kind": "stand", "id": "stand1", "on": "chain1", "value": STANDS},
-    {"kind": "bash", "id": "bash2", "on": "chain1", "value": SHELL},
+    {"kind": "bash", "id": "bash2", "on": "chain1", "words": ["echo one"], "value": SHELL},
   ],
 }
 """The data of a checkpoint: the root and a chain under it that a prompt waits on, paused, the last standing, and a
@@ -86,10 +86,12 @@ async def test_each_open_prompt_of_the_data_is_made_again_through_prompt_under_i
   assert not engine.paused("chain1")
 
 
-async def test_each_act_of_the_data_with_a_value_stands_known_on_its_chain_with_that_value_and_runs_nothing() -> None:
-  """Each act of the data with a value stands known on its chain with that value and runs nothing."""
+async def test_each_act_of_the_data_with_a_value_stands_known_on_its_chain_with_the_words_that_made_it_and_with_that_value_and_runs_nothing() -> (
+  None
+):
+  """Each act of the data with a value stands known on its chain with the words that made it and with that value and runs nothing."""
   sand, _ = await seeded()
-  assert engine.get("bash2") == ("bash", "bash2", "journal", "chain1")
+  assert engine.get("bash2") == ("bash", "bash2", "journal", "chain1", "echo one")
   assert engine.peek("bash2") == SHELL
   assert not [x for x in sand.calls if x[0] == "bash"]
 
