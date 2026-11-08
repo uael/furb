@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
-import { createConnection, type Socket } from "node:net";
+import type { Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Fact, Standing, Turn } from "furb";
@@ -21,7 +21,7 @@ import type {
   Threads,
   Request1 as Verb,
 } from "furb/protocol";
-import { Closed, Connection, Refused } from "furb/skill";
+import { Closed, Connection, daemonPlace, dialed, Refused } from "furb/skill";
 import { program } from "../../bind/typescript/program.ts";
 import type { Setting } from "./configs.ts";
 
@@ -48,13 +48,6 @@ export function daemonFolder(env: Record<string, string | undefined> = process.e
         : join(homedir(), ".cache"));
   if (!base) throw new Error("This machine has no cache of furb, so no daemon has a place on it.");
   return join(base, "furb", "host");
-}
-
-/** Where a window dials the daemon of a folder: its socket, or its named pipe on Windows. */
-export function daemonPlace(folder = daemonFolder()): string {
-  return process.platform === "win32"
-    ? `\\\\.\\pipe\\furb-${folder.replace(/[\\/:]/g, "-")}`
-    : join(folder, "host.sock");
 }
 
 /** The program furb that serves the daemon: the one that FURB_BIN names, else the one that `bun run build` made for
@@ -109,18 +102,6 @@ function tail(path: string): string {
   } catch {
     return "";
   }
-}
-
-/** A connection to a place, or nothing when no daemon answers there. */
-export function dialed(place: string): Promise<Socket | undefined> {
-  return new Promise((resolve) => {
-    const socket = createConnection(place);
-    socket.once("connect", () => {
-      socket.removeAllListeners("error");
-      resolve(socket);
-    });
-    socket.once("error", () => resolve(undefined));
-  });
 }
 
 /** A refusal of the version is told as a daemon of another build. */

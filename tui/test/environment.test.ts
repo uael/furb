@@ -2,8 +2,9 @@ import { expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
+import { daemonPlace } from "furb/skill";
 import { environment } from "../script/environment.ts";
-import { daemonFolder, daemonPlace } from "../src/client.ts";
+import { daemonFolder } from "../src/client.ts";
 
 /** A folder that holds a claude command line and node, as /opt/homebrew/bin does. */
 function shared(): string {

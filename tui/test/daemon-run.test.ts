@@ -2,8 +2,9 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { daemonPlace, dialed } from "furb/skill";
 import { handedOver } from "../script/daemon.ts";
-import { daemonFolder, daemonPlace, dialed } from "../src/client.ts";
+import { daemonFolder } from "../src/client.ts";
 
 test("a run of the tests that a kill ends leaves no daemon of it", async () => {
   // A short folder, since the path of a socket has a bound; Windows has no /tmp, and its daemon listens on a pipe.
