@@ -669,12 +669,31 @@ fn a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without
 /// The state of a life at its tip, with each of these directories written as <at>, so lives in
 /// two directories, a fork and its origin among them, compare.
 fn placed(engine: &mut Engine, at: &[&Path]) -> String {
+  placing(state(engine), at)
+}
+
+/// A state with each of these directories written as <at>, in each form that python shows it in: a
+/// path of Windows has its backslashes doubled by the repr of a text, and again by the repr of that
+/// repr, as a module value that holds a path is shown.
+fn placing(shown: String, at: &[&Path]) -> String {
   let home = std::env::var("HOME").unwrap_or_default();
-  at.iter().fold(state(engine), |shown, one| {
+  at.iter().fold(shown, |shown, one| {
     let path = one.display().to_string();
     let tilded = path.strip_prefix(&home).map_or_else(|| path.clone(), |rest| format!("~{rest}"));
-    shown.replace(&path, "<at>").replace(&tilded, "<at>")
+    (0..4).rev().fold(shown, |shown, doubled| {
+      let said =
+        |text: &str| (0..doubled).fold(text.to_owned(), |text, _| text.replace('\\', "\\\\"));
+      shown.replace(&said(&path), "<at>").replace(&said(&tilded), "<at>")
+    })
   })
+}
+
+#[test]
+fn a_directory_that_python_shows_with_its_backslashes_doubled_is_placed_as_at() {
+  let at = Path::new(r"C:\Users\x\furb-torn");
+  let shown =
+    r"[('C:\\Users\\x\\furb-torn', 'C:\\\\Users\\\\x\\\\furb-torn', 'C:\Users\x\furb-torn')]";
+  assert_eq!(placing(shown.to_owned(), &[at]), "[('<at>', '<at>', '<at>')]");
 }
 
 /// The names of the questions that the text of a record holds, each a fact whose name is its kind
