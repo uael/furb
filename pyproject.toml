@@ -53,6 +53,10 @@ members = ["bind/python", "cli"]
 # crates of the workspace quickly. A wheel built for a release takes the release profile of maturin.
 config-settings-package = { furb-monty = { build-args = "--profile=dev" }, furb-cli = { build-args = "--profile=dev" } }
 
+# The source of a release ships the promise of its major, which docs/promise.md states.
+[tool.uv.build-backend]
+source-include = ["docs/promise.md"]
+
 [tool.uv.sources]
 furb-monty = { workspace = true }
 furb-cli = { workspace = true }

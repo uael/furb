@@ -3122,6 +3122,44 @@ fn a_signed_thought_written_after_a_compaction_reaches_the_next_turn_whole() {
   );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_ceiling_on_a_chain_pauses_it_at_a_reply_that_a_named_account_served() {
+  let (mut engine, _yard) = on_claude("ceiling");
+  let root = engine.root().to_owned();
+  let ceiling = verbs::Grant { usd: Some(0.005), on: on(&root), ..Default::default() };
+  engine.grant(ceiling).expect("a grant is made");
+  // The answer of the prompt never comes: the ceiling pauses the chain at the first reply.
+  let with = verbs::Prompt { message: Some("first".into()), on: on(&root), ..Default::default() };
+  drop(engine.prompt(Object::string("str"), with).expect("a prompt is made"));
+  let pauses = |engine: &mut Engine| {
+    let of = verbs::Transcript { on: Some(root.clone()), of: Some("pause".to_owned()) };
+    engine.transcript(of).unwrap().iter().filter(|fact| fact.about() == root).count()
+  };
+  assert!(until(&mut engine, |engine| pauses(engine) == 1), "the ceiling paused the chain");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_reply_of_a_named_account_has_numbers_alone_in_its_usage_and_a_fact_that_names_the_account() {
+  let (mut engine, _yard) = on_claude("named");
+  answer(&mut engine, "first");
+  let root = engine.root().to_owned();
+  let facts = |engine: &mut Engine, of: &str| {
+    let of = verbs::Transcript { on: Some(root.clone()), of: Some(of.to_owned()) };
+    engine.transcript(of).unwrap()
+  };
+  let named = facts(&mut engine, "account");
+  assert_eq!(named.len(), 1);
+  assert_eq!(
+    named[0].word(0).and_then(|one| one.as_str().map(str::to_owned)).as_deref(),
+    Some("a")
+  );
+  let replies = facts(&mut engine, "reply");
+  let turn = engine.peek(replies[0].about(), verbs::Peek::default()).unwrap().py_repr();
+  assert!(!turn.contains("'a')"), "the usage holds numbers alone: {turn}");
+}
+
 #[test]
 fn a_model_of_rig_reads_the_thought_of_each_earlier_turn_whole_and_one_that_forgets_reads_none() {
   let thought = Reasoning::new_with_signature("a long thought", Some("sig".to_owned()));
