@@ -44,7 +44,7 @@ TIME = re.compile(
 
 # A line that says a test process was killed: cargo gives `(signal: 9, SIGKILL: kill)`, pytest-xdist `node down: Not
 # properly terminated` for a worker that died.
-KILLED = re.compile(r"SIGKILL|node down: Not properly terminated")
+KILLED = re.compile(r"signal: 9, SIGKILL|node down: Not properly terminated")
 # The return code of a command that SIGKILL, signal 9, ended.
 KILLED_CODE = -9
 
@@ -154,9 +154,9 @@ def main(argv: list[str]) -> int:
   if run.returncode:
     if run.returncode == KILLED_CODE or any(KILLED.search(line) for line in lines):
       print(
-        f"budget: {part} lost a test process to SIGKILL: the guard of memory, script/memwatch.sh, ends the largest test"
+        f"budget: {part} lost a test process to SIGKILL, which the guard of memory, script/memwatch.sh, sends to the largest"
       )
-      print("process while the memory is tight, so this is no failure of a test: run it again once the memory frees.")
+      print("test process while the memory is tight: read its log before you read this as a failed test.")
     return run.returncode
   over_cpu = cpu_limit > 0 and worked > cpu_limit
   over_wall = wall_limit > 0 and took > wall_limit

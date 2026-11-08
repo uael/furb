@@ -96,16 +96,18 @@ def test_the_hooks_and_the_gates_run_pytest_through_the_one_home_of_its_limit() 
   assert '"budget.py"' in (ROOT / "script" / "hooks" / "reach.py").read_text(encoding="utf-8")
 
 
-def test_a_run_that_lost_a_test_process_to_sigkill_says_the_guard_of_memory_ended_it(tmp_path: Path) -> None:
+def test_a_run_that_lost_a_test_process_to_sigkill_names_the_guard_of_memory(tmp_path: Path) -> None:
   for command in (
     [sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGKILL)"],
     [sys.executable, "-c", "print('(signal: 9, SIGKILL: kill)'); raise SystemExit(101)"],
   ):
     got = budget(tmp_path, "cargo", 100, *command)
     assert got.returncode != 0
-    assert "lost a test process to SIGKILL: the guard of memory" in got.stdout, command
+    assert "lost a test process to SIGKILL, which the guard of memory" in got.stdout, command
 
 
 def test_a_run_that_fails_with_no_kill_names_no_guard(tmp_path: Path) -> None:
-  got = budget(tmp_path, "cargo", 100, sys.executable, "-c", "raise SystemExit(101)")
-  assert got.returncode == 101 and "SIGKILL" not in got.stdout
+  got = budget(
+    tmp_path, "cargo", 100, sys.executable, "-c", "print('test a_sigkill_ends_it ... FAILED'); raise SystemExit(101)"
+  )
+  assert got.returncode == 101 and "guard of memory" not in got.stdout
