@@ -475,8 +475,16 @@ export class HostView extends EventEmitter {
       this.directory = life.reader.directory;
     } else this.role = life.daemon.peer?.role ?? "write";
     const fact = (one: Fact) => this.hear(one);
-    const forgot = () => this.forget();
-    const facts = () => this.heard();
+    // The facts that the life tells again as the window attaches, until the first change, are no work that the window
+    // saw run, so it times none of them.
+    const forgot = () => {
+      this.forget();
+      this.replaying = true;
+    };
+    const facts = () => {
+      this.replaying = false;
+      this.heard();
+    };
     const change = () => this.update();
     const log = (line: string) => this.emit("log", line);
     const authentication = (status: unknown) => this.emit("authentication", status);
@@ -602,6 +610,7 @@ export class HostView extends EventEmitter {
 
   /** The facts of a change: the view holds them, and the work that waits for a wake is read again. */
   private heard(): void {
+    this.now = undefined;
     this.update();
     if (this.journal) {
       this.journal.readable(0, 0);
@@ -629,12 +638,15 @@ export class HostView extends EventEmitter {
   private hear(fact: Fact, timed = true): void {
     const [kind, id] = fact;
     const answered = kind === "done" ? questionKind(id) : undefined;
-    if (timed) {
+    if (timed && !this.replaying) {
+      // The facts of one change share the moment that the window heard them, so an act that opened and ended in one
+      // change took no time that the window knows.
+      const now = (this.now ??= clock());
       const began = this.began.get(id);
-      if (isQuestion(kind, id)) this.began.set(id, clock());
+      if (isQuestion(kind, id)) this.began.set(id, now);
       else if (kind === "done" && began !== undefined) {
         this.began.delete(id);
-        this.took.set(id, clock() - began);
+        this.took.set(id, now - began);
       }
     }
     const turn = fact[3];
@@ -655,6 +667,10 @@ export class HostView extends EventEmitter {
   private readonly replies = new Map<string, string>();
   /** The lines that each write added and removed, by the write. */
   private readonly lines = new Map<string, NonNullable<ActRow["lines"]>>();
+  /** Whether the life tells again the facts that it held before the window attached, which the window times not. */
+  private replaying = false;
+  /** The moment that the window heard the facts of the change that it hears now. */
+  private now?: number;
   /** What the facts heard since the last snapshot change of the views, which that snapshot reads again. */
   private unread: Fact[] = [];
   private given?: Given;
