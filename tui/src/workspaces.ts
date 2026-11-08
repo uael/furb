@@ -735,6 +735,12 @@ export class Workspaces extends EventEmitter {
     await this.opening.get(entry.path);
     const group = this.groupOf(entry);
     if (!group) throw new Error("This session has no workspace.");
+    // A life that another window holds is no life of this window to end, so the delete is refused before this window
+    // leaves the session or lets it go. This window counts as one of the windows when it holds the life itself.
+    if ((await daemon().windows(entry.path)) > (entry.session ? 1 : 0))
+      throw new Error(
+        `Another window holds the life of ${entry.path}, so it is not deleted: close it there first.`,
+      );
     await this.leave(entry, group);
     await this.release(entry);
     // The daemon ends the life once no window and no pin held it for its grace, and frees its record then.

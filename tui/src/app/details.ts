@@ -12,7 +12,6 @@ import {
 } from "@opentui/core";
 import { display, leveled, safeText, TIMEOUT, unmarked } from "furb";
 import {
-  byOperator,
   type CodeRow,
   cancelled,
   type Exit,
@@ -68,7 +67,7 @@ export const details = part({
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
    * wrote once it read the failure, so the failure no longer stands. */
   retry(act: ActRow): ActRow | undefined {
-    if (act.kind !== "rung" || byOperator(act) || !failed(act)) return undefined;
+    if (act.kind !== "rung" || this.session.own(act) || !failed(act)) return undefined;
     return this.session.madeAfter(act, (other) => other.kind === "rung");
   },
 
@@ -150,9 +149,9 @@ export const details = part({
 
   /** The label of the block of a word: the model that wrote it with its effort, as opus/high, by the name that the line
    * under the input gives it, or the operator. */
-  writer(step: { kind: string; maker?: ActRow["maker"]; words: readonly unknown[] }): string {
+  writer(step: { kind: string; by?: string; maker?: ActRow["maker"]; words: readonly unknown[] }): string {
     const actor = step.kind === "rung" && typeof step.words[2] === "string" ? step.words[2] : "";
-    return !actor || byOperator(step) ? "operator" : this.actorLabel(actor);
+    return !actor || this.session.own(step) ? "operator" : this.actorLabel(actor);
   },
 
   /** The one label of a model in the feed, as opus/high: the model by its name alone and its effort. The block of a
@@ -211,7 +210,7 @@ export const details = part({
    * the operator fixes his own word, and the chain asks a model for its word again with the findings. */
   gateHint(act: ActRow): string | undefined {
     if (act.kind !== "rung" || !isDone(act) || act.run?.run !== "refused") return undefined;
-    return byOperator(act)
+    return this.session.own(act)
       ? "Press ↑ in the input to bring the word back, fix the line that the gate names, and send it again."
       : "The chain tells the model these findings and asks it for its word again.";
   },
