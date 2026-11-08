@@ -23,6 +23,7 @@ use super::{
   Catalog, catalog,
   disk::{self, Access},
   provider::{KEY_AUTOMATIC, KEY_CLASSES, KEY_THINKING, THINKING, catalog::switched},
+  scratch,
 };
 use crate::{
   gate,
@@ -166,6 +167,16 @@ fn own() -> Vec<Named> {
       "The most tokens of thought of a model in one turn, 0 turning the thought off.",
     ),
     one(KEY_AUTOMATIC, Kind::Array, json!([]), "The models of automatic work, the first first."),
+    one(
+      scratch::KEY,
+      Kind::Integer,
+      json!(scratch::DAYS),
+      "The days with no use after which the scratch directory of a record that no life holds is \
+       removed: no change of any file in it, at any depth, for that many days. A directory that \
+       the system refuses to remove, as one with an open file, stays. A reopen of the record \
+       makes it again from the writes that the record holds; the files that commands made in it \
+       are lost.",
+    ),
     one(KEY_CLASSES, Kind::Object, json!({}), "The class, cheap or dear, of each model it names."),
     one(PROVIDERS, Kind::Object, json!({}), "The providers of models, each by its name."),
     one(

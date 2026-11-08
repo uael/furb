@@ -641,6 +641,29 @@ export type Rung =
       type: "more";
     };
 /**
+ * Who made an act, as a window names it: the operator, a member who answers as him by his login,
+ * a model with its effort, a skill, or the engine itself.
+ */
+export type Role2 =
+  | {
+      role: "operator";
+    }
+  | {
+      login: string;
+      role: "member";
+    }
+  | {
+      model: string;
+      effort: string;
+      role: "model";
+    }
+  | {
+      role: "skill";
+    }
+  | {
+      role: "engine";
+    };
+/**
  * Where an act stands: asked, started by the ear that owns it, or done, with what it came to.
  */
 export type Phase =
@@ -1049,6 +1072,11 @@ export interface Act {
   id: string;
   by: string;
   /**
+   * Who made the act: for a rung that waits for the word of an actor, that actor; for any
+   * other act, the role of the act or the person that made it.
+   */
+  maker?: Role2;
+  /**
    * What the act is on: a chain, or the prompt of a thread for a prompt on a thread.
    */
   on: string;
@@ -1141,4 +1169,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 7;
+export const PROTOCOL = 8;

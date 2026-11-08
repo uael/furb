@@ -20,6 +20,9 @@ The line of the policy is the sentence of the contract that starts `A minor may 
 The names of the release rule when it holds the line, so one pull request cannot add a name and change its value;
 the names of the working tree rule before the first release that holds the line.
 
+Each break must also stand on the page of the promise, docs/promise.md, as a line `- `<where>: <what>`: <its fate>`.
+When the page exists, the script fails on a break that it does not name, whatever the title.
+
 With a title, the breaks are declared when the title holds `!` before its colon, and the script says so and passes.
 Without a title, it fails on each break.
 
@@ -43,6 +46,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ENGINE = "src/furb/engine.pyi"
+PAGE = "docs/promise.md"
 SCHEMA = "host/protocol.schema.json"
 KIT = re.compile(r"(?:extensions|\.agents/skills)/([^/]+/[^/]+\.pyi)")
 """KIT is the interface of a kit, in .agents/skills, or in extensions, its folder in a release before the kits moved."""
@@ -414,7 +418,8 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     return 0
   files = paths(root, tag, *([args.since] if args.since else []))
   known = {str(x) for x in compared(root, tag, files, args.since)} if args.since else set()
-  found = [x for x in compared(root, tag, files) if str(x) not in known]
+  every = compared(root, tag, files)
+  found = [x for x in every if str(x) not in known]
   for one in found:
     sys.stdout.write(f"{one}\n")
   blocking = [x for x in found if x.level == "break" or (x.level == "wording" and not args.wording)]
@@ -423,6 +428,18 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
   sys.stdout.write(
     f"Against {tag}: {counts['break']} breaks, {counts['wording']} sentences that change, {counts['minor']} minors.{stand}\n"
   )
+  page = root / PAGE
+  if page.exists():
+    listed = page.read_text(encoding="utf-8")
+    unlisted = [
+      f"{x.where}: {x.what}"
+      for x in every
+      if x.level == "break" and not re.search(rf"^- `{re.escape(f'{x.where}: {x.what}')}`: \S", listed, re.M)
+    ]
+    for one in unlisted:
+      sys.stderr.write(f"{PAGE} does not list the break {one}, with its fate.\n")
+    if unlisted:
+      return 1
   if not blocking:
     return 0
   if args.title is not None and declared(args.title):

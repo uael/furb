@@ -59,7 +59,7 @@ pub enum Error {
 }
 
 /// Why the environment does not say how to reach a model of a provider of the network.
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum Unreached {
   #[error("no credential of it stands in the environment: set {}", .env.join(" or "))]
   NoCredential { env: Vec<String> },

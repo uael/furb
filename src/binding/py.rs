@@ -5,7 +5,7 @@
 #![deny(clippy::needless_pass_by_value, clippy::map_err_ignore)]
 #![expect(
   clippy::too_many_arguments,
-  reason = "a verb of the host API takes each argument that the host gives it"
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 
 use indexmap::IndexMap;

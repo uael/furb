@@ -13,6 +13,7 @@ fn act(kind: &str, id: &str, by: &str, words: &[Value], phase: Phase) -> Event {
     kind: Kind::from(kind),
     id: id.to_owned(),
     by: by.to_owned(),
+    maker: furb::view::Role::Engine,
     on: "chain1".to_owned(),
     chain: "chain1".to_owned(),
     words: words.to_vec(),

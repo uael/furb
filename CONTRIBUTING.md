@@ -170,7 +170,8 @@ and `cli/pyproject.toml` say.
 | `tui/script/` | The gallery, the animation, and the rasterizer that turns a frame into a PNG. |
 
 A screen must read clearly at first sight. After a change that a screen shows, run `bun run screenshots` and read each
-capture. Do not commit the captures: after a push to `main`, `.github/workflows/gallery.yml` draws them again. The entry
+capture. Do not commit the captures: at most once an hour, on a new head of `w/converge`,
+`.github/workflows/gallery.yml` draws them again on the branch `w/gallery`. The entry
 `bun run screenshots` of [`AGENTS.md`](AGENTS.md#commands) gives each variable that the gallery reads.
 
 ### The suite
