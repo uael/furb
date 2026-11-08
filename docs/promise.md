@@ -49,6 +49,8 @@ R1, no drift on the same engine:
 - `src/engine.test.rs::a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift`
 - `src/life.test.rs::each_record_of_the_replays_replays_on_its_own_engine_with_no_drift`
 - `src/life.test.rs::a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts`
+- `tests/promise.rs::a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entries_written_whole`, at a
+  random byte of a random line and of the last checkpoint, from a seed that it prints
 
 R2, the exact tip, with a checkpoint and without one (resume and reopen):
 
@@ -58,6 +60,13 @@ R2, the exact tip, with a checkpoint and without one (resume and reopen):
 - `tests/promise.rs::a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint`
 - `host/tests/daemon.rs::a_life_that_ended_opens_again_from_its_checkpoint`
 - `test/test_gathered.py::test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard`
+- `tests/promise.rs::a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without_one_and_goes_on`, a
+  kill of the process of the life at or after a fact that a seed draws, which it prints with the length of
+  the record at the kill, so the torn test plays that kill again as a cut
+
+A fork of a life, its record up to a fact in a directory of its own:
+
+- `tests/promise.rs::a_fork_of_a_life_opens_at_the_state_of_its_origin_at_the_fork_and_goes_on_by_its_own_facts`
 
 R3, no drift within a major, through the one home of adapters:
 
@@ -91,8 +100,7 @@ What no machine proves yet, so the promise does not hold there until a proof lan
 - A rollback: `test/outside/test_promise_rollback.py::test_each_record_of_next_opens_on_the_last_release_of_its_major_once_that_release_holds_a_corpus`
   opens each record of the corpus on the last release of its major, but it skips until a release of the major holds a
   folder of the corpus (P8).
-- A fork of a life: no test opens a fork at the state of its origin.
-- A stop at a random fact, and a replay with random delays and ears that raise (stop-random, replay-chaos).
+- A replay with random delays of the bus and of each ear, and with ears that raise (replay-chaos).
 - A replay across the builds of the major, with a count of the drifts of the corpus (drift-gate).
 
 ## The breaks of the contract since v0.4.2
