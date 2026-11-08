@@ -540,6 +540,39 @@ fn a_turn_after_a_prefix_resumes_the_thought_of_the_reply_before_it_whole_with_i
   assert_eq!(entries[1]["message"]["content"], expected);
 }
 
+#[test]
+fn a_conversation_that_replaces_another_resumes_the_turns_that_they_share_as_the_command_line_held_them()
+ {
+  let yard = Yard::new("held");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let low = json!({"session": "chain", "effort": "low"});
+  asked(&model, &[user("first THINK")], low.clone()).unwrap();
+  // The chain gives the reply back as the word that ran, with no thought.
+  let ran = Message::assistant("close(\"reply 1\")");
+  let second = asked(&model, &[user("first THINK"), ran.clone(), user("second")], low).unwrap();
+  fs::write(yard.at.join("lost"), "1").unwrap();
+  let replied = Message::Assistant { id: None, content: second.choice };
+  let turns = [user("first THINK"), ran, user("second"), replied, user("third")];
+  asked(&model, &turns, json!({"session": "chain", "effort": "high"})).unwrap();
+  let pids = yard.pids();
+  let last = pids.last().expect("a process rebuilt the lost conversation");
+  let id = after(&yard.args(last), "--resume").expect("the process resumes a conversation");
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let file = projects[0].path().join(format!("{id}.jsonl"));
+  let contents: Vec<Value> = fs::read_to_string(&file)
+    .unwrap()
+    .lines()
+    .map(|one| serde_json::from_str::<Value>(one).unwrap()["message"]["content"].clone())
+    .collect();
+  assert_eq!(contents.len(), 4, "{contents:?}");
+  let thought = json!({"type": "thinking", "thinking": "hmm", "signature": "sig"});
+  assert_eq!(contents[1], json!([thought, {"type": "text", "text": "close(\"reply 1\")"}]));
+  assert_eq!(contents[2][0]["text"], "[earlier turn: you]\n", "{}", contents[2]);
+  assert_eq!(contents[2][1]["text"], "close(\"reply 1\")", "{}", contents[2]);
+}
+
 /// A model of the fake that keeps its conversations in a config dir of the yard, whose command line loses the
 /// conversation that a process resumes as many times as `lost` says.
 fn losing(yard: &Yard, lost: &str) -> Completion {
