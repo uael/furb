@@ -954,7 +954,6 @@ export class Session extends EventEmitter {
             this.threadsFresh(selected) ? undefined : this.readThreads(selected),
             this.railFresh ? undefined : this.readRail(),
           ]);
-        if (this.momentsRead?.version !== this.version) await this.readMoments().catch(this.threadFault);
         this.named();
         this.carryQueue();
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
@@ -1977,9 +1976,19 @@ export class Session extends EventEmitter {
   async readMoments(): Promise<void> {
     const version = this.version;
     this.momentsRead = { version, moments: await this.host.moments() };
+    this.emit("change");
   }
+  private momentsAsking?: Promise<void>;
   /** The moments of the life as the crate gives them, up to the moment that the feed shows. */
   get moments(): readonly number[] {
+    // The moments are read only for a loom that draws cells, which asks for them, and not at each new act: a read walks
+    // every act of the life, so a read per act made a new act cost more as the life grew.
+    if (this.momentsRead?.version !== this.version && !this.momentsAsking)
+      this.momentsAsking = this.readMoments()
+        .catch(this.threadFault)
+        .finally(() => {
+          this.momentsAsking = undefined;
+        });
     const all = this.momentsRead?.moments ?? [];
     const moment = this.moment;
     return moment === undefined ? all : all.filter((one) => one <= moment);
