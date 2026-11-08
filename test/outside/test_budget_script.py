@@ -100,7 +100,7 @@ def test_the_hooks_and_the_gates_run_pytest_through_the_one_home_of_its_limit() 
 def killed_after(log: Path, when: str, program: str) -> list[str]:
   """A command that writes a line of the log of the guard of memory, at a time given as an expression, then ends at once with the code of a kill, 137, which every system gives,
   as a test binary that the guard ended does."""
-  line = f"f'{{{when}}} 4242 {program} --test-threads 4\\n'"
+  line = f"f'{{{when}}} 4242 ' + {program!r} + ' --test-threads 4\\n'"
   body = f"import os, time\nopen({str(log)!r}, 'a').write({line})\nos._exit(137)"
   return [sys.executable, "-c", body]
 
