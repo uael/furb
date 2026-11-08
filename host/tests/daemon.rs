@@ -156,6 +156,29 @@ mod daemon {
     }
   }
 
+  /// The opening of a life whose claude command line says nothing and ends at once, so a stand
+  /// that reads the settings again does not ask the command line of the machine, which takes
+  /// seconds to answer where one is installed. Where no script runs, as on Windows, it is the plain
+  /// opening.
+  fn mute(at: &Path) -> Opening {
+    let mut opening = opening(at);
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt;
+      let program = at.join("claude");
+      fs::write(
+        &program,
+        "#!/bin/sh
+exit 0
+",
+      )
+      .unwrap();
+      fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+      opening.claude = Some(program.display().to_string());
+    }
+    opening
+  }
+
   /// A daemon that listens in a folder, served on a task of the test.
   async fn started(at: &Path, grace: Duration) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     started_with(at, grace, opening(at)).await
@@ -1152,14 +1175,8 @@ mod daemon {
     let tailnet = Some(Tailnet { identity: identity.clone(), ports: Ports::default() });
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings = Settings {
-      opening: opening(&at),
-      grace: GRACE,
-      stall: STALL,
-      tailnet,
-      door: None,
-      host: None,
-    };
+    let settings =
+      Settings { opening: mute(&at), grace: GRACE, stall: STALL, tailnet, door: None, host: None };
     let served = local.clone();
     let _daemon = tokio::spawn(async move { run(&served, listener, settings).await });
     let mut window = Window::dialed(&local).await;

@@ -304,33 +304,24 @@ pub struct Local {
 }
 
 impl Catalog {
-  /// The catalog of this machine: the snapshot, with the models the cache holds of its providers, the claude command
-  /// line when it finds one, and the local server that the environment of the process names, one for the process, so
-  /// what it listed holds for every catalog after. A cache a day old is refreshed in the background, for the next
-  /// life, when the host has called [`keep_fresh`].
-  pub fn load() -> Self {
-    blocking(Self::loaded())
-  }
-
-  /// The catalog of this machine, as [`Catalog::loaded_on`] gives it, for a caller that blocks.
-  pub fn load_on(named: Option<&Path>) -> Self {
-    blocking(Self::loaded_on(named))
+  /// The catalog of this machine: the snapshot, with the models the cache holds of its providers,
+  /// the claude command line when it finds one, the one at a path in the place of the one of this
+  /// machine when a path is given, so a life that names its command line asks no other, and the
+  /// local server that the environment of the process names, one for the process, so what it
+  /// listed holds for every catalog after. A cache a day old is refreshed in the background, for
+  /// the next life, when the host has called [`keep_fresh`].
+  pub fn load(bin: Option<PathBuf>) -> Self {
+    blocking(Self::loaded(bin))
   }
 
   /// The catalog of this machine, as [`Catalog::load`] gives it, for a caller that awaits.
-  pub async fn loaded() -> Self {
-    Self::loaded_on(None).await
-  }
-
-  /// The catalog of this machine, which asks the claude command line of the machine for its
-  /// models unless a program is named: [`Catalog::discovered`] asks a named program.
-  pub async fn loaded_on(named: Option<&Path>) -> Self {
+  pub async fn loaded(bin: Option<PathBuf>) -> Self {
     static SERVER: OnceLock<Option<Arc<Server>>> = OnceLock::new();
     let env = |name: &str| env::var(name).ok();
     let server = SERVER.get_or_init(|| Server::named(env).map(Arc::new)).clone();
     let cached = cache().map(|at| at.join(update::MODELS));
     let listed = listed(cached.as_ref());
-    let claude = match named.map_or_else(Claude::found, |_| None) {
+    let claude = match bin.map(|bin| Claude::with(Some(bin), None)).or_else(Claude::found) {
       Some(claude) => {
         let models = claude.models().await;
         Some((claude, models))

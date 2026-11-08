@@ -20,7 +20,7 @@ use super::{
   answer::{Answering, answered, cut},
   images::Images,
   model::{Ask, Model, requested, standing},
-  retry::{Backoff, OVERFLOW, Retry, failure, overflows, recoverable},
+  retry::{Backoff, Retry, failure, overflows, recoverable},
   search::{Error as Unsearched, free},
   thinking::{Thinking, thinks},
   watch::{self, Watch},
@@ -382,10 +382,8 @@ impl Hearer {
       told(co, &reply.chain, &format!("#{} {dropped}", reply.rung));
     }
     let recoverable = got.as_ref().is_err_and(recoverable);
-    let got = got.map_err(|no| {
-      let over = if overflows(&no) { format!("{OVERFLOW}: ") } else { String::new() };
-      format!("{} answered nothing: {over}{}", reply.actor, failure(&no))
-    });
+    let overflow = got.as_ref().err().is_some_and(overflows);
+    let got = got.map_err(|no| format!("{} answered nothing: {}", reply.actor, failure(&no)));
     if let (Err(why), true) = (&got, reply.again)
       && !recoverable
     {
@@ -401,7 +399,15 @@ impl Hearer {
     if let (Ok(_), Some(account)) = (&got, &account) {
       say(co, Fact::says("account", &id, [Object::string(account)]));
     }
-    let got = got.map_err(Fault::refused).unwrap_or_else(|fault| fault.object());
+    let got = got
+      .map_err(|why| {
+        if overflow {
+          Fault::new("Overflow", vec![Object::string(why)])
+        } else {
+          Fault::refused(why)
+        }
+      })
+      .unwrap_or_else(|fault| fault.object());
     say(co, Fact::says("done", &id, [got]));
   }
 

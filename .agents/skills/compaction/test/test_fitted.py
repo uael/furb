@@ -5,7 +5,7 @@ from pathlib import Path
 
 from conftest import Sand, World, settle
 from furb import engine
-from furb.engine import Refused
+from furb.engine import Overflow
 from skills.conftest import extended
 
 BIG = "\n".join(f"line {n} " + "x" * 50 for n in range(400)) + "\n"
@@ -20,11 +20,11 @@ class Narrow(Sand):
   most: int = 0
 
   def hear(self, a: tuple) -> World:
-    """A reply whose turns pass most characters is refused with OVERFLOW, and every other fact goes to the Sand."""
+    """A reply whose turns pass most characters is refused with an Overflow, and every other fact goes to the Sand."""
     match a:
       case ("reply", about, _, on, _) if len(repr(engine.turns(on=on))) > self.most:
         yield "started", about
-        why = Refused(f"m answered nothing: {engine.module(on)['OVERFLOW']}: Prompt is too long")
+        why = Overflow("m answered nothing: Prompt is too long")
         self.loop.call_soon(engine.say, "done", about, why)
       case _:
         yield from super().hear(a)
@@ -48,7 +48,7 @@ def cuts(root: str) -> list[str]:
 
 
 async def test_fitted_watches_a_chain(tmp_path: Path) -> None:
-  """fitted() watches a chain: when its model refuses a reply of the chain with OVERFLOW, it compacts the chain at once to its open prompts with the summary OVERFLOWED, so the next reply reads less and the chain goes on with no pause."""
+  """fitted() watches a chain: when its model refuses a reply of the chain with an Overflow, it compacts the chain at once to its open prompts with the summary OVERFLOWED, so the next reply reads less and the chain goes on with no pause."""
   _, root = await narrowed(tmp_path, "read('big.txt')", "close(7)")
   act = engine.prompt(int, "go", on=root)
   assert await act == 7
@@ -59,7 +59,7 @@ async def test_fitted_watches_a_chain(tmp_path: Path) -> None:
 
 
 async def test_it_compacts_once_in_a_row_of_refusals(tmp_path: Path) -> None:
-  """It compacts once in a row of refusals with OVERFLOW, and again only after a reply of the chain that the model answered."""
+  """It compacts once in a row of refusals with an Overflow, and again only after a reply of the chain that the model answered."""
   sand, root = await narrowed(tmp_path, "read('big.txt')")
   wide, sand.most = sand.most, 10
   engine.prompt(int, "go", on=root)
