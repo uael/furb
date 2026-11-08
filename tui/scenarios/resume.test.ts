@@ -2,6 +2,8 @@
 // transcript, the same values and the same module, from its checkpoint and from its first entry with no checkpoint.
 import { expect } from "bun:test";
 import { readFileSync } from "node:fs";
+import { isDone } from "furb/life";
+import { until as untilChange } from "../../bind/typescript/test/until.ts";
 import { alive, scenario, test, until, Window } from "./harness.ts";
 
 /** What a life holds that a resume must keep: the turns of each chain, which its model reads, what each act of its
@@ -83,6 +85,10 @@ const SCRIPT = [
 async function work(window: Window): Promise<void> {
   await window.type("Scenario: work.");
   await window.shows((frame) => frame.includes("n=41"), "the first answer");
+  // The answer can stand in the frame before its prompt is done, and a line typed on an open prompt goes to it as a
+  // message of None, which no model answers, so the next line waits for the end of the prompt.
+  const { session } = window;
+  await untilChange(session, () => !session.acts.some((act) => act.kind === "prompt" && !isDone(act)));
   await window.type("Scenario: more.");
   await window.shows((frame) => frame.includes("n=42"), "the second answer");
 }

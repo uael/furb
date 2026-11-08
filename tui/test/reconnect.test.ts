@@ -316,3 +316,26 @@ test("a daemon of another build that takes the place of the daemon that went is 
   refuse = false;
   expect(await daemon.ask({ verb: "list" })).toEqual({ answer: "done" });
 });
+
+test("a pause, a wake and a seen that the daemon left when it went are not sent again, so none overrides a newer control of another window", async () => {
+  const seen: [number, string][] = [];
+  const { folder, place, server } = served((asked, socket, connection) => {
+    seen.push([connection, asked.verb]);
+    if (asked.verb === "open") {
+      reply(socket, asked, { answer: "done" });
+      socket.write(
+        `${JSON.stringify({ frame: "event", life: asked.life, seq: 0, event: { event: "changed" } })}\n`,
+      );
+    } else if (asked.verb === "pending") reply(socket, asked, { answer: "values", data: [] });
+    else if (connection === 0 && ["pause", "wake", "seen"].includes(asked.verb)) socket.destroy();
+    else if (asked.verb === "detach") reply(socket, asked, { answer: "done" });
+  });
+  const daemon = new Daemon(folder, place);
+  made.push({ folder, server, daemon });
+  const life = new RemoteLife(daemon, join(folder, "life.jsonl"));
+  await life.open();
+  const lost = await life.pause("chain1").catch((error: unknown) => error);
+  expect(lost).toBeInstanceOf(Closed);
+  expect(seen.filter(([, verb]) => verb === "pause")).toEqual([[0, "pause"]]);
+  await life.detach();
+});
