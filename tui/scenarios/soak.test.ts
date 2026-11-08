@@ -1,7 +1,13 @@
 // A soak: a life of thousands of facts, whose workers run commands while its host is killed at random points, opens
 // again after each kill, ends each job with its right value, and replays at the end to the same turns and values.
 import { expect } from "bun:test";
+import { copyFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { alive, scenario, test, until, Window } from "./harness.ts";
+
+/** The temporary folder of the machine, which outlives the yard of the run, where a red run keeps its record. */
+const KEPT = process.env.FURB_MACHINE_TMPDIR ?? tmpdir();
 
 /** How many commands each worker runs, and how many workers the root hires. */
 const ROUNDS = 120;
@@ -59,52 +65,61 @@ test(
         const seed = Number(process.env.FURB_SOAK_SEED ?? Date.now() % 100000);
         const next = random(seed);
         console.log(`The soak plays the seed ${seed}: FURB_SOAK_SEED=${seed} plays it again.`);
-        let window = first;
-        await window.type("Scenario: soak.");
-        await window.shows((frame) => frame.includes("Hired."), "the root to hire its workers");
-        for (let kill = 0; kill < 3; kill++) {
-          await Bun.sleep(500 + next() * 3000);
-          const pid = yard.host() ?? 0;
-          expect(pid).toBeGreaterThan(0);
-          await window.close(false);
-          process.kill(pid, "SIGKILL");
-          await until(() => !alive(pid), "the host to die");
-          window = await Window.open(yard);
-        }
-        const sum = (ROUNDS * (ROUNDS - 1)) / 2;
-        await until(
-          async () => {
-            const got = await jobs(window);
-            return got.length === WORKERS && got.every((one) => one !== null);
-          },
-          "each job to end",
-          180,
-        );
-        expect(await jobs(window)).toEqual(Array(WORKERS).fill(sum));
-        const facts = await size(window);
-        expect(facts).toBeGreaterThan(2000);
-        const cues = yard.turns().map((one) => one.cue);
-        console.log(
-          `The soak said ${facts} facts, and its model took ${cues.length} turns: ${JSON.stringify(cues)}.`,
-        );
-        const turns = async (one: Window) => {
-          const all: unknown[] = [];
-          for (let n = 1; await one.engine.get(`chain${n}`); n++)
-            all.push(await one.engine.turns({ on: `chain${n}` }));
-          return JSON.stringify(all);
-        };
-        const before = await turns(window);
-        await window.close(true);
-        await yard.ended();
-        // The end wrote a checkpoint, which a next life goes on from with turns of its own: the replay reads the record
-        // with no checkpoint.
-        await yard.uncheckpoint();
-        const replayed = await Window.open(yard);
+        // A red run keeps its record beside its seed, so it plays again exactly.
         try {
-          expect(await turns(replayed)).toBe(before);
-          expect(await jobs(replayed)).toEqual(Array(WORKERS).fill(sum));
-        } finally {
-          await replayed.close(true);
+          let window = first;
+          await window.type("Scenario: soak.");
+          await window.shows((frame) => frame.includes("Hired."), "the root to hire its workers");
+          for (let kill = 0; kill < 3; kill++) {
+            await Bun.sleep(500 + next() * 3000);
+            const pid = yard.host() ?? 0;
+            expect(pid).toBeGreaterThan(0);
+            await window.close(false);
+            process.kill(pid, "SIGKILL");
+            await until(() => !alive(pid), "the host to die");
+            window = await Window.open(yard);
+          }
+          const sum = (ROUNDS * (ROUNDS - 1)) / 2;
+          await until(
+            async () => {
+              const got = await jobs(window);
+              return got.length === WORKERS && got.every((one) => one !== null);
+            },
+            "each job to end",
+            180,
+          );
+          expect(await jobs(window)).toEqual(Array(WORKERS).fill(sum));
+          const facts = await size(window);
+          expect(facts).toBeGreaterThan(2000);
+          const cues = yard.turns().map((one) => one.cue);
+          console.log(
+            `The soak said ${facts} facts, and its model took ${cues.length} turns: ${JSON.stringify(cues)}.`,
+          );
+          const turns = async (one: Window) => {
+            const all: unknown[] = [];
+            for (let n = 1; await one.engine.get(`chain${n}`); n++)
+              all.push(await one.engine.turns({ on: `chain${n}` }));
+            return JSON.stringify(all);
+          };
+          const before = await turns(window);
+          await window.close(true);
+          await yard.ended();
+          // The end wrote a checkpoint, which a next life goes on from with turns of its own: the replay reads the record
+          // with no checkpoint.
+          await yard.uncheckpoint();
+          const replayed = await Window.open(yard);
+          try {
+            expect(await turns(replayed)).toBe(before);
+            expect(await jobs(replayed)).toEqual(Array(WORKERS).fill(sum));
+          } finally {
+            await replayed.close(true);
+          }
+        } catch (error) {
+          const kept = join(KEPT, `furb-soak-${seed}.jsonl`);
+          copyFileSync(yard.record, kept);
+          throw new Error(`The soak of the seed ${seed} failed, and its record is ${kept}: ${error}`, {
+            cause: error,
+          });
         }
       },
     ),
