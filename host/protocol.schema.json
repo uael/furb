@@ -3059,6 +3059,19 @@
             "from"
           ],
           "description": "A question of another chain to this one, a worker that asks its coordinator, with the chain\nthat asks."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "aside": {
+              "type": "string",
+              "const": "agent"
+            }
+          },
+          "required": [
+            "aside"
+          ],
+          "description": "The work of an agent: a prompt that a rung made on a chain under its own, when that rung\nstands in no thread, as a command of the operator runs its word. It is no thread of the\noperator and never takes an unread mark of his."
         }
       ],
       "description": "What a prompt of a chain is that is no conversation, which the feed of its chain draws as what\nit is and the list of its threads leaves out."
@@ -4193,5 +4206,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 7
+  "x-protocol": 8
 }
