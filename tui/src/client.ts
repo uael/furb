@@ -104,9 +104,16 @@ function tail(path: string): string {
   }
 }
 
+/** How long a connection to the address of a machine dials it again, in milliseconds. */
+const RECONNECTING = 10000;
+
 /** A refusal of the version is told as a daemon of another build. */
-function another(error: unknown): unknown {
+function another(error: unknown, place: string): unknown {
   if (!(error instanceof Refused) || error.kind !== "protocol") return error;
+  if (addressOf(place))
+    return new Error(
+      `The daemon at ${place} is of another build (${error.message}): upgrade furb on that machine.`,
+    );
   return new Error(
     `The daemon of this machine is of another build (${error.message}). It ends once its windows quit and its grace passes, and the next window starts one of this build.`,
   );
@@ -153,11 +160,18 @@ export class Daemon extends EventEmitter {
       reach: async () => {
         const socket = await dialed(this.place);
         if (socket) return socket;
-        if (addressOf(this.place)) throw new Error(`No daemon of furb listens at ${this.place}.`);
-        return await started(this.folder, this.place);
+        if (!addressOf(this.place)) return await started(this.folder, this.place);
+        // A machine that restarts or a network that blinks answers again in a moment, so the dial tries again for a
+        // few seconds before the connection is lost.
+        for (const until = Date.now() + RECONNECTING; Date.now() < until; ) {
+          await Bun.sleep(250);
+          const again = await dialed(this.place);
+          if (again) return again;
+        }
+        throw new Error(`No daemon of furb listens at ${this.place}.`);
       },
       heard: (frame) => this.heard(frame),
-      explain: another,
+      explain: (error) => another(error, this.place),
     });
     this.link = link;
     this.peer = link.peer;
@@ -264,8 +278,6 @@ export type Listener = Parameters<EventEmitter["on"]>[1];
 /** The one connection of this window to the daemon of its machine, made at its first use. A cache of furb named
  * again, as a scenario of the tests names one of its own, takes a connection to the daemon of that cache. */
 let shared: Daemon | undefined;
-/** A role given makes this window a reader on any transport: its hello asks that role, and the daemon gives the
- * lesser of it and the role that the transport proved. */
 /** The daemons of other machines that this window reached, by their address: a window holds a life of such a machine
  * as it holds a local one, through the one dial. */
 const machines = new Map<string, Daemon>();
@@ -280,6 +292,8 @@ export function machine(address: string, role?: Role): Daemon {
   return found;
 }
 
+/** A role given makes this window a reader on any transport: its hello asks that role, and the daemon gives the
+ * lesser of it and the role that the transport proved. */
 export function daemon(role?: Role): Daemon {
   const folder = daemonFolder();
   if (shared?.folder !== folder || (role && shared.role !== role)) {

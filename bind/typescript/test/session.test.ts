@@ -19,6 +19,7 @@ import {
   type Turn,
 } from "../src/index.ts";
 import { pauseSaid } from "../src/life/acts.ts";
+import { addressOf } from "../src/skill.ts";
 import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
 
@@ -1220,4 +1221,19 @@ test("the activity keeps each compaction of a chain: a prefix said on it after i
     ],
   ]);
   expect(activity.compactions).toEqual([{ chain: "chain2", by: "rung3", at: 4 }]);
+});
+
+test("a place names a machine only as host:port or [address]:port, and a socket or a pipe of this machine stays a place", () => {
+  expect(addressOf("100.64.0.2:7431")).toEqual({ host: "100.64.0.2", port: 7431 });
+  expect(addressOf("[fd7a:115c::1]:7431")).toEqual({ host: "fd7a:115c::1", port: 7431 });
+  expect(addressOf("box.tailnet.ts.net:7431")).toEqual({ host: "box.tailnet.ts.net", port: 7431 });
+  for (const place of [
+    "fd7a::1:7431",
+    "100.64.0.2:0",
+    "100.64.0.2:65536",
+    "100.64.0.2",
+    "/tmp/furb/host.sock",
+    "\\\\.\\pipe\\furb",
+  ])
+    expect(addressOf(place)).toBeUndefined();
 });

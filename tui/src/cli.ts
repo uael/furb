@@ -35,7 +35,7 @@ const { values } = parseArgs({
   },
 });
 if (values.help) {
-  console.log(`furb-tui [--demo] [--cwd path] [--machine host:port] [--model provider:model] [--effort ${efforts.join("|")}]
+  console.log(`furb-tui [--demo] [--cwd path] [--machine host:port --cwd path --record file.jsonl, the paths of that machine] [--model provider:model] [--effort ${efforts.join("|")}]
          [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...]
          [--view main|loom|graph] [--read] [--screen-reader] [--reduced-motion]
 
