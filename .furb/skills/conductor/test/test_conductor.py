@@ -160,7 +160,7 @@ async def test_a_fix_of_ci_pauses_the_live_items_of_its_topic_takes_each_new_fai
   assert conductor.engine.peek(fix) == "fixed at h3"
   await conductor.beat()
   assert (conductor.engine.paused(one), conductor.engine.paused(two)) == (False, True)
-  assert "a ended the fix" in [x for x in conductor.ns["desk_notes"] if not x.startswith("Free seats")][-1]
+  assert any("a ended the fix" in x for x in conductor.ns["desk_notes"])
 
 
 async def test_a_cycle_starts_on_a_new_print_a_floor_after_the_start_of_the_last_and_sends_each_failure_to_its_topic(conductor: Round) -> None:
@@ -491,7 +491,7 @@ async def test_the_ledger_holds_the_cost_of_each_ended_item_from_the_answers_on_
   conductor.sand.now += 60
   await conductor.beat()
   assert len(conductor.ns["desk_ledger"]) == 3
-  assert conductor.ns["desk_text"].get("ledger", "") == ""
+  assert conductor.ns["desk_text"]["ledger"].startswith("\nThe asks since 0: item 4 replies")
   await conductor.word("desk_time['merged_upto'] = clock()")
   await conductor.beat()
   rows = {r["key"]: (r["topic"], r["class"], r["in"], r["out"], r["cached"], r["cost"], r["steps"], r["seconds"]) for r in conductor.ns["desk_ledger"]}
@@ -500,7 +500,53 @@ async def test_the_ledger_holds_the_cost_of_each_ended_item_from_the_answers_on_
     "two": ("a", "opus/medium", 4000, 400, 1000, 3.0, 1, 60.0),
     "three": ("b", "sonnet/high", 500, 50, 0, 0.5, 1, 60.0),
   }
-  assert conductor.ns["desk_text"]["ledger"] == (
+  assert conductor.ns["desk_text"]["ledger"].split("\n")[0] == (
     "Cost per landed item since 0: by class opus/medium none of 1 landed, sonnet/high $1.00 (2 of 2 landed); "
     "by topic a $4.50 (1 of 2 landed), b $0.50 (1 of 1 landed); the cache gave 41% of 7500 tokens in."
+  )
+
+
+async def test_the_ledger_of_the_asks_gives_each_kind_its_spend_and_landed_items_and_names_each_kind_that_landed_nothing(conductor: Round) -> None:
+  await conductor.word("SIDE[:] = [verify_step]\ndesk_width['b'] = 0\ndesk_queue['a'].append(item('one'))\nqueue_found('k2 | b | sonnet/medium | p | fix p', 'r')")
+  conductor.file("finger.txt", "head h1\n")
+  await conductor.beat()
+  woke = conductor.engine.prompt(None, f"The chain {conductor.ns['topic_chain']['a']} had no change for 5 minutes.", on=conductor.ns["topic_chain"]["a"])
+  await settle()
+  uses = {"item": (1000, 100, 600, 0, 1.0), "judge": (600, 60, 0, 0, 0.75), "cycle": (400, 40, 0, 0, 0.5), "triage": (300, 30, 0, 0, 0.25), "wake": (200, 20, 100, 0, 0.125)}
+  asked = {x[0]: x for x in [*conductor.asked(), *conductor.asked("tuple[dict[str, str], str]"), *conductor.asked("tuple[list[dict[str, object]], dict[str, str]]")]}
+
+  def who(p: str) -> str:
+    if p == woke:
+      return "wake"
+    return {"a": "item", "converge": "cycle", "triage": "triage"}.get(asked[p][1], "judge") if p in asked else "judge"
+
+  # A reply that the life writes itself, as the seat of a new chain, carries no usage, and a grant sums the usage of each other reply.
+  spent, answered = 0.0, set()
+
+  def maker(reply: str) -> str:
+    return str(conductor.engine.get(conductor.engine.get(reply)[2])[2])
+
+  def seated(reply: str) -> bool:
+    return str(conductor.engine.get(conductor.engine.get(reply)[2])[4]).startswith("stand()")
+
+  for _ in range(2):
+    while held := [x[1] for x in said(conductor.log, "reply") if not conductor.engine.over(x[1]) and (seated(x[1]) or maker(x[1]) not in answered)]:
+      for reply in held:
+        seat, sort = seated(reply), who(maker(reply))
+        seat or answered.add(maker(reply))
+        word = 'close("done one")' if sort == "item" and not seat else 'debug(t"a step")'
+        conductor.engine.say("done", reply, ("assistant", word, None if seat else uses[sort], None))
+        spent += 0 if seat else uses[sort][-1]
+      await settle()
+    conductor.sand.now += 60
+    await conductor.beat()
+    asked |= {x[0]: x for x in conductor.asked()}
+  await conductor.word("desk_time['merged_upto'] = clock()")
+  await conductor.beat()
+  assert spent == 2.625
+  assert conductor.ns["desk_text"]["ledger"].split("\n")[1] == (
+    "The asks since 0: item 1 replies, 1000 in, 100 out, 600 cached, $1.00, 1 landed; judge 1 replies, 600 in, 60 out, 0 cached, $0.75, 1 landed; "
+    "cycle 1 replies, 400 in, 40 out, 0 cached, $0.50, 1 landed; triage 1 replies, 300 in, 30 out, 0 cached, $0.25, 0 landed; "
+    "stall wake 1 replies, 200 in, 20 out, 100 cached, $0.12, 0 landed; in all $2.62. "
+    f"Landed nothing: triage $0.25 (10%): no item that it ruled merged in the window; stall wake $0.12 (5%): wakes of the watch, which serve no item, on {conductor.ns['topic_chain']['a']} (1)."
   )
