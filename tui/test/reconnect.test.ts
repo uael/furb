@@ -276,3 +276,43 @@ test("a window of a later protocol that meets an older daemon says so, and waits
   ]);
   expect(ended).toContain("another build");
 });
+
+test("a daemon of another build that takes the place of the daemon that went is told as such, and the next request dials a new connection", async () => {
+  const folder = mkdtempSync(join(tmpdir(), "furb-reconnect-"));
+  const place = join(folder, "host.sock");
+  let refuse = false;
+  let connections = 0;
+  const server = createServer((socket) => {
+    const connection = connections++;
+    socket.setEncoding("utf8");
+    socket.on("error", () => {});
+    socket.on("data", (chunk: string) => {
+      for (const line of chunk.split("\n").filter(Boolean)) {
+        const asked = JSON.parse(line) as Asked;
+        if (asked.verb === "hello" && refuse) {
+          const why = "the daemon speaks protocol 9, the peer 8";
+          const error = { error: "protocol", ours: 9, theirs: 8 };
+          socket.write(`${JSON.stringify({ frame: "refused", id: asked.id, error, why })}\n`);
+          socket.destroy();
+        } else if (asked.verb === "hello")
+          reply(socket, asked, {
+            answer: "welcome",
+            data: { peer: { login: "test", role: "write", kind: "window" } },
+          });
+        else if (connection === 0) socket.destroy();
+        else reply(socket, asked, { answer: "done" });
+      }
+    });
+  });
+  server.listen(place);
+  const daemon = new Daemon(folder, place, "write");
+  made.push({ folder, server, daemon });
+  await daemon.connect();
+  const lost = new Promise<string>((resolve) => daemon.once("lost", resolve));
+  refuse = true;
+  expect(await daemon.ask({ verb: "list" }).catch((error: unknown) => error)).toBeInstanceOf(Closed);
+  expect(await lost).toContain("is of another build");
+  // The daemon of this build is back: the window holds no dead connection, so the next request dials a new one.
+  refuse = false;
+  expect(await daemon.ask({ verb: "list" })).toEqual({ answer: "done" });
+});

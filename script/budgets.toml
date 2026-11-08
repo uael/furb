@@ -3,10 +3,14 @@
 # each part through script/budget.py, which reads its limit here.
 # [local] holds the limits of this machine, [ci] those of a runner of the gates, which is slower. A part with no limit
 # here has none that its run fits yet: it reports its time and fails never.
-# Measured on 11-07: pytest took 45 s on this machine and 93 to 114 s on the runners. A limit is never raised to pass:
-# make the run faster.
+# <part> is the wall time in seconds, and <part>_cpu the CPU time of the run and its children: a run past its wall limit on
+# a loaded machine is judged by its CPU time, which the load does not stretch. script/budget.py says how.
+# Measured on 11-08, pytest: 37 to 45 s of wall and 160 s of CPU alone on this machine, 74 to 80 s of wall and 160 s of CPU
+# beside 28 busy processes; on the runners, 54 to 117 s on ubuntu and macOS and 68 to 153 s on windows (the gates of 11-06 to
+# 11-08). A limit is never raised to pass: make the run faster.
 [local]
-pytest = 90
+pytest = 60
+pytest_cpu = 240
 
 [ci]
 pytest = 180
