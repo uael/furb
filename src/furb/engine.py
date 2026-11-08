@@ -538,13 +538,23 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             close(Refused(*found), rid)
         case ("done", _, "", Refused() as why) if r[0] == "reply":
           pause(id, why)
+        case ("done", about, *_) if prompted(about):
+          owed = []
+          for fact in transcript(id):
+            owed = (
+              []
+              if fact[0] == "reply"
+              else owed + [fact[1]] * (fact is get(fact[1]) and fact[3:5] == (about, "None") and operated(fact[2]))
+            )
+          for message in owed:
+            with site.set(message):
+              rung(to=r[6])
       if r[0] == "run":
         running[r[4]] = a[0] != "done"
       elif r[0] == "wants":
         running[get(r[2])[4]] = a[0] != "started"
       if any(running.values()):
         continue
-      waits = [c for *_, c in transcript(id, "wants") if not over(c)]
       if (
         (step not in waiting or paused(step))
         and not stuck
@@ -572,7 +582,12 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
           hush = maker
-          note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=waits or None)
+          note = yield told(
+            step,
+            "advance on " + maker,
+            share=filled(reply) or None,
+            waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
+          )
           news = ""
       if news and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
         ours = get(news[1])[2]

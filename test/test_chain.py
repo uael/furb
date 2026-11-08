@@ -37,6 +37,7 @@ from conftest import (
   settle,
   sown,
   stood,
+  waiting,
   world_says,
 )
 from furb import engine
@@ -1725,3 +1726,28 @@ async def test_a_word_that_only_debugs_tells_what_it_debugged_so_the_chain_asks_
   _, log, root = born('forced = 1\ndebug(t"{forced}")', "close(forced)")
   assert await engine.prompt(int, "count", on=root) == 1
   assert len(said(log, "reply")) == 2
+
+
+async def test_a_message_on_a_thread_is_owed_until_a_reply_reads_it() -> None:
+  """A message on a thread is owed until a reply reads it: when its thread is over, closed before or after the message came, the chain asks the model for that message in a rung that the message makes, so the answer goes on the same thread."""
+  sand, log, root, act, _, reply = await waiting()
+  second = engine.prompt(None, "second", on=act)
+  await settle()
+  sand.script[root] = ["close(2)", "close(3)"]
+  world_says("done", reply, ("assistant", "close(1)", (0, 0, 0, 0, 0.0), None))
+  for _ in range(6):
+    await settle()
+  late = engine.prompt(None, "third", on=act)
+  for _ in range(6):
+    await settle()
+  closes = {a[1]: a[3] for a in said(log, "close")}
+  assert (closes, len(said(log, "reply"))) == ({act: 1, second: 2, late: 3}, 3)
+  assert [a[2] for a in said(log, "rung")][-2:] == [second, late]
+  sand, log, root, act, _, reply = await waiting()
+  read = engine.prompt(None, "read", on=act)
+  await settle()
+  sand.script[root] = ["close(4)"]
+  world_says("done", reply, ("assistant", "debug(t'go')", (0, 0, 0, 0, 0.0), None))
+  for _ in range(6):
+    await settle()
+  assert (engine.peek(act), [a for a in said(log, "rung") if a[2] == read]) == (4, [])
