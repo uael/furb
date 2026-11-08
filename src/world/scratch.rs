@@ -239,10 +239,14 @@ impl Scratch {
         log(&format!("the scratch directory of the record leaves out {SCRATCH}{path}: {no}"));
       }
     }
+    // The mark of the new directory is held open and locked, and Windows renames no directory
+    // that holds an open file, so the hold ends before the rename.
+    let from = beside.path().to_path_buf();
+    drop(beside);
     gone(at, log);
-    if let Err(no) = fs::rename(beside.path(), at) {
+    if let Err(no) = fs::rename(&from, at) {
       log(&format!("the scratch directory of the record was not made again: {no}"));
-      gone(beside.path(), log);
+      gone(&from, log);
     }
     self.hold();
   }
