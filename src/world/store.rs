@@ -72,6 +72,13 @@ pub trait Store {
   fn room(&self) -> Option<(&Path, u64)> {
     None
   }
+
+  /// The bytes of a last line that a stop tore as it was written, which the entries passed over and
+  /// the next keep cuts, so the life tells the operator once. A store that tears no line gives
+  /// nothing.
+  fn cut(&self) -> Option<u64> {
+    None
+  }
 }
 
 /// The room of the record at a path: the folder that holds it and the bytes that its disk still
@@ -345,7 +352,8 @@ enum Told {
 /// so a later life says them again at the same place. A record of a build before the fact made names no engine, and
 /// stays so, since this engine did not make it.
 ///
-/// The ear tells the operator once when the disk of the record holds less than [`LOW`] free, with
+/// The ear tells the operator once of the bytes of a torn last line that the open passed over.
+/// It tells the operator once when the disk of the record holds less than [`LOW`] free, with
 /// the folder and the space left, before a keep fails. An entry that the store cannot keep, as on a
 /// full disk, waits in memory with each entry after it, and the ear tries again in order at each
 /// keep, at the end of each run and every few seconds, until they land: no entry is lost or kept
@@ -362,7 +370,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
     || checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
   let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
     // What the ear told the operator last, and whether a try waits for its time.
-    let (mut said, mut again) = (Told::Room, false);
+    let (mut said, mut again, mut cut) = (Told::Room, false, held.borrow().store.cut());
     loop {
       match co.next().await {
         Next::Heard(a) | Next::Resumed(a) => match a.kind() {
@@ -377,6 +385,11 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
           _ => continue,
         },
         Next::Worked(()) => again = false,
+      }
+      if let Some(bytes) = cut
+        && told(&mut co, torn(bytes)).await.is_ok()
+      {
+        cut = None;
       }
       let fault = held.borrow_mut().flushed();
       match fault {
@@ -420,6 +433,15 @@ fn stopped(fault: &Fault) -> String {
      that the record does not hold yet. It tries again until the record takes them, in order, and tells \
      you then. Give the disk room.",
     fault.message()
+  )
+}
+
+/// The message that the open of the record passed over a last line that a stop tore as it was
+/// written.
+fn torn(bytes: u64) -> String {
+  format!(
+    "The last line of the record of this life was torn as it was written, so the life opened \
+     without it: it cut {bytes} bytes, a part of one fact that the record never held whole."
   )
 }
 
@@ -508,6 +530,10 @@ impl<S: Store + ?Sized> Store for Box<S> {
 
   fn room(&self) -> Option<(&Path, u64)> {
     (**self).room()
+  }
+
+  fn cut(&self) -> Option<u64> {
+    (**self).cut()
   }
 }
 

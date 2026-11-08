@@ -369,6 +369,24 @@ fn a_record_on_a_disk_that_is_almost_full_tells_the_operator_once_with_its_folde
   );
 }
 
+#[test]
+fn a_record_whose_last_line_a_stop_tore_tells_the_operator_once_the_bytes_that_its_open_cut() {
+  let path = place("torn-told", "record.jsonl");
+  let entries = facts();
+  Lines::open(&path).unwrap().keep(entries[0].as_ref()).unwrap();
+  let mut text = fs::read(&path).unwrap();
+  text.extend_from_slice(b"[[\"stand\",\"sta");
+  fs::write(&path, text).unwrap();
+  let (record, mut ear) = keeping(Lines::open(&path).unwrap()).unwrap();
+  assert_eq!(record.len(), 1, "the open holds each line written whole");
+  let wake = waker();
+  assert!(matches!(ear.resume(Heard::Born, &mut Context::from_waker(&wake)), Step::Wait(_)));
+  let told = pass(&mut ear, &entries[1]).expect("the first pass tells the bytes that the open cut");
+  assert!(told.contains("it cut 14 bytes"), "{told}");
+  assert_eq!(pass(&mut ear, &entries[2]), None, "the operator knows already");
+  assert_eq!(kept(&path).unwrap().len(), 3, "the keep cut the torn line and kept each entry");
+}
+
 /// A fact made of the engine that a digest names, with the texts given.
 fn made_of(engine: &str, held: &[&str]) -> Object {
   let mut fact = serde_json::json!(["made", "chain1", "store", engine, 9, "1.0", "0.4.2"]);
