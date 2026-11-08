@@ -290,6 +290,7 @@ impl Provider {
   }
 
   /// How the provider asks a model again after a failure that passes.
+  #[cfg(test)]
   #[must_use]
   pub fn backoff(mut self, backoff: Backoff) -> Self {
     self.backoff = backoff;

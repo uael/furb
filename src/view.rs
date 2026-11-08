@@ -24,7 +24,7 @@ pub use ladder::{Rung, SHOWN, Shown, ladder};
 #[cfg(any(test, feature = "test-support"))]
 pub use named::word;
 pub use named::{NAME, Named, RENAME, said};
-pub use quote::{Quote, Writing, python_string, quote_at, quotes, writing};
+pub use quote::{Quote, Writing, quotes, writing};
 pub use state::{State, chain_state, restate, working};
 pub use threads::{
   Aside, Attention, ChainAside, ChainThread, Concern, NoteRun, Origin, Rows, ThreadNode, attention,

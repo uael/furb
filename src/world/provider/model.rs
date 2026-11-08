@@ -245,6 +245,7 @@ impl Model {
 
   /// What the model costs, in dollars for a million tokens: read, written, read from the cache, and
   /// written to it.
+  #[cfg(test)]
   #[must_use]
   pub fn price(mut self, input: f64, output: f64, read: f64, wrote: f64) -> Self {
     self.price = Some([input, output, read, wrote]);
