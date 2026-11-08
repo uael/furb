@@ -50,9 +50,20 @@ pub struct Held {
   /// Whether an act was told that began before the last one held, so the order of the acts is not
   /// the order they began.
   unordered: bool,
+  /// The place of each act or chain at which the operator last said that he saw it.
+  seen: HashMap<String, u64>,
 }
 
 impl Held {
+  /// A fact of the life at its place: what the operator says that he saw, which marks the threads
+  /// that he started and that ended after it.
+  pub fn noted(&mut self, fact: &serde_json::Value, at: u64) {
+    let text = |n: usize| fact.get(n).and_then(serde_json::Value::as_str).unwrap_or_default();
+    if text(0) == "seen" && (super::act::operator(text(2)) || text(2) == "journal") {
+      self.seen.insert(text(1).to_owned(), at);
+    }
+  }
+
   /// An act of the life heard as a host tells it: it takes the place of the earlier one of the same
   /// id.
   pub fn heard(&mut self, act: &Act) {
@@ -148,7 +159,7 @@ impl Held {
     let state =
       rows.get(chain).filter(|act| act.kind == Kind::Chain).map_or(State::Idle, |act| act.state);
     let (asides, notes) = (chain_asides(&on, &rows), chain_notes(&on, &rows, read));
-    Threads { attention: attention(&threads), asides, notes, threads, state }
+    Threads { attention: attention(&threads, &rows, &self.seen), asides, notes, threads, state }
   }
 
   /// The threads of every chain of the life but those that `hidden` names, as one tree in the

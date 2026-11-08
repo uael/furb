@@ -3120,12 +3120,18 @@
           "type": "integer",
           "format": "uint",
           "minimum": 0
+        },
+        "unread": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
         }
       },
       "required": [
         "asks",
         "failed",
-        "paused"
+        "paused",
+        "unread"
       ],
       "description": "What a tree of threads says to the operator, counted by thread."
     },
@@ -4213,5 +4219,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 9
+  "x-protocol": 10
 }

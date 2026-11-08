@@ -69,7 +69,7 @@ export const rail = part({
       if (counted) {
         if (counted.paused) out.paused += 1;
         else if (counted.failed) out.failed += 1;
-        else if (entry.status === "unread") out.unread += 1;
+        else if (counted.unread) out.unread += 1;
       } else if (entry.status === "paused") out.paused += 1;
       else if (entry.status === "failed") out.failed += 1;
       else if (entry.status === "unread") out.unread += 1;

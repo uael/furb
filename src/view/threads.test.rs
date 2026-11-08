@@ -264,6 +264,7 @@ fn held(facts: impl IntoIterator<Item = Value>) -> Held {
     for act in fold.recorded(&fact) {
       held.heard(&act);
     }
+    held.noted(&fact, fold.clock());
   }
   held
 }
@@ -300,7 +301,7 @@ fn a_question_and_a_notice_that_a_thread_made_for_the_operator_stand_in_it_with_
   assert_eq!(node.thread.asked, names(&["prompt2", "prompt3"]));
   assert_eq!(node.thread.asks, names(&["prompt2"]));
   assert_eq!(node.state, State::Asks);
-  assert_eq!(got.attention, Attention { asks: 1, failed: 0, paused: 0 });
+  assert_eq!(got.attention, Attention { asks: 1, failed: 0, paused: 0, unread: 0 });
 }
 
 #[test]
@@ -355,7 +356,7 @@ fn the_agents_of_a_thread_nest_under_it_and_a_question_in_an_agent_makes_each_th
   // The question rolls into the node over it, and the thread over it keeps its own state and asks.
   assert_eq!((tops[0].thread.asks.len(), tops[0].thread.state), (0, State::Runs));
   // A question counts once, in the thread where it waits.
-  assert_eq!(got.attention, Attention { asks: 1, failed: 0, paused: 0 });
+  assert_eq!(got.attention, Attention { asks: 1, failed: 0, paused: 0, unread: 0 });
 }
 
 #[test]
@@ -376,8 +377,14 @@ fn a_failure_or_a_pause_concerns_the_operator_only_in_a_thread_that_he_started()
   let failed = json!(["done", "prompt2", "", error]);
   let paused = json!(["pause", "prompt2", "operator", "held"]);
   // A thread that a word of the operator made concerns him when it fails or a pause holds it.
-  assert_eq!(attention("rung1", failed.clone()), Attention { asks: 0, failed: 1, paused: 0 });
-  assert_eq!(attention("rung1", paused.clone()), Attention { asks: 0, failed: 0, paused: 1 });
+  assert_eq!(
+    attention("rung1", failed.clone()),
+    Attention { asks: 0, failed: 1, paused: 0, unread: 0 }
+  );
+  assert_eq!(
+    attention("rung1", paused.clone()),
+    Attention { asks: 0, failed: 0, paused: 1, unread: 0 }
+  );
   // An agent that a ladder hired does not: its failure rolls into the thread that hired it.
   assert_eq!(attention("rung2", failed), Attention::default());
   assert_eq!(attention("rung2", paused), Attention::default());
@@ -523,4 +530,27 @@ fn a_rung_of_the_operator_forks_a_chooser_that_is_no_thread_and_no_unread_note()
   assert_eq!(listed(&acts, "chain2").1, vec![("prompt2".to_owned(), Aside::Agent)]);
   assert_eq!(runs(&acts, "chain2", 0), Vec::<(Vec<String>, usize)>::new());
   assert_eq!(tree(&acts, "chain1"), vec![(0, "prompt1".to_owned(), "Fix the setup.".to_owned())]);
+}
+
+#[test]
+fn a_thread_that_ended_unseen_concerns_the_operator_only_when_he_started_it() {
+  let unread = |by: &str, seen: bool| {
+    let mut facts = vec![
+      json!(["chain", "chain1", "operator", "", "root", ""]),
+      asked("prompt1"),
+      json!(["rung", "rung1", "operator", "chain1", "x = 1", "", ""]),
+      json!(["rung", "rung2", "prompt1", "chain1", "hire()", "", ""]),
+      json!(["prompt", "prompt2", by, "chain1", "str", "Work.", ""]),
+      json!(["done", "prompt2", "", "ok"]),
+    ];
+    if seen {
+      facts.push(json!(["seen", "chain1", "operator"]));
+    }
+    held(facts).threads("chain1", None, 0).attention.unread
+  };
+  // A thread that a word of the operator made, ended after his seen, is unread until he sees it.
+  assert_eq!(unread("rung1", false), 1);
+  assert_eq!(unread("rung1", true), 0);
+  // An agent that a ladder hired never marks the row.
+  assert_eq!(unread("rung2", false), 0);
 }
