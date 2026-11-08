@@ -8,9 +8,9 @@ a limit of CPU time, <part>_cpu, in seconds, that the command and its children u
 reports its time.
 
 The wall time stretches with the load of the machine, and the CPU time that a run needs does not: a hook that ran beside
-the builds of other chains kept its work and failed its clock (pytest: 37 s of wall and 160 s of CPU alone, 74 to 80 s
-of wall and 160 s of CPU beside 28 busy processes). So a run that passes its wall limit while the machine is loaded, with
-a load average at its start over a time and a half the cores, is judged by its CPU time, when the part has a limit of it.
+the builds of other chains kept its work and failed its clock (the figures stand in budgets.toml). So a run that
+passes its wall limit while the load average at its start is over the cores is judged by its CPU time, when the part
+has a limit of it.
 On a quiet machine, and for a part with no limit of CPU, the wall time judges: a test that waits on a clock shows only
 there. A run past its CPU limit fails whatever the load. A run that fails names its slowest tests, as its runner prints
 them with their times (pytest with --durations, cargo test with --report-time). A command that fails gives its own exit
@@ -91,7 +91,7 @@ def main(argv: list[str]) -> int:
     return run.returncode
   over_cpu = cpu_limit > 0 and worked > cpu_limit
   over_wall = wall_limit > 0 and took > wall_limit
-  if over_wall and cpu_limit and not over_cpu and busy > 1.5 * cores:
+  if over_wall and cpu_limit and not over_cpu and busy > cores:
     print(
       f"budget: {part} passed its wall limit while the load was {busy:.0f} on {cores} cores, and its CPU time fits."
     )

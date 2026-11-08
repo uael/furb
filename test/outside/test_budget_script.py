@@ -62,6 +62,13 @@ def test_a_loaded_machine_judges_a_run_past_its_wall_limit_by_its_cpu_time(tmp_p
   assert "while the load was 999" in got.stdout and "its CPU time fits" in got.stdout
 
 
+def test_a_load_just_over_the_cores_already_judges_a_run_by_its_cpu_time(tmp_path: Path) -> None:
+  busy = str((os.cpu_count() or 1) + 2)
+  got = budget(tmp_path, "pytest", 1, *WAIT, cpu=30, load=busy)
+  assert got.returncode == 0
+  assert "its CPU time fits" in got.stdout
+
+
 def test_a_quiet_machine_judges_the_same_run_by_its_wall_time(tmp_path: Path) -> None:
   got = budget(tmp_path, "pytest", 1, *WAIT, cpu=30, load="0")
   assert got.returncode == 1 and "passed its wall limit" in got.stdout
