@@ -157,15 +157,11 @@ export const details = part({
     return name === "operator" ? "operator" : modelLabel(name, effort);
   },
 
-  /** Who asked a prompt that is not a message of the operator, and which model, each as its model with its effort,
-   * opus/high: the asked model alone when a chain or the operator asked it, or when the model that asked is that model,
-   * and the model that asked, then the asked one, when a word of another model asked it. No id of a rung stands in it. */
+  /** The model that a prompt that is not a message of the operator asks, as one label with its effort, opus/high, which
+   * the block of its reply names the same way. No id of a rung and no second model stand in it. */
   sender(act: ActRow): string {
     const { name, effort } = this.model(String(act.words[2] ?? ""));
-    const asked = modelLabel(name, effort);
-    const maker = this.session.actOf(act.by);
-    const asker = maker?.kind === "rung" ? this.writer(maker) : "operator";
-    return asker === "operator" || asker === asked ? asked : `${asker} asked ${asked}`;
+    return modelLabel(name, effort);
   },
 
   /** The message of a prompt as a reader reads it. The chain tells a model that an act is done or paused with the id

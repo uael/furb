@@ -21,11 +21,11 @@ test("the header of a thread that a word opened names the model with its effort,
       if (!act) throw new Error("No prompt of the word.");
       // The operator asked, so the header names the asked model alone.
       expect(app.threadHead(act, false).sent).toBe("sonnet/medium");
-      // A word of a model that asks another model names both, each with its effort.
+      // A word of a model that asks another model still names the asked model alone, as one label.
       const word = session.acts.find((one) => one.kind === "rung" && !operated(one.by) && one.words[2]);
       if (!word) throw new Error("No word of a model in the demo.");
       expect(app.writer(word)).toBe("sonnet/high");
-      expect(app.sender({ ...act, by: word.id })).toBe("sonnet/high asked sonnet/medium");
+      expect(app.sender({ ...act, by: word.id })).toBe("sonnet/medium");
       expect(
         app.sender({ ...act, by: word.id, words: [act.words[0], act.words[1], "claude-cli:sonnet/high"] }),
       ).toBe("sonnet/high");
