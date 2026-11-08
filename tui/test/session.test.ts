@@ -345,11 +345,10 @@ test("a follow-up that the operator takes out of the queue is not sent", async (
       "First follow-up on main",
     ]);
     // The other chain holds only the rungs that run again the words of the setup of the root that its prefix holds,
-    // the debug of the extensions and what it told, the read of the doctrine and what that read told, then the stand and the cd that it
-    // plays on itself, as the root played its own.
+    // the stand and the cd and what they told, the debug of the extensions and what it told, then the read of the doctrine,
+    // as the root played its own.
     const setup = session.acts.filter((act) => act.kind === "rung" && act.by === session.engine.root);
-    const [first, read] = setup;
-    const stood = setup.at(-1);
+    const [stood, first, read] = setup;
     expect(first?.word).toBe('debug(t"{standing()[4]=}")');
     expect(read?.word).toMatch(/^read\('.*DOCTRINE\.md'\)$/);
     expect(stood?.word).toMatch(/^stand\(\)\ncd\('.*'\)$/);
@@ -358,11 +357,11 @@ test("a follow-up that the operator takes out of the queue is not sent", async (
         .filter((act) => act.chain === other && act.kind === "rung")
         .map((act) => [act.by, act.words]),
     ).toEqual([
+      [other, [stood?.word, stood?.id, ""]],
+      [other, [expect.stringMatching(/^#stand2\n[\s\S]*#cd1\ncd1_path = /), `${first?.id}_told`, ""]],
       [other, [first?.word, first?.id, ""]],
-      [other, ["#rung1 debugged\nrung1_debug = 'standing()[4]=[]'", `${read?.id}_told`, ""]],
+      [other, ["#rung2 debugged\nrung2_debug = 'standing()[4]=[]'", `${read?.id}_told`, ""]],
       [other, [read?.word, read?.id, ""]],
-      [other, [expect.stringMatching(/^#read1\nread1_path = '.*DOCTRINE\.md'\n/), `${stood?.id}_told`, ""]],
-      [other, [stood?.word, "", "claude-cli:sonnet/high"]],
     ]);
   } finally {
     await session.dispose();

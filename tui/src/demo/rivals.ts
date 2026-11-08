@@ -96,7 +96,7 @@ page = read("research/obsidian.md", HIDDEN)
 for title, number in headings(page):
   print(f"line {number}: {title}")
 ops = [x for x in page.lines if x.startswith("- ") and ":" in x.split(" ")[1]]
-print(len(ops), "operators")`;
+debug(t"{len(ops)} operators")`;
 
 const obsidianEnd = `close("Obsidian finds text with Ctrl+Shift+F and narrows it with operators: file:, path:, tag:, line:, section:. Ctrl+O finds a note by name. Copy: the tag: operator, since Fieldnotes has no folders.")`;
 
