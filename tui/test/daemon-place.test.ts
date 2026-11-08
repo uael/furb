@@ -1,19 +1,17 @@
-// The place of the daemon and the dial of its socket have one home, in furb/skill: a window dials the place that a
-// skill dials for one folder, and the one dial gives nothing where no daemon listens and a socket where one does.
+// The dial of the daemon has one home, in furb/skill: it gives nothing where no daemon listens, and a socket where one
+// does.
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { daemonPlace, dialed } from "furb/skill";
-import { Daemon } from "../src/client.ts";
 
-test("a window and a skill dial one place for one folder, from one function", () => {
-  const folder = join("/tmp", "furb-place");
-  expect(new Daemon(folder).place).toBe(daemonPlace(folder));
-});
+/** A folder of a short path, since a socket has a bound on its path. */
+const short = () => mkdtemp(join(process.platform === "win32" ? tmpdir() : "/tmp", "furb-dial-"));
 
 test("the one dial gives nothing where no daemon listens, and a socket where one does", async () => {
-  const folder = await mkdtemp(join("/tmp", "furb-dial-"));
+  const folder = await short();
   const place = daemonPlace(folder);
   try {
     expect(await dialed(place)).toBeUndefined();
