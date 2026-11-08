@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -111,6 +112,12 @@ def main(args: list[str]) -> int:
     return 0
   sys.stdout.write(" ".join(run) + "\n")
   sys.stdout.flush()
+  if args[0] == "cargo":
+    # The build is no part of the limit of time: a commit that changes a crate builds it and its tests, which takes
+    # minutes of CPU, and the limit holds the run of the tests alone.
+    if built := subprocess.run([*run, "--no-run"], check=False).returncode:  # noqa: S603
+      return built
+    run = [sys.executable, str(ROOT / "script" / "budget.py"), "cargo", "--", *run]
   os.execvp(run[0], run)  # noqa: S606
   return 1
 
