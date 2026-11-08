@@ -202,6 +202,12 @@ export class Daemon extends EventEmitter {
     );
   }
 
+  /** How many windows hold the life now, as the daemon says its peers, and none when no life of the daemon holds it. */
+  async windows(life: string): Promise<number> {
+    const heard = await this.ask({ verb: "presence", life }).catch(() => undefined);
+    return heard?.answer === "presence" ? heard.data.filter((one) => one.kind === "window").length : 0;
+  }
+
   /** The life of a record gone from the daemon, which ends it once no window and no pin held it for its grace. It is
    * refused at once while a window holds the life, and when the life lives longer than a window waits, as under a
    * pin. A window waits for that end before it takes the record. */
@@ -281,9 +287,8 @@ export interface Choices {
 }
 
 /** The verbs that a window sends again when the daemon went before it answered: each reads, or says what a second time
- * says again. */
-// A verb that controls the life, as a pause, a wake or a seen, is never sent again after a reconnect: another window may
-// have said a newer one meanwhile, and the old one would override it.
+ * says again, as a seen, which marks the life read up to now. A pause or a wake is never sent again: another window may
+ * have said a newer one meanwhile, and the old one would override it. */
 const AGAIN = new Set<Verb["verb"]>([
   "peek",
   "get",
@@ -298,6 +303,7 @@ const AGAIN = new Set<Verb["verb"]>([
   "pending",
   "queued",
   "queue",
+  "seen",
 ]);
 
 /** The value of an act done with a fault, as an error with the name of its class. */

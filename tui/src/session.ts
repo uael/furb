@@ -41,6 +41,7 @@ import {
   threadWork,
 } from "furb/life";
 import type { ThreadNode as CrateNode, FollowUp, Layer, Rung, Threads } from "furb/protocol";
+import { Closed } from "furb/skill";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { skillSlashes } from "./commands.ts";
@@ -1632,6 +1633,18 @@ export class Session extends EventEmitter {
     const rest = this.desk.asks.length;
     this.notice = `${said} ${rest ? `${rest} more ${rest === 1 ? "waits" : "wait"}.` : "Nothing else waits."}`;
   }
+  /** A control of the life that a restart of the daemon cut: the daemon says nothing of it, since a control is never
+   * said again after a reconnect, so the notice tells the operator to say it again. False when it was cut. */
+  private async cut(verb: string, control: () => Promise<unknown>): Promise<boolean> {
+    try {
+      await control();
+      return true;
+    } catch (error) {
+      if (!(error instanceof Closed)) throw error;
+      this.notice = `The daemon restarted before the ${verb} went: ${verb} again.`;
+      return false;
+    }
+  }
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && byOperator(act);
   }
@@ -2312,8 +2325,8 @@ export class Session extends EventEmitter {
         void this.rename(argument);
         break;
       case "pause":
-        await this.engine.pause(argument || this.selected);
-        this.notice = "Paused. In-flight work can finish.";
+        if (await this.cut("pause", () => this.engine.pause(argument || this.selected)))
+          this.notice = "Paused. In-flight work can finish.";
         break;
       case "wake": {
         // With no chain named, the wake goes to the whole life: a pause of one chain holds the chains it made, and the
@@ -2326,8 +2339,10 @@ export class Session extends EventEmitter {
                 ...this.chains.filter((chain) => isPaused(chain) && !isDone(chain)).map((chain) => chain.id),
               ]),
             ];
-        for (const id of stopped) await this.engine.wake(id);
-        this.notice = stopped.length > 1 ? `Work resumed on ${stopped.length} chains.` : "Work resumed.";
+        let woke = true;
+        for (const id of stopped) if (woke) woke = await this.cut("wake", () => this.engine.wake(id));
+        if (woke)
+          this.notice = stopped.length > 1 ? `Work resumed on ${stopped.length} chains.` : "Work resumed.";
         break;
       }
       case "cancel":

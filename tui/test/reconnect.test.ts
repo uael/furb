@@ -317,7 +317,7 @@ test("a daemon of another build that takes the place of the daemon that went is 
   expect(await daemon.ask({ verb: "list" })).toEqual({ answer: "done" });
 });
 
-test("a pause, a wake and a seen that the daemon left when it went are not sent again, so none overrides a newer control of another window", async () => {
+test("a pause and a wake that the daemon left when it went are not sent again, so neither overrides a newer control of another window", async () => {
   const seen: [number, string][] = [];
   const { folder, place, server } = served((asked, socket, connection) => {
     seen.push([connection, asked.verb]);
@@ -327,7 +327,7 @@ test("a pause, a wake and a seen that the daemon left when it went are not sent 
         `${JSON.stringify({ frame: "event", life: asked.life, seq: 0, event: { event: "changed" } })}\n`,
       );
     } else if (asked.verb === "pending") reply(socket, asked, { answer: "values", data: [] });
-    else if (connection === 0 && ["pause", "wake", "seen"].includes(asked.verb)) socket.destroy();
+    else if (connection === 0 && ["pause", "wake"].includes(asked.verb)) socket.destroy();
     else if (asked.verb === "detach") reply(socket, asked, { answer: "done" });
   });
   const daemon = new Daemon(folder, place);
