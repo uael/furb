@@ -1865,6 +1865,21 @@ export class Session extends EventEmitter {
         : `The new branch reads the transcript through ${id}. ${kept}`;
     return branch;
   }
+  /** A new branch that starts where its chain does: it reads none of the acts of the chain, and the first message of the
+   * operator returns to the composer to be sent again. The module and the files keep the state they have. */
+  async rewindToStart(label?: string): Promise<string> {
+    if (this.paused) throw new Error("Wake this chain before rewinding.");
+    const first = this.activity.find((act) => this.isUserPrompt(act));
+    const branch = await this.branch(
+      label ?? this.branchLabel(),
+      this.activity.map((act) => act.id),
+    );
+    if (first) this.restore(String(first.words[1] ?? ""));
+    this.notice = first
+      ? "The message is back in the input on a new branch that starts empty. The module and the files keep their state."
+      : "The new branch starts empty. The module and the files keep their state.";
+    return branch;
+  }
   /** What a rewind to an act gives back of the files: the files as they stood when the act was made, or before the
    * message for a message of the operator. A write after the point counts, on any chain, but a write that the act
    * itself made, which the branch keeps. A change that an older session kept names no write, and stays. */

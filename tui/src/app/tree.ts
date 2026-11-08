@@ -196,11 +196,18 @@ export const tree = part({
     if (chain) {
       const current = act.id === w.selected;
       const status = this.session.chainStatus(act.id);
+      // The root of the chain shown, in the tree that goes back to a point, is the start of its life: it goes back to it.
+      const start = current && this.tree?.title === "Rewind";
       return {
         parts: [statusMark(status), [w.labelOf(act.id), current ? c.text : c.muted, bold]],
         tag: current ? "current" : act.id,
-        hint: "open it",
+        hint: start ? "start again from here" : "open it",
         run: async () => {
+          if (start) {
+            this.closeTree();
+            await w.rewindToStart();
+            return;
+          }
           this.closeTree();
           await w.select(act.id);
         },
@@ -376,7 +383,11 @@ export const tree = part({
   async chooseTreeRow(): Promise<void> {
     const row = this.treeRow();
     if (!row) return;
-    if (row.id === this.session.selected && this.session.chains.some((chain) => chain.id === row.id)) {
+    if (
+      this.tree?.title !== "Rewind" &&
+      row.id === this.session.selected &&
+      this.session.chains.some((chain) => chain.id === row.id)
+    ) {
       this.closeTree();
       return;
     }
