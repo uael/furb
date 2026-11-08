@@ -71,3 +71,9 @@ def test_a_conftest_of_another_folder_does_not_shadow_the_harness() -> None:
   finally:
     shutil.rmtree(folder, ignore_errors=True)
   assert ran.returncode == 0, ran.stdout[-4000:]
+
+
+def test_the_suite_finds_no_claude_command_line_of_the_machine() -> None:
+  """A World that opens a life asks the claude of the machine for its models, which takes ten seconds in each process
+  of the run, so the suite hides it, as the tests of the TUI do."""
+  assert os.environ["FURB_CLAUDE_BIN"] == ""

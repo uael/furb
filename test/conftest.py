@@ -35,6 +35,10 @@ CONFIG = Path(tempfile.mkdtemp(prefix="furb-config-"))
 process and each process that it starts: a provider, an extension or a memory file in the config directory of the
 machine changes no test. A test that needs a config of the user writes it in a directory of its own."""
 os.environ["FURB_CONFIG_DIR"] = str(CONFIG)
+# The tests find no claude command line and no local model, as on a machine that has none, as tui/script/environment.ts
+# says for the tests of the TUI: a World that opens a life asks the claude of the machine which models it has, and
+# that takes about ten seconds in each process of the run, for each of its tests that opens a life.
+os.environ["FURB_CLAUDE_BIN"] = ""
 
 
 @atexit.register
