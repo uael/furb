@@ -8,7 +8,6 @@ import {
   gist,
   isDone,
   type NoteRun,
-  operated,
   outcomeOf,
   type ProgramLine,
   pauseSaid,
@@ -281,7 +280,7 @@ export const feed = part({
       w.moment === undefined &&
       !w.paused &&
       !w.actOf(w.selected)?.words[1] &&
-      !w.activity.some((act) => operated(act.by) || act.kind === "prompt");
+      !w.activity.some((act) => this.session.own(act) || act.kind === "prompt");
     if (this.welcoming) {
       const { width, height } = this.scroll.viewport;
       add("welcome", `welcome:${width}:${height}:${this.theme}:${this.welcomeKey()}`, [], (box) =>
@@ -736,7 +735,7 @@ export const feed = part({
         ];
         const says: ActRow[] = [];
         for (const line of program) {
-          if (line.kind === "note" && line.step.kind === "prompt" && operated(line.step.by)) {
+          if (line.kind === "note" && line.step.kind === "prompt" && this.session.own(line.step)) {
             // A message that the operator took back leaves the box, and the message that replaces it stands in its place.
             if (cancelled(line.step)) continue;
             says.push(line.step as ActRow);
@@ -1093,7 +1092,7 @@ export const feed = part({
           // A word of the operator that only made a chain, as a branch or a new chain does, reads as the chain that it
           // made, and a click on it opens that chain.
           const made =
-            operated(act.by) && /^\s*chain\(/.test(code)
+            this.session.own(act) && /^\s*chain\(/.test(code)
               ? w.chains.find((chain) => chain.by === act.id)
               : undefined;
           if (made) {
@@ -1289,7 +1288,7 @@ export const feed = part({
                 ? "your word"
                 : aside === "agent"
                   ? "agent work"
-                  : operated(act.by)
+                  : this.session.own(act)
                     ? ""
                     : `from ${act.by}`;
           const opened = w.folds[act.id] === false;
@@ -1348,7 +1347,7 @@ export const feed = part({
             [
               [`${glyph.asks} `, waiting ? c.warning : c.faint],
               ["Question", c.text, bold],
-              [`  ${operated(act.by) ? "for you" : `from ${act.by}`}`, c.faint],
+              [`  ${this.session.own(act) ? "for you" : `from ${act.by}`}`, c.faint],
             ],
             (box) => {
               this.panel(box, waiting ? c.warning : c.border).add(this.markdown(message));

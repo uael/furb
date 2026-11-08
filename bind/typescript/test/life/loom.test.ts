@@ -8,7 +8,6 @@ import {
   doingOf,
   duration,
   type Loom,
-  momentsOf,
   nowOf,
   orderOf,
   owedAt,
@@ -41,6 +40,12 @@ const thread = (
   );
 };
 
+/** The moments of acts as the crate gives them to a window: each start and each end, in order. */
+const momentsIn = (acts: readonly Act[]): number[] =>
+  [...new Set(acts.flatMap((one) => [one.began, ...(one.ended == null ? [] : [one.ended])]))]
+    .filter((moment) => moment > 0)
+    .sort((one, other) => one - other);
+
 /** A loom woven from acts in the states that the crate gives them, as a host tells them, and the index of the host
  * with those states. */
 const woven = (given: Weave): Loom => {
@@ -50,7 +55,7 @@ const woven = (given: Weave): Loom => {
     ...given.index,
     ids: new Map([...given.index.ids].map(([id, one]) => [id, byId.get(id) ?? one])),
   };
-  return weave({ ...given, acts, index });
+  return weave({ ...given, acts, index, moments: given.moments ?? momentsIn(acts) });
 };
 
 const loomOf = (
@@ -458,7 +463,11 @@ test("the moments of the acts are each start and end, in order, and a prompt tha
     }),
     act("read1", "read", "chain1", "rung2", 7, 7),
   ];
-  expect(momentsOf(acts)).toEqual([1, 2, 3, 4, 5, 7, 8, 9]);
+  // The loom reads the moments that the crate gives, and computes none from the acts.
+  const loom = (moments?: number[]) =>
+    weave({ acts, prompts: [], measures: {}, folds: new Set(), width: 12, label: (id) => id, moments });
+  expect(loom().folded).toBe(0);
+  expect(loom([1, 2, 3, 4, 5, 7, 8, 9]).folded).toBeGreaterThan(0);
   expect(owedAt(acts)).toEqual([]);
   const asking = act("prompt2", "prompt", "chain1", "rung1", 10, undefined, {
     words: ["str", "Why?", "operator"],

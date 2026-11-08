@@ -385,14 +385,14 @@ async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
   assert_eq!(desk["questions"], json!(1), "{desk}");
   assert_eq!(desk["asks"][0]["id"], json!(asked));
   assert_eq!(desk["asks"][0]["choices"], json!(["yes", "no"]));
-  let threads = Command::Threads { on: None, at: None, read: None };
+  let threads = Command::Threads { on: None, at: None, read: None, site: None };
   let Reply::Threads(now) = life.send(threads).await.unwrap() else { panic!("the threads") };
   assert_eq!(now.state, State::Asks, "{now:?}");
   let Reply::Moments(moments) = life.send(Command::Moments { on: None }).await.unwrap() else {
     panic!("the moments")
   };
   let first = *moments.first().expect("a moment");
-  let past = Command::Threads { on: None, at: Some(first), read: None };
+  let past = Command::Threads { on: None, at: Some(first), read: None, site: None };
   let Reply::Threads(back) = life.send(past).await.unwrap() else { panic!("the threads") };
   assert_ne!(back.state, State::Asks, "the chain asked nothing at its first moment: {back:?}");
   let Reply::Acts(then) = life.send(Command::AsOf { at: first }).await.unwrap() else {

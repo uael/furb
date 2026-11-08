@@ -524,7 +524,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Unqueue { life, entry } => (life, Command::Unqueue { entry }),
     Verb::Queued { life, on } => (life, Command::Queued { on }),
     Verb::Desk { life, notices } => (life, Command::Desk { notices }),
-    Verb::Threads { life, on, at, read } => (life, Command::Threads { on, at, read }),
+    Verb::Threads { life, on, at, read } => (life, Command::Threads { on, at, read, site: None }),
     Verb::Rail { life, hidden, at } => (life, Command::Rail { hidden, at }),
     Verb::Ladder { life, on, at, opened, owed, taken, shown } => {
       (life, Command::Ladder { on, at, opened, owed, taken, shown })

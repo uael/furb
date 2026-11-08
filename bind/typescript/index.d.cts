@@ -410,6 +410,13 @@ export declare function laddered(acts: Array<import("./dist/protocol.js").Act>, 
 /** LARGEST is the largest number of bytes that a read tells of the lines that its show picks. */
 export declare const LARGEST: number
 
+/**
+ * The model and the effort that an actor names, as the crate reads an actor: the model whole
+ * when `models` holds its whole name, else the model and the level after its last slash when
+ * that word is one of the levels. The effort is `off` when the actor names none.
+ */
+export declare function leveled(actor: string, models?: Array<string> | undefined | null): Array<string>
+
 /** The levels of effort, from least to most, which an actor names after its model. */
 export declare function levels(): Array<string>
 

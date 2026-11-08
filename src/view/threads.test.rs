@@ -554,3 +554,25 @@ fn a_thread_that_ended_unseen_concerns_the_operator_only_when_he_started_it() {
   // An agent that a ladder hired never marks the row.
   assert_eq!(unread("rung2", false), 0);
 }
+
+#[test]
+fn the_seen_of_one_operator_does_not_clear_the_unread_mark_of_another() {
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    asked("prompt1"),
+    json!(["rung", "rung1", "operator", "chain1", "x = 1", "", ""]),
+    json!(["prompt", "prompt2", "rung1", "chain1", "str", "Work.", ""]),
+    json!(["done", "prompt2", "", "ok"]),
+    json!(["seen", "chain1", "operator/ann"]),
+  ];
+  let got = held(facts);
+  let unread = |login: &str| got.threads_as(login, "chain1", None, 0).attention.unread;
+  // Ann read the chain, so it is no unread mark of hers, and Bob has not read it, so it stays his.
+  assert_eq!(unread("operator/ann"), 0);
+  assert_eq!(unread("operator/bob"), 1);
+  // The same facts give the same marks on each read: the roll-up holds no order of a map.
+  for _ in 0..20 {
+    assert_eq!(unread("operator/ann"), 0);
+    assert_eq!(unread("operator/bob"), 1);
+  }
+}

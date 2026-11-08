@@ -16,7 +16,7 @@ import { Console, type ConsoleOptions } from "./console.js";
 import { call, type Ear } from "./ears.js";
 import { type PauseCause, WORK } from "./life/acts.js";
 import { furbDirectory, saveFile } from "./project.js";
-import { actorParts, type Entry, type Fact, isQuestion, standingOf } from "./types.js";
+import { type Entry, type Fact, isQuestion, leveled, standingOf } from "./types.js";
 
 /** An ear that takes nothing and says nothing. */
 function* silent(): Ear {
@@ -285,7 +285,8 @@ export class Session extends EventEmitter {
 
   private save(): void {
     if (!this.record || this.options.readOnly) return;
-    const chosen = this.actor === "operator" ? {} : actorParts(this.actor);
+    const [model, effort] = leveled(this.actor);
+    const chosen = this.actor === "operator" ? {} : { model, effort };
     const saved: Saved = { options: { cwd: this.directory, ...chosen } };
     saveFile(`${this.record}.session.json`, JSON.stringify(saved));
   }
