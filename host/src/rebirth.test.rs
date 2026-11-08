@@ -5,7 +5,7 @@
 use furb::view::{Act, Kind, Maker, Phase, State};
 use serde_json::{Value, json};
 
-use super::{TAIL, Watch};
+use super::{Asks, PATIENCE, TAIL, Watch};
 use crate::event::Event;
 
 fn act(kind: &str, id: &str, by: &str, words: &[Value], phase: Phase) -> Event {
@@ -86,4 +86,49 @@ fn the_rungs_of_completed_words_hold_no_rebirth_and_the_rungs_of_life_words_go_w
   watch.heard(&act("rung", "rung91", "chain1", &[json!("seed()")], Phase::Started));
   watch.heard(&act("lasting", "life1", "rung91", &[], Phase::Started));
   assert!(watch.due(), "the life words stand until the next stand");
+}
+
+/// Three lives, each with its name, its weight and the count of its births.
+fn lives(a: (u64, u64), b: (u64, u64), c: (u64, u64)) -> Vec<(String, u64, u64)> {
+  [("a", a), ("b", b), ("c", c)]
+    .map(|(name, (weight, births))| (name.to_owned(), weight, births))
+    .to_vec()
+}
+
+#[test]
+fn the_daemon_asks_one_life_at_a_time_and_the_next_once_it_is_born_again() {
+  let mut asks = Asks::default();
+  assert_eq!(asks.next(&lives((9, 0), (5, 0), (0, 0))), Some("a".to_owned()));
+  assert_eq!(asks.next(&lives((9, 0), (5, 0), (0, 0))), None, "a is not born again yet");
+  assert_eq!(asks.next(&lives((12, 1), (5, 0), (0, 0))), Some("b".to_owned()), "a is born again");
+  assert_eq!(asks.next(&lives((12, 1), (6, 0), (0, 0))), None, "b is not born again yet");
+  assert_eq!(asks.next(&lives((12, 1), (6, 1), (0, 0))), None, "c weighs nothing and a was asked");
+  let mut spared = asks.spared();
+  spared.sort();
+  assert_eq!(spared, ["a", "b"]);
+  assert_eq!(asks.next(&lives((12, 1), (6, 1), (0, 0))), Some("a".to_owned()), "a fresh share");
+}
+
+#[test]
+fn a_life_that_is_not_born_again_holds_the_asks_no_more_than_its_patience() {
+  let mut asks = Asks::default();
+  let stuck = lives((9, 0), (5, 0), (1, 0));
+  assert_eq!(asks.next(&stuck), Some("a".to_owned()));
+  for _ in 0..PATIENCE {
+    assert_eq!(asks.next(&stuck), None);
+  }
+  assert_eq!(asks.next(&stuck), Some("b".to_owned()), "past its patience, the next life");
+  for _ in 0..PATIENCE {
+    assert_eq!(asks.next(&stuck), None);
+  }
+  assert_eq!(asks.next(&stuck), Some("c".to_owned()));
+  assert_eq!(asks.next(&lives((9, 0), (5, 0), (1, 0))), None, "c is not born again yet");
+}
+
+#[test]
+fn a_life_that_ended_holds_no_ask() {
+  let mut asks = Asks::default();
+  assert_eq!(asks.next(&lives((9, 0), (5, 0), (0, 0))), Some("a".to_owned()));
+  let left = vec![("b".to_owned(), 5, 0)];
+  assert_eq!(asks.next(&left), Some("b".to_owned()));
 }
