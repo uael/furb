@@ -9,6 +9,7 @@ import type {
   Mount,
   Node,
   Peer,
+  Role,
   Slot,
   Request1 as Verb,
   ViewEvent,
@@ -64,6 +65,19 @@ function dialing(place: string): Promise<Socket> {
   });
 }
 
+/** Where a connection dials and who it says it is: the place, the kind and name of its peer, the role that its hello
+ * asks (none to hold the role that its transport proved), and how it gets a socket when the place alone is not
+ * enough, as a window that starts a daemon where none listens. */
+interface Route {
+  place: string;
+  kind: Kind;
+  name?: string;
+  role?: Role;
+  reach?: () => Promise<Socket>;
+  /** A listener of each frame that the daemon pushes, added before the first hello so that no frame is missed. */
+  heard?: (frame: Frame) => void;
+}
+
 /** One connection to the daemon, after its hello. Each verb takes a number and its answer, in any order, and each
  * frame that the daemon pushes goes to each listener of `pushed`. `closed` settles when the stream ends for good, from
  * either side, and each verb that waits when the socket ends fails. A connection dialed with `again` dials the place
@@ -83,14 +97,18 @@ export class Connection extends EventEmitter {
   /** How many lives hold the connection, which an idle connection keeps the process alive for. */
   private held = 0;
   private ending = false;
+  /** Whether the first hello is over: a socket that closes before it fails the dial and is not dialed again here. */
+  private ready = false;
   private reaching?: Promise<void>;
   private finish!: () => void;
   private constructor(
     socket: Socket,
     private readonly idle: boolean,
-    private readonly route?: { place: string; kind: Kind; name?: string },
+    private readonly route: Route,
+    private readonly again: boolean,
   ) {
     super();
+    if (route.heard) this.frameListeners.add(route.heard);
     this.closed = new Promise((resolve) => {
       this.finish = resolve;
     });
@@ -115,28 +133,32 @@ export class Connection extends EventEmitter {
       for (const waits of this.waiting.values())
         waits.reject(askedBy(new Closed("The daemon closed the connection."), waits.asked));
       this.waiting.clear();
-      if (this.ending || !this.route || this.reaching) return this.finish();
-      this.reaching = this.hello(this.route.place).then(
-        () => {
-          this.reaching = undefined;
-          this.emit("reconnected");
-        },
-        (error: unknown) => {
-          this.reaching = undefined;
-          this.emit("lost", error instanceof Error ? error.message : String(error));
-          this.finish();
-        },
-      );
+      if (this.ending || !this.again || !this.ready || this.reaching) return this.finish();
+      // A daemon that closes before its welcome, as one that ends at its grace in the instant that this dials it, is
+      // dialed once more.
+      this.reaching = this.hello()
+        .catch((error: unknown) => (error instanceof Closed ? this.hello() : Promise.reject(error)))
+        .then(
+          () => {
+            this.reaching = undefined;
+            this.emit("reconnected");
+          },
+          (error: unknown) => {
+            this.reaching = undefined;
+            this.emit("lost", error instanceof Error ? error.message : String(error));
+            this.finish();
+          },
+        );
     });
     // An error of the stream closes it, which `closed` tells.
     socket.on("error", () => {});
   }
 
   /** The hello on a socket to the place, which makes it the socket of the connection. */
-  private async hello(place: string, socket?: Socket): Promise<void> {
-    if (!socket) this.attach(await dialing(place));
-    const { kind, name } = this.route ?? { kind: "skill" as Kind };
-    const welcome = await this.send({ verb: "hello", protocol: PROTOCOL, kind, name });
+  private async hello(socket?: Socket): Promise<void> {
+    if (!socket) this.attach(await (this.route.reach?.() ?? dialing(this.route.place)));
+    const { kind, name, role } = this.route;
+    const welcome = await this.send({ verb: "hello", protocol: PROTOCOL, kind, name, role });
     if (welcome.answer !== "welcome") throw new Error(`The daemon gave ${welcome.answer}, and no welcome.`);
     this.peer = welcome.data.peer;
   }
@@ -148,11 +170,12 @@ export class Connection extends EventEmitter {
     name?: string,
     idle = false,
     again = false,
+    via: Pick<Route, "role" | "reach" | "heard"> = {},
   ): Promise<Connection> {
-    const socket = await dialing(place);
-    const connection = new Connection(socket, idle, { place, kind, name });
-    if (!again) Reflect.set(connection, "route", undefined);
-    await connection.hello(place, socket);
+    const socket = await (via.reach?.() ?? dialing(place));
+    const connection = new Connection(socket, idle, { place, kind, name, ...via }, again);
+    await connection.hello(socket);
+    connection.ready = true;
     return connection;
   }
 

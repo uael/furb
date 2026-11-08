@@ -62,7 +62,7 @@ test("a request that the daemon leaves when it goes fails as closed, with the st
   await daemon.connect();
   const failed = await daemon.ask({ verb: "list" }).catch((error: unknown) => error);
   expect(failed).toBeInstanceOf(Closed);
-  expect((failed as Error).message).toBe("The daemon of this machine closed.");
+  expect((failed as Error).message).toBe("The daemon closed the connection.");
   expect((failed as Error).stack).toContain("reconnect.test.ts");
 });
 
