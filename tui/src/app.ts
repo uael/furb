@@ -817,9 +817,8 @@ export class App {
       flexShrink: 0,
       ...(this.reader ? plain : { border, borderColor, borderStyle, customBorderChars, ...plain }),
     });
-    this.held.set(node, [options.onMouseOver, options.onMouseOut]);
     return !still && (lit || (options.onMouseUp && !options.onMouseOver && !options.onMouseOut))
-      ? this.hoverable(node, lit)
+      ? this.hoverable(node, lit, options.onMouseOver, options.onMouseOut)
       : node;
   }
   /** A box that lays out what it holds in a row one bar high. */
@@ -849,17 +848,16 @@ export class App {
       run(event);
     };
   }
-  /** The handlers of the pointer that a node of box, text or whole holds, for the hover state to keep. */
-  private held = new WeakMap<
-    Renderable,
-    [over?: (event: MouseEvent) => void, out?: (event: MouseEvent) => void]
-  >();
   /** The one hover state, which box and text give to a node that takes a click, or that names the color `lit` that it
    * takes: its background takes that color while the pointer is on it, and gives it back when the pointer leaves. It
    * keeps the handlers that the node held, as the tip of a text that the terminal cut, since OpenTUI keeps one of each
-   * and gives none back: box, text and whole write what they set in `held`. */
-  private hoverable<T extends BoxRenderable | TextRenderable>(node: T, color = c.raised): T {
-    const [over, out] = this.held.get(node) ?? [];
+   * and gives none back, so the caller gives the two that it holds. */
+  private hoverable<T extends BoxRenderable | TextRenderable>(
+    node: T,
+    color = c.raised,
+    over?: (event: MouseEvent) => void,
+    out?: (event: MouseEvent) => void,
+  ): T {
     // A box has a background, and a text the color behind its cells.
     if (node instanceof BoxRenderable) {
       const rest = node.backgroundColor;
@@ -973,12 +971,14 @@ export class App {
       onMouseUp: run && this.click(run),
       ...options,
     });
-    this.held.set(node, [options.onMouseOver, options.onMouseOut]);
-    const shown = options.truncate && !options.onMouseOver ? this.whole(node) : node;
+    const [over, out] =
+      options.truncate && !options.onMouseOver ? this.tips(node) : [options.onMouseOver, options.onMouseOut];
     // A text that takes a click lights while the pointer is on it, as a box does.
-    return lit || ((run || options.onMouseUp) && !options.onMouseOver && !options.onMouseOut)
-      ? this.hoverable(shown, lit)
-      : shown;
+    if (lit || ((run || options.onMouseUp) && !options.onMouseOver && !options.onMouseOut))
+      return this.hoverable(node, lit, over, out);
+    node.onMouseOver = over;
+    node.onMouseOut = out;
+    return node;
   }
   /** A text one bar high. */
   line(content: string | Part[], fg = c.text, options: TextShape & Lights = {}): TextRenderable {
@@ -988,20 +988,21 @@ export class App {
    * cut, or the whole that a caller gives for a text that it cut itself. The tip takes the hover handlers of the text,
    * since OpenTUI keeps one of each and gives none back. */
   whole(node: TextRenderable, full?: () => string): TextRenderable {
-    const over = (event: MouseEvent) => {
-      // A drag selects text, and no tip comes between the drag and what it selects.
-      if (event.isDragging) return;
-      const text = full ? full() : node.plainText;
-      const cut = full ? text !== node.plainText : Bun.stringWidth(text) > node.width;
-      if (cut && text) this.tip([[text, c.text]], event.x, event.y);
-    };
-    const out = () => {
-      this.unhover();
-    };
-    node.onMouseOver = over;
-    node.onMouseOut = out;
-    this.held.set(node, [over, out]);
+    [node.onMouseOver, node.onMouseOut] = this.tips(node, full);
     return node;
+  }
+  /** The handlers of the pointer that show the tip of a text cut to its room. */
+  private tips(node: TextRenderable, full?: () => string): [(event: MouseEvent) => void, () => void] {
+    return [
+      (event) => {
+        // A drag selects text, and no tip comes between the drag and what it selects.
+        if (event.isDragging) return;
+        const text = full ? full() : node.plainText;
+        const cut = full ? text !== node.plainText : Bun.stringWidth(text) > node.width;
+        if (cut && text) this.tip([[text, c.text]], event.x, event.y);
+      },
+      () => this.unhover(),
+    ];
   }
   /** Whether a change waits for the next frame to draw the view again. */
   due = false;

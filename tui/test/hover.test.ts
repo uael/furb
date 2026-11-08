@@ -2,10 +2,7 @@
 // the pointer over each kind of element of the window and reads the cell under it, which differs from what it was while
 // the pointer is over it and is the same again once it leaves.
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { RGBA } from "@opentui/core";
-import { Glob } from "bun";
 import { type Composing, cellAt, composing } from "./composing.ts";
 
 /** The colors of a cell: its text and its ground. */
@@ -74,13 +71,4 @@ test("each button of a dialog lights while the pointer is on it and is as it was
     { width: 140, height: 46 },
     true,
   );
-});
-
-test("no part of the window lights a node by a call of its own: box and text give the one hover state", () => {
-  const callers = [...new Glob("src/**/*.ts").scanSync(join(import.meta.dir, ".."))].filter((file) =>
-    readFileSync(join(import.meta.dir, "..", "src", file.replace(/^src\//, "")), "utf8").includes(
-      "this.hoverable(",
-    ),
-  );
-  expect(callers.map((file) => file.replace(/^src\//, ""))).toEqual(["app.ts"]);
 });

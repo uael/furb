@@ -154,13 +154,12 @@ export const welcome = part({
         borderColor: c.border,
         customBorderChars: { ...noBorder, vertical: glyph.bar },
         onMouseUp: this.click(run),
-        onMouseOver() {
-          this.backgroundColor = c.panel;
-          if (framed) this.borderColor = c.accent;
+        lit: c.panel,
+        onMouseOver: () => {
+          if (framed) card.borderColor = c.accent;
         },
-        onMouseOut() {
-          this.backgroundColor = c.background;
-          if (framed) this.borderColor = lead ? c.accent : c.border;
+        onMouseOut: () => {
+          if (framed) card.borderColor = lead ? c.accent : c.border;
         },
       });
       // The card that plays a life leads, with its bar in the accent.
