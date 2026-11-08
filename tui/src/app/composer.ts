@@ -642,7 +642,12 @@ export const composer = part({
 
   /** The values of a command in a picker, with the current one marked and selected, which runs the command on the
    * value that is chosen. */
-  pick(command: string, label: string, note: string, only?: (value: string) => boolean): void {
+  pick(
+    command: string,
+    label: string,
+    note: string,
+    { only, empty }: { only?: (value: string) => boolean; empty: string },
+  ): void {
     const values = (this.values[command]?.() ?? []).filter((one) => !only || only(one.value));
     this.openPalette(
       label,
@@ -653,7 +658,11 @@ export const composer = part({
         mark: this.current(Boolean(one.current)),
         run: () => this.action(`/${command} ${one.value}`),
       })),
-      { selected: values.findIndex((one) => one.current), note },
+      {
+        selected: values.findIndex((one) => one.current),
+        note,
+        empty,
+      },
     );
   },
 });
