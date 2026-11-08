@@ -311,6 +311,9 @@ export async function lived(walk: Walk, window: Window, yard: Yard): Promise<voi
     ask("Walk: pick a way.", "Walk: which way?"),
   );
   await walk.step("choose the second value with ↓ and Enter", async () => {
+    // The question shows in the feed before the list of its values opens, and a loaded machine draws the two apart: a
+    // key before the list goes to the input, so the walk presses its keys once the list shows.
+    await walk.shows("Choose below with ↑↓");
     walk.press("down");
     await walk.drawn();
     walk.press("return");
