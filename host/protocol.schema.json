@@ -48,6 +48,7 @@
         },
         {
           "type": "object",
+          "description": "The records of the machine: each record of the sessions of each workspace that\n`workspaces.json` in the folder `config` names, the config folder of the daemon when the peer\nnames none, as a window keeps its list there, and each record that a life of the daemon holds.",
           "properties": {
             "config": {
               "type": [
@@ -63,11 +64,11 @@
           },
           "required": [
             "verb"
-          ],
-          "description": "The records of the machine: each record of the sessions of each workspace that\n`workspaces.json` in the folder `config` names, the config folder of the daemon when the peer\nnames none, as a window keeps its list there, and each record that a life of the daemon holds."
+          ]
         },
         {
           "type": "object",
+          "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the skills that the peer names, reads the\nsettings of the user in the folder `config` and runs the claude command line `claude` when\nthe peer names them, as the window of the peer reads them, and the peer answers each request\nof its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass.",
           "properties": {
             "life": {
               "type": "string"
@@ -134,11 +135,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the extensions that the peer names, reads the\nsettings of the user in the folder `config` and runs the claude command line `claude` when\nthe peer names them, as the window of the peer reads them, and the peer answers each request\nof its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass."
+          ]
         },
         {
           "type": "object",
+          "description": "The events of a life from a place in its log, which the daemon pushes to the peer.",
           "properties": {
             "life": {
               "type": "string"
@@ -157,11 +158,14 @@
             "verb",
             "life",
             "from"
-          ],
-          "description": "The events of a life from a place in its log, which the daemon pushes to the peer."
+          ]
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -170,14 +174,15 @@
               "type": "string",
               "const": "detach"
             }
-          },
-          "required": [
-            "verb",
-            "life"
-          ]
+          }
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "holder"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -189,15 +194,15 @@
               "type": "string",
               "const": "pin"
             }
-          },
+          }
+        },
+        {
+          "type": "object",
           "required": [
             "verb",
             "life",
             "holder"
-          ]
-        },
-        {
-          "type": "object",
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -209,15 +214,11 @@
               "type": "string",
               "const": "unpin"
             }
-          },
-          "required": [
-            "verb",
-            "life",
-            "holder"
-          ]
+          }
         },
         {
           "type": "object",
+          "description": "Who is attached to a life now.",
           "properties": {
             "life": {
               "type": "string"
@@ -230,11 +231,15 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "Who is attached to a life now."
+          ]
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -246,15 +251,15 @@
               "type": "string",
               "const": "get"
             }
-          },
+          }
+        },
+        {
+          "type": "object",
           "required": [
             "verb",
             "life",
             "act"
-          ]
-        },
-        {
-          "type": "object",
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -266,15 +271,14 @@
               "type": "string",
               "const": "peek"
             }
-          },
-          "required": [
-            "verb",
-            "life",
-            "act"
-          ]
+          }
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -295,14 +299,14 @@
               "type": "string",
               "const": "transcript"
             }
-          },
-          "required": [
-            "verb",
-            "life"
-          ]
+          }
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -317,14 +321,14 @@
               "type": "string",
               "const": "turns"
             }
-          },
-          "required": [
-            "verb",
-            "life"
-          ]
+          }
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -339,14 +343,14 @@
               "type": "string",
               "const": "program"
             }
-          },
-          "required": [
-            "verb",
-            "life"
-          ]
+          }
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -355,14 +359,11 @@
               "type": "string",
               "const": "standing"
             }
-          },
-          "required": [
-            "verb",
-            "life"
-          ]
+          }
         },
         {
           "type": "object",
+          "description": "The share of the window of its model that the prompt of an answer filled, as `filled` of\nthe engine gives it from the reply that took that answer, and nothing before an answer.",
           "properties": {
             "life": {
               "type": "string"
@@ -379,11 +380,14 @@
             "verb",
             "life",
             "act"
-          ],
-          "description": "The share of the window of its model that the prompt of an answer filled, as `filled` of\nthe engine gives it from the reply that took that answer, and nothing before an answer."
+          ]
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -398,14 +402,15 @@
               "type": "string",
               "const": "cwd"
             }
-          },
-          "required": [
-            "verb",
-            "life"
-          ]
+          }
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "name"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -423,15 +428,11 @@
               "type": "string",
               "const": "inspect"
             }
-          },
-          "required": [
-            "verb",
-            "life",
-            "name"
-          ]
+          }
         },
         {
           "type": "object",
+          "description": "The prompts of a life that wait for an operator.",
           "properties": {
             "life": {
               "type": "string"
@@ -444,11 +445,16 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "The prompts of a life that wait for an operator."
+          ]
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "shape",
+            "message"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -475,16 +481,11 @@
               "type": "string",
               "const": "prompt"
             }
-          },
-          "required": [
-            "verb",
-            "life",
-            "shape",
-            "message"
-          ]
+          }
         },
         {
           "type": "object",
+          "description": "The close of a prompt to the operator, with a line that the operator wrote.",
           "properties": {
             "life": {
               "type": "string"
@@ -505,11 +506,11 @@
             "life",
             "act",
             "line"
-          ],
-          "description": "The close of a prompt to the operator, with a line that the operator wrote."
+          ]
         },
         {
           "type": "object",
+          "description": "A pause of an act or of a chain, with the cause that the operator gives.",
           "properties": {
             "life": {
               "type": "string"
@@ -532,11 +533,15 @@
             "verb",
             "life",
             "act"
-          ],
-          "description": "A pause of an act or of a chain, with the cause that the operator gives."
+          ]
         },
         {
           "type": "object",
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ],
           "properties": {
             "life": {
               "type": "string"
@@ -548,15 +553,11 @@
               "type": "string",
               "const": "wake"
             }
-          },
-          "required": [
-            "verb",
-            "life",
-            "act"
-          ]
+          }
         },
         {
           "type": "object",
+          "description": "A cancel of an act or of a chain, with the cause that the operator gives.",
           "properties": {
             "life": {
               "type": "string"
@@ -579,11 +580,11 @@
             "verb",
             "life",
             "act"
-          ],
-          "description": "A cancel of an act or of a chain, with the cause that the operator gives."
+          ]
         },
         {
           "type": "object",
+          "description": "A chain made on a chain, under a label, or a fork of the chain `source` with its transcript\nand its program.",
           "properties": {
             "life": {
               "type": "string"
@@ -614,11 +615,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "A chain made on a chain, under a label, or a fork of the chain `source` with its transcript\nand its program."
+          ]
         },
         {
           "type": "object",
+          "description": "A word that runs on a chain as a turn of the operator.",
           "properties": {
             "life": {
               "type": "string"
@@ -641,11 +642,11 @@
             "verb",
             "life",
             "word"
-          ],
-          "description": "A word that runs on a chain as a turn of the operator."
+          ]
         },
         {
           "type": "object",
+          "description": "A close of an act with a value, written as the record writes a value: `2.0` stays a float,\nand `{\"is\": \"Refused\", \"args\": [\"why\"]}` is a refusal.",
           "properties": {
             "life": {
               "type": "string"
@@ -666,11 +667,11 @@
             "life",
             "act",
             "value"
-          ],
-          "description": "A close of an act with a value, written as the record writes a value: `2.0` stays a float,\nand `{\"is\": \"Refused\", \"args\": [\"why\"]}` is a refusal."
+          ]
         },
         {
           "type": "object",
+          "description": "A ceiling of the spend of a chain, in dollars or in a share of its window.",
           "properties": {
             "life": {
               "type": "string"
@@ -703,11 +704,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "A ceiling of the spend of a chain, in dollars or in a share of its window."
+          ]
         },
         {
           "type": "object",
+          "description": "A command that runs on a chain, with the text of its stdin, or with its stdin kept open for\nthe lines that a write to `<act>/stdin` feeds it.",
           "properties": {
             "life": {
               "type": "string"
@@ -740,11 +741,11 @@
             "verb",
             "life",
             "command"
-          ],
-          "description": "A command that runs on a chain, with the text of its stdin, or with its stdin kept open for\nthe lines that a write to `<act>/stdin` feeds it."
+          ]
         },
         {
           "type": "object",
+          "description": "The text at a path, read where a chain stands, as an act of the operator.",
           "properties": {
             "life": {
               "type": "string"
@@ -767,11 +768,11 @@
             "verb",
             "life",
             "path"
-          ],
-          "description": "The text at a path, read where a chain stands, as an act of the operator."
+          ]
         },
         {
           "type": "object",
+          "description": "A text written at a path, where a chain stands, as an act of the operator.",
           "properties": {
             "life": {
               "type": "string"
@@ -798,11 +799,11 @@
             "life",
             "path",
             "content"
-          ],
-          "description": "A text written at a path, where a chain stands, as an act of the operator."
+          ]
         },
         {
           "type": "object",
+          "description": "The names that the module of a chain binds.",
           "properties": {
             "life": {
               "type": "string"
@@ -821,11 +822,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "The names that the module of a chain binds."
+          ]
         },
         {
           "type": "object",
+          "description": "What the gate finds in a word on a chain, which runs nothing.",
           "properties": {
             "life": {
               "type": "string"
@@ -848,11 +849,11 @@
             "verb",
             "life",
             "word"
-          ],
-          "description": "What the gate finds in a word on a chain, which runs nothing."
+          ]
         },
         {
           "type": "object",
+          "description": "A stand of the life, which reads the roster and the actor again.",
           "properties": {
             "life": {
               "type": "string"
@@ -865,11 +866,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "A stand of the life, which reads the roster and the actor again."
+          ]
         },
         {
           "type": "object",
+          "description": "The configs of the folder of the life, in their layers: what each key holds, a change of a\nkey, or a stand on them as the disk holds them now.",
           "properties": {
             "life": {
               "type": "string"
@@ -886,11 +887,11 @@
             "verb",
             "life",
             "config"
-          ],
-          "description": "The configs of the folder of the life, in their layers: what each key holds, a change of a\nkey, or a stand on them as the disk holds them now."
+          ]
         },
         {
           "type": "object",
+          "description": "A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config\nthat asked it. It writes no config.",
           "properties": {
             "life": {
               "type": "string"
@@ -903,11 +904,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config\nthat asked it. It writes no config."
+          ]
         },
         {
           "type": "object",
+          "description": "The fact that the operator read a chain or a thread up to now, which each window and each\nlater life reads in the record.",
           "properties": {
             "life": {
               "type": "string"
@@ -924,11 +925,11 @@
             "verb",
             "life",
             "about"
-          ],
-          "description": "The fact that the operator read a chain or a thread up to now, which each window and each\nlater life reads in the record."
+          ]
         },
         {
           "type": "object",
+          "description": "A follow-up that the operator queued on a chain, under an entry that the window chose. The\nlife sends it as a prompt of its shape and its message once the chain rests, and a second\nqueue of the same entry, from any window, changes nothing.",
           "properties": {
             "life": {
               "type": "string"
@@ -959,11 +960,11 @@
             "entry",
             "shape",
             "message"
-          ],
-          "description": "A follow-up that the operator queued on a chain, under an entry that the window chose. The\nlife sends it as a prompt of its shape and its message once the chain rests, and a second\nqueue of the same entry, from any window, changes nothing."
+          ]
         },
         {
           "type": "object",
+          "description": "A follow-up taken out of its queue before the life sent it.",
           "properties": {
             "life": {
               "type": "string"
@@ -980,11 +981,11 @@
             "verb",
             "life",
             "entry"
-          ],
-          "description": "A follow-up taken out of its queue before the life sent it."
+          ]
         },
         {
           "type": "object",
+          "description": "The follow-ups that wait on a chain, in order.",
           "properties": {
             "life": {
               "type": "string"
@@ -1003,11 +1004,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "The follow-ups that wait on a chain, in order."
+          ]
         },
         {
           "type": "object",
+          "description": "What waits for the operator in a life, with each notice that the window still shows.",
           "properties": {
             "life": {
               "type": "string"
@@ -1027,11 +1028,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "What waits for the operator in a life, with each notice that the window still shows."
+          ]
         },
         {
           "type": "object",
+          "description": "The threads of a chain with their meaning, now or as they stood just after a moment. `read`\nis the place up to which the window read the chain, from which the runs of notes count the\nones not yet read; none reads nothing.",
           "properties": {
             "life": {
               "type": "string"
@@ -1067,11 +1068,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "The threads of a chain with their meaning, now or as they stood just after a moment. `read`\nis the place up to which the window read the chain, from which the runs of notes count the\nones not yet read; none reads nothing."
+          ]
         },
         {
           "type": "object",
+          "description": "The threads of every chain of a life but those it names, as one tree in the order of the\nlist of the threads, now or as they stood just after a moment.",
           "properties": {
             "life": {
               "type": "string"
@@ -1099,11 +1100,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "The threads of every chain of a life but those it names, as one tree in the order of the\nlist of the threads, now or as they stood just after a moment."
+          ]
         },
         {
           "type": "object",
+          "description": "The ladder of a chain, now or as it stood just after a moment: the steps that show and the\nfolds of the others, with the folds that the window opened, the prompts that the operator\nowes, the only acts at its top when `taken` names them, and how many last steps show.",
           "properties": {
             "life": {
               "type": "string"
@@ -1165,11 +1166,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "The ladder of a chain, now or as it stood just after a moment: the steps that show and the\nfolds of the others, with the folds that the window opened, the prompts that the operator\nowes, the only acts at its top when `taken` names them, and how many last steps show."
+          ]
         },
         {
           "type": "object",
+          "description": "The acts of a life as they stood just after a moment, each with its meaning then.",
           "properties": {
             "life": {
               "type": "string"
@@ -1188,11 +1189,11 @@
             "verb",
             "life",
             "at"
-          ],
-          "description": "The acts of a life as they stood just after a moment, each with its meaning then."
+          ]
         },
         {
           "type": "object",
+          "description": "Each moment of a life at which an act began or ended, in order.",
           "properties": {
             "life": {
               "type": "string"
@@ -1213,11 +1214,11 @@
           "required": [
             "verb",
             "life"
-          ],
-          "description": "Each moment of a life at which an act began or ended, in order."
+          ]
         },
         {
           "type": "object",
+          "description": "The turn that the peer gave for a request of a model of a life that it answers, written as\nthe record writes a value, or why it gives none.",
           "properties": {
             "life": {
               "type": "string"
@@ -1243,11 +1244,11 @@
             "verb",
             "life",
             "ask"
-          ],
-          "description": "The turn that the peer gave for a request of a model of a life that it answers, written as\nthe record writes a value, or why it gives none."
+          ]
         },
         {
           "type": "object",
+          "description": "What the peer added to the text and to the thought of the turn of a request, as it writes.",
           "properties": {
             "life": {
               "type": "string"
@@ -1274,8 +1275,7 @@
             "ask",
             "text",
             "thinking"
-          ],
-          "description": "What the peer added to the text and to the thought of the turn of a request, as it writes."
+          ]
         },
         {
           "type": "object",
@@ -1291,88 +1291,132 @@
           "description": "The place of the daemon given to the daemon of a new build: each life written to its\ncheckpoint and ended, and the lives with their pins in the answer, once the daemon stopped to\nlisten."
         },
         {
-          "required": [
-            "verb"
-          ],
           "type": "object",
+          "description": "A view that a window mounts in a slot of a life, which the process of a skill serves.",
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "life": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "skill": {
+              "type": "string"
+            },
             "verb": {
               "type": "string",
               "const": "view.mount"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Mount"
-            }
+          "required": [
+            "verb",
+            "viewer",
+            "life",
+            "slot",
+            "skill"
           ]
         },
         {
-          "required": [
-            "verb"
-          ],
           "type": "object",
+          "description": "The tree of a view, which takes the place of each tree of a lower version.",
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "version": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "tree": {
+              "$ref": "#/definitions/Node"
+            },
             "verb": {
               "type": "string",
               "const": "view.tree"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Tree"
-            }
+          "required": [
+            "verb",
+            "viewer",
+            "slot",
+            "version",
+            "tree"
           ]
         },
         {
-          "required": [
-            "verb"
-          ],
           "type": "object",
+          "description": "What a person did to a node of a view, with the value of an input.",
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/definitions/Gesture"
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "verb": {
               "type": "string",
               "const": "view.event"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/ViewEvent"
-            }
+          "required": [
+            "verb",
+            "viewer",
+            "node",
+            "kind"
           ]
         },
         {
-          "required": [
-            "verb"
-          ],
           "type": "object",
+          "description": "What a skill asks of the one window of a view.",
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "effect": {
+              "$ref": "#/definitions/Effect"
+            },
             "verb": {
               "type": "string",
               "const": "view.effect"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/ViewEffect"
-            }
+          "required": [
+            "verb",
+            "viewer",
+            "effect"
           ]
         },
         {
-          "required": [
-            "verb"
-          ],
           "type": "object",
+          "description": "The end of a view in its window.",
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
             "verb": {
               "type": "string",
               "const": "view.dispose"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Dispose"
-            }
+          "required": [
+            "verb",
+            "viewer"
           ]
         }
       ],
@@ -1628,30 +1672,6 @@
         }
       ],
       "description": "Where a window shows a view. The dock follows the chain that it names, and the row, the detail\nand the mark follow the chain of the act that they name. The sidebar, the footer, a screen and\nan overlay follow the life."
-    },
-    "Mount": {
-      "type": "object",
-      "properties": {
-        "viewer": {
-          "type": "string"
-        },
-        "life": {
-          "type": "string"
-        },
-        "slot": {
-          "$ref": "#/definitions/Slot"
-        },
-        "skill": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "viewer",
-        "life",
-        "slot",
-        "skill"
-      ],
-      "description": "A view that a window mounts in a slot of a life, which the process of a skill serves."
     },
     "Node": {
       "type": "object",
@@ -1931,32 +1951,6 @@
       ],
       "description": "The tone of a run, which each window gives its own color."
     },
-    "Tree": {
-      "type": "object",
-      "properties": {
-        "viewer": {
-          "type": "string"
-        },
-        "slot": {
-          "$ref": "#/definitions/Slot"
-        },
-        "version": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "tree": {
-          "$ref": "#/definitions/Node"
-        }
-      },
-      "required": [
-        "viewer",
-        "slot",
-        "version",
-        "tree"
-      ],
-      "description": "The tree of a view, which takes the place of each tree of a lower version."
-    },
     "Gesture": {
       "type": "string",
       "enum": [
@@ -1965,32 +1959,6 @@
         "submit"
       ],
       "description": "What a person does to a node."
-    },
-    "ViewEvent": {
-      "type": "object",
-      "properties": {
-        "viewer": {
-          "type": "string"
-        },
-        "node": {
-          "type": "string"
-        },
-        "kind": {
-          "$ref": "#/definitions/Gesture"
-        },
-        "value": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "viewer",
-        "node",
-        "kind"
-      ],
-      "description": "What a person did to a node of a view, with the value of an input."
     },
     "Effect": {
       "oneOf": [
@@ -2044,34 +2012,6 @@
         }
       ],
       "description": "What a skill asks of a window."
-    },
-    "ViewEffect": {
-      "type": "object",
-      "properties": {
-        "viewer": {
-          "type": "string"
-        },
-        "effect": {
-          "$ref": "#/definitions/Effect"
-        }
-      },
-      "required": [
-        "viewer",
-        "effect"
-      ],
-      "description": "What a skill asks of the one window of a view."
-    },
-    "Dispose": {
-      "type": "object",
-      "properties": {
-        "viewer": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "viewer"
-      ],
-      "description": "The end of a view in its window."
     },
     "Frame": {
       "oneOf": [
@@ -2261,89 +2201,138 @@
           "description": "A request of a model of a life that the peer answers: its number, and the request with the\nactor, the chain, the messages and the settings."
         },
         {
-          "required": [
-            "frame"
-          ],
           "type": "object",
+          "additionalProperties": false,
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "life": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "skill": {
+              "type": "string"
+            },
             "frame": {
               "type": "string",
               "const": "view.mount"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Mount"
-            }
-          ]
+          "required": [
+            "frame",
+            "viewer",
+            "life",
+            "slot",
+            "skill"
+          ],
+          "description": "A view that a window mounts in a slot of a life, which the process of a skill serves."
         },
         {
-          "required": [
-            "frame"
-          ],
           "type": "object",
+          "additionalProperties": false,
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "slot": {
+              "$ref": "#/definitions/Slot"
+            },
+            "version": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "tree": {
+              "$ref": "#/definitions/Node"
+            },
             "frame": {
               "type": "string",
               "const": "view.tree"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Tree"
-            }
-          ]
+          "required": [
+            "frame",
+            "viewer",
+            "slot",
+            "version",
+            "tree"
+          ],
+          "description": "The tree of a view, which takes the place of each tree of a lower version."
         },
         {
-          "required": [
-            "frame"
-          ],
           "type": "object",
+          "additionalProperties": false,
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/definitions/Gesture"
+            },
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "frame": {
               "type": "string",
               "const": "view.event"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/ViewEvent"
-            }
-          ]
+          "required": [
+            "frame",
+            "viewer",
+            "node",
+            "kind"
+          ],
+          "description": "What a person did to a node of a view, with the value of an input."
         },
         {
-          "required": [
-            "frame"
-          ],
           "type": "object",
+          "additionalProperties": false,
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "effect": {
+              "$ref": "#/definitions/Effect"
+            },
             "frame": {
               "type": "string",
               "const": "view.effect"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/ViewEffect"
-            }
-          ]
+          "required": [
+            "frame",
+            "viewer",
+            "effect"
+          ],
+          "description": "What a skill asks of the one window of a view."
         },
         {
-          "required": [
-            "frame"
-          ],
           "type": "object",
+          "additionalProperties": false,
           "properties": {
+            "viewer": {
+              "type": "string"
+            },
             "frame": {
               "type": "string",
               "const": "view.dispose"
             }
           },
-          "allOf": [
-            {
-              "$ref": "#/definitions/Dispose"
-            }
-          ]
+          "required": [
+            "frame",
+            "viewer"
+          ],
+          "description": "The end of a view in its window."
         }
       ],
       "description": "What the daemon says to a peer."
@@ -4219,5 +4208,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 10
+  "x-protocol": 11
 }

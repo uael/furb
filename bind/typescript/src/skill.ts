@@ -53,16 +53,24 @@ function askedBy<E extends Error>(error: E, asked: Error): E {
   return error;
 }
 
-/** A socket to the daemon at a place, which fails when none listens there. */
-function dialing(place: string): Promise<Socket> {
-  return new Promise<Socket>((resolve, reject) => {
+/** A socket to the daemon at a place, or nothing when no daemon listens there: the one dial of a window, a skill and
+ * each script. */
+export function dialed(place: string): Promise<Socket | undefined> {
+  return new Promise((resolve) => {
     const socket = createConnection(place);
     socket.once("connect", () => {
-      socket.removeListener("error", reject);
+      socket.removeAllListeners("error");
       resolve(socket);
     });
-    socket.once("error", reject);
+    socket.once("error", () => resolve(undefined));
   });
+}
+
+/** A socket to the daemon at a place, which fails when none listens there. */
+async function dialing(place: string): Promise<Socket> {
+  const socket = await dialed(place);
+  if (!socket) throw new Error(`No daemon of furb listens at ${place}.`);
+  return socket;
 }
 
 /** Where a connection dials and who it says it is: the place, the kind and name of its peer, the role that its hello

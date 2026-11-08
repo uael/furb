@@ -408,7 +408,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       yield top
       top = ""
     yield from replay()
-    seat = top and last and placed(last[1])
+    seat = top and last and (transcript(id, "stand") or placed(last[1]))
     while True:
       r = get((a := (yield {id, "stand", "reply"}))[1]) or a
       match a:
@@ -423,6 +423,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             yield ("tell", id, ["chain()"]) if last[3:] else top
             top *= bool(last[3:])
             if last[4:] and id == ROOT and not transcript(id, "reply") and not transcript(id, "carried"):
+              seat = placed(last[1])
               yield from seeded(id, last, stood)
           elif last[3:] and not top:
             placed(last[1] * (was[1] != last[1]) * all(all(get(x[2])[4::2]) for x in transcript(id, "cd")))
@@ -1073,8 +1074,7 @@ def boot(record=(), **outside):
   ranks = {id(e): n for n, (e,) in enumerate(record)}
   saved, again = {e[1]: e for (e,) in record if question(e)}, {}
   recorded = {**saved}
-  schemas = [(*e[5:6], None)[0] for (e,) in record if e[0] == "made"]
-  stable = not schemas or tuple(map(int, str(schemas[-1] or "0.0").split("."))) >= (1, 1)
+  stable = str(["9", *((*e[5:6], "0")[0] for (e,) in record if e[0] == "made")][-1]) >= "1.1"
   top, asked, strays, back = Counter(), {}, {}, []
   for quest in saved.values():
     top[quest[0]] = max(top[quest[0]], int(quest[1][len(quest[0]) :]))

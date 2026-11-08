@@ -6,6 +6,7 @@ import pytest
 
 from conftest import (
   DOOR,
+  STANDS,
   WORD,
   WORLD,
   Dead,
@@ -719,6 +720,31 @@ async def test_a_record_whose_last_fact_made_names_a_schema_before_1_1_holds_no_
   assert [a[1] for a in said(again, "rung")] == [a[1] for a in said(log, "rung")] == ["rung1", "rung2", "rung3"]
   with pytest.raises(Drift, match=r"^reply1 drifts: the life made no act, "):
     life(Sand(), [(("made", "chain1", "store", "e", None, "1.1", "0.4.2"),), *kept])
+
+
+async def test_a_replay_of_a_tail_where_each_chain_gates_stand_at_a_stand_holds_no_drift() -> None:
+  """A later life names each act that it makes again by its kind, its maker, its chain and its words, so the gate of stand() that each chain plays at a stand takes the name that the record holds for that chain, and never the name of the gate of another chain."""
+  files = {"/w/DOCTRINE.md": "Read first.\n"}
+  sand, _, root = born(stands=[*STANDS, "/w/DOCTRINE.md", []], files=files)
+  chains = [root, await chained("two"), await chained("three")]
+  await settle()
+  sand.stands = [STANDS[0], "/z", STANDS[2], "/w/DOCTRINE.md", []]
+  engine.stand(engine.ROOT)
+  await settle()
+  first = plain(sand.record)
+  moved = [STANDS[0], "/y", STANDS[2], "/w/DOCTRINE.md", []]
+  # The second life opens where the stand moved the directory again, so each chain gates stand() live in it.
+  second = Sand(stands=moved, files=files)
+  log, over = await relived(second, first)
+  gates = [(a[1], a[3]) for a in said(log, "gate") if a[4] == "stand()\ncd('/y')"]
+  assert over == root and [on for _, on in gates] == chains
+  assert not {name for name, _ in gates} & {e[1] for (e,) in first}
+  # The third life replays the whole record, where the gates of the second life wait under their names.
+  third = Sand(stands=moved, files=files)
+  log, over = await relived(third, first + plain(second.record))
+  assert over == root and [(a[1], a[3]) for a in said(log, "gate") if a[4] == "stand()\ncd('/y')"] == gates
+  assert [e for (e,) in third.record if e[0] == "gate"] == []
+  assert [engine.cwd(on=one) for one in chains] == ["/y"] * 3
 
 
 async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_gone() -> None:
