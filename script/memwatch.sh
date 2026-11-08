@@ -26,12 +26,13 @@ tight() {
   fi
 }
 # largest: the pid, the size in KB and the command of the largest test process of this user, or nothing. A daemon of
-# furb never counts, and neither does this script or the awk that reads the list. The test runner of python gives its
-# tests to workers whose command is the exec of a line of their input.
+# furb never counts, and neither does this script or the awk that reads the list. A test binary of cargo is the program
+# of its command, so a linker that names it as an argument stays. The test runner of python gives its tests to workers
+# whose command is the exec of a line of their input.
 largest() {
   ps -axo uid=,pid=,rss=,command= | awk -v uid="$(id -u)" '
     $1 != uid || $4 ~ /(^|\/)awk$/ || index($0, "memwatch") || $0 ~ /[ \/]furb host( |$)/ { next }
-    $0 ~ /\/target\/[^ ]*\/deps\/[^ \/]+-[0-9a-f]+( |$)|[ \/]pytest( |$)|bun test( |$)|tui\/script\/(screenshots|stage)\.ts|exec\(eval\(sys\.stdin\.readline/ && $3 > size {
+    ($4 ~ /\/target\/.*\/deps\/[^\/]+-[0-9a-f]+$/ || $0 ~ /[ \/]pytest( |$)|bun test( |$)|tui\/script\/(screenshots|stage)\.ts|exec\(eval\(sys\.stdin\.readline/) && $3 > size {
       size = $3; pid = $2; command = $0; sub(/^ *[0-9]+ +[0-9]+ +[0-9]+ +/, "", command)
     }
     END { if (pid) print pid, size, substr(command, 1, 150) }'

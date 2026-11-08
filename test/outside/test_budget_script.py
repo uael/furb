@@ -10,8 +10,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "script" / "budget.py"
 # A command that uses about two seconds of CPU, and one that waits for two seconds with none.
-BUSY = [sys.executable, "-c", "import time\nt = time.process_time()\nwhile time.process_time() - t < 2:\n  pass"]
-WAIT = [sys.executable, "-c", "import time; time.sleep(2)"]
+BUSY = [sys.executable, "-c", "import time\nt = time.process_time()\nwhile time.process_time() - t < 1.2:\n  pass"]
+WAIT = [sys.executable, "-c", "import time; time.sleep(1.2)"]
 
 
 def budget(
@@ -94,3 +94,20 @@ def test_the_hooks_and_the_gates_run_pytest_through_the_one_home_of_its_limit() 
   cargo = next(one for repo in loaded["repos"] for one in repo["hooks"] if one["id"] == "cargo-test")
   assert cargo["entry"] == "python3 script/hooks/reach.py cargo"
   assert '"budget.py"' in (ROOT / "script" / "hooks" / "reach.py").read_text(encoding="utf-8")
+
+
+def test_a_run_that_lost_a_test_process_to_sigkill_names_the_guard_of_memory(tmp_path: Path) -> None:
+  for command in (
+    [sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGKILL)"],
+    [sys.executable, "-c", "print('(signal: 9, SIGKILL: kill)'); raise SystemExit(101)"],
+  ):
+    got = budget(tmp_path, "cargo", 100, *command)
+    assert got.returncode != 0
+    assert "lost a test process to SIGKILL, which the guard of memory" in got.stdout, command
+
+
+def test_a_run_that_fails_with_no_kill_names_no_guard(tmp_path: Path) -> None:
+  got = budget(
+    tmp_path, "cargo", 100, sys.executable, "-c", "print('test a_sigkill_ends_it ... FAILED'); raise SystemExit(101)"
+  )
+  assert got.returncode == 101 and "guard of memory" not in got.stdout

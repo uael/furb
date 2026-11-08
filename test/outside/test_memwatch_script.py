@@ -147,3 +147,23 @@ def test_the_loop_ends_one_test_process_at_each_look_while_the_memory_stays_tigh
     finally:
       loop.kill()
       loop.communicate()
+
+
+def test_a_linker_that_writes_a_test_binary_is_no_test_process(tmp_path: Path) -> None:
+  link = (
+    "/usr/bin/ld -demangle -o /w/target/debug/deps/furb-3bfcea354560c7bc /w/target/debug/deps/furb-3bfcea354560c7bc.o"
+  )
+  with fakes(2) as procs:
+    machine(
+      tmp_path,
+      2,
+      [
+        (procs[0].pid, 2500 * MB, link, MINE),
+        (procs[1].pid, 600 * MB, "/w/target/debug/deps/furb-3bfcea354560c7bc --test-threads 4", MINE),
+      ],
+    )
+    got = watch(tmp_path)
+  assert (
+    got.stdout
+    == f"memwatch: pressure level 2, ended pid {procs[1].pid} (600 MB): /w/target/debug/deps/furb-3bfcea354560c7bc --test-threads 4\n"
+  )

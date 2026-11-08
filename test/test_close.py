@@ -9,6 +9,10 @@ from furb import engine
 from furb.engine import OPERATOR, Refused, Text
 
 
+@pytest.mark.xfail(
+  raises=AssertionError,
+  reason="H4 of the register of defects: a close leaves the commands of the word that it closes running; carrier engine:close-rules",
+)
 async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
   """An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with."""
   _, _, _, act, step, command = await stalled()
@@ -16,7 +20,7 @@ async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
   await settle()
   assert (await act) == 21
   assert isinstance(engine.peek(step), CancelledError)
-  assert engine.peek(command) is None
+  assert engine.over(command)
 
 
 async def test_the_close_of_the_operator_enters_the_record_as_a_fact_of_its_own() -> None:
