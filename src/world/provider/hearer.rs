@@ -372,7 +372,7 @@ impl Hearer {
 
   /// What the model of a reply that still stands came to.
   pub(super) async fn came(&mut self, co: &mut Co<Replied>, came: Came) {
-    let Came { id, got, dropped } = came;
+    let Came { id, got, dropped, account } = came;
     let Some(reply) = self.replies.taken.get(&id) else { return };
     let Some(got) = kept(co, reply, got).await else { return };
     // The word that runs is not all the text that the model wrote, so the chain is told what went,
@@ -395,6 +395,11 @@ impl Hearer {
         let note = format!("#{} could not pause the chain: {}", reply.rung, no.message());
         told(co, &reply.chain, &note);
       }
+    }
+    // The account is a fact of its own before the turn that it served, which no reader of a usage
+    // meets.
+    if let (Ok(_), Some(account)) = (&got, &account) {
+      say(co, Fact::says("account", &id, [Object::string(account)]));
     }
     let got = got.map_err(Fault::refused).unwrap_or_else(|fault| fault.object());
     say(co, Fact::says("done", &id, [got]));
@@ -581,11 +586,12 @@ pub(super) struct Retried {
 }
 
 /// What the call of the model of a reply came to: the id of the reply, its turn or why it gives
-/// none, and the marks that its turn lost.
+/// none, the marks that its turn lost, and the account that served it.
 pub(super) struct Came {
   pub(super) id: String,
   pub(super) got: Result<Object, CompletionError>,
   pub(super) dropped: Option<String>,
+  pub(super) account: Option<String>,
 }
 
 /// A note told to a chain.
