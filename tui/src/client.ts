@@ -26,6 +26,14 @@ import { program } from "../../bind/typescript/program.ts";
 import type { Setting } from "./configs.ts";
 
 export { Closed, Refused };
+
+/** Whether a prefix cuts its chain, as a word that compacts or clears it says one: a chain says its own prefix at its
+ * birth, and the checkpoint word of a record made before the chain said that prefix itself began with the prefix that
+ * it said, which was the birth of its chain. */
+export function cuts([, id, by]: readonly unknown[], word: string): boolean {
+  return by !== id && !word.startsWith("say('prefix', scope(acting()), ");
+}
+
 export type { Verb };
 
 /** The folder of the daemon of this machine in the cache of furb, as `furb host` names it. */
@@ -558,7 +566,8 @@ export class RemoteLife extends EventEmitter {
     // A later life says each fact of its record again as the journal, which names no speaker, and only the operator
     // says seen. A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.
     if (kind === "seen" && (operated(by) || by === "journal")) this.seenAt.set(id, at);
-    else if (kind === "prefix" && by !== id) this.compactions.push({ chain: id, by, at });
+    else if (kind === "prefix" && cuts(fact, String(this.acts.get(by)?.words[0] ?? "")))
+      this.compactions.push({ chain: id, by, at });
     else if (kind === "started" && this.outputs.has(id)) this.outputs.set(id, { stdout: "", stderr: "" });
     else if (kind === "out" && this.acts.get(id)?.kind === "bash" && !isDone(this.acts.get(id) as Act)) {
       const output = this.outputs.get(id) ?? { stdout: "", stderr: "" };
