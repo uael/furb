@@ -68,7 +68,7 @@ use crate::{
     Answer, BOUND, Config, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer,
     Request, Verb,
   },
-  rebirth::Heap,
+  rebirth::{Asks, Heap},
   records,
   serve::{Host, Outbox, fixed, serve},
   stall::{Quiet, Stall},
@@ -422,7 +422,7 @@ impl Daemon {
     let mut lives = Lives {
       changes,
       weigh,
-      asked: HashMap::new(),
+      rebirths: Asks::default(),
       members: Members::default(),
       settings,
       held: HashMap::new(),
@@ -606,9 +606,9 @@ struct Lives {
   /// Whether the daemon holds no life, which the listener reads to end the daemon.
   empty: watch::Sender<bool>,
   /// The clock at which the daemon reads its heap, and each life that it asked to be born again
-  /// since the heap passed its share, with its weight at the ask.
+  /// since the heap passed its share.
   weigh: Interval,
-  asked: HashMap<String, u64>,
+  rebirths: Asks,
 }
 
 /// The next change of the access list, or never when there is no list.
@@ -729,38 +729,29 @@ impl Lives {
 
   /// The heap of the daemon weighed: past its share, the life that said the most facts since it
   /// opened, of those that the daemon did not ask yet, is asked to be born again, and the next one
-  /// only once that life is born again or ended, while the heap stays past the share. A life that
-  /// holds work is born again once that work ends, as at its tail. Once the heap falls under the
-  /// share, each life asked and not yet born again is spared.
+  /// once that life is born again, ended, or did not in [`crate::rebirth::PATIENCE`] weighs, while
+  /// the heap stays past the share. A life that holds work is born again once that work ends, as at
+  /// its tail. Once the heap falls under the share, each life asked is spared.
   fn weighed(&mut self) {
     let Some(heap) = self.settings.heap else { return };
+    let living = |held: &Held| matches!(held.stage, Stage::Living(_));
     if !heap.over() {
-      for life in std::mem::take(&mut self.asked).into_keys() {
-        if let Some(Held { handle, stage: Stage::Living(_), .. }) = self.held.get(&life) {
-          handle.reborn(false);
+      for life in self.rebirths.spared() {
+        if let Some(held) = self.held.get(&life).filter(|one| living(one)) {
+          held.handle.reborn(false);
         }
       }
       return;
     }
-    // A life asked and not born again yet weighs as much as at its ask, or more: a rebirth sets
-    // its weight to what its new birth said.
-    let waits = self.asked.iter().any(|(life, at)| {
-      self
-        .held
-        .get(life)
-        .is_some_and(|held| matches!(held.stage, Stage::Living(_)) && held.handle.weight() >= *at)
-    });
-    if waits {
-      return;
+    let weighed: Vec<(String, u64, u64)> = self
+      .held
+      .iter()
+      .filter(|(_, held)| living(held))
+      .map(|(life, held)| (life.clone(), held.handle.weight(), held.handle.births()))
+      .collect();
+    if let Some(held) = self.rebirths.next(&weighed).and_then(|life| self.held.get(&life)) {
+      held.handle.reborn(true);
     }
-    let living = self.held.iter().filter(|(life, held)| {
-      matches!(held.stage, Stage::Living(_))
-        && !self.asked.contains_key(*life)
-        && held.handle.weight() > 0
-    });
-    let Some((life, held)) = living.max_by_key(|(_, held)| held.handle.weight()) else { return };
-    self.asked.insert(life.clone(), held.handle.weight());
-    held.handle.reborn(true);
   }
 
   /// Each life that lives told to stand again, so that its roster names the members that the

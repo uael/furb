@@ -266,7 +266,7 @@ pub struct Life {
   record: Option<String>,
   gone: Gone,
   /// The facts that the life said since it last opened, by which the daemon weighs it.
-  weight: Arc<AtomicU64>,
+  weight: Arc<Scale>,
 }
 
 /// The facts that the log of a life let go: each one before the last checkpoint of the life, which
@@ -282,6 +282,14 @@ struct Gone {
   /// The places of the log of what each open told, which the log keeps: the facts of the opening
   /// of a birth that the journal says again, which the file of the record does not hold.
   opened: Vec<std::ops::Range<usize>>,
+}
+
+/// The weight of a life, which its thread writes and the daemon reads: the facts that it said since
+/// it last opened, and how many times it was born again.
+#[derive(Default)]
+pub(crate) struct Scale {
+  facts: AtomicU64,
+  births: AtomicU64,
 }
 
 /// The places of the log whose event a later event replaced, which the log drops once the life told
@@ -335,7 +343,7 @@ pub struct LifeHandle {
   inbox: UnboundedSender<Message>,
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
-  weight: Arc<AtomicU64>,
+  weight: Arc<Scale>,
 }
 
 impl Life {
@@ -349,7 +357,7 @@ impl Life {
     let told = readers.clone();
     let name = Arc::new(Mutex::new(None));
     let named = Arc::clone(&name);
-    let weight = Arc::new(AtomicU64::new(0));
+    let weight = Arc::new(Scale::default());
     let weighed = Arc::clone(&weight);
     thread::Builder::new()
       .name("furb-life".to_owned())
@@ -374,7 +382,7 @@ impl Life {
     self.watch.heard(&event);
     // A life that keeps no record is never born again, so the daemon never weighs it.
     if self.record.is_some() {
-      self.weight.store(self.watch.facts(), Ordering::Relaxed);
+      self.weight.facts.store(self.watch.facts(), Ordering::Relaxed);
     }
     let queued = self.queue.heard(&event);
     if let Event::Act(act) = &event {
@@ -530,7 +538,8 @@ impl Life {
     }
     self.put(Event::Reborn(fault));
     self.watch.reborn();
-    self.weight.store(0, Ordering::Relaxed);
+    self.weight.facts.store(0, Ordering::Relaxed);
+    self.weight.births.fetch_add(1, Ordering::Relaxed);
   }
 
   /// The events of the log from a place, and the read of the facts among them that the log let
@@ -612,11 +621,11 @@ impl Retell {
   fn told(self, sender: &mpsc::Sender<Logged>) {
     let mut places: Places = HashMap::new();
     for (at, one) in &self.wanted {
-      let key = match one {
+      let (key, by) = match one {
         Digest::Fact(one) => ((false, *one), None),
         Digest::Keep(one, by) => ((true, *one), Some(by.clone())),
       };
-      places.entry(key.0).or_default().push_back((*at, key.1));
+      places.entry(key).or_default().push_back((*at, by));
     }
     let mut order: VecDeque<Seq> = self.wanted.iter().map(|one| one.0).collect();
     let mut ready: BTreeMap<Seq, Value> = BTreeMap::new();
@@ -637,6 +646,10 @@ impl Retell {
     };
     let first = order.front().copied();
     let read = read(&mut |_, one: Object| {
+      // Once each place is filled, the rest of the record is read and left.
+      if order.is_empty() {
+        return;
+      }
       let Some(fact) = Fact::of(one.as_ref()).map(|a| json_of(&a)).filter(|_| !sender.is_closed())
       else {
         return;
@@ -654,7 +667,7 @@ impl Retell {
       && let Some(at) = first
     {
       let why = format!(
-        "The record {} does not read, so the facts before its last checkpoint are gaps here.",
+        "The record {} does not read, so the facts that the log let go are gaps here.",
         self.record
       );
       sender.blocking_send((at, Arc::new(Event::Notice(why)))).ok();
@@ -687,7 +700,7 @@ fn lived(
   received: UnboundedReceiver<Message>,
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
-  weight: Arc<AtomicU64>,
+  weight: Arc<Scale>,
 ) {
   match runtime::Builder::new_current_thread().enable_all().build() {
     Ok(runtime) => {
@@ -706,7 +719,7 @@ async fn run(
   mut received: UnboundedReceiver<Message>,
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
-  weight: Arc<AtomicU64>,
+  weight: Arc<Scale>,
 ) {
   let (told, heard) = mpsc::unbounded_channel();
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from));
@@ -1141,7 +1154,13 @@ impl LifeHandle {
 
   /// The facts that the life said since it last opened, by which the daemon weighs it.
   pub(crate) fn weight(&self) -> u64 {
-    self.weight.load(Ordering::Relaxed)
+    self.weight.facts.load(Ordering::Relaxed)
+  }
+
+  /// How many times the life was born again since it opened, by which the daemon sees that a life
+  /// that it asked was born again.
+  pub(crate) fn births(&self) -> u64 {
+    self.weight.births.load(Ordering::Relaxed)
   }
 
   /// The ask of the daemon that the life be born again, as its heap passed its share, or the ask

@@ -20,7 +20,7 @@
 
 use std::{
   alloc::{GlobalAlloc, Layout, System},
-  collections::HashSet,
+  collections::{HashMap, HashSet},
   sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -152,6 +152,50 @@ fn machine() -> Option<usize> {
   // SAFETY: status is a MEMORYSTATUSEX whose length says its size, as the call asks.
   let read = unsafe { GlobalMemoryStatusEx(&raw mut status) };
   (read != 0).then(|| usize::try_from(status.ullTotalPhys).ok()).flatten()
+}
+
+/// How many weighs the daemon waits for a life that it asked to be born again before it asks the
+/// next one: a life that holds an act that a checkpoint does not keep, as a grant of its chain, may
+/// not be born again for long.
+pub(crate) const PATIENCE: u32 = 30;
+
+/// The lives that the daemon asked to be born again since its heap passed its share, each with the
+/// count of its births at the ask and the weighs since.
+#[derive(Default)]
+pub(crate) struct Asks {
+  asked: HashMap<String, (u64, u32)>,
+}
+
+impl Asks {
+  /// The heap fell under its share: each life asked, whose ask the daemon takes back.
+  pub(crate) fn spared(&mut self) -> Vec<String> {
+    std::mem::take(&mut self.asked).into_keys().collect()
+  }
+
+  /// The heap is past its share: of the lives that live, each with its name, its weight and the
+  /// count of its births, the one to ask now. None while a life asked is not born again yet and
+  /// the daemon waited for it fewer than [`PATIENCE`] weighs; else the heaviest that it did not
+  /// ask yet.
+  pub(crate) fn next(&mut self, living: &[(String, u64, u64)]) -> Option<String> {
+    let mut waits = false;
+    for (life, _, births) in living {
+      if let Some((at, weighs)) = self.asked.get_mut(life)
+        && *at == *births
+        && *weighs < PATIENCE
+      {
+        *weighs += 1;
+        waits = true;
+      }
+    }
+    if waits {
+      return None;
+    }
+    let free =
+      living.iter().filter(|(life, weight, _)| *weight > 0 && !self.asked.contains_key(life));
+    let (life, _, births) = free.max_by_key(|(_, weight, _)| *weight)?;
+    self.asked.insert(life.clone(), (*births, 0));
+    Some(life.clone())
+  }
 }
 
 /// What the actor watches of a life since it opened: the facts that it said, each act that lives
