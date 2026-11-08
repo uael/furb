@@ -632,7 +632,22 @@ export const blocks = part({
   bounded(box: BoxRenderable, text: string, key: string): void {
     const [shown, rest] = this.session.folds[key] === false ? [text, 0] : this.firstRows(text, FOLD_ROWS);
     box.add(this.markdown(shown));
-    if (rest) box.add(this.foldLine(key, rest, "line"));
+    if (!rest) return;
+    // A cut inside a code block folds under a row at the column of its code, as the fold of a word does.
+    const fences = shown.split("\n").filter((line) => /^\s*```/.test(line)).length;
+    const open = fences % 2 === 1;
+    const fold = this.foldLine(key, rest, "line");
+    if (!open) {
+      box.add(fold);
+      return;
+    }
+    const start = shown.lastIndexOf("```");
+    const body = text.slice(text.indexOf("\n", start) + 1);
+    const close = body.search(/^\s*```/m);
+    const count = (close < 0 ? body : body.slice(0, close)).replace(/\n$/, "").split("\n").length;
+    const row = this.box({ paddingLeft: STATE + gutterWidth(String(count).length) });
+    row.add(fold);
+    box.add(row);
   },
 
   /** A text joined by a branch to the heading above it. */
