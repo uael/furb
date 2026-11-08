@@ -161,12 +161,11 @@ export const details = part({
     return { name: modelName(model).id, effort };
   },
 
-  /** Who sent a prompt that is not a message of the operator, and to which model: the model alone for a chain, which
-   * tells its model that an act it waits on is done, and the rung and the model for a rung that asks a question. */
+  /** Who a prompt that is not a message of the operator asks, as the model with its effort, opus/high, which the block
+   * of its reply names the same way: the id of the rung that asked stays out of it. */
   sender(act: ActRow): string {
-    const model = this.model(String(act.words[2] ?? "")).name;
-    const maker = this.session.actOf(act.by);
-    return maker?.kind === "chain" ? model : `${act.by} asked ${model}`;
+    const { name, effort } = this.model(String(act.words[2] ?? ""));
+    return modelLabel(name, effort);
   },
 
   /** The message of a prompt as a reader reads it. The chain tells a model that an act is done or paused with the id
