@@ -32,12 +32,20 @@ use crate::{
   verbs, wire, world,
 };
 
-/// A directory of its own for one test, and empty.
+/// A directory of its own for one test, whose project config turns the gate off. A boot of the
+/// life reads the words of its setup through the gate, which is the most of its time, and only
+/// the tests that name the gate prove it: each of them turns it on again.
 fn place(name: &str) -> Yard {
   static MADE: AtomicUsize = AtomicUsize::new(0);
   let n = MADE.fetch_add(1, Relaxed);
-  Yard::new(format!("furb-life-{name}-{}-{n}", process::id()))
+  let at = Yard::new(format!("furb-life-{name}-{}-{n}", process::id()));
+  fs::create_dir_all(at.join(".furb")).unwrap();
+  fs::write(at.join(".furb/config.json"), GATE_OFF).unwrap();
+  at
 }
+
+/// The project config that turns the gate off.
+const GATE_OFF: &str = r#"{"gate": false}"#;
 
 /// A life in a directory of the tests, on its record and on the configs of that directory, whose provider offers
 /// the operator alone.
@@ -903,7 +911,7 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
     .map(|one| one.unwrap().file_name().to_string_lossy().into_owned())
     .collect();
   beside.sort();
-  assert_eq!(beside, ["record.jsonl", "record.jsonl.lock", "record.jsonl.log"]);
+  assert_eq!(beside, [".furb", "record.jsonl", "record.jsonl.lock", "record.jsonl.log"]);
   assert_eq!(held("record.jsonl"), text, "the record stays as it was");
   assert_eq!(held("record.jsonl.log"), log, "the log stays as it was");
 }
@@ -1786,6 +1794,7 @@ fn facts(engine: &mut Engine) -> Vec<String> {
 fn a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts()
  {
   let on = place("gate-on");
+  fs::write(on.join(".furb/config.json"), r#"{"gate": true}"#).unwrap();
   let open = |at: &Path, keeps: bool| Opening { skills: Some(false), ..opening(at, keeps) };
   let (mut engine, _) = open(&on, false).boot::<String>([]).unwrap();
   let refused = rung(&mut engine, MISTYPED).unwrap_err();
@@ -1830,6 +1839,7 @@ fn a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_re
 #[test]
 fn the_gate_is_on_unless_the_last_config_that_names_it_says_false() {
   let at = place("gate-configs");
+  fs::remove_file(at.join(".furb/config.json")).unwrap();
   let (user, furb) = (at.join("user"), at.join(".furb"));
   fs::create_dir_all(&user).unwrap();
   fs::create_dir_all(&furb).unwrap();
