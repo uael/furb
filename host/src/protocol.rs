@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 9;
+pub const PROTOCOL: u32 = 10;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -73,7 +73,7 @@ pub struct Request {
 /// Each thing that a peer may ask the daemon. A life is named by the path of its record, and a
 /// verb that names no chain says it on the root.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "verb", rename_all = "snake_case")]
+#[serde(tag = "verb", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Verb {
   Hello(Hello),
   /// The records of the machine: each record of the sessions of each workspace that
@@ -84,7 +84,7 @@ pub enum Verb {
     config: Option<String>,
   },
   /// The life of a record opened, in a folder or in the folder of its record. A life that this
-  /// open makes stands on the actor, the roster and the extensions that the peer names, reads the
+  /// open makes stands on the actor, the roster and the skills that the peer names, reads the
   /// settings of the user in the folder `config` and runs the claude command line `claude` when
   /// the peer names them, as the window of the peer reads them, and the peer answers each request
   /// of its models in their place when it asks to, as a demo does.

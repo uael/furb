@@ -434,6 +434,7 @@ mod protocol {
     "ac081ea7adb80dcd8b017c2b13ccc2a191bedc76f48399ea4e4af332e8eebbfb",
     "0eba18a0cee335a618490601a27a6088e88594de3163b840fb38b5b587f774d4",
     "69e3c729852b81913c0d5b655b932779333b094b1d59b10e317f5aed228afeca",
+    "69f68a3229945922f23f2118c8e8115f716b126911ea1350f930118932209704",
   ];
 
   /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
@@ -512,7 +513,7 @@ mod protocol {
   }
 
   #[tokio::test]
-  async fn an_open_that_names_extensions_is_refused_with_skills_and_the_version() {
+  async fn an_open_that_names_extensions_is_refused_with_the_fields_that_it_takes() {
     let mut client = served(Role::Write);
     client.hello(PROTOCOL).await;
     client.say(r#"{"id": 1, "verb": "open", "life": "/a.jsonl", "extensions": false}"#).await;
@@ -520,8 +521,8 @@ mod protocol {
     let Some(Frame::Refused { id, why, .. }) = heard else { panic!("no refusal: {heard:?}") };
     assert_eq!(id, Some(1), "the open that names extensions is refused to its request");
     assert!(
-      why.contains("skills") && why.contains(&PROTOCOL.to_string()),
-      "the refusal names the new field and the version: {why}"
+      why.contains("extensions") && why.contains("skills"),
+      "the refusal names the field that it does not take and the field skills: {why}"
     );
     assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
   }

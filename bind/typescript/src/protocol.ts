@@ -1173,4 +1173,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 9;
+export const PROTOCOL = 10;
