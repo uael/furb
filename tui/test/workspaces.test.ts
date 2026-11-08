@@ -9,6 +9,7 @@ import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
+import { Closed, daemon, Refused } from "../src/client.ts";
 import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session, savedView } from "../src/session.ts";
@@ -1077,5 +1078,31 @@ test("deleting a session that another window holds is refused before this window
     } finally {
       holder.stdin.end();
       await holder.exited;
+    }
+  }));
+
+test("a delete refuses when the daemon gives no count of the windows of the life, and goes on when no life holds it", () =>
+  withLibrary(async ({ directory, open }) => {
+    const library = open();
+    const group = await library.add(directory);
+    const first = await library.create(group, "Kept");
+    await library.create(group, "Other");
+    await library.select(first);
+    const link = daemon();
+    const ask = link.ask.bind(link);
+    const answering = (fault: Error) =>
+      ((verb: { verb: string }) =>
+        verb.verb === "presence" ? Promise.reject(fault) : ask(verb as never)) as typeof link.ask;
+    try {
+      link.ask = answering(new Closed("presence"));
+      const error = await library.delete(first).catch((error: unknown) => error);
+      expect(error).toBeInstanceOf(Closed);
+      expect(library.current).toBe(first);
+      expect((await stat(first.path)).isFile()).toBe(true);
+      link.ask = answering(new Refused("closed", "no life holds it"));
+      await library.delete(first);
+      expect(await stat(first.path).catch(() => null)).toBeNull();
+    } finally {
+      link.ask = ask;
     }
   }));

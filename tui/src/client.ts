@@ -209,7 +209,9 @@ export class Daemon extends EventEmitter {
       if (error instanceof Refused && error.kind === "closed") return undefined;
       throw error;
     });
-    return heard?.answer === "presence" ? heard.data.filter((one) => one.kind === "window").length : 0;
+    if (heard === undefined) return 0;
+    if (heard.answer !== "presence") throw new Error(`The daemon gave ${heard.answer}, and no presence.`);
+    return heard.data.filter((one) => one.kind === "window").length;
   }
 
   /** The life of a record gone from the daemon, which ends it once no window and no pin held it for its grace. It is

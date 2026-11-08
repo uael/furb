@@ -268,17 +268,21 @@ function placed(index: Index, act: ActRow): void {
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
   }
   // A word of his own: the operator made it, and no act made it.
-  if (
-    act.kind !== "rung" ||
-    !(act.maker === undefined ? operated(act.by) : byOperator(act) && !index.ids.has(act.by))
-  )
-    return;
+  if (act.kind !== "rung" || !mine(act, (id) => index.ids.has(id))) return;
   const word = index.words.get(act.chain);
   if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.chain, act);
 }
 
 /** The index of a list of acts, each placed in its order, which goes on from the count of prompts of the index
  * before it. */
+/** Whether the operator made an act himself: the crate says him in its maker, and no act that `known` holds made it.
+ * The acts of a record open to read come from the fold of the binding, which gives no maker, so those read the site;
+ * the two agree but for a rung of the operator that waits for the word of an actor, which he never makes himself. */
+function mine(act: { by?: string; maker?: ActRow["maker"] }, known: (id: string) => boolean): boolean {
+  if (act.maker === undefined) return operated(act.by ?? "");
+  return byOperator(act) && (act.by === undefined || !known(act.by));
+}
+
 function indexOf(acts: readonly ActRow[], prompts = 0): Index {
   const index: Index = {
     of: acts,
@@ -1655,9 +1659,7 @@ export class Session extends EventEmitter {
    * made the work in the end, so a prompt or a rung that a word of his made has him as its maker too, and is his work
    * but no message or word of his own. */
   own(act: { by?: string; maker?: ActRow["maker"] }): boolean {
-    // The acts of a record open to read come from the fold of the binding, which gives no maker: those read the site.
-    if (act.maker === undefined) return operated(act.by ?? "");
-    return byOperator(act) && (act.by === undefined || this.actOf(act.by) === undefined);
+    return mine(act, (id) => this.actOf(id) !== undefined);
   }
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && this.own(act);
