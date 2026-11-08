@@ -20,7 +20,7 @@ test("the runner starts the longest tests first, whatever the size of their file
   );
   const first = longestFirst(paths)
     .slice(0, 2)
-    .map((path) => path.slice(root.length + 1))
+    .map((path) => path.slice(root.length + 1).replaceAll("\\", "/"))
     .sort();
   // The gallery lasts 380 seconds on Linux and the walk 250 seconds on macOS, and their files are the smallest.
   expect(first).toEqual(["tui/scenarios/walk.test.ts", "tui/test/gallery.test.ts"]);

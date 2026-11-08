@@ -8,9 +8,15 @@
 # Measured on 11-08, pytest: 37 to 45 s of wall and 160 s of CPU alone on this machine, 74 to 80 s of wall and 160 s of CPU
 # beside 28 busy processes; on the runners, 54 to 117 s on ubuntu and macOS and 68 to 153 s on windows (the gates of 11-06 to
 # 11-08). A limit is never raised to pass: make the run faster.
+# cargo test --workspace, 11-08, warm, three runs at a load of 15 to 40 on 14 cores: 175 to 253 s of wall and 278 to 352 s of CPU;
+# its binaries add up to about 70 s of wall on a quiet machine (the unit tests of furb 22 s, daemon 14 s, life 9 s). The limits
+# below hold that measure with a margin, so a slower run fails; they are not the 60 s that the owner asks, which the causes
+# named in the report of suite-time-regression-r1 stand in the way of.
 [local]
 pytest = 60
 pytest_cpu = 240
+cargo = 300
+cargo_cpu = 450
 
 [ci]
 pytest = 180

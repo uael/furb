@@ -15,28 +15,17 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Glob } from "bun";
-import { endedByMemory, endOf } from "./children.ts";
+import { endedByMemory } from "./children.ts";
 import { ownDaemon } from "./daemon.ts";
 import { environment } from "./environment.ts";
 import { LIMIT, longestFirst } from "./order.ts";
+import { exactly, runTest, testFiles } from "./run.ts";
 import { stale, warning } from "./stale.ts";
 
 const given = process.argv.slice(2);
 const flags = given.filter((one) => one.startsWith("-"));
 const filters = given.filter((one) => !one.startsWith("-"));
-const found = ["bind/typescript/test", "tui/test", "tui/scenarios"]
-  .flatMap((root) =>
-    [...new Glob("**/*.test.ts").scanSync(root)].map((file) => ({
-      path: `./${root}/${file}`,
-      named: `${root.replace(/\/test$/, "")}/${file}`,
-    })),
-  )
-  .filter(
-    ({ path, named }) =>
-      filters.length === 0 || filters.some((one) => path.includes(one) || named.includes(one)),
-  )
-  .map(({ path }) => path);
-const files = longestFirst(found);
+const files = longestFirst(testFiles(filters));
 if (files.length === 0) {
   console.log(`0 pass, 0 fail: no test file matches ${filters.join(" ")}`);
   process.exit(1);
@@ -52,23 +41,12 @@ const env = environment();
 const ended_by_memory: string[] = [];
 const entities: Record<string, string> = { quot: '"', amp: "&", lt: "<", gt: ">", apos: "'" };
 
-/** What a run of the tests wrote, and whether it passed. The run, and each process that it starts, takes a temporary
- * directory of its own, a yard that goes when the run ends, on a pass and on a failure, unless FURB_KEEP_YARDS is set:
- * a library of the run reads the temporary directory that its process started with. */
+/** What a run of the tests wrote, and whether it passed. A child that the watcher of memory ended is no failure of its test:
+ * it is named and run again by the owner. */
 async function test(args: string[]): Promise<{ text: string; passed: boolean }> {
-  const machine = tmpdir();
-  const yard = await mkdtemp(join(machine, "furb-yard-"));
-  const own = { ...env, TMPDIR: yard, TMP: yard, TEMP: yard, FURB_MACHINE_TMPDIR: machine, FURB_YARD: yard };
-  const run = Bun.spawn([process.execPath, "test", ...args], { env: own, stdout: "pipe", stderr: "pipe" });
-  const [out, err, end] = await Promise.all([
-    new Response(run.stdout).text(),
-    new Response(run.stderr).text(),
-    endOf(run),
-  ]);
-  if (process.env.FURB_KEEP_YARDS === undefined) await rm(yard, { recursive: true, force: true });
-  // A child that the watcher of memory ended is no failure of its test: it is named and run again by the owner.
-  if (end.memory) ended_by_memory.push(args[args.length - 1] ?? "a test");
-  return { text: out + err, passed: end.code === 0 };
+  const { text, passed, memory } = await runTest(env, args);
+  if (memory) ended_by_memory.push(args[args.length - 1] ?? "a test");
+  return { text, passed };
 }
 
 /** Each work, as many at once as `slots`, in the order given, and what each came to. */
@@ -142,7 +120,7 @@ for (const { file, names, text } of listed)
     failed.push(file);
   }
 await deal(runs, cores, async ({ file, names }) => {
-  const pattern = `^(${names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`;
+  const pattern = exactly(names);
   const { text, passed } = await test([
     "--timeout",
     String(LIMIT),
