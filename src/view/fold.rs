@@ -76,6 +76,11 @@ pub struct Fold {
 }
 
 impl Fold {
+  /// How many facts the fold heard, the place of the last one.
+  pub fn clock(&self) -> u64 {
+    self.clock
+  }
+
   /// The chain that an act stands in.
   pub fn chain_of(&self, id: &str) -> Option<&str> {
     self.acts.get(id).map(|act| act.chain.as_str())

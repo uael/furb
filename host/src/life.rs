@@ -332,6 +332,7 @@ impl Life {
   fn put(&mut self, event: Event) {
     if let Event::Fact(fact) = &event {
       self.said += 1;
+      self.held.noted(fact, self.said);
       self.facts.entry(digest(fact)).or_insert(self.said);
       if self.named.hear(fact, false)
         && let Ok(mut name) = self.name.lock()

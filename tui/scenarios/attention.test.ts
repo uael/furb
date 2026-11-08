@@ -43,3 +43,20 @@ test("a thread that the operator started and that fails marks the row as failed"
     await until(() => (window.session.attention?.failed ?? 0) === 1, "the failed thread in the crate");
     expect(marks(window)).toEqual({ ...NONE, failed: 1 });
   }));
+
+test("a question to the operator marks the row as asking", () =>
+  scenario([], async (window) => {
+    const { engine } = window;
+    await engine.rung({ word: 'await prompt(str, "Which effort?", to=OPERATOR)', on: engine.root });
+    await until(() => window.session.desk.asks.some((ask) => !ask.notice), "the question on the desk");
+    expect(marks(window)).toEqual({ ...NONE, asks: 1 });
+  }));
+
+test("a thread that the operator started and that ended unseen marks the row as unread", () =>
+  scenario([], async (window) => {
+    const { engine } = window;
+    const mine = await engine.prompt("str", { message: "A thread of mine", on: engine.root });
+    await engine.result(await engine.rung({ word: `close("done", "${mine}")`, on: engine.root }));
+    await until(() => (window.session.attention?.unread ?? 0) === 1, "the unread thread in the crate");
+    expect(marks(window)).toEqual({ ...NONE, unread: 1 });
+  }));

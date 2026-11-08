@@ -34,6 +34,23 @@ pub(crate) const FIXTURE: &str = "FURB_MCP_FIXTURE";
 /// The variable that names the file where the server over stdio writes a line at each start.
 pub(crate) const STARTS: &str = "FURB_MCP_FIXTURE_STARTS";
 
+/// The variable that names a file of the names of more tools, one on each line, which the server
+/// over stdio reads at each list of its tools and at each call, so a test changes the tools while
+/// the server runs.
+pub(crate) const TOOLS: &str = "FURB_MCP_FIXTURE_TOOLS";
+
+/// The names that the file of [`TOOLS`] holds now, none when no file is named or it cannot be read.
+fn named() -> Vec<String> {
+  let text = env::var_os(TOOLS).and_then(|file| fs::read_to_string(file).ok());
+  text
+    .iter()
+    .flat_map(|text| text.lines())
+    .map(str::trim)
+    .filter(|one| !one.is_empty())
+    .map(str::to_owned)
+    .collect()
+}
+
 /// The bytes of the image that the tool picture gives.
 pub(crate) const PICTURE: &[u8] = b"\x89PNG\r\n\x1a\nfixture";
 
@@ -89,6 +106,11 @@ fn tools_list(held: &Mutex<Fixture>, params: &Value) -> Value {
   if held.lock().unwrap().added {
     tools.push(tool("added", "Was added.", &json!({"type": "object"})));
   }
+  tools.extend(
+    named()
+      .iter()
+      .map(|name| tool(name, "Named by the file of the test.", &json!({"type": "object"}))),
+  );
   match params["cursor"].as_str() {
     None => json!({"tools": tools[..3], "nextCursor": "2"}),
     Some(_) => json!({"tools": tools[3..]}),
@@ -125,6 +147,7 @@ fn call(held: &Mutex<Fixture>, params: &Value, sent: &mut Vec<Value>) -> Result<
       Ok(said("changed"))
     }
     "crash" => process::exit(3),
+    other if named().iter().any(|one| one == other) => Ok(said(&format!("called {other}"))),
     other => Err(format!("no tool {other}")),
   }
 }
