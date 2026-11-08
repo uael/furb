@@ -676,9 +676,17 @@ fn a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without
 fn placed(engine: &mut Engine, at: &[&Path]) -> String {
   let home = std::env::var("HOME").unwrap_or_default();
   at.iter().fold(state(engine), |shown, one| {
+    // The state is python text, which doubles each backslash of a Windows path, and a path may
+    // come in its slashes too.
     let path = one.display().to_string();
-    let tilded = path.strip_prefix(&home).map_or_else(|| path.clone(), |rest| format!("~{rest}"));
-    shown.replace(&path, "<at>").replace(&tilded, "<at>")
+    [path.clone(), path.replace('\\', "\\\\"), path.replace('\\', "/")].iter().fold(
+      shown,
+      |shown, path| {
+        let tilded =
+          path.strip_prefix(&home).map_or_else(|| path.clone(), |rest| format!("~{rest}"));
+        shown.replace(path, "<at>").replace(&tilded, "<at>")
+      },
+    )
   })
 }
 
