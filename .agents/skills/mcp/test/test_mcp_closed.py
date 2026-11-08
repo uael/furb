@@ -41,3 +41,14 @@ async def test_a_result_tells_the_lines_of_its_text_that_its_show_picks_and_a_li
     {"text": "a"},
     {"text": ""},
   ]
+
+
+async def test_mcp_closed_and_mcp_type_read_no_list_that_the_module_of_the_chain_binds(tmp_path: Path) -> None:
+  """It reads no list from the module of the chain, which a record from before the gate refused such a name may bind to a str."""
+  root = mcped(tmp_path, {})[1]
+  # The gate refuses that binding in a new word, so the test binds it as a record from before the rule holds it.
+  schema = {"anyOf": [{"type": "string"}, {"type": ["integer", "null"]}], "enum": None}
+  word = f"globals()['list'] = 'ls -la'\nclose([mcp_closed([{server('a')!r}], HEAD), mcp_type({schema!r})])"
+  got = await engine.rung(word, on=root)
+  assert got == [{"servers": "a connected, no tools"}, "str | int | None"]
+  assert engine.module(root)["list"] == "ls -la"

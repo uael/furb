@@ -27,6 +27,7 @@ def mcp_closed(got: object, show: Show) -> dict:
   """mcp_closed(got, show) gives the words that the done of an mcp act tells, as a dict, and an empty dict for an answer that is none of the following.
   A list of servers tells under the word servers one line for each server, and a server tells its line under the word server, as mcp_line gives them.
   A result tells under the word text the lines of its text that its show picks, and one line of Markdown for each image block of its content, which shows the image.
+  It reads no list from the module of the chain, which a record from before the gate refused such a name may bind to a str.
   """
 
 def mcp_act(kind: str, on: str, of: str, fields: dict, show: Show, *words: object) -> Act:
