@@ -980,17 +980,19 @@ export const details = part({
   },
 
   reference(label: string, value: string): TextRenderable {
-    const node = this.text(label, c.link, { attributes: underline });
-    node.onMouseDown = () => {
-      void this.follow(value).catch(this.report);
-    };
-    node.onMouseOver = (event) => {
-      void this.referenceHover(value, event.x, event.y);
-    };
-    node.onMouseOut = () => {
-      this.unhover();
-    };
-    return node;
+    return this.text(label, c.link, {
+      attributes: underline,
+      lit: c.raised,
+      onMouseDown: () => {
+        void this.follow(value).catch(this.report);
+      },
+      onMouseOver: (event) => {
+        void this.referenceHover(value, event.x, event.y);
+      },
+      onMouseOut: () => {
+        this.unhover();
+      },
+    });
   },
 
   async follow(value: string): Promise<void> {

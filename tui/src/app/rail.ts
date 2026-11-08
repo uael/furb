@@ -384,7 +384,7 @@ export const rail = part({
         mark: markOf(thread.state),
         run: () => void this.session.select(thread.act.chain),
       })),
-      { note: rows.length ? "" : "No prompt is active." },
+      { empty: "No prompt is active." },
     );
   },
 
