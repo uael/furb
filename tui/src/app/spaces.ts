@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { MouseEvent } from "@opentui/core";
 import {
   type BoxOptions,
   type BoxRenderable,
@@ -48,7 +49,9 @@ export const spaces = part({
       paddingLeft: space.inset,
       paddingRight: space.inset,
       backgroundColor: renaming ? lit : ground,
-      ...(renaming ? {} : { onMouseUp: this.click(run) }),
+      ...(renaming
+        ? {}
+        : { onMouseUp: this.click(run), lit, onMouseOver: (event) => over(event), onMouseOut: () => out() }),
       onMouseDown: (event) => {
         if (event.button !== 2) return;
         event.stopPropagation();
@@ -143,8 +146,7 @@ export const spaces = part({
     buttons.add(rename);
     buttons.add(remove);
     row.add(buttons);
-    row.onMouseOver = (event) => {
-      row.backgroundColor = lit;
+    const over = (event: MouseEvent) => {
       buttons.visible = true;
       rename.fg = event.target === rename ? c.accent : c.muted;
       remove.fg = event.target === remove ? c.danger : c.muted;
@@ -171,8 +173,7 @@ export const spaces = part({
                 : undefined;
       if (told) this.tip(told, event.x, event.y);
     };
-    row.onMouseOut = () => {
-      row.backgroundColor = ground;
+    const out = () => {
       buttons.visible = false;
       this.unhover();
     };

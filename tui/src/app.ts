@@ -40,6 +40,7 @@ import {
   type Choice,
   inputColors,
   keymapOf,
+  type Lights,
   noBorder,
   type Suggestion,
   type TextShape,
@@ -807,21 +808,22 @@ export class App {
   /** A box. A box that takes a click lights while the pointer is on it, as the one hover state of the layer that draws:
    * `still` leaves it as it is, for a box that covers a place that the pointer crosses, and a caller that gives its own
    * handler of the pointer keeps it. */
-  box(options: BoxOptions & { still?: boolean } = {}): BoxRenderable {
+  box(options: BoxOptions & Lights & { still?: boolean } = {}): BoxRenderable {
     // The mode of a screen reader draws no border, since a reader reads each glyph of a border aloud. A box with no
     // border takes no color and no glyph of a border, since either of them draws a whole border.
-    const { still, border, borderColor, borderStyle, customBorderChars, ...plain } = options;
+    const { still, lit, border, borderColor, borderStyle, customBorderChars, ...plain } = options;
     const node = new BoxRenderable(this.renderer, {
       flexDirection: "column",
       flexShrink: 0,
       ...(this.reader ? plain : { border, borderColor, borderStyle, customBorderChars, ...plain }),
     });
-    return options.onMouseUp && !still && !options.onMouseOver && !options.onMouseOut
-      ? this.hoverable(node)
+    this.held.set(node, [options.onMouseOver, options.onMouseOut]);
+    return !still && (lit || (options.onMouseUp && !options.onMouseOver && !options.onMouseOut))
+      ? this.hoverable(node, lit)
       : node;
   }
   /** A box that lays out what it holds in a row one bar high. */
-  row(options: BoxOptions & { still?: boolean } = {}): BoxRenderable {
+  row(options: BoxOptions & Lights & { still?: boolean } = {}): BoxRenderable {
     return this.box({ flexDirection: "row", height: space.bar, ...options });
   }
   /** A handler of the release of the left button that runs only for a click: a press and a release on one node that
@@ -847,10 +849,17 @@ export class App {
       run(event);
     };
   }
-  /** A node whose background takes a color while the pointer is on it, and gives it back when the pointer leaves. It
-   * keeps the handlers that the node held, as the tip of a text that the terminal cut, since OpenTUI keeps one of each. */
-  hoverable<T extends BoxRenderable | TextRenderable>(node: T, color = c.raised): T {
-    const [over, out] = [node.onMouseOver, node.onMouseOut];
+  /** The handlers of the pointer that a node of box, text or whole holds, for the hover state to keep. */
+  private held = new WeakMap<
+    Renderable,
+    [over?: (event: MouseEvent) => void, out?: (event: MouseEvent) => void]
+  >();
+  /** The one hover state, which box and text give to a node that takes a click, or that names the color `lit` that it
+   * takes: its background takes that color while the pointer is on it, and gives it back when the pointer leaves. It
+   * keeps the handlers that the node held, as the tip of a text that the terminal cut, since OpenTUI keeps one of each
+   * and gives none back: box, text and whole write what they set in `held`. */
+  private hoverable<T extends BoxRenderable | TextRenderable>(node: T, color = c.raised): T {
+    const [over, out] = this.held.get(node) ?? [];
     // A box has a background, and a text the color behind its cells.
     if (node instanceof BoxRenderable) {
       const rest = node.backgroundColor;
@@ -950,7 +959,11 @@ export class App {
     this.session.notice = `Copied ${length} ${length === 1 ? "character" : "characters"}.`;
   };
   /** A text, which runs an action at a click when it has one. */
-  text(content: string | Part[], fg = c.text, { run, ...options }: TextShape = {}): TextRenderable {
+  text(
+    content: string | Part[],
+    fg = c.text,
+    { run, lit, ...options }: TextShape & Lights = {},
+  ): TextRenderable {
     const node = new TextRenderable(this.renderer, {
       content: typeof content === "string" ? safeText(content) : styled(content),
       fg,
@@ -960,30 +973,34 @@ export class App {
       onMouseUp: run && this.click(run),
       ...options,
     });
+    this.held.set(node, [options.onMouseOver, options.onMouseOut]);
     const shown = options.truncate && !options.onMouseOver ? this.whole(node) : node;
     // A text that takes a click lights while the pointer is on it, as a box does.
-    return (run || options.onMouseUp) && !options.onMouseOver && !options.onMouseOut
-      ? this.hoverable(shown)
+    return lit || ((run || options.onMouseUp) && !options.onMouseOver && !options.onMouseOut)
+      ? this.hoverable(shown, lit)
       : shown;
   }
   /** A text one bar high. */
-  line(content: string | Part[], fg = c.text, options: TextShape = {}): TextRenderable {
+  line(content: string | Part[], fg = c.text, options: TextShape & Lights = {}): TextRenderable {
     return this.text(content, fg, { height: space.bar, ...options });
   }
   /** A text cut to its room shows the whole of it in a tip while the pointer is over it: the text that the terminal
    * cut, or the whole that a caller gives for a text that it cut itself. The tip takes the hover handlers of the text,
    * since OpenTUI keeps one of each and gives none back. */
   whole(node: TextRenderable, full?: () => string): TextRenderable {
-    node.onMouseOver = (event) => {
+    const over = (event: MouseEvent) => {
       // A drag selects text, and no tip comes between the drag and what it selects.
       if (event.isDragging) return;
       const text = full ? full() : node.plainText;
       const cut = full ? text !== node.plainText : Bun.stringWidth(text) > node.width;
       if (cut && text) this.tip([[text, c.text]], event.x, event.y);
     };
-    node.onMouseOut = () => {
+    const out = () => {
       this.unhover();
     };
+    node.onMouseOver = over;
+    node.onMouseOut = out;
+    this.held.set(node, [over, out]);
     return node;
   }
   /** Whether a change waits for the next frame to draw the view again. */

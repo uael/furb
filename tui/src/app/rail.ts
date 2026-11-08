@@ -264,10 +264,12 @@ export const rail = part({
     options: BoxOptions = {},
     selected = false,
   ): BoxRenderable {
-    const row = this.hoverable(
-      this.row({ backgroundColor: selected ? c.selected : c.panel, onMouseUp: this.click(run), ...options }),
-      selected ? c.selected : c.raised,
-    );
+    const row = this.row({
+      backgroundColor: selected ? c.selected : c.panel,
+      onMouseUp: this.click(run),
+      lit: selected ? c.selected : c.raised,
+      ...options,
+    });
     const margins = [options.paddingLeft, options.paddingRight, options.marginLeft, options.marginRight];
     const room =
       this.sideWidth -

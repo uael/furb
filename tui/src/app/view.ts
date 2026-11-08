@@ -146,12 +146,10 @@ export const view = part({
       case "button":
         return inert
           ? this.line(`[ ${node.label} ]`, c.faint, { id })
-          : this.hoverable(
-              this.line([[`[ ${node.label} ]`, c.accent, bold]], c.accent, {
-                id,
-                run: () => this.viewGesture(viewer, node.id, "press"),
-              }),
-            );
+          : this.line([[`[ ${node.label} ]`, c.accent, bold]], c.accent, {
+              id,
+              run: () => this.viewGesture(viewer, node.id, "press"),
+            });
       case "progress": {
         if (node.done === undefined || node.done === null) {
           // Work of no known size turns the loader of work that runs, from the one table of marks.
