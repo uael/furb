@@ -259,7 +259,7 @@ impl Opening {
     let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let ears = vec![
       ("provider", provider),
-      ("extensions", skill::telling(played, refused, places)),
+      (skill::EAR, skill::telling(played, refused, places)),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       (
         "mcp",

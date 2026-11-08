@@ -6,10 +6,11 @@ use std::{
 };
 
 use crate::fact::named;
+use crate::skill;
 use serde_json::Value;
 
 use super::{
-  act::{Act, Answer, Kind, Pause, Phase, Role, RunState, Spend, fault, operator},
+  act::{Act, Answer, Kind, Maker, Pause, Phase, RunState, Spend, fault, operator},
   state::{State, chain_state},
 };
 use crate::world::CONSOLE;
@@ -34,9 +35,6 @@ struct Chain {
   prompt: Option<String>,
   remote: BTreeMap<u64, String>,
 }
-
-/// The ear of the skills, which makes the rungs of their words.
-const SKILLS: &str = "extensions";
 
 /// A reply that is not done: the chain that it stands on, the actor that answers it, and the rung
 /// that waits for the word that it writes.
@@ -238,20 +236,16 @@ impl Fold {
   /// maker. A rung with no word that waits for an actor is the rung of that actor; else the
   /// operator, a member or a skill made the act, or an act whose role it takes, as the word of a
   /// rung takes the role of its rung, and the engine made any other.
-  fn maker(&self, kind: &Kind, by: &str, rest: &[Value]) -> Role {
+  fn maker(&self, kind: &Kind, by: &str, rest: &[Value]) -> Maker {
     let text = |at: usize| rest.get(at).and_then(Value::as_str).unwrap_or_default();
-    if *kind == Kind::Rung && text(1).is_empty() && !text(3).is_empty() {
-      return Role::of(text(3), &self.models, &self.members);
-    }
-    if operator(by) {
-      return Role::of(by, &self.models, &self.members);
-    }
-    if by == SKILLS {
-      return Role::Skill;
-    }
     match self.acts.get(by) {
+      _ if *kind == Kind::Rung && text(1).is_empty() && !text(3).is_empty() => {
+        Maker::of(text(3), &self.models, &self.members)
+      }
+      _ if operator(by) => Maker::of(by, &self.models, &self.members),
+      _ if by == skill::EAR => Maker::Skill,
       Some(made) if made.kind != Kind::Chain => made.maker.clone(),
-      _ => Role::Engine,
+      _ => Maker::Engine,
     }
   }
 
@@ -376,7 +370,7 @@ impl Fold {
   /// The end of an act, with what it came to: the answer of a reply costs its chain and its rung,
   /// the run of a word ends its rung, and the act ends with its value.
   fn done(&mut self, about: &str, value: Value) {
-    if self.acts.get(about).is_some_and(|act| act.kind.as_str() == "stand") {
+    if self.acts.get(about).is_some_and(|act| act.kind == Kind::Stand) {
       self.stood(&value);
     }
     if let Some(reply) = self.replies.remove(about) {

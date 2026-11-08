@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use furb::view::{Act, Kind, Pause, Phase, State};
+use furb::view::{Act, Kind, Maker, Pause, Phase, State};
 use serde_json::{Value, json};
 use tokio::time::Instant;
 
@@ -12,7 +12,7 @@ fn act(kind: &str, id: &str, chain: &str, words: &[Value]) -> Act {
     kind: Kind::from(kind),
     id: id.to_owned(),
     by: String::new(),
-    maker: furb::view::Role::Engine,
+    maker: Maker::Engine,
     on: chain.to_owned(),
     chain: chain.to_owned(),
     words: words.to_vec(),

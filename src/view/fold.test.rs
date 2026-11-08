@@ -6,7 +6,8 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 use super::Fold;
-use crate::view::{Pause, Role};
+use crate::view::{Maker, Pause};
+use crate::world::catalog::leveled;
 
 /// A paused prompt, a rung born under its pause, and a later wake, with what the engine of the live
 /// life finds for each fact: the acts that it covers, and the pause that holds a new act.
@@ -159,16 +160,16 @@ fn each_act_names_the_role_of_its_maker_live_and_from_its_record_alike() {
     lived.extend(live.hear(fact, &[], None).into_iter().map(|act| (act.id.clone(), act.maker)));
     read.extend(recorded.recorded(fact).into_iter().map(|act| (act.id.clone(), act.maker)));
   }
-  let opus = Role::Model { model: "claude-cli:opus".to_owned(), effort: "high".to_owned() };
+  let opus = Maker::Model { model: "claude-cli:opus".to_owned(), effort: Some("high".to_owned()) };
   let want = [
     ("rung1", opus.clone()),
     ("bash1", opus),
-    ("rung2", Role::Member { login: "uael".to_owned() }),
-    ("rung3", Role::Operator),
-    ("rung4", Role::Operator),
-    ("rung5", Role::Skill),
-    ("rung6", Role::Engine),
-    ("chain1", Role::Operator),
+    ("rung2", Maker::Member { login: "uael".to_owned() }),
+    ("rung3", Maker::Operator),
+    ("rung4", Maker::Operator),
+    ("rung5", Maker::Skill),
+    ("rung6", Maker::Engine),
+    ("chain1", Maker::Operator),
   ];
   for (id, role) in want {
     assert_eq!(lived.get(id), Some(&role), "{id} live");
@@ -178,16 +179,18 @@ fn each_act_names_the_role_of_its_maker_live_and_from_its_record_alike() {
 
 #[test]
 fn an_actor_names_its_model_and_its_effort_unless_the_roster_holds_its_whole_name() {
-  let model =
-    |model: &str, effort: &str| Role::Model { model: model.to_owned(), effort: effort.to_owned() };
-  assert_eq!(Role::of("claude-cli:org/plain", &[], &[]), model("claude-cli:org/plain", "off"));
+  let model = |model: &str, effort: Option<&str>| Maker::Model {
+    model: model.to_owned(),
+    effort: effort.map(str::to_owned),
+  };
+  assert_eq!(Maker::of("claude-cli:org/plain", &[], &[]), model("claude-cli:org/plain", None));
   assert_eq!(
-    Role::of("claude-cli:org/plain/high", &[], &[]),
-    model("claude-cli:org/plain", "high")
+    Maker::of("claude-cli:org/plain/high", &[], &[]),
+    model("claude-cli:org/plain", Some("high"))
   );
   let whole = ["claude-cli:org/high".to_owned()];
-  assert_eq!(Role::of("claude-cli:org/high", &whole, &[]), model("claude-cli:org/high", "off"));
-  assert_eq!(Role::of("", &[], &[]), Role::Engine);
+  assert_eq!(Maker::of("claude-cli:org/high", &whole, &[]), model("claude-cli:org/high", None));
+  assert_eq!(Maker::of("", &[], &[]), Maker::Engine);
 }
 
 #[test]
@@ -247,4 +250,19 @@ fn the_account_that_a_fact_names_stands_in_the_spend_of_its_rung_and_its_chain()
   }
   let last = spends.get("chain1").cloned().flatten().expect("a spend");
   assert_eq!(last.account, None);
+}
+
+#[test]
+fn the_maker_of_an_actor_reads_its_model_and_its_level_as_the_catalog_reads_them() {
+  let cases = [
+    ("claude-cli:opus/high", "claude-cli:opus", Some("high")),
+    ("claude-cli:opus", "claude-cli:opus", None),
+    ("local:org/qwen3", "local:org/qwen3", None),
+    ("local:org/qwen3/low", "local:org/qwen3", Some("low")),
+  ];
+  for (actor, model, level) in cases {
+    assert_eq!(leveled(actor), (model, level), "{actor}");
+    let maker = Maker::Model { model: model.to_owned(), effort: level.map(str::to_owned) };
+    assert_eq!(Maker::of(actor, &[], &[]), maker, "{actor}");
+  }
 }
