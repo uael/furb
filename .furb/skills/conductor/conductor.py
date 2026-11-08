@@ -402,7 +402,8 @@ def ask_of(r: str, items: dict[str, tuple[str, str]]) -> tuple[str, str]:
 def asks_step() -> None:
   """Each reply that a model answered, once, as one row of its ask: its kind, its key, its chain, the usage that its answer
   carries (tokens in, out, read from the cache, dollars), never an estimate, and the clock of the beat that saw it. A reply
-  that the life wrote itself, as the seat of a new chain, carries no usage and is no row."""
+  that the life wrote itself, as the seat of a new chain, carries no usage and is no row. The record gives a reply no clock,
+  so the first beat after a load stamps each reply that the life already holds, and a life holds only its own replies."""
   items = {p: (t, str(x["key"])) for t in TOPICS for p, x in desk_live[t].items()} | {p: (t, k) for t, k, p in desk_ended}
   chains, seen, now = [ROOT], {ROOT}, clock()
   for c in chains:

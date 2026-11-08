@@ -512,41 +512,40 @@ async def test_the_ledger_of_the_asks_gives_each_kind_its_spend_and_landed_items
   await conductor.beat()
   woke = conductor.engine.prompt(None, f"The chain {conductor.ns['topic_chain']['a']} had no change for 5 minutes.", on=conductor.ns["topic_chain"]["a"])
   await settle()
-  uses = {"item": (1000, 100, 600, 0, 1.0), "judge": (600, 60, 0, 0, 0.75), "cycle": (400, 40, 0, 0, 0.5), "triage": (300, 30, 0, 0, 0.25), "wake": (200, 20, 100, 0, 0.125)}
-  asked = {x[0]: x for x in [*conductor.asked(), *conductor.asked("tuple[dict[str, str], str]"), *conductor.asked("tuple[list[dict[str, object]], dict[str, str]]")]}
+  # The item answers twice: its first word asks a review on a chain of its own, whose reply counts as the item.
+  uses = {"item": [(1000, 100, 600, 0, 1.0), (500, 50, 0, 0, 0.5)], "inner": [(250, 25, 0, 0, 0.25)], "judge": [(600, 60, 0, 0, 0.75)], "cycle": [(400, 40, 0, 0, 0.5)], "triage": [(300, 30, 0, 0, 0.25)], "wake": [(200, 20, 100, 0, 0.125)]}
+  words = {"item": ['inner = prompt(str, "look", to="claude-cli:opus/medium", on=chain("review one"))', 'close("done one")']}
+  labels = {"a": "item", "review one": "inner", "converge": "cycle", "triage": "triage", "verify one": "judge"}
 
   def who(p: str) -> str:
-    if p == woke:
-      return "wake"
-    return {"a": "item", "converge": "cycle", "triage": "triage"}.get(asked[p][1], "judge") if p in asked else "judge"
+    asked = {x[0]: x[1] for x in [*conductor.asked(), *conductor.asked("tuple[dict[str, str], str]"), *conductor.asked("tuple[list[dict[str, object]], dict[str, str]]")]}
+    return "wake" if p == woke else labels[asked[p]]
 
-  # A reply that the life writes itself, as the seat of a new chain, carries no usage, and a grant sums the usage of each other reply.
-  spent, answered = 0.0, set()
+  def rung_of(reply: str) -> tuple:
+    return conductor.engine.get(conductor.engine.get(reply)[2])
 
-  def maker(reply: str) -> str:
-    return str(conductor.engine.get(conductor.engine.get(reply)[2])[2])
-
-  def seated(reply: str) -> bool:
-    return str(conductor.engine.get(conductor.engine.get(reply)[2])[4]).startswith("stand()")
-
+  # A reply that the life writes itself, as the seat of a new chain, carries no usage; a grant sums the usage of each other reply.
+  spent = 0.0
   for _ in range(2):
-    while held := [x[1] for x in said(conductor.log, "reply") if not conductor.engine.over(x[1]) and (seated(x[1]) or maker(x[1]) not in answered)]:
-      for reply in held:
-        seat, sort = seated(reply), who(maker(reply))
-        seat or answered.add(maker(reply))
-        word = 'close("done one")' if sort == "item" and not seat else 'debug(t"a step")'
-        conductor.engine.say("done", reply, ("assistant", word, None if seat else uses[sort], None))
-        spent += 0 if seat else uses[sort][-1]
-      await settle()
+    while held := [x[1] for x in said(conductor.log, "reply") if not conductor.engine.over(x[1]) and (str(rung_of(x[1])[4]).startswith("stand()") or uses[who(str(rung_of(x[1])[2]))])]:
+      for reply in sorted(held, key=lambda r: who(str(rung_of(r)[2])) == "item"):
+        if conductor.engine.over(reply):
+          continue
+        seat, sort = str(rung_of(reply)[4]).startswith("stand()"), who(str(rung_of(reply)[2]))
+        use = None if seat else uses[sort].pop(0)
+        word = words[sort].pop(0) if sort in words and not seat else 'debug(t"a step")'
+        conductor.engine.say("done", reply, ("assistant", word, use, None))
+        spent += use[-1] if use else 0
+        await settle()
     conductor.sand.now += 60
     await conductor.beat()
-    asked |= {x[0]: x for x in conductor.asked()}
   await conductor.word("desk_time['merged_upto'] = clock()")
   await conductor.beat()
-  assert spent == 2.625
+  assert spent == 3.375
+  assert conductor.ns["desk_ledger"][0]["cost"] == 1.75
   assert conductor.ns["desk_text"]["ledger"].split("\n")[1] == (
-    "The asks since 0: item 1 replies, 1000 in, 100 out, 600 cached, $1.00, 1 landed; judge 1 replies, 600 in, 60 out, 0 cached, $0.75, 1 landed; "
+    "The asks since 0: item 3 replies, 1750 in, 175 out, 600 cached, $1.75, 1 landed; judge 1 replies, 600 in, 60 out, 0 cached, $0.75, 1 landed; "
     "cycle 1 replies, 400 in, 40 out, 0 cached, $0.50, 1 landed; triage 1 replies, 300 in, 30 out, 0 cached, $0.25, 0 landed; "
-    "stall wake 1 replies, 200 in, 20 out, 100 cached, $0.12, 0 landed; in all $2.62. "
-    f"Landed nothing: triage $0.25 (10%): no item that it ruled merged in the window; stall wake $0.12 (5%): wakes of the watch, which serve no item, on {conductor.ns['topic_chain']['a']} (1)."
+    "stall wake 1 replies, 200 in, 20 out, 100 cached, $0.12, 0 landed; in all $3.38. "
+    f"Landed nothing: triage $0.25 (7%): no item that it ruled merged in the window; stall wake $0.12 (4%): wakes of the watch, which serve no item, on {conductor.ns['topic_chain']['a']} (1)."
   )
