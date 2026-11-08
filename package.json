@@ -16,6 +16,7 @@
     "check": "tsc --noEmit",
     "test": "bun run tui/script/test.ts",
     "bench": "bun run tui/script/bench.ts",
+    "memory": "bun run tui/script/memory.ts",
     "protocol": "bun run bind/typescript/script/protocol.ts",
     "format": "biome format --write bind/typescript tui docs/examples .agents/skills/*/tui.ts package.json tsconfig.json biome.json",
     "lint": "biome check bind/typescript tui docs/examples .agents/skills/*/tui.ts package.json tsconfig.json biome.json --error-on-warnings"

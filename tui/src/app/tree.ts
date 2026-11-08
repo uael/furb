@@ -72,6 +72,50 @@ export const tree = part({
     );
   },
 
+  /** A new branch from the start of the life, which asks first what comes back of the files when a write changed one
+   * after the first message, as a rewind to any other point does. */
+  async rewindStart(): Promise<void> {
+    const w = this.session;
+    const first = w.activity.find((act) => w.isUserPrompt(act));
+    const found = first ? await w.filesAt(first.id) : undefined;
+    if (!found?.files.length) {
+      await w.rewindToStart();
+      return;
+    }
+    const { files, commands } = found;
+    const count = files.length === 1 ? "the file" : `the ${files.length} files`;
+    const named = files.map(({ path }) => {
+      const near = relative(w.workingDirectory, path);
+      return near.startsWith("..") || isAbsolute(near) ? shortenHome(path) : near;
+    });
+    const stays = commands
+      ? `${commands} ${commands === 1 ? "command" : "commands"} ran after it: a change that a command made is not restored.`
+      : "A change that a command made is not restored.";
+    this.openPalette(
+      "Start again from the beginning of the life",
+      [
+        {
+          label: "Restore the conversation",
+          detail:
+            "A new branch that reads none of the acts, with the first message in the input. The files stay.",
+          run: () => w.rewindToStart().then(() => {}),
+        },
+        {
+          label: "Restore the files",
+          detail: `Put back ${count} that a write changed after the first message. The conversation stays.`,
+          run: () => w.restoreAt(first?.id ?? "", found),
+        },
+        {
+          label: "Both",
+          detail: `A new branch that starts empty, and ${count} put back`,
+          run: () => w.rewindToStart(undefined, found).then(() => {}),
+        },
+        { label: "Keep", detail: "Return without changes", run() {} },
+      ],
+      { note: `${clip(named.join(", "), 200)}. ${stays}` },
+    );
+  },
+
   /** The tree of the session in the feed, with the pointer on the chain shown. */
   sessionTree(): void {
     this.openTree(this.session.selected, "Session tree");
@@ -196,11 +240,18 @@ export const tree = part({
     if (chain) {
       const current = act.id === w.selected;
       const status = this.session.chainStatus(act.id);
+      // The root of the chain shown, in the tree that goes back to a point, is the start of its life: it goes back to it.
+      const start = current && this.tree?.title === "Rewind";
       return {
         parts: [statusMark(status), [w.labelOf(act.id), current ? c.text : c.muted, bold]],
         tag: current ? "current" : act.id,
-        hint: "open it",
+        hint: start ? "start again from here" : "open it",
         run: async () => {
+          if (start) {
+            this.closeTree();
+            await this.rewindStart();
+            return;
+          }
           this.closeTree();
           await w.select(act.id);
         },
@@ -376,7 +427,11 @@ export const tree = part({
   async chooseTreeRow(): Promise<void> {
     const row = this.treeRow();
     if (!row) return;
-    if (row.id === this.session.selected && this.session.chains.some((chain) => chain.id === row.id)) {
+    if (
+      this.tree?.title !== "Rewind" &&
+      row.id === this.session.selected &&
+      this.session.chains.some((chain) => chain.id === row.id)
+    ) {
       this.closeTree();
       return;
     }

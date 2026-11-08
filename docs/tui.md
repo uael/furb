@@ -516,7 +516,9 @@ A cancel of an act with no running work under it, as a message that its model st
 Escape twice opens the rewind tree in the feed. Each act stands under the act that made it, and each branch under
 the point it starts from. Up and Down move the pointer, Left and Right fold a branch, and a click points at a row.
 Enter on a message gives it back to the input on a new branch, and Enter on another act makes a new branch that reads
-the chain through that act. The module keeps its state.
+the chain through that act. Enter on the root of the chain shown, the first row, starts again from the beginning of
+the life: a new branch that reads none of its acts, with the first message back in the input, however far the tree
+scrolled. The module keeps its state.
 
 When a write changed a file after the point, on any chain, Enter asks first what comes back. Restore the
 conversation makes the branch, and the files stay as they are. Restore the files puts back each file as it was at

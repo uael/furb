@@ -132,7 +132,10 @@ class ReadLife extends EventEmitter {
     if (reader.recorded)
       this.following = setInterval(() => {
         try {
-          if (reader.follow()) this.emit("facts");
+          const from = reader.facts.length;
+          if (!reader.follow()) return;
+          for (const fact of reader.facts.slice(from)) this.emit("fact", fact);
+          this.emit("facts");
         } catch {
           // A file that went away, with its folder, adds no line more.
           clearInterval(this.following);
@@ -224,8 +227,9 @@ class ReadLife extends EventEmitter {
     const exit = act.value as Exit | null;
     return { stdout: exit?.stdout?.content ?? "", stderr: exit?.stderr?.content ?? "" };
   }
-  get facts(): readonly Fact[] {
-    return this.reader.facts;
+  /** How many facts the record holds. */
+  get count(): number {
+    return this.reader.facts.length;
   }
   private refuse = async (): Promise<never> => this.reader.refuse();
   prompt = this.refuse;
@@ -309,6 +313,19 @@ class ReadLife extends EventEmitter {
 
 /** A life as a window holds it: through the daemon, or a record open to read. */
 type Held = RemoteLife | ReadLife;
+
+/** What the change of the views reads of a fact: its kind, its name and its speaker, the rung, the word and the donor
+ * of a run, and the path of a write. A fact may carry a whole transcript, as a prefix or a checkpoint does, so the view
+ * keeps this alone of it until the next snapshot. */
+function slim(fact: Fact, answered?: string): Fact {
+  const [kind, id, by] = fact;
+  const path = (value: unknown) =>
+    value && typeof value === "object" ? { path: (value as { path?: unknown }).path } : value;
+  if (kind === "run") return fact.slice(0, 7) as Fact;
+  if (kind === "write") return [kind, id, by, fact[3], path(fact[4])] as Fact;
+  if (answered === "write") return [kind, id, by, path(fact[3])] as Fact;
+  return [kind, id, by] as Fact;
+}
 
 /** What a snapshot knows of one chain. A value that it must read again is undefined. */
 interface ChainView {
@@ -457,7 +474,17 @@ export class HostView extends EventEmitter {
       this.recorded = life.reader.recorded;
       this.directory = life.reader.directory;
     } else this.role = life.daemon.peer?.role ?? "write";
-    const facts = () => this.heard();
+    const fact = (one: Fact) => this.hear(one);
+    // The facts that the life tells again as the window attaches, until the first change, are no work that the window
+    // saw run, so it times none of them.
+    const forgot = () => {
+      this.forget();
+      this.replaying = true;
+    };
+    const facts = () => {
+      this.replaying = false;
+      this.heard();
+    };
     const change = () => this.update();
     const log = (line: string) => this.emit("log", line);
     const authentication = (status: unknown) => this.emit("authentication", status);
@@ -466,12 +493,15 @@ export class HostView extends EventEmitter {
       this.emit("fault", new Error(why));
       this.emit("change");
     };
+    // The life forgot what it held before it attached again, and the view heard each fact again since then.
     const reset = () => {
-      this.forget();
       this.lost = "";
+      this.update();
       this.emit("reset");
     };
     const heard: [string, Listener][] = [
+      ["fact", fact],
+      ["forgot", forgot],
       ["facts", facts],
       ["change", change],
       ["log", log],
@@ -484,9 +514,13 @@ export class HostView extends EventEmitter {
       for (const [name, listener] of heard) life.off(name, listener);
     };
     this.forget();
+    // A record open to read holds its facts before the view hears it, which takes them as the facts that the life
+    // told as the window attached, whose time it knows not.
+    if (life instanceof ReadLife) for (const one of life.reader.facts) this.hear(one, false);
+    this.update();
   }
 
-  /** The view of the life read again from its start. */
+  /** The view of the life read again from its start, as the life tells each fact again. */
   private forget(): void {
     this.chains.clear();
     this.answers.clear();
@@ -494,10 +528,9 @@ export class HostView extends EventEmitter {
     this.lines.clear();
     this.measured.clear();
     this.given = undefined;
-    this.heardAt = 0;
-    this.replayed = this.life.facts.length;
-    this.timed = this.replayed;
-    this.update();
+    this.unread = [];
+    // An act that was open before the window attached again ends in the replay, which times nothing.
+    this.began.clear();
   }
 
   /** A record that a build of another engine made drifts on a replay, so it opens to read in its place, with the
@@ -520,7 +553,7 @@ export class HostView extends EventEmitter {
     const life = this.life;
     this.completed = life.completed;
     this.cost = life.cost;
-    this.seq = life.facts.length;
+    this.seq = life.count;
     this.streams = new Map(life.streams);
     // A view keys on the measures, the compactions, the seen and the prompts, as the loom of the life does on the
     // measures: each keeps its object while nothing of it changed, so a fact that changes none of them, as a line of a
@@ -579,7 +612,7 @@ export class HostView extends EventEmitter {
 
   /** The facts of a change: the view holds them, and the work that waits for a wake is read again. */
   private heard(): void {
-    this.time();
+    this.now = undefined;
     this.update();
     if (this.journal) {
       this.journal.readable(0, 0);
@@ -599,15 +632,19 @@ export class HostView extends EventEmitter {
    * no time, so an act that the life told as the window attached took no time that it knows. */
   private readonly began = new Map<string, number>();
   private readonly took = new Map<string, number>();
-  private replayed = 0;
   /** The measure of each chain, and the spend that it reads. */
   private readonly measured = new Map<string, { spend: Spend; measure: Measure }>();
-  private timed = 0;
-  private time(): void {
-    const now = clock();
-    const facts = this.life.facts;
-    for (; this.timed < facts.length; this.timed++) {
-      const [kind, id] = facts[this.timed] as Fact;
+  /** A fact as the view hears it: when it opens or ends an act, which a fact that the life told as the window attached
+   * does not time; the usage of an answer; and what the next snapshot reads again for it. The view keeps no fact
+   * whole, since a fact may carry a whole transcript, as a prefix or a checkpoint does. */
+  private hear(fact: Fact, timed = true): void {
+    const [kind, id] = fact;
+    const answered = kind === "done" ? questionKind(id) : undefined;
+    if (timed && !this.replaying) {
+      // The facts of one change share the moment that the window heard them, so an act that opened and ended in one
+      // change took no time that the window knows.
+      this.now ??= clock();
+      const now = this.now;
       const began = this.began.get(id);
       if (isQuestion(kind, id)) this.began.set(id, now);
       else if (kind === "done" && began !== undefined) {
@@ -615,6 +652,15 @@ export class HostView extends EventEmitter {
         this.took.set(id, now - began);
       }
     }
+    const turn = fact[3];
+    if (answered === "reply" && Array.isArray(turn) && Array.isArray(turn[2])) {
+      const scope = this.life.scope(id);
+      const answers = this.answers.get(scope) ?? [];
+      answers.push(usageOf(turn[2]));
+      this.answers.set(scope, answers);
+      this.replies.set(scope, id);
+    }
+    this.unread.push(slim(fact, answered));
   }
 
   private readonly chains = new Map<string, ChainView>();
@@ -624,7 +670,12 @@ export class HostView extends EventEmitter {
   private readonly replies = new Map<string, string>();
   /** The lines that each write added and removed, by the write. */
   private readonly lines = new Map<string, NonNullable<ActRow["lines"]>>();
-  private heardAt = 0;
+  /** Whether the life tells again the facts that it held before the window attached, which the window times not. */
+  private replaying = false;
+  /** The moment that the window heard the facts of the change that it hears now. */
+  private now?: number;
+  /** What the facts heard since the last snapshot change of the views, which that snapshot reads again. */
+  private unread: Fact[] = [];
   private given?: Given;
   private marks = 0;
 
@@ -647,15 +698,7 @@ export class HostView extends EventEmitter {
           actor: undefined,
           turns: undefined,
         });
-    const turn = fact[3];
-    const scope = this.life.scope(id);
-    if (answered === "reply" && Array.isArray(turn) && Array.isArray(turn[2])) {
-      const answers = this.answers.get(scope) ?? [];
-      answers.push(usageOf(turn[2]));
-      this.answers.set(scope, answers);
-      this.replies.set(scope, id);
-    }
-    const view = this.chains.get(scope);
+    const view = this.chains.get(this.life.scope(id));
     if (!view) return;
     if (
       ["tell", "pause", "wake", "cancel", "close", "reply", "prefix"].includes(kind) ||
@@ -699,9 +742,10 @@ export class HostView extends EventEmitter {
   }
 
   private async snapshotOf(life: Held, requested: string, since: number, held: number): Promise<Snapshot> {
-    const facts = life.facts;
-    for (const fact of facts.slice(this.heardAt)) this.changed(fact);
-    const start = facts.length;
+    // A fact that comes while the views are read changes them at the next snapshot, which the session takes then.
+    const unread = this.unread;
+    this.unread = [];
+    for (const fact of unread) this.changed(fact);
     const selected = life.act(requested)?.kind === "chain" ? requested : life.root;
     const view = this.chains.get(selected) ?? {};
     this.chains.set(selected, view);
@@ -719,8 +763,6 @@ export class HostView extends EventEmitter {
     view.actor ??= String((await life.inspect("actor", selected)).value ?? "");
     // The actor of the root is the actor of the life, which a chain with no actor of its own takes.
     if (selected === life.root) this.actor = view.actor;
-    // A fact that came while the views were read changes them at the next snapshot, which the session takes then.
-    this.heardAt = start;
     // The daemon writes the journal after it tells the write, so the counts of a write may come after its act: the
     // act whose counts came is given again with them.
     const counted = new Set<string>();
@@ -914,7 +956,7 @@ export class HostView extends EventEmitter {
     return await this.life.moments(on);
   }
   async act(id: string): Promise<Act | undefined> {
-    if (!(this.life instanceof ReadLife)) return this.life.acts.get(id);
+    if (!(this.life instanceof ReadLife)) return await this.life.whole(id);
     const whole = this.life.reader.act(id);
     return whole && this.life.reader.activity.hosted([whole]).find((one) => one.id === id);
   }

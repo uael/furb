@@ -114,13 +114,18 @@ type Line = [at: number, length: number];
  * answer, and how many of them stand before the last reply that it asked. */
 type Folded = { read: number; turns: Turn[]; told: string[]; cut: number };
 
-/** A value with each text longer than HELD cut to its start, or the value itself when no text is so long. */
-function shortened<T>(value: T): T {
-  if (typeof value === "string") return (value.length > HELD ? `${value.slice(0, HELD)}…` : value) as T;
+/** How many characters of a text a window holds of an act whose text a view reads, as the word of a step: no view draws
+ * more of a text at once, and the card of the act reads it whole. */
+const SHOWN = 65536;
+
+/** A value with each text longer than a count, HELD by default, cut to its start, or the value itself when no text is
+ * so long. */
+function shortened<T>(value: T, most = HELD): T {
+  if (typeof value === "string") return (value.length > most ? `${value.slice(0, most)}…` : value) as T;
   if (!value || typeof value !== "object") return value;
   let changed = false;
   const each = (one: unknown) => {
-    const short = shortened(one);
+    const short = shortened(one, most);
     changed ||= short !== one;
     return short;
   };
@@ -199,6 +204,49 @@ export function row(
     ...(made.output === undefined ? {} : { output: made.output }),
     ...(lines ? { lines } : {}),
     ...(took === undefined ? {} : { took }),
+  };
+}
+
+/** An act that is done as a window keeps it: a read, a write and a command that printed more than a tail keep their
+ * texts as a row slims them, with the counts of what they left out, and the view reads the whole act from the life
+ * when it shows it. A window that kept each text whole held more with each hour of a long life. The parts that the act
+ * keeps are copies, since a part of a text holds the whole text in memory. Any other act is kept as it is. */
+export function lean<T extends ActRow>(act: T): T {
+  if (!isDone(act)) {
+    // An act that runs keeps its words up to what a view shows too: the word of a run may carry megabytes, and the
+    // card of the act reads it whole from the life.
+    const most = WHOLE.has(act.kind) || act.kind === "reply" ? SHOWN : HELD;
+    const words = shortened(act.words, most);
+    const word = typeof act.word === "string" ? shortened(act.word, most) : act.word;
+    if (words === act.words && word === act.word) return act;
+    return {
+      ...act,
+      words: structuredClone(words),
+      ...(word === act.word ? {} : { word: structuredClone(word) }),
+    };
+  }
+  if (!["read", "write", "bash"].includes(act.kind)) {
+    // The kinds whose texts a view reads keep them up to what a view shows, and the others as the reader keeps them.
+    const most = WHOLE.has(act.kind) || act.kind === "reply" ? SHOWN : HELD;
+    const value = outcomeOf(act);
+    const [words, short] = [shortened(act.words, most), shortened(value, most)];
+    const word = typeof act.word === "string" ? shortened(act.word, most) : act.word;
+    if (words === act.words && short === value && word === act.word) return act;
+    return {
+      ...act,
+      words: structuredClone(words),
+      phase: { phase: "done", value: structuredClone(short) },
+      ...(word === act.word ? {} : { word: structuredClone(word) }),
+    };
+  }
+  const made = slim(act.kind, act.words, outcomeOf(act), act.count);
+  if (made.count === undefined && made.output === undefined) return act;
+  return {
+    ...act,
+    words: structuredClone(made.words),
+    phase: { phase: "done", value: structuredClone(made.value) },
+    ...(made.count === undefined ? {} : { count: made.count }),
+    ...(made.output === undefined ? {} : { output: made.output }),
   };
 }
 
