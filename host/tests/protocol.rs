@@ -513,7 +513,7 @@ mod protocol {
   }
 
   #[tokio::test]
-  async fn an_open_that_names_extensions_is_refused_with_skills_and_the_version() {
+  async fn an_open_with_the_old_field_is_refused_with_skills_and_the_version() {
     let mut client = served(Role::Write);
     client.hello(PROTOCOL).await;
     client.say(r#"{"id": 1, "verb": "open", "life": "/a.jsonl", "extensions": false}"#).await;
