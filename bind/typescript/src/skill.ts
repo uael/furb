@@ -45,6 +45,12 @@ export class Closed extends Error {
   override name = "Closed";
 }
 
+/** An error that comes on the socket, with the stack of the verb that asked it, which names its caller. */
+function askedBy<E extends Error>(error: E, asked: Error): E {
+  error.stack = `${error.name}: ${error.message}\n${asked.stack?.split("\n").slice(1).join("\n") ?? ""}`;
+  return error;
+}
+
 /** One connection to the daemon, after its hello. Each verb takes a number and its answer, in any order, and each
  * frame that the daemon pushes goes to each listener of `pushed`. `closed` settles when the stream ends, from either
  * side, and each verb that waits then fails. */
@@ -53,7 +59,10 @@ export class Connection {
   peer!: Peer;
   readonly closed: Promise<void>;
   private next = 0;
-  private readonly waiting = new Map<number, { resolve(answer: Answer): void; reject(error: Error): void }>();
+  private readonly waiting = new Map<
+    number,
+    { resolve(answer: Answer): void; reject(error: Error): void; asked: Error }
+  >();
   private readonly listeners = new Set<(frame: Frame) => void>();
   private constructor(private readonly socket: Socket) {
     let held = "";
@@ -69,7 +78,7 @@ export class Connection {
     this.closed = new Promise((resolve) => {
       socket.on("close", () => {
         for (const waits of this.waiting.values())
-          waits.reject(new Closed("The daemon closed the connection."));
+          waits.reject(askedBy(new Closed("The daemon closed the connection."), waits.asked));
         this.waiting.clear();
         resolve();
       });
@@ -98,8 +107,9 @@ export class Connection {
   /** The answer of the daemon to a verb, or its refusal as a `Refused`. */
   ask(verb: Verb): Promise<Answer> {
     const id = this.next++;
+    const asked = new Error(verb.verb);
     return new Promise<Answer>((resolve, reject) => {
-      this.waiting.set(id, { resolve, reject });
+      this.waiting.set(id, { resolve, reject, asked });
       this.socket.write(`${JSON.stringify({ id, ...verb })}\n`);
     });
   }
@@ -120,7 +130,7 @@ export class Connection {
       if (!waits) return;
       this.waiting.delete(frame.id ?? -1);
       if (frame.frame === "reply") waits.resolve(frame.answer);
-      else waits.reject(new Refused(frame.error.error, frame.why));
+      else waits.reject(askedBy(new Refused(frame.error.error, frame.why), waits.asked));
       return;
     }
     for (const listener of this.listeners) listener(frame);
