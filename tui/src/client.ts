@@ -22,9 +22,11 @@ import type {
   Request1 as Verb,
 } from "furb/protocol";
 import { PROTOCOL } from "furb/protocol";
+import { Closed, Refused } from "furb/skill";
 import { program } from "../../bind/typescript/program.ts";
 import type { Setting } from "./configs.ts";
 
+export { Closed, Refused };
 export type { Verb };
 
 /** The folder of the daemon of this machine in the cache of furb, as `furb host` names it. */
@@ -112,23 +114,6 @@ export function dialed(place: string): Promise<Socket | undefined> {
     });
     socket.once("error", () => resolve(undefined));
   });
-}
-
-/** A refusal of the daemon, named by its kind, as `closed` or `role`. */
-export class Refused extends Error {
-  constructor(
-    readonly kind: string,
-    why: string,
-  ) {
-    super(why);
-    this.name = kind === "refused" ? "Refused" : kind;
-  }
-}
-
-/** A request that the daemon left with no answer when its socket closed, as when it ends or hands over to another
- * build: it takes the stack of the verb that asked it, which names its caller. */
-export class Closed extends Error {
-  override name = "Closed";
 }
 
 /** The connection of a window to the daemon of its machine, which it starts when none answers. Each request takes a
