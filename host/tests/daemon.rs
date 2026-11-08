@@ -1916,6 +1916,19 @@ mod daemon {
     id
   }
 
+  /// The port of the browser callback of a sign-in, once no process holds it: another run of the
+  /// tests on this machine may hold it for a while, and a sign-in that finds it busy fails.
+  async fn claimed() -> std::net::TcpListener {
+    let start = Instant::now();
+    loop {
+      match std::net::TcpListener::bind(("127.0.0.1", 1455)) {
+        Ok(port) => return port,
+        Err(no) => assert!(start.elapsed() < PATIENCE, "no process lets go of the port: {no}"),
+      }
+      time::sleep(SHORT).await;
+    }
+  }
+
   fn signed_in(state: &'static str) -> impl Fn(&Frame) -> bool {
     move |frame| matches!(frame, Frame::SignIn { state: got, .. } if got == state)
   }
@@ -1930,7 +1943,7 @@ mod daemon {
     window.life = opened(&mut window, &at, "a.jsonl").await;
     let life = window.life.clone();
     window.attach(&life).await;
-    let taken = std::net::TcpListener::bind(("127.0.0.1", 1455)).unwrap();
+    let taken = claimed().await;
     let id = signing(&mut window).await;
     let Frame::SignIn { url, message, .. } = window.keeping(signed_in("failed")).await else {
       unreachable!()
@@ -1953,6 +1966,7 @@ mod daemon {
     window.life = opened(&mut window, &at, "a.jsonl").await;
     let life = window.life.clone();
     window.attach(&life).await;
+    drop(claimed().await);
     let id = signing(&mut window).await;
     let Frame::SignIn { url, .. } = window.keeping(signed_in("waiting")).await else {
       unreachable!()
