@@ -247,7 +247,7 @@ impl Model {
   /// written to it.
   #[cfg(test)]
   #[must_use]
-  pub fn price(mut self, input: f64, output: f64, read: f64, wrote: f64) -> Self {
+  pub(crate) fn price(mut self, input: f64, output: f64, read: f64, wrote: f64) -> Self {
     self.price = Some([input, output, read, wrote]);
     self
   }
