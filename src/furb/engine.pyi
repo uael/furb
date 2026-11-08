@@ -826,6 +826,9 @@ class Refused(Exception):
   A word that catches that refusal reads the Exit of the command with peek, as peek(bash3).
   """
 
+class Overflow(Refused):
+  """What a reply is refused with when its prompt passes the window of its model, so the chain can cut its acts before its next reply."""
+
 class Drift(Exception):
   """What a life fails with when an act of it is not the one the record holds, which the journal raises, so that it comes out of the entry the operator went in by and the life goes on with nothing.
   An act whose words are not the ones the record holds under its name is a drift, which it raises.
