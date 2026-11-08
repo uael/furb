@@ -21,6 +21,7 @@
 use std::{
   alloc::{GlobalAlloc, Layout, System},
   collections::{HashMap, HashSet},
+  mem,
   sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -147,7 +148,7 @@ fn machine() -> Option<usize> {
 fn machine() -> Option<usize> {
   use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
   // SAFETY: MEMORYSTATUSEX is plain data, for which each byte zero is a value.
-  let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+  let mut status: MEMORYSTATUSEX = unsafe { mem::zeroed() };
   status.dwLength = u32::try_from(size_of::<MEMORYSTATUSEX>()).ok()?;
   // SAFETY: status is a MEMORYSTATUSEX whose length says its size, as the call asks.
   let read = unsafe { GlobalMemoryStatusEx(&raw mut status) };
@@ -169,7 +170,7 @@ pub(crate) struct Asks {
 impl Asks {
   /// The heap fell under its share: each life asked, whose ask the daemon takes back.
   pub(crate) fn spared(&mut self) -> Vec<String> {
-    std::mem::take(&mut self.asked).into_keys().collect()
+    mem::take(&mut self.asked).into_keys().collect()
   }
 
   /// The heap is past its share: of the lives that live, each with its name, its weight and the

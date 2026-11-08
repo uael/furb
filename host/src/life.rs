@@ -13,6 +13,8 @@ use std::{
   collections::{BTreeMap, HashMap, VecDeque},
   future::poll_fn,
   hash::{DefaultHasher, Hash, Hasher},
+  mem,
+  ops::Range,
   path::PathBuf,
   sync::{
     Arc, Mutex,
@@ -42,7 +44,7 @@ use tokio::{
     mpsc::{self, UnboundedReceiver, UnboundedSender},
     oneshot,
   },
-  task::LocalSet,
+  task::{LocalSet, spawn_blocking},
 };
 
 use crate::{
@@ -285,7 +287,7 @@ struct Gone {
   scanned: usize,
   /// The places of the log of what each open told, which the log keeps: the facts of the opening
   /// of a birth that the journal says again, which the file of the record does not hold.
-  opened: Vec<std::ops::Range<usize>>,
+  opened: Vec<Range<usize>>,
 }
 
 /// The weight of a life, which its thread writes and the daemon reads: the facts that it said since
@@ -520,7 +522,7 @@ impl Life {
   /// passed. The log keeps an empty place for each, which [`Life::since`] fills from the record.
   /// A fact that kept a checkpoint stays, since the record holds that entry as its number alone.
   fn let_go(&mut self) {
-    let opened = std::mem::take(&mut self.gone.opened);
+    let opened = mem::take(&mut self.gone.opened);
     let kept = |at: usize| opened.iter().any(|one| one.contains(&at));
     for (at, slot) in self.log.iter_mut().enumerate().skip(self.gone.scanned) {
       let fact = match slot.as_deref() {
@@ -617,7 +619,7 @@ impl Retell {
   /// no more than [`BEHIND`] of them in the channel ahead of what the reader read.
   fn spawned(self) -> mpsc::Receiver<Logged> {
     let (sender, receiver) = mpsc::channel(BEHIND);
-    tokio::task::spawn_blocking(move || self.told(&sender));
+    spawn_blocking(move || self.told(&sender));
     receiver
   }
 

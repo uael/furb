@@ -28,6 +28,7 @@
 use std::{
   collections::HashMap,
   fmt::Display,
+  mem,
   net::{IpAddr, SocketAddr},
   path::{Path, PathBuf},
   pin::pin,
@@ -723,7 +724,7 @@ impl Lives {
         Some(asked) => self.heard(asked),
       }
       let empty = self.held.is_empty();
-      self.empty.send_if_modified(|was| std::mem::replace(was, empty) != empty);
+      self.empty.send_if_modified(|was| mem::replace(was, empty) != empty);
     }
   }
 
