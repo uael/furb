@@ -128,6 +128,18 @@ export const feed = part({
         this.partsLoaded,
       ];
       const prior = this.cards.get(id);
+      // A card that the feed shelved far from the view keeps its place and its height, and is made again once it
+      // comes near the view.
+      if (prior?.shelved !== undefined) {
+        if (!this.nearFeed(prior.node, 2)) {
+          if (this.feedChild(order) !== prior.node) this.placeCard(prior.node, order);
+          order++;
+          return;
+        }
+        prior.shelved = undefined;
+        prior.same = undefined;
+        prior.key = "";
+      }
       if (
         same &&
         prior?.same?.length === same.length &&
@@ -381,11 +393,21 @@ export const feed = part({
           .join("|");
       const programFor = (key: string, live: string, make: () => ProgramLine[]): ProgramLine[] => {
         const known = this.programs.get(key);
-        if (!past && known?.version !== -1 && known?.session === w && known?.live === live)
+        if (!past && known?.version !== -1 && known?.session === w && known?.live === live) {
+          // The most recent read stands last, so that the oldest go first.
+          this.programs.delete(key);
+          this.programs.set(key, known);
           return known.lines;
+        }
         const made = make();
-        if (this.programs.size > 2000) this.programs.clear();
+        // A program holds the lines of a whole word, which weigh more than the card that shows them, so the window keeps
+        // those of the cards near its view alone and reads the others again from their acts.
+        this.programs.delete(key);
         this.programs.set(key, { session: w, version: past ? -1 : w.version, live, lines: made });
+        for (const old of this.programs.keys()) {
+          if (this.programs.size <= PROGRAMS) break;
+          this.programs.delete(old);
+        }
         return made;
       };
       // What a step took and cost once it is done, and how long the line that waits has waited.
@@ -1607,5 +1629,53 @@ export const feed = part({
     }
   },
 });
+
+/** How many heights of the view a card of a done act stands from the view before the feed shelves it, and how near it
+ * comes before the feed makes it again. */
+const SHELF = 3;
+
+/** How many programs the feed keeps, the most recently read first. */
+const PROGRAMS = 64;
+
+/** The memory of the feed is bounded by what it shows: a card of a done act that stands far from the view keeps its
+ * place and its height alone, as an empty box, and its rows, its texts and its code go, since a long life holds
+ * thousands of them. The card is made again from its act once the view comes near it, so a scroll back loses nothing.
+ * A card of an act that works is never shelved, since the ticks of the feed write into it. */
+export const shelf = part({
+  /** Whether a card stands within a count of heights of the view from the view. A card not laid out yet is near. */
+  nearFeed(node: BoxRenderable, heights: number): boolean {
+    const { viewport } = this.scroll;
+    if (node.height <= 0) return true;
+    const margin = viewport.height * heights;
+    return node.y + node.height >= viewport.y - margin && node.y <= viewport.y + viewport.height + margin;
+  },
+
+  /** After each frame where the view moved or the cards changed: each card of a done act far from the view goes to the
+   * shelf, and the feed is made again when a shelved card came near. */
+  shelveFeed(): void {
+    if (this.tree || this.session.view !== "feed") return;
+    const at = `${this.scroll.scrollTop}:${this.scroll.scrollHeight}:${this.cards.size}:${this.scroll.viewport.height}`;
+    if (at === this.shelvedAt) return;
+    this.shelvedAt = at;
+    let near = false;
+    for (const card of this.cards.values()) {
+      if (card.shelved !== undefined) {
+        near ||= this.nearFeed(card.node, 2);
+        continue;
+      }
+      if (!card.same || card.node.isDestroyed || this.nearFeed(card.node, SHELF)) continue;
+      const height = card.node.height;
+      for (const child of card.node.getChildren()) child.destroyRecursively();
+      card.node.height = height;
+      card.shelved = height;
+      card.title = undefined;
+    }
+    if (near) this.renderContent();
+  },
+});
+
+export const shelfBound = ["shelveFeed"] as const;
+
+export type ShelfPart = typeof shelf;
 
 export type FeedPart = typeof feed;

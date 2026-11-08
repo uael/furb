@@ -46,8 +46,15 @@ const library = await demoLibrary(session);
 const screen = await createTestRenderer({ width: 152, height: 46, exitSignals: [] });
 const app = new App(screen.renderer, session, { quit() {}, workspaces: library });
 app.render();
-await screen.flush();
+// The feed lays out its cards over a few frames, after which it holds the whole height of the life.
+for (let k = 0, height = -1, still = 0; k < 600 && still < 20; k++) {
+  still = app.scroll.scrollHeight === height ? still + 1 : 0;
+  height = app.scroll.scrollHeight;
+  await screen.renderOnce();
+  await Bun.sleep(50);
+}
 const opened = measure();
+console.log(`The feed holds ${app.scroll.scrollHeight} rows of ${session.activity.length} acts.`);
 const facts = session.host.seq;
 console.log(`A life of ${facts} facts opened in ${((performance.now() - began) / 1000).toFixed(1)} s.`);
 
