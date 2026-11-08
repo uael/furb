@@ -509,6 +509,7 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
     said.contains("\n[assistant] debug(t\"{standing()[4]=}\")\n[user] #rung"),
     "then the setup of the root, with the turn of its extensions: {said}"
   );
+  assert!(said.contains(" debugged\n"), "the setup of the root is answered: {said}");
   assert!(said.contains("\n[assistant] read('"), "then the read of the doctrine: {said}");
   assert!(
     said.contains("\n[user] #chain1\nchain1_label = 'root'\n"),

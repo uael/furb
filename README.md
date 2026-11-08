@@ -108,6 +108,7 @@ same program in TypeScript and in Rust, and four more.
 | Extend furb | [Extensions](https://github.com/uael/furb/blob/main/docs/skills.md) |
 | See what may come | [Ideas for later](https://github.com/uael/furb/blob/main/docs/ideas.md) |
 | Check a record that someone gave you | [The audit](https://github.com/uael/furb/blob/main/docs/audit.md) |
+| Know what a release keeps | [The promise](https://github.com/uael/furb/blob/main/docs/promise.md): within a major, each life opens and resumes with no drift, from 1.0.0 |
 | Change furb | [Contributing](https://github.com/uael/furb/blob/main/CONTRIBUTING.md), and [the contract](https://github.com/uael/furb/blob/main/src/furb/engine.pyi), every law of the engine |
 
 ## License
