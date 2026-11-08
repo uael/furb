@@ -96,14 +96,13 @@ repos:
         pass_filenames: false
       - id: biome
         name: biome
-        # The lint of the gates, bun run lint, and a warning fails it here too, which checks the TypeScript, its JSON and the biome config in about a
+        # The lint of the gates, bun run lint, which fails on a warning too and checks the TypeScript, its JSON and the biome config in about a
         # second: a commit that the gates refuse never lands. The job of the hooks has no bun, so it skips this hook, and
         # the job of the bindings and the TUI runs the same lint. tsc is not here: it reads the bindings that bun run
         # build makes, so it fails on a clone with no build.
-        entry: bun run lint --error-on-warnings
+        entry: bun run lint
         language: system
         files: ^(bind/typescript/|tui/|docs/examples/|\.agents/skills/[^/]+/tui\.ts$)|^(package|tsconfig|biome)\.json$
-        types_or: [ts, tsx, json]
         pass_filenames: false
       - id: workflows
         name: the workflows parse and keep their shape

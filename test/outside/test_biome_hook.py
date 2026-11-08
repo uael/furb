@@ -17,7 +17,9 @@ def hook() -> dict:
 def test_the_hook_of_biome_runs_the_lint_of_the_gates_whole_and_reads_each_path_that_it_checks() -> None:
   lint = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["scripts"]["lint"]
   assert lint.startswith("biome check ")
-  assert hook()["entry"] == "bun run lint --error-on-warnings"
+  # A warning fails the gate and the hook alike, since both run this one script.
+  assert lint.endswith(" --error-on-warnings")
+  assert hook()["entry"] == "bun run lint"
   assert hook()["pass_filenames"] is False
   files = re.compile(hook()["files"])
   # One file under each path that the lint names, as a change of it would give to the hook.
