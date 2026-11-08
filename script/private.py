@@ -21,42 +21,53 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 # The files that hold the record of a life, its log, or what its modules held.
 KINDS = ("*.jsonl", "*.jsonl.zst", "*.modules", "*.log")
-# Each trace of a person, with the stand-in that a scrub writes in its place, in the order of the scrub.
+# Each trace of a person, with the stand-in that a scrub writes in its place, in the order of the scrub. A stand-in with
+# {n} is numbered by the order in which each distinct trace comes first, so two sessions of a record stay two.
 TRACES: list[tuple[str, re.Pattern[str], str]] = [
   (
     "a scratch folder of a home",
     re.compile(r"/Users/[^/\s\"'\\]+/Library/Caches/furb/scratch/[0-9a-f]{16}"),
-    "/home/example/.cache/furb/scratch/" + "0" * 16,
+    "/home/example/.cache/furb/scratch/{n:016d}",
   ),
-  ("a path of a home", re.compile(r"/Users/[^/\s\"'\\]+/|/home/(?!example/)[^/\s\"'\\]+/"), "/home/example/"),
+  (
+    "a path of a home",
+    re.compile(
+      r"/Users/(?!Shared\b)[^/\s\"'\\.]+(?=[/\s\"'\\]|$)|/home/(?!example\b)[^/\s\"'\\]+|/root(?=/)|[A-Za-z]:\\\\+Users\\\\+[^\\\s\"']+"
+    ),
+    "/home/example",
+  ),
   (
     "a checkout of an account",
     re.compile(r"~/src/github\.com/(?!example/)[^/\s\"'\\]+/furb[\w-]*"),
     "~/src/github.com/example/furb",
   ),
   ("the handle of the owner", re.compile(r"\buael\b(?!/(?:furb|monty)(?![\w-]))"), "example"),
+  ("an operator by his login", re.compile(r"\boperator/(?!tui\b)[\w-]+"), "operator/tui"),
+  (
+    "an address of mail",
+    re.compile(r"\b[\w.+-]+@(?!example\.)[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\b"),
+    "someone@example.com",
+  ),
   (
     "the id of a session",
     re.compile(r"(?<![0-9a-f-])(?!0{8}-)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f-])"),
-    "00000000-0000-0000-0000-000000000000",
+    "00000000-0000-0000-0000-{n:012d}",
   ),
-  ("the scratch folder of a session", re.compile(r"(?<=scratch/)(?!0{16}\b|1{16}\b)[0-9a-f]{16}\b"), "0" * 16),
+  ("the scratch folder of a session", re.compile(r"(?<=scratch/)(?![0-9]{16}\b|1{16}\b)[0-9a-f]{16}\b"), "{n:016d}"),
 ]
-# The words of a person that a record held, each with the scripted words that stand for it.
-SPOKEN = {
-  "Are all other furb lifes than you dead ?": "Are the other lives of the sample stopped?",
-  "And now?": "Check them again.",
-  "kill all others lifes": "Stop the other lives of the sample.",
-  "Can you see images now ? can you take care if finishing https://github.com/uael/furb/pull/555 ?": (
-    "Read the sample image, then finish the sample change."
-  ),
-  "Wait.": "Hold on.",
+# The prompts of the operator that a script wrote in the records of the replay, in place of the words of a person, beside
+# the messages of the record of the conductor that tui/script/scripted.ts writes, and the task and the nudge of the
+# bench of script/deepswe.py.
+SCRIPTED = {
+  "Are the other lives of the sample stopped?",
+  "Check them again.",
+  "Stop the other lives of the sample.",
+  "Read the sample image, then finish the sample change.",
+  "Hold on.",
 }
-# The place of the message in a prompt: ("prompt", id, by, on, shape, message, to).
-MESSAGE = 5
-# The prompts of the operator that a script wrote: the stand-ins above, the messages of the record of the conductor that
-# tui/script/scripted.ts writes, and those of the bench of script/deepswe.py, its task and its nudge.
 HARNESS = re.compile(r"confidence level [0-9.]+ is too low, continue|- Update the `display` style property to accept")
+# The place of the maker and of the message in a prompt: ("prompt", id, by, on, shape, message, to).
+BY, MESSAGE = 2, 5
 
 
 def scripted_of_the_tui() -> set[str]:
@@ -77,7 +88,8 @@ def operator_prompts(line: str) -> list[str]:
   while stack:
     one = stack.pop()
     if isinstance(one, list):
-      if len(one) > MESSAGE and one[0] == "prompt" and one[2] == "operator" and isinstance(one[MESSAGE], str):
+      operated = len(one) > MESSAGE and str(one[BY]).split("/")[0] == "operator"
+      if operated and one[0] == "prompt" and isinstance(one[MESSAGE], str):
         found.append(one[MESSAGE])
       stack.extend(one)
     elif isinstance(one, dict):
@@ -113,11 +125,9 @@ def traces(path: Path, scripted: set[str]) -> list[str]:
 
 
 def scrubbed(text: str) -> str:
-  for said, stand in SPOKEN.items():
-    for form in {said, json.dumps(said)[1:-1]}:
-      text = text.replace(form, stand)
   for _, pattern, stand in TRACES:
-    text = pattern.sub(stand, text)
+    seen: dict[str, str] = {}
+    text = pattern.sub(lambda hit: seen.setdefault(hit[0], stand.format(n=len(seen) + 1)), text)  # noqa: B023
   return text
 
 
@@ -131,7 +141,7 @@ def main(argv: list[str]) -> int:
         made = zstd.compress(made)
       one.write_bytes(made)
     return 0
-  scripted = {*SPOKEN.values(), *scripted_of_the_tui()}
+  scripted = {*SCRIPTED, *scripted_of_the_tui()}
   found = [one for path in (map(Path, argv) if argv else records()) for one in traces(path, scripted)]
   said = f"private: {len(found)} traces of a person in the records" if found else "private: no record holds a trace"
   sys.stdout.write("".join(f"{one}\n" for one in [*found, said]))

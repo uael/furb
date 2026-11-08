@@ -18,8 +18,9 @@ TRACED = [
   ["read", "read2", "rung1", "chain1", "~/src/github.com/someone/furb-w6/DOCTRINE.md"],
   ["bash", "bash1", "rung1", "chain1", "ls /Users/x/Library/Caches/furb/scratch/3bcaab2537057c07"],
   ["tell", "rung1", "chain1", ["session 0c16d8e3-6726-4650-aac1-a3161707af0e of uael"]],
-  ["prompt", "prompt1", "operator", "chain1", "None", "Are all other furb lifes than you dead ?", ""],
-  ["prompt", "prompt2", "operator", "chain1", "None", "a word that no script wrote", ""],
+  ["tell", "rung2", "chain1", ["git log: Someone <someone@mail.org>, by operator/someone"]],
+  ["prompt", "prompt1", "operator", "chain1", "None", "Are the other lives of the sample stopped?", ""],
+  ["prompt", "prompt2", "operator/tui", "chain1", "None", "a word that no script wrote", ""],
 ]
 
 
@@ -47,6 +48,8 @@ def test_each_trace_of_a_person_in_a_record_is_named(tmp_path: Path) -> None:
     "the id of a session",
     "the handle of the owner",
     "a prompt of the operator that no script wrote",
+    "an address of mail",
+    "an operator by his login",
   }
   assert "a word that no script wrote" in got.stdout
 
@@ -58,5 +61,17 @@ def test_a_scrub_puts_each_trace_to_its_stand_in_and_keeps_the_public_repositori
   assert run("--scrub", str(record)).returncode == 0
   text = record.read_text(encoding="utf-8")
   assert run(str(record)).stdout == "private: no record holds a trace\n"
-  assert "Are the other lives of the sample stopped?" in text and "github.com/uael/furb and uael/monty" in text
+  assert "github.com/uael/furb and uael/monty" in text
   assert [json.loads(line)[0] for line in text.splitlines()] == [one[0] for one in [*TRACED[:-1], public]]
+
+
+def test_a_scrub_numbers_the_stand_ins_so_two_sessions_stay_two(tmp_path: Path) -> None:
+  record = tmp_path / "record.jsonl"
+  ids = ["0c16d8e3-6726-4650-aac1-a3161707af0e", "9f00aa11-2222-4333-8444-555566667777"]
+  record.write_text(
+    "".join(json.dumps(["tell", "rung1", "chain1", [one, ids[0]]]) + "\n" for one in ids), encoding="utf-8"
+  )
+  assert run("--scrub", str(record)).returncode == 0
+  first, second = (json.loads(line)[3] for line in record.read_text(encoding="utf-8").splitlines())
+  assert first == ["00000000-0000-0000-0000-000000000001"] * 2
+  assert second == ["00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000001"]
