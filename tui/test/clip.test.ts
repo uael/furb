@@ -39,6 +39,7 @@ test("the renderer draws a clipped row in the cells of its width, none past them
   const lines = [
     "abcdefghijklmnop",
     "ab\tcdefghijkl",
+    "ab\x07cd\x1befghijkl",
     "日本語のテキストです",
     "a👍🏽b👨‍👩‍👧c日本語😀😀",
     "e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301",
