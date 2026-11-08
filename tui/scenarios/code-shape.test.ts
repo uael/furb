@@ -72,3 +72,18 @@ test("a long word and a long fence of the same code fold under one row at the co
     );
     for (const one of [9, 13]) await same(one);
   }));
+
+const TALL = Array.from({ length: 120 }, (_, i) => `row_${i} = ${i}`);
+const TALL_WORD = `close("Here:\\n\\n\`\`\`python\\n${TALL.join("\\n")}\\n\`\`\`")`;
+
+test("a fold inside a code block of a hundred lines or more stands at the column of the code that the fold shows", () =>
+  scenario([{ cue: "Shape: tall.", word: TALL_WORD }], async (window) => {
+    await window.type("Shape: tall.");
+    await window.shows((shown) => /more lines/.test(shown), "the fold of the fence");
+    const rows = (await window.frame()).split("\n");
+    // The last line of code that the fence shows stands right above its fold.
+    const at = rows.findIndex((row) => /more lines/.test(row));
+    const code = (rows[at - 1] ?? "").search(/row_\d+ = /);
+    expect(code).toBeGreaterThan(0);
+    expect((rows[at] ?? "").search(/▸/)).toBe(code);
+  }));

@@ -17,7 +17,7 @@ import {
 } from "@opentui/core";
 import { safeText } from "furb";
 import { busy, type Chip, failed, isDone, unfinished } from "furb/life";
-import type { Token, Tokens } from "marked";
+import { Lexer, type Token, type Tokens } from "marked";
 import { openFile } from "../editor.ts";
 import { shortenHomes } from "../files.ts";
 import { clip } from "../format.ts";
@@ -633,19 +633,17 @@ export const blocks = part({
     const [shown, rest] = this.session.folds[key] === false ? [text, 0] : this.firstRows(text, FOLD_ROWS);
     box.add(this.markdown(shown));
     if (!rest) return;
-    // A cut inside a code block folds under a row at the column of its code, as the fold of a word does.
-    const fences = shown.split("\n").filter((line) => /^\s*```/.test(line)).length;
-    const open = fences % 2 === 1;
+    // A cut inside a code block folds under a row at the column of its code, as the fold of a word does. The block is
+    // the one that the renderer draws from the shown text: the last token, when it is a fenced block that no closing
+    // fence ends, so its gutter has the digits of the lines that are shown.
+    const last = Lexer.lex(shown).at(-1);
+    const closed = last?.type === "code" && /\n\s*(`{3,}|~{3,})\s*$/.test(last.raw);
     const fold = this.foldLine(key, rest, "line");
-    if (!open) {
+    if (last?.type !== "code" || closed) {
       box.add(fold);
       return;
     }
-    const start = shown.lastIndexOf("```");
-    const body = text.slice(text.indexOf("\n", start) + 1);
-    const close = body.search(/^\s*```/m);
-    const count = (close < 0 ? body : body.slice(0, close)).replace(/\n$/, "").split("\n").length;
-    const row = this.box({ paddingLeft: STATE + gutterWidth(String(count).length) });
+    const row = this.box({ paddingLeft: STATE + gutterWidth(String(last.text.split("\n").length).length) });
     row.add(fold);
     box.add(row);
   },
