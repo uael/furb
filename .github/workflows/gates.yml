@@ -288,6 +288,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/measures"
           bun run bench 2>&1 | tee "$RUNNER_TEMP/measures/bench.log"
+      - uses: ./.github/actions/clear
       - if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/measures"

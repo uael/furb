@@ -66,7 +66,9 @@ const LARGE = Math.max(1, Math.round(FACTS / COPY));
 const SMALL = Math.max(1, Math.round(LARGE / 10));
 /** The budgets of the warm first frame and of the 95th percentile of the frames, in units of the pace of the
  * machine. On 120 runs of the bench on ubuntu-latest, the warm first frame took 17 to 26 paces, and the 95th
- * percentile 0.43 to 0.81 of a pace, against 0.89 to 1.38 before the cards of the feed were kept. */
+ * percentile 0.43 to 0.81 of a pace, against 0.89 to 1.38 before the cards of the feed were kept. Those runs measured a
+ * build of the crate in the dev profile; the bench measures a release build alone now, so they are a ceiling until the
+ * runs of the release build set them again. */
 const FIRST = 32;
 const SMOOTH = 1;
 /** How many times its cost in the short life a new fact may cost in the long life, and the least that it may cost
