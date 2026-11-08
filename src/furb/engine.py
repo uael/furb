@@ -343,7 +343,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
     blocked, running, waiting, last, heard = set(), {}, {}, standing(), []
-    step = news = ran = reply = note = to = hush = dull = stuck = ""
+    step = news = ran = reply = note = to = hush = dull = stuck = past = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(went):
@@ -463,6 +463,23 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           ran = yield "tell", get(r[2])[2], [headed(r[2], "asked no more until a fact comes")]
         dull = 1
       match a:
+        case ("carried", *_):
+          past = a
+        case ("rung", *_) if past and a[2] == OPERATOR:
+          top = ""
+          yield (
+            "prefix",
+            id,
+            [
+              *transcript(id, "module")[-1:],
+              past,
+              *past[3],
+              *transcript(id, "stand")[-1:],
+              *transcript(id, "pause"),
+              a,
+            ],
+          )
+          past = ""
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if prompted(path) and scope(path) == id:
@@ -576,13 +593,9 @@ def seeded(id, last, to):
       y[3] == k and y[2] and rung(y[2], to=to)
 
 
-HEARD = (
-  "say('prefix', scope(acting()), [*transcript(of='module')[-1:], *transcript(of='carried')[-1:], "
-  "*transcript(of='carried')[-1][3], *transcript(of='stand')[-1:], *transcript(of='pause'), "
-  "*[x for x in transcript() if acting() in x[1::3] and x[0] != 'tell']])"
-)
 KEPT = (
-  "say('prefix', scope(acting()), [x for x in transcript() if x[0] != 'tell' or x in transcript(of='carried')[-1][3]])"
+  "with site.set(scope(acting())): say('prefix', site.get(), "
+  "[x for x in transcript() if x[0] != 'tell' or x in transcript(of='carried')[-1][3]])"
 )
 
 
@@ -622,7 +635,6 @@ def seed(data):
     ]
     word = "\n".join(
       [
-        HEARD,
         c["definitions"],
         *(
           f"{named} = " + (f"eval(transcript(of='carried')[-1][4][{named!r}])" if text[LARGEST // 16 :] else text)

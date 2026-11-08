@@ -199,12 +199,7 @@ pub fn made(record: &[Object]) -> Option<String> {
 /// last fact made holds, or this build's own when it holds none. Texts that are not the engine that
 /// their fact names refuse the record.
 pub fn texts(record: &[Object]) -> Result<(String, String), Fault> {
-  let held = record.iter().rev().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
-    let word = |at| fact.word(at).and_then(|one| one.as_str().map(str::to_owned));
-    (fact.kind() == MADE).then(|| (word(0), word(4), word(5)))
-  });
-  let Some((Some(named), Some(source), Some(kernel))) = held else {
+  let Some((Some(named), Some(source), Some(kernel))) = held(record) else {
     return Ok((ENGINE.to_owned(), KERNEL.to_owned()));
   };
   if digest(&source, &kernel) != named {
@@ -213,6 +208,24 @@ pub fn texts(record: &[Object]) -> Result<(String, String), Fault> {
     )));
   }
   adapted(&named, source, &kernel)
+}
+
+/// The digest, the engine and the Kernel that the last fact made of a segment names and holds.
+fn held(record: &[Object]) -> Option<(Option<String>, Option<String>, Option<String>)> {
+  record.iter().rev().find_map(|entry| {
+    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    let word = |at| fact.word(at).and_then(|one| one.as_str().map(str::to_owned));
+    (fact.kind() == MADE).then(|| (word(0), word(4), word(5)))
+  })
+}
+
+/// The engine that the last fact made of a segment names when it holds no texts of it and it is not
+/// the engine of this build, which [`texts`] then gives in its place.
+pub fn unheld(record: &[Object]) -> Option<String> {
+  match held(record)? {
+    (_, Some(_), Some(_)) => None,
+    (named, ..) => named.filter(|one| !one.is_empty() && *one != digest(ENGINE, KERNEL)),
+  }
 }
 
 /// The adapters of the engines of this major, by the digest of an engine, as `src/furb/adapters.py`

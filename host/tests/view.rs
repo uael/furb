@@ -633,10 +633,23 @@ fn the_acts_as_they_stood_at_a_moment_hold_what_began_by_then_and_an_act_that_en
 #[test]
 fn the_spend_counts_the_answers_sums_their_dollars_and_names_the_actor_of_the_last() {
   let answers = [
-    Answer { actor: "claude-cli:sonnet/high".to_owned(), usage: [100.0, 10.0, 0.0, 0.0, 0.25] },
-    Answer { actor: "claude-cli:opus/high".to_owned(), usage: [200.0, 20.0, 0.0, 0.0, 0.5] },
+    Answer {
+      actor: "claude-cli:sonnet/high".to_owned(),
+      usage: [100.0, 10.0, 0.0, 0.0, 0.25],
+      account: None,
+    },
+    Answer {
+      actor: "claude-cli:opus/high".to_owned(),
+      usage: [200.0, 20.0, 0.0, 0.0, 0.5],
+      account: None,
+    },
   ];
-  let want = Spend { dollars: 0.75, answers: 2, actor: Some("claude-cli:opus/high".to_owned()) };
+  let want = Spend {
+    dollars: 0.75,
+    answers: 2,
+    actor: Some("claude-cli:opus/high".to_owned()),
+    account: None,
+  };
   assert_eq!(Spend::of(&answers), want);
 }
 

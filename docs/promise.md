@@ -25,7 +25,7 @@ engine holds the record, in the one home of adapters, `src/furb/adapters.py`, ke
 | The contract: the engine and the interface of each official kit | `src/furb/engine.pyi`, `.agents/skills/<name>/<name>.pyi` | frozen at 1.0.0, as now with the breaks that the last section lists |
 | The schema of the record | `RECORD_SCHEMA` in `src/world/store/schema.rs` | 1.1 |
 | The schema of a checkpoint: pure data, which `seed` of `src/furb/engine.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.0 |
-| The protocol of the daemon | `PROTOCOL` in `host/src/protocol.rs`, `host/protocol.schema.json` | 7 |
+| The protocol of the daemon | `PROTOCOL` in `host/src/protocol.rs`, `host/protocol.schema.json` | 9 |
 | The nodes of a view, a closed set that only grows (P5) | `host/protocol.schema.json` | with the protocol |
 
 A schema only adds within a major, and each reader skips each kind of fact and each field that it does not know. So a
