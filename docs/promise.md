@@ -104,6 +104,8 @@ What no machine proves yet, so the promise does not hold there until a proof lan
   folder of the corpus (P8).
 - A replay with random delays of the bus and of each ear, and with ears that raise (replay-chaos).
 - A replay across the builds of the major, with a count of the drifts of the corpus (drift-gate).
+- A life born from a checkpoint: its live transcript holds the facts of the word that seeds it otherwise than its open,
+  so the fork proof compares a fork with the open of its origin, not with the live origin.
 
 ## The breaks of the contract since v0.4.2
 

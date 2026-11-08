@@ -137,3 +137,22 @@ test("a word that ends with no close and tells something is asked again, and its
       expect(yard.turns().map((one) => one.cue)).toEqual(["Scenario: count.", "debugged"]);
     },
   ));
+
+test("a message of the model on a thread of the operator shows on that thread and asks the model nothing", () =>
+  scenario(
+    [
+      {
+        cue: "Scenario: progress.",
+        word: "prompt(None, 'Half done.', on=[x[1] for x in transcript(of='prompt') if x[5] == 'Scenario: progress.'][-1])\nclose('All done.')",
+      },
+    ],
+    async (window, yard) => {
+      await window.type("Scenario: progress.");
+      const frame = await window.shows((shown) => shown.includes("All done."), "the answer");
+      expect(frame).toContain("Half done.");
+      const [thread] = await asked(window);
+      const notes = await window.engine.transcript({ on: window.root, of: "prompt" });
+      expect(notes.find((fact) => fact[5] === "Half done.")?.[3]).toBe(thread?.id);
+      expect(yard.turns().map((one) => one.cue)).toEqual(["Scenario: progress."]);
+    },
+  ));

@@ -111,6 +111,11 @@ impl Store for Lines {
   fn room(&self) -> Option<(&Path, u64)> {
     super::room(&self.path)
   }
+
+  fn cut(&self) -> Option<u64> {
+    let whole = self.whole.filter(|_| self.torn)?;
+    Some(self.file.metadata().ok()?.len().saturating_sub(whole))
+  }
 }
 
 /// Each entry of the file of lines at a path, in order, read with no lease and changed in nothing, one line at a time.
