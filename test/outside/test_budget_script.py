@@ -9,7 +9,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "script" / "budget.py"
-# A command that uses about two seconds of CPU, and one that waits for two seconds with none.
+# A command that uses 1.2 s of CPU, and one that waits 1.2 s with none: each just over the limit of 1 s of the tests.
 BUSY = [sys.executable, "-c", "import time\nt = time.process_time()\nwhile time.process_time() - t < 1.2:\n  pass"]
 WAIT = [sys.executable, "-c", "import time; time.sleep(1.2)"]
 
@@ -22,6 +22,7 @@ def budget(
   (tmp / "budgets.toml").write_text(f"[local]\n{table}[ci]\n{table}", encoding="utf-8")
   env = {n: v for n, v in os.environ.items() if n != "CI"} | {"FURB_BUDGETS": str(tmp / "budgets.toml")}
   env["FURB_BUDGET_LOAD"] = load
+  env["FURB_WATCH_LOG"] = str(tmp / "watch.log")
   args = [sys.executable, str(SCRIPT), part, "--", *command]
   return subprocess.run(args, env=env, cwd=tmp, capture_output=True, text=True, timeout=120, check=False)
 
@@ -96,18 +97,33 @@ def test_the_hooks_and_the_gates_run_pytest_through_the_one_home_of_its_limit() 
   assert '"budget.py"' in (ROOT / "script" / "hooks" / "reach.py").read_text(encoding="utf-8")
 
 
-def test_a_run_that_lost_a_test_process_to_sigkill_names_the_guard_of_memory(tmp_path: Path) -> None:
-  for command in (
-    [sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGKILL)"],
-    [sys.executable, "-c", "print('(signal: 9, SIGKILL: kill)'); raise SystemExit(101)"],
-  ):
-    got = budget(tmp_path, "cargo", 100, *command)
-    assert got.returncode != 0
-    assert "lost a test process to SIGKILL, which the guard of memory" in got.stdout, command
+def killed_after(log: Path, when: str, program: str) -> list[str]:
+  """A command that writes a line of the log of the guard of memory, at a time given as an expression, then ends by SIGKILL,
+  as a test binary that the guard ended does."""
+  line = f"f'{{{when}}} 4242 {program} --test-threads 4\\n'"
+  body = f"import os, signal, time\nopen({str(log)!r}, 'a').write({line})\nos.kill(os.getpid(), signal.SIGKILL)"
+  return [sys.executable, "-c", body]
 
 
-def test_a_run_that_fails_with_no_kill_names_no_guard(tmp_path: Path) -> None:
-  got = budget(
-    tmp_path, "cargo", 100, sys.executable, "-c", "print('test a_sigkill_ends_it ... FAILED'); raise SystemExit(101)"
+def test_a_kill_that_the_log_of_the_guard_of_memory_holds_in_the_run_is_named_as_its(tmp_path: Path) -> None:
+  program = str(tmp_path / "target" / "debug" / "deps" / "furb-3bfcea354560c7bc")
+  got = budget(tmp_path, "cargo", 100, *killed_after(tmp_path / "watch.log", "int(time.time())", program))
+  assert got.returncode != 0
+  assert "the guard of memory, script/memwatch.sh, ended a test process of cargo" in got.stdout
+  assert f"pid 4242: {program} --test-threads 4" in got.stdout
+
+
+def test_a_kill_that_the_log_holds_not_in_the_run_or_of_its_folder_names_no_guard(tmp_path: Path) -> None:
+  ours, other = (
+    str(tmp_path / "target" / "debug" / "deps" / "furb-3bfcea354560c7bc"),
+    "/elsewhere/target/debug/deps/x-1a",
   )
-  assert got.returncode == 101 and "guard of memory" not in got.stdout
+  for when, program in (("int(time.time()) - 3600", ours), ("int(time.time())", other)):
+    got = budget(tmp_path, "cargo", 100, *killed_after(tmp_path / "watch.log", when, program))
+    assert got.returncode != 0 and "guard of memory" not in got.stdout, (when, program)
+
+
+def test_a_sigkill_with_no_line_of_the_guard_names_no_guard(tmp_path: Path) -> None:
+  command = "import os, signal; print('(signal: 9, SIGKILL: kill)', flush=True); os.kill(os.getpid(), signal.SIGKILL)"
+  got = budget(tmp_path, "cargo", 100, sys.executable, "-c", command)
+  assert got.returncode != 0 and "guard of memory" not in got.stdout
