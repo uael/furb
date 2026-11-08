@@ -125,6 +125,7 @@ export const palette = part({
       height: "100%",
       backgroundColor: at ? "transparent" : c.backdrop,
       zIndex: 19,
+      still: true,
       onMouseDown: (event) => {
         if (event.button === 2) this.closeOverlay();
       },
