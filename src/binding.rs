@@ -15,8 +15,6 @@
   clippy::too_many_arguments,
   reason = "a verb of the host API takes each argument that the host gives it"
 )]
-// This tree pays these lints already, so they hold here ahead of the workspace.
-#![deny(clippy::absolute_paths, clippy::use_self)]
 #![expect(
   clippy::needless_pass_by_value,
   reason = "a function of the API serves both doors, and N-API gives each argument owned"
@@ -45,9 +43,9 @@ use pyo3::pyfunction;
 
 use serde::Serialize;
 
-use crate::gate::checked;
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
+  gate::checked,
   life::Opening,
   skill::{self, Part, Skill},
   view::{
@@ -57,8 +55,7 @@ use crate::{
   wire,
   world::{self, images},
 };
-use std::env;
-use std::path;
+use std::{env, path};
 
 /// A value of the engine, as a host language holds it, both ways.
 pub struct Value(pub Object);

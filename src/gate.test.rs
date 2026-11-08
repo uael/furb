@@ -12,6 +12,7 @@ use crate::{
   sand::{Nobody, Sand},
   value::{Object, entry},
 };
+use std::time::{Duration, Instant};
 
 /// The sheet of one word after a program, and how many lines stand above the word, as `furb.sheet`
 /// writes it in the sandbox from the module of the engine, made as a life makes it.
@@ -459,12 +460,12 @@ const SLACK: u32 = 10;
 /// that one process measures. The gate keeps what it read of a text, so each run reads a text of
 /// its own, which `make` gives from the number of the run, and a run before them all, which is not
 /// timed, reads the typeshed and the engine.
-fn quickest<T>(make: impl Fn(usize) -> T, work: impl Fn(T)) -> std::time::Duration {
+fn quickest<T>(make: impl Fn(usize) -> T, work: impl Fn(T)) -> Duration {
   work(make(0));
   (1..=5)
     .map(|run| {
       let given = make(run);
-      let start = std::time::Instant::now();
+      let start = Instant::now();
       work(given);
       start.elapsed()
     })
@@ -614,11 +615,11 @@ fn a_gate_after_one_more_word_reads_the_words_after_the_last_module_alone() {
   let program: Vec<String> = (0..2000).map(looped).collect();
   let program: Vec<&str> = program.iter().map(String::as_str).collect();
   let (text, _) = sheet(&program[..1999], "close(one + label)");
-  let start = std::time::Instant::now();
+  let start = Instant::now();
   found(&text);
   let cold = start.elapsed();
   let (text, _) = sheet(&program, "close(one + label)");
-  let start = std::time::Instant::now();
+  let start = Instant::now();
   found(&text);
   let warm = start.elapsed();
   assert!(warm * 4 < cold, "cold {cold:?}, warm {warm:?}");

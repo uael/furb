@@ -5,7 +5,7 @@
 #![allow(dead_code, reason = "a suite takes the part of the yard that it needs")]
 
 use std::{
-  fs,
+  env, fs,
   ops::Deref,
   path::{Path, PathBuf},
 };
@@ -23,8 +23,8 @@ pub(crate) struct Yard {
 
 impl Yard {
   /// The folder of this name in the temporary directory, made empty.
-  pub(crate) fn new(name: impl AsRef<Path>) -> Yard {
-    let yard = Yard::unmade(name);
+  pub(crate) fn new(name: impl AsRef<Path>) -> Self {
+    let yard = Self::unmade(name);
     if let Err(no) = fs::create_dir_all(&yard.base) {
       panic!("the yard {} was not made: {no}", yard.base.display());
     }
@@ -33,14 +33,14 @@ impl Yard {
 
   /// The folder of this name in the temporary directory, which the test or the code that it tests
   /// makes.
-  pub(crate) fn unmade(name: impl AsRef<Path>) -> Yard {
-    let base = std::env::temp_dir().join(name);
+  pub(crate) fn unmade(name: impl AsRef<Path>) -> Self {
+    let base = env::temp_dir().join(name);
     drop(fs::remove_dir_all(&base));
-    Yard { at: base.clone(), base }
+    Self { at: base.clone(), base }
   }
 
   /// The same yard, read as this path beneath its folder.
-  pub(crate) fn within(mut self, path: impl AsRef<Path>) -> Yard {
+  pub(crate) fn within(mut self, path: impl AsRef<Path>) -> Self {
     self.at = self.at.join(path);
     self
   }
@@ -61,14 +61,14 @@ impl AsRef<Path> for Yard {
 }
 
 impl From<&Yard> for PathBuf {
-  fn from(yard: &Yard) -> PathBuf {
+  fn from(yard: &Yard) -> Self {
     yard.at.clone()
   }
 }
 
 impl Drop for Yard {
   fn drop(&mut self) {
-    if std::env::var_os(KEEP).is_some() {
+    if env::var_os(KEEP).is_some() {
       eprintln!("{KEEP} keeps {}", self.base.display());
     } else {
       drop(fs::remove_dir_all(&self.base));

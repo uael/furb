@@ -35,7 +35,24 @@ use crate::{
   verbs, world,
 };
 
-use crate::testing::{Yard, block_on, waker};
+use crate::{
+  checkpoint,
+  sand::BOUND,
+  testing,
+  testing::{Yard, block_on, waker},
+  value,
+  value::ObjectRef,
+  wire,
+};
+use std::{
+  cell::Cell,
+  collections::HashSet,
+  env, future,
+  path::Path,
+  process,
+  process::Command,
+  sync::atomic::{AtomicUsize, Ordering},
+};
 
 /// A fact of a done of an act with a value.
 fn done(about: &str, value: Object) -> Fact {
@@ -76,7 +93,7 @@ fn provider(
           say(&mut co, Fact::says("started", a.about(), []));
           let turns = co.call("turns", vec![], vec![("on", Object::string(a.on()))]).await?;
           read.borrow_mut().push(turns.py_repr());
-          crate::testing::answering(read.borrow().len());
+          testing::answering(read.borrow().len());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
           if word == "WAIT" {
             continue;
@@ -107,9 +124,9 @@ struct Lived {
 impl Lived {
   /// A life in a yard of its own, fresh, or opened on what the store kept there.
   fn new(yard: &str, words: &[&str], fresh: bool) -> Result<Self, Fault> {
-    let name = format!("furb-engine-{yard}-{}", std::process::id());
+    let name = format!("furb-engine-{yard}-{}", process::id());
     let yard = fresh.then(|| Yard::new(&name));
-    let at = std::env::temp_dir().join(name);
+    let at = env::temp_dir().join(name);
     fs::create_dir_all(&at).expect("a yard of the test");
     let (record, store) = world::store(at.join("record.jsonl"))?;
     let read = Rc::default();
@@ -123,7 +140,7 @@ impl Lived {
       ("store", store),
     ];
     let engine = Engine::boot(record, ears)?;
-    Ok(Lived { engine, at, read, yard })
+    Ok(Self { engine, at, read, yard })
   }
 
   /// The end of a fresh life, and its folder, for a later life on what the store kept there.
@@ -155,7 +172,7 @@ fn the_files_serve_a_read_and_a_write_of_the_real_engine() {
   assert_eq!(
     got,
     Text::new(
-      world::files::tilded(&lived.at.join("a.txt"), std::env::home_dir().as_deref()),
+      world::files::tilded(&lived.at.join("a.txt"), env::home_dir().as_deref()),
       "one\ntwo\n"
     )
   );
@@ -345,7 +362,7 @@ fn a_timeout_ends_the_command_though_a_process_of_it_left_its_group_holding_the_
   let exit: Exit = block_on(lived.engine.bash(&line, with).unwrap()).unwrap();
   let took = begun.elapsed();
   let pid = exit.stdout.content.lines().next().unwrap_or_default().to_owned();
-  std::process::Command::new("kill").arg(&pid).status().unwrap();
+  Command::new("kill").arg(&pid).status().unwrap();
   assert_eq!(exit.code, None);
   assert!(took < Duration::from_secs(LONG / 2), "the act outlived its timeout, for {took:?}");
 }
@@ -381,7 +398,7 @@ fn a_command_ends_once_its_shell_exited_and_a_drain_passed_though_a_process_of_i
   let exit: Exit = block_on(lived.engine.bash(&line, with).unwrap()).unwrap();
   let took = begun.elapsed();
   let pid = exit.stdout.content.lines().last().unwrap_or_default().to_owned();
-  std::process::Command::new("kill").arg(&pid).status().unwrap();
+  Command::new("kill").arg(&pid).status().unwrap();
   assert_eq!(exit.code, Some(0));
   assert!(
     exit.stdout.content.starts_with("before\n"),
@@ -407,7 +424,7 @@ fn a_command_ends_though_a_process_that_left_its_group_holds_its_streams() {
   let exit: Exit = block_on(lived.engine.bash(&line, with).unwrap()).unwrap();
   let took = begun.elapsed();
   let pid = exit.stdout.content.trim().to_owned();
-  std::process::Command::new("kill").arg(&pid).status().unwrap();
+  Command::new("kill").arg(&pid).status().unwrap();
   assert_eq!(exit.code, Some(0));
   assert!(pid.parse::<u32>().is_ok(), "the stdout says the child: {:?}", exit.stdout.content);
   assert!(
@@ -422,7 +439,7 @@ fn a_cd_comes_to_the_directory_that_stands_there_and_a_cd_where_none_stands_is_r
   let root = lived.root();
   let into = lived.at.join("into");
   fs::create_dir_all(&into).expect("a directory of the test");
-  let shown = world::files::tilded(&into, std::env::home_dir().as_deref());
+  let shown = world::files::tilded(&into, env::home_dir().as_deref());
   let into = into.display().to_string();
   assert_eq!(lived.engine.cd(&into, verbs::Cd { on: on(&root) }).unwrap(), shown);
   let no = lived.engine.cd("nowhere", verbs::Cd { on: on(&root) }).unwrap_err();
@@ -484,7 +501,7 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
 #[cfg(unix)]
 #[test]
 fn a_cancel_of_a_command_ends_the_process_that_it_started_and_not_only_its_shell() {
-  let pid = std::env::temp_dir().join(format!("furb-cancel-{}.pid", std::process::id()));
+  let pid = env::temp_dir().join(format!("furb-cancel-{}.pid", process::id()));
   drop(fs::remove_file(&pid));
   let word = format!("await bash('sleep 30 & echo $! > {}; wait')", pid.display());
   let mut lived = Lived::new("slay", &[word.as_str()], true).unwrap();
@@ -505,8 +522,7 @@ fn a_cancel_of_a_command_ends_the_process_that_it_started_and_not_only_its_shell
   let sleeper = fs::read_to_string(&pid).unwrap().trim().to_owned();
   lived.engine.cancel(&cancelled, verbs::Cancel::default()).unwrap();
   assert_eq!(lived.settled("bash1").unwrap_err().name, "CancelledError");
-  let alive =
-    || std::process::Command::new("kill").args(["-0", &sleeper]).output().unwrap().status.success();
+  let alive = || Command::new("kill").args(["-0", &sleeper]).output().unwrap().status.success();
   let waited = Instant::now();
   while alive() && waited.elapsed() < Duration::from_secs(10) {
     thread::sleep(Duration::from_millis(20));
@@ -593,7 +609,7 @@ fn a_wait_that_a_wake_starts_again_in_a_later_life_ends_when_it_was_due() {
 fn a_template_string_of_the_host_comes_in_whole_and_a_pair_comes_in_as_its_expression_with_an_equals_sign()
  {
   let mut lived = Lived::new("templates", &[], true).unwrap();
-  let whole = crate::value::templated([
+  let whole = value::templated([
     Object::string("n is "),
     Object::list([Object::int(5), Object::string("n"), Object::none(), Object::string("03")]),
   ]);
@@ -604,7 +620,7 @@ fn a_template_string_of_the_host_comes_in_whole_and_a_pair_comes_in_as_its_expre
     "each string and each interpolation came in as it was, its conversion and its format spec among it"
   );
   let pairs =
-    crate::value::paired([("n".to_owned(), Object::int(5)), ("s".to_owned(), Object::string("a"))]);
+    value::paired([("n".to_owned(), Object::int(5)), ("s".to_owned(), Object::string("a"))]);
   let got = lived.engine.word("repr(list(t))", vec![("t", pairs)]).unwrap();
   assert_eq!(
     got.as_ref().as_str(),
@@ -702,7 +718,7 @@ impl world::Store for Ledger {
     Ok(Vec::new())
   }
 
-  fn keep(&mut self, _: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+  fn keep(&mut self, _: ObjectRef<'_>) -> Result<(), Fault> {
     self.0.borrow_mut().push("keep");
     Ok(())
   }
@@ -717,7 +733,7 @@ impl world::Store for Ledger {
 fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
   let ledger = Rc::new(RefCell::new(Vec::new()));
   let (record, store) = world::keeping(Ledger(Rc::clone(&ledger))).unwrap();
-  let at = Yard::new(format!("furb-engine-ledger-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-ledger-{}", process::id()));
   let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned()])));
   let scratch = world::Scratch::own();
   let ears = [
@@ -742,7 +758,7 @@ fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
 /// A store whose disk can be full: while it is, it refuses each entry and each sync. It writes in a ledger each entry
 /// that it keeps and each entry that it refuses.
 struct Full {
-  refusing: Rc<std::cell::Cell<bool>>,
+  refusing: Rc<Cell<bool>>,
   kept: Rc<RefCell<Vec<String>>>,
   refused: Rc<RefCell<Vec<String>>>,
 }
@@ -752,8 +768,8 @@ impl world::Store for Full {
     Ok(Vec::new())
   }
 
-  fn keep(&mut self, entry: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
-    let line = crate::wire::record(entry).to_string();
+  fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
+    let line = wire::record(entry).to_string();
     if self.refusing.get() {
       self.refused.borrow_mut().push(line);
       return Err(Fault::refused("No space left on device (os error 28): the record"));
@@ -773,12 +789,12 @@ impl world::Store for Full {
 
 #[test]
 fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator() {
-  let full = Rc::new(std::cell::Cell::new(true));
+  let full = Rc::new(Cell::new(true));
   let (kept, refused) = (Rc::new(RefCell::new(Vec::new())), Rc::new(RefCell::new(Vec::new())));
   let store =
     Full { refusing: Rc::clone(&full), kept: Rc::clone(&kept), refused: Rc::clone(&refused) };
   let (record, store) = world::keeping(store).unwrap();
-  let at = Yard::new(format!("furb-engine-full-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-full-{}", process::id()));
   let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned(), "close(2)".to_owned()])));
   let scratch = world::Scratch::own();
   let ears = [
@@ -816,7 +832,7 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));
   settle(&mut engine);
   let kept = kept.borrow();
-  let once: std::collections::HashSet<_> = kept.iter().collect();
+  let once: HashSet<_> = kept.iter().collect();
   assert_eq!(once.len(), kept.len(), "an entry was kept twice: {kept:?}");
   let refused = refused.borrow();
   let mut waited: Vec<&String> = Vec::new();
@@ -1077,7 +1093,7 @@ fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
 
 /// A life on the provider of the test and on the ear that pauses, and the gate of the work of that ear.
 fn paused(yard: &str) -> (Engine, oneshot::Sender<()>) {
-  let at = std::env::temp_dir().join(format!("furb-engine-{yard}-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-engine-{yard}-{}", process::id()));
   let (gate, opens) = oneshot::channel();
   let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("pauser", pauser(opens))];
   (Engine::boot(Vec::<Object>::new(), ears).unwrap(), gate)
@@ -1131,7 +1147,7 @@ fn quick() -> Box<dyn Ear> {
         Next::Heard(a) | Next::Resumed(a) => {
           if a.kind() == "wait" && a.question() {
             say(&mut co, Fact::says("started", a.about(), []));
-            co.work(stream::once(std::future::ready(a.about().to_owned())));
+            co.work(stream::once(future::ready(a.about().to_owned())));
           }
         }
         Next::Worked(about) => {
@@ -1144,7 +1160,7 @@ fn quick() -> Box<dyn Ear> {
 
 #[test]
 fn what_the_work_of_an_ear_came_to_lands_after_the_run_that_began_it() {
-  let at = std::env::temp_dir().join(format!("furb-engine-landed-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-engine-landed-{}", process::id()));
   let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("quick", quick())];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   let root = engine.root().to_owned();
@@ -1166,8 +1182,8 @@ fn the_work_of_an_ear_speaks_when_the_life_drives_it_and_never_while_the_ear_hea
   // Two waits end in one drive. The first wakes a word that waits on a rung that waits on it, the second a word
   // that waits on it alone, and each word then makes a wait. What the second wait came to lands after all that the
   // first one caused, as a later life says it again, so the later life makes each act under the name it had.
-  let at = Yard::new(format!("furb-engine-alone-{}", std::process::id()));
-  let life = |at: &std::path::Path| {
+  let at = Yard::new(format!("furb-engine-alone-{}", process::id()));
+  let life = |at: &Path| {
     let (record, store) = world::store(at.join("record.jsonl")).unwrap();
     let ears = [
       ("provider", provider(at.to_path_buf(), Rc::default(), Rc::default())),
@@ -1216,7 +1232,7 @@ fn early() -> Box<dyn Ear> {
         Next::Heard(a) | Next::Resumed(a) => {
           if a.kind() == "wait" && a.question() && a.by() == "caller" {
             say(&mut co, Fact::says("started", a.about(), []));
-            co.work(stream::once(std::future::ready(a.about().to_owned())));
+            co.work(stream::once(future::ready(a.about().to_owned())));
           }
         }
         Next::Worked(about) => say(&mut co, done(&about, Object::none())),
@@ -1234,7 +1250,7 @@ fn caller() -> Box<dyn Ear> {
         Next::Heard(a) | Next::Resumed(a) => {
           if a.kind() == "wait" && a.question() && a.by() == "operator" {
             say(&mut co, Fact::says("started", a.about(), []));
-            co.work(stream::once(std::future::ready((a.about().to_owned(), a.on().to_owned()))));
+            co.work(stream::once(future::ready((a.about().to_owned(), a.on().to_owned()))));
           }
         }
         Next::Worked((about, on)) => {
@@ -1270,7 +1286,7 @@ fn the_work_of_an_ear_takes_what_its_verb_came_to_when_the_life_drives_it_and_ne
  {
   // The work of caller makes wait2, which early ends while the work of caller has not taken what its verb gave.
   // The work of caller goes on at the next drive, so the done of wait1 lands after all that the done of wait2 made.
-  let at = std::env::temp_dir().join(format!("furb-engine-answered-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-engine-answered-{}", process::id()));
   let ears = [
     ("provider", provider(at, Rc::default(), Rc::default())),
     ("early", early()),
@@ -1290,28 +1306,24 @@ fn the_work_of_an_ear_takes_what_its_verb_came_to_when_the_life_drives_it_and_ne
 }
 
 /// A waker that counts how often it is woken.
-struct Counted(std::sync::atomic::AtomicUsize);
+struct Counted(AtomicUsize);
 
 impl Wake for Counted {
   fn wake(self: Arc<Self>) {
-    self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    self.0.fetch_add(1, Ordering::SeqCst);
   }
 }
 
 #[test]
 fn a_drive_that_finds_nothing_to_do_wakes_nobody() {
   let mut lived = Lived::new("idle", &[], true).unwrap();
-  let counted = Arc::new(Counted(std::sync::atomic::AtomicUsize::new(0)));
+  let counted = Arc::new(Counted(AtomicUsize::new(0)));
   let waker = Waker::from(Arc::clone(&counted));
   lived.engine.pump(&waker).unwrap();
-  let woken = counted.0.load(std::sync::atomic::Ordering::SeqCst);
+  let woken = counted.0.load(Ordering::SeqCst);
   lived.engine.pump(&waker).unwrap();
   lived.engine.pump(&waker).unwrap();
-  assert_eq!(
-    counted.0.load(std::sync::atomic::Ordering::SeqCst),
-    woken,
-    "a drive with nothing to do wakes nobody"
-  );
+  assert_eq!(counted.0.load(Ordering::SeqCst), woken, "a drive with nothing to do wakes nobody");
 }
 
 /// An ear that keeps the kind and the subject of every fact it hears.
@@ -1387,7 +1399,7 @@ fn said(fact: &Fact) -> Option<String> {
 /// [`crate::testing::LOADED`],
 /// since the test proves what the first word did, not how fast the machine runs the others.
 fn bounded() {
-  crate::testing::cut_first(Duration::from_millis(500));
+  testing::cut_first(Duration::from_millis(500));
 }
 
 #[test]
@@ -1483,7 +1495,7 @@ fn prober(count: Rc<RefCell<i64>>, raises: &'static [i64]) -> Box<dyn Ear> {
 
 /// A life on the provider of the test and on these ears, and its root.
 fn probed(yard: &str, ears: Vec<(&str, Box<dyn Ear>)>) -> (Yard, Engine, String) {
-  let at = Yard::new(format!("furb-engine-{yard}-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-{yard}-{}", process::id()));
   let mut all = vec![("provider", provider(at.to_path_buf(), Rc::default(), Rc::default()))];
   all.extend(ears);
   let engine = Engine::boot(Vec::new(), all).unwrap();
@@ -1664,7 +1676,7 @@ fn taken_replies(engine: &mut Engine, root: &str) -> (usize, Vec<(String, String
 #[test]
 fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply_taken_by_the_same_provider()
  {
-  let at = Yard::new(format!("furb-engine-streamed-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-streamed-{}", process::id()));
   let turn = |text: &str| {
     [
       MockStreamEvent::text(text),
@@ -1760,7 +1772,7 @@ fn noter() -> Box<dyn Ear> {
 fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes_each_act_that_it_makes()
  {
   // The note lands before teller calls the verb of its second thing, so teller takes the wait that the note makes.
-  let at = std::env::temp_dir().join(format!("furb-engine-yield-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-engine-yield-{}", process::id()));
   let ears = [
     ("provider", provider(at, Rc::default(), Rc::default())),
     ("teller", teller()),
@@ -1794,7 +1806,7 @@ fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes
 fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry() {
   // A bound of 100 ms may pass before the loop enters its `try` on a loaded machine, as in
   // life.test.rs.
-  crate::sand::BOUND.set(Duration::from_secs(1));
+  BOUND.set(Duration::from_secs(1));
   let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
   let mut lived = Lived::new("stopped", &[cutter, "close(8)"], true).unwrap();
   let root = lived.root();
@@ -1831,7 +1843,7 @@ fn briefly() -> Box<dyn Ear> {
 
 #[test]
 fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
-  let at = std::env::temp_dir().join(format!("furb-engine-briefly-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-engine-briefly-{}", process::id()));
   let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("briefly", briefly())];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   let root = engine.root().to_owned();
@@ -1846,7 +1858,7 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
 /// Each sandbox that this thread makes from now on, and each that holds the bound again after
 /// the work of the engine, with this bound of the turn.
 fn bounded_at(bound: Duration) {
-  crate::testing::bound_all(bound);
+  testing::bound_all(bound);
 }
 
 /// The bound of the replay and the bound of the checkpoint that the test proves, from `gather`,
@@ -1877,8 +1889,7 @@ fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint
     let gather = (0..3)
       .map(|_| {
         let began = Instant::now();
-        crate::checkpoint::written(&mut first.engine)
-          .expect("the checkpoint of the life is gathered");
+        checkpoint::written(&mut first.engine).expect("the checkpoint of the life is gathered");
         began.elapsed()
       })
       .min()
@@ -1930,10 +1941,10 @@ fn a_kernel_of_the_major_from_before_it_ended_its_lost_runs_ends_them_through_it
     head[1].contains("\"made\"") && !head[1].contains("def lost("),
     "the record holds an older Kernel"
   );
-  let name = format!("furb-engine-lost-old-{}", std::process::id());
+  let name = format!("furb-engine-lost-old-{}", process::id());
   let yard = Yard::new(&name);
-  fs::create_dir_all(std::env::temp_dir().join(&name)).unwrap();
-  fs::write(std::env::temp_dir().join(&name).join("record.jsonl"), head.join("\n") + "\n").unwrap();
+  fs::create_dir_all(env::temp_dir().join(&name)).unwrap();
+  fs::write(env::temp_dir().join(&name).join("record.jsonl"), head.join("\n") + "\n").unwrap();
   let mut lived = Lived::new("lost-old", &LOST, false).unwrap();
   lived.yard = Some(yard);
   lost_runs_end(lived);
@@ -2037,7 +2048,7 @@ fn a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_
   let at =
     record.find("A object at 0x").expect("the record holds the address") + "A object at 0x".len();
   let end = at + record[at..].find(|one: char| !one.is_ascii_hexdigit()).unwrap_or(0);
-  let path = std::env::temp_dir().join(format!("furb-engine-address-{}", std::process::id()));
+  let path = env::temp_dir().join(format!("furb-engine-address-{}", process::id()));
   fs::write(path.join("record.jsonl"), format!("{}1{}", &record[..at], &record[end..])).unwrap();
   let second = Lived::new("address", &[], false).expect("the replay opens the life");
   assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
@@ -2046,22 +2057,22 @@ fn a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_
 }
 
 /// A work that gives nothing, and counts its end in `ends` as it drops.
-fn counted(ends: &Rc<std::cell::Cell<u8>>) -> impl futures::Stream<Item = ()> + 'static {
+fn counted(ends: &Rc<Cell<u8>>) -> impl futures::Stream<Item = ()> + 'static {
   /// What ends with the work.
-  struct Ends(Rc<std::cell::Cell<u8>>);
+  struct Ends(Rc<Cell<u8>>);
   impl Drop for Ends {
     fn drop(&mut self) {
       self.0.set(self.0.get() + 1);
     }
   }
   stream::unfold(Ends(Rc::clone(ends)), |held| async move {
-    std::future::pending::<()>().await;
+    future::pending::<()>().await;
     Some(((), held))
   })
 }
 
 /// An ear that takes each wait twice, each time with a work that gives nothing.
-fn twice(ends: Rc<std::cell::Cell<u8>>) -> Box<dyn Ear> {
+fn twice(ends: Rc<Cell<u8>>) -> Box<dyn Ear> {
   ear(move |mut co: Co<()>| async move {
     loop {
       if let Next::Heard(a) = co.next().await
@@ -2078,8 +2089,8 @@ fn twice(ends: Rc<std::cell::Cell<u8>>) -> Box<dyn Ear> {
 
 #[test]
 fn the_work_of_an_act_ends_at_a_later_take_of_it_and_at_its_first_done_whoever_says_it() {
-  let at = std::env::temp_dir().join(format!("furb-engine-taken-{}", std::process::id()));
-  let ends = Rc::new(std::cell::Cell::new(0));
+  let at = env::temp_dir().join(format!("furb-engine-taken-{}", process::id()));
+  let ends = Rc::new(Cell::new(0));
   let ears =
     [("provider", provider(at, Rc::default(), Rc::default())), ("twice", twice(Rc::clone(&ends)))];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
@@ -2113,7 +2124,7 @@ fn holder(ends: bool) -> Box<dyn Ear> {
 
 #[test]
 fn an_ear_that_hears_with_no_work_takes_again_an_act_that_an_earlier_life_took() {
-  let at = Yard::new(format!("furb-engine-held-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-held-{}", process::id()));
   let life = |ends: bool| {
     let (record, store) = world::store(at.join("record.jsonl")).unwrap();
     let ears = [
@@ -2219,7 +2230,7 @@ fn a_run_of_the_record_that_goes_on_live_after_the_replay_is_bounded() {
 fn a_record_of_an_older_engine_opens_through_its_adapter_and_keeps_no_fact_of_its_record_again() {
   // The adapter of c63db8af says each fact of the outside again under its speaker, which the
   // journal of that engine hears as a new fact unless it knows that it said it.
-  let at = Yard::new(format!("furb-engine-c63db8af-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-c63db8af-{}", process::id()));
   let path = at.join("record.jsonl");
   fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/replay/speaker.jsonl"), &path).unwrap();
   let before = fs::read_to_string(&path).unwrap().lines().count();

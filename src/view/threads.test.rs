@@ -10,13 +10,14 @@ use super::{
   chain_tree, open,
 };
 use crate::view::{Act, Fold, Held, State};
+use std::{fs, iter, slice};
 
 /// The acts of the record of a conductor that the tests of the TUI read, with after it what a
 /// record of the owner holds and it lacks, scrubbed: a wake of the round, and a word of the
 /// operator that tells the chain, with the acknowledgment of his rung.
 fn conductor() -> Vec<Act> {
   let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tui/fixtures/conductor.jsonl");
-  let Ok(record) = std::fs::read_to_string(path) else { panic!("no record at {path}") };
+  let Ok(record) = fs::read_to_string(path) else { panic!("no record at {path}") };
   let wake = "An ask of the ledger is missing, and no item carries it now.";
   let more = [
     json!(["prompt", "prompt9001", "quiet2602", "chain1", "None", wake, ""]),
@@ -315,7 +316,7 @@ fn an_acknowledgment_that_a_chain_makes_is_a_message_of_the_thread_of_the_act_th
     json!(["prompt", "prompt3", "chain1", "chain1", "None", "prompt2 done", ""]),
   ])
   .threads("chain1", None, 0);
-  let messages: Vec<(String, Vec<String>)> = std::iter::once(&got.threads[0])
+  let messages: Vec<(String, Vec<String>)> = iter::once(&got.threads[0])
     .chain(&got.threads[0].agents)
     .map(|node| (node.thread.prompt.clone(), node.thread.messages.clone()))
     .collect();
@@ -351,7 +352,7 @@ fn the_agents_of_a_thread_nest_under_it_and_a_question_in_an_agent_makes_each_th
     vec![("prompt1".to_owned(), agents), ("prompt30".to_owned(), Vec::new())]
   );
   let last = &tops[0].agents[7];
-  assert_eq!(shape(std::slice::from_ref(last)), vec![("prompt9".to_owned(), names(&["prompt20"]))]);
+  assert_eq!(shape(slice::from_ref(last)), vec![("prompt9".to_owned(), names(&["prompt20"]))]);
   assert_eq!([tops[0].state, last.state, tops[1].state], [State::Asks, State::Asks, State::Runs]);
   // The question rolls into the node over it, and the thread over it keeps its own state and asks.
   assert_eq!((tops[0].thread.asks.len(), tops[0].thread.state), (0, State::Runs));

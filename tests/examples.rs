@@ -10,10 +10,11 @@ mod pipes;
 mod yard;
 
 use std::{
-  fs,
+  env, fs,
   io::Write,
   os::unix::fs::PermissionsExt,
   path::PathBuf,
+  process,
   process::{Command, Stdio},
   thread,
   time::{Duration, Instant},
@@ -34,8 +35,8 @@ struct Yard {
 }
 
 impl Yard {
-  fn new(name: &str, words: &[&str]) -> Yard {
-    let base = yard::Yard::new(format!("furb-example-{name}-{}", std::process::id()));
+  fn new(name: &str, words: &[&str]) -> Self {
+    let base = yard::Yard::new(format!("furb-example-{name}-{}", process::id()));
     let root = fs::canonicalize(&base).expect("the root of the yard, with no link");
     let (at, fake) = (root.join("work"), root.join("fake"));
     fs::create_dir_all(&at).expect("the yard");
@@ -48,7 +49,7 @@ impl Yard {
     fs::write(fake.join("claude"), FAKE).expect("the fake");
     fs::set_permissions(fake.join("claude"), fs::Permissions::from_mode(0o755))
       .expect("the fake runs");
-    let yard = Yard { at, fake, _base: base };
+    let yard = Self { at, fake, _base: base };
     yard.words(words);
     yard
   }
@@ -62,7 +63,7 @@ impl Yard {
 
   /// The example, as a process in the yard, on the fake claude and on the config and the cache of the yard.
   fn command(&self, name: &str) -> Command {
-    let here = std::env::current_exe().expect("this test");
+    let here = env::current_exe().expect("this test");
     let example =
       here.parent().and_then(|deps| deps.parent()).expect("the target").join("examples").join(name);
     let mut command = Command::new(example);

@@ -17,9 +17,6 @@
 //! Each is an ear like any other, so an ear that comes before one of them in the order of boot takes a question in
 //! its place, and an ear that takes a question and asks it again wraps it.
 
-// This tree pays these lints already, so they hold here ahead of the workspace.
-#![deny(clippy::absolute_paths, clippy::use_self)]
-
 mod bash;
 mod child;
 pub mod config;

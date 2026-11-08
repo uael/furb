@@ -28,6 +28,15 @@ use furb::{
   life::{Answer, Opening},
   verbs, world,
 };
+use futures::executor;
+use std::{
+  env,
+  os::unix::process::ExitStatusExt,
+  process,
+  process::{Child, Command, Stdio},
+  thread,
+  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
 
 /// The folder of the corpus, with a folder for each release and `next` for the coming one.
 fn corpus() -> PathBuf {
@@ -36,7 +45,7 @@ fn corpus() -> PathBuf {
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> yard::Yard {
-  yard::Yard::new(format!("furb-promise-{name}-{}", std::process::id()))
+  yard::Yard::new(format!("furb-promise-{name}-{}", process::id()))
 }
 
 /// A life on the record of a directory, with each default kit unless `kits` is false, whose one
@@ -76,7 +85,7 @@ fn closed(engine: &mut Engine, word: &str) -> Object {
   let word = Some(word.to_owned());
   let rung =
     engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() }).unwrap();
-  futures::executor::block_on(rung).unwrap()
+  executor::block_on(rung).unwrap()
 }
 
 /// Each chain of a life, and for each its values and what each of its definitions gives, as python
@@ -323,8 +332,7 @@ fn scrubbed(record: &Path, at: &Path) {
 /// account, to the stand-ins of `script/private.py`, which holds the rule of each record.
 fn private(record: &Path) {
   let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("script").join("private.py");
-  let status =
-    std::process::Command::new("python3").arg(script).arg("--scrub").arg(record).status().unwrap();
+  let status = Command::new("python3").arg(script).arg("--scrub").arg(record).status().unwrap();
   assert!(status.success(), "script/private.py scrubs {}", record.display());
 }
 
@@ -529,10 +537,10 @@ fn each_proof_that_the_page_of_the_promise_names_stands_in_its_file() {
 /// draws one, which the test prints, so a failure says the seed that plays it again.
 fn seeded(name: &str) -> u64 {
   let drawn = || {
-    let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+    let since = SystemTime::now().duration_since(UNIX_EPOCH);
     since.map_or(1, |one| u64::try_from(one.as_micros() % 1_000_000).unwrap_or(0) + 1)
   };
-  let seed = std::env::var("FURB_PROMISE_SEED").ok().and_then(|one| one.parse().ok());
+  let seed = env::var("FURB_PROMISE_SEED").ok().and_then(|one| one.parse().ok());
   let seed = seed.unwrap_or_else(drawn);
   eprintln!("{name} plays the seed {seed}: FURB_PROMISE_SEED={seed} plays it again");
   seed
@@ -564,7 +572,7 @@ fn holds_kept(engine: &mut Engine) -> i64 {
 #[test]
 #[ignore = "the test of a kill runs it in a process of its own"]
 fn a_life_that_a_test_kills() {
-  let Ok(at) = std::env::var("FURB_PROMISE_KILLED") else { return };
+  let Ok(at) = env::var("FURB_PROMISE_KILLED") else { return };
   let at = Path::new(&at);
   // More lives than the few seconds before the kill can hold.
   for n in 0..10_000 {
@@ -579,7 +587,7 @@ fn a_life_that_a_test_kills() {
 
 /// The process of a life that a test kills, which ends with its guard, so a test that fails before
 /// its kill leaves no process.
-struct Reaped(std::process::Child);
+struct Reaped(Child);
 
 impl Drop for Reaped {
   fn drop(&mut self) {
@@ -593,24 +601,17 @@ impl Drop for Reaped {
 /// kill: the seed fixes only the fact that the kill comes at or after, and that length plays the
 /// kill again as a cut of the record.
 fn killed(Reaped(child): &mut Reaped, record: &Path, fact: usize) {
-  let begun = std::time::Instant::now();
+  let begun = Instant::now();
   while !fs::read_to_string(record).is_ok_and(|text| text.matches('\n').count() >= fact) {
     assert!(child.try_wait().unwrap().is_none(), "the life ended before its kill");
-    assert!(
-      begun.elapsed() < std::time::Duration::from_secs(120),
-      "the life never reached fact {fact}"
-    );
-    std::thread::sleep(std::time::Duration::from_millis(2));
+    assert!(begun.elapsed() < Duration::from_secs(120), "the life never reached fact {fact}");
+    thread::sleep(Duration::from_millis(2));
   }
   assert!(child.try_wait().unwrap().is_none(), "the life still runs at its kill");
   child.kill().unwrap();
   let ended = child.wait().unwrap();
   #[cfg(unix)]
-  assert_eq!(
-    std::os::unix::process::ExitStatusExt::signal(&ended),
-    Some(9),
-    "the kill ended the life"
-  );
+  assert_eq!(ExitStatusExt::signal(&ended), Some(9), "the kill ended the life");
   #[cfg(not(unix))]
   assert!(!ended.success(), "the kill ended the life");
   let text = fs::read_to_string(record).unwrap();
@@ -627,10 +628,10 @@ fn a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without
   let at = place("killed");
   let record = at.join("record.jsonl");
   let mut child = Reaped(
-    std::process::Command::new(std::env::current_exe().unwrap())
+    Command::new(env::current_exe().unwrap())
       .args(["a_life_that_a_test_kills", "--exact", "--ignored", "--nocapture"])
       .env("FURB_PROMISE_KILLED", &*at)
-      .stdout(std::process::Stdio::null())
+      .stdout(Stdio::null())
       .spawn()
       .unwrap(),
   );
@@ -708,7 +709,7 @@ fn a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_he
 /// path of Windows has its backslashes doubled by the repr of a text, and again by the repr of that
 /// repr, as a module value that holds a path is shown.
 fn placing(shown: String, at: &[&Path]) -> String {
-  let home = std::env::var("HOME").unwrap_or_default();
+  let home = env::var("HOME").unwrap_or_default();
   at.iter().fold(shown, |shown, one| {
     let path = one.display().to_string();
     let tilded = path.strip_prefix(&home).map_or_else(|| path.clone(), |rest| format!("~{rest}"));
@@ -824,7 +825,7 @@ fn a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entrie
 fn stands_in(at: &Path) {
   let mut life = inspected(at).unwrap();
   let cwd = life.word("cwd('chain1')", vec![]).unwrap().as_ref().as_str().map(str::to_owned);
-  let (home, ours) = (std::env::var("HOME").unwrap_or_default(), at.display().to_string());
+  let (home, ours) = (env::var("HOME").unwrap_or_default(), at.display().to_string());
   let tilded = ours.strip_prefix(&home).map(|rest| format!("~{rest}"));
   assert!(cwd == Some(ours) || cwd == tilded, "the life goes on in its own directory: {cwd:?}");
 }

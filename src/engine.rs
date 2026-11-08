@@ -60,13 +60,20 @@ pub(crate) use self::{
   record::{left, looping, settled},
 };
 use crate::{
-  SHEET,
-  ear::{Call, Ear},
+  SHEET, checkpoint,
+  checkpoint::CHECKPOINT,
+  ear::{Call, Ear, Heard},
+  fact,
   fact::Fact,
   gate::checked_on,
+  sand,
   sand::{Answer, Host, Nobody, Sand, id, object},
+  value,
   value::{Exit, Fault, Given, Object, Text, entry},
+  world,
+  world::Schema,
 };
+use std::{fmt, mem};
 
 /// The name of the function of the host that the gate calls with a sheet, which answers each finding by its line.
 const GATE: &str = "gate";
@@ -114,15 +121,14 @@ fn seeded(
   record: Vec<Object>,
 ) -> Result<Vec<Object>, Fault> {
   let first = record.first().and_then(|one| entry(&one.as_ref(), 0)).and_then(Fact::of);
-  let Some(data) = first
-    .filter(|a| a.kind() == crate::checkpoint::CHECKPOINT)
-    .and_then(|a| a.word(0).map(|one| one.to_owned()))
+  let Some(data) =
+    first.filter(|a| a.kind() == CHECKPOINT).and_then(|a| a.word(0).map(|one| one.to_owned()))
   else {
     return Ok(record);
   };
   let pairs = data.as_ref().pairs().unwrap_or_default();
   let schema = pairs.iter().find(|(key, _)| key.as_str() == Some("schema")).map(|one| one.1);
-  crate::world::Schema::opens_checkpoint(schema)?;
+  Schema::opens_checkpoint(schema)?;
   let made = sand.enter(outside, |sand, outside| {
     outside.bound(sand)?;
     let data = outside.inward(sand, &data)?;
@@ -137,9 +143,7 @@ fn seeded(
 
 /// A template string, as a host says one: each expression beside its value.
 fn templated(pairs: &[(&str, Object)]) -> Object {
-  crate::value::paired(
-    pairs.iter().map(|(expression, one)| ((*expression).to_owned(), one.clone())),
-  )
+  value::paired(pairs.iter().map(|(expression, one)| ((*expression).to_owned(), one.clone())))
 }
 
 /// The entries of a record as boot is given them, each fact alone in an entry, made in the sandbox
@@ -206,7 +210,7 @@ impl Host for Outside {
           bounded && !self.stepping.last().is_some_and(|job| self.settled.contains(job));
         // Each step of a word starts a stretch of the bound, and a round trip to the host
         // starts none.
-        crate::sand::step(bounded && !self.stepping.is_empty());
+        sand::step(bounded && !self.stepping.is_empty());
         self.past = None;
         Ok(Object::bool(sand.bound(bounded)))
       }
@@ -245,7 +249,7 @@ fn found(engine: &str, sheet: Option<&Object>) -> Result<Object, Fault> {
 impl Outside {
   /// The side of the host, on what the opening gave: a dict of its callables by name, each of which
   /// the engine keeps.
-  fn new(handed: Handed, opened: &Object) -> Result<Outside, Fault> {
+  fn new(handed: Handed, opened: &Object) -> Result<Self, Fault> {
     let mut held: HashMap<String, Object> = (opened.as_ref().pairs().unwrap_or_default())
       .into_iter()
       .filter_map(|(name, one)| Some((name.as_str()?.to_owned(), one.to_owned())))
@@ -254,7 +258,7 @@ impl Outside {
     let opened = Opened::of(|name| {
       held.remove(name).ok_or_else(|| Fault::refused(format!("the opening gives no {name}")))
     })?;
-    Ok(Outside {
+    Ok(Self {
       hosted: Hosted { handed, ..Hosted::default() },
       crossing: Crossing { kept, ..Crossing::default() },
       opened,
@@ -273,10 +277,10 @@ impl Outside {
   /// its model again. The sandbox hears nothing after the stop, so each ear of the host hears the
   /// keep from here.
   fn cut(&mut self) {
-    let Some(run) = self.stepping.pop().filter(|job| crate::fact::named(job, "run")) else {
+    let Some(run) = self.stepping.pop().filter(|job| fact::named(job, "run")) else {
       return;
     };
-    let why = crate::world::interruption(&run);
+    let why = world::interruption(&run);
     let done = [
       Object::string("done"),
       Object::string(&run),
@@ -292,7 +296,7 @@ impl Outside {
     let Some(fact) = Fact::of(keep.as_ref()) else { return };
     let mut cx = std::task::Context::from_waker(&self.hosted.waker);
     for ear in self.hosted.handed.ears.values_mut() {
-      drop(ear.resume(crate::ear::Heard::Fact(fact.clone()), &mut cx));
+      drop(ear.resume(Heard::Fact(fact.clone()), &mut cx));
       // A store that refuses the entry holds it, and Engine::unkept counts it for the host.
       drop(ear.ran());
     }
@@ -467,8 +471,8 @@ impl Kept {
   /// The name of the state, as a list of records shows it.
   pub fn name(self) -> &'static str {
     match self {
-      Kept::Runs => "runs",
-      Kept::Saved => "saved",
+      Self::Runs => "runs",
+      Self::Saved => "saved",
     }
   }
 }
@@ -545,7 +549,7 @@ impl Engine {
       Err(cut) => {
         // No act that a watcher waits on comes to anything after the cut, so each watcher goes, unanswered.
         self.watchers.clear();
-        crate::sand::step(false);
+        sand::step(false);
         self.outside.cut();
         self.stopped = Some(cut.clone());
         return Err(cut);
@@ -573,8 +577,8 @@ impl Engine {
 
   /// An engine on a sandbox and the side of its host, before any run: the record says what work it
   /// left and what loops.
-  fn new(sand: Sand, outside: Outside, record: &[Object], root: String) -> Engine {
-    Engine {
+  fn new(sand: Sand, outside: Outside, record: &[Object], root: String) -> Self {
+    Self {
       sand,
       outside,
       watchers: HashMap::new(),
@@ -583,7 +587,7 @@ impl Engine {
       stopped: None,
       holding: left(record),
       parked: looping(record),
-      taken: crate::checkpoint::taken(record),
+      taken: checkpoint::taken(record),
     }
   }
 
@@ -595,8 +599,8 @@ impl Engine {
   pub fn boot<N: Into<String>>(
     record: impl IntoIterator<Item = Object>,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
-  ) -> Result<Engine, Fault> {
-    Engine::gated(record, ears, true)
+  ) -> Result<Self, Fault> {
+    Self::gated(record, ears, true)
   }
 
   /// An engine, opened as [`Engine::boot`] opens it, whose gate reads each word when gated says
@@ -607,12 +611,12 @@ impl Engine {
     record: impl IntoIterator<Item = Object>,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
     gated: bool,
-  ) -> Result<Engine, Fault> {
+  ) -> Result<Self, Fault> {
     let (given, names) = Handed::of(ears)?;
     let record: Vec<Object> = record.into_iter().collect();
     // A record replays on the engine that the fact made of its last segment holds.
-    let (source, kernel) = crate::world::texts(crate::checkpoint::segment(&record))?;
-    let unheld = crate::world::unheld(crate::checkpoint::segment(&record));
+    let (source, kernel) = world::texts(checkpoint::segment(&record))?;
+    let unheld = world::unheld(checkpoint::segment(&record));
     let mut sand = Sand::new();
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
     // they run again.
@@ -624,7 +628,7 @@ impl Engine {
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
     let record = seeded(&mut sand, &mut outside, record)?;
     outside.settled = settled(&record);
-    let mut engine = Engine::new(sand, outside, &record, String::new());
+    let mut engine = Self::new(sand, outside, &record, String::new());
     let names_parked = Object::list(engine.parked.iter().map(|(id, _)| Object::string(id)));
     let parks = !engine.parked.is_empty();
     let (root, raised) = engine.run(|sand, outside| {
@@ -677,7 +681,7 @@ impl Engine {
 
   /// What `body` gives, run as the engine's own work, with no bound of the turn but for each word
   /// that it steps.
-  pub(crate) fn unbounded<T>(&mut self, body: impl FnOnce(&mut Engine) -> T) -> T {
+  pub(crate) fn unbounded<T>(&mut self, body: impl FnOnce(&mut Self) -> T) -> T {
     let was = self.sand.bound(false);
     let got = body(self);
     self.sand.bound(was);
@@ -769,7 +773,7 @@ impl Engine {
   /// when that act is a prompt, a rung, a command or a wait that is not done and that no pause holds.
   pub fn pending(&mut self) -> Result<Vec<(String, String)>, Fault> {
     let mut holding = Vec::new();
-    for id in std::mem::take(&mut self.holding) {
+    for id in mem::take(&mut self.holding) {
       if !self.whether(TOOK, &id)? {
         holding.push(id);
       }
@@ -784,7 +788,7 @@ impl Engine {
       while let Some(act) = self.get(&at)? {
         let by = act.by().to_owned();
         if WORK.contains(&act.kind()) && self.whether(WAITS, &at)? {
-          made.push((std::mem::replace(&mut at, by), act.kind().to_owned()));
+          made.push((mem::replace(&mut at, by), act.kind().to_owned()));
         } else {
           at = by;
         }
@@ -958,8 +962,8 @@ impl Engine {
 include!(concat!(env!("OUT_DIR"), "/methods.rs"));
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
-impl std::fmt::Debug for Engine {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Engine {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("Engine").field("root", &self.root).finish_non_exhaustive()
   }
 }

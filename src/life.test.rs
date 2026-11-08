@@ -2,33 +2,32 @@
 
 #![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 
-use std::io::Write;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering::Relaxed;
-use std::time::Instant;
 use std::{
   collections::VecDeque,
   env, fs, future, io,
+  io::Write,
   path::{Path, PathBuf},
   process,
-  sync::{Arc, Mutex},
-  time::Duration,
+  sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering::Relaxed},
+  },
+  time::{Duration, Instant},
 };
 
-use futures::channel::mpsc::unbounded;
-use futures::executor;
-use futures::future::select;
+use futures::{channel::mpsc::unbounded, executor, future::select};
 
 use super::{Answer, Opening};
-use crate::checkpoint::CHECKPOINT;
-use crate::testing::{LOADED, Yard, cut_first};
 use crate::{
   Act, Ear, Engine, Fact, Object, Text, checkpoint,
+  checkpoint::CHECKPOINT,
   ear::{ear, hear, say},
-  gate,
+  gate, sand,
   sand::BOUND,
   skill::enabled,
-  value::entry,
+  testing,
+  testing::{LOADED, Yard, cut_first},
+  value::{Fault, entry},
   verbs, wire, world,
 };
 
@@ -262,7 +261,7 @@ fn closed(engine: &mut Engine, word: &str) -> Object {
 }
 
 /// The standing that a stand on the root gives, once the World answered it, or why it refused it.
-fn stood(engine: &mut Engine) -> Result<Object, crate::Fault> {
+fn stood(engine: &mut Engine) -> Result<Object, Fault> {
   let stand = engine.stand(verbs::Stand { on: Some("chain1".to_owned()) })?;
   executor::block_on(stand)
 }
@@ -373,7 +372,7 @@ fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a
 
 /// A prompt of the root, in a life that a test opened, and what it came to: an error when the life
 /// stopped before it closed.
-fn asked_of(life: &mut Engine, message: &str) -> Result<Object, crate::value::Fault> {
+fn asked_of(life: &mut Engine, message: &str) -> Result<Object, Fault> {
   let asked = verbs::Prompt {
     message: Some(message.to_owned()),
     on: Some("chain1".to_owned()),
@@ -420,7 +419,7 @@ fn a_word_that_catches_the_refusal_of_the_bound_and_loops_ends_its_step_and_leav
     Opening { skills: Some(false), ..scripted(&at, &[caught]) }.boot::<String>([]).unwrap().0;
   drop(asked_of(&mut first, "go"));
   assert!(first.stopped().is_some(), "a word that asks past the refusal ends its step");
-  assert!(crate::sand::past().is_none(), "the stop leaves no deadline on the thread");
+  assert!(sand::past().is_none(), "the stop leaves no deadline on the thread");
   drop(first);
   BOUND.set(LOADED);
   let mut later =
@@ -701,7 +700,7 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
   let answer = Answer(Arc::new(move |_, _| {
     let mut said = said.lock().unwrap();
     said.1 += 1;
-    crate::testing::answering(said.1);
+    testing::answering(said.1);
     let word = said.0.pop_front().unwrap_or_else(|| "close(None)".to_owned());
     let turn = Object::tuple([
       Object::string("assistant"),
@@ -1782,7 +1781,7 @@ fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of
 const MISTYPED: &str = "x: int = 'one'\nclose(x)";
 
 /// What a word that a rung runs on the root closes with, or why it was refused.
-fn rung(engine: &mut Engine, word: &str) -> Result<Object, crate::Fault> {
+fn rung(engine: &mut Engine, word: &str) -> Result<Object, Fault> {
   let word = Some(word.to_owned());
   let rung =
     engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() })?;

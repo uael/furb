@@ -19,9 +19,11 @@ use super::Outside;
 use crate::{
   ear::{Call, Ear, Heard, Spoken, Step},
   fact::Fact,
+  sand,
   sand::{Answer, Sand},
   value::{Fault, Given, Object, marked},
 };
+use std::mem;
 
 /// The prefix of the name a function of the host crosses in under: `call:` and its number.
 pub(super) const CALL: &str = "call:";
@@ -45,8 +47,8 @@ impl Handed {
   /// them. A name given twice is refused.
   pub(super) fn of<N: Into<String>>(
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
-  ) -> Result<(Handed, Vec<String>), Fault> {
-    let mut given = Handed::default();
+  ) -> Result<(Self, Vec<String>), Fault> {
+    let mut given = Self::default();
     let mut names = Vec::new();
     for (name, ear) in ears {
       let name = name.into();
@@ -152,8 +154,8 @@ pub(super) struct Hosted {
 }
 
 impl Default for Hosted {
-  fn default() -> Hosted {
-    Hosted {
+  fn default() -> Self {
+    Self {
       handed: Handed::default(),
       waker: Waker::noop().clone(),
       standing: HashMap::new(),
@@ -295,7 +297,7 @@ impl Outside {
     };
     if let Heard::Fact(fact) = &heard
       && fact.question()
-      && let Some(bound) = crate::sand::past()
+      && let Some(bound) = sand::past()
     {
       return self.refused(sand, on, fact, bound);
     }
@@ -350,7 +352,7 @@ impl Outside {
   /// Every frame of the life waits until `step` is done, so the life goes to it by value, with a
   /// life of nothing in its place, and comes back with what `step` gave.
   pub(super) fn lent<R>(&mut self, sand: &mut Sand, step: impl FnOnce(Life) -> (R, Life)) -> R {
-    let life = Life { sand: std::mem::replace(sand, Sand::none()), outside: std::mem::take(self) };
+    let life = Life { sand: mem::replace(sand, Sand::none()), outside: mem::take(self) };
     let (got, life) = step(life);
     (*sand, *self) = (life.sand, life.outside);
     got

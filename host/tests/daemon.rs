@@ -12,10 +12,9 @@ mod yard;
 #[cfg(test)]
 mod daemon {
   use super::yard::Yard;
+  use std::net::TcpListener;
+  use tokio::sync;
 
-  use std::sync::mpsc::Receiver;
-  use std::sync::mpsc::Sender;
-  use std::sync::mpsc::channel;
   use std::{
     cell::RefCell,
     collections::VecDeque,
@@ -27,6 +26,7 @@ mod daemon {
     sync::{
       Arc, Mutex,
       atomic::{AtomicU32, AtomicUsize, Ordering},
+      mpsc::{Receiver, Sender, channel},
     },
     thread,
     time::{Duration, Instant},
@@ -49,11 +49,8 @@ mod daemon {
     upgrade,
   };
   use futures::{SinkExt, StreamExt};
-  use serde_json::Value;
-  use serde_json::json;
-  use tokio::task;
-  use tokio::time;
-  use tokio::{task::JoinHandle, time::timeout};
+  use serde_json::{Value, json};
+  use tokio::{task, task::JoinHandle, time, time::timeout};
   use tokio_util::codec::{Framed, LinesCodec};
 
   /// How long a test waits for a frame before it fails.
@@ -1894,7 +1891,7 @@ mod daemon {
   }
 
   /// One test at a time holds the port of the browser callback of a sign-in.
-  static PORT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+  static PORT: sync::Mutex<()> = sync::Mutex::const_new(());
 
   /// A folder of configs whose credential of codex ended, so that no account of this machine serves
   /// and no request goes out.
@@ -1918,10 +1915,10 @@ mod daemon {
 
   /// The port of the browser callback of a sign-in, once no process holds it: another run of the
   /// tests on this machine may hold it for a while, and a sign-in that finds it busy fails.
-  async fn claimed() -> std::net::TcpListener {
+  async fn claimed() -> TcpListener {
     let start = Instant::now();
     loop {
-      match std::net::TcpListener::bind(("127.0.0.1", 1455)) {
+      match TcpListener::bind(("127.0.0.1", 1455)) {
         Ok(port) => return port,
         Err(no) => assert!(start.elapsed() < PATIENCE, "no process lets go of the port: {no}"),
       }

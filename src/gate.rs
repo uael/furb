@@ -33,11 +33,13 @@ mod findings;
 mod layout;
 mod shallow;
 
+use crate::world::config::Layers;
 pub use check::{checked, checked_on};
 pub use findings::{Finding, Rule};
 use ruff_python_ast::{ExceptHandler, Expr, ModModule, Stmt};
 use ruff_python_parser::parse_module;
 use ruff_text_size::Ranged;
+use std::{iter, path::Path};
 
 /// The key of a config that turns the gate off when it is false, as `{"gate": false}`.
 pub const KEY: &str = "gate";
@@ -51,8 +53,8 @@ pub const ON: bool = true;
 /// With the gate
 /// off, its ear answers each word with no finding, so the word runs one statement at a time and
 /// stops at the first that raises.
-pub fn configured(user: &std::path::Path, project: &std::path::Path) -> bool {
-  let layers = crate::world::config::Layers::new(project, Some(user.to_path_buf()));
+pub fn configured(user: &Path, project: &Path) -> bool {
+  let layers = Layers::new(project, Some(user.to_path_buf()));
   layers.values().ok().and_then(|values| values.get(KEY)?.as_bool()).unwrap_or(ON)
 }
 
@@ -82,7 +84,7 @@ struct Parsed<'a> {
 impl<'a> Parsed<'a> {
   fn new(text: &'a str) -> Self {
     let starts = text.match_indices('\n').map(|(at, _)| at + 1);
-    let lines = std::iter::once(0).chain(starts).collect();
+    let lines = iter::once(0).chain(starts).collect();
     Parsed { text, module: parse_module(text).ok(), lines }
   }
 

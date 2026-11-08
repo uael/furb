@@ -5,8 +5,7 @@ use std::{
   mem,
 };
 
-use crate::fact::named;
-use crate::skill;
+use crate::{fact::named, skill};
 use serde_json::Value;
 
 use super::{
@@ -14,6 +13,7 @@ use super::{
   state::{State, chain_state},
 };
 use crate::world::CONSOLE;
+use std::str::Chars;
 
 /// The questions that the engine asks on the way to what an act does, which no person follows: each
 /// is answered for the act that asked it, which shows what it came to.
@@ -557,7 +557,7 @@ fn python(said: &str) -> Option<String> {
       out.push(one);
       continue;
     }
-    let code = |chars: &mut std::str::Chars<'_>, n: usize| {
+    let code = |chars: &mut Chars<'_>, n: usize| {
       let hex: String = chars.by_ref().take(n).collect();
       u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32)
     };

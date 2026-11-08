@@ -2,8 +2,7 @@
 
 use std::fmt;
 
-use crate::engine::OPERATOR;
-use crate::world::catalog::leveled;
+use crate::{engine::OPERATOR, world::catalog::leveled};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -30,48 +29,48 @@ impl Kind {
   /// The kind as the fact writes it.
   pub fn as_str(&self) -> &str {
     match self {
-      Kind::Chain => "chain",
-      Kind::Rung => "rung",
-      Kind::Prompt => "prompt",
-      Kind::Reply => "reply",
-      Kind::Run => "run",
-      Kind::Bash => "bash",
-      Kind::Wait => "wait",
-      Kind::Stand => "stand",
-      Kind::Other(kind) => kind,
+      Self::Chain => "chain",
+      Self::Rung => "rung",
+      Self::Prompt => "prompt",
+      Self::Reply => "reply",
+      Self::Run => "run",
+      Self::Bash => "bash",
+      Self::Wait => "wait",
+      Self::Stand => "stand",
+      Self::Other(kind) => kind,
     }
   }
 
   /// Whether an act of the kind is work which ends later.
   pub fn work(&self) -> bool {
-    matches!(self, Kind::Prompt | Kind::Rung | Kind::Bash | Kind::Wait)
+    matches!(self, Self::Prompt | Self::Rung | Self::Bash | Self::Wait)
   }
 }
 
 impl From<&str> for Kind {
-  fn from(kind: &str) -> Kind {
+  fn from(kind: &str) -> Self {
     match kind {
-      "chain" => Kind::Chain,
-      "rung" => Kind::Rung,
-      "prompt" => Kind::Prompt,
-      "reply" => Kind::Reply,
-      "run" => Kind::Run,
-      "bash" => Kind::Bash,
-      "wait" => Kind::Wait,
-      "stand" => Kind::Stand,
-      other => Kind::Other(other.to_owned()),
+      "chain" => Self::Chain,
+      "rung" => Self::Rung,
+      "prompt" => Self::Prompt,
+      "reply" => Self::Reply,
+      "run" => Self::Run,
+      "bash" => Self::Bash,
+      "wait" => Self::Wait,
+      "stand" => Self::Stand,
+      other => Self::Other(other.to_owned()),
     }
   }
 }
 
 impl From<String> for Kind {
-  fn from(kind: String) -> Kind {
-    Kind::from(kind.as_str())
+  fn from(kind: String) -> Self {
+    Self::from(kind.as_str())
   }
 }
 
 impl From<Kind> for String {
-  fn from(kind: Kind) -> String {
+  fn from(kind: Kind) -> Self {
     match kind {
       Kind::Other(kind) => kind,
       known => known.as_str().to_owned(),
@@ -239,8 +238,8 @@ pub struct Spend {
 
 impl Spend {
   /// What answers cost, in order.
-  pub fn of<'a>(answers: impl IntoIterator<Item = &'a Answer>) -> Spend {
-    let mut spend = Spend::default();
+  pub fn of<'a>(answers: impl IntoIterator<Item = &'a Answer>) -> Self {
+    let mut spend = Self::default();
     for one in answers {
       spend.add(one);
     }
@@ -258,8 +257,8 @@ impl Spend {
 
 impl Pause {
   /// The pause that a fact of a pause says, and none for any other fact.
-  pub fn of(fact: &Value) -> Option<Pause> {
-    (fact[0] == "pause").then(|| Pause {
+  pub fn of(fact: &Value) -> Option<Self> {
+    (fact[0] == "pause").then(|| Self {
       by: fact[2].as_str().unwrap_or_default().to_owned(),
       why: Some(fact[3].clone()).filter(|why| !why.is_null()),
     })

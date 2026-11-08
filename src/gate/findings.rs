@@ -22,6 +22,7 @@ use super::{
   ACTS, MODULE, Parsed, VALUED, WORDS, binds, deleted, layout::builtin, named, strings, worded,
 };
 use crate::sand::{Nobody, Sand};
+use std::mem;
 
 /// The rule that a finding of the gate breaks: a rule that the gate checks itself, or any other
 /// that the checker names.
@@ -51,27 +52,27 @@ pub enum Rule {
 
 impl Rule {
   /// The rule that the checker names.
-  fn named(name: &str) -> Rule {
+  fn named(name: &str) -> Self {
     match name {
-      "unresolved-import" => Rule::Import,
-      "invalid-assignment" => Rule::Assign,
-      other => Rule::Checker(other.to_owned()),
+      "unresolved-import" => Self::Import,
+      "invalid-assignment" => Self::Assign,
+      other => Self::Checker(other.to_owned()),
     }
   }
 
   /// The name of the rule, as the model reads it between the brackets.
   fn name(&self) -> &str {
     match self {
-      Rule::Import => "unresolved-import",
-      Rule::Await => "await-outside-async",
-      Rule::Asyncio => "asyncio-in-word",
-      Rule::Coroutine => "unawaited-coroutine",
-      Rule::Told => "transcript-name",
-      Rule::Bare => "bare-answer",
-      Rule::Engine => "engine-name",
-      Rule::Builtin => "builtin-name",
-      Rule::Assign => "invalid-assignment",
-      Rule::Checker(name) => name,
+      Self::Import => "unresolved-import",
+      Self::Await => "await-outside-async",
+      Self::Asyncio => "asyncio-in-word",
+      Self::Coroutine => "unawaited-coroutine",
+      Self::Told => "transcript-name",
+      Self::Bare => "bare-answer",
+      Self::Engine => "engine-name",
+      Self::Builtin => "builtin-name",
+      Self::Assign => "invalid-assignment",
+      Self::Checker(name) => name,
     }
   }
 }
@@ -597,8 +598,7 @@ impl<'a> Visitor<'a> for Awaits<'a> {
         if let Some(returns) = &def.returns {
           self.visit_annotation(returns);
         }
-        let around =
-          std::mem::replace(&mut self.function, (!def.is_async).then_some(def.name.as_str()));
+        let around = mem::replace(&mut self.function, (!def.is_async).then_some(def.name.as_str()));
         self.visit_body(&def.body);
         self.function = around;
       }
