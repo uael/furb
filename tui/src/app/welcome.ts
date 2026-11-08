@@ -38,7 +38,7 @@ export const welcome = part({
 
   /** A text that lights under the pointer, and runs an action at a click. */
   link(content: string | Part[], run: () => void): TextRenderable {
-    return this.hoverable(this.text(content, c.accent, { run }));
+    return this.text(content, c.accent, { run });
   },
 
   /** A message of the operator: its text, and the name of each image it refers to in the color of an attachment. A
