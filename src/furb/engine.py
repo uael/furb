@@ -1074,7 +1074,7 @@ def boot(record=(), **outside):
   ranks = {id(e): n for n, (e,) in enumerate(record)}
   saved, again = {e[1]: e for (e,) in record if question(e)}, {}
   recorded = {**saved}
-  stable = str(["9", *((*e[5:6], "0")[0] for (e,) in record if e[0] == "made")][-1]) >= "1.1"
+  stable = str([9, *((*e[5:6], 0)[0] or 0 for (e,) in record if e[0] == "made")][-1]) >= "1.1"
   top, asked, strays, back = Counter(), {}, {}, []
   for quest in saved.values():
     top[quest[0]] = max(top[quest[0]], int(quest[1][len(quest[0]) :]))

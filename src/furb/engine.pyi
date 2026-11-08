@@ -1230,6 +1230,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   A question of the record that no act took, on a chain that the life made again, is a drift once the journal comes to a fact that an ear of the outside said of it, so a word that makes one command less drifts.
   A record whose last fact made names a schema before 1.1 holds no question of an act that an act made, so a later life names each of its acts by how many acts of its kind it made, as the life that kept it did.
   A boot is a life; a second boot is a second life, and the first is gone.
+  A later life names each act that it makes again by its kind, its maker, its chain and its words, so the gate of stand() that each chain plays at a stand takes the name that the record holds for that chain, and never the name of the gate of another chain.
   The names operator and journal are the life's own, and boot refuses a generator of the outside under either name.
   A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything.
   An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and each show and the acts that each filter kept come again with its words, since the record holds them.
