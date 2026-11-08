@@ -1975,8 +1975,12 @@ export class Session extends EventEmitter {
   /** The crate gives each moment of the life, each start and each end of an act, which the session holds per version. */
   async readMoments(): Promise<void> {
     const version = this.version;
-    this.momentsRead = { version, moments: await this.host.moments() };
-    this.emit("change");
+    const was = this.momentsRead?.moments;
+    const moments = await this.host.moments();
+    this.momentsRead = { version, moments };
+    // The frame draws again only when the moments moved: a change said at each read made each frame read them again,
+    // a loop of draws and reads that held the window busy while a chain worked.
+    if (was?.length !== moments.length || was.at(-1) !== moments.at(-1)) this.emit("change");
   }
   private momentsAsking?: Promise<void>;
   /** The moments of the life as the crate gives them, up to the moment that the feed shows. */

@@ -29,12 +29,13 @@ const { values } = parseArgs({
     resume: { type: "string" },
     roster: { type: "string", multiple: true },
     view: { type: "string" },
+    machine: { type: "string" },
     "screen-reader": { type: "boolean" },
     "reduced-motion": { type: "boolean" },
   },
 });
 if (values.help) {
-  console.log(`furb-tui [--demo] [--cwd path] [--model provider:model] [--effort ${efforts.join("|")}]
+  console.log(`furb-tui [--demo] [--cwd path] [--machine host:port --cwd path --record file.jsonl, the paths of that machine] [--model provider:model] [--effort ${efforts.join("|")}]
          [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...]
          [--view main|loom|graph] [--read] [--screen-reader] [--reduced-motion]
 
@@ -110,6 +111,8 @@ const engineOptions: EngineOptions = {
   effort: values.effort,
   roster: values.roster,
   demo: values.demo,
+  // A window holds its lives in the daemon of another machine of the tailnet when it names one, as host:port.
+  ...(values.machine ? { machine: values.machine } : {}),
 };
 const library = new Workspaces(
   preferences,
