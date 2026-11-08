@@ -145,12 +145,19 @@ def standing():
   return answer("stand", ROOT, [])
 
 
-def automatic():
-  models = [one for one in (standing()[:1] or [[]])[0] if one[0] != OPERATOR]
-  placed = {}
-  for entry in models:
-    isinstance(place := (entry[4:] or [None])[0], int) and placed.setdefault(place, entry[0])
-  return next(iter([placed[k] for k in sorted(placed)] + [two[0] for two in models if two[3:4] == ["cheap"]]), "")
+def automatic(n=0):
+  models = (standing()[:1] or [[]])[0]
+  return (
+    [
+      *dict.fromkeys(
+        one[0]
+        for one in sorted((p for p in models if isinstance(p[4:5] and p[4], int)), key=lambda p: p[4])
+        + [c for c in models if c[3:4] == ["cheap"]]
+        if one[0] != OPERATOR
+      )
+    ][n:]
+    or [""]
+  )[0]
 
 
 def operated(where):

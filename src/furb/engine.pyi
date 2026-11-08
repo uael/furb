@@ -1066,9 +1066,10 @@ def under(name: str, of: str) -> bool:
   Nothing is under a name of nothing.
   """
 
-def automatic() -> str:
-  """automatic gives the actor of automatic work: the model of the roster of the standing with the first place in the list of automatic work, which the entry of each model of that list gives as its fifth field, else the first cheap model of the roster, else an empty str.
+def automatic(n: int = 0) -> str:
+  """automatic gives the actor of automatic work: the name at place n of the list of automatic work, which holds the models of the roster of the standing that have a place in that list, which the entry of each model gives as its fifth field, in the order of their places, then each cheap model of the roster, each name once.
   The operator is no such model.
+  Past the end of the list it gives an empty str, so a use whose model refuses it asks automatic(1), then the next, until the list ends.
   """
 
 def operated(site: str) -> bool:

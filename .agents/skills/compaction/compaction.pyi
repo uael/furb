@@ -5,7 +5,8 @@ compaction: str
 SHARE: float
 """SHARE is the share of the window of its actor that an answer reads past, after which compacted asks choice what to keep of its chain, and it is 0.6 unless a word rebinds it."""
 CHOOSER: str
-"""CHOOSER is the actor that choice asks when it is given none, and an empty CHOOSER is the actor that automatic() gives, else the default actor of the chain of the model that chooses."""
+"""CHOOSER is the actor that choice asks when it is given none, and an empty CHOOSER is the actor that automatic() gives, else the default actor of the chain of the model that chooses.
+When the model of automatic work refuses its reply, choice asks the next actor of automatic work, automatic(1), then the next, each on a new chain labelled chosen, and the refusal of the last ends the prompt."""
 OVERFLOW: str
 """OVERFLOW is what the refusal of a reply says first when the prompt of the reply passes the window of its model."""
 OVERFLOWED: str
