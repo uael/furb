@@ -71,7 +71,7 @@ test("an idle connection keeps the process alive only while a life holds it, and
   const refs = (connection: Connection) =>
     state.get((connection as unknown as { socket: Socket }).socket) ?? true;
   try {
-    const idle = await Connection.dial(place, "window", undefined, true);
+    const idle = await Connection.dial(place, "window", undefined, { idle: true });
     expect(refs(idle)).toBe(false);
     idle.hold();
     expect(refs(idle)).toBe(true);
@@ -93,7 +93,7 @@ test("an idle connection keeps the process alive only while a life holds it, and
   }
 });
 
-test("a connection that dials again redials the place when the daemon goes, and tells reconnected, and one that is closed does not", async () => {
+test("a connection that dials again redials the place when the daemon goes, and tells reconnected, and a plain one does not", async () => {
   const place = join(tmpdir(), `furb-again-${process.pid}.sock`);
   const sockets: Socket[] = [];
   const server = createServer((socket) => {
@@ -108,7 +108,7 @@ test("a connection that dials again redials the place when the daemon goes, and 
   });
   await new Promise<void>((resolve) => server.listen(place, resolve));
   try {
-    const connection = await Connection.dial(place, "window", undefined, true, true);
+    const connection = await Connection.dial(place, "window", undefined, { idle: true, again: true });
     const back = new Promise<void>((resolve) => connection.once("reconnected", () => resolve()));
     sockets[0]?.destroy();
     await back;

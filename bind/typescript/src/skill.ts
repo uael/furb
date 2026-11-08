@@ -76,6 +76,15 @@ interface Route {
   reach?: () => Promise<Socket>;
   /** A listener of each frame that the daemon pushes, added before the first hello so that no frame is missed. */
   heard?: (frame: Frame) => void;
+  /** Says in the words of its caller why a hello failed, as a daemon of another build. */
+  explain?: (error: unknown) => unknown;
+}
+
+/** How a connection is dialed beside its route: whether it is idle, which keeps the process alive only while a life
+ * holds it, and whether it dials again when the daemon goes. */
+interface Way extends Pick<Route, "role" | "reach" | "heard" | "explain"> {
+  idle?: boolean;
+  again?: boolean;
 }
 
 /** One connection to the daemon, after its hello. Each verb takes a number and its answer, in any order, and each
@@ -133,7 +142,8 @@ export class Connection extends EventEmitter {
       for (const waits of this.waiting.values())
         waits.reject(askedBy(new Closed("The daemon closed the connection."), waits.asked));
       this.waiting.clear();
-      if (this.ending || !this.again || !this.ready || this.reaching) return this.finish();
+      if (this.reaching) return;
+      if (this.ending || !this.again || !this.ready) return this.finish();
       // A daemon that closes before its welcome, as one that ends at its grace in the instant that this dials it, is
       // dialed once more.
       this.reaching = this.hello()
@@ -145,7 +155,9 @@ export class Connection extends EventEmitter {
           },
           (error: unknown) => {
             this.reaching = undefined;
-            this.emit("lost", error instanceof Error ? error.message : String(error));
+            this.ending = true;
+            const why = this.route.explain?.(error) ?? error;
+            this.emit("lost", why instanceof Error ? why.message : String(why));
             this.finish();
           },
         );
@@ -164,19 +176,22 @@ export class Connection extends EventEmitter {
   }
 
   /** A connection to the daemon at a place, as a peer of a kind, with the name of a skill for a skill. */
-  static async dial(
-    place: string,
-    kind: Kind,
-    name?: string,
-    idle = false,
-    again = false,
-    via: Pick<Route, "role" | "reach" | "heard"> = {},
-  ): Promise<Connection> {
-    const socket = await (via.reach?.() ?? dialing(place));
-    const connection = new Connection(socket, idle, { place, kind, name, ...via }, again);
-    await connection.hello(socket);
-    connection.ready = true;
-    return connection;
+  static async dial(place: string, kind: Kind, name?: string, way: Way = {}): Promise<Connection> {
+    const { idle = false, again = false, ...via } = way;
+    // A daemon that closes before its welcome, as one that ends at its grace in the instant that this dials it, is
+    // dialed once more, which starts a new daemon when none listens.
+    for (let attempt = 0; ; attempt++) {
+      const socket = await (via.reach?.() ?? dialing(place));
+      const connection = new Connection(socket, idle, { place, kind, name, ...via }, again);
+      try {
+        await connection.hello(socket);
+      } catch (error) {
+        if (error instanceof Closed && attempt === 0) continue;
+        throw via.explain?.(error) ?? error;
+      }
+      connection.ready = true;
+      return connection;
+    }
   }
 
   /** The answer of the daemon to a verb, or its refusal as a `Refused`. A verb waits for the dial that follows a
@@ -255,7 +270,7 @@ export class View {
   readonly slot: Slot;
   readonly disposed: Promise<void>;
   private version = 0;
-  private readonly frameListeners = new Set<(event: ViewEvent) => void>();
+  private readonly listeners = new Set<(event: ViewEvent) => void>();
   private ended = () => {};
   constructor(
     private readonly connection: Connection,
@@ -284,13 +299,13 @@ export class View {
   }
 
   events(listener: (event: ViewEvent) => void): () => void {
-    this.frameListeners.add(listener);
-    return () => this.frameListeners.delete(listener);
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
   /** @internal */
   heard(event: ViewEvent): void {
-    for (const listener of this.frameListeners) listener(event);
+    for (const listener of this.listeners) listener(event);
   }
 
   /** @internal */
