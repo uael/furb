@@ -276,8 +276,22 @@ pub(crate) fn reaped(root: &Path, bound: Duration, now: SystemTime) -> Vec<PathB
     // The lock of the mark, held while the directory goes: a life that opens on it meanwhile
     // takes no lock, and its next make makes the directory again.
     let free = fs::File::open(&mark).map_or(Ok(None), |file| file.try_lock().map(|()| Some(file)));
-    let Ok(_free) = free else { continue };
-    if fs::remove_dir_all(&at).is_ok() {
+    let Ok(free) = free else { continue };
+    // Windows removes no directory that holds an open file, so everything but the mark goes while
+    // the lock stands, then the lock ends and the mark goes with the directory.
+    let kept = fs::read_dir(&at).is_ok_and(|each| {
+      each.flatten().filter(|one| one.path() != mark).any(|one| {
+        let path = one.path();
+        let gone = if one.file_type().is_ok_and(|kind| kind.is_dir()) {
+          fs::remove_dir_all(&path)
+        } else {
+          fs::remove_file(&path)
+        };
+        gone.is_err()
+      })
+    });
+    drop(free);
+    if !kept && fs::remove_dir_all(&at).is_ok() {
       gone.push(at);
     }
   }

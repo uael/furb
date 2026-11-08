@@ -261,7 +261,10 @@ fn a_reap_keeps_a_directory_whose_file_changed_within_the_days_and_goes_on_past_
     fs::set_permissions(stuck.join("locked"), fs::Permissions::from_mode(0o555)).unwrap();
   }
   let gone = reaped(&root, Duration::from_hours(24 * 7), later);
-  assert_eq!(gone, slice::from_ref(&free), "a change at any depth keeps a directory");
+  assert!(gone.contains(&free), "a directory past its days goes");
+  assert!(!gone.contains(&written), "a change at any depth keeps a directory");
+  #[cfg(unix)]
+  assert_eq!(gone, slice::from_ref(&free), "a directory that will not go stays");
   assert!(written.join("deep/down/log").is_file());
   #[cfg(unix)]
   {
