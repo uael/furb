@@ -1045,16 +1045,29 @@ impl Listed {
 /// The class that the snapshot gives a model of a family that a program of its own serves, by the
 /// name of the family, as `claude-cli` or `codex`, and the name of the model in it, and nothing for
 /// a model that it does not list.
-#[expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
 pub(super) fn family(name: &str, model: &str) -> Option<Class> {
-  static FAMILIES: OnceLock<HashMap<String, Cached>> = OnceLock::new();
-  let families = FAMILIES.get_or_init(|| {
+  snapshot().get(name)?.models.get(model)?.class
+}
+
+/// The price that the snapshot gives a model of a provider, in dollars for a million tokens: what
+/// it reads fresh, what it writes, what it reads from the cache and what it writes to it.
+pub(super) fn priced(name: &str, model: &str) -> Option<[f64; 4]> {
+  let cost = snapshot().get(name)?.models.get(model)?.cost.as_ref()?;
+  Some([cost.input, cost.output, cost.cache_read, cost.cache_write])
+}
+
+/// The models of each provider and of each family of the snapshot, by its name.
+#[expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
+fn snapshot() -> &'static HashMap<String, Cached> {
+  static PROVIDERS: OnceLock<HashMap<String, Cached>> = OnceLock::new();
+  PROVIDERS.get_or_init(|| {
     let entries: HashMap<String, Value> = serde_json::from_str(SNAPSHOT)
       .expect("the snapshot of the catalog is the JSON of its providers");
-    let families = entries.into_iter().filter(|(_, one)| one.get("rig").is_none());
-    families.filter_map(|(name, one)| Some((name, serde_json::from_value(one).ok()?))).collect()
-  });
-  families.get(name)?.models.get(model)?.class
+    entries
+      .into_iter()
+      .filter_map(|(name, one)| Some((name, serde_json::from_value(one).ok()?)))
+      .collect()
+  })
 }
 
 #[cfg(test)]

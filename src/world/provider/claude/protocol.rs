@@ -67,7 +67,12 @@ pub(super) enum Control {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(super) enum Streamed {
-  MessageStart,
+  /// The start of a message, with the model that writes it and what its request read, which is all
+  /// that a turn cut before its end says of what it read.
+  MessageStart {
+    #[serde(default)]
+    message: Begun,
+  },
   ContentBlockStart {
     index: u64,
     content_block: Start,
@@ -86,6 +91,15 @@ pub(super) enum Streamed {
   },
   #[serde(other)]
   Other,
+}
+
+/// The message that a stream starts, as far as it says the model that writes it and what its
+/// request read.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+pub(super) struct Begun {
+  model: Option<String>,
+  usage: Option<Spent>,
 }
 
 /// The block that a stream opens.
@@ -229,6 +243,8 @@ pub(super) struct Reply<'a> {
   /// The usage of the last message the command line settled, which is the one request of the turn
   /// whose answer the reply holds.
   pub(super) spent: Option<Spent>,
+  /// The model that writes the current message, when its start names it.
+  pub(super) model: Option<String>,
   deltas: Option<&'a Deltas>,
 }
 
@@ -299,7 +315,7 @@ impl<'a> Reply<'a> {
 
   /// One event of a message as it streams.
   pub(super) fn streamed(&mut self, update: &Streamed) {
-    if matches!(update, Streamed::MessageStart) {
+    if matches!(update, Streamed::MessageStart { .. }) {
       self.streamed = Some(HashMap::new());
       self.settled = 0;
       self.spent = None;
@@ -337,7 +353,13 @@ impl<'a> Reply<'a> {
         }
       }
       Streamed::MessageDelta { usage } => self.spent.get_or_insert_default().grow(usage),
-      Streamed::MessageStart | Streamed::Other => {}
+      Streamed::MessageStart { message } => {
+        self.model.clone_from(&message.model);
+        if let Some(usage) = &message.usage {
+          self.spent = Some(usage.clone());
+        }
+      }
+      Streamed::Other => {}
     }
   }
 

@@ -128,12 +128,13 @@ while IFS= read -r line; do
       fi ;;
     *BARE*) echo '{"type":"result","result":"close(1)","usage":{}}'; continue ;;
     # While the file hold stands beside it, a line that holds HOLD gets no answer, and when hold holds stream, the
-    # first part of a text before the silence. It says held and its id on the lifeline then.
+    # first part of a text
+    # before the silence, after a start of its message that names its model and says what it read. It says held and its id on the lifeline then.
     *HOLD*)
       if [ -f "$here/hold" ]; then
         if [ "$(cat "$here/hold")" = stream ]; then
           at=0
-          say '{"type":"message_start"}'
+          say '{"type":"message_start","message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":1000,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":2000}}}'
           say '{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}'
           part '"close("'
         fi

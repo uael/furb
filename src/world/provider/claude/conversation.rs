@@ -25,10 +25,10 @@ use tokio::io::AsyncWriteExt;
 use super::{
   Deltas, Error, Program, discover, error, failed,
   process::{GRACE, Line, Process, Spend, absent, exited, last, stalled},
-  protocol::{Event, Finished, Reply, unexplained},
+  protocol::{Event, Finished, Reply, Spent, unexplained},
   refused, worded,
 };
-use crate::world::provider;
+use crate::world::provider::{self, answer::counted};
 use crate::world::{
   disk::{self, Access},
   provider::{ENV_THINKING, uuid},
@@ -100,6 +100,34 @@ pub(super) struct Conversation {
   /// What the command line holds of this conversation, entry by entry, which the first process of
   /// a conversation that replaces this one resumes as far as the two share their turns.
   pub(super) said: Vec<Said>,
+  /// What each request of a turn that came to no result read, the request of the turn that streams
+  /// among them, which the next turn that comes to a result pays.
+  unpaid: Vec<Unpaid>,
+}
+
+/// What a request read as far as its stream said: the model that read it and its usage. The command
+/// line counts no cost for a request of a turn that came to no result, as a turn that the provider
+/// cut at a statement that cannot be python, though the API read its prompt.
+#[derive(Default)]
+struct Unpaid {
+  model: Option<String>,
+  spent: Spent,
+}
+
+impl Unpaid {
+  /// What it cost at the price that the catalog gives its model, with a write of the cache at the
+  /// price of the time that the mark of the cache lasts: twice a fresh read for an hour.
+  fn cost(&self) -> f64 {
+    let model = self.model.as_deref().unwrap_or_default();
+    // The command line runs the models of Anthropic, which the catalog lists under that provider.
+    let Some([fresh, out, cached, cache]) = provider::catalog::priced("anthropic", model) else {
+      return 0.0;
+    };
+    let write = if lasting() == "1h" { 2.0 * fresh } else { cache };
+    let Spent { input, output, cache_read, cache_creation } = &self.spent;
+    let read = counted(*input) * fresh + counted(*cache_read) * cached;
+    (read + counted(*output) * out + counted(*cache_creation) * write) / 1e6
+  }
 }
 
 impl Conversation {
@@ -120,6 +148,7 @@ impl Conversation {
       used: Instant::now(),
       marked: false,
       said: Vec::new(),
+      unpaid: Vec::new(),
     }
   }
 
@@ -128,7 +157,9 @@ impl Conversation {
   fn renew(&mut self) -> Result<(), CompletionError> {
     let id = uuid()?;
     let (account, store, said) = (self.account, self.store.take(), mem::take(&mut self.said));
+    let unpaid = mem::take(&mut self.unpaid);
     *self = Self::new(&self.name, &self.system, id);
+    self.unpaid = unpaid;
     self.account = account;
     self.store = store;
     self.said = said;
@@ -460,6 +491,14 @@ impl Conversation {
     }
   }
 
+  /// What the request of the turn that streams read as far as its reply says, which the next turn
+  /// that comes to a result pays when this one comes to none.
+  fn owes(&mut self, reply: &Reply) {
+    if let (Some(open), Some(spent)) = (self.unpaid.last_mut(), &reply.spent) {
+      *open = Unpaid { model: reply.model.clone(), spent: spent.clone() };
+    }
+  }
+
   /// The response that the result of a turn ends the reply with, with the process that paid for it,
   /// or the failure that the result says.
   fn concluded(
@@ -475,7 +514,13 @@ impl Conversation {
       let said = result.result.as_deref().filter(|one| !one.is_empty());
       return Err(failed(said.map_or_else(|| unexplained(result), str::to_owned)));
     }
-    let response = reply.response(result, &self.name, &self.id, &mut process.paid);
+    let mut response = reply.response(result, &self.name, &self.id, &mut process.paid);
+    // The cost that the result says holds the request of this turn, and no request of an earlier
+    // turn that came to no result, which this turn pays.
+    self.unpaid.pop();
+    let owed: f64 = mem::take(&mut self.unpaid).iter().map(Unpaid::cost).sum();
+    let cost = response.raw["cost"].as_f64().unwrap_or_default();
+    response.raw["cost"] = json!(cost + owed);
     Ok((response, process))
   }
 
@@ -491,6 +536,7 @@ impl Conversation {
   ) -> Result<(CompletionResponse, Process), CompletionError> {
     let stall = run.stall;
     let mut reply = Reply::new(run.deltas);
+    self.unpaid.push(Unpaid::default());
     let mut odd = String::new();
     // Whether the process wrote a line, as a process that found no program to run writes none.
     let mut spoke = false;
@@ -533,12 +579,11 @@ impl Conversation {
       }
       match event {
         Event::Stream { event } => reply.streamed(&event),
-        Event::Assistant { message } => {
-          reply.said(&message);
-        }
+        Event::Assistant { message } => reply.said(&message),
         Event::Result(result) => return self.concluded(&result, reply, process),
         Event::ControlResponse { .. } | Event::Other => {}
       }
+      self.owes(&reply);
     };
     let (no, missing) = exited(code, &mut process.tail, run.program, spoke).await;
     if missing {

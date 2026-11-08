@@ -501,7 +501,7 @@ fn untagged(choice: Vec<AssistantContent>) -> Vec<AssistantContent> {
 }
 
 /// A count of tokens as a float, which holds it whole up to `u32::MAX`, more than a turn counts.
-fn counted(tokens: u64) -> f64 {
+pub(super) fn counted(tokens: u64) -> f64 {
   f64::from(u32::try_from(tokens).unwrap_or(u32::MAX))
 }
 
