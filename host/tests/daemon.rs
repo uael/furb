@@ -161,21 +161,15 @@ mod daemon {
   /// seconds to answer where one is installed. Where no script runs, as on Windows, it is the plain
   /// opening.
   fn mute(at: &Path) -> Opening {
-    let mut opening = opening(at);
+    let opening = opening(at);
     #[cfg(unix)]
-    {
+    let opening = {
       use std::os::unix::fs::PermissionsExt;
       let program = at.join("claude");
-      fs::write(
-        &program,
-        "#!/bin/sh
-exit 0
-",
-      )
-      .unwrap();
+      fs::write(&program, "#!/bin/sh\nexit 0\n").unwrap();
       fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
-      opening.claude = Some(program.display().to_string());
-    }
+      Opening { claude: Some(program.display().to_string()), ..opening }
+    };
     opening
   }
 
@@ -388,7 +382,13 @@ exit 0
     async fn ran(&mut self, life: &str, word: &str) -> String {
       let verb = Verb::Run { life: life.to_owned(), word: word.to_owned(), on: None };
       let Ok(Answer::Act(rung)) = self.ask(verb).await else { panic!("no rung") };
-      self.until(done(&rung)).await;
+      // Each birth names its rungs anew, so a rung of an earlier birth that a window reads late
+      // may hold the same name: the done of this one holds this word.
+      let this = |frame: &Frame| {
+        matches!(frame, Frame::Event { event: Event::Act(act), .. }
+          if act.id == rung && matches!(act.phase, Phase::Done(_)) && act.word.as_deref() == Some(word))
+      };
+      self.until(this).await;
       rung
     }
 
@@ -652,7 +652,13 @@ exit 0
     later.ran(&life, "y = 1").await;
     let facts_of = |window: &Window| -> Vec<Value> {
       let facts = window.pushed.iter().filter_map(|frame| match frame {
-        Frame::Event { event: Event::Fact(fact), .. } if fact[0] != "keep" => Some(fact.clone()),
+        // The extensions teach when they load, which a birth may do after the rung that the test
+        // runs, so the test counts none of their facts.
+        Frame::Event { event: Event::Fact(fact), .. }
+          if fact[0] != "keep" && fact[2] != "extensions" =>
+        {
+          Some(fact.clone())
+        }
         _ => None,
       });
       facts.collect()
@@ -799,6 +805,7 @@ exit 0
     let new = tokio::spawn(async move { upgrade(&next, settings).await });
     assert!(window.closed().await);
     assert!(matches!(old.await, Ok(Ok(()))));
+    listening(&local).await;
     let mut window = Window::dialed(&local).await;
     window.attach(&life).await;
     let inspect = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
@@ -809,6 +816,15 @@ exit 0
     time::sleep(PAST).await;
     assert!(window.lives(&life).await);
     assert!(!new.is_finished());
+  }
+
+  /// The new daemon of a handover, once it listens: the old one ends before the new one binds.
+  async fn listening(local: &Local) {
+    let start = Instant::now();
+    while local.dial().await.is_err() {
+      assert!(start.elapsed() < PATIENCE, "the new daemon listens");
+      time::sleep(SHORT).await;
+    }
   }
 
   /// The opening of a test whose model blocks the thread of its life: it tells the test that it
@@ -875,6 +891,7 @@ exit 0
     drop(hold);
     let gone = timeout(PATIENCE, old).await.expect("the handover ends once each life ended");
     assert!(matches!(gone, Ok(Ok(()))));
+    listening(&local).await;
     let mut window = Window::dialed(&local).await;
     window.attach(&life).await;
     window.ran(&life, "y = x").await;
@@ -1899,6 +1916,19 @@ exit 0
     id
   }
 
+  /// The port of the browser callback of a sign-in, once no process holds it: another run of the
+  /// tests on this machine may hold it for a while, and a sign-in that finds it busy fails.
+  async fn claimed() -> std::net::TcpListener {
+    let start = Instant::now();
+    loop {
+      match std::net::TcpListener::bind(("127.0.0.1", 1455)) {
+        Ok(port) => return port,
+        Err(no) => assert!(start.elapsed() < PATIENCE, "no process lets go of the port: {no}"),
+      }
+      time::sleep(SHORT).await;
+    }
+  }
+
   fn signed_in(state: &'static str) -> impl Fn(&Frame) -> bool {
     move |frame| matches!(frame, Frame::SignIn { state: got, .. } if got == state)
   }
@@ -1913,7 +1943,7 @@ exit 0
     window.life = opened(&mut window, &at, "a.jsonl").await;
     let life = window.life.clone();
     window.attach(&life).await;
-    let taken = std::net::TcpListener::bind(("127.0.0.1", 1455)).unwrap();
+    let taken = claimed().await;
     let id = signing(&mut window).await;
     let Frame::SignIn { url, message, .. } = window.keeping(signed_in("failed")).await else {
       unreachable!()
@@ -1936,6 +1966,7 @@ exit 0
     window.life = opened(&mut window, &at, "a.jsonl").await;
     let life = window.life.clone();
     window.attach(&life).await;
+    drop(claimed().await);
     let id = signing(&mut window).await;
     let Frame::SignIn { url, .. } = window.keeping(signed_in("waiting")).await else {
       unreachable!()

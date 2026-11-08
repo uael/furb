@@ -103,7 +103,7 @@ impl Held {
 
   /// The ladder of a chain, now or as it stood just after a moment, with the folds that the window
   /// opened, the prompts that the operator owes, and the only acts at its top when `taken` names
-  /// them, as [`ladder`] folds it.
+  /// them.
   pub fn ladder(
     &self,
     chain: &str,

@@ -637,7 +637,7 @@ def seed(data):
     (c["paused"] or c["id"] in asking) and entries.append((("pause", c["id"], OPERATOR),))
   for x in data["acts"]:
     "value" in x and (
-      put(x["kind"], i := x["id"], "journal", x["on"]),
+      put(x["kind"], i := x["id"], "journal", x["on"], *x.get("words", ())),
       entries.extend([(("started", i, "journal"),), (("done", i, "journal", x["value"]),)]),
     )
   for x in data["acts"]:
@@ -712,7 +712,7 @@ def gathered(define, floor):
       held = next((x[2] for x in transcript(scope(one), "started") if x[1] == one and get(x[2]) is None), "")
       acts.append({**d, "shape": a[4], "message": a[5], "to": a[6], "held": held})
     elif over(one):
-      literal(peek(one), set()) and acts.append({**d, "value": peek(one)})
+      literal(peek(one), set()) and acts.append({**d, "words": a[4:], "value": peek(one)})
     else:
       cut.append(one)
       acts.append({**d, "value": Refused(one + " was interrupted: the life that ran it ended before it did")})
@@ -1121,7 +1121,7 @@ def boot(record=(), **outside):
           by in saved
           or (name not in first and by[-1:].isdigit())
           or (on and not get(on))
-          or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on))]))
+          or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on, *words))]))
         ):
           born.setdefault(kind, {})[name] = name
           return

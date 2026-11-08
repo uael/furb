@@ -20,7 +20,7 @@
 
 use std::{
   alloc::{GlobalAlloc, Layout, System},
-  collections::HashSet,
+  collections::{HashMap, HashSet},
   sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -50,11 +50,12 @@ pub struct Heap {
 
 impl Heap {
   /// The heap that [`Counted`] reads, bound by a number of MiB, or by half the memory of the
-  /// machine when none is given. None when the bound is no size, or the machine does not say its
-  /// memory.
+  /// machine when none is given. None when the bound is zero or no size, or the machine does not
+  /// say its memory.
   #[must_use]
   pub fn counted(mib: Option<u64>) -> Option<Self> {
     let bound = match mib {
+      Some(0) => return None,
       Some(mib) => usize::try_from(mib).ok()?.checked_mul(1 << 20)?,
       None => machine()? / 2,
     };
@@ -91,15 +92,21 @@ impl Counted {
 // the bytes.
 unsafe impl GlobalAlloc for Counted {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-    LIVE.fetch_add(layout.size(), Ordering::Relaxed);
     // SAFETY: the caller keeps the contract of alloc, which is that of the system.
-    unsafe { System.alloc(layout) }
+    let at = unsafe { System.alloc(layout) };
+    if !at.is_null() {
+      LIVE.fetch_add(layout.size(), Ordering::Relaxed);
+    }
+    at
   }
 
   unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-    LIVE.fetch_add(layout.size(), Ordering::Relaxed);
     // SAFETY: the caller keeps the contract of alloc_zeroed, which is that of the system.
-    unsafe { System.alloc_zeroed(layout) }
+    let at = unsafe { System.alloc_zeroed(layout) };
+    if !at.is_null() {
+      LIVE.fetch_add(layout.size(), Ordering::Relaxed);
+    }
+    at
   }
 
   unsafe fn dealloc(&self, at: *mut u8, layout: Layout) {
@@ -145,6 +152,54 @@ fn machine() -> Option<usize> {
   // SAFETY: status is a MEMORYSTATUSEX whose length says its size, as the call asks.
   let read = unsafe { GlobalMemoryStatusEx(&raw mut status) };
   (read != 0).then(|| usize::try_from(status.ullTotalPhys).ok()).flatten()
+}
+
+/// How many weighs the daemon waits for a life that it asked to be born again before it asks the
+/// next one: a life that holds an act that a checkpoint does not keep, as a grant of its chain, may
+/// not be born again for long.
+pub(crate) const PATIENCE: u32 = 30;
+
+/// The lives that the daemon asked to be born again since its heap passed its share, each with the
+/// count of its births at the ask and the weighs since.
+#[derive(Default)]
+pub(crate) struct Asks {
+  asked: HashMap<String, (u64, u32)>,
+}
+
+impl Asks {
+  /// The heap fell under its share: each life asked, whose ask the daemon takes back.
+  pub(crate) fn spared(&mut self) -> Vec<String> {
+    std::mem::take(&mut self.asked).into_keys().collect()
+  }
+
+  /// The heap is past its share: of the lives that live, each with its name, its weight and the
+  /// count of its births, the one to ask now. None while a life asked is not born again yet and
+  /// the daemon waited for it fewer than [`PATIENCE`] weighs; else the heaviest that it did not
+  /// ask since its last birth.
+  pub(crate) fn next(&mut self, living: &[(String, u64, u64)]) -> Option<String> {
+    // A life that ended holds no ask: one that opens again is a new life, with births of its own.
+    self.asked.retain(|life, _| living.iter().any(|one| &one.0 == life));
+    let mut waits = false;
+    for (life, _, births) in living {
+      if let Some((at, weighs)) = self.asked.get_mut(life)
+        && *at == *births
+        && *weighs < PATIENCE
+      {
+        *weighs += 1;
+        waits = true;
+      }
+    }
+    if waits {
+      return None;
+    }
+    // A life that was born again since its ask is free to be asked again.
+    let free = living.iter().filter(|(life, weight, births)| {
+      *weight > 0 && self.asked.get(life).is_none_or(|(at, _)| at != births)
+    });
+    let (life, _, births) = free.max_by_key(|(_, weight, _)| *weight)?;
+    self.asked.insert(life.clone(), (*births, 0));
+    Some(life.clone())
+  }
 }
 
 /// What the actor watches of a life since it opened: the facts that it said, each act that lives
@@ -197,9 +252,10 @@ impl Watch {
     (self.facts >= TAIL || self.asked) && self.held.is_empty()
   }
 
-  /// The ask of the daemon, whose heap passed its share, that the life be born again.
-  pub(crate) fn ask(&mut self) {
-    self.asked = true;
+  /// The ask of the daemon, whose heap passed its share, that the life be born again, or the ask
+  /// taken back once the heap fell under the share.
+  pub(crate) fn ask(&mut self, asked: bool) {
+    self.asked = asked;
   }
 
   /// The facts that the life said since it opened, by which the daemon weighs it.

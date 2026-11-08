@@ -1222,7 +1222,7 @@ export const feed = part({
           const ear = act;
           const earLines = programFor(
             `ear:${act.id}`,
-            `${line.state}:${line.acts.map((chip) => chip.label + chip.state).join(" ")}`,
+            `${line.state}:${line.rungs.length}:${line.acts.map((chip) => chip.label + chip.state).join(" ")}`,
             () => {
               return earProgram(
                 ear,
