@@ -3,6 +3,8 @@
 import { expect } from "bun:test";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { isDone } from "furb/life";
+import { until } from "../../bind/typescript/test/until.ts";
 import { type Rule, test, Window, Yard } from "./harness.ts";
 
 /** A server of MCP over stdio that reads the names of its tools, one on each line, from the file tools.txt beside it at
@@ -58,6 +60,10 @@ test("/mcp reload lists again the tools that a server changed, and the changed t
     window = await Window.open(yard);
     await window.type("Scenario: load.");
     await window.shows((frame) => frame.includes("mcp played"), "the skill mcp played");
+    // The word that closes the prompt shows its text before the prompt is done, and a line typed on a prompt that is
+    // open goes to it as a message of None, so the next line waits for the end of the prompt.
+    const { session } = window;
+    await until(session, () => !session.acts.some((act) => act.kind === "prompt" && !isDone(act)));
     await window.type("Scenario: list.");
     const before = await window.shows(
       (frame) => frame.includes("hello(): Tool hello."),

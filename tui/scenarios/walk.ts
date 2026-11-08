@@ -8,6 +8,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import { isDone } from "furb/life";
+import { until as untilChange } from "../../bind/typescript/test/until.ts";
 import { cells, rasterize } from "../script/raster.ts";
 import { highlighting, mount } from "../script/stage.ts";
 import type { App } from "../src/app.ts";
@@ -279,9 +281,16 @@ export class Walk {
 /** The journey of a life of the scripted model, from its first message: each shape of answer, a question of each
  * shape, a command, a fault, a message that queues, a second thread, a click, the scroll, the sizes and the keys. */
 export async function lived(walk: Walk, window: Window, yard: Yard): Promise<void> {
+  // The answer that a step waits for can stand in the frame before its prompt is done, as the text of the word that
+  // closes it does. The next line typed then meets an open prompt and goes to it as a message of None, so a step ends
+  // once no prompt waits on a model, or a question waits for the owner.
+  const settled = () =>
+    window.session.desk.asks.length > 0 ||
+    !window.session.acts.some((act) => act.kind === "prompt" && !isDone(act));
   const ask = (line: string, answer: string) => async () => {
     await window.type(line);
     await walk.shows(answer);
+    await untilChange(window.session, settled);
   };
   await walk.step("open a new life");
   await walk.step("send Walk: hello. and wait for its answer", ask("Walk: hello.", "Hello from the walk."));
