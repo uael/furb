@@ -121,7 +121,7 @@ const PARTS: usize = 1_000;
 const READS: usize = 10;
 const FILE: usize = 8_000;
 
-/// A life that keeps its record, with no extension, whose model writes each reply in parts and
+/// A life that keeps its record, with no skill, whose model writes each reply in parts and
 /// closes it with a word.
 fn opening(at: &Path) -> Opening {
   let answer = Answered(Arc::new(move |_, told: Told| {

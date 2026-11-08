@@ -229,7 +229,7 @@ pub struct Spend {
   pub dollars: f64,
   pub answers: u32,
   pub actor: Option<String>,
-  /// The account of the last answer that named one.
+  /// The account of the last answer, none when that answer named none.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub account: Option<String>,
 }
@@ -249,9 +249,7 @@ impl Spend {
     self.dollars += answer.usage[4];
     self.answers += 1;
     self.actor = Some(answer.actor.clone());
-    if answer.account.is_some() {
-      self.account.clone_from(&answer.account);
-    }
+    self.account.clone_from(&answer.account);
   }
 }
 
