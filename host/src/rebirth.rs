@@ -175,8 +175,10 @@ impl Asks {
   /// The heap is past its share: of the lives that live, each with its name, its weight and the
   /// count of its births, the one to ask now. None while a life asked is not born again yet and
   /// the daemon waited for it fewer than [`PATIENCE`] weighs; else the heaviest that it did not
-  /// ask yet.
+  /// ask since its last birth.
   pub(crate) fn next(&mut self, living: &[(String, u64, u64)]) -> Option<String> {
+    // A life that ended holds no ask: one that opens again is a new life, with births of its own.
+    self.asked.retain(|life, _| living.iter().any(|one| &one.0 == life));
     let mut waits = false;
     for (life, _, births) in living {
       if let Some((at, weighs)) = self.asked.get_mut(life)
@@ -190,8 +192,10 @@ impl Asks {
     if waits {
       return None;
     }
-    let free =
-      living.iter().filter(|(life, weight, _)| *weight > 0 && !self.asked.contains_key(life));
+    // A life that was born again since its ask is free to be asked again.
+    let free = living.iter().filter(|(life, weight, births)| {
+      *weight > 0 && self.asked.get(life).is_none_or(|(at, _)| at != births)
+    });
     let (life, _, births) = free.max_by_key(|(_, weight, _)| *weight)?;
     self.asked.insert(life.clone(), (*births, 0));
     Some(life.clone())
