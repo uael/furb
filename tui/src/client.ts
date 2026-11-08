@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
-import { createConnection, type Socket } from "node:net";
+import type { Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Fact, Standing, Turn } from "furb";
@@ -21,7 +21,7 @@ import type {
   Threads,
   Request1 as Verb,
 } from "furb/protocol";
-import { Closed, Connection, Refused } from "furb/skill";
+import { Closed, Connection, daemonPlace, dialed, Refused } from "furb/skill";
 import { program } from "../../bind/typescript/program.ts";
 import type { Setting } from "./configs.ts";
 
@@ -30,12 +30,6 @@ export { Closed, Refused };
 /** Whether a prefix cuts its chain, as a word that compacts or clears it says one: a chain says its own prefix at its
  * birth, and the checkpoint word of a record made before the chain said that prefix itself began with the prefix that
  * it said, which was the birth of its chain. */
-/** Whether an out fact of an act adds to its output so far: a command that runs, or one that the window has not heard
- * yet. */
-function printing(act: Act | undefined, id: string): boolean {
-  return act ? act.kind === "bash" && !isDone(act) : /^bash\d+$/.test(id);
-}
-
 export function cuts([, id, by]: readonly unknown[], word: string): boolean {
   return by !== id && !word.startsWith("say('prefix', scope(acting()), ");
 }
@@ -54,13 +48,6 @@ export function daemonFolder(env: Record<string, string | undefined> = process.e
         : join(homedir(), ".cache"));
   if (!base) throw new Error("This machine has no cache of furb, so no daemon has a place on it.");
   return join(base, "furb", "host");
-}
-
-/** Where a window dials the daemon of a folder: its socket, or its named pipe on Windows. */
-export function daemonPlace(folder = daemonFolder()): string {
-  return process.platform === "win32"
-    ? `\\\\.\\pipe\\furb-${folder.replace(/[\\/:]/g, "-")}`
-    : join(folder, "host.sock");
 }
 
 /** The program furb that serves the daemon: the one that FURB_BIN names, else the one that `bun run build` made for
@@ -115,18 +102,6 @@ function tail(path: string): string {
   } catch {
     return "";
   }
-}
-
-/** A connection to a place, or nothing when no daemon answers there. */
-export function dialed(place: string): Promise<Socket | undefined> {
-  return new Promise((resolve) => {
-    const socket = createConnection(place);
-    socket.once("connect", () => {
-      socket.removeAllListeners("error");
-      resolve(socket);
-    });
-    socket.once("error", () => resolve(undefined));
-  });
 }
 
 /** A refusal of the version is told as a daemon of another build. */
@@ -366,6 +341,10 @@ export class RemoteLife extends EventEmitter {
   readonly compactions: Compaction[] = [];
   /** What each command that is not done printed on each stream so far, by the command. */
   readonly outputs = new Map<string, { stdout: string; stderr: string }>();
+  /** The lines that a command printed before the window heard its act, which the log keeps before the act: the log
+   * keeps of an act its last event alone, so a window that attaches late hears its facts first. The act takes them
+   * when it comes. */
+  private readonly early = new Map<string, { stdout: string; stderr: string }>();
   /** How many acts of work are done, which grows as the daemon tells each end. */
   completed = 0;
   /** What the answers of the models cost each chain, by the chain, and all chains together, in dollars. */
@@ -449,6 +428,7 @@ export class RemoteLife extends EventEmitter {
     this.seenAt.clear();
     this.compactions.length = 0;
     this.outputs.clear();
+    this.early.clear();
     this.completed = 0;
     this.spends.clear();
     this.spendChanges++;
@@ -573,14 +553,16 @@ export class RemoteLife extends EventEmitter {
     else if (kind === "prefix" && cuts(fact, String(this.acts.get(by)?.words[0] ?? "")))
       this.compactions.push({ chain: id, by, at });
     else if (kind === "started" && this.outputs.has(id)) this.outputs.set(id, { stdout: "", stderr: "" });
-    // A window that attaches late hears the out facts of a command before the act: the log keeps of an act its last
-    // event alone, which comes after them.
-    else if (kind === "out" && printing(this.acts.get(id), id)) {
-      const output = this.outputs.get(id) ?? { stdout: "", stderr: "" };
-      if (fact[4] === "stderr") output.stderr += String(fact[3]);
-      else output.stdout += String(fact[3]);
-      this.outputs.set(id, output);
-      this.mark(id);
+    else if (kind === "out") {
+      const act = this.acts.get(id);
+      const held = act ? this.outputs : this.early;
+      if (!act || (act.kind === "bash" && !isDone(act))) {
+        const output = held.get(id) ?? { stdout: "", stderr: "" };
+        if (fact[4] === "stderr") output.stderr += String(fact[3]);
+        else output.stdout += String(fact[3]);
+        held.set(id, output);
+        act && this.mark(id);
+      }
     }
     this.told(batch.acts);
   }
@@ -638,8 +620,12 @@ export class RemoteLife extends EventEmitter {
       const was = this.acts.get(act.id);
       this.acts.set(act.id, act);
       if (followed(act.kind)) this.mark(act.id);
-      if (act.kind === "bash" && !isDone(act) && !this.outputs.has(act.id))
-        this.outputs.set(act.id, { stdout: "", stderr: "" });
+      const early = this.early.get(act.id);
+      this.early.delete(act.id);
+      if (act.kind === "bash" && !isDone(act) && !this.outputs.has(act.id)) {
+        this.outputs.set(act.id, early ?? { stdout: "", stderr: "" });
+        early && this.mark(act.id);
+      }
       if (act.kind === "chain" && act.spend && act.spend !== was?.spend) {
         this.cost += act.spend.dollars - (this.spends.get(act.id)?.dollars ?? 0);
         this.spends.set(act.id, act.spend);

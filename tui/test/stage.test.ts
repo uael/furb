@@ -63,7 +63,8 @@ test.skipIf(process.platform === "win32")(
         `import { mkdirSync, writeFileSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
 import { join } from "node:path";
-import { daemonFolder, daemonPlace } from ${JSON.stringify(join(import.meta.dir, "../src/client.ts"))};
+import { daemonPlace } from ${JSON.stringify(join(import.meta.dir, "../../bind/typescript/src/skill.ts"))};
+import { daemonFolder } from ${JSON.stringify(join(import.meta.dir, "../src/client.ts"))};
 import { home } from ${JSON.stringify(join(import.meta.dir, "../script/stage.ts"))};
 await home("furb-stage-test");
 const place = daemonPlace(daemonFolder());

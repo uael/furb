@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { PROTOCOL } from "furb/protocol";
-import { daemonFolder, daemonPlace, dialed, furbProgram } from "../src/client.ts";
+import { daemonPlace, dialed } from "furb/skill";
+import { daemonFolder, furbProgram } from "../src/client.ts";
 
 /** How long the daemon of a run has to listen, or a daemon of an earlier build to give its place, in milliseconds. */
 const PATIENCE = 60000;
