@@ -75,7 +75,7 @@ repos:
         pass_filenames: false
       - id: cargo-test
         name: cargo test
-        entry: python3 script/hooks/reach.py cargo
+        entry: python3 script/budget.py cargo -- python3 script/hooks/reach.py cargo
         language: system
         # The files that the crate and its tests read. The gates run every hook on every file.
         files: ^(src|cli|host|\.agents/skills|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$
