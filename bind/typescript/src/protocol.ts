@@ -1164,4 +1164,10 @@ export interface Open {
   chain: string;
 }
 
+export type Mount = Omit<Extract<Request1, { verb: "view.mount" }>, "verb">;
+export type Tree = Omit<Extract<Request1, { verb: "view.tree" }>, "verb">;
+export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
+export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
+export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
+
 export const PROTOCOL = 11;
