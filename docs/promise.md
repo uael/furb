@@ -97,6 +97,9 @@ names is gone. `script/contract.py` fails on a break of the contract that this p
 
 What no machine proves yet, so the promise does not hold there until a proof lands:
 
+- A record cut between the gate of the first stand and its done: it drifts at gate1, since a replay makes that gate
+  before the teach of the extensions that the record holds before it. The torn and kill proofs step over that cut, and
+  the fork proof compares with the open of its origin rather than the live origin, until the journal is fixed.
 - A rollback: `test/outside/test_promise_rollback.py::test_each_record_of_next_opens_on_the_last_release_of_its_major_once_that_release_holds_a_corpus`
   opens each record of the corpus on the last release of its major, but it skips until a release of the major holds a
   folder of the corpus (P8).
