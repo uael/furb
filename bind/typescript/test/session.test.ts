@@ -5,7 +5,6 @@ import { join, sep } from "node:path";
 import { FileChanges } from "../src/changes.ts";
 import {
   Activity,
-  actorParts,
   boot,
   DamagedJournal,
   type Ear,
@@ -13,6 +12,7 @@ import {
   type Fact,
   inspectRecord,
   Life,
+  leveled,
   ROOT,
   Session,
   saveFile,
@@ -118,12 +118,9 @@ test("the act table holds an act paused while the last pause or wake that covers
 });
 
 test("an actor names its model and its effort after the last slash that follows the name of a model", () => {
-  expect(actorParts("claude-cli:org/plain")).toEqual({ model: "claude-cli:org/plain", effort: "off" });
-  expect(actorParts("claude-cli:org/plain/high")).toEqual({ model: "claude-cli:org/plain", effort: "high" });
-  expect(actorParts("claude-cli:org/high", ["claude-cli:org/high"])).toEqual({
-    model: "claude-cli:org/high",
-    effort: "off",
-  });
+  expect(leveled("claude-cli:org/plain")).toEqual(["claude-cli:org/plain", "off"]);
+  expect(leveled("claude-cli:org/plain/high")).toEqual(["claude-cli:org/plain", "high"]);
+  expect(leveled("claude-cli:org/high", ["claude-cli:org/high"])).toEqual(["claude-cli:org/high", "off"]);
 });
 
 test("a session offers the models its host names, and keeps the model and the effort chosen last as a preference", async () => {

@@ -1,19 +1,17 @@
 import { stripVTControlCharacters } from "node:util";
-import { type Engine, levels } from "../index.cjs";
+import { type Engine, levels, leveled as read } from "../index.cjs";
 import { unmarked } from "./life/marks.js";
 
 export { unmarked };
 
 /** The levels of effort, from least to most, which an actor names after its model. */
 export const efforts: readonly string[] = levels();
-/** The model and the effort an actor names: a model alone, whose effort is `off`, or a model and a level after its
- * last slash, when the models named do not hold the whole name. */
-export function actorParts(actor: string, models: readonly string[] = []): { model: string; effort: string } {
-  const at = actor.lastIndexOf("/");
-  return at < 0 || models.includes(actor) || !efforts.some((effort) => effort === actor.slice(at + 1))
-    ? { model: actor, effort: "off" }
-    : { model: actor.slice(0, at), effort: actor.slice(at + 1) };
-}
+/** The model and the effort an actor names, as the crate reads an actor: a model alone, whose effort is `off`, or a
+ * model and a level after its last slash, when the models named do not hold the whole name. */
+export const leveled = (actor: string, models: readonly string[] = []): [model: string, effort: string] => {
+  const [model = actor, effort = "off"] = read(actor, [...models]);
+  return [model, effort];
+};
 
 export type Turn = ReturnType<Engine["turns"]>[number];
 /** One actor of the roster, as the World offers it: its name, its efforts and its window. A record of a build before

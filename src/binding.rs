@@ -731,6 +731,18 @@ pub fn levels() -> Vec<&'static str> {
   world::catalog::LEVELS.to_vec()
 }
 
+/// The model and the effort that an actor names, as the crate reads an actor: the model whole
+/// when `models` holds its whole name, else the model and the level after its last slash when
+/// that word is one of the levels. The effort is `off` when the actor names none.
+#[cfg_attr(feature = "typescript", napi)]
+pub fn leveled(actor: String, models: Option<Vec<String>>) -> Vec<String> {
+  if models.unwrap_or_default().contains(&actor) {
+    return vec![actor, "off".to_owned()];
+  }
+  let (model, level) = world::catalog::leveled(&actor);
+  vec![model.to_owned(), level.unwrap_or("off").to_owned()]
+}
+
 /// An image copied into a directory of images under the digest of its bytes, as a message attaches it.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]

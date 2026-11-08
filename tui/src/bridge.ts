@@ -3,7 +3,6 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
-  actorParts,
   attachImage,
   ENGINE,
   type Fact,
@@ -11,6 +10,7 @@ import {
   FileChanges,
   type ImageAttachment,
   isQuestion,
+  leveled,
   model,
   models,
   questionKind,
@@ -830,7 +830,7 @@ export class HostView extends EventEmitter {
   /** Whether the model of an actor takes an image, as the catalog of the crate says. */
   async sees(actor: string): Promise<boolean> {
     const names = ((await this.life.standing())[0] ?? []).map(([one]) => one);
-    return model(actorParts(actor, names).model, this.directory, this.options.config)?.images ?? false;
+    return model(leveled(actor, names)[0], this.directory, this.options.config)?.images ?? false;
   }
   async source(): Promise<string> {
     return ENGINE;

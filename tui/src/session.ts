@@ -4,12 +4,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { FileChange, SetupInfo, Turn } from "furb";
 import {
-  actorParts,
   decodeRecord,
   enabled,
   furbDirectory,
   imageReference,
   imageReferences,
+  leveled,
   ROOT,
   saveFile,
   shapes,
@@ -1556,10 +1556,11 @@ export class Session extends EventEmitter {
     return this.labelOf(this.selected);
   }
   get actorChoice(): { model: string; effort: string } {
-    return actorParts(
+    const [model, effort] = leveled(
       this.actor,
       this.roster.map(([name]) => name),
     );
+    return { model, effort };
   }
   /** The ask that the operator points at on the desk, which the input answers while its chain is shown. */
   pointed?: string;
