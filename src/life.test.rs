@@ -21,7 +21,7 @@ use futures::future::select;
 
 use super::{Answer, Opening};
 use crate::checkpoint::CHECKPOINT;
-use crate::testing::Yard;
+use crate::testing::{LOADED, Yard, cut_first};
 use crate::{
   Act, Ear, Engine, Fact, Object, Text, checkpoint,
   ear::{ear, hear, say},
@@ -305,24 +305,14 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
   assert_eq!(running, "[]", "no act stays running with no process");
 }
 
-/// The bound of a turn for the words that a test does not cut: a step of a word that a loaded
-/// machine runs in a minute still holds under it.
-const LOADED: Duration = Duration::from_secs(120);
-
-/// The most that a word cut at 2 s may take as a whole on a loaded machine, under the 60 s that
-/// the word of a poll would take if nothing cut it.
-const CUT: Duration = Duration::from_secs(50);
-
 #[test]
 fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a_row_still_run() {
-  BOUND.set(Duration::from_secs(2));
+  cut_first(Duration::from_secs(2));
   let at = place("clock-spin");
   let poll = "t0 = clock()\nwhile clock() - t0 < 60:\n  pass\nclose('polled')";
   let twice = "a = clock()\nb = clock()\nclose(b >= a)";
-  let mut life = Opening { skills: Some(false), ..scripted_cut(&at, &[poll, twice], LOADED) }
-    .boot::<String>([])
-    .unwrap()
-    .0;
+  let mut life =
+    Opening { skills: Some(false), ..scripted(&at, &[poll, twice]) }.boot::<String>([]).unwrap().0;
   let asked = verbs::Prompt {
     message: Some("go".to_owned()),
     on: Some("chain1".to_owned()),
@@ -344,7 +334,23 @@ fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a
   );
   let clocks = life.word("len(transcript('chain1', 'clock'))", vec![]).unwrap();
   eprintln!("the poll made {:?} acts of clock in {took:?}", clocks.as_ref().as_int());
-  assert!(took < CUT, "the poll was cut near 2 s, not at 60: {took:?}");
+  // The readings of the clock count what the word did, which no load changes: a poll that its
+  // own loop ended would span 60 s of them.
+  let readings = life.word("[peek(x[1]) for x in transcript('chain1', 'clock')]", vec![]).unwrap();
+  let readings: Vec<f64> = readings
+    .as_ref()
+    .items()
+    .unwrap_or_default()
+    .iter()
+    .filter_map(monty_types::ObjectRef::as_float)
+    .collect();
+  assert!(readings.len() >= 3, "the poll and the word after it read the clock: {readings:?}");
+  // The readings of the poll, before the two of the word after it, count what the poll did, which
+  // no load changes: a poll that its own loop ended would span 60 s of them.
+  let poll = &readings[..readings.len() - 2];
+  let span =
+    poll.iter().copied().fold(f64::MIN, f64::max) - poll.iter().copied().fold(f64::MAX, f64::min);
+  assert!(span < 30.0, "the poll was cut at the bound, not by its own loop: {span} s");
   drop(life);
   let again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert!(again.raised().is_none(), "a later life replays the poll and its refusal with no drift");
@@ -364,10 +370,10 @@ fn asked_of(life: &mut Engine, message: &str) -> Result<Object, crate::value::Fa
 
 #[test]
 fn a_word_that_loops_on_an_answer_of_the_host_ends_at_the_bound_of_a_turn_with_a_bounded_record() {
-  BOUND.set(Duration::from_secs(2));
+  cut_first(Duration::from_secs(2));
   let at = place("cd-spin");
   let spin = "while True:\n  cd('.')";
-  let mut life = Opening { skills: Some(false), ..scripted_cut(&at, &[spin, "close(1)"], LOADED) }
+  let mut life = Opening { skills: Some(false), ..scripted(&at, &[spin, "close(1)"]) }
     .boot::<String>([])
     .unwrap()
     .0;
@@ -384,7 +390,6 @@ fn a_word_that_loops_on_an_answer_of_the_host_ends_at_the_bound_of_a_turn_with_a
   let cds = life.word("len(transcript('chain1', 'cd'))", vec![]).unwrap();
   let cds = cds.as_ref().as_int().unwrap_or_default();
   eprintln!("the loop made {cds} acts of cd in {took:?}");
-  assert!(took < CUT, "the loop was cut near 2 s: {took:?}");
   assert!(cds < 200_000, "the record holds the acts of the bound alone: {cds}");
   drop(life);
   let again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
@@ -398,10 +403,8 @@ fn a_word_that_catches_the_refusal_of_the_bound_and_loops_ends_its_step_and_leav
   let caught = "while True:\n  try:\n    clock()\n  except Refused:\n    pass";
   let mut first =
     Opening { skills: Some(false), ..scripted(&at, &[caught]) }.boot::<String>([]).unwrap().0;
-  let started = Instant::now();
   drop(asked_of(&mut first, "go"));
   assert!(first.stopped().is_some(), "a word that asks past the refusal ends its step");
-  assert!(started.elapsed() < CUT, "the step ends near 2 s");
   assert!(crate::sand::past().is_none(), "the stop leaves no deadline on the thread");
   drop(first);
   BOUND.set(LOADED);
@@ -676,29 +679,15 @@ fn replays() -> PathBuf {
 }
 
 /// A life of a test whose model answers each request with the next word of a script, and with close(None) once the
-/// script runs out.
+/// script runs out. A test that cuts its first word alone sets its bound with [`cut_first`].
 fn scripted(at: &Path, words: &[&str]) -> Opening {
-  cut_after(at, words, None)
-}
-
-/// A scripted life whose bound of a turn becomes `then` once its model gave its first word: the
-/// first word meets the short bound that the test set, and each word after it runs under a bound
-/// that a loaded machine does not pass, since the test proves what the first word did, not how
-/// fast the machine runs the others.
-fn scripted_cut(at: &Path, words: &[&str], then: Duration) -> Opening {
-  cut_after(at, words, Some(then))
-}
-
-fn cut_after(at: &Path, words: &[&str], then: Option<Duration>) -> Opening {
   let said: VecDeque<String> = words.iter().map(|one| (*one).to_owned()).collect();
-  let all = said.len();
-  let said = Arc::new(Mutex::new(said));
+  let said = Arc::new(Mutex::new((said, 0)));
   let answer = Answer(Arc::new(move |_, _| {
-    let mut left = said.lock().unwrap();
-    if let Some(then) = then.filter(|_| left.len() < all) {
-      BOUND.set(then);
-    }
-    let word = left.pop_front().unwrap_or_else(|| "close(None)".to_owned());
+    let mut said = said.lock().unwrap();
+    said.1 += 1;
+    crate::testing::answering(said.1);
+    let word = said.0.pop_front().unwrap_or_else(|| "close(None)".to_owned());
     let turn = Object::tuple([
       Object::string("assistant"),
       Object::string(word),

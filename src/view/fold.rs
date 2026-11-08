@@ -238,13 +238,13 @@ impl Fold {
   /// rung takes the role of its rung, and the engine made any other.
   fn maker(&self, kind: &Kind, by: &str, rest: &[Value]) -> Maker {
     let text = |at: usize| rest.get(at).and_then(Value::as_str).unwrap_or_default();
-    match self.acts.get(by) {
-      _ if *kind == Kind::Rung && text(1).is_empty() && !text(3).is_empty() => {
+    match (kind, by, self.acts.get(by)) {
+      (Kind::Rung, ..) if text(1).is_empty() && !text(3).is_empty() => {
         Maker::of(text(3), &self.models, &self.members)
       }
-      _ if operator(by) => Maker::of(by, &self.models, &self.members),
-      _ if by == skill::EAR => Maker::Skill,
-      Some(made) if made.kind != Kind::Chain => made.maker.clone(),
+      (_, by, _) if operator(by) => Maker::of(by, &self.models, &self.members),
+      (_, skill::EAR, _) => Maker::Skill,
+      (_, _, Some(made)) if made.kind != Kind::Chain => made.maker.clone(),
       _ => Maker::Engine,
     }
   }

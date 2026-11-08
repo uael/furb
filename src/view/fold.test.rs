@@ -190,6 +190,14 @@ fn an_actor_names_its_model_and_its_effort_unless_the_roster_holds_its_whole_nam
   );
   let whole = ["claude-cli:org/high".to_owned()];
   assert_eq!(Maker::of("claude-cli:org/high", &whole, &[]), model("claude-cli:org/high", None));
+  // The id of a model of a local server holds a slash, and the one parse of the catalog reads it.
+  for (actor, name, level) in [
+    ("local:org/qwen3", "local:org/qwen3", None),
+    ("local:org/qwen3/low", "local:org/qwen3", Some("low")),
+  ] {
+    assert_eq!(leveled(actor), (name, level), "{actor}");
+    assert_eq!(Maker::of(actor, &[], &[]), model(name, level), "{actor}");
+  }
   assert_eq!(Maker::of("", &[], &[]), Maker::Engine);
 }
 
@@ -250,19 +258,4 @@ fn the_account_that_a_fact_names_stands_in_the_spend_of_its_rung_and_its_chain()
   }
   let last = spends.get("chain1").cloned().flatten().expect("a spend");
   assert_eq!(last.account, None);
-}
-
-#[test]
-fn the_maker_of_an_actor_reads_its_model_and_its_level_as_the_catalog_reads_them() {
-  let cases = [
-    ("claude-cli:opus/high", "claude-cli:opus", Some("high")),
-    ("claude-cli:opus", "claude-cli:opus", None),
-    ("local:org/qwen3", "local:org/qwen3", None),
-    ("local:org/qwen3/low", "local:org/qwen3", Some("low")),
-  ];
-  for (actor, model, level) in cases {
-    assert_eq!(leveled(actor), (model, level), "{actor}");
-    let maker = Maker::Model { model: model.to_owned(), effort: level.map(str::to_owned) };
-    assert_eq!(Maker::of(actor, &[], &[]), maker, "{actor}");
-  }
 }

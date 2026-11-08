@@ -72,7 +72,9 @@ pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh
 
 /// An actor as its words say it: its model, and the level after its last slash when that word is
 /// one of [`LEVELS`]. A slash before any other word is a part of the name of the model, as in the
-/// id of a model of a local server.
+/// id of a model of a local server. A caller that knows a model whose whole name is the actor
+/// reads that model first, as [`Catalog`], the names of a local model and the maker of an act in
+/// the view do.
 pub fn leveled(actor: &str) -> (&str, Option<&str>) {
   match actor.rsplit_once('/') {
     Some((model, level)) if LEVELS.contains(&level) => (model, Some(level)),
@@ -493,15 +495,17 @@ impl Catalog {
       if let Some(model) = named(&known, actor) {
         return Some((model.clone(), None));
       }
-      if let Some(model) = level.and_then(|_| named(&known, name)) {
+      if level.is_some()
+        && let Some(model) = named(&known, name)
+      {
         return Some((model.clone(), level));
       }
     }
     if let Some(model) = self.served(actor).await {
       return Some((model, None));
     }
-    level?;
-    Some((self.served(name).await?, level))
+    let level = level?;
+    Some((self.served(name).await?, Some(level)))
   }
 
   /// What the catalog still holds of the roster and the actor that a host names, as [`Kept`] says.

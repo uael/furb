@@ -73,3 +73,6 @@ def test_a_page_that_names_a_proof_by_a_path_of_windows_gives_it_and_its_line_of
   _, patterns, _ = promise.runs(found)[0]
   assert re.search(patterns[0], "PASSED C:\\Users\\x\\test_proof.py::test_holds", re.MULTILINE)
   assert re.search(patterns[0], "PASSED ../x/test_proof.py::test_holds [case]", re.MULTILINE)
+  # A file on another drive than the root of pytest has no path from it, so pytest names the proof by its test alone.
+  assert re.search(patterns[0], "PASSED ::test_holds", re.MULTILINE)
+  assert not re.search(patterns[0], "PASSED other/test_other.py::test_holds", re.MULTILINE)

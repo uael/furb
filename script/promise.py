@@ -42,8 +42,9 @@ def runs(found: list[tuple[str, str]]) -> list[tuple[list[str], list[str], list[
   if python:
     ids = [f"{file}::{name}" for file, name in python]
     command = [sys.executable, "-m", "pytest", "-q", "--no-cov", "-p", "no:cacheprovider", "-n", "0", "-rA", *ids]
-    # pytest names a file by its path from its root, so the line of a proof is matched by the name of its file.
-    lines = [rf"^PASSED (\S*[/\\])?{re.escape(re.split(r'[/\\]', file)[-1])}::{name}\b" for file, name in python]
+    # pytest names a file by its path from its root, so the line of a proof is matched by the name of its file; on Windows,
+    # a file on another drive than the root has no path from it, and pytest names it by the test alone.
+    lines = [rf"^PASSED (\S*[/\\])?(?:{re.escape(re.split(r'[/\\]', file)[-1])})?::{name}\b" for file, name in python]
     made.append((command, lines, python))
   rust: dict[tuple[str, ...], list[tuple[str, str]]] = {}
   for one in found:

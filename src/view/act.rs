@@ -123,14 +123,16 @@ impl Maker {
       model: model.to_owned(),
       effort: effort.map(str::to_owned),
     };
-    match actor.strip_prefix(OPERATOR) {
-      _ if actor.is_empty() => Self::Engine,
-      Some(rest) if operator(actor) => match rest.strip_prefix('/') {
-        Some(login) if members.iter().any(|one| one == login) => {
-          Self::Member { login: login.to_owned() }
+    match actor {
+      "" => Self::Engine,
+      _ if operator(actor) => {
+        match actor.strip_prefix(OPERATOR).and_then(|rest| rest.strip_prefix('/')) {
+          Some(login) if members.iter().any(|one| one == login) => {
+            Self::Member { login: login.to_owned() }
+          }
+          _ => Self::Operator,
         }
-        _ => Self::Operator,
-      },
+      }
       _ if models.iter().any(|one| one == actor) => model(actor, None),
       _ => {
         let (name, effort) = leveled(actor);
