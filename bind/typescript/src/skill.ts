@@ -27,15 +27,22 @@ export function daemonPlace(folder: string): string {
     : join(folder, "host.sock");
 }
 
-/** A refusal of the daemon, named by its kind, as `closed`, `role` or `no_skill`. */
+/** A refusal of the daemon, named by its kind, as `closed`, `role` or `no_skill`. Its name is its kind, and
+ * `Refused` for the kind that says no more. */
 export class Refused extends Error {
   constructor(
     readonly kind: string,
     why: string,
   ) {
     super(why);
-    this.name = "Refused";
+    this.name = kind === "refused" ? "Refused" : kind;
   }
+}
+
+/** A request that the daemon left with no answer when its socket closed, as when it ends or hands over to another
+ * build. */
+export class Closed extends Error {
+  override name = "Closed";
 }
 
 /** One connection to the daemon, after its hello. Each verb takes a number and its answer, in any order, and each
@@ -62,7 +69,7 @@ export class Connection {
     this.closed = new Promise((resolve) => {
       socket.on("close", () => {
         for (const waits of this.waiting.values())
-          waits.reject(new Error("The daemon closed the connection."));
+          waits.reject(new Closed("The daemon closed the connection."));
         this.waiting.clear();
         resolve();
       });
