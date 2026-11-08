@@ -81,9 +81,10 @@ test.skipIf(process.platform === "win32")(
       expect([big?.passed, big?.memory]).toEqual([false, true]);
       expect([small?.passed, small?.memory]).toEqual([true, false]);
     } finally {
-      for (const one of pids) {
+      // A child that wrote its pid after the deadline is ended too.
+      for (const name of ["big", "small"]) {
         try {
-          process.kill(one, "SIGKILL");
+          process.kill(Number(readFileSync(pid(name), "utf8")), "SIGKILL");
         } catch {}
       }
       await Promise.allSettled(runs);
