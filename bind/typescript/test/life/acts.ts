@@ -61,6 +61,8 @@ export function act(
     id,
     kind,
     by,
+    // The crate gives the maker of an act, which for a site of the operator is the operator.
+    ...(by.split("/")[0] === "operator" ? { maker: { role: "operator" as const } } : {}),
     on: thread ?? chain,
     chain,
     words: [],
