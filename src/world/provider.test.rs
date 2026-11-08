@@ -66,6 +66,7 @@ use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 #[cfg(unix)]
 use crate::testing::on_reactor;
 use crate::testing::{Yard, block_on, park, pause, waker};
+#[cfg(unix)]
 use crate::value::entry;
 use crate::wire;
 use futures::future;
