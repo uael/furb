@@ -15,36 +15,26 @@ async function tree(at: string): Promise<void> {
   }
 }
 
-/** The time of each key of a text, typed as fast as the window draws it: from its press to the frame that shows it, so
- * it holds the suggestions that the key draws. */
-async function keys(window: Window, text: string): Promise<number[]> {
-  const waited: number[] = [];
+/** Whether the picker still walked or matched as each key of a query showed: each key is pressed and the next frame
+ * shows it. A picker that walks and ranks on the thread of the window ends its walk before the frame of the key, and
+ * a picker that never waits shows the key with its walk still running. The order of the frame and of the walk is what
+ * the test reads, and the load of the machine only makes the walk run longer, so no load moves the check. */
+async function keys(window: Window, query: string): Promise<boolean[]> {
+  const running: boolean[] = [];
   let typed = "";
-  for (const key of text) {
+  for (const key of query) {
     typed += key;
-    const began = performance.now();
     window.screen.mockInput.pressKey(key);
-    const frame = await window.frame();
-    waited.push(performance.now() - began);
-    expect(frame).toContain(typed);
+    expect(await window.frame()).toContain(typed);
+    running.push(window.app.filePicker?.running ?? false);
   }
-  return waited;
+  return running;
 }
 
-/** Words with no picker, then a query of the picker from its @, while its walk runs, and then the meant file. A picker
- * that walks and ranks on the thread of the window makes a key of the picker take three to ten times a key with no
- * picker in the folder, and near a second outside it, where it walked at each key. A key of a picker that never waits
- * takes about the time of a key with no picker, and up to three times it when the walk and the match on threads of
- * their own share a loaded machine with the window; the middle key holds a key that the machine slows now and then. */
+/** A query of the picker from its @, typed as fast as the window draws it, and then the meant file. */
 async function picks(window: Window, query: string, meant: string): Promise<void> {
-  const plain = await keys(window, "look at the ");
-  const picked = await keys(window, query);
-  const middle = (waited: number[]) =>
-    [...waited].sort((one, other) => one - other)[Math.floor(waited.length / 2)] ?? 0;
-  const shown = (waited: number[]) => waited.map((one) => one.toFixed(0)).join(" ");
-  expect(middle(picked), `with no picker ${shown(plain)}, in the picker ${shown(picked)}`).toBeLessThan(
-    3 * middle(plain) + 10,
-  );
+  await window.screen.mockInput.typeText("look at the ");
+  expect(await keys(window, query), "the picker ran at the frame of a key").toContain(true);
   await window.shows((frame) => frame.includes(meant), "the meant file", 30);
 }
 
