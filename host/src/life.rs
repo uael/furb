@@ -14,7 +14,10 @@ use std::{
   future::poll_fn,
   hash::{DefaultHasher, Hash, Hasher},
   path::PathBuf,
-  sync::{Arc, Mutex},
+  sync::{
+    Arc, Mutex,
+    atomic::{AtomicU64, Ordering},
+  },
   task::Poll,
   thread,
 };
@@ -159,6 +162,10 @@ pub enum Command {
   /// each fact that it said yet, as on a full disk, keeps the end, tells why in a notice, and ends
   /// once the record holds them: the reply comes then.
   End,
+  /// A rebirth that the daemon asks when its heap passes its share: a life that keeps its record
+  /// writes its checkpoint and is born again at the first moment when it holds no act that a
+  /// checkpoint does not keep, as at its tail.
+  Rebirth,
   /// A command of the engine said by a speaker other than the life itself, a skill as
   /// `skill/<name>` or a window as `operator/<login>`: each act and each fact that the command
   /// says is of that speaker, so a fact seen names the person who read.
@@ -258,6 +265,8 @@ pub struct Life {
   /// them, as [`Life::let_go`] says.
   record: Option<String>,
   gone: Gone,
+  /// The facts that the life said since it last opened, by which the daemon weighs it.
+  weight: Arc<AtomicU64>,
 }
 
 /// The facts that the log of a life let go: each one before the last checkpoint of the life, which
@@ -326,6 +335,7 @@ pub struct LifeHandle {
   inbox: UnboundedSender<Message>,
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
+  weight: Arc<AtomicU64>,
 }
 
 impl Life {
@@ -339,11 +349,13 @@ impl Life {
     let told = readers.clone();
     let name = Arc::new(Mutex::new(None));
     let named = Arc::clone(&name);
+    let weight = Arc::new(AtomicU64::new(0));
+    let weighed = Arc::clone(&weight);
     thread::Builder::new()
       .name("furb-life".to_owned())
-      .spawn(move || lived(opening, received, told, named))
+      .spawn(move || lived(opening, received, told, named, weighed))
       .map_err(LifeError::Thread)?;
-    Ok(LifeHandle { inbox, readers, name })
+    Ok(LifeHandle { inbox, readers, name, weight })
   }
 
   /// One event put in the log, and sent to each reader, then the follow-ups of a chain when the
@@ -360,6 +372,7 @@ impl Life {
       }
     }
     self.watch.heard(&event);
+    self.weight.store(self.watch.facts(), Ordering::Relaxed);
     let queued = self.queue.heard(&event);
     if let Event::Act(act) = &event {
       self.held.heard(act);
@@ -488,6 +501,12 @@ impl Life {
     self.reborn(None);
   }
 
+  /// The ask of the daemon that the life be born again, which it keeps until its rebirth.
+  fn ask(&mut self, reply: Replier) {
+    self.watch.ask();
+    reply.send(Ok(Reply::Done)).ok();
+  }
+
   /// Each fact of the log let go, since the record holds it: those that a checkpoint of the record
   /// passed. The log keeps an empty place for each, which [`Life::since`] fills from the record.
   fn let_go(&mut self) {
@@ -511,6 +530,7 @@ impl Life {
     }
     self.put(Event::Reborn(fault));
     self.watch.reborn();
+    self.weight.store(0, Ordering::Relaxed);
   }
 
   /// The events of the log from a place, and the read of the facts among them that the log let
@@ -655,9 +675,12 @@ fn lived(
   received: UnboundedReceiver<Message>,
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
+  weight: Arc<AtomicU64>,
 ) {
   match runtime::Builder::new_current_thread().enable_all().build() {
-    Ok(runtime) => LocalSet::new().block_on(&runtime, run(opening, received, readers, name)),
+    Ok(runtime) => {
+      LocalSet::new().block_on(&runtime, run(opening, received, readers, name, weight));
+    }
     Err(no) => {
       let ended = Event::Ended(Some(format!("the life has no runtime: {no}")));
       readers.send((0, Arc::new(ended))).ok();
@@ -671,6 +694,7 @@ async fn run(
   mut received: UnboundedReceiver<Message>,
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
+  weight: Arc<AtomicU64>,
 ) {
   let (told, heard) = mpsc::unbounded_channel();
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from));
@@ -691,6 +715,7 @@ async fn run(
     name,
     record: opening.record.clone().filter(|_| opening.keeps()),
     gone: Gone::default(),
+    weight,
   };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
@@ -827,6 +852,7 @@ async fn driven(
         asked.push(reply);
         return Drove::Ended(rebirth::ended(engine, record.is_some()), asked);
       }
+      Woke::Said(Some(Message::Command(Command::Rebirth, reply))) => life.ask(reply),
       Woke::Said(Some(Message::Command(command, reply))) => {
         let replied = commanded(&mut engine, &life.configs, &life.queue, &life.held, command);
         reply.send(replied.await).ok();
@@ -1098,6 +1124,11 @@ impl LifeHandle {
   /// holds neither.
   pub fn name(&self) -> Option<String> {
     self.name.lock().ok().and_then(|name| name.clone())
+  }
+
+  /// The facts that the life said since it last opened, by which the daemon weighs it.
+  pub(crate) fn weight(&self) -> u64 {
+    self.weight.load(Ordering::Relaxed)
   }
 
   /// The reply of the life to a command, once the life ran it, in the order that the life heard

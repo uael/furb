@@ -266,6 +266,7 @@ mod net {
       tailnet: Some(Tailnet { identity, ports }),
       door: None,
       host: None,
+      heap: None,
     };
     let local = Local::new(held.join("host"));
     let listener = local.listen().await.unwrap();
@@ -388,6 +389,7 @@ mod net {
       tailnet: None,
       door: Some(file.to_owned()),
       host: None,
+      heap: None,
     };
     let local = Local::new(yard.join("host"));
     let listener = local.listen().await.unwrap();

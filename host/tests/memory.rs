@@ -479,6 +479,7 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(window: (usize, usi
     tailnet: None,
     door: None,
     host: None,
+    heap: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });

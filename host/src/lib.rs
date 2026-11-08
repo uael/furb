@@ -44,5 +44,6 @@ pub use error::{AccessError, DaemonError, LifeError, ProtocolError, TransportErr
 pub use event::{Event, Seq};
 pub use life::{Command, Life, LifeHandle, Reply};
 pub use queue::FollowUp;
+pub use rebirth::{Counted, Heap, SHARE};
 pub use serve::{Gone, Granted, Host, Outbox, fixed, serve};
 pub use stall::{HUNG, STALL};

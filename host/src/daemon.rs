@@ -26,7 +26,7 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
-  collections::HashMap,
+  collections::{HashMap, HashSet},
   fmt::Display,
   net::{IpAddr, SocketAddr},
   path::{Path, PathBuf},
@@ -52,7 +52,7 @@ use tokio::{
   net::{TcpListener, TcpStream},
   sync::{mpsc, oneshot, watch},
   task::JoinSet,
-  time::{Instant, sleep_until},
+  time::{Instant, Interval, MissedTickBehavior, interval, sleep_until},
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
@@ -68,6 +68,7 @@ use crate::{
     Answer, BOUND, Config, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer,
     Request, Verb,
   },
+  rebirth::Heap,
   records,
   serve::{Host, Outbox, fixed, serve},
   stall::{Quiet, Stall},
@@ -86,6 +87,9 @@ pub const GRACE: Duration = Duration::from_secs(30);
 /// and a reference for each event of the rest of the log, and keeps each such event until the
 /// window has it.
 const WAITING: usize = 256;
+
+/// How often the daemon reads its heap, when it watches one.
+const WEIGH: Duration = Duration::from_secs(1);
 
 /// What the daemon opens each life on.
 #[derive(Clone)]
@@ -106,6 +110,9 @@ pub struct Settings {
   /// The folder of the local transport, where the process of each skill that a life plays dials
   /// the daemon. With none, the daemon starts no process.
   pub host: Option<PathBuf>,
+  /// The heap of the daemon, past whose share the life that weighs the most is born again. With
+  /// none, only the tail of a life makes it be born again.
+  pub heap: Option<Heap>,
 }
 
 /// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
@@ -410,8 +417,12 @@ impl Daemon {
     let (leave, leaving) = oneshot::channel();
     let (empty, emptied) = watch::channel(handed.is_empty());
     let changes = settings.tailnet.as_ref().map(|one| one.identity.changes());
+    let mut weigh = interval(WEIGH);
+    weigh.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut lives = Lives {
       changes,
+      weigh,
+      asked: HashSet::new(),
       members: Members::default(),
       settings,
       held: HashMap::new(),
@@ -594,6 +605,10 @@ struct Lives {
   views: Views,
   /// Whether the daemon holds no life, which the listener reads to end the daemon.
   empty: watch::Sender<bool>,
+  /// The clock at which the daemon reads its heap, and each life that it asked to be born again
+  /// since the heap passed its share.
+  weigh: Interval,
+  asked: HashSet<String>,
 }
 
 /// The next change of the access list, or never when there is no list.
@@ -695,6 +710,10 @@ impl Lives {
           self.restand();
           continue;
         }
+        _ = self.weigh.tick(), if self.settings.heap.is_some() => {
+          self.weighed();
+          continue;
+        }
       };
       match asked {
         None => return,
@@ -706,6 +725,27 @@ impl Lives {
       let empty = self.held.is_empty();
       self.empty.send_if_modified(|was| std::mem::replace(was, empty) != empty);
     }
+  }
+
+  /// The heap of the daemon weighed: past its share, the life that said the most facts since it
+  /// opened, of those that the daemon did not ask yet, is asked to be born again, and at the next
+  /// weigh the next one, until the heap falls under the share. A life that holds work is born
+  /// again once that work ends, as at its tail.
+  fn weighed(&mut self) {
+    let Some(heap) = self.settings.heap else { return };
+    if !heap.over() {
+      self.asked.clear();
+      return;
+    }
+    let living = self.held.iter().filter(|(life, held)| {
+      matches!(held.stage, Stage::Living(_))
+        && !self.asked.contains(*life)
+        && held.handle.weight() > 0
+    });
+    let Some((life, held)) = living.max_by_key(|(_, held)| held.handle.weight()) else { return };
+    self.asked.insert(life.clone());
+    let handle = held.handle.clone();
+    tokio::spawn(async move { handle.send(Command::Rebirth).await.ok() });
   }
 
   /// Each life that lives told to stand again, so that its roster names the members that the
