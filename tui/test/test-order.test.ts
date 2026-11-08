@@ -1,14 +1,17 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { Glob } from "bun";
-import { longestFirst, weight } from "../script/order.ts";
+import { LIMIT, longestFirst, weight } from "../script/order.ts";
 
 const root = join(import.meta.dir, "../..");
 
-test("a file weighs as much as the longest limit that it declares for a test", () => {
-  expect(weight('test("a", async () => {}, 7000);')).toBe(7000);
-  expect(weight("test(\n  'b',\n  async () => {},\n  1_500,\n);")).toBe(1500);
-  expect(weight("test('c', () => {}); setSystemTime(new Date(1_000_000));")).toBe(0);
+const limited = (limit: string) => `test("a", async () => {}, ${limit});`;
+
+test("a file weighs as much as the longest limit that it declares for a test, and never less than the runner gives", () => {
+  expect(weight(limited("90000"))).toBe(90000);
+  expect(weight(`test(\n  "b",\n  async () => {},\n  ${"150_000"},\n);`)).toBe(150000);
+  expect(weight(limited("7000"))).toBe(LIMIT);
+  expect(weight("test('c', () => {}); setSystemTime(new Date(1_000_000));")).toBe(LIMIT);
 });
 
 test("the runner starts the longest tests first, whatever the size of their files", () => {

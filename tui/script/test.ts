@@ -1,15 +1,16 @@
-// The tests of the workspace. A run is a process of its own that runs some tests of one file, one test at a time.
-// So a test counts its own time alone against its limit of thirty seconds, and no test runs beside a test that
-// changes what they share, such as the environment or the clock. A first run of each file, which matches no name,
-// lists its tests. Then the tests of all the files go into runs of at most one size, about four runs for each core,
-// the runs of the files with the longest limit of time first, and of the largest first among equal limits. As many runs go at once as the machine has cores: twice as many made each test
-// take more than twice its time on the four cores of a runner of Windows, and the whole suite no less time. A word given filters the files by their path, or by the name of their package and their file, as tui/host, and a flag goes to each run. A test
-// that passes shows its line, a run that fails shows all that it wrote, and one failed run fails them all. The
-// last line counts the tests that passed and failed, and a filter that matches no file fails. FURB_TEST_OUTPUT=1
-// shows all that each run wrote, so a console.log in a test shows too. Each
-// program that a test runs compiles first, all at once, so that no compile takes the machine from a test. A build
-// behind its sources, as after a switch of branch, shows a warning before the run and again after a failure, since
-// tests that read that build then fail as they fail on main. CI=true skips that check.
+// The tests of the workspace. A run is a process of its own that runs some tests of one file, one test at a time. So a
+// test counts its own time alone against its limit of thirty seconds, and no test runs beside a test that changes what
+// they share, such as the environment or the clock. A first run of each file, which matches no name, lists its tests.
+// Then the tests of all the files go into runs of at most one size, about four runs for each core, the runs of the
+// files with the longest limit of time first, and of the largest first among equal limits. As many runs go at once as
+// the machine has cores: twice as many made each test take more than twice its time on the four cores of a runner of
+// Windows, and the whole suite no less time. A word given filters the files by their path, or by the name of their
+// package and their file, as tui/host, and a flag goes to each run. A test that passes shows its line, a run that fails
+// shows all that it wrote, and one failed run fails them all. The last line counts the tests that passed and failed,
+// and a filter that matches no file fails. FURB_TEST_OUTPUT=1 shows all that each run wrote, so a console.log in a test
+// shows too. Each program that a test runs compiles first, all at once, so that no compile takes the machine from a
+// test. A build behind its sources, as after a switch of branch, shows a warning before the run and again after a
+// failure, since tests that read that build then fail as they fail on main. CI=true skips that check.
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,7 +18,7 @@ import { Glob } from "bun";
 import { endedByMemory, endOf } from "./children.ts";
 import { ownDaemon } from "./daemon.ts";
 import { environment } from "./environment.ts";
-import { longestFirst } from "./order.ts";
+import { LIMIT, longestFirst } from "./order.ts";
 import { stale, warning } from "./stale.ts";
 
 const given = process.argv.slice(2);
@@ -142,7 +143,14 @@ for (const { file, names, text } of listed)
   }
 await deal(runs, cores, async ({ file, names }) => {
   const pattern = `^(${names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`;
-  const { text, passed } = await test(["--timeout", "30000", "--test-name-pattern", pattern, ...flags, file]);
+  const { text, passed } = await test([
+    "--timeout",
+    String(LIMIT),
+    "--test-name-pattern",
+    pattern,
+    ...flags,
+    file,
+  ]);
   passes += text.match(/^\(pass\)/gm)?.length ?? 0;
   fails += text.match(/^\(fail\)/gm)?.length ?? 0;
   if (passed) process.stdout.write(everything ? text : text.replace(/^(?!\(pass\)).*\n/gm, ""));
