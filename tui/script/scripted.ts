@@ -109,8 +109,6 @@ const TOKEN =
 const NOTICE = /^#?[a-z_]+\d+(?: [a-z]+)*$/;
 /** The kinds of fact whose fourth place holds a text of the life: a value, a close, a note and a line of output. */
 const TEXT = new Set(["done", "close", "tell", "out"]);
-/** The mark of the lines that a cut text left out, which the record keeps as the readers count it. */
-const MORE = /^… \d+ more lines$/;
 
 /** A number for a key, the same on each run. */
 function hashed(key: string): number {

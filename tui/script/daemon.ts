@@ -5,6 +5,10 @@ import { daemonFolder, daemonPlace, dialed, furbProgram } from "../src/client.ts
 /** How long the daemon of a run has to listen, or a daemon of an earlier build to give its place, in milliseconds. */
 const PATIENCE = 60000;
 
+/** The exit code of a run that a signal ends, as a shell reads it. */
+export const signalExit = (signal: "SIGINT" | "SIGTERM" | "SIGHUP"): number =>
+  128 + (signal === "SIGHUP" ? 1 : signal === "SIGINT" ? 2 : 15);
+
 /** The daemon that a run of the tests owns in the cache of the tests, of the build that the run tests: a daemon of an
  * earlier build there gives its place first, so that no test reaches it. A life of a test ends as soon as its last
  * window lets it go, so that a test reads its record as that end left it. It gives the end of that daemon, which the
@@ -26,7 +30,7 @@ export async function ownDaemon(
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
     process.once(signal, () => {
       served.kill();
-      process.exit(128 + (signal === "SIGHUP" ? 1 : signal === "SIGINT" ? 2 : 15));
+      process.exit(signalExit(signal));
     });
   // The run holds one peer of its daemon for as long as it lives, so that the daemon ends once its grace passed after
   // the run is gone, even by a kill that no handler hears.

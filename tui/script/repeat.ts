@@ -9,7 +9,8 @@
 import { existsSync, rmSync } from "node:fs";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { ownDaemon } from "./daemon.ts";
+import { endedByMemory } from "./children.ts";
+import { ownDaemon, signalExit } from "./daemon.ts";
 import { environment } from "./environment.ts";
 import { LIMIT } from "./order.ts";
 import { exactly, runTest, testFiles } from "./run.ts";
@@ -48,25 +49,32 @@ const env = environment();
 // A signal ends the processes of the load first, as the daemon of the tests ends with it: the handler of the daemon
 // exits at once, so this one stands before it and runs first.
 const spinning = Array.from({ length: load }, () => Bun.spawn(["yes"], { stdout: "ignore" }));
+// The yard of the run in flight goes too, since the run keeps what its processes wrote.
+let flying: string | undefined;
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
   process.once(signal, () => {
     for (const one of spinning) one.kill();
-    if (!daemon) process.exit(128);
+    if (flying) rmSync(flying, { recursive: true, force: true });
+    if (!daemon) process.exit(signalExit(signal));
   });
 const ended = daemon ? await ownDaemon(env) : async () => {};
 let failed = 0;
 try {
   for (let run = 1; run <= runs; run++) {
     const began = Date.now();
-    const { text, passed, yard } = await runTest(
+    const { text, passed, memory, yard } = await runTest(
       env,
       ["--timeout", String(LIMIT), "--test-name-pattern", exactly([name as string]), file],
       true,
     );
+    flying = yard;
     const seconds = ((Date.now() - began) / 1000).toFixed(1);
     const tests = text.match(/^\((pass|fail)\)/gm)?.length ?? 0;
-    // The name names one test: another count says that it matched none, or more than one.
-    if (tests !== 1) {
+    // A run that the watcher of memory ended is no failure of the test, and no evidence of a flake: it counts for nothing.
+    if (memory) {
+      console.log(`run ${run} of ${runs}: ${endedByMemory(name as string)}`);
+    } else if (tests !== 1) {
+      // The name names one test: another count says that it matched none, or more than one.
       console.log(`run ${run} of ${runs}: ${tests} tests ran for the name ${name}, and one test should`);
       failed = 2;
     } else if (passed) {

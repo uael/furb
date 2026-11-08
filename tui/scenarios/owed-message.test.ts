@@ -11,6 +11,10 @@ test("a message on a thread whose word closes it before the model read it still 
       await new Promise((r) => setTimeout(r, 500));
       await window.type("Scenario: second.");
       await window.shows((frame) => frame.includes("First answered."), "the answer of the first message");
-      await window.shows((frame) => frame.includes("Second answered."), "the answer of the second message", 30);
+      await window.shows(
+        (frame) => frame.includes("Second answered."),
+        "the answer of the second message",
+        30,
+      );
     },
   ));

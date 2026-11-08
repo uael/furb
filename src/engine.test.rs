@@ -42,6 +42,16 @@ fn done(about: &str, value: Object) -> Fact {
   Fact::says("done", about, [value])
 }
 
+thread_local! {
+  /// The bound of a turn for each word after the first of a scripted life, when the test
+  /// cuts its first word alone.
+  static THEN: std::cell::Cell<Option<Duration>> = const { std::cell::Cell::new(None) };
+}
+
+/// The bound of a turn for the words that a test does not cut: a step of a word that a
+/// loaded machine runs in a minute still holds under it.
+const LOADED: Duration = Duration::from_secs(120);
+
 /// The provider of the test: it answers what the chains stand on, and each reply with the next word of its script,
 /// but for the word WAIT, which leaves the reply started and not done.
 fn provider(
@@ -76,6 +86,12 @@ fn provider(
           say(&mut co, Fact::says("started", a.about(), []));
           let turns = co.call("turns", vec![], vec![("on", Object::string(a.on()))]).await?;
           read.borrow_mut().push(turns.py_repr());
+          // Each word after the first, which the test cuts, runs under LOADED.
+          if read.borrow().len() > 1
+            && let Some(then) = THEN.get()
+          {
+            crate::sand::BOUND.set(then);
+          }
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
           if word == "WAIT" {
             continue;
@@ -1381,15 +1397,21 @@ fn said(fact: &Fact) -> Option<String> {
     .then(|| format!("{} {} {:?}", fact.kind(), fact.about(), words.collect::<Vec<_>>()))
 }
 
-/// Each sandbox that this thread makes from now on, with a turn bound short enough for a test.
+/// Each sandbox that this thread makes from now on, with a turn bound short enough for a
+/// test, which the first word of the script meets; each word after it runs under [`LOADED`],
+/// since the test proves what the first word did, not how fast the machine runs the others.
 fn bounded() {
   crate::sand::BOUND.set(Duration::from_millis(500));
+  THEN.set(Some(LOADED));
 }
 
 #[test]
 fn a_word_that_never_yields_raises_at_the_bound_and_the_chain_asks_again() {
   bounded();
-  let mut lived = Lived::new("spun", &["while True:\n  pass", "close(8)"], true).unwrap();
+  // The second word polls the clock for a second, past the short bound, and runs whole
+  // under the bound of the words that the test does not cut.
+  let polls = "t0 = clock()\nwhile clock() - t0 < 1:\n  pass\nclose(8)";
+  let mut lived = Lived::new("spun", &["while True:\n  pass", polls, "close(0)"], true).unwrap();
   let root = lived.root();
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = lived.engine.prompt(Object::string("int"), with).unwrap();
@@ -1441,6 +1463,7 @@ fn a_record_whose_word_never_yields_replays_to_the_same_facts() {
     let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
     (root, facts.iter().filter_map(said).collect::<Vec<_>>(), first.end())
   };
+  bounded();
   let mut second = Lived::new("replayed", &[], false).unwrap();
   assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
   assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
@@ -1760,7 +1783,9 @@ fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes
 
 #[test]
 fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry() {
-  crate::sand::BOUND.set(Duration::from_millis(100));
+  // A bound of 100 ms may pass before the loop enters its `try` on a loaded machine, as in
+  // life.test.rs.
+  crate::sand::BOUND.set(Duration::from_secs(1));
   let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
   let mut lived = Lived::new("stopped", &[cutter, "close(8)"], true).unwrap();
   let root = lived.root();
@@ -1813,6 +1838,7 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
 /// the work of the engine, with this bound of the turn.
 fn bounded_at(bound: Duration) {
   crate::sand::BOUND.set(bound);
+  THEN.set(None);
 }
 
 /// The bound of the replay and the bound of the checkpoint that the test proves, from `gather`,

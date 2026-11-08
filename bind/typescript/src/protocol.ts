@@ -1053,6 +1053,7 @@ export interface Attention {
   asks: number;
   failed: number;
   paused: number;
+  unread: number;
 }
 /**
  * One act of a life with its meaning, as it stands after the last fact about it.
@@ -1163,4 +1164,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 10;
+export const PROTOCOL = 11;
