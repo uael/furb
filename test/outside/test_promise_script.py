@@ -28,6 +28,9 @@ def test_the_page_of_the_promise_names_its_proofs_of_python_and_of_rust_and_each
 
 
 def page(tmp: Path, body: str) -> Path:
+  # A pytest.ini roots the proof at its folder: with none, pytest roots it at the common folder of it and the repo, the
+  # home on a desk, and walks that tree for seconds before it runs one test.
+  (tmp / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
   (tmp / "test_proof.py").write_text(body, encoding="utf-8")
   made = tmp / "promise.md"
   made.write_text(
