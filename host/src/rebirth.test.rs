@@ -100,9 +100,11 @@ fn the_daemon_asks_one_life_at_a_time_and_the_next_once_it_is_born_again() {
   let mut asks = Asks::default();
   assert_eq!(asks.next(&lives((9, 0), (5, 0), (0, 0))), Some("a".to_owned()));
   assert_eq!(asks.next(&lives((9, 0), (5, 0), (0, 0))), None, "a is not born again yet");
-  assert_eq!(asks.next(&lives((12, 1), (5, 0), (0, 0))), Some("b".to_owned()), "a is born again");
-  assert_eq!(asks.next(&lives((12, 1), (6, 0), (0, 0))), None, "b is not born again yet");
-  assert_eq!(asks.next(&lives((12, 1), (6, 1), (0, 0))), None, "c weighs nothing and a was asked");
+  let after = asks.next(&lives((1, 1), (5, 0), (0, 0)));
+  assert_eq!(after, Some("b".to_owned()), "a is born again and weighs little now");
+  assert_eq!(asks.next(&lives((1, 1), (6, 0), (0, 0))), None, "b is not born again yet");
+  let grown = asks.next(&lives((8, 1), (1, 1), (0, 0)));
+  assert_eq!(grown, Some("a".to_owned()), "a grew again after its birth, so it is asked again");
   let mut spared = asks.spared();
   spared.sort();
   assert_eq!(spared, ["a", "b"]);
@@ -129,6 +131,7 @@ fn a_life_that_is_not_born_again_holds_the_asks_no_more_than_its_patience() {
 fn a_life_that_ended_holds_no_ask() {
   let mut asks = Asks::default();
   assert_eq!(asks.next(&lives((9, 0), (5, 0), (0, 0))), Some("a".to_owned()));
-  let left = vec![("b".to_owned(), 5, 0)];
-  assert_eq!(asks.next(&left), Some("b".to_owned()));
+  assert_eq!(asks.next(&[]), None, "no life lives");
+  let back = vec![("a".to_owned(), 9, 0)];
+  assert_eq!(asks.next(&back), Some("a".to_owned()), "a life that opens again is a new life");
 }
