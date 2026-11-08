@@ -26,7 +26,7 @@ import {
 } from "furb";
 import { type Act, type Compaction, type Exit, isPaused, type Measure, type Spend } from "furb/life";
 import type { Config, FollowUp, Rung, ThreadNode, Threads } from "furb/protocol";
-import { type Choices, daemon, type Listener, Refused, RemoteLife } from "./client.ts";
+import { type Choices, daemon, type Listener, machine, Refused, RemoteLife } from "./client.ts";
 import { clock } from "./clock.ts";
 import type { Setting } from "./configs.ts";
 import { demoModels } from "./demo/answer.ts";
@@ -987,7 +987,7 @@ export function openingEngine(options: EngineOptions): {
     claude: options.claude ?? process.env.FURB_CLAUDE_BIN,
     models: options.demo || options.watch ? demoModels(options.watch) : undefined,
   };
-  const life = new RemoteLife(daemon(), kept, choices);
+  const life = new RemoteLife(options.machine ? machine(options.machine) : daemon(), kept, choices);
   const host = new HostView(life, { ...options, record: kept });
   const ready = life.open().then(
     () => {

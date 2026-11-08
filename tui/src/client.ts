@@ -21,7 +21,7 @@ import type {
   Threads,
   Request1 as Verb,
 } from "furb/protocol";
-import { Closed, Connection, daemonPlace, dialed, Refused } from "furb/skill";
+import { addressOf, Closed, Connection, daemonPlace, dialed, Refused } from "furb/skill";
 import { program } from "../../bind/typescript/program.ts";
 import type { Setting } from "./configs.ts";
 
@@ -149,7 +149,13 @@ export class Daemon extends EventEmitter {
       idle: true,
       again: true,
       role: this.role,
-      reach: async () => (await dialed(this.place)) ?? (await started(this.folder, this.place)),
+      // A daemon of another machine is dialed at its address and never started from here.
+      reach: async () => {
+        const socket = await dialed(this.place);
+        if (socket) return socket;
+        if (addressOf(this.place)) throw new Error(`No daemon of furb listens at ${this.place}.`);
+        return await started(this.folder, this.place);
+      },
       heard: (frame) => this.heard(frame),
       explain: another,
     });
@@ -260,6 +266,20 @@ export type Listener = Parameters<EventEmitter["on"]>[1];
 let shared: Daemon | undefined;
 /** A role given makes this window a reader on any transport: its hello asks that role, and the daemon gives the
  * lesser of it and the role that the transport proved. */
+/** The daemons of other machines that this window reached, by their address: a window holds a life of such a machine
+ * as it holds a local one, through the one dial. */
+const machines = new Map<string, Daemon>();
+export function machine(address: string, role?: Role): Daemon {
+  if (!addressOf(address)) throw new Error(`${address} is no address of a machine, as host:port.`);
+  let found = machines.get(address);
+  if (!found || (role && found.role !== role)) {
+    found?.close();
+    found = new Daemon(daemonFolder(), address, role ?? found?.role);
+    machines.set(address, found);
+  }
+  return found;
+}
+
 export function daemon(role?: Role): Daemon {
   const folder = daemonFolder();
   if (shared?.folder !== folder || (role && shared.role !== role)) {

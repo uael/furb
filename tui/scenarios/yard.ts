@@ -112,10 +112,19 @@ export class Yard {
       .filter(Boolean)
       .map((line) => JSON.parse(line));
   }
+  /** The address of the daemon of another machine that the windows of the yard hold their lives in, as host:port. */
+  machine?: string;
   /** The options of a window on the record of the yard, or on another record in its folder of sessions. */
   options(record = this.record): EngineOptions {
     const claude = join(this.model, process.platform === "win32" ? "claude.exe" : "claude");
-    return { cwd: this.work, record, claude, model: MODEL, roster: [MODEL] };
+    return {
+      cwd: this.work,
+      record,
+      claude,
+      model: MODEL,
+      roster: [MODEL],
+      ...(this.machine ? { machine: this.machine } : {}),
+    };
   }
   /** The process of the daemon of the yard, which holds its lives, while one runs. */
   host(): number | undefined {

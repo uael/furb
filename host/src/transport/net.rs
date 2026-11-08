@@ -4,7 +4,7 @@
 //! local API of Tailscale gives for its address, with the role that the access list gives it.
 
 use std::{
-  fs, io, mem,
+  env, fs, io, mem,
   net::{IpAddr, Ipv4Addr, SocketAddr},
   path::{Path, PathBuf},
   pin::Pin,
@@ -253,6 +253,16 @@ impl LocalApi {
     const SOCKETS: [&str; 2] = ["/var/run/tailscale/tailscaled.sock", "/var/run/tailscaled.socket"];
     #[cfg(windows)]
     const SOCKETS: [&str; 1] = [r"\\.\pipe\ProtectedPrefix\Administrators\Tailscale\tailscaled"];
+    // FURB_TAILSCALE_API names a port of loopback and its token, as `port:token`, in place of
+    // the Tailscale of the machine: a test stands a daemon of the tailnet on loopback with a
+    // fake of the local API, as host/tests/net.rs does.
+    let fake = env::var("FURB_TAILSCALE_API").ok().and_then(|one| {
+      let (port, token) = one.split_once(':')?;
+      Some(Self::Port { port: port.parse().ok()?, token: token.to_owned() })
+    });
+    if fake.is_some() {
+      return fake;
+    }
     if let Some(socket) = SOCKETS.iter().map(PathBuf::from).find(|one| one.exists()) {
       return Some(Self::Socket(socket));
     }

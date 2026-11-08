@@ -53,11 +53,20 @@ function askedBy<E extends Error>(error: E, asked: Error): E {
   return error;
 }
 
+/** The host and the port of a place that names a machine, as `100.64.0.2:7431` or `[fd7a::1]:7431`, and nothing for a
+ * place that is a socket or a pipe of this machine: the one dial reaches a daemon by either. */
+export function addressOf(place: string): { host: string; port: number } | undefined {
+  const found = /^(?:\[([0-9a-fA-F:.]+)\]|([A-Za-z0-9][A-Za-z0-9.-]*)):(\d{1,5})$/.exec(place);
+  const port = Number(found?.[3]);
+  return found && port > 0 && port < 65536 ? { host: found[1] ?? found[2] ?? "", port } : undefined;
+}
+
 /** A socket to the daemon at a place, or nothing when no daemon listens there: the one dial of a window, a skill and
  * each script. */
 export function dialed(place: string): Promise<Socket | undefined> {
   return new Promise((resolve) => {
-    const socket = createConnection(place);
+    const at = addressOf(place);
+    const socket = at ? createConnection(at) : createConnection(place);
     socket.once("connect", () => {
       socket.removeAllListeners("error");
       resolve(socket);

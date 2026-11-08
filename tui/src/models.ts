@@ -9,6 +9,8 @@ export const demoRoster = ["claude-cli:sonnet", "claude-cli:opus", "claude-cli:h
 export type EngineOptions = Omit<SessionOptions, "answer" | "operator" | "ears"> & {
   demo?: boolean;
   watch?: boolean;
+  /** The address of the daemon of another machine of the tailnet, as host:port, that holds the life of this window. */
+  machine?: string;
 };
 
 /** The roster of a session of the TUI: the models the operator names, or those of the demo, and the models the
