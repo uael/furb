@@ -152,8 +152,24 @@ fn crossed(record: &Path) {
     .rfind("[[\"checkpoint\"")
     .and_then(|at| text[at..].find('\n').map(|end| at + end))
     .expect("the record holds a checkpoint");
-  let theirs = text[cut..].replacen(&made(&world::engine()), &made(&"0".repeat(64)), 1);
-  assert_ne!(theirs, text[cut..], "the tail names the engine of this build");
+  let mut named = false;
+  let mut theirs = String::new();
+  for line in text[cut..].split_inclusive('\n') {
+    if named || !line.contains(&made(&world::engine())) {
+      theirs.push_str(line);
+      continue;
+    }
+    named = true;
+    // The tail names another engine and holds none of its texts, so it goes on on the engine of
+    // this build, as a build of another engine whose texts the record never held.
+    let mut entry: serde_json::Value = serde_json::from_str(line).unwrap();
+    let fact = entry[0].as_array_mut().unwrap();
+    fact[3] = serde_json::Value::String("0".repeat(64));
+    fact.truncate(7);
+    theirs.push_str(&entry.to_string());
+    theirs.push_str(&line[line.trim_end_matches('\n').len()..]);
+  }
+  assert!(named, "the tail names the engine of this build");
   fs::write(record, format!("{}{theirs}", &text[..cut])).unwrap();
 }
 
@@ -258,14 +274,15 @@ fn make_the_corpus() {
       lived(&at, kits);
     }
     let record = at.join("record.jsonl");
-    if other {
-      crossed(&record);
-    }
     scrubbed(&record, &at);
-    // The module is read as the test reads it: from the record alone, with no log beside it.
+    // The module is read as the test reads it: from the record alone, with no log beside it, and
+    // before the tail names another engine, which this build cannot inspect.
     let alone = place(&format!("made-{name}"));
     fs::copy(&record, alone.join("record.jsonl")).unwrap();
     let shown = modules(&mut inspected(&alone).unwrap());
+    if other {
+      crossed(&record);
+    }
     fs::copy(&record, next.join(format!("{name}.jsonl"))).unwrap();
     fs::write(next.join(format!("{name}.modules")), format!("{shown}\n")).unwrap();
   }
