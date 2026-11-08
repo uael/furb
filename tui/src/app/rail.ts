@@ -40,7 +40,7 @@ export interface Waiting {
 const LEFT = space.inset;
 const RIGHT = space.inset;
 
-/** The least cells that the head of a thread row keeps: its marks and the start of its title. A row that cannot leave them drops the age of its tail. */
+/** The cells that a row of the sidebar tries to leave its head: its marks and the start of its title. A tail that would leave less drops its last parts. */
 const HEAD_MIN = 16;
 
 /** The number in the name of an act, which orders the acts as they came. */
@@ -259,15 +259,14 @@ export const rail = part({
   },
 
   /** A row of the sidebar in two parts, its head, which the room cuts and a hover shows whole, and its tail, which
-   * stays. A row too narrow to leave its head HEAD_MIN cells takes the `short` tail that its caller gives, as a state
-   * with no age, so that the tail never crowds the head. */
+   * stays. A tail that would leave the head fewer than HEAD_MIN cells drops its last parts, one by one, down to its
+   * first part, so that a thread keeps its state and loses its age before its title is cut. */
   railSplit(
     head: Part[] | (() => Part[]),
     tail: Part[],
     run: () => void,
     options: BoxOptions = {},
     selected = false,
-    short?: Part[],
   ): BoxRenderable {
     const row = this.row({
       backgroundColor: selected ? c.selected : c.panel,
@@ -280,7 +279,8 @@ export const rail = part({
       this.sideWidth -
       margins.reduce<number>((sum, one) => sum + (typeof one === "number" ? one : 0), 0) -
       (parts.length ? Bun.stringWidth(plain(parts)) + space.between : 0);
-    const kept = short && spare(tail) < HEAD_MIN ? short : tail;
+    let kept = tail;
+    while (kept.length > 1 && spare(kept) < HEAD_MIN) kept = kept.slice(0, -1);
     const room = spare(kept);
     const read = typeof head === "function" ? head : () => head;
     const fits = Bun.stringWidth(plain(read())) <= room;
@@ -550,15 +550,12 @@ export const rail = part({
         [`${markOf(shown)[0]} `, markOf(shown)[1]],
         [title, lit ? c.text : thread.over ? c.faint : c.muted, lit ? bold : 0],
       ];
-      const meta = this.threadMeta(thread, state);
       const row = this.railSplit(
         moves(shown) ? head : head(),
-        meta,
+        this.threadMeta(thread, state),
         () => this.chooseThread(thread),
         { paddingLeft: indent, paddingRight: RIGHT },
         lit || cursor === id,
-        // The state stands alone where the title would else have too little room.
-        meta.length > 1 ? meta.slice(0, 1) : undefined,
       );
       this.railSpaces.add(row);
       step(1, id);
