@@ -64,19 +64,6 @@ const thinkingText = (label: Part[], tail?: Part[]): Part[] => [
   ...(tail ?? []),
 ];
 
-/** The model that wrote the word of a rung, by the name that the line under the input gives it, or nothing for a word
- * of the operator. */
-const modelOf = (step: { kind: string; words: readonly unknown[] }) => {
-  const actor = step.kind === "rung" && typeof step.words[2] === "string" ? step.words[2] : "";
-  const { model, effort } = actorParts(actor);
-  const { id } = modelName(model);
-  return actor && id !== "operator" ? modelLabel(id, effort) : "";
-};
-
-/** The label of the block of a word: the model that wrote it, as opus/high, or the operator. */
-const writerOf = (step?: { kind: string; by?: string; words: readonly unknown[] }) =>
-  (!operated(step?.by ?? "") && step && modelOf(step)) || "operator";
-
 export const details = part({
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
    * wrote once it read the failure, so the failure no longer stands. */
@@ -161,11 +148,24 @@ export const details = part({
     return { name: modelName(model).id, effort };
   },
 
-  /** Who a prompt that is not a message of the operator asks, as the model with its effort, opus/high, which the block
-   * of its reply names the same way: the id of the rung that asked stays out of it. */
+  /** The label of the block of a word: the model that wrote it with its effort, as opus/high, by the name that the line
+   * under the input gives it, or the operator. */
+  writer(step?: { kind: string; by?: string; words: readonly unknown[] }): string {
+    const actor = step?.kind === "rung" && typeof step.words[2] === "string" ? step.words[2] : "";
+    if (!step || !actor || operated(step.by ?? "")) return "operator";
+    const { name, effort } = this.model(actor);
+    return name === "operator" ? "operator" : modelLabel(name, effort);
+  },
+
+  /** Who asked a prompt that is not a message of the operator, and which model, each as its model with its effort,
+   * opus/high: the asked model alone when a chain or the operator asked it, or when the model that asked is that model,
+   * and the model that asked, then the asked one, when a word of another model asked it. No id of a rung stands in it. */
   sender(act: ActRow): string {
     const { name, effort } = this.model(String(act.words[2] ?? ""));
-    return modelLabel(name, effort);
+    const asked = modelLabel(name, effort);
+    const maker = this.session.actOf(act.by);
+    const asker = maker?.kind === "rung" ? this.writer(maker) : "operator";
+    return asker === "operator" || asker === asked ? asked : `${asker} asked ${asked}`;
   },
 
   /** The message of a prompt as a reader reads it. The chain tells a model that an act is done or paused with the id
@@ -348,7 +348,7 @@ export const details = part({
     const label: Part[] = done
       ? []
       : [
-          [writerOf(act), c.muted, bold],
+          [this.writer(act), c.muted, bold],
           [
             waits
               ? " · waits for its turn"
@@ -516,7 +516,7 @@ export const details = part({
         let joined = "";
         // The watch speaks in common words, so it names no word and no rung.
         if (heads.has(line) && line.step.kind === "rung" && !this.session.watching) {
-          const name = writerOf(line.step);
+          const name = this.writer(line.step);
           const facts = took(line.step as ActRow);
           if (!first && writing === name) joined = took(line.step as ActRow, false);
           else {
