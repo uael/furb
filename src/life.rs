@@ -355,7 +355,7 @@ impl Opening {
     let config = self.config.as_ref().map(PathBuf::from);
     let directory = self.directory.clone();
     let user = config.clone().unwrap_or_else(|| Places::here().config);
-    let catalog = Catalog::load()
+    let catalog = Catalog::load_on(claude.clone())
       .claude(claude.clone(), stall)
       .configured(Path::new(&directory), config.as_deref())
       .map_err(|no| Fault::refused(no.to_string()))?;
@@ -374,7 +374,7 @@ impl Opening {
       let (names, preferred, answer) = (names.clone(), preferred.clone(), answer.clone());
       Box::pin(async move {
         world::claude::refresh();
-        let fresh = Catalog::loaded()
+        let fresh = Catalog::loaded_on(claude.clone())
           .await
           .discovered(claude, stall)
           .await
