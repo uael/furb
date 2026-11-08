@@ -25,3 +25,10 @@ test("a picker that has rows, and a filter that matches none of them, keeps its 
     expect(shown).not.toContain("No name to inspect in this chain yet.");
   });
 });
+
+test("a list that a part opens with no item shows the reason that the part gives", async () => {
+  await composing(async ({ app, frame }) => {
+    void app.partChoose("Pick one", [], { empty: "No item to pick here." });
+    expect(await frame()).toContain("No item to pick here.");
+  });
+});

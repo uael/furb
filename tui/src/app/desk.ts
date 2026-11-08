@@ -95,7 +95,7 @@ export const desk = part({
       };
     });
     this.openPalette("Skills", choices, {
-      empty: "No part of an extension is loaded.",
+      empty: "No extension runs in this life, and none has a part for the TUI.",
       note: "A part for the TUI loads live from the folder of its extension. A part that fails shows its error in a panel.",
     });
   },
