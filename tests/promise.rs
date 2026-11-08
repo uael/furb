@@ -775,8 +775,8 @@ fn a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entrie
   for (name, start) in cuts {
     let line = text[start..].find('\n').map_or(text.len(), |end| start + end) - start;
     // A third of the cuts fall at the end of the line, which leaves it whole and not ended, so the
-    // store reads it as an entry and ends it at its next keep; but none at the done of gate1, whose
-    // gate then stands with no done. The others fall inside the line.
+    // store reads it as an entry and ends it at its next keep; but none at the done of gate1: that
+    // cut falls inside its line, so gate1 stands with no done. The others fall inside the line.
     let at = usize::try_from(draw(&mut points)).unwrap();
     let unended = at % 3 == 0 && start != gated;
     let cut = if unended { start + line } else { start + 1 + at / 3 % (line - 1) };
@@ -838,8 +838,9 @@ fn kept_in(at: &Path) -> String {
 /// Lives of [`kept`] in the directory of an origin, each second one ended by a checkpoint, and the
 /// length of its record and its state at the end of each.
 fn lived_for_a_fork(origin: &Path, lives: u64) -> Vec<(usize, String)> {
-  // A life born from a checkpoint holds, live, the facts of the word that seeds it otherwise than
-  // its open, so the state of the origin at a fork is its open, which each later life reads.
+  // shortcut: a life born from a checkpoint holds, live, the facts of the word that seeds it
+  // otherwise than its open, so the state of the origin at a fork is its open, which each later
+  // life reads. docs/promise.md names this gap under what no machine proves yet.
   let mut ends = Vec::new();
   for n in 0..lives {
     let mut life = scripted(origin, false, &SCRIPT).boot::<String>([]).unwrap().0;
