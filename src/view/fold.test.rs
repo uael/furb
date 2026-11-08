@@ -234,4 +234,17 @@ fn the_account_that_a_fact_names_stands_in_the_spend_of_its_rung_and_its_chain()
     assert_eq!(spend.account.as_deref(), Some("b"), "{id}");
     assert!((spend.dollars - 0.5).abs() < 1e-9, "{id}");
   }
+  // The next answer names no account, so the spend names none: it is the account of the last
+  // answer.
+  let more = [
+    json!(["reply", "reply2", "rung1", "chain1", "codex:gpt"]),
+    json!(["done", "reply2", "journal", ["assistant", "x = 2", [1, 1, 0, 0, 0.1], []]]),
+  ];
+  for fact in &more {
+    for act in fold.recorded(fact) {
+      spends.insert(act.id, act.spend);
+    }
+  }
+  let last = spends.get("chain1").cloned().flatten().expect("a spend");
+  assert_eq!(last.account, None);
 }
