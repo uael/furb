@@ -87,13 +87,13 @@ async def test_a_stand_from_inside_an_act_tells_its_answer_under_its_own_name() 
   step = engine.rung("got = await stand()", on=two)
   assert await step is None
   (asked,) = [a[1] for a in said(log, "stand") if a[2] == step]
-  # The root played its stand, stand2, after its setup, and chain two its own, stand3, at its birth, so the stand of
-  # the word is stand4.
-  assert asked == "stand4" and engine.module(two)["got"] == taught
+  # The root played its stand, stand2, first in its setup, which chain two holds and plays as its own, so the stand of
+  # the word is stand3.
+  assert asked == "stand3" and engine.module(two)["got"] == taught
   assert of(engine.turns(on=two), asked) == [stood(asked)]
   assert stood(asked) == (
-    "#stand4\nstand4_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
-    "stand4_actor = 'm/low'"
+    "#stand3\nstand3_roster = [['operator', [], 200000], ['m', ['low', 'high'], 400000], ['n', ['low'], 200000]]\n"
+    "stand3_actor = 'm/low'"
   )
   assert [a for a in engine.transcript(two) if a[0] == "tell" and a[1] == asked] == [
     ("tell", asked, step, [stood(asked)])
