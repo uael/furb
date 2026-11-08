@@ -51,8 +51,8 @@ WATCH_LOG = Path(os.environ.get("FURB_WATCH_LOG") or Path(tempfile.gettempdir())
 
 def watched(since: float, until: float, root: Path, said: str) -> list[str]:
   """The processes of this run that the log of the guard of memory says it ended between two times of the epoch: each
-  whose program lies under the folder of the run, or that the output of the run names, as cargo names a test binary that
-  a signal ended."""
+  whose program lies under the folder of the run, or whose absolute path the output of the run names as a whole word,
+  as cargo names a test binary that a signal ended. A bare name, as bun, is no evidence."""
   try:
     text = WATCH_LOG.read_text(encoding="utf-8")
   except OSError:
@@ -61,7 +61,8 @@ def watched(since: float, until: float, root: Path, said: str) -> list[str]:
   for line in text.splitlines():
     when, pid, command = [*line.split(" ", 2), "", ""][:3]
     program = command.split(" ", 1)[0]
-    ours = program.startswith(f"{root}{os.sep}") or (bool(program) and program in said)
+    named = Path(program).is_absolute() and re.search(rf"(?<![\w/.-]){re.escape(program)}(?![\w/.-])", said)
+    ours = program.startswith(f"{root}{os.sep}") or bool(named)
     if when.isdigit() and since - 1 <= int(when) <= until + 1 and ours:
       found.append(f"pid {pid}: {command}")
   return found

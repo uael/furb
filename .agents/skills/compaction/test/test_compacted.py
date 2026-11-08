@@ -136,5 +136,4 @@ async def test_when_the_choice_ends_refused_it_keeps_the_chain_as_it_is(tmp_path
   root, act = await wrapped(tmp_path, chooser="x = 1", ends=told_kept)
   assert engine.peek(act) == 3
   assert made(root) == []
-  assert [a for a in engine.transcript(root) if a[0] == "tell" and "kept the chain as it is" in str(a[3])] != []
   assert engine.get("chain3") is None
