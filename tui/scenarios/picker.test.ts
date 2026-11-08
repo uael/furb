@@ -32,20 +32,25 @@ async function keys(window: Window, query: string): Promise<boolean[]> {
 }
 
 /** A query of the picker from its @, typed as fast as the window draws it, and then the meant file. */
-async function picks(window: Window, query: string, meant: string): Promise<void> {
+async function picks(window: Window, query: string, meant: string, at: number): Promise<void> {
   await window.screen.mockInput.typeText("look at the ");
-  expect(await keys(window, query), "the picker ran at the frame of a key").toContain(true);
+  // The walk starts at the key `at`, which names its folder, and a walk that never waits still runs at that key.
+  const running = await keys(window, query);
+  expect(
+    running[at],
+    `the picker walks still at the frame of key ${at}: ${running.map(Number).join("")}`,
+  ).toBe(true);
   await window.shows((frame) => frame.includes(meant), "the meant file", 30);
 }
 
 test("a key of the file picker in a folder of 50000 files never waits for the walk or the match", () =>
   scenario([], async (window, yard) => {
     await tree(yard.work);
-    await picks(window, "@folder42/file7", "folder42/file7.ts");
+    await picks(window, "@folder42/file7", "folder42/file7.ts", 0);
   }));
 
 test("a key of the file picker in a folder of 50000 files beside the folder of the life never waits for its walk", () =>
   scenario([], async (window, yard) => {
     await tree(join(dirname(yard.work), "other"));
-    await picks(window, "@../other/folder42/file7", "other/folder42/file7.ts");
+    await picks(window, "@../other/folder42/file7", "other/folder42/file7.ts", 3);
   }));

@@ -25,7 +25,7 @@ import { type ComposerPart, composer, composerBound } from "./app/composer.ts";
 import { type DeskPart, desk, deskBound } from "./app/desk.ts";
 import { type DetailsPart, details } from "./app/details.ts";
 import { type DialogsPart, dialogs } from "./app/dialogs.ts";
-import { type FeedPart, feed } from "./app/feed.ts";
+import { type FeedPart, feed, type ShelfPart, shelf, shelfBound } from "./app/feed.ts";
 import { GhostTextarea } from "./app/ghost.ts";
 import type { Gutter } from "./app/gutter.ts";
 import { type InputPart, input, inputBound } from "./app/input.ts";
@@ -110,6 +110,7 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
 const bounds = [
   ...composerBound,
   ...sidebarBound,
+  ...shelfBound,
   ...welcomeBound,
   ...deskBound,
   ...questionsBound,
@@ -283,6 +284,8 @@ export class App {
    * feed, and the key of what it shows. */
   readonly pin: BoxRenderable;
   pinKey = "";
+  /** Where the view of the feed stood when the feed last shelved its far cards. */
+  shelvedAt = "";
   /** Whether the feed shows the welcome, whose check of the setup takes the key r while the input is empty. */
   welcoming = false;
   /** The view of the life that shows over the feed: the loom or the graph, drawn as rows of text. */
@@ -360,6 +363,8 @@ export class App {
       indent: number;
       /** What the card of a done act is made of, which a later render compares to make it again only on a change. */
       same?: readonly unknown[];
+      /** The height of a card that the feed shelved far from the view, which holds no rows until it comes near. */
+      shelved?: number;
     }
   >();
   /** Where the view scrolls to, the card it brings into view, or the thread whose end it brings to the bottom of the
@@ -756,6 +761,7 @@ export class App {
     renderer.on("theme_mode", this.modeChanged);
     renderer.setFrameCallback(this.drawDue);
     renderer.on("frame", this.renderPin);
+    renderer.on("frame", this.shelveFeed);
     renderer.keyInput.on("keypress", this.keyHeard);
     renderer.on("focus", this.focusTaken);
     renderer.on("blur", this.focusLost);
@@ -1292,6 +1298,7 @@ export interface App
     ComposerPart,
     ChromePart,
     FeedPart,
+    ShelfPart,
     WelcomePart,
     StagePart,
     DeskPart,
@@ -1316,6 +1323,7 @@ assemble(
   composer,
   chrome,
   feed,
+  shelf,
   welcome,
   stage,
   desk,

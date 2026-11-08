@@ -659,6 +659,7 @@ export const input = part({
     this.renderer.off("theme_mode", this.modeChanged);
     this.renderer.removeFrameCallback(this.drawDue);
     this.renderer.off("frame", this.renderPin);
+    this.renderer.off("frame", this.shelveFeed);
     this.renderer.keyInput.off("keypress", this.keyHeard);
     this.renderer.off("focus", this.focusTaken);
     this.renderer.off("blur", this.focusLost);
