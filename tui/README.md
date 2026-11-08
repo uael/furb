@@ -210,6 +210,16 @@ at most a third of the thread.
 
 `bun run bench` measures this speed, and the gates hold it to its budgets, as [AGENTS.md](../AGENTS.md) says.
 
+## A test that fails once in many runs
+
+A flake leaves no evidence in one run of the suite. `tui/script/repeat.ts` runs one test of one file again and again, each run in a yard of its own, and stops at the first run that fails. It keeps the output and the yard of that run (the captures and the record that it wrote) in `.furb/repeat/run-N`. It never runs a failed test again to make it pass: read what it kept, and fix the cause in the product or in the test.
+
+```sh
+bun tui/script/repeat.ts scenarios/window.test.ts 'a redraw between a press and its release folds nothing, and no click on a thread in the sidebar closes it' --runs 100 --load 12
+```
+
+The first word is the file, or a part of its path, and the second is the whole name of one test. `--runs` is the count (100 by default), `--load` starts that many busy processes (`yes`), to run the test on a loaded machine, and `--keep` names the folder. Run `bun run build` first.
+
 ## Mouse and keys
 
 The mouse reaches every control: a click is a press and a release on one control, and a drag selects text instead.

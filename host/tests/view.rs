@@ -548,10 +548,16 @@ fn a_failed_thread_of_the_operator_whose_agent_asks_counts_as_asks_and_keeps_fai
   let failed = ChainThread { state: State::Failed, yours: true, ..thread(&lead, &[]) };
   let node = nest_threads(vec![failed.clone(), thread(&agent, &["prompt9"])], &rows);
   assert_eq!([node[0].state, node[0].thread.state], [State::Asks, State::Failed]);
-  assert_eq!(concerns(&node[0]), Some(Concern::Asks));
-  assert_eq!(attention(&node), Attention { asks: 1, failed: 0, paused: 0 });
+  assert_eq!(concerns(&node[0], &rows, &HashMap::new()), Some(Concern::Asks));
+  assert_eq!(
+    attention(&node, &rows, &HashMap::new()),
+    Attention { asks: 1, failed: 0, paused: 0, unread: 0 }
+  );
   let alone = nest_threads(vec![failed, thread(&agent, &[])], &rows);
-  assert_eq!(attention(&alone), Attention { asks: 0, failed: 1, paused: 0 });
+  assert_eq!(
+    attention(&alone, &rows, &HashMap::new()),
+    Attention { asks: 0, failed: 1, paused: 0, unread: 0 }
+  );
 }
 
 #[test]
@@ -575,7 +581,11 @@ fn a_question_concerns_the_operator_in_any_thread_and_a_failure_or_a_pause_only_
         .map(|node| {
           (
             node.thread.prompt.clone(),
-            (node.thread.origin, node.thread.yours, concerns(node).is_some()),
+            (
+              node.thread.origin,
+              node.thread.yours,
+              concerns(node, &rows, &HashMap::new()).is_some(),
+            ),
           )
         })
         .collect();
@@ -633,10 +643,23 @@ fn the_acts_as_they_stood_at_a_moment_hold_what_began_by_then_and_an_act_that_en
 #[test]
 fn the_spend_counts_the_answers_sums_their_dollars_and_names_the_actor_of_the_last() {
   let answers = [
-    Answer { actor: "claude-cli:sonnet/high".to_owned(), usage: [100.0, 10.0, 0.0, 0.0, 0.25] },
-    Answer { actor: "claude-cli:opus/high".to_owned(), usage: [200.0, 20.0, 0.0, 0.0, 0.5] },
+    Answer {
+      actor: "claude-cli:sonnet/high".to_owned(),
+      usage: [100.0, 10.0, 0.0, 0.0, 0.25],
+      account: None,
+    },
+    Answer {
+      actor: "claude-cli:opus/high".to_owned(),
+      usage: [200.0, 20.0, 0.0, 0.0, 0.5],
+      account: None,
+    },
   ];
-  let want = Spend { dollars: 0.75, answers: 2, actor: Some("claude-cli:opus/high".to_owned()) };
+  let want = Spend {
+    dollars: 0.75,
+    answers: 2,
+    actor: Some("claude-cli:opus/high".to_owned()),
+    account: None,
+  };
   assert_eq!(Spend::of(&answers), want);
 }
 

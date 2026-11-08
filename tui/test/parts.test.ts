@@ -546,7 +546,7 @@ test("the model of the demo adds a component to a life that runs: it reads the t
       shown = await shows(frame, "evaluating 'seen.todos");
       expect(shown).not.toContain("2 open of 3");
       // The panel says in plain words which panel failed and in which call, with the raw message under it.
-      expect(shown).toContain("The panel Todo list of todo failed while it drew its lines.");
+      expect(shown).toContain("The panel Todo of todo failed while it drew its lines.");
       // The operator tells the model, and the panel draws again from the file that it mends.
       await session.submit("The Todo panel shows an error. Fix it.");
       await idle(session);

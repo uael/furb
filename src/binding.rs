@@ -881,6 +881,7 @@ impl Meaning {
     for act in &acts {
       self.held.heard(act);
     }
+    self.held.noted(&fact, self.fold.clock());
     meant(&acts)
   }
 
@@ -896,6 +897,7 @@ impl Meaning {
     for act in self.fold.recorded(&fact) {
       self.held.took(act);
     }
+    self.held.noted(&fact, self.fold.clock());
     Ok(())
   }
 

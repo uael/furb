@@ -456,7 +456,7 @@ fix what your change broke, and report what was broken before.
 - `bun run screenshots` and `bun run animation`: draw `docs/screenshots/` and `docs/furb.gif` again from the real
   renderer. Run both after a change that a screen shows, and read each capture. Do not commit them: at most once an hour,
   on a new head of `w/converge`, `.github/workflows/gallery.yml` draws both again on a runner of CI and keeps one pull
-  request of the branch `w/gallery` into `w/converge` open, whose body names the head that it shows. One run at a time
+  request of the branch `w/gallery-converge` into `w/converge` open, whose body names the head that it shows. One run at a time
   holds its home in `/tmp`, and `FURB_GALLERY_ROOT` names another folder for it, and a root so long that the socket of
   the daemon in the home would pass 100 bytes gives the run a short private cache in `/tmp` for that daemon;
   `tui/script/stage.ts` says how long a run waits.

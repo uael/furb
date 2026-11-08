@@ -38,7 +38,7 @@ export const welcome = part({
 
   /** A text that lights under the pointer, and runs an action at a click. */
   link(content: string | Part[], run: () => void): TextRenderable {
-    return this.hoverable(this.text(content, c.accent, { run }));
+    return this.text(content, c.accent, { run });
   },
 
   /** A message of the operator: its text, and the name of each image it refers to in the color of an attachment. A
@@ -154,13 +154,12 @@ export const welcome = part({
         borderColor: c.border,
         customBorderChars: { ...noBorder, vertical: glyph.bar },
         onMouseUp: this.click(run),
-        onMouseOver() {
-          this.backgroundColor = c.panel;
-          if (framed) this.borderColor = c.accent;
+        lit: c.panel,
+        onMouseOver: () => {
+          if (framed) card.borderColor = c.accent;
         },
-        onMouseOut() {
-          this.backgroundColor = c.background;
-          if (framed) this.borderColor = lead ? c.accent : c.border;
+        onMouseOut: () => {
+          if (framed) card.borderColor = lead ? c.accent : c.border;
         },
       });
       // The card that plays a life leads, with its bar in the accent.

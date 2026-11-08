@@ -484,7 +484,15 @@ impl Claude {
     let program = self.program.under(at);
     let run = Run { program: &program, stall: self.stall, gone: self.gone, deltas };
     let got = held.turn(&messages, spend, &run).await;
-    got.map_err(|no| self.switched(at, no))
+    let name = accounts.name(at).to_owned();
+    got
+      .map(|mut response| {
+        if !name.is_empty() {
+          response.raw["account"] = json!(name);
+        }
+        response
+      })
+      .map_err(|no| self.switched(at, no))
   }
 
   /// The failure of a turn that finds every account parked: the wait for the first reset of a

@@ -47,7 +47,7 @@ export const tree = part({
       ? `${commands} ${commands === 1 ? "command" : "commands"} ran after it: a change that a command made is not restored.`
       : "A change that a command made is not restored.";
     this.openPalette(
-      `Rewind to ${act.id}`,
+      `Rewind to ${act.kind === "rung" ? clip(this.subject(act).split("\n")[0] ?? "", 40) : act.id}`,
       [
         {
           label: "Restore the conversation",
@@ -223,7 +223,7 @@ export const tree = part({
     const { mark, color } = this.actState(act);
     const subject = this.subject(act);
     const observation = act.kind === "prompt" && !asksOperator(act) && !w.isUserPrompt(act);
-    const name = asksOperator(act) ? "question" : act.kind === "rung" ? act.id : act.kind;
+    const name = asksOperator(act) ? "question" : act.kind === "rung" ? this.writer(act) : act.kind;
     return {
       parts: observation
         ? [
@@ -303,6 +303,8 @@ export const tree = part({
         id: `tree-${row.id}`,
         // Each tree of chains stands apart from the one above it.
         marginTop: index && !row.lines ? space.section : 0,
+        lit: c.panel,
+        still: active,
         paddingX: space.inset,
         backgroundColor: active ? c.selected : c.background,
         onMouseUp: this.click((event) => {
@@ -314,7 +316,6 @@ export const tree = part({
           else this.pointTree(row.id);
         }),
       });
-      if (!active) this.hoverable(line, c.panel);
       const fold = row.parent ? `${row.folded ? glyph.closed : glyph.open} ` : "  ";
       const tag = row.tag ? `  ${row.tag}` : "";
       const room = Math.max(8, width - space.inset * 2 - Bun.stringWidth(row.lines + fold + tag));

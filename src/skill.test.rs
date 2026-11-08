@@ -778,25 +778,23 @@ fn the_setup_of_the_root_ends_with_the_skills_of_the_root_alone_and_a_chain_with
     [shared, "x = 1".to_owned()],
     "a file, then its code alone: {root:?}"
   );
-  assert_eq!(root[life + 2..life + 4], [rooted.clone(), "z = 3".to_owned()], "{root:?}");
+  assert_eq!(root[life + 2], rooted, "{root:?}");
   let stood = format!("stand()\ncd({})", Object::string(at.display().to_string()).py_repr());
-  assert_eq!(root[life + 4], stood, "the root tells its standing after every extension: {root:?}");
-  let last = &root[life + 5];
+  assert_eq!(root[1], stood, "the root tells its standing before every extension: {root:?}");
   assert!(
-    last.starts_with("#stand2\nstand2_roster = ") && last.contains("\n\n#cd1\ncd1_path = "),
-    "{last}"
+    root[2].starts_with("#stand2\nstand2_roster = ") && root[2].contains("\n\n#cd1\ncd1_path = "),
+    "{root:?}"
   );
-  assert!(last.contains("#chain1\nchain1_label = 'root'"), "{last}");
+  let last = &root[life + 3];
+  assert!(last.starts_with("z = 3\n\n#chain1\nchain1_label = 'root'"), "{last}");
   assert!(last.ends_with("chain1: Act[Never] = Act('chain1')"), "{last}");
   engine.chain(verbs::Chain { label: Some("two".to_owned()), ..Default::default() }).unwrap();
   let two = texts(&mut engine, "chain2");
-  assert_eq!(two[..=life + 1], root[..=life + 1], "a chain with no source holds the shared setup");
-  assert_eq!(
-    two[life + 2],
-    stood,
-    "the ear tells a chain with no source its standing at its birth: {two:?}"
+  assert_eq!(two[..=life], root[..=life], "a chain with no source holds the shared setup");
+  assert!(
+    two[life + 1].starts_with("#chain2\n"),
+    "a chain with no source plays the stand of the setup and none of its own: {two:?}"
   );
-  assert!(two[life + 3].starts_with("#stand3\nstand3_roster = "), "{two:?}");
   assert!(two.iter().all(|one| !one.contains(&rooted) && one != "z = 3"), "{two:?}");
   assert!(two.last().unwrap().contains("#chain2\nchain2_label = 'two'"), "{two:?}");
 }
@@ -836,6 +834,12 @@ fn a_later_life_on_a_new_standing_plays_a_stand_on_each_chain_and_a_cd_where_the
       turns.iter().filter(|one| one.as_ref().items().unwrap()[0].as_str() == Some("assistant"));
     said.next_back().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned()
   };
+  let first = |engine: &mut Engine, chain: &str| -> String {
+    let turns = engine.turns(verbs::Turns { on: Some(chain.to_owned()) }).unwrap();
+    let mut said =
+      turns.iter().filter(|one| one.as_ref().items().unwrap()[0].as_str() == Some("assistant"));
+    said.next().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned()
+  };
   let mut engine = set_up(&at, vec![]);
   for label in ["two", "three"] {
     engine.chain(verbs::Chain { label: Some(label.to_owned()), ..Default::default() }).unwrap();
@@ -848,7 +852,7 @@ fn a_later_life_on_a_new_standing_plays_a_stand_on_each_chain_and_a_cd_where_the
   engine.rung(moved).unwrap();
   let stood = format!("stand()\ncd({})", Object::string(at.display().to_string()).py_repr());
   assert_eq!(
-    last(&mut engine, "chain2"),
+    first(&mut engine, "chain2"),
     stood,
     "a chain with no source holds the standing of the setup"
   );

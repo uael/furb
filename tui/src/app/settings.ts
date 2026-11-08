@@ -24,7 +24,9 @@ import { type Choice, inputColors, terminalDetail } from "./shared.ts";
 export const settings = part({
   /** The models of the roster and of the catalog under their providers, with the one the chain uses marked. */
   models(): void {
-    this.pick("model", "Model", "The chain sends its next prompt to this model.");
+    this.pick("model", "Model", "The chain sends its next prompt to this model.", {
+      empty: "No model to choose from.",
+    });
   },
 
   codexModels(): void {
@@ -42,7 +44,10 @@ export const settings = part({
             provider
               ? "These models use your ChatGPT subscription."
               : "The chain sends its next prompt to this model.",
-            provider ? (value) => value.startsWith(`${provider}:`) : undefined,
+            {
+              only: provider ? (value) => value.startsWith(`${provider}:`) : undefined,
+              empty: provider ? "No model of this provider is in the catalog." : "No model to choose from.",
+            },
           );
       })
       .catch(this.report);
@@ -261,6 +266,7 @@ export const settings = part({
       "effort",
       `Effort of ${modelName(this.session.actorChoice.model).id}`,
       "More effort thinks longer and costs more. ⇧Tab moves to the next.",
+      { empty: "This model has no effort to choose." },
     );
   },
 
@@ -273,38 +279,42 @@ export const settings = part({
     const w = this.session;
     // Each thread of the chain folds to its header and opens to its program, as a click on its header does.
     const threads = w.view === "feed" ? w.threads.list : [];
-    this.openPalette("Details", [
-      ...threads.map((one) => {
-        const folded = this.threadFolded(one.act.id);
-        return {
-          label: clip(shortenHomes(gist(this.threadTitle(one))) || one.act.id, 72),
-          detail: folded ? "Expand" : "Collapse",
-          run: () => {
-            this.foldThread(one.act.id, !folded);
-            this.scrollAfterLayout({ card: one.act.id });
-          },
-        };
-      }),
-      ...[...this.cards]
-        .filter(([, card]) => card.compact || card.collapsible)
-        .map(([id, card]) => ({
-          label: card.heading.plainText.replace(/^[▸▾] /, ""),
-          detail: card.closed ? "Expand" : "Collapse",
-          run: () => {
-            w.folds[card.state] = !card.closed;
-            this.renderContent();
-            this.scrollAfterLayout({ card: id });
-          },
-        })),
-      // Each fold of the feed opens in place, as a click on its row does.
-      ...[...this.foldRows]
-        .filter(([, one]) => !one.node.isDestroyed)
-        .map(([key, one]) => ({
-          label: one.label,
-          detail: "Expand",
-          run: () => (one.open ? one.open() : this.openFold(key)),
-        })),
-    ]);
+    this.openPalette(
+      "Details",
+      [
+        ...threads.map((one) => {
+          const folded = this.threadFolded(one.act.id);
+          return {
+            label: clip(shortenHomes(gist(this.threadTitle(one))) || one.act.id, 72),
+            detail: folded ? "Expand" : "Collapse",
+            run: () => {
+              this.foldThread(one.act.id, !folded);
+              this.scrollAfterLayout({ card: one.act.id });
+            },
+          };
+        }),
+        ...[...this.cards]
+          .filter(([, card]) => card.compact || card.collapsible)
+          .map(([id, card]) => ({
+            label: card.heading.plainText.replace(/^[▸▾] /, ""),
+            detail: card.closed ? "Expand" : "Collapse",
+            run: () => {
+              w.folds[card.state] = !card.closed;
+              this.renderContent();
+              this.scrollAfterLayout({ card: id });
+            },
+          })),
+        // Each fold of the feed opens in place, as a click on its row does.
+        ...[...this.foldRows]
+          .filter(([, one]) => !one.node.isDestroyed)
+          .map(([key, one]) => ({
+            label: one.label,
+            detail: "Expand",
+            run: () => (one.open ? one.open() : this.openFold(key)),
+          })),
+      ],
+      { empty: "Nothing in this view to expand or collapse." },
+    );
     this.detailsOverlay = this.overlay;
   },
 
@@ -341,7 +351,9 @@ export const settings = part({
   },
 
   shapes(): void {
-    this.pick("shape", "Response shape", "The engine validates the result against this Python type.");
+    this.pick("shape", "Response shape", "The engine validates the result against this Python type.", {
+      empty: "No response shape to choose.",
+    });
   },
 
   toggleMode(): void {

@@ -176,7 +176,9 @@ function percentile(values: readonly number[], share: number): number {
 // The bench measures the speed that a user gets, so it refuses a build of the crate in the dev profile, whose crates of
 // the workspace run with no optimization: build it with bun run build --release.
 if (PROFILE !== "release") {
-  console.error(`The crate was built in the ${PROFILE} profile, and the bench measures a release build alone: run bun run build --release.`);
+  console.error(
+    `The crate was built in the ${PROFILE} profile, and the bench measures a release build alone: run bun run build --release.`,
+  );
   process.exit(1);
 }
 console.log(`The crate was built in the ${PROFILE} profile.`);

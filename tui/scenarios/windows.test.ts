@@ -1,7 +1,7 @@
 // Several windows on one life: a second window on the life of a first one is a second view of it, and neither ends,
 // takes over or refuses the other, and a click on a workspace never lands on a session that another window holds.
 import { expect } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { scenario, test, until, Window } from "./harness.ts";
 
@@ -59,4 +59,29 @@ test("a click on a workspace opens a session that no other window holds, and nev
     const { engine } = first;
     await engine.result(await engine.rung({ word: "untouched = 3", on: engine.root }));
     expect((await engine.inspect("untouched", first.session.selected)).value).toBe(3);
+  }));
+
+test("a window that opens while a command runs shows the lines that the command printed before it opened", () =>
+  scenario([], async (first, yard) => {
+    // The command prints two lines and waits for a file, so it runs while the second window opens.
+    const gate = join(yard.work, "gate");
+    const command = `echo early-line-one; echo early-line-two; while [ ! -e ${gate} ]; do sleep 0.2; done`;
+    const { engine } = first;
+    await engine.rung({ word: `await bash(${JSON.stringify(command)}, ok=True)`, on: engine.root });
+    await first.shows(
+      (frame) => frame.includes("early-line-two"),
+      "the printed lines in the first window",
+      20,
+    );
+    const second = await Window.open(yard);
+    try {
+      await second.shows(
+        (frame) => frame.includes("early-line-two"),
+        "the printed lines in the second window",
+        20,
+      );
+    } finally {
+      await second.close();
+      await writeFile(gate, "");
+    }
   }));

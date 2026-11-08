@@ -284,10 +284,12 @@ export const sidebar = part({
   /** A row of the sidebar, whose click runs, which spans the sidebar so that the pointer and the selection show from
    * edge to edge. It lights while the pointer is on it, and stays lit while it is selected. */
   railRow(parts: Part[], run: () => void, options: BoxOptions, selected = false): BoxRenderable {
-    const row = this.hoverable(
-      this.row({ backgroundColor: selected ? c.selected : c.panel, onMouseUp: this.click(run), ...options }),
-      selected ? c.selected : c.raised,
-    );
+    const row = this.row({
+      backgroundColor: selected ? c.selected : c.panel,
+      onMouseUp: this.click(run),
+      lit: selected ? c.selected : c.raised,
+      ...options,
+    });
     row.add(this.text(parts, c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 }));
     return row;
   },

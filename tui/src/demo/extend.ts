@@ -23,14 +23,16 @@ export default function (furb) {
 const define = `def todo(item, *, done=False, on=""):
   def ear(name):
     yield "done", name, None
-  return act("todo", on, ear, item, done)`;
+  return act("todo", on, ear, item, done)
+debug(t"The def todo stands.")`;
 
 const extend = `${part}
-extend("todo", next(k for k, w in program().items() if w.startswith("def todo")), tui=part)`;
+extend("todo", bound_by()["todo"], tui=part)`;
 
 const items = `todo("Read the capture", done=True)
 todo("Draw the todo list in a panel")
-todo("Load the part again when its file changes")`;
+todo("Load the part again when its file changes")
+debug(t"Three todos stand.")`;
 
 const read = `part = read(".furb/skills/todo/tui.ts", grep("items|panel"))`;
 

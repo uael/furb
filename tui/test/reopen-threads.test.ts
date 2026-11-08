@@ -7,16 +7,18 @@ import { until } from "../../bind/typescript/test/until.ts";
 import { demoSession } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
 
+const rows = (session: Session) =>
+  session.rail.map((node) => [node.thread.act.id, node.thread.title, node.thread.state]);
+
+/** The rows of the rail once each thread has its title, as the rail reads again on each change of the session. */
 const titles = async (session: Session) => {
-  for (let tries = 0; tries < 200; tries++) {
-    await session.refresh();
-    await session.readThreads(session.engine.root);
-    await session.readRail();
-    const rows = session.rail.map((node) => [node.thread.act.id, node.thread.title, node.thread.state]);
-    if (rows.length === 3 && rows.every((row) => row[1])) return rows;
-    await Bun.sleep(25);
-  }
-  return session.rail.map((node) => [node.thread.act.id, node.thread.title, node.thread.state]);
+  const ready = () => {
+    const now = rows(session);
+    return now.length === 3 && now.every((row) => row[1]);
+  };
+  await session.refresh();
+  await until(session, ready);
+  return rows(session);
 };
 
 test("a reopen lists the threads by their messages, with the same rows and states as before the quit", async () => {

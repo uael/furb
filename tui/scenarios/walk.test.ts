@@ -11,6 +11,7 @@ import { END, walk } from "./walk.ts";
 
 test("the walk of the audit drives a life with keys to the end of its journey, and keeps each frame with its action", async () => {
   const out = await mkdtemp(join(tmpdir(), "furb-walk-"));
+  const clock = process.env.FURB_STILL_CLOCK;
   try {
     // The clock stands still for the walk, as for the gallery, so that no age of a thread turns from 0m to 1m between
     // the two frames of a probe: a frame that moves with the time says nothing of what a key changed.
@@ -28,6 +29,9 @@ test("the walk of the audit drives a life with keys to the end of its journey, a
     expect(missing).toEqual([]);
     expect(existsSync(join(out, "walk.json"))).toBe(true);
   } finally {
+    // The clock of the walk does not leak into the tests that run after it in the same process.
+    if (clock === undefined) delete process.env.FURB_STILL_CLOCK;
+    else process.env.FURB_STILL_CLOCK = clock;
     await rm(out, { recursive: true, force: true });
   }
 }, 900000);

@@ -1,4 +1,4 @@
-import type { BoxRenderable, RGBA, TextRenderable } from "@opentui/core";
+import type { BoxRenderable, RGBA } from "@opentui/core";
 import { busy, gist } from "furb/life";
 import { clock } from "../clock.ts";
 import { shortenHome, shortenHomes } from "../files.ts";
@@ -24,26 +24,16 @@ export const chrome = part({
   ): void {
     for (const [index, choice] of choices.entries()) {
       const active = index === chosen;
-      const fill = active ? choice.color : track;
-      const parts = (lit: boolean): Part[] => [
-        [`  ${choice.label}`, active ? c.background : lit ? c.text : c.muted, active ? bold : 0, fill],
-        [choice.badge ? ` ${choice.badge}` : "", active ? c.background : lit ? c.text : c.faint, 0, fill],
+      const fill = active ? choice.color : undefined;
+      const parts: Part[] = [
+        [`  ${choice.label}`, active ? c.background : c.muted, active ? bold : 0, fill],
+        [choice.badge ? ` ${choice.badge}` : "", active ? c.background : c.faint, 0, fill],
         ["  ", c.text, 0, fill],
       ];
-      // The pointer recolors the segment that it is over, and builds no node, so that a press and its release land on
-      // the same segment.
-      const segment: TextRenderable = this.line(parts(false), c.text, {
+      // The layer lights a segment that the pointer is over, on the track that it stands on.
+      const segment = this.line(parts, c.text, {
         run: choice.run,
-        ...(choice.run && !active
-          ? {
-              onMouseOver: () => {
-                segment.content = styled(parts(true));
-              },
-              onMouseOut: () => {
-                segment.content = styled(parts(false));
-              },
-            }
-          : {}),
+        ...(active ? {} : { bg: track, lit: c.selected }),
       });
       box.add(segment);
     }

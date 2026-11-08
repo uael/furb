@@ -29,7 +29,7 @@ test("a recorded life folds its acts, its desk, its threads and its moments in t
   expect([threads.threads.length, threads.state, threads.attention]).toEqual([
     1,
     "idle",
-    { asks: 0, failed: 0, paused: 0 },
+    { asks: 0, failed: 0, paused: 0, unread: 0 },
   ]);
   expect(meaning.asOf(moments.at(-1) ?? 0).map((act) => [act.kind, act.id, act.state])).toEqual([
     ["chain", "chain1", "idle"],

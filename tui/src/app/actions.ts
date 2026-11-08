@@ -85,6 +85,7 @@ export const actions = part({
             run: () => this.removeItem(entry),
           })),
         ),
+        { empty: "No session to delete." },
       );
       return true;
     }
@@ -177,6 +178,7 @@ export const actions = part({
           this.replaceBefore(token, `@${/\s/.test(path) ? JSON.stringify(path) : path} `);
         },
       })),
+      { empty: "No project file to attach in this folder." },
     );
   },
 
@@ -212,7 +214,10 @@ export const actions = part({
             ]),
         })),
       ],
-      { note: "Sent in turn after the current work. Choose one to edit or remove it." },
+      {
+        note: "Sent in turn after the current work. Choose one to edit or remove it.",
+        empty: "Nothing waits in the queue.",
+      },
     );
   },
 

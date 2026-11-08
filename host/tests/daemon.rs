@@ -130,7 +130,7 @@ mod daemon {
     }
   }
 
-  /// The opening of each life of a daemon of a test: no extension, and a model that closes each
+  /// The opening of each life of a daemon of a test: no skill, and a model that closes each
   /// prompt with None.
   fn opening(at: &Path) -> Opening {
     let asked = AtomicUsize::new(0);

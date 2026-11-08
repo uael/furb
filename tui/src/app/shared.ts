@@ -207,6 +207,9 @@ export const seconds = (value: number) => `${value} ${value === 1 ? "second" : "
 /** The options of a text, and the action that a click on it runs. */
 export type TextShape = TextOptions & { run?: () => void };
 
+/** The color that a node of box or text takes under the pointer, in place of the raised color. */
+export type Lights = { lit?: RGBA };
+
 /** A border that draws nothing, which a part of a border replaces. */
 export const noBorder = {
   topLeft: " ",

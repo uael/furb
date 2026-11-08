@@ -3,7 +3,7 @@ name: gallery
 # The gallery of the TUI, docs/screenshots and docs/furb.gif, drawn from the head of w/converge, so the owner follows
 # the screens of the builds and the QA judges the same pictures of the same head. The run renders both as
 # `bun run screenshots` and `bun run animation` do on a machine, with the watcher of memory beside them, and pushes the
-# head with the render on top to one fixed branch, w/gallery. One pull request of w/gallery into w/converge stands, and
+# head with the render on top to one fixed branch, w/gallery-converge. One pull request of w/gallery-converge into w/converge stands, and
 # each later run updates its branch and its body in place, with the head that it shows. The diff of that pull request
 # is what the screens of the head changed against the gallery that the head holds.
 # It renders at most once an hour, and never on a push, so it takes no runner from the gates: the desk of the conductor
@@ -15,8 +15,15 @@ on:
     - cron: "41 * * * *"
 
 # A request while a render runs waits for it, and a newer request replaces the one that waits: a render that a newer
-# request ended would leave no gallery at all. The group is fixed, since a schedule runs on main and a dispatch on
-# w/converge, and both render the same branch.
+# request ended would leave no gallery at all. The group is fixed, since a schedule and a dispatch of this workflow
+# both write the one branch of the gallery of w/converge, BRANCH below.
+# The branch of the gallery of w/converge has a name of its own: the workflow of main, which a schedule runs, writes w/gallery,
+# and two writers of one branch would show main on the pull request of w/converge. Each use below reads this one name.
+env:
+  BRANCH: w/gallery-converge
+  RETIRED: w/gallery
+  BASE: w/converge
+
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
@@ -26,7 +33,7 @@ permissions:
 
 jobs:
   # The head of w/converge to render, and whether to render it. A dispatch on w/converge renders its head. The schedule
-  # renders the head only when it changed since the last render, whose head is the parent of the tip of w/gallery.
+  # renders the head only when it changed since the last render, whose head is the parent of the tip of w/gallery-converge.
   head:
     name: the head to render
     runs-on: ubuntu-latest
@@ -42,8 +49,8 @@ jobs:
           REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/w/converge" --jq .sha)
-          last=$(gh api "repos/$GITHUB_REPOSITORY/commits/w/gallery" --jq '.parents[0].sha' 2>/dev/null || true)
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BASE" --jq .sha)
+          last=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq '.parents[0].sha' 2>/dev/null || true)
           render=false
           if [ "$EVENT" = workflow_dispatch ]; then
             [ "$REF" = refs/heads/w/converge ] && render=true
@@ -60,14 +67,11 @@ jobs:
     if: needs.head.outputs.render == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # This job pushes w/gallery and edits its pull request as github-actions[bot], with GITHUB_TOKEN, whose push and
+    # This job pushes w/gallery-converge and edits its pull request as github-actions[bot], with GITHUB_TOKEN, whose push and
     # pull request start no workflow: a render of screenshots runs no gate.
     permissions:
       contents: write
       pull-requests: write
-    env:
-      BRANCH: w/gallery
-      BASE: w/converge
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -115,7 +119,7 @@ jobs:
           # A render that changes no file still moves the branch to the head, so the branch shows each head it rendered.
           git switch -q -C "$BRANCH"
           git commit -q --allow-empty -m "$title" -m "The render of $head in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
-          # A pull request of w/gallery into another base, as the old one into main, would take all of this head.
+          # A pull request of w/gallery-converge into another base, as the old one into main, would take all of this head.
           gh pr list --head "$BRANCH" --state open --json number,baseRefName --jq ".[] | select(.baseRefName != \"$BASE\") | .number" |
             while read -r stray; do gh pr close "$stray" --comment "🤖 The gallery follows w/converge now, on one pull request into it."; done
           git push -q --force "$remote" "$BRANCH"
@@ -146,7 +150,9 @@ jobs:
           EOF
           number=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number --jq '.[0].number // empty')
           if [ -z "$number" ]; then
-            gh pr create --base "$BASE" --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            number=$(gh pr create --base "$BASE" --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md" | sed 's#.*/##')
           else
             gh pr edit "$number" --title "$title" --body-file "$RUNNER_TEMP/body.md"
           fi
+          gh pr list --head "$RETIRED" --base "$BASE" --state open --json number --jq '.[].number' |
+            while read -r old; do gh pr close "$old" --comment "🤖 The gallery of w/converge moved to #$number, on the branch $BRANCH, which the workflow of main never writes."; done
