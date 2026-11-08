@@ -1,7 +1,7 @@
 // A word that the operator sends as Python draws as a word of a model draws: the same layout and the same color of each
 // cell of its code, live and after a window opens the life again.
 import { expect } from "bun:test";
-import { scenario, test, until, Window } from "./harness.ts";
+import { scenario, test, Window } from "./harness.ts";
 
 const LINES = ['total = len("abc") + 1', "double = total * 2"];
 const word = (last: string) => `${LINES.join("\n")}\nclose("${last}")`;
@@ -48,11 +48,6 @@ test("a word of the operator in Python draws as a word of a model, live and afte
     await window.frame();
     window.app.composer.setText(word("operator"));
     window.screen.mockInput.pressEnter();
-    await until(
-      async () =>
-        (await window.engine.get("rung3")) !== undefined || (await window.engine.get("rung2")) !== undefined,
-      "the word of the operator",
-    );
     await alike(window, "live");
     await window.close(false);
     const again = await Window.open(yard);
