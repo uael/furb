@@ -40,3 +40,21 @@ def test_the_render_waits_for_the_check_of_the_head_that_a_schedule_renders_once
   jobs = workflow()["jobs"]
   assert "head" in jobs["render"]["needs"]
   assert "needs.head.outputs.render" in jobs["render"]["if"]
+
+
+def test_the_gallery_of_w_converge_writes_a_branch_that_the_workflow_of_main_never_writes() -> None:
+  # The gallery.yml of main renders main to w/gallery, and a proof run of it to w/gallery-proof. A schedule runs the
+  # workflow of the default branch, so one branch for both would show main on the pull request of w/converge.
+  branch = workflow()["env"]["BRANCH"]
+  assert branch.startswith("w/gallery") and branch not in {"w/gallery", "w/gallery-proof"}
+
+
+def test_each_use_of_the_branch_of_the_gallery_in_the_file_reads_the_one_constant() -> None:
+  lines = [
+    x
+    for x in (ROOT / ".github" / "workflows" / "gallery.yml").read_text(encoding="utf-8").splitlines()
+    if not x.lstrip().startswith("#")
+  ]
+  named = [x for x in lines if "w/gallery" in x]
+  assert named == ["  BRANCH: w/gallery-converge", "  RETIRED: w/gallery"]
+  assert any('commits/$BRANCH"' in x for x in lines)
