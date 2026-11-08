@@ -64,7 +64,13 @@ export class Connection {
     { resolve(answer: Answer): void; reject(error: Error): void; asked: Error }
   >();
   private readonly listeners = new Set<(frame: Frame) => void>();
-  private constructor(private readonly socket: Socket) {
+  /** How many lives hold the connection, which an idle connection keeps the process alive for. */
+  private held = 0;
+  private constructor(
+    private readonly socket: Socket,
+    private readonly idle: boolean,
+  ) {
+    if (idle) socket.unref();
     let held = "";
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
@@ -88,7 +94,7 @@ export class Connection {
   }
 
   /** A connection to the daemon at a place, as a peer of a kind, with the name of a skill for a skill. */
-  static async dial(place: string, kind: Kind, name?: string): Promise<Connection> {
+  static async dial(place: string, kind: Kind, name?: string, idle = false): Promise<Connection> {
     const socket = await new Promise<Socket>((resolve, reject) => {
       const dialing = createConnection(place);
       dialing.once("connect", () => {
@@ -97,7 +103,7 @@ export class Connection {
       });
       dialing.once("error", reject);
     });
-    const connection = new Connection(socket);
+    const connection = new Connection(socket, idle);
     const welcome = await connection.ask({ verb: "hello", protocol: PROTOCOL, kind, name });
     if (welcome.answer !== "welcome") throw new Error(`The daemon gave ${welcome.answer}, and no welcome.`);
     connection.peer = welcome.data.peer;
@@ -118,6 +124,20 @@ export class Connection {
   pushed(listener: (frame: Frame) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** A life that the connection serves. An idle connection, as the one of a window, keeps the process alive only
+   * while a life holds it, and a connection that is not idle keeps it alive always. */
+  hold(): void {
+    this.held++;
+    this.socket.ref();
+  }
+
+  /** A life let go: with the last life that it held, an idle connection keeps the process alive no more and stays open
+   * for the next life. */
+  release(): void {
+    this.held = Math.max(0, this.held - 1);
+    if (this.idle && this.held === 0) this.socket.unref();
   }
 
   close(): void {
