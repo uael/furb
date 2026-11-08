@@ -122,8 +122,12 @@ def test_on_linux_the_memory_is_tight_under_its_share_of_free_memory(
   with fakes(1) as procs:
     machine(tmp_path, 0, [(procs[0].pid, 500 * MB, "bun test ./a.test.ts", MINE)], mac=False)
     got = watch(tmp_path, FURB_WATCH_FREE=floor)
-    assert (procs[0].poll() is not None) == ended
-  assert ("% free, ended pid" in got.stdout) == ended
+    assert ("% free, ended pid" in got.stdout) == ended, got.stdout
+    # The kill is a signal, which the process takes when it next runs, so an ended process is waited for, not polled.
+    if ended:
+      assert procs[0].wait(timeout=10) == -signal.SIGKILL
+    else:
+      assert procs[0].poll() is None
 
 
 def test_the_loop_ends_one_test_process_at_each_look_while_the_memory_stays_tight(tmp_path: Path) -> None:
