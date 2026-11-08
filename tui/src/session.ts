@@ -1532,8 +1532,13 @@ export class Session extends EventEmitter {
     const servers = (
       ((listed ? outcomeOf(listed) : undefined) ?? []) as { name: string; state: string }[]
     ).map(({ name, state }) => `${name} ${state}`);
+    // The account that served the last answer, by its name alone, which a provider with several accounts gives as the
+    // sixth number of the usage.
+    const used = this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2];
+    const account = (used as readonly unknown[] | undefined)?.[5];
     return [
       ["Actor", this.actor],
+      ...(typeof account === "string" && account ? ([["Account", account]] as [string, string][]) : []),
       [
         "Context",
         known
