@@ -18,7 +18,8 @@ export const dialogs = part({
       note = "",
       actions = [],
       selected = 0,
-    }: { note?: string; actions?: readonly Action[]; selected?: number } = {},
+      empty = "",
+    }: { note?: string; actions?: readonly Action[]; selected?: number; empty?: string } = {},
   ): Promise<Chosen<T> | undefined> {
     return new Promise((resolve) => {
       const of = new Map<Choice, Item<T>>();
@@ -36,6 +37,7 @@ export const dialogs = part({
       const keys = actions.map((one) => `${one.key} ${one.label}`).join(", ");
       this.openPalette(String(title), choices, {
         selected,
+        empty: String(empty),
         note: [String(note), keys ? `Keys: ${keys}.` : ""].filter(Boolean),
         actions: actions.map((one) => ({
           key: String(one.key),

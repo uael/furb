@@ -171,7 +171,10 @@ export const values = part({
           heading: headings[group],
           run: () => this.inspect(key),
         })),
-      { note: "Enter reads the live value of the name, its type, and its fields." },
+      {
+        note: "Enter reads the live value of the name, its type, and its fields.",
+        empty: "No name to inspect in this chain yet.",
+      },
     );
   },
 
@@ -190,6 +193,7 @@ export const values = part({
             this.composer.focus();
           },
         })),
+      { empty: "No name in this chain to insert yet." },
     );
   },
 
@@ -210,6 +214,7 @@ export const values = part({
       {
         selected: Math.max(0, prompts.length - 1),
         note: "The program is the Python the model wrote for the prompt. An edit replays it.",
+        empty: "No prompt in this chain has a program to edit yet.",
       },
     );
   },

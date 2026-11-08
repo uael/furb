@@ -124,11 +124,12 @@ export interface Seen {
   /** Opens an address of http or https in the browser of the system, and rejects any other address. */
   open(url: string): Promise<void>;
   /** Opens a dialog of a list, which a filter narrows, and gives what the operator chose: Enter chooses the selected
-   * item, and the key of an action acts on it. Escape, or a dialog that another one replaces, gives undefined. */
+   * item, and the key of an action acts on it. A list with no item shows the `empty` line, the reason that it has none.
+   * Escape, or a dialog that another one replaces, gives undefined. */
   choose<T>(
     title: string,
     items: readonly Item<T>[],
-    options?: { note?: string; actions?: readonly Action[]; selected?: number },
+    options?: { note?: string; actions?: readonly Action[]; selected?: number; empty?: string },
   ): Promise<Chosen<T> | undefined>;
   /** Opens a dialog of a form, and gives the value of each field by its name once Enter sends the last field. Tab and
    * Enter go to the next field, ⇧Tab to the one before, and a form with an empty field that it needs says so and
