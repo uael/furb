@@ -68,10 +68,18 @@ test("a window that opens while a command runs shows the lines that the command 
     const command = `echo early-line-one; echo early-line-two; while [ ! -e ${gate} ]; do sleep 0.2; done`;
     const { engine } = first;
     await engine.rung({ word: `await bash(${JSON.stringify(command)}, ok=True)`, on: engine.root });
-    await first.shows((frame) => frame.includes("early-line-two"), "the printed lines in the first window", 20);
+    await first.shows(
+      (frame) => frame.includes("early-line-two"),
+      "the printed lines in the first window",
+      20,
+    );
     const second = await Window.open(yard);
     try {
-      await second.shows((frame) => frame.includes("early-line-two"), "the printed lines in the second window", 20);
+      await second.shows(
+        (frame) => frame.includes("early-line-two"),
+        "the printed lines in the second window",
+        20,
+      );
     } finally {
       await second.close();
       await writeFile(gate, "");
