@@ -210,7 +210,8 @@ fn blank(word: Option<&Value>) -> bool {
   word.is_none_or(|word| word.is_null() || word == "" || word == false)
 }
 
-/// The ladder of a chain from the index of the acts that a window holds, as [`ladder`] gives it.
+/// The ladder of a chain from the index of the acts that a window holds, as
+/// [`super::Held::ladder`] reads it.
 pub(super) fn folded(
   index: &Index<'_>,
   chain: &str,
