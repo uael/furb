@@ -124,6 +124,9 @@ pub(super) fn passing(no: &CompletionError) -> Option<Transient> {
     "dns error",
     "tls handshake",
     "network is unreachable",
+    "can't reach the api server",
+    "enotfound",
+    "eai_again",
   ]) {
     Transient::Network
   } else {

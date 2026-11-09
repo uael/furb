@@ -1252,6 +1252,15 @@ fn only_a_failure_of_the_network_or_of_the_side_of_the_provider_passes() {
   assert_eq!(passing(&CompletionError::ResponseError("the stream stopped, 503".into())), None);
 }
 
+#[test]
+fn a_claude_command_line_that_cannot_reach_its_server_fails_on_the_network_and_passes() {
+  let provider =
+    |why: &str| passing(&CompletionError::ProviderError(why.to_owned())).map(|one| one.to_string());
+  let lost = "API Error: Can't reach the API server, check your internet or DNS (ENOTFOUND)";
+  assert_eq!(provider(lost), Some("network error".to_owned()));
+  assert_eq!(provider("getaddrinfo EAI_AGAIN api.anthropic.com"), Some("network error".to_owned()));
+}
+
 /// A provider on a port of this machine, which reads one request and streams these events. It gives the request it
 /// read.
 pub(super) fn served(listener: TcpListener, events: String) -> thread::JoinHandle<String> {
