@@ -450,7 +450,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           and (maker := (get(p := get(r[2])[2]) or a)[2]) in running
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
-      a[0] == "wake" and unread.update(x for x in seen if covers(a, x))
+      a[0] == "wake" and [mark(x, True) for x in seen if covers(a, x)]
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
@@ -466,8 +466,9 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         mark(a[1], True)
       if a[0] == "done" and prompted(p := r[2]) and not over(p):
         hushed[p] = hushed.get(p, 0) + 1 if a[1] in (ran, *blocked) else 0
-        if hushed[p] > (p in unread):
+        if hushed[p] > (p in unread) * 2:
           unread.discard(p)
+          hushed[p] // 3 and pause(p, "made nothing")
           hushed[p] = 2
           ran = yield "tell", get(p)[2], [headed(p, "asked no more until a fact comes")]
       match a:
