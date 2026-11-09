@@ -2,13 +2,15 @@
 //! the life runs it, so it sees a life whose words are lost, which no watch that a word runs can.
 //! A life is stalled when it holds an open act, a run of a word, a reply of a model or a command,
 //! and says no fact and no model writes for the bound of the daemon, [`STALL`] unless `host.json`
-//! says otherwise. A chain is stalled when it holds a rung, or a prompt to a model, while nothing
-//! else lives on it, no run, no reply, no command and no wait, and no act of it changes for
-//! [`HUNG`], or when a reply of a model on it writes nothing and no act of it changes for
-//! [`THINK`], even while other chains work. That is a chain whose ear or model is lost, and the
-//! watch wakes that chain alone. Work that waits for the operator waits on purpose and never
-//! stalls: a paused act, a prompt to him, an act on a chain that asks him, and a rung or a run
-//! whose word awaits such a prompt.
+//! says otherwise. A chain is stalled when it holds a rung with a word while nothing else lives on
+//! it, no run, no reply, no command and no wait, and no act of it changes for [`HUNG`], or when a
+//! reply of a model on it writes nothing and no act of it changes for [`THINK`], even while other
+//! chains work. That is a chain whose word or model is lost, and the watch wakes that chain alone.
+//! A rung with no word, or a prompt to a model, with nothing else on its chain rests: the
+//! chain asks a thread only for a fact of its own, so a thread that rests waits for that fact
+//! on purpose, and the watch never wakes it. Work that waits for the operator waits on purpose
+//! and never stalls: a paused act, a prompt to him, an act on a chain that asks him, and a rung
+//! or a run whose word awaits such a prompt.
 
 use std::{
   collections::{HashMap, HashSet},
@@ -26,8 +28,8 @@ use crate::{event::Event, protocol::Open};
 /// unless the settings of the daemon say otherwise.
 pub const STALL: Duration = Duration::from_mins(20);
 
-/// How long a chain that holds a rung or a prompt to a model, with nothing else that lives on it,
-/// stays with no change before the daemon tells that it stalled. The bound of the life caps it.
+/// How long a chain that holds a rung with a word, with nothing else that lives on it, stays with
+/// no change before the daemon tells that it stalled. The bound of the life caps it.
 pub const HUNG: Duration = Duration::from_secs(60);
 
 /// How long a reply of a model writes nothing while no act of its chain changes before the daemon
@@ -206,14 +208,13 @@ impl Quiet {
   }
 
   /// How long the chain of an act stays with no change before the act stalls it, or none for an
-  /// act that never stalls its chain: a rung that nothing else lives beside on its chain, or a
-  /// prompt to a model whose chain holds no rung and nothing else, for [`HUNG`], and a reply for
-  /// [`THINK`], each capped by the bound of the life. Work that waits on purpose never stalls.
+  /// act that never stalls its chain: a rung with a word that nothing else lives beside on its
+  /// chain stalls it after [`HUNG`], and a reply after [`THINK`], each capped by the bound of the
+  /// life. A rung with no word rests, and work that waits on purpose never stalls.
   fn hung(&self, one: &Act) -> Option<Duration> {
-    let ruled = || self.acts.iter().any(|rung| rung.chain == one.chain && rung.kind == Kind::Rung);
+    let worded = one.words.first().and_then(Value::as_str).is_some_and(|word| !word.is_empty());
     let bound = match one.kind {
-      Kind::Rung if !self.working(&one.chain) => HUNG,
-      Kind::Prompt if !self.working(&one.chain) && !ruled() => HUNG,
+      Kind::Rung if worded && !self.working(&one.chain) => HUNG,
       Kind::Reply => THINK,
       _ => return None,
     };
