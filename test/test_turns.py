@@ -105,7 +105,7 @@ async def test_a_turn_once_phrased_is_phrased_the_same_on_every_later_reply() ->
   """A turn once phrased is phrased the same on every later reply."""
   sand, _, root = born()
   engine.grant(usd=10.0, on=root)
-  sand.script[root] = ["a = 1", "b = 2", "close(3)"]
+  sand.script[root] = ["a = 1\ndebug(t'{a}')", "b = 2\ndebug(t'{b}')", "close(3)"]
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
   asks = list(sand.turns.values())

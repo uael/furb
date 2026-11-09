@@ -264,13 +264,13 @@ fn an_assistant_turn_goes_again_as_the_blocks_its_provider_gave() {
   let thought = Reasoning::new_with_signature("hmm", Some("sig".into()));
   // The stream says the id of the thought, which the turn keeps and the provider reads again.
   let thought = AssistantContent::Reasoning(Reasoning { id: Some("r".into()), ..thought });
-  let first = [thought, AssistantContent::text("x = 1")];
+  let first = [thought, AssistantContent::text("x = 1\ndebug(t'{x}')")];
   let reasoning =
     message::ReasoningContent::Text { text: "hmm".into(), signature: Some("sig".into()) };
   let turns = [
     vec![
       MockStreamEvent::Reasoning { id: "r".into(), content: reasoning },
-      MockStreamEvent::text("x = 1"),
+      MockStreamEvent::text("x = 1\ndebug(t'{x}')"),
     ],
     vec![MockStreamEvent::text("close(x)")],
   ];
@@ -359,7 +359,7 @@ fn a_turn_between_two_refusals_of_an_actor_on_a_chain_ends_their_row() {
   let turn = |word: &str| vec![MockStreamEvent::text(word)];
   let model = MockCompletionModel::from_stream_turns([
     failed(),
-    turn("x = 1"),
+    turn("x = 1\ndebug(t'{x}')"),
     failed(),
     turn("close(x + 2)"),
   ]);
@@ -1824,7 +1824,7 @@ fn a_local_model_reads_its_earlier_turn_with_no_thought() {
   let ended = format!("data: {usage}\n\ndata: [DONE]\n\n");
   let first = [
     chunk(json!({"role": "assistant", "reasoning_content": "a"}), Value::Null),
-    chunk(json!({"content": "x = 1"}), json!("stop")),
+    chunk(json!({"content": "x = 1\ndebug(t'{x}')"}), json!("stop")),
     ended.clone(),
   ];
   let again = [chunk(json!({"role": "assistant", "content": "close(x)"}), json!("stop")), ended];
@@ -1842,7 +1842,7 @@ fn a_local_model_reads_its_earlier_turn_with_no_thought() {
     .unwrap_or_default();
   assert_eq!(
     (&earlier["content"], earlier.get("reasoning_content")),
-    (&json!([{"type": "text", "text": "x = 1"}]), None),
+    (&json!([{"type": "text", "text": "x = 1\ndebug(t'{x}')"}]), None),
     "the earlier turn goes with its word and no thought"
   );
 }
@@ -2009,13 +2009,12 @@ fn a_word_that_ends_with_a_line_of_three_backticks_runs_without_it_and_the_chain
   asked(&mut engine);
   replied(&mut engine);
   assert!(until(&mut engine, |engine| ran(engine, "y = x")), "the word runs");
-  let root = engine.root().to_owned();
   let facts = said(&mut engine);
   let kinds: Vec<_> =
     facts.iter().map(|(kind, about, _)| (kind.as_str(), about.as_str())).take(4).collect();
   assert_eq!(
     kinds,
-    [("started", "reply1"), ("writing", "rung1"), ("tell", root.as_str()), ("done", "reply1")]
+    [("started", "reply1"), ("writing", "rung1"), ("tell", "rung1"), ("done", "reply1")]
   );
   assert!(facts[2].2.contains("the provider dropped that line"), "{}", facts[2].2);
   assert!(facts[3].2.starts_with("('assistant', 'x = 3\\ny = x', "), "{}", facts[3].2);
@@ -2822,7 +2821,12 @@ fn a_local_model_reads_the_end_of_a_thought_that_the_provider_cut_in_its_next_tu
   };
   let thought =
     ["a", "b", "c", "d"].map(|one| chunk(json!({"reasoning_content": one}), Value::Null));
-  let answers = vec![thought.concat(), word("x = 1"), word("y = 2"), word("close(x + y)")];
+  let answers = vec![
+    thought.concat(),
+    word("x = 1\ndebug(t'{x}')"),
+    word("y = 2\ndebug(t'{y}')"),
+    word("close(x + y)"),
+  ];
   let (mut engine, id, asked_of) = rethinking_at("local:qwen/high", answers);
   let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
   assert_eq!(got.as_ref().as_int(), Some(3));

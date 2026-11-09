@@ -120,7 +120,11 @@ test("the model asks the operator before it deploys", async () => {
 });
 
 test("a grant pauses the chain at its ceiling and a larger grant lets it go on", async () => {
-  const { root, home, run } = await yard("files = 3", "files = 3", "close(1200)");
+  const { root, home, run } = await yard(
+    "files = 3\ndebug(t'{files}')",
+    "files = 3\ndebug(t'{files}')",
+    "close(1200)",
+  );
   try {
     await writeFile(join(home, "cost"), "0.3");
     expect(await run("grant")).toBe("paused at 0.60 dollars\n1200\n");

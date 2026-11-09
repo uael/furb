@@ -1432,14 +1432,14 @@ async def test_the_chain_advances_first_the_rung_that_was_made_first() -> None:
   await settle()
   engine.prompt(int, "r", on=root)
   await settle()
-  await answer(0, "y = 1")
+  await answer(0, "debug(t'1')")
   await answer(1, "q = prompt(int, 'q')\nclose(0)")
   await answer(2, "close(0)")
   engine.prompt(int, "s", on=root)
   await settle()
-  await answer(3, "y = 3")
+  await answer(3, "debug(t'3')")
   await answer(4, "t = prompt(int, 't')\nclose(0)")
-  await answer(5, "y = 5")
+  await answer(5, "debug(t'5')")
   assert [engine.get(engine.get(a[2])[2])[5] for a in said(log, "reply")] == ["p", "r", "p", "q", "s", "q", "t"]
 
 
@@ -1455,7 +1455,7 @@ async def test_the_chain_asks_a_new_prompt_while_a_word_awaits_a_wait_that_is_no
 
 
 async def test_the_chain_asks_again_only_when_something_new_came_since_its_last_ask() -> None:
-  """The chain asks a prompt again only when something new came on the chain since its last ask: a fact that another speaker said, or the end of an act that the word did not end itself. Nothing that the last word made, nor what the chain says of that word, is new, so a word that tells nothing, that only sends a message to the operator or that only writes a page ends its step with no second ask, and a message of the operator asks again at once."""
+  """The chain asks a prompt again only when something new for its thread came since its last ask: a fact that another speaker said of that thread, or the end of an act that the word did not end itself. Nothing that the last word made, nor what the chain says of that word, is new, so a word that tells nothing, that only sends a message to the operator or that only writes a page ends its step with no second ask, and a message of the operator asks again at once."""
   words = (
     "x = read('/w/a.txt', show=HIDDEN)",
     "prompt(None, 'on it', to=OPERATOR)",
@@ -1658,14 +1658,14 @@ async def test_a_statement_that_the_model_of_a_rung_writes_runs_after_the_told_r
 async def test_the_chain_asks_a_prompt_no_more_after_two_words_in_a_row_that_made_nothing_new_until_a_fact_comes_and_tells_its_maker_once() -> (
   None
 ):
-  """After a second word in a row that bound no new name and after which nothing but the chain or a reminder of a message that is not answered told on the chain, the chain advances no rung until a fact comes, a tell of another or the end of an act that a word made, and tells the maker of that prompt once, so a model that answers a bare expression, prose and pass in turn is asked twice."""
+  """A word that made nothing hushes its thread when nothing for that thread came during it, and so does a second word in a row that made nothing: the chain advances no rung of that thread until a message on it, a wake or the end of an act of it, and tells the maker of that prompt once, so a model that answers a bare expression, prose and pass in turn is asked twice."""
   _, log, root = born("('a', 1)", "The answer stands.", "pass", "pass", "close(1)", auto=False)
   one = engine.prompt(int, "count", on=root)
   for _ in range(4):
     await settle()
   told = [a for a in said(log, "tell") if "asked no more until a fact comes" in a[3][0]]
   assert (len(said(log, "reply")), engine.peek(one, ...), len(told)) == (2, ..., 1)
-  for replies in (4, 5):
+  for replies in (3, 4, 5):
     engine.prompt(None, "go on", on=one)
     for _ in range(4):
       await settle()
@@ -1774,3 +1774,17 @@ async def test_a_message_on_a_thread_is_owed_until_a_reply_reads_it() -> None:
   for _ in range(6):
     await settle()
   assert (engine.peek(act), [a for a in said(log, "rung") if a[2] == read]) == (4, [])
+
+
+async def test_a_thread_is_asked_again_only_for_a_fact_of_its_own() -> None:
+  """The chain asks a thread again only for a fact for that thread, the end of an act of it, a message on it, or its own word refused or raised, and a fact of another thread asks it never."""
+  sand, log, root = born("x = 1", "y = await bash('slow')", "close(2)", "close(1)", auto=False)
+  one = engine.prompt(int, "one", on=root)
+  await settle()
+  two = engine.prompt(int, "two", on=root)
+  await settle()
+  sand.exits(said(log, "bash")[0][1], 0)
+  assert await two == 2
+  await settle()
+  asked = [engine.get(engine.get(a[2])[2])[1] for a in said(log, "reply")]
+  assert (asked.count(one), engine.peek(one, ...)) == (1, ...)

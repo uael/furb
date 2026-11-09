@@ -606,17 +606,15 @@ async def lived() -> tuple[Sand, list[tuple], str]:
 
 
 async def acknowledged() -> tuple[Sand, list[tuple], str, str]:
-  """A life whose task starts a command, then waits for a second one, so the chain acknowledges the end of the first
-  on the task, which is open: the World, what was said, the root and the task."""
-  sand, log, root = born("x = bash('slow')\nawait bash('slow')", "close(3)", auto=False)
+  """A life whose task asks the operator and closes, then the operator refuses that question, so the chain acknowledges
+  that failure on the task, which is over: the World, what was said, the root and the task."""
+  sand, log, root = born("x = prompt(int, 'which?', to=OPERATOR)\nclose(3)", "close(None)")
   task = engine.prompt(int, "task", on=root)
-  await settle()
-  first, second = (one[1] for one in said(log, "bash"))
-  sand.exits(first, 0)
-  await settle()
-  sand.exits(second, 0)
   assert await task == 3
-  await settle()
+  (asked,) = [one[1] for one in said(log, "prompt") if one[5] == "which?"]
+  engine.close(Refused("no"), asked)
+  for _ in range(3):
+    await settle()
   return sand, log, root, task
 
 

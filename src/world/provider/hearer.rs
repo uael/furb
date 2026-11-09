@@ -1,9 +1,5 @@
 //! The ear of the provider: one method for each event that it hears, and the replies that it took.
 
-#![expect(
-  clippy::too_many_arguments,
-  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
-)]
 use std::{
   collections::{HashMap, HashSet},
   path::PathBuf,
@@ -379,7 +375,7 @@ impl Hearer {
     // before it.
     let wrapped = reply.call.watch.as_ref().and_then(Watch::note);
     if let Some(dropped) = dropped.or(wrapped) {
-      told(co, &reply.chain, &format!("#{} {dropped}", reply.rung));
+      told(co, &reply.rung, &format!("#{} {dropped}", reply.rung));
     }
     let recoverable = got.as_ref().is_err_and(recoverable);
     let overflow = got.as_ref().err().is_some_and(overflows);
@@ -495,10 +491,10 @@ impl Replies {
     let Some(Reply { chain, rung, call, .. }) = self.taken.remove(id) else { return };
     self.mute.remove(&chain);
     if let Some(note) = call.watch.as_ref().and_then(Watch::note) {
-      told(co, &chain, &format!("#{rung} {note}"));
+      told(co, &rung, &format!("#{rung} {note}"));
     }
     if let Some((what, fields)) = ending.note {
-      noted(co, &chain, &rung, what, &fields).await;
+      noted(co, &rung, what, &fields).await;
     }
     say(co, Fact::says("done", id, [ending.turn]));
   }
@@ -600,9 +596,9 @@ pub(super) struct Came {
   pub(super) account: Option<String>,
 }
 
-/// A note told to a chain.
-pub(super) fn told(co: &mut Co<Replied>, chain: &str, note: &str) {
-  say(co, Fact::says("tell", chain, [Object::list([Object::string(note)])]));
+/// A note told about a chain, or about a rung of it, whose thread reads it as a fact of its own.
+pub(super) fn told(co: &mut Co<Replied>, about: &str, note: &str) {
+  say(co, Fact::says("tell", about, [Object::list([Object::string(note)])]));
 }
 
 /// The note that tells a chain which names of the roster and of the actor left the catalog, as a
@@ -617,18 +613,12 @@ fn departed(about: &str, names: &[String]) -> String {
 /// call gave, which the engine binds under the rung as it binds a value of an act, so the turn that
 /// holds the note stays python. A text after the header as a line of its own is no python, and the
 /// run of the turn would raise a `SyntaxError`.
-pub(super) async fn noted(
-  co: &mut Co<Replied>,
-  chain: &str,
-  rung: &str,
-  what: &str,
-  fields: &[(&str, String)],
-) {
+pub(super) async fn noted(co: &mut Co<Replied>, rung: &str, what: &str, fields: &[(&str, String)]) {
   let words = vec![Object::string(rung), Object::string(what)];
   let fields = fields.iter().map(|(word, text)| (*word, Object::string(text))).collect();
   let got = co.call("headed", words, fields).await;
   let note = got.ok().and_then(|one| one.as_ref().as_str().map(str::to_owned));
-  told(co, chain, &note.unwrap_or_else(|| format!("#{rung} {what}")));
+  told(co, rung, &note.unwrap_or_else(|| format!("#{rung} {what}")));
 }
 
 /// What a turn tells as it streams, sent to the work of its reply, which tells the host and reads

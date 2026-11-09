@@ -83,7 +83,7 @@ pub(super) async fn kept(
     Err(no) => (STOPPED, [("why", failure(no)), ("ran", ending(ran))]),
     Ok(_) => (AFTER, [("findings", afterward(&why)), ("ran", ending(ran))]),
   };
-  noted(co, &reply.chain, &reply.rung, what, &fields).await;
+  noted(co, &reply.rung, what, &fields).await;
   Some(Ok(turn))
 }
 

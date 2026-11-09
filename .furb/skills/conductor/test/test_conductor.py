@@ -514,7 +514,7 @@ async def test_the_ledger_of_the_asks_gives_each_kind_its_spend_and_landed_items
   await settle()
   # The item answers twice: its first word asks a review on a chain of its own, whose reply counts as the item.
   uses = {"item": [(1000, 100, 600, 0, 1.0), (500, 50, 0, 0, 0.5)], "inner": [(250, 25, 0, 0, 0.25)], "judge": [(600, 60, 0, 0, 0.75)], "cycle": [(400, 40, 0, 0, 0.5)], "triage": [(300, 30, 0, 0, 0.25)], "wake": [(200, 20, 100, 0, 0.125)]}
-  words = {"item": ['inner = prompt(str, "look", to="claude-cli:opus/medium", on=chain("review one"))', 'close("done one")']}
+  words = {"item": ['inner = prompt(str, "look", to="claude-cli:opus/medium", on=chain("review one"))', 'close("done one")'], "inner": ['close("seen")']}
   labels = {"a": "item", "review one": "inner", "converge": "cycle", "triage": "triage", "verify one": "judge"}
 
   def who(p: str) -> str:

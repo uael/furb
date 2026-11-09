@@ -108,7 +108,7 @@ def test_the_model_asks_the_operator_before_it_deploys(yard: Yard) -> None:
 
 def test_a_grant_pauses_the_chain_at_its_ceiling_and_a_larger_grant_lets_it_go_on(yard: Yard) -> None:
   (yard.fake / "cost").write_text("0.3")
-  yard.words("files = 3", "files = 3", "close(1200)")
+  yard.words("files = 3\ndebug(t'{files}')", "files = 3\ndebug(t'{files}')", "close(1200)")
   assert yard.run("grant") == "paused at 0.60 dollars\n1200\n"
 
 

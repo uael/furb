@@ -130,7 +130,10 @@ fn the_model_asks_the_operator_before_it_deploys() {
 
 #[test]
 fn a_grant_pauses_the_chain_at_its_ceiling_and_a_larger_grant_lets_it_go_on() {
-  let yard = Yard::new("grant", &["files = 3", "files = 3", "close(1200)"]);
+  let yard = Yard::new(
+    "grant",
+    &["files = 3\ndebug(t'{files}')", "files = 3\ndebug(t'{files}')", "close(1200)"],
+  );
   fs::write(yard.fake.join("cost"), "0.3").expect("the cost of a turn");
   assert_eq!(yard.run("grant", ""), "paused at 0.60 dollars\n1200\n");
 }

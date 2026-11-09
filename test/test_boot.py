@@ -871,7 +871,7 @@ async def test_the_journal_says_again_the_first_answer_of_an_act_when_the_act_is
 
 async def test_what_the_record_shows_started_and_not_done_when_boot_returns_is_pending() -> None:
   """What the record shows started and not done when boot returns is pending: the journal holds it from the outside until a wake that this life says."""
-  first, log, root = born("a = 1")
+  first, log, root = born("a = 1\ndebug(t'{a}')")
   engine.prompt(int, "count", on=root)
   await settle()
   child = outside()
