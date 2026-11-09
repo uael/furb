@@ -519,14 +519,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           heard.append("\n".join(notes))
           if a is note:
             note = bind(step)
-          elif not (
-            a is ran
-            or (not over(about) and question(("rung", r[2])))
-            or r[0] == "write"
-            or (
-              prompted(by) and prompted(get(by)[2]) and [x[5] for x in transcript(id, "prompt")].count(get(by)[5]) > 1
-            )
-          ):
+          elif not (a is ran or (not over(about) and question(("rung", r[2]))) or r[0] == "write"):
             mark(about, prompted(about))
           ran = ""
         case ("done", about, *_) if about == note and step in waiting:
@@ -713,13 +706,13 @@ def gathered(define, floor):
       acts.append({**d, "value": Refused(one + " was interrupted: the life that ran it ended before it did")})
   out = []
   for c in chains:
-    a = get(c)
+    a, ended = get(c), {y[1] for y in transcript(c, "done")}
     saved = [
       x
       for x in transcript(c)
       if x[0] not in ("module", "carried", "made")
       and literal(x, set())
-      and (not question(x) or x[0] == "reply" or x[1] in borne)
+      and (not question(x) or (x[0] == "reply" and x[1] in ended) or x[1] in borne)
     ]
     held = {*chains, *borne, *(x[1] for x in saved if question(x))}
     out.append(

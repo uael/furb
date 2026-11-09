@@ -191,3 +191,17 @@ async def test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard() ->
   _, again = life(sown(), engine.seed(data))
   await settle()
   assert (engine.module(again)["k"], engine.module(again)["j"]) == (1, 2)
+
+
+async def test_the_turns_of_a_chain_keep_no_reply_that_is_not_done_so_a_later_life_holds_no_reply_that_no_ear_of_it_takes() -> (
+  None
+):
+  """The turns of a chain keep no reply that is not done, so a later life holds no reply that no ear of it takes."""
+  _, log, root = born("close(1)", auto=False)
+  assert await engine.prompt(int, "count", on=root) == 1
+  engine.prompt(int, "again", on=root)
+  await settle()
+  (open_reply,) = [a[1] for a in log if a[0] == "reply" and not engine.over(a[1])]
+  (chain,) = [c for c in engine.gathered(lambda word: word, {})["chains"] if c["id"] == root]
+  replies = [x[1] for x in chain["turns"] if x[0] in ("reply", "started", "done") and x[1].startswith("reply")]
+  assert open_reply not in replies and replies != []
