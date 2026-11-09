@@ -373,6 +373,7 @@ impl Provider {
           Next::Worked(Replied::Retried(retried)) => hearer.retried(&mut co, retried).await,
           Next::Worked(Replied::Came(came)) => hearer.came(&mut co, came).await,
           Next::Worked(Replied::Searched { id, got }) => searched(&mut co, &id, got),
+          Next::Worked(Replied::Woken { chain }) => hearer.woke(&mut co, &chain).await,
         }
       }
     })

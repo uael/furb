@@ -9,7 +9,10 @@ use std::{
 use futures::{FutureExt, stream};
 use monty::ReplContinuationMode;
 use rig_core::completion::CompletionError;
-use tokio::sync::{mpsc, watch as holding};
+use tokio::{
+  sync::{mpsc, watch as holding},
+  time,
+};
 
 use super::{
   Advertised, Mode, Provider, Refresh, Retries, Search, Settings, Told, Unrefreshed, Writes,
@@ -64,7 +67,17 @@ pub(super) struct Hearer {
   stands: Option<(String, bool)>,
   /// The chains that the ear told which names left the catalog.
   lacked: HashSet<String>,
+  /// How many times the ear woke each chain that it paused since a turn last ended its row of
+  /// refusals, which [`WOKEN`] bounds.
+  woken: HashMap<String, u32>,
+  /// Each pause and wake that the ear said and did not hear yet, as `kind:chain`, so that a
+  /// control of a person alone stops the wakes of a chain.
+  controls: HashSet<String>,
 }
+
+/// How many times the ear wakes a chain that it paused, each after the backoff of its next attempt,
+/// before it leaves the chain paused for a person.
+pub(super) const WOKEN: u32 = 3;
 
 impl Hearer {
   pub(super) fn new(provider: Provider, life: String) -> Self {
@@ -115,6 +128,8 @@ impl Hearer {
       stood: false,
       stands: None,
       lacked: HashSet::new(),
+      woken: HashMap::new(),
+      controls: HashSet::new(),
     }
   }
 
@@ -125,7 +140,12 @@ impl Hearer {
       RAN => self.ran(co, a).await,
       "done" => self.done(a),
       "search" if a.question() => self.search(co, a),
-      "pause" | "wake" => self.held(co).await,
+      "pause" | "wake" => {
+        if !self.controls.remove(&format!("{}:{}", a.kind(), a.about())) {
+          self.woken.remove(a.about());
+        }
+        self.held(co).await;
+      }
       _ => {}
     }
     Ok(())
@@ -366,6 +386,20 @@ impl Hearer {
     }
   }
 
+  /// The end of the backoff of a chain that the ear paused: the ear wakes it, with a fact that the
+  /// record keeps, while no person paused or woke it since and a pause still holds it.
+  pub(super) async fn woke(&mut self, co: &mut Co<Replied>, chain: &str) {
+    if !self.woken.contains_key(chain) {
+      return;
+    }
+    let paused = co.call("paused", vec![Object::string(chain)], vec![]).await;
+    if paused.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false) {
+      self.controls.insert(format!("wake:{chain}"));
+      told(co, chain, &format!("#{chain} woke by the provider after its backoff"));
+      say(co, Fact::says("wake", chain, []));
+    }
+  }
+
   /// What the model of a reply that still stands came to.
   pub(super) async fn came(&mut self, co: &mut Co<Replied>, came: Came) {
     let Came { id, got, dropped, account } = came;
@@ -383,11 +417,21 @@ impl Hearer {
     if let (Err(why), true) = (&got, reply.again)
       && !recoverable
     {
+      self.controls.insert(format!("pause:{}", reply.chain));
       let paused =
         co.call("pause", vec![Object::string(&reply.chain), Object::string(why)], vec![]).await;
       if let Err(no) = paused {
         let note = format!("#{} could not pause the chain: {}", reply.rung, no.message());
         told(co, &reply.chain, &note);
+      } else {
+        let chain = reply.chain.clone();
+        let tries = self.woken.entry(chain.clone()).or_default();
+        if *tries < WOKEN {
+          *tries += 1;
+          let wait = self.backoff.wait(*tries + 1);
+          let slept = spawned(time::sleep(wait));
+          co.work(stream::once(slept.map(move |_| Replied::Woken { chain })));
+        }
       }
     }
     // The account is a fact of its own before the turn that it served, which no reader of a usage
@@ -434,6 +478,7 @@ impl Hearer {
       .is_some_and(|turn| turn.len() == 4 && turn[0].as_str() == Some("assistant"));
     if turned {
       self.replies.mute.remove(&chain);
+      self.woken.remove(&chain);
     } else {
       self.replies.mute.insert(chain, actor);
     }
@@ -567,8 +612,18 @@ pub(super) enum Replied {
   Wrote(Wrote),
   Retried(Retried),
   Came(Came),
-  Refreshed { about: String, got: Result<Settings, Unrefreshed> },
-  Searched { id: String, got: Result<value::Text, Unsearched> },
+  Refreshed {
+    about: String,
+    got: Result<Settings, Unrefreshed>,
+  },
+  Searched {
+    id: String,
+    got: Result<value::Text, Unsearched>,
+  },
+  /// The end of the backoff of a chain that the ear paused.
+  Woken {
+    chain: String,
+  },
 }
 
 /// A part that the model of a reply wrote: the id of the reply, and what the part added to its

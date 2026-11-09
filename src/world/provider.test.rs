@@ -321,6 +321,26 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
 }
 
 #[test]
+fn the_provider_wakes_a_chain_that_it_paused_after_its_backoff_and_leaves_it_paused_after_its_bound()
+ {
+  let failed = || vec![MockStreamEvent::Error(MockError::provider("boom"))];
+  let model = MockCompletionModel::from_stream_turns((0..12).map(|_| failed()));
+  let backoff = Backoff { most: 1, first: Duration::from_millis(5) };
+  let provider = Provider::new(yard("woken").display().to_string(), vec![scripted(&model)]);
+  let mut engine = lived(provider.backoff(backoff));
+  let root = engine.root().to_owned();
+  asked(&mut engine);
+  let woken = super::hearer::WOKEN as usize;
+  let wakes = |engine: &mut Engine| {
+    said(engine).iter().filter(|(kind, about, _)| kind == "wake" && *about == root).count()
+  };
+  assert!(until(&mut engine, |engine| wakes(engine) == woken), "{:?}", said(&mut engine));
+  let more = within(&mut engine, Duration::from_millis(300), |engine| wakes(engine) > woken);
+  assert!(!more, "the provider leaves the chain paused after its bound");
+  assert_eq!(model.request_count(), 2 + woken, "each wake asks the model once more");
+}
+
+#[test]
 fn a_function_of_the_host_that_refuses_later_twice_in_a_row_pauses_the_chain_and_is_asked_no_more()
 {
   let calls = Arc::new(AtomicUsize::new(0));
@@ -1223,7 +1243,10 @@ fn a_model_whose_prompt_is_always_too_long_pauses_the_chain_with_why_after_two_r
     said(&mut engine).into_iter().find(|(kind, about, _)| kind == "done" && about == "reply1");
   let (_, _, refused) = first.expect("the first reply is done");
   assert!(refused.starts_with("Overflow("), "the refusal is an Overflow: {refused}");
-  let more = within(&mut engine, Duration::from_millis(300), |_| calls.load(Ordering::SeqCst) > 2);
+  let bound = 2 + super::hearer::WOKEN as usize;
+  assert!(until(&mut engine, |_| calls.load(Ordering::SeqCst) >= bound), "each wake asks once");
+  let more =
+    within(&mut engine, Duration::from_millis(300), |_| calls.load(Ordering::SeqCst) > bound);
   assert!(!more, "the paused chain asks the model no more: {}", calls.load(Ordering::SeqCst));
 }
 
