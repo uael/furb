@@ -1268,7 +1268,11 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
   assert_eq!(chains, ["chain1", "chain2"]);
   let root = &data["chains"][0];
   assert_eq!(root["values"]["queue"], serde_json::json!("[Act('bash1')]"));
-  assert!(root["definitions"].as_str().unwrap().contains("def f():"));
+  assert_eq!(
+    root["definitions"].as_array().and_then(|each| each.last()),
+    Some(&serde_json::json!("SIZE = 6\n\ndef f():\n  return SIZE")),
+    "the definitions hold one string for each word, the last word last"
+  );
   let acts: Vec<(&str, bool)> = data["acts"]
     .as_array()
     .unwrap()

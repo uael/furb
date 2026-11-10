@@ -5,7 +5,7 @@
 //! The fact is `("checkpoint", "chain1", "store", data)`. Its data is a map: `schema`, the version
 //! of its own shape, [`CHECKPOINT_SCHEMA`]; `engine`, the engine that wrote it; `taken`, the
 //! highest number of each kind; `chains`, each chain that lives with its parent, its label, its
-//! source, whether it is paused, its turns, the text of its definitions, its plain values by name,
+//! source, whether it is paused, its turns, the definitions of each word, its plain values by name,
 //! the names that it lost, and the acts that the checkpoint cut, each word that ran on it among
 //! them, which no later life runs again; and `acts`, each act that a value names, the last stand
 //! and the last clock, with its value and its words, or, for an open prompt, with its shape, its

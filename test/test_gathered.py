@@ -55,7 +55,7 @@ async def test_taken_gives_the_highest_number_of_each_kind_that_an_act_of_a_chai
 async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_each_with_its_parent_its_label_its_source_whether_it_is_paused_its_turns_but_the_facts_made_what_define_gives_of_each_word_that_ran_on_it_the_text_that_binds_each_plain_value_of_its_module_again_the_names_of_the_other_values_and_the_acts_that_it_cut_each_word_that_ran_on_it_among_them() -> (
   None
 ):
-  """chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose rung stands in the lineage of an act whose ear still hears on it at the tip, an open act or a done act with a lasting ear, as lives."""
+  """chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, as one string for each word that defines a name, in order, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose rung stands in the lineage of an act whose ear still hears on it at the tip, an open act or a done act with a lasting ear, as lives."""
   root, _ = await gather()
   # A verb with no words makes an act that makes an open prompt, as name_session makes the prompt of its chain.
   await engine.rung("with site.set(act('named', ROOT, None)):\n  named = prompt(str, 'Name?', to=OPERATOR)", on=root)
@@ -135,7 +135,7 @@ async def test_paused_says_whether_a_pause_stands_over_the_chain_at_the_tip_and_
 async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_seed_binds_a_large_one_from_the_carried_fact_of_its_chain_so_a_later_life_holds_it_exactly_and_no_turn_tells_it() -> (
   None
 ):
-  """chains holds each plain value of a chain whatever its size, and seed binds a large one from the carried fact of its chain, so a later life holds it exactly and no turn tells it."""
+  """chains holds each plain value of a chain whatever its size, and seed binds each from the fact carried of its chain, so a later life holds it exactly and no turn tells it."""
   _, _, root = born()
   rest = engine.chain("rest", source=root)
   await engine.rung("big = 'x' * LARGEST\nran = Exit(0, Text('o', 'y' * LARGEST), Text('e', ''))\nsmall = 1", on=rest)
@@ -145,7 +145,7 @@ async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_se
     data = engine.gathered(definitions, {})
     [one] = [x for x in data["chains"] if x["id"] == rest]
     assert (one["values"]["small"], {"big", "ran"} <= one["values"].keys(), one["lost"]) == ("1", True, [])
-    assert "LARGEST" not in one["definitions"]
+    assert not [d for d in one["definitions"] if "LARGEST" in d]
     entries = engine.seed(data)
     assert all(len(str(word).encode()) < LARGEST // 8 for x in entries if x[0][0] == "rung" for word in x[0][4:5])
     log, _ = life(sown(), entries)
@@ -196,7 +196,7 @@ async def test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard() ->
   await settle()
   data = engine.gathered(definitions, {})
   [one] = [x for x in data["chains"] if x["id"] == root]
-  assert "A note in prose" not in one["definitions"]
+  assert not [d for d in one["definitions"] if "A note in prose" in d]
   _, again = life(sown(), engine.seed(data))
   await settle()
   assert (engine.module(again)["k"], engine.module(again)["j"]) == (1, 2)

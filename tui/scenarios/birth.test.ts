@@ -56,61 +56,55 @@ async function whole(window: Window, root: string, life: string): Promise<void> 
   expect(await value(window, "EVERY", root)).toEqual(300);
 }
 
-test(
-  "a life born on a checkpoint keeps each value and life word, sets up a new chain, and goes on with its thread",
-  () =>
-    scenario(
-      [
-        { cue: "Scenario: work.", word: WORK },
-        { cue: "Scenario: again.", word: AGAIN },
-      ],
-      async (first, yard) => {
-        await first.type("Scenario: work.");
-        await first.shows((frame) => frame.includes("desk=307.0"), "the first answer");
-        const root = first.root;
+test("a life born on a checkpoint keeps each value and life word, sets up a new chain, and goes on with its thread", () =>
+  scenario(
+    [
+      { cue: "Scenario: work.", word: WORK },
+      { cue: "Scenario: again.", word: AGAIN },
+    ],
+    async (first, yard) => {
+      await first.type("Scenario: work.");
+      await first.shows((frame) => frame.includes("desk=307.0"), "the first answer");
+      const root = first.root;
+      await lives(
+        first,
+        String(await value(first, "early", root)),
+        "the life words of a chain of the first life",
+      );
+      expect(await kinds(first, root)).toEqual(LIFE);
+      const facts = (await first.engine.transcript({ on: root })) as unknown[][];
+      const thread = String(facts.filter((fact) => fact[0] === "prompt").at(-1)?.[1]);
+      expect(thread).toMatch(/^prompt\d+$/);
+      await first.close(true);
+      const second = await Window.open(yard);
+      try {
+        await whole(second, root, "second");
+      } finally {
+        await second.close(true);
+      }
+      const third = await Window.open(yard);
+      try {
+        await whole(third, root, "third");
+        expect(await third.engine.get(thread)).toBeTruthy();
+        await third.type("Scenario: again.");
+        await until(
+          async () => (await value(third, "seen", root)) !== undefined,
+          "the word on the old thread",
+        ).catch(async (error: Error) => {
+          throw new Error(`${error.message} The last frame:\n${await third.frame()}`);
+        });
+        expect(await value(third, "seen", root)).toEqual([7, 307, 301, 300]);
+        const again = (await third.engine.transcript({ on: root })) as unknown[][];
+        expect(
+          again.some((fact) => fact[0] === "prompt" && fact[3] === thread && fact[5] === "Scenario: again."),
+        ).toBe(true);
         await lives(
-          first,
-          String(await value(first, "early", root)),
-          "the life words of a chain of the first life",
+          third,
+          String(await value(third, "later", root)),
+          "the life words of a chain made after a birth",
         );
-        expect(await kinds(first, root)).toEqual(LIFE);
-        const facts = (await first.engine.transcript({ on: root })) as unknown[][];
-        const thread = String(facts.filter((fact) => fact[0] === "prompt").at(-1)?.[1]);
-        expect(thread).toMatch(/^prompt\d+$/);
-        await first.close(true);
-        const second = await Window.open(yard);
-        try {
-          await whole(second, root, "second");
-        } finally {
-          await second.close(true);
-        }
-        const third = await Window.open(yard);
-        try {
-          await whole(third, root, "third");
-          expect(await third.engine.get(thread)).toBeTruthy();
-          await third.type("Scenario: again.");
-          await until(
-            async () => (await value(third, "seen", root)) !== undefined,
-            "the word on the old thread",
-          ).catch(async (error: Error) => {
-            throw new Error(`${error.message} The last frame:\n${await third.frame()}`);
-          });
-          expect(await value(third, "seen", root)).toEqual([7, 307, 301, 300]);
-          const again = (await third.engine.transcript({ on: root })) as unknown[][];
-          expect(
-            again.some(
-              (fact) => fact[0] === "prompt" && fact[3] === thread && fact[5] === "Scenario: again.",
-            ),
-          ).toBe(true);
-          await lives(
-            third,
-            String(await value(third, "later", root)),
-            "the life words of a chain made after a birth",
-          );
-        } finally {
-          await third.close(true);
-        }
-      },
-    ),
-  300000,
-);
+      } finally {
+        await third.close(true);
+      }
+    },
+  ));

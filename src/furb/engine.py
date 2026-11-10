@@ -351,6 +351,19 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     def placed(went):
       return rung("stand()" + (went and "\ncd(" + repr(went) + ")"), to=stood)
 
+    def seeded():
+      went = placed(last[1])
+      if last[4:]:
+        rung('debug(t"{standing()[4]=}")', to=stood)
+        rung(f"read({last[3]!r})", to=stood)
+        for k in range(1 + (id == ROOT)):
+          k and (yield "setup", id)
+          for x in last[4]:
+            x[1] and x[3] == k and rung(f"rung(read({x[1]!r}, HIDDEN).content)", to=stood)
+          for y in last[4]:
+            y[3] == k and y[2] and rung(y[2], to=stood)
+      return went
+
     def mark(of, loud=False):
       q = get(of) or [""] * 5
       for g in {*lineage(get(q[2])[4] if q[0] == "wants" else q[4] if q[0] == "run" else of), q[3]}:
@@ -415,9 +428,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       yield top
       top = ""
     yield from replay()
-    seat = top and last and (transcript(id, "stand") or placed(last[1]))
-    if last[4:] and seat and not transcript(id, "stand"):
-      yield from seeded(id, last, stood)
+    seat = top and last and (transcript(id, "stand") or (yield from seeded()))
     while True:
       r = get((a := (yield {id, "stand", "reply"}))[1]) or a
       match a:
@@ -432,8 +443,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             yield ("tell", id, ["chain()"]) if last[3:] else top
             top *= bool(last[3:])
             if last[4:] and id == ROOT and not transcript(id, "reply") and not transcript(id, "carried"):
-              seat = placed(last[1])
-              yield from seeded(id, last, stood)
+              seat = yield from seeded()
           elif last[3:] and not top:
             placed(last[1] * (was[1] != last[1]) * all(all(get(x[2])[4::2]) for x in transcript(id, "cd")))
         case ("done", about, _, value) if running.get(maker := r[2]) in (
@@ -601,17 +611,6 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
   return act("chain", on, ear, label, source, *[kept] * (kept is not None))
 
 
-def seeded(id, last, to):
-  rung('debug(t"{standing()[4]=}")', to=to)
-  rung(f"read({last[3]!r})", to=to)
-  for k in range(1 + (id == ROOT)):
-    k and (yield "setup", id)
-    for x in last[4]:
-      x[1] and x[3] == k and rung(f"rung(read({x[1]!r}, HIDDEN).content)", to=to)
-    for y in last[4]:
-      y[3] == k and y[2] and rung(y[2], to=to)
-
-
 def seed(data):
   entries, numbers = [], Counter()
 
@@ -622,11 +621,15 @@ def seed(data):
     words and entries.append(((sort, called, *words),))
 
   asking = {a["on"] for a in data["acts"] if "value" not in a}
+  parts = {}
   for c in data["chains"]:
     put("chain", c["id"], OPERATOR, c["on"], c["label"], "")
-    entries.append(
-      (("carried", c["id"], "journal", c["turns"], {k: t for k, t in c["values"].items() if t[LARGEST // 16 :]}),)
+    v = "".join(
+      f"try: {k} = eval(transcript(of='carried')[-1][4][{k!r}])\nexcept Exception: pass\n" for k in c["values"]
     )
+    d = c["definitions"]
+    parts[c["id"]] = [*filter(None, [v, *([d] if isinstance(d, str) else d), v, *c.get("lives", ())])]
+    entries.append((("carried", c["id"], "journal", c["turns"], c["values"], parts[c["id"]]),))
     (c["paused"] or c["id"] in asking) and entries.append((("pause", c["id"], OPERATOR),))
   for x in data["acts"]:
     "value" in x and (
@@ -642,26 +645,14 @@ def seed(data):
     put(kind, f"{kind}{most + 1}")
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
-    lost = f"[n for n in {c['lost']} if n not in globals()]"
-    parts = [
-      *filter(
-        None,
-        [
-          "\n".join(
-            f"{named} = " + (f"eval(transcript(of='carried')[-1][4][{named!r}])" if text[LARGEST // 16 :] else text)
-            for named, text in c["values"].items()
-          ),
-          c["definitions"],
-          *c.get("lives", ()),
-        ],
-      )
-    ]
-    word = "".join(f"try: await rung({one!r})\nexcept Exception as e: debug(t'{{e!r}}')\n" for one in parts) + (
-      f"{lost} + {cut} and debug(t\"The life goes on from a checkpoint. It lost {{{lost} or 'no name'}}, "
+    word = (
+      "for __p in transcript(of='carried')[-1][5]:\n try: await rung(__p)\n except Exception as __e: debug(t'{__e!r}')\n"
+      f"__l = [n for n in [*{c['lost']}, *transcript(of='carried')[-1][4]] if n not in globals()]\n"
+      f"__l + {cut} and debug(t\"The life goes on from a checkpoint. It lost {{__l or 'no name'}}, "
       f'and it cut {cut or "no act"}.")'
-    ) * bool(c["lost"] or cut)
+    )
     seat = f"rung{numbers['rung'] + 1}"
-    for maker, said in [(OPERATOR, word), *((seat, one) for one in parts)]:
+    for maker, said in [(OPERATOR, word), *((seat, one) for one in parts[i])]:
       put("rung", f"rung{numbers['rung'] + 1}", maker, i, said, "", "")
       put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, said)
       entries.append((("done", gated, "gate", []),))
@@ -730,9 +721,9 @@ def gathered(define, floor):
         "source": a[5],
         "paused": paused(c),
         "turns": [x for x in saved if x[0] not in ("started", "done") or x[1] in held],
-        "definitions": "\n\n".join(
-          filter(None, [define(w) for r, w in program(c).items() if get(r) and get(r)[2] != "extensions"])
-        ),
+        "definitions": [
+          *filter(None, [define(w) for r, w in program(c).items() if get(r) and get(r)[2] != "extensions"])
+        ],
         "values": values[c],
         "lost": lost[c],
         "cut": [x for x in cut if scope(x) == c],

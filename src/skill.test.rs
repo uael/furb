@@ -491,8 +491,7 @@ fn the_definitions_of_a_word_are_its_imports_its_functions_its_classes_its_types
               tuple[int, int]\n\nnote()\nif LIMIT:\n  OTHER = 1";
   assert_eq!(
     definitions(word),
-    "import json\n\nfrom re import sub\n\nLIMIT = globals().setdefault(\"LIMIT\", 2)\n\nA = B = 3\n\nTOP: int = \
-     globals().setdefault(\"TOP\", 4)\n\n@staticmethod\ndef note(on=\"\"):\n  \
+    "import json\n\nfrom re import sub\n\nLIMIT = 2\n\nA = B = 3\n\nTOP: int = 4\n\n@staticmethod\ndef note(on=\"\"):\n  \
      return read(\"note.txt\", on=on)\n\nclass Note:\n  x = 1\n\ntype Pair = tuple[int, int]"
   );
   assert_eq!(definitions("def broken(:"), "def broken(:", "a word that does not parse stays whole");
