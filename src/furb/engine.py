@@ -1111,7 +1111,6 @@ def boot(record=(), **outside):
           or (on and not get(on))
           or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on, *words))]))
         ):
-          born.setdefault(kind, {})[name] = name
           return
         if by not in outside and (not callable(verb := (module(on) or globals()).get(kind)) or by[-1:].isdigit()):
           raise drift(name)
