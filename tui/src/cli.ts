@@ -133,8 +133,9 @@ const fatal = async (error: unknown): Promise<never> => {
 try {
   if (record) await library.import(record, group);
   else if (!values.demo || values.cwd) {
-    // The life opens in the background, so the window draws at once, and a life that fails to open ends the TUI then.
-    const entry = await library.create(group, undefined, directory, true);
+    // The window shows the last session of the workspace, else a new one, whose life opens in the background, so the
+    // window draws at once, and a life that fails to open ends the TUI then.
+    const entry = await library.resume(group, directory);
     void entry.ready?.then((open) => {
       if (!open && entry.status === "failed") void fatal(entry.error);
     });

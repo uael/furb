@@ -321,7 +321,9 @@ test("a model of the catalog that the roster does not hold joins the session, wh
       "Choose one of claude-cli:opus.",
     );
     await first?.submit("/model sonnet");
-    await until(library, () => entry.session !== first && entry.session?.actor === "claude-cli:sonnet/high");
+    await until(library, () => entry.session?.actor === "claude-cli:sonnet/high");
+    // The life opens again in place: the window shows the same session, and never one that it let go.
+    expect(entry.session).toBe(first);
     expect(entry.session?.roster.map(([name]) => name)).toEqual([
       "claude-cli:opus",
       "claude-cli:sonnet",
@@ -1106,3 +1108,29 @@ test("a delete refuses when the daemon gives no count of the windows of the life
       link.ask = ask;
     }
   }));
+
+test("a start shows the newest session of its workspace that no window holds, and a new one when it holds none", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-workspaces-"));
+  const options = { claude: join(directory, "claude"), roster: ["claude-cli:opus"] };
+  const list = join(directory, "config/workspaces.json");
+  let made: { path: string } | undefined;
+  const first = new Workspaces(new Preferences(join(directory, "config/ui.json")), options, list);
+  try {
+    const entry = await first.resume(await first.add(directory));
+    expect(await entry.ready).toBe(true);
+    made = entry;
+  } finally {
+    await first.dispose();
+  }
+  const second = new Workspaces(new Preferences(join(directory, "config/ui.json")), options, list);
+  try {
+    const shown = await second.resume(await second.add(directory));
+    expect(await shown.ready).toBe(true);
+    expect(shown.path).toBe(made?.path ?? "");
+    expect(second.current).toBe(shown);
+    expect(second.groupOf()?.sessions.length).toBe(1);
+  } finally {
+    await second.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

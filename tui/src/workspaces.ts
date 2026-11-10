@@ -424,7 +424,6 @@ export class Workspaces extends EventEmitter {
     };
     this.subscriptions.set(session, changed);
     session.on("change", changed);
-    session.on("reopen", (command: string) => void this.reopen(row, command).catch(session.fail));
     changed();
     this.save({ directory: group.directory, add: path });
     return row;
@@ -539,15 +538,6 @@ export class Workspaces extends EventEmitter {
     this.emit("select", entry.session);
     this.emit("change");
   }
-  /** Open a session again on its record, as a later life whose roster holds the models the operator added, which
-   * starts again the work that the life before it left, and then runs a command of the operator in it. */
-  async reopen(entry: SessionEntry, command: string): Promise<void> {
-    await this.release(entry);
-    await this.select(entry);
-    const session = entry.session;
-    if (!session) return;
-    await session.command(command);
-  }
   /** A new session. It selects after its life opens, unless lazy is set: the session then stands and selects at once,
    * on a life that opens in the background and fills it in, and a life that fails to open tells so with the event
    * failed. Its record stands in the .furb/sessions of `checkout`, the main checkout of the workspace or one of its
@@ -633,6 +623,23 @@ export class Workspaces extends EventEmitter {
         made.session.notice = `“${entry.name}” did not open, so this is a new session. ${why}`;
       return made;
     }
+  }
+  /** The session that a start of the window shows: the newest session of the workspace that no other window holds,
+   * whose life opens in the background so that the window draws at once, else a new session in `checkout`. A session
+   * that does not open keeps its error on its row, and a new session takes its place with the reason as its notice. */
+  async resume(group: Workspace, checkout = group.directory): Promise<SessionEntry> {
+    const entry = await this.free(group);
+    if (!entry || !existsSync(entry.path)) return this.create(group, undefined, checkout, true);
+    await this.load(entry, group, true);
+    await this.select(entry);
+    entry.ready = entry.ready?.then(async (open) => {
+      if (open || this.closed) return open;
+      const made = await this.create(group, undefined, checkoutOf(entry.path, group.directory), true);
+      if (made.session)
+        made.session.notice = `“${entry.name}” did not open, so this is a new session. ${entry.error ?? ""}`;
+      return (await made.ready) ?? true;
+    });
+    return entry;
   }
   /** The newest session of a workspace that this window holds, or that no window holds. A daemon that does not
    * answer holds nothing that this window knows of. */

@@ -978,6 +978,19 @@ export class HostView extends EventEmitter {
     this.forget();
     this.emit("reset");
   }
+  /** The life opened again on its record with the roster named, in place, as `RemoteLife.restart` says, and read again
+   * from its start. */
+  async restart(roster: string[]): Promise<void> {
+    if (!(this.life instanceof RemoteLife))
+      throw new Error("This record is open to read, so its roster does not change.");
+    try {
+      await this.life.restart(roster);
+    } finally {
+      this.lost = "";
+      this.forget();
+      this.emit("reset");
+    }
+  }
   /** The life pinned under the name of a holder, so it lives with no window, until an unpin of that holder. */
   /** The follow-ups that wait on each chain of the life, in order, as the life told them last. */
   get queued(): FollowUp[] {
