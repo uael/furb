@@ -498,6 +498,16 @@ fn the_definitions_of_a_word_are_its_imports_its_functions_its_classes_its_types
 }
 
 #[test]
+fn a_tuple_of_names_in_capitals_is_a_definition_so_a_default_that_reads_one_finds_it() {
+  let word = "EVERY, FLOOR = 300.0, 900.0\n(TOP, [LOW, HIGH]) = 1, [2, 3]\nleft, RIGHT = 1, 2\n\n\
+              def desk(every=EVERY):\n  return every";
+  assert_eq!(
+    definitions(word),
+    "EVERY, FLOOR = 300.0, 900.0\n\n(TOP, [LOW, HIGH]) = 1, [2, 3]\n\ndef desk(every=EVERY):\n  return every"
+  );
+}
+
+#[test]
 fn a_manifest_says_whether_its_skill_plays_on_every_chain_or_on_the_root_alone() {
   let at = place("plays");
   let manifest =

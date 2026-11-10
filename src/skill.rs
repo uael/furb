@@ -759,15 +759,22 @@ pub fn reloads(word: &str) -> String {
   shaped(word, true)
 }
 
-fn shaped(word: &str, state: bool) -> String {
-  let Ok(parsed) = parse_module(word) else { return word.to_owned() };
-  let capital = |target: &Expr| match target {
+/// Whether a target names constants alone: a name in capitals, or a tuple or a list of them, so
+/// a definition that reads one of them as a default finds it bound before it.
+fn capital(target: &Expr) -> bool {
+  match target {
     Expr::Name(name) => {
       let id = name.id.as_str();
       id.chars().any(char::is_uppercase) && !id.chars().any(char::is_lowercase)
     }
+    Expr::Tuple(many) => many.elts.iter().all(capital),
+    Expr::List(many) => many.elts.iter().all(capital),
     _ => false,
-  };
+  }
+}
+
+fn shaped(word: &str, state: bool) -> String {
+  let Ok(parsed) = parse_module(word) else { return word.to_owned() };
   let defines = |one: &Stmt| match one {
     Stmt::FunctionDef(_)
     | Stmt::ClassDef(_)
