@@ -623,14 +623,15 @@ def seed(data):
   asking = {a["on"] for a in data["acts"] if "value" not in a}
   parts = {}
   for c in data["chains"]:
-    put("chain", c["id"], OPERATOR, c["on"], c["label"], "")
+    put("chain", i := c["id"], OPERATOR, c["on"], c["label"], "")
     v = "".join(
-      f"try: {k} = eval(transcript(of='carried')[-1][4][{k!r}])\nexcept Exception: pass\n" for k in c["values"]
+      f"try:\n if literal(globals().get({k!r}, ...)) != (__t := __c[4][{k!r}]): {k} = eval(__t)\n"
+      "except Exception: pass\n"
+      for k in c["values"]
     )
-    d = c["definitions"]
-    parts[c["id"]] = [*filter(None, [v, *([d] if isinstance(d, str) else d), v, *c.get("lives", ())])]
-    entries.append((("carried", c["id"], "journal", c["turns"], c["values"], parts[c["id"]]),))
-    (c["paused"] or c["id"] in asking) and entries.append((("pause", c["id"], OPERATOR),))
+    parts[i] = [*filter(None, [v, *([d] if isinstance(d := c["definitions"], str) else d), v, *c.get("lives", ())])]
+    entries.append((("carried", i, "journal", c["turns"], c["values"], parts[i]),))
+    (c["paused"] or i in asking) and entries.append((("pause", i, OPERATOR),))
   for x in data["acts"]:
     "value" in x and (
       put(x["kind"], i := x["id"], "journal", x["on"], *x.get("words", ())),
@@ -646,8 +647,8 @@ def seed(data):
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
     word = (
-      "for __p in transcript(of='carried')[-1][5]:\n try: await rung(__p)\n except Exception as __e: debug(t'{__e!r}')\n"
-      f"__l = [n for n in [*{c['lost']}, *transcript(of='carried')[-1][4]] if n not in globals()]\n"
+      "__c = transcript(of='carried')[-1]\nfor __p in __c[5]:\n try: await rung(__p)\n except Exception as __e: debug(t'{__e!r}')\n"
+      f"__l = [n for n in {c['lost']} + [*__c[4]] if n not in globals()]\n"
       f"__l + {cut} and debug(t\"The life goes on from a checkpoint. It lost {{__l or 'no name'}}, "
       f'and it cut {cut or "no act"}.")'
     )

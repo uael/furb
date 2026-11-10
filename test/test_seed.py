@@ -40,8 +40,12 @@ command that a value of the root names."""
 
 
 def bound(*names: str) -> str:
-  """The word of a birth that binds each value of a chain of these names from the fact carried of that chain."""
-  return "".join(f"try: {k} = eval(transcript(of='carried')[-1][4][{k!r}])\nexcept Exception: pass\n" for k in names)
+  """The word of a birth that binds each value of a chain of these names from the fact carried of that chain, when
+  the module does not hold it as that fact says."""
+  return "".join(
+    f"try:\n if literal(globals().get({k!r}, ...)) != (__t := __c[4][{k!r}]): {k} = eval(__t)\nexcept Exception: pass\n"
+    for k in names
+  )
 
 
 def operated(log: list[tuple], on: str) -> str:
@@ -113,7 +117,7 @@ async def test_each_act_of_the_data_with_a_value_stands_known_on_its_chain_with_
   assert not [x for x in sand.calls if x[0] == "bash"]
 
 
-async def test_a_rung_of_the_operator_on_each_chain_awaits_a_rung_of_its_values_of_its_definitions_and_of_each_life_word_says_its_turns_as_its_prefix_and_tells_what_the_checkpoint_lost_and_cut_and_it_runs_no_word_again_so_the_model_of_the_chain_starts_a_cut_word_again_in_a_turn_that_shows() -> (
+async def test_a_rung_of_the_operator_on_each_chain_awaits_in_turn_a_rung_of_each_part_of_the_birth_that_the_fact_carried_of_the_chain_holds_and_tells_what_the_checkpoint_lost_and_cut_and_it_runs_no_word_again_so_the_model_of_the_chain_starts_a_cut_word_again_in_a_turn_that_shows() -> (
   None
 ):
   """A rung of the operator on each chain awaits in turn a rung of each part of the birth that the fact carried of the chain holds, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain itself says its turns as its prefix when that rung comes, and again with each fact since but a tell when the rung ends, so a reader reads each as a birth and as no clear."""
@@ -179,7 +183,7 @@ async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_
 async def test_the_fact_carried_of_a_chain_holds_the_text_of_each_value_then_the_parts_of_its_birth_so_the_word_of_the_operator_holds_no_text_of_a_value_or_of_a_definition() -> (
   None
 ):
-  """The fact carried of a chain holds the text of each value of the chain, then the parts of its birth in order: a word that binds each value from that text when the chain holds one, each word of its definitions, that word of the values again, and each life word whose act was open on it at the tip, so the word of the operator holds no text of a value or of a definition."""
+  """The fact carried of a chain holds the text of each value of the chain, then the parts of its birth in order: a word that binds from that text each value that the module does not hold as that text says, when the chain holds one, each word of its definitions, that word of the values again, and each life word whose act was open on it at the tip, so the word of the operator holds no text of a value or of a definition."""
   life(sown())
   root = chain(
     "chain1", "", "root", definitions=["def f():\n  return SIZE", "X = 1"], values={"SIZE": "6"}, lives=["w()"]
@@ -198,8 +202,8 @@ async def test_the_fact_carried_of_a_chain_holds_the_text_of_each_value_then_the
   ]
   (word,) = [x[0][4] for x in entries if x[0][0] == "rung" and x[0][2] == OPERATOR and x[0][3] == "chain1"]
   assert word == (
-    "for __p in transcript(of='carried')[-1][5]:\n try: await rung(__p)\n except Exception as __e: debug(t'{__e!r}')\n"
-    "__l = [n for n in [*[], *transcript(of='carried')[-1][4]] if n not in globals()]\n"
+    "__c = transcript(of='carried')[-1]\nfor __p in __c[5]:\n try: await rung(__p)\n except Exception as __e: debug(t'{__e!r}')\n"
+    "__l = [n for n in [] + [*__c[4]] if n not in globals()]\n"
     "__l + [] and debug(t\"The life goes on from a checkpoint. It lost {__l or 'no name'}, and it cut no act.\")"
   )
 
@@ -221,20 +225,20 @@ async def test_seed_reads_the_definitions_that_a_checkpoint_of_an_earlier_build_
 async def test_a_part_that_raises_at_a_birth_tells_its_exception_and_stops_no_part_after_it_so_a_value_or_a_definition_that_raises_loses_only_itself() -> (
   None
 ):
-  """A part that raises at a birth tells its exception in a debug of the rung of the operator and stops no part after it, and the word of the values binds each value in a try of its own, so a value that raises loses only itself, a word of definitions that raises loses only what follows the raise in that word, and the second word of the values binds a value that names a class of the definitions and gives a constant back the value that a later word gave it."""
+  """A part that raises at a birth tells its exception in a debug of the rung of the operator and stops no part after it, and the word of the values binds each value in a try of its own, so a value that raises loses only itself, a word of definitions that raises loses only what follows the raise in that word, and the second word of the values binds a value that names a class of the definitions and gives a constant back the value that a later word gave it, while a value that the module holds as the fact carried says stays the object that a definition took."""
   life(sown())
   definitions = [
-    "class Custom(Exception):\n  pass\n\nLIMIT = 1\n\ndef f(x=size):\n  return x",
+    "class Custom(Exception):\n  pass\n\nLIMIT = 1\n\ndef f(x=size):\n  return x\n\ndef q(x=queue):\n  return x",
     "def g():\n  return 1\nraise ValueError('v')\ndef h():\n  return 2",
   ]
-  values = {"size": "6", "made": "Custom('x')", "LIMIT": "3", "e": "5", "bad": "nan"}
-  lives = ["raise KeyError('k')", "lived = [f(), g(), isinstance(made, Custom), made.args[0]]"]
+  values = {"size": "6", "queue": "[1]", "made": "Custom('x')", "LIMIT": "3", "e": "5", "bad": "nan"}
+  lives = ["raise KeyError('k')", "lived = [f(), g(), isinstance(made, Custom), made.args[0], q() is queue]"]
   root = chain("chain1", "", "root", definitions=definitions, values=values, lives=lives)
   log, _ = life(sown(), engine.seed({**DATA, "chains": [root, chain("chain3", "chain1", "work")]}))
   await settle()
   held = engine.module("chain1")
   assert (held["lived"], held["LIMIT"], held["e"], "h" in held, "bad" in held) == (
-    [6, 1, True, "x"],
+    [6, 1, True, "x", True],
     3,
     5,
     False,

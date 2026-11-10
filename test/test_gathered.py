@@ -52,7 +52,7 @@ async def test_taken_gives_the_highest_number_of_each_kind_that_an_act_of_a_chai
   assert data["taken"]["chain"] == 1
 
 
-async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_each_with_its_parent_its_label_its_source_whether_it_is_paused_its_turns_but_the_facts_made_what_define_gives_of_each_word_that_ran_on_it_the_text_that_binds_each_plain_value_of_its_module_again_the_names_of_the_other_values_and_the_acts_that_it_cut_each_word_that_ran_on_it_among_them() -> (
+async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_each_with_its_parent_its_label_its_source_whether_it_is_paused_its_turns_but_the_facts_made_what_define_gives_of_each_word_that_ran_on_it_as_one_string_for_each_word_that_defines_a_name_in_order_the_text_that_binds_each_plain_value_of_its_module_again_the_names_of_the_other_values_and_the_acts_that_it_cut_each_word_that_ran_on_it_among_them() -> (
   None
 ):
   """chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, as one string for each word that defines a name, in order, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose rung stands in the lineage of an act whose ear still hears on it at the tip, an open act or a done act with a lasting ear, as lives."""
@@ -61,6 +61,11 @@ async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_ea
   await engine.rung("with site.set(act('named', ROOT, None)):\n  named = prompt(str, 'Name?', to=OPERATOR)", on=root)
   await settle()
   world_says("made", root, "an engine", 9, "1.0", "0.4.2", "its text", "the text of its Kernel")
+  await engine.rung("def g():\n  return 2", on=root)
+  await settle()
+  assert [x["definitions"] for x in engine.gathered(definitions, {})["chains"]] == [
+    ["def f():\n  return 1", "def g():\n  return 2"]
+  ]
   [one] = engine.gathered(lambda word: word, {"wait": 9})["chains"]
   assert one["lives"] == []
   assert (one["id"], one["on"], one["label"], one["source"], one["paused"]) == (root, "", "root", "", False)
@@ -132,7 +137,7 @@ async def test_paused_says_whether_a_pause_stands_over_the_chain_at_the_tip_and_
   assert one["paused"]
 
 
-async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_seed_binds_a_large_one_from_the_carried_fact_of_its_chain_so_a_later_life_holds_it_exactly_and_no_turn_tells_it() -> (
+async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_seed_binds_each_from_the_fact_carried_of_its_chain_so_a_later_life_holds_it_exactly_and_no_turn_tells_it() -> (
   None
 ):
   """chains holds each plain value of a chain whatever its size, and seed binds each from the fact carried of its chain, so a later life holds it exactly and no turn tells it."""
