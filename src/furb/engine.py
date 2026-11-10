@@ -1067,7 +1067,6 @@ def boot(record=(), **outside):
   ranks = {id(e): n for n, (e,) in enumerate(record)}
   saved, again = {e[1]: e for (e,) in record if question(e)}, {}
   recorded = {**saved}
-  stable = str([9, *((*e[5:6], 0)[0] or 0 for (e,) in record if e[0] == "made")][-1]) >= "1.1"
   top, asked, strays, back = Counter(), {}, {}, []
   for quest in saved.values():
     top[quest[0]] = max(top[quest[0]], int(quest[1][len(quest[0]) :]))
@@ -1076,7 +1075,7 @@ def boot(record=(), **outside):
   def drift(name, fact=None):
     ours, name = fact or get(name), strays.get(name) or name
     return Drift(
-      f"{name} drifts: the life made {ours or 'no act'!s:.300}, the record holds {(fact and first[fact[1]]) or recorded.get(name)!r:.300}"
+      f"{name} drifts: the life made {ours or 'no act'!s:.300}, the record holds {(fact and first[fact[1]]) or recorded[name]!r:.300}"
     )
 
   def matched(sort, maker, *said):
@@ -1123,9 +1122,7 @@ def boot(record=(), **outside):
             pass
       case (_, about, *_) if scope(about):
         repeat(*entry)
-      case (_, about, by, *_) if (
-        stable and by in outside and about in saved and get(saved[about][3]) and not get(about)
-      ):
+      case (_, about, by, *_) if by in outside and about in saved and get(saved[about][3]) and not get(about):
         raise drift(about)
 
   def journal(a=(), last=None):
@@ -1191,7 +1188,7 @@ def boot(record=(), **outside):
       raise Refused(f"no verb {kind} on {on}, so a later life cannot make the act again")
     names, key = born.setdefault(kind, {}), (by, made[speaker, kind])
     if key not in names:
-      names[key] = matched(kind, by, on, *words) if stable else kind + str(len(names) + 1)
+      names[key] = matched(kind, by, on, *words)
     a = (kind, name := names[key], by, on, *words)
     if known.setdefault(name, a) is a:
       upto(saved.get(name))

@@ -700,30 +700,6 @@ async def test_a_question_of_the_record_that_no_act_took_on_a_chain_that_the_lif
     life(Sand(), [*record[:at], *extra, *record[at:]])
 
 
-async def test_a_record_whose_last_fact_made_names_a_schema_before_1_1_holds_no_question_of_an_act_that_an_act_made() -> (
-  None
-):
-  """A record whose last fact made names a schema before 1.1 holds no question of an act that an act made, so a later life names each of its acts by how many acts of its kind it made, as the life that kept it did."""
-  sand, log, root = born("close(1)")
-  assert await engine.rung("y = 1", on=root) is None
-  assert await engine.prompt(int, "one", on=root) == 1
-  assert await engine.rung("x = bash('echo x')", on=root) is None
-  await settle()
-  made = [(e[0], e[1]) for e in log if engine.question(e)]
-  kept = [
-    (e,)
-    for (e,) in plain(sand.record)
-    if not (e[0] in ("rung", "run") and engine.question(e) and engine.get(e[2]))  # ty: ignore[redundant-condition]
-  ]
-  # A fact made whose schema is null names a schema before 1.1 as well.
-  for schema in ("1.0", None):
-    again, _ = await relived(Sand(), [(("made", "chain1", "store", "e", None, schema, "0.4.2"),), *kept])
-    assert {(e[0], e[1]) for e in again if engine.question(e) and e[0] != "stand"} <= set(made)
-    assert [a[1] for a in said(again, "rung")] == [a[1] for a in said(log, "rung")] == ["rung1", "rung2", "rung3"]
-  with pytest.raises(Drift, match=r"^reply1 drifts: the life made no act, "):
-    life(Sand(), [(("made", "chain1", "store", "e", None, "1.1", "0.4.2"),), *kept])
-
-
 async def test_a_replay_of_a_tail_where_each_chain_gates_stand_at_a_stand_holds_no_drift() -> None:
   """A later life names each act that it makes again by its kind, its maker, its chain and its words, so the gate of stand() that each chain plays at a stand takes the name that the record holds for that chain, and never the name of the gate of another chain."""
   files = {"/w/DOCTRINE.md": "Read first.\n"}

@@ -832,7 +832,7 @@ class Overflow(Refused):
 class Drift(Exception):
   """What a life fails with when an act of it is not the one the record holds, which the journal raises, so that it comes out of the entry the operator went in by and the life goes on with nothing.
   An act whose words are not the ones the record holds under its name is a drift, which it raises.
-  Its message names the act that drifted, the fact that the life made under that name and the fact that the record holds under it, which is the act or else its first answer, or None when the record holds no fact under that name, each cut to 300 characters, so a drift says the fact that differs.
+  Its message names the act that drifted, the fact that the life made under that name and the fact that the record holds under it, which is the act or else its first answer, each cut to 300 characters, so a drift says the fact that differs.
   A drift breaks the journal, which keeps nothing more, and the life runs on with nothing kept.
   """
 
@@ -1232,7 +1232,6 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   An act that no question of the record matches takes the number after the highest of its kind in the record; before the journal said the whole record again, the outside hears it only when no question of its kind and its maker that no act took waits in the record, and one that the outside is to answer while such a question waits stands in place of the first of them and is a drift of it, so a command whose words changed drifts under the name it had and the World does nothing for it.
   While the journal says the record again it holds what it keeps, and keeps it in its order once the record is said whole, so a life whose replay drifts keeps nothing of what it made before the drift.
   A question of the record that no act took, on a chain that the life made again, is a drift once the journal comes to a fact that an ear of the outside said of it, so a word that makes one command less drifts.
-  A record whose last fact made names a schema before 1.1 holds no question of an act that an act made, so a later life names each of its acts by how many acts of its kind it made, as the life that kept it did.
   A boot is a life; a second boot is a second life, and the first is gone.
   A later life names each act that it makes again by its kind, its maker, its chain and its words, so the gate of stand() that each chain plays at a stand takes the name that the record holds for that chain, and never the name of the gate of another chain.
   The names operator and journal are the life's own, and boot refuses a generator of the outside under either name.
