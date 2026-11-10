@@ -111,6 +111,22 @@ fn opened(provider: Provider, gallery: Option<PathBuf>, gated: bool) -> Engine {
   Engine::gated(Vec::<Object>::new(), ears, gated).expect("the life opens")
 }
 
+/// A life of the real engine on the record that a store keeps at a path, with the ears of the
+/// World, as a later life opens on what an earlier one kept.
+fn stored(provider: Provider, record: &Path) -> Engine {
+  let (kept, store) = world::store(record).expect("the record opens");
+  let scratch = world::Scratch::own();
+  let config = env::temp_dir().join(format!("furb-provider-user-{}", process::id()));
+  let ears: [(&str, Box<dyn Ear>); 5] = [
+    ("provider", provider.config(config.clone()).ear()),
+    ("files", world::files(scratch.clone(), config, None)),
+    ("bash", world::bash(scratch)),
+    ("time", world::time()),
+    ("store", store),
+  ];
+  Engine::gated(kept, ears, true).expect("the life opens")
+}
+
 /// A life of the real engine on the provider of these models and the ears of the World, in a yard of its own.
 fn life(name: &str, models: Vec<Model>) -> (Engine, Yard) {
   let at = yard(name);
@@ -338,6 +354,34 @@ fn the_provider_wakes_a_chain_that_it_paused_after_its_backoff_and_leaves_it_pau
   let more = within(&mut engine, Duration::from_millis(300), |engine| wakes(engine) > woken);
   assert!(!more, "the provider leaves the chain paused after its bound");
   assert_eq!(model.request_count(), 2 + woken, "each wake asks the model once more");
+}
+
+#[test]
+fn a_life_that_opens_on_a_record_with_a_pause_of_the_provider_wakes_the_chain_under_the_same_bound()
+{
+  let failed = || vec![MockStreamEvent::Error(MockError::provider("boom"))];
+  let at = yard("reborn");
+  let record = at.join("record.jsonl");
+  let provider = |model: &MockCompletionModel, first: Duration| {
+    Provider::new(at.display().to_string(), vec![scripted(model)])
+      .backoff(Backoff { most: 1, first })
+  };
+  let before = MockCompletionModel::from_stream_turns((0..2).map(|_| failed()));
+  let mut engine = stored(provider(&before, Duration::from_secs(3600)), &record);
+  let root = engine.root().to_owned();
+  asked(&mut engine);
+  let count = |engine: &mut Engine, kind: &str| {
+    said(engine).iter().filter(|(one, about, _)| *one == kind && *about == root).count()
+  };
+  assert!(until(&mut engine, |engine| count(engine, "pause") == 1), "{:?}", said(&mut engine));
+  drop(engine);
+  let after = MockCompletionModel::from_stream_turns((0..12).map(|_| failed()));
+  let mut engine = stored(provider(&after, Duration::from_millis(5)), &record);
+  let woken = super::hearer::WOKEN as usize;
+  assert!(until(&mut engine, |engine| count(engine, "wake") == woken), "{:?}", said(&mut engine));
+  let more =
+    within(&mut engine, Duration::from_millis(300), |engine| count(engine, "wake") > woken);
+  assert!(!more, "the provider leaves the chain paused after its bound");
 }
 
 #[test]

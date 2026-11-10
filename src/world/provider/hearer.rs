@@ -67,12 +67,6 @@ pub(super) struct Hearer {
   stands: Option<(String, bool)>,
   /// The chains that the ear told which names left the catalog.
   lacked: HashSet<String>,
-  /// How many times the ear woke each chain that it paused since a turn last ended its row of
-  /// refusals, which [`WOKEN`] bounds.
-  woken: HashMap<String, u32>,
-  /// Each pause and wake that the ear said and did not hear yet, as `kind:chain`, so that a
-  /// control of a person alone stops the wakes of a chain.
-  controls: HashSet<String>,
 }
 
 /// How many times the ear wakes a chain that it paused, each after the backoff of its next attempt,
@@ -128,8 +122,6 @@ impl Hearer {
       stood: false,
       stands: None,
       lacked: HashSet::new(),
-      woken: HashMap::new(),
-      controls: HashSet::new(),
     }
   }
 
@@ -141,10 +133,10 @@ impl Hearer {
       "done" => self.done(a),
       "search" if a.question() => self.search(co, a),
       "pause" | "wake" => {
-        if !self.controls.remove(&format!("{}:{}", a.kind(), a.about())) {
-          self.woken.remove(a.about());
-        }
         self.held(co).await;
+        if a.kind() == "pause" {
+          self.sleep(co, a.about()).await;
+        }
       }
       _ => {}
     }
@@ -386,15 +378,27 @@ impl Hearer {
     }
   }
 
+  /// The backoff of a chain that a pause of the provider holds. The record says how many wakes the
+  /// provider gave the chain since its last turn, so a life that opens on a record goes on with
+  /// the count, and a pause of a person alone starts no backoff.
+  async fn sleep(&mut self, co: &mut Co<Replied>, chain: &str) {
+    if self.mode == Mode::Inspecting {
+      return;
+    }
+    let Some(woken) = owed(co, chain).await else { return };
+    let wait = self.backoff.wait(woken + 2);
+    let chain = chain.to_owned();
+    co.work(stream::once(spawned(time::sleep(wait)).map(move |_| Replied::Woken { chain })));
+  }
+
   /// The end of the backoff of a chain that the ear paused: the ear wakes it, with a fact that the
   /// record keeps, while no person paused or woke it since and a pause still holds it.
   pub(super) async fn woke(&mut self, co: &mut Co<Replied>, chain: &str) {
-    if !self.woken.contains_key(chain) {
+    if owed(co, chain).await.is_none() {
       return;
     }
     let paused = co.call("paused", vec![Object::string(chain)], vec![]).await;
     if paused.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false) {
-      self.controls.insert(format!("wake:{chain}"));
       told(co, chain, &format!("#{chain} woke by the provider after its backoff"));
       say(co, Fact::says("wake", chain, []));
     }
@@ -417,21 +421,11 @@ impl Hearer {
     if let (Err(why), true) = (&got, reply.again)
       && !recoverable
     {
-      self.controls.insert(format!("pause:{}", reply.chain));
       let paused =
         co.call("pause", vec![Object::string(&reply.chain), Object::string(why)], vec![]).await;
       if let Err(no) = paused {
         let note = format!("#{} could not pause the chain: {}", reply.rung, no.message());
         told(co, &reply.chain, &note);
-      } else {
-        let chain = reply.chain.clone();
-        let tries = self.woken.entry(chain.clone()).or_default();
-        if *tries < WOKEN {
-          *tries += 1;
-          let wait = self.backoff.wait(*tries + 1);
-          let slept = spawned(time::sleep(wait));
-          co.work(stream::once(slept.map(move |_| Replied::Woken { chain })));
-        }
       }
     }
     // The account is a fact of its own before the turn that it served, which no reader of a usage
@@ -472,13 +466,8 @@ impl Hearer {
     if a.by() == a.about() {
       return;
     }
-    let turned = a
-      .word(0)
-      .and_then(|one| one.items())
-      .is_some_and(|turn| turn.len() == 4 && turn[0].as_str() == Some("assistant"));
-    if turned {
+    if turned(a) {
       self.replies.mute.remove(&chain);
-      self.woken.remove(&chain);
     } else {
       self.replies.mute.insert(chain, actor);
     }
@@ -518,6 +507,36 @@ impl Hearer {
       }
     }
   }
+}
+
+/// Whether a fact is a done that ended a reply with a turn of the model.
+fn turned(a: &Fact) -> bool {
+  a.kind() == "done"
+    && a
+      .word(0)
+      .and_then(|one| one.items())
+      .is_some_and(|turn| turn.len() == 4 && turn[0].as_str() == Some("assistant"))
+}
+
+/// The facts of a chain that a speaker said, in order, from the record.
+async fn said_by(co: &mut Co<Replied>, chain: &str, by: &str) -> Vec<Fact> {
+  let of = [chain, by].map(Object::string).to_vec();
+  let Ok(got) = co.call("transcript", of, vec![]).await else { return Vec::new() };
+  (0..).map_while(|at| value::entry(&got.as_ref(), at)).filter_map(Fact::of).collect()
+}
+
+/// How many wakes the provider gave a chain since its last turn, while the last pause or wake of
+/// the chain is a pause of the provider and [`WOKEN`] bounds the count: the record holds both.
+async fn owed(co: &mut Co<Replied>, chain: &str) -> Option<u32> {
+  let control = |one: &Fact| matches!(one.kind(), "pause" | "wake") && one.about() == chain;
+  let last = said_by(co, chain, "pause").await.into_iter().rfind(|one| control(one))?;
+  if last.kind() != "pause" || last.by() != "provider" {
+    return None;
+  }
+  let mine = said_by(co, chain, "provider").await;
+  let since = mine.iter().rev().take_while(|one| !turned(one));
+  let woken = since.filter(|one| control(one) && one.kind() == "wake").count();
+  u32::try_from(woken).ok().filter(|woken| *woken < WOKEN)
 }
 
 /// The replies that the ear took and that still stand, by id, and the actor whose last reply on
