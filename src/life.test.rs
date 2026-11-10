@@ -1221,6 +1221,31 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
 }
 
 #[test]
+fn a_life_born_on_a_checkpoint_binds_the_function_whose_default_reads_a_tuple_of_constants_each_value_and_each_life_word()
+ {
+  let at = place("tuple-default");
+  let mut first = opening(&at, true).boot::<String>([]).unwrap().0;
+  let word = "EVERY, FLOOR = 300.0, 900.0\ndef desk(every: float = EVERY, floor: float = FLOOR):\n  return every + floor\n\
+              limit = 7\nclose(desk())";
+  assert_eq!(closed(&mut first, word).as_ref().as_float(), Some(1200.0));
+  drop(first);
+  let mut inspected =
+    Opening { inspecting: Some(true), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  let written = checkpoint::written(&mut inspected).unwrap();
+  drop(inspected);
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  let mut later = opening(&at, true).boot::<String>([]).unwrap().0;
+  let kinds = "sorted({x[0] for x in transcript('chain1') if x[0] in ('catchup', 'remember', 'compacted', 'fitted')})";
+  assert_eq!(
+    closed(&mut later, &format!("close([desk(), desk(1.0), EVERY, FLOOR, limit, {kinds}])"))
+      .as_ref()
+      .py_repr(),
+    "[1200.0, 901.0, 300.0, 900.0, 7, ['catchup', 'compacted', 'fitted', 'remember']]",
+    "the born life holds the function, each value and each life word of the chain, whatever the function read when it was made"
+  );
+}
+
+#[test]
 fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no_act_run_again() {
   let at = yard("checkpoint-data");
   let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose('late')";
