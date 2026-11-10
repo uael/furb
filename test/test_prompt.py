@@ -3,6 +3,8 @@
 from asyncio import CancelledError
 from typing import Literal
 
+import pytest
+
 from conftest import (
   BAD,
   COST,
@@ -779,3 +781,10 @@ async def test_a_prompt_reads_the_facts_of_the_acts_of_its_own_life_alone_so_the
   earlier = ("prompt", "prompt99", OPERATOR, root, "str", "Which?")
   engine.say("prefix", root, [*engine.transcript(root), earlier])
   assert await engine.prompt(str, "Reply.", on=root) == "ok"
+
+
+async def test_a_prompt_on_a_thread_that_the_life_does_not_hold_is_refused_with_the_name_of_that_thread() -> None:
+  """A prompt on a thread that the life does not hold is refused with the name of that thread, since nothing says the actor of the thread."""
+  born()
+  with pytest.raises(Refused, match=r"^no thread prompt9$"):
+    engine.prompt(None, "Go on.", on="prompt9")

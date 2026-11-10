@@ -291,6 +291,8 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
     shape if isinstance(shape, str) else re.sub(r"""<class '|'>|('[^']*'|"[^"]*")|[\w.:/]*\.""", r"\1", repr(shape))
   )
   thread = on * prompted(on)
+  if thread and not get(thread):
+    raise Refused("no thread " + thread)
   to = to or (thread and "".join(get(thread)[6:]))
   asks = (to or module(on).get("actor")) != OPERATOR
   says = asks and thread and named == "None" and not over(thread)
@@ -377,7 +379,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         with site.set(of):
           rung(words)
 
-    if source or t[lo:hi]:
+    if source or "stand" in h[lo:hi]:
       kin = {
         source,
         id,
@@ -414,6 +416,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       top = ""
     yield from replay()
     seat = top and last and (transcript(id, "stand") or placed(last[1]))
+    if last[4:] and seat and not transcript(id, "stand"):
+      yield from seeded(id, last, stood)
     while True:
       r = get((a := (yield {id, "stand", "reply"}))[1]) or a
       match a:
@@ -600,7 +604,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
 def seeded(id, last, to):
   rung('debug(t"{standing()[4]=}")', to=to)
   rung(f"read({last[3]!r})", to=to)
-  for k in 0, 1:
+  for k in range(1 + (id == ROOT)):
     k and (yield "setup", id)
     for x in last[4]:
       x[1] and x[3] == k and rung(f"rung(read({x[1]!r}, HIDDEN).content)", to=to)
@@ -638,22 +642,26 @@ def seed(data):
     put(kind, f"{kind}{most + 1}")
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
-    note = [
-      f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")'
+    lost = f"[n for n in {c['lost']} if n not in globals()]"
+    parts = [
+      *filter(
+        None,
+        [
+          "\n".join(
+            f"{named} = " + (f"eval(transcript(of='carried')[-1][4][{named!r}])" if text[LARGEST // 16 :] else text)
+            for named, text in c["values"].items()
+          ),
+          c["definitions"],
+          *c.get("lives", ()),
+        ],
+      )
     ]
-    word = "\n".join(
-      [
-        c["definitions"],
-        *(
-          f"{named} = " + (f"eval(transcript(of='carried')[-1][4][{named!r}])" if text[LARGEST // 16 :] else text)
-          for named, text in c["values"].items()
-        ),
-        *(f"await rung({one!r})" for one in c.get("lives", ())),
-        *note * bool(c["lost"] or cut),
-      ]
-    )
+    word = "".join(f"try: await rung({one!r})\nexcept Exception as e: debug(t'{{e!r}}')\n" for one in parts) + (
+      f"{lost} + {cut} and debug(t\"The life goes on from a checkpoint. It lost {{{lost} or 'no name'}}, "
+      f'and it cut {cut or "no act"}.")'
+    ) * bool(c["lost"] or cut)
     seat = f"rung{numbers['rung'] + 1}"
-    for maker, said in [(OPERATOR, word), *((seat, one) for one in c.get("lives", ()))]:
+    for maker, said in [(OPERATOR, word), *((seat, one) for one in parts)]:
       put("rung", f"rung{numbers['rung'] + 1}", maker, i, said, "", "")
       put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, said)
       entries.append((("done", gated, "gate", []),))
@@ -668,8 +676,7 @@ def gathered(define, floor):
   asked = [*map(get, chains)] + [x for h in chains for x in transcript(h) if x is get(x[1])]
   cut = sorted((x[1] for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=number)
   gone = {x[4] for x in asked if x[0] == "wants" and x[2] in cut and prompted(x[4]) and not over(x[1])}
-  asks = [x[1] for x in asked if x[0] == "prompt" and not over(x[1]) and x[1] not in gone]
-  values, lost, named = {}, {}, set(asks)
+  values, lost, named = {}, {}, {x[1] for x in asked if x[0] in ("prompt", "bash")}
   for c in chains:
     here, values[c], lost[c] = module(c), {}, []
     for key, value in here.items():
@@ -689,8 +696,7 @@ def gathered(define, floor):
     taken[one[0]] = max(taken.get(one[0], 0), number(one[1]))
   verbs = ("prompt", "bash", "read", "write", "wait", "cd", "chance")
   words = {y[2] for y in (standing()[4:5] or [()])[0]}
-  done = {x[1] for x in asked if x[0] == "bash"}
-  borne = sorted((x for x in named - gone | done if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
+  borne = sorted((x for x in named - gone if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
   stands = [x[1] for x in transcript(ROOT, "stand") if over(x[1])][-1:]
   ticks = [x[1] for x in transcript(ROOT, "clock") if isinstance(peek(x[1]), float)][-1:]
   acts = []

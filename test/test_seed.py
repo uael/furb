@@ -96,13 +96,16 @@ async def test_each_act_of_the_data_with_a_value_stands_known_on_its_chain_with_
   assert not [x for x in sand.calls if x[0] == "bash"]
 
 
-async def test_a_rung_of_the_operator_on_each_chain_binds_its_definitions_and_its_values_says_its_turns_as_its_prefix_and_tells_what_the_checkpoint_lost_and_cut_with_each_word_that_ran_on_it_in_the_data_of_schema_1_and_it_runs_no_word_again_so_the_model_of_the_chain_starts_a_cut_word_again_in_a_turn_that_shows() -> (
+async def test_a_rung_of_the_operator_on_each_chain_awaits_a_rung_of_its_values_of_its_definitions_and_of_each_life_word_says_its_turns_as_its_prefix_and_tells_what_the_checkpoint_lost_and_cut_and_it_runs_no_word_again_so_the_model_of_the_chain_starts_a_cut_word_again_in_a_turn_that_shows() -> (
   None
 ):
-  """A rung of the operator on each chain binds its definitions and its values, awaits a rung of each life word whose act was open on it at the tip, and tells what the checkpoint lost and cut when it lost or cut one, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain itself says its turns as its prefix when that rung comes, and again with each fact since but a tell when the rung ends, so a reader reads each as a birth and as no clear."""
+  """A rung of the operator on each chain awaits a rung of its values, then a rung of its definitions, then a rung of each life word whose act was open on it at the tip, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain itself says its turns as its prefix when that rung comes, and again with each fact since but a tell when the rung ends, so a reader reads each as a birth and as no clear."""
   _, log = await seeded()
   root = engine.module("chain1")
   assert (root["f"](), root["shell"], engine.module("chain3").get("SIZE")) == (6, "bash2", None)
+  (seat,) = [x for x in said(log, "rung") if x[2] == OPERATOR and x[3] == "chain1"]
+  made = [x[4] for x in said(log, "rung") if x[2] == seat[1]]
+  assert made == ["SIZE = 6\nshell = Act('bash2')", "def f():\n  return SIZE"]
   told = [x[3][0] for x in said(log, "tell") if "debugged" in x[3][0] and x[1].startswith("rung")]
   assert any("It lost ['gone'], and it cut ['rung9']." in x for x in told), told
   assert [x for x in said(log, "prefix") if x[1] == "chain3"]
@@ -149,10 +152,47 @@ async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_
   told = [x[3][0] for x in said(log, "tell") if x[1].startswith("rung")]
   assert not any("It lost" in x for x in told) and any(" raised" in x.split("\\n")[0] for x in told), told
   kept = [x for x in said(log, "prefix") if x[1] == "chain1"][-1][3]
-  assert [f for f in kept if f[0] == "tell" and " raised" in f[3][0].split("\\n")[0]], (
-    "the chain keeps the raise in its turns"
-  )
+  assert [f for f in kept if f[0] == "tell" and "NameError" in f[3][0]], "the chain keeps the raise in its turns"
   assert "SIZE" not in engine.module("chain1")
+
+
+async def test_a_rung_that_raises_at_a_birth_tells_its_exception_and_stops_none_of_the_rungs_after_it_so_a_definition_that_reads_a_value_finds_it_bound_and_each_value_and_each_life_word_stands_whatever_raised() -> (
+  None
+):
+  """A rung of the values, of the definitions or of a life word that raises at a birth tells its exception in a debug of the rung of the operator and stops none of the rungs after it, so a definition that reads a value finds it bound, and each value and each life word stands whatever raised."""
+  life(sown())
+  definitions = "def f(x=size):\n  return x\n\ndef g(a=gone):\n  return a\n\ndef h():\n  return 2"
+  root = chain(
+    "chain1", "", "root", definitions=definitions, values={"size": "6"}, lives=["raise KeyError('k')", "lived = f()"]
+  )
+  log, _ = life(sown(), engine.seed({**DATA, "chains": [root, chain("chain3", "chain1", "work")]}))
+  await settle()
+  held = engine.module("chain1")
+  assert (held["size"], held["f"](), held["lived"], "g" in held, "h" in held) == (6, 6, 6, False, False)
+  told = [x[3][0] for x in said(log, "tell") if "debugged" in x[3][0]]
+  assert [x for x in told if "NameError" in x] and [x for x in told if "KeyError" in x], told
+
+
+async def test_the_note_of_a_birth_names_a_name_that_the_checkpoint_lost_only_when_the_born_life_does_not_hold_it_and_a_birth_that_holds_each_such_name_and_cut_no_act_tells_no_note() -> (
+  None
+):
+  """The note of a birth names a name that the checkpoint lost only when the born life does not hold it, as one that a definition binds again, and a birth that holds each such name and cut no act tells no note."""
+  life(sown())
+  chains = [
+    chain("chain1", "", "root", definitions="AGAIN = [1]", lost=["gone", "AGAIN"]),
+    chain("chain3", "chain1", "work", definitions="BOUND = [2]", lost=["BOUND"]),
+  ]
+  log, _ = life(sown(), engine.seed({**DATA, "chains": chains}))
+  await settle()
+  notes = {
+    engine.get(x[1])[3]: x[3][0].split("\n")[1]
+    for x in said(log, "tell")
+    if "debugged" in x[3][0] and "The life goes on from a checkpoint." in x[3][0]
+  }
+  assert [*notes] == ["chain1"] and notes["chain1"].endswith(
+    "The life goes on from a checkpoint. It lost ['gone'], and it cut no act.\""
+  ), notes
+  assert (engine.module("chain1")["AGAIN"], engine.module("chain3")["BOUND"]) == ([1], [2])
 
 
 HELD = [["held", "/w/held.py", "held()", False]]

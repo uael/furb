@@ -742,10 +742,11 @@ pub fn word(source: &str) -> String {
 }
 
 /// The definitions of a word: each statement at its top that defines a function, a class, a type or
-/// a constant, an
-/// import, and an assignment to names in capitals, in its order. A word that does not parse is its
-/// own definitions,
-/// so the gate says why it is refused.
+/// a constant, an import, and an assignment to names in capitals, in its order. A word that does
+/// not parse is its own definitions, so the gate says why it is refused. An assignment to one name
+/// in capitals takes the form `NAME = globals().setdefault("NAME", value)`, since a birth binds the
+/// values of the module before the definitions: a constant that a later word changed keeps the
+/// value that the module holds, and a constant that no checkpoint can carry takes its value again.
 pub fn definitions(word: &str) -> String {
   shaped(word, false)
 }
@@ -799,20 +800,22 @@ fn shaped(word: &str, state: bool) -> String {
     .iter()
     .filter_map(|one| {
       let whole = &word[one.range()];
-      if defines(one) {
+      let assigns = matches!(one, Stmt::Assign(_) | Stmt::AnnAssign(_));
+      if defines(one) && (state || !assigns) {
         return Some(whole.to_owned());
       }
+      let named = state || defines(one);
       match one {
-        Stmt::Assign(two) if state => match two.targets.as_slice() {
+        Stmt::Assign(two) if named => match two.targets.as_slice() {
           [Expr::Name(name)] => Some(held(name.id.as_str(), "", &two.value, whole)),
-          _ => None,
+          _ => defines(one).then(|| whole.to_owned()),
         },
-        Stmt::AnnAssign(two) if state => match (&*two.target, &two.value) {
+        Stmt::AnnAssign(two) if named => match (&*two.target, &two.value) {
           (Expr::Name(name), Some(value)) => {
             let annotation = format!(": {}", &word[two.annotation.range()]);
             Some(held(name.id.as_str(), &annotation, value, whole))
           }
-          _ => None,
+          _ => defines(one).then(|| whole.to_owned()),
         },
         _ => None,
       }

@@ -596,7 +596,7 @@ async def test_a_chain_with_no_source_holds_first_the_setup_of_the_root() -> Non
 
 
 async def test_a_chain_with_no_source_whose_standing_names_a_doctrine_tells_its_open_as_the_root_does() -> None:
-  """A chain with no source whose standing names a doctrine plays no stand of its own: the rung of stand() and a cd to the directory of the standing, which the root plays on itself with that word and its default actor before its setup, stands first in the setup that the chain holds and runs again, so the chain stands where the root stands; when the setup that it holds plays no stand, as the setup of a root whose compaction kept none or that a checkpoint carried, it plays that rung on itself at its birth, as the root does, and it tells its open once no rung with a word and an actor is open on it at the done of a rung on it."""
+  """A chain with no source whose standing names a doctrine plays no stand of its own: the rung of stand() and a cd to the directory of the standing, which the root plays on itself with that word and its default actor before its setup, stands first in the setup that the chain holds and runs again, so the chain stands where the root stands; when the setup that it holds plays no stand, as the setup of a root whose compaction kept none or that a checkpoint carried, it plays that rung on itself at its birth, then the setup that its standing gives but the extensions of the root alone, as the root does, and it tells its open once no rung with a word and an actor is open on it at the done of a rung on it."""
   _, log, _ = await taught()
   two = await chained("two")
   turns = engine.turns(on=two)
@@ -606,8 +606,9 @@ async def test_a_chain_with_no_source_whose_standing_names_a_doctrine_tells_its_
   _, _, _ = born(stands=[*STANDS, "/w/DOCTRINE.md", []], files=TAUGHT_FILES)
   bare = await chained("bare")
   assert heads(engine.turns(on=bare)) == ["chain()", "#stand2", "#cd1", "#rung2 debugged", "#read1", f"#{bare}"]
-  # A root that a checkpoint carried holds no stand in its setup, so a chain with no source born of it plays its own.
-  files, stands = {"/w/DOCTRINE.md": "Read first.\n"}, [*STANDS, "/w/DOCTRINE.md", []]
+  # A root that a checkpoint carried holds no stand in its setup, so a chain with no source born of it plays its own
+  # stand and its own setup, which binds the extensions of every chain and no extension of the root alone.
+  files, stands = TAUGHT_FILES, [*TAUGHT[:4], [*TAUGHT[4], LATE]]
   born(stands=stands, files=files)
   await settle()
   life(sown(stands=stands, files=files), engine.seed(engine.gathered(lambda word: word, {})))
@@ -618,6 +619,8 @@ async def test_a_chain_with_no_source_whose_standing_names_a_doctrine_tells_its_
   made = engine.get(by)
   assert made is not None and made[3] == kid and str(made[4]).startswith("stand()")
   assert engine.cwd(on=kid) == "/w"
+  held = engine.module(kid)
+  assert (held.get("x"), held.get("z"), "y" in held, "w" in held) == (41, 42, False, False)
 
 
 async def test_a_chain_that_hears_a_prefix_that_another_said_on_it_tells_no_open_of_its_own() -> None:
@@ -1655,7 +1658,7 @@ async def test_a_statement_that_the_model_of_a_rung_writes_runs_after_the_told_r
   assert engine.module(root)["k"] == "root"
 
 
-async def test_the_chain_asks_a_prompt_no_more_after_two_words_in_a_row_that_made_nothing_new_until_a_fact_comes_and_tells_its_maker_once() -> (
+async def test_a_word_that_made_nothing_hushes_its_thread_and_a_third_word_in_a_row_that_made_nothing_pauses_it_until_a_wake() -> (
   None
 ):
   """A word that made nothing hushes its thread when nothing for that thread came during it: the chain advances no rung of that thread until a message on it, a wake or the end of an act of it; a word that the gate refused tells its findings, which ask its thread again, and a third word in a row that made nothing pauses the thread until a wake; each time the chain tells the maker of that prompt, so a model that answers a bare expression, prose and pass in turn is asked three times."""
@@ -1697,10 +1700,10 @@ async def test_the_chain_asks_a_prompt_no_more_after_two_words_in_a_row_that_mad
   assert len([a for a in said(log, "reply") if a[3] == root]) == 5
 
 
-async def test_a_root_that_holds_no_open_after_its_paragraph_chain_as_a_root_whose_compaction_kept_no_setup_gives_no_setup_to_such_a_chain_so_the_chain_holds_no_open_rung_of_the_root_and_its_own_rungs_run() -> (
+async def test_a_root_that_holds_no_open_after_its_paragraph_chain_or_no_stand_before_its_open_gives_no_setup_to_such_a_chain_so_the_chain_holds_no_open_rung_of_the_root_and_its_own_rungs_run() -> (
   None
 ):
-  """A root that holds no open after its paragraph chain(), as a root whose compaction kept no setup, gives no setup to such a chain, so the chain holds no open rung of the root and its own rungs run."""
+  """A root that holds no open after its paragraph chain() or no stand before its open, as a root whose compaction kept no setup or that a checkpoint carried, gives no setup to such a chain, so the chain holds no open rung of the root and its own rungs run."""
   _, _, root = born(
     stands=[*STANDS, "/w/DOCTRINE.md", []], files={"/w/a.txt": "one\n", "/w/DOCTRINE.md": "Read first.\n"}
   )
@@ -1721,6 +1724,16 @@ async def test_a_root_that_holds_no_open_after_its_paragraph_chain_as_a_root_who
   ran = engine.rung("close(7)", on=kid)
   await settle()
   assert engine.peek(ran) == 7
+  stands = [*TAUGHT[:4], [*TAUGHT[4], LATE]]
+  born(stands=stands, files=TAUGHT_FILES)
+  await settle()
+  life(sown(stands=stands, files=TAUGHT_FILES), engine.seed(engine.gathered(lambda word: word, {})))
+  await settle()
+  late = await chained("late")
+  assert [x for x in engine.transcript(late) if x[0] == "tell" and x[3] == ["chain()"]] == []
+  ran = engine.rung("close(8)", on=late)
+  await settle()
+  assert engine.peek(ran) == 8
 
 
 async def test_when_the_fact_that_a_word_awaits_comes_each_chain_whose_rung_waits_asks_it_at_once_while_a_paused_chain_and_a_wait_on_the_operator_stay_held() -> (

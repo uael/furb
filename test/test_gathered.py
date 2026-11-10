@@ -83,12 +83,17 @@ async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_ea
   assert now[: len(was) - 1] == was[:-1] and now[len(was) - 1].startswith(was[-1]), (was, now)
 
 
-async def test_acts_holds_the_last_stand_the_last_clock_and_each_act_of_a_verb_that_a_value_names_or_that_is_a_command_of_a_chain_in_chains_an_act_that_is_over_with_its_value_an_open_prompt_with_its_shape_its_message_its_actor_and_the_ear_that_started_it_and_another_act_as_cut_with_a_refusal_that_says_why() -> (
+async def test_acts_holds_the_last_stand_the_last_clock_each_prompt_and_each_command_of_a_chain_in_chains_and_each_act_of_a_verb_that_a_value_names_so_a_later_life_holds_each_thread_of_a_chain_a_closed_one_too() -> (
   None
 ):
-  """acts holds the last stand, the last clock, and each act of a verb that a value names or that is a command of a chain in chains: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why."""
-  root, data = await gather()
+  """acts holds the last stand, the last clock, each prompt and each command of a chain in chains, and each act of a verb that a value names: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why, so a later life holds each thread of a chain, a closed one too, and a prompt on it goes on."""
+  root, _ = await gather()
+  thread = engine.prompt(str, "Done?", to=OPERATOR, on=root)
+  engine.close("yes", thread)
+  await settle()
+  data = engine.gathered(lambda word: word, {"wait": 9})
   acts = {x["id"]: x for x in data["acts"]}
+  assert acts[thread] == {"kind": "prompt", "id": thread, "on": root, "words": engine.get(thread)[4:], "value": "yes"}
   shell, asked, later = (value(root, name) for name in ("shell", "asked", "later"))
   assert acts[shell] == {
     "kind": "bash",
@@ -102,6 +107,10 @@ async def test_acts_holds_the_last_stand_the_last_clock_and_each_act_of_a_verb_t
   cut = acts[later]["value"]
   assert isinstance(cut, Refused) and str(cut) == f"{later} was interrupted: the life that ran it ended before it did"
   assert [x["kind"] for x in data["acts"]][:1] == ["stand"]
+  life(sown(), engine.seed(data))
+  await settle()
+  went = engine.prompt(None, "Go on.", on=thread)
+  assert engine.get(went)[3] == thread
 
 
 async def test_gathered_is_a_view_it_makes_nothing_and_says_nothing() -> None:
