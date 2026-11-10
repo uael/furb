@@ -5,6 +5,8 @@
 //! furb becomes the TUI, so the TUI holds the terminal and its signals alone. On Windows, which has no such call,
 //! furb waits for the TUI and ends with its code.
 
+#[cfg(windows)]
+use std::process::exit;
 use std::{
   convert::Infallible,
   env,
@@ -15,6 +17,8 @@ use std::{
 };
 
 use furb::world;
+#[cfg(windows)]
+use windows_sys::{Win32::System::Console::SetConsoleCtrlHandler, core::BOOL};
 
 use crate::{Place, Stand, error::CliError, life};
 
@@ -102,15 +106,15 @@ fn handed(mut command: Command) -> io::Result<Infallible> {
   reason = "the handler of the console is a call of Windows that no safe crate of the lock makes"
 )]
 fn handed(mut command: Command) -> io::Result<Infallible> {
-  unsafe extern "system" fn held(_: u32) -> windows_sys::core::BOOL {
+  unsafe extern "system" fn held(_: u32) -> BOOL {
     1
   }
   // SAFETY: the handler is a function of this program that reads nothing and holds for as long as the process lives.
   unsafe {
-    windows_sys::Win32::System::Console::SetConsoleCtrlHandler(Some(held), 1);
+    SetConsoleCtrlHandler(Some(held), 1);
   }
   let status = command.status()?;
-  std::process::exit(status.code().unwrap_or(1))
+  exit(status.code().unwrap_or(1))
 }
 
 #[cfg(test)]
