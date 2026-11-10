@@ -491,7 +491,7 @@ fn a_later_life_that_replays_a_record_with_acts_of_mcp_asks_no_server() {
     directory: at.join("project").display().to_string(),
     record: Some(at.join("record.jsonl").display().to_string()),
     config: Some(at.join("config").display().to_string()),
-    roster: Some(Vec::new()),
+    roster: Some(Vec::new().into()),
     skills: Some(false),
     ..Opening::default()
   };
@@ -545,7 +545,7 @@ fn a_call_that_a_crash_cut_ends_as_interrupted_at_the_wake_and_runs_no_more() {
     directory: at.join("project").display().to_string(),
     record: Some(at.join("record.jsonl").display().to_string()),
     config: Some(at.join("config").display().to_string()),
-    roster: Some(Vec::new()),
+    roster: Some(Vec::new().into()),
     skills: Some(false),
     ..Opening::default()
   };

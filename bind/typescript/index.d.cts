@@ -547,13 +547,15 @@ export interface Opening {
    */
   actor?: string
   /**
-   * The models the provider offers beside the model of the actor, as the catalog names them;
-   * a name that the catalog lacks is dropped, and each chain is told so once.
-   * When it is unsaid, the
+   * The home of the models the provider offers beside the model of the actor, as the catalog
+   * names them; a name that the catalog lacks is dropped, and each chain is told so once.
+   * When it is unsaid or holds none, the
    * roster of the last stand that the record answered, less the operator, so a life opened
    * again goes on with the roster it had, and on a record with no stand, the
    * provider offers every model that the catalog offers, after the model of the actor; a roster that names none
-   * offers the model of the actor alone, and, with no actor, the operator alone.
+   * offers the model of the actor alone, and, with no actor, the operator alone. A host that
+   * puts other names in the home changes the roster at the next stand that reads the catalog
+   * again, with no new life, and the record keeps the answer of that stand.
    */
   roster?: Array<string>
   /** The claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine holds. */

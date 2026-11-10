@@ -810,8 +810,11 @@ export class RemoteLife extends EventEmitter {
   async grant({ usd, share, on }: { usd?: number; share?: number; on?: string } = {}): Promise<string> {
     return await this.made(await this.verb({ verb: "grant", life: this.record, usd, share, on }));
   }
-  async stand(): Promise<string> {
-    return await this.made(await this.verb({ verb: "stand", life: this.record }));
+  /** A stand of the life, on the models of a roster when it names one, which the life offers from then on with no
+   * new life, and which a later open of this window names. */
+  async stand(roster?: string[]): Promise<string> {
+    if (roster) this.choices = { ...this.choices, roster };
+    return await this.made(await this.verb({ verb: "stand", life: this.record, roster }));
   }
   /** What an act came to once it is done, which throws the fault that ended it. */
   async config(config: Config): Promise<string> {
@@ -1021,35 +1024,6 @@ export class RemoteLife extends EventEmitter {
   }
   async unpin(holder: string): Promise<void> {
     await this.verb({ verb: "unpin", life: this.record, holder });
-  }
-  /** The life opened again on its record with the roster named, as a later life, in place: the window lets it go,
-   * waits for its end, and opens it again on its choices with that roster, and each verb waits for that open. It
-   * refuses before it lets the life go while another window holds the life. A life that a pin keeps longer than the
-   * window waits opens again as it stands, and the restart fails with the reason. */
-  restart(roster: string[]): Promise<void> {
-    const before = this.open();
-    let refused: unknown;
-    const opening = (async () => {
-      await before.catch(() => {});
-      if ((await this.daemon.windows(this.record)) > 1) {
-        refused = new Error(
-          `Another window holds the life of ${this.record}, so it does not open again with a new roster: close it there first.`,
-        );
-        return;
-      }
-      await this.daemon.ask({ verb: "detach", life: this.record });
-      try {
-        await this.daemon.ended(this.record);
-        this.choices = { ...this.choices, roster };
-      } catch (error) {
-        refused = error;
-      }
-      await this.opened();
-    })();
-    this.opening = opening;
-    return opening.then(() => {
-      if (refused) throw refused;
-    });
   }
   /** The window lets the life go: it hears no event of it more, and the life ends with its last holder. */
   async detach(): Promise<void> {

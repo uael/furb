@@ -76,9 +76,9 @@ directory of the life, and `--record` its record.
 
 `/model` and `/effort` open separate pickers. The model picker lists the models of the session, then every model that
 the catalog of the crate offers. `/model name` takes `provider:model` or the id of the model alone, by the rule of the
-catalog. A model of the catalog that the session does not offer joins the session: the session saves it, opens again
-on its record, starts again the work that was running, but for a command, which ends as interrupted, and sends the
-next prompt of the chain to that model. Each model offers the efforts that the catalog gives it, saved in the roster
+catalog. A model of the catalog that the session does not offer joins the session: the session saves it, and the
+life stands again with it in its roster, as the same life, so the work that runs goes on, and the next prompt of the
+chain goes to that model. Each model offers the efforts that the catalog gives it, saved in the roster
 of the chain. A change of model keeps the current effort if the new model offers it. A choice of a model or an effort
 sets the actor of the chain by a rung of the operator. A prompt names no actor, so the next rung of a prompt that
 runs, and each follow-up that the queue sends, asks the actor that the chain has then.

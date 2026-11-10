@@ -62,7 +62,7 @@ fn opening(at: &Path, keeps: bool) -> Opening {
     record: place("record.jsonl"),
     keeps: Some(keeps),
     config: place("config"),
-    roster: Some(Vec::new()),
+    roster: Some(Vec::new().into()),
     ..Opening::default()
   }
 }
@@ -279,7 +279,7 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
     Box::pin(future::pending())
   }));
   let first = Opening {
-    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    roster: Some(vec!["claude-cli:opus".to_owned()].into()),
     answer: Some(streams),
     skills: Some(false),
     ..opening(&at, true)
@@ -711,7 +711,7 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
     Box::pin(async move { Ok(turn) })
   }));
   Opening {
-    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    roster: Some(vec!["claude-cli:opus".to_owned()].into()),
     answer: Some(answer),
     ..opening(at, true)
   }
@@ -731,7 +731,7 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
   let asked = || fs::read_to_string(at.join("discoveries")).unwrap_or_default().lines().count();
   let (mut engine, _) = Opening {
     claude: Some(bin.display().to_string()),
-    roster: Some(vec!["claude-cli:nova".to_owned()]),
+    roster: Some(vec!["claude-cli:nova".to_owned()].into()),
     skills: Some(false),
     ..opening(&at, true)
   }
@@ -761,7 +761,7 @@ fn a_life_opens_when_its_actor_and_a_roster_name_left_the_catalog_and_tells_each
   let at = place("catalog-left");
   let (mut engine, _) = Opening {
     skills: Some(false),
-    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:gone".to_owned()]),
+    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:gone".to_owned()].into()),
     actor: Some("claude-cli:vanished/high".to_owned()),
     ..scripted(&at, &[])
   }
@@ -785,7 +785,7 @@ fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_sto
   let both = "close((standing()[2], sorted(a[0] for a in standing()[0])))";
   let given = Opening {
     skills: Some(false),
-    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:sonnet".to_owned()]),
+    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:sonnet".to_owned()].into()),
     actor: Some("claude-cli:sonnet/low".to_owned()),
     ..scripted(&at, &[])
   };
@@ -1790,7 +1790,7 @@ fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of
   fs::create_dir_all(at.join("config")).unwrap();
   fs::write(at.join("config/config.json"), r#"{"classes": {"claude-cli:opus": "cheap"}}"#).unwrap();
   let opening = Opening {
-    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    roster: Some(vec!["claude-cli:opus".to_owned()].into()),
     skills: Some(false),
     ..opening(&at, false)
   };

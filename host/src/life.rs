@@ -126,6 +126,10 @@ pub enum Command {
   /// A change of a key of a layer of the configs, which the World keeps only when the catalog
   /// reads it, then a stand of the life on them: the act of the stand.
   Configure(Change),
+  /// The names of the models of the roster of the life put in place of the ones it held, then a
+  /// stand of the life, which reads the catalog again and offers them: the act of the stand. The
+  /// life goes on, and each later birth of it keeps them.
+  Roster(Vec<String>),
   /// The fact that the operator read a chain or a thread up to now.
   Seen { about: String },
   /// A follow-up that the operator queued on a chain, under an entry that a second queue finds,
@@ -261,6 +265,8 @@ pub struct Life {
   births: Vec<Seq>,
   watch: Watch,
   configs: Layers,
+  /// The home of the names of the roster that each birth of the life reads at a stand.
+  roster: world::Roster,
   queue: Queue,
   held: Held,
   backlog: Backlog,
@@ -739,6 +745,7 @@ async fn run(
     births: Vec::new(),
     watch: Watch::default(),
     configs,
+    roster: opening.roster.get_or_insert_default().clone(),
     queue: Queue::default(),
     held: Held::default(),
     backlog: Backlog::default(),
@@ -886,7 +893,7 @@ async fn driven(
       }
       Woke::Said(Some(Message::Rebirth(asked))) => life.watch.ask(asked),
       Woke::Said(Some(Message::Command(command, reply))) => {
-        let replied = commanded(&mut engine, &life.configs, &life.queue, &life.held, command);
+        let replied = commanded(&mut engine, life, command);
         reply.send(replied.await).ok();
         if let Some(fault) = engine.stopped().cloned() {
           drop(engine);
@@ -934,58 +941,56 @@ async fn pumped(engine: &mut Engine, waits: bool) -> Woke {
   .await
 }
 
-/// What a command comes to: on the configs of the life for a command of its configs, on the queue
-/// of the life for a command of the queue, on the acts that the life told for a query of their
-/// meaning, and else on the engine.
-async fn commanded(
-  engine: &mut Engine,
-  configs: &Layers,
-  queue: &Queue,
-  held: &Held,
-  command: Command,
-) -> Result<Reply, LifeError> {
+/// What a command comes to: on the configs of the life for a command of its configs, on the home of
+/// its roster for a change of the roster, on the queue of the life for a command of the queue, on
+/// the acts that the life told for a query of their meaning, and else on the engine.
+async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result<Reply, LifeError> {
   let root = engine.root().to_owned();
   let chain = |on: Option<String>| on.unwrap_or_else(|| root.clone());
   match command {
     Command::By { speaker, command } => spoken(engine, &speaker, *command),
     Command::Queue { entry, shape, message, on } => {
       let chain = chain(on);
-      if !queue.holds(&entry) {
+      if !life.queue.holds(&entry) {
         let words = ["add", &entry, &shape, &message].map(Object::string);
         engine.say(QUEUE, &chain, words.into())?;
       }
       Ok(Reply::Done)
     }
     Command::Unqueue { entry } => {
-      let follow = queue.takes(&entry);
+      let follow = life.queue.takes(&entry);
       let follow =
         follow.ok_or_else(|| LifeError::Refused(format!("No follow-up {entry} waits.")))?;
       engine.say(QUEUE, &follow.chain, ["drop", &entry].map(Object::string).into())?;
       Ok(Reply::Done)
     }
     Command::Queued { on } => {
-      let waiting = queue.waiting(&chain(on));
+      let waiting = life.queue.waiting(&chain(on));
       let waiting = waiting.iter().map(serde_json::to_value).collect::<Result<_, _>>();
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
-    Command::Desk { notices } => Ok(Reply::Desk(held.desk(&notices))),
+    Command::Desk { notices } => Ok(Reply::Desk(life.held.desk(&notices))),
     Command::Threads { on, at, read, site } => {
       let site = site.as_deref().unwrap_or("operator");
-      Ok(Reply::Threads(held.threads_as(site, &chain(on), at, read.unwrap_or_default())))
+      Ok(Reply::Threads(life.held.threads_as(site, &chain(on), at, read.unwrap_or_default())))
     }
-    Command::Rail { hidden, at } => Ok(Reply::Rail(held.rail(&hidden, at))),
+    Command::Rail { hidden, at } => Ok(Reply::Rail(life.held.rail(&hidden, at))),
     Command::Ladder { on, at, opened, owed, taken, shown } => {
       let shown = shown.unwrap_or(SHOWN);
-      Ok(Reply::Ladder(held.ladder(&chain(on), at, &opened, &owed, taken.as_deref(), shown)))
+      Ok(Reply::Ladder(life.held.ladder(&chain(on), at, &opened, &owed, taken.as_deref(), shown)))
     }
-    Command::AsOf { at } => Ok(Reply::Acts(held.as_of(at))),
-    Command::Moments { on } => Ok(Reply::Moments(held.moments(on.as_deref()))),
+    Command::AsOf { at } => Ok(Reply::Acts(life.held.as_of(at))),
+    Command::Moments { on } => Ok(Reply::Moments(life.held.moments(on.as_deref()))),
     Command::Settings => {
-      let settings = configs.get()?.into_iter().map(|one| json!(one));
+      let settings = life.configs.get()?.into_iter().map(|one| json!(one));
       Ok(Reply::Values(settings.collect()))
     }
     Command::Configure(change) => {
-      configs.set(change).await?;
+      life.configs.set(change).await?;
+      answered_by(engine, Command::Stand)
+    }
+    Command::Roster(names) => {
+      life.roster.set(Some(names));
       answered_by(engine, Command::Stand)
     }
     other => answered_by(engine, other),

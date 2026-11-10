@@ -143,7 +143,7 @@ mod daemon {
     }));
     Opening {
       config: Some(at.join("config").display().to_string()),
-      roster: Some(vec!["claude-cli:opus".to_owned()]),
+      roster: Some(vec!["claude-cli:opus".to_owned()].into()),
       // A stand reads the settings again, and a command line of this machine would answer it
       // in seconds.
       claude: Some(at.join("no-claude").display().to_string()),

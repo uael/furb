@@ -2470,19 +2470,17 @@ export class Session extends EventEmitter {
           ? argument
           : await this.host.model(argument);
         let entry = this.roster.find(([candidate]) => candidate === name);
-        // A model of the catalog that the roster does not hold joins the roster: the life of this session opens again
-        // in place with it, and the model takes the chain once the new life holds it.
+        // A model of the catalog that the roster does not hold joins the roster of this life at a stand, and takes the
+        // chain once the life offers it.
         if (!entry && name) {
           this.models = [...new Set([...this.models, name])];
           this.save();
-          this.notice = `The life opens again to take ${name}.`;
-          this.emit("change");
           const kept = this.roster.map(([one]) => one).filter((one) => one !== "operator");
-          await this.host.restart([...new Set([...kept, ...this.models])]);
+          await this.host.stand([...new Set([...kept, ...this.models])]);
           await this.refresh();
           entry = this.roster.find(([candidate]) => candidate === name);
           if (!entry)
-            throw new Error(`The life opened again with no ${name}, since its daemon offers no such model.`);
+            throw new Error(`The life stood with no ${name}, since its daemon offers no such model.`);
           this.notice = `The life holds ${name} now.`;
         }
         if (!entry)

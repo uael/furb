@@ -108,28 +108,41 @@ pub struct Provider {
   system: Arc<str>,
 }
 
-/// The one home of the logins of the members who answer as the operator. Each clone shares it, so
-/// a host that changes it, as when its access list changes, changes the roster of each life at its
-/// next stand.
+/// A home of what a life offers, which each clone shares, so a host that changes it changes the
+/// standing of each life that holds it at its next stand.
 #[derive(Clone, Default)]
-pub struct Members(Arc<RwLock<Vec<String>>>);
+pub struct Shared<T>(Arc<RwLock<T>>);
 
-impl Members {
-  /// A home that holds these logins.
+impl<T: Clone> Shared<T> {
+  /// A home that holds this value.
   #[must_use]
-  pub fn new(logins: Vec<String>) -> Self {
-    Self(Arc::new(RwLock::new(logins)))
+  pub fn new(value: T) -> Self {
+    Self(Arc::new(RwLock::new(value)))
   }
 
-  /// Put these logins in place of the ones that the home held.
-  pub fn set(&self, logins: Vec<String>) {
-    *self.0.write().unwrap_or_else(PoisonError::into_inner) = logins;
+  /// Put this value in place of the one that the home held.
+  pub fn set(&self, value: T) {
+    *self.0.write().unwrap_or_else(PoisonError::into_inner) = value;
   }
 
-  /// The logins that the home holds now.
+  /// The value that the home holds now.
   #[must_use]
-  pub fn logins(&self) -> Vec<String> {
+  pub fn get(&self) -> T {
     self.0.read().unwrap_or_else(PoisonError::into_inner).clone()
+  }
+}
+
+/// The one home of the logins of the members who answer as the operator, which a host changes
+/// as its access list changes.
+pub type Members = Shared<Vec<String>>;
+
+/// The one home of the names of the models of the roster of a life, which a host changes to offer
+/// another model: the stand that reads the catalog again keeps them. None is unsaid.
+pub type Roster = Shared<Option<Vec<String>>>;
+
+impl From<Vec<String>> for Roster {
+  fn from(names: Vec<String>) -> Self {
+    Self::new(Some(names))
   }
 }
 

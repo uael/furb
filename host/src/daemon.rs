@@ -42,7 +42,7 @@ use furb::{
   view::WATCH,
   wire::parsed,
   world::{
-    Members,
+    Members, Roster,
     codex::{self, SignIn},
     config::Change,
   },
@@ -516,7 +516,8 @@ fn routed(verb: Verb) -> Routed {
     Verb::Write { life, path, content, on } => (life, Command::Write { path, content, on }),
     Verb::Names { life, on } => (life, Command::Names { on }),
     Verb::Gate { life, word, on } => (life, Command::Gate { word, on }),
-    Verb::Stand { life } => (life, Command::Stand),
+    Verb::Stand { life, roster: None } => (life, Command::Stand),
+    Verb::Stand { life, roster: Some(names) } => (life, Command::Roster(names)),
     Verb::Config { life, config } => (life, configured(config)),
     Verb::Seen { life, about } => (life, Command::Seen { about }),
     Verb::Queue { life, entry, shape, message, on } => {
@@ -909,7 +910,8 @@ impl Lives {
       record: Some(life.clone()),
       directory: cwd.clone(),
       actor: actor.or_else(|| base.actor.clone()),
-      roster: roster.or_else(|| base.roster.clone()),
+      // Each life takes a home of its own, so a change of its roster changes no other life.
+      roster: roster.or_else(|| base.roster.as_ref().and_then(Roster::get)).map(Roster::from),
       skills: skills.or(base.skills),
       config: config.clone(),
       claude: claude.or_else(|| base.claude.clone()),

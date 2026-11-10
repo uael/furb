@@ -853,10 +853,19 @@
         },
         {
           "type": "object",
-          "description": "A stand of the life, which reads the roster and the actor again.",
+          "description": "A stand of the life, which reads the roster and the actor again, on the names of models that\nit names in place of the roster of the life, when it names some. The life goes on, and the\nrecord keeps the answer of the stand.",
           "properties": {
             "life": {
               "type": "string"
+            },
+            "roster": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
             },
             "verb": {
               "type": "string",
@@ -4210,5 +4219,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 12
+  "x-protocol": 13
 }

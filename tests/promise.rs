@@ -73,7 +73,7 @@ fn scripted(at: &Path, kits: bool, script: &[(&str, &str)]) -> Opening {
     record: path("record.jsonl"),
     keeps: Some(true),
     config: path("config"),
-    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    roster: Some(vec!["claude-cli:opus".to_owned()].into()),
     answer: Some(answer),
     skills: (!kits).then_some(false),
     ..Opening::default()

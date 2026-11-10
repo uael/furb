@@ -89,7 +89,7 @@ fn opening(at: &Path) -> Opening {
     directory: at.display().to_string(),
     record: Some(at.join("record.jsonl").display().to_string()),
     config: Some(at.join("config").display().to_string()),
-    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    roster: Some(vec!["claude-cli:opus".to_owned()].into()),
     skills: Some(false),
     answer: Some(answer),
     ..Opening::default()

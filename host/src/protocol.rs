@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 12;
+pub const PROTOCOL: u32 = 13;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -259,9 +259,12 @@ pub enum Verb {
     word: String,
     on: Option<String>,
   },
-  /// A stand of the life, which reads the roster and the actor again.
+  /// A stand of the life, which reads the roster and the actor again, on the names of models that
+  /// it names in place of the roster of the life, when it names some. The life goes on, and the
+  /// record keeps the answer of the stand.
   Stand {
     life: String,
+    roster: Option<Vec<String>>,
   },
   /// The configs of the folder of the life, in their layers: what each key holds, a change of a
   /// key, or a stand on them as the disk holds them now.

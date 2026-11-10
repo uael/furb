@@ -28,7 +28,7 @@ fn opening(at: &Path) -> Opening {
   Opening {
     directory: at.display().to_string(),
     config: Some(at.join("config").display().to_string()),
-    roster: Some(Vec::new()),
+    roster: Some(Vec::new().into()),
     skills: Some(false),
     ..Opening::default()
   }

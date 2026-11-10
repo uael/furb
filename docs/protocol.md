@@ -129,7 +129,7 @@ it is not given. The daemon answers requests in any order.
 | `write` | `life`, `path`, `content`, `on` | write |
 | `names` | `life`, `on` | read |
 | `gate` | `life`, `word`, `on` | read |
-| `stand` | `life` | write |
+| `stand` | `life`, `roster` (names of models) | write |
 | `cancel_sign_in` | `life` | write |
 | `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
@@ -147,6 +147,10 @@ it is not given. The daemon answers requests in any order.
 | `view.event` | see below | write |
 | `view.tree`, `view.effect` | see below | read |
 
+- `stand` makes the life stand again: it reads the catalog, the configs and the actor again, and the answer is the
+  act of the stand. A `roster` names the models that the life offers from that stand on, in place of its roster, as
+  the catalog names them, so a window offers a model that the roster lacks with no new life. The record keeps the
+  answer of the stand, so a later life of the record goes on with that roster.
 - `config` reads and changes the configs of the folder of a life, which the World writes, so no window writes a disk.
   A get gives `values`, each key with the value that wins for it and its layer, `user`, `project` or `local`. A key has
   one or two names, as `["providers", "codex"]`. A key that a schema names comes with its `property`, as

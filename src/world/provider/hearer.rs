@@ -209,7 +209,7 @@ impl Hearer {
       &self.directory,
       &self.actor,
       self.skills.as_deref(),
-      &self.members.logins(),
+      &self.members.get(),
       &self.config.clone().unwrap_or_else(|| skill::Places::here().config),
     );
     say(co, Fact::says("done", &about, [given]));

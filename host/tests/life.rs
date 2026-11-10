@@ -61,7 +61,7 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
   Opening {
     directory: at.display().to_string(),
     config: Some(at.join("config").display().to_string()),
-    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    roster: Some(vec!["claude-cli:opus".to_owned()].into()),
     skills: Some(false),
     answer: Some(answer),
     ..Opening::default()
@@ -774,4 +774,24 @@ async fn a_reader_that_attaches_late_reads_each_line_that_a_running_command_prin
     |(_, e)| matches!(&**e, Event::Act(a) if a.id == id && !matches!(a.phase, Phase::Done(_))),
   );
   assert!(running, "the command still runs while the reader reads");
+}
+#[tokio::test]
+async fn a_change_of_the_roster_offers_its_models_at_the_next_stand_of_the_life() {
+  let at = place("roster");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let offered = async || {
+    let Reply::Value(standing) = life.send(Command::Standing).await.unwrap() else {
+      panic!("the standing is a value")
+    };
+    let names = standing[0].as_array().cloned().unwrap_or_default();
+    names.iter().filter_map(|one| one[0].as_str().map(str::to_owned)).collect::<Vec<_>>()
+  };
+  assert!(!offered().await.contains(&"claude-cli:sonnet".to_owned()));
+  let roster = vec!["claude-cli:opus".to_owned(), "claude-cli:sonnet".to_owned()];
+  let stand = made(&life, Command::Roster(roster)).await;
+  until(&mut events, done(&stand)).await;
+  assert!(offered().await.contains(&"claude-cli:sonnet".to_owned()));
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
 }

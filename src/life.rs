@@ -121,15 +121,18 @@ pub struct Opening {
   /// model of the actor.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub actor: Option<String>,
-  /// The models the provider offers beside the model of the actor, as the catalog names them;
-  /// a name that the catalog lacks is dropped, and each chain is told so once.
-  /// When it is unsaid, the
+  /// The home of the models the provider offers beside the model of the actor, as the catalog
+  /// names them; a name that the catalog lacks is dropped, and each chain is told so once.
+  /// When it is unsaid or holds none, the
   /// roster of the last stand that the record answered, less the operator, so a life opened
   /// again goes on with the roster it had, and on a record with no stand, the
   /// provider offers every model that the catalog offers, after the model of the actor; a roster that names none
-  /// offers the model of the actor alone, and, with no actor, the operator alone.
+  /// offers the model of the actor alone, and, with no actor, the operator alone. A host that
+  /// puts other names in the home changes the roster at the next stand that reads the catalog
+  /// again, with no new life, and the record keeps the answer of that stand.
+  #[cfg_attr(feature = "typescript", napi(ts_type = "Array<string>"))]
   #[cfg_attr(feature = "python", pyo3(default))]
-  pub roster: Option<Vec<String>>,
+  pub roster: Option<world::Roster>,
   /// The claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine holds.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub claude: Option<String>,
@@ -330,7 +333,7 @@ impl Opening {
     // A life that names no actor or no roster goes on with the ones that its record stood on last.
     let stood = marks.and_then(|marks| marks.standing);
     let (actor, roster) = stood.as_ref().map_or((None, None), |one| offered(one.as_ref()));
-    let (actor, roster) = (self.actor.clone().or(actor), self.roster.clone().or(roster));
+    let actor = self.actor.clone().or(actor);
     let provider = match system {
       Some(one) => self.provider(advertised, actor, roster)?.system(one.into()),
       None => self.provider(advertised, actor, roster)?,
@@ -341,13 +344,16 @@ impl Opening {
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
   /// gives one, and which a life that inspects asks nothing; and the native search of the web of each of them, which
-  /// the provider answers the question search with.
+  /// the provider answers the question search with. Its roster is the one of the home of the
+  /// opening at each read of the catalog, else the one that the record stood on last.
   fn provider(
     &self,
     advertised: Vec<world::Advertised>,
     actor: Option<String>,
-    roster: Option<Vec<String>>,
+    stood: Option<Vec<String>>,
   ) -> Result<world::Provider, Fault> {
+    let home = self.roster.clone().unwrap_or_default();
+    let roster = move || home.get().or_else(|| stood.clone());
     let works = self.works();
     let gallery = self.gallery();
     let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
@@ -363,15 +369,15 @@ impl Opening {
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
     let answer =
       if works { self.answer.as_ref().map(|one| Arc::clone(&one.0)) } else { Some(asks) };
-    let kept = catalog.keep(roster.as_deref(), actor.as_deref());
+    let kept = catalog.keep(roster().as_deref(), actor.as_deref());
     let mut provider = catalog
       .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())
       .map_err(|no| Fault::refused(no.to_string()))?
       .gone(kept.left);
-    let (names, preferred) = (roster, actor);
+    let preferred = actor;
     provider = provider.refreshing(Arc::new(move || {
       let (claude, config, directory) = (claude.clone(), config.clone(), directory.clone());
-      let (names, preferred, answer) = (names.clone(), preferred.clone(), answer.clone());
+      let (names, preferred, answer) = (roster(), preferred.clone(), answer.clone());
       Box::pin(async move {
         world::claude::refresh();
         let fresh = Catalog::loaded(claude.clone())

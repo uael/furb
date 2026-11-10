@@ -125,7 +125,7 @@ impl Open {
   /// The models that the life offers beside that one.
   #[must_use]
   pub fn roster<S: Into<String>>(mut self, models: impl IntoIterator<Item = S>) -> Self {
-    self.0.roster = Some(models.into_iter().map(Into::into).collect());
+    self.0.roster = Some(models.into_iter().map(Into::into).collect::<Vec<_>>().into());
     self
   }
 

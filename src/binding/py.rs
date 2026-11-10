@@ -41,7 +41,7 @@ use crate::{
   engine::{Life, handed, lending},
   life::{Answer, Log, Opening, Retrying, Stream},
   value::{IS, entry, field, marked, templated},
-  world::Members,
+  world::{Members, Roster},
 };
 use tokio::task;
 
@@ -270,6 +270,15 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Members {
   /// A list of logins of python, as a home that the life alone changes.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     Ok(Self::new(value.extract()?))
+  }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Roster {
+  type Error = PyErr;
+
+  /// A list of names of models of python, as a home that the life alone changes.
+  fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+    Ok(value.extract::<Vec<String>>()?.into())
   }
 }
 

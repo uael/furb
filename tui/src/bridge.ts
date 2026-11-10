@@ -854,9 +854,10 @@ export class HostView extends EventEmitter {
   async settings(): Promise<Setting[]> {
     return this.demo ? [] : await this.life.settings();
   }
-  /** A stand of the life on the configs as the disk holds them, which asks again each model that waits to retry. */
-  async stand(): Promise<void> {
-    await this.life.result(await this.life.stand());
+  /** A stand of the life on the configs as the disk holds them, which asks again each model that waits to retry, and
+   * offers the models of a roster from then on when it names one, as the same life. */
+  async stand(roster?: string[]): Promise<void> {
+    await this.life.result(await this.life.stand(roster));
   }
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   async model(name: string): Promise<string | null> {
@@ -977,19 +978,6 @@ export class HostView extends EventEmitter {
     this.lost = "";
     this.forget();
     this.emit("reset");
-  }
-  /** The life opened again on its record with the roster named, in place, as `RemoteLife.restart` says, and read again
-   * from its start. */
-  async restart(roster: string[]): Promise<void> {
-    if (!(this.life instanceof RemoteLife))
-      throw new Error("This record is open to read, so its roster does not change.");
-    try {
-      await this.life.restart(roster);
-    } finally {
-      this.lost = "";
-      this.forget();
-      this.emit("reset");
-    }
   }
   /** The life pinned under the name of a holder, so it lives with no window, until an unpin of that holder. */
   /** The follow-ups that wait on each chain of the life, in order, as the life told them last. */

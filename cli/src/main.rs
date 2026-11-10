@@ -201,7 +201,7 @@ impl Place {
 impl Stand {
   /// A life that stands on the actor and the roster of this stand.
   fn on(&self, opening: Opening) -> Opening {
-    let roster = (!self.roster.is_empty()).then(|| self.roster.clone());
+    let roster = (!self.roster.is_empty()).then(|| self.roster.clone().into());
     Opening { actor: self.model.clone(), roster, ..opening }
   }
 }
