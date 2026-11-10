@@ -30,9 +30,7 @@ use furb::{
 };
 use futures::executor;
 use std::{
-  env,
-  os::unix::process::ExitStatusExt,
-  process,
+  env, process,
   process::{Child, Command, Stdio},
   thread,
   time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -611,7 +609,10 @@ fn killed(Reaped(child): &mut Reaped, record: &Path, fact: usize) {
   child.kill().unwrap();
   let ended = child.wait().unwrap();
   #[cfg(unix)]
-  assert_eq!(ExitStatusExt::signal(&ended), Some(9), "the kill ended the life");
+  {
+    use std::os::unix::process::ExitStatusExt;
+    assert_eq!(ended.signal(), Some(9), "the kill ended the life");
+  }
   #[cfg(not(unix))]
   assert!(!ended.success(), "the kill ended the life");
   let text = fs::read_to_string(record).unwrap();

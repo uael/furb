@@ -4,7 +4,7 @@
 //! local API of Tailscale gives for its address, with the role that the access list gives it.
 
 use std::{
-  env, fs, io, mem,
+  fs, io, mem,
   net::{IpAddr, Ipv4Addr, SocketAddr},
   path::{Path, PathBuf},
   pin::Pin,
@@ -26,8 +26,12 @@ use hyper::{
 };
 use hyper_util::rt::TokioIo;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+#[cfg(debug_assertions)]
+use std::env;
 #[cfg(unix)]
 use tokio::net::UnixStream;
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
 use tokio::{
   io::{AsyncRead, AsyncWrite, ReadBuf},
   net::{TcpListener, TcpStream},
@@ -312,8 +316,8 @@ async fn connected(socket: &Path) -> io::Result<UnixStream> {
 
 #[cfg(windows)]
 #[expect(clippy::unused_async, reason = "the same signature as the unix one, which awaits")]
-async fn connected(socket: &Path) -> io::Result<tokio::net::windows::named_pipe::NamedPipeClient> {
-  tokio::net::windows::named_pipe::ClientOptions::new().open(socket)
+async fn connected(socket: &Path) -> io::Result<NamedPipeClient> {
+  ClientOptions::new().open(socket)
 }
 
 /// The status and the body of the answer to a request on a stream of the local API.

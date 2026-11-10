@@ -3,8 +3,9 @@
 //! access list of that user alone.
 
 use std::{
-  future,
+  fs, future,
   io::{self, Write},
+  mem,
   os::windows::{ffi::OsStrExt, io::FromRawHandle},
   path::Path,
   ptr,
@@ -14,6 +15,7 @@ use std::{
 use tokio::net::windows::named_pipe::{
   ClientOptions, NamedPipeClient, NamedPipeServer, ServerOptions,
 };
+use tokio::time::sleep;
 use windows_sys::Win32::{
   Foundation::{
     ERROR_ACCESS_DENIED, ERROR_ALREADY_EXISTS, ERROR_PIPE_BUSY, GENERIC_WRITE,
@@ -63,7 +65,7 @@ impl Listener {
   pub(crate) async fn accept(&mut self) -> Result<Accepted, TransportError> {
     self.next.connect().await.map_err(TransportError::Accept)?;
     let next = instance(&self.place, false)?;
-    Ok(std::mem::replace(&mut self.next, next))
+    Ok(mem::replace(&mut self.next, next))
   }
 }
 
@@ -73,7 +75,7 @@ pub(crate) async fn dial(folder: &Path) -> Result<Dialed, TransportError> {
   loop {
     match ClientOptions::new().open(&place) {
       Err(no) if no.raw_os_error() == Some(ERROR_PIPE_BUSY.cast_signed()) => {
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        sleep(Duration::from_millis(20)).await;
       }
       opened => return opened.map_err(|source| TransportError::Dial { place, source }),
     }
@@ -171,7 +173,7 @@ fn instance(place: &str, first: bool) -> Result<NamedPipeServer, TransportError>
 pub(crate) fn guarded(folder: &Path) -> Result<(), TransportError> {
   let made = |source| TransportError::Folder { folder: folder.to_owned(), source };
   if let Some(parent) = folder.parent().filter(|parent| !parent.as_os_str().is_empty()) {
-    std::fs::create_dir_all(parent).map_err(made)?;
+    fs::create_dir_all(parent).map_err(made)?;
   }
   let wide = widened(folder);
   // SAFETY: wide ends with a NUL, and the attributes live until the call returns.
@@ -183,7 +185,7 @@ pub(crate) fn guarded(folder: &Path) -> Result<(), TransportError> {
       return Err(made(no));
     }
   }
-  let held = std::fs::symlink_metadata(folder).map_err(made)?;
+  let held = fs::symlink_metadata(folder).map_err(made)?;
   if !held.is_dir() || held.file_type().is_symlink() {
     return Err(TransportError::Exposed { folder: folder.to_owned() });
   }
@@ -197,7 +199,7 @@ pub(crate) fn guarded(folder: &Path) -> Result<(), TransportError> {
   reason = "std makes no file under an access list, which only a call of Windows does"
 )]
 pub(crate) fn private(file: &Path, bytes: &[u8]) -> io::Result<()> {
-  match std::fs::remove_file(file) {
+  match fs::remove_file(file) {
     Err(no) if no.kind() != io::ErrorKind::NotFound => return Err(no),
     _ => {}
   }
@@ -218,7 +220,7 @@ pub(crate) fn private(file: &Path, bytes: &[u8]) -> io::Result<()> {
     return Err(io::Error::last_os_error());
   }
   // SAFETY: CreateFileW gave this handle, which nothing else owns.
-  let mut out = unsafe { std::fs::File::from_raw_handle(handle) };
+  let mut out = unsafe { fs::File::from_raw_handle(handle) };
   out.write_all(bytes)?;
   out.sync_all()
 }
@@ -230,7 +232,7 @@ fn widened(path: &Path) -> Vec<u16> {
 
 #[cfg(test)]
 mod tests {
-  use std::{path::Path, ptr};
+  use std::{env, fs, path::Path, process, ptr, slice};
 
   use windows_sys::Win32::{
     Foundation::LocalFree,
@@ -278,7 +280,7 @@ mod tests {
     };
     assert_ne!(made, 0);
     // SAFETY: the call wrote size units at text.
-    let sddl = unsafe { std::slice::from_raw_parts(text, usize::try_from(size).unwrap()) };
+    let sddl = unsafe { slice::from_raw_parts(text, usize::try_from(size).unwrap()) };
     let sddl = String::from_utf16_lossy(sddl).trim_end_matches('\0').to_owned();
     // SAFETY: text came from the call above, and nothing reads it after.
     unsafe { LocalFree(text.cast()) };
@@ -294,17 +296,17 @@ mod tests {
 
   #[test]
   fn the_folder_and_the_file_of_the_door_let_in_their_owner_alone() {
-    let yard = std::env::temp_dir().join(format!("furb-acl-{}", std::process::id()));
-    drop(std::fs::remove_dir_all(&yard));
+    let yard = env::temp_dir().join(format!("furb-acl-{}", process::id()));
+    drop(fs::remove_dir_all(&yard));
     let folder = yard.join("cold").join("host");
     guarded(&folder).unwrap();
     assert!(owner_alone(&listed(&folder)), "{}", listed(&folder));
     let file = folder.join("window.draft");
-    std::fs::write(&file, "open to all").unwrap();
+    fs::write(&file, "open to all").unwrap();
     private(&file, b"{}").unwrap();
-    assert_eq!(std::fs::read(&file).unwrap(), b"{}");
+    assert_eq!(fs::read(&file).unwrap(), b"{}");
     assert!(owner_alone(&listed(&file)), "{}", listed(&file));
     guarded(&folder).unwrap();
-    std::fs::remove_dir_all(&yard).unwrap();
+    fs::remove_dir_all(&yard).unwrap();
   }
 }
