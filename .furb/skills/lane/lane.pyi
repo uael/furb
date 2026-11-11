@@ -52,6 +52,7 @@ async def lane_item(id: str) -> tuple[str, str]:
 async def lane_fill() -> list[str]:
   """lane_fill() starts lane_item on the runner of each next row while fewer rows run than the key cap of the skill in the configs, and gives the ids that it started.
   It reads main as red when the last run of the gates on main failed.
+  It takes a running row whose runner holds no open word back to open, since that row runs nowhere and holds no place.
   After three blocked rows in a row, it starts nothing and tells the operator once.
   It keeps script/memwatch.sh running while a row runs, and ends it when none runs.
   """

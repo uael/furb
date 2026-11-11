@@ -246,6 +246,11 @@ async def lane_fill() -> list[str]:
       lane_halted[:] = [x["id"] for x in ended]
       prompt(None, "The lane starts nothing: " + ", ".join(lane_halted) + " ended blocked in a row.", to=OPERATOR)
     return []
+  for x in rows:
+    runner = lane_runners.get(x["id"], ("", ""))[0]
+    if x["state"] == "running" and not any(r is get(r[1]) and not over(r[1]) for r in transcript(runner, "rung") if runner):
+      x["state"] = "open"
+  lane_keep(rows)
   cap = json.loads(read("settings://lane", HIDDEN).content)["cap"]
   main = await bash("gh run list --repo uael/furb --branch main --workflow gates.yml --limit 1 --json conclusion -q '.[0].conclusion'", ok=True, show=HIDDEN, timeout=60.0)
   red = main.stdout.content.strip() == "failure"

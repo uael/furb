@@ -49,3 +49,13 @@ async def test_lane_fill_keeps_the_watcher_of_memory_while_a_row_runs(laning: Be
   await laning.value("await lane_fill()")
   await settle()
   assert laning.engine.peek(guard) is not None
+
+
+async def test_lane_fill_reopens_a_row_that_runs_on_no_runner(laning: Bench) -> None:
+  """It takes a running row whose runner holds no open word back to open, since that row runs nowhere and holds no place."""
+  laning.say("run list", "success\n")
+  laning.sand.files[laning.sand.placed(laning.root, "settings://lane")] = '{"cap": 1}'
+  await laning.word('lane_ask("a", "a", "s", state="running", tree="ta")\nlane_ask("b", "b", "s", tree="tb")')
+  assert await laning.value("await lane_fill()") == ["a"]
+  assert [x["state"] for x in await laning.value("lane_rows()")] == ["running", "open"]
+  assert await laning.value("await lane_fill()") == []
