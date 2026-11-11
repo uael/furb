@@ -1,11 +1,16 @@
+import json
+
 from furb.engine import (
   HIDDEN,
+  OPERATOR,
   Act,
   Refused,
+  Text,
   bash,
   cancel,
   chain,
   clock,
+  covers,
   get,
   over,
   paused,
@@ -16,9 +21,11 @@ from furb.engine import (
   scope,
   transcript,
   wait,
+  write,
 )
 
 LANE_BASE: str = globals().setdefault("LANE_BASE", "main")
+LANE_ITEMS: str = globals().setdefault("LANE_ITEMS", ".furb/lane.json")
 LANE_LOOK = 600.0
 LANE_CHECKS = {
   "the title": 'python3 script/title.py "$(git log -1 --format=%s)"',
@@ -30,6 +37,8 @@ LANE_CHECKS = {
 }
 lane_runners: dict[str, tuple[str, str]] = globals().setdefault("lane_runners", {})
 lane_jobs: dict[str, tuple[str, float, float]] = globals().setdefault("lane_jobs", {})
+lane_halted: list[str] = globals().setdefault("lane_halted", [])
+lane_guard: list[str] = globals().setdefault("lane_guard", [])
 
 LANE_RULES = """You take one item of the work on the branch <BASE> of furb, from A to Z: the investigation, the change, its proof, the commit and the push. No part of it goes to another chain, and it ends accepted or blocked with its cause, never partly.
 
@@ -53,6 +62,42 @@ LANE_NUDGE = "Your last word closed nothing and left no act open, so the chain a
 LANE_HUNG = "A reply of your model did not end in six looks of the lane, and code cancelled it. Go on from where you stood."
 
 
+def lane_rows() -> list[dict]:
+  try:
+    return json.loads(read(LANE_ITEMS, HIDDEN).content or "[]")
+  except Refused:
+    return []
+
+
+def lane_keep(rows: list[dict]) -> None:
+  write(Text(LANE_ITEMS, json.dumps(rows, indent=1)))
+
+
+def lane_put(id: str, **keys: object) -> dict:
+  rows = lane_rows()
+  row = next(x for x in rows if x["id"] == id)
+  row.update(keys)
+  lane_keep(rows)
+  return row
+
+
+def lane_ask(id: str, ask: str, source: str, done: str = "", **row: object) -> None:
+  rows = lane_rows()
+  if any(x["id"] == id for x in rows):
+    raise Refused(f"the row {id} stands")
+  if row.get("worker") and not row.get("why"):
+    raise Refused(f"the row {id} names the worker {row['worker']} with no why: the effort follows the kind of the work")
+  lane_keep([*rows, {"id": id, "ask": ask, "source": source, "done": done, "state": "open", **row}])
+
+
+def lane_next(red: bool = False) -> str:
+  rows = lane_rows()
+  state = {x["id"]: x["state"] for x in rows}
+  held = {x.get(k) for x in rows if x["state"] == "running" for k in ("tree", "branch")} - {None, ""}
+  ready = [x for x in rows if x["state"] == "open" and all(state.get(a) in ("landed", "void") for a in x.get("after", [])) and not {x.get("tree"), x.get("branch")} & held and (x.get("main") or not red)]
+  return max(ready, key=lambda x: x.get("hard", 0))["id"] if ready else ""
+
+
 def lane_rules(tree: str, branch: str = "", lands: bool = True) -> str:
   base = LANE_BASE
   if not branch:
@@ -64,8 +109,9 @@ def lane_rules(tree: str, branch: str = "", lands: bool = True) -> str:
   return LANE_RULES.replace("<STAND>", stand).replace("<PUSH>", push).replace("<TREE>", tree).replace("<BASE>", base)
 
 
-def lane_brief(ask: str, evidence: str, tree: str, branch: str = "", lands: bool = True) -> str:
-  return lane_rules(tree, branch, lands) + "\nThe ask, in the words of the owner. They stay in this life: quote them in no commit, pull request or issue.\n" + ask + "\n\nThe evidence:\n" + evidence + "\n"
+def lane_brief(id: str, evidence: str, tree: str, branch: str = "", lands: bool = True) -> str:
+  row = next(x for x in lane_rows() if x["id"] == id)
+  return lane_rules(tree, branch, lands) + f"\nThe ask {id}, in the words of the owner, from {row['source']}. They stay in this life: quote them in no commit, pull request or issue.\n{row['ask']}\n\nThe evidence:\n{evidence}\n"
 
 
 def lane_quiet(job: str) -> bool:
@@ -83,17 +129,19 @@ async def lane_settled(job: Act, seconds: float) -> object:
     hung = [x[1] for x in replies if not over(x[1])]
     if same and lane_quiet(job):
       prompt(None, LANE_NUDGE, on=job)
+      prompt(None, f"{job}: code nudged its quiet thread.", to=OPERATOR)
     elif same >= 6 and hung:
       cancel(hung[0], "no end in six looks")
       prompt(None, LANE_HUNG, on=job)
+      prompt(None, f"{job}: code cancelled {hung[0]}, which did not end in six looks.", to=OPERATOR)
       same = 0
     left, words = left - look, len(replies)
   return Refused(f"{job} did not close in {seconds} s")
 
 
-async def lane_open(label: str, ask: str, evidence: str, tree: str, worker: str = "claude-cli:sonnet/high", branch: str = "", source: str = "", patience: float = 3600.0) -> tuple[str, str, str]:
-  c = chain(label, source=source)
-  got = await lane_settled(prompt(tuple[str, str], lane_brief(ask, evidence, tree, branch) + LANE_OPENING, to=worker, on=c), patience)
+async def lane_open(id: str, evidence: str, tree: str, worker: str = "claude-cli:sonnet/medium", branch: str = "", source: str = "", patience: float = 3600.0) -> tuple[str, str, str]:
+  c = chain(id, source=source)
+  got = await lane_settled(prompt(tuple[str, str], lane_brief(id, evidence, tree, branch) + LANE_OPENING, to=worker, on=c), patience)
   if isinstance(got, tuple) and len(got) == 2:
     return str(c), str(got[0]), str(got[1])
   return str(c), "", repr(got)[:600]
@@ -110,8 +158,12 @@ async def lane_checks(tree: str, base: str) -> list[str]:
 
 
 async def lane_break(c: str, tree: str, breakers: list[str]) -> tuple[str, str]:
+  look = f"cd {tree} && git rev-parse HEAD && git status --porcelain"
   for who in breakers:
+    before = (await bash(look, show=HIDDEN, timeout=60.0)).stdout.content
     got = await lane_settled(prompt("str | None", LANE_PROBE, to=who, on=c), 2700.0)
+    if (await bash(look, show=HIDDEN, timeout=60.0)).stdout.content != before:
+      continue
     if isinstance(got, str) and got.strip():
       ran = await bash("cd " + tree + " && " + got, ok=True, show=HIDDEN, timeout=900.0)
       if ran.code != 0:
@@ -123,7 +175,7 @@ async def lane_tip(tree: str) -> str:
   return (await bash("git -C " + tree + " rev-parse HEAD", show=HIDDEN, timeout=30.0)).stdout.content.strip()
 
 
-async def lane_work(c: str, accept: str, first: str, tree: str, worker: str = "claude-cli:sonnet/high", breakers: list[str] | None = None, patience: float = 7200.0, accept_s: float = 3600.0, begun: bool = False) -> tuple[str, str]:
+async def lane_work(c: str, accept: str, first: str, tree: str, worker: str = "claude-cli:sonnet/medium", breakers: list[str] | None = None, patience: float = 7200.0, accept_s: float = 3600.0, begun: bool = False) -> tuple[str, str]:
   base = await lane_tip(tree)
   n = 0
   while n < 16:
@@ -136,7 +188,7 @@ async def lane_work(c: str, accept: str, first: str, tree: str, worker: str = "c
     elif flaws := await lane_checks(tree, base):
       asked = "The acceptance command passes, and these checks of code fail. Fix each one at its cause, commit and push:\n" + "\n".join(flaws)
     else:
-      probe, shown_tail = await lane_break(c, tree, breakers or ["claude-cli:opus/high", "claude-cli:fable/high"])
+      probe, shown_tail = await lane_break(c, tree, breakers or ["claude-cli:opus/high"])
       if not probe:
         return "accepted", accept
       accept = accept + " && ( " + probe + " )"
@@ -150,14 +202,65 @@ async def lane_work(c: str, accept: str, first: str, tree: str, worker: str = "c
   return "blocked", "16 closes of the worker, and the acceptance command still fails"
 
 
-async def lane_land(tree: str) -> tuple[bool, str]:
+async def lane_land(tree: str, verdict: str, branch: str = "") -> tuple[bool, str]:
+  if verdict != "accepted":
+    raise Refused(f"{tree} lands only an accepted item, and its verdict is {verdict}")
   tail = ""
   for _ in range(3):
     ran = await bash(f"cd {tree} && git fetch -q origin && {{ git rebase origin/{LANE_BASE} || {{ git rebase --abort; exit 9; }}; }} && git push origin HEAD:{LANE_BASE}", ok=True, show=HIDDEN, timeout=2700.0)
     tail = ran.stdout.content[-800:]
+    if ran.code == 0 and branch:
+      await bash(f'cd {tree} && test -z "$(git status --porcelain)" && git merge-base --is-ancestor HEAD origin/{LANE_BASE} && cd "$(git rev-parse --git-common-dir)/.." && git worktree remove {tree} && git branch -D {branch}', ok=True, show=HIDDEN, timeout=120.0)
     if ran.code in (0, 9):
       return ran.code == 0, tail
   return False, tail
+
+
+async def lane_item(id: str) -> tuple[str, str]:
+  rows = lane_rows()
+  row = next(x for x in rows if x["id"] == id)
+  tree, branch = row.get("tree", ""), row.get("branch", "")
+  owner = next((x["id"] for x in rows if x["state"] == "running" and x["id"] != id and (tree and x.get("tree") == tree or branch and x.get("branch") == branch)), "")
+  if owner:
+    raise Refused(f"{owner}, which is not over, holds the tree or the branch of {id}")
+  lane_put(id, state="running")
+  worker = row.get("worker") or ("claude-cli:sonnet/high" if row.get("hard") else "claude-cli:sonnet/medium")
+  try:
+    c, reading, command = await lane_open(id, row.get("evidence", ""), tree, worker, branch)
+    accept = row["done"] or (command if reading else "")
+    state, cause = await lane_work(c, accept, "", tree, worker) if accept else ("blocked", command)
+    if state == "accepted":
+      landed, tail = await lane_land(tree, state, branch)
+      state, cause = ("landed", accept) if landed else ("blocked", tail)
+  except Exception as fault:
+    accept, state, cause = row["done"], "blocked", repr(fault)[:600]
+  lane_put(id, state=state, cause=cause, done=accept, ended=clock())
+  return state, cause
+
+
+async def lane_fill() -> list[str]:
+  rows = lane_rows()
+  ended = sorted((x for x in rows if x.get("ended")), key=lambda x: x["ended"])[-3:]
+  if len(ended) == 3 and all(x["state"] == "blocked" for x in ended):
+    if lane_halted != [x["id"] for x in ended]:
+      lane_halted[:] = [x["id"] for x in ended]
+      prompt(None, "The lane starts nothing: " + ", ".join(lane_halted) + " ended blocked in a row.", to=OPERATOR)
+    return []
+  cap = json.loads(read("settings://lane", HIDDEN).content)["cap"]
+  main = await bash("gh run list --repo uael/furb --branch main --workflow gates.yml --limit 1 --json conclusion -q '.[0].conclusion'", ok=True, show=HIDDEN, timeout=60.0)
+  red = main.stdout.content.strip() == "failure"
+  running = sum(x["state"] == "running" for x in rows)
+  started: list[str] = []
+  while running + len(started) < cap and (id := lane_next(red)):
+    lane_put(id, state="running")
+    lane_run(id, f"await lane_item({id!r})")
+    started.append(id)
+  if running or started:
+    if not lane_guard or over(lane_guard[0]):
+      lane_guard[:] = [str(bash("sh script/memwatch.sh", ok=True, show=HIDDEN, timeout=86400.0))]
+  elif lane_guard and not over(lane_guard[0]):
+    cancel(lane_guard[0], "no row runs")
+  return started
 
 
 async def lane_steer(tree: str, ground: str, since: str, overdue: str = "", model: str = "claude-cli:fable/high") -> list[tuple[str, str, str]]:
@@ -175,7 +278,7 @@ def lane_run(label: str, word: str) -> Act:
   if played != kit:
     rung(kit, on=runner)
   lane_runners[label] = (runner, kit)
-  return rung(word, on=runner)
+  return rung(f"LANE_BASE = {LANE_BASE!r}\nLANE_ITEMS = {LANE_ITEMS!r}\n{word}", on=runner)
 
 
 def lane_job(label: str, job: Act, started: float, patience: float) -> Act:
@@ -193,4 +296,5 @@ def lane_state(c: str) -> str:
   replies = [x[1] for x in t if x[0] == "reply"]
   still = {kind: [x[1] for x in t if x[0] == kind and x is get(x[1]) and not over(x[1])] for kind in ("prompt", "bash", "wait", "rung")}
   last = peek(replies[-1], "an open reply") if replies else "no reply"
-  return f"{c} {get(c)[4]!r}: paused={paused(c)} open={still} replies={len(replies)} last word={str(last[1] if isinstance(last, tuple) else last)[-400:]!r}"
+  why = next((x[3] for x in reversed(transcript(c, "pause")) if x[0] == "pause" and x[3:] and covers(x, c)), None)
+  return f"{c} {get(c)[4]!r}: paused={(why or True) if paused(c) else False!r} open={still} replies={len(replies)} last word={str(last[1] if isinstance(last, tuple) else last)[-400:]!r}"

@@ -38,7 +38,7 @@ async def pulling(tmp_path: Path) -> Bench:
 LANE = REPO / ".furb" / "skills" / "lane"
 LANE_ROSTER = [
   [OPERATOR, [], 200000],
-  ["claude-cli:sonnet", ["high"], 1000000],
+  ["claude-cli:sonnet", ["medium", "high"], 1000000],
   ["claude-cli:opus", ["high"], 1000000],
   ["claude-cli:fable", ["high"], 1000000],
 ]
@@ -79,12 +79,14 @@ class Lane(Bench):
     self.origin = tmp.parent / f"{tmp.name}.git"
     gitted(tmp.parent, "init", "-q", "--bare", "-b", "main", str(self.origin))
     gitted(tmp, "init", "-q", "-b", "main")
+    (tmp / ".git" / "info" / "exclude").write_text("bin/\ngh.log\nsays.json\n", encoding="utf-8")
     for key, value in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
       gitted(tmp, "config", key, value)
     gitted(tmp, "commit", "-q", "--allow-empty", "-m", "base")
     gitted(tmp, "remote", "add", "origin", str(self.origin))
     gitted(tmp, "push", "-q", "origin", "main")
     self.kit(self.text)
+    self.sand.files[self.sand.placed(self.root, "settings://lane")] = '{"cap": 2}'
     self.sand.files[self.sand.placed(self.root, "skills://lane/lane.pyi")] = (LANE / "lane.pyi").read_text(encoding="utf-8")
 
   def kit(self, word: str) -> None:
