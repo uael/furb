@@ -1,0 +1,3 @@
+#!/bin/sh
+# A tree whose target is a link to the target that trees shared takes one of its own, as script/own-target.sh says.
+exec sh "$(dirname "$0")/../own-target.sh" "$(git rev-parse --show-toplevel)"

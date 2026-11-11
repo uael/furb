@@ -310,7 +310,9 @@ fix what your change broke, and report what was broken before.
   to the new commit: the `target` of cargo, the `node_modules` of bun, the build of the TypeScript package and the cache
   of the tests of the TUI. Each tree builds in a target of its own: cargo gives a crate of the workspace the same name
   in each tree, so in a target that trees share, a build of one tree made each other tree build its crates again.
-  `script/own-target.sh <tree>` gives a tree whose `target` is a link a copy on write of the target it names, once.
+  `script/own-target.sh <tree>` gives a tree whose `target` is a link a copy on write of the target it names, once,
+  and the hooks `post-checkout`, `post-merge` and `post-rewrite` run it, so a tree of the shared target of before
+  takes its own at its first checkout, merge or rebase of a commit that holds the script.
   Then it runs
   `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value
   stands, so that the hooks of each worktree print only what fails. It copies no `.venv`: it makes the `.venv` of the new tree with

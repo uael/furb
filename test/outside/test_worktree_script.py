@@ -94,6 +94,30 @@ def test_a_tree_whose_target_is_a_link_takes_a_copy_of_it_once(tmp_path: Path) -
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
+def test_a_checkout_a_merge_or_a_rebase_gives_a_tree_with_a_link_to_a_shared_target_its_own(tmp_path: Path) -> None:
+  main = clone_with_origin(tmp_path)
+  (main / "script" / "hooks").mkdir()
+  for name in ("post-checkout", "post-merge", "post-rewrite"):
+    shutil.copy(SCRIPT.with_name("hooks") / name, main / "script" / "hooks" / name)
+  git(main, "add", ".")
+  git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "hooks")
+  git(main, "config", "core.hooksPath", "script/hooks")
+  shared = tmp_path / "shared"
+  shared.mkdir()
+  (shared / "built").write_text("warm")
+  for name, guard in (("plain", ""), ("guarded", "[env]\nFURB_TREE = 1\n")):
+    tree = tmp_path / name
+    git(main, "worktree", "add", "-q", "--detach", str(tree), "HEAD~1")
+    (tree / ".cargo").mkdir()
+    (tree / ".cargo" / "config.toml").write_text(guard)
+    (tree / "target").symlink_to(shared)
+    git(tree, "checkout", "-q", "--detach", "main")
+  assert (tmp_path / "plain" / "target").is_dir() and not (tmp_path / "plain" / "target").is_symlink()
+  assert (tmp_path / "guarded" / "target").is_symlink(), "a tree that tells the trees apart keeps its link"
+  assert sorted(shared.iterdir()) == [shared / "built"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
 def test_success_says_bun_run_build_suffices(tmp_path: Path) -> None:
   main = clone_with_origin(tmp_path)
   got = run(main, tmp_path / "new", "fresh")
