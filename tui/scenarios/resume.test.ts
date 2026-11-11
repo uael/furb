@@ -81,14 +81,18 @@ const SCRIPT = [
   { cue: "Scenario: more.", word: 'n += 1\nnotes = read("notes.md").content\nclose(f"n={n}")' },
 ];
 
+/** The prompts of the life are all done. An answer can stand in the frame before its prompt is done, and a line typed on
+ * an open prompt goes to it as a message of None, which no model answers, so the next line waits for that end. */
+async function settled(window: Window): Promise<void> {
+  const { session } = window;
+  await untilChange(session, () => !session.acts.some((act) => act.kind === "prompt" && !isDone(act)));
+}
+
 /** A life that worked and settled: two messages answered, a command, a write and a read. */
 async function work(window: Window): Promise<void> {
   await window.type("Scenario: work.");
   await window.shows((frame) => frame.includes("n=41"), "the first answer");
-  // The answer can stand in the frame before its prompt is done, and a line typed on an open prompt goes to it as a
-  // message of None, which no model answers, so the next line waits for the end of the prompt.
-  const { session } = window;
-  await untilChange(session, () => !session.acts.some((act) => act.kind === "prompt" && !isDone(act)));
+  await settled(window);
   await window.type("Scenario: more.");
   await window.shows((frame) => frame.includes("n=42"), "the second answer");
 }
@@ -119,6 +123,7 @@ test("a life that quits opens again, and after its end replays from its first en
     const replayed = await Window.open(yard);
     try {
       await same(replayed, before);
+      await settled(replayed);
       await replayed.type("Scenario: more.");
       await replayed.shows((frame) => frame.includes("n=43"), "an answer after the resume");
     } finally {
@@ -139,6 +144,7 @@ test("a life whose host is killed opens again to the same transcript, values and
     const again = await Window.open(yard);
     try {
       await same(again, before);
+      await settled(again);
       await again.type("Scenario: more.");
       await again.shows((frame) => frame.includes("n=43"), "an answer after the kill");
     } finally {

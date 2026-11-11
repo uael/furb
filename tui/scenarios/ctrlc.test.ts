@@ -19,10 +19,12 @@ test("Ctrl+C on a question empties the typed answer, then a second Ctrl+C refuse
       window.screen.mockInput.pressKey(key, modifiers);
       await window.frame();
       expect(window.app.composer.plainText).toBe("");
-      const first = await window.frame();
+      // The footer says what the next press does, once its frame is drawn.
+      const first = await window.shows(
+        (frame) => frame.includes("⌃C refuse"),
+        "the footer of the second press",
+      );
       expect(first).toContain("Ctrlc: which color?");
-      // The footer says what the next press does.
-      expect(first).toContain("⌃C refuse");
       window.screen.mockInput.pressKey(key, modifiers);
       const second = await window.shows((frame) => !frame.includes("Input needed"), "the question refused");
       expect(second).not.toContain("Take back");
