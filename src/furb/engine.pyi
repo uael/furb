@@ -423,7 +423,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   """The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is.
   A rung is an act: the run of one word in the globals of its chain, which the chain has the Kernel run.
   The engine tells what a step raised.
-  A step that raised nothing and debugged nothing tells nothing, and the chain asks no more until a fact comes, as a message.
+  A step that raised nothing and debugged nothing tells nothing, and its end asks its thread again when it leaves no act of that thread open.
   The open of a rung with a word tells that word alone, the code that the rung runs, and the chain binds no paragraph that holds it, so no word that ran runs again.
   A rung with no word tells nothing where it is made, since the chain tells it as the last line of the turn it asks for it with.
   A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its reply and its ledger read the one actor.
@@ -456,7 +456,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   The chain has the Kernel begin it in the module of that chain, and the run carries it forward at the done of every act the word waits for, so that the engine owns the order of it.
   It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, or as cancelled for a CancelledError, which its close then holds none of.
   Of the acts its word made and read at once it tells nothing, since such an act tells of itself or not at all.
-  An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the chain asks the model again when something new comes, as a message.
+  An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the chain asks the model again as after any word that leaves no act of its thread open.
   A replay makes a rung of its own retelling each rung of the donor it keeps.
   A replay makes no rung for a word that is empty, since a rung with no word asks a model for a word.
   What a rung that retells asks is named under the one it retells, so the life answers it with what it answered then and the World is asked nothing twice.
@@ -512,7 +512,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
   The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done.
   A done whose value is None makes no acknowledgment, since it gives the model nothing to read.
-  The end of an act of an open thread makes no acknowledgment: the tell of that act is the fact that asks its thread, once no word of that thread runs, so a word that awaits another act holds it.
+  The end of an act of an open thread makes no acknowledgment: the tell of that act is the fact that asks its thread, once no word that made that act runs, also while a word of the thread awaits another act.
   When that thread is over and the act did not fail, or when that rung answers no prompt, the chain prompts nothing, and what the act told waits for the next advance, which shows it.
   A prompt on a thread is on the chain of that thread, and goes to the actor of the thread unless it names one.
   A prompt on a thread tells the thread it is on under the word thread, as prompt4_thread = 'prompt1'.
@@ -629,10 +629,10 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   Before every reply the chain tells the last paragraph of the turn, whose header says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The advance binds the share of the window that the last reply on the chain read, as rung5_share = 0.25: the tokens that reply read over the window that the roster gives its actor, to two places, and no share before a reply that read a token.
   The advance binds each act that a word of the chain awaits and that is not over, as rung5_waits = ['bash3'], and no waits when no word awaits, so the model sees which acts the words that it wrote before still wait for.
-  The chain asks a prompt again only when something new for its thread came since its last ask: a fact that another speaker said of that thread, or the end of an act that the word did not end itself. Nothing that the last word made, nor what the chain says of that word, is new, so a word that tells nothing, that only sends a message to the operator or that only writes a page ends its step with no second ask, and a message of the operator asks again at once.
-  A word that made nothing hushes its thread when nothing for that thread came during it: the chain advances no rung of that thread until a message on it, a wake or the end of an act of it; a word that the gate refused tells its findings, which ask its thread again, and a third word in a row that made nothing pauses the thread until a wake; each time the chain tells the maker of that prompt, so a model that answers a bare expression, prose and pass in turn is asked three times.
-  The chain asks a thread again only for a fact for that thread, the end of an act of it, a message on it, or its own word refused or raised, and a fact of another thread asks it never.
-  A message on a thread is owed until a reply reads it: when its thread is over, closed before or after the message came, the chain asks the model for that message in a rung that the message makes, so the answer goes on the same thread.
+  A thread is asked again exactly when a new fact for it came since its last ask, so no thread rests with no ask due, no pause and no tell: the end of a step that leaves no act of the thread open, a fact that a speaker said of an act of the thread while no word that made that act runs, a message on it, or its own word refused or raised.
+  A step is barren when it raises or the gate refuses it, when it leaves no act of its thread open and repeats the last word of the thread or tells nothing, as a word that only binds or only sends a note to the operator, and when it leaves a message of a person on its thread unanswered, whatever it leaves open; the third barren step in a row pauses the thread until a wake, with a why that names each message that it leaves unanswered, or says made nothing.
+  The chain asks a thread again only for a fact for that thread, and a fact of another thread asks it never.
+  A message of a person on a thread is owed until a step that read it closes a prompt or prompts a person, and while it is owed its thread is asked again; when its thread is over, closed before or after the message came, the chain asks the model for each message that no reply read in a rung that the message makes, so the answer goes on the same thread.
   When a word ends with no close and tells nothing while a prompt, or an act that the outside started, that it made is not over, the chain asks no rung of its maker until that act ends, and it asks no model while a word of the chain runs, so a word with no close waits for what it made.
   A word that ends with no close after it awaited an act that was not over is asked again at once, whatever the value of that act, as a wait that timed out or a message answered with None, even while an act that it or another word made is open, so the model reads what it awaited, as the answer that the operator waits for.
   A message or a prompt of a person on the chain tells its open, so the chain asks it at once while an act that a word of the chain made runs.

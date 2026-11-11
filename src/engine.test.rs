@@ -1421,7 +1421,7 @@ fn a_word_that_never_yields_raises_at_the_bound_and_the_chain_asks_again() {
 fn a_word_that_never_yields_on_another_chain_raises_and_the_root_goes_on() {
   bounded();
   let word = "c = chain('w')\nr = rung('while True:\\n  pass', on=c)\nawait wait(1, __name__)\nclose(repr(peek(r)))";
-  let mut lived = Lived::new("apart", &[word], true).unwrap();
+  let mut lived = Lived::new("apart", &[word, "pass"], true).unwrap();
   let root = lived.root();
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = lived.engine.prompt(Object::string("str"), with).unwrap();

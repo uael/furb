@@ -104,7 +104,8 @@ test("a step that leaves a message unanswered is asked again, and the message ge
     [
       { cue: "Scenario: work.", word: "await wait(600, __name__)" },
       { cue: "Scenario: use this.", word: "x = 1" },
-      { cue: "unanswered", word: 'close(f"Used it, x = {x}.")' },
+      // The advance stands last in each turn, so only the rung of the third ask tells it apart from the first two.
+      { cue: "#rung18 advance on prompt1", word: 'close(f"Used it, x = {x}.")' },
     ],
     async (window, yard) => {
       await window.type("Scenario: work.");
@@ -118,7 +119,7 @@ test("a step that leaves a message unanswered is asked again, and the message ge
       expect(yard.turns().map((one) => one.cue)).toEqual([
         "Scenario: work.",
         "Scenario: use this.",
-        "unanswered",
+        "#rung18 advance on prompt1",
       ]);
     },
   ));

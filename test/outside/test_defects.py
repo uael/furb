@@ -9,10 +9,6 @@ from furb import engine
 from furb.engine import OPERATOR
 
 
-@pytest.mark.xfail(
-  raises=AssertionError,
-  reason="H1 of the register of defects: a message that a word says on its own thread asks its model again; carrier engine:message-rules",
-)
 async def test_a_message_of_a_model_on_its_own_thread_asks_that_model_no_step_again() -> None:
   """A message that a word of a thread says on that thread is a fact of its own maker, so it asks the model of the
   thread no step again: the word awaits a command, and no second rung of the thread comes."""

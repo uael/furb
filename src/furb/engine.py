@@ -303,18 +303,9 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
       while crafted(id):
         yield {"rung"}
     yield opened(id, named, message=message, thread=thread)
-    a: tuple = ()
     while not says:
-      got = a[:1] == ("done",) and get(a[1])
-      heard = got and prompted(a[1]) and got[3:5] == (id, "None")
-      asks and not (
-        paused(id)
-        or any(
-          id in x[2:4] and not over(x[1]) and not (heard and any(y[2] == x[1] for y in transcript(id, "reply")))
-          for x in transcript(id, "rung")
-        )
-      ) and rung(to=to)
-      a = yield {id}
+      asks and not (paused(id) or any(id in x[2:4] and not over(x[1]) for x in transcript(id, "rung"))) and rung(to=to)
+      yield {id}
     yield "done", id, None
 
   return act("prompt", on, controlled(ear), named, message, to)
@@ -334,8 +325,18 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
-    blocked, running, waiting, last, heard, unread, seen, hushed = set(), {}, {}, standing(), [], set(), set(), {}
-    step = news = ran = reply = note = to = ""
+    blocked, running, waiting, last, heard, came, owed, barren, wrote = (
+      set(),
+      {},
+      {},
+      standing(),
+      [],
+      {},
+      {},
+      Counter(),
+      {},
+    )
+    step = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(went):
@@ -354,10 +355,14 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             y[3] == k and y[2] and rung(y[2], to=stood)
       return went
 
-    def mark(of, loud=False):
-      q = get(of) or [""] * 5
-      for g in {*lineage(get(q[2])[4] if q[0] == "wants" else q[4] if q[0] == "run" else of), q[3]}:
-        prompted(g) and (loud and hushed.pop(g, 0), hushed.get(g, 0) <= 1 and unread.add(g))
+    def thread(of):
+      return next((g for g in [*lineage(get(of)[2]), get(of)[3]] if prompted(g)), "")
+
+    def busy(of):
+      return any(
+        x != of and under(x, of) and not over(x) and (x in ladder or get(x)[0] in ("prompt", "bash"))
+        for x in listening()
+      )
 
     def bind(whose):
       w = "\n\n".join(heard)
@@ -443,10 +448,9 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           transcript(id, "wants") + [x[1] for x in transcript(id, "close") if scope(x[2]) == id != x[2]]
         ):
           scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
-          value is None or isinstance(value, CancelledError) or (
-            mark(about, True),
-            isinstance(value, Exception) and (news := (about + " done", maker)),
-          )
+          if isinstance(value, Exception):
+            ours = thread(about)
+            (over(ours) and prompt(None, about + " done", on=ours)) or came.setdefault(ours, []).append(about + " done")
         case ("done", _, by, Refused() as why) if (
           r[0] == "reply"
           and r[3] != id
@@ -454,27 +458,22 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           and (maker := (get(p := get(r[2])[2]) or a)[2]) in running
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
-      a[0] == "wake" and [mark(x, True) for x in seen if covers(a, x)]
+      a[0] == "wake" and [barren.pop(x) for x in [*barren] if covers(a, x)]
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
         waiting.pop(a[1], None)
-      if a[0] == "done" and (
-        r[0] == "wants"
-        or (
-          question(("rung", m := r[2]))
-          and not running.get(m)
-          and not (get(m)[4] or isinstance(a[3], CancelledError | None | tuple))
-        )
-      ):
-        mark(a[1], True)
-      if a[0] == "done" and prompted(p := r[2]) and not over(p):
-        hushed[p] = hushed.get(p, 0) + 1 if a[1] in (ran, *blocked) else 0
-        if hushed[p] > (p in unread) * 2:
-          unread.discard(p)
-          hushed[p] // 3 and pause(p, "made nothing")
-          hushed[p] = 2
-          ran = yield "tell", get(p)[2], [headed(p, "asked no more until a fact comes")]
+      if a[0] == "done" and a[1] in ladder and prompted(p := r[2]) and not over(p):
+        made = transcript(id, a[1])
+        answered = any(x[0] == "close" or (x[0] == "prompt" and operated(x[6])) for x in made)
+        broke = isinstance(a[3], Exception)
+        owed[p] = owed.get(p, []) * (not answered)
+        fruit = not broke and (busy(p) or (ladder[a[1]] != wrote.get(p) and any(x[0] == "tell" for x in made)))
+        barren[p] = (barren[p] + 1) * bool(owed[p] or not fruit)
+        wrote[p] = ladder[a[1]]
+        (owed[p] or broke) and came.setdefault(p, [])
+        if barren[p] // 3:
+          pause(p, owed[p] or "made nothing")
       match a:
         case ("carried", *_):
           top = ""
@@ -506,9 +505,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           heard.append("\n".join(notes))
           if a is note:
             note = bind(step)
-          elif not (a is ran or (not over(about) and question(("rung", r[2]))) or r[0] == "write"):
-            mark(about, prompted(about))
-          ran = ""
+          elif not any(x in running and running[x] is not False for x in lineage(about)):
+            came.setdefault(thread(about), [])
         case ("done", about, *_) if about == note and step in waiting:
           with site.set(step):
             reply = act("reply", id, controlled(idle), to)
@@ -516,7 +514,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           try:
             rid == step or bind(rid)
             ladder[(donor := r[5]) or rid] = word
-            found = (ran := tells(rid) and rid) and gate(word)
+            found = tells(rid) and gate(word)
             if not found:
               running[rid] = act("run", id, None, rid, unquoted(word), donor)
           except Refused as e:
@@ -527,23 +525,33 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             close(Refused(*found), rid)
         case ("done", _, "", Refused() as why) if r[0] == "reply":
           pause(id, why)
+        case ("prompt", m, by, p, "None", *_) if prompted(p) and operated(by):
+          came.setdefault(p, []).append(m)
         case ("done", about, *_) if prompted(about):
-          owed = []
-          for fact in reading(id):
-            owed = (
-              []
-              if fact[0] == "reply"
-              else owed + [fact[1]] * (fact is get(fact[1]) and fact[3:5] == (about, "None") and operated(fact[2]))
-            )
-          for message in owed:
-            with site.set(message):
-              rung(to=r[6])
+          for message in came.pop(about, []):
+            if prompted(message):
+              with site.set(message):
+                rung(to=r[6])
+            else:
+              prompt(None, message, on=about)
       if r[0] == "run":
-        running[r[4]] = a[0] != "done"
+        running[r[4]] = a[0] != "done" or (question(("rung", r[4])) and not over(r[4]))
       elif r[0] == "wants":
         running[get(r[2])[4]] = a[0] != "started"
+      elif r[0] == "rung" and a[0] == "done":
+        running[a[1]] = False
       if any(running.values()):
         continue
+      for lone in [
+        x
+        for x in came
+        if scope(x) == id
+        and not over(x)
+        and x not in {y[2] for y in transcript(id, "rung") if not (over(y[1]) or y[1] in ladder or y[4])}
+      ]:
+        with site.set(lone):
+          made = rung(to=get(lone)[6])
+        waiting[made] = running[made] = ""
       if (step not in waiting or paused(step)) and (
         (
           got := next(
@@ -554,7 +562,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
                 paused(x)
                 or over(x)
                 or x in {y[2] for y in transcript(id, "reply") if not over(y[1])}
-                or (prompted(t := get(x)[2]) and t in seen and t not in unread)
+                or (prompted(t := get(x)[2]) and t not in came and busy(t))
               )
             ),
             "",
@@ -566,19 +574,13 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         if offered(last[0], to) is None:
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
-          seen.add(maker)
-          unread.discard(maker)
+          owed[maker] = owed.get(maker, []) + [x for x in came.pop(maker, []) if prompted(x)]
           note = yield told(
             step,
             "advance on " + maker,
             share=filled(reply) or None,
             waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
           )
-          news = ""
-      if news and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
-        ours = get(news[1])[2]
-        prompted(ours) and over(ours) and prompt(None, news[0], on=ours)
-        news = ""
 
   return act("chain", on, ear, label, source, *[kept] * (kept is not None))
 

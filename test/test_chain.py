@@ -1370,12 +1370,13 @@ async def test_the_advance_binds_each_act_that_a_word_of_the_chain_awaits() -> N
 async def test_the_chain_advances_no_rung_after_a_word_that_told_nothing_while_an_act_of_a_word_is_open() -> None:
   """When a word ends with no close and tells nothing while a prompt, or an act that the outside started, that it made is not over, the chain asks no rung of its maker until that act ends, and it asks no model while a word of the chain runs, so a word with no close waits for what it made."""
   _, log, root = born("x = bash('slow')\nawait x", "y = 1", "y = 2", "close(2)", auto=False)
-  engine.prompt(int, "count", on=root)
+  first = engine.prompt(int, "count", on=root)
   await settle()
   two = engine.prompt(int, "tally", on=root)
-  await settle()
-  await settle()
-  assert (len(said(log, "reply")), engine.peek(two)) == (2, None)
+  for _ in range(4):
+    await settle()
+  asked = [engine.get(engine.get(a[2])[2])[1] for a in said(log, "reply")]
+  assert (len(asked), asked.count(first), engine.peek(two)) == (4, 1, 2)
   _, log, root = born("x = bash('slow')", "close(1)", auto=False)
   one = engine.prompt(int, "count", on=root)
   await settle()
@@ -1392,9 +1393,13 @@ async def test_the_chain_advances_no_rung_after_a_word_that_told_nothing_while_a
   await settle()
   for grace in said(log, "wait"):
     world_says("done", grace[1], None)
-  assert await one == 1
+  for _ in range(4):
+    await settle()
   (other,) = [a[1] for a in said(log, "prompt") if a[3] != root]
-  assert (len([a for a in said(log, "reply") if a[3] == root]), engine.over(other)) == (2, False)
+  assert (len([a for a in said(log, "reply") if a[3] == root]), engine.peek(one, ...)) == (1, ...)
+  engine.close(5, other)
+  assert await one == 1
+  assert len([a for a in said(log, "reply") if a[3] == root]) == 2
 
 
 async def test_a_word_that_awaited_an_act_is_asked_again_at_once() -> None:
@@ -1462,26 +1467,26 @@ async def test_the_chain_asks_a_new_prompt_while_a_word_awaits_a_wait_that_is_no
   assert two in [engine.get(a[2])[2] for a in said(log, "reply")]
 
 
-async def test_the_chain_asks_again_only_when_something_new_came_since_its_last_ask() -> None:
-  """The chain asks a prompt again only when something new for its thread came since its last ask: a fact that another speaker said of that thread, or the end of an act that the word did not end itself. Nothing that the last word made, nor what the chain says of that word, is new, so a word that tells nothing, that only sends a message to the operator or that only writes a page ends its step with no second ask, and a message of the operator asks again at once."""
+async def test_a_thread_is_asked_again_exactly_when_a_new_fact_for_it_came_since_its_last_ask() -> None:
+  """A thread is asked again exactly when a new fact for it came since its last ask, so no thread rests with no ask due, no pause and no tell: the end of a step that leaves no act of the thread open, a fact that a speaker said of an act of the thread while no word that made that act runs, a message on it, or its own word refused or raised."""
   words = (
     "x = read('/w/a.txt', show=HIDDEN)",
     "prompt(None, 'on it', to=OPERATOR)",
     "write(Text('/w/page.md', 'notes'))",
+    "raise ValueError('x')",
   )
   for word in words:
     _, log, root = born(word, "close(1)")
-    one = engine.prompt(int, "count", on=root)
-    for _ in range(4):
-      await settle()
-    assert (len(said(log, "reply")), engine.peek(one, ...)) == (1, ...), word
-    assert not [a for a in said(log, "tell") if "told nothing" in a[3][0]], word
-    engine.prompt(None, "go on", on=one)
-    assert await one == 1
+    assert await engine.prompt(int, "count", on=root) == 1, word
     assert len(said(log, "reply")) == 2, word
-  _, log, root = born("close(1)", "raise ValueError('x')", "close(2)")
-  assert await engine.prompt(int, "", on=root) == 1
-  assert await engine.prompt(int, "", on=root) == 2
+  _, log, root = born("await wait(600, __name__)", "close(2)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(4):
+    await settle()
+  assert (len(said(log, "reply")), engine.peek(one, ...), engine.paused(one)) == (1, ..., False)
+  engine.prompt(None, "go on", on=one)
+  assert await one == 2
+  assert len(said(log, "reply")) == 2
 
 
 async def test_the_chain_holds_the_text_of_each_paragraph_told_on_it() -> None:
@@ -1663,46 +1668,45 @@ async def test_a_statement_that_the_model_of_a_rung_writes_runs_after_the_told_r
   assert engine.module(root)["k"] == "root"
 
 
-async def test_a_word_that_made_nothing_hushes_its_thread_and_a_third_word_in_a_row_that_made_nothing_pauses_it_until_a_wake() -> (
-  None
-):
-  """A word that made nothing hushes its thread when nothing for that thread came during it: the chain advances no rung of that thread until a message on it, a wake or the end of an act of it; a word that the gate refused tells its findings, which ask its thread again, and a third word in a row that made nothing pauses the thread until a wake; each time the chain tells the maker of that prompt, so a model that answers a bare expression, prose and pass in turn is asked three times."""
-  _, log, root = born("('a', 1)", "The answer stands.", "pass", "pass", "close(1)", auto=False)
+async def test_a_step_is_barren_and_the_third_barren_step_in_a_row_pauses_the_thread_until_a_wake() -> None:
+  """A step is barren when it raises or the gate refuses it, when it leaves no act of its thread open and repeats the last word of the thread or tells nothing, as a word that only binds or only sends a note to the operator, and when it leaves a message of a person on its thread unanswered, whatever it leaves open; the third barren step in a row pauses the thread until a wake, with a why that names each message that it leaves unanswered, or says made nothing."""
+  _, log, root = born("('a', 1)", "The answer stands.", "pass", "close(1)", auto=False)
   one = engine.prompt(int, "count", on=root)
   for _ in range(4):
     await settle()
-  told = [a for a in said(log, "tell") if "asked no more until a fact comes" in a[3][0]]
-  assert (len(said(log, "reply")), engine.peek(one, ...), engine.paused(one), len(told)) == (3, ..., True, 1)
-  engine.wake(one)
-  for _ in range(4):
-    await settle()
-  assert (len(said(log, "reply")), engine.paused(one)) == (4, False)
-  engine.prompt(None, "go on", on=one)
-  for _ in range(4):
-    await settle()
-  assert (len(said(log, "reply")), engine.peek(one)) == (5, 1)
-  word = "x = await prompt(int, 'q', on=chain('two'))"
-  _, log, root = born(word, word, "close(x)", auto=False)
-  one = engine.prompt(int, "count", on=root)
-  for n in (3, 4):
-    await settle()
-    await settle()
-    (sub,) = [a[1] for a in said(log, "prompt") if a[3] != root and not engine.over(a[1])]
-    engine.close(n, sub)
-    await settle()
-    await settle()
-  assert (len([a for a in said(log, "reply") if a[3] == root]), engine.peek(one)) == (3, 4)
-  ask = "x = prompt(str, 'q', to=OPERATOR, on=chain('two'))\ndebug(t'asked')"
-  _, log, root = born(ask, "The answer stands.", "It stands.", "It still stands.", "close(1)", auto=False)
-  one = engine.prompt(int, "count", on=root)
-  for _ in range(4):
-    await settle()
-  assert (len([a for a in said(log, "reply") if a[3] == root]), engine.peek(one, ...)) == (4, ...)
-  (sub,) = [a[1] for a in said(log, "prompt") if a[3] != root]
-  engine.close("yes", sub)
+  assert (len(said(log, "reply")), engine.peek(one, ...), engine.paused(one)) == (3, ..., True)
+  assert said(log, "pause")[-1][3] == "made nothing"
   engine.wake(one)
   assert await one == 1
-  assert len([a for a in said(log, "reply") if a[3] == root]) == 5
+  assert len(said(log, "reply")) == 4
+  _, log, root = born(*["debug(t'{1}')"] * 6, auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(4):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one)) == (4, True)
+  _, log, root = born(*["close('a')"] * 6, auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(4):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one)) == (3, True)
+  _, log, root = born("await wait(600, __name__)", "pass", "pass", "pass", "close(2)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  await settle()
+  note = engine.prompt(None, "go on", on=one)
+  for _ in range(4):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one), said(log, "pause")[-1][3]) == (4, True, [note])
+  engine.wake(one)
+  assert await one == 2
+  sand, log, root = born(
+    "made = [bash('slow') for _ in range(3)]\nawait wait(600, __name__)", *["pass"] * 4, auto=False
+  )
+  one = engine.prompt(int, "count", on=root)
+  await settle()
+  for command in said(log, "bash"):
+    sand.exits(command[1], 0)
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one)) == (4, False)
 
 
 async def test_a_root_that_holds_no_open_after_its_paragraph_chain_or_no_stand_before_its_open_gives_no_setup_to_such_a_chain_so_the_chain_holds_no_open_rung_of_the_root_and_its_own_rungs_run() -> (
@@ -1775,8 +1779,8 @@ async def test_a_word_that_only_debugs_tells_what_it_debugged_so_the_chain_asks_
   assert len(said(log, "reply")) == 2
 
 
-async def test_a_message_on_a_thread_is_owed_until_a_reply_reads_it() -> None:
-  """A message on a thread is owed until a reply reads it: when its thread is over, closed before or after the message came, the chain asks the model for that message in a rung that the message makes, so the answer goes on the same thread."""
+async def test_a_message_of_a_person_on_a_thread_is_owed_until_a_step_that_read_it_answers_it() -> None:
+  """A message of a person on a thread is owed until a step that read it closes a prompt or prompts a person, and while it is owed its thread is asked again; when its thread is over, closed before or after the message came, the chain asks the model for each message that no reply read in a rung that the message makes, so the answer goes on the same thread."""
   sand, log, root, act, _, reply = await waiting()
   second = engine.prompt(None, "second", on=act)
   await settle()
@@ -1798,11 +1802,17 @@ async def test_a_message_on_a_thread_is_owed_until_a_reply_reads_it() -> None:
   for _ in range(6):
     await settle()
   assert (engine.peek(act), [a for a in said(log, "rung") if a[2] == read]) == (4, [])
+  sand, log, root = born("await wait(600, __name__)", "x = 1", "close(2)", auto=False)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  engine.prompt(None, "use this", on=act)
+  assert await act == 2
+  assert len(said(log, "reply")) == 3
 
 
 async def test_a_thread_is_asked_again_only_for_a_fact_of_its_own() -> None:
-  """The chain asks a thread again only for a fact for that thread, the end of an act of it, a message on it, or its own word refused or raised, and a fact of another thread asks it never."""
-  sand, log, root = born("x = 1", "y = await bash('slow')", "close(2)", "close(1)", auto=False)
+  """The chain asks a thread again only for a fact for that thread, and a fact of another thread asks it never."""
+  sand, log, root = born("await wait(600, __name__)", "y = await bash('slow')", "close(2)", auto=False)
   one = engine.prompt(int, "one", on=root)
   await settle()
   two = engine.prompt(int, "two", on=root)
@@ -1811,7 +1821,7 @@ async def test_a_thread_is_asked_again_only_for_a_fact_of_its_own() -> None:
   assert await two == 2
   await settle()
   asked = [engine.get(engine.get(a[2])[2])[1] for a in said(log, "reply")]
-  assert (asked.count(one), engine.peek(one, ...)) == (1, ...)
+  assert (asked.count(one), engine.peek(one, ...), engine.paused(one)) == (1, ..., False)
 
 
 async def test_each_scan_of_all_its_facts_that_the_ear_of_a_chain_makes_at_a_fact_reads_its_reading(

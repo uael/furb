@@ -332,9 +332,9 @@ async def test_a_word_written_to_its_door_is_a_rung_of_it() -> None:
   await settle()
   engine.write(Text(act, "a = 1\nclose(5)"), on=root)
   await settle()
-  first = next(a[1] for a in said(log, "rung") if a[2] == act)
+  first, second = [a[1] for a in said(log, "rung") if a[2] == act][:2]
   bind = fresh(root, prompted(act, "int", "count"), f"#{first} advance on {act}")
-  assert (await act) == 5 and ran(log) == [bind, "a = 1", "close(5)"]
+  assert (await act) == 5 and ran(log) == [bind, "a = 1", f"#{second} advance on {act}", "close(5)"]
   assert [a[2] for a in said(log, "rung") if a[4] == "close(5)"] == [act]
 
 
@@ -517,17 +517,19 @@ async def test_a_done_whose_value_is_none_makes_no_acknowledgment() -> None:
 
 
 async def test_the_end_of_an_act_of_an_open_thread_makes_no_acknowledgment() -> None:
-  """The end of an act of an open thread makes no acknowledgment: the tell of that act is the fact that asks its thread, once no word of that thread runs, so a word that awaits another act holds it."""
-  sand, log, root = born("x = bash('slow')\nawait bash('slow')", "close(3)", auto=False)
+  """The end of an act of an open thread makes no acknowledgment: the tell of that act is the fact that asks its thread, once no word that made that act runs, also while a word of the thread awaits another act."""
+  sand, log, root = born("x = bash('slow')\nawait bash('slow')", "pass", "close(3)", auto=False)
   task = engine.prompt(int, "task", to="m/high", on=root)
   await settle()
   first, second = (one[1] for one in said(log, "bash"))
   sand.exits(first, 0)
   await settle()
-  assert [one for one in said(log, "prompt") if one[4] == "None"] == [] and len(said(log, "reply")) == 1
+  assert [one for one in said(log, "prompt") if one[4] == "None"] == [] and len(said(log, "reply")) == 2
+  await settle()
+  assert len(said(log, "reply")) == 2 and not engine.paused(task)
   sand.exits(second, 0)
   assert await task == 3
-  assert len(said(log, "reply")) == 2
+  assert len(said(log, "reply")) == 3
 
 
 async def test_when_that_thread_is_over_or_that_rung_answers_no_prompt_the_chain_prompts_nothing() -> None:
