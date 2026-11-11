@@ -163,19 +163,8 @@ export class Walk {
     readonly out: string,
     readonly journey: string,
   ) {}
-  /** The frame of the window, drawn again until two in a row are the same: the layout of the feed settles over a few
-   * frames, and a frame that comes before it is no frame of the step. */
-  async drawn(): Promise<string> {
-    let frame = await this.painted();
-    for (let again = 0; again < 40; again++) {
-      const next = await this.painted();
-      if (next === frame) break;
-      frame = next;
-    }
-    return frame;
-  }
   /** The frame of the window, drawn once its code has its colors. */
-  private async painted(): Promise<string> {
+  async drawn(): Promise<string> {
     const { screen } = this.view;
     const app = this.view.app();
     app.render();
@@ -256,7 +245,13 @@ export class Walk {
       if (still && pressed === before && (VIEWS.has(run) || TOGGLES.has(run)))
         this.find(this.last, "dead", `${label} changed nothing on the screen`);
       if (TOGGLES.has(run)) {
-        const again = await this.step(`press ${label} again`, () => this.press(on));
+        let again = await this.step(`press ${label} again`, () => this.press(on));
+        // The layout of the feed settles over a few frames after the sidebar comes back, so a frame that differs is
+        // drawn again before it counts as a toggle that did not undo.
+        for (let tries = 0; tries < 40 && still && again !== before; tries++) {
+          await Bun.sleep(25);
+          again = await this.drawn();
+        }
         if (still && again !== before)
           this.find(
             this.last,
