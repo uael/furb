@@ -184,7 +184,7 @@ async def test_task_context_under_a_262144_token_window_triggers_compaction(
   sand, root, _ = skill_fixtures.compacting(tmp_path)
   await engine.rung("compacted()", on=root)
   sand.cost = (160000, 0, 0, 0, 0.0)
-  sand.script[root] = ["x = 1\ndebug(t'go')", "close(x)"]
+  sand.script[root] = ["x = 1\ndebug(t'go')", "SHARE = 2\nclose(([], ''))", "close(x)"]
   assert await engine.prompt(int, "past the share", on=root) == 1
   await settle()
-  assert engine.get("chain2") is not None
+  assert [a[4] for a in engine.transcript(root) if a[0] == "prompt" and a[2] == "compacted1"] == ["tuple"]
