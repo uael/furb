@@ -6,7 +6,9 @@ and the model reads the extension in its turns as it reads its own work. In the 
 holds, each extension is two turns: a turn of the model whose word is `rung(read('<file>', HIDDEN).content)`, and the
 turn of the rung that this word made, which holds the code of the file alone, since that rung runs it. The engine
 crafts these turns itself from the extensions that the World gives in the standing. The file is a copy of the
-word of the extension in `words/<name>/` of the config directory of the user, which holds no import of furb.
+word of the extension in `words/<name>/<digest>/` of the config directory of the user, which holds no import of furb.
+The digest is the start of the sha256 of the word, so a life of another build in the same config directory writes its
+own word beside this one, and never over the file that this life reads.
 
 An extension never goes into the system prompt. So a chain that takes one only grows at its end, and what a provider
 caches of the chain stays valid.

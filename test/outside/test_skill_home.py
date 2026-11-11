@@ -109,7 +109,7 @@ def names(path: Path) -> list[str]:
 
 def test_each_name_in_code_says_skill_and_the_name_of_the_ear_that_a_record_holds_stands_as_a_literal() -> None:
   """A skill has one name in code: no name of Rust, Python or TypeScript says extension. The ear extensions, the fact
-  enable and words/<name>/<file> are names that each record holds, and the code gives them as literals alone."""
+  enable and words/<name>/<digest>/<file> are names that each record holds, and the code gives them as literals alone."""
   tracked = subprocess.run(  # noqa: S603
     [shutil.which("git") or "git", "ls-files", "*.rs", "*.py", "*.pyi", "*.ts", "*.cts"],
     cwd=ROOT,

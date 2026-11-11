@@ -11,8 +11,8 @@ use std::{
 };
 
 use super::{
-  Enabled, Part, Places, Skill, configs, configured, definitions, enabled, enabled_by, frontmatter,
-  load, parts, played, projected, reloads, telling, turned, word,
+  COPY_DIGEST, Enabled, Part, Places, Skill, configs, configured, copy, definitions, digest,
+  enabled, enabled_by, frontmatter, load, parts, played, projected, reloads, telling, turned, word,
 };
 use crate::testing::Yard;
 use crate::value::{ObjectRef, Text, entry};
@@ -67,7 +67,8 @@ fn places(at: &Path) -> Places {
 /// The extension that a folder loads, with the file of its word: the copy of that word in the
 /// config directory of the test, whatever the folder.
 fn filed(one: Skill, at: &Path) -> Skill {
-  let copy = at.join("user").join("words").join("note").join("note.py");
+  let held = &digest(&one.word)[..COPY_DIGEST];
+  let copy = at.join("user").join("words").join("note").join(held).join("note.py");
   Skill { file: copy.display().to_string(), ..one }
 }
 
@@ -595,11 +596,14 @@ fn a_skill_of_the_config_of_the_user_goes_through_the_same_check_and_a_refused_w
     )]
   );
   assert!(!user.join("words").join("mine").exists(), "a refused word leaves no copy");
-  folder(&user.join("mine"), &manifest, "def noted(template: str) -> str:\n  return template\n");
+  let noted = "def noted(template: str) -> str:\n  return template\n";
+  folder(&user.join("mine"), &manifest, noted);
   let (on, refused) = configured(&places, &project).unwrap();
-  assert!(refused.is_empty() && on.iter().any(|one| one.name == "mine"));
+  let mine = on.iter().find(|one| one.name == "mine").map(|one| one.word.as_str());
+  assert_eq!((refused, mine), (Vec::<String>::new(), Some(noted.trim_end())));
+  let held = &digest(noted.trim_end())[..COPY_DIGEST];
   assert!(
-    user.join("words").join("mine").join("note.py").is_file(),
+    user.join("words").join("mine").join(held).join("note.py").is_file(),
     "a word that passes has its copy"
   );
 }
@@ -1138,4 +1142,15 @@ fn a_write_of_a_config_with_the_former_key_turns_nothing_on_and_says_that_the_ke
   let told =
     format!("The key extensions of {} is now skills, so it turns nothing on", file.display());
   assert_eq!(refused, [told]);
+}
+
+#[test]
+fn a_word_that_differs_has_a_copy_of_its_own_which_no_other_word_writes_over() {
+  let at = place("copies");
+  let places = places(&at);
+  let one = copy("note", "note.py", "x = 1\n", &places);
+  let other = copy("note", "note.py", "x = 2\n", &places);
+  let read = |path: &str| fs::read_to_string(path).unwrap();
+  assert_eq!((read(&one), read(&other)), ("x = 1\n".to_owned(), "x = 2\n".to_owned()));
+  assert_eq!(copy("note", "note.py", "x = 1\n", &places), one);
 }

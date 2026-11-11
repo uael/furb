@@ -323,7 +323,7 @@ impl Skill {
   /// The saying that enables the extension, with the program of its process when it gives one.
   fn said(&self, program: Option<&str>) -> Fact {
     let rooted = if self.root { ROOTED } else { "" };
-    let digest = format!("{:x}", Sha256::digest(self.word.as_bytes()));
+    let digest = digest(&self.word);
     let words: [&str; PROGRAM] = [
       self.name.as_str(),
       self.word.as_str(),
@@ -432,14 +432,16 @@ fn names() -> Vec<(String, bool)> {
   named.collect()
 }
 
-/// The path of the copy of the word of an extension, `words/<name>/<file>` in the config directory,
-/// with `~` for the home, which it writes from the word when that copy differs, or nothing when the
-/// directory takes no copy. The setup reads this copy and not the file of the source, since the
-/// source imports from `furb.engine`, and a word of a chain imports nothing of furb. Each life of a
-/// config directory shares the copy, so a life of another build in the same directory can write
-/// another word there: a host or a test that runs builds at once gives each a directory of its own.
+/// The path of the copy of the word of an extension, `words/<name>/<digest>/<file>` in the config
+/// directory, with `~` for the home, which it writes from the word when that copy differs, or
+/// nothing when the directory takes no copy. The setup reads this copy and not the file of the
+/// source, since the source imports from `furb.engine`, and a word of a chain imports nothing of
+/// furb. The digest is the start of the sha256 of the word, so each word has a file of its own: a
+/// life of another build that shares the config directory writes its word beside this one, and
+/// never over the file that the setup of this life reads.
 pub(crate) fn copy(name: &str, file: &str, text: &str, places: &Places) -> String {
-  let copied = places.config.join("words").join(name).join(file);
+  let held = &digest(text)[..COPY_DIGEST];
+  let copied = places.config.join("words").join(name).join(held).join(file);
   if fs::read_to_string(&copied).ok().as_deref() != Some(text)
     && copied
       .parent()
@@ -448,6 +450,14 @@ pub(crate) fn copy(name: &str, file: &str, text: &str, places: &Places) -> Strin
     return String::new();
   }
   files::tilded(&copied, places.home.as_deref())
+}
+
+/// The hex digits of the sha256 of a word that name the folder of its copy.
+const COPY_DIGEST: usize = 16;
+
+/// The sha256 of a word in hex.
+fn digest(word: &str) -> String {
+  format!("{:x}", Sha256::digest(word.as_bytes()))
 }
 
 /// The extension in a folder, under the name that its config gives it: its manifest, whose name
