@@ -63,7 +63,9 @@ test("/mcp reload lists again the tools that a server changed, and the changed t
     // The word that closes the prompt shows its text before the prompt is done, and a line typed on a prompt that is
     // open goes to it as a message of None, so the next line waits for the end of the prompt.
     const { session } = window;
-    await until(session, () => !session.acts.some((act) => act.kind === "prompt" && !isDone(act)));
+    const settled = () =>
+      until(session, () => !session.acts.some((act) => act.kind === "prompt" && !isDone(act)));
+    await settled();
     await window.type("Scenario: list.");
     const before = await window.shows(
       (frame) => frame.includes("hello(): Tool hello."),
@@ -81,11 +83,14 @@ test("/mcp reload lists again the tools that a server changed, and the changed t
     await window.shows((frame) => frame.includes("MCP servers"), "the dialog of the servers");
     window.screen.mockInput.pressEscape();
     await window.shows((frame) => !frame.includes("MCP servers"), "the dialog closed");
+    await settled();
     await window.type("Scenario: list.");
     await window.shows(
       (frame) => frame.includes("fresh(): Tool fresh."),
       "the tool fresh that the reload lists",
     );
+    // The word of the list shows the tools before its prompt is done, so the call waits for that end, as the list did.
+    await settled();
     await window.type("Scenario: call.");
     await window.shows((frame) => frame.includes("called fresh"), "the call of the tool fresh");
   } finally {
