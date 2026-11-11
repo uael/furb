@@ -454,6 +454,11 @@ fix what your change broke, and report what was broken before.
   machine, and which the gates hold on Linux. `FURB_BENCH_JSON` names a file that takes the measures of each run, and
   `FURB_BENCH_FACTS` sets the size of the long life. It measures the crate in the release profile alone, and refuses
   another: run `bun run build --release` before it.
+- `bun run memory <record> [bound in MB]`: the heap that a window holds on a long record. It copies the record, opens
+  the copy in a daemon of its own, and scrolls the feed to its start and back. It fails when the heap passes the bound,
+  512 MB by default, or when the scroll back loses the start of the feed. `tui/test/window-heap.test.ts` takes the same
+  measure, `tui/script/heap.ts`, on a life of twelve commands that print a megabyte each, and fails when the heap of the
+  window grows by more than 40 MB: the gates hold the bound of the memory of a window with it.
 - `bun run screenshots` and `bun run animation`: draw `docs/screenshots/` and `docs/furb.gif` again from the real
   renderer. Run both after a change that a screen shows, and read each capture. Do not commit them: at most once an hour,
   on a new head of `w/converge`, `.github/workflows/gallery.yml` draws both again on a runner of CI and keeps one pull

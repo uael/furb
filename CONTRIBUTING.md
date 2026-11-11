@@ -201,6 +201,7 @@ Run the gates that your change touches before you push. The hooks run most of th
 | `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` | The gates of the crate and of the command line. |
 | `bun run check`, `bun run lint` and `bun run test` | The type check, the lint and the tests of the TypeScript side. |
 | `bun run bench` | The speed of the TUI against its budget, after a change of the TUI. |
+| `bun run memory <record>` | The heap of a window on a long record, which a test of the TUI holds on a life of its own. |
 
 Each pull request runs the gates of `.github/workflows/gates.yml` on Linux, on macOS and on Windows.
 
