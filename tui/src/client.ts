@@ -304,6 +304,12 @@ export function daemon(role?: Role): Daemon {
   return shared;
 }
 
+/** The daemon that holds the lives of a window: the one of the machine that the window names, as host:port, and the
+ * one of this machine when it names none. A window asks no other daemon. */
+export function reach(address?: string): Daemon {
+  return address ? machine(address) : daemon();
+}
+
 /** A request of a model of a life, as the daemon asks the window that answers it. */
 type Asked = { actor: string; chain: string; messages: unknown[] };
 
