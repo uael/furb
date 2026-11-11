@@ -51,14 +51,15 @@ def test_each_hook_of_the_tests_starts_at_once_while_the_memory_is_tight(tmp_pat
     got = subprocess.run(words, cwd=ROOT, env=env, timeout=20, capture_output=True, text=True, check=False)  # noqa: S603
     assert got.returncode == 0, name
   lines = calls.read_text(encoding="utf-8").splitlines()
-  # The hook of cargo test builds first, outside the limit of its time, then runs the tests under it.
-  assert [line.split()[:2] for line in lines] == [
-    ["uv", "run"],
-    ["cargo", "test"],
-    ["cargo", "test"],
-    ["cargo", "clippy"],
+  # Each hook of the tests builds first, outside the limit of its time, then runs the tests under it.
+  assert [line.split()[:3] for line in lines] == [
+    ["uv", "sync", "--inexact"],
+    ["uv", "run", "--no-sync"],
+    ["cargo", "test", "-p"],
+    ["cargo", "test", "-p"],
+    ["cargo", "clippy", "--workspace"],
   ]
-  assert lines[1].endswith("--no-run") and not lines[2].endswith("--no-run")
+  assert lines[2].endswith("--no-run") and not lines[3].endswith("--no-run")
 
 
 def test_only_the_watcher_reads_the_memory() -> None:
@@ -100,9 +101,9 @@ def test_every_file_of_the_tree_reaches_the_whole_set_as_the_gates_give_it() -> 
 
 def test_a_selection_of_tests_runs_with_no_coverage_and_the_whole_suite_keeps_it() -> None:
   got = reach.command("pytest", ["script/title.py"])
-  assert got[:5] == ["uv", "run", "pytest", "-q", "--no-cov"]
-  assert "test/outside/test_title_script.py" in got[5:]
-  assert reach.command("pytest", ["src/furb/engine.py"]) == ["uv", "run", "pytest", "-q"]
+  assert got[:6] == ["uv", "run", "--no-sync", "pytest", "-q", "--no-cov"]
+  assert "test/outside/test_title_script.py" in got[6:]
+  assert reach.command("pytest", ["src/furb/engine.py"]) == ["uv", "run", "--no-sync", "pytest", "-q"]
   assert reach.command("pytest", ["tui/src/app.ts"]) is None
 
 

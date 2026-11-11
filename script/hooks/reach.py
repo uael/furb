@@ -99,8 +99,9 @@ def command(kind: str, files: list[str]) -> list[str] | None:
     reached = suite(files)
     if reached == []:
       return None
-    # The coverage of the whole suite is the wall of the gates: a part of the suite cannot reach it.
-    return ["uv", "run", "pytest", "-q", *(["--no-cov", *reached] if reached else [])]
+    # The coverage of the whole suite is the wall of the gates: a part of the suite cannot reach it. The sync builds the
+    # wheels before the run, so the run syncs nothing.
+    return ["uv", "run", "--no-sync", "pytest", "-q", *(["--no-cov", *reached] if reached else [])]
   packages = crates(files)
   chosen = ["--workspace"] if packages is None else [x for one in packages for x in ("-p", one)]
   return ["cargo", "test", *chosen, "--features", "furb/typescript"]
@@ -112,12 +113,13 @@ def main(args: list[str]) -> int:
     return 0
   sys.stdout.write(" ".join(run) + "\n")
   sys.stdout.flush()
-  if args[0] == "cargo":
-    # The build is no part of the limit of time: a commit that changes a crate builds it and its tests, which takes
-    # minutes of CPU, and the limit holds the run of the tests alone.
-    if built := subprocess.run([*run, "--no-run"], check=False).returncode:  # noqa: S603
-      return built
-    run = [sys.executable, str(ROOT / "script" / "budget.py"), "cargo", "--", *run]
+  # The build is no part of the limit of time: a commit that changes a crate builds it, its tests and the wheels that the
+  # suite of python imports, which takes minutes of CPU, and the limit holds the run of the tests alone. The sync is the
+  # one that uv run makes.
+  build = [*run, "--no-run"] if args[0] == "cargo" else ["uv", "sync", "--inexact"]
+  if built := subprocess.run(build, check=False).returncode:  # noqa: S603
+    return built
+  run = [sys.executable, str(ROOT / "script" / "budget.py"), args[0], "--", *run]
   os.execvp(run[0], run)  # noqa: S606
   return 1
 
