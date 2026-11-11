@@ -9,13 +9,15 @@ use std::env;
 use std::path;
 use std::process;
 
-/// A project and a config directory of a user, each empty, in a folder of the test alone.
+/// A project and a config directory of a user, each empty, in a folder of the test alone, checked
+/// against no claude command line, since the one of this machine answers in seconds.
 fn place(name: &str) -> (PathBuf, Layers) {
   let at = env::temp_dir().join(format!("furb-config-{name}-{}", process::id()));
   drop(fs::remove_dir_all(&at));
   fs::create_dir_all(at.join("project/.furb")).unwrap();
   fs::create_dir_all(at.join("user")).unwrap();
-  let layers = Layers::new(at.join("project"), Some(at.join("user")));
+  let layers =
+    Layers::new(at.join("project"), Some(at.join("user"))).claude(Some(at.join("no-claude")));
   (at, layers)
 }
 

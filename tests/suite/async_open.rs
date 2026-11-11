@@ -25,6 +25,7 @@ fn threads() -> Vec<String> {
 /// A life with no model and no extension, on a directory of this test.
 fn opening(at: &Path) -> Opening {
   Opening {
+    claude: Some(at.join("no-claude").display().to_string()),
     directory: at.display().to_string(),
     config: Some(at.join("config").display().to_string()),
     roster: Some(Vec::new().into()),

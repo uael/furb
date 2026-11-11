@@ -75,6 +75,7 @@ mod unix {
       Box::pin(async move { Ok(turn) })
     }));
     Opening {
+      claude: Some(at.join("no-claude").display().to_string()),
       directory: at.display().to_string(),
       record: Some(at.join("record.jsonl").display().to_string()),
       config: Some(at.join("config").display().to_string()),

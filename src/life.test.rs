@@ -58,6 +58,9 @@ const GATE_OFF: &str = r#"{"gate": false}"#;
 fn opening(at: &Path, keeps: bool) -> Opening {
   let place = |name: &str| Some(at.join(name).display().to_string());
   Opening {
+    // A life asks the claude command line of the machine for its models, which takes seconds: a
+    // test names none.
+    claude: Some(at.join("no-claude").display().to_string()),
     directory: at.display().to_string(),
     record: place("record.jsonl"),
     keeps: Some(keeps),

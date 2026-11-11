@@ -488,6 +488,7 @@ fn a_later_life_that_replays_a_record_with_acts_of_mcp_asks_no_server() {
     &json!({"mcpServers": {"fixture": stdio(&at, &json!({}))}}),
   );
   let opening = || Opening {
+    claude: Some(at.join("no-claude").display().to_string()),
     directory: at.join("project").display().to_string(),
     record: Some(at.join("record.jsonl").display().to_string()),
     config: Some(at.join("config").display().to_string()),
@@ -542,6 +543,7 @@ fn a_call_that_a_crash_cut_ends_as_interrupted_at_the_wake_and_runs_no_more() {
     &json!({"mcpServers": {"fixture": stdio(&at, &json!({}))}}),
   );
   let opening = || Opening {
+    claude: Some(at.join("no-claude").display().to_string()),
     directory: at.join("project").display().to_string(),
     record: Some(at.join("record.jsonl").display().to_string()),
     config: Some(at.join("config").display().to_string()),

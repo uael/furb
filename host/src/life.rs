@@ -734,7 +734,8 @@ async fn run(
   weight: Arc<Scale>,
 ) {
   let (told, heard) = mpsc::unbounded_channel();
-  let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from));
+  let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from))
+    .claude(opening.claude.as_ref().map(PathBuf::from));
   let mut life = Life {
     log: Vec::new(),
     spent: Spent::default(),

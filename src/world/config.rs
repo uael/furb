@@ -226,18 +226,28 @@ pub enum Error {
   Value { key: String, wanted: String, value: Value },
 }
 
-/// The three configs of a project, under the config directory of a user.
+/// The three configs of a project, under the config directory of a user, and the claude command
+/// line whose catalog a change is checked against.
 #[derive(Debug, Clone)]
 pub struct Layers {
   project: PathBuf,
   user: PathBuf,
+  claude: Option<PathBuf>,
 }
 
 impl Layers {
   /// The configs of a project, under the config directory of the user of this process when none
-  /// is given.
+  /// is given, checked against the claude command line of this machine.
   pub fn new(project: impl Into<PathBuf>, user: Option<PathBuf>) -> Self {
-    Self { project: project.into(), user: user.unwrap_or_else(|| Places::here().config) }
+    let user = user.unwrap_or_else(|| Places::here().config);
+    Self { project: project.into(), user, claude: None }
+  }
+
+  /// The configs checked against the claude command line at this program, as the life that holds
+  /// them runs it, in place of the one of this machine.
+  #[must_use]
+  pub fn claude(self, bin: Option<PathBuf>) -> Self {
+    Self { claude: bin, ..self }
   }
 
   fn file(&self, layer: Layer) -> PathBuf {
@@ -360,7 +370,8 @@ impl Layers {
       .map_err(|source| Error::Parse { path: path.clone(), source })?;
     text.push(b'\n');
     disk::write(&path, &text, Access::Owner)?;
-    let configured = Catalog::loaded(None).await.configure(&self.project, Some(&self.user)).await;
+    let catalog = Catalog::loaded(self.claude.clone()).await;
+    let configured = catalog.configure(&self.project, Some(&self.user)).await;
     let Err(refused) = configured else { return Ok(()) };
     match restored(&path, before.as_deref()) {
       Ok(()) => Err(Error::Refused(refused)),

@@ -66,6 +66,7 @@ fn scripted(at: &Path, kits: bool, script: &[(&str, &str)]) -> Opening {
   }));
   let path = |name: &str| Some(at.join(name).display().to_string());
   Opening {
+    claude: Some(at.join("no-claude").display().to_string()),
     directory: at.display().to_string(),
     record: path("record.jsonl"),
     keeps: Some(true),
