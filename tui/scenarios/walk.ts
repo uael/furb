@@ -181,6 +181,50 @@ export class Walk {
   find(step: string, probe: string, detail: string): void {
     this.findings.push({ step, probe, detail });
   }
+  /** What the life holds open and said last, for a step that failed: the acts that nothing has answered and the tail of
+   * the transcript of the chain shown, and the frame, in a bounded size, so that the log of a run that got stuck names
+   * the act that no model answered, or says that each act is done and the frame lacks its text. The reads of the
+   * extension memory are left out of the tail. */
+  private async why(): Promise<string> {
+    try {
+      const { session } = this.view.app();
+      const standing = new Set(["chain", "grant", "catchup", "compacted", "fitted", "remember"]);
+      const open = session.acts
+        .filter((act) => !isDone(act) && !standing.has(act.kind))
+        .slice(0, 12)
+        .map((act) => `${act.id} ${act.kind} by ${act.by}: ${String(act.words[0] ?? "").slice(0, 60)}`);
+      const facts = await session.engine.transcript({ on: session.selected });
+      const noise = new Set(
+        facts.filter((fact) => String(fact[2]).startsWith("remember")).map((fact) => String(fact[1])),
+      );
+      const tail = facts
+        .filter((fact) => !noise.has(String(fact[1])))
+        .slice(-14)
+        .map((fact) =>
+          fact
+            .slice(0, 5)
+            .map((one) =>
+              (typeof one === "string" ? one : JSON.stringify(one)).replaceAll("\n", " ").slice(0, 50),
+            )
+            .join("|"),
+        );
+      // A run that got stuck with each act done and the text missing from the frame has its fault in the drawing, so
+      // the frame stands in the finding.
+      const shown = (await this.drawn())
+        .split("\n")
+        .map((row) => row.trimEnd().slice(0, 120))
+        .filter(Boolean);
+      return [
+        `open acts: ${open.join("; ") || "none"}`,
+        `transcript tail: ${tail.join(" / ")}`,
+        `the frame:\n${shown.join("\n")}`,
+      ]
+        .join("\n")
+        .slice(0, 6000);
+    } catch (error) {
+      return `the walk could not read the life: ${said(error)}`;
+    }
+  }
   /** Do an action, then keep the frame that it left as a step, and probe it: a failed action is stuck. */
   async step(action: string, act: () => unknown = () => {}): Promise<string> {
     const name = `${this.journey}-${String(this.steps.length + 1).padStart(2, "0")}`;
@@ -191,7 +235,7 @@ export class Walk {
     try {
       await act();
     } catch (error) {
-      this.find(name, "stuck", `${action}: ${said(error)}`);
+      this.find(name, "stuck", `${action}: ${said(error)}\n${await this.why()}`);
     }
     const frame = await this.drawn();
     for (const row of leaks(frame)) this.find(name, "leak", row);
