@@ -688,6 +688,22 @@ impl Engine {
     got
   }
 
+  /// The life with its sandbox dumped as monty dumps one and loaded into a new sandbox, and these
+  /// ears in the place of those it held: the probe of a life that goes on from a dump. The side of
+  /// the host stays in memory, and the bytes of the dump come back.
+  #[cfg(test)]
+  pub(crate) fn reloaded<N: Into<String>>(
+    &mut self,
+    ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
+  ) -> Result<usize, Fault> {
+    let bytes = self.sand.dumped()?;
+    self.sand = Sand::loaded(&bytes)?;
+    let (handed, _) = Handed::of(ears)?;
+    self.watchers.clear();
+    self.outside.rehanded(&mut self.sand, handed)?;
+    Ok(bytes.len())
+  }
+
   /// The highest number that each kind took in the record that the life opened on.
   pub(crate) fn taken(&self) -> &Object {
     &self.taken

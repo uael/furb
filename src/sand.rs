@@ -124,6 +124,26 @@ impl Sand {
     self.fed
   }
 
+  /// The session dumped as monty dumps one, while it stands between two runs.
+  #[cfg(test)]
+  pub(crate) fn dumped(&self) -> Result<Vec<u8>, Fault> {
+    let State::Idle(repl) = &self.state else {
+      return Err(Fault::refused("a sandbox dumps only between two runs"));
+    };
+    monty::dump("furb", None, &[], monty::SessionRef::Idle(repl))
+      .map_err(|no| Fault::refused(no.to_string()))
+  }
+
+  /// A sandbox on the session of a dump that [`Sand::dumped`] made, between two runs.
+  #[cfg(test)]
+  pub(crate) fn loaded(bytes: &[u8]) -> Result<Self, Fault> {
+    let dump = monty::Dump::load(bytes).map_err(|no| Fault::refused(no.to_string()))?;
+    let monty::Session::Idle(repl) = dump.state else {
+      return Err(Fault::refused("a dump of a sandbox holds a session between two runs"));
+    };
+    Ok(Self { state: State::Idle(*repl), fed: 0, bounded: true, applied: true })
+  }
+
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.
   ///
   /// The host answers every call the code makes while it runs. What the code raises is the fault.

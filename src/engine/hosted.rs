@@ -358,6 +358,28 @@ impl Outside {
     got
   }
 
+  /// These ears in the place of those that the life held, each born outside the sandbox, which
+  /// holds the object of each where it stood: an ear that says something at its birth cannot go on
+  /// from a dump, since no fact of the sandbox hears it.
+  #[cfg(test)]
+  pub(super) fn rehanded(&mut self, sand: &mut Sand, handed: Handed) -> Result<(), Fault> {
+    self.hosted.handed = handed;
+    let names: Vec<String> = self.hosted.handed.ears.keys().cloned().collect();
+    for name in names {
+      let Some(mut ear) = self.hosted.handed.ears.remove(&name) else { continue };
+      let born = self.stepped(sand, &mut *ear, Heard::Born);
+      self.hosted.handed.ears.insert(name.clone(), ear);
+      match born {
+        Stepped::Wait(_) => {}
+        Stepped::Say(_) => return Err(Fault::refused(format!("{name} says at its birth"))),
+        Stepped::Over | Stepped::Raised(_) => {
+          return Err(Fault::refused(format!("{name} ends at its birth")));
+        }
+      }
+    }
+    Ok(())
+  }
+
   /// What the host handed over under this name, which this life holds from now on.
   pub(super) fn take(&mut self, name: &str) {
     HANDED.with_borrow_mut(|held| {

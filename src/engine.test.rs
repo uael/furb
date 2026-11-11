@@ -37,7 +37,7 @@ use crate::{
 
 use crate::{
   checkpoint,
-  sand::BOUND,
+  sand::{BOUND, Sand},
   testing,
   testing::{Yard, block_on, waker},
   value,
@@ -2251,5 +2251,99 @@ fn a_record_of_an_older_engine_opens_through_its_adapter_and_keeps_no_fact_of_it
   assert!(
     added.iter().all(|one| one.contains(r#""stand2""#)),
     "only the stand of this life is new: {added:?}"
+  );
+}
+
+/// An ear that takes each command and leaves it started, so the host says when it is done.
+fn commands() -> Box<dyn Ear> {
+  ear(move |mut co: Co<()>| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if a.question() && a.kind() == "bash" {
+        say(&mut co, Fact::says("started", a.about(), []));
+      }
+    }
+  })
+}
+
+/// What a life of a word that awaits a command came to once the host said the command done: the
+/// transcript, the turns and the module of the root, and the bytes of the dump when the sandbox
+/// went through one while the word waited.
+fn awaited(dumps: bool) -> (Vec<String>, Vec<String>, String, Vec<String>, Option<usize>) {
+  let at = env::temp_dir().join(format!("furb-engine-dumped-{}", process::id()));
+  let ears =
+    || [("provider", provider(at.clone(), Rc::default(), Rc::default())), ("commands", commands())];
+  let mut engine = Engine::boot(Vec::<Object>::new(), ears()).unwrap();
+  let root = engine.root().to_owned();
+  let word = "b = bash('make probe')\ngot = await b\nseen = peek(b)\nwho = site.get()";
+  let rung = verbs::Rung { word: Some(word.to_owned()), on: on(&root), ..Default::default() };
+  let rung = engine.rung(rung).unwrap().id().to_owned();
+  let size = dumps.then(|| engine.reloaded(ears()).unwrap());
+  engine.say("done", "bash1", vec![Object::string("made")]).unwrap();
+  block_on(Act::<Object>::of(&mut engine, &rung)).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let facts = facts.iter().map(|one| one.0.py_repr()).collect();
+  let turns = engine.turns(verbs::Turns { on: on(&root) }).unwrap();
+  let turns = turns.iter().map(Object::py_repr).collect();
+  let values = engine.dump(&["got", "seen", "who"], verbs::Dump { on: on(&root) }).unwrap();
+  let module = engine.module(verbs::Module { on: on(&root) }).unwrap();
+  let mut names: Vec<String> = module
+    .as_ref()
+    .pairs()
+    .unwrap_or_default()
+    .into_iter()
+    .filter_map(|(name, _)| name.as_str().map(str::to_owned))
+    .collect();
+  names.sort();
+  (facts, turns, values, names, size)
+}
+
+#[test]
+fn a_life_goes_on_from_a_dump_of_its_sandbox_as_a_life_that_never_dumped() {
+  let (facts, turns, values, names, none) = awaited(false);
+  let (dumped_facts, dumped_turns, dumped_values, dumped_names, size) = awaited(true);
+  assert_eq!(none, None);
+  assert!(size.is_some_and(|bytes| bytes > 0));
+  assert_eq!(values, "got = 'made'\nseen = 'made'\nwho = 'rung1'");
+  assert_eq!(dumped_values, values);
+  assert_eq!(dumped_names, names);
+  assert_eq!(dumped_turns, turns);
+  assert_eq!(dumped_facts, facts);
+}
+
+#[test]
+#[ignore = "a measure, which prints the size and the time of a dump beside those of a replay"]
+fn a_dump_of_a_long_life_beside_its_record_and_its_replay() {
+  let yard = "dumpsize";
+  let (facts, record, dumped, dump, load, _yard) = {
+    let mut first = Lived::new(yard, &[], true).unwrap();
+    fs::write(first.at.join("a.txt"), "one\ntwo\n").unwrap();
+    let root = first.root();
+    let lines = |at: &Path| fs::read_to_string(at.join("record.jsonl")).unwrap().lines().count();
+    let mut words = 0;
+    while lines(&first.at) < 20_000 {
+      let word = "for i in range(1000):\n  read('a.txt', HIDDEN)";
+      let rung = verbs::Rung { word: Some(word.to_owned()), on: on(&root), ..Default::default() };
+      let rung = first.engine.rung(rung).unwrap().id().to_owned();
+      first.settled(&rung).unwrap();
+      words += 1;
+      eprintln!("{words} words, {} facts", lines(&first.at));
+    }
+    let started = Instant::now();
+    let bytes = first.engine.sand.dumped().unwrap();
+    let dump = started.elapsed();
+    let started = Instant::now();
+    let loaded = Sand::loaded(&bytes).unwrap();
+    let load = started.elapsed();
+    drop(loaded);
+    let record = fs::metadata(first.at.join("record.jsonl")).unwrap().len();
+    (lines(&first.at), record, bytes.len(), dump, load, first.end())
+  };
+  let started = Instant::now();
+  let second = Lived::new(yard, &[], false).unwrap();
+  let replay = started.elapsed();
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  println!(
+    "facts {facts}, record {record} bytes, dump {dumped} bytes in {dump:?}, load in {load:?}, replay in {replay:?}"
   );
 }
