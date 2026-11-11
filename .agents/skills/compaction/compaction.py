@@ -1,25 +1,20 @@
 from furb.engine import (
   HEAD,
   Act,
-  Exit,
   Filter,
   Overflow,
   Refused,
   Text,
   act,
   acting,
-  automatic,
-  cancel,
-  chain,
-  close,
   controlled,
   differs,
   filled,
   get,
+  module,
+  operated,
   over,
-  pause,
   peek,
-  program,
   prompt,
   question,
   read,
@@ -38,9 +33,10 @@ compaction = """Compaction cuts this chain to the work that it still needs, and 
   that it is given and reads again each file whose read or write it kept, showing what changed. Its prompts, its
   rungs, the words that run and its module go on.
 - A filter drops acts. latest() keeps the last read or write of each path, quiet() drops the commands, recent(n)
-  keeps the acts of the last n replies, and await chosen() asks a model which acts to keep. together(*filters)
-  applies filters in order.
-- choice() asks a model which acts the work still needs, and what the rest holds, as ids and a summary.
+  keeps the acts of the last n replies, and await chosen() asks the model of this chain which acts to keep.
+  together(*filters) applies filters in order.
+- choice() asks on this chain the model that wrote its last reply, which reads the chain from its cache, which acts
+  the work still needs, and what the rest holds, as ids and a summary. The turn of that answer stays in the chain.
 - await condense() compacts this chain at once to what choice() chose, with the summary of the model, as compacted()
   does once. The command /compact of the TUI runs it on the chain on screen.
 - clear() cuts this chain to nothing, with no summary: its model reads from zero, and the chain keeps its name, its
@@ -51,24 +47,19 @@ compaction = """Compaction cuts this chain to the work that it still needs, and 
   once to its open prompts, so the next reply reads less and the chain goes on with no pause.
 - The life word wraps each chain with compacted() and fitted(), so a chain compacts with a summary of the model
   before it passes its window, and the cut of fitted() is the last resort.
-- A project changes the defaults in an extension of its own, whose word rebinds SHARE, FILTERS, CHOOSER, LISTED or
-  BRIEF."""
+- A project changes the defaults in an extension of its own, whose word rebinds SHARE, FILTERS or BRIEF."""
 SHARE = 0.6
-CHOOSER = ""
-
-
-LISTED = 40
 OVERFLOWED = """The model refused the last reply of this chain, since its prompt passed the window of the model,
 so compaction cut the chain to its open prompts: read again what the work still needs."""
-BRIEF = """The chain below grows past its window, and it goes on with what the work still needs.
+BRIEF = """The chain grows past its window, and it goes on with what the work still needs.
 Choose what it keeps: each act that holds a decision or a ruling of the operator, a brief, a finding that the work
 still needs, and the last state of each command that matters. A step keeps all that it made, and an act keeps the
 step that made it. The chain keeps its module, its prompts and its steps, so keep no act for a value that the module
 holds. It reads again each file whose read or write you keep and shows what changed since, so keep the last read or
 write of each file that the work still needs, and no other.
-Close with one call, close((ids, summary)): the ids to keep, as list[str] of the heads below, and a summary, in a
-few short lines, of what the acts that you drop hold and the work still needs to know. A tuple written bare closes
-nothing, and the choice ends refused after 4 words that close nothing."""
+Close this prompt with one call, close((ids, summary)): the ids to keep, as list[str], as ["read3", "bash7"], and a
+summary, in a few short lines, of what the acts that you drop hold and the work still needs to know. Do no other work
+in this word."""
 
 
 def together(*filters: Filter) -> Filter:
@@ -102,82 +93,14 @@ def recent(n: int) -> Filter:
   return keep
 
 
-def choice(to: str = "", on: str = "") -> Act:
+def choice(on: str = "") -> Act:
   here = on or scope(acting())
-  words = program(here)
-  acts = [a for a in transcript(here) if question(a) and a[0] not in ("reply", "run", "wants", "gate", "stand")]
-  made: dict[str, list[str]] = {}
-  for entry in acts:
-    made.setdefault(entry[2], []).append(entry[1])
-  lines = ["Open prompts:"]
-  lines += [f"{a[1]} to {a[6] or 'its model'}: {a[5]!r:.300}" for a in acts if a[0] == "prompt" and not over(a[1])]
-  lines.append("Acts:")
-  for entry in acts:
-    held = peek(entry[1])
-    kilo = (
-      len(held.content)
-      if isinstance(held, Text)
-      else len(held.stdout.content + held.stderr.content)
-      if isinstance(held, Exit)
-      else 0
-    ) // 1000
-    state = ("" if over(entry[1]) else " (open)") + (f" ({kilo}k chars)" if kilo else "")
-    if (get(entry[2]) or ("",))[0] == "rung":
-      if entry[1] in made[entry[2]][-LISTED:]:
-        lines.append(f"  {entry[1]} {', '.join(map(repr, entry[4:]))[:120]}{state}")
-    elif entry[0] == "rung":
-      left = len(made.get(entry[1], [])) - LISTED
-      word = " ".join(words.get(entry[1], "").split())[:160] or "(no word)"
-      lines.append(
-        f"{entry[1]} step of {entry[2]}{state}: {word}" + (f" ({left} earlier acts of it unlisted)" if left > 0 else "")
-      )
-    else:
-      lines.append(f"{entry[1]} {', '.join(map(repr, entry[4:]))[:200]}{state}")
-  heads = [item[1] for item in acts if item[0] != "rung"][:2] or [item[1] for item in acts][:2]
-  example = "close(([" + ", ".join(map(repr, heads)) + "], 'what the acts that you drop hold'))"
-  brief = (
-    BRIEF
-    + "\n\n"
-    + "\n".join(lines)
-    + "\n\nAnswer with this one call alone, the ids taken from the heads above:\n"
-    + example
-  )
-  side = chain("chosen", on=here)
-  given = to or CHOOSER
-  asked: Act = prompt("tuple[list[str], str]", brief, to=given or automatic(), on=side)
-  bound = 4
-
-  def ear(id):
-    yield "started", id
-    replies, maker, n, now, place = 0, get(asked)[2], 0, asked, side
-    while not over(asked):
-      match (yield {id, place, now, asked, maker}):
-        # A model of automatic work that refuses its reply gives its place to the next one, and the last one's refusal ends the prompt.
-        case ("done", about, _, Refused() as why) if question(("reply", about)) and scope(about) == place and not given:
-          # The first prompt stays open for the close of the one after it, so it only asks no more.
-          (pause if now == asked else cancel)(now)
-          if then := automatic(n := n + 1):
-            place = chain("chosen", on=here)
-            now = prompt("tuple[list[str], str]", brief, to=then, on=place)
-          else:
-            close(why, asked)
-        case ("done", about, _, value) if about == now != asked:
-          close(value, asked)
-        case ("done", about, _, _) if question(("reply", about)) and scope(about) == place:
-          replies += 1
-          if replies >= bound and not over(asked):
-            close(Refused(f"{asked}: the model of choice wrote {replies} words on {place} and closed none"), asked)
-        # The chain of choice tells the maker of the prompt only that it asks it no more, after a word that made nothing new, so it ends refused.
-        case ("tell", about, by, _) if about == maker and by == place and not over(asked):
-          close(Refused(f"{asked}: the model of choice wrote {replies} words on {place} that made nothing new"), asked)
-    yield "done", id, None
-
-  act("bounded", side, controlled(ear))
-  return asked
+  wrote = [str(a[4]) for a in transcript(here, "reply") if isinstance(peek(a[1]), tuple) and not operated(str(a[4]))]
+  return prompt("tuple", BRIEF, to=wrote[-1] if wrote else module(here)["actor"], on=here)
 
 
-async def chosen(to: str = "", on: str = "") -> Filter:
-  got = await choice(to, on)
+async def chosen(on: str = "") -> Filter:
+  got = await choice(on)
   assert isinstance(got, tuple)
   return take(*got[0])
 
@@ -312,10 +235,10 @@ def fitted(on: str = "") -> Act:
   return act("fitted", on, controlled(ear))
 
 
-async def condense(to: str = "", on: str = "") -> str:
+async def condense(on: str = "") -> str:
   here = on or scope(acting())
   before = {fact[1] for fact in transcript(here) if question(fact)}
-  match await choice(to, here):
+  match await choice(here):
     case ([*listed], str() as summary):
       ids = [i for i in listed if isinstance(i, str) and scope(i)]
 

@@ -1,4 +1,4 @@
-"""BRIEF, what the prompt of choice says first."""
+"""BRIEF, the message of the prompt of choice."""
 
 from pathlib import Path
 
@@ -6,11 +6,10 @@ from furb import engine
 from skills.conftest import compacting
 
 
-async def test_brief_is_what_the_prompt_of_choice_says_first(tmp_path: Path) -> None:
-  """BRIEF is what the prompt of choice says first: which acts to keep, and how to close."""
+async def test_brief_is_the_message_of_the_prompt_of_choice(tmp_path: Path) -> None:
+  """BRIEF is the message of the prompt of choice: which acts to keep, and how to close."""
   sand, root, _ = compacting(tmp_path)
-  sand.script[root] = ["kept = 'keep' in BRIEF and 'tuple' in BRIEF\nBRIEF = 'pick'\nc = choice()\nclose(kept)"]
+  word = "kept = 'keep' in BRIEF and 'close((ids, summary))' in BRIEF\nBRIEF = 'pick'\nc = choice()\nclose(kept)"
+  sand.script[root] = [word, "close(([], ''))"]
   assert await engine.prompt(bool, "brief", on=root) is True
-  assert [str(a[5]).split("\n")[:3] for a in engine.transcript("chain2") if a[0] == "prompt"] == [
-    ["pick", "", "Open prompts:"]
-  ]
+  assert [a[5] for a in engine.transcript(root) if a[0] == "prompt" and a[4] == "tuple"] == ["pick"]

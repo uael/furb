@@ -24,7 +24,7 @@ async def wrapped(
   for word in words:
     await engine.rung(word, on=root)
   sand.cost = FULL
-  sand.script.update({root: ["x = 1\ndebug(t'{x}')", ONCE, "close(x + y)"], "chain2": [chooser]})
+  sand.script[root] = ["x = 1\ndebug(t'{x}')", "SHARE = 2\n" + chooser, ONCE, "close(x + y)"]
   act = engine.prompt(int, "go", on=root)
   await act
   await until(lambda: (ends or compacted_on)(root))
@@ -56,11 +56,16 @@ def asked(chain: str, message: str) -> str:
   return next(str(a[1]) for a in engine.transcript(chain) if a[0] == "prompt" and a[5] == message)
 
 
+def choices(root: str) -> list[tuple]:
+  """The prompts of choice on a chain."""
+  return [a for a in engine.transcript(root) if a[0] == "prompt" and a[4] == "tuple"]
+
+
 async def test_compacted_wraps_a_chain(tmp_path: Path) -> None:
   """compacted() wraps a chain: after an answer that reads more than SHARE of the window of its actor, it asks choice() of the chain, and at the next reply on the chain once that came, it compacts the chain, which it wraps still."""
   root, act = await wrapped(tmp_path)
   assert engine.peek(act) == 3
-  assert engine.get("chain2")[3:] == (root, "chosen", "") and engine.get("chain3") is None
+  assert engine.get("chain2") is None and len(choices(root)) == 1
   assert made(root) == ["<s:summary>\ngist</s:summary>\nreground()"]
 
 
@@ -76,7 +81,7 @@ async def test_the_chain_keeps_the_acts_that_the_model_chose(tmp_path: Path) -> 
   }
   sand.cost = FULL
   chooser = f"close(([{held['c.txt']!r}, {held['a.txt']!r}], 'gist'))"
-  sand.script.update({root: ["read('a.txt')\nx = 1", ONCE, "close(x + y)"], "chain2": [chooser]})
+  sand.script[root] = ["read('a.txt')\nx = 1", "SHARE = 2\n" + chooser, ONCE, "close(x + y)"]
   assert await engine.prompt(int, "go", on=root) == 3
   await until(lambda: compacted_on(root))
   told = {a[1] for a in engine.transcript(root) if a[0] == "tell"}
@@ -100,16 +105,16 @@ async def test_it_moves_stops_and_pauses_nothing(tmp_path: Path) -> None:
   sand.cost = FULL
   word = "w = prompt(int, 'work', on=chain('worker'))\nn = await prompt(int, 'n', to=OPERATOR)\nclose(n + await w)"
   worker = "v = await prompt(int, 'w?', to=OPERATOR)\nclose(v)"
-  sand.script.update({root: [word, "close(None)"], "chain2": [GIST], "chain3": [worker]})
+  sand.script.update({root: [word, GIST, "close(None)"], "chain2": [worker]})
   act = engine.prompt(int, "go", on=root)
-  await until(lambda: opened(root, "n") and opened("chain3", "w?"))
+  await until(lambda: opened(root, "n") and opened("chain2", "w?"))
   engine.prompt(None, "poke", on=root)
   await until(lambda: compacted_on(root))
   assert made(root) == ["<s:summary>\ngist</s:summary>\nreground()"]
   ran = next(str(a[4]) for a in engine.transcript(root) if a[0] == "run" and a[5] == word)
   assert not engine.over(ran) and not engine.over(act)
-  assert [a for one in (root, "chain3") for a in engine.transcript(one) if a[0] == "pause"] == []
-  engine.close(5, asked("chain3", "w?"))
+  assert [a for one in (root, "chain2") for a in engine.transcript(one) if a[0] == "pause"] == []
+  engine.close(5, asked("chain2", "w?"))
   engine.close(2, asked(root, "n"))
   assert await act == 7
 
@@ -118,12 +123,7 @@ async def test_it_never_completes(tmp_path: Path) -> None:
   """It never completes."""
   sand, root, _ = compacting(tmp_path)
   sand.cost = FULL
-  sand.script.update(
-    {
-      root: ["w = compacted()\ndebug(t'{w}')", "x = 1\ndebug(t'{x}')", "SHARE = 2\ndebug(t'{SHARE}')", "close(1)"],
-      "chain2": [GIST],
-    }
-  )
+  sand.script[root] = ["w = compacted()\ndebug(t'{w}')", "x = 1\ndebug(t'{x}')", "SHARE = 2\n" + GIST, "close(1)"]
   assert await engine.prompt(int, "go", on=root) == 1
   watcher = engine.module(root)["w"]
   await until(lambda: compacted_on(root, watcher))
@@ -133,7 +133,7 @@ async def test_it_never_completes(tmp_path: Path) -> None:
 
 async def test_when_the_choice_ends_refused_it_keeps_the_chain_as_it_is(tmp_path: Path) -> None:
   """When the choice ends refused, it keeps the chain as it is, tells why, and asks no choice again."""
-  root, act = await wrapped(tmp_path, chooser="x = 1", ends=told_kept)
+  root, act = await wrapped(tmp_path, chooser="close(Refused('no choice'))", ends=told_kept)
   assert engine.peek(act) == 3
   assert made(root) == []
-  assert engine.get("chain3") is None
+  assert len(choices(root)) == 1

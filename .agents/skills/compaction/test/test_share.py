@@ -6,6 +6,11 @@ from furb import engine
 from skills.conftest import compacting
 
 
+def choices(root: str) -> list[tuple]:
+  """The prompts of choice on a chain."""
+  return [a for a in engine.transcript(root) if a[0] == "prompt" and a[4] == "tuple"]
+
+
 async def test_share_is_the_share_of_the_window_past_which_compacted_compacts(tmp_path: Path) -> None:
   """SHARE is the share of the window of its actor that an answer reads past, after which compacted asks choice what to keep of its chain, and it is 0.6 unless a word rebinds it."""
   sand, root, _ = compacting(tmp_path)
@@ -13,8 +18,8 @@ async def test_share_is_the_share_of_the_window_past_which_compacted_compacts(tm
   sand.cost = (240000, 0, 0, 0, 0.0)
   sand.script[root] = ["x = 1\ndebug(t'{x}')", "close(SHARE)"]
   assert await engine.prompt(float, "share", on=root) == 0.6
-  assert engine.get("chain2") is None
+  assert choices(root) == []
   sand.cost = (244000, 0, 0, 0, 0.0)
-  sand.script[root] = ["x = 2\ndebug(t'{x}')", "close(x)"]
+  sand.script[root] = ["x = 2\ndebug(t'{x}')", "SHARE = 2\nclose(([], ''))", "close(x)"]
   assert await engine.prompt(int, "past", on=root) == 2
-  assert engine.get("chain2")[3:] == (root, "chosen", "")
+  assert len(choices(root)) == 1 and engine.get("chain2") is None

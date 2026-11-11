@@ -67,17 +67,17 @@ reads it.
 - **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name. `compact()` keeps
   what `FILTERS` keep, binds a summary in its next word, and reads again with `reground()` each file that it kept,
   showing only what changed. The filters are `latest()`, the last read or write of each path, `quiet()`, which drops the
-  commands, `recent(n)`, the acts of the last `n` replies, and `await chosen()`, which asks a model.
-  `together(*filters)` joins them, and `supersede(keep)` applies one. `await condense()` asks a model what to keep and
+  commands, `recent(n)`, the acts of the last `n` replies, and `await chosen()`, which asks the model of the chain.
+  `together(*filters)` joins them, and `supersede(keep)` applies one. `await condense()` asks the model of the chain what to keep and
   compacts at once. `compacted()` does the same for one chain each time an answer fills more than `SHARE`, 0.6, of the
   window, and moves, stops and pauses nothing. `fitted()` watches a chain: when the model refuses a reply because its
   prompt passes the window, it cuts the chain at once to its open prompts, with a summary that says why, so the next
   reply reads less and the chain goes on with no pause. Its life word, `compacted(); fitted()`, wraps each chain with
   both, so a chain compacts to what a model chose, with its summary, before its prompt passes the window, and keeps
   its reads and its findings. The cut of `fitted()` comes only as the last resort, when one reply grows past the
-  window before the compaction. Each compaction costs one prompt more, to the actor that `CHOOSER` names, else the
-  one that `automatic()` gives.
-  A project changes `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule
+  window before the compaction. Each compaction costs one turn more on the chain, to the model that wrote its last
+  reply, which reads the chain from its cache.
+  A project changes `SHARE`, `FILTERS` or `BRIEF` in an extension of its own. In the TUI, a rule
   with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
 - **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
   on the root alone. At the first prompt that the operator makes in the life, even one made before the word plays, it asks the actor that `automatic()` of the

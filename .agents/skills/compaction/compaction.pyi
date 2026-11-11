@@ -4,15 +4,10 @@ compaction: str
 """compaction is the doctrine of the extension, a quote that says what each part does and how a project changes the defaults."""
 SHARE: float
 """SHARE is the share of the window of its actor that an answer reads past, after which compacted asks choice what to keep of its chain, and it is 0.6 unless a word rebinds it."""
-CHOOSER: str
-"""CHOOSER is the actor that choice asks when it is given none, and an empty CHOOSER is the actor that automatic() gives, else the default actor of the chain of the model that chooses.
-When the model of automatic work refuses its reply, choice asks the next actor of automatic work, automatic(1), then the next, each on a new chain labelled chosen, and the refusal of the last ends the prompt."""
 OVERFLOWED: str
 """OVERFLOWED is the summary that fitted gives compact, which says why the chain lost its acts."""
-LISTED: int
-"""LISTED is the most acts of one step that choice lists, and it is 40 unless a word rebinds it."""
 BRIEF: str
-"""BRIEF is what the prompt of choice says first: which acts to keep, and how to close."""
+"""BRIEF is the message of the prompt of choice: which acts to keep, and how to close."""
 FILTERS: list[Filter]
 """FILTERS are the filters that compact applies in order when it is given none: latest(), then recent(8)."""
 
@@ -28,16 +23,12 @@ def quiet() -> Filter:
 def recent(n: int) -> Filter:
   """recent(n) keeps the rungs of the last n replies, and all that they made."""
 
-def choice(to: str = "", on: str = "") -> Act:
-  """choice() asks a model, on a chain of its own, which acts of the chain the work still needs, in a prompt of the shape tuple[list[str], str], the ids to keep and a summary of what the rest holds, and gives that prompt.
-  The prompt says what to keep, then lists each open prompt with its message, then each act of the chain by its id and its words, with the thousands of characters of its text or its output when they pass a thousand, each act that a step made under that step, and no reply, run, wants, gate or stand.
-  It lists of a step only the last LISTED acts that it made, and says how many it left out.
-  The prompt ends with the one call that answers, close(([<ids>], <summary>)), with ids taken from the heads that it lists.
-  When the model of choice writes 4 words on its chain and closes none, the prompt ends refused, so no chooser loops.
-  When the words of the model of choice make nothing new, its chain asks it no more, and the prompt ends refused.
+def choice(on: str = "") -> Act:
+  """choice() asks the model that wrote the last reply of the chain, with its effort, on the chain itself, which acts of the chain the work still needs, in a prompt of the shape tuple, the ids to keep as list[str] and a summary of what the rest holds, and gives that prompt.
+  When no model wrote a reply of the chain, choice() asks the actor of the module of the chain.
   """
 
-async def chosen(to: str = "", on: str = "") -> Filter:
+async def chosen(on: str = "") -> Filter:
   """chosen() asks choice() and gives a take of the ids that it comes to."""
 
 def reground(on: str = "") -> None:
@@ -74,7 +65,7 @@ def compacted(on: str = "") -> Act:
   It never completes.
   """
 
-async def condense(to: str = "", on: str = "") -> str:
+async def condense(on: str = "") -> str:
   """condense() asks choice() of the chain of the caller, and at once compacts that chain to the acts that the model chose, each act said on the chain after it asked, of each path only the last read or write, and the summary of the model, and gives the chain.
   When the model gives no tuple of a list and a str, it compacts the chain with FILTERS and no summary of the model.
   It reads no builtin from the module of the chain when it asks choice(), as a record from before the gate refused such a name may bind it to a str.

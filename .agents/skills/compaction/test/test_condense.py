@@ -14,11 +14,11 @@ async def test_condense_compacts_the_chain_at_once(tmp_path: Path) -> None:
   await engine.rung("write(Text('c.txt', 'c'))\nwrite(Text('d.txt', 'd'))", on=root)
   held = {str(a[4].path): str(a[1]) for a in engine.transcript(root) if a[0] == "write" and isinstance(a[4], Text)}
   chooser = f"close(([{held['c.txt']!r}], 'gist'))"
-  sand.script.update({root: ["close(await condense())"], "chain2": [chooser]})
+  sand.script[root] = ["close(await condense())", chooser]
   assert await engine.prompt(str, "go", on=root) == root
   await settle()
   told = {a[1] for a in engine.transcript(root) if a[0] == "tell"}
-  assert engine.get("chain2")[3:] == (root, "chosen", "")
+  assert engine.get("chain2") is None
   assert held["c.txt"] in told and held["d.txt"] not in told
   assert engine.module(root)["summary"] == "gist"
 
@@ -28,7 +28,7 @@ async def test_when_the_model_gives_no_tuple_it_compacts_the_chain_with_filters(
   sand, root, _ = compacting(tmp_path)
   await engine.rung("FILTERS = [lambda acts: []]\nread('a.txt')", on=root)
   (one,) = [a[1] for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt"]
-  sand.script.update({root: ["close(await condense())"], "chain2": ["close((1, 2))"]})
+  sand.script[root] = ["close(await condense())", "close((1, 2))"]
   assert await engine.prompt(str, "go", on=root) == root
   await settle()
   assert [str(a[4]) for a in engine.transcript(root) if a[0] == "rung" and str(a[4]).endswith("reground()")] == [
@@ -44,7 +44,7 @@ async def test_it_chooses_in_a_chain_whose_module_binds_list(tmp_path: Path) -> 
   # The gate refuses that binding in a new word, so the test binds it as a record from before the rule holds it.
   assert await engine.rung("globals()['list'] = 'ls -la'\nwrite(Text('c.txt', 'c'))", on=root) is None
   held = {str(a[4].path): str(a[1]) for a in engine.transcript(root) if a[0] == "write" and isinstance(a[4], Text)}
-  sand.script.update({root: ["close(await condense())"], "chain2": [f"close(([{held['c.txt']!r}], 'gist'))"]})
+  sand.script[root] = ["close(await condense())", f"close(([{held['c.txt']!r}], 'gist'))"]
   assert await engine.prompt(str, "go", on=root) == root
   await settle()
   assert engine.module(root)["summary"] == "gist"

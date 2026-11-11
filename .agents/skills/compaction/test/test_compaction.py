@@ -28,4 +28,4 @@ async def test_compaction_is_the_doctrine_of_the_skill(tmp_path: Path) -> None:
     "SHARE",
     "FILTERS",
   ]
-  assert [part for part in [*parts, "CHOOSER", "LISTED", "BRIEF", "extension of its own"] if part not in doctrine] == []
+  assert [part for part in [*parts, "BRIEF", "extension of its own"] if part not in doctrine] == []

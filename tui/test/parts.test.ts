@@ -346,17 +346,17 @@ test("the command /compact tells that a life that does not run the extension com
   );
 });
 
-test("the command /compact of the part of compaction asks a model what the chain on screen keeps, compacts it with the summary, and says so", async () => {
+test("the command /compact of the part of compaction asks the model of the chain on screen what it keeps, compacts it with the summary, and says so", async () => {
   const { directory } = project();
   const session = await demoSession({ cwd: directory, skills: true });
   await composing(
     async ({ app, frame }) => {
       for (let tries = 0; tries < 400 && !app.parts.command("compact"); tries++) await Bun.sleep(25);
       expect(app.parts.command("compact")?.detail).toBe(
-        "Compact this chain now: a model keeps what the work still needs and sums up the rest",
+        "Compact this chain now: its model keeps what the work still needs and sums up the rest",
       );
-      // The operator plays the model that chooses, so the test asks no model.
-      await session.command(`/run CHOOSER = OPERATOR\nbefore = "the first step"`);
+      // The model of the demo plays the model of the chain, which chooses, so the test asks no model.
+      await session.command(`/run before = "the first step"`);
       // The acts of the life reach the view a moment after the word ran. The read of the doctrine is a rung of the chain
       // already, so the view waits for the rung that defines condense().
       const defines = () =>
@@ -375,20 +375,11 @@ test("the command /compact of the part of compaction asks a model what the chain
       await app.submit();
       for (let tries = 0; tries < 400 && !said.length; tries++) await Bun.sleep(25);
       session.off("change", hear);
-      expect(said).toContain("A model compacts this chain");
-      let asked = "";
-      for (let tries = 0; tries < 400 && !asked; tries++) {
-        await session.refresh();
-        asked =
-          session.acts.find(
-            (act) => act.kind === "prompt" && String(act.words[1] ?? "").startsWith("The chain below"),
-          )?.id ?? "";
-        if (!asked) await Bun.sleep(25);
-      }
-      expect(asked).toMatch(/^prompt\d+$/);
-      await session.command(`/run close(([], "It read " + "the plan."), id="${asked}")`);
-      const shown = await shows(frame, "It read the plan.", (seen) =>
-        seen.includes("Compaction: the model reads on from here"),
+      expect(said).toContain("Its model compacts this chain");
+      const shown = await shows(
+        frame,
+        "The chain keeps its plan, and its model reads the rest again.",
+        (seen) => seen.includes("Compaction: the model reads on from here"),
       );
       expect(shown).toContain("Compaction: the model reads on from here");
       expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("Compaction:"));

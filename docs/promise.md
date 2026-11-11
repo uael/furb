@@ -119,6 +119,11 @@ form must change, and so these breaks stand for the next major, 1.0.0.
 - `.agents/skills/compaction/compaction.pyi carry: the def goes`: compaction keeps a chain by supersede.
 - `.agents/skills/compaction/compaction.pyi inherit: the def goes`: as carry.
 - `.agents/skills/compaction/compaction.pyi imported: the def goes`: as carry.
+- `.agents/skills/compaction/compaction.pyi CHOOSER: the const goes`: choice asks on the chain the model that wrote its last reply, which reads the chain from its cache.
+- `.agents/skills/compaction/compaction.pyi LISTED: the const goes`: the model of the chain read each act, so the prompt of choice lists none.
+- `.agents/skills/compaction/compaction.pyi choice: the parameter to goes`: as CHOOSER.
+- `.agents/skills/compaction/compaction.pyi chosen: the parameter to goes`: as CHOOSER.
+- `.agents/skills/compaction/compaction.pyi condense: the parameter to goes`: as CHOOSER.
 - `.agents/skills/memory/memory.pyi Memory: the alias goes`: memory reads its files with reads in the word.
 - `.agents/skills/ouroboros/ouroboros.pyi LORE: the const goes`: the kit ouroboros was rewritten.
 - `.agents/skills/ouroboros/ouroboros.pyi ouroboros: the def goes`: as LORE.

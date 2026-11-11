@@ -99,22 +99,27 @@ export function demoModels(watch = false): (asked: Asked, write: Write) => Promi
     // A message that hires workers makes a life as a conductor makes it: a prompt to a worker on each of two or eight
     // chains of its own, each of which thinks until a cancel, under a wait that holds the thread of the message open.
     const hires = /Hire (two|eight) workers/.exec(last)?.[1];
+    // A message that asks the model what its chain keeps, as the compaction of the chain asks it, gets the one call that
+    // answers it, so a compaction of the demo asks no model.
+    const chooses = last.includes("close((ids, summary))");
     // A message that adds the search shortcut writes the README, so a rewind to a point before it can give the file
     // back as it was.
     const shortcut = !first && last.includes("Add the search shortcut");
-    const fallback = hires
-      ? hires === "two"
-        ? 'for label in ("w/one", "w/two"):\n  prompt(str, "Think until I cancel.", on=chain(label))\nawait wait(3600, __name__)'
-        : 'for n in range(8):\n  prompt(str, "Think until I cancel.", on=chain(f"w/{n}"))\nawait wait(3600, __name__)'
-      : shortcut
-        ? 'notes = read("README.md")\nwrite(notes.replace("- Find it when it matters", "- Find it when it matters, with Ctrl+K"))\nclose("Ctrl+K opens the search now, and the README says so.")'
-        : fenced
-          ? '```python\nclose("Here is the answer, in a fence.")\n```'
-          : asks
-            ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
-            : first
-              ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
-              : `close(${JSON.stringify(answer)})`;
+    const fallback = chooses
+      ? 'close(([], "The chain keeps its plan, and its model reads the rest again."))'
+      : hires
+        ? hires === "two"
+          ? 'for label in ("w/one", "w/two"):\n  prompt(str, "Think until I cancel.", on=chain(label))\nawait wait(3600, __name__)'
+          : 'for n in range(8):\n  prompt(str, "Think until I cancel.", on=chain(f"w/{n}"))\nawait wait(3600, __name__)'
+        : shortcut
+          ? 'notes = read("README.md")\nwrite(notes.replace("- Find it when it matters", "- Find it when it matters, with Ctrl+K"))\nclose("Ctrl+K opens the search now, and the README says so.")'
+          : fenced
+            ? '```python\nclose("Here is the answer, in a fence.")\n```'
+            : asks
+              ? 'await prompt(str, "Which effort should the next step take?", to=OPERATOR)'
+              : first
+                ? 'notes = read("README.md")\ncheck = await bash("printf \'✓ capture\\n✓ search\\n✓ local storage\\n\'")\nclose("## A clear starting point\\nFieldnotes keeps ideas close. The project has three small parts: capture, search, and local storage.\\n\\nAll three checks passed. A useful next step is to add a **search shortcut**, then cover it with a focused test.")'
+                : `close(${JSON.stringify(answer)})`;
     const code = step?.word ?? fallback;
     if (slow) {
       write({ thinking: step?.thinking ?? thinking });
