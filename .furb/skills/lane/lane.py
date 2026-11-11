@@ -22,7 +22,7 @@ LANE_BASE: str = globals().setdefault("LANE_BASE", "main")
 LANE_LOOK = 600.0
 LANE_CHECKS = {
   "the title": 'python3 script/title.py "$(git log -1 --format=%s)"',
-  "a dash in the prose": "! git diff BASE...HEAD -- . ':(exclude)tests/corpus' | grep -q '^+.*[—–]'",
+  "a dash in the prose": r'''git diff BASE...HEAD -- . ':(exclude)tests/corpus' | python3 -c "import sys; sys.exit(any(l[0] == '+' and ('\u2013' in l or '\u2014' in l) for l in sys.stdin if l))"''',
   "the format of the Rust": "cargo fmt --all --check",
   "a comment past 100 columns": "python3 script/rustwidth.py BASE",
   "the walls of the engine and the doctrine": ".venv/bin/python script/tokens.py",
