@@ -12,10 +12,12 @@ from furb.engine import (
   clock,
   covers,
   get,
+  listening,
   over,
   paused,
   peek,
   prompt,
+  question,
   read,
   rung,
   scope,
@@ -98,6 +100,10 @@ def lane_next(red: bool = False) -> str:
   return max(ready, key=lambda x: x.get("hard", 0))["id"] if ready else ""
 
 
+def lane_held(label: str) -> str:
+  return next((c for c in listening() if question(("chain", c)) and get(c)[4] == label and any(x is get(x[1]) and not over(x[1]) for kind in ("prompt", "rung") for x in transcript(c, kind))), "")
+
+
 def lane_rules(tree: str, branch: str = "", lands: bool = True) -> str:
   base = LANE_BASE
   if not branch:
@@ -140,6 +146,8 @@ async def lane_settled(job: Act, seconds: float) -> object:
 
 
 async def lane_open(id: str, evidence: str, tree: str, worker: str = "claude-cli:sonnet/medium", branch: str = "", source: str = "", patience: float = 3600.0) -> tuple[str, str, str]:
+  if held := lane_held(id):
+    raise Refused(f"{held}, which is not over, holds the label {id}")
   c = chain(id, source=source)
   got = await lane_settled(prompt(tuple[str, str], lane_brief(id, evidence, tree, branch) + LANE_OPENING, to=worker, on=c), patience)
   if isinstance(got, tuple) and len(got) == 2:
@@ -247,8 +255,7 @@ async def lane_fill() -> list[str]:
       prompt(None, "The lane starts nothing: " + ", ".join(lane_halted) + " ended blocked in a row.", to=OPERATOR)
     return []
   for x in rows:
-    runner = lane_runners.get(x["id"], ("", ""))[0]
-    if x["state"] == "running" and not any(r is get(r[1]) and not over(r[1]) for r in transcript(runner, "rung") if runner):
+    if x["state"] == "running" and not lane_held(x["id"]) and not lane_held("run " + x["id"]):
       x["state"] = "open"
   lane_keep(rows)
   cap = json.loads(read("settings://lane", HIDDEN).content)["cap"]

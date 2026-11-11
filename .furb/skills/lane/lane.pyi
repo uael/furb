@@ -25,6 +25,7 @@ async def lane_settled(job: Act, seconds: float) -> object:
 async def lane_open(id: str, evidence: str, tree: str, worker: str = "claude-cli:sonnet/medium", branch: str = "", source: str = "", patience: float = 3600.0) -> tuple[str, str, str]:
   """lane_open(id, evidence, tree) makes the chain id, asks worker there, under the rules of the lane and with the ask of the row id verbatim, for its reading of the item and one shell command that fails now, and gives the chain, the reading and the command.
   It gives the chain, an empty reading and the refusal when the worker gives no pair of strings within patience seconds.
+  It refuses an id whose label a chain that is not over holds with an open prompt or rung, and names that chain.
   """
 
 async def lane_work(c: str, accept: str, first: str, tree: str, worker: str = "claude-cli:sonnet/medium", breakers: list[str] | None = None, patience: float = 7200.0, accept_s: float = 3600.0, begun: bool = False) -> tuple[str, str]:
@@ -52,7 +53,7 @@ async def lane_item(id: str) -> tuple[str, str]:
 async def lane_fill() -> list[str]:
   """lane_fill() starts lane_item on the runner of each next row while fewer rows run than the key cap of the skill in the configs, and gives the ids that it started.
   It reads main as red when the last run of the gates on main failed.
-  It takes a running row whose runner holds no open word back to open, since that row runs nowhere and holds no place.
+  It takes a running row back to open when no chain of its label or of its runner holds an open prompt or rung, since that row runs nowhere and holds no place.
   After three blocked rows in a row, it starts nothing and tells the operator once.
   It keeps script/memwatch.sh running while a row runs, and ends it when none runs.
   """

@@ -1,7 +1,10 @@
 """lane_open, the reading of an item and its command."""
 
+import pytest
+
 from conftest import said
 from skills.conftest import Bench
+from furb.engine import Refused
 
 
 async def test_lane_open_gives_the_chain_the_reading_and_the_command(laning: Bench) -> None:
@@ -20,3 +23,11 @@ async def test_lane_open_gives_the_refusal_when_the_worker_gives_no_pair(laning:
   c, reading, why = await laning.value(f'LANE_LOOK = 0.02\nlane_ask("item", "a", "s")\ngot = await lane_open("item", "", {str(laning.tmp)!r}, patience=0.05)')
   assert (laning.engine.get(c)[4], reading) == ("item", "")
   assert why.startswith("Refused('prompt") and why.endswith(" did not close in 0.05 s')")
+
+
+async def test_lane_open_refuses_a_label_that_a_chain_not_over_holds(laning: Bench) -> None:
+  """It refuses an id whose label a chain that is not over holds with an open prompt or rung, and names that chain."""
+  await laning.word('lane_ask("item", "a", "s")\nheld = chain("item")\nprompt(str, "do", to="claude-cli:sonnet/medium", on=held)')
+  with pytest.raises(Refused, match=f"{laning.ns['held']}, which is not over, holds the label item"):
+    await laning.word(f'await lane_open("item", "", {str(laning.tmp)!r})')
+  assert [x[4] for x in said(laning.log, "chain")].count("item") == 1

@@ -52,10 +52,13 @@ async def test_lane_fill_keeps_the_watcher_of_memory_while_a_row_runs(laning: Be
 
 
 async def test_lane_fill_reopens_a_row_that_runs_on_no_runner(laning: Bench) -> None:
-  """It takes a running row whose runner holds no open word back to open, since that row runs nowhere and holds no place."""
+  """It takes a running row back to open when no chain of its label or of its runner holds an open prompt or rung, since that row runs nowhere and holds no place."""
   laning.say("run list", "success\n")
   laning.sand.files[laning.sand.placed(laning.root, "settings://lane")] = '{"cap": 1}'
+  await laning.word('held = chain("a")\nprompt(str, "do", to="claude-cli:sonnet/medium", on=held)')
   await laning.word('lane_ask("a", "a", "s", state="running", tree="ta")\nlane_ask("b", "b", "s", tree="tb")')
-  assert await laning.value("await lane_fill()") == ["a"]
-  assert [x["state"] for x in await laning.value("lane_rows()")] == ["running", "open"]
   assert await laning.value("await lane_fill()") == []
+  assert [x["state"] for x in await laning.value("lane_rows()")] == ["running", "open"]
+  await laning.word('lane_ask("c", "c", "s", state="running", hard=1, tree="tc")\nlane_put("a", state="landed")')
+  assert await laning.value("await lane_fill()") == ["c"]
+  assert [x["state"] for x in await laning.value("lane_rows()")] == ["landed", "open", "running"]
