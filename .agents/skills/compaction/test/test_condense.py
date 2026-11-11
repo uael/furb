@@ -17,7 +17,7 @@ async def test_condense_compacts_the_chain_at_once(tmp_path: Path) -> None:
   sand.script[root] = ["close(await condense())", chooser]
   assert await engine.prompt(str, "go", on=root) == root
   await settle()
-  told = {a[1] for a in engine.transcript(root) if a[0] == "tell"}
+  told = {a[1] for a in engine.reading(root) if a[0] == "tell"}
   assert engine.get("chain2") is None
   assert held["c.txt"] in told and held["d.txt"] not in told
   assert engine.module(root)["summary"] == "gist"
@@ -34,7 +34,7 @@ async def test_when_the_model_gives_no_tuple_it_compacts_the_chain_with_filters(
   assert [str(a[4]) for a in engine.transcript(root) if a[0] == "rung" and str(a[4]).endswith("reground()")] == [
     "reground()"
   ]
-  assert [a for a in engine.transcript(root) if a[0] == "tell" and a[1] == one] == []
+  assert [a for a in engine.reading(root) if a[0] == "tell" and a[1] == one] == []
   assert "summary" not in engine.module(root)
 
 

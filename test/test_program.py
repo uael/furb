@@ -6,7 +6,7 @@ from furb.engine import OPERATOR, Text
 
 
 async def test_program_gives_the_program_of_a_chain() -> None:
-  """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its transcript say."""
+  """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its reading say."""
   sand, log, root = born()
   mine = engine.rung("mine = 1", on=root)
   await mine

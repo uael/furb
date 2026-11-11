@@ -5,7 +5,7 @@ from furb import engine
 
 
 async def test_a_filter_is_given_the_acts_of_the_transcript_up_to_the_source() -> None:
-  """A filter is given the acts of the transcript up to the source of a chain that has one."""
+  """A filter is given the acts of the reading of the source of a chain that has one."""
   _, _, root = await lived()
   held: list[tuple] = []
   engine.chain("twin", source=root, filter=seen(held))

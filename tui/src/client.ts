@@ -5,7 +5,7 @@ import type { Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Fact, Standing, Turn } from "furb";
-import { type Compaction, followed, isDone, operated, type Spend, WORK } from "furb/life";
+import { type Compaction, compacts, followed, isDone, operated, type Spend, WORK } from "furb/life";
 import type {
   Act,
   Answer,
@@ -27,13 +27,6 @@ import type { Setting } from "./configs.ts";
 import { lean } from "./reading.ts";
 
 export { Closed, Refused };
-
-/** Whether a prefix cuts its chain, as a word that compacts or clears it says one: a chain says its own prefix at its
- * birth, and the checkpoint word of a record made before the chain said that prefix itself began with the prefix that
- * it said, which was the birth of its chain. */
-export function cuts([, id, by]: readonly unknown[], word: string): boolean {
-  return by !== id && !word.startsWith("say('prefix', scope(acting()), ");
-}
 
 export type { Verb };
 
@@ -614,10 +607,9 @@ export class RemoteLife extends EventEmitter {
     const at = ++this.count;
     const [kind, id, by] = fact;
     // A later life says each fact of its record again as the journal, which names no speaker, and only the operator
-    // says seen. A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.
+    // says seen.
     if (kind === "seen" && this.saw(by)) this.seenAt.set(id, at);
-    else if (kind === "prefix" && cuts(fact, String(this.acts.get(by)?.words[0] ?? "")))
-      this.compactions.push({ chain: id, by, at });
+    else if (compacts(fact)) this.compactions.push({ chain: id, by, at });
     else if (kind === "started" && this.outputs.has(id)) this.outputs.set(id, { stdout: "", stderr: "" });
     else if (kind === "out") {
       const act = this.acts.get(id);

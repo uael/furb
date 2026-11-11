@@ -68,7 +68,7 @@ A show of the file is plain data, which span, grep and differs make, so it is a 
 A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show to a read by writing one, which the word makes again when it runs again; no later life makes it again as it was, so bash, whose shows are words of its act, refuses one.
 """
 type Filter = Callable[[list[Question]], list[Question]]
-"""A filter is given the acts of the transcript up to the source of a chain that has one.
+"""A filter is given the acts of the reading of the source of a chain that has one.
 A filter says which acts the turns of that chain keep, each with its entries.
 A filter is any callable of that shape, so a word adds a filter by writing one, and take makes the filter of the file.
 A later life runs the filter again and keeps the same acts, since the word that opened the chain opens it again with it.
@@ -122,6 +122,11 @@ def transcript(on: str = "", of: str = "") -> list[Fact]:
   transcript gives a new list at each call, so a word that changes the list it was given changes no transcript.
   The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the root.
   The name of an act gives the facts on its scope, and a name of no act gives no fact.
+  """
+
+def reading(on: str = "") -> list[Fact]:
+  """reading gives what the model of a chain reads: the facts that the last cut on the chain kept, then each fact said on the chain after that cut, or the whole transcript of a chain that holds no cut.
+  reading gives a new list at each call, and asks nothing, so no act is made and the journal keeps nothing.
   """
 
 def ask(kind: str, on: str, *words: object) -> object:
@@ -214,7 +219,7 @@ def peek(at: str, waiting: object = None) -> object:
   """
 
 def turns(on: str = "") -> list[Turn]:
-  """The turns of a chain, folded from what it has heard.
+  """The turns of a chain, folded from its reading.
   The turns of what a chain has heard: every tell stands as a paragraph of its notes, and nothing else stands at all.
   The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines that the show of the one that tells it picks.
   turns reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing.
@@ -235,7 +240,7 @@ def module(on: str = "") -> dict:
   """
 
 def program(on: str = "") -> dict[str, str]:
-  """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its transcript say."""
+  """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its reading say."""
 
 def dump(*names: str, on: str = "") -> str:
   """dump gives names of the module of a chain as python, which a word of another life runs to bind them again, so no verb loads them.
@@ -554,7 +559,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   A chain is an act of Never, so the chain never completes.
   The turns of a chain tell the acts of the operator.
   The transcript of a chain is the facts on it, in the order they were said.
-  Nothing leaves a transcript once the transcript holds it, but by a prefix said on its chain, which takes the place of what the transcript held.
+  Nothing leaves a transcript once the transcript holds it: a cut said on its chain changes what its model reads, and takes no fact from the transcript.
   An assistant turn keeps the role assistant in every chain made from the chain.
   The engine adds the acts that caused a kept act to what the filter kept.
   The globals of a chain whose filter is a take that is not inside hold the bindings of the skipped words still.
@@ -572,7 +577,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   A chain with no source holds first the setup of the root, each fact of the root from its paragraph chain() up to its open but the facts of each act that an ear of the outside, the operator or the root itself made on the root after the fact setup that the root says, and of each act under one, so every such chain holds the turns of the setup that every chain shares with the same names, the turn of the stand of the root first among them, and its own open comes after them.
   A root that holds no open after its paragraph chain() or no stand before its open, as a root whose compaction kept no setup or that a checkpoint carried, gives no setup to such a chain, so the chain holds no open rung of the root and its own rungs run.
   A chain with no source whose standing names a doctrine plays no stand of its own: the rung of stand() and a cd to the directory of the standing, which the root plays on itself with that word and its default actor before its setup, stands first in the setup that the chain holds and runs again, so the chain stands where the root stands; when the setup that it holds plays no stand, as the setup of a root whose compaction kept none or that a checkpoint carried, it plays that rung on itself at its birth, then the setup that its standing gives but the extensions of the root alone, as the root does, and it tells its open once no rung with a word and an actor is open on it at the done of a rung on it.
-  A chain that hears a prefix that another said on it tells no open of its own and plays no stand at its birth, since the turns of the prefix hold them, as the turns that a checkpoint carries.
+  A chain that holds a fact carried tells no open of its own and plays no stand at its birth, since the turns that the fact carried holds hold them.
   A chain with no source runs again each word of the setup that it holds, as a chain with a source runs the rungs of its origin, so the words of the extensions bind their names in its module and the setup tells nothing again.
   A chain with a source holds whole the setup that its origin holds, whatever its filter, and its filter applies only to what came after that setup.
   The transcript then holds the prompt of the operator, and the replies of the model, each with its turn.
@@ -608,10 +613,10 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   It holds the transcript of its origin first and tells its own open after it, and the rungs it runs again tell nothing, since every word of those stands in what it inherited.
   It hears no control that ends it, since nothing that happens to a chain ends it, and a control over a chain is over the acts on it, which end themselves.
   Every done it holds answers a question it holds, since it holds every question made on it, the ones it made itself among them.
-  What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin.
+  What a chain with a source holds of the reading of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin.
   The filter is given every act, what the operator asked among them, since what the operator asked of a chain no rung of it says again.
   What a chain said of itself it keeps whatever the filter says, so the open of the origin stands in the new chain.
-  The source of a chain is a chain, by its name, and means the transcript of that chain as it stands.
+  The source of a chain is a chain, by its name, and means the reading of that chain as it stands.
   A source that names no chain of the life refuses the call in the caller, and no chain is made.
   A chain with a source reads what its origin stands on, as it stands.
   The chain retells the rungs of its origin through the program of the origin, and it makes the rungs it retells itself, so they tell nothing.
@@ -650,6 +655,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
   When an act that a rung of the chain made on another chain is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript.
   When the chain of a prompt that a rung of the chain made on another chain pauses at a refused reply of that prompt, the chain tells that rung under the header paused and binds the refusal under the word why, and when the word of that rung does not run it acknowledges the pause, so a model sees that the prompt waits for a wake.
+  Each scan of its facts that the ear of a chain makes at a fact reads them from its last cut, so the work of a fact does not grow with the facts that a cut dropped.
   """
 
 def seed(data: object) -> list[Entry]:
@@ -659,10 +665,10 @@ def seed(data: object) -> list[Entry]:
   Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
   Each act of the data with a value stands known on its chain with the words that made it and with that value and runs nothing.
   Each act of the data with a value is made before each open prompt, so a message that the operator sent on a done prompt while its chain was paused reads that prompt, and its model is asked once a wake comes in the later life.
-  A rung of the operator on each chain awaits in turn a rung of each part of the birth that the fact carried of the chain holds, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain itself says its turns as its prefix when that rung comes, and again with each fact since but a tell when the rung ends, so a reader reads each as a birth and as no clear.
+  A rung of the operator on each chain awaits in turn a rung of each part of the birth that the fact carried of the chain holds, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain holds the turns of its fact carried as its prefix, and once the parts ran, that rung says a cut on the chain that keeps each fact of the chain but what the birth told and did not debug, so a reader reads a birth by the fact carried that the cut keeps, and no clear.
   The fact carried of a chain holds the text of each value of the chain, then the parts of its birth in order: a word that binds each value from that text when the chain holds one, each word of its definitions, that word of the values again, which binds a value only when the module does not still hold the object that it bound first, and each life word whose act was open on it at the tip, so the word of the operator holds no text of a value or of a definition.
   seed reads the definitions that a checkpoint of an earlier build holds as one string as one word of definitions.
-  The rung binds the definitions and the values of the chain after the chain says the prefix, so a value that raises as it is bound leaves the turns of the chain whole.
+  The rung binds the definitions and the values of the chain before it says the cut, so a value that raises as it is bound leaves the turns of the chain whole.
   A part that raises at a birth tells its exception in a debug of the rung of the operator and stops no part after it, and the word of the values binds each value in a try of its own, so a value that raises loses only itself, a word of definitions that raises loses only what follows the raise in that word, and the second word of the values binds a value that the first could not bind, as one that names a class of the definitions, and gives a name that a definition bound again the value of the fact carried, while a value whose object the module still holds stays that object, which a definition took.
   The note of a birth names each name that the checkpoint lost and each value of the fact carried that the born life does not hold after the parts, and a birth that holds each such name and cut no act tells no note.
   The rung of the operator leaves no name of its own in the module of the chain after its last line, whatever raised, so no object of a birth stays held.
@@ -1029,7 +1035,10 @@ type Module = tuple[Literal["module"], str, str, dict[str, object]]
 type Prefix = tuple[Literal["prefix"], str, str, list[Fact]]
 """A prefix carries what a chain with a source holds of the transcript of its origin, which the chain says at its birth, before its open.
 The transcript of the chain holds the facts of its prefix where the prefix stands, and not the prefix itself.
-A prefix takes the place of what the transcript of the chain that it is said on held, so a word that says a prefix on its own chain cuts its turns, and the chain goes on under its name, with its module, its ladders and its acts.
+"""
+type Cut = tuple[Literal["cut"], str, str, list[Fact]]
+"""A cut names what the model of a chain reads from it on: the facts that it keeps, then each fact said on the chain after it.
+A cut takes nothing from the transcript of its chain, so the chain only grows, and its module, its ladders and its acts go on.
 """
 type Gate = tuple[Literal["gate"], str, str, str, str]
 """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word.
@@ -1193,7 +1202,7 @@ def controlled(ear: Callable[[str], Ear], lasting: bool = False) -> Callable[[st
   """
 
 def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
-  """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek and transcript, which read the tables.
+  """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek, transcript and reading, which read the tables.
   A verb from a rung takes the chain of the rung when the call leaves on unsaid.
   The kind of an act is the verb that made the act, or the kind an ear made it with.
   An act says who made it, and the one that made it says its own maker in turn, which is how the life knows every ancestor of an act.

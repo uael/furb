@@ -18,6 +18,7 @@ from furb.engine import (
   prompt,
   question,
   read,
+  reading,
   rung,
   say,
   scope,
@@ -113,9 +114,9 @@ regrounded: set[str] = set()
 
 def reground(on: str = "") -> None:
   here = on or scope(acting())
-  voiced = {x[1] for x in transcript(here) if x[0] == "tell"}
+  voiced = {x[1] for x in reading(here) if x[0] == "tell"}
   held: dict[str, tuple[Text, bool]] = {}
-  for a in transcript(here):
+  for a in reading(here):
     if (
       a[0] in ("read", "write")
       and a[1] in voiced
@@ -143,7 +144,7 @@ def headline(fact: tuple) -> str:
 
 def supersede(keep: Filter | None = None, on: str = "") -> str:
   here = on or scope(acting())
-  theirs = transcript(here)
+  theirs = reading(here)
   kin = {here}
   acts = []
   for x in theirs:
@@ -169,12 +170,18 @@ def supersede(keep: Filter | None = None, on: str = "") -> str:
       return it[2] in kin
     return question(it) or (made[2] if question(("reply", it[1])) else it[1]) in kin
 
-  say("prefix", here, [it for it in theirs if stays(it)])
+  say("cut", here, [it for it in theirs if stays(it)])
   return here
 
 
 def compact(filters: list[Filter] | None = None, summary: str = "", on: str = "") -> str:
-  here = supersede(together(*(FILTERS if filters is None else filters)), on)
+  narrowed = together(*(FILTERS if filters is None else filters))
+
+  def keep(acts: list) -> list:
+    kept = {a[1] for a in narrowed(acts)}
+    return [a for a in acts if a[1] in kept or (a[0] == "prompt" and operated(a[2]))]
+
+  here = supersede(keep, on)
   name = "summary"
   while f"</s:{name}>" in summary:
     name += "_"

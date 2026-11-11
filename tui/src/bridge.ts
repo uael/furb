@@ -701,7 +701,7 @@ export class HostView extends EventEmitter {
     const view = this.chains.get(this.life.scope(id));
     if (!view) return;
     if (
-      ["tell", "pause", "wake", "cancel", "close", "reply", "prefix"].includes(kind) ||
+      ["tell", "pause", "wake", "cancel", "close", "reply", "prefix", "cut"].includes(kind) ||
       answered === "reply"
     )
       view.turns = undefined;

@@ -66,6 +66,15 @@ const RESERVE: &str = "reserve";
 /// turns of a chain.
 const CARRIED: &str = "carried";
 
+/// The prefix of a chain that the fact carried of a checkpoint of the form before
+/// [`CHECKPOINT_SCHEMA`] holds the turns of, as the engine of that form said it: the chain holds
+/// those turns, so its model reads them as it did.
+fn prefix(carried: &Fact) -> Object {
+  let turns = carried.word(0).map_or_else(|| Object::list([]), |one| one.to_owned());
+  let words = ["prefix", carried.about(), "store"].map(Object::string);
+  Object::tuple(words.into_iter().chain([turns]))
+}
+
 /// The entry of the checkpoint of a life at its tip, as the store keeps it.
 pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
   let define = callable(|args: Vec<Object>| {
@@ -249,7 +258,7 @@ pub fn booted(record: Vec<Object>) -> Vec<Object> {
 /// The entries that a checkpoint carries: the fact itself when it holds data, which boot gives
 /// `seed` of the engine, or, for the form before [`CHECKPOINT_SCHEMA`], its entries, each reserve
 /// as the questions of the root that it stands for, and the turns of each chain just after that
-/// chain.
+/// chain, with the prefix that holds them.
 fn carried(checkpoint: &Object) -> Vec<Object> {
   let Some(a) = fact(checkpoint) else { return Vec::new() };
   let pairs = a.word(0).and_then(|one| one.pairs()).unwrap_or_default();
@@ -275,7 +284,7 @@ fn carried(checkpoint: &Object) -> Vec<Object> {
       let turns = facts
         .iter()
         .filter(|b| a.kind() == "chain" && b.kind() == CARRIED && b.about() == a.about());
-      out.extend(turns.map(|b| Object::list([b.0.clone()])));
+      out.extend(turns.flat_map(|b| [Object::list([b.0.clone()]), Object::list([prefix(b)])]));
       continue;
     }
     let (kind, n) = (a.about(), a.word(0).and_then(|one| one.as_int()).unwrap_or_default());

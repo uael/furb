@@ -104,6 +104,8 @@ export declare class Engine {
   drive(g: Generator<unknown, unknown, unknown> | NativeEar, name: string): void
   /** transcript gives the facts on a chain, each of which the life adds when it is said, so a chain reads at once what it said itself. */
   transcript(options?: { on?: string; of?: string } | null): Array<[string, string, string, ...unknown[]]>
+  /** reading gives what the model of a chain reads: the facts that the last cut on the chain kept, then each fact said on the chain after that cut, or the whole transcript of a chain that holds no cut. */
+  reading(options?: { on?: string } | null): Array<[string, string, string, ...unknown[]]>
   /** The way to put a question that is answered now: it makes the act, and gives back what the act came to. */
   ask(kind: string, on: string, words?: unknown[]): unknown
   /** span(lo, hi) is the show of the lines lo through hi, where a line under one is counted back from the end, so that span(1, 20) is the first twenty lines and span(-20, -1) is the last twenty. */
@@ -122,11 +124,11 @@ export declare class Engine {
   write(text: TextValue, options?: { on?: string } | null): TextValue
   /** What the act it is at came to, as the record stands where the call is made, which it gives and never raises. */
   peek(at: string, options?: { waiting?: unknown } | null): unknown
-  /** The turns of a chain, folded from what it has heard. */
+  /** The turns of a chain, folded from its reading. */
   turns(options?: { on?: string } | null): Array<['user' | 'assistant', string, [number, number, number, number, number] | null, unknown]>
   /** module gives the globals of a chain: the dict that the last module of its transcript carries, in which every rung of the chain runs. */
   module(options?: { on?: string } | null): unknown
-  /** program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its transcript say. */
+  /** program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its reading say. */
   program(options?: { on?: string } | null): unknown
   /** dump gives names of the module of a chain as python, which a word of another life runs to bind them again, so no verb loads them. */
   dump(names?: string[], options?: { on?: string } | null): string

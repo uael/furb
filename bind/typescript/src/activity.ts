@@ -3,6 +3,7 @@ import { type Call, call, isFault } from "./ears.js";
 import {
   type Act,
   type Compaction,
+  compacts,
   followed,
   operated,
   type PauseCause,
@@ -295,8 +296,7 @@ export class Activity {
     // says seen.
     if (kind === "seen" && (operated(by) || by === "journal")) {
       this.seen.set(id, at);
-    } else if (kind === "prefix" && by !== id) {
-      // A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.
+    } else if (compacts(fact)) {
       this.compactions.push({ chain: id, by, at });
     } else if (kind === "pause" || kind === "wake") {
       const paused = kind === "pause";

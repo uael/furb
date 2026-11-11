@@ -3,6 +3,7 @@
 import asyncio
 import symtable
 from asyncio import CancelledError
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -333,7 +334,7 @@ async def test_the_transcript_of_a_chain_is_the_facts_on_it_in_the_order_it_hear
 
 
 async def test_nothing_leaves_a_transcript_once_the_transcript_holds_it() -> None:
-  """Nothing leaves a transcript once the transcript holds it, but by a prefix said on its chain, which takes the place of what the transcript held."""
+  """Nothing leaves a transcript once the transcript holds it: a cut said on its chain changes what its model reads, and takes no fact from the transcript."""
   _, _, root, one = await posed()
   was = list(engine.transcript(root))
   engine.cancel(one)
@@ -341,8 +342,9 @@ async def test_nothing_leaves_a_transcript_once_the_transcript_holds_it() -> Non
   now = engine.transcript(root)
   assert now[: len(was)] == was and len(now) > len(was)
   kept = [a for a in now if a[1] != one]
-  engine.say("prefix", root, kept)
-  assert [a[:2] for a in engine.transcript(root)] == [a[:2] for a in kept] != [a[:2] for a in now]
+  engine.say("cut", root, kept)
+  assert [a[:2] for a in engine.transcript(root)][: len(now)] == [a[:2] for a in now]
+  assert [a[:2] for a in engine.reading(root)][: len(kept)] == [a[:2] for a in kept] != [a[:2] for a in now]
 
 
 async def test_an_assistant_turn_keeps_the_role_assistant_in_every_chain_made_from_the_chain() -> None:
@@ -624,15 +626,15 @@ async def test_a_chain_with_no_source_whose_standing_names_a_doctrine_tells_its_
   assert (held.get("x"), held.get("z"), "y" in held, "w" in held) == (41, 42, False, False)
 
 
-async def test_a_chain_that_hears_a_prefix_that_another_said_on_it_tells_no_open_of_its_own() -> None:
-  """A chain that hears a prefix that another said on it tells no open of its own and plays no stand at its birth, since the turns of the prefix hold them, as the turns that a checkpoint carries."""
-  # A record as a checkpoint lays it: the chains, then the stand, then a word that says the prefix of each chain.
+async def test_a_chain_that_holds_a_fact_carried_tells_no_open_of_its_own() -> None:
+  """A chain that holds a fact carried tells no open of its own and plays no stand at its birth, since the turns that the fact carried holds hold them."""
+  # A record as a checkpoint lays it: the chains, each with the fact carried of its turns, then the stand.
   record = [
     (("chain", "chain1", OPERATOR, "", "root", ""),),
     (("chain", "chain2", OPERATOR, "", "two", ""),),
+    (("carried", "chain2", "journal", [], {}, []),),
     (("stand", "stand1", OPERATOR, "chain1"),),
     (("done", "stand1", "world", TAUGHT),),
-    (("rung", "rung1", OPERATOR, "chain2", "say('prefix', 'chain2', [])", "", ""),),
   ]
   log, _ = life(sown(stands=TAUGHT, files=TAUGHT_FILES), record)
   await settle(300)
@@ -1062,7 +1064,7 @@ async def test_every_done_it_holds_answers_a_question_it_holds() -> None:
 
 
 async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin() -> None:
-  """What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin."""
+  """What a chain with a source holds of the reading of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin."""
   _, log, root = born("x = bash('echo hi')", "close(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
@@ -1106,7 +1108,7 @@ async def test_what_a_chain_said_of_itself_it_keeps_whatever_the_filter_says() -
 
 
 async def test_the_source_of_a_chain_is_a_chain_by_its_name() -> None:
-  """The source of a chain is a chain, by its name, and means the transcript of that chain as it stands."""
+  """The source of a chain is a chain, by its name, and means the reading of that chain as it stands."""
   _, log, root = born()
   await engine.rung("k = 1", on=root)
   was = list(engine.transcript(root))
@@ -1805,3 +1807,34 @@ async def test_a_thread_is_asked_again_only_for_a_fact_of_its_own() -> None:
   await settle()
   asked = [engine.get(engine.get(a[2])[2])[1] for a in said(log, "reply")]
   assert (asked.count(one), engine.peek(one, ...)) == (1, ...)
+
+
+async def test_each_scan_of_its_facts_that_the_ear_of_a_chain_makes_at_a_fact_reads_them_from_its_last_cut(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  """Each scan of its facts that the ear of a chain makes at a fact reads them from its last cut, so the work of a fact does not grow with the facts that a cut dropped."""
+  _, _, root = born()
+  scanned = [0]
+
+  def counted(view: Callable[..., list]) -> Callable[..., list]:
+    def scan(*given: str, **named: str) -> list:
+      got = view(*given, **named)
+      scanned[0] += len(got) * (not (given[1:] or named.get("of")))
+      return got
+
+    return scan
+
+  async def work(word: str) -> int:
+    engine.say("cut", root, [])
+    with monkeypatch.context() as patched:
+      patched.setattr(engine, "transcript", counted(engine.transcript))
+      patched.setattr(engine, "reading", counted(engine.reading))
+      scanned[0] = 0
+      assert await engine.rung(word, on=root) is None
+      await settle()
+      return scanned[0]
+
+  first = await work("x = 1")
+  assert await engine.rung("for i in range(300):\n  chance()", on=root) is None
+  assert len(engine.transcript(root)) > 600
+  assert await work("x = 1") <= first

@@ -3140,11 +3140,11 @@ fn answer(engine: &mut Engine, said: &str) -> Object {
     .expect("an answer")
 }
 
-/// A compaction as the skill compaction makes it: the chain keeps each fact but what it was told,
+/// A compaction as the skill compaction makes it: the chain reads each fact but what it was told,
 /// and a rung tells it the summary, so its next turn begins a new conversation.
 #[cfg(unix)]
 const CUT: &str = r#"here = scope(acting())
-say('prefix', here, [x for x in transcript(here) if x[0] != 'tell'])
+say('cut', here, [x for x in reading(here) if x[0] != 'tell'])
 rung("<s:summary>\nThe chain asked first.</s:summary>\nsummary", on=here)"#;
 
 /// The signed thought that the command line of the tests writes for a line that holds THINK.

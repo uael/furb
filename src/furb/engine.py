@@ -71,7 +71,7 @@ def write(text: Text, on="") -> Text:
 
 def turns(on="") -> list[tuple]:
   past, user, sent = [], [], []
-  for it in transcript(on):
+  for it in reading(on):
     match it:
       case ("reply", *_):
         sent += user
@@ -90,7 +90,7 @@ def module(on="") -> dict:
 
 def program(on="") -> dict[str, str]:
   words = {}
-  for x in transcript(on):
+  for x in reading(on):
     match x:
       case ("module", *_):
         words = {}
@@ -326,25 +326,15 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
   kept = (
     filter
     if filter is None or isinstance(filter, list)
-    else [one[1] for one in filter([x for x in transcript(source or ROOT) if question(x)])]
+    else [one[1] for one in filter([x for x in reading(source or ROOT) if question(x)])]
   )
 
   def ear(id):
-    t = transcript(o := source or ROOT)
+    t = reading(o := source or ROOT)
     h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
-    blocked, running, waiting, last, heard, past, unread, seen, hushed = (
-      set(),
-      {},
-      {},
-      standing(),
-      [],
-      [],
-      set(),
-      set(),
-      {},
-    )
+    blocked, running, waiting, last, heard, unread, seen, hushed = set(), {}, {}, standing(), [], set(), set(), {}
     step = news = ran = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
@@ -432,17 +422,15 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     while True:
       r = get((a := (yield {id, "stand", "reply"}))[1]) or a
       match a:
-        case ("prefix", _, by, _) if by != id:
-          top = ""
         case ("done", *_) if r[0] == "stand" and standing() != last:
           was, last = last, standing()
           if last[2:3] != was[2:3]:
             stood = module()["actor"] = last[2]
             top = top and opening()
           if not was:
-            yield ("tell", id, ["chain()"]) if last[3:] else top
+            top and (yield ("tell", id, ["chain()"]) if last[3:] else top)
             top *= bool(last[3:])
-            if last[4:] and id == ROOT and not transcript(id, "reply") and not transcript(id, "carried"):
+            if last[4:] and top and id == ROOT and not transcript(id, "reply"):
               seat = yield from seeded()
           elif last[3:] and not top:
             placed(last[1] * (was[1] != last[1]) * all(all(get(x[2])[4::2]) for x in transcript(id, "cd")))
@@ -487,25 +475,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           ran = yield "tell", get(p)[2], [headed(p, "asked no more until a fact comes")]
       match a:
         case ("carried", *_):
-          past = a
-        case ("rung", *_) if "carried" in past[:1]:
           top = ""
-          yield (
-            "prefix",
-            id,
-            [
-              *transcript(id, "module")[-1:],
-              past,
-              *past[3],
-              *transcript(id, "stand")[-1:],
-              *transcript(id, "pause"),
-              a,
-            ],
-          )
-          past = a[1], past[3]
-        case ("done", *_) if a[1] in past[:1]:
-          yield "prefix", id, [x for x in transcript(id) if x[0] != "tell" or x[1] == past[0] or x in past[1]]
-          past = []
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if prompted(path) and scope(path) == id:
@@ -557,7 +527,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           pause(id, why)
         case ("done", about, *_) if prompted(about):
           owed = []
-          for fact in transcript(id):
+          for fact in reading(id):
             owed = (
               []
               if fact[0] == "reply"
@@ -625,11 +595,14 @@ def seed(data):
   for c in data["chains"]:
     put("chain", i := c["id"], OPERATOR, c["on"], c["label"], "")
     v = "".join(
-      f"try:\n if {k!r} not in __v or {k} is not __v[{k!r}]: {k} = __v[{k!r}] = eval(__c[4][{k!r}])\nexcept Exception: pass\n"
+      f"try:\n if {k!r} not in __bound or {k} is not __bound[{k!r}]: {k} = __bound[{k!r}] = eval(__carried[4][{k!r}])\nexcept Exception: pass\n"
       for k in c["values"]
     )
     parts[i] = [*filter(None, [v, *([d] if isinstance(d := c["definitions"], str) else d), v, *c.get("lives", ())])]
-    entries.append((("carried", i, "journal", c["turns"], c["values"], parts[i]),))
+    entries += [
+      (("carried", i, "journal", c["turns"], c["values"], parts[i]),),
+      (("prefix", i, "journal", c["turns"]),),
+    ]
     (c["paused"] or i in asking) and entries.append((("pause", i, OPERATOR),))
   for x in data["acts"]:
     "value" in x and (
@@ -646,9 +619,12 @@ def seed(data):
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
     word = (
-      "__c = transcript(of='carried')[-1]\n__v = {}\nfor __v[0] in __c[5]:\n try: await rung(__v[0])\n except Exception as __e: debug(t'{__e!r}')\n"
-      f'(__v := [n for n in {c["lost"]} + [*__c[4]] if n not in globals()]) + {cut} and debug(t"The life goes on from a checkpoint. '
-      f"It lost {{__v or 'no name'}}, and it cut {cut or 'no act'}.\")\ndel __c, __v"
+      "__carried, __bound, __part = transcript(of='carried')[-1], {}, None\n"
+      "for __part in __carried[5]:\n try: await rung(__part)\n except Exception as __raised: debug(t'{__raised!r}')\n"
+      "__carried[1] == scope(acting()) and say('cut', __carried[1], "
+      "[x for x in transcript() if x[0] != 'tell' or not under(x[1], acting()) or x[3][0].startswith(f'#{acting()} debugged')])\n"
+      f'(__lost := [n for n in {c["lost"]} + [*__carried[4]] if n not in globals()]) + {cut} and debug(t"The life goes on from a checkpoint. '
+      f"It lost {{__lost or 'no name'}}, and it cut {cut or 'no act'}.\")\ndel __carried, __bound, __part, __lost"
     )
     seat = f"rung{numbers['rung'] + 1}"
     for maker, said in [(OPERATOR, word), *((seat, one) for one in parts[i])]:
@@ -713,10 +689,10 @@ def gathered(define, floor):
       acts.append({**d, "value": Refused(one + " was interrupted: the life that ran it ended before it did")})
   out = []
   for c in chains:
-    a, ended = get(c), {y[1] for y in transcript(c, "done")}
+    a, ended = get(c), {y[1] for y in reading(c) if y[0] == "done"}
     saved = [
       x
-      for x in transcript(c)
+      for x in reading(c)
       if x[0] not in ("module", "carried", "made")
       and literal(x, set())
       and (not question(x) or (x[0] == "reply" and x[1] in ended) or x[1] in borne)
@@ -1065,9 +1041,21 @@ def controlled(ear, lasting=False):
 
 
 def boot(record=(), **outside):
-  global say, act, drive, get, peek, transcript, listening
+  global say, act, drive, get, peek, transcript, reading, listening
   get_running_loop()
-  made, known, done, held, log, alive, born, busy, left, heed = Counter(), {}, {}, {}, [], {}, {}, set(), [], {}
+  made, known, done, held, cuts, log, alive, born, busy, left, heed = (
+    Counter(),
+    {},
+    {},
+    {},
+    {},
+    [],
+    {},
+    {},
+    set(),
+    [],
+    {},
+  )
   first, owned, taken = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
   ranks = {id(e): n for n, (e,) in enumerate(record)}
@@ -1176,7 +1164,6 @@ def boot(record=(), **outside):
     if about in known and kind in ("started", "done"):
       taken.setdefault(about, False)
       kind == "done" and done.setdefault(about, words[0])
-    kind == "prefix" and [held[x].clear() for x in held if x[0] == about]
     holds(scope(about), words[0] if kind == "prefix" else [a])
     log.append((a, ()))
     dispatch()
@@ -1239,6 +1226,8 @@ def boot(record=(), **outside):
     for x in on and facts:
       for k in {"", x[0].replace("wake", "pause"), x[2]}:
         held.setdefault((on, k), []).append(x)
+      if x[0] == "cut":
+        cuts[on] = x[3], len(held[on, ""])
 
   def dispatch():
     while not busy:
@@ -1294,6 +1283,10 @@ def boot(record=(), **outside):
 
   def transcript(on="", of=""):
     return held.get((scope(on or site.get()), of), [])[:]
+
+  def reading(on=""):
+    kept, at = cuts.get(on := scope(on or site.get()), ([], 0))
+    return [*kept, *held.get((on, ""), [])[at:]]
 
   for who, listener in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("journal", journal())]:
     drive(listener, who)

@@ -1,4 +1,4 @@
-"""supersede, the chain cut to a prefix that goes on under its name."""
+"""supersede, the chain cut to what a filter keeps, which goes on under its name."""
 
 from pathlib import Path
 
@@ -7,8 +7,8 @@ from furb import engine
 from skills.conftest import compacting, extended
 
 
-async def test_supersede_says_on_the_chain_a_prefix_of_what_the_filter_kept(tmp_path: Path) -> None:
-  """supersede(keep) says on the chain of the caller a prefix of what the filter keep kept of its acts, everything that made what it kept, and every act of the chain, and gives the chain."""
+async def test_supersede_says_on_the_chain_a_cut_that_keeps_what_the_filter_kept(tmp_path: Path) -> None:
+  """supersede(keep) says on the chain of the caller a cut that keeps what the filter keep kept of its acts, everything that made what it kept, and every act of the chain, and gives the chain."""
   sand, root, _ = compacting(tmp_path)
   kept, dropped = await engine.rung("k = 1", on=root), engine.bash("echo hi", on=root)
   before = engine.transcript(root)
@@ -18,7 +18,7 @@ async def test_supersede_says_on_the_chain_a_prefix_of_what_the_filter_kept(tmp_
   questions = [a[1] for a in before if engine.question(a)]
   assert [a[1] for a in after if engine.question(a)][: len(questions)] == questions
   assert [a for a in before if a[1] == dropped and not engine.question(a)] != []
-  assert [a for a in after if a[1] == dropped and not engine.question(a)] == []
+  assert [a for a in engine.reading(root) if a[1] == dropped and not engine.question(a)] == []
 
 
 async def test_so_the_chain_goes_on_under_its_name(tmp_path: Path) -> None:
@@ -29,7 +29,7 @@ async def test_so_the_chain_goes_on_under_its_name(tmp_path: Path) -> None:
   sand.script[root] = ["supersede(lambda _: [])\nclose(k)"]
   assert await engine.prompt(int, "the k", on=root) == 7
   assert engine.get("chain2") is None and len(str(engine.turns(on=root))) < len(str(turns)) + 400
-  assert [a for a in engine.transcript(root) if a[0] == "tell" and "a.txt" in str(a)] == []
+  assert [a for a in engine.reading(root) if a[0] == "tell" and "a.txt" in str(a)] == []
 
 
 async def test_supersede_keeps_whole_the_setup_that_the_model_reads_first(tmp_path: Path) -> None:

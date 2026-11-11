@@ -244,9 +244,11 @@ fn inspected_whole(at: &Path) -> Result<Engine, furb::Fault> {
   Ok(opening.boot::<String>([])?.0)
 }
 
-/// What each chain of a life holds, as python shows it: each fact that it heard, but its module,
-/// which [`MODULES`] shows with no address of the heap, and the outcome of each act among them.
-const STATE: &str = "[(c, [x for x in transcript(c) if x[0] != 'module'], [(x[1], peek(x[1], ...)) for x in transcript(c) if question(x)]) \
+/// What each chain of a life holds, as python shows it: each fact that its model reads, but its
+/// module, which [`MODULES`] shows with no address of the heap, and the outcome of each act among
+/// them. An engine from before the cut has no reading, and its model reads its transcript.
+const STATE: &str = "[(c, [x for x in held(c) if x[0] != 'module'], [(x[1], peek(x[1], ...)) for x in held(c) if question(x)]) \
+                     for held in [globals().get('reading', transcript)] \
                      for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')]]";
 
 /// The state of a life at its tip: what each chain holds and each of its modules.
@@ -685,7 +687,7 @@ fn placed(engine: &mut Engine, at: &[&Path]) -> String {
 fn recorded(engine: &mut Engine, text: &str, at: &[&Path]) -> String {
   let facts = text.lines().filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok());
   let names: Vec<Object> = facts.filter_map(|one| one[0][1].as_str().map(Object::string)).collect();
-  let word = STATE.replace("transcript(c) if", "transcript(c) if x[1] in __names and");
+  let word = STATE.replace("held(c) if", "held(c) if x[1] in __names and");
   let held = engine.word(&word, vec![("__names", Object::list(names))]).unwrap().as_ref().py_repr();
   placing(format!("{held}\n{}", modules(engine)), at)
 }

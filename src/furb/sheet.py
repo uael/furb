@@ -384,13 +384,16 @@ def gate(
 def against(engine: dict[str, object], checked: Checked, on: str, word: str, valued: Sequence[str] = ()) -> list[str]:
   """What the gate finds against a word on the sheet of the engine whose names it is given, after the program of its
   chain as it stands now and the parts that the writings of a rung with no run hold, each word under the name of its
-  rung, with the names of the acts of the chain. It makes no
+  rung, with the names of the acts of the chain, each read from its last cut. It makes no
   fact, so a host may read it while a model still writes the word."""
-  program, question, transcript = engine["program"], engine["question"], engine["transcript"]
+  # An engine of the major from before the cut, which a record replays on, has no reading: its transcript is what its
+  # model reads.
+  program, question = engine["program"], engine["question"]
+  reading = engine.get("reading", engine.get("transcript"))
   assert callable(program)
   assert callable(question)
-  assert callable(transcript)
-  words, facts = program(on), transcript(on)
+  assert callable(reading)
+  words, facts = program(on), reading(on)
   assert isinstance(words, dict)
   assert isinstance(facts, list)
   written: dict[str, str] = {}

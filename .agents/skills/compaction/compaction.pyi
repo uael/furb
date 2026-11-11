@@ -39,7 +39,7 @@ def reground(on: str = "") -> None:
   """
 
 def supersede(keep: Filter | None = None, on: str = "") -> str:
-  """supersede(keep) says on the chain of the caller a prefix of what the filter keep kept of its acts, everything that made what it kept, and every act of the chain, and gives the chain.
+  """supersede(keep) says on the chain of the caller a cut that keeps what the filter keep kept of its acts, everything that made what it kept, and every act of the chain, and gives the chain.
   So the chain goes on under its name with its module, its ladders and its acts, and only its turns are cut.
   With no filter, supersede() keeps every act of the chain, and it reads no builtin from the module of the chain, which a record from before the gate refused such a name may bind to a str.
   supersede(keep) keeps whole the setup of the chain, each fact from its paragraph chain() up to its open, so a cut, even one that keeps nothing, leaves the doctrine and the words of the setup that its model reads first.
@@ -47,6 +47,7 @@ def supersede(keep: Filter | None = None, on: str = "") -> str:
 
 def compact(filters: list[Filter] | None = None, summary: str = "", on: str = "") -> str:
   """compact() supersedes the chain of the caller with a filter that applies the filters in order, FILTERS when it is given none, so the chain goes on under its name with less, and gives that chain.
+  compact() keeps each prompt of the operator whatever its filters keep, so no message of the operator leaves what the model of the chain reads.
   The next word of that chain binds the summary that compact is given as the quote summary when there is one, and regrounds the chain.
   """
 

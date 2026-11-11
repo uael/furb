@@ -13,7 +13,7 @@ def notes(held: list[tuple]) -> list[list[object]]:
 
 
 async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
-  """The turns of a chain, folded from what it has heard."""
+  """The turns of a chain, folded from its reading."""
   _, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)

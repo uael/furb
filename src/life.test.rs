@@ -1281,7 +1281,7 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
     .collect();
   assert!(acts.contains(&("bash1", true)) && acts.contains(&(waiting.as_str(), false)), "{acts:?}");
   assert!(
-    !data.to_string().contains("say('prefix'"),
+    !data.to_string().contains("say('cut'"),
     "the checkpoint holds no word that the crate crafts"
   );
   let mut later = scripted(&at, &["close('late')"]).boot::<String>([]).unwrap().0;

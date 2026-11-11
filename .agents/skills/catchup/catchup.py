@@ -12,6 +12,7 @@ from furb.engine import (
   picked,
   question,
   read,
+  reading,
   scope,
   transcript,
 )
@@ -32,7 +33,7 @@ def catchup(on: str = "") -> Act:
           if here == ROOT:
             act("clock", here, None)
           seen: dict[str, object] = {}
-          for fact in transcript(here)[::-1]:
+          for fact in reading(here)[::-1]:
             if fact[0] not in ("read", "write") or (fact[0] == "read" and str(fact[4]).endswith(("/", "\\"))):
               continue
             was = peek(fact[1])

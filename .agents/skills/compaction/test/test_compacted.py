@@ -84,7 +84,7 @@ async def test_the_chain_keeps_the_acts_that_the_model_chose(tmp_path: Path) -> 
   sand.script[root] = ["read('a.txt')\nx = 1", "SHARE = 2\n" + chooser, ONCE, "close(x + y)"]
   assert await engine.prompt(int, "go", on=root) == 3
   await until(lambda: compacted_on(root))
-  told = {a[1] for a in engine.transcript(root) if a[0] == "tell"}
+  told = {a[1] for a in engine.reading(root) if a[0] == "tell"}
   again = [a[1] for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt" and a[1] != held["a.txt"]]
   assert held["c.txt"] in told and held["d.txt"] not in told and held["a.txt"] not in told
   assert again[0] in told and engine.module(root)["summary"] == "gist"
@@ -95,7 +95,7 @@ async def test_when_the_model_gives_no_tuple_it_compacts_the_chain_with_filters(
   root, act = await wrapped(tmp_path, "FILTERS = [lambda acts: []]\nread('a.txt')", chooser="close((1, 2))")
   assert engine.peek(act) == 3 and made(root) == ["reground()"]
   (one,) = [a[1] for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt"]
-  assert [a for a in engine.transcript(root) if a[0] == "tell" and a[1] == one] == []
+  assert [a for a in engine.reading(root) if a[0] == "tell" and a[1] == one] == []
 
 
 async def test_it_moves_stops_and_pauses_nothing(tmp_path: Path) -> None:

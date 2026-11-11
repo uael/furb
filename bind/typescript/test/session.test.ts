@@ -1201,18 +1201,18 @@ test("a rung is asking while a reply of it runs, and no more once that reply is 
   expect(activity.acts.get("rung1")?.asking).toBeUndefined();
 });
 
-test("the activity keeps each compaction of a chain: a prefix said on it after its birth", () => {
+test("the activity keeps each compaction of a chain: a cut said on it, but the cut of a birth", () => {
   const activity = new Activity();
   const hear = (fact: Fact) => {
     const heard = activity.hear(fact);
     while (!heard.next().done);
   };
   hear(["chain", "chain2", "rung1", ROOT, "work", ROOT]);
-  // A chain with a source says its own prefix at its birth, which cuts nothing.
-  hear(["prefix", "chain2", "chain2", [["bash", "bash1", "rung1", ROOT, "ls", "", 600]]]);
+  // A birth from a checkpoint cuts the chain to what keeps its fact carried, which compacts nothing.
+  hear(["cut", "chain2", "rung2", [["carried", "chain2", "journal", [], {}, []]]]);
   hear(["bash", "bash2", "rung2", "chain2", "ls", "", 600]);
   hear([
-    "prefix",
+    "cut",
     "chain2",
     "rung3",
     [

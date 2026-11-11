@@ -87,8 +87,12 @@ meanings. The entry of such a name here gives only its form in the engine.
   new list of them at each call, and the view of a kind or of a speaker gives the facts on the chain of that kind
   or that it said, which boot keeps as they are said.
 - module: the fact that carries the globals of a chain, which the chain says at its birth and at each replay.
-- prefix: the fact that carries what a chain with a source holds of the transcript of its origin, which the chain
-  says at its birth, before its open; the transcript of the chain holds those facts where the prefix stands.
+- prefix: the fact that carries what a chain with a source holds of the reading of its origin, which the chain says at
+  its birth, before its open; the transcript of the chain holds those facts where the prefix stands.
+- cut: the fact that names what the model of a chain reads from it on: the facts that it keeps, then each fact said on
+  the chain after it. It takes nothing from the transcript, so a chain only grows; a compaction and a birth say one.
+- reading: what the model of a chain reads: the facts that its last cut kept, then each fact said on the chain after
+  that cut, or the whole transcript of a chain that holds no cut; the turns, a fork and each scan at a fact read it.
 - carried turn: a fact on a chain about a name that no act of the life holds, as a turn that the chain took from
   another record or from a checkpoint; a chain with a source holds it whole.
 - note: one thing a tell says: a paragraph, or the binding of an act.

@@ -16,7 +16,17 @@ async def test_compact_supersedes_the_chain_of_the_caller(tmp_path: Path) -> Non
   await settle()
   (first,) = [a[1] for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt"]
   assert engine.get("chain2") is None
-  assert [a for a in engine.transcript(root) if a[0] == "tell" and a[1] == first] == []
+  assert [a for a in engine.reading(root) if a[0] == "tell" and a[1] == first] == []
+
+
+async def test_compact_keeps_each_prompt_of_the_operator_whatever_its_filters_keep(tmp_path: Path) -> None:
+  """compact() keeps each prompt of the operator whatever its filters keep, so no message of the operator leaves what the model of the chain reads."""
+  sand, root, _ = compacting(tmp_path)
+  sand.script[root] = ["close(compact([lambda acts: []]))"]
+  assert await engine.prompt(str, "the words of the owner", on=root) == root
+  await settle()
+  shown = "\n".join(str(turn[1]) for turn in engine.turns(on=root))
+  assert "the words of the owner" in shown
 
 
 async def test_the_next_word_of_that_chain_binds_the_summary_and_regrounds_the_chain(tmp_path: Path) -> None:

@@ -105,7 +105,7 @@ function answerValue(value: unknown): unknown[] | undefined {
 /** How many characters of a text the reader holds of a fact whose text no view reads whole, and the kinds of fact that
  * it holds whole, since the turns, the program and the rows read their texts. The file holds each fact whole. */
 const HELD = 2000;
-const WHOLE = new Set(["tell", "run", "rung", "prompt", "prefix", "module", "chain", "stand", "cd"]);
+const WHOLE = new Set(["tell", "run", "rung", "prompt", "prefix", "cut", "module", "chain", "stand", "cd"]);
 
 /** The place of a line in a file, and its length, in bytes. */
 type Line = [at: number, length: number];
@@ -509,20 +509,26 @@ export class Reader {
   }
   /** The turns of the facts of a chain that the fold has not read yet. */
   private fold(kept: Folded, facts: Fact[]): Turn[] {
-    for (const fact of facts.slice(kept.read)) {
-      const [kind, about] = fact;
-      if (kind === "reply" && isQuestion("reply", about)) kept.cut = kept.told.length;
-      else if (kind === "done" && isQuestion("reply", about) && tupled(fact[3])?.length === 4) {
-        kept.turns.push(
-          ["user", kept.told.slice(0, kept.cut).join("\n\n"), null, null],
-          tupled(fact[3]) as Turn,
-        );
-        kept.told = kept.told.slice(kept.cut);
-        kept.cut = 0;
-      } else if (kind === "tell" && Array.isArray(fact[3])) kept.told.push(fact[3].join("\n"));
-    }
+    for (const fact of facts.slice(kept.read)) this.step(kept, fact);
     kept.read = facts.length;
     return [...kept.turns, ["user", kept.told.join("\n\n"), null, null]];
+  }
+  /** One fact folded into the turns: a prefix folds each fact that it carries, and a cut folds the turns again from the
+   * facts that it keeps, as the model of the chain reads them. */
+  private step(kept: Folded, fact: Fact): void {
+    const [kind, about] = fact;
+    if ((kind === "prefix" || kind === "cut") && Array.isArray(fact[3])) {
+      if (kind === "cut") Object.assign(kept, { turns: [], told: [], cut: 0 });
+      for (const one of fact[3] as Fact[]) this.step(kept, one);
+    } else if (kind === "reply" && isQuestion("reply", about)) kept.cut = kept.told.length;
+    else if (kind === "done" && isQuestion("reply", about) && tupled(fact[3])?.length === 4) {
+      kept.turns.push(
+        ["user", kept.told.slice(0, kept.cut).join("\n\n"), null, null],
+        tupled(fact[3]) as Turn,
+      );
+      kept.told = kept.told.slice(kept.cut);
+      kept.cut = 0;
+    } else if (kind === "tell" && Array.isArray(fact[3])) kept.told.push(fact[3].join("\n"));
   }
 
   /** Where a chain stands: where it went last, or the directory of the life. */
