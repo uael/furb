@@ -324,7 +324,9 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
 
 #[test]
 fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a_row_still_run() {
-  cut_first(Duration::from_secs(2));
+  // A bound of one second cuts the word as a longer one would, and the replay of a shorter run
+  // takes less time.
+  cut_first(Duration::from_secs(1));
   let at = place("clock-spin");
   let poll = "t0 = clock()\nwhile clock() - t0 < 60:\n  pass\nclose('polled')";
   let twice = "a = clock()\nb = clock()\nclose(b >= a)";
@@ -387,7 +389,9 @@ fn asked_of(life: &mut Engine, message: &str) -> Result<Object, Fault> {
 
 #[test]
 fn a_word_that_loops_on_an_answer_of_the_host_ends_at_the_bound_of_a_turn_with_a_bounded_record() {
-  cut_first(Duration::from_secs(2));
+  // A bound of one second cuts the word as a longer one would, and the replay of a shorter run
+  // takes less time.
+  cut_first(Duration::from_secs(1));
   let at = place("cd-spin");
   let spin = "while True:\n  cd('.')";
   let mut life = Opening { skills: Some(false), ..scripted(&at, &[spin, "close(1)"]) }
