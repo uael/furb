@@ -85,7 +85,7 @@ def lane_ask(id: str, ask: str, source: str, done: str = "", **row: object) -> N
   rows = lane_rows()
   if any(x["id"] == id for x in rows):
     raise Refused(f"the row {id} stands")
-  if row.get("worker") and not row.get("why"):
+  if str(row.get("worker", "")).rpartition("/")[2] not in ("", "low", "medium", "high") and not row.get("why"):
     raise Refused(f"the row {id} names the worker {row['worker']} with no why: the effort follows the kind of the work")
   lane_keep([*rows, {"id": id, "ask": ask, "source": source, "done": done, "state": "open", **row}])
 

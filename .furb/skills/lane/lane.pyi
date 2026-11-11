@@ -8,7 +8,7 @@ LANE_ITEMS: str
 
 def lane_ask(id: str, ask: str, source: str, done: str = "", **row: object) -> None:
   """lane_ask(id, ask, source, done) keeps the ask verbatim as an open row of LANE_ITEMS, with its source, the command that says it is done and each other key of row, and refuses an id that a row holds.
-  It refuses a worker with no why, since the effort follows the kind of the work: medium for work, high for a hard row, and more only with a reason.
+  It refuses a worker above high with no why, since the effort follows the kind of the work: medium for work, high for a hard row, and more only with a reason.
   """
 
 def lane_next(red: bool = False) -> str:

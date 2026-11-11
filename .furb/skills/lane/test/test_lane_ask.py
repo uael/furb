@@ -18,9 +18,10 @@ async def test_lane_ask_keeps_the_ask_verbatim_as_a_row(laning: Bench) -> None:
   assert await laning.value("lane_rows()") == [row]
 
 
-async def test_lane_ask_refuses_a_worker_with_no_why(laning: Bench) -> None:
-  """It refuses a worker with no why, since the effort follows the kind of the work: medium for work, high for a hard row, and more only with a reason."""
-  with pytest.raises(Refused, match="names the worker claude-cli:opus/high with no why"):
-    await laning.word('lane_ask("a", "Fix it.", "message 3", worker="claude-cli:opus/high")')
-  await laning.word('lane_ask("a", "Fix it.", "message 3", worker="claude-cli:opus/high", why="a ruling")')
-  assert [x["why"] for x in await laning.value("lane_rows()")] == ["a ruling"]
+async def test_lane_ask_refuses_a_worker_above_high_with_no_why(laning: Bench) -> None:
+  """It refuses a worker above high with no why, since the effort follows the kind of the work: medium for work, high for a hard row, and more only with a reason."""
+  await laning.word('lane_ask("a", "a", "s", worker="claude-cli:sonnet/medium")\nlane_ask("b", "b", "s", worker="claude-cli:opus/high")')
+  with pytest.raises(Refused, match="names the worker claude-cli:opus/xhigh with no why"):
+    await laning.word('lane_ask("c", "Fix it.", "message 3", worker="claude-cli:opus/xhigh")')
+  await laning.word('lane_ask("c", "Fix it.", "message 3", worker="claude-cli:opus/xhigh", why="a ruling")')
+  assert [x["id"] for x in await laning.value("lane_rows()")] == ["a", "b", "c"]
