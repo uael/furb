@@ -646,9 +646,9 @@ def seed(data):
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
     word = (
-      "__c = transcript(of='carried')[-1]\n__v = {}\nfor __p in __c[5]:\n try: await rung(__p)\n except Exception as __e: debug(t'{__e!r}')\ndel __v\n"
-      f'(__l := [n for n in {c["lost"]} + [*__c[4]] if n not in globals()]) + {cut} and debug(t"The life goes on from a checkpoint. '
-      f"It lost {{__l or 'no name'}}, and it cut {cut or 'no act'}.\")"
+      "__c = transcript(of='carried')[-1]\n__v = {}\nfor __v[0] in __c[5]:\n try: await rung(__v[0])\n except Exception as __e: debug(t'{__e!r}')\n"
+      f'(__v := [n for n in {c["lost"]} + [*__c[4]] if n not in globals()]) + {cut} and debug(t"The life goes on from a checkpoint. '
+      f"It lost {{__v or 'no name'}}, and it cut {cut or 'no act'}.\")\ndel __c, __v"
     )
     seat = f"rung{numbers['rung'] + 1}"
     for maker, said in [(OPERATOR, word), *((seat, one) for one in parts[i])]:
@@ -668,9 +668,9 @@ def gathered(define, floor):
   gone = {x[4] for x in asked if x[0] == "wants" and x[2] in cut and prompted(x[4]) and not over(x[1])}
   values, lost, named = {}, {}, {x[1] for x in asked if x[0] in ("prompt", "bash")}
   for c in chains:
-    here, values[c], lost[c] = module(c), {}, []
-    for key, value in here.items():
-      if not (key.startswith("__") or callable(value) or globals().get(key, here) is value):
+    values[c], lost[c] = {}, []
+    for key, value in module(c).items():
+      if not (key.startswith("__") or callable(value) or globals().get(key, values) is value):
         try:
           text = literal(value, found := set())
         except RecursionError:
@@ -697,8 +697,15 @@ def gathered(define, floor):
     a = get(one)
     d = {"kind": a[0], "id": one, "on": a[3]}
     if prompted(one) and not over(one):
-      held = next((x[2] for x in transcript(scope(one), "started") if x[1] == one and get(x[2]) is None), "")
-      acts.append({**d, "shape": a[4], "message": a[5], "to": a[6], "held": held})
+      acts.append(
+        {
+          **d,
+          "shape": a[4],
+          "message": a[5],
+          "to": a[6],
+          "held": next((x[2] for x in transcript(scope(one), "started") if x[1] == one and get(x[2]) is None), ""),
+        }
+      )
     elif over(one):
       literal(peek(one), set()) and acts.append({**d, "words": a[4:], "value": peek(one)})
     else:
@@ -718,7 +725,7 @@ def gathered(define, floor):
     out.append(
       {
         "id": c,
-        "on": a[3] if a[3] in chains else "",
+        "on": a[3] * (a[3] in chains),
         "label": a[4],
         "source": a[5],
         "paused": paused(c),

@@ -202,8 +202,8 @@ async def test_the_fact_carried_of_a_chain_holds_the_text_of_each_value_then_the
   ]
   (word,) = [x[0][4] for x in entries if x[0][0] == "rung" and x[0][2] == OPERATOR and x[0][3] == "chain1"]
   assert word == (
-    "__c = transcript(of='carried')[-1]\n__v = {}\nfor __p in __c[5]:\n try: await rung(__p)\n except Exception as __e: debug(t'{__e!r}')\ndel __v\n"
-    "(__l := [n for n in [] + [*__c[4]] if n not in globals()]) + [] and debug(t\"The life goes on from a checkpoint. It lost {__l or 'no name'}, and it cut no act.\")"
+    "__c = transcript(of='carried')[-1]\n__v = {}\nfor __v[0] in __c[5]:\n try: await rung(__v[0])\n except Exception as __e: debug(t'{__e!r}')\n"
+    "(__v := [n for n in [] + [*__c[4]] if n not in globals()]) + [] and debug(t\"The life goes on from a checkpoint. It lost {__v or 'no name'}, and it cut no act.\")\ndel __c, __v"
   )
 
 
@@ -282,6 +282,29 @@ async def test_the_note_of_a_birth_names_each_name_that_the_checkpoint_lost_and_
   notes = [debugs(said(log, "tell"), operated(log, on)) for on in ("chain1", "chain3")]
   assert notes == [["The life goes on from a checkpoint. It lost ['gone', 'bad'], and it cut no act."], []]
   assert (engine.module("chain1")["AGAIN"], engine.module("chain3")["BOUND"]) == ([1], [2])
+
+
+async def test_the_rung_of_the_operator_leaves_no_name_of_its_own_in_the_module_of_the_chain_after_its_last_line_whatever_raised() -> (
+  None
+):
+  """The rung of the operator leaves no name of its own in the module of the chain after its last line, whatever raised, so no object of a birth stays held."""
+  life(sown())
+  values = {"k": "1", "bad": "nan"}
+  root = chain(
+    "chain1", "", "root", definitions=["raise ValueError('v')"], values=values, lives=["raise KeyError('k')"]
+  )
+  log, _ = life(sown(), engine.seed({**DATA, "chains": [root, chain("chain3", "chain1", "work")]}))
+  await settle()
+  kid = engine.chain("kid", source="chain1")
+  await settle()
+  births = ("__c", "__v", "__p", "__l", "__e")
+  assert [[n for n in births if n in engine.module(on)] for on in ("chain1", "chain3", kid)] == [[], [], []]
+  assert (engine.module("chain1")["k"], engine.module(kid)["k"]) == (1, 1)
+  assert debugs(said(log, "tell"), operated(log, "chain1")) == [
+    "ValueError('v')",
+    "KeyError('k')",
+    "The life goes on from a checkpoint. It lost ['bad'], and it cut no act.",
+  ]
 
 
 HELD = [["held", "/w/held.py", "held()", False]]
