@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
-import { join } from "node:path";
-import { Glob } from "bun";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { LIMIT, longestFirst, weight } from "../script/order.ts";
-
-const root = join(import.meta.dir, "../..");
 
 const limited = (limit: string) => `test("a", async () => {}, ${limit});`;
 
@@ -15,18 +14,26 @@ test("a file weighs as much as the longest limit that it declares for a test, an
 });
 
 test("the runner starts the longest tests first, whatever the size of their files", () => {
-  const paths = ["bind/typescript/test", "tui/test", "tui/scenarios"].flatMap((dir) =>
-    [...new Glob("**/*.test.ts").scanSync(join(root, dir))].map((file) => join(root, dir, file)),
-  );
-  const first = longestFirst(paths)
-    .slice(0, 3)
-    .map((path) => path.slice(root.length + 1).replaceAll("\\", "/"))
-    .sort();
-  // The gallery lasts 380 seconds on Linux and the walk 250 seconds on macOS, and their files are among the smallest:
-  // the three longest limits start first, and the runner holds as many runs at once as a runner of CI has cores.
-  expect(first).toEqual([
-    "tui/scenarios/walk.test.ts",
-    "tui/test/feed-memory.test.ts",
-    "tui/test/gallery.test.ts",
-  ]);
+  const folder = mkdtempSync(join(tmpdir(), "furb-order-"));
+  try {
+    const padding = "// padding\n".repeat(500);
+    const file = (name: string, source: string) => {
+      const path = join(folder, name);
+      writeFileSync(path, source);
+      return path;
+    };
+    const long = file("long.test.ts", limited("120000"));
+    const shorter = file("shorter.test.ts", `${limited("60000")}\n${padding}`);
+    const big = file("big.test.ts", `test("b", () => {});\n${padding}`);
+    const small = file("small.test.ts", 'test("c", () => {});');
+    // The longest limit stands first even in the smallest file, and the larger file of two equal limits stands first.
+    expect(longestFirst([small, big, shorter, long]).map((path) => basename(path))).toEqual([
+      "long.test.ts",
+      "shorter.test.ts",
+      "big.test.ts",
+      "small.test.ts",
+    ]);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });

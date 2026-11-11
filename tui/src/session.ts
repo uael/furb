@@ -588,9 +588,6 @@ export class Session extends EventEmitter {
   /** The mark of the last snapshot that the session took, which tells the worker which parts of the chain it holds. */
   private held = 0;
   private dirty = false;
-  /** The chain that the saved view shows, until the life tells it: a life that opens tells its acts as its replay goes on,
-   * so the first snapshots show the root, and the chain comes back once it is told. */
-  private wanted = "";
   private closed = false;
   /** The follow-ups that `<record>.ui.json` held from an older release, which move into the queue of the life. */
   private legacyQueue: Kept[] = [];
@@ -638,7 +635,6 @@ export class Session extends EventEmitter {
       this.legacyQueue = queued ?? [];
       this.scanName(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
-      if (this.selected !== engine.root) this.wanted = this.selected;
       this.savedCost = view.cost ?? 0;
       if (damage) this.notice = damage;
     }
@@ -950,15 +946,6 @@ export class Session extends EventEmitter {
           if (moved) this.version++;
         }
         this.counted = count;
-        if (this.wanted && this.indexed().ids.get(this.wanted)?.kind === "chain") {
-          this.selected = this.wanted;
-          this.wanted = "";
-          this.held = 0;
-          this.turns = [];
-          this.answers = [];
-          this.program = {};
-          this.dirty = true;
-        }
         // The threads of the chain shown and the tree of the sidebar come from the crate with the acts that they read,
         // so a frame draws the threads of the acts that it shows.
         // A read that began before these acts came gives the threads of before them, so the read goes again.
@@ -1744,7 +1731,6 @@ export class Session extends EventEmitter {
     return id === this.engine.root ? "Main" : String((chain?.kind === "chain" && chain.words[0]) || "Chain");
   }
   async select(id: string): Promise<void> {
-    this.wanted = "";
     if (id !== this.selected) this.leave();
     // The moment that the feed shows is one of the chain shown, so another chain is shown as it stands now.
     if (id !== this.selected) this.moment = undefined;
@@ -1946,13 +1932,37 @@ export class Session extends EventEmitter {
     const after = (act: ActRow | undefined): act is ActRow =>
       !!act && act.began >= point.began && (message || !under(act));
     const files = new Map<string, FileChange>();
+    const kept = new Set<string>();
     // The count of changes in the state of the host lags the acts, which the session asks for, so the journal is read
     // to its end: a page shorter than asked is its last.
-    for (let at = 0, page: FileChange[] = []; at === 0 || page.length === 100; at += 100) {
-      page = await this.host.readChanges(at, 100);
-      for (const change of page)
-        if (change.act && after(byId.get(change.act)) && !files.has(change.path))
-          files.set(change.path, change);
+    const read = async () => {
+      files.clear();
+      kept.clear();
+      for (let at = 0, page: FileChange[] = []; at === 0 || page.length === 100; at += 100) {
+        page = await this.host.readChanges(at, 100);
+        for (const change of page) {
+          if (change.act) kept.add(change.act);
+          if (change.act && after(byId.get(change.act)) && !files.has(change.path))
+            files.set(change.path, change);
+        }
+      }
+    };
+    await read();
+    // The daemon writes the change of a write in the journal after it tells the write, so a write that was told a
+    // moment ago has no change yet: the journal is read again until each write that is done has its change.
+    const owed = () =>
+      this.acts.some(
+        (act) =>
+          act.kind === "write" &&
+          isDone(act) &&
+          !failed(act) &&
+          !cancelled(act) &&
+          after(act) &&
+          !kept.has(act.id),
+      );
+    for (let tries = 0; tries < 20 && owed(); tries++) {
+      await Bun.sleep(25);
+      await read();
     }
     const commands = this.acts.filter((act) => act.kind === "bash" && after(act)).length;
     return { files: [...files.values()], commands };

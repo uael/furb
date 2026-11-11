@@ -26,9 +26,6 @@ async function shortcut(session: Session): Promise<{ point: string; readme: stri
   await idle(session);
   await session.refresh();
   expect(await readFile(path, "utf8")).not.toBe(readme);
-  // The daemon writes the change in the journal after it tells the write, so the journal holds it a moment later.
-  for (let tries = 0; tries < 200 && !(await session.filesAt(point)).files.length; tries++)
-    await Bun.sleep(50);
   return { point, readme, path };
 }
 

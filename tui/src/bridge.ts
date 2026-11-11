@@ -746,7 +746,13 @@ export class HostView extends EventEmitter {
     const unread = this.unread;
     this.unread = [];
     for (const fact of unread) this.changed(fact);
-    const selected = life.act(requested)?.kind === "chain" ? requested : life.root;
+    // The acts that the window was told lag the life while its replay goes on, so a chain that they lack is asked of the
+    // life: a saved view that names it keeps it, and the root stands in for a name that no chain holds.
+    const told = life.act(requested);
+    const made = told
+      ? told.kind === "chain"
+      : ((await life.get(requested)) as unknown[] | null | undefined)?.[0] === "chain";
+    const selected = made ? requested : life.root;
     const view = this.chains.get(selected) ?? {};
     this.chains.set(selected, view);
     view.roster ??= ((await life.standing())[0] ?? []).map(([name, efforts, window]) => [
