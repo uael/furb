@@ -24,6 +24,6 @@ pytest = 180
 # The limits of the benches that no run of the suite makes. A test reads each key of this table, and the name of each
 # key ends with its unit. script/budget.py reads only [local] and [ci], and ignores this table.
 [bench]
-# The most heap, in MiB, that a life of the last size of LARGE in host/tests/memory.rs may hold, when its test runs
-# with `-- --ignored`.
+# The most heap, in MiB, that a life of the last size of LARGE in host/tests/suite/memory.rs may hold, when its test runs
+# as `memory::bench -- --ignored`.
 memory_heap_mib = 1024

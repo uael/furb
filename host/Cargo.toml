@@ -62,21 +62,3 @@ furb = { path = "..", version = "0.4.2", features = ["test-support"] }
 # The digest of the schema of each version of the protocol.
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
-
-[[test]]
-# The test of a record that takes no fact runs in a process of its own, with no harness, since it
-# sets a limit of the process.
-name = "unkept"
-harness = false
-
-[[test]]
-# The test of the memory of a life runs in a process of its own, with no harness, since it counts
-# each byte that the process allocates.
-name = "memory"
-harness = false
-
-[[test]]
-# The test of the heap of the daemon runs in a process of its own, with no harness, since it counts
-# each byte that the process allocates.
-name = "heap"
-harness = false

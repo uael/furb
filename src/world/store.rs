@@ -328,7 +328,8 @@ fn named() -> Fact {
 }
 
 /// How long the ear of the record waits before it tries again to write the entries that it could not write.
-const AGAIN: Duration = Duration::from_secs(5);
+/// A try that fails costs one write that the system refuses.
+const AGAIN: Duration = Duration::from_secs(1);
 
 /// The free bytes of the disk of the record under which the ear tells the operator that the disk is
 /// almost full. It tells again only once the disk held twice as much, so a disk that stands near

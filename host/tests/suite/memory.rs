@@ -1,28 +1,23 @@
 //! The memory that a life holds as it grows: a life that keeps a record of its own draws numbers
 //! and answers prompts whose model writes its reply in many small parts, and the heap of the
 //! process is read at the sizes of `SMALL`, with the events and the bytes that a reader who
-//! attaches at the start of the log reads. With the argument `--ignored` it is the measure of the
-//! bench, at the sizes of `LARGE`, with the budget of its heap, `memory_heap_mib` of
-//! `script/budgets.toml`. The test counts each byte that the process allocates, so it runs in a
-//! process of its own, with no harness, and its argument takes the place of an ignored test.
+//! attaches at the start of the log reads. The ignored test `bench` is the measure of the bench, at
+//! the sizes of `LARGE`, with the budget of its heap, `memory_heap_mib` of `script/budgets.toml`.
+//! The test counts each byte that the process allocates, so a child of the suite runs it alone, as
+//! `apart` says.
 
 #![expect(
   clippy::disallowed_methods,
   reason = "the test blocks on the runtime that it starts for itself"
 )]
-#![expect(clippy::expect_used, reason = "a test with no harness fails by a panic")]
+#![expect(clippy::expect_used, reason = "a helper of the test fails it by a panic")]
 
-#[path = "../../tests/common/yard.rs"]
-mod yard;
+use crate::{apart, yard};
 
 use std::{
-  alloc::{GlobalAlloc, Layout, System},
   collections::{BTreeMap, HashSet},
   path::Path,
-  sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-  },
+  sync::Arc,
   time::{Duration, Instant},
 };
 
@@ -33,7 +28,7 @@ use furb::{
   world::Told,
 };
 use furb_host::{
-  Command, Event, GRACE, Life, LifeHandle, Reply, STALL, Seq, Settings,
+  Command, Counted, Event, GRACE, Life, LifeHandle, Reply, STALL, Seq, Settings,
   protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
   run,
   transport::{Dialer, Local},
@@ -51,46 +46,17 @@ use tokio_util::codec::{Framed, LinesCodec};
 /// The events of a life, each under its place in the log.
 type Logged = (Seq, Arc<Event>);
 
-/// The allocator of the system, which counts the bytes that the process holds.
-struct Counted;
-
-/// The bytes that the process holds on its heap.
-static LIVE: AtomicUsize = AtomicUsize::new(0);
-
-#[expect(
-  unsafe_code,
-  reason = "a count of the heap wraps the allocator of the system, whose trait is unsafe"
-)]
-// SAFETY: each call goes to the allocator of the system with its own arguments, and only counts
-// the bytes.
-unsafe impl GlobalAlloc for Counted {
-  unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-    LIVE.fetch_add(layout.size(), Ordering::Relaxed);
-    // SAFETY: the caller keeps the contract of alloc, which is that of the system.
-    unsafe { System.alloc(layout) }
-  }
-
-  unsafe fn dealloc(&self, at: *mut u8, layout: Layout) {
-    LIVE.fetch_sub(layout.size(), Ordering::Relaxed);
-    // SAFETY: at came from the allocator of the system with this layout.
-    unsafe { System.dealloc(at, layout) }
-  }
-}
-
-#[global_allocator]
-static COUNTED: Counted = Counted;
-
 /// The sizes of a life, in facts, at which the suite reads the heap: two sizes that run in a few
 /// seconds, which show what a reader reads. `FURB_MEMORY_SIZES` may name others, as numbers apart
 /// by commas.
 const SMALL: [usize; 2] = [2_000, 6_000];
 
-/// The sizes of the measure of the bench, which the argument `--ignored` runs. The suite reads the
+/// The sizes of the measure of the bench, which the ignored test `bench` runs. The suite reads the
 /// budget of that run as well, so a key that is gone from `script/budgets.toml` fails each run.
 const LARGE: [usize; 3] = [10_000, 40_000, 160_000];
 
 /// The limits of the benches, whose home is `script/budgets.toml`.
-const LIMITS: &str = include_str!("../../script/budgets.toml");
+const LIMITS: &str = include_str!("../../../script/budgets.toml");
 
 /// The most heap that a life of the last large size may hold, in MiB: the budget of the bench,
 /// which the key `memory_heap_mib` of `script/budgets.toml` gives.
@@ -232,10 +198,38 @@ fn footprint() -> String {
   line.split("Footprint: ").nth(1).and_then(|one| one.split(" (").next()).unwrap_or("?").to_owned()
 }
 
-fn main() {
+#[test]
+fn runs_alone() {
+  apart::run("memory::alone");
+}
+
+/// The measure of the bench, at the sizes of [`LARGE`], with the budget of its heap.
+#[test]
+#[ignore = "the measure of the bench, which takes minutes"]
+fn bench() {
+  apart::run("memory::bench_alone");
+}
+
+#[test]
+#[ignore = "a child of the suite runs it alone"]
+fn alone() {
+  if apart::alone("memory::alone") {
+    measured(false);
+  }
+}
+
+#[test]
+#[ignore = "a child of the suite runs it alone"]
+fn bench_alone() {
+  if apart::alone("memory::bench_alone") {
+    measured(true);
+  }
+}
+
+/// The memory of a life, at the sizes of [`SMALL`], or of [`LARGE`] with the budget of the bench.
+fn measured(large: bool) {
   let runtime = Builder::new_current_thread().enable_all().build();
   let runtime = runtime.expect("the test has a runtime");
-  let large = env::args().any(|one| one == "--ignored");
   let budget = budget();
   let sizes: Vec<usize> = env::var("FURB_MEMORY_SIZES").map_or_else(
     |_| if large { LARGE.to_vec() } else { SMALL.to_vec() },
@@ -291,7 +285,7 @@ async fn a_rebirth_lets_go_of_each_fact_that_the_record_holds() {
     };
     if born {
       time::sleep(Duration::from_secs(1)).await;
-      heaps.push(LIVE.load(Ordering::Relaxed));
+      heaps.push(Counted::live());
       (since, last) = (0, seq);
     }
   }
@@ -339,7 +333,7 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(
   budget: Option<usize>,
 ) {
   let at = yard::Yard::new(format!("furb-host-memory-{}", process::id()));
-  let base = LIVE.load(Ordering::Relaxed);
+  let base = Counted::live();
   fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
@@ -350,7 +344,7 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(
   let mut biggest = (0, 0);
   for &size in sizes {
     while facts < size {
-      let heap = LIVE.load(Ordering::Relaxed);
+      let heap = Counted::live();
       assert!(heap < MOST, "the process holds {heap} bytes at {facts} facts, past {MOST}");
       eprintln!("{:?}\t{facts} facts\t{} MB", started.elapsed(), heap >> 20);
       let word = format!(
@@ -369,7 +363,7 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(
       (facts, last) = (facts + more + after, seq.max(end));
     }
     time::sleep(Duration::from_millis(200)).await;
-    let heap = LIVE.load(Ordering::Relaxed).saturating_sub(base);
+    let heap = Counted::live().saturating_sub(base);
     let (count, bytes, parts, events, acts) = attached(&life, last).await;
     println!(
       "{facts}\t{}\t{}\t{count}\t{}\t{}",
@@ -517,11 +511,11 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(window: (usize, usi
     facts += driver.until_done(&rung).await;
   }
   time::sleep(Duration::from_millis(500)).await;
-  let before = LIVE.load(Ordering::Relaxed);
+  let before = Counted::live();
   let mut slow = Peer::dialed(&local).await;
   slow.said(Verb::Attach { life: life.clone(), from: 0 }).await;
   time::sleep(Duration::from_secs(wait)).await;
-  let taken = LIVE.load(Ordering::Relaxed).saturating_sub(before);
+  let taken = Counted::live().saturating_sub(before);
   println!("a slow window on a life of {facts} facts: the daemon took {} KiB", taken >> 10);
   assert!(
     taken < most,

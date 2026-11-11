@@ -1,7 +1,7 @@
 //! A life whose record takes no fact for a time, past the tail of facts that a checkpoint bounds:
 //! it holds its rebirth and keeps its end until the record takes them again. The test fills the
 //! record with the limit of the size of a file of the process, which only a system of Unix gives,
-//! so it runs in a process of its own, with no harness.
+//! so a child of the suite runs it alone, as `apart` says.
 
 #![cfg_attr(
   unix,
@@ -10,23 +10,31 @@
     reason = "the test blocks on the runtime that it starts for itself"
   )
 )]
-#![cfg_attr(unix, expect(clippy::expect_used, reason = "a test with no harness fails by a panic"))]
+#![cfg_attr(unix, expect(clippy::expect_used, reason = "a helper of the test fails it by a panic"))]
 
 #[cfg(unix)]
-#[path = "../../tests/common/yard.rs"]
-mod yard;
+use crate::{apart, yard};
+#[cfg(unix)]
+use tokio::runtime::Builder;
 
-fn main() {
-  #[cfg(unix)]
-  {
-    use tokio::runtime::Builder;
-    let runtime = Builder::new_current_thread().enable_all().build();
-    let runtime = runtime.expect("the test has a runtime");
-    runtime.block_on(unix::a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end());
-    runtime.block_on(
-      unix::a_life_whose_record_lacks_too_many_facts_pauses_its_work_until_it_takes_them(),
-    );
+#[cfg(unix)]
+#[test]
+fn runs_alone() {
+  apart::run("unkept::alone");
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "a child of the suite runs it alone"]
+fn alone() {
+  if !apart::alone("unkept::alone") {
+    return;
   }
+  let runtime = Builder::new_current_thread().enable_all().build();
+  let runtime = runtime.expect("the test has a runtime");
+  runtime.block_on(unix::a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end());
+  runtime
+    .block_on(unix::a_life_whose_record_lacks_too_many_facts_pauses_its_work_until_it_takes_them());
 }
 
 #[cfg(unix)]

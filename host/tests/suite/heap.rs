@@ -1,16 +1,15 @@
 //! The heap of a daemon past its share: the life that said the most facts since it opened writes
 //! its checkpoint and is born again, the heap falls under the share, and the other life goes on
-//! untouched. The test runs in a process of its own, with no harness, since it counts each byte
-//! that the process allocates.
+//! untouched. The test counts each byte that the process allocates, so a child of the suite runs it
+//! alone, as `apart` says.
 
 #![expect(
   clippy::disallowed_methods,
   reason = "the test blocks on the runtime that it starts for itself"
 )]
-#![expect(clippy::expect_used, reason = "a test with no harness fails by a panic")]
+#![expect(clippy::expect_used, reason = "a helper of the test fails it by a panic")]
 
-#[path = "../../tests/common/yard.rs"]
-mod yard;
+use crate::{apart, yard};
 
 use std::{
   fs, process,
@@ -38,9 +37,6 @@ use std::path::Path;
 use tokio::{runtime::Builder, time};
 use tokio_util::codec::{Framed, LinesCodec};
 
-#[global_allocator]
-static COUNTED: Counted = Counted;
-
 /// The bound of the heap of the daemon of the test, which reads its heap past a floor.
 const BOUND: usize = 1 << 20;
 
@@ -56,7 +52,17 @@ fn heap() -> usize {
 /// How long a life with no holder lives in the daemon of the test.
 const GRACE: Duration = Duration::from_secs(1);
 
-fn main() {
+#[test]
+fn runs_alone() {
+  apart::run("heap::alone");
+}
+
+#[test]
+#[ignore = "a child of the suite runs it alone"]
+fn alone() {
+  if !apart::alone("heap::alone") {
+    return;
+  }
   let runtime = Builder::new_current_thread().enable_all().build();
   let runtime = runtime.expect("the test has a runtime");
   runtime.block_on(the_heaviest_life_is_born_again_when_the_heap_passes_its_share());
