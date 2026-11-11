@@ -246,8 +246,8 @@ export class Walk {
         this.find(this.last, "dead", `${label} changed nothing on the screen`);
       if (TOGGLES.has(run)) {
         let again = await this.step(`press ${label} again`, () => this.press(on));
-        // The layout of the feed settles over a few frames after the sidebar comes back, so a frame that differs is
-        // drawn again before it counts as a toggle that did not undo.
+        // A run on a loaded machine drew the feed at another scroll in the first frame after the second press, so a frame
+        // that differs is drawn again before it counts. The cause of that frame is not known.
         for (let tries = 0; tries < 40 && still && again !== before; tries++) {
           await Bun.sleep(25);
           again = await this.drawn();

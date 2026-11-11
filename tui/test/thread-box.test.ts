@@ -153,8 +153,14 @@ test("a folded thread marks new work with a dot, and the dot goes once the threa
     async ({ session, app, frame }) => {
       await idle(session);
       const id = listed(session)[0]?.act.id ?? "";
-      // The thread counts as read once the feed has drawn it open with its answer, so the fold leaves it read.
-      await frame();
+      // The thread counts as read once the feed has drawn it open with its answer, which draws over a few frames, so
+      // the fold leaves it read.
+      let drawn = await frame();
+      for (let step = 0; step < 80 && !drawn.includes("Fieldnotes keeps ideas close"); step++) {
+        await Bun.sleep(25);
+        drawn = await frame();
+      }
+      expect(drawn).toContain("Fieldnotes keeps ideas close");
       app.foldThread(id, true);
       const folded = async () =>
         (await frame())

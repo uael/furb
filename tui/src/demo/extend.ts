@@ -26,11 +26,8 @@ const define = `def todo(item, *, done=False, on=""):
   return act("todo", on, ear, item, done)
 debug(t"The def todo stands.")`;
 
-// A word that only writes files tells no fact of its own, and a thread is asked again only for a fact of its own, so
-// each such word of this script ends with a debug that says what it did, as a model ends it.
 const extend = `${part}
-extend("todo", bound_by()["todo"], tui=part)
-debug(t"The extension todo stands.")`;
+extend("todo", bound_by()["todo"], tui=part)`;
 
 const items = `todo("Read the capture", done=True)
 todo("Draw the todo list in a panel")
@@ -40,12 +37,10 @@ debug(t"Three todos stand.")`;
 const read = `part = read(".furb/skills/todo/tui.ts", grep("items|panel"))`;
 
 const sorted = `part = read(".furb/skills/todo/tui.ts")
-write(part.replace("const all = items(seen);", "const all = seen.todos.sort((one, other) => Number(one.done) - Number(other.done));"))
-debug(t"The part sorts the items.")`;
+write(part.replace("const all = items(seen);", "const all = seen.todos.sort((one, other) => Number(one.done) - Number(other.done));"))`;
 
 const mended = `part = read(".furb/skills/todo/tui.ts")
-write(part.replace("seen.todos.sort(", "items(seen).sort("))
-debug(t"The part reads the items again.")`;
+write(part.replace("seen.todos.sort(", "items(seen).sort("))`;
 
 export const extending: Script[] = [
   {

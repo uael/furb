@@ -1932,24 +1932,25 @@ export class Session extends EventEmitter {
     const after = (act: ActRow | undefined): act is ActRow =>
       !!act && act.began >= point.began && (message || !under(act));
     const files = new Map<string, FileChange>();
-    const kept = new Set<string>();
+    const journaled = new Set<string>();
     // The count of changes in the state of the host lags the acts, which the session asks for, so the journal is read
     // to its end: a page shorter than asked is its last.
     const read = async () => {
       files.clear();
-      kept.clear();
+      journaled.clear();
       for (let at = 0, page: FileChange[] = []; at === 0 || page.length === 100; at += 100) {
         page = await this.host.readChanges(at, 100);
         for (const change of page) {
-          if (change.act) kept.add(change.act);
+          if (change.act) journaled.add(change.act);
           if (change.act && after(byId.get(change.act)) && !files.has(change.path))
             files.set(change.path, change);
         }
       }
     };
     await read();
-    // The daemon writes the change of a write in the journal after it tells the write, so a write that was told a
-    // moment ago has no change yet: the journal is read again until each write that is done has its change.
+    // The daemon writes the change of a write in the journal after it tells the write, and the host tells each change of
+    // the journal as facts. A write that is done and has no change yet waits for them, until a deadline, since a write
+    // may leave no change.
     const owed = () =>
       this.acts.some(
         (act) =>
@@ -1958,12 +1959,19 @@ export class Session extends EventEmitter {
           !failed(act) &&
           !cancelled(act) &&
           after(act) &&
-          !kept.has(act.id),
+          !journaled.has(act.id),
       );
-    for (let tries = 0; tries < 20 && owed(); tries++) {
-      await Bun.sleep(25);
-      await read();
-    }
+    if (owed())
+      await new Promise<void>((resolve) => {
+        const stop = () => {
+          clearTimeout(deadline);
+          this.host.off("facts", heard);
+          resolve();
+        };
+        const heard = () => void read().then(() => owed() || stop());
+        const deadline = setTimeout(() => void read().then(stop), 1000);
+        this.host.on("facts", heard);
+      });
     const commands = this.acts.filter((act) => act.kind === "bash" && after(act)).length;
     return { files: [...files.values()], commands };
   }
