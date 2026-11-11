@@ -2214,16 +2214,19 @@ fn a_run_of_the_record_that_goes_on_live_after_the_replay_is_bounded() {
   let mut second =
     Lived::new("held-live", &["close(9)", "close(9)"], false).expect("the replay opens");
   second.engine.wake(&root).unwrap();
-  let pause = second
-    .engine
-    .wait(&[root.as_str()], verbs::Wait { seconds: Some(8.0), on: on(&root) })
-    .unwrap();
-  block_on(pause).unwrap();
+  // The life runs in short waits until the bound refuses the word, which it does after 2 s.
+  let refused =
+    |read: &[String]| read.iter().any(|one| one.contains("TimeoutError('turn time limit exceeded"));
+  let started = Instant::now();
+  while !refused(&second.read.borrow()) && started.elapsed() < Duration::from_secs(8) {
+    let pause = second
+      .engine
+      .wait(&[root.as_str()], verbs::Wait { seconds: Some(0.2), on: on(&root) })
+      .unwrap();
+    block_on(pause).unwrap();
+  }
   let read = second.read.borrow();
-  assert!(
-    read.iter().any(|one| one.contains("TimeoutError('turn time limit exceeded")),
-    "the word that spins after its wait is refused by the bound: {read:?}"
-  );
+  assert!(refused(&read), "the word that spins after its wait is refused by the bound: {read:?}");
 }
 
 #[test]

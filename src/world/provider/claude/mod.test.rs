@@ -1035,7 +1035,7 @@ fn the_models_are_asked_again_after_a_refresh() {
   let claude = yard.claude(10_000);
   assert_eq!(said(&claude)[0].1, 100);
   fs::write(yard.at.join("models"), "nova 200 low\n").unwrap();
-  super::refresh();
+  super::refresh(Some(&*claude.program.bin));
   assert_eq!(said(&claude)[0].1, 200);
 }
 

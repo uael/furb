@@ -41,7 +41,7 @@ fn a_refresh_leaves_no_discovery_that_a_store_of_another_program_wrote_back() {
     let stamp = format!("mine\0program\0{round}\0{round}");
     unsynced(&file, &stamp, &fallback());
     begin.wait();
-    forget(&file);
+    forget(&file, "mine\0");
     end.wait();
     if stored(&file, &stamp, NOW).is_some() {
       kept.push(round);

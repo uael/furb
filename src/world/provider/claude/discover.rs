@@ -160,10 +160,18 @@ fn stored_by(file: &path::Path, stamp: &str, told: Value, write: impl FnOnce(&pa
   write(file, Value::Object(map).to_string().as_bytes());
 }
 
-/// The cache gone, so the next models ask the command line again.
-fn forget(file: &path::Path) {
+/// The entries of the cache whose program is named so gone, so its next models ask it again.
+fn forget(file: &path::Path, named: &str) {
   let _held = exclusive();
-  fs::remove_file(file).unwrap_or_default();
+  let Some(mut map) = fs::read_to_string(file)
+    .ok()
+    .and_then(|text| serde_json::from_str::<serde_json::Map<String, Value>>(&text).ok())
+  else {
+    fs::remove_file(file).unwrap_or_default();
+    return;
+  };
+  map.retain(|key, _| !key.starts_with(named));
+  drop(disk::write(file, Value::Object(map).to_string().as_bytes(), Access::Shared));
 }
 
 /// The models that the program says, from memory, from the cache, or from the program itself;
@@ -234,12 +242,17 @@ async fn help(program: &Program) -> Option<String> {
   Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// Forget each discovery, so the next models ask the command line again.
-pub fn refresh() {
-  seen().lock().unwrap_or_else(PoisonError::into_inner).clear();
-  // A cache that cannot go stays, and the next models read it until the program makes a new stamp.
+/// Forget each discovery of the program at `bin`, or of the command line of this machine, so its
+/// next models ask it again. The discoveries of another program stay, as those of another life of
+/// the same process.
+pub fn refresh(bin: Option<&path::Path>) {
+  let Some(bin) = bin.map(path::Path::to_path_buf).or_else(super::located) else { return };
+  let named = format!("{}\0", bin.display());
+  seen().lock().unwrap_or_else(PoisonError::into_inner).retain(|key, _| !key.starts_with(&named));
+  // A cache that cannot be written stays, and the next models read it until the program makes a new
+  // stamp.
   if let Some(file) = cached() {
-    forget(&file);
+    forget(&file, &named);
   }
 }
 

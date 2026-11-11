@@ -19,22 +19,26 @@ use tokio::runtime::Builder;
 
 #[cfg(unix)]
 #[test]
-fn runs_alone() {
-  apart::run("unkept::alone");
+#[ignore = "a child of the suite runs it alone"]
+fn rebirth_alone() {
+  if apart::alone("unkept::rebirth_alone") {
+    let runtime = Builder::new_current_thread().enable_all().build();
+    let runtime = runtime.expect("the test has a runtime");
+    runtime.block_on(unix::a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end());
+  }
 }
 
 #[cfg(unix)]
 #[test]
 #[ignore = "a child of the suite runs it alone"]
-fn alone() {
-  if !apart::alone("unkept::alone") {
-    return;
+fn backlog_alone() {
+  if apart::alone("unkept::backlog_alone") {
+    let runtime = Builder::new_current_thread().enable_all().build();
+    let runtime = runtime.expect("the test has a runtime");
+    runtime.block_on(
+      unix::a_life_whose_record_lacks_too_many_facts_pauses_its_work_until_it_takes_them(),
+    );
   }
-  let runtime = Builder::new_current_thread().enable_all().build();
-  let runtime = runtime.expect("the test has a runtime");
-  runtime.block_on(unix::a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end());
-  runtime
-    .block_on(unix::a_life_whose_record_lacks_too_many_facts_pauses_its_work_until_it_takes_them());
 }
 
 #[cfg(unix)]

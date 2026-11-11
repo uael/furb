@@ -53,11 +53,6 @@ fn heap() -> usize {
 const GRACE: Duration = Duration::from_secs(1);
 
 #[test]
-fn runs_alone() {
-  apart::run("heap::alone");
-}
-
-#[test]
 #[ignore = "a child of the suite runs it alone"]
 fn alone() {
   if !apart::alone("heap::alone") {

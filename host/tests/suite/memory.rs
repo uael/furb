@@ -40,7 +40,10 @@ use std::{
   hash::{DefaultHasher, Hash, Hasher},
   process,
 };
-use tokio::{runtime::Builder, time};
+use tokio::{
+  runtime::{Builder, Runtime},
+  time,
+};
 use tokio_util::codec::{Framed, LinesCodec};
 
 /// The events of a life, each under its place in the log.
@@ -198,23 +201,34 @@ fn footprint() -> String {
   line.split("Footprint: ").nth(1).and_then(|one| one.split(" (").next()).unwrap_or("?").to_owned()
 }
 
-#[test]
-fn runs_alone() {
-  apart::run("memory::alone");
-}
-
 /// The measure of the bench, at the sizes of [`LARGE`], with the budget of its heap.
 #[test]
 #[ignore = "the measure of the bench, which takes minutes"]
 fn bench() {
-  apart::run("memory::bench_alone");
+  apart::run(&["memory::bench_alone"]);
 }
 
 #[test]
 #[ignore = "a child of the suite runs it alone"]
-fn alone() {
-  if apart::alone("memory::alone") {
-    measured(false);
+fn heap_alone() {
+  if apart::alone("memory::heap_alone") {
+    grown(false);
+  }
+}
+
+#[test]
+#[ignore = "a child of the suite runs it alone"]
+fn window_alone() {
+  if apart::alone("memory::window_alone") {
+    windowed(false);
+  }
+}
+
+#[test]
+#[ignore = "a child of the suite runs it alone"]
+fn rebirth_alone() {
+  if apart::alone("memory::rebirth_alone") {
+    runtime().block_on(a_rebirth_lets_go_of_each_fact_that_the_record_holds());
   }
 }
 
@@ -222,25 +236,32 @@ fn alone() {
 #[ignore = "a child of the suite runs it alone"]
 fn bench_alone() {
   if apart::alone("memory::bench_alone") {
-    measured(true);
+    grown(true);
+    windowed(true);
+    runtime().block_on(a_rebirth_lets_go_of_each_fact_that_the_record_holds());
   }
 }
 
-/// The memory of a life, at the sizes of [`SMALL`], or of [`LARGE`] with the budget of the bench.
-fn measured(large: bool) {
-  let runtime = Builder::new_current_thread().enable_all().build();
-  let runtime = runtime.expect("the test has a runtime");
+/// The runtime of one part of the test, on the thread of the test.
+fn runtime() -> Runtime {
+  Builder::new_current_thread().enable_all().build().expect("the test has a runtime")
+}
+
+/// The heap of a life at the sizes of [`SMALL`], or of [`LARGE`] with the budget of the bench.
+fn grown(large: bool) {
   let budget = budget();
   let sizes: Vec<usize> = env::var("FURB_MEMORY_SIZES").map_or_else(
     |_| if large { LARGE.to_vec() } else { SMALL.to_vec() },
     |named| named.split(',').map(|one| one.trim().parse().expect("a size is a number")).collect(),
   );
-  runtime
+  runtime()
     .block_on(the_heap_of_a_life_grows_with_its_facts_and_no_more(&sizes, large.then_some(budget)));
-  // The window of the slow reader, as its facts, its most bytes and its seconds of wait.
+}
+
+/// The window of the slow reader, as its facts, its most bytes and its seconds of wait.
+fn windowed(large: bool) {
   let window = if large { (40_000, 16 << 20, 3) } else { (10_000, 6 << 20, 1) };
-  runtime.block_on(a_window_that_reads_slowly_holds_no_copy_of_the_log(window));
-  runtime.block_on(a_rebirth_lets_go_of_each_fact_that_the_record_holds());
+  runtime().block_on(a_window_that_reads_slowly_holds_no_copy_of_the_log(window));
 }
 
 /// The most heap that a birth of about [`TAIL`] facts adds past the rebirth before it: 21.3 MiB

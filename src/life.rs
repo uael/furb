@@ -379,7 +379,7 @@ impl Opening {
       let (claude, config, directory) = (claude.clone(), config.clone(), directory.clone());
       let (names, preferred, answer) = (roster(), preferred.clone(), answer.clone());
       Box::pin(async move {
-        world::claude::refresh();
+        world::claude::refresh(claude.as_deref());
         let fresh = Catalog::loaded(claude.clone())
           .await
           .discovered(claude, stall)
