@@ -92,7 +92,8 @@ test(
         screen.mockInput.pressArrow("down");
         screen.mockInput.pressArrow("down");
         screen.mockInput.pressEnter();
-        for (let tries = 0; tries < 200 && session.selected === source; tries++) {
+        // The branch is selected before the files come back, and the notice says so once they have.
+        for (let tries = 0; tries < 200 && !session.notice.includes("back as it was"); tries++) {
           await Bun.sleep(50);
           await frame();
         }

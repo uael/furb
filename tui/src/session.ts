@@ -588,6 +588,9 @@ export class Session extends EventEmitter {
   /** The mark of the last snapshot that the session took, which tells the worker which parts of the chain it holds. */
   private held = 0;
   private dirty = false;
+  /** The chain that the saved view shows, until the life tells it: a life that opens tells its acts as its replay goes on,
+   * so the first snapshots show the root, and the chain comes back once it is told. */
+  private wanted = "";
   private closed = false;
   /** The follow-ups that `<record>.ui.json` held from an older release, which move into the queue of the life. */
   private legacyQueue: Kept[] = [];
@@ -635,6 +638,7 @@ export class Session extends EventEmitter {
       this.legacyQueue = queued ?? [];
       this.scanName(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
+      if (this.selected !== engine.root) this.wanted = this.selected;
       this.savedCost = view.cost ?? 0;
       if (damage) this.notice = damage;
     }
@@ -946,6 +950,15 @@ export class Session extends EventEmitter {
           if (moved) this.version++;
         }
         this.counted = count;
+        if (this.wanted && this.indexed().ids.get(this.wanted)?.kind === "chain") {
+          this.selected = this.wanted;
+          this.wanted = "";
+          this.held = 0;
+          this.turns = [];
+          this.answers = [];
+          this.program = {};
+          this.dirty = true;
+        }
         // The threads of the chain shown and the tree of the sidebar come from the crate with the acts that they read,
         // so a frame draws the threads of the acts that it shows.
         // A read that began before these acts came gives the threads of before them, so the read goes again.
@@ -1731,6 +1744,7 @@ export class Session extends EventEmitter {
     return id === this.engine.root ? "Main" : String((chain?.kind === "chain" && chain.words[0]) || "Chain");
   }
   async select(id: string): Promise<void> {
+    this.wanted = "";
     if (id !== this.selected) this.leave();
     // The moment that the feed shows is one of the chain shown, so another chain is shown as it stands now.
     if (id !== this.selected) this.moment = undefined;

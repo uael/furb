@@ -27,7 +27,8 @@ const define = `def todo(item, *, done=False, on=""):
 debug(t"The def todo stands.")`;
 
 const extend = `${part}
-extend("todo", bound_by()["todo"], tui=part)`;
+extend("todo", bound_by()["todo"], tui=part)
+debug(t"The extension todo stands.")`;
 
 const items = `todo("Read the capture", done=True)
 todo("Draw the todo list in a panel")
@@ -37,10 +38,12 @@ debug(t"Three todos stand.")`;
 const read = `part = read(".furb/skills/todo/tui.ts", grep("items|panel"))`;
 
 const sorted = `part = read(".furb/skills/todo/tui.ts")
-write(part.replace("const all = items(seen);", "const all = seen.todos.sort((one, other) => Number(one.done) - Number(other.done));"))`;
+write(part.replace("const all = items(seen);", "const all = seen.todos.sort((one, other) => Number(one.done) - Number(other.done));"))
+debug(t"The part sorts the items.")`;
 
 const mended = `part = read(".furb/skills/todo/tui.ts")
-write(part.replace("seen.todos.sort(", "items(seen).sort("))`;
+write(part.replace("seen.todos.sort(", "items(seen).sort("))
+debug(t"The part reads the items again.")`;
 
 export const extending: Script[] = [
   {

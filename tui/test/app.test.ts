@@ -708,8 +708,9 @@ test("resume preserves chains, the values of the program, theme, and input draft
     async ({ app }) => {
       // The life born from its checkpoint tells its chains in the order of the checkpoint.
       expect(second.chains.map((chain) => chain.id).sort()).toEqual(ids.sort());
-      // The life born from its checkpoint carries the values of the program of the first life in one word.
-      expect(Object.values(second.program).join("\n")).toContain("small ideas");
+      // The life born from its checkpoint holds each value that the first life bound, in the module of its chain.
+      expect((await second.engine.inspect("query", fork.id)).value).toBe("small ideas");
+      expect((await second.engine.inspect("shortcut", fork.id)).value).toBe("Ctrl+K");
       expect(Object.values(program).join("\n")).toContain("small ideas");
       expect(second.selected).toBe(fork.id);
       expect(second.theme).toBe("paper");
