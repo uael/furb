@@ -100,27 +100,33 @@ thread_local! {
 struct Held(RefCell<Vec<(PathBuf, Vec<File>)>>);
 
 impl Drop for Held {
+  /// The folders go on a thread of their own: the harness joins the thread of each test before it
+  /// starts the next one, so a wait here would hold every test of the suite.
   fn drop(&mut self) {
     let kept = env::var_os("FURB_KEEP_YARDS").is_some();
     for (folder, leases) in self.0.take() {
-      // A write of a life that lives on makes its folder again, and a life that the test asked
-      // may still open, so the folder goes at each look until each lease is free, with a bound
-      // twice the time that a life of a short grace takes to end.
-      let end = Instant::now() + 2 * PAST;
-      loop {
-        if !kept {
-          drop(fs::remove_dir_all(&folder));
-        }
-        let free = !leases.is_empty() && leases.iter().all(|lease| lease.try_lock().is_ok());
-        if free || Instant::now() > end {
-          break;
-        }
-        thread::sleep(Duration::from_millis(20));
-      }
-      if !kept {
-        drop(fs::remove_dir_all(&folder));
-      }
+      thread::spawn(move || reaped(&folder, &leases, kept));
     }
+  }
+}
+
+/// A folder gone once each lease of it is free. A write of a life that lives on makes its folder
+/// again, and a life that the test asked may still open, so the folder goes at each look until
+/// each lease is free, with a bound twice the time that a life of a short grace takes to end.
+fn reaped(folder: &Path, leases: &[File], kept: bool) {
+  let end = Instant::now() + 2 * PAST;
+  loop {
+    if !kept {
+      drop(fs::remove_dir_all(folder));
+    }
+    let free = !leases.is_empty() && leases.iter().all(|lease| lease.try_lock().is_ok());
+    if free || Instant::now() > end {
+      break;
+    }
+    thread::sleep(Duration::from_millis(20));
+  }
+  if !kept {
+    drop(fs::remove_dir_all(folder));
   }
 }
 
