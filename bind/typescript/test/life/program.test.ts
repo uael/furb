@@ -378,7 +378,7 @@ test("a line with no string that runs past it stands as it is", () => {
 
 test("a line too wide wraps between tokens in rows of a width at most, and the rows hold the line whole", () => {
   const line =
-    '  result = await prompt(tuple[list[str], str], "Choose what it keeps: each act that holds a decision", to=CHOOSER, on=here)';
+    '  result = await prompt(tuple[list[str], str], "Choose what it keeps: each act that holds a decision", to=wrote, on=here)';
   for (const width of [30, 40, 60, 100]) {
     const rows = wrap(line, width);
     expect(rows.length).toBeGreaterThan(line.length > width ? 1 : 0);
