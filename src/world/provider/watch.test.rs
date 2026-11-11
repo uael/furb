@@ -66,9 +66,18 @@ fn a_fence_around_a_word_goes_as_each_of_its_lines_ends() {
   let mut watch = Watch::default();
   assert_eq!(watch.wrote("```python\nx = 1\n"), None);
   assert!(watch.note().is_some());
-  let end = watch.wrote("y = 2\n```").expect("the fence stands at the left edge");
+  let end = watch.wrote("y = 2\nz").expect("a line stands at the left edge");
   assert_eq!(watch.upto(end), "x = 1\ny = 2\n");
   assert_eq!(broken(watch.upto(end)), None);
+}
+
+#[test]
+fn the_mark_that_ends_a_fence_or_a_tool_call_starts_no_statement() {
+  for end in ["```", "```\n", "</parameter>", "</invoke>\n"] {
+    let mut watch = Watch::default();
+    assert_eq!(watch.wrote("x = 1\nclose(x)\n"), Some(6));
+    assert_eq!(watch.wrote(end), None, "{end:?}");
+  }
 }
 
 #[test]

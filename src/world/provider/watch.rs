@@ -37,6 +37,17 @@ pub(super) const QUOTE: &str = "<s:";
 /// The mark that opens the end of a quote in a word: `</s:name>` at the end of a line.
 const UNQUOTE: &str = "</s:";
 
+/// Whether the text after the end of a line starts a statement at the left edge. The mark of a
+/// fence and the close of a tag of a tool call start none, since [`Bare`] drops them: so the last
+/// statement of a word that a fence or a tool call wraps runs with the whole turn, and a close in
+/// it does not end the reply before its model said what the reply read.
+fn starts(mut rest: impl Iterator<Item = char>) -> bool {
+  match (rest.next(), rest.next()) {
+    (Some(one), next) => !(one.is_whitespace() || one == '`' || (one == '<' && next == Some('/'))),
+    (None, _) => false,
+  }
+}
+
 /// What a reply that is watched has of its word so far.
 #[derive(Default)]
 pub(super) struct Watch {
@@ -76,9 +87,7 @@ impl Watch {
     let end = text[self.seen..]
       .match_indices('\n')
       .map(|(at, _)| self.seen + at + 1)
-      .filter(|after| {
-        text[*after..].chars().chain(tail.chars()).next().is_some_and(|one| !one.is_whitespace())
-      })
+      .filter(|after| starts(text[*after..].chars().chain(tail.chars())))
       .rfind(|after| complete(&text[..*after]) != ReplContinuationMode::IncompleteImplicit)?;
     self.seen = end;
     Some(end)
