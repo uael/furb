@@ -625,8 +625,7 @@ def seed(data):
   for c in data["chains"]:
     put("chain", i := c["id"], OPERATOR, c["on"], c["label"], "")
     v = "".join(
-      f"try:\n if literal(globals().get({k!r}, ...)) != (__t := __c[4][{k!r}]): {k} = eval(__t)\n"
-      "except Exception: pass\n"
+      f"try:\n if globals().get({k!r}, ...) != (__t := eval(__c[4][{k!r}])): {k} = __t\nexcept Exception: pass\n"
       for k in c["values"]
     )
     parts[i] = [*filter(None, [v, *([d] if isinstance(d := c["definitions"], str) else d), v, *c.get("lives", ())])]

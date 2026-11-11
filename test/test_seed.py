@@ -41,9 +41,9 @@ command that a value of the root names."""
 
 def bound(*names: str) -> str:
   """The word of a birth that binds each value of a chain of these names from the fact carried of that chain, when
-  the module does not hold it as that fact says."""
+  the module does not hold a value equal to it."""
   return "".join(
-    f"try:\n if literal(globals().get({k!r}, ...)) != (__t := __c[4][{k!r}]): {k} = eval(__t)\nexcept Exception: pass\n"
+    f"try:\n if globals().get({k!r}, ...) != (__t := eval(__c[4][{k!r}])): {k} = __t\nexcept Exception: pass\n"
     for k in names
   )
 
@@ -183,7 +183,7 @@ async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_
 async def test_the_fact_carried_of_a_chain_holds_the_text_of_each_value_then_the_parts_of_its_birth_so_the_word_of_the_operator_holds_no_text_of_a_value_or_of_a_definition() -> (
   None
 ):
-  """The fact carried of a chain holds the text of each value of the chain, then the parts of its birth in order: a word that binds from that text each value that the module does not hold as that text says, when the chain holds one, each word of its definitions, that word of the values again, and each life word whose act was open on it at the tip, so the word of the operator holds no text of a value or of a definition."""
+  """The fact carried of a chain holds the text of each value of the chain, then the parts of its birth in order: a word that binds from that text each value that the module does not hold equal to the value of that text, when the chain holds one, each word of its definitions, that word of the values again, and each life word whose act was open on it at the tip, so the word of the operator holds no text of a value or of a definition."""
   life(sown())
   root = chain(
     "chain1", "", "root", definitions=["def f():\n  return SIZE", "X = 1"], values={"SIZE": "6"}, lives=["w()"]
@@ -225,20 +225,32 @@ async def test_seed_reads_the_definitions_that_a_checkpoint_of_an_earlier_build_
 async def test_a_part_that_raises_at_a_birth_tells_its_exception_and_stops_no_part_after_it_so_a_value_or_a_definition_that_raises_loses_only_itself() -> (
   None
 ):
-  """A part that raises at a birth tells its exception in a debug of the rung of the operator and stops no part after it, and the word of the values binds each value in a try of its own, so a value that raises loses only itself, a word of definitions that raises loses only what follows the raise in that word, and the second word of the values binds a value that names a class of the definitions and gives a constant back the value that a later word gave it, while a value that the module holds as the fact carried says stays the object that a definition took."""
+  """A part that raises at a birth tells its exception in a debug of the rung of the operator and stops no part after it, and the word of the values binds each value in a try of its own, so a value that raises loses only itself, a word of definitions that raises loses only what follows the raise in that word, and the second word of the values binds a value that names a class of the definitions and gives a constant back the value that a later word gave it, while a value that the module holds equal to the value of the fact carried stays the object that a definition took, as a list of acts or a set in another order."""
   life(sown())
   definitions = [
-    "class Custom(Exception):\n  pass\n\nLIMIT = 1\n\ndef f(x=size):\n  return x\n\ndef q(x=queue):\n  return x",
+    "class Custom(Exception):\n  pass\n\nLIMIT = 1\n\ndef f(x=size):\n  return x\n\ndef q(x=queue):\n  return x\n\ndef keep(x=held):\n  return x\n\ndef n(x=named):\n  return x",
     "def g():\n  return 1\nraise ValueError('v')\ndef h():\n  return 2",
   ]
-  values = {"size": "6", "queue": "[1]", "made": "Custom('x')", "LIMIT": "3", "e": "5", "bad": "nan"}
-  lives = ["raise KeyError('k')", "lived = [f(), g(), isinstance(made, Custom), made.args[0], q() is queue]"]
+  values = {
+    "size": "6",
+    "queue": "[1]",
+    "held": "[Act('bash2')]",
+    "named": "{'b', 'a', 'c', 'd'}",
+    "made": "Custom('x')",
+    "LIMIT": "3",
+    "e": "5",
+    "bad": "nan",
+  }
+  lives = [
+    "raise KeyError('k')",
+    "lived = [f(), g(), isinstance(made, Custom), made.args[0], q() is queue, keep() is held, n() is named]",
+  ]
   root = chain("chain1", "", "root", definitions=definitions, values=values, lives=lives)
   log, _ = life(sown(), engine.seed({**DATA, "chains": [root, chain("chain3", "chain1", "work")]}))
   await settle()
   held = engine.module("chain1")
   assert (held["lived"], held["LIMIT"], held["e"], "h" in held, "bad" in held) == (
-    [6, 1, True, "x", True],
+    [6, 1, True, "x", True, True, True],
     3,
     5,
     False,
