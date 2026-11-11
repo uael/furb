@@ -655,7 +655,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
   When an act that a rung of the chain made on another chain is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript.
   When the chain of a prompt that a rung of the chain made on another chain pauses at a refused reply of that prompt, the chain tells that rung under the header paused and binds the refusal under the word why, and when the word of that rung does not run it acknowledges the pause, so a model sees that the prompt waits for a wake.
-  Each scan of its facts that the ear of a chain makes at a fact reads them from its last cut, so the work of a fact does not grow with the facts that a cut dropped.
+  Each scan of all its facts that the ear of a chain makes at a fact reads its reading, so the work of that scan does not grow with the facts that a cut dropped, where a view of one kind holds each fact of that kind.
   """
 
 def seed(data: object) -> list[Entry]:
@@ -665,7 +665,7 @@ def seed(data: object) -> list[Entry]:
   Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
   Each act of the data with a value stands known on its chain with the words that made it and with that value and runs nothing.
   Each act of the data with a value is made before each open prompt, so a message that the operator sent on a done prompt while its chain was paused reads that prompt, and its model is asked once a wake comes in the later life.
-  A rung of the operator on each chain awaits in turn a rung of each part of the birth that the fact carried of the chain holds, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain holds the turns of its fact carried as its prefix, and once the parts ran, that rung says a cut on the chain that keeps each fact of the chain but what the birth told and did not debug, so a reader reads a birth by the fact carried that the cut keeps, and no clear.
+  A rung of the operator on each chain awaits in turn a rung of each part of the birth that the fact carried of the chain holds, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain holds the turns of its fact carried as its prefix, and once the parts ran, that rung says a cut on the chain that holds no cut, which keeps each fact that the chain reads but what the birth told and did not debug, so a reader reads a birth by the fact carried that the cut keeps, and no clear, and a replay of the rung cuts nothing again.
   The fact carried of a chain holds the text of each value of the chain, then the parts of its birth in order: a word that binds each value from that text when the chain holds one, each word of its definitions, that word of the values again, which binds a value only when the module does not still hold the object that it bound first, and each life word whose act was open on it at the tip, so the word of the operator holds no text of a value or of a definition.
   seed reads the definitions that a checkpoint of an earlier build holds as one string as one word of definitions.
   The rung binds the definitions and the values of the chain before it says the cut, so a value that raises as it is bound leaves the turns of the chain whole.
@@ -1039,6 +1039,7 @@ The transcript of the chain holds the facts of its prefix where the prefix stand
 type Cut = tuple[Literal["cut"], str, str, list[Fact]]
 """A cut names what the model of a chain reads from it on: the facts that it keeps, then each fact said on the chain after it.
 A cut takes nothing from the transcript of its chain, so the chain only grows, and its module, its ladders and its acts go on.
+A cut that a prefix or a cut carries in its list cuts nothing, since only a cut said on a chain names what its model reads.
 """
 type Gate = tuple[Literal["gate"], str, str, str, str]
 """A gate is the question of whether a word may run, which the ear named gate answers with its findings, apart from the Kernel, so a word may ask it while the Kernel runs that word.

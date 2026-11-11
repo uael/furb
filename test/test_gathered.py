@@ -186,7 +186,7 @@ async def test_gathered_reads_the_questions_of_the_life_alone_so_the_fact_of_an_
   _, _, root = born()
   await settle()
   earlier = ("prompt", "prompt99", OPERATOR, "chain9", "str", "Which?", "")
-  engine.say("prefix", root, [*engine.transcript(root), earlier])
+  engine.say("prefix", root, [earlier])
   data = engine.gathered(lambda word: word, {})
   assert [c["id"] for c in data["chains"]] == [root]
   assert "prompt99" not in [a["id"] for a in data["acts"]]

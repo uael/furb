@@ -599,10 +599,7 @@ def seed(data):
       for k in c["values"]
     )
     parts[i] = [*filter(None, [v, *([d] if isinstance(d := c["definitions"], str) else d), v, *c.get("lives", ())])]
-    entries += [
-      (("carried", i, "journal", c["turns"], c["values"], parts[i]),),
-      (("prefix", i, "journal", c["turns"]),),
-    ]
+    entries += [(("carried", i, "journal", c["turns"], c["values"], parts[i]),), (("prefix", i, i, c["turns"]),)]
     (c["paused"] or i in asking) and entries.append((("pause", i, OPERATOR),))
   for x in data["acts"]:
     "value" in x and (
@@ -619,12 +616,13 @@ def seed(data):
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
     word = (
-      "__carried, __bound, __part = transcript(of='carried')[-1], {}, None\n"
-      "for __part in __carried[5]:\n try: await rung(__part)\n except Exception as __raised: debug(t'{__raised!r}')\n"
-      "__carried[1] == scope(acting()) and say('cut', __carried[1], "
-      "[x for x in transcript() if x[0] != 'tell' or not under(x[1], acting()) or x[3][0].startswith(f'#{acting()} debugged')])\n"
-      f'(__lost := [n for n in {c["lost"]} + [*__carried[4]] if n not in globals()]) + {cut} and debug(t"The life goes on from a checkpoint. '
-      f"It lost {{__lost or 'no name'}}, and it cut {cut or 'no act'}.\")\ndel __carried, __bound, __part, __lost"
+      "for __carried in [] if transcript(of='cut') else transcript(of='carried')[-1:]:\n"
+      " __bound, __part = {}, None\n"
+      " for __part in __carried[5]:\n  try: await rung(__part)\n  except Exception as __raised: debug(t'{__raised!r}')\n"
+      " say('cut', scope(acting()), "
+      "[x for x in reading() if x[0] != 'tell' or not under(x[1], acting()) or x[3][0].startswith(f'#{acting()} debugged')])\n"
+      f' (__lost := [n for n in {c["lost"]} + [*__carried[4]] if n not in globals()]) + {cut} and debug(t"The life goes on from a checkpoint. '
+      f"It lost {{__lost or 'no name'}}, and it cut {cut or 'no act'}.\")\n del __carried, __bound, __part, __lost"
     )
     seat = f"rung{numbers['rung'] + 1}"
     for maker, said in [(OPERATOR, word), *((seat, one) for one in parts[i])]:
@@ -689,7 +687,7 @@ def gathered(define, floor):
       acts.append({**d, "value": Refused(one + " was interrupted: the life that ran it ended before it did")})
   out = []
   for c in chains:
-    a, ended = get(c), {y[1] for y in reading(c) if y[0] == "done"}
+    a, ended = get(c), {y[1] for y in transcript(c, "done")}
     saved = [
       x
       for x in reading(c)
@@ -1164,7 +1162,9 @@ def boot(record=(), **outside):
     if about in known and kind in ("started", "done"):
       taken.setdefault(about, False)
       kind == "done" and done.setdefault(about, words[0])
-    holds(scope(about), words[0] if kind == "prefix" else [a])
+    holds(on := scope(about), words[0] if kind == "prefix" else [a])
+    if kind == "cut" and on:
+      cuts[on] = words[0], len(held[on, ""])
     log.append((a, ()))
     dispatch()
     return a
@@ -1226,8 +1226,6 @@ def boot(record=(), **outside):
     for x in on and facts:
       for k in {"", x[0].replace("wake", "pause"), x[2]}:
         held.setdefault((on, k), []).append(x)
-      if x[0] == "cut":
-        cuts[on] = x[3], len(held[on, ""])
 
   def dispatch():
     while not busy:

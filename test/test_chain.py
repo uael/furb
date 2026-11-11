@@ -757,7 +757,7 @@ async def test_a_chain_with_a_source_holds_whole_each_fact_of_its_origin_about_a
     ("done", "reply77", "provider", turn),
     ("tell", "bash40", "bash40", ["#bash40"]),
   ]
-  engine.say("prefix", root, [*engine.transcript(root), *carried])
+  engine.say("prefix", root, carried)
   twin = engine.chain("twin", source=root, filter=take("chain0"))
   await settle()
   assert [a for a in engine.transcript(twin) if a in carried] == carried
@@ -1717,7 +1717,7 @@ async def test_a_root_that_holds_no_open_after_its_paragraph_chain_or_no_stand_b
     x for x in engine.transcript(root) if x[0] == "tell" and isinstance(x[3], list) and x[3][0].startswith("#chain")
   ]
   assert opening and [x for x in engine.transcript(root) if x[0] == "tell" and x[3] == ["chain()"]]
-  engine.say("prefix", root, [x for x in engine.transcript(root) if x not in opening and x[0] != "setup"])
+  engine.say("cut", root, [x for x in engine.transcript(root) if x not in opening and x[0] != "setup"])
   engine.pause(root)
   engine.wake(root)
   await settle()
@@ -1809,10 +1809,10 @@ async def test_a_thread_is_asked_again_only_for_a_fact_of_its_own() -> None:
   assert (asked.count(one), engine.peek(one, ...)) == (1, ...)
 
 
-async def test_each_scan_of_its_facts_that_the_ear_of_a_chain_makes_at_a_fact_reads_them_from_its_last_cut(
+async def test_each_scan_of_all_its_facts_that_the_ear_of_a_chain_makes_at_a_fact_reads_its_reading(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-  """Each scan of its facts that the ear of a chain makes at a fact reads them from its last cut, so the work of a fact does not grow with the facts that a cut dropped."""
+  """Each scan of all its facts that the ear of a chain makes at a fact reads its reading, so the work of that scan does not grow with the facts that a cut dropped, where a view of one kind holds each fact of that kind."""
   _, _, root = born()
   scanned = [0]
 

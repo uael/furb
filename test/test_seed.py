@@ -120,7 +120,7 @@ async def test_each_act_of_the_data_with_a_value_stands_known_on_its_chain_with_
 async def test_a_rung_of_the_operator_on_each_chain_awaits_in_turn_a_rung_of_each_part_of_the_birth_that_the_fact_carried_of_the_chain_holds_and_tells_what_the_checkpoint_lost_and_cut_and_it_runs_no_word_again_so_the_model_of_the_chain_starts_a_cut_word_again_in_a_turn_that_shows() -> (
   None
 ):
-  """A rung of the operator on each chain awaits in turn a rung of each part of the birth that the fact carried of the chain holds, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain holds the turns of its fact carried as its prefix, and once the parts ran, that rung says a cut on the chain that keeps each fact of the chain but what the birth told and did not debug, so a reader reads a birth by the fact carried that the cut keeps, and no clear."""
+  """A rung of the operator on each chain awaits in turn a rung of each part of the birth that the fact carried of the chain holds, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain holds the turns of its fact carried as its prefix, and once the parts ran, that rung says a cut on the chain that holds no cut, which keeps each fact that the chain reads but what the birth told and did not debug, so a reader reads a birth by the fact carried that the cut keeps, and no clear, and a replay of the rung cuts nothing again."""
   _, log = await seeded()
   root = engine.module("chain1")
   assert (root["f"](), root["shell"], engine.module("chain3").get("SIZE")) == (6, "bash2", None)
@@ -206,12 +206,13 @@ async def test_the_fact_carried_of_a_chain_holds_the_text_of_each_value_then_the
   ]
   (word,) = [x[0][4] for x in entries if x[0][0] == "rung" and x[0][2] == OPERATOR and x[0][3] == "chain1"]
   assert word == (
-    "__carried, __bound, __part = transcript(of='carried')[-1], {}, None\n"
-    "for __part in __carried[5]:\n try: await rung(__part)\n except Exception as __raised: debug(t'{__raised!r}')\n"
-    "__carried[1] == scope(acting()) and say('cut', __carried[1], "
-    "[x for x in transcript() if x[0] != 'tell' or not under(x[1], acting()) or x[3][0].startswith(f'#{acting()} debugged')])\n"
-    "(__lost := [n for n in [] + [*__carried[4]] if n not in globals()]) + [] and debug(t\"The life goes on from a checkpoint. It lost {__lost or 'no name'}, and it cut no act.\")\n"
-    "del __carried, __bound, __part, __lost"
+    "for __carried in [] if transcript(of='cut') else transcript(of='carried')[-1:]:\n"
+    " __bound, __part = {}, None\n"
+    " for __part in __carried[5]:\n  try: await rung(__part)\n  except Exception as __raised: debug(t'{__raised!r}')\n"
+    " say('cut', scope(acting()), "
+    "[x for x in reading() if x[0] != 'tell' or not under(x[1], acting()) or x[3][0].startswith(f'#{acting()} debugged')])\n"
+    " (__lost := [n for n in [] + [*__carried[4]] if n not in globals()]) + [] and debug(t\"The life goes on from a checkpoint. It lost {__lost or 'no name'}, and it cut no act.\")\n"
+    " del __carried, __bound, __part, __lost"
   )
 
 

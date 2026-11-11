@@ -779,7 +779,7 @@ async def test_a_prompt_reads_the_facts_of_the_acts_of_its_own_life_alone_so_the
   _, _, root = born("n = 1\ndebug(t'go')", "close('ok')")
   await settle()
   earlier = ("prompt", "prompt99", OPERATOR, root, "str", "Which?")
-  engine.say("prefix", root, [*engine.transcript(root), earlier])
+  engine.say("prefix", root, [earlier])
   assert await engine.prompt(str, "Reply.", on=root) == "ok"
 
 

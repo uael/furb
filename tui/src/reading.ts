@@ -513,12 +513,13 @@ export class Reader {
     kept.read = facts.length;
     return [...kept.turns, ["user", kept.told.join("\n\n"), null, null]];
   }
-  /** One fact folded into the turns: a prefix folds each fact that it carries, and a cut folds the turns again from the
+  /** One fact folded into the turns: a prefix that a chain says at its birth folds each fact that it carries, and a cut,
+   * or a prefix that another said, as an engine from before the cut compacted a chain, folds the turns again from the
    * facts that it keeps, as the model of the chain reads them. */
   private step(kept: Folded, fact: Fact): void {
-    const [kind, about] = fact;
+    const [kind, about, by] = fact;
     if ((kind === "prefix" || kind === "cut") && Array.isArray(fact[3])) {
-      if (kind === "cut") Object.assign(kept, { turns: [], told: [], cut: 0 });
+      if (kind === "cut" || by !== about) Object.assign(kept, { turns: [], told: [], cut: 0 });
       for (const one of fact[3] as Fact[]) this.step(kept, one);
     } else if (kind === "reply" && isQuestion("reply", about)) kept.cut = kept.told.length;
     else if (kind === "done" && isQuestion("reply", about) && tupled(fact[3])?.length === 4) {

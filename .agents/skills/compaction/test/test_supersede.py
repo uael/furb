@@ -53,3 +53,13 @@ async def test_supersede_reads_no_name_that_the_module_of_the_chain_binds(tmp_pa
   assert await engine.rung("globals()['list'] = 'ls -la'\ncut = supersede()", on=root) is None
   assert engine.module(root)["cut"] == root
   assert engine.module(root)["list"] == "ls -la"
+
+
+async def test_supersede_keeps_no_fact_carried(tmp_path: Path) -> None:
+  """supersede(keep) keeps no fact carried, which marks the birth of a chain from a checkpoint, so a window reads each cut after that birth as a compaction."""
+  _, root, _ = compacting(tmp_path)
+  engine.say("carried", root, [], {}, [])
+  assert await engine.rung("supersede()", on=root) is None
+  (cut,) = [a for a in engine.transcript(root) if a[0] == "cut"]
+  assert isinstance(cut[3], list) and [a for a in engine.transcript(root) if a[0] == "carried"]
+  assert [a for a in cut[3] if a[0] == "carried"] == []

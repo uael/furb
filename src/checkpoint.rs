@@ -71,7 +71,7 @@ const CARRIED: &str = "carried";
 /// those turns, so its model reads them as it did.
 fn prefix(carried: &Fact) -> Object {
   let turns = carried.word(0).map_or_else(|| Object::list([]), |one| one.to_owned());
-  let words = ["prefix", carried.about(), "store"].map(Object::string);
+  let words = ["prefix", carried.about(), carried.about()].map(Object::string);
   Object::tuple(words.into_iter().chain([turns]))
 }
 

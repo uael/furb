@@ -50,10 +50,12 @@ export const isPaused = (act?: Pick<Act, "phase" | "pause">): boolean => Boolean
 export const onThread = (act?: Pick<Act, "kind" | "on" | "chain">): string | undefined =>
   act?.kind === "prompt" && act.on !== act.chain ? act.on : undefined;
 /** Whether a fact compacts its chain: a cut, which names what the model of the chain reads from then on, but the cut of
- * a birth, which keeps the fact carried of its checkpoint. */
-export const compacts = (fact: readonly unknown[]): boolean =>
-  fact[0] === "cut" &&
-  !(Array.isArray(fact[3]) && fact[3].some((one) => Array.isArray(one) && one[0] === "carried"));
+ * a birth, which keeps the fact carried of its checkpoint; and a prefix that another said on a chain, which is how an
+ * engine from before the cut compacted it, where a chain says its own prefix at its birth. */
+export const compacts = ([kind, id, by, kept]: readonly unknown[]): boolean =>
+  (kind === "cut" &&
+    !(Array.isArray(kept) && kept.some((one) => Array.isArray(one) && one[0] === "carried"))) ||
+  (kind === "prefix" && by !== id);
 /** A compaction of a chain: a cut that a word said on the chain, after which its model reads only what the cut kept and
  * what came after it. It gives the chain, the act that said the cut, and its place in time, as the place of an act. */
 export interface Compaction {

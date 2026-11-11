@@ -168,20 +168,14 @@ def supersede(keep: Filter | None = None, on: str = "") -> str:
     made = get(it[1])
     if made is None:
       return it[2] in kin
-    return question(it) or (made[2] if question(("reply", it[1])) else it[1]) in kin
+    return question(it) or ((made[2] if question(("reply", it[1])) else it[1]) in kin and it[0] != "carried")
 
   say("cut", here, [it for it in theirs if stays(it)])
   return here
 
 
 def compact(filters: list[Filter] | None = None, summary: str = "", on: str = "") -> str:
-  narrowed = together(*(FILTERS if filters is None else filters))
-
-  def keep(acts: list) -> list:
-    kept = {a[1] for a in narrowed(acts)}
-    return [a for a in acts if a[1] in kept or (a[0] == "prompt" and operated(a[2]))]
-
-  here = supersede(keep, on)
+  here = supersede(together(*(FILTERS if filters is None else filters)), on)
   name = "summary"
   while f"</s:{name}>" in summary:
     name += "_"
