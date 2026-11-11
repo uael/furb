@@ -6,7 +6,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { heapNow, hold } from "../script/heap.ts";
-import { longLife } from "./long-life.ts";
+import { realLife } from "./real-life.ts";
 
 /** How many commands the life holds, and how many numbers each prints on one line: about a megabyte. */
 const COMMANDS = 12;
@@ -25,7 +25,7 @@ test("a window on a life that printed megabytes keeps a heap that no text of the
   const record = join(directory, "life.jsonl");
   const before = heapNow();
   try {
-    await longLife(
+    await realLife(
       record,
       Array.from({ length: COMMANDS }, () => `await bash("seq -s ' ' 1 ${PRINTED}")`),
     );

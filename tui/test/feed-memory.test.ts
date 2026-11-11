@@ -9,7 +9,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
-import { longLife } from "./long-life.ts";
+import { realLife } from "./real-life.ts";
 
 /** How many renderables a node holds, itself among them. */
 const count = (node: Renderable): number => 1 + node.getChildren().reduce((sum, one) => sum + count(one), 0);
@@ -19,7 +19,7 @@ test("a long feed shelves the cards far from its view and keeps a bounded count 
   const record = join(directory, "long.jsonl");
   try {
     // A life of many words of the operator, each with a command, which a later window opens again.
-    await longLife(
+    await realLife(
       record,
       Array.from({ length: 160 }, (_, k) => `await bash("echo step_${k}; seq 1 40")`),
     );

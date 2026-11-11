@@ -23,7 +23,8 @@ export interface Held {
   acts: number;
   /** The seconds from the open of the life to the end of its layout. */
   seconds: number;
-  /** The heap before the open of the life, once it opened, and the highest of the scroll. */
+  /** The baseline that the caller gave, or else the heap before the open; the heap once the life opened; and the
+   * highest heap of the scroll. */
   before: number;
   opened: number;
   most: number;
