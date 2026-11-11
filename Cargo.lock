@@ -3068,7 +3068,7 @@ dependencies = [
 [[package]]
 name = "monty"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=ae0edf3b#ae0edf3bd6c3d0a875cafec39091c2a6ad3cf97d"
+source = "git+https://github.com/uael/monty?rev=3b32acfb#3b32acfbdcc22838eb37dd8aa936881cf8d6148b"
 dependencies = [
  "ahash",
  "chrono",
@@ -3109,7 +3109,7 @@ dependencies = [
 [[package]]
 name = "monty-macros"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=ae0edf3b#ae0edf3bd6c3d0a875cafec39091c2a6ad3cf97d"
+source = "git+https://github.com/uael/monty?rev=3b32acfb#3b32acfbdcc22838eb37dd8aa936881cf8d6148b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3119,7 +3119,7 @@ dependencies = [
 [[package]]
 name = "monty-type-checking"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=ae0edf3b#ae0edf3bd6c3d0a875cafec39091c2a6ad3cf97d"
+source = "git+https://github.com/uael/monty?rev=3b32acfb#3b32acfbdcc22838eb37dd8aa936881cf8d6148b"
 dependencies = [
  "monty-types",
  "monty-typeshed",
@@ -3137,7 +3137,7 @@ dependencies = [
 [[package]]
 name = "monty-types"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=ae0edf3b#ae0edf3bd6c3d0a875cafec39091c2a6ad3cf97d"
+source = "git+https://github.com/uael/monty?rev=3b32acfb#3b32acfbdcc22838eb37dd8aa936881cf8d6148b"
 dependencies = [
  "chrono",
  "jiff",
@@ -3156,7 +3156,7 @@ dependencies = [
 [[package]]
 name = "monty-typeshed"
 version = "1.6.0"
-source = "git+https://github.com/uael/monty?rev=ae0edf3b#ae0edf3bd6c3d0a875cafec39091c2a6ad3cf97d"
+source = "git+https://github.com/uael/monty?rev=3b32acfb#3b32acfbdcc22838eb37dd8aa936881cf8d6148b"
 dependencies = [
  "path-slash",
  "ruff_db",
