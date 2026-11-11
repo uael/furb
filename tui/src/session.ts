@@ -1931,13 +1931,11 @@ export class Session extends EventEmitter {
     };
     const after = (act: ActRow | undefined): act is ActRow =>
       !!act && act.began >= point.began && (message || !under(act));
-    const files = new Map<string, FileChange>();
-    const journaled = new Set<string>();
     // The count of changes in the state of the host lags the acts, which the session asks for, so the journal is read
-    // to its end: a page shorter than asked is its last.
+    // to its end: a page shorter than asked is its last. A read gives its own result and keeps nothing between calls.
     const read = async () => {
-      files.clear();
-      journaled.clear();
+      const files = new Map<string, FileChange>();
+      const journaled = new Set<string>();
       for (let at = 0, page: FileChange[] = []; at === 0 || page.length === 100; at += 100) {
         page = await this.host.readChanges(at, 100);
         for (const change of page) {
@@ -1946,12 +1944,9 @@ export class Session extends EventEmitter {
             files.set(change.path, change);
         }
       }
+      return { files, journaled };
     };
-    await read();
-    // The daemon writes the change of a write in the journal after it tells the write, and the host tells each change of
-    // the journal as facts. A write that is done and has no change yet waits for them, until a deadline, since a write
-    // may leave no change.
-    const owed = () =>
+    const owed = (journaled: Set<string>) =>
       this.acts.some(
         (act) =>
           act.kind === "write" &&
@@ -1961,19 +1956,39 @@ export class Session extends EventEmitter {
           after(act) &&
           !journaled.has(act.id),
       );
-    if (owed())
-      await new Promise<void>((resolve) => {
-        const stop = () => {
-          clearTimeout(deadline);
-          this.host.off("facts", heard);
-          resolve();
-        };
-        const heard = () => void read().then(() => owed() || stop());
-        const deadline = setTimeout(() => void read().then(stop), 1000);
-        this.host.on("facts", heard);
-      });
+    // The daemon writes the change of a write in the journal after it tells the write, and the host tells that the
+    // journal changed after the append. So a done write with no change yet waits for the next facts of the host, one
+    // read at a time. A write can leave no change, as one to a path of a door, so the wait has one deadline for the
+    // whole call, and the last read gives the answer.
+    const until = Date.now() + 1000;
+    let heard = 0;
+    let wake = () => {};
+    const hear = () => {
+      heard++;
+      wake();
+    };
+    this.host.on("facts", hear);
+    let got: Awaited<ReturnType<typeof read>>;
+    try {
+      for (;;) {
+        const seen = heard;
+        got = await read();
+        if (!owed(got.journaled) || Date.now() >= until) break;
+        if (heard === seen)
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, until - Date.now());
+            wake = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+          });
+        wake = () => {};
+      }
+    } finally {
+      this.host.off("facts", hear);
+    }
     const commands = this.acts.filter((act) => act.kind === "bash" && after(act)).length;
-    return { files: [...files.values()], commands };
+    return { files: [...got.files.values()], commands };
   }
   /** The files given back as a rewind found them, by a rung of the operator on a chain, so that the record holds each
    * write and the chain reads it. A write puts back the text of a file, and a command removes a file that a write
