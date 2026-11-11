@@ -625,7 +625,7 @@ def seed(data):
   for c in data["chains"]:
     put("chain", i := c["id"], OPERATOR, c["on"], c["label"], "")
     v = "".join(
-      f"try:\n if globals().get({k!r}, ...) != (__t := eval(__c[4][{k!r}])): {k} = __t\nexcept Exception: pass\n"
+      f"try:\n if {k!r} not in __v or {k} is not __v[{k!r}]: {k} = __v[{k!r}] = eval(__c[4][{k!r}])\nexcept Exception: pass\n"
       for k in c["values"]
     )
     parts[i] = [*filter(None, [v, *([d] if isinstance(d := c["definitions"], str) else d), v, *c.get("lives", ())])]
@@ -646,10 +646,9 @@ def seed(data):
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
     word = (
-      "__c = transcript(of='carried')[-1]\nfor __p in __c[5]:\n try: await rung(__p)\n except Exception as __e: debug(t'{__e!r}')\n"
-      f"__l = [n for n in {c['lost']} + [*__c[4]] if n not in globals()]\n"
-      f"__l + {cut} and debug(t\"The life goes on from a checkpoint. It lost {{__l or 'no name'}}, "
-      f'and it cut {cut or "no act"}.")'
+      "__c = transcript(of='carried')[-1]\n__v = {}\nfor __p in __c[5]:\n try: await rung(__p)\n except Exception as __e: debug(t'{__e!r}')\ndel __v\n"
+      f'(__l := [n for n in {c["lost"]} + [*__c[4]] if n not in globals()]) + {cut} and debug(t"The life goes on from a checkpoint. '
+      f"It lost {{__l or 'no name'}}, and it cut {cut or 'no act'}.\")"
     )
     seat = f"rung{numbers['rung'] + 1}"
     for maker, said in [(OPERATOR, word), *((seat, one) for one in parts[i])]:
@@ -672,9 +671,8 @@ def gathered(define, floor):
     here, values[c], lost[c] = module(c), {}, []
     for key, value in here.items():
       if not (key.startswith("__") or callable(value) or globals().get(key, here) is value):
-        found = set()
         try:
-          text = literal(value, found)
+          text = literal(value, found := set())
         except RecursionError:
           text = ""
         if text:
@@ -685,13 +683,17 @@ def gathered(define, floor):
   taken = dict(floor)
   for one in asked:
     taken[one[0]] = max(taken.get(one[0], 0), number(one[1]))
-  verbs = ("prompt", "bash", "read", "write", "wait", "cd", "chance")
   words = {y[2] for y in (standing()[4:5] or [()])[0]}
-  borne = sorted((x for x in named - gone if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
-  stands = [x[1] for x in transcript(ROOT, "stand") if over(x[1])][-1:]
-  ticks = [x[1] for x in transcript(ROOT, "clock") if isinstance(peek(x[1]), float)][-1:]
+  borne = sorted(
+    (x for x in named - gone if get(x)[0] in ("prompt", "bash", "read", "write", "wait", "cd", "chance")),
+    key=lambda r: (get(r)[0], number(r)),
+  )
   acts = []
-  for one in [*stands, *ticks, *borne]:
+  for one in [
+    *[x[1] for x in transcript(ROOT, "stand") if over(x[1])][-1:],
+    *[x[1] for x in transcript(ROOT, "clock") if isinstance(peek(x[1]), float)][-1:],
+    *borne,
+  ]:
     a = get(one)
     d = {"kind": a[0], "id": one, "on": a[3]}
     if prompted(one) and not over(one):
