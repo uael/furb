@@ -302,26 +302,21 @@ fix what your change broke, and report what was broken before.
   `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any case. This build,
   `cargo test` and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them,
   so a word runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the
-  release. A build keeps no incremental state and no debug information of a dependency (`.cargo/config.toml`,
-  `Cargo.toml`), which holds a target to about a third of its bytes; a rebuild of the crate takes about 45 s.
+  release. A build keeps no debug information of a dependency (`Cargo.toml`), which holds a target to about a third of
+  its bytes. A tree keeps the incremental state of its crates (`.cargo/config.toml`), which a job of CI does not keep.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
-  `base`, `origin/main` by default. It links `target` to `furb-target` beside the main checkout, which each worktree of the
-  clone shares, so a dependency builds once and a worktree adds only its crates of the workspace. The build script of
-  furb reads `FURB_TREE`, so a build rebuilds a crate that another worktree built last: cargo would call it fresh by
-  the time of its files and test the code of the other worktree. The programs keep no such
-  stamp: the program `furb` of the last build of any tree stands in the shared target, so `bun run build` copies it
-  to `bind/typescript/furb` of its tree (`bind/typescript/program.ts`), and the TUI and its tests serve the daemon from
-  that copy, never from the target. A tree
-  that lacks this stamp keeps its own target until it merges `origin/w/converge`: the hooks `post-merge` and
-  `post-commit` run `script/share-target.sh`, which drops that target and links the shared one, when no build runs in it. It copies on write the build directories of the
-  checkout whose build stands nearest to the new commit: the `node_modules` of bun, the build of the TypeScript
-  package and the cache of the tests of the TUI. Then it runs
+  `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
+  to the new commit: the `target` of cargo, the `node_modules` of bun, the build of the TypeScript package and the cache
+  of the tests of the TUI. Each tree builds in a target of its own: cargo gives a crate of the workspace the same name
+  in each tree, so in a target that trees share, a build of one tree made each other tree build its crates again.
+  `script/own-target.sh <tree>` gives a tree whose `target` is a link a copy on write of the target it names, once.
+  Then it runs
   `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value
   stands, so that the hooks of each worktree print only what fails. It copies no `.venv`: it makes the `.venv` of the new tree with
   `uv sync --locked` on the warm target, so the python of its hooks imports its own tree. That takes about 52 s in a new
   tree, and next to no time when uv holds the wheel in its cache. If `uv` is missing or the sync fails, the script says
-  so and names the command to run. A first build takes about a minute when the shared target holds the
+  so and names the command to run. A first build takes a few minutes when the source holds the
   dependencies, against about 35 in a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.

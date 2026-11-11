@@ -1,10 +1,5 @@
-# No build keeps incremental state: it grows in each worktree, and the worktrees share one target. The measures stand in
-# the commits that made this file.
+# A tree keeps the incremental state of its crates in its own target, so a change of one file of a crate rebuilds it in
+# seconds, whatever a config above the clone says. A job of CI builds once and turns it off with CARGO_INCREMENTAL in
+# .github/actions/setup/action.yml.
 [build]
-incremental = false
-
-# The path of the worktree. The build script of furb reads it, so that a build in a worktree rebuilds a crate of the
-# workspace that another worktree built last in the target that they share: cargo names such a crate by its path inside
-# the workspace and calls it fresh by the time of its files, so a worktree would test the code of another.
-[env]
-FURB_TREE = { value = ".", relative = true, force = true }
+incremental = true

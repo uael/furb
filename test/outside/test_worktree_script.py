@@ -3,14 +3,13 @@ import os
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
 
 CLEAN = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 SCRIPT = Path(__file__).resolve().parents[2] / "script" / "worktree.sh"
-SHARE = SCRIPT.with_name("share-target.sh")
+OWN = SCRIPT.with_name("own-target.sh")
 
 
 def git(cwd: Path, *args: str) -> None:
@@ -24,9 +23,7 @@ def clone_with_origin(root: Path) -> Path:
   subprocess.run(["git", "clone", "-q", str(origin), str(main)], check=True, capture_output=True, env=CLEAN)
   (main / "script").mkdir()
   shutil.copy(SCRIPT, main / "script" / "worktree.sh")
-  shutil.copy(SHARE, main / "script" / "share-target.sh")
-  (main / ".cargo").mkdir()
-  shutil.copy(SCRIPT.parents[1] / ".cargo" / "config.toml", main / ".cargo" / "config.toml")
+  shutil.copy(OWN, main / "script" / "own-target.sh")
   git(main, "add", ".")
   git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
   git(main, "push", "-q", "origin", "HEAD:refs/heads/main")
@@ -57,48 +54,43 @@ def test_failure_names_the_path_and_the_step(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
-def test_each_worktree_links_its_target_to_the_one_that_the_clone_shares(tmp_path: Path) -> None:
+def test_each_worktree_builds_in_a_target_of_its_own_that_starts_as_a_copy_of_the_nearest(tmp_path: Path) -> None:
   main = clone_with_origin(tmp_path)
-  assert run(main, tmp_path / "one", "first").returncode == 0
-  assert run(main, tmp_path / "two", "second").returncode == 0
-  shared = tmp_path / "main-target"
-  assert (tmp_path / "one" / "target").resolve() == shared.resolve()
-  assert (tmp_path / "two" / "target").resolve() == shared.resolve()
+  (main / "Cargo.toml").write_text("")
+  shared = tmp_path / "shared"
+  shared.mkdir()
+  (shared / "built").write_text("warm")
+  (main / "target").symlink_to(shared)
+  got = run(main, tmp_path / "one", "first")
+  assert got.returncode == 0, got.stderr
+  target = tmp_path / "one" / "target"
+  assert target.is_dir() and not target.is_symlink()
+  if "no copy on write" not in got.stdout:
+    assert (target / "built").read_text() == "warm"
+  assert list(shared.iterdir()) == [shared / "built"]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
-def test_a_tree_with_a_target_of_its_own_drops_it_for_the_shared_one_unless_it_is_in_use(tmp_path: Path) -> None:
-  main = clone_with_origin(tmp_path)
-  shared = tmp_path / "main-target"
+def test_a_tree_whose_target_is_a_link_takes_a_copy_of_it_once(tmp_path: Path) -> None:
+  shared = tmp_path / "shared"
+  shared.mkdir()
+  (shared / "built").write_text("warm")
+  tree = tmp_path / "tree"
+  tree.mkdir()
+  (tree / "target").symlink_to(shared)
 
-  def share(name: str) -> None:
-    subprocess.run(["sh", str(main / "script" / "share-target.sh"), str(tmp_path / name)], check=True, env=CLEAN)
+  def own() -> str:
+    return subprocess.run(["sh", str(OWN), str(tree)], check=True, env=CLEAN, capture_output=True, text=True).stdout
 
-  for name in ("one", "two", "busy", "bare"):
-    git(main, "worktree", "add", "-q", "-b", name, str(tmp_path / name))
-    (tmp_path / name / "target").mkdir()
-    (tmp_path / name / "target" / "own").write_text(name)
-  (tmp_path / "bare" / ".cargo" / "config.toml").write_text("")
-  share("one")
-  share("two")
-  share("two")
-  assert list(shared.iterdir()) == []
-  for name in ("one", "two"):
-    assert (tmp_path / name / "target").resolve() == shared.resolve()
-  for _ in range(100):
-    if not list(tmp_path.glob("main-target-drop.*")):
-      break
-    time.sleep(0.1)
-  assert list(tmp_path.glob("main-target-drop.*")) == []
-  share("bare")
-  assert (tmp_path / "bare" / "target" / "own").read_text() == "bare"
-  user = subprocess.Popen(["sh", "-c", "sleep 30; true", "user", str(tmp_path / "busy" / "target")])
-  try:
-    share("busy")
-  finally:
-    user.kill()
-    user.wait()
-  assert (tmp_path / "busy" / "target" / "own").read_text() == "busy"
+  said = own()
+  assert (tree / "target").is_dir() and not (tree / "target").is_symlink()
+  if "no copy on write" not in said:
+    assert (tree / "target" / "built").read_text() == "warm"
+  (tree / "target" / "mine").write_text("tree")
+  assert own() == ""
+  assert (tree / "target" / "mine").read_text() == "tree"
+  assert sorted(shared.iterdir()) == [shared / "built"]
+  assert list(tmp_path.glob("tree/target.own.*")) == []
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")

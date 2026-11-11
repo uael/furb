@@ -1,7 +1,7 @@
 #!/bin/sh
-# Make a git worktree whose build starts warm: its `target` is the one that each worktree of the clone shares, and its
-# other build directories are a copy on write of those of the main checkout, or of the worktree of this clone whose
-# commit stands nearest, so cargo, maturin and bun build only what changed.
+# Make a git worktree whose build starts warm: its build directories, the target of cargo among them, are a copy on write
+# of those of the main checkout, or of the worktree of this clone whose commit stands nearest, so cargo, maturin and
+# bun build only what changed.
 # Usage: script/worktree.sh <path> <branch> [base, origin/main by default]
 # A branch that stands on origin, or in this clone, is checked out and not made again: a local branch that only lags
 # behind origin moves up to it, and a local branch with work that origin lacks stays as it is. The base is the start
@@ -86,11 +86,6 @@ if [ $opened != new ]; then
   fi
 fi
 
-step="share the target"
-# One target for each worktree of the clone: a dependency builds once, where a copy on write of a target splits from its
-# source at the first build and fills the disk.
-sh "$(dirname "$0")/share-target.sh" "$path"
-
 step="copy the build"
 # What the python side needs, said at each end of the script.
 python_note() {
@@ -154,13 +149,16 @@ if ! clone "$src/Cargo.toml" "$path/.worktree-probe" 2>/dev/null; then
 fi
 rm -f "$path/.worktree-probe"
 
-# The packages of bun, the build of the TypeScript package, and the cache of the tests of the TUI.
-for dir in node_modules bind/typescript/node_modules tui/node_modules bind/typescript/dist .furb/tests; do
+# The target of cargo, the packages of bun, the build of the TypeScript package, and the cache of the tests of the TUI.
+for dir in target node_modules bind/typescript/node_modules tui/node_modules bind/typescript/dist .furb/tests; do
   if [ -e "$src/$dir" ] && [ ! -e "$path/$dir" ]; then
     mkdir -p "$(dirname "$path/$dir")"
     clone "$src/$dir" "$path/$dir"
   fi
 done
+# A source whose target is a link to a target that trees share gives a copy of that link, which becomes a target of
+# its own.
+sh "$(dirname "$0")/own-target.sh" "$path"
 for node in "$src"/bind/typescript/*.node "$src"/bind/typescript/index.cjs; do
   if [ -e "$node" ]; then
     clone "$node" "$path/bind/typescript/"
