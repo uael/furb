@@ -88,7 +88,7 @@ path = "src/lib.rs"
 # A library to a Rust host, and the extension module of the python distribution when the python feature is on.
 crate-type = ["rlib", "cdylib"]
 
-# The examples of the framework, one for each thing that it shows, which tests/examples.rs runs as programs.
+# The examples of the framework, one for each thing that it shows, which tests/suite/examples.rs runs as programs.
 [[example]]
 name = "durable"
 path = "docs/examples/rust/durable.rs"

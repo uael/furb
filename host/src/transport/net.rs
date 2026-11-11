@@ -262,7 +262,7 @@ impl LocalApi {
     {
       // FURB_TAILSCALE_API names a port of loopback and its token, as `port:token`, in place of
       // the Tailscale of the machine: a test stands a daemon of the tailnet on loopback with a
-      // fake of the local API, as host/tests/net.rs does.
+      // fake of the local API, as host/tests/suite/net.rs does.
       let fake = env::var("FURB_TAILSCALE_API").ok().and_then(|one| {
         let (port, token) = one.split_once(':')?;
         Some(Self::Port { port: port.parse().ok()?, token: token.to_owned() })

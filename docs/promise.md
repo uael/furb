@@ -49,26 +49,26 @@ R1, no drift on the same engine:
 - `src/engine.test.rs::a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift`
 - `src/life.test.rs::each_record_of_the_replays_replays_on_its_own_engine_with_no_drift`
 - `src/life.test.rs::a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts`
-- `tests/promise.rs::a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entries_written_whole`, at a
+- `tests/suite/promise.rs::a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entries_written_whole`, at a
   random byte of a random line, of the done of the gate of the first stand and of the last checkpoint, from a seed
   that it prints
-- `tests/promise.rs::a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_held_live`
+- `tests/suite/promise.rs::a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_held_live`
 
 R2, the exact tip, with a checkpoint and without one (resume and reopen):
 
 - `src/life.test.rs::a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip`
 - `src/life.test.rs::a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_prompt_of_each_chain`
 - `src/life.test.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
-- `tests/promise.rs::a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint`
-- `host/tests/daemon.rs::a_life_that_ended_opens_again_from_its_checkpoint`
+- `tests/suite/promise.rs::a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint`
+- `host/tests/suite/daemon.rs::a_life_that_ended_opens_again_from_its_checkpoint`
 - `test/test_gathered.py::test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard`
-- `tests/promise.rs::a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without_one_and_goes_on`, a
+- `tests/suite/promise.rs::a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without_one_and_goes_on`, a
   kill of the process of the life at or after a fact that a seed draws, which it prints with the length of
   the record at the kill, so the torn test plays that kill again as a cut
 
 A fork of a life, its record up to a fact in a directory of its own:
 
-- `tests/promise.rs::a_fork_of_a_life_opens_at_the_state_of_its_origin_at_the_fork_and_goes_on_by_its_own_facts`
+- `tests/suite/promise.rs::a_fork_of_a_life_opens_at_the_state_of_its_origin_at_the_fork_and_goes_on_by_its_own_facts`
 
 R3, no drift within a major, through the one home of adapters:
 
@@ -76,25 +76,25 @@ R3, no drift within a major, through the one home of adapters:
 - `src/engine.test.rs::a_kernel_of_the_major_from_before_it_ended_its_lost_runs_ends_them_through_its_adapter`
 - `src/life.test.rs::a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter`
 - `src/life.test.rs::a_record_that_names_no_engine_replays_as_before_and_names_none`
-- `tests/promise.rs::each_record_of_each_folder_of_the_corpus_opens_gives_back_its_modules_and_takes_one_more_turn`, which reads each record with the reader too
+- `tests/suite/promise.rs::each_record_of_each_folder_of_the_corpus_opens_gives_back_its_modules_and_takes_one_more_turn`, which reads each record with the reader too
 
 The schemas (P7, P8):
 
 - `src/life.test.rs::a_checkpoint_of_a_later_minor_of_its_schema_with_fields_more_opens_with_each_chain_and_its_prompts`
 - `src/life.test.rs::a_checkpoint_of_another_major_of_its_schema_is_refused_with_both_schemas`
 - `src/life.test.rs::a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keeps_nothing`
-- `tests/promise.rs::a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens`
+- `tests/suite/promise.rs::a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens`
 
 The protocol, the nodes of a view and the contract (P2, P5):
 
-- `host/tests/protocol.rs::the_schema_on_disk_is_the_schema_of_the_protocol`
-- `host/tests/protocol.rs::each_change_of_the_schema_raises_the_protocol`
+- `host/tests/suite/protocol.rs::the_schema_on_disk_is_the_schema_of_the_protocol`
+- `host/tests/suite/protocol.rs::each_change_of_the_schema_raises_the_protocol`
 - `test/outside/test_contract_diff.py::test_a_node_of_a_view_that_goes_is_a_break`
 - `test/outside/test_contract_diff.py::test_a_break_that_the_page_of_the_promise_does_not_name_fails_whatever_the_title`
-- `host/tests/daemon.rs::a_life_that_its_open_attaches_has_a_holder_before_a_grace_of_none_passes`
-- `host/tests/daemon.rs::a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemon`
+- `host/tests/suite/daemon.rs::a_life_that_its_open_attaches_has_a_holder_before_a_grace_of_none_passes`
+- `host/tests/suite/daemon.rs::a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemon`
 
-`tests/promise.rs::each_proof_that_the_page_of_the_promise_names_stands_in_its_file` fails when a test that this page
+`tests/suite/promise.rs::each_proof_that_the_page_of_the_promise_names_stands_in_its_file` fails when a test that this page
 names is gone. `script/contract.py` fails on a break of the contract that this page does not list below.
 
 What no machine proves yet, so the promise does not hold there until a proof lands:

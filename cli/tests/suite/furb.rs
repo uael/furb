@@ -1,17 +1,15 @@
 //! furb, driven as a process, as an operator or a client drives it: the commands and the TUI it
 //! hands the terminal to.
 //!
-//! Every life runs on the real engine and on the real ears of the crate, and a claude command line that answers from
-//! a script stands in for the models, so no test asks one. The fake answers each line of input with the next word the
-//! test gave it, and it counts what it answered.
+//! Every life runs on the real engine and on the real ears of the crate, and a claude command line
+//! that answers from a script stands in for the models, so no test asks one. The fake answers each
+//! line of input with the next word the test gave it, and it counts what it answered.
 
 #![cfg(unix)]
 #![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 
-#[path = "../../tests/common/pipes.rs"]
-mod pipes;
-#[path = "../../tests/common/yard.rs"]
-mod yard;
+use crate::pipes;
+use crate::yard;
 
 use std::path::MAIN_SEPARATOR;
 use std::process;
@@ -30,8 +28,9 @@ use std::{
 
 use serde_json::{Value, json};
 
-/// The fake claude of the tests of the crate, which answers the Nth turn with the word of the file word.N beside it.
-const FAKE: &str = include_str!("../../src/world/provider/claude/fake-claude.sh");
+/// The fake claude of the tests of the crate, which answers the Nth turn with the word of the file
+/// word.N beside it.
+const FAKE: &str = include_str!("../../../src/world/provider/claude/fake-claude.sh");
 
 /// A word that counts the lines of the file of the yard.
 const COUNT: &str = "close(len(read('a.txt').lines))";
@@ -59,8 +58,9 @@ impl Drop for Yard {
 
 impl Yard {
   fn new(name: &str) -> Self {
-    // A process that starts in the yard reads its directory as the system gives it, with no link in it: on macOS the
-    // temporary directory is under /var, a link to /private/var. So the yard is that path too.
+    // A process that starts in the yard reads its directory as the system gives it, with no link in
+    // it: on macOS the temporary directory is under /var, a link to /private/var. So the yard is
+    // that path too.
     let base = env::temp_dir().join(format!("furb-cli-{name}-{}", process::id()));
     drop(fs::remove_dir_all(&base));
     fs::create_dir_all(&base).expect("the root of the yard");
@@ -96,8 +96,9 @@ impl Yard {
     self.at.join("record.jsonl")
   }
 
-  /// furb with these words, in the yard, on the fake claude and on the config directory and the cache of the yard,
-  /// and with no TUI, no local server and no most of thought that the machine names.
+  /// furb with these words, in the yard, on the fake claude and on the config directory and the
+  /// cache of the yard, and with no TUI, no local server and no most of thought that the machine
+  /// names.
   fn furb(&self, words: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
     command.args(words).current_dir(&self.at);
@@ -129,9 +130,9 @@ fn program(at: &Path, script: &str) {
   fs::set_permissions(at, fs::Permissions::from_mode(0o755)).expect("the program runs");
 }
 
-/// A local server of models on a port of this machine, which lists one model, `m`, and answers each chat completion
-/// with this word; and each request it reads, as it reads it. A test of the command line sees no helper of the tests
-/// of the crate, so this fake is a second one.
+/// A local server of models on a port of this machine, which lists one model, `m`, and answers each
+/// chat completion with this word; and each request it reads, as it reads it. A test of the command
+/// line sees no helper of the tests of the crate, so this fake is a second one.
 fn served(word: &str) -> (u16, mpsc::Receiver<String>) {
   let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = listener.local_addr().expect("the port").port();
@@ -265,7 +266,8 @@ fn a_checkpoint_at_the_tip_of_a_record_carries_the_module_of_its_root_to_the_nex
 #[test]
 fn a_word_run_on_a_record_that_holds_pending_work_asks_that_work_again_with_no_wake() {
   let yard = Yard::new("pending");
-  // The fake claude gives no answer to a turn that holds WAIT, so the reply runs until the life ends.
+  // The fake claude gives no answer to a turn that holds WAIT, so the reply runs until the life
+  // ends.
   let said = printed(yard.kept(&["run", "prompt(str, 'WAIT', on=chain('w'))\nclose(1)"]), "");
   assert_eq!(said, "1\n");
   let output = ran(yard.kept(&["run", "close(2)"]), "");
@@ -466,7 +468,8 @@ fn a_word_that_a_model_wraps_in_a_tool_call_runs_less_its_markup_and_the_next_tu
   assert_eq!(yard.answered(), 2);
   let input = fs::read_to_string(yard.fake.join("in")).expect("the input of the fake");
   let next = input.lines().last().unwrap_or_default();
-  // The refused word goes on the user side, so the turn holds the whole chain again: read only its last paragraphs.
+  // The refused word goes on the user side, so the turn holds the whole chain again: read only its
+  // last paragraphs.
   let tail = &next[next.rfind("wrapped its word").unwrap_or(0)..];
   assert!(tail.contains("refused") && next.contains("wrapped its word"), "{tail}");
   assert!(!tail.contains("invoke") && !tail.contains("parameter"), "{tail}");
@@ -526,7 +529,8 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
 fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_taken_up() {
   let yard = Yard::new("paused");
   let counted = ["prompt", "count the lines", "--shape", "int"];
-  // A missing program is a failure that passes, which the provider asks again for minutes: this one fails at once.
+  // A missing program is a failure that passes, which the provider asks again for minutes: this one
+  // fails at once.
   let broken = yard.at.join("broken");
   program(&broken, "#!/bin/sh\necho 'claude is broken' >&2\nexit 1\n");
   let mut failing = yard.kept(&counted);

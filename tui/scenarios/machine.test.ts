@@ -1,6 +1,6 @@
 // A window holds a life of the daemon of another machine of the tailnet as it holds a local one: the second daemon is a
 // process of its own that listens on loopback as on the tailnet, with a fake of the local API of Tailscale that names the
-// login of each peer, as host/tests/net.rs does. The window dials its address through the one dial, lists its lives, opens
+// login of each peer, as host/tests/suite/net.rs does. The window dials its address through the one dial, lists its lives, opens
 // one and sends a message that the model answers.
 import { expect } from "bun:test";
 import { type ChildProcess, spawn } from "node:child_process";

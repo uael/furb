@@ -1,13 +1,12 @@
-//! The examples of Rust in docs/examples/rust, each run as a user runs it, on a claude command line that answers from
-//! a script, so no test asks a model. `cargo test` builds the examples before it runs this test.
+//! The examples of Rust in docs/examples/rust, each run as a user runs it, on a claude command line
+//! that answers from a script, so no test asks a model. `cargo test` builds the examples before it
+//! runs this test.
 #![cfg(unix)]
 #![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 
-#[path = "common/pipes.rs"]
-mod pipes;
-#[path = "common/yard.rs"]
-mod yard;
+use crate::pipes;
+use crate::yard;
 
 use std::{
   env, fs,
@@ -24,7 +23,7 @@ use std::{
 const BOUND: Duration = Duration::from_secs(60);
 
 /// The fake claude of the tests of the crate.
-const FAKE: &str = include_str!("../src/world/provider/claude/fake-claude.sh");
+const FAKE: &str = include_str!("../../src/world/provider/claude/fake-claude.sh");
 
 /// The directory an example runs in, and the fake claude beside it.
 struct Yard {
@@ -61,7 +60,8 @@ impl Yard {
     }
   }
 
-  /// The example, as a process in the yard, on the fake claude and on the config and the cache of the yard.
+  /// The example, as a process in the yard, on the fake claude and on the config and the cache of
+  /// the yard.
   fn command(&self, name: &str) -> Command {
     let here = env::current_exe().expect("this test");
     let example =

@@ -14,8 +14,7 @@
   reason = "the test blocks on the act of a rung, as the tests of the crate do"
 )]
 
-#[path = "common/yard.rs"]
-mod yard;
+use crate::yard;
 
 use std::{
   fs,
@@ -632,7 +631,7 @@ fn a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without
   let record = at.join("record.jsonl");
   let mut child = Reaped(
     Command::new(env::current_exe().unwrap())
-      .args(["a_life_that_a_test_kills", "--exact", "--ignored", "--nocapture"])
+      .args(["promise::a_life_that_a_test_kills", "--exact", "--ignored", "--nocapture"])
       .env("FURB_PROMISE_KILLED", &*at)
       .stdout(Stdio::null())
       .spawn()

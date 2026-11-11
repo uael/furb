@@ -30,8 +30,8 @@ def proofs(text: str) -> list[tuple[str, str]]:
 def target(file: str) -> list[str]:
   """The arguments of cargo test that build the target which holds a test of rust in this file."""
   package = "furb-host" if file.startswith("host/") else "furb-cli" if file.startswith("cli/") else "furb"
-  if hit := re.fullmatch(r"(?:host/|cli/)?tests/(\w+)\.rs", file):
-    return ["-p", package, "--test", hit[1]]
+  if hit := re.fullmatch(r"(?:host/|cli/)?tests/(suite/)?(\w+)\.rs", file):
+    return ["-p", package, "--test", "suite" if hit[1] else hit[2]]
   return ["-p", package, "--lib"]
 
 

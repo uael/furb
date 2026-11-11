@@ -61,7 +61,7 @@ order, and the life drifts at `bash2`. The adapter of that engine in `src/furb/a
 so the record replays with no drift. The test `a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter`
 in `src/life.test.rs` proves the drift without the adapter.
 
-No record here holds a checkpoint now, so the open from the first entry of `each_record_of_the_replays_replays_on_its_own_engine_with_no_drift` runs for a record that a later change adds with one. The tests `a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint` in `tests/promise.rs` and `a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip` in `src/life.test.rs` prove that open.
+No record here holds a checkpoint now, so the open from the first entry of `each_record_of_the_replays_replays_on_its_own_engine_with_no_drift` runs for a record that a later change adds with one. The tests `a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint` in `tests/suite/promise.rs` and `a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip` in `src/life.test.rs` prove that open.
 
 `lives.jsonl.zst` is a life of the engine `0a11688b` of the commit `d5550efda`, with the default extensions. Its root
 runs a word that makes an act whose ear makes an act of its own, as compaction makes the prompt of its chooser. The

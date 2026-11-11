@@ -9,7 +9,7 @@ record, and never the record of a life.
 
 A build before the texts replayed an older record on its own engine and went on with no fact made of its own, so a
 segment of several lives may hold the entries of several engines. The script says how many lives each segment holds,
-and tests/tip.rs opens the copy to check it: a segment that the texts of one engine, and its adapter, cannot replay
+and tests/suite/tip.rs opens the copy to check it: a segment that the texts of one engine, and its adapter, cannot replay
 drifts.
 
 Usage: python3 script/engines.py <copy of a record>

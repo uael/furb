@@ -18,12 +18,12 @@ SPEC.loader.exec_module(promise)
 
 def test_the_page_of_the_promise_names_its_proofs_of_python_and_of_rust_and_each_goes_to_its_target() -> None:
   found = promise.proofs((ROOT / "docs" / "promise.md").read_text(encoding="utf-8"))
-  assert ("tests/promise.rs", "each_proof_that_the_page_of_the_promise_names_stands_in_its_file") in found
+  assert ("tests/suite/promise.rs", "each_proof_that_the_page_of_the_promise_names_stands_in_its_file") in found
   # A test that the page names as no proof yet runs in no gate of a release.
   assert all("rollback" not in file for file, _ in found)
   commands = [command for command, _, _ in promise.runs(found)]
   assert any("pytest" in command for command in commands)
-  assert ["cargo", "test", "-p", "furb-host", "--test", "daemon"] in [one[:6] for one in commands]
+  assert ["cargo", "test", "-p", "furb-host", "--test", "suite"] in [one[:6] for one in commands]
   assert ["cargo", "test", "-p", "furb", "--lib"] in [one[:5] for one in commands]
 
 

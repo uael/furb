@@ -123,7 +123,7 @@ The TypeScript side is a bun workspace at the root, whose packages are the three
 `typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on
 a life as a program holds it, which each door gives with the same names: `src/furb/life.py`, which `furb.open`
 gives, `bind/typescript/src/framework.ts`, and `src/life/host.rs`. `test/outside/test_examples.py`,
-`bind/typescript/test/examples.test.ts` and `tests/examples.rs` run each example as a process, on a claude command
+`bind/typescript/test/examples.test.ts` and `tests/suite/examples.rs` run each example as a process, on a claude command
 line that answers from a script.
 
 `CONTRIBUTING.md` is the guide for a person who changes the repository: the tools to install, how to set up a clone,
@@ -348,7 +348,7 @@ fix what your change broke, and report what was broken before.
   `.furb/skills` too, less their tests.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:
   the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
-  `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/furb.rs` runs `furb` as
+  `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/suite/furb.rs` runs `furb` as
   a process, on a claude command line that answers from a script.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `sh script/hooks/pre-commit run --all-files`: every gate the commit hook runs, with the same pre-commit as the commit

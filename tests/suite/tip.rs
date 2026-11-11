@@ -5,7 +5,7 @@
 //!
 //! ```sh
 //! FURB_PROBE_RECORD=<copy> FURB_PROBE_OUT=<file> FURB_PROBE_DIRECTORY=<directory of the life> \
-//!   cargo test -p furb --test tip -- --ignored
+//!   cargo test -p furb --test suite tip:: -- --ignored
 //! ```
 //!
 //! `FURB_PROBE_CONFIG` names the config directory, `FURB_PROBE_SKILLS` set to anything runs

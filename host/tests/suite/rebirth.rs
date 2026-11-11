@@ -1,14 +1,13 @@
 //! A life that its thread opens again from its checkpoint, past the tail of facts that a checkpoint
-//! bounds. The test runs in a process of its own, with no harness.
+//! bounds.
 
 #![expect(
   clippy::disallowed_methods,
-  reason = "the test blocks on the runtime that it starts for itself"
+  reason = "a test blocks on the runtime that tokio starts for it"
 )]
-#![expect(clippy::expect_used, reason = "a test with no harness fails by a panic")]
+#![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
 
-#[path = "../../tests/common/yard.rs"]
-mod yard;
+use crate::yard;
 
 use std::{
   collections::BTreeMap,
@@ -29,7 +28,6 @@ use furb::{
 };
 use furb_host::{Command, Event, Life, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
-use tokio::runtime::Builder;
 use tokio::time;
 
 /// The events of a life, each under its place in the log.
@@ -37,17 +35,6 @@ type Logged = (Seq, Arc<Event>);
 
 /// The most facts that a life says after its checkpoint before it writes the next one.
 const TAIL: usize = 10_000;
-
-fn main() {
-  let runtime = Builder::new_current_thread().enable_all().build();
-  runtime.expect("the test has a runtime").block_on(async {
-    a_life_goes_on_through_each_rebirth().await;
-    a_rebirth_waits_for_each_word_that_runs().await;
-    a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing().await;
-    a_life_with_the_default_skills_is_born_again_at_its_tail().await;
-  });
-  the_check_of_a_held_rebirth_fails_on_an_early_rebirth_and_passes_a_later_one();
-}
 
 /// How many rebirths the log tells from a place on: the interval where live work must hold the
 /// rebirth, which the test marks before the workload that it checks.
@@ -57,6 +44,7 @@ fn rebirths_from(log: &[Logged], mark: usize) -> usize {
 
 /// The check of the interval fails when a rebirth comes inside it, early or late, and passes when
 /// the only rebirth comes after it.
+#[test]
 fn the_check_of_a_held_rebirth_fails_on_an_early_rebirth_and_passes_a_later_one() {
   let at = |seq: Seq, event: Event| -> Logged { (seq, Arc::new(event)) };
   let told = || Event::Notice("a fact".to_owned());
@@ -216,6 +204,7 @@ async fn looked(life: &LifeHandle, at: u64) -> Vec<(String, u64)> {
   acts.into_iter().map(|one| (one.id, one.began)).collect()
 }
 
+#[tokio::test]
 async fn a_life_goes_on_through_each_rebirth() {
   let at = place("tail");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
@@ -294,6 +283,7 @@ async fn bound(life: &LifeHandle, name: &str) -> String {
   got.trim_matches('\'').to_owned()
 }
 
+#[tokio::test]
 async fn a_rebirth_waits_for_each_word_that_runs() {
   let at = place("bound");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
@@ -320,6 +310,7 @@ async fn a_rebirth_waits_for_each_word_that_runs() {
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
 }
 
+#[tokio::test]
 async fn a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing() {
   let at = place("ear");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
@@ -355,6 +346,7 @@ async fn a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing() {
 
 /// A life with the default skills, whose life words hold acts that live until the life ends, is
 /// born again at its tail: the seed makes each of those acts again, so none holds the rebirth.
+#[tokio::test]
 async fn a_life_with_the_default_skills_is_born_again_at_its_tail() {
   let at = place("skills");
   let life = Life::spawn(Opening { skills: None, ..opening(&at) }).expect("the life has a thread");

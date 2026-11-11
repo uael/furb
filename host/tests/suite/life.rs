@@ -6,8 +6,7 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
-#[path = "../../tests/common/yard.rs"]
-mod yard;
+use crate::yard;
 
 use std::{
   collections::BTreeMap,

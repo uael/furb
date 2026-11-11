@@ -95,7 +95,7 @@ contract needs a request of the owner.
 | `src/world/operator.rs` | The rules by which every console reads what the operator answers. |
 | `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [The provider](#the-provider) gives file by file. |
 | `src/life.rs` | The opening of a life, which every host shares: the record, the ears of the crate, and the extensions. |
-| `src/view.rs`, `src/view/` | The meaning of a life, folded from its facts, which every window shows the same way: the state of each act and chain, the desk, the threads, the spend, and the acts at a moment. The host tells each act with it, and `host/tests/view.rs` proves it. |
+| `src/view.rs`, `src/view/` | The meaning of a life, folded from its facts, which every window shows the same way: the state of each act and chain, the desk, the threads, the spend, and the acts at a moment. The host tells each act with it, and `host/tests/suite/view.rs` proves it. |
 | `src/furb/world.py` | The World of Python: the ears of the crate, and the operator at its terminal. The scripts open a life on it. |
 
 ### The provider
@@ -155,7 +155,7 @@ and `cli/pyproject.toml` say.
 | `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
 | `cli/src/tui.rs` | How furb finds the TUI and hands the terminal to it. |
-| `cli/tests/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |
+| `cli/tests/suite/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |
 
 ### The TUI
 

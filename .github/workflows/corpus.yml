@@ -64,5 +64,5 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python: none
-      - run: cargo test -p furb --test promise
+      - run: "cargo test -p furb --test suite promise::"
       - uses: ./.github/actions/clear

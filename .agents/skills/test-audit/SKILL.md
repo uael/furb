@@ -22,8 +22,8 @@ tests.
   change together.
 - `test/outside/` proves the World, the Kernel, the door to python, the switch of the package, the harness, the
   examples and the life as a program. The hygiene laws do not hold these tests, so this gate holds them.
-- The tests of the crate stand beside each module, `src/<name>.test.rs`, `tests/examples.rs` runs the examples, and
-  `cli/tests/furb.rs` runs the command line as a process.
+- The tests of the crate stand beside each module, `src/<name>.test.rs`, `tests/suite/examples.rs` runs the examples, and
+  `cli/tests/suite/furb.rs` runs the command line as a process.
 - The TypeScript tests stand in `bind/typescript/test/` and `tui/test/`.
 
 Each contract has one primary test at its strongest boundary. A sentence of the contract is proved once, by the

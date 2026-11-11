@@ -1,9 +1,8 @@
-//! A life that a program opens on a runtime of its own, in a binary of its own, so that no other test starts the
-//! reactor of the process.
+//! A life that a program opens on a runtime of its own, in a binary of its own, so that no other
+//! test starts the reactor of the process.
 #![cfg(unix)]
 
-#[path = "common/yard.rs"]
-mod yard;
+use crate::yard;
 
 #[cfg(target_os = "linux")]
 use std::fs;

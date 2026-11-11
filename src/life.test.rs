@@ -687,7 +687,7 @@ fn a_record_of_another_engine_crosses_to_this_build_by_a_checkpoint_and_goes_on_
 
 /// The records that each build of this version replays word by word: the records in `tests/replay`,
 /// which `tests/replay/README.md` says. The records of the promise of a release are in
-/// `tests/corpus`, which `tests/promise.rs` opens.
+/// `tests/corpus`, which `tests/suite/promise.rs` opens.
 fn replays() -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("replay")
 }

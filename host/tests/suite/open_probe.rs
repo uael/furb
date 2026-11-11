@@ -4,7 +4,7 @@
 //!
 //! ```sh
 //! FURB_PROBE_RECORD=<copy> FURB_PROBE_DIRECTORY=<directory of the life> \
-//!   cargo test -p furb-host --test open_probe -- --ignored --nocapture
+//!   cargo test -p furb-host --test suite open_probe:: -- --ignored --nocapture
 //! ```
 //!
 //! The life keeps its record, so the probe writes to the copy and never to a record of a person.
