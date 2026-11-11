@@ -7,7 +7,6 @@ import { isDone, operated, outcomeOf } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { Gutter } from "../src/app/gutter.ts";
 import { App, sessionDetail } from "../src/app.ts";
-import { think } from "../src/demo/answer.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import type { Session } from "../src/session.ts";
@@ -348,33 +347,6 @@ test("a question of a choice offers its values as a list in place of the input, 
     },
     { width: 120, height: 40 },
   ));
-
-test("the block of a word whose model works turns the loader of a thought in the cell of its number under the label of the model, then the size and the last line of its thought as they come, and the footer turns the same loader", () =>
-  composing(async ({ session, app, frame }) => {
-    app.composer.setText("Think until I cancel.");
-    await app.submit();
-    await until(session, () => session.activity.some((act) => act.kind === "rung" && !isDone(act)));
-    await session.refresh();
-    const step = session.activity.find((act) => act.kind === "rung" && !isDone(act))?.id ?? "";
-    // The feed draws the block of the step at a later tick than the refresh, later on a slow runner.
-    const rows = (await framed(frame, (shown) => thinking.test(shown), "the step that thinks")).split("\n");
-    const label = rows.find((row) => thinking.test(row)) ?? "";
-    expect(label).not.toContain("thinking");
-    expect(label).not.toContain("word · ");
-    expect(rows.join("\n")).not.toContain("# thinking");
-    expect(rows.findLast((row) => row.trim()) ?? "").toMatch(/[\u2800-\u28ff] Thinking/);
-    // The demo answers the models of its life in this window, so the turn that thinks until a cancel writes here.
-    think("First I read.\nThen I wait.");
-    await until(
-      session.host,
-      () => session.host.streams.get(step)?.thinking === "First I read.\nThen I wait.",
-    );
-    const thought = await framed(frame, (shown) => shown.includes("26 chars"), "the size of the thought");
-    expect(thought).toContain("26 chars");
-    expect(thought).toContain("Then I wait.");
-    expect(thought).not.toContain("First I read.");
-    await session.submit("/cancel");
-  }));
 
 // The life of 11-05 showed "thinking" under each thread whose rung waited for its turn behind the reply of another
 // rung, as if each model worked at once.

@@ -252,7 +252,7 @@ export function weave({ acts, prompts, measures, folds, width, label, index, mom
  * each chain with what it was read of. A host that names each chain that an act came or changed on has the board
  * read again only those chains, and the chains whose question of the operator or measure changed: the board keeps its
  * rows, the place of each chain among them, how many names of chains it read, the chains that held a question or a
- * prompt on another chain, and the order of the rows by state. */
+ * prompt on another chain. */
 interface Boarded {
   chains: number;
   tree: ReturnType<typeof treeOf>;
@@ -263,7 +263,6 @@ interface Boarded {
     seen: number;
     marked: Set<string>;
     measures: Readonly<Record<string, Measure>>;
-    order: Ordering;
   };
 }
 /** The state of a chain on the board, and what it was read of: the stamp of its acts, whether the operator owes a
@@ -276,76 +275,6 @@ interface Boarding {
   waits?: string;
 }
 const boarded = new WeakMap<object, Boarded>();
-
-/** The rows of the chains of a board in the orders that the board reads them: every row, the rows that ask, then
- * those that need a look, each in the order of the tree, the first rows of the others, the place of each row, and how
- * many rows hold each state. */
-export interface BoardOrder {
-  rows: readonly Row[];
-  asking: Row[];
-  looking: Row[];
-  resting(count: number): Row[];
-  place: ReadonlyMap<string, number>;
-  counts: ReadonlyMap<State, number>;
-}
-/** The chains that ask and that need a look, and how many rows hold each state, which a board keeps as rows change. */
-interface Ordering {
-  asking: Set<string>;
-  looking: Set<string>;
-  counts: Map<State, number>;
-}
-/** The states of a row that needs a look. */
-const looks: readonly State[] = ["failed", "paused", "thinks", "runs", "delegates"];
-const orders = new WeakMap<Loom, BoardOrder>();
-
-/** A row of a chain that holds a new state, or no state when it is gone, in an ordering. */
-function reorder(order: Ordering, id: string, was: State | undefined, now: State | undefined): void {
-  if (was === now) return;
-  if (was !== undefined) order.counts.set(was, (order.counts.get(was) ?? 1) - 1);
-  if (now !== undefined) order.counts.set(now, (order.counts.get(now) ?? 0) + 1);
-  if (now === "asks") order.asking.add(id);
-  else order.asking.delete(id);
-  if (now !== undefined && now !== "asks" && looks.includes(now)) order.looking.add(id);
-  else order.looking.delete(id);
-}
-
-/** The order of the rows of the chains of a loom, as a board reads them. A loom that a board read from the index of a
- * host gives the order that the board kept, and any other loom gives the order of its rows. */
-export function orderOf(loom: Loom): BoardOrder {
-  const known = orders.get(loom);
-  if (known) return known;
-  const rows = loom.rows.filter((row) => row.id !== "operator");
-  const order: Ordering = { asking: new Set(), looking: new Set(), counts: new Map() };
-  for (const row of rows) reorder(order, row.id, undefined, row.state);
-  const made = ordered(rows, new Map(rows.map((row, at) => [row.id, at])), order);
-  orders.set(loom, made);
-  return made;
-}
-
-/** The order of rows from what an ordering holds. */
-function ordered(rows: readonly Row[], place: ReadonlyMap<string, number>, order: Ordering): BoardOrder {
-  const of = (ids: Set<string>) =>
-    [...ids]
-      .map((id) => place.get(id) ?? -1)
-      .filter((at) => at >= 0)
-      .sort((one, other) => one - other)
-      .map((at) => rows[at] as Row);
-  return {
-    rows,
-    asking: of(order.asking),
-    looking: of(order.looking),
-    resting(count) {
-      const out: Row[] = [];
-      for (const row of rows) {
-        if (out.length >= count) break;
-        if (!order.asking.has(row.id) && !order.looking.has(row.id)) out.push(row);
-      }
-      return out;
-    },
-    place,
-    counts: new Map(order.counts),
-  };
-}
 
 /** The loom of no width of a life, read from the index of a host: its rows, with no cells. A host that stamps each
  * change of the acts on each chain has the state of a chain read again only once an act on it, a question of the
@@ -449,9 +378,8 @@ function board(
   const marked = new Set([...owing, ...asked.keys()]);
   let rows: Row[];
   let place: Map<string, number>;
-  let order: Ordering;
   if (kept && touched) {
-    ({ rows, place, order } = kept);
+    ({ rows, place } = kept);
     // Only a chain that an act came or changed on, or whose question, prompt on another chain or measure changed, is
     // read again.
     const again = new Set([...touched.slice(kept.seen), ...marked, ...kept.marked]);
@@ -468,18 +396,13 @@ function board(
       if (now === before && was.measure === measures[id]) continue;
       const row = rowOf(one);
       rows[at] = row;
-      reorder(order, id, was.state, row.state);
     }
   } else {
     rows = tree.map(rowOf);
     place = new Map(rows.map((row, at) => [row.id, at]));
-    order = { asking: new Set(), looking: new Set(), counts: new Map() };
-    for (const row of rows) reorder(order, row.id, undefined, row.state);
   }
-  entry.kept = { rows, place, seen: touched?.length ?? 0, marked, measures, order };
-  const loom: Loom = { rows: [operator, ...rows], owed, folded: 0 };
-  if (!folds.size) orders.set(loom, ordered([...rows], place, order));
-  return loom;
+  entry.kept = { rows, place, seen: touched?.length ?? 0, marked, measures };
+  return { rows: [operator, ...rows], owed, folded: 0 };
 }
 
 /** The rows of the tree of the chains of a life, in its order: each chain under the chain whose rung made it, with

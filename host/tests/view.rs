@@ -140,24 +140,7 @@ fn each_act_takes_one_state_of_the_one_set() {
 }
 
 #[test]
-fn a_whole_takes_the_first_state_of_its_parts_in_the_order_of_the_one_set() {
-  let order = [
-    State::Asks,
-    State::Unread,
-    State::Failed,
-    State::Paused,
-    State::Thinks,
-    State::Runs,
-    State::Delegates,
-    State::Done,
-    State::Cancelled,
-    State::Idle,
-  ];
-  assert_eq!(State::ALL, order);
-  for (at, state) in order.iter().enumerate() {
-    assert_eq!(State::roll_up(order[at..].iter().rev().copied()), *state);
-  }
-  assert_eq!(State::roll_up([]), State::Idle);
+fn a_state_that_thinks_runs_or_delegates_is_work_that_is_not_done() {
   let busy: Vec<bool> =
     [State::Thinks, State::Runs, State::Delegates, State::Done].map(State::busy).to_vec();
   assert_eq!(busy, [true, true, true, false]);

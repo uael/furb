@@ -87,7 +87,7 @@ pub const LEVEL: &str = "high";
 
 /// The doctrine of furb, which says how a model works in furb and holds no law: `DOCTRINE.md` at the root of the
 /// repository. A chain reads it as a file, in the first turn of its actor, at the path that [`doctrine`] gives.
-pub const DOCTRINE: &str = include_str!("../../../DOCTRINE.md");
+const DOCTRINE: &str = include_str!("../../../DOCTRINE.md");
 
 /// The path of the doctrine that a chain in a directory reads: `.furb/DOCTRINE.md` of that directory when it holds
 /// one, as a doctrine of the project; else, in dev mode, the `DOCTRINE.md` of the checkout of git that this furb was
@@ -396,7 +396,7 @@ impl Catalog {
   }
 
   /// What a first run checks, as [`Catalog::setup`] gives it, for a caller that awaits.
-  pub async fn checked(&self) -> Setup {
+  async fn checked(&self) -> Setup {
     let offered = |provider: &str| {
       let of = |model: &Model| model.name.split_once(':').is_some_and(|(one, _)| one == provider);
       self.models.iter().filter(|one| one.offered && of(&one.model)).count()

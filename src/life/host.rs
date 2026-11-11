@@ -95,21 +95,6 @@ impl Question {
   }
 }
 
-/// One act of a chain, with named fields.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LifeAct {
-  /// The kind of the act, as prompt.
-  pub kind: String,
-  /// The name of the act, as prompt1.
-  pub id: String,
-  /// Who made the act.
-  pub by: String,
-  /// The chain of the act.
-  pub on: String,
-  /// Whether the act has what it came to.
-  pub done: bool,
-}
-
 /// What [`Life::open`] opens a life with, which it opens when it is awaited on a runtime of tokio, as
 /// [`Opening::open`] opens it.
 pub struct Open(Opening);
@@ -126,13 +111,6 @@ impl Open {
   #[must_use]
   pub fn roster<S: Into<String>>(mut self, models: impl IntoIterator<Item = S>) -> Self {
     self.0.roster = Some(models.into_iter().map(Into::into).collect::<Vec<_>>().into());
-    self
-  }
-
-  /// The directory that the life stands on; the directory of the process when unsaid.
-  #[must_use]
-  pub fn directory(mut self, directory: impl Into<String>) -> Self {
-    self.0.directory = directory.into();
     self
   }
 
@@ -269,7 +247,7 @@ impl Life {
   }
 
   /// A new chain on a chain.
-  pub fn chain_on(&mut self, on: &Chain, label: &str) -> Result<Chain, Fault> {
+  fn chain_on(&mut self, on: &Chain, label: &str) -> Result<Chain, Fault> {
     let words = [Object::string(label), Object::string("")];
     let id = if let Some(id) = self.again("chain", on, &words) {
       id
@@ -310,7 +288,7 @@ impl Life {
   }
 
   /// Whether a pause holds a chain.
-  pub fn is_paused(&mut self, chain: &Chain) -> Result<bool, Fault> {
+  fn is_paused(&mut self, chain: &Chain) -> Result<bool, Fault> {
     Ok(self.view("paused(id)", vec![("id", Object::string(&chain.0))])?.py_repr() == "True")
   }
 
@@ -360,19 +338,6 @@ impl Life {
       }
     }
     Ok(found)
-  }
-
-  /// Every act on a chain, in order, with named fields.
-  pub fn acts(&mut self, chain: &Chain) -> Result<Vec<LifeAct>, Fault> {
-    let facts =
-      self.engine.transcript(verbs::Transcript { on: Some(chain.0.clone()), of: None })?;
-    let mut acts = Vec::new();
-    for one in facts.iter().filter(|one| one.question() && one.on() == chain.0) {
-      let done = self.engine.outcome(one.about())?.is_some();
-      let (kind, id, by, on) = (one.kind(), one.about(), one.by(), one.on());
-      acts.push(LifeAct { kind: kind.into(), id: id.into(), by: by.into(), on: on.into(), done });
-    }
-    Ok(acts)
   }
 
   /// What a thread comes to, once a model answers it.

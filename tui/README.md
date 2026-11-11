@@ -252,7 +252,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌥D / ⌥E | Fold or expand details / external editor |
 | ⌃V | Paste a clipboard image |
 | @ or ! | Find a project file, or run a shell command |
-| ↑, ↓, Tab, Enter after /, @ or : | Choose a command, a value, a file or an emoji |
+| ↑, ↓, Tab, Enter after / or @ | Choose a command, a value or a file |
 | ⌃F / PageUp / PageDown | Filter the current view / scroll |
 | ⌃R / ⌃Space | Python input / complete a name |
 | ⌃L / ⌃A | Edit a prompt program / answer the questions that wait |

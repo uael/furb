@@ -51,7 +51,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time;
 
 /// Who says each fact that the reader adds to the facts that a record kept, but a question.
-pub const READER: &str = "reader";
+const READER: &str = "reader";
 
 /// What a record tells, read with no life.
 #[derive(Debug, Clone)]
@@ -89,18 +89,6 @@ impl Retold {
   /// of a large record than it keeps of each fact.
   pub fn each(&self, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
     self.lines(None, None, &mut |_, one| take(one))
-  }
-
-  /// Each fact of the file that the life said after the record kept its entry n, counted from 1,
-  /// in order.
-  pub fn after(&self, n: usize, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
-    self.lines(Some(&keep(n)), None, &mut |_, one| take(one))
-  }
-
-  /// Each fact of the file that the life said before the record kept its entry n, counted from 1,
-  /// in order.
-  pub fn before(&self, n: usize, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
-    self.lines(None, Some(&keep(n)), &mut |_, one| take(one))
   }
 
   /// Each fact of the file that the life said before the record kept its entry n, counted from 1,

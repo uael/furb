@@ -16,33 +16,6 @@ export function watchBar(
   ];
 }
 
-/** The common words of what a step did, by the kind of its acts. */
-const did: Record<string, [one: string, many: (count: number) => string]> = {
-  read: ["read a file", (count) => `read ${count} files`],
-  write: ["changed a file", (count) => `changed ${count} files`],
-  bash: ["ran a command", (count) => `ran ${count} commands`],
-  prompt: ["asked a model", (count) => `asked ${count} models`],
-  chain: ["started a branch", (count) => `started ${count} branches`],
-};
-
-/** What acts of one kind did, in common words, as "ran a command": the kind is the name of an act less its number. */
-export function plainActs(name: string, count: number): string {
-  const kind = name.replace(/\d+$/, "");
-  const words = did[kind];
-  if (!words) return count === 1 ? kind : `${count} × ${kind}`;
-  return count === 1 ? words[0] : words[1](count);
-}
-
-/** The name of a step of Python: the program of the operator, or the step that a model writes. */
-export function stepName(author: string): string {
-  return author === "you" ? "Your program" : `${author} writes Python`;
-}
-
-/** Who asks a model: the program, or furb, which tells the model of a chain that an act is done. */
-export function asker(model: string, chain: boolean): string {
-  return chain ? `furb tells ${model}` : `the program asks ${model}`;
-}
-
 /** Where a branch starts: from a moment of the chain that it branched from, with the files as they were then. */
 export function branchStart(source: string): string {
   return `This branch starts from a moment of ${source}, with the files as they were.`;

@@ -14,7 +14,7 @@ use crate::fact;
 const ROOT: &str = "chain1";
 
 /// The kind of the act by which the operator names a session.
-pub const RENAME: &str = "rename_session";
+const RENAME: &str = "rename_session";
 /// The kind of the act by which the extension naming names a session.
 pub const NAME: &str = "name_session";
 

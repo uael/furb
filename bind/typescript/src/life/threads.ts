@@ -1,9 +1,6 @@
 import type { Act } from "./acts.js";
 import type { State } from "./states.js";
 
-/** The acts of a life by their names, as a host indexes them. */
-export type Rows = Pick<ReadonlyMap<string, Act>, "get">;
-
 /** What a prompt of a chain is that is no conversation, which the feed of its chain draws as what it is and the list
  * of its threads leaves out: a notice of the round, a prompt of None that a rung or a chain made, which no one answers;
  * what a word of the operator told the chain, a prompt of None that a rung of his made or the acknowledgment of a rung

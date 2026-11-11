@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Meaning, restated } from "../../index.cjs";
-import type { Act, Measure } from "../../src/life/acts.ts";
+import type { Act } from "../../src/life/acts.ts";
 import { isDone } from "../../src/life/acts.ts";
 import { thread as drawn } from "../../src/life/ladder.ts";
 import {
@@ -9,7 +9,6 @@ import {
   duration,
   type Loom,
   nowOf,
-  orderOf,
   owedAt,
   spans,
   subjectOf,
@@ -419,62 +418,6 @@ test("a loom of no width read from the index of a host gives the rows that it gi
   index.live = acts.filter((one) => !isDone(one));
   stamped.live = index.live;
   expect(woven({ ...base, folds: new Set(), index: stamped })).toEqual(woven({ ...base, folds: new Set() }));
-});
-
-test("a board read from the chains that a host names as touched gives the rows and the order of a whole board", () => {
-  const acts = boardActs();
-  let prompts = [{ id: "prompt4", shape: "str", message: "Work" }];
-  let measures: Record<string, Measure> = {};
-  const touched: string[] = [];
-  const index = {
-    ids: new Map(acts.map((one) => [one.id, one])),
-    on: Map.groupBy(acts, (one) => one.chain),
-    chains: acts.filter((one) => one.kind === "chain"),
-    live: acts.filter((one) => !isDone(one)),
-    stamp: (chain: string) => touched.filter((one) => one === chain).length,
-    touched,
-  };
-  const order = ({ rows, asking, looking, place, counts }: ReturnType<typeof orderOf>, loom: Loom) => ({
-    loom,
-    rows,
-    asking,
-    looking,
-    resting: orderOf(loom).resting(3),
-    place: [...place],
-    counts: [...counts].filter(([, count]) => count).sort(([one], [other]) => one.localeCompare(other)),
-  });
-  const same = () => {
-    const base = {
-      acts,
-      prompts,
-      measures,
-      folds: new Set<string>(),
-      width: 0,
-      label: (id: string) => id,
-    };
-    const read = woven({ ...base, index });
-    const whole = woven(base);
-    expect(order(orderOf(read), read)).toEqual(order(orderOf(whole), whole));
-  };
-  same();
-  same();
-  // Each command that runs ends, but on chain7, whose held work waits.
-  for (const [place, one] of acts.entries())
-    if (one.kind === "bash" && !isDone(one) && one.chain !== "chain7") {
-      const done = changed(one, { done: true, ended: acts.length + 1 });
-      acts[place] = done;
-      index.ids.set(done.id, done);
-      const list = index.on.get(done.chain) ?? [];
-      list[list.indexOf(one)] = done;
-      touched.push(done.chain);
-    }
-  index.live = acts.filter((one) => !isDone(one));
-  same();
-  // The question of the operator moves to another chain, and a chain is measured.
-  prompts = [{ id: "prompt5", shape: "str", message: "Work" }];
-  same();
-  measures = { chain3: { answers: 2, dollars: 0.5, spent: 0.5, actor: "a" } };
-  same();
 });
 
 test("the moments of the acts are each start and end, in order, and a prompt that is not done is owed", () => {

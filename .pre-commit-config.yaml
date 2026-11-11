@@ -94,6 +94,12 @@ repos:
         language: system
         always_run: true
         pass_filenames: false
+      - id: unused
+        name: the names that nothing but a test names
+        entry: python3 -I script/unused.py
+        language: system
+        files: ^(tui/src/|bind/typescript/(src/|README\.md$)|src/|cli/src/|host/src/|build/|script/unused\.py$)
+        pass_filenames: false
       - id: biome
         name: biome
         # The lint of the gates, bun run lint, which fails on a warning too and checks the TypeScript, its JSON and the biome config in about a

@@ -9,7 +9,6 @@ import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import type { clipboardImage } from "../src/clipboard.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
-import { emojis } from "../src/emoji.ts";
 import { count } from "../src/format.ts";
 import { palettes } from "../src/theme.ts";
 import { cellAt, composing, drawn, framed } from "./composing.ts";
@@ -843,59 +842,11 @@ test("a word that the gate refused shows a cross on the line that the refusal na
     true,
   ));
 
-test("a colon that starts a word lists the emojis whose shortcode holds what follows it, and Tab or Enter puts the chosen emoji in its place", () =>
+test("a colon in a prompt opens no list and leaves the text as typed", () =>
   composing(async ({ app, screen, frame }) => {
-    await screen.mockInput.typeText("Ship it :rocke");
-    const rows = (await frame()).split("\n").filter((line) => line.includes(":rocket:"));
-    expect(rows[0]).toContain("🚀 :rocket:");
-    screen.mockInput.pressTab();
-    expect(app.composer.plainText).toBe("Ship it 🚀");
-    app.composer.setText("");
-    await screen.mockInput.typeText(":smile");
-    await frame();
-    screen.mockInput.pressArrow("down");
-    screen.mockInput.pressEnter();
-    expect(app.composer.plainText).toBe(emojis("smile")[1]?.emoji ?? "");
-  }));
-
-test("a colon inside a word opens no emoji list, and a whole shortcode becomes its emoji", () =>
-  composing(async ({ app, screen, frame }) => {
-    for (const typed of ["10:30", "a:rock", "https://rock"]) {
-      app.composer.setText("");
-      await screen.mockInput.typeText(typed);
-      expect(await frame()).not.toContain(":rocket:");
-    }
-    app.composer.setText("");
-    for (const typed of ["Thanks :+1:", " and :tada:", "!"]) {
-      await screen.mockInput.typeText(typed);
-      await frame();
-    }
-    expect(app.composer.plainText).toBe("Thanks 👍 and 🎉!");
-  }));
-
-test("Escape, a space, a removed colon, or no match closes the emoji list and keeps the text, and Enter then sends it", () =>
-  composing(async ({ session, app, screen, frame }) => {
-    await screen.mockInput.typeText(":rock");
-    expect(await frame()).toContain(":rocket:");
-    screen.mockInput.pressEscape();
-    // A lone Escape reaches the app once the parser knows that no sequence follows it.
-    for (let tries = 0; tries < 100 && (await frame()).includes(":rocket:"); tries++) await Bun.sleep(10);
-    expect(await frame()).not.toContain(":rocket:");
-    expect(app.composer.plainText).toBe(":rock");
-    app.composer.setText("");
-    await screen.mockInput.typeText(":rock ");
-    expect(await frame()).not.toContain(":rocket:");
-    app.composer.setText("");
-    await screen.mockInput.typeText(":rocke");
-    expect(await frame()).toContain(":rocket:");
-    for (let step = 0; step < 6; step++) screen.mockInput.pressBackspace();
-    expect(await frame()).not.toContain(":rocket:");
-    await screen.mockInput.typeText(":rocketzz");
-    expect(await frame()).not.toContain(":rocket:");
-    const sent = session.activity.length;
-    screen.mockInput.pressEnter();
-    await until(session, () => session.activity.length > sent);
-    expect(app.composer.plainText).toBe("");
+    await screen.mockInput.typeText("Ship it :rocket: and :rocke");
+    expect(await frame()).not.toContain("🚀");
+    expect(app.composer.plainText).toBe("Ship it :rocket: and :rocke");
   }));
 
 test("The input draws the rest of a line from the history in grey, and Right, Ctrl+F and Alt+Right take it at the end of the line", () =>

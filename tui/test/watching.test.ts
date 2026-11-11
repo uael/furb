@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { demoSession, removeDemoDirectories, tour } from "../src/demo.ts";
-import { asker, branchStart, branchTakes, plainActs, stepName, watchBar } from "../src/watching.ts";
+import { branchStart, branchTakes, watchBar } from "../src/watching.ts";
 import { composing } from "./composing.ts";
 
 afterAll(removeDemoDirectories);
@@ -27,20 +27,6 @@ test("the bar of the watch says what plays, what it costs, and how to move in ti
   );
   for (const line of [...watchBar("$0.00", false), ...watchBar("$0.00", true)])
     expect(line).not.toMatch(jargon);
-});
-
-test("the acts of a step, its name, and who asks a model read in common words", () => {
-  expect([
-    plainActs("read1", 1),
-    plainActs("write1", 1),
-    plainActs("bash2", 3),
-    plainActs("prompt4", 2),
-  ]).toEqual(["read a file", "changed a file", "ran 3 commands", "asked 2 models"]);
-  expect([stepName("you"), stepName("haiku")]).toEqual(["Your program", "haiku writes Python"]);
-  expect([asker("haiku", false), asker("sonnet", true)]).toEqual([
-    "the program asks haiku",
-    "furb tells sonnet",
-  ]);
 });
 
 test("a branch says where it starts, with the files as they were, and the messages that it takes", () => {

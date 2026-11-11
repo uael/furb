@@ -2,7 +2,6 @@ import { FilePicker, shapes } from "furb";
 import { isDone, takesNothing, unfinished, WORK } from "furb/life";
 import { clipboardImage } from "../clipboard.ts";
 import { canonical, skillSlashes, slashes } from "../commands.ts";
-import { emojiNamed, emojis } from "../emoji.ts";
 import { shortenHome } from "../files.ts";
 import { clip, count, dollars, graphemes, modelName, share } from "../format.ts";
 import { modeOf } from "../history.ts";
@@ -235,10 +234,10 @@ export const composer = part({
     this.composer.insertText(replacement);
   },
 
-  /** The token the cursor ends: a `/command` that opens the input, or an `@path` or a `:shortcode` that starts a word
-   * of a prompt. */
+  /** The token the cursor ends: a `/command` that opens the input, or an `@path` that starts a word of a
+   * prompt. */
   token():
-    | { kind: "/" | "@" | ":" | "value" | "trigger"; text: string; command?: string; trigger?: string }
+    | { kind: "/" | "@" | "value" | "trigger"; text: string; command?: string; trigger?: string }
     | undefined {
     const before = this.beforeCursor();
     const slash = before.match(/^\/([\w-]*)$/);
@@ -250,9 +249,6 @@ export const composer = part({
     const at = before.match(/(?:^|\s)@([^\s"']*)$/);
     if (at && this.session.mode === "prompt" && !this.session.editing)
       return { kind: "@", text: at[1] ?? "" };
-    const colon = before.match(/(?:^|\s):([\w+-]*)$/);
-    if (colon && this.session.mode === "prompt" && !this.session.editing)
-      return { kind: ":", text: colon[1] ?? "" };
     // A trigger of a part starts a word of a prompt, as `@` does.
     if (this.session.mode === "prompt" && !this.session.editing)
       for (const trigger of this.parts.triggers()) {
@@ -417,14 +413,6 @@ export const composer = part({
   },
 
   suggest(): void {
-    // A whole `:shortcode:` of a prompt that names an emoji becomes that emoji.
-    const whole = this.beforeCursor().match(/(?:^|\s)(:([\w+-]+):)$/);
-    const named =
-      whole && this.session.mode === "prompt" && !this.session.editing && emojiNamed(whole[2] ?? "");
-    if (whole && named) {
-      this.replaceBefore(whole[1] ?? "", named);
-      return;
-    }
     const token = this.token();
     const key = token ? `${token.trigger ?? token.kind}${token.text}` : "";
     this.suggestionError = "";
@@ -517,14 +505,6 @@ export const composer = part({
                 },
               }),
         }));
-    } else if (token.kind === ":") {
-      this.suggestions = emojis(token.text)
-        .slice(0, 50)
-        .map(({ emoji, name, description }) => ({
-          label: `${emoji} :${name}:`,
-          detail: description,
-          text: emoji,
-        }));
     } else if (token.kind === "trigger") {
       const given = this.parts.completions(token.trigger ?? "", token.text, this.seen());
       this.suggestionError = given.errors.join(" ");
@@ -555,27 +535,25 @@ export const composer = part({
     const token = this.overlay || this.dismissed ? undefined : this.token();
     const shown = token ? this.suggestions : [];
     const files = this.session.files;
-    // An emoji list that matches nothing closes.
     const failed = token && (token.kind === "@" || token.kind === "trigger") ? this.suggestionError : "";
-    const state =
-      !token || token.kind === ":"
-        ? ""
-        : failed
-          ? failed
-          : pathCommands.has(token.command ?? "") && files?.error
-            ? files.error
-            : (pathCommands.has(token.command ?? "") && !files?.paths) ||
-                (token.kind === "@" && !shown.length && this.filePicker?.running)
-              ? "Finding project files…"
-              : shown.length
-                ? ""
-                : token.kind === "/"
-                  ? "No command starts with that name."
-                  : token.kind === "value"
-                    ? "No known value matches. Enter sends what is typed."
-                    : token.kind === "trigger"
-                      ? "Nothing matches."
-                      : "No project file matches.";
+    const state = !token
+      ? ""
+      : failed
+        ? failed
+        : pathCommands.has(token.command ?? "") && files?.error
+          ? files.error
+          : (pathCommands.has(token.command ?? "") && !files?.paths) ||
+              (token.kind === "@" && !shown.length && this.filePicker?.running)
+            ? "Finding project files…"
+            : shown.length
+              ? ""
+              : token.kind === "/"
+                ? "No command starts with that name."
+                : token.kind === "value"
+                  ? "No known value matches. Enter sends what is typed."
+                  : token.kind === "trigger"
+                    ? "Nothing matches."
+                    : "No project file matches.";
     if (
       !this.paneChanged(this.suggestionBox, [
         this.theme,

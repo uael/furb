@@ -608,7 +608,7 @@ pub struct Filed {
 }
 
 impl Filed {
-  pub fn new(path: PathBuf) -> Self {
+  pub(super) fn new(path: PathBuf) -> Self {
     Self { path, lock: Mutex::new(()) }
   }
 

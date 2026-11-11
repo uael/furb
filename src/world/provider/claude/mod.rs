@@ -204,7 +204,7 @@ impl Claude {
   /// it, as `cswap run 3` holds the program `cswap` and the words `run` and `3`. No shell reads the
   /// words: each reaches the program as it stands, with its spaces, once, for a turn and for a
   /// search alike. The stall is the one of [`Claude::with`].
-  pub fn with_command(bin: PathBuf, args: Vec<String>, stall: Option<Duration>) -> Self {
+  pub(super) fn with_command(bin: PathBuf, args: Vec<String>, stall: Option<Duration>) -> Self {
     Self::with_accounts(Some(bin), args, Vec::new(), Switch::default(), stall)
   }
 

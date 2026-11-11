@@ -606,8 +606,7 @@ moves it to the trash of its workspace and removes its scratch directory.
 
 ## Suggestions
 
-`@` suggests project files, `/` suggests slash commands, and `:` at the start of a word suggests emojis by their
-shortcodes of GitHub, as you type.
+`@` suggests project files and `/` suggests slash commands, as you type.
 
 ![File suggestions](screenshots/40-file-picker.png)
 
@@ -627,18 +626,10 @@ life and in earlier ones, and `.furb/history.json` in the workspace keeps it. A 
 its repository, so it shares that history. The lines of the session now open come first, in a walk with Up and Down
 and in a suggestion, and the lines of the other sessions come after them. Another workspace shares nothing.
 Right or `⌃F` at the end of the line takes the whole rest, and `⌥→` or `⌥F` takes its next word. Tab keeps
-completing commands, paths, and emojis. The grey rest shows only while the cursor ends the text, and not while the
+completing commands and paths. The grey rest shows only while the cursor ends the text, and not while the
 list of suggestions or a walk of the history with Up and Down is open.
 
 ![History suggestion](screenshots/46b-history-suggestion.png)
-
-## Emoji
-
-A colon that starts a word of the prompt lists the emojis whose shortcode holds what follows it, as GitHub names them.
-Up and Down choose, Tab or Enter puts the emoji in the prompt in place of the word, and Escape, a space or a text that
-no shortcode holds closes the list and keeps the text. A whole `:shortcode:` in a prompt becomes its emoji.
-
-![Emoji suggestions](screenshots/46c-emoji-suggestions.png)
 
 ## Retried words
 

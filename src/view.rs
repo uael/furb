@@ -4,7 +4,6 @@
 //! each window stays its own.
 
 mod act;
-mod context;
 mod desk;
 mod fold;
 mod held;
@@ -16,14 +15,13 @@ mod threads;
 mod time;
 
 pub use act::{Act, Answer, Kind, Maker, Pause, Phase, RunState, Spend, WATCH, operator};
-pub use context::{Part, Share, breakdown};
 pub use desk::{Ask, Desk, Tick, choices, desk, hint, takes_nothing, ticks, wants};
 pub use fold::{Fold, followed};
 pub use held::{Held, Threads};
 pub use ladder::{Rung, SHOWN, Shown};
 #[cfg(any(test, feature = "test-support"))]
 pub use named::word;
-pub use named::{NAME, Named, RENAME, said};
+pub use named::{NAME, Named, said};
 pub use quote::{Quote, Writing, quotes, writing};
 pub use state::{State, chain_state, restate, working};
 pub use threads::{

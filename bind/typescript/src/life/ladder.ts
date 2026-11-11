@@ -252,6 +252,3 @@ export function thread(
   close(0);
   return out;
 }
-
-/** How many of the last prompts of a thread, and of the last rungs of each ladder, a condensed thread shows. */
-export const SHOWN = { prompts: 6, rungs: 4 };

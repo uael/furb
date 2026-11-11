@@ -84,7 +84,7 @@ pub enum Shape {
 
 impl Shape {
   /// The shape as an annotation of Python.
-  pub fn python(&self) -> String {
+  fn python(&self) -> String {
     match self {
       Self::Any => "Any".to_owned(),
       Self::Str => "str".to_owned(),

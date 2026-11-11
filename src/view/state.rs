@@ -30,25 +30,6 @@ pub enum State {
 }
 
 impl State {
-  /// Each state, in the order of the roll-up.
-  pub const ALL: [Self; 10] = [
-    Self::Asks,
-    Self::Unread,
-    Self::Failed,
-    Self::Paused,
-    Self::Thinks,
-    Self::Runs,
-    Self::Delegates,
-    Self::Done,
-    Self::Cancelled,
-    Self::Idle,
-  ];
-
-  /// The state of a whole: the first state that any of its parts holds, and idle for no part.
-  pub fn roll_up(states: impl IntoIterator<Item = Self>) -> Self {
-    states.into_iter().min().unwrap_or(Self::Idle)
-  }
-
   /// Whether the state is work that is not done: a model that thinks, a word or a command that
   /// runs, or a word that awaits another chain.
   pub fn busy(self) -> bool {

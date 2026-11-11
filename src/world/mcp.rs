@@ -77,7 +77,7 @@ use tokio::task;
 const KINDS: [&str; 5] = ["mcp_servers", "mcp_call", "mcp_read", "mcp_prompt", "mcp_control"];
 
 /// The kind of the fact that a server changed with no act that asked.
-pub const CHANGED: &str = "mcp_changed";
+const CHANGED: &str = "mcp_changed";
 
 /// The root chain, which the fact of a change is about, so its transcript holds it.
 const ROOT: &str = "chain1";

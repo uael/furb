@@ -59,14 +59,6 @@ function reply(turn: string, actor: string, chain: string): [thinking: string, a
       ];
 }
 
-/** The turns that think until a cancel, each with what writes its stream. */
-const held = new Map<(turn: Turn) => void, Write>();
-
-/** The thought that each turn that thinks until a cancel writes, as a model streams one. */
-export function think(thinking: string): void {
-  for (const write of held.values()) write({ thinking });
-}
-
 /** The models of the demo, which ask no model and answer each request from the script of the demo. A demo that the
  * operator watches streams each turn, as a model writes it, and each of its answers costs nothing. */
 export function demoModels(watch = false): (asked: Asked, write: Write) => Promise<Turn> {
@@ -76,8 +68,7 @@ export function demoModels(watch = false): (asked: Asked, write: Write) => Promi
     // A turn whose last message asks to think until a cancel never answers, so its work stays in progress until the
     // operator cancels it, however slow the machine that shows it.
     const message = [...last.matchAll(/prompt\d+_message = '([^']*)'/g)].at(-1)?.[1];
-    if (message === "Think until I cancel.")
-      return await new Promise<Turn>((resolve) => held.set(resolve, write));
+    if (message === "Think until I cancel.") return await new Promise<Turn>(() => {});
     // Only the turn that asks for live progress is slow, and not every later turn of its chain: it thinks, then
     // writes its word a few words at a time, as a model streams it. FURB_DEMO_STREAM=1 makes every turn so, for a
     // recording of the demo.
