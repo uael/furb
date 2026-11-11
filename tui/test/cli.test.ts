@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { copyFile, mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { store } from "furb";
@@ -151,6 +152,55 @@ test("the first frame says which record the TUI opens and its size, and the life
     expect(await Promise.race([tui.exited, Bun.sleep(15000).then(() => "still running")])).toBe(0);
   } finally {
     tui.kill();
+    await remove(directory);
+  }
+}, 60000);
+
+test("a window of a machine that opens with --read asks that machine for the role to read", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-read-machine-"));
+  const hellos: (string | undefined)[] = [];
+  const server = createServer((socket) => {
+    let rest = "";
+    socket.on("error", () => {});
+    socket.on("data", (chunk) => {
+      const lines = (rest + String(chunk)).split("\n");
+      rest = lines.pop() ?? "";
+      for (const line of lines.filter(Boolean)) {
+        const { id, verb, role } = JSON.parse(line) as { id: number; verb: string; role?: string };
+        if (verb === "hello") hellos.push(role);
+        const answer =
+          verb === "hello"
+            ? { answer: "welcome", data: { peer: { login: "test", role: role ?? "write", kind: "window" } } }
+            : verb === "list"
+              ? { answer: "lives", data: [] }
+              : { answer: "done" };
+        socket.write(`${JSON.stringify({ frame: "reply", id, answer })}\n`);
+      }
+    });
+  });
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  const cli = [
+    process.execPath,
+    join(import.meta.dir, "../src/cli.ts"),
+    "--machine",
+    `127.0.0.1:${port}`,
+    "--read",
+    "--cwd",
+    directory,
+    "--record",
+    join(directory, "life.jsonl"),
+  ];
+  const env = { ...process.env, FURB_CONFIG_DIR: join(directory, "config") };
+  const tui =
+    process.platform === "win32" ? windowsConsole(cli, env, directory) : terminal(cli, env, "SIGTERM");
+  try {
+    await eventually(() => hellos.length > 0, "the hello of the window to the machine");
+    expect(hellos.every((role) => role === "read")).toBe(true);
+  } finally {
+    tui.kill();
+    server.close();
     await remove(directory);
   }
 }, 60000);

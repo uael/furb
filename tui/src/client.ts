@@ -305,9 +305,10 @@ export function daemon(role?: Role): Daemon {
 }
 
 /** The daemon that holds the lives of a window: the one of the machine that the window names, as host:port, and the
- * one of this machine when it names none. A window asks no other daemon. */
-export function reach(address?: string): Daemon {
-  return address ? machine(address) : daemon();
+ * one of this machine when it names none, with the role that the window asks of it, as `daemon` and `machine` say.
+ * A window asks no other daemon. */
+export function reach(address?: string, role?: Role): Daemon {
+  return address ? machine(address, role) : daemon(role);
 }
 
 /** A request of a model of a life, as the daemon asks the window that answers it. */
