@@ -13,6 +13,7 @@ from furb.engine import (
   covers,
   get,
   listening,
+  module,
   over,
   paused,
   peek,
@@ -41,6 +42,7 @@ lane_runners: dict[str, tuple[str, str]] = globals().setdefault("lane_runners", 
 lane_jobs: dict[str, tuple[str, float, float]] = globals().setdefault("lane_jobs", {})
 lane_halted: list[str] = globals().setdefault("lane_halted", [])
 lane_guard: list[str] = globals().setdefault("lane_guard", [])
+lane_probers: dict[str, str] = globals().setdefault("lane_probers", {})
 
 LANE_RULES = """You take one item of the work on the branch <BASE> of furb, from A to Z: the investigation, the change, its proof, the commit and the push. No part of it goes to another chain, and it ends accepted or blocked with its cause, never partly.
 
@@ -165,11 +167,18 @@ async def lane_checks(tree: str, base: str) -> list[str]:
   return flaws
 
 
-async def lane_break(c: str, tree: str, breakers: list[str]) -> tuple[str, str]:
+async def lane_break(c: str, tree: str, breakers: list[str], accept: str, base: str) -> tuple[str, str]:
   look = f"cd {tree} && git rev-parse HEAD && git status --porcelain"
+  item = get(c)[4]
   for who in breakers:
+    label = f"{item} probe {who}"
+    asked = f"The acceptance command of the item, in the tree {tree}:\n{accept}\n\nThe change is {base}..HEAD of the tree.\n\n" + LANE_PROBE
+    if label not in lane_probers:
+      lane_probers[label] = str(chain(label))
+      ask = next((x["ask"] for x in lane_rows() if x["id"] == item), "")
+      asked = f"You probe the item {item} of the lane, in the tree {tree}, and you work in that tree alone. The ask, in the words of the owner, which stay in this life:\n{ask}\n\n" + asked
     before = (await bash(look, show=HIDDEN, timeout=60.0)).stdout.content
-    got = await lane_settled(prompt("str | None", LANE_PROBE, to=who, on=c), 2700.0)
+    got = await lane_settled(prompt("str | None", asked, to=who, on=lane_probers[label]), 2700.0)
     if (await bash(look, show=HIDDEN, timeout=60.0)).stdout.content != before:
       continue
     if isinstance(got, str) and got.strip():
@@ -196,7 +205,7 @@ async def lane_work(c: str, accept: str, first: str, tree: str, worker: str = "c
     elif flaws := await lane_checks(tree, base):
       asked = "The acceptance command passes, and these checks of code fail. Fix each one at its cause, commit and push:\n" + "\n".join(flaws)
     else:
-      probe, shown_tail = await lane_break(c, tree, breakers or ["claude-cli:opus/high"])
+      probe, shown_tail = await lane_break(c, tree, breakers or ["claude-cli:opus/high"], accept, base)
       if not probe:
         return "accepted", accept
       accept = accept + " && ( " + probe + " )"
@@ -275,8 +284,9 @@ async def lane_fill() -> list[str]:
   return started
 
 
-async def lane_steer(tree: str, ground: str, since: str, overdue: str = "", model: str = "claude-cli:fable/high") -> list[tuple[str, str, str]]:
+async def lane_steer(tree: str, ground: str, since: str, overdue: str = "", model: str = "") -> list[tuple[str, str, str]]:
   ran = await bash(f"cd {tree} && sh .furb/skills/lane/measures.sh . {LANE_BASE}", ok=True, show=HIDDEN, timeout=180.0)
+  model = model or str(module(ground).get("actor", ""))
   c = chain("steer", source=ground)
   rung('read("skills://lane/lane.pyi")', to=model, on=c)
   got = await lane_settled(prompt("list[tuple[str, str, str]]", ran.stdout.content + "open jobs past their time: " + (overdue or "none") + "\n\nThe items since the last time:\n" + since + LANE_STEER, to=model, on=c), 1800.0)

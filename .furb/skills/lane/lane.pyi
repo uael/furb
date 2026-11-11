@@ -33,7 +33,8 @@ async def lane_work(c: str, accept: str, first: str, tree: str, worker: str = "c
   It gives void when accept passes before any work, unless begun says that the item stands in its middle.
   It gives blocked with the close of the worker when the head of tree did not move, since a close with no commit changes nothing that accept reads.
   Once accept passes, it runs each check of LANE_CHECKS in tree, with BASE put to the head where the item began, and asks worker to fix each check that fails.
-  Once the checks pass, it asks each breaker, one breaker by default, on c for a probe, a shell command that fails on the head, and a probe that fails joins accept, which worker then makes pass.
+  Once the checks pass, it asks each breaker, one breaker by default, for a probe, a shell command that fails on the head, and a probe that fails joins accept, which worker then makes pass.
+  It asks a breaker on a chain of the item for that breaker alone, which it makes once and asks again at each later round, with the tree, the ask of the row, accept and the range of the change in its first prompt and nothing of the words of the worker, so the breaker reads its own prefix from its cache.
   It refuses the probe of a breaker that changed the files or the head of tree, and asks the next breaker.
   It gives accepted with accept once no breaker gives a probe that fails, and blocked after 16 closes of worker.
   """
@@ -58,8 +59,8 @@ async def lane_fill() -> list[str]:
   It keeps script/memwatch.sh running while a row runs, and ends it when none runs.
   """
 
-async def lane_steer(tree: str, ground: str, since: str, overdue: str = "", model: str = "claude-cli:fable/high") -> list[tuple[str, str, str]]:
-  """lane_steer(tree, ground, since) runs measures.sh of the kit in tree, and asks model, on a chain that goes on from ground and reads the contract of the kit, for at most three rows: a question of the owner, the measure that makes him ask it, and the change of the kit that answers it.
+async def lane_steer(tree: str, ground: str, since: str, overdue: str = "", model: str = "") -> list[tuple[str, str, str]]:
+  """lane_steer(tree, ground, since) runs measures.sh of the kit in tree, and asks model, the actor of ground by default so that it reads the prefix of ground from its cache, on a chain that goes on from ground and reads the contract of the kit, for at most three rows: a question of the owner, the measure that makes him ask it, and the change of the kit that answers it.
   """
 
 def lane_run(label: str, word: str) -> Act:

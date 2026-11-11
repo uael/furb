@@ -16,7 +16,8 @@ def made(laning: Bench, name: str) -> str:
 async def test_lane_item_runs_a_row_from_a_to_z(laning: Bench) -> None:
   """lane_item(id) runs the row id from A to Z: lane_open on its tree, lane_work on its done command or else on the command of the worker, and lane_land once accepted, and it keeps the state, the cause, the done command and the time of the end in the row."""
   tree = str(laning.tmp)
-  laning.words["item"] = ['close(("the reading", "test -f b"))', made(laning, "b"), "close(None)"]
+  laning.words["item"] = ['close(("the reading", "test -f b"))', made(laning, "b")]
+  laning.words["item probe claude-cli:opus/high"] = ["close(None)"]
   await laning.word(f'lane_ask("item", "Add b.", "message 1", tree={tree!r})')
   assert await laning.value('await lane_item("item")') == ("landed", "test -f b")
   [row] = await laning.value("lane_rows()")
