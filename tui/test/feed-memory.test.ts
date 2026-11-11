@@ -1,16 +1,15 @@
 // The feed holds what it shows of a long life: a card of a done act far from the view keeps its place and its height
 // alone, the feed keeps the lines of the programs near the view alone, and a scroll back shows what it showed.
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Renderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { App } from "../src/app.ts";
-import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
-import { ended } from "./ended.ts";
+import { longLife } from "./long-life.ts";
 
 /** How many renderables a node holds, itself among them. */
 const count = (node: Renderable): number => 1 + node.getChildren().reduce((sum, one) => sum + count(one), 0);
@@ -20,25 +19,9 @@ test("a long feed shelves the cards far from its view and keeps a bounded count 
   const record = join(directory, "long.jsonl");
   try {
     // A life of many words of the operator, each with a command, which a later window opens again.
-    const first = await openEngine({ cwd: directory, record, demo: true });
-    // The words are queued one after the other with no wait, as a person sends them while the life works.
-    let last = "";
-    for (let k = 0; k < 160; k++)
-      last = await first.engine.rung({
-        word: `await bash("echo step_${k}; seq 1 40")`,
-        on: first.engine.root,
-      });
-    await first.engine.result(last);
-    await first.host.dispose();
-    await ended(record);
-    // The life opens again from its record whole, with no checkpoint, so the feed holds a card for each act.
-    const kept = await readFile(record, "utf8");
-    await writeFile(
+    await longLife(
       record,
-      kept
-        .split("\n")
-        .filter((line) => !line.startsWith('[["checkpoint",'))
-        .join("\n"),
+      Array.from({ length: 160 }, (_, k) => `await bash("echo step_${k}; seq 1 40")`),
     );
     const session = await demoSession({
       record,

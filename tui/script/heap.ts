@@ -1,10 +1,12 @@
 /** What a window holds of a life, measured as a window of the operator opens it: the record in a daemon, drawn in the
- * App on a test terminal. The feed scrolls from its end to its start a page each frame, then back to its end, and each
- * tenth of the way the window collects its garbage and measures its heap, which holds what the window keeps. It is the
- * one measure of `bun run memory` and of tui/test/window-heap.test.ts, which the gates run. On macOS the resident size
- * counts pages that the process freed and the system did not take back yet, so the heap is the measure of what the
- * window keeps. The heap before the open is the baseline: it holds the code of the window and what the process held
- * already. The caller gives the daemon its cache, which an environment variable names before the life opens. */
+ * App on a test terminal. The feed scrolls to its start, to its end and to its start again, a page each frame, and after
+ * the open, every 200 pages and at the end of each scroll the window collects its garbage and measures its heap, which
+ * holds what the window keeps. It is the one measure of `bun run memory` and of tui/test/window-heap.test.ts, which the
+ * gates run. On macOS the resident size counts pages that the process freed and the system did not take back yet, so
+ * the heap is the measure of what the window keeps. The heap before the open is the baseline: it holds the code of the
+ * window and what the process held already. The window dials the daemon of the cache that XDG_CACHE_HOME names, so a
+ * caller that wants a daemon of its own, which ends once the life lets go, sets it before the call: else the life opens
+ * in the daemon of the user. */
 
 import { heapStats } from "bun:jsc";
 import { join } from "node:path";
@@ -36,16 +38,17 @@ export interface Held {
 }
 
 /** The heap after a collection of the garbage. */
-function heapNow(): number {
+export function heapNow(): number {
   Bun.gc(true);
   return heapStats().heapSize + heapStats().extraMemorySize;
 }
 
 /** A window that opens the life of a record and scrolls the whole of its feed, and what it held. The folder takes the
- * preferences of the window. */
-export async function hold(record: string, folder: string): Promise<Held> {
-  const before = heapNow();
-  let most = before;
+ * preferences of the window. The baseline is the heap before the open. A caller that made the life in this process
+ * takes it before it makes the life, since the garbage of the making leaves the heap only while the window runs, and
+ * the highest heap counts the measures after the open alone. */
+export async function hold(record: string, folder: string, before = heapNow()): Promise<Held> {
+  let most = 0;
   let resident = 0;
   const measure = () => {
     const now = heapNow();
@@ -74,7 +77,8 @@ export async function hold(record: string, folder: string): Promise<Held> {
   const opened = measure();
   const [facts, rows, acts] = [session.host.seq, app.scroll.scrollHeight, session.activity.length];
 
-  /** The feed scrolls a page each frame until it stands still at its end, and the frames at a tenth of the way. */
+  /** The feed scrolls a page each frame until it stands still, and the heap is measured every 200 pages. It gives the
+   * pages that it scrolled, and the frame that it stood still on. */
   async function scroll(down: boolean): Promise<{ steps: number; first: string }> {
     let steps = 0;
     let still = 0;
