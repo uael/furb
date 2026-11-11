@@ -47,13 +47,15 @@ test("the read of the files at a point reads the journal one read at a time, wai
       await Bun.sleep(40);
       const journal = [...others, ...(ready ? [first, later] : [])];
       running--;
+      // The journal takes the change of the write late: once a pass over its two pages came back without it, it holds
+      // it, and the host tells its facts several times. The count of reads, and no clock, says when.
+      if (reads === 2)
+        setTimeout(() => {
+          ready = true;
+          for (let n = 0; n < 5; n++) session.host.emit("facts");
+        }, 20);
       return journal.slice(start, start + count);
     };
-    // The journal takes the change of the write late, and the host tells its facts several times while a read runs.
-    setTimeout(() => {
-      ready = true;
-      for (let n = 0; n < 5; n++) session.host.emit("facts");
-    }, 100);
     const found = await session.filesAt(point);
     expect(most).toBe(1);
     expect(reads).toBeGreaterThan(2);
