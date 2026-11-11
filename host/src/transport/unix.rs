@@ -18,7 +18,16 @@ use crate::error::TransportError;
 pub(crate) type Accepted = UnixStream;
 pub(crate) type Dialed = UnixStream;
 
-pub(crate) struct Listener(UnixListener);
+/// A listener of the socket of a folder, whose file goes with it: a process that the daemon
+/// started may hold the socket open, as a fork of another thread does before the socket is marked
+/// to close on exec on macOS, and it would answer each dial at that path after the daemon ended.
+pub(crate) struct Listener(UnixListener, PathBuf);
+
+impl Drop for Listener {
+  fn drop(&mut self) {
+    drop(fs::remove_file(&self.1));
+  }
+}
 
 const SOCKET: &str = "host.sock";
 
@@ -32,9 +41,12 @@ pub(crate) async fn listen(folder: &Path) -> Result<Listener, TransportError> {
         return Err(TransportError::Taken { place: shown(&socket) });
       }
       fs::remove_file(&socket).map_err(|source| listening(&socket, source))?;
-      UnixListener::bind(&socket).map(Listener).map_err(|source| listening(&socket, source))
+      let bound = UnixListener::bind(&socket).map_err(|source| listening(&socket, source))?;
+      Ok(Listener(bound, socket))
     }
-    bound => bound.map(Listener).map_err(|source| listening(&socket, source)),
+    bound => {
+      bound.map(|one| Listener(one, socket.clone())).map_err(|source| listening(&socket, source))
+    }
   }
 }
 
