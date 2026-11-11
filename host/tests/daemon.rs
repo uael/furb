@@ -345,21 +345,12 @@ mod daemon {
       }
     }
 
-    /// The first frame that the daemon pushed and that the test waits for.
+    /// The first frame that the daemon pushed and that the test waits for. It keeps each frame
+    /// that it reads before that one, for a later wait or a count of what the window heard.
     async fn until(&mut self, wanted: impl Fn(&Frame) -> bool) -> Frame {
       if let Some(at) = self.pushed.iter().position(&wanted) {
         return self.pushed.remove(at).unwrap();
       }
-      loop {
-        let frame = self.read().await.expect("the daemon pushes the frame");
-        if wanted(&frame) {
-          return frame;
-        }
-      }
-    }
-
-    /// The first frame that the test waits for, which keeps each frame before it for `until`.
-    async fn keeping(&mut self, wanted: impl Fn(&Frame) -> bool) -> Frame {
       loop {
         let frame = self.read().await.expect("the daemon pushes the frame");
         if wanted(&frame) {
@@ -1942,7 +1933,7 @@ mod daemon {
     window.attach(&life).await;
     let taken = claimed().await;
     let id = signing(&mut window).await;
-    let Frame::SignIn { url, message, .. } = window.keeping(signed_in("failed")).await else {
+    let Frame::SignIn { url, message, .. } = window.until(signed_in("failed")).await else {
       unreachable!()
     };
     assert_eq!(url, None);
@@ -1965,7 +1956,7 @@ mod daemon {
     window.attach(&life).await;
     drop(claimed().await);
     let id = signing(&mut window).await;
-    let Frame::SignIn { url, .. } = window.keeping(signed_in("waiting")).await else {
+    let Frame::SignIn { url, .. } = window.until(signed_in("waiting")).await else {
       unreachable!()
     };
     assert!(url.is_some_and(|one| one.starts_with("https://")), "the frame holds the address");
