@@ -30,16 +30,6 @@ async def test_lane_settled_gives_the_value_of_the_job_or_a_refused_once_seconds
   assert re.fullmatch(r"prompt\d+ did not close in 0.05 s", str(got))
 
 
-async def test_lane_settled_adds_the_nudge_to_a_thread_that_stands_quiet(laning: Bench) -> None:
-  """After a look with no new reply, it adds LANE_NUDGE to the thread of job and tells the operator in one line when the chain of job is not paused and holds no open reply, run, command or wait, since the engine asks a thread no more after a word that closes nothing and leaves no act open."""
-  laning.words["item"] = ["x = 1", 'close("went on")']
-  await laning.word(f'LANE_LOOK = 0.02\nc = chain("item")\njob = prompt(str, "do", to="{SONNET}", on=c)')
-  assert await laning.value("await lane_settled(job, 5.0)") == "went on"
-  job = laning.ns["job"]
-  assert notes(laning, job) == [laning.ns["LANE_NUDGE"]]
-  assert told(laning) == [f"{job}: code nudged its quiet thread."]
-
-
 async def test_lane_settled_cancels_a_reply_that_does_not_end(laning: Bench) -> None:
   """After six looks with no new reply, it cancels the reply of the chain that does not end, adds LANE_HUNG to the thread of job, and tells the operator in one line."""
   laning.words["item"] = []

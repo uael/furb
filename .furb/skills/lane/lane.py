@@ -62,7 +62,6 @@ The rules:
 LANE_OPENING = "\nChange no file of the tree yet. You may read, search and run probes, and you may write the scripts of your oracle in $TMPDIR. Close with a tuple of two strings: your reading of this item in your own words, with what you found that changes it, and one shell command, run in the tree, that fails now and passes only when the item is done."
 LANE_PROBE = "Change no file of the tree. The acceptance command of this item passes on the head. Find what it does not hold: one case of the ask that the change gets wrong, on the path of the owner or at an edge of it. Write your probe under $TMPDIR, never in the tree, and run it yourself first. Close with one shell command, to run in the tree, that exits 0 when the item is right, that exits non-zero on this head for the reason that you mean, and that ends in less than 10 minutes. Close with None when you find no such case: a probe that asks for more than the ask is no case."
 LANE_STEER = "\nThese are the measures of the lane now, and the items since the last time. This chain holds the rules of the owner and his rulings, and it read the contract of the kit of the lane, whose sentences hold what the lane learned. Read as he reads: which questions would he ask now, from these measures and from his rulings? Close with at most three rows of three strings: the question in his voice, the measure or the fact that makes him ask it, and the change that answers it. The change is a change of a function of the kit with the sentence of its contract that holds it, a new command of its ratchet, an item with its command, or a change of the measures themselves: one shell command that prints one line with the number that his question needs and that no measure gives yet, or the name of a measure that can answer none of his questions and so goes. A row whose change is a sentence of intent is no row. Close with an empty list when the measures give him nothing to ask."
-LANE_NUDGE = "Your last word closed nothing and left no act open, so the chain asked you no more, and code sent this message. Go on from where you stood."
 LANE_HUNG = "A reply of your model did not end in six looks of the lane, and code cancelled it. Go on from where you stood."
 
 
@@ -122,10 +121,6 @@ def lane_brief(id: str, evidence: str, tree: str, branch: str = "", lands: bool 
   return lane_rules(tree, branch, lands) + f"\nThe ask {id}, in the words of the owner, from {row['source']}. They stay in this life: quote them in no commit, pull request or issue.\n{row['ask']}\n\nThe evidence:\n{evidence}\n"
 
 
-def lane_quiet(job: str) -> bool:
-  return not paused(job) and not any(x[0] in ("reply", "run", "bash", "wait") and x is get(x[1]) and not over(x[1]) for x in transcript(scope(job)))
-
-
 async def lane_settled(job: Act, seconds: float) -> object:
   left, words, same = seconds, -1, 0
   while left > 0:
@@ -135,10 +130,7 @@ async def lane_settled(job: Act, seconds: float) -> object:
     replies = transcript(scope(job), "reply")
     same = same + 1 if len(replies) == words else 0
     hung = [x[1] for x in replies if not over(x[1])]
-    if same and lane_quiet(job):
-      prompt(None, LANE_NUDGE, on=job)
-      prompt(None, f"{job}: code nudged its quiet thread.", to=OPERATOR)
-    elif same >= 6 and hung:
+    if same >= 6 and hung:
       cancel(hung[0], "no end in six looks")
       prompt(None, LANE_HUNG, on=job)
       prompt(None, f"{job}: code cancelled {hung[0]}, which did not end in six looks.", to=OPERATOR)

@@ -18,7 +18,6 @@ def lane_next(red: bool = False) -> str:
 
 async def lane_settled(job: Act, seconds: float) -> object:
   """lane_settled(job, seconds) awaits job in looks of LANE_LOOK seconds, and gives its value once it is over, or a Refused once seconds pass.
-  After a look with no new reply, it adds LANE_NUDGE to the thread of job and tells the operator in one line when the chain of job is not paused and holds no open reply, run, command or wait, since the engine asks a thread no more after a word that closes nothing and leaves no act open.
   After six looks with no new reply, it cancels the reply of the chain that does not end, adds LANE_HUNG to the thread of job, and tells the operator in one line.
   """
 
