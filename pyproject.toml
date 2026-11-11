@@ -68,9 +68,9 @@ target-version = "py314"
 src = ["src", "test", "bind/python"]
 # A path given on the command line, as a hook or a worker gives it, keeps the exclude.
 force-exclude = true
-# A word of the project reads the names that a word before it in .furb/config.json defines: pr and shq of pr. A test
-# holds each of them to a definition.
-builtins = ["choice", "compact", "latest"]
+# A word of the project reads the names that a word before it in .furb/config.json defines as builtins. A test holds each
+# of them to a definition.
+builtins = []
 
 [tool.ruff.per-file-target-version]
 # The verifier images use Python versions older than this repository.
@@ -169,14 +169,6 @@ include = ["bind/python/furb_monty/engine.py"]
 [tool.ty.overrides.rules]
 unresolved-attribute = "ignore"
 unresolved-import = "ignore"
-
-# A word of the project reads the names of the words before it, which ty cannot follow from file to file, and get gives
-# nothing for a name of no act, which the contract types as an act (ruff reads these names through its builtins).
-[[tool.ty.overrides]]
-include = [".furb/skills/conductor/conductor.py"]
-
-[tool.ty.overrides.rules]
-unresolved-reference = "ignore"
 
 [[tool.ty.overrides]]
 include = [".furb/skills/*/*.py"]

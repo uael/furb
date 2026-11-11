@@ -380,6 +380,10 @@ fix what your change broke, and report what was broken before.
 - `python script/bench/audit.py <record> <sha256>`: the audit of a record. It checks the sha256 of the record, replays
   it in a life that only inspects it, with no model and no network, and checks that each word and each answer hashes
   as the record says. It imports furb alone, so an outsider runs it on `pip install furb`, as `docs/audit.md` says.
+- `sh script/opens.sh <furb> <out.tsv> [before.tsv]`: open a copy of each record of `tests/corpus` and `tests/replay`,
+  or of each path of the file that `OPENS_LIST` names, with `furb turns` of the given build, with no model and no
+  network, one record at a time, and write one line for each to `out.tsv`. Given the table of a run before, it fails
+  when a record that opened then opens no more.
 - `uv run python script/bench/inert.py <record>`: the proof that a replay is inert. It replays a copy of the record
   in a life that only inspects it, and fails when, before the tip, the life puts an act on to the World that the
   record answers, an ear of the World says that it started an act, or the journal keeps a fact.

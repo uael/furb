@@ -1,0 +1,7 @@
+a message of the operator never waits behind a prompt that came after it
+a step that leaves a message unanswered is asked again, and the message gets its answer
+the model of the demo adds a component to a life that runs: it reads the teaching, writes the extension, and its panel stands, fails and mends with no restart
+a life whose host is killed opens again to the same transcript, values and module, and goes on
+the gallery runs through to its last capture
+a life that quits opens again, and after its end replays from its first entry to the same turns, values and module
+the walk of the audit drives a life with keys to the end of its journey, and keeps each frame with its action

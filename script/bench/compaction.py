@@ -14,7 +14,7 @@ compacted() at a SHARE of -1, and pokes the chain twice: an answer of the bench 
 choice() after the first and compacts the chain at the second. Then it waits for the first answer of a model on the
 new chain, unless `--dry` stops it at the birth of the new chain. It prints the share of the window of the last answer
 on the chain before and of the first answer after, the tokens of `o200k_base` in the turns of each, the acts kept, the
-module state of the extension conductor in both chains, each copy of a rung that was not over, and the first word of
+module state of the kit of the lane in both chains, each copy of a rung that was not over, and the first word of
 the model after the compaction.
 """
 
@@ -42,8 +42,8 @@ ENCODING = tiktoken.get_encoding("o200k_base")
 """ENCODING counts the tokens of the turns, the same on each machine."""
 POKED = 1000
 """POKED is the tokens that an answer of the bench to a poke says it read."""
-STATE = ("queue", "working", "results", "relays", "noticed", "prs")
-"""STATE is the module state of the extension conductor that the bench compares in both chains."""
+STATE = ("lane_runners", "lane_jobs")
+"""STATE is the module state of the kit of the lane that the bench compares in both chains."""
 
 
 async def engined(record: Path, cut: str) -> None:
