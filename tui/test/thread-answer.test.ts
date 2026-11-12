@@ -64,9 +64,24 @@ test("the box of a thread shows the answer of a message that closed before the c
     // The fold catches up, and the box draws the thread again: the message closed, so its answer stands under it.
     hold = false;
     await session.readThreads(root);
-    const shown = feedOf(await render());
+    // The renderer draws what a read brought a moment after the read, so the frame is drawn again until it shows the
+    // answer, and the lines that it did show are told when it never does.
+    const first = answer.split("\n")[0] ?? "";
+    let shown = feedOf(await render());
+    for (const stop = Date.now() + 15000; Date.now() < stop && !shown.includes(first); ) {
+      await Bun.sleep(25);
+      shown = feedOf(await render());
+    }
+    if (!shown.includes(first))
+      console.log(
+        `The feed never showed the answer. It shows:\n${shown
+          .split("\n")
+          .map((line) => line.trimEnd())
+          .filter(Boolean)
+          .join("\n")}`,
+      );
     expect(answer.length).toBeGreaterThan(0);
-    expect(shown).toContain(answer.split("\n")[0] ?? "");
+    expect(shown).toContain(first);
   } finally {
     app.dispose();
     screen.renderer.destroy();
