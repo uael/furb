@@ -16,9 +16,11 @@ const PRINTED = 150000;
  * fact, which grow it several times more. Only a Mac measured those two, so the bound holds on a runner of CI by that
  * margin alone: the runners ran it with the slim window in, and never out. */
 const BOUND = 40 * 2 ** 20;
-/** The least that the record of the life weighs once its checkpoint is gone, which is what its window hears: a command
- * that printed less would make a proof of nothing. Each print stands in the record about twice. */
-const WEIGHT = 16 * 2 ** 20;
+/** The least that the record of the life weighs once its checkpoint is gone, which is what its window hears: the bytes
+ * that the commands print, which the record holds at least once. A command that printed less would make a proof of
+ * nothing. The size of the record is no such count: the same life weighed 22.7 MB on a Mac and 15.9 MB on a runner of
+ * Linux, so the weight counts the prints. */
+const WEIGHT = COMMANDS * Array.from({ length: PRINTED }, (_, at) => at + 1).join(" ").length;
 
 test("a window on a life that printed megabytes keeps a heap that no text of the life grows", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-window-heap-"));
