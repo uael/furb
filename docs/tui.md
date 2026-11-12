@@ -491,11 +491,16 @@ and not "Error".
 
 ⌃C on an empty input names in a notice the last message, word or command that you sent on the chain shown and that
 still runs, and a second ⌃C while the notice names it cancels that act alone with the work under it. No press cancels
-an act that the notice did not name first, so a press never reaches the act before it. It never cancels the thread or the chain that the act stands on,
-and it never cancels a prompt that a model made, such as the prompt of a worker. When that act is a message, ⌃C takes
-it back: the message is cancelled and its text goes back to the input, so you change it and send it again, and the
-other work of the life goes on. A right click on a message opens its menu, which offers Take back for your last
-message that runs, and Cancel for another act that runs. `/cancel <id>` cancels the act that you name.
+an act that the notice did not name first, so a press never reaches the act before it. It never cancels the thread or
+the chain that the act stands on, and it never cancels a prompt that a model made, such as the prompt of a worker. When
+that act is a message, ⌃C takes it back: the message is cancelled and its text goes back to the input, so you change it
+and send it again, and the other work of the life goes on. A right click on a message opens its menu, which offers Take
+back for your last message that runs, and Cancel for another act that runs. `/cancel <id>` cancels the act that you
+name.
+
+While a question of a model waits for you and the footer names no act, ⌃C on an empty input refuses that question at
+once, as the footer offers with `⌃C refuse`. Once the footer names your act, the second ⌃C takes that act back, and a
+question under it ends as its work.
 
 While the last message that you sent runs and the input is empty, the footer offers ⌃C to take it back, in two presses.
 
