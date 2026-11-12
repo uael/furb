@@ -52,5 +52,6 @@ test("a key of the file picker in a folder of 50000 files never waits for the wa
 test("a key of the file picker in a folder of 50000 files beside the folder of the life never waits for its walk", () =>
   scenario([], async (window, yard) => {
     await tree(join(dirname(yard.work), "other"));
-    await picks(window, "@../other/folder42/file7", "other/folder42/file7.ts", 3);
+    // The query `..` names the folder `../` already, so its walk starts at the key 2.
+    await picks(window, "@../other/folder42/file7", "other/folder42/file7.ts", 2);
   }));
