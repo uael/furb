@@ -470,7 +470,7 @@ async def test_each_act_of_the_data_with_a_value_is_made_before_each_open_prompt
 async def test_the_prefix_of_a_born_chain_holds_no_question_started_or_done_of_an_act_that_seed_makes_again_so_each_act_of_the_data_stands_once_in_the_transcript_of_its_chain() -> (
   None
 ):
-  """The prefix of a born chain holds no question, started or done of an act that seed makes again, so each act of the data stands once in the transcript of its chain: after the facts of the prefix, or in the prefix for an act on an open prompt, which seed does not make again."""
+  """The prefix of a born chain holds no question, started or done of an act that seed makes again, so each act of the data stands once in the transcript of its chain: after the facts of the prefix, or in the prefix for an act with a value on an open prompt, which seed does not make again."""
   _, _, root = born()
   work = engine.chain("work", on=root)
   await settle()
@@ -480,7 +480,9 @@ async def test_the_prefix_of_a_born_chain_holds_no_question_started_or_done_of_a
     "made = [x[1] for k in ('cd', 'read', 'write', 'chance', 'wait') for x in transcript(of=k)]"
   )
   await engine.rung(word, on=work)
-  await engine.rung(f"clock()\nstand()\nwaiting = prompt(int, 'Wait.', on={work!r})", on=root)
+  await engine.rung(
+    f"clock()\nstand()\nwaiting = prompt(int, 'Wait.', on={work!r})\nsub = prompt(str, 'Sub?', on=waiting)", on=root
+  )
   engine.close(7, engine.module(work)["job"])
   note = engine.prompt(None, "Note.", on=engine.module(root)["waiting"])
   await settle()
@@ -492,7 +494,7 @@ async def test_the_prefix_of_a_born_chain_holds_no_question_started_or_done_of_a
   assert {"stand", "clock", "prompt", "bash", "read", "write", "wait", "cd", "chance"} <= {
     x for x, _ in carried.values()
   }
-  assert carried[note][1] in opened
+  assert carried[note][1] in opened and carried[engine.module(root)["sub"]][1] in opened
   for one, (kind, on) in carried.items():
     facts = engine.transcript(engine.scope(on))
     asked = [n for n, x in enumerate(facts) if x[:2] == (kind, one)]
