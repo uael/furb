@@ -143,20 +143,23 @@ async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_se
   """chains holds each plain value of a chain whatever its size, and seed binds each from the fact carried of its chain, so a later life holds it exactly and no turn tells it."""
   _, _, root = born()
   rest = engine.chain("rest", source=root)
-  await engine.rung("big = 'x' * LARGEST\nran = Exit(0, Text('o', 'y' * LARGEST), Text('e', ''))\nsmall = 1", on=rest)
+  await engine.rung(
+    "big = 'x' * LARGEST\nran = Exit(0, Text('o', 'y' * LARGEST), Text('e', ''))\nsmall = 1\nansi = '\\x1b[31mred\\x1b[0m' * 300",
+    on=rest,
+  )
   await settle()
-  big, ran = engine.module(rest)["big"], engine.module(rest)["ran"]
+  big, ran, ansi = engine.module(rest)["big"], engine.module(rest)["ran"], engine.module(rest)["ansi"]
   for _ in (1, 2):
     data = checkpoint.gathered(vars(engine), definitions, {})
     [one] = [x for x in data["chains"] if x["id"] == rest]
-    assert (one["values"]["small"], {"big", "ran"} <= one["values"].keys(), one["lost"]) == ("1", True, [])
+    assert (one["values"]["small"], {"big", "ran", "ansi"} <= one["values"].keys(), one["lost"]) == ("1", True, [])
     assert not [d for d in one["definitions"] if "LARGEST" in d]
     entries = checkpoint.seed(vars(engine), data)
     assert all(len(str(word).encode()) < LARGEST // 8 for x in entries if x[0][0] == "rung" for word in x[0][4:5])
     log, _ = life(sown(), entries)
     await settle()
     here = engine.module(rest)
-    assert (here["big"], here["ran"], here["small"], here["raised"]) == (big, ran, 1, None)
+    assert (here["big"], here["ran"], here["ansi"], here["small"], here["raised"]) == (big, ran, ansi, 1, None)
     assert all(len(str(x).encode()) < LARGEST // 8 for x in log if x[0] == "tell")
     assert not [x for x in log if x[0] == "tell" and " raised" in x[3][0].split("\n")[0]]
 
