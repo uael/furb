@@ -337,8 +337,8 @@ fix what your change broke, and report what was broken before.
   names `cargo check` to make one. `--doctrine` or `--engine` prints that one count alone, and `--stdin` counts a draft
   of the doctrine from stdin, so `uv run python script/tokens.py --stdin < draft.md` checks it against the wall with no
   write. Each exits 1 over its wall.
-- `uv run ruff format src test script extensions` then `uv run ruff check src test script extensions`: format and
-  lint. Two spaces of indentation, 120 columns.
+- `uv run ruff format src test script .agents/skills` then `uv run ruff check src test script .agents/skills`: format
+  and lint. Two spaces of indentation, 120 columns.
 - `.furb` is outside the formatter, even for a path that you give it: its words keep the form of the engine. Ruff
   lints it for what breaks a word, which is a name that nothing binds, a bug of the family B and an error of the family
   PLE, and for no style. A word imports each name of the engine that it uses from `furb.engine`, which the crate leaves

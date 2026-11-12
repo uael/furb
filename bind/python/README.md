@@ -33,7 +33,7 @@ root = engine.boot(record, world=world, **dict(ears))
 
 The ears of the crate are the provider of the models, the extensions, the ear of each official extension, the files, the
 commands, time, and the store and the log when the life keeps its record. The extensions enable at the start what the
-configs of the user and of the directory turn on, unless `extensions=False`. Each ear is a `NativeEar`, which
+configs of the user and of the directory turn on, unless `skills=False`. Each ear is a `NativeEar`, which
 `furb_monty.engine.boot` takes beside the generators of this interpreter, and which the engine of this interpreter,
 `furb.python`, steps as a generator of its own.
 
@@ -61,7 +61,7 @@ deletes the record.
 
 - `models(claude)` gives the models that the catalog of this machine offers, `model(name)` one model by its name, and
   `levels()` the levels of effort.
-- `files(scratch, config)`, `bash(scratch)`, `time()`, `extensions(given)` and `skills(config)`
+- `files(scratch, config)`, `bash(scratch)`, `time()`, `played(given)` and `skills(config)`
   give the ears one by one, as the suite of each extension boots them. `store(path)` gives the record that a path
   holds and the ear of its store, and `official()` gives the official skills, which `played` takes. The files
   and the commands share the scratch directory that the host names, which a word reads as `scratch://` and a command

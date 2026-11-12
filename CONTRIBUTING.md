@@ -197,7 +197,7 @@ Run the gates that your change touches before you push. The hooks run most of th
 | `uv run pre-commit run --all-files` | Every hook: the format and the lint, the type check, the suite, and the gates of the crate. |
 | `uv run pytest -q` | The suite on both engines, with a coverage that must be whole. |
 | `uv run pytest -q test/test_hygiene.py` | The hygiene laws alone, after a change of the engine, a contract or a suite. |
-| `uv run ruff format src test script extensions` and `uv run ruff check src test script extensions` | The format and the lint of Python: two spaces of indentation, 120 columns. |
+| `uv run ruff format src test script .agents/skills` and `uv run ruff check src test script .agents/skills` | The format and the lint of Python: two spaces of indentation, 120 columns. |
 | `uv run ty check --error-on-warning` | The type check. |
 | `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` | The gates of the crate and of the command line. |
 | `bun run check`, `bun run lint` and `bun run test` | The type check, the lint and the tests of the TypeScript side. |
