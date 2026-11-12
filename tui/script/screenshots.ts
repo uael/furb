@@ -46,7 +46,12 @@ const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200", FURB_STILL_
 process.env.XDG_CACHE_HOME = join(projects, ".cache");
 const endDaemon = await ownDaemon(process.env, 5);
 /** What the script waits for: a screen whose state never comes ends the script with an error that names the screen. */
-const waits = watch();
+const waits = watch(() =>
+  session.activity
+    .filter((act) => !isDone(act))
+    .map((act) => `${act.id}:${act.kind}`)
+    .join(" "),
+);
 /** A project of the gallery in its home, new, with the files of the demo. */
 async function project(name: string): Promise<string> {
   const directory = join(projects, name);

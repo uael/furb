@@ -171,15 +171,22 @@ export async function home(name: string, environment: Record<string, string> = {
 
 /** The watch of a script of the gallery, told what it waits for at each step: a step that waits for more than STEP
  * seconds ends the script with an error that names what it waited for, as a screen whose state never comes. */
-export function watch(): (what: string) => void {
+export function watch(open: () => string = () => ""): (what: string) => void {
   let waiting = "the first screen";
   const timer = setTimeout(() => {
     console.error(`The script waited ${STEP} seconds for ${waiting}, so it ends.`);
     process.exit(1);
   }, STEP * 1000);
+  // A step that lasts past the gaps of a healthy run names what it waits for and what is still open, every 30 seconds,
+  // so a limit that ends the run first leaves the cause in the log.
+  const quiet = setInterval(
+    () => console.error(`The script still waits for ${waiting}. Open: ${open() || "nothing"}`),
+    30000,
+  );
   return (what) => {
     waiting = what;
     timer.refresh();
+    quiet.refresh();
   };
 }
 
