@@ -39,7 +39,7 @@ async def test_extend_writes_the_words_of_the_rungs_it_names(tmp_path: Path) -> 
   assert (got.path, got.content) == (tilded(folder / "kit.py"), G + "\n")
   await engine.rung(f"extend('kit', {f!r})", on=root)
   assert (folder / "kit.py").read_text(encoding="utf-8") == f"{G}\n\n{F}\n"
-  said = "The extension kit of this project."
+  said = "The skill kit of this project."
   made = f"---\nname: kit\ndescription: {said}\nmetadata:\n  furb-word: kit.py\n---\n{said}\n"
   assert (folder / "SKILL.md").read_text(encoding="utf-8") == made
   mine = "---\nname: kit\ndescription: Mine.\nlicense: MIT\nmetadata:\n  furb-life: f()\n  furb-word: old.py\n---\nMy body.\n"
@@ -58,7 +58,7 @@ async def test_extend_writes_tui_as_the_part_that_the_tui_loads(tmp_path: Path) 
   part = 'export default (furb) => furb.panel("Kit", () => ["one"])'
   await engine.rung(f"extend('kit', {f!r}, tui={part!r})", on=root)
   assert (folder / "tui.ts").read_text(encoding="utf-8") == part + "\n"
-  said = "The extension kit of this project."
+  said = "The skill kit of this project."
   manifest = f"---\nname: kit\ndescription: {said}\nmetadata:\n  furb-word: kit.py\n  furb-view: tui.ts\n---\n{said}\n"
   assert (folder / "SKILL.md").read_text(encoding="utf-8") == manifest
   await engine.rung(f"extend('kit', {g!r})", on=root)

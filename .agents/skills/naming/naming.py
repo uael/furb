@@ -19,7 +19,7 @@ naming = """name_session() names the session once, at the first message of the o
 automatic() gives, on a chain of its own labelled naming, and with no such actor, or
 with no name from it, the name is the first line of that message. The act of name_session() is done with the name.
 rename_session(name) says the name that the operator chose, and its name wins over the name of name_session().
-A client shows the name of the session that its record holds. The extension plays on the root alone."""
+A client shows the name of the session that its record holds. The skill plays on the root alone."""
 NAME_LONGEST = 60
 NAME_BRIEF = """Give a name to a session of work, from the first message of its operator below: at most six words, in the
 language of the message, that say what the work is, with no quotes and no period. Close with the name alone, as
