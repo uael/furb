@@ -264,7 +264,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   rebinds names, and it tells notes of its own, from a door or from a rebound verb.
 - The engine has no registry, no plugin surface, no permission and no REPL: the record shows who made each act.
 - Within a chain, a rung binds, passes and returns any python value, plain or not.
-- When its share of the window is high, a model opens a chain with a source and a take that is not inside.
+- When its share of the window is high, a model opens a chain with a source, which keeps its whole prefix.
 - Compaction is not in the core.
 - engine.pyi is the specification of engine.py: it says what the engine is, what is always true of it and what its
   surface is, and never how it is made; it names the ears and the facts as python reads them, and holds every law, so
