@@ -580,8 +580,8 @@ Each session is a life in the daemon of the machine, which outlives the window.
 
 ## Queued follow-ups
 
-⌥Enter queues a message until the current work completes. Up in an empty input takes the last one back to edit
-it, and `/queue` edits or removes the others.
+⌥Enter queues a message until the current work completes. `/queue` edits or removes each queued message. Up in an
+empty input only walks the history, and leaves the queue as it is.
 
 ![Queued follow-up](screenshots/34-queued-follow-up.png)
 
