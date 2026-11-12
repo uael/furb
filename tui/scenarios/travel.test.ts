@@ -2,7 +2,7 @@
 // the operator, and ⌃C on an empty input names the act that a second ⌃C cancels, so no press reaches the act before it.
 import { expect } from "bun:test";
 import { operated } from "furb/life";
-import { scenario, test, until, type Window } from "./harness.ts";
+import { scenario, test, until, Window } from "./harness.ts";
 
 /** The asks of the operator on the root, each id, message and whether it is over. */
 async function asks(window: Window) {
@@ -79,10 +79,10 @@ test("⌃C on an empty input names the act that a second ⌃C cancels, and cance
     const { hire, ask } = await sent(window);
     window.screen.mockInput.pressCtrlC();
     await until(
-      () => window.session.notice.includes(`take back ${ask}`),
+      () => window.session.notice.includes(`Take back ${ask}?`),
       "the notice that names the last ask",
     );
-    await window.shows((frame) => frame.includes(`Press ⌃C again to take back ${ask}`), "the notice drawn");
+    await window.shows((frame) => frame.includes(`Take back ${ask}?`), "the notice drawn");
     await Bun.sleep(1500);
     expect(await cancels(window)).toEqual([]);
     window.screen.mockInput.pressCtrlC();
@@ -93,4 +93,29 @@ test("⌃C on an empty input names the act that a second ⌃C cancels, and cance
     await until(() => window.app.composer.plainText === "Travel: ask.", "the message back in the input");
     expect((await cancels(window)).map((fact) => fact[1])).toEqual([ask]);
     expect((await asks(window)).find((one) => one.id === hire)?.over).toBe(false);
+  }));
+
+// The footer cuts a notice to the room that its keys leave: in a terminal of 80 columns, with the state of work that
+// waits on a worker, it showed "Press ⌃C again to take back…", which names no ask, and the second ⌃C took the ask back.
+// The keys yield to a notice that asks for a second press, the notice names the act first, and the second press
+// cancels only once the footer drew that name.
+test("in a terminal of 80 columns, a second ⌃C ends only the ask that the footer named", () =>
+  scenario(script, async (first, yard) => {
+    await first.close(true).catch(() => {});
+    const window = await Window.open(yard, yard.record, { width: 80, height: 44 });
+    try {
+      const { hire, ask } = await sent(window);
+      window.screen.mockInput.pressCtrlC();
+      await Bun.sleep(500);
+      const footer = (await window.frame()).split("\n").at(-2) ?? "";
+      expect(await cancels(window)).toEqual([]);
+      window.screen.mockInput.pressCtrlC();
+      await Bun.sleep(2500);
+      await window.session.refresh();
+      expect(footer).toContain(`Take back ${ask}?`);
+      expect((await cancels(window)).map((fact) => fact[1])).toEqual([ask]);
+      expect((await asks(window)).find((one) => one.id === hire)?.over).toBe(false);
+    } finally {
+      await window.close(true).catch(() => {});
+    }
   }));

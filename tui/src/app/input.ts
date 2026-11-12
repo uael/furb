@@ -7,6 +7,7 @@ import { theme as c, spacing as space } from "../theme.ts";
 import { bold, underline } from "../ui.ts";
 import { part } from "./part.ts";
 import {
+  cancelNamed,
   cancelNotice,
   exitNotice,
   type Hint,
@@ -364,8 +365,8 @@ export const input = part({
 
   /** Ctrl+C closes a dialog or the rewind tree, or clears the input, or, on a question of a model with an empty input,
    * refuses the question, or else names in a notice the last act that the operator made on the chain, and cancels that
-   * act at a second press while the notice names it, which takes back a message of his. A press cancels no act that
-   * the notice did not name first, so no press reaches the act before it. */
+   * act at a second press once the footer drew the name of that act, which takes back a message of his. A press
+   * cancels no act that the window did not name first, at any width, so no press reaches the act before it. */
   cancel(): void {
     if (this.overlay) this.closeOverlay();
     else if (this.tree) this.closeTree();
@@ -376,10 +377,15 @@ export const input = part({
       void this.session.decline(ask, "The operator refused the question.").catch(this.report);
     } else {
       const last = this.session.lastOwn;
-      const notice = last && cancelNotice(last);
+      const named =
+        last && this.session.notice === cancelNotice(last) && this.noticeShown.startsWith(cancelNamed(last));
       // The cancel reads the last act in the same turn of the loop as this check, so it ends the act that was named.
-      if (notice && this.session.notice !== notice) this.session.notice = notice;
-      else void this.session.cancel().catch(this.report);
+      if (last && !named) this.session.notice = cancelNotice(last);
+      else {
+        // The notice asked for this press, which answers it.
+        this.session.notice = "";
+        void this.session.cancel().catch(this.report);
+      }
     }
   },
 

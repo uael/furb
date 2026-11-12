@@ -372,7 +372,8 @@ test("⌃C twice in an empty input takes back the last message to the thread, to
       // The key goes to the handler of the input itself: a key press of the test terminal reaches it later on a slow
       // machine than the test can wait. The first press names the message, and the second takes it back.
       app.cancel();
-      expect(session.notice).toContain("Press ⌃C again to take back");
+      expect(session.notice).toStartWith("Take back ");
+      expect(await frame()).toContain(session.notice.slice(0, session.notice.indexOf("?") + 1));
       app.cancel();
       await until(session, () => app.composer.plainText === "First wording", "compose");
       app.composer.setText("Second wording");

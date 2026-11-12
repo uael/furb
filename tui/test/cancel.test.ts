@@ -22,6 +22,19 @@ async function conductor(session: Session): Promise<{ thread: string; workers: s
 /** Whether each act exists and lives on. */
 const live = (session: Session, ids: string[]) => ids.every((id) => open(session, id));
 
+/** ⌃C two times on an empty input: the first names the last act of the owner in the footer, and the second, once the
+ * footer drew that name, cancels it. */
+async function twice(
+  session: Session,
+  screen: { mockInput: { pressCtrlC(): void } },
+  frame: () => Promise<string>,
+): Promise<void> {
+  screen.mockInput.pressCtrlC();
+  await until(session, () => session.notice.endsWith("Press ⌃C again."));
+  expect(await frame()).toContain(session.notice.slice(0, session.notice.indexOf("?") + 1));
+  screen.mockInput.pressCtrlC();
+}
+
 test("an act that is missing lives on no more than an act that is done", () =>
   composing(async ({ session }) => {
     const { thread, workers } = await conductor(session);
@@ -54,8 +67,7 @@ test("⌃C cancels the last message of the owner alone, and never the thread or 
       await app.submit();
       const message = await sent(session, thread);
       // The first press names the message, and the second cancels it.
-      screen.mockInput.pressCtrlC();
-      screen.mockInput.pressCtrlC();
+      await twice(session, screen, frame);
       await until(
         session,
         () =>
@@ -72,8 +84,7 @@ test("⌃C cancels the last message of the owner alone, and never the thread or 
         session.activity.some((act) => act.kind === "rung" && act.by === reply && !isDone(act)),
       );
       expect(session.lastOwn?.id).toBe(reply);
-      screen.mockInput.pressCtrlC();
-      screen.mockInput.pressCtrlC();
+      await twice(session, screen, frame);
       await until(
         session,
         () =>
@@ -85,8 +96,7 @@ test("⌃C cancels the last message of the owner alone, and never the thread or 
       // ⌃C again closes the question and ends nothing.
       app.composer.setText("");
       await until(session, () => session.lastOwn?.id === thread);
-      screen.mockInput.pressCtrlC();
-      screen.mockInput.pressCtrlC();
+      await twice(session, screen, frame);
       expect(await frame()).toContain(`Take back ${thread}, and end 5 running acts on 3 chains?`);
       screen.mockInput.pressCtrlC();
       expect(await frame()).not.toContain("Take back");
@@ -152,8 +162,7 @@ test("the owner takes back his last message and writes it again, and no other wo
       }
       app.composer.setText("");
       await frame();
-      screen.mockInput.pressCtrlC();
-      screen.mockInput.pressCtrlC();
+      await twice(session, screen, frame);
       await until(session, () => app.composer.plainText === "Think until I cancel.");
       await until(
         session,

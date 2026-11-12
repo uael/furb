@@ -20,15 +20,21 @@ export const exitNotice = "Press ⌃D again to exit.";
 
 export const rewindNotice = "Press Escape again to rewind.";
 
-/** The start of the notice of a first ⌃C on an empty input. */
-export const cancelAgain = "Press ⌃C again to ";
+/** The end of the notice of a first ⌃C on an empty input. */
+export const cancelAgain = "Press ⌃C again.";
 
-/** The notice of a first ⌃C on an empty input, which names the act that a second ⌃C cancels: a message of the operator,
- * which the cancel takes back, and else his word or his command. */
-export const cancelNotice = (act: ActRow): string => {
-  const what = String(act.words[act.kind === "prompt" ? 1 : 0] ?? "").split("\n")[0] ?? "";
-  return `${cancelAgain}${act.kind === "prompt" ? "take back" : "cancel"} ${act.id}: ${clip(what, 60)}`;
-};
+/** What the notice of a first ⌃C on an empty input says first, which the footer must show before a second ⌃C cancels:
+ * the act that the second press cancels, a message of the operator, which the cancel takes back, and else his word or
+ * his command. */
+export const cancelNamed = (act: ActRow): string =>
+  `${act.kind === "prompt" ? "Take back" : "Cancel"} ${act.id}?`;
+
+/** The notice of a first ⌃C on an empty input, which names the act first, so a footer that cuts it still names it. */
+export const cancelNotice = (act: ActRow): string => `${cancelNamed(act)} ${cancelAgain}`;
+
+/** Whether a notice asks for a second press of its key, which the footer draws before any of its keys. */
+export const arms = (notice: string): boolean =>
+  [exitNotice, rewindNotice].includes(notice) || notice.endsWith(cancelAgain);
 
 /** The time within which a second Escape rewinds. */
 export const twice = 800;

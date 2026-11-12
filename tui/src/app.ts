@@ -421,6 +421,8 @@ export class App {
   };
   /** The whole text of the footer, which a notice cut to its room shows in a tip. */
   statusWhole = "";
+  /** The notice that the footer drew last, as it drew it, whole or cut, and empty when it drew none. */
+  noticeShown = "";
   readonly tick: ReturnType<typeof setInterval>;
   /** Whether the view serves a screen reader, as the preferences said when the view was made. */
   readonly reader: boolean;

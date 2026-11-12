@@ -8,7 +8,7 @@ import { statusLabels, views } from "../session.ts";
 import { theme as c, frame, glyph, markOf, motion, shimmer, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
-import { cancelAgain, exitNotice, type Hint, rewindNotice, spell, statusMark } from "./shared.ts";
+import { arms, type Hint, spell, statusMark } from "./shared.ts";
 
 export const chrome = part({
   /** A switch between a few choices, which the views and the mode of the input share. A track in a color of its own
@@ -342,7 +342,8 @@ export const chrome = part({
     ];
     const notice = w.error ? "" : w.notice;
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
-    // beside the keys.
+    // beside the keys. The keys leave room for a notice that asks for a second press of its key.
+    const armed = arms(notice);
     // Work reads at a glance: the word of its state under a light that sweeps over it, the time since the work began,
     // and the size of what its models streamed. The key that stops it stands in the keys of the footer.
     const work = moving && !retry && !loading ? w.progress(w.selected) : undefined;
@@ -363,7 +364,8 @@ export const chrome = part({
     ]);
     // On a narrow terminal, or with the sidebar hidden, the context of the corner folds into the end of the state.
     if (!this.sidebarShown || this.drawerOpen) statuses.push(["   ", c.text], [this.contextLine(), c.muted]);
-    // The keys that have no room beside the whole state leave the footer from the last one, so the state is never cut.
+    // The keys that have no room beside the whole state leave the footer from the last one, so the state is never cut,
+    // and neither is a notice that asks for a second press of its key.
     const shown = [...keys];
     const buttonsOf = (list: typeof keys) =>
       list.map(([chord, action], index): Part[] => [
@@ -380,7 +382,10 @@ export const chrome = part({
       Bun.stringWidth(plain(buttons.flat())) <= w.preferences.sidebarWidth - space.inset * 2;
     const stateWidth = cornered
       ? 0
-      : Bun.stringWidth(plain(state)) + Bun.stringWidth(plain(statuses)) + space.between * 2;
+      : Bun.stringWidth(plain(state)) +
+        Bun.stringWidth(plain(statuses)) +
+        (armed ? Bun.stringWidth(notice) + 3 : 0) +
+        space.between * 2;
     while (
       !cornered &&
       shown.length &&
@@ -400,14 +405,8 @@ export const chrome = part({
     this.statusWhole = [plain(state), notice, plain(statuses).trim(), tokens && `Tokens: ${tokens}.`]
       .filter(Boolean)
       .join("   ");
-    if (notice && room >= 8)
-      state.push(
-        ["   ", c.text],
-        [
-          clip(notice, room - 3),
-          [exitNotice, rewindNotice].includes(notice) || notice.startsWith(cancelAgain) ? c.warning : c.text,
-        ],
-      );
+    this.noticeShown = notice && room >= 8 ? clip(notice, room - 3) : "";
+    if (this.noticeShown) state.push(["   ", c.text], [this.noticeShown, armed ? c.warning : c.text]);
     state.push(...statuses);
     // The light over the word of work that runs moves at each frame, which its plain text does not show.
     const key = JSON.stringify([
