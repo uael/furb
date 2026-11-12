@@ -129,6 +129,11 @@ async function capture(name: string): Promise<void> {
   if (name !== "25-loading" && name !== "27-view-error")
     do await session.refresh();
     while (session.loading);
+  // The crate folds the ladder of the chain shown, which a frame draws once it came.
+  for (let pass = 0; pass < 3; pass++) {
+    app().render();
+    await session.laddersRead();
+  }
   app().render();
   await test.flush();
   // Code is colored by a parser off the main thread: the frame is taken once every code block is highlighted.
