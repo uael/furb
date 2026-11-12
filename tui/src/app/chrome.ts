@@ -8,7 +8,7 @@ import { statusLabels, views } from "../session.ts";
 import { theme as c, frame, glyph, markOf, motion, shimmer, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
-import { exitNotice, type Hint, rewindNotice, spell, statusMark } from "./shared.ts";
+import { cancelAgain, exitNotice, type Hint, rewindNotice, spell, statusMark } from "./shared.ts";
 
 export const chrome = part({
   /** A switch between a few choices, which the views and the mode of the input share. A track in a color of its own
@@ -403,7 +403,10 @@ export const chrome = part({
     if (notice && room >= 8)
       state.push(
         ["   ", c.text],
-        [clip(notice, room - 3), [exitNotice, rewindNotice].includes(notice) ? c.warning : c.text],
+        [
+          clip(notice, room - 3),
+          [exitNotice, rewindNotice].includes(notice) || notice.startsWith(cancelAgain) ? c.warning : c.text,
+        ],
       );
     state.push(...statuses);
     // The light over the word of work that runs moves at each frame, which its plain text does not show.

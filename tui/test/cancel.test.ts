@@ -53,6 +53,8 @@ test("⌃C cancels the last message of the owner alone, and never the thread or 
       app.composer.setText("Think until I cancel.");
       await app.submit();
       const message = await sent(session, thread);
+      // The first press names the message, and the second cancels it.
+      screen.mockInput.pressCtrlC();
       screen.mockInput.pressCtrlC();
       await until(
         session,
@@ -71,6 +73,7 @@ test("⌃C cancels the last message of the owner alone, and never the thread or 
       );
       expect(session.lastOwn?.id).toBe(reply);
       screen.mockInput.pressCtrlC();
+      screen.mockInput.pressCtrlC();
       await until(
         session,
         () =>
@@ -81,8 +84,9 @@ test("⌃C cancels the last message of the owner alone, and never the thread or 
       // The last message of the owner that is open is now the thread, which reaches the workers, so ⌃C asks first, and
       // ⌃C again closes the question and ends nothing.
       app.composer.setText("");
-      screen.mockInput.pressCtrlC();
       await until(session, () => session.lastOwn?.id === thread);
+      screen.mockInput.pressCtrlC();
+      screen.mockInput.pressCtrlC();
       expect(await frame()).toContain(`Take back ${thread}, and end 5 running acts on 3 chains?`);
       screen.mockInput.pressCtrlC();
       expect(await frame()).not.toContain("Take back");
@@ -148,6 +152,7 @@ test("the owner takes back his last message and writes it again, and no other wo
       }
       app.composer.setText("");
       await frame();
+      screen.mockInput.pressCtrlC();
       screen.mockInput.pressCtrlC();
       await until(session, () => app.composer.plainText === "Think until I cancel.");
       await until(

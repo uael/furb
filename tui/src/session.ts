@@ -2252,7 +2252,7 @@ export class Session extends EventEmitter {
     if (back) {
       // The words go back to where they went: the thread that they answered, or a new thread when they began one, and
       // not to the open thread of this moment, which may be the thread that this cancel ends.
-      const into = this.sentTo.get(act.id);
+      const into = onThread(act);
       this.aim(into);
       this.pinned = into ?? null;
       await this.restore(String(act.words[1] ?? ""));
@@ -2260,8 +2260,6 @@ export class Session extends EventEmitter {
     } else this.notice = `${act.id} is cancelled${ended ? `, and ${under}` : ""}.`;
     await this.refresh();
   }
-  /** The thread that each message of the input went to, or undefined for a message that began a thread. */
-  private readonly sentTo = new Map<string, string | undefined>();
   /** The acts that a cancel of the operator ended, whose notice that cancel gave. */
   private readonly cancels = new Set<string>();
   /** The chains that a cancel reaches, each with its label, in the order of the chains. */
@@ -2298,33 +2296,6 @@ export class Session extends EventEmitter {
     this.track(choice.rung);
   }
 
-  /** The last message of the operator in a thread that the input can take back: one that still runs, or that a cancel
-   * ended, and that he did not take back yet. */
-  lastMessage(thread: string): ActRow | undefined {
-    return this.acts.findLast(
-      (act) =>
-        onThread(act) === thread &&
-        act.kind === "prompt" &&
-        this.isUserPrompt(act) &&
-        !this.retaken.has(act.id) &&
-        (!isDone(act) || cancelled(act)),
-    );
-  }
-  /** The messages that the operator took back from the box of a thread, which the box does not offer again. */
-  private readonly retaken = new Set<string>();
-  /** The last message of the operator in a thread that still runs, or that a cancel ended, taken back: a message that
-   * runs is cancelled, and its text comes back to be edited and sent again. The cancelled message leaves the box. */
-  async takeBackMessage(thread: string): Promise<void> {
-    const last = this.lastMessage(thread);
-    if (!last) return;
-    this.retaken.add(last.id);
-    if (!isDone(last)) {
-      this.cancels.add(last.id);
-      await this.engine.cancel(last.id);
-    }
-    await this.refresh();
-    this.emit("compose", String(last.words[1] ?? ""));
-  }
   /** A message to a thread, from the box at the end of the thread. It goes to the thread whatever the input is
    * doing: a message that its model reads at its next step while the thread is open, and a prompt that opens the
    * thread again once it is over. */
@@ -2728,7 +2699,6 @@ export class Session extends EventEmitter {
       ? await this.engine.prompt(this.lineShape(thread), { message: input, on: thread })
       : await this.engine.prompt(shape, { message: input, on: chain });
     if (thread) this.notice = `Your message went to the thread ${thread}.`;
-    this.sentTo.set(id, thread);
     this.save();
     this.track(id);
   }

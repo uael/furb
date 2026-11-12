@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import type { KeyEvent } from "@opentui/core";
 import type { ProgramLine } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
@@ -344,7 +343,7 @@ test("the box of a thread starts where the input of the chain starts, and the wo
     true,
   ));
 
-test("the up arrow in an empty input takes back the last message to the thread that it targets, to edit it, and the message that replaces it takes its place in the box", () =>
+test("⌃C twice in an empty input takes back the last message to the thread, to edit it, and the message that replaces it takes its place in the box", () =>
   composing(
     async ({ session, app, frame }) => {
       await idle(session);
@@ -371,8 +370,10 @@ test("the up arrow in an empty input takes back the last message to the thread t
       app.replyTo(id);
       expect(session.target).toBe(id);
       // The key goes to the handler of the input itself: a key press of the test terminal reaches it later on a slow
-      // machine than the test can wait.
-      expect(app.walkHistory({ name: "up" } as KeyEvent)).toBe(true);
+      // machine than the test can wait. The first press names the message, and the second takes it back.
+      app.cancel();
+      expect(session.notice).toContain("Press ⌃C again to take back");
+      app.cancel();
       await until(session, () => app.composer.plainText === "First wording", "compose");
       app.composer.setText("Second wording");
       await app.submit();

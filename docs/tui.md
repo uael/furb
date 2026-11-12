@@ -97,9 +97,8 @@ that thread its target, and a reply to a thread that is over opens it again. Whi
 takes the color of the thread, its meta line says `to ↳` and the name of the thread, and the box of the thread ends with
 `↳ Replying here` in its color. `+ New thread`, at the right end of the meta line, and `/newthread`, make the next
 message start a thread of its own. The target holds from the first character that you type until you send or clear the
-message, so a thread that opens meanwhile takes nothing that you wrote for another. ↑ in an empty input takes back your
-last prompt that opened the thread again, while it runs or once a cancel ended it, to edit it and send it again in its
-place. A message to an open thread is over at once, so it stays. The
+message, so a thread that opens meanwhile takes nothing that you wrote for another. ↑ and ↓ only walk the history of
+the input, and change nothing of the life. The
 numbers go on from one step to the next, so a thread counts the lines of its program from its first step to its last,
 also past the steps that a fold keeps out. No step and no act takes a row of its own. Each line ends with a quiet hint
 of what its acts came to: a read the count of its lines, a write the lines that it added and removed, a command its exit
@@ -490,14 +489,15 @@ and not "Error".
 
 ## Cancel and take back
 
-⌃C on an empty input cancels the last message, word or command that you sent on the chain shown and that still
-runs, and that act alone with the work under it. It never cancels the thread or the chain that the act stands on,
+⌃C on an empty input names in a notice the last message, word or command that you sent on the chain shown and that
+still runs, and a second ⌃C while the notice names it cancels that act alone with the work under it. No press cancels
+an act that the notice did not name first, so a press never reaches the act before it. It never cancels the thread or the chain that the act stands on,
 and it never cancels a prompt that a model made, such as the prompt of a worker. When that act is a message, ⌃C takes
 it back: the message is cancelled and its text goes back to the input, so you change it and send it again, and the
 other work of the life goes on. A right click on a message opens its menu, which offers Take back for your last
 message that runs, and Cancel for another act that runs. `/cancel <id>` cancels the act that you name.
 
-While the last message that you sent runs and the input is empty, the footer offers ⌃C to take it back.
+While the last message that you sent runs and the input is empty, the footer offers ⌃C to take it back, in two presses.
 
 ![Take back in the footer](screenshots/97-take-back-hint.png)
 

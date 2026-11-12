@@ -38,7 +38,6 @@ export const keys = [
     bindings: [{ on: ["meta+return", "meta+enter"], run: "queue", command: "queue" }],
   },
   { chord: "↑ / ↓", action: "Previous / next sent input, on the first / last line" },
-  { chord: "↑ in an empty input", action: "Take the last queued message back to edit it" },
   {
     chord: "→ / ⌃F",
     action: "At the end, take the grey rest of the suggestion",
@@ -278,7 +277,7 @@ export const keys = [
   {
     chord: "⌃C",
     action:
-      "Clear the input, close a dialog, refuse the question that waits, or cancel what you sent last (a message goes back to the input)",
+      "Clear the input, close a dialog, refuse the question that waits, or name what you sent last, which a second ⌃C cancels (a message goes back to the input)",
     bindings: [{ on: ["ctrl+c"], run: "takeBack", hint: "take back" }],
   },
   {

@@ -20,6 +20,16 @@ export const exitNotice = "Press ⌃D again to exit.";
 
 export const rewindNotice = "Press Escape again to rewind.";
 
+/** The start of the notice of a first ⌃C on an empty input. */
+export const cancelAgain = "Press ⌃C again to ";
+
+/** The notice of a first ⌃C on an empty input, which names the act that a second ⌃C cancels: a message of the operator,
+ * which the cancel takes back, and else his word or his command. */
+export const cancelNotice = (act: ActRow): string => {
+  const what = String(act.words[act.kind === "prompt" ? 1 : 0] ?? "").split("\n")[0] ?? "";
+  return `${cancelAgain}${act.kind === "prompt" ? "take back" : "cancel"} ${act.id}: ${clip(what, 60)}`;
+};
+
 /** The time within which a second Escape rewinds. */
 export const twice = 800;
 

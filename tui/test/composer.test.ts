@@ -327,7 +327,7 @@ test("a message that the queue shortcut sends comes back to its composer when th
     expect(app.composer.plainText).toBe("newer text");
   }));
 
-test("Up and Down walk the history from the edges of the input, and Up on an empty input takes back a queued message", () =>
+test("Up and Down walk the history from the edges of the input, and Up on an empty input leaves a queued message in the queue", () =>
   composing(
     async ({ session, app, screen }) => {
       for (const name of ["first", "second"]) {
@@ -363,9 +363,10 @@ test("Up and Down walk the history from the edges of the input, and Up on an emp
       await session.engine.pause(session.selected);
       await session.enqueue("a queued message");
       await until(session, () => session.queued.length === 1);
+      // Up only walks the history: the life keeps the queued message.
       screen.mockInput.pressArrow("up");
-      await until(session, () => app.composer.plainText === "a queued message");
-      await until(session, () => session.queued.length === 0);
+      await Bun.sleep(100);
+      expect(session.queued.length).toBe(1);
     },
     { width: 120, height: 44, kittyKeyboard: true },
   ));

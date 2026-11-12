@@ -6,7 +6,15 @@ import { type View, views } from "../session.ts";
 import { theme as c, spacing as space } from "../theme.ts";
 import { bold, underline } from "../ui.ts";
 import { part } from "./part.ts";
-import { exitNotice, type Hint, type KeyCommand, rewindNotice, steps, twice } from "./shared.ts";
+import {
+  cancelNotice,
+  exitNotice,
+  type Hint,
+  type KeyCommand,
+  rewindNotice,
+  steps,
+  twice,
+} from "./shared.ts";
 
 export const input = part({
   /** The layers of the keys of the App, from the top: a layer that holds takes a key before the layers under it, a
@@ -355,8 +363,9 @@ export const input = part({
   },
 
   /** Ctrl+C closes a dialog or the rewind tree, or clears the input, or, on a question of a model with an empty input,
-   * refuses the question, or else cancels the last act that the operator made on the chain, which takes back a message
-   * of his. */
+   * refuses the question, or else names in a notice the last act that the operator made on the chain, and cancels that
+   * act at a second press while the notice names it, which takes back a message of his. A press cancels no act that
+   * the notice did not name first, so no press reaches the act before it. */
   cancel(): void {
     if (this.overlay) this.closeOverlay();
     else if (this.tree) this.closeTree();
@@ -365,7 +374,13 @@ export const input = part({
       // On a question of a model, an empty input refuses the question at once, with no dialog that asks to confirm.
       const ask = this.session.operatorPrompt;
       void this.session.decline(ask, "The operator refused the question.").catch(this.report);
-    } else this.action("/cancel");
+    } else {
+      const last = this.session.lastOwn;
+      const notice = last && cancelNotice(last);
+      // The cancel reads the last act in the same turn of the loop as this check, so it ends the act that was named.
+      if (notice && this.session.notice !== notice) this.session.notice = notice;
+      else void this.session.cancel().catch(this.report);
+    }
   },
 
   /** Right and Ctrl+F at the end of the line take the grey rest of it, and Alt+Right and Alt+F take its next word, as
@@ -375,30 +390,14 @@ export const input = part({
     this.composer.insertText(word ?? this.composer.ghost);
   },
 
-  /** Up on an empty input takes back the last message queued on the chain, and Up and Down at the first and the last
-   * line of the input walk the history of what it sent, as a shell does: the entries of this chain first, then those
-   * of the other chains of the session, then those of the other sessions of the workspace, and with text typed, only the entries that start with it, as fish does. Alt+Up and Alt+Down
-   * walk it from any line. It gives false when it does nothing, and the input moves its cursor. */
+  /** Up and Down at the first and the last line of the input walk the history of what it sent, as a shell does: the
+   * entries of this chain first, then those of the other chains of the session, then those of the other sessions of
+   * the workspace, and with text typed, only the entries that start with it, as fish does. Alt+Up and Alt+Down walk it
+   * from any line. A walk changes the input alone and nothing of the life. It gives false when it does nothing, and
+   * the input moves its cursor. */
   walkHistory(key?: KeyEvent): boolean {
     const up = key?.name === "up";
     const anywhere = key?.meta;
-    const queued = this.session.queued.findLast((entry) => entry.chain === this.session.selected);
-    // Up on an empty input takes back the last message to the thread that it targets, when that message still runs or
-    // a cancel ended it: the text comes back to edit, and the message sent in its place takes its place in the box.
-    const target = this.session.target;
-    if (up && !anywhere && !this.composer.plainText && this.historyIndex < 0 && target) {
-      if (this.session.lastMessage(target)) {
-        void this.session.takeBackMessage(target).catch(this.report);
-        return true;
-      }
-    }
-    if (up && !anywhere && !this.composer.plainText && queued && this.historyIndex < 0) {
-      void this.session.removeQueued(queued.entry).then(() => {
-        this.insert(queued.message);
-        this.session.notice = "The queued message is back in the input. ⌥Enter queues it again.";
-      }, this.report);
-      return true;
-    }
     const cursor = this.composer.visualCursor.visualRow;
     const edge = up ? cursor === 0 : cursor >= this.composer.virtualLineCount - 1;
     const prefix = this.historyIndex < 0 ? this.composer.plainText : this.historyPrefix;
@@ -531,8 +530,8 @@ export const input = part({
     };
   },
 
-  /** The hints of the footer that say more than their key: on a question that waits, ⌃C refuses it, and else it takes
-   * back the last message. */
+  /** The hints of the footer that say more than their key: on a question that waits, ⌃C refuses it, and else it names
+   * the last message that a second ⌃C takes back. */
   hintTable(): Partial<Record<Action, () => string>> {
     return { takeBack: () => (this.session.operatorPrompt ? "refuse" : "take back") };
   },
