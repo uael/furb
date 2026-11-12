@@ -92,6 +92,17 @@ test(
             180,
           );
           expect(await jobs(window)).toEqual(Array(WORKERS).fill(sum));
+          // The kills come at random, so a run seldom ends a life at rest; this end writes the checkpoint that the next
+          // life is born on, which each run then proves.
+          await window.close(true);
+          await yard.ended();
+          window = await Window.open(yard);
+          await until(
+            async () => (await jobs(window)).length >= WORKERS,
+            "the born life to hold each job",
+            60,
+          );
+          expect(await jobs(window)).toEqual(Array(WORKERS).fill(sum));
           const facts = await size(window);
           expect(facts).toBeGreaterThan(2000);
           const cues = yard.turns().map((one) => one.cue);
