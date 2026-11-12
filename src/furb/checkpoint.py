@@ -27,7 +27,9 @@ def seed(names, data):
   for c in data["chains"]:
     put("chain", i := c["id"], operator, c["on"], c["label"], "")
     v = "".join(
-      f"try:\n if {k!r} not in __bound or {k} is not __bound[{k!r}]: {k} = __bound[{k!r}] = eval(__carried[4][{k!r}])\nexcept Exception: pass\n"
+      f"try:\n if {k!r} not in __bound or {k} is not __bound[{k!r}]: {k} = __bound[{k!r}] = "
+      f"eval(__t) if isinstance(__t := __carried[4][{k!r}], str) else (__q.clear(), [__q.append(eval(p)) for p in __t], __q[-1])[2]"
+      "\nexcept Exception: pass\n"
       for k in c["values"]
     )
     parts[i] = [*filter(None, [v, *([d] if isinstance(d := c["definitions"], str) else d), v, *c.get("lives", ())])]
@@ -49,12 +51,12 @@ def seed(names, data):
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
     word = (
       "for __carried in [] if transcript(of='cut') else transcript(of='carried')[-1:]:\n"
-      " __bound, __part = {}, None\n"
+      " __bound, __part, __q, __t = {}, None, [], None\n"
       " for __part in __carried[5]:\n  try: await rung(__part)\n  except Exception as __raised: debug(t'{__raised!r}')\n"
       " say('cut', scope(acting()), "
       "[x for x in reading() if x[0] != 'tell' or not under(x[1], acting()) or x[3][0].startswith(f'#{acting()} debugged')])\n"
       f' (__lost := [n for n in {c["lost"]} + [*__carried[4]] if n not in globals()]) + {cut} and debug(t"The life goes on from a checkpoint. '
-      f"It lost {{__lost or 'no name'}}, and it cut {cut or 'no act'}.\")\n del __carried, __bound, __part, __lost"
+      f"It lost {{__lost or 'no name'}}, and it cut {cut or 'no act'}.\")\n del __carried, __bound, __part, __lost, __q, __t"
     )
     seat = f"rung{numbers['rung'] + 1}"
     for maker, said in [(operator, word), *((seat, one) for one in parts[i])]:
@@ -62,6 +64,51 @@ def seed(names, data):
       put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, said)
       entries.append((("done", gated, "gate", []),))
   return entries + [(("wake", y["id"], operator),) for y in data["chains"] if y["id"] in asking and not y["paused"]]
+
+
+def pieces(value, text, literal):
+  # One eval of the sandbox takes at most 65536 constants and 65536 items of a display, so a value with more leaves
+  # stands as the texts of its parts, each after the parts that it names as __q[i], and the last makes the value.
+  most = 4096
+
+  def leaves(v):
+    held = [*v, *v.values()] if isinstance(v, dict) else v if isinstance(v, list | tuple | set) else ()
+    return 1 + sum(map(leaves, held))
+
+  if leaves(value) <= most:
+    return text
+  out, seen = [], set()
+
+  def shape(v, j):
+    if isinstance(v, dict | set):
+      return f"{{{j}}}" if j or isinstance(v, dict) else "set()"
+    return f"[{j}]" if isinstance(v, list) else f"({j},)" if j else "()"
+
+  def put(v):
+    if not isinstance(v, list | tuple | set | dict):
+      return literal(v, seen), 1
+    kids = (
+      [(literal(k, seen) + ": ", *put(y)) for k, y in v.items()] if isinstance(v, dict) else [("", *put(y)) for y in v]
+    )
+    groups, held, total = [[]], 0, 1
+    for head, part, n in kids:
+      total += n
+      if groups[-1] and held + n > most:
+        groups.append([])
+        held = 0
+      groups[-1].append(head + part)
+      held += n
+    if total <= most:
+      return shape(v, ", ".join(groups[0])), total
+    refs = []
+    for group in groups:
+      out.append(shape(v, ", ".join(group)))
+      refs.append(f"__q[{len(out) - 1}]")
+    mark = "**" if isinstance(v, dict) else "*" if isinstance(v, set) else ""
+    out.append("{" + ", ".join(mark + r for r in refs) + "}" if mark else " + ".join(refs))
+    return f"__q[{len(out) - 1}]", 1
+
+  return [*out, put(value)[0]]
 
 
 def gathered(names, define, floor):
@@ -89,7 +136,7 @@ def gathered(names, define, floor):
         except RecursionError:
           text = ""
         if text:
-          values[c][key] = text
+          values[c][key] = pieces(value, text, literal)
           named |= found
         else:
           lost[c].append(key)

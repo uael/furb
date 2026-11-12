@@ -1,6 +1,6 @@
 """gathered, the data of a checkpoint of a life."""
 
-from conftest import born, definitions, life, paragraphs, settle, sown, world_says
+from conftest import born, definitions, life, paragraphs, said, settle, sown, world_says
 from furb import checkpoint, engine
 from furb.engine import LARGEST, OPERATOR, Refused
 
@@ -219,3 +219,39 @@ async def test_the_turns_of_a_chain_keep_no_reply_that_is_not_done_so_a_later_li
   (chain,) = [c for c in checkpoint.gathered(vars(engine), lambda word: word, {})["chains"] if c["id"] == root]
   replies = [x[1] for x in chain["turns"] if x[0] in ("reply", "started", "done") and x[1].startswith("reply")]
   assert open_reply not in replies and replies != []
+
+
+BIG = """flat = list(range(66000))
+words = tuple(range(5000))
+table = {"k" + str(i): i for i in range(5000)}
+bag = set(range(5000))
+rows = [{"id": "a" + str(i), "n": i, "s": "x"} for i in range(11000)]
+nest = {"z": Text("p", "c"), "e": Refused("r", 2), "rows": [(i, {"x": [i], "y": {i}}) for i in range(1000)], "a": (), "b": set()}
+small = [1, (2,), {3}, {"k": "v"}]"""
+"""A word of the root that binds a value over each bound of one eval of monty, a list of 66000 items, over the 65536
+items of a display, and 11000 dicts of three keys, over its 65536 constants, then a tuple, a dict and a set over the
+4096 leaves of a part, a nest of them with a Text and an exception, and a small value."""
+
+
+async def test_a_value_larger_than_one_eval_of_the_sandbox_takes_stands_in_chains_as_the_texts_of_its_parts_each_after_the_parts_that_it_names_so_seed_binds_it_equal_of_the_same_types_and_with_the_keys_of_each_dict_in_the_same_order() -> (
+  None
+):
+  """A value larger than one eval of the sandbox takes stands in chains as the texts of its parts, each after the parts that it names, so seed binds it equal, of the same types, and with the keys of each dict in the same order."""
+  _, _, root = born()
+  await engine.rung(BIG, on=root)
+  names = ("flat", "words", "table", "bag", "rows", "nest", "small")
+  told = f"texts = {{n: literal(globals()[n], set()) for n in {names!r}}}"
+  await engine.rung(told, on=root)
+  before = engine.module(root)["texts"]
+  data = checkpoint.gathered(vars(engine), lambda word: word, {})
+  (held,) = [c["values"] for c in data["chains"] if c["id"] == root]
+  assert isinstance(held["small"], str)
+  assert all(isinstance(held[name], list) for name in names[:-1])
+  log, _ = life(sown(), checkpoint.seed(vars(engine), data))
+  (seat,) = [x[1] for x in said(log, "rung") if x[2] == OPERATOR and x[3] == root]
+  for _ in range(40):
+    if engine.over(seat):
+      break
+    await settle()
+  await engine.rung(told, on=root)
+  assert engine.module(root)["texts"] == before

@@ -43,7 +43,9 @@ def bound(*names: str) -> str:
   """The word of a birth that binds each value of a chain of these names from the fact carried of that chain, when
   the module does not still hold the object that the word bound first."""
   return "".join(
-    f"try:\n if {k!r} not in __bound or {k} is not __bound[{k!r}]: {k} = __bound[{k!r}] = eval(__carried[4][{k!r}])\nexcept Exception: pass\n"
+    f"try:\n if {k!r} not in __bound or {k} is not __bound[{k!r}]: {k} = __bound[{k!r}] = "
+    f"eval(__t) if isinstance(__t := __carried[4][{k!r}], str) else (__q.clear(), [__q.append(eval(p)) for p in __t], __q[-1])[2]"
+    "\nexcept Exception: pass\n"
     for k in names
   )
 
@@ -207,12 +209,12 @@ async def test_the_fact_carried_of_a_chain_holds_the_text_of_each_value_then_the
   (word,) = [x[0][4] for x in entries if x[0][0] == "rung" and x[0][2] == OPERATOR and x[0][3] == "chain1"]
   assert word == (
     "for __carried in [] if transcript(of='cut') else transcript(of='carried')[-1:]:\n"
-    " __bound, __part = {}, None\n"
+    " __bound, __part, __q, __t = {}, None, [], None\n"
     " for __part in __carried[5]:\n  try: await rung(__part)\n  except Exception as __raised: debug(t'{__raised!r}')\n"
     " say('cut', scope(acting()), "
     "[x for x in reading() if x[0] != 'tell' or not under(x[1], acting()) or x[3][0].startswith(f'#{acting()} debugged')])\n"
     " (__lost := [n for n in [] + [*__carried[4]] if n not in globals()]) + [] and debug(t\"The life goes on from a checkpoint. It lost {__lost or 'no name'}, and it cut no act.\")\n"
-    " del __carried, __bound, __part, __lost"
+    " del __carried, __bound, __part, __lost, __q, __t"
   )
 
 
