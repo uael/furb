@@ -1,5 +1,7 @@
 """lane_item, one row of the lane from A to Z."""
 
+import shlex
+
 import pytest
 
 from conftest import said
@@ -10,7 +12,8 @@ from ...conftest import gitted
 
 
 def made(laning: Bench, name: str) -> str:
-  return f'await bash("cd {laning.tmp} && echo {name} > {name} && git add {name} && git commit -qm {name}")\nclose("made {name}")'
+  command = f"cd {shlex.quote(str(laning.tmp))} && echo {name} > {name} && git add {name} && git commit -qm {name}"
+  return f'await bash({command!r})\nclose("made {name}")'
 
 
 async def test_lane_item_runs_a_row_from_a_to_z(laning: Bench) -> None:

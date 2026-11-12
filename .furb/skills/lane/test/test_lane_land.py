@@ -1,5 +1,7 @@
 """lane_land, the rebase and the push of a lane, with no model."""
 
+import shlex
+
 import pytest
 
 from skills.conftest import Bench
@@ -43,7 +45,7 @@ async def test_lane_land_aborts_a_conflict_and_tries_a_push_three_times(laning: 
   commit(laning.tmp, "g", "g\n")
   tries = laning.tmp.parent / f"{laning.tmp.name}.tries"
   hook = laning.origin / "hooks" / "pre-receive"
-  hook.write_text(f"#!/bin/sh\necho try >> {tries}\nexit 1\n", encoding="utf-8")
+  hook.write_text(f"#!/bin/sh\necho try >> {shlex.quote(str(tries))}\nexit 1\n", encoding="utf-8")
   hook.chmod(0o755)
   assert (await laning.value(f"await lane_land({tree!r}, \"accepted\")"))[0] is False
   assert tries.read_text(encoding="utf-8").split() == ["try", "try", "try"]

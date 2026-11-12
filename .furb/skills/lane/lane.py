@@ -158,7 +158,7 @@ async def lane_open(id: str, evidence: str, tree: str, worker: str = "claude-cli
 
 
 async def lane_checks(tree: str, base: str) -> list[str]:
-  runs = {name: bash("cd " + tree + " && " + check.replace("BASE", base), ok=True, show=HIDDEN, timeout=900.0) for name, check in LANE_CHECKS.items()}
+  runs = {name: bash("cd " + lane_quoted(tree) + " && " + check.replace("BASE", base), ok=True, show=HIDDEN, timeout=900.0) for name, check in LANE_CHECKS.items()}
   flaws: list[str] = []
   for name, run in runs.items():
     out = await run
@@ -168,7 +168,7 @@ async def lane_checks(tree: str, base: str) -> list[str]:
 
 
 async def lane_break(c: str, tree: str, breakers: list[str], accept: str, base: str) -> tuple[str, str]:
-  look = f"cd {tree} && git rev-parse HEAD && git status --porcelain"
+  look = f"cd {lane_quoted(tree)} && git rev-parse HEAD && git status --porcelain"
   item = get(c)[4]
   for who in breakers:
     label = f"{item} probe {who}"
@@ -182,21 +182,26 @@ async def lane_break(c: str, tree: str, breakers: list[str], accept: str, base: 
     if (await bash(look, show=HIDDEN, timeout=60.0)).stdout.content != before:
       continue
     if isinstance(got, str) and got.strip():
-      ran = await bash("cd " + tree + " && " + got, ok=True, show=HIDDEN, timeout=900.0)
+      ran = await bash("cd " + lane_quoted(tree) + " && " + got, ok=True, show=HIDDEN, timeout=900.0)
       if ran.code != 0:
         return got, ran.stdout.content[-2000:]
   return "", ""
 
 
+def lane_quoted(path: str) -> str:
+  home = "~/" if path.startswith("~/") else ""
+  return home + "'" + path[len(home) :].replace("'", "'\\''") + "'"
+
+
 async def lane_tip(tree: str) -> str:
-  return (await bash("git -C " + tree + " rev-parse HEAD", show=HIDDEN, timeout=30.0)).stdout.content.strip()
+  return (await bash("git -C " + lane_quoted(tree) + " rev-parse HEAD", show=HIDDEN, timeout=30.0)).stdout.content.strip()
 
 
 async def lane_work(c: str, accept: str, first: str, tree: str, worker: str = "claude-cli:sonnet/medium", breakers: list[str] | None = None, patience: float = 7200.0, accept_s: float = 3600.0, begun: bool = False) -> tuple[str, str]:
   base = await lane_tip(tree)
   n = 0
   while n < 16:
-    ran = await bash("cd " + tree + " && " + accept, ok=True, show=HIDDEN, timeout=accept_s)
+    ran = await bash("cd " + lane_quoted(tree) + " && " + accept, ok=True, show=HIDDEN, timeout=accept_s)
     if ran.code == 0 and n == 0 and not begun:
       return "void", "the acceptance command passed before any work"
     before = await lane_tip(tree)
@@ -224,10 +229,10 @@ async def lane_land(tree: str, verdict: str, branch: str = "") -> tuple[bool, st
     raise Refused(f"{tree} lands only an accepted item, and its verdict is {verdict}")
   tail = ""
   for _ in range(3):
-    ran = await bash(f"cd {tree} && git fetch -q origin && {{ git rebase origin/{LANE_BASE} || {{ git rebase --abort; exit 9; }}; }} && git push origin HEAD:{LANE_BASE}", ok=True, show=HIDDEN, timeout=2700.0)
+    ran = await bash(f"cd {lane_quoted(tree)} && git fetch -q origin && {{ git rebase origin/{LANE_BASE} || {{ git rebase --abort; exit 9; }}; }} && git push origin HEAD:{LANE_BASE}", ok=True, show=HIDDEN, timeout=2700.0)
     tail = ran.stdout.content[-800:]
     if ran.code == 0 and branch:
-      await bash(f'cd {tree} && test -z "$(git status --porcelain)" && git merge-base --is-ancestor HEAD origin/{LANE_BASE} && cd "$(git rev-parse --git-common-dir)/.." && git worktree remove {tree} && git branch -D {branch}', ok=True, show=HIDDEN, timeout=120.0)
+      await bash(f'cd {lane_quoted(tree)} && test -z "$(git status --porcelain)" && git merge-base --is-ancestor HEAD origin/{LANE_BASE} && cd "$(git rev-parse --git-common-dir)/.." && git worktree remove {lane_quoted(tree)} && git branch -D {branch}', ok=True, show=HIDDEN, timeout=120.0)
     if ran.code in (0, 9):
       return ran.code == 0, tail
   return False, tail
@@ -285,7 +290,7 @@ async def lane_fill() -> list[str]:
 
 
 async def lane_steer(tree: str, ground: str, since: str, overdue: str = "", model: str = "") -> list[tuple[str, str, str]]:
-  ran = await bash(f"cd {tree} && sh .furb/skills/lane/measures.sh . {LANE_BASE}", ok=True, show=HIDDEN, timeout=180.0)
+  ran = await bash(f"cd {lane_quoted(tree)} && sh .furb/skills/lane/measures.sh . {LANE_BASE}", ok=True, show=HIDDEN, timeout=180.0)
   model = model or str(module(ground).get("actor", ""))
   c = chain("steer", source=ground)
   rung('read("skills://lane/lane.pyi")', to=model, on=c)

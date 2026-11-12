@@ -1,5 +1,7 @@
 """lane_work, the loop of a worker on a command that fails."""
 
+import shlex
+
 from conftest import said
 from skills.conftest import Bench
 
@@ -8,7 +10,8 @@ from ...conftest import gitted
 
 def made(laning: Bench, name: str) -> str:
   """The word of a worker that commits the file name in the tree, then closes."""
-  return f'await bash("cd {laning.tmp} && echo {name} > {name} && git add {name} && git commit -qm {name}")\nclose("made {name}")'
+  command = f"cd {shlex.quote(str(laning.tmp))} && echo {name} > {name} && git add {name} && git commit -qm {name}"
+  return f'await bash({command!r})\nclose("made {name}")'
 
 
 def asked(laning: Bench) -> list[str]:
@@ -86,7 +89,7 @@ async def test_lane_work_refuses_a_probe_that_changed_the_tree(laning: Bench) ->
   """It refuses the probe of a breaker that changed the files or the head of tree, and asks the next breaker."""
   tree = str(laning.tmp)
   laning.words["item"] = [made(laning, "b")]
-  laning.words["item probe claude-cli:opus/high"] = [f'await bash("cd {tree} && echo x > stray")\nclose("false")']
+  laning.words["item probe claude-cli:opus/high"] = [f'await bash({f"cd {shlex.quote(tree)} && echo x > stray"!r})\nclose("false")']
   laning.words["item probe claude-cli:fable/high"] = ["close(None)"]
   breakers = ["claude-cli:opus/high", "claude-cli:fable/high"]
   assert await work(laning, "test -f b", breakers=breakers) == ("accepted", "test -f b")
