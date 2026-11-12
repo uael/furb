@@ -37,7 +37,7 @@ async function again(window: Window): Promise<void> {
 }
 
 /** The script: a first message that its model answers, then two messages on its thread that stay open, the first of
- * them with a worker under it whose model never answers, as the asks of the owner that carried his lanes. */
+ * them with a worker under it whose model never answers. */
 const script = [
   { cue: "Travel: begin.", word: 'close("Begun.")' },
   { cue: "Travel: hire.", word: 'prompt(str, "Travel: work.", on=chain("travel worker"))' },
@@ -67,12 +67,12 @@ async function sent(window: Window): Promise<{ hire: string; ask: string }> {
   return open as { hire: string; ask: string };
 }
 
-// 11-12: two presses of Up, 460 ms apart, to find a line sent before, cancelled the two last open asks of the owner.
+// Two presses of Up on an empty input, to find a line sent before, walk the history and cancel no open ask.
 test("Up two times on an empty input walks the history and ends no ask of the operator", () =>
   scenario(script, async (window) => {
     const { hire, ask } = await sent(window);
     expect(window.app.composer.plainText).toBe("");
-    // Both presses come inside one refresh of the session, as the keys of the owner did.
+    // Both presses come inside one refresh of the session, so the second reads the state that the first left.
     window.screen.mockInput.pressArrow("up");
     window.screen.mockInput.pressArrow("up");
     await until(
