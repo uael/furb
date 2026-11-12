@@ -274,7 +274,9 @@ export class Workspaces extends EventEmitter {
   }
   async scan(group: Workspace): Promise<void> {
     // The daemon lists the sessions of the main checkout and of each of its worktrees, from the list of this window.
-    const found = (await reach(this.options.machine).records(dirname(this.path)))
+    const found = (
+      await reach(this.options.machine).records(this.options.machine ? undefined : dirname(this.path))
+    )
       .filter((one) => one.workspace === group.directory)
       .map((one) => ({ name: basename(one.life), path: one.life }));
     found.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));

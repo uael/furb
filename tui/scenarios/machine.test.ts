@@ -1,13 +1,13 @@
 // A window holds a life of the daemon of another machine of the tailnet as it holds a local one: the second daemon is a
 // process of its own that listens on loopback as on the tailnet, with a fake of the local API of Tailscale that names the
 // login of each peer, as host/tests/suite/net.rs does. The window dials its address through the one dial, lists its lives, opens
-// one and sends a message that the model answers. It refuses to delete that session, which stands on the other machine.
+// one and sends a message that the model answers. It lists the records that the machine names, and refuses to delete a session that stands on the machine.
 import { expect } from "bun:test";
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { type Daemon, furbProgram, daemon as local, machine } from "../src/client.ts";
 import { type Rule, scenario, test, Window, type Yard } from "./harness.ts";
 
@@ -64,6 +64,9 @@ async function onMachine(
     join(configs, "host.json"),
     JSON.stringify({ tailnet: { tcp: port }, roles: { [LOGIN]: "write" } }),
   );
+  // The list of workspaces of that machine, which its daemon reads to name the records of the sessions.
+  const listed = { directory: yard.work, name: "work", collapsed: false, records: [], archived: [] };
+  await writeFile(join(configs, "workspaces.json"), JSON.stringify({ workspaces: [listed] }));
   let second: ChildProcess | undefined;
   try {
     second = spawn(PROGRAM, ["host", "--grace", "2"], {
@@ -146,6 +149,28 @@ test("a window of another machine refuses to delete a session that its daemon ho
         );
         const here = await local().ask({ verb: "list" });
         expect(here.answer === "lives" && here.data.some((one) => one.life === remote)).toBe(false);
+      } finally {
+        await window.close();
+      }
+    }),
+  ));
+
+test("a window of a machine lists the records of the workspaces that the machine names, with no list of this machine on that machine", () =>
+  scenario(SCRIPT, (_first, yard) =>
+    onMachine(yard, async (_address, _link, remote) => {
+      // A record that stands on the machine, and that no window of this machine opened.
+      const far = join(dirname(remote), "far.jsonl");
+      await mkdir(dirname(remote), { recursive: true });
+      await writeFile(far, "");
+      const window = await Window.open(yard, remote);
+      try {
+        const paths = () => window.library.groups.flatMap((group) => group.sessions).map((one) => one.path);
+        await window.library.refresh();
+        expect(paths()).toContain(far);
+        // The list of this machine, which the machine does not hold, as another machine does not.
+        await rm(join(yard.root, "ui", "workspaces.json"));
+        await window.library.refresh();
+        expect(paths()).toContain(far);
       } finally {
         await window.close();
       }

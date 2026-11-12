@@ -200,8 +200,9 @@ export class Daemon extends EventEmitter {
   }
 
   /** The records of the sessions of each workspace of the list in a config folder, as the daemon reads them, and each
-   * record whose life the daemon holds. */
-  async records(config: string): Promise<Listed[]> {
+   * record whose life the daemon holds. With no folder the daemon reads the list of its own machine, as a window of
+   * another machine asks, since that machine holds no folder of this one. */
+  async records(config?: string): Promise<Listed[]> {
     const listed = await this.ask({ verb: "list", config });
     if (listed.answer !== "lives") throw new Error(`The daemon gave ${listed.answer}, and no list of lives.`);
     return listed.data;
