@@ -108,7 +108,8 @@ def pieces(value, text, literal):
     out.append("{" + ", ".join(mark + r for r in refs) + "}" if mark else " + ".join(refs))
     return f"__q[{len(out) - 1}]", 1
 
-  return [*out, put(value)[0]]
+  top = put(value)[0]
+  return [*out, top]
 
 
 def gathered(names, define, floor):

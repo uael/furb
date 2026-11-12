@@ -246,12 +246,13 @@ async def test_a_value_larger_than_one_eval_of_the_sandbox_takes_stands_in_chain
   data = checkpoint.gathered(vars(engine), lambda word: word, {})
   (held,) = [c["values"] for c in data["chains"] if c["id"] == root]
   assert isinstance(held["small"], str)
-  assert all(isinstance(held[name], list) for name in names[:-1])
+  assert all(isinstance(held[name], list) and len(held[name]) > 1 for name in names[:-1])
   log, _ = life(sown(), checkpoint.seed(vars(engine), data))
   (seat,) = [x[1] for x in said(log, "rung") if x[2] == OPERATOR and x[3] == root]
   for _ in range(40):
     if engine.over(seat):
       break
     await settle()
-  await engine.rung(told, on=root)
-  assert engine.module(root)["texts"] == before
+  again = await engine.rung(told.replace("texts = ", "again = "), on=root)
+  assert again is None
+  assert engine.module(root)["again"] == before
