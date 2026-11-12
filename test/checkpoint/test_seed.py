@@ -467,10 +467,10 @@ async def test_each_act_of_the_data_with_a_value_is_made_before_each_open_prompt
   assert len(said(log, "reply")) == 1
 
 
-async def test_the_prefix_of_a_born_chain_holds_no_question_started_or_done_of_an_act_that_seed_makes_again_so_each_act_of_the_data_stands_once_in_the_transcript_of_its_chain_after_the_facts_of_the_prefix() -> (
+async def test_the_prefix_of_a_born_chain_holds_no_question_started_or_done_of_an_act_that_seed_makes_again_so_each_act_of_the_data_stands_once_in_the_transcript_of_its_chain() -> (
   None
 ):
-  """The prefix of a born chain holds no question, started or done of an act that seed makes again, so each act of the data stands once in the transcript of its chain, after the facts of the prefix."""
+  """The prefix of a born chain holds no question, started or done of an act that seed makes again, so each act of the data stands once in the transcript of its chain: after the facts of the prefix, or in the prefix for an act on an open prompt, which seed does not make again."""
   _, _, root = born()
   work = engine.chain("work", on=root)
   await settle()
@@ -480,17 +480,23 @@ async def test_the_prefix_of_a_born_chain_holds_no_question_started_or_done_of_a
     "made = [x[1] for k in ('cd', 'read', 'write', 'chance', 'wait') for x in transcript(of=k)]"
   )
   await engine.rung(word, on=work)
-  await engine.rung("clock()\nstand()", on=root)
+  await engine.rung(f"clock()\nstand()\nwaiting = prompt(int, 'Wait.', on={work!r})", on=root)
   engine.close(7, engine.module(work)["job"])
+  note = engine.prompt(None, "Note.", on=engine.module(root)["waiting"])
   await settle()
   data = checkpoint.gathered(vars(engine), lambda one: one, {})
-  carried = {a["id"]: a["kind"] for a in data["acts"]}
+  carried = {a["id"]: (a["kind"], a["on"]) for a in data["acts"]}
+  opened = {a["id"] for a in data["acts"] if "value" not in a}
   life(sown(), checkpoint.seed(vars(engine), data))
   await settle()
-  assert {"stand", "clock", "prompt", "bash", "read", "write", "wait", "cd", "chance"} <= {*carried.values()}
-  for one, kind in carried.items():
-    facts = engine.transcript(engine.scope(one))
+  assert {"stand", "clock", "prompt", "bash", "read", "write", "wait", "cd", "chance"} <= {
+    x for x, _ in carried.values()
+  }
+  assert carried[note][1] in opened
+  for one, (kind, on) in carried.items():
+    facts = engine.transcript(engine.scope(on))
     asked = [n for n, x in enumerate(facts) if x[:2] == (kind, one)]
     ended = [x for x in facts if x[:2] == ("done", one)]
     told = [n for n, x in enumerate(facts) if x[:2] == ("tell", one)]
-    assert (len(asked), len(ended), asked[0] > max(told, default=-1)) == (1, 1, True), one
+    assert (len(asked), len(ended)) == (1, int(one not in opened)), one
+    assert one in opened or on in opened or asked[0] > max(told, default=-1), one

@@ -23,7 +23,10 @@ def seed(names, data):
     words and entries.append(((sort, called, *words),))
 
   asking = {a["on"] for a in data["acts"] if "value" not in a}
-  kinds = {x["id"]: x["kind"] for x in data["acts"]}
+  # The journal makes no act whose thread it does not know yet, and an open prompt comes after each act with a value,
+  # so seed makes no act on an open prompt again, and its facts stay in the prefix.
+  opened = {a["id"] for a in data["acts"] if "value" not in a}
+  kinds = {x["id"]: x["kind"] for x in data["acts"] if x["on"] not in opened}
   parts = {}
   for c in data["chains"]:
     put("chain", i := c["id"], operator, c["on"], c["label"], "")
