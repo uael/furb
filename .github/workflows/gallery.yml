@@ -87,9 +87,10 @@ jobs:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
       - run: bun run build
-      # The watcher ends the largest capture when the memory of the runner is tight, and says so in the log.
+      # The watcher ends the largest capture when the memory of the runner is tight, and says so in the log. Nothing else
+      # runs on the runner, so the work is the only cause: FURB_WATCH_LANE=0 gives no size to reach first.
       - run: |
-          sh script/memwatch.sh & watch=$!
+          FURB_WATCH_LANE=0 sh script/memwatch.sh & watch=$!
           trap 'kill "$watch"' EXIT
           bun run screenshots
           bun run animation

@@ -72,7 +72,8 @@ test.skipIf(process.platform === "win32")(
       chmodSync(join(shim, "ps"), 0o755);
       chmodSync(join(shim, "sysctl"), 0o755);
       const look = Bun.spawnSync(["sh", watcher, "--once"], {
-        env: { ...process.env, PATH: `${shim}:${process.env.PATH}` },
+        // The fake children hold 4000 MB in all, under the sizes that make the work the cause by default.
+        env: { ...process.env, PATH: `${shim}:${process.env.PATH}`, FURB_WATCH_MIN: "1" },
       });
       expect(look.stdout.toString()).toBe(
         `memwatch: pressure level 4, ended pid ${pids[0]} (3000 MB): bun test ./big.test.ts\n`,

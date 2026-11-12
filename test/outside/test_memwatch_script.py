@@ -1,6 +1,7 @@
 # ruff: noqa: S603, S607
 import contextlib
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -37,11 +38,13 @@ def machine(tmp: Path, level: int, rows: list[Row], *, mac: bool = True) -> None
 def env(tmp: Path, **more: str) -> dict[str, str]:
   kept = {n: v for n, v in os.environ.items() if not n.startswith("FURB_WATCH_")}
   log = {"FURB_WATCH_LOG": str(tmp / "watch.log")}
-  return {**kept, "PATH": f"{tmp / 'shim'}{os.pathsep}{os.environ['PATH']}", **log, **more}
+  # A test process that runs away holds 4 GB by default, so the fake processes of most tests, which hold less, run with a
+  # size of one KB, and a test of the default gives an empty value.
+  return {**kept, "PATH": f"{tmp / 'shim'}{os.pathsep}{os.environ['PATH']}", **log, "FURB_WATCH_MIN": "1", **more}
 
 
-def watch(tmp: Path, **more: str) -> subprocess.CompletedProcess[str]:
-  args = ["sh", str(SCRIPT), "--once"]
+def watch(tmp: Path, script: Path = SCRIPT, **more: str) -> subprocess.CompletedProcess[str]:
+  args = ["sh", str(script), "--once"]
   return subprocess.run(args, env=env(tmp, **more), text=True, capture_output=True, timeout=30, check=False)
 
 
@@ -189,3 +192,80 @@ def test_each_process_that_it_ends_is_a_line_of_its_log_with_its_time_and_pid(tm
     watch(tmp_path)
   when, pid, command = (tmp_path / "watch.log").read_text(encoding="utf-8").rstrip("\n").split(" ", 2)
   assert before <= int(when) <= time.time() and int(pid) == procs[0].pid and command == "bun test ./a.test.ts"
+
+
+def clone(tmp: Path) -> tuple[Path, Path]:
+  """A git clone that holds the script, with a second tree beside it: the script to run, and the second tree."""
+  root = (tmp / "clone").resolve()
+  (root / "script").mkdir(parents=True)
+  shutil.copy(SCRIPT, root / "script" / "memwatch.sh")
+  git = ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+  git += ["-c", f"core.hooksPath={os.devnull}"]
+  subprocess.run(["git", "init", "-q", str(root)], check=True)
+  subprocess.run([*git, "add", "-A"], check=True)
+  subprocess.run([*git, "commit", "-qm", "x"], check=True)
+  other = (tmp / "other").resolve()
+  subprocess.run([*git, "worktree", "add", "-q", str(other), "-b", "other"], check=True)
+  return root / "script" / "memwatch.sh", other
+
+
+def test_a_tight_memory_that_the_work_does_not_hold_ends_no_test_process_and_says_so(tmp_path: Path) -> None:
+  with fakes(3) as procs:
+    machine(
+      tmp_path,
+      2,
+      [
+        (procs[0].pid, 300 * MB, "bun test ./a.test.ts", MINE),
+        (procs[1].pid, 20000 * MB, "Chrome", MINE),
+        (procs[2].pid, 9000 * MB, "/elsewhere/furb/target/debug/rustc --crate-name y", MINE),
+      ],
+    )
+    got = watch(tmp_path, FURB_WATCH_MIN="")
+    assert [one.poll() for one in procs] == [None] * 3
+  said = "the work is not the cause (it holds 300 MB, its largest test process 300 MB): none ended"
+  assert got.stdout == f"memwatch: pressure level 2, and {said}\n"
+
+
+def test_a_capture_of_the_gallery_is_no_runaway_while_the_work_holds_little(tmp_path: Path) -> None:
+  with fakes(1) as procs:
+    machine(tmp_path, 2, [(procs[0].pid, 1500 * MB, "/opt/bun/bin/bun /w/tui/script/screenshots.ts", MINE)])
+    got = watch(tmp_path, FURB_WATCH_MIN="")
+    assert procs[0].poll() is None
+  assert "the work is not the cause (it holds 1500 MB, its largest test process 1500 MB): none ended" in got.stdout
+
+
+def test_a_test_process_that_holds_4_gb_is_ended_by_default(tmp_path: Path) -> None:
+  with fakes(1) as procs:
+    machine(tmp_path, 2, [(procs[0].pid, 4500 * MB, "bun test ./a.test.ts", MINE)])
+    got = watch(tmp_path, FURB_WATCH_MIN="")
+    assert procs[0].wait(timeout=10) == -signal.SIGKILL
+  assert got.stdout == f"memwatch: pressure level 2, ended pid {procs[0].pid} (4500 MB): bun test ./a.test.ts\n"
+
+
+def test_a_work_that_holds_the_size_of_its_limit_ends_the_largest_test_process(tmp_path: Path) -> None:
+  with fakes(1) as procs:
+    machine(tmp_path, 2, [(procs[0].pid, 300 * MB, "bun test ./a.test.ts", MINE)])
+    got = watch(tmp_path, FURB_WATCH_MIN="", FURB_WATCH_LANE="1")
+    assert procs[0].wait(timeout=10) == -signal.SIGKILL
+  assert got.stdout == f"memwatch: pressure level 2, ended pid {procs[0].pid} (300 MB): bun test ./a.test.ts\n"
+
+
+@pytest.mark.parametrize(("size", "ended"), [(3000, True), (2000, False)])
+def test_the_work_is_each_test_process_and_each_process_that_names_a_tree_of_the_clone(
+  tmp_path: Path, size: int, *, ended: bool
+) -> None:
+  script, other = clone(tmp_path)
+  names = [
+    f"{other}/target/debug/deps/furb-0123456789abcdef --test-threads 4",
+    f"{other}/node_modules/.bin/esbuild --serve",
+    f"{script.parents[1]}/target/debug/rustc --crate-name x",
+  ]
+  with fakes(3) as procs:
+    machine(tmp_path, 2, [(one.pid, size * MB, name, MINE) for one, name in zip(procs, names, strict=True)])
+    got = watch(tmp_path, script, FURB_WATCH_MIN="")
+    if ended:
+      assert procs[0].wait(timeout=10) == -signal.SIGKILL
+      assert [one.poll() for one in procs[1:]] == [None] * 2
+    else:
+      assert [one.poll() for one in procs] == [None] * 3
+  assert ("ended pid" in got.stdout) == ended, got.stdout
