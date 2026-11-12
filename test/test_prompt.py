@@ -32,7 +32,7 @@ from furb.engine import OPERATOR, Act, Exit, Refused, Text
 
 
 async def test_a_prompt_it_makes_the_rung_of_one_turn_of_its_model() -> None:
-  """A prompt: it makes the rung of one turn of its model, makes another when no rung that it made runs, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike."""
+  """A prompt: it makes the rung of the first turn of its model, its chain makes one more rung of it at each fact that makes it due, and it is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike."""
   _, log, root = born("k = BAD", "raise ValueError('boom')", "close(7)")
   act = engine.prompt(int, "try", on=root)
   assert await act == 7
@@ -517,7 +517,7 @@ async def test_a_done_whose_value_is_none_makes_no_acknowledgment() -> None:
 
 
 async def test_the_end_of_an_act_of_an_open_thread_makes_no_acknowledgment() -> None:
-  """The end of an act of an open thread makes no acknowledgment: the tell of that act is the fact that asks its thread, once no word that made that act runs, also while a word of the thread awaits another act."""
+  """The end of an act of an open thread makes no acknowledgment: that end is the fact that makes its thread due, once no word that made that act runs, also while a word of the thread awaits another act."""
   sand, log, root = born("x = bash('slow')\nawait bash('slow')", "pass", "close(3)", auto=False)
   task = engine.prompt(int, "task", to="m/high", on=root)
   await settle()
@@ -596,7 +596,7 @@ async def test_a_prompt_of_none_on_a_thread_that_is_open_is_a_message_of_that_th
 
 
 async def test_a_message_makes_a_rung_of_its_thread_while_a_word_of_the_thread_awaits() -> None:
-  """When a message lands and each open rung of its thread has advanced, the prompt of the thread makes a rung for it, even while a word of the thread awaits, so its model reads the message before that wait ends."""
+  """When a message lands on a thread that has no rung that waits for its reply, the chain makes a rung of the thread for it, even while a word of the thread awaits, so its model reads the message before that wait ends."""
   _, log, root = born("await wait(60, __name__)", "close(prompt2_message)", auto=False)
   first = engine.prompt(str, "work", on=root)
   await settle()

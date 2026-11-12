@@ -303,8 +303,11 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
       while crafted(id):
         yield {"rung"}
     yield opened(id, named, message=message, thread=thread)
+    ready = asks
     while not says:
-      asks and not (paused(id) or any(id in x[2:4] and not over(x[1]) for x in transcript(id, "rung"))) and rung(to=to)
+      if ready and not paused(id):
+        rung(to=to)
+        ready = False
       yield {id}
     yield "done", id, None
 
@@ -325,17 +328,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
-    blocked, running, waiting, last, heard, came, owed, barren, wrote = (
-      set(),
-      {},
-      {},
-      standing(),
-      [],
-      {},
-      {},
-      Counter(),
-      {},
-    )
+    blocked, running, waiting, last, heard, held, due = set(), set(), {}, standing(), [], set(), set()
+    barren, wrote, inbox, owed, took, awaited = {}, {}, {}, {}, {}, {}
     step = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
@@ -356,13 +350,13 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       return went
 
     def thread(of):
-      return next((g for g in [*lineage(get(of)[2]), get(of)[3]] if prompted(g)), "")
+      return next((g for g in lineage(of) if prompted(g)), "")
 
-    def busy(of):
-      return any(
-        x != of and under(x, of) and not over(x) and (x in ladder or get(x)[0] in ("prompt", "bash"))
-        for x in listening()
-      )
+    def heed(of):
+      if of in barren:
+        due.add(of)
+        barren[of] = 0
+        wrote.pop(of, 0)
 
     def bind(whose):
       w = "\n\n".join(heard)
@@ -441,39 +435,64 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             placed(
               last[1] * (was[1] != last[1]) * all(get(x[2]) and all(get(x[2])[4::2]) for x in transcript(id, "cd"))
             )
-        case ("done", about, _, value) if running.get(maker := r[2]) in (
-          False,
-          isinstance(value, Exception) and r[0] != "reply" and "",
-        ) and repr(about) not in str(
-          transcript(id, "wants") + [x[1] for x in transcript(id, "close") if scope(x[2]) == id != x[2]]
-        ):
-          scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
-          if isinstance(value, Exception):
-            ours = thread(about)
-            (over(ours) and prompt(None, about + " done", on=ours)) or came.setdefault(ours, []).append(about + " done")
         case ("done", _, by, Refused() as why) if (
           r[0] == "reply"
           and r[3] != id
           and (paused(r[3]) or not by)
-          and (maker := (get(p := get(r[2])[2]) or a)[2]) in running
+          and scope(maker := (get(p := get(r[2])[2]) or a)[2]) == id
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
-      a[0] == "wake" and [barren.pop(x) for x in [*barren] if covers(a, x)]
+          heed(thread(maker))
+        case ("prompt", m, by, p, "None", *_) if p in barren and thread(by) != p:
+          heed(p)
+          operated(by) and inbox.setdefault(p, []).append(m)
+        case ("pause", about, by, _) if scope(by) != id == scope(about):
+          heed(thread(r[2]))
+        case ("close" | "cancel", about, by, *_) if r[2] in running or thread(by) == thread(r[2]):
+          held.discard(about)
+        case ("done", about, _, value) if (
+          about in held
+          and scope(maker := r[2]) == id
+          and not prompted(maker)
+          and (maker not in waiting or isinstance(value, Exception))
+          and not any(about in (c, *get(c)[5:]) for c in awaited.values())
+        ):
+          if maker in running:
+            value is not None and (p := thread(maker)) in barren and due.add(p)
+          else:
+            scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
+            heed(p := thread(maker))
+            if isinstance(value, Exception):
+              if p in barren:
+                inbox.setdefault(p, []).append(about + " done")
+              elif over(p):
+                prompt(None, about + " done", on=p)
+      a[0] == "wake" and [heed(x) for x in barren if covers(a, x)]
+      if get(a[1]) and (a[0] in ("prompt", "rung") or (a[0] == "started" and not get(a[2]) and r[0] != "reply")):
+        held.add(a[1])
+      elif a[0] == "done":
+        held.discard(a[1])
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
         waiting.pop(a[1], None)
-      if a[0] == "done" and a[1] in ladder and prompted(p := r[2]) and not over(p):
+      if a[0] == "done" and r[0] == "rung" and (p := r[2]) in barren and not isinstance(a[3], CancelledError):
         made = transcript(id, a[1])
-        answered = any(x[0] == "close" or (x[0] == "prompt" and operated(x[6])) for x in made)
-        broke = isinstance(a[3], Exception)
-        owed[p] = owed.get(p, []) * (not answered)
-        fruit = not broke and (busy(p) or (ladder[a[1]] != wrote.get(p) and any(x[0] == "tell" for x in made)))
-        barren[p] = (barren[p] + 1) * bool(owed[p] or not fruit)
-        wrote[p] = ladder[a[1]]
-        (owed[p] or broke) and came.setdefault(p, [])
+        kinds = {x[0] for x in made}
+        debt = owed.get(p, [])
+        if "close" in kinds or any(x[0] == "prompt" and operated(x[6]) for x in made):
+          debt = owed[p] = [x for x in debt if x not in took.get(a[1], [])]
+        broke, waited, word = isinstance(a[3], Exception), a[1] in awaited, ladder.get(a[1])
+        busy = any(thread(get(x)[2]) == p for x in held)
+        written = wrote.setdefault(p, [])
+        barren[p] = (barren[p] + 1) * bool(
+          broke or debt or (not waited and (word in written or kinds <= {"started", "ready", "done", "reply", "tell"}))
+        )
+        written.append(word)
         if barren[p] // 3:
-          pause(p, owed[p] or "made nothing")
+          (debt or not busy) and pause(p, debt or "made nothing")
+        elif debt or broke or waited or "tell" in kinds or not busy:
+          due.add(p)
       match a:
         case ("carried", *_):
           top = ""
@@ -500,23 +519,26 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           else:
             seat = placed(last[1])
         case ("rung", rid, by, _, "", *_):
-          waiting[rid] = running[rid] = ""
+          waiting[rid] = ""
+          prompted(by) and not over(by) and barren.setdefault(by, 0)
         case ("tell", about, by, notes) if notes not in (["chain()"], [*r[4:5]]):
           heard.append("\n".join(notes))
           if a is note:
             note = bind(step)
-          elif not any(x in running and running[x] is not False for x in lineage(about)):
-            came.setdefault(thread(about), [])
         case ("done", about, *_) if about == note and step in waiting:
+          if (p := get(step)[2]) in barren:
+            due.discard(p)
+            took[step] = owed[p] = owed.get(p, []) + [x for x in inbox.pop(p, []) if prompted(x)]
           with site.set(step):
-            reply = act("reply", id, controlled(idle), to)
+            waiting[step] = reply = act("reply", id, controlled(idle), to)
         case ("ready", rid, _, word):
           try:
             rid == step or bind(rid)
             ladder[(donor := r[5]) or rid] = word
             found = tells(rid) and gate(word)
             if not found:
-              running[rid] = act("run", id, None, rid, unquoted(word), donor)
+              act("run", id, None, rid, unquoted(word), donor)
+              running.add(rid)
           except Refused as e:
             found = [str(e)]
           if found:
@@ -525,62 +547,46 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             close(Refused(*found), rid)
         case ("done", _, "", Refused() as why) if r[0] == "reply":
           pause(id, why)
-        case ("prompt", m, by, p, "None", *_) if prompted(p) and operated(by):
-          came.setdefault(p, []).append(m)
-        case ("done", about, *_) if prompted(about):
-          for message in came.pop(about, []):
+        case ("done", about, *_) if about in barren:
+          due.discard(about)
+          for fold in (barren, owed, wrote):
+            fold.pop(about, None)
+          for message in inbox.pop(about, []):
             if prompted(message):
               with site.set(message):
                 rung(to=r[6])
             else:
               prompt(None, message, on=about)
       if r[0] == "run":
-        running[r[4]] = a[0] != "done" or (question(("rung", r[4])) and not over(r[4]))
+        running.discard(r[4]) if a[0] == "done" and (over(r[4]) or not get(r[4])) else running.add(r[4])
       elif r[0] == "wants":
-        running[get(r[2])[4]] = a[0] != "started"
-      elif r[0] == "rung" and a[0] == "done":
-        running[a[1]] = False
-      if any(running.values()):
+        rid = get(r[2])[4]
+        running.discard(rid) if a[0] == "started" else running.add(rid)
+        if a[0] == "wants" and not over(r[4]):
+          awaited[rid] = r[4]
+      elif a[0] == "done":
+        running.discard(a[1])
+        took.pop(a[1], None)
+        awaited.pop(a[1], None)
+      if running:
         continue
-      for lone in [
-        x
-        for x in came
-        if scope(x) == id
-        and not over(x)
-        and x not in {y[2] for y in transcript(id, "rung") if not (over(y[1]) or y[1] in ladder or y[4])}
-      ]:
-        with site.set(lone):
-          made = rung(to=get(lone)[6])
-        waiting[made] = running[made] = ""
       if (step not in waiting or paused(step)) and (
-        (
-          got := next(
-            (
-              x
-              for x in waiting
-              if not (
-                paused(x)
-                or over(x)
-                or x in {y[2] for y in transcript(id, "reply") if not over(y[1])}
-                or (prompted(t := get(x)[2]) and t not in came and busy(t))
-              )
-            ),
-            "",
-          )
-        ),
+        (got := next((x for x in waiting if not (paused(x) or over(x) or waiting[x])), "")),
         step := got or step * (step in waiting),
       )[0]:
         maker, to = get(step)[2::4]
         if offered(last[0], to) is None:
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
-          owed[maker] = owed.get(maker, []) + [x for x in came.pop(maker, []) if prompted(x)]
           note = yield told(
             step,
             "advance on " + maker,
             share=filled(reply) or None,
-            waits=[c for *_, c in transcript(id, "wants") if not over(c)] or None,
+            waits=[c for c in awaited.values() if not over(c)] or None,
           )
+      for lone in [x for x in due if not (over(x) or paused(x) or x in {get(y)[2] for y in waiting})]:
+        with site.set(lone):
+          waiting[rung(to=get(lone)[6])] = ""
 
   return act("chain", on, ear, label, source, *[kept] * (kept is not None))
 

@@ -1182,7 +1182,7 @@ async def test_the_chain_retells_the_rungs_of_its_origin_through_the_program_of_
 
 async def test_a_replay_makes_the_rungs_of_a_chain_again_from_its_donor() -> None:
   """A replay makes the rungs of a chain again from its donor: it keeps each rung of the ladder whose word is the next part of the words it is given, it makes one rung of what is left, and every other rung of the ladder is gone."""
-  _, log, root = born("a = 1\ndebug(t'go')", "b = 2\ndebug(t'go')", "c = 3\ndebug(t'go')", "close(None)")
+  _, log, root = born("a = 1\ndebug(t'go')", "b = chance()\ndebug(t'go')", "c = 3\ndebug(t'go')", "close(None)")
   act = engine.prompt(None, "count", on=root)
   assert await act is None
   await settle()
@@ -1388,7 +1388,7 @@ async def test_the_chain_advances_no_rung_after_a_word_that_told_nothing_while_a
   world_says("done", said(log, "bash")[0][1], engine.Exit(0, engine.Text("o"), engine.Text("e")))
   assert await one == 1
   assert len(said(log, "reply")) == 2
-  _, log, root = born("p = prompt(int, 'count', on=chain('two'))\ndebug(t'{1}')", "close(1)", auto=False)
+  _, log, root = born("p = prompt(int, 'count', on=chain('two'))", "close(1)", auto=False)
   one = engine.prompt(int, "count", on=root)
   await settle()
   for grace in said(log, "wait"):
@@ -1468,7 +1468,7 @@ async def test_the_chain_asks_a_new_prompt_while_a_word_awaits_a_wait_that_is_no
 
 
 async def test_a_thread_is_asked_again_exactly_when_a_new_fact_for_it_came_since_its_last_ask() -> None:
-  """A thread is asked again exactly when a new fact for it came since its last ask, so no thread rests with no ask due, no pause and no tell: the end of a step that leaves no act of the thread open, a fact that a speaker said of an act of the thread while no word that made that act runs, a message on it, or its own word refused or raised."""
+  """A thread is asked again exactly when a new fact for it came since its last ask, so it rests only when it is over, when it is paused, or when nothing new came for it; this rule is of a thread that is open and that a model answers."""
   words = (
     "x = read('/w/a.txt', show=HIDDEN)",
     "prompt(None, 'on it', to=OPERATOR)",
@@ -1585,7 +1585,7 @@ async def test_the_chain_asks_the_model_of_a_rung_for_its_word_by_a_reply() -> N
 
 
 async def test_when_an_act_that_a_rung_made_on_another_chain_is_done_the_chain_tells_it() -> None:
-  """When an act that a rung of the chain made on another chain is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript."""
+  """When an open act that a rung of the chain made on another chain, a prompt, a rung or an act that the outside started, is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript."""
   word = "far = chain('far')\nx = prompt(str, 'one', on=far)\ny = prompt(str, 'two', to=OPERATOR, on=far)\nclose(1)"
   sand, log, root = born(word, "close(await y)")
   sand.script["chain2"] = ["close('a\\nb')"]
@@ -1626,7 +1626,7 @@ class Down(Sand):
 
 
 async def test_the_chain_tells_the_pause_of_a_prompt_that_one_of_its_rungs_made_on_another_chain() -> None:
-  """When the chain of a prompt that a rung of the chain made on another chain pauses at a refused reply of that prompt, the chain tells that rung under the header paused and binds the refusal under the word why, and when the word of that rung does not run it acknowledges the pause, so a model sees that the prompt waits for a wake."""
+  """When the chain of a prompt that a rung of the chain made on another chain pauses at a refused reply of that prompt, the chain tells that rung under the header paused and binds the refusal under the word why, and the thread of that rung is due, so a model sees that the prompt waits for a wake."""
   sand = Down()
   log, root = life(sand)
   sand.script[root] = ["lane = chain('lane')\nwork = prompt(int, 'work', on=lane)\nclose(0)", "close(None)"]
@@ -1668,36 +1668,57 @@ async def test_a_statement_that_the_model_of_a_rung_writes_runs_after_the_told_r
   assert engine.module(root)["k"] == "root"
 
 
-async def test_a_step_is_barren_and_the_third_barren_step_in_a_row_pauses_the_thread_until_a_wake() -> None:
-  """A step is barren when it raises or the gate refuses it, when it leaves no act of its thread open and repeats the last word of the thread or tells nothing, as a word that only binds or only sends a note to the operator, and when it leaves a message of a person on its thread unanswered, whatever it leaves open; the third barren step in a row pauses the thread until a wake, with a why that names each message that it leaves unanswered, or says made nothing."""
-  _, log, root = born("('a', 1)", "The answer stands.", "pass", "close(1)", auto=False)
+async def test_a_step_is_barren_when_it_raises_makes_nothing_repeats_a_word_or_leaves_a_message_owed() -> None:
+  """A step is barren when it raises or the gate refuses it, when it made no act, closed no prompt and no act that it awaited ended, as a step that only passes, binds a name or debugs, when it repeats a word that its thread wrote since the last fact that made the thread due and no act that it awaited ended, and when it leaves a message of a person owed, whatever else it did; an act is each question that the step made but its reply and each control that it said, and an act that was over before the await is no end."""
+  for word in ("raise ValueError('x')", "1/0", "The answer stands.", "close('a')", "pass", "x = 1", "debug(t'{1}')"):
+    assert await looped(word) == (3, True, ["made nothing"]), word
+  for word in ("prompt(None, 'working', to=OPERATOR)", "x = read('a.txt')", "x = clock()"):
+    assert await looped(word) == (4, True, ["made nothing"]), word
+  _, log, root = born("b = bash('ls')\nawait b", "await b", "await b\nx = 1", "await b\nx = 2", "await b\nx = 3")
   one = engine.prompt(int, "count", on=root)
-  for _ in range(4):
-    await settle()
-  assert (len(said(log, "reply")), engine.peek(one, ...), engine.paused(one)) == (3, ..., True)
-  assert said(log, "pause")[-1][3] == "made nothing"
-  engine.wake(one)
-  assert await one == 1
-  assert len(said(log, "reply")) == 4
-  _, log, root = born(*["debug(t'{1}')"] * 6, auto=False)
-  one = engine.prompt(int, "count", on=root)
-  for _ in range(4):
+  for _ in range(12):
     await settle()
   assert (len(said(log, "reply")), engine.paused(one)) == (4, True)
-  _, log, root = born(*["close('a')"] * 6, auto=False)
+  words = [f"x{n} = read('a.txt')" for n in range(4)]
+  _, log, root = born("await wait(600, __name__)", *words, auto=False)
   one = engine.prompt(int, "count", on=root)
-  for _ in range(4):
+  await settle()
+  note = engine.prompt(None, "go on", on=one)
+  for _ in range(6):
     await settle()
-  assert (len(said(log, "reply")), engine.paused(one)) == (3, True)
+  assert (len(said(log, "reply")), engine.paused(one), said(log, "pause")[-1][3]) == (4, True, [note])
+
+
+async def test_the_third_barren_step_in_a_row_pauses_the_thread_or_lets_it_rest_on_its_open_acts() -> None:
+  """The third barren step in a row pauses the thread when it owes a message, with a why that names each owed message, or when no act of it is open, with the why made nothing, and in each other case the thread rests with no pause until a fact makes it due; so a loop of one word, two words in turn that each only debug and a loop of passes while a grant tells its ledger end at the third step, and two words in turn that each read a file end at the fifth, while a loop whose each step awaits an act that ends has no bound here: the time of each act bounds it, and a grant bounds its spend."""
+  assert await looped("('a', 1)") == (3, True, ["made nothing"])
+  assert await looped("debug(t'a')", "debug(t'b')") == (3, True, ["made nothing"])
+  assert await looped("x = read('a.txt')", "y = read('a.txt')") == (5, True, ["made nothing"])
+  assert await looped("await bash('ls')") == (13, False, [])
+  sand, log, root = born("g = grant(usd=1000)\nx = bash('slow')", *["pass"] * 6, auto=False)
+  one = engine.prompt(int, "count", on=root)
+  await lingered(log)
+  sand.exits(said(log, "bash")[0][1], 0)
+  for _ in range(8):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one), said(log, "pause")[-1][3]) == (4, True, "made nothing")
   _, log, root = born("await wait(600, __name__)", "pass", "pass", "pass", "close(2)", auto=False)
   one = engine.prompt(int, "count", on=root)
   await settle()
   note = engine.prompt(None, "go on", on=one)
-  for _ in range(4):
+  for _ in range(6):
     await settle()
   assert (len(said(log, "reply")), engine.paused(one), said(log, "pause")[-1][3]) == (4, True, [note])
   engine.wake(one)
   assert await one == 2
+  sand, log, root = born("x = bash('slow')\nawait wait(600, __name__)", *["raise ValueError('x')"] * 6, auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(3):
+    await settle()
+  sand.exits(said(log, "bash")[0][1], 0)
+  for _ in range(8):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one), said(log, "pause")) == (4, False, [])
   sand, log, root = born(
     "made = [bash('slow') for _ in range(3)]\nawait wait(600, __name__)", *["pass"] * 4, auto=False
   )
@@ -1780,7 +1801,7 @@ async def test_a_word_that_only_debugs_tells_what_it_debugged_so_the_chain_asks_
 
 
 async def test_a_message_of_a_person_on_a_thread_is_owed_until_a_step_that_read_it_answers_it() -> None:
-  """A message of a person on a thread is owed until a step that read it closes a prompt or prompts a person, and while it is owed its thread is asked again; when its thread is over, closed before or after the message came, the chain asks the model for each message that no reply read in a rung that the message makes, so the answer goes on the same thread."""
+  """A message of a person on a thread is owed from the reply that read it until a step that read it closes a prompt or prompts a person, and each step whose reply was asked after the message read it, not the first one alone; when its thread is over, closed before or after the message came, the chain asks the model for each message that no reply read in a rung that the message makes, so the answer goes on the same thread."""
   sand, log, root, act, _, reply = await waiting()
   second = engine.prompt(None, "second", on=act)
   await settle()
@@ -1808,6 +1829,22 @@ async def test_a_message_of_a_person_on_a_thread_is_owed_until_a_step_that_read_
   engine.prompt(None, "use this", on=act)
   assert await act == 2
   assert len(said(log, "reply")) == 3
+  _, log, root = born("await wait(600, __name__)", "x = 1", "prompt(None, 'on it', to=OPERATOR)", "pass", auto=False)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  engine.prompt(None, "status?", on=act)
+  for _ in range(8):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(act), said(log, "pause")) == (3, False, [])
+  sand, log, root = born("await bash('slow')\nprompt(None, 'part done', to=OPERATOR)", *["pass"] * 5, auto=False)
+  act = engine.prompt(int, "count", on=root)
+  for _ in range(3):
+    await settle()
+  unread = engine.prompt(None, "status?", on=act)
+  sand.exits(said(log, "bash")[0][1], 0)
+  for _ in range(8):
+    await settle()
+  assert (engine.paused(act), [a[3] for a in said(log, "pause")]) == (True, [[unread]])
 
 
 async def test_a_thread_is_asked_again_only_for_a_fact_of_its_own() -> None:
@@ -1853,3 +1890,338 @@ async def test_each_scan_of_all_its_facts_that_the_ear_of_a_chain_makes_at_a_fac
   assert await engine.rung("for i in range(300):\n  chance()", on=root) is None
   assert len(engine.transcript(root)) > 600
   assert await work("x = 1") <= first
+
+
+async def lingered(log: list[tuple]) -> None:
+  """Room for the loop, then the end of each wait by which a word that is over waits for its commands, then room
+  again."""
+  for _ in range(3):
+    await settle()
+  for linger in said(log, "wait"):
+    if engine.get(engine.get(linger[1])[2])[0] == "run" and not engine.over(linger[1]):
+      world_says("done", linger[1], None)
+  for _ in range(3):
+    await settle()
+
+
+async def looped(*words: str) -> tuple[int, bool, list]:
+  """A thread whose model answers the same words in turn: the replies that the life asked, whether the thread is
+  paused, and the cause of each pause."""
+  _, log, root = born(*[*words] * 12)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(14):
+    await settle()
+  return len(said(log, "reply")), engine.paused(one), [a[3] for a in said(log, "pause")]
+
+
+@dataclass
+class Fetching(Sand):
+  """A World that starts an act of its own kind and does not end it, as the World of an extension starts a fetch."""
+
+  def hear(self, a: tuple) -> World:
+    match a:
+      case ("fetch", about, *_):
+        yield "started", about
+      case _:
+        yield from super().hear(a)
+
+
+async def test_a_thread_is_due_when_it_is_made_at_a_wake_that_covers_it_and_at_a_message_on_it() -> None:
+  """A thread is due, one time for one fact, and its count of barren steps starts again, when it is made, at a wake that covers it, and at a message on it of a person or of a model whose word is no word of the thread, as a word of another thread of its chain, of a thread that a word of it made, or of another chain."""
+  first = "[x[1] for x in transcript(of='prompt') if x[5] == 'count'][0]"
+  word = f"prompt(None, 'need x', on={first})\nawait wait(600, __name__)"
+  _, log, root = born("q = prompt(int, 'sub')\nawait wait(600, __name__)", word, "close(1)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(10):
+    await settle()
+  assert (len(said(log, "reply")), engine.peek(one, ...)) == (3, 1)
+  sand, log, root = born(auto=False)
+  side = engine.chain("w", on=root)
+  await settle()
+  sand.script[side] = ["await wait(600, __name__)", "close(1)"]
+  worker = engine.prompt(int, "work", on=side)
+  for _ in range(3):
+    await settle()
+  sand.script[root] = [f"prompt(None, 'status?', on={str(worker)!r})\nclose(2)"]
+  assert await engine.prompt(int, "lead", on=root) == 2
+  assert await worker == 1
+  assert len([a for a in said(log, "reply") if a[3] == side]) == 2
+  _, log, root = born("await wait(600, __name__)", "prompt(None, 'on it', to=OPERATOR)", "pass", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  await settle()
+  engine.prompt(None, "status?", on=one)
+  for _ in range(6):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one)) == (2, False)
+  _, log, root = born(*["pass"] * 6, auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(6):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one)) == (3, True)
+  engine.wake(one)
+  for _ in range(6):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one)) == (6, True)
+
+
+async def test_an_open_act_of_a_thread_is_an_act_that_the_outside_started_or_a_prompt_or_a_rung() -> None:
+  """An open act of a thread is an act that a word of the thread made and that the outside started, or a prompt or a rung that such a word made, from its start to its done, so an act with an ear of its own that never ends, as a chain or a grant, is no open act."""
+  sand = Fetching(files={"/w/a.txt": "one\n"})
+  log, root = life(sand)
+  sand.script[root] = ["x = act('fetch', '', None, 'u')", "close(1)"]
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(6):
+    await settle()
+  assert (len(said(log, "reply")), engine.peek(one, ...), engine.over(said(log, "fetch")[0][1])) == (1, ..., False)
+  for word in ("q = prompt(int, 'ask', to=OPERATOR)", "r = rung('await wait(600, __name__)')"):
+    _, log, root = born(word, "close(1)", auto=False)
+    one = engine.prompt(int, "count", on=root)
+    for _ in range(6):
+      await settle()
+    assert (word, len(said(log, "reply")), engine.peek(one, ...)) == (word, 1, ...)
+  _, log, root = born("g = grant(usd=1000)\nc = chain('side')", "pass", "pass", "pass", "close(1)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(8):
+    await settle()
+  ceiling = said(log, "grant")[0][1]
+  assert (len(said(log, "reply")), engine.paused(one), engine.over(ceiling)) == (4, True, False)
+  assert said(log, "pause")[-1][3] == "made nothing"
+
+
+async def test_the_end_of_an_open_act_that_no_word_of_its_thread_awaits_makes_the_thread_due() -> None:
+  """The end of an open act of a thread that no word of that thread awaits makes the thread due as a message does, whether that end tells a paragraph or none: a hidden command, the answer of a model or of a person to a prompt, an act of another kind that the outside started, and a wait that timed out."""
+  sand, log, root = born("x = bash('slow', show=HIDDEN)", "close(1)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  await lingered(log)
+  assert len(said(log, "reply")) == 1
+  sand.exits(said(log, "bash")[0][1], 0)
+  assert await one == 1
+  assert len(said(log, "reply")) == 2
+  _, log, root = born("q = prompt(int, 'sub')", "close(3)", "close(peek(q) + 1)")
+  assert await engine.prompt(int, "count", on=root) == 4
+  assert len(said(log, "reply")) == 3
+  _, log, root = born("q = prompt(str, 'which?', to=OPERATOR)", "close(len(peek(q)))", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(4):
+    await settle()
+  engine.close("ab", next(a[1] for a in said(log, "prompt") if a[5] == "which?"))
+  assert await one == 2
+  assert len(said(log, "reply")) == 2
+  sand = Fetching(files={"/w/a.txt": "one\n"})
+  log, root = life(sand)
+  sand.script[root] = ["x = act('fetch', '', None, 'u')", "close(1)"]
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(6):
+    await settle()
+  world_says("done", said(log, "fetch")[0][1], "page")
+  assert await one == 1
+  assert len(said(log, "reply")) == 2
+  _, log, root = born("w = wait(0.01, __name__)", "close(1)")
+  assert await engine.prompt(int, "count", on=root) == 1
+  assert len(said(log, "reply")) == 2
+
+
+async def test_a_word_awaits_an_act_with_await_and_through_a_wait_each_act_that_the_wait_names() -> None:
+  """A word awaits an act with await, and through wait(seconds, act) each act that the wait names, and the end of an act that a word of its thread awaits makes no thread due: the word goes on with it."""
+  _, log, root = born("x = await prompt(str, 'which?', to=OPERATOR)\nclose(len(x))", "pass", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(3):
+    await settle()
+  engine.close("ab", next(a[1] for a in said(log, "prompt") if a[5] == "which?"))
+  assert await one == 2
+  assert len(said(log, "reply")) == 1
+  sand, log, root = born("b = bash('slow')\nawait wait(600, b)\nclose(1)", "pass", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(3):
+    await settle()
+  sand.exits(said(log, "bash")[0][1], 0)
+  assert await one == 1
+  assert len(said(log, "reply")) == 1
+  word = "w = prompt(int, 'work', on=chain('w'))\nawait wait(600, w)\nawait bash('check')\nclose(peek(w))"
+  sand, log, root = born(word, "pass", auto=False)
+  lead = engine.prompt(int, "lead", on=root)
+  for _ in range(4):
+    await settle()
+  side = next(a[1] for a in said(log, "chain") if a[4] == "w")
+  world_says("done", next(a[1] for a in said(log, "reply") if a[3] == side), ("assistant", "close(7)", None, None))
+  for _ in range(8):
+    await settle()
+  assert (len([a for a in said(log, "reply") if a[3] == root]), engine.peek(lead, ...)) == (1, ...)
+  sand.exits(said(log, "bash")[0][1], 0)
+  assert await lead == 7
+
+
+async def test_an_end_while_the_word_that_made_the_act_runs_or_that_its_own_thread_made_is_no_new_fact() -> None:
+  """An end while the word that made the act still runs is no new fact, since that step shows it, and neither is an end that a word of the same thread made with a close or a cancel; a close or a cancel by another is one fact with the end that it makes, so the thread is asked one time, with the paragraph of that control in the turn."""
+  for end in ("prompt(None, 'on it', to=OPERATOR)", "cancel(b)", "close(None, b)"):
+    _, log, root = born(f"b = bash('slow')\n{end}\nawait wait(600, __name__)", "pass", auto=False)
+    one = engine.prompt(int, "count", on=root)
+    for _ in range(6):
+      await settle()
+    assert (end, len(said(log, "reply")), engine.paused(one)) == (end, 1, False)
+  for end in (engine.cancel, lambda command: engine.close(None, command)):
+    sand, log, root = born("b = bash('slow')\nawait wait(600, __name__)", "pass", "pass", auto=False)
+    one = engine.prompt(int, "count", on=root)
+    for _ in range(3):
+      await settle()
+    command = said(log, "bash")[0][1]
+    end(command)
+    for _ in range(8):
+      await settle()
+    assert (len(said(log, "reply")), engine.paused(one)) == (2, False)
+    assert f"#{command} c" in sand.turns[said(log, "reply")[1][1]][-1][1]
+
+
+async def test_a_pause_of_an_act_of_a_thread_that_came_from_outside_its_chain_makes_the_thread_due() -> None:
+  """A pause of an act of a thread on its chain that came from outside that chain makes the thread due, and a wake of an act of the thread that does not cover the thread asks nothing."""
+  _, log, root = born("b = bash('slow')\nawait wait(600, __name__)", "pass", "pass", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(3):
+    await settle()
+  command = said(log, "bash")[0][1]
+  engine.pause(command)
+  for _ in range(8):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one)) == (2, False)
+  engine.wake(command)
+  for _ in range(8):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(one)) == (2, False)
+
+
+async def test_when_a_step_ends_its_thread_is_due_again_at_once_or_rests_on_its_open_acts() -> None:
+  """When a step ends and its thread is open, the thread is due again at once when a paragraph was told for it since the advance of the step, as what a read, a write, a cd or a debug of the step shows and the exit of a command of the thread that the step did not await, when an act that the step awaited ended, when the step raised or the gate refused it, when it leaves a message of a person owed, and when it leaves no act of the thread open; in each other case the thread rests on its open acts until a fact makes it due, so a step that reads a file while a command of its thread runs is asked again at once, and a pass there rests."""
+  for shows in ("read('a.txt')", "write(Text('b.txt', 'b'))", "cd('.')", "debug(t'{1}')", "raise ValueError('x')"):
+    _, log, root = born(f"x = bash('slow')\n{shows}", "pass", "pass", auto=False)
+    one = engine.prompt(int, "count", on=root)
+    await lingered(log)
+    await lingered(log)
+    assert (shows, len(said(log, "reply")), engine.paused(one)) == (shows, 2, False)
+  sand, log, root = born("a = bash('fast')\nb = bash('slow')", "pass", "pass", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(3):
+    await settle()
+  sand.exits(said(log, "bash")[0][1], 0)
+  await lingered(log)
+  assert (len(said(log, "reply")), engine.paused(one)) == (2, False)
+  sand, log, root = born("server = bash('serve')\ny = await bash('curl')", "close(1)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(3):
+    await settle()
+  serve, curl = (a[1] for a in said(log, "bash"))
+  sand.exits(curl, 0)
+  await lingered(log)
+  assert (len(said(log, "reply")), engine.peek(one, ...), engine.over(serve)) == (2, 1, False)
+  _, log, root = born("x = 1", "close(1)")
+  assert await engine.prompt(int, "count", on=root) == 1
+  assert len(said(log, "reply")) == 2
+  _, log, root = born("x = bash('slow')", "pass", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  await lingered(log)
+  assert (len(said(log, "reply")), engine.paused(one)) == (1, False)
+
+
+async def test_what_the_chain_or_an_ear_says_of_a_reply_of_a_thread_makes_no_thread_due() -> None:
+  """What the chain or an ear says of a reply of a thread, as the advance and the ledger of a grant, makes no thread due, and neither does a reply that is cancelled."""
+  sand, log, root = born("g = grant(usd=1000)\nx = bash('slow')\nawait wait(600, __name__)", "pass", "pass", auto=False)
+  engine.prompt(int, "count", on=root)
+  for _ in range(3):
+    await settle()
+  sand.exits(said(log, "bash")[0][1], 0)
+  for _ in range(8):
+    await settle()
+  assert (len(said(log, "reply")), len([a for a in log if a[0] == "tell" and "ledger" in a[3][0]])) == (2, 1)
+  sand, log, root, act, _, reply = await waiting()
+  engine.cancel(reply)
+  for _ in range(6):
+    await settle()
+  assert (len(said(log, "reply")), engine.paused(act), engine.over(act)) == (1, False, False)
+
+
+async def test_a_thread_that_is_due_gets_one_rung_and_a_rung_is_asked_one_reply() -> None:
+  """A thread that is due, open and not paused, and that has no rung that waits for its reply, gets one rung, and a rung is asked one reply: while that reply is not over nothing advances the rung a second time, a wake neither, and a paused thread gets no rung until its wake."""
+  sand, log, root, act, rung, reply = await waiting()
+  engine.prompt(None, "one", on=act)
+  engine.prompt(None, "two", on=act)
+  engine.pause(act)
+  sand.script[root] = ["close(2)"]
+  assert await engine.prompt(int, "two", on=root) == 2
+  engine.wake(act)
+  for _ in range(6):
+    await settle()
+  assert ([a[1] for a in said(log, "rung") if a[2] == act], [a[1] for a in said(log, "reply") if a[2] == rung]) == (
+    [rung],
+    [reply],
+  )
+  world_says("done", reply, ("assistant", "close(1)", (0, 0, 0, 0, 0.0), None))
+  assert await act == 1
+  _, log, root = born("await wait(600, __name__)", "close(1)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for _ in range(3):
+    await settle()
+  engine.pause(one)
+  before = [a[1] for a in said(log, "rung") if a[2] == one]
+  engine.prompt(None, "look", on=one)
+  for _ in range(6):
+    await settle()
+  assert [a[1] for a in said(log, "rung") if a[2] == one] == before
+  engine.wake(one)
+  assert await one == 1
+  assert len([a for a in said(log, "rung") if a[2] == one]) == len(before) + 1
+
+
+async def test_a_prompt_to_a_person_is_no_thread() -> None:
+  """A prompt to a person is asked no rung: a message on it and its close make none."""
+  _, log, root = born("pass", "pass", auto=False)
+  question = engine.prompt(str, "which?", to=OPERATOR, on=root)
+  await settle()
+  note = engine.prompt(None, "note", on=question)
+  for _ in range(4):
+    await settle()
+  engine.close("a", question)
+  for _ in range(6):
+    await settle()
+  assert ([a[1] for a in said(log, "rung") if a[2] in (question, note)], said(log, "reply")) == ([], [])
+  assert engine.peek(question) == "a"
+
+
+async def test_the_chain_holds_the_state_of_the_rule_of_the_thread_as_a_fold_whose_keys_leave(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  """The chain holds the state of this rule as a fold of the facts that it hears, in the order of the log, each key of which is a thread that is open, an act that is open or a rung that is not over, and leaves when that ends, so the work of the chain at a fact grows with no thread that closed, no rung that is over and no ear of the life."""
+
+  async def work(threads: int) -> int:
+    words = ["y = await bash('ls')\nz = bash('slow')\nread('a.txt')", "close(0)"] * threads
+    sand, log, root = born(*words, "x = bash('slow')\nawait wait(600, __name__)", auto=False)
+    for n in range(threads):
+      engine.chain(f"w{n}", on=root)
+      one = engine.prompt(int, "n", on=root)
+      for _ in range(3):
+        await settle()
+      for command in said(log, "bash"):
+        sand.exits(command[1], 0)
+      await lingered(log)
+      assert await one == 0
+    for command in said(log, "bash"):
+      sand.exits(command[1], 0)
+    engine.prompt(int, "count", on=root)
+    await lingered(log)
+    views = {name: getattr(engine, name) for name in ("get", "over", "transcript", "listening")}
+    read = [0]
+
+    def counted(view: Callable) -> Callable:
+      def reads(*given: object, **named: object) -> object:
+        read[0] += 1
+        return view(*given, **named)
+
+      return reads
+
+    with monkeypatch.context() as patched:
+      for name, view in views.items():
+        patched.setattr(engine, name, counted(view))
+      for _ in range(10):
+        sand.writes(said(log, "bash")[-1][1], "line\n", "stdout")
+      await settle()
+    return read[0]
+
+  assert await work(2) == await work(12)

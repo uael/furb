@@ -2211,8 +2211,9 @@ fn a_run_of_the_record_that_goes_on_live_after_the_replay_is_bounded() {
     block_on(pause).unwrap();
     (root, first.end())
   };
-  let mut second =
-    Lived::new("held-live", &["close(9)", "close(9)"], false).expect("the replay opens");
+  let mut second = Lived::new("held-live", &["pass", "close(9)"], false).expect("the replay opens");
+  // The wake covers the thread, so the chain asks it one reply while its word waits, and a pass
+  // leaves the thread to rest on that wait.
   second.engine.wake(&root).unwrap();
   // The life runs in short waits until the bound refuses the word, which it does after 2 s.
   let refused =

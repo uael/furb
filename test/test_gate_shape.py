@@ -42,7 +42,7 @@ async def test_a_gate_is_the_question_of_whether_a_word_may_run() -> None:
 async def test_a_gate_carries_the_word_alone() -> None:
   """A gate carries the word alone, and the gate reads the program of the chain before that rung and the names of its acts when it takes the gate, and the word after it, so the Kernel keeps no ladder of its own, the journal keeps no program, and a word of a program made again is read after the rungs that stand."""
   sand, log, root = born(
-    "k = 1\ndebug(t'go')",
+    "k = chance()\ndebug(t'go')",
     "x = BAD",
     "y = 2\ndebug(t'go')",
     "write(read(get(acting())[2]).replace('y = 2', 'k = 3'))",
@@ -62,16 +62,16 @@ async def test_a_gate_carries_the_word_alone() -> None:
     f"#{after} debugged\n{after}_debug = 'go'\n\n#{edit} advance on {act}",
   ]
   read = engine.unquoted(
-    f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\ndebug(t'go')\nx = BAD\ny = 2\ndebug(t'go')</s:read1_text>"
+    f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = chance()\ndebug(t'go')\nx = BAD\ny = 2\ndebug(t'go')</s:read1_text>"
   )
-  again = [read, bind, "k = 1\ndebug(t'go')", *told]
+  again = [read, bind, "k = chance()\ndebug(t'go')", *told]
   assert gatings(log) == [
-    ("k = 1\ndebug(t'go')", [bind]),
-    ("x = BAD", [bind, "k = 1\ndebug(t'go')", told[0]]),
-    ("y = 2\ndebug(t'go')", [bind, "k = 1\ndebug(t'go')", told[0], told[1]]),
+    ("k = chance()\ndebug(t'go')", [bind]),
+    ("x = BAD", [bind, "k = chance()\ndebug(t'go')", told[0]]),
+    ("y = 2\ndebug(t'go')", [bind, "k = chance()\ndebug(t'go')", told[0], told[1]]),
     (
       "write(read(get(acting())[2]).replace('y = 2', 'k = 3'))",
-      [bind, "k = 1\ndebug(t'go')", *told[:2], "y = 2\ndebug(t'go')", told[2]],
+      [bind, "k = chance()\ndebug(t'go')", *told[:2], "y = 2\ndebug(t'go')", told[2]],
     ),
     ("k = 3\ndebug(t'go')", again),
     (
