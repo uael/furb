@@ -49,7 +49,9 @@ test.skipIf(process.platform !== "linux")(
       if (code !== 0) throw new Error(`The gallery ended with ${code}`);
       expect(out).toMatch(/Wrote \d+ captures/);
       // Each capture that the script named has its file: the SVG, and for the last one its picture.
-      const names = [...new Set([...out.matchAll(/^capture (\S+)$/gm)].map((one) => one[1] ?? ""))];
+      const names = [
+        ...new Set([...out.matchAll(/^capture (\S+)(?: at [\d.]+s)?$/gm)].map((one) => one[1] ?? "")),
+      ];
       expect(names).toContain(last);
       const files = new Set(await readdir(join(root, "out")));
       expect(names.filter((name) => !files.has(name === last ? `${name}.png` : `${name}.svg`))).toEqual([]);
