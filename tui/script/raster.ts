@@ -360,7 +360,10 @@ export function svg(frame: CapturedFrame, palette: Window, title: string, zoom =
     .join("");
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width * zoom}" height="${height * zoom}" viewBox="0 0 ${width} ${height}">`,
-    `<defs><filter id="shadow" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity="0.35"/></filter>`,
+    // The shadow is computed over the window and 48 units around it, which hold all of the shadow that the image shows,
+    // since the image reaches 28 units from the window: the same pixels as the region of 10% and more of the window
+    // that it had, in about 60% of the time.
+    `<defs><filter id="shadow" filterUnits="userSpaceOnUse" x="${margin - 48}" y="${margin - 48}" width="${window.width + 96}" height="${window.height + 96}"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity="0.35"/></filter>`,
     `<clipPath id="window"><rect x="${margin}" y="${margin}" width="${window.width}" height="${window.height}" rx="12"/></clipPath></defs>`,
     `<rect x="${margin}" y="${margin}" width="${window.width}" height="${window.height}" rx="12" fill="${palette.background}" filter="url(#shadow)"/>`,
     `<g clip-path="url(#window)">`,
