@@ -19,7 +19,7 @@ export const questions = part({
   /** The values that a question of a choice lists before Other: its values, or the values of the list that it takes
    * many of. */
   rows(ask: Ask): string[] {
-    return ask.choices.length ? ask.choices : ask.options.map((one) => one.shown);
+    return ask.choices.length ? ask.choices : ask.ticks.map((one) => one.shown);
   },
 
   /** The values of a question of a choice, each after its number, and a last row, Other, whose words go in place of
@@ -41,7 +41,7 @@ export const questions = part({
       this.pickKey = "";
       return;
     }
-    const key = JSON.stringify([ask.id, ask.choices, ask.options, this.choice, this.theme]);
+    const key = JSON.stringify([ask.id, ask.choices, ask.ticks, this.choice, this.theme]);
     if (key === this.pickKey) return;
     this.pickKey = key;
     this.clear(this.pickBox);
@@ -51,7 +51,7 @@ export const questions = part({
       const ticked = this.choice.ticked.includes(index);
       // A list of many values shows a box before each value, which Space ticks.
       const box: Part[] =
-        ask.options.length && index < values.length
+        ask.ticks.length && index < values.length
           ? [[ticked ? "[x] " : "[ ] ", ticked ? c.warning : c.faint]]
           : [];
       this.pickBox.add(
@@ -87,7 +87,7 @@ export const questions = part({
     if (!ask) return;
     const values = this.rows(ask);
     // A value of a list of many is ticked or not, and nothing is sent until Enter sends the ticked values.
-    if (ask.options.length && at < values.length) {
+    if (ask.ticks.length && at < values.length) {
       const ticked = this.choice.ticked.includes(at)
         ? this.choice.ticked.filter((one) => one !== at)
         : [...this.choice.ticked, at];
@@ -104,9 +104,9 @@ export const questions = part({
   /** The values that a list of many has ticked, in the order of the list, as the line of that list. */
   async sendTicked(): Promise<void> {
     const ask = this.picking();
-    if (!ask?.options.length) return;
+    if (!ask?.ticks.length) return;
     const ticked = [...this.choice.ticked].sort((one, other) => one - other);
-    const line = `[${ticked.map((at) => ask.options[at]?.json).join(", ")}]`;
+    const line = `[${ticked.map((at) => ask.ticks[at]?.json).join(", ")}]`;
     await this.session.answer(ask, line).catch(this.report);
     this.render();
   },
@@ -120,7 +120,7 @@ export const questions = part({
   /** Whether the pointer stands on a value of a list of many, which Space ticks and Enter does not send. */
   onTick(): boolean {
     const ask = this.picking();
-    return Boolean(ask?.options.length && this.choice.at < ask.options.length);
+    return Boolean(ask?.ticks.length && this.choice.at < ask.ticks.length);
   },
 
   /** The time since an act started. */

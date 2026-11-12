@@ -27,7 +27,6 @@ import {
   type ChainThread,
   cancelled,
   type Desk,
-  desk,
   failed,
   isDone,
   isPaused,
@@ -41,7 +40,14 @@ import {
   type ThreadNode,
   threadWork,
 } from "furb/life";
-import type { ThreadNode as CrateNode, FollowUp, Layer, Rung, Threads } from "furb/protocol";
+import type {
+  Desk as CrateDesk,
+  ThreadNode as CrateNode,
+  FollowUp,
+  Layer,
+  Rung,
+  Threads,
+} from "furb/protocol";
 import { Closed } from "furb/skill";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
@@ -949,10 +955,15 @@ export class Session extends EventEmitter {
         // The threads of the chain shown and the tree of the sidebar come from the crate with the acts that they read,
         // so a frame draws the threads of the acts that it shows.
         // A read that began before these acts came gives the threads of before them, so the read goes again.
-        for (let tries = 0; tries < 3 && !(this.threadsFresh(selected) && this.railFresh); tries++)
+        for (
+          let tries = 0;
+          tries < 3 && !(this.threadsFresh(selected) && this.railFresh && this.deskFresh);
+          tries++
+        )
           await Promise.all([
             this.threadsFresh(selected) ? undefined : this.readThreads(selected),
             this.railFresh ? undefined : this.readRail(),
+            this.deskFresh ? undefined : this.readDesk(),
           ]);
         this.named();
         this.carryQueue();
@@ -1574,29 +1585,53 @@ export class Session extends EventEmitter {
   }
   /** The ask that the operator points at on the desk, which the input answers while its chain is shown. */
   pointed?: string;
-  /** What waits for the operator in the life: each question of every chain, the oldest first. A notice asks nothing,
-   * so it settles at once and waits on no desk. */
+  /** What waits for the operator in the life: each question of every chain, the oldest first, as the crate folds them
+   * in the daemon, with the label of each chain. A notice asks nothing, so it settles at once and waits on no desk. A
+   * question that came since the crate gave the desk stands on it once the crate gives it again. */
   get desk(): Desk {
     // An ask that the operator answered leaves the desk at once, though the console holds it until it hears the close.
     for (const id of this.gone) if (!this.host.prompts.has(id)) this.gone.delete(id);
-    const held = (one: { id: string }) => !this.gone.has(one.id);
-    const { acts, host } = this;
-    const gone = [...this.gone].join(" ");
-    const cached = this.deskRead;
-    if (cached?.version === this.version && cached.prompts === host.prompts && cached.gone === gone)
+    if (!this.deskFresh) void this.readDesk().catch(this.threadFault);
+    const { prompts } = this.host;
+    const [read, gone] = [this.deskRead, [...this.gone].join(" ")];
+    const cached = this.deskShown;
+    if (
+      cached?.version === this.version &&
+      cached.read === read &&
+      cached.prompts === prompts &&
+      cached.gone === gone
+    )
       return cached.desk;
-    const made = desk({
-      acts,
-      ids: this.indexed().ids,
-      prompts: [...host.prompts.values()].filter(held),
-      notices: [],
-      label: (id) => this.labelOf(id),
-    });
-    this.deskRead = { version: this.version, prompts: host.prompts, gone, desk: made };
+    const asks = (read?.got.asks ?? [])
+      .filter((one) => prompts.has(one.id) && !this.gone.has(one.id))
+      .map((one) => ({ ...one, label: this.labelOf(one.chain) }));
+    const made = { asks, questions: asks.length, notices: 0 };
+    this.deskShown = { version: this.version, read, prompts, gone, desk: made };
     return made;
   }
-  /** The desk as it was last read, with what it was read from, since every draw reads it many times. */
-  private deskRead?: { version: number; prompts: unknown; gone: string; desk: Desk };
+  /** The desk as the crate last gave it, with the questions that waited then. */
+  private deskRead?: { owed: string; got: CrateDesk };
+  private deskAsking?: Promise<void>;
+  /** The desk as it was last built, with what it was built from, since every draw reads it many times. */
+  private deskShown?: { version: number; read: unknown; prompts: unknown; gone: string; desk: Desk };
+  /** Whether the desk that the crate gave is of the questions that wait now. */
+  private get deskFresh(): boolean {
+    return this.deskRead?.owed === this.owedNow;
+  }
+  /** The crate folds the desk, which the session asks for once at a time, and draws again once it comes. */
+  readDesk(): Promise<void> {
+    if (this.deskAsking) return this.deskAsking;
+    const owed = this.owedNow;
+    this.deskAsking = (async () => {
+      try {
+        this.deskRead = { owed, got: await this.host.desk() };
+      } finally {
+        this.deskAsking = undefined;
+      }
+      this.emit("change");
+    })();
+    return this.deskAsking;
+  }
   /** The questions that the operator answered, until the console drops them. */
   private readonly gone = new Set<string>();
   /** The question that the operator acts on, on the chain shown: the one that he points at, else the oldest. */

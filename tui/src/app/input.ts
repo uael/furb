@@ -72,9 +72,9 @@ export const input = part({
         hint: [
           "Enter",
           () =>
-            this.picking()?.options.length && this.onTick()
+            this.picking()?.ticks.length && this.onTick()
               ? `send ${this.choice.ticked.length || "none"}`
-              : this.picking()?.options.length
+              : this.picking()?.ticks.length
                 ? "write your words"
                 : "answer",
         ],

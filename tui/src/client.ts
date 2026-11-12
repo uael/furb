@@ -10,6 +10,7 @@ import type {
   Act,
   Answer,
   Config,
+  Desk,
   Event,
   FollowUp,
   Frame,
@@ -960,6 +961,12 @@ export class RemoteLife extends EventEmitter {
       read: read ?? null,
     });
     if (got.answer !== "threads") throw new Error(`The daemon gave ${got.answer}, and no threads.`);
+    return got.data;
+  }
+  /** What waits for the operator in the life, as the crate folds it in the daemon. */
+  async desk(notices: string[] = []): Promise<Desk> {
+    const got = await this.verb({ verb: "desk", life: this.record, notices });
+    if (got.answer !== "desk") throw new Error(`The daemon gave ${got.answer}, and no desk.`);
     return got.data;
   }
   /** The ladder of a chain as the crate folds it in the daemon, now or as it stood just after a moment: the steps that

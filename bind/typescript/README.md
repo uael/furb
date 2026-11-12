@@ -243,10 +243,9 @@ gives. It holds no native code and no module of node, so a terminal and a window
   failed or was cancelled; the kinds of work, `WORK`, whether a site is the operator or a member of the operator,
   `operated`, what a command came to, `Exit`, the measure of a chain, `Measure`, and a compaction of a chain,
   `Compaction`, which an `Activity` keeps for each prefix said on a chain after its birth.
-- `asks`: the desk of the operator, `desk`: each question that waits for him and each notice that he did not dismiss,
-  the oldest first, each with its chain and the choices of its shape, `choicesOf`: yes and no for a bool, and each
-  value of a Literal. `aimed` gives the ask that the operator acts on, on the chain that he reads, `beside` the ask a
-  step after or before it, and `wants` what an ask wants of him, in words.
+- `asks`: an ask of the desk of the operator, `Ask`, as the crate folds it, with the label of its chain. `aimed` gives
+  the ask that the operator acts on, on the chain that he reads, `beside` the ask a step after or before it, and `wants`
+  what an ask wants of him, in words.
 - `loom`: the rows of the loom, one for the operator and one for each chain in the order of the tree, with the cells
   of their moments, what each chain does now, `nowOf`, in words that a person reads, a count of seconds as a person
   reads it, `duration`, and the acts as they stood at a moment, `asOf`.

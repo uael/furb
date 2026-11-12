@@ -25,7 +25,7 @@ import {
   WINDOW,
 } from "furb";
 import { type Act, type Compaction, type Exit, isPaused, type Measure, type Spend } from "furb/life";
-import type { Config, FollowUp, Rung, ThreadNode, Threads } from "furb/protocol";
+import type { Config, Desk, FollowUp, Rung, ThreadNode, Threads } from "furb/protocol";
 import { type Choices, type Listener, Refused, RemoteLife, reach } from "./client.ts";
 import { clock } from "./clock.ts";
 import type { Setting } from "./configs.ts";
@@ -171,6 +171,10 @@ class ReadLife extends EventEmitter {
   /** The threads of a chain as the crate folds them from the record, as the daemon folds them for a life that runs. */
   async threads(on: string, at?: number, read?: number): Promise<Threads> {
     return this.reader.meaning.threads(on, at, read);
+  }
+  /** What waits for the operator, as the crate folds it from the record, as the daemon folds it for a life that runs. */
+  async desk(): Promise<Desk> {
+    return this.reader.meaning.desk();
   }
   /** The ladder of a chain as the crate folds it from the record, as the daemon folds it for a life that runs. */
   async ladder(
@@ -937,6 +941,10 @@ export class HostView extends EventEmitter {
    * notes counted past the place up to which the window read it. */
   async threads(chain: string, at?: number, read?: number): Promise<Threads> {
     return await this.life.threads(chain, at, read);
+  }
+  /** What waits for the operator, as the crate folds it. */
+  async desk(): Promise<Desk> {
+    return await this.life.desk();
   }
   /** The ladder of a chain as the crate folds it, now or as it stood just after a moment, with the folds that the
    * window opened, the prompts that the operator owes, and the only acts at its top when `taken` names them. */

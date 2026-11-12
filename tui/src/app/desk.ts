@@ -331,7 +331,7 @@ export const desk = part({
     if (this.rows(ask).length && ask.id === this.picking()?.id)
       act.add(
         this.text(
-          ask.options.length
+          ask.ticks.length
             ? "Tick below with Space, send with Enter, or choose Other for your own words"
             : "Choose below with ↑↓ and Enter, or its number, or Other for your own words",
           c.faint,
