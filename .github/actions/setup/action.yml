@@ -89,8 +89,9 @@ runs:
     # stands far from main, so with no save each of its runs built again the crates that changed since main, in up to
     # 10 minutes. A run on w/converge saves the cache of its own jobs too, such as the render of the gallery that the
     # desk dispatches there. Any other pull request reads the cache of main.
-    # Only a job that passes saves it. A job that fails or is cancelled holds part of the build, and a key that
-    # matches whole is never saved again, so every later run would build again what that part lacks.
+    # Only a job that passes saves it, or a job that sets CACHE_ON_FAILURE once its build passed. A job that fails or
+    # is cancelled holds part of the build, and a key that matches whole is never saved again, so every later run would
+    # build again what that part lacks.
     # A script of the build that starts to build a new crate changes no manifest, so with no hash of it the key stayed
     # whole and each run built that crate and each of its dependencies again: the program furb took 8 minutes and 34
     # seconds on Windows, on a cache saved before the script built it.

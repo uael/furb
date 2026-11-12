@@ -2,6 +2,12 @@ name: gates
 
 on:
   workflow_dispatch:
+    inputs:
+      base:
+        description: >-
+          The commit that the head is compared with, as the merge base of a lane and w/converge: the run takes the jobs
+          that the paths between them need, as a pull request does. Empty, the run takes every job.
+        default: ""
   pull_request:
     branches: [main]
   push:
@@ -35,7 +41,8 @@ jobs:
     # A runner of macOS waits in a queue of its own, for 10 minutes in the median. The jobs on Linux always run and hold
     # the whole proof of the logic; the jobs on macOS and on Windows prove the system alone, so a pull request and a
     # push to main run them only when a path that they change can behave in another way there, which script/scope.py
-    # says. A run by hand, and the run of each night, run every job.
+    # says. A run by hand given a base runs what the paths between that base and its head need, and says the base as
+    # base=<sha>, which the oracle of a lane reads. A run by hand with no base, and the run of each night, run every job.
     # The commit of a pull request is the merge of its branch into the base, whose first parent is the base, so two
     # commits of history hold the change. A push to main holds the commits after the head before it, which the step
     # fetches alone, since the diff of two trees needs no history between them. A push with no head before it, or one
@@ -62,9 +69,14 @@ jobs:
       - id: scope
         env:
           BEFORE: ${{ github.event.before }}
+          BASE: ${{ inputs.base }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             git diff --name-only HEAD^1 HEAD | python3 script/scope.py
+          elif [ -n "$BASE" ]; then
+            git fetch -q --depth=1 --no-tags origin "$BASE" && base=$(git rev-parse FETCH_HEAD) || exit 1
+            echo "base=$base"
+            git diff --name-only "$base" HEAD | python3 script/scope.py
           elif [ "$GITHUB_EVENT_NAME" = push ] && [ -n "${BEFORE//0/}" ] \
             && git fetch -q --depth=1 --no-tags origin "$BEFORE" && changed=$(git diff --name-only "$BEFORE" HEAD); then
             printf '%s\n' "$changed" | python3 script/scope.py
@@ -235,12 +247,17 @@ jobs:
       # The job of the crate runs the clippy and the tests of the crate with this feature on Windows and on macOS, and
       # the hooks on Linux.
       - run: bun run build
+      # The build is whole once it passed, so the cache of rust is saved whatever the tests after it give: a job that
+      # saved only when it passed built every crate again on each run while one test of it failed, 35 minutes on
+      # Windows.
+      - run: echo "CACHE_ON_FAILURE=true" >> "$GITHUB_ENV"
       - run: bun run docs
       - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
       - run: bun run check
       - run: bun run lint
       - run: bun run test
-      - uses: ./.github/actions/clear
+      - if: ${{ !cancelled() && env.CACHE_ON_FAILURE == 'true' }}
+        uses: ./.github/actions/clear
         with:
           key: ${{ runner.os == 'Windows' && 'package' || '' }}
 
