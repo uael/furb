@@ -106,7 +106,7 @@ def literal(v, into=None):
       return f"Act({str(v)!r})" * (into is not None)
     case BaseException():
       return literal(v.args) and repr(v)
-    case None | bool() | int() | float() | str() | Text() | Exit():
+    case None | int() | float() | str() | Text() | Exit():
       return repr(v) * (not (isinstance(v, float) and v - v))
     case dict():
       s = [(literal(k, into), literal(y, into)) for k, y in v.items()]
@@ -421,7 +421,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         label=label,
         source=source,
         actor=stood * (not source),
-        actor_via=(not source) * (get(id)[3] or "stand") or None,
+        actor_via=(not source) * (get(id)[3] or "stand"),
       )
 
     top = opening()
@@ -476,7 +476,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       a[0] == "wake" and [heed(x) for x in barren if covers(a, x)]
       if a[2] in did:
         did[a[2]].add("close" if a[0] == "prompt" and operated(a[6]) else a[0])
-      if get(a[1]) and (a[0] in ("prompt", "rung") or (a[0] == "started" and not get(a[2]) and r[0] != "reply")):
+      if a[0] in ("prompt", "rung") or (a[0] == "started" and not get(a[2]) and r[0] != "reply"):
         held[a[1]] = thread(r[2])
       elif a[0] == "done":
         held.pop(a[1], 0)
@@ -566,9 +566,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           for message in inbox.pop(about, []):
             with site.set(message):
               rung(to=r[6])
-      if r[0] == "run":
-        running.discard(r[4]) if a[0] == "done" and (over(r[4]) or not get(r[4])) else running.add(r[4])
-      elif r[0] == "wants":
+      if r[0] == "wants":
         rid = get(r[2])[4]
         running.discard(rid) if a[0] == "started" else running.add(rid)
         if a[0] == "wants" and not over(r[4]):
@@ -934,7 +932,6 @@ def boot(record=(), **outside):
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
   ranks = {id(e): n for n, (e,) in enumerate(record)}
   saved, again = {e[1]: e for (e,) in record if question(e)}, {}
-  recorded = {**saved}
   top, asked, strays, back = Counter(), {}, {}, []
   for quest in saved.values():
     top[quest[0]] = max(top[quest[0]], int(quest[1][len(quest[0]) :]))
@@ -943,7 +940,7 @@ def boot(record=(), **outside):
   def drift(name, fact=None):
     ours, name = fact or get(name), strays.get(name) or name
     return Drift(
-      f"{name} drifts: the life made {ours or 'no act'!s:.300}, the record holds {(fact and first[fact[1]]) or recorded[name]!r:.300}"
+      f"{name} drifts: the life made {ours or 'no act'!s:.300}, the record holds {(fact and first[fact[1]]) or saved[name]!r:.300}"
     )
 
   def matched(sort, maker, *said):
@@ -1054,10 +1051,10 @@ def boot(record=(), **outside):
       raise Refused("no chain for " + kind)
     if by and not (get(by) or by in outside or callable((module(on) or globals()).get(kind))):
       raise Refused(f"no verb {kind} on {on}, so a later life cannot make the act again")
-    names, key = born.setdefault(kind, {}), (by, made[speaker, kind])
-    if key not in names:
-      names[key] = matched(kind, by, on, *words)
-    a = (kind, name := names[key], by, on, *words)
+    key = kind, by, made[speaker, kind]
+    if key not in born:
+      born[key] = matched(kind, by, on, *words)
+    a = (kind, name := born[key], by, on, *words)
     if known.setdefault(name, a) is a:
       upto(saved.get(name))
       holds(scope(on), [a])
