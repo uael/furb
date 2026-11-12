@@ -2,7 +2,7 @@ import type { BoxRenderable, KeyEvent } from "@opentui/core";
 import { asksOperator, type ChainThread } from "furb/life";
 import { type Action, bindings, shown } from "../keys.ts";
 import { commentStart, type Hunk, lines, scopeLabels, scopes } from "../review.ts";
-import { type View, views } from "../session.ts";
+import { type ActRow, type View, views } from "../session.ts";
 import { theme as c, spacing as space } from "../theme.ts";
 import { bold, underline } from "../ui.ts";
 import { part } from "./part.ts";
@@ -363,29 +363,39 @@ export const input = part({
     );
   },
 
-  /** Ctrl+C closes a dialog or the rewind tree, or clears the input, or, on a question of a model with an empty input,
-   * refuses the question, or else names in a notice the last act that the operator made on the chain, and cancels that
-   * act at a second press once the footer drew the name of that act, which takes back a message of his. A press
-   * cancels no act that the window did not name first, at any width, so no press reaches the act before it. */
+  /** The last act of the operator on the chain when the notice of a first ⌃C names it and the footer drew that name,
+   * which a second ⌃C cancels. */
+  namedAct(): ActRow | undefined {
+    const last = this.session.lastOwn;
+    return last &&
+      this.session.notice === cancelNotice(last) &&
+      this.noticeShown.startsWith(cancelNamed(last))
+      ? last
+      : undefined;
+  },
+
+  /** Ctrl+C closes a dialog or the rewind tree, or clears the input, or cancels the act that the footer named at the
+   * press before, which takes back a message of the operator, or, on a question of a model with an empty input,
+   * refuses the question, or else names in a notice the last act that the operator made on the chain. A press cancels
+   * no act that the window did not name first, at any width, so no press reaches the act before it, and a question
+   * that lands between the two presses keeps the second for the act that the footer named. */
   cancel(): void {
     if (this.overlay) this.closeOverlay();
     else if (this.tree) this.closeTree();
     else if (this.composer.plainText) this.composer.replaceText("");
-    else if (this.session.operatorPrompt) {
+    else if (this.namedAct()) {
+      // The notice asked for this press, which answers it. The cancel reads the last act in the same turn of the loop
+      // as this check, so it ends the act that was named.
+      this.session.notice = "";
+      void this.session.cancel().catch(this.report);
+    } else if (this.session.operatorPrompt) {
       // On a question of a model, an empty input refuses the question at once, with no dialog that asks to confirm.
       const ask = this.session.operatorPrompt;
       void this.session.decline(ask, "The operator refused the question.").catch(this.report);
     } else {
       const last = this.session.lastOwn;
-      const named =
-        last && this.session.notice === cancelNotice(last) && this.noticeShown.startsWith(cancelNamed(last));
-      // The cancel reads the last act in the same turn of the loop as this check, so it ends the act that was named.
-      if (last && !named) this.session.notice = cancelNotice(last);
-      else {
-        // The notice asked for this press, which answers it.
-        this.session.notice = "";
-        void this.session.cancel().catch(this.report);
-      }
+      if (last) this.session.notice = cancelNotice(last);
+      else void this.session.cancel().catch(this.report);
     }
   },
 
@@ -536,10 +546,10 @@ export const input = part({
     };
   },
 
-  /** The hints of the footer that say more than their key: on a question that waits, ⌃C refuses it, and else it names
-   * the last message that a second ⌃C takes back. */
+  /** The hints of the footer that say more than their key: on a question that waits, ⌃C refuses it, but when the
+   * footer names an act that a second ⌃C takes back, and else it names the last message that a second ⌃C takes back. */
   hintTable(): Partial<Record<Action, () => string>> {
-    return { takeBack: () => (this.session.operatorPrompt ? "refuse" : "take back") };
+    return { takeBack: () => (this.session.operatorPrompt && !this.namedAct() ? "refuse" : "take back") };
   },
 
   whenTable(): Partial<Record<Action, () => boolean>> {

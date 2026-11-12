@@ -177,3 +177,44 @@ test("in a terminal of 100 columns, while a model works, a second ⌃C takes bac
       }
     },
   ));
+
+// A question of a model can land between the two presses. The second press answers the notice that the footer drew, and
+// it refuses no question that the window did not name: the question ends only as work under the named ask.
+test("a second ⌃C answers the notice of a take back, and refuses no question that landed since the first", () =>
+  scenario(
+    [
+      { cue: "Travel: begin.", word: 'close("Begun.")' },
+      { cue: "Travel: ask.", word: 'prompt(str, "Travel: which?", to=OPERATOR)', hold: "gate" },
+    ],
+    async (window, yard) => {
+      await window.type("Travel: begin.");
+      await window.shows((frame) => frame.includes("Begun."), "the answer of the first message");
+      await window.type("Travel: ask.");
+      let ask = "";
+      await until(async () => {
+        await window.session.refresh();
+        ask = window.session.lastOwn?.words[1] === "Travel: ask." ? window.session.lastOwn.id : "";
+        return ask;
+      }, "the open ask");
+      window.screen.mockInput.pressCtrlC();
+      await window.shows((frame) => frame.includes(`Take back ${ask}?`), "the name in the footer");
+      await yard.release("gate");
+      await until(() => window.session.operatorPrompt !== undefined, "the question of the model");
+      const question = window.session.operatorPrompt?.id ?? "";
+      await window.shows(
+        (frame) => frame.includes(`Take back ${ask}?`),
+        "the name in the footer with the question",
+      );
+      window.screen.mockInput.pressCtrlC();
+      // The question is work under the ask, so the window asks to confirm the take back, which names the ask.
+      await window.shows(
+        (frame) => frame.includes(`Take back ${ask}, and end`),
+        "the confirm of the take back",
+      );
+      expect(await window.engine.peek(question)).toBeNull();
+      window.screen.mockInput.pressEnter();
+      await until(async () => (await cancels(window)).length > 0, "the cancel of the named ask");
+      expect((await cancels(window)).map((fact) => fact[1])).toEqual([ask]);
+      expect(JSON.stringify(await window.engine.peek(question))).not.toContain("refused the question");
+    },
+  ));
