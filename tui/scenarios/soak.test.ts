@@ -52,10 +52,13 @@ test(
   () =>
     scenario(
       [
+        // The root tells the operator that it hired its workers, and rests on their jobs: a close of its prompt waits
+        // for each job, so it closes once the last job ends.
         {
           cue: "Scenario: soak.",
-          word: `workers = [chain(f"w{i}") for i in range(${WORKERS})]\njobs = [prompt(int, "Scenario: job.", on=w) for w in workers]\nclose("Hired.")`,
+          word: `workers = [chain(f"w{i}") for i in range(${WORKERS})]\njobs = [prompt(int, "Scenario: job.", on=w) for w in workers]\nprompt(None, "Hired.", to=OPERATOR, on="prompt1")`,
         },
+        { cue: " done\nprompt", word: 'if all(over(j) for j in jobs):\n  close("All done.")' },
         { cue: "Scenario: job.", word: JOB },
         // A word that a kill cut is refused as interrupted, and the worker runs its job again.
         { cue: "raised", word: JOB },
