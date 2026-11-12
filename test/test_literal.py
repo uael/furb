@@ -8,11 +8,11 @@ from furb.engine import Exit, Text
 
 
 async def test_literal_gives_the_python_that_makes_a_value_again() -> None:
-  """literal gives the python that makes a value again when the value is one that a checkpoint carries: None, a bool, an int, a float, a str, a Text, an Exit or an exception as python shows it, and a list, a tuple, a set or a dict of those as python writes it."""
+  """literal gives the python that makes a value again when the value is one that a checkpoint carries: None, a bool, an int, a float, a str, a Text, an Exit or an exception, and a list, a tuple, a set or a dict of those as python writes it."""
   born()
   value = {"one": [None, True, 1, 2.5, "x", Text("a", "b"), Exit(0, Text(""), Text("")), (1,), set(), {3}], 2: ()}
   assert engine.literal(value) == repr(value)
-  assert engine.literal(KeyError("k")) == "KeyError('k')"
+  assert engine.literal(KeyError("k")) == "KeyError('k',)"
 
 
 async def test_literal_gives_a_value_that_is_false_for_any_other_value() -> None:
@@ -56,3 +56,20 @@ async def test_literal_gives_a_value_that_is_false_for_a_float_that_is_not_finit
   got = engine.literal(ValueError(len))
   assert not got or ast.parse(str(got))
   assert engine.literal(1.5) == "1.5"
+
+
+async def test_literal_writes_an_exception_by_the_name_of_its_class_and_the_tuple_of_its_arguments_as_cancellederror_c_so_the_module_of_a_chain_evals_it_again_on_each_engine() -> (
+  None
+):
+  """literal writes an exception by the name of its class and the tuple of its arguments, as CancelledError('c',), so the module of a chain evals it again on each engine."""
+  _, _, root = born()
+  word = (
+    "made = [CancelledError('c'), Refused('r'), Overflow('o'), Drift('d'), ValueError('v'), KeyError('k'), Exception(), Refused('two', 2)]\n"
+    "texts = [literal(e) for e in made]\n"
+    "again = [eval(t) for t in texts]\n"
+    "same = [type(x) is type(e) and x.args == e.args for x, e in zip(again, made)]"
+  )
+  await engine.rung(word, on=root)
+  held = engine.module(root)
+  assert held["texts"][:2] == ["CancelledError('c',)", "Refused('r',)"]
+  assert held["same"] == [True] * 8

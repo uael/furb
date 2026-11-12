@@ -105,7 +105,7 @@ def literal(v, into=None):
     case Act():
       return f"Act({str(v)!r})" * (into is not None)
     case BaseException():
-      return literal(v.args) and repr(v)
+      return (a := literal(v.args)) and type(v).__name__ + a
     case None | int() | float() | str() | Text() | Exit():
       return repr(v) * (not (isinstance(v, float) and v - v))
     case dict():

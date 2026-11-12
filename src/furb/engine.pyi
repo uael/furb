@@ -1047,7 +1047,8 @@ type Bash = tuple[Literal["bash"], str, str, str, str, str | None, float, tuple[
 """A bash carries the command, the stdin, the timeout, the codes that it accepts and a show for each stream, and no working directory."""
 
 def literal(v: object, into: set[str] | None = None) -> str | bool:
-  """literal gives the python that makes a value again when the value is one that a checkpoint carries: None, a bool, an int, a float, a str, a Text, an Exit or an exception as python shows it, and a list, a tuple, a set or a dict of those as python writes it.
+  """literal gives the python that makes a value again when the value is one that a checkpoint carries: None, a bool, an int, a float, a str, a Text, an Exit or an exception, and a list, a tuple, a set or a dict of those as python writes it.
+  literal writes an exception by the name of its class and the tuple of its arguments, as CancelledError('c',), so the module of a chain evals it again on each engine.
   literal gives a value that is false for any other value, and for a list, a tuple, a set or a dict that holds one, so a caller learns that the value is lost.
   literal gives a value that is false for a float that is not finite and for an exception whose arguments it cannot write, so a caller learns that the value is lost.
   literal adds to into each str of the value that names an act of the life, an Act among them, and writes an Act as Act('bash1').
