@@ -8,8 +8,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def steps(job: str) -> list[dict]:
-  workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "gates.yml").read_text(encoding="utf-8"))
-  return workflow["jobs"][job]["steps"]
+  """The steps of a job of the gates, or of the workflow system that the gates call for each system."""
+  jobs = {}
+  for name in ("gates.yml", "system.yml"):
+    jobs |= yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))["jobs"]
+  return jobs[job]["steps"]
 
 
 def published(job: str) -> list[dict]:
