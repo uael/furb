@@ -433,7 +433,9 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             if last[4:] and top and id == ROOT and not transcript(id, "reply"):
               seat = yield from seeded()
           elif last[3:] and not top:
-            placed(last[1] * (was[1] != last[1]) * all(all(get(x[2])[4::2]) for x in transcript(id, "cd")))
+            placed(
+              last[1] * (was[1] != last[1]) * all(get(x[2]) and all(get(x[2])[4::2]) for x in transcript(id, "cd"))
+            )
         case ("done", about, _, value) if running.get(maker := r[2]) in (
           False,
           isinstance(value, Exception) and r[0] != "reply" and "",

@@ -994,6 +994,7 @@ The World answers it with a done at once, so the life stands on that answer befo
 The journal keeps each stand and its answer, so a later life says them again at their places and replays every chain on what it stood on there.
 At its tip, once the record is said again whole, boot stands the life again, so a change of the World reaches every chain after what it replayed.
 Every chain hears the done of every stand, and binds its default actor again when the actor of the standing changes, and a chain whose standing names a doctrine plays on itself the rung of stand(), with a cd to the new directory when the directory changed and no cd of a rung with no actor moved the chain, so the transcript grows at one end.
+A cd whose maker is no act of the life, as a cd that a checkpoint carries, is a cd that moved the chain, so a stand that gives another directory plays no cd on it, and the chain stays where it stood.
 A standing binds the default actor of the chain, under the name actor, when its actor differs from that of the standing before it, so a new roster or a new directory alone keeps the actor that a word chose.
 """
 type Module = tuple[Literal["module"], str, str, dict[str, object]]
