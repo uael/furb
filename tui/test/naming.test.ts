@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { isDone, outcomeOf } from "furb/life";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
+import { inspectRecords } from "../src/records.ts";
 import type { Session } from "../src/session.ts";
 import { Workspaces } from "../src/workspaces.ts";
 
@@ -36,6 +37,10 @@ test("the first message of the operator names the session and its row, and the s
     const act = await named(session);
     for (let tries = 0; tries < 400 && session.sessionName !== "Fix the login form"; tries++)
       await Bun.sleep(25);
+    if (session.sessionName !== "Fix the login form")
+      console.log(
+        `The name never came. session.error: ${session.error}. The read of the record gives: ${JSON.stringify(await inspectRecords([session.host.record ?? ""], new AbortController().signal, []))}`,
+      );
     expect([outcomeOf(act), session.sessionName, entry.name]).toEqual([
       "Fix the login form",
       "Fix the login form",

@@ -268,7 +268,12 @@ function placed(index: Index, act: ActRow): void {
     if (failed(act)) index.failing.add(act.chain);
     else index.failing.delete(act.chain);
   }
-  if ((act.kind === "rename_session" || act.kind === "name_session") && isDone(act)) index.names.add(act.id);
+  if (
+    (act.kind === "rename_session" || act.kind === "name_session") &&
+    isDone(act) &&
+    typeof outcomeOf(act) === "string"
+  )
+    index.names.add(act.id);
   if (act.kind === "read" && isDone(act) && act.words[0] === "skills://") {
     const past = index.skills;
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
@@ -775,10 +780,26 @@ export class Session extends EventEmitter {
   private scanName(path: string, acts?: number): void {
     const read = ++this.nameScans;
     if (acts !== undefined) this.nameReads = acts;
-    inspectRecords([path], this.scanning.signal, []).then(
-      (states) => this.scannedName(read, states[path]),
-      () => this.scannedName(read),
-    );
+    void this.readName(path, read);
+  }
+  /** A read that failed, or that found no name while an act of the index gave one, is read again after 0.1, 0.2, 0.4
+   * and 0.8 seconds, since the record may not hold the act yet when the index does. Then the read stands as it came. */
+  private async readName(path: string, read: number): Promise<void> {
+    for (let missed = 0; ; missed++) {
+      const state = await inspectRecords([path], this.scanning.signal, []).then(
+        (states) => states[path],
+        () => undefined,
+      );
+      if (
+        state?.name !== undefined ||
+        !this.indexed().names.size ||
+        missed === 4 ||
+        this.closed ||
+        read !== this.nameScans
+      )
+        return this.scannedName(read, state);
+      await new Promise((done) => setTimeout(done, 100 << missed));
+    }
   }
   private scannedName(read: number, state?: RecordState): void {
     if (this.closed || read !== this.nameScans) return;
