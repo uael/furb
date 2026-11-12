@@ -75,7 +75,7 @@ async def test_the_engine_tells_what_a_step_raised() -> None:
 
 
 async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -> None:
-  """A step that raised nothing and debugged nothing tells nothing, and its end asks its thread again when it leaves no act of that thread open."""
+  """A step that raised nothing and debugged nothing tells nothing."""
   _, log, root = born("k = 1", "close(1)")
   act = engine.prompt(int, "count", on=root)
   assert await act == 1

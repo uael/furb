@@ -423,7 +423,8 @@ fn a_turn_between_two_refusals_of_an_actor_on_a_chain_ends_their_row() {
   let turn = |word: &str| vec![MockStreamEvent::text(word)];
   let model = MockCompletionModel::from_stream_turns([
     failed(),
-    turn("x = 1\ndebug(t'{x}')"),
+    // The turn between the two refusals makes an act, so it is no barren step of its thread.
+    turn("x = 1\nstand()"),
     failed(),
     turn("close(x + 2)"),
   ]);
