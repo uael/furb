@@ -687,10 +687,23 @@ test("resume preserves chains, the values of the program, theme, and input draft
       expect(second.selected).toBe(fork.id);
       expect(second.theme).toBe("paper");
       expect(second.mode).toBe("python");
-      expect(app.composer.plainText).toBe('draft = "keep this"');
+      // The question that the record shows open is owed after the birth: the input answers it, and the draft of the
+      // chain stays under its own key.
+      const ask = second.desk.asks.find((one) => one.id === String(pending));
+      if (!ask) throw new Error("The question is not on the desk of the born life.");
+      expect(ask.chain).toBe(fork.id);
+      expect(app.composeKey()).toBe(`${fork.id}:python#${ask.id}`);
+      expect(app.composer.plainText).toBe("");
+      expect(second.drafts[`${fork.id}:python`]).toBe('draft = "keep this"');
       // The question waits for the operator again, with no wake of his.
       expect(second.host.pending.size).toBe(0);
       expect((await second.engine.outcome(pending)).done).toBe(false);
+      // Once the operator answers it, the input shows the draft of the chain again.
+      await second.answer(ask, "kept");
+      for (let n = 0; n < 400 && !(await second.engine.outcome(pending)).done; n++) await Bun.sleep(25);
+      expect((await second.engine.outcome(pending)).done).toBe(true);
+      app.render();
+      expect(app.composer.plainText).toBe('draft = "keep this"');
     },
     { width: 120, height: 40 },
     second,
