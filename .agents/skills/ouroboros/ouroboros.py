@@ -1,6 +1,6 @@
 import json
 
-from furb.engine import HIDDEN, ROOT, Refused, Text, program, read, say, transcript, write
+from furb.engine import HIDDEN, ROOT, Refused, Text, module, program, read, say, transcript, write
 
 
 def enabled() -> list[str]:
@@ -62,3 +62,24 @@ def extend(name: str, *rungs: str, tui: str = "", session: bool = False, view: s
   config.setdefault("skills", {})[name] = f"skills/{name}"
   write(Text(".furb/config.json", json.dumps(config, indent=2) + "\n"))
   return landed
+
+
+def dump(*names: str, on: str = "") -> str:
+  def defines(word: str, of: str) -> bool:
+    heads = (["def", of], ["class", of])
+    return any(
+      x.removeprefix("async ").split("(")[0].split(":")[0].split("[")[0].split(" ") in heads for x in word.splitlines()
+    )
+
+  here, out = module(on), {}
+  for name in names:
+    held = here.get(name)
+    text = (
+      callable(held)
+      and getattr(held, "__name__", name) == name
+      and next((w for w in reversed(program(on).values()) if defines(w, name)), "")
+    )
+    if not text:
+      raise Refused("no dump of " + name)
+    out[text] = name
+  return "\n".join(out)

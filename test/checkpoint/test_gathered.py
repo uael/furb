@@ -219,3 +219,34 @@ async def test_the_turns_of_a_chain_keep_no_reply_that_is_not_done_so_a_later_li
   (chain,) = [c for c in checkpoint.gathered(vars(engine), lambda word: word, {})["chains"] if c["id"] == root]
   replies = [x[1] for x in chain["turns"] if x[0] in ("reply", "started", "done") and x[1].startswith("reply")]
   assert open_reply not in replies and replies != []
+
+
+async def test_the_text_of_a_value_is_the_python_that_makes_it_again() -> None:
+  """The text of a value is the python that makes it again: None, a bool, an int, a float, a str, a Text, an Exit or an exception as python shows it, a list, a tuple, a set or a dict of those as python writes it, and an Act as Act('bash1')."""
+  _, _, root = born()
+  word = "k = {'one': [None, True, 1, 2.5, 'x', Text('a', 'b'), Exit(0, Text(''), Text('')), (1,), set(), {3}], 2: ()}\ne = KeyError('k')\nshell = bash('echo one')"
+  await engine.rung(word, on=root)
+  await settle()
+  [one] = checkpoint.gathered(vars(engine), lambda word: word, {})["chains"]
+  assert one["values"]["k"] == repr(engine.module(root)["k"])
+  assert one["values"]["e"] == "KeyError('k')"
+  assert one["values"]["shell"] == f"Act({str(engine.module(root)['shell'])!r})"
+
+
+async def test_every_other_value_is_lost_and_the_rest_of_the_checkpoint_is_gathered_all_the_same(
+  engine_of: str,
+) -> None:
+  """Every other value is lost, and so is a float that is not finite, an exception whose arguments are lost, and a list, a tuple, a set or a dict that holds a lost value at any depth, so its name stands among the lost names and the rest of the checkpoint is gathered all the same."""
+  _, _, root = born()
+  word = (
+    "gone = iter([1])\nmany = [1, gone]\nonce = (gone,)\nkeyed = {'k': gone}\ndeep = {1: [gone]}\n"
+    "listed = [{'k': gone}]\npaired = ({'k': len},)\nnan = float('nan')\ninf = -float('inf')\nkept = 1"
+  )
+  # monty makes an exception of no argument or of one string alone, so only this interpreter holds one whose argument
+  # is lost.
+  wrong = {"wrong"} if engine_of == "python" else set()
+  await engine.rung(word + "\nwrong = ValueError(len)" * bool(wrong), on=root)
+  [one] = checkpoint.gathered(vars(engine), lambda word: word, {})["chains"]
+  lost = {"gone", "many", "once", "keyed", "deep", "listed", "paired", "nan", "inf"} | wrong
+  assert lost <= set(one["lost"]) and not lost & one["values"].keys()
+  assert one["values"]["kept"] == "1"

@@ -99,48 +99,6 @@ def program(on="") -> dict[str, str]:
   return words
 
 
-def literal(v, into=None):
-  isinstance(v, str) and get(v) and into is not None and into.add(v)
-  match v:
-    case Act():
-      return f"Act({str(v)!r})" * (into is not None)
-    case BaseException():
-      return literal(v.args) and repr(v)
-    case None | int() | float() | str() | Text() | Exit():
-      return repr(v) * (not (isinstance(v, float) and v - v))
-    case dict():
-      s = [(literal(k, into), literal(y, into)) for k, y in v.items()]
-      return all(p and o for p, o in s) and "{" + ", ".join(f"{p}: {o}" for p, o in s) + "}"
-    case list() | tuple() | set():
-      s = [literal(y, into) for y in v]
-      j = ", ".join(s)
-      return all(s) and (
-        f"[{j}]"
-        if isinstance(v, list)
-        else f"({j}{',' * (len(s) == 1)})"
-        if isinstance(v, tuple)
-        else "{" + j + "}"
-        if s
-        else "set()"
-      )
-  return ""
-
-
-def dump(*names: str, on="") -> str:
-  here, out = module(on), {}
-  for name in names:
-    if name in here and callable(here[name]):
-      text = getattr(here[name], "__name__", name) == name and next(
-        (w for w in reversed(program(on).values()) if re.search(rf"(?m)^(async )?(def|class) {name}\b", w)), ""
-      )
-    else:
-      text = name in here and (got := literal(here[name])) and f"{name} = {got}"
-    if not text:
-      raise Refused("no dump of " + name)
-    out[text] = name
-  return "\n".join(out)
-
-
 def standing():
   return answer("stand", ROOT, [])
 

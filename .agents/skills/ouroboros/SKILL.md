@@ -15,7 +15,7 @@ furb has no plugin surface. What extends it is python, as a word is, and the rec
 - `extend(name, *rungs, tui=module)` also writes `module`, TypeScript, as the part of the skill that the TUI loads live (see below).
 - An official skill lives in furb: a word, a contract, a suite and an ear of the World in the crate. Take it for what every project needs, and ask the operator first.
 
-`enabled()` gives the skills that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word. Their contract is `ouroboros.pyi`.
+`enabled()` gives the skills that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word. `dump(*names)` gives the words that define the functions and the classes that it names, which a word of another life runs to define them again. Their contract is `ouroboros.pyi`.
 
 ## A def in a word
 

@@ -31,6 +31,8 @@ def gathered(names: dict[str, object], define: Callable[[str], str], floor: dict
   The turns of a chain keep no reply that is not done, so a later life holds no reply that no ear of it takes.
   gathered reads the questions of the life alone, so the fact of an act of an earlier life that a carried turn holds raises nothing.
   chains holds each plain value of a chain whatever its size, and seed binds each from the fact carried of its chain, so a later life holds it exactly and no turn tells it.
+  The text of a value is the python that makes it again: None, a bool, an int, a float, a str, a Text, an Exit or an exception as python shows it, a list, a tuple, a set or a dict of those as python writes it, and an Act as Act('bash1').
+  Every other value is lost, and so is a float that is not finite, an exception whose arguments are lost, and a list, a tuple, a set or a dict that holds a lost value at any depth, so its name stands among the lost names and the rest of the checkpoint is gathered all the same.
   acts holds the last stand, the last clock, each prompt and each command of a chain in chains, and each act of a verb that a value names: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why, so a later life holds each thread of a chain, a closed one too, and a prompt on it goes on.
   paused says whether a pause stands over the chain at the tip, and no prompt of it pauses it, so a later life goes on as the tip left it.
   gathered is a view: it makes nothing and says nothing.

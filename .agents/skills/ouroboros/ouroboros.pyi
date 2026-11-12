@@ -18,3 +18,11 @@ def extend(name: str, *rungs: str, tui: str = "", session: bool = False, view: s
   A later life on the record plays the kit on each chain from that fact, with no file in the project or the config.
   extend with session and view names in that fact the value of the root that holds the tree of the view of the kit, a node of the protocol as a dict, as {'id': 'todo', 'node': 'text', 'runs': [{'text': 'nothing to do'}]}: each window that mounts the view of the kit gets that tree from the daemon, and again each time that the value changes, at each later open too.
   """
+
+def dump(*names: str, on: str = "") -> str:
+  """dump gives the words of the program of a chain that define the functions and the classes that it names, as python, which a word of another life runs to define them again.
+  A name of a function or of a class gives the last word of the program of the chain that defines it at the start of a line, whole, and a word that defines two of the names comes once.
+  A name of a function or of a class whose own name is another, as after an import of another function as f, raises Refused, since no word of the program defines its value under that name.
+  A name of a value, a name of a function or of a class that no word of the program defines, and a name that the module does not hold raise Refused, which names it, so no name is lost in silence, and a word writes the repr of a plain value itself.
+  dump reads the module and the program of the chain and asks nothing, so no act is made and the journal keeps nothing.
+  """

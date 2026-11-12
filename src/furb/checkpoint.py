@@ -68,9 +68,29 @@ def gathered(names, define, floor):
   get, peek, over, scope, question, prompted, lineage, paused, root = (
     names[x] for x in ("get", "peek", "over", "scope", "question", "prompted", "lineage", "paused", "ROOT")
   )
-  transcript, reading, module, program, literal, standing, listening, refused = (
-    names[x] for x in ("transcript", "reading", "module", "program", "literal", "standing", "listening", "Refused")
+  transcript, reading, module, program, standing, listening, refused = (
+    names[x] for x in ("transcript", "reading", "module", "program", "standing", "listening", "Refused")
   )
+
+  def literal(v, into=None):
+    isinstance(v, str) and get(v) and into is not None and into.add(v)
+    if isinstance(v, names["Act"]):
+      return f"Act({str(v)!r})" * (into is not None)
+    if isinstance(v, BaseException):
+      return literal(v.args) and repr(v)
+    if v is None or isinstance(v, (int, float, str, names["Text"], names["Exit"])):
+      return repr(v) * (not (isinstance(v, float) and v - v))
+    if not isinstance(v, (dict, list, tuple, set)):
+      return ""
+    pairs = v.items() if isinstance(v, dict) else [(y,) for y in v]
+    s = [": ".join(made) if all(made := [literal(y, into) for y in pair]) else "" for pair in pairs]
+    ends = "[]" if isinstance(v, list) else "()" if isinstance(v, tuple) else "{}"
+    whole = (
+      "set()"
+      if isinstance(v, set) and not v
+      else ends[0] + ", ".join(s) + "," * (ends == "()" and len(s) == 1) + ends[1]
+    )
+    return whole if all(s) else ""
 
   def number(called):
     return int(re.sub(r"^\D+", "", called) or 0)
