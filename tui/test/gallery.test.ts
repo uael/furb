@@ -3,6 +3,17 @@ import { mkdtemp, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { remove } from "../../bind/typescript/test/processes.ts";
 
+/** The text of a stream, which a log takes as it comes. */
+async function tee(stream: ReadableStream<Uint8Array>, log: NodeJS.WriteStream): Promise<string> {
+  const decoder = new TextDecoder();
+  let text = "";
+  for await (const chunk of stream) {
+    log.write(chunk);
+    text += decoder.decode(chunk, { stream: true });
+  }
+  return text;
+}
+
 /** The whole gallery runs on CI, to its last capture, so that a scene that hangs or fails stops a pull request and not
  * the audit that draws the gallery later. It draws in a home of its own, with a daemon of its own, and writes its
  * pictures to a folder of the test. The gallery draws about 125 shots in about 3 minutes, and a loaded runner takes
@@ -26,12 +37,14 @@ test.skipIf(process.platform !== "linux")(
       env.FURB_GALLERY_ROOT = root;
       env.FURB_GALLERY_OUT = join(root, "out");
       const run = Bun.spawn([process.execPath, script], { env, stdout: "pipe", stderr: "pipe" });
-      const [out, err, code] = await Promise.all([
-        new Response(run.stdout).text(),
-        new Response(run.stderr).text(),
+      // The script writes a line for each capture, and the log takes it as it comes: a limit that ends the test keeps
+      // the step that the script stood at.
+      const [out, , code] = await Promise.all([
+        tee(run.stdout, process.stdout),
+        tee(run.stderr, process.stderr),
         run.exited,
       ]);
-      if (code !== 0) throw new Error(`The gallery ended with ${code}: ${err}${out}`);
+      if (code !== 0) throw new Error(`The gallery ended with ${code}`);
       expect(out).toMatch(/Wrote \d+ captures/);
       expect(await readdir(join(root, "out"))).toContain(`${last}.png`);
     } finally {
