@@ -246,7 +246,7 @@ async def test_a_value_larger_than_one_eval_of_the_sandbox_takes_stands_in_chain
   told = f"texts = {{n: literal(globals()[n], set()) for n in {names!r}}}"
   await engine.rung(told, on=root)
   before = engine.module(root)["texts"]
-  data = checkpoint.gathered(vars(engine), lambda word: word, {})
+  data = checkpoint.gathered(vars(engine), definitions, {})
   (held,) = [c["values"] for c in data["chains"] if c["id"] == root]
   assert isinstance(held["small"], str)
   assert all(isinstance(held[name], list) and len(held[name]) > 1 for name in names[:-1])
