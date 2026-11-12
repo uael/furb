@@ -22,7 +22,7 @@ import { fromDirectory, shortenHomes } from "../files.ts";
 import { clip, dollars, plainFailure } from "../format.ts";
 import type { Mark as PartMark } from "../parts.ts";
 import { hunkPatch, type Scope } from "../review.ts";
-import type { ActRow, View } from "../session.ts";
+import { type ActRow, phaseOf, type View } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
 import { branchStart, branchTakes } from "../watching.ts";
@@ -379,13 +379,16 @@ export const feed = part({
           w.revision(rung.id),
           ...madeBy(rung.id).map((one) => `${one.id}.${w.revision(one.id)}`),
         ].join(":");
-      const liveOf = (ids: readonly string[]) =>
-        ids
-          .map((id) =>
+      // The key reads each message from the same acts that the program is made of, so that a message that closed,
+      // which no rung of it changes, is read again from the box and not left as it stood when the thread was read. An
+      // act of another branch can take the same id, so the phase of the act, which holds its place in its record and
+      // the end that it came to, names it too.
+      const liveOf = (parts: readonly ActRow[]) =>
+        parts
+          .map((act) =>
             [
-              // An act of another branch can take the same id, so the place of the act in its record names it too.
-              `${id}@${index.ids.get(id)?.began ?? ""}`,
-              ...madeBy(id)
+              `${act.id}:${phaseOf(act)}`,
+              ...madeBy(act.id)
                 .filter((one) => one.kind === "rung")
                 .map(stepOf),
             ].join(" "),
@@ -721,10 +724,8 @@ export const feed = part({
         });
         if (folded) return emit();
         const parts = [act, ...messages];
-        const program = programFor(
-          mine ? `taken:${w.selected}:${act.id}` : act.id,
-          liveOf(parts.map((one) => one.id)),
-          () => threadProgram(parts, mine ? takenMade() : madeMap(), word, owed, named),
+        const program = programFor(mine ? `taken:${w.selected}:${act.id}` : act.id, liveOf(parts), () =>
+          threadProgram(parts, mine ? takenMade() : madeMap(), word, owed, named),
         );
         // What a model answered stands as markdown with no line of color, since it is no message of the operator.
         const answerOf = (target: ActRow, id: string): Section => {

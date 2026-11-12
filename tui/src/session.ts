@@ -164,7 +164,7 @@ export const notice = (act: ActRow): boolean =>
   act.kind === "prompt" && act.words[0] === "None" && act.words[2] === "operator";
 /** The phase of an act that a view of the whole life reads: whether it is done or held, when it began and ended, and
  * how its rung ran. The output that a command streams is no part of it. */
-function phaseOf(act?: ActRow): string {
+export function phaseOf(act?: ActRow): string {
   return act
     ? `${isDone(act)}|${isPaused(act)}|${act.asking}|${act.state}|${act.began}|${act.ended}|${act.run?.run}|${reasonOf(act.run)}`
     : "";
