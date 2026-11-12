@@ -275,7 +275,7 @@ async fn command(furb: Furb) -> Result<(), CliError> {
 /// Where the models of this machine came from, after an update when the operator asks for one.
 async fn catalog(update: bool) -> Result<(), CliError> {
   let status = if update {
-    // The update waits for the network on a thread that may block.
+    // The update waits for the network on a thread, which may block.
     task::spawn_blocking(world::catalog::updated).await.map_err(CliError::Updating)?
   } else {
     world::catalog::status()
