@@ -55,6 +55,8 @@ def test_failure_names_the_path_and_the_step(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
 def test_each_worktree_builds_in_a_target_of_its_own_that_starts_as_a_copy_of_the_nearest(tmp_path: Path) -> None:
+  """A file system with no copy on write, as the one of a runner of Linux, copies nothing: the tree then holds no
+  target, and its first build makes one of its own, which no link shares."""
   main = clone_with_origin(tmp_path)
   (main / "Cargo.toml").write_text("")
   shared = tmp_path / "shared"
@@ -64,8 +66,10 @@ def test_each_worktree_builds_in_a_target_of_its_own_that_starts_as_a_copy_of_th
   got = run(main, tmp_path / "one", "first")
   assert got.returncode == 0, got.stderr
   target = tmp_path / "one" / "target"
-  assert target.is_dir() and not target.is_symlink()
-  if "no copy on write" not in got.stdout:
+  assert not target.is_symlink()
+  if "no copy on write" in got.stdout:
+    assert not target.exists()
+  else:
     assert (target / "built").read_text() == "warm"
   assert list(shared.iterdir()) == [shared / "built"]
 
@@ -102,6 +106,9 @@ def test_a_checkout_a_merge_or_a_rebase_gives_a_tree_with_a_link_to_a_shared_tar
   git(main, "add", ".")
   git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "hooks")
   git(main, "config", "core.hooksPath", "script/hooks")
+  tip = subprocess.run(
+    ["git", "-C", str(main), "rev-parse", "HEAD"], capture_output=True, text=True, check=True, env=CLEAN
+  ).stdout.strip()
   shared = tmp_path / "shared"
   shared.mkdir()
   (shared / "built").write_text("warm")
@@ -111,7 +118,7 @@ def test_a_checkout_a_merge_or_a_rebase_gives_a_tree_with_a_link_to_a_shared_tar
     (tree / ".cargo").mkdir()
     (tree / ".cargo" / "config.toml").write_text(guard)
     (tree / "target").symlink_to(shared)
-    git(tree, "checkout", "-q", "--detach", "main")
+    git(tree, "checkout", "-q", "--detach", tip)
   assert (tmp_path / "plain" / "target").is_dir() and not (tmp_path / "plain" / "target").is_symlink()
   assert (tmp_path / "guarded" / "target").is_symlink(), "a tree that tells the trees apart keeps its link"
   assert sorted(shared.iterdir()) == [shared / "built"]
