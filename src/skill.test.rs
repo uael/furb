@@ -205,10 +205,10 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
     format!("A config is a map, whose skills is a map: {shown}")
   );
   let form = "is true, false, or the path of its folder when it is not official";
-  assert_eq!(refused(r#"{"skills": {"note": 1}}"#), format!("The extension note {form}: {shown}"));
+  assert_eq!(refused(r#"{"skills": {"note": 1}}"#), format!("The skill note {form}: {shown}"));
   assert_eq!(
     refused(r#"{"skills": {"skills": "."}}"#),
-    format!("The extension skills {form}: {shown}")
+    format!("The skill skills {form}: {shown}")
   );
   assert_eq!(
     refused(r#"{"skills": {"note": true}}"#),
@@ -525,10 +525,7 @@ fn a_manifest_says_whether_its_skill_plays_on_every_chain_or_on_the_root_alone()
   folder(&at.join("some"), &manifest("some"), "x = 1\n");
   assert_eq!(
     refused("some"),
-    format!(
-      r#"The manifest plays "some", and an extension plays "every" or "root": {}"#,
-      file("some")
-    )
+    format!(r#"The manifest plays "some", and a skill plays "every" or "root": {}"#, file("some"))
   );
 }
 

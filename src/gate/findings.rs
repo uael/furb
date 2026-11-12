@@ -725,7 +725,7 @@ pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str, whole: &str) -> Vec<F
         format!("`{name}` is a name of the engine, which each later word reads: give the value a name of its own")
       } else {
         format!(
-          "`{name}` is a builtin that a def of this chain reads, an extension's among them, and would read the \
+          "`{name}` is a builtin that a def of this chain reads, a skill's among them, and would read the \
            value in its place: give the value a name of its own"
         )
       };

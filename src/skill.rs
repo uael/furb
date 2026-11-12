@@ -515,7 +515,7 @@ pub(crate) fn manifested<T: AsRef<str>>(
     Some(ROOTED) => true,
     Some(other) => {
       return Err(format!(
-        "The manifest plays {other:?}, and an extension plays \"{EVERY}\" or \"{ROOTED}\""
+        "The manifest plays {other:?}, and a skill plays \"{EVERY}\" or \"{ROOTED}\""
       ));
     }
   };
@@ -615,7 +615,7 @@ pub(crate) fn turned_on(places: &Places, project: &Path) -> Result<Turned, Fault
         Value::String(path) if theirs => (one.1, one.2) = (Some(beside(&file, path, places)), true),
         _ => {
           let form = "is true, false, or the path of its folder when it is not official";
-          return Err(refused(format!("The extension {name} {form}")));
+          return Err(refused(format!("The skill {name} {form}")));
         }
       }
     }

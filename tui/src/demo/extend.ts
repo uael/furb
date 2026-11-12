@@ -54,12 +54,12 @@ export const extending: Script[] = [
       },
       {
         thinking:
-          "A todo is an act of a kind, so a def makes it. The panel reads the acts of that kind, and the def goes in the extension.",
+          "A todo is an act of a kind, so a def makes it. The panel reads the acts of that kind, and the def goes in the skill.",
         word: define,
       },
       {
         thinking:
-          "The panel and the rows belong to this project from now on, so extend writes the def and the part as an extension that every chain runs.",
+          "The panel and the rows belong to this project from now on, so extend writes the def and the part as a skill that every chain runs.",
         word: extend,
       },
       { thinking: "The part loads at once. Three items show that it draws them.", word: items },

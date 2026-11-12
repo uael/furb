@@ -639,7 +639,12 @@ fn a_word_binds_no_builtin_that_a_def_of_the_program_reads() {
   let found = said(&program, "list = 'ls -la'");
   assert_eq!(found.len(), 1, "{found:?}");
   assert!(found[0].1.starts_with("error[builtin-name]"), "{found:?}");
-  assert!(found[0].1.contains("`list` is a builtin that a def of this chain reads"), "{found:?}");
+  assert!(
+    found[0]
+      .1
+      .contains("`list` is a builtin that a def of this chain reads, a skill's among them, and"),
+    "{found:?}"
+  );
   assert_eq!(said(&program, "sum = 'ls'"), vec![], "no def reads sum");
   assert_eq!(said(&[], "list = 'ls'"), vec![], "no def reads list");
 }
