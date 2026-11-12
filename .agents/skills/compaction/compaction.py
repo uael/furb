@@ -48,7 +48,7 @@ compaction = """Compaction cuts this chain to the work that it still needs, and 
   once to its open prompts, so the next reply reads less and the chain goes on with no pause.
 - The life word wraps each chain with compacted() and fitted(), so a chain compacts with a summary of the model
   before it passes its window, and the cut of fitted() is the last resort.
-- A project changes the defaults in an extension of its own, whose word rebinds SHARE, FILTERS or BRIEF."""
+- A project changes the defaults in a skill of its own, whose word rebinds SHARE, FILTERS or BRIEF."""
 SHARE = 0.6
 OVERFLOWED = """The model refused the last reply of this chain, since its prompt passed the window of the model,
 so compaction cut the chain to its open prompts: read again what the work still needs."""

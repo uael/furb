@@ -1,6 +1,6 @@
 ---
 name: ouroboros
-description: Teaches a model how to extend furb, and gives extend(), which writes an extension of the project.
+description: Teaches a model how to extend furb, and gives extend(), which writes a skill of the project.
 metadata:
   furb-word: ouroboros.py
   furb-interface: ouroboros.pyi
@@ -11,11 +11,11 @@ metadata:
 furb has no plugin surface. What extends it is python, as a word is, and the record shows who made each act. Extend it in the smallest of three ways that serves.
 
 - A def in a word lives with its chain: a chain with a source and a later life run it again. Take it for the work of this chain.
-- `extend(name, *rungs)` lives with the project: it writes the words of those rungs as the word of the extension `name` in `.furb/skills/name`, and turns it on in `.furb/config.json`, so it plays on every chain, now and in every later life. Take it for a helper that later work needs too, and give it only rungs that define.
-- `extend(name, *rungs, tui=module)` also writes `module`, TypeScript, as the part of the extension that the TUI loads live (see below).
-- An official extension lives in furb: a word, a contract, a suite and an ear of the World in the crate. Take it for what every project needs, and ask the operator first.
+- `extend(name, *rungs)` lives with the project: it writes the words of those rungs as the word of the skill `name` in `.furb/skills/name`, and turns it on in `.furb/config.json`, so it plays on every chain, now and in every later life. Take it for a helper that later work needs too, and give it only rungs that define.
+- `extend(name, *rungs, tui=module)` also writes `module`, TypeScript, as the part of the skill that the TUI loads live (see below).
+- An official skill lives in furb: a word, a contract, a suite and an ear of the World in the crate. Take it for what every project needs, and ask the operator first.
 
-`enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word. Their contract is `ouroboros.pyi`.
+`enabled()` gives the skills that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word. Their contract is `ouroboros.pyi`.
 
 ## A def in a word
 
@@ -43,9 +43,9 @@ def notes(id: str):
 act("notes", "", notes)
 ```
 
-## An extension
+## A skill with code
 
-An extension is a folder that a host enables on each chain of a life, and on each chain born later, or on the root
+A skill with code is a folder that a host enables on each chain of a life, and on each chain born later, or on the root
 alone when its manifest says `furb-plays: root`. The record keeps that it is on, so a later life runs it again.
 
 ```text
@@ -65,8 +65,8 @@ metadata:
 What the notes are for.
 ```
 
-The life word starts the work of the extension on each chain. The file `.furb/config.json` of a project turns it on, or
-`.furb/config.local.json` beside it, which git ignores, for an extension of this machine alone:
+The life word starts the work of the skill on each chain. The file `.furb/config.json` of a project turns it on, or
+`.furb/config.local.json` beside it, which git ignores, for a skill of this machine alone:
 
 ```json
 { "skills": { "notes": "path/to/notes" } }
@@ -74,8 +74,8 @@ The life word starts the work of the extension on each chain. The file `.furb/co
 
 ## A part for the TUI
 
-An extension can also give the TUI a part: a module of TypeScript beside its word, which its manifest names under
-`furb-view`. The TUI loads it at its start, and again when its file changes or when a write of the extension lands, with
+A skill with code can also give the TUI a part: a module of TypeScript beside its word, which its manifest names under
+`furb-view`. The TUI loads it at its start, and again when its file changes or when a write of the skill lands, with
 no restart. The module imports no value: it exports a function, which the TUI calls with `furb`.
 
 ```text
@@ -105,17 +105,17 @@ a rule with the title and the lines under it, after the last act whose `began` i
 dialog is open, and a command runs from the palette or as `/name`. A key or a command of the TUI wins.
 `extend(name, *rungs, tui=module)` writes the part with the word.
 
-A panel reads the acts of a kind, so make them with a def in the word of the extension, as `todo` above does,
+A panel reads the acts of a kind, so make them with a def in the word of the skill, as `todo` above does,
 and `seen.of("todo")` gives them in the order of the record.
 
 Check a part before you say that it works. The TUI shows a part that fails, in plain words, in a panel under the name of
-its extension, and only the operator sees it. A module that has a syntax error, one that imports a value, and a
+its skill, and only the operator sees it. A module that has a syntax error, one that imports a value, and a
 function that throws when it runs all show there. So run `bun build --no-bundle .furb/skills/todo/tui.ts`, which
 finds a syntax error, and read your code again for each name that `seen` and `furb` do not have. When the operator
 tells you an error, read the file again, change it with `replace`, and write it: the panel draws again at once.
-`/skills` in the TUI lists what each part gives. To take an extension away, set it to `false` in
+`/skills` in the TUI lists what each part gives. To take a skill away, set it to `false` in
 `.furb/config.json`, and its part goes with it.
 
-An official extension of furb also has a contract, `notes.pyi`, a suite, `test/`, and, when it reads the disk, an ear
+An official skill of furb also has a contract, `notes.pyi`, a suite, `test/`, and, when it reads the disk, an ear
 of the World in the crate, `src/world/notes.rs`. The crate carries its part, so the TUI loads it in an installed
-package too. [The guide of the extensions](https://github.com/uael/furb/blob/main/docs/skills.md) says the rest.
+package too. [The guide of the skills](https://github.com/uael/furb/blob/main/docs/skills.md) says the rest.

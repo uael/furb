@@ -72,8 +72,8 @@ export const desk = part({
     this.schedule();
   },
 
-  /** The dialog of the extensions that the life runs, each with its part for the TUI: what the part gives, or the error
-   * that stopped its load. A part of an extension that the life does not run stands in it too, since the configs
+  /** The dialog of the skills that the life runs, each with its part for the TUI: what the part gives, or the error
+   * that stopped its load. A part of a skill that the life does not run stands in it too, since the configs
    * turn it on. */
   async skillsDialog(): Promise<void> {
     const running = await this.session.skillsRun();
@@ -95,15 +95,15 @@ export const desk = part({
       };
     });
     this.openPalette("Skills", choices, {
-      empty: "No extension runs in this life, and none has a part for the TUI.",
-      note: "A part for the TUI loads live from the folder of its extension. A part that fails shows its error in a panel.",
+      empty: "No skill runs in this life, and none has a part for the TUI.",
+      note: "A part for the TUI loads live from the folder of its skill. A part that fails shows its error in a panel.",
     });
   },
 
   /** Runs what a part does, and shows in the footer the error of one that fails. */
   partRun(run: () => unknown): void {
     const failed = (error: unknown) => {
-      this.session.notice = `A part of an extension failed: ${plainError(error)}`;
+      this.session.notice = `A part of a skill failed: ${plainError(error)}`;
       this.schedule();
     };
     try {
