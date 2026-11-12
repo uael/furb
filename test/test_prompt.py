@@ -11,7 +11,6 @@ from conftest import (
   STANDS,
   WORLD,
   Sand,
-  acknowledged,
   born,
   chained,
   dones,
@@ -24,11 +23,9 @@ from conftest import (
   relived,
   said,
   settle,
-  waiting,
-  wrote,
 )
 from furb import engine
-from furb.engine import OPERATOR, Act, Exit, Refused, Text
+from furb.engine import OPERATOR, Act, Refused, Text
 
 
 async def test_a_prompt_it_makes_the_rung_of_one_turn_of_its_model() -> None:
@@ -182,11 +179,12 @@ async def test_a_rung_need_not_wait_for_a_prompt_of_shape_none() -> None:
   """A rung need not wait for a prompt of shape None."""
   sand, log, root = born()
   two = engine.chain("two")
-  sand.script[root] = [f"prompt(None, 'look at this', on={two!r})\nclose(1)"]
-  assert await engine.prompt(int, "tell them", on=root) == 1
+  sand.script[root] = [f"prompt(None, 'look at this', on={two!r})"]
+  act = engine.prompt(int, "tell them", on=root)
   await settle()
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   theirs = said(log, "prompt")[-1]
-  assert theirs[3] == two and engine.peek(theirs[1], ...) is ...
+  assert engine.peek(step) is None and theirs[3] == two and engine.peek(theirs[1], ...) is ...
 
 
 async def test_the_actor_left_unsaid_is_the_default_actor_of_the_chain() -> None:
@@ -254,19 +252,16 @@ async def test_a_rung_whose_word_closes_nothing_ends_its_step() -> None:
   assert engine.peek(first) is None and [a[2] for a in said(log, "reply")] == [first, second]
 
 
-async def test_the_completion_of_a_prompt_cancels_nothing_under_the_prompt() -> None:
-  """The completion of a prompt cancels nothing under the prompt but the words it ran."""
-  sand, log, root = born("x = bash('slow')\nclose(1)", auto=False)
+async def test_the_completion_of_a_prompt_leaves_no_act_under_it_running() -> None:
+  """The completion of a prompt leaves no command and no prompt under it running, since its own word cannot close it while one runs and a close by another cancels each."""
+  _, log, root = born("x = bash('slow')\nclose(1)", auto=False)
   act = engine.prompt(int, "start one", on=root)
   await settle()
   command = said(log, "bash")[0][1]
-  assert (await act) == 1
-  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
-  assert isinstance(engine.peek(step), CancelledError)
-  sand.exits(command, 0)
+  assert engine.peek(act, ...) is ... and engine.peek(command, ...) is ...
+  engine.close(2, act)
   await settle()
-  got = engine.peek(command)
-  assert isinstance(got, Exit) and got.code == 0
+  assert (await act) == 2 and isinstance(engine.peek(command), CancelledError)
 
 
 async def test_the_operator_prompts_on_any_chain_by_the_id_of_the_chain() -> None:
@@ -429,9 +424,8 @@ async def test_the_world_closes_a_prompt_of_shape_none_to_the_operator_with_none
 
 
 async def test_the_shape_left_unsaid_is_none() -> None:
-  """The shape left unsaid is None, which the acknowledgment uses, and any value responds to it."""
-  _, log, _, _ = await acknowledged()
-  assert [one[4] for one in said(log, "prompt")] == ["int", "int", "None"]
+  """The shape left unsaid is None, and any value responds to it."""
+  born()
   act = engine.prompt(None, "look at this", on=engine.chain("held"))
   await settle()
   engine.close("anything", act)
@@ -494,64 +488,20 @@ async def test_a_prompt_carries_the_name_of_its_shape_as_a_word() -> None:
   assert over == root and [one[1] for one in said(again, "prompt")] == named
 
 
-async def test_the_acknowledgment_carries_no_shape_and_a_message_that_names_the_act_that_is_done() -> None:
-  """The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done."""
-  _, log, _, _ = await acknowledged()
-  asked = said(log, "prompt")[1][1]
-  assert [(one[4], one[5]) for one in said(log, "prompt")] == [
-    ("int", "task"),
-    ("int", "which?"),
-    ("None", f"{asked} done"),
-  ]
-
-
-async def test_a_done_whose_value_is_none_makes_no_acknowledgment() -> None:
-  """A done whose value is None makes no acknowledgment, since it gives the model nothing to read."""
-  _, log, root = born("x = prompt(None, 'note', to=OPERATOR)\nclose(1)")
-  assert await engine.prompt(int, "go", on=root) == 1
-  note = said(log, "prompt")[1][1]
-  engine.close(None, note)
-  await settle()
-  assert engine.peek(note) is None
-  assert [(one[4], one[5]) for one in said(log, "prompt")] == [("int", "go"), ("None", "note")]
-
-
-async def test_the_end_of_an_act_of_an_open_thread_makes_no_acknowledgment() -> None:
-  """The end of an act of an open thread makes no acknowledgment, since that end makes its thread due, also while a word of the thread awaits another act."""
-  sand, log, root = born("x = bash('slow')\nawait bash('slow')", "pass", "close(3)", auto=False)
-  task = engine.prompt(int, "task", to="m/high", on=root)
-  await settle()
-  first, second = (one[1] for one in said(log, "bash"))
-  sand.exits(first, 0)
-  await settle()
-  assert [one for one in said(log, "prompt") if one[4] == "None"] == [] and len(said(log, "reply")) == 2
-  await settle()
-  assert len(said(log, "reply")) == 2 and not engine.paused(task)
-  sand.exits(second, 0)
-  assert await task == 3
-  assert len(said(log, "reply")) == 3
-
-
-async def test_when_that_thread_is_over_or_that_rung_answers_no_prompt_the_chain_prompts_nothing() -> None:
-  """When that thread is over and the act did not fail, or when that rung answers no prompt, the chain prompts nothing, and what the act told waits for the next advance, which shows it."""
-  sand, log, root = born("x = bash('slow')\nclose(1)", "close(2)", auto=False)
-  assert await engine.prompt(int, "start one", on=root) == 1
-  first = said(log, "bash")[0][1]
-  sand.exits(first, 0)
-  await settle()
+async def test_the_end_of_an_act_that_a_rung_which_answers_no_prompt_made_prompts_nothing() -> None:
+  """The end of an act that a rung which answers no prompt made prompts nothing, and what the act told waits for the next advance, which shows it."""
+  sand, log, root = born("close(2)", auto=False)
   engine.rung("y = bash('slow')", on=root)
   await settle()
-  second = said(log, "bash")[1][1]
-  sand.exits(second, 0)
+  command = said(log, "bash")[0][1]
+  sand.exits(command, 0)
   await settle()
-  assert [one for one in said(log, "prompt") if one[4] == "None"] == [] and len(said(log, "reply")) == 1
+  assert [one for one in said(log, "prompt") if one[4] == "None"] == [] and said(log, "reply") == []
   assert await engine.prompt(int, "next", on=root) == 2
   told = heads(engine.turns(on=root))
-  step = next(one[1] for one in said(log, "rung") if one[2] == "prompt2")
-  assert (
-    told.index(f"#{first} exited 0") < told.index(f"#{second} exited 0") < told.index(f"#{step} advance on prompt2")
-  )
-  assert len(said(log, "reply")) == 2
+  step = next(one[1] for one in said(log, "rung") if one[2] == "prompt1")
+  assert told.index(f"#{command} exited 0") < told.index(f"#{step} advance on prompt1")
+  assert len(said(log, "reply")) == 1
 
 
 async def test_a_prompt_on_a_thread_is_on_the_chain_of_that_thread() -> None:
@@ -646,50 +596,13 @@ async def test_a_later_life_makes_each_prompt_on_a_thread_again_at_its_place() -
 
 async def test_a_prompt_that_a_rung_of_a_thread_makes_is_a_thread_under_it() -> None:
   """A prompt that a rung of a thread makes is a thread under it, by its lineage."""
-  _, log, root = born("x = prompt(str, 'which?', to=OPERATOR)\nclose(1)")
+  _, log, root = born("x = prompt(str, 'which?', to=OPERATOR)", "close(1)")
   first = engine.prompt(int, "ask", on=root)
-  assert await first == 1
+  await settle()
   (sub,) = [a[1] for a in said(log, "prompt") if a[5] == "which?"]
+  engine.close("this", sub)
+  assert await first == 1
   assert engine.under(sub, first) and engine.get(sub)[3] == root
-
-
-async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowledgment_names() -> None:
-  """The turns of the chain hold the result of the act that the acknowledgment names."""
-  _, log, root, task = await acknowledged()
-  asked = said(log, "prompt")[1][1]
-  ack = said(log, "prompt")[-1][1]
-  assert said(log, "prompt")[-1][5] == f"{asked} done"
-  told = paragraphs(engine.turns(on=root))
-  answered = [one for one in told if one.startswith("#") and one.split("\n")[0].endswith(f" advance on {ack}")]
-  assert [one for one in told if one.startswith(f"#{asked} closed by operator")] != []
-  assert told.index(prompted(ack, "None", f"{asked} done", task)) < told.index(answered[-1])
-
-
-async def test_a_cancelled_result_is_no_orphan() -> None:
-  """A cancelled result is no orphan."""
-  _, log, root = born("x = bash('slow')\nclose(1)", auto=False)
-  act = engine.prompt(int, "start one", on=root)
-  await settle()
-  command = said(log, "bash")[0][1]
-  assert (await act) == 1
-  engine.cancel(command)
-  await settle()
-  assert isinstance(engine.peek(command), CancelledError)
-  assert [one[5] for one in said(log, "prompt")] == ["start one"]
-
-
-async def test_the_chain_prompts_nothing_too_for_a_failure_of_an_act_made_before_the_run_of_its_rung() -> None:
-  """The chain acknowledges too a failure of an act that a rung of the chain made before the run of that rung, as while its model writes its word, and a failure of an act but for a cancel opens that thread again when it is over, so an error asks the model again even after that word closed its prompt."""
-  _, log, _, act, rung, _ = await waiting()
-  wrote(rung, "rung('BAD')\n", 0)
-  await settle()
-  (bad,) = [a[1] for a in said(log, "rung") if a[2] == rung]
-  assert isinstance(engine.peek(bad), Refused)
-  assert [one[5] for one in said(log, "prompt")] == ["count"]
-  wrote(rung, "close(1)\n", 12)
-  assert await act == 1
-  await settle()
-  assert [one[5] for one in said(log, "prompt")] == ["count", f"{bad} done"]
 
 
 async def test_a_pause_stands_over_the_close_that_answers_a_prompt_too() -> None:
@@ -713,7 +626,6 @@ async def test_the_name_of_a_shape_is_the_word_a_chain_says_it_by() -> None:
     "close(None)",
   )
   assert await engine.prompt(list, "work", on=root) == [[], None]
-  # The chain acknowledges each act a rung made once it is done, with a prompt of no shape, which is not one of these.
   assert [one[4] for one in said(log, "prompt") if one[4] != "None"] == ["list", "list[Foo]", "Foo | None"]
   assert [one for one in heads(engine.turns(on=root)) if one.split(" ")[1:2] in (["raised"], ["refused"])] == []
 
@@ -762,16 +674,6 @@ async def test_a_prompt_to_a_model_takes_its_own_act() -> None:
   shown = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
   assert [(a[1], a[2]) for a in said(log, "started") if a[1] == shown] == [(shown, WORLD)]
-
-
-async def test_the_chain_acknowledges_no_done_that_a_word_of_the_chain_caused_with_a_close() -> None:
-  """The chain acknowledges no done that a word of the chain caused with a close, since the model that wrote that close knows it already, and it acknowledges a done that the chain itself caused, as the close of a rung that it refused."""
-  _, log, root = born("close(7)")
-  await engine.rung("p = prompt(int, 'seven')", on=root)
-  await settle()
-  (asked,) = [a[1] for a in said(log, "prompt") if a[5] == "seven"]
-  assert engine.peek(asked) == 7
-  assert [a[5] for a in said(log, "prompt") if a[5] == f"{asked} done"] == []
 
 
 async def test_a_prompt_reads_the_facts_of_the_acts_of_its_own_life_alone_so_the_fact_of_a_prompt_of_an_earlier_life_that_a_carried_turn_holds_in_the_shape_of_its_build_raises_nothing() -> (

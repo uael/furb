@@ -69,7 +69,7 @@ async def test_a_read_takes_its_number_as_a_command_does() -> None:
   """A read takes its number as a command does, so the first read is read1, whoever made it."""
   sand, log, root = born()
   engine.read("a.txt", on=root)
-  sand.script[root] = ["x = bash('echo hi')\nt = read('a.txt')\nclose(len(t.lines))"]
+  sand.script[root] = ["x = bash('echo hi')\nt = read('a.txt')\nawait x\nclose(len(t.lines))"]
   asking = engine.prompt(int, "read it", on=root)
   assert await asking == 2
   await settle()
@@ -83,7 +83,7 @@ async def test_a_read_takes_its_number_as_a_command_does() -> None:
 
 async def test_the_generator_that_settles_an_await_is_named_after_that_act() -> None:
   """The generator that settles an await of an act from outside a run is named after that act and the task that awaits it, which is the name of no question."""
-  _, log, root = born("x = bash('echo hi')\nclose(1)")
+  _, log, root = born("x = bash('echo hi')\nawait x\nclose(1)")
   asking = engine.prompt(int, "run it", on=root)
   assert await asking == 1
   assert [a for a in log if "waits" in a[1]] == []

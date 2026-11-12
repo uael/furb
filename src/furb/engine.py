@@ -223,6 +223,18 @@ def close(value: object, id=""):
         )
       except Exception:
         raise Refused(repr(value) + " not " + shape) from None
+  left = [
+    x
+    for x in listening()
+    if prompted(id)
+    and x != id
+    and under(x, id)
+    and get(x)[0] in ("bash", "prompt")
+    and not (over(x) or any(covers(c, x) for c in transcript(x, "cancel") + transcript(x, "close")))
+  ]
+  if left and under(who, id):
+    raise Refused(f"{id} runs {left}: await or cancel each")
+  [cancel(x) for x in left]
   control("close", "closed", id, value)
   if under(who, id):
     raise CancelledError()
@@ -460,12 +472,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             value is None or did[maker].add("tell")
           else:
             scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
-            heed(p := held[about])
-            if isinstance(value, Exception):
-              if p in barren:
-                inbox.setdefault(p, []).append(about + " done")
-              elif p:
-                prompt(None, about + " done", on=p)
+            heed(held[about])
       a[0] == "wake" and [heed(x) for x in barren if covers(a, x)]
       if a[2] in did:
         did[a[2]].add("close" if a[0] == "prompt" and operated(a[6]) else a[0])
@@ -536,7 +543,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         case ("ready", rid, _, word):
           if rid in took:
             inbox[p := r[2]] = inbox.get(p, [])[len(took[rid]) :]
-            took[rid] = owed[p] = owed.get(p, []) + [x for x in took[rid] if prompted(x)]
+            took[rid] = owed[p] = owed.get(p, []) + took[rid]
           try:
             rid == step or bind(rid)
             ladder[(donor := r[5]) or rid] = word
@@ -557,11 +564,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           for fold in (barren, owed, wrote):
             fold.pop(about, None)
           for message in inbox.pop(about, []):
-            if prompted(message):
-              with site.set(message):
-                rung(to=r[6])
-            else:
-              prompt(None, message, on=about)
+            with site.set(message):
+              rung(to=r[6])
       if r[0] == "run":
         running.discard(r[4]) if a[0] == "done" and (over(r[4]) or not get(r[4])) else running.add(r[4])
       elif r[0] == "wants":

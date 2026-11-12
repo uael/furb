@@ -112,8 +112,8 @@ LATER: list = [[[OPERATOR, [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
 COST = (80000, 0, 0, 0, 1.5)
 """One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""
 
-WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose(k)"
-"""A word of a rung that reads a file, starts a command and gives back how many lines the file holds, before the
+WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nawait x\nclose(k)"
+"""A word of a rung that reads a file, starts a command and gives back how many lines the file holds, once the
 command is done."""
 
 
@@ -609,19 +609,6 @@ async def lived() -> tuple[Sand, list[tuple], str]:
   assert await engine.prompt(int, "read and run", on=root) == 2
   await settle()
   return sand, log, root
-
-
-async def acknowledged() -> tuple[Sand, list[tuple], str, str]:
-  """A life whose task asks the operator and closes, then the operator refuses that question, so the chain acknowledges
-  that failure on the task, which is over: the World, what was said, the root and the task."""
-  sand, log, root = born("x = prompt(int, 'which?', to=OPERATOR)\nclose(3)", "close(None)")
-  task = engine.prompt(int, "task", on=root)
-  assert await task == 3
-  (asked,) = [one[1] for one in said(log, "prompt") if one[5] == "which?"]
-  engine.close(Refused("no"), asked)
-  for _ in range(3):
-    await settle()
-  return sand, log, root, task
 
 
 def slow() -> tuple[Sand, list[tuple], str, Act[Exit]]:

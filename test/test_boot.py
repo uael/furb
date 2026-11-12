@@ -92,7 +92,7 @@ async def test_a_verb_from_a_rung_takes_the_chain_of_the_rung_when_the_call_leav
   """A verb from a rung takes the chain of the rung when the call leaves on unsaid."""
   sand, log, _ = born()
   two = engine.chain("two")
-  sand.script[two] = ["x = bash('echo hi')\nclose(1)"]
+  sand.script[two] = ["x = bash('echo hi')\nawait x\nclose(1)"]
   assert await engine.prompt(int, "run it", on=two) == 1
   assert [a[3] for a in said(log, "bash")] == [two]
 
@@ -100,7 +100,7 @@ async def test_a_verb_from_a_rung_takes_the_chain_of_the_rung_when_the_call_leav
 async def test_the_kind_of_an_act_is_the_verb_that_made_the_act_or_the_kind_an_ear_made_it_with() -> None:
   """The kind of an act is the verb that made the act, or the kind an ear made it with."""
   _, log, _ = await lived()
-  kinds = {"chain", "stand", "prompt", "rung", "reply", "gate", "run", "read", "bash", "merged"}
+  kinds = {"chain", "stand", "prompt", "rung", "reply", "gate", "run", "read", "bash", "merged", "wants"}
   assert {engine.get(name)[0] for name in ids(log)} == kinds and engine.get("merged1")[2] == WORLD
   assert [name for name in ids(log) if name.rstrip("0123456789") != engine.get(name)[0]] == []
 
@@ -440,6 +440,7 @@ async def test_the_journal_an_ear_of_the_engine_which_hears_everything() -> None
     "bash",
     "joined",
     "merged",
+    "wants",
     "out",
   }
   marks = [e for e in sand.record if e[0][0] == "joined"]

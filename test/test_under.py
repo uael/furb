@@ -7,7 +7,7 @@ from furb.engine import OPERATOR
 
 async def lineage() -> tuple[str, str, str, str]:
   """A life whose prompt makes a rung, whose word starts a command: the chain, the prompt, the rung and the command."""
-  _, log, root = born("x = bash('echo hi')\nclose(1)")
+  _, log, root = born("x = bash('echo hi')\nawait x\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   return root, said(log, "prompt")[0][1], said(log, "rung")[0][1], said(log, "bash")[0][1]
 

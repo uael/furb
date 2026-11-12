@@ -113,8 +113,9 @@ meanings. The entry of such a name here gives only its form in the engine.
 - message: the text a prompt carries.
 - shape: the python type of a response, which a prompt carries by its name.
 - response: what a prompt completes with.
-- acknowledgment: the prompt of nothing that a chain makes on a thread that is over when an act that a rung of that
-  thread made fails, so it opens that thread again.
+- acknowledgment: the prompt of nothing that a chain of an earlier build made on a thread that was over when an act
+  that a rung of that thread made failed. A chain makes none now, since a thread closes only once no command, wait or
+  prompt under it runs, and the view of the crate still reads those prompts in an older record.
 - due: the state of an open thread that a model answers once a new fact for it came that no reply read, as a message
   on it or the end of an act of it that no word awaits; the chain makes one rung of a due thread, and asks it one reply.
 - barren: a step that raises, that makes nothing, that repeats a word of its thread or that leaves a message of a

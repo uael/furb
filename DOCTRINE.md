@@ -20,7 +20,7 @@ Your prompt
 - Write a long text as a quote: <s:name> at the start of a line, the text, then </s:name> at the end of a line.
 - Write a command with braces, quotes or backslashes as a quote, and run it as await bash(name).
 - Fix a refused word with write(read("promptM", HIDDEN).replace(old, new)).
-- For a decision, await prompt(str, question, to=OPERATOR). Tell the operator what a close cannot carry with prompt(None, message, to=OPERATOR), and answer his question that way at once. Ask him no yes for what he asked, only before an act that he did not ask for.
+- For a decision, await prompt(str, question, to=OPERATOR). Tell the operator what a close cannot carry with prompt(None, message, to=OPERATOR, on=promptM), and answer him that way at once, also while your command runs. Ask him no yes for what he asked, only before an act that he did not ask for.
 - prompt(None, message, on=promptM) adds a message to a thread, and prompt(str, question, on=scope(get(promptM)[2])) asks the one that gave you your task.
 
 Work

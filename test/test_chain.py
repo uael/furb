@@ -219,7 +219,7 @@ async def test_a_chain_that_the_word_of_a_rung_opens_is_a_scope_of_its_own() -> 
   twin = await chained("twin", root, 200)
   assert [a[1] for a in said(log, "chain")] == [root, side, twin]
   assert [a[3] for a in said(log, "chain") if a[1] == side] == [root]
-  sand.script[side] = ["x = bash('echo hi')\nclose((await x).code)", "close(None)"]
+  sand.script[side] = ["x = bash('echo hi')\nawait x\nclose((await x).code)", "close(None)"]
   assert await engine.prompt(int, "count", on=side) == 0
   assert [a[3] for a in said(log, "bash")] == [side]
 
@@ -281,7 +281,7 @@ async def test_a_chain_its_module_which_is_the_engine_itself_named_for_the_chain
   await laid
   program = engine.program(root)
   assert list(program.values()) == [fresh(root), "k = 21"] and engine.module(root)["k"] == 21
-  sand.script[root] = ["x = bash('echo hi')\nclose(1)", "close(None)"]
+  sand.script[root] = ["x = bash('echo hi')\nawait x\nclose(1)", "close(None)"]
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   assert said(log, "bash")[0][3] == root
@@ -360,7 +360,7 @@ async def test_an_assistant_turn_keeps_the_role_assistant_in_every_chain_made_fr
 
 async def test_the_engine_adds_the_acts_that_caused_a_kept_act_to_what_the_filter_kept() -> None:
   """The engine adds the acts that caused a kept act to what the filter kept."""
-  _, log, root = born("x = bash('echo hi')\nclose(1)", "close(None)")
+  _, log, root = born("x = bash('echo hi')\nawait x\nclose(1)", "close(None)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   command = said(log, "bash")[0]
@@ -414,14 +414,14 @@ async def test_every_name_that_the_file_defines_is_in_the_globals_of_a_chain() -
 
 async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
   """A chain holds whole every act made on the chain, the rungs it makes itself among them, which tell nothing."""
-  _, log, root = born("t = read('a.txt')\nx = bash('echo hi')\nclose(1)")
+  _, log, root = born("t = read('a.txt')\nx = bash('echo hi')\nawait x\nclose(1)")
   act = engine.prompt(int, "work", on=root)
   assert await act == 1
   await settle()
   held = engine.transcript(root)
   mine = [a for a in held if engine.question(a)]
   assert [a for a in acts(log).values() if a[3] == root and a not in mine] == []
-  kinds = ["stand", "prompt", "rung", "run", "reply", "gate", "run", "read", "bash", "merged"]
+  kinds = ["stand", "prompt", "rung", "run", "reply", "gate", "run", "read", "bash", "merged", "wants"]
   assert [a[0] for a in mine] == kinds
   engine.write(Text(act, ""), on=root)
   await settle()
@@ -439,8 +439,8 @@ async def test_a_chain_holds_every_fact_on_it_and_an_act_on_another_chain_is_tha
   """A chain holds every fact on it, and an act on another chain is that chain's."""
   sand, log, root = born()
   two = engine.chain("two")
-  sand.script[root] = [f"p = prompt(int, 'hi', on={two!r})\nclose(1)", "close(None)"]
-  assert await engine.prompt(int, "delegate", on=root) == 1
+  sand.script[root] = [f"p = prompt(int, 'hi', on={two!r})"]
+  engine.prompt(int, "delegate", on=root)
   await settle()
   theirs = said(log, "prompt")[-1]
   held, ours = engine.transcript(two), engine.transcript(root)
@@ -737,7 +737,7 @@ async def test_a_chain_has_a_globals_dict_and_a_working_directory_of_its_own() -
 
 async def test_a_chain_with_a_source_holds_the_acts_it_inherited_as_the_filter_kept_them() -> None:
   """A chain with a source holds the acts it inherited from that source, as the filter kept them."""
-  _, log, root = born("x = bash('echo hi')\ny = bash('echo there')\nclose(1)", "close(None)")
+  _, log, root = born("x = bash('echo hi')\ny = bash('echo there')\nawait x\nawait y\nclose(1)", "close(None)")
   assert await engine.prompt(int, "run them", on=root) == 1
   await settle()
   one, two = said(log, "bash")
@@ -832,7 +832,7 @@ async def test_a_chain_with_no_source_stands_on_the_default_actor_of_the_chain_i
 
 async def test_a_chain_with_a_source_that_holds_an_act_reads_the_close_of_the_act() -> None:
   """A chain with a source that holds an act reads the close of the act in its transcript."""
-  _, log, root = born("x = bash('echo hi')\nclose((await x).code)", "close(None)")
+  _, log, root = born("x = bash('echo hi')\nawait x\nclose((await x).code)", "close(None)")
   assert await engine.prompt(int, "run it", on=root) == 0
   await settle()
   command = said(log, "bash")[0][1]
@@ -843,7 +843,7 @@ async def test_a_chain_with_a_source_that_holds_an_act_reads_the_close_of_the_ac
 
 async def test_a_chain_with_a_source_awaits_or_peeks_an_inherited_act_as_it_likes() -> None:
   """A chain with a source awaits or peeks an inherited act as it likes."""
-  sand, log, root = born("x = bash('echo hi')\nclose(1)", "close(None)")
+  sand, log, root = born("x = bash('echo hi')\nawait x\nclose(1)", "close(None)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   command = said(log, "bash")[0][1]
@@ -855,8 +855,8 @@ async def test_a_chain_with_a_source_awaits_or_peeks_an_inherited_act_as_it_like
 
 async def test_the_engine_does_not_wake_a_chain_with_a_source_for_an_inherited_act() -> None:
   """The engine does not wake a chain with a source for the result of an inherited act."""
-  sand, log, root = born("x = bash('slow')\nclose(1)", "close(None)", auto=False)
-  assert await engine.prompt(int, "start one", on=root) == 1
+  sand, log, root = born(auto=False)
+  await engine.rung("x = bash('slow')", on=root)
   await settle()
   command = said(log, "bash")[0][1]
   twin = await chained("twin", root)
@@ -898,7 +898,7 @@ async def test_the_transcript_of_a_chain_with_a_source_holds_the_entries_up_to_t
 
 async def test_the_acts_of_the_prefix_of_a_chain_with_a_source_keep_the_ids_they_had() -> None:
   """The acts of the prefix of a chain with a source keep the ids they had on the origin."""
-  _, _, root = born("x = bash('echo hi')\nclose(1)", "close(None)")
+  _, _, root = born("x = bash('echo hi')\nawait x\nclose(1)", "close(None)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   held = engine.transcript(root)
@@ -1370,14 +1370,15 @@ async def test_the_advance_binds_each_act_that_a_word_of_the_chain_awaits() -> N
 
 async def test_the_chain_asks_a_message_at_once_while_an_act_of_a_word_runs() -> None:
   """A message or a prompt of a person on the chain tells its open, so the chain asks it at once while an act that a word of the chain made runs."""
-  _, log, root = born("x = bash('slow')", "close(1)", auto=False)
+  _, log, root = born("x = bash('slow')", "prompt(None, 'still at it', to=OPERATOR, on='prompt1')", auto=False)
   one = engine.prompt(int, "count", on=root)
   await settle()
   for grace in said(log, "wait"):
     world_says("done", grace[1], None)
   await settle()
   engine.prompt(None, "look", on=one)
-  assert await one == 1
+  await settle()
+  assert not engine.over(one)
   assert (len(said(log, "reply")), engine.over(said(log, "bash")[0][1])) == (2, False)
 
 
@@ -1394,12 +1395,12 @@ async def test_the_chain_advances_first_the_rung_that_was_made_first() -> None:
   engine.prompt(int, "r", on=root)
   await settle()
   await answer(0, "debug(t'1')")
-  await answer(1, "q = prompt(int, 'q')\nclose(0)")
+  await answer(1, "q = prompt(int, 'q')")
   await answer(2, "close(0)")
   engine.prompt(int, "s", on=root)
   await settle()
   await answer(3, "debug(t'3')")
-  await answer(4, "t = prompt(int, 't')\nclose(0)")
+  await answer(4, "t = prompt(int, 't')")
   await answer(5, "debug(t'5')")
   assert [engine.get(engine.get(a[2])[2])[5] for a in said(log, "reply")] == ["p", "r", "p", "q", "s", "q", "t"]
 
@@ -1534,16 +1535,16 @@ async def test_the_chain_asks_the_model_of_a_rung_for_its_word_by_a_reply() -> N
 
 async def test_when_an_act_that_a_rung_made_on_another_chain_is_done_the_chain_tells_it() -> None:
   """When an open act that a rung of the chain made on another chain, a prompt, a rung or an act that the outside started, is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript."""
-  word = "far = chain('far')\nx = prompt(str, 'one', on=far)\ny = prompt(str, 'two', to=OPERATOR, on=far)\nclose(1)"
-  sand, log, root = born(word, "close(await y)")
+  word = "far = chain('far')\nx = prompt(str, 'one', on=far)\ny = prompt(str, 'two', to=OPERATOR, on=far)"
+  sand, log, root = born(word, "seen = 1", "close(1)")
   sand.script["chain2"] = ["close('a\\nb')"]
   act = engine.prompt(int, "fan out", on=root)
-  assert await act == 1
   await settle()
-  (step,) = steps(log, act)
+  step, *_ = steps(log, act)
   far, (x, y) = "chain2", [next(a[1] for a in said(log, "prompt") if a[5] == message) for message in ("one", "two")]
   engine.close("c", y)
   await settle()
+  assert await act == 1
   assert [(a[1], a[2], a[3]) for a in said(log, "tell") if a[3][0].startswith((f"#{x} done", f"#{y} done"))] == [
     (step, root, [f"#{x} done\n<s:{x}_value>\na\nb</s:{x}_value>"]),
     (step, root, [f"#{y} done\n{y}_value = 'c'"]),
@@ -1577,11 +1578,11 @@ async def test_the_chain_tells_the_pause_of_a_prompt_that_one_of_its_rungs_made_
   """When the chain of a prompt that a rung of the chain made on another chain pauses at a refused reply of that prompt, the chain tells that rung under the header paused and binds the refusal under the word why, and the thread of that rung is due, so a model sees that the prompt waits for a wake."""
   sand = Down()
   log, root = life(sand)
-  sand.script[root] = ["lane = chain('lane')\nwork = prompt(int, 'work', on=lane)\nclose(0)", "close(None)"]
+  sand.script[root] = ["lane = chain('lane')\nwork = prompt(int, 'work', on=lane)", "cancel(work)\nclose(0)"]
   act = engine.prompt(int, "lead", on=root)
   assert await act == 0
   await settle(300)
-  (step,) = steps(log, act)
+  step, _ = steps(log, act)
   (work,) = [a[1] for a in said(log, "prompt") if a[5] == "work"]
   told = f"#{work} paused\n{work}_why = Refused('m answered nothing: overloaded')"
   assert [(a[1], a[2], a[3]) for a in said(log, "tell") if a[3][0].startswith(f"#{work} paused")] == [
@@ -1895,7 +1896,7 @@ async def test_a_thread_is_due_when_it_is_made_at_a_wake_that_covers_it_and_at_a
   """A thread is due, one time for one fact, and its count of barren steps starts again, when it is made, at a wake that covers it, and at a message on it of a person or of a model whose word is no word of the thread, as a word of another thread of its chain, of a thread that a word of it made, or of another chain."""
   first = "[x[1] for x in transcript(of='prompt') if x[5] == 'count'][0]"
   word = f"prompt(None, 'need x', on={first})\nawait wait(600, __name__)"
-  _, log, root = born("q = prompt(int, 'sub')\nawait wait(600, __name__)", word, "close(1)", auto=False)
+  _, log, root = born("q = prompt(int, 'sub')\nawait wait(600, __name__)", word, "cancel(q)\nclose(1)", auto=False)
   one = engine.prompt(int, "count", on=root)
   for _ in range(10):
     await settle()
@@ -2091,7 +2092,8 @@ async def rested_on_what_it_made() -> None:
 
 async def asked_again_after_it_awaited() -> None:
   """A word that ends with no close after it awaited an act is asked again at once, also while another act is open."""
-  sand, log, root = born("x = bash('slow')\nclose('on it')", "y = await bash('slow')", "close(5)", auto=False)
+  sand, log, root = born("close('on it')", "y = await bash('slow')", "close(5)", auto=False)
+  engine.bash("slow", on=root)
   first = engine.prompt(str, "work", on=root)
   assert await first == "on it"
   question = engine.prompt(int, "and the benchmarks ?", on=first)
@@ -2122,14 +2124,14 @@ async def test_when_a_step_ends_its_thread_is_due_again_at_once_or_rests_on_its_
   sand.exits(said(log, "bash")[0][1], 0)
   await lingered(log)
   assert (len(said(log, "reply")), engine.paused(one)) == (2, False)
-  sand, log, root = born("server = bash('serve')\ny = await bash('curl')", "close(1)", auto=False)
+  sand, log, root = born("server = bash('serve')\ny = await bash('curl')", "seen = 1", auto=False)
   one = engine.prompt(int, "count", on=root)
   for _ in range(3):
     await settle()
   serve, curl = (a[1] for a in said(log, "bash"))
   sand.exits(curl, 0)
   await lingered(log)
-  assert (len(said(log, "reply")), engine.peek(one, ...), engine.over(serve)) == (2, 1, False)
+  assert (len(said(log, "reply")), engine.module(root).get("seen"), engine.over(serve)) == (2, 1, False)
   _, log, root = born("x = 1", "close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
   assert len(said(log, "reply")) == 2
@@ -2224,7 +2226,7 @@ async def test_the_chain_holds_the_state_of_the_rule_of_the_thread_as_a_fold_who
   """The chain holds the state of this rule as a fold of the facts that it hears, in the order of the log, each key of which is a thread that is open, an act that is open or a rung that is not over, and leaves when that ends, so a life that opens again on its record in the middle of a thread comes to the same asks, a chain with a source asks nothing for a thread of its origin, and the work of the chain at a fact grows with no thread that closed, no rung that is over and no ear of the life."""
 
   async def work(threads: int) -> int:
-    words = ["y = await bash('ls')\nz = bash('slow')\nread('a.txt')", "close(0)"] * threads
+    words = ["y = await bash('ls')\nz = bash('slow')\nread('a.txt')", "cancel(z)\nclose(0)"] * threads
     sand, log, root = born(*words, "x = bash('slow')\nawait wait(600, __name__)", auto=False)
     for n in range(threads):
       engine.chain(f"w{n}", on=root)

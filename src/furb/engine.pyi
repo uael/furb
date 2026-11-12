@@ -386,6 +386,10 @@ def close(value: object, id: str = "") -> None:
   close is given the value first, since a word that answers its own prompt names no act at all.
   A value closes an act with that value, and a prompt with a value that has its shape.
   A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again.
+  A close in the wrong shape is a raise of its step, which is barren, so the third such step in a row pauses the thread when no act of it is open, and else the thread rests until an act of it ends.
+  A close of a prompt that a word under that prompt says raises Refused in that word while a command or a prompt under the prompt is not over and no cancel or close was said over it, and the refusal names each such act, so the prompt stays open and the word awaits or cancels each.
+  A wait under the prompt neither refuses its close nor is cancelled by it, since a wait does no work: each act that it waits for counts by itself, and the close ends the word that awaits it.
+  A close of a prompt that another says, the operator, an ear or a word that is not under the prompt, first cancels each command and each prompt under the prompt that is not over, so the transcript shows the cancel of each, and then ends the prompt.
   A close on an act that is over tells nothing, and reaches only the words that still run under it.
   A close of a name of no act of the life raises Refused, which names it, and says nothing, so a caller that names a wrong act learns it.
   A close said from a word that names no act is over the prompt that made the rung of the word, and over the rung itself for a word its caller wrote, which answers no prompt.
@@ -493,7 +497,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A prompt to a model runs in steps until the prompt completes.
   The binding of a prompt gives the shape as python shows the expression, as prompt1: Act[int] = Act('prompt1').
   A rung whose word closes nothing ends its step, and the chain asks the model again when something new comes, as a message or the end of an act that the word awaited.
-  The completion of a prompt cancels nothing under the prompt but the words it ran.
+  The completion of a prompt leaves no command and no prompt under it running, since its own word cannot close it while one runs and a close by another cancels each.
   The operator prompts on any chain, by the id of the chain.
   A rung prompts on any chain, by the id of the chain.
   A prompt to the operator of a shape that is not None completes when the operator closes the prompt.
@@ -506,14 +510,11 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   A paused prompt makes no rung until the wake, and a cancel of it is over its rung too, which ends itself.
   The World closes with a refusal a prompt it cannot put to the operator; which shapes the operator answers is the World's law.
   The World closes a prompt of shape None to the operator with None as it takes it, since that prompt asks nothing: the operator reads it as a notice, and no word that awaits it waits for the operator.
-  The shape left unsaid is None, which the acknowledgment uses, and any value responds to it.
+  The shape left unsaid is None, and any value responds to it.
   A prompt takes any shape, which a close is read against as python reads an instance: of the shape, or of the origin of a generic one, a Literal as one of its values of the same type, and a union as any of its members, each read the same way.
   A prompt carries the name of its shape as a word, and takes the name as well as the shape, so the journal makes it again.
   The name of a shape is the word a chain says it by, so a shape that holds a class of the engine or of the chain names it as the chain does, under no module.
-  The acknowledgment carries no shape and a message that names the act and what happened to it, as prompt3 done.
-  A done whose value is None makes no acknowledgment, since it gives the model nothing to read.
-  The end of an act of an open thread makes no acknowledgment, since that end makes its thread due, also while a word of the thread awaits another act.
-  When that thread is over and the act did not fail, or when that rung answers no prompt, the chain prompts nothing, and what the act told waits for the next advance, which shows it.
+  The end of an act that a rung which answers no prompt made prompts nothing, and what the act told waits for the next advance, which shows it.
   A prompt on a thread is on the chain of that thread, and goes to the actor of the thread unless it names one.
   A prompt on a thread tells the thread it is on under the word thread, as prompt4_thread = 'prompt1'.
   A prompt on a thread that the life does not hold is refused with the name of that thread, since nothing says the actor of the thread.
@@ -522,10 +523,6 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   Every other prompt on a thread is answered in steps, with a ladder and a door of its own, and on a thread that is closed it opens the thread again, so the model of the thread goes on with the whole transcript of its chain.
   A thread is a prompt and the prompts on it, in order, and the record keeps each done as it landed, so a later life makes each prompt on a thread again at its place, as a message or as a prompt in steps as the thread stood there.
   A prompt that a rung of a thread makes is a thread under it, by its lineage.
-  The turns of the chain hold the result of the act that the acknowledgment names.
-  A cancelled result is no orphan.
-  The chain acknowledges too a failure of an act that a rung of the chain made before the run of that rung, as while its model writes its word, and a failure of an act but for a cancel opens that thread again when it is over, so an error asks the model again even after that word closed its prompt.
-  The chain acknowledges no done that a word of the chain caused with a close, since the model that wrote that close knows it already, and it acknowledges a done that the chain itself caused, as the close of a rung that it refused.
   A pause stands over the close that answers a prompt too, so what a word gave waits for the wake.
   A prompt tells its message and its binding where it is made, as every act tells its open, whether a model or the operator answers it, and a prompt to a model tells them once no rung with a word and an actor is open on its chain, so its message comes after the turns that their callers wrote, as the setup of a chain.
   A prompt reads the facts of the acts of its own life alone, so the fact of a prompt of an earlier life that a carried turn holds, in the shape of its build, raises nothing.

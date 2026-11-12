@@ -233,7 +233,7 @@ async def test_a_record_whose_acts_hold_a_callable_or_an_address_replays_on_the_
   life cannot make again, so a host of this engine gives boot what recorded makes of the record: each such text
   stands for each value that shows the same with no address, and the act that the word makes again is the act of the
   record."""
-  word = "class A:\n  pass\ny = bash(f'echo {A()}')\nclose(1)"
+  word = "class A:\n  pass\ny = bash(f'echo {A()}')\nawait y\nclose(1)"
   sand, _, root = born(word)
   assert await engine.prompt(int, "go", on=root) == 1
   addressed = lambda one: re.sub(r" at 0x[0-9a-f]+", " at 0x1", one) if isinstance(one, str) else one  # noqa: E731

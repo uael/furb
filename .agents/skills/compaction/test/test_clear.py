@@ -23,8 +23,9 @@ async def test_clear_supersedes_the_chain_of_the_caller_with_a_filter_that_keeps
 async def test_so_the_model_of_the_chain_reads_from_zero_and_the_chain_keeps_what_it_is(tmp_path: Path) -> None:
   """So the model of the chain reads from zero, and the chain keeps its name, its module, its open prompts and its threads."""
   sand, root, _ = compacting(tmp_path)
-  word = "k = 7\nread('a.txt')\nw = prompt(int, 'n', to=OPERATOR)\nside = chain('worker')"
+  word = "k = 7\nread('a.txt')\nside = chain('worker')"
   sand.script[root] = [word, "clear()\nclose(k)"]
+  engine.prompt(int, "n", to=engine.OPERATOR, on=root)
   the = engine.prompt(int, "the k", on=root)
   await settle()
   engine.prompt(None, "go on", on=the)

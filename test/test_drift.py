@@ -67,8 +67,8 @@ async def test_its_message_names_the_act_that_drifted_and_both_facts() -> None:
 
 async def test_a_drift_breaks_the_journal_which_keeps_nothing_more() -> None:
   """A drift breaks the journal, which keeps nothing more, and the life runs on with nothing kept."""
-  sand, _, root = born("import random\nx = bash(f'echo {random.random()}')\nclose(None)", auto=False)
-  await engine.prompt(None, "roll", on=root)
+  sand, _, root = born(auto=False)
+  await engine.rung("import random\nx = bash(f'echo {random.random()}')", on=root)
   kept = engine.bash("echo kept", on=root)
   await settle()
   assert kept == "bash2" and ("started", "bash2", WORLD) in [e[0] for e in sand.record]

@@ -19,6 +19,9 @@ async function asked(window: Window) {
   );
 }
 
+/** The thread of the first message of the operator, as a word of the model names it. */
+const THREAD = "[x[1] for x in transcript(of='prompt') if x[5] == 'Scenario: work.'][0]";
+
 /** The acts of a kind on the root, each id and whether it is over. */
 async function made(window: Window, kind: string) {
   const facts = await window.engine.transcript({ on: window.root });
@@ -69,26 +72,27 @@ test("a message goes to the thread that the view shows by default, also once the
 
 // #1118: a message waited until the command that the word of its thread awaited ended. #1256: a word that awaited a
 // command and closed nothing was asked again only when every act of the chain ended, so a message waited behind a
-// command of ten minutes.
+// command of ten minutes. A close of the thread is refused while its command runs, so each answer is a message on the
+// thread, and the thread stays open.
 test("a message on a thread gets its answer while a word of the thread awaits a command, and again once a later word awaited a short one", () =>
   scenario(
     [
       { cue: "Scenario: work.", word: 'slow = await bash("sleep 600", timeout=700)\nclose("Slept.")' },
-      { cue: "Scenario: and now?", word: 'close("Still at work.")' },
+      { cue: "Scenario: and now?", word: `prompt(None, "Still at work.", to=OPERATOR, on=${THREAD})` },
       { cue: "Scenario: and the benchmarks?", word: 'bench = await bash("sleep 0.3")' },
-      { cue: "exited 0", word: 'close("Benchmarks: 5.")' },
+      { cue: "exited 0", word: `prompt(None, "Benchmarks: 5.", to=OPERATOR, on=${THREAD})` },
     ],
     async (window, yard) => {
       await window.type("Scenario: work.");
       await until(async () => (await made(window, "bash")).length === 1, "the long command to start");
       await window.type("Scenario: and now?");
       await window.shows((frame) => frame.includes("Still at work."), "the answer while the command runs");
-      const [work] = await asked(window);
-      expect(work).toMatchObject({ message: "Scenario: work.", value: "Still at work." });
       await window.type("Scenario: and the benchmarks?");
       await window.shows((frame) => frame.includes("Benchmarks: 5."), "the answer after the short command");
-      const all = await asked(window);
-      expect(all.at(-1)).toMatchObject({ message: "Scenario: and the benchmarks?", value: "Benchmarks: 5." });
+      const [work] = await asked(window);
+      expect(work).toMatchObject({ message: "Scenario: work.", value: null });
+      const [slow] = await made(window, "bash");
+      expect(slow).toMatchObject({ over: false });
       expect(yard.turns().map((one) => one.cue)).toEqual([
         "Scenario: work.",
         "Scenario: and now?",

@@ -11,7 +11,7 @@ async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state
   word = (
     "read('a.txt')\ncd('/x')\nx = bash('echo hi')\nseen = [peek(x), turns(), clock(), chance(), gate('k = 1'), cwd()]\n"
   )
-  sand.script[root] = [word + "debug(t'{seen[2]}')\nclose(1)"]
+  sand.script[root] = [word + "debug(t'{seen[2]}')\nawait x\nclose(1)"]
   assert await engine.prompt(int, "ask things", on=root) == 1
   await settle()
   _, step, *_ = said(log, "rung")[0]

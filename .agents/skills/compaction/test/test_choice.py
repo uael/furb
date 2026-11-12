@@ -21,7 +21,7 @@ def rungs(chain: str, prompt: str) -> set[str]:
 async def test_choice_asks_the_model_that_wrote_the_last_reply_of_the_chain(tmp_path: Path) -> None:
   """choice() asks the model that wrote the last reply of the chain, with its effort, on the chain itself, which acts of the chain the work still needs, in a prompt of the shape tuple, the ids to keep as list[str] and a summary of what the rest holds, and gives that prompt."""
   sand, root, _ = compacting(tmp_path)
-  sand.script[root] = ["got = choice()\nclose('asked')", "close((['x'], 'gist'))"]
+  sand.script[root] = ["got = choice()\nawait got\nclose('asked')", "close((['x'], 'gist'))"]
   assert await engine.prompt(str, "go", to="n/low", on=root) == "asked"
   got = engine.module(root)["got"]
   await until(lambda: engine.over(got))

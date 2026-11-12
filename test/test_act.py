@@ -213,7 +213,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
   heard: list[object] = []
   named = engine.act("note", two, noting(heard), "one")
   assert engine.get(named)[3] == two
-  sand.script[root] = ["close(bash('echo hi'))"]
+  sand.script[root] = ["x = bash('echo hi')\nawait x\nclose(x)"]
   unsaid = await engine.prompt(str, "start one", on=root)
   assert engine.get(unsaid)[3] == root
 

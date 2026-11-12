@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import said, settle, slow, stalled
+from conftest import born, said, settle, slow
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -23,11 +23,13 @@ async def test_a_close_is_a_cancel_that_carries_what_the_act_it_names_is_done_wi
 
 async def test_a_close_is_over_the_act_it_names_and_the_words_running_under_it() -> None:
   """A close is over the act it names, the words running under it and the replies that ask for those words, where a cancel is over everything under it."""
-  sand, log, root, shut, step, command = await stalled()
+  sand, log, root = born(auto=False)
+  shut = engine.rung("x = bash('slow')\nawait x", on=root)
+  await settle()
+  command = said(log, "bash")[0][1]
   engine.close(21, shut)
   await settle()
-  assert engine.peek(shut) == 21
-  assert isinstance(engine.peek(step), CancelledError) and engine.peek(command, ...) is ...
+  assert engine.peek(shut) == 21 and engine.peek(command, ...) is ...
   sand.script[root] = ["y = bash('slower')\nclose((await y).code)"]
   gone = engine.prompt(int, "go again", on=root)
   await settle()

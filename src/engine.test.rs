@@ -467,7 +467,7 @@ fn a_command_that_does_not_start_is_closed_with_why_and_the_chain_is_told() {
 
 #[test]
 fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it() {
-  let words = ["await bash('sleep 5')", "c = bash('sleep 0.2; echo late')\nclose(1)"];
+  let words = ["await bash('sleep 5')", "c = bash('sleep 0.2; echo late')\nawait c\nclose(1)"];
   let mut lived = Lived::new("controls", &words, true).unwrap();
   let root = lived.root();
   let cancelled = lived

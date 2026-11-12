@@ -149,7 +149,7 @@ async def test_a_word_that_raises_a_cancellederror_tells_cancelled_and_no_raised
 
 async def test_a_rung_that_retells_another_rung_names_its_acts_under_that_one() -> None:
   """A rung that retells another rung names its acts under that one, so it makes the same acts and shares them."""
-  _, log, root = born("x = bash('echo hi')\nclose(1)")
+  _, log, root = born("x = bash('echo hi')\nawait x\nclose(1)")
   act = engine.prompt(int, "run it", on=root)
   assert await act == 1
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
@@ -315,7 +315,7 @@ async def test_a_close_ends_the_rung_that_runs_in_a_prompt_at_its_next_await() -
 
 async def test_a_chain_with_a_source_and_its_origin_share_the_one_act() -> None:
   """A chain with a source and its origin share the one act, the record's."""
-  sand, log, root = born("x = bash('echo hi')\nclose(1)")
+  sand, log, root = born("x = bash('echo hi')\nawait x\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   _, command, *_ = said(log, "bash")[0]
   twin = await chained("twin", root, 300)
@@ -326,8 +326,8 @@ async def test_a_chain_with_a_source_and_its_origin_share_the_one_act() -> None:
 
 async def test_a_chain_with_a_source_awaits_what_its_origin_started() -> None:
   """A chain with a source awaits what its origin started, through the name of the act."""
-  sand, log, root = born("x = bash('slow')\nclose(1)", auto=False)
-  assert await engine.prompt(int, "start one", on=root) == 1
+  sand, log, root = born(auto=False)
+  await engine.rung("x = bash('slow')", on=root)
   _, command, *_ = said(log, "bash")[0]
   twin = await chained("twin", root, 300)
   sand.script[twin] = ["close((await x).code)"]
@@ -502,7 +502,7 @@ async def test_a_rung_that_awaits_an_act_nobody_settles_waits_until_the_operator
 
 async def test_a_rung_that_retells_says_each_question_it_makes_as_the_rung_it_retells() -> None:
   """A rung that retells says each question it makes as the rung it retells, so the question it makes at a place is the one that rung made there."""
-  _, log, root = born("t = read('a.txt')\nx = bash('echo hi')\nclose(1)", "close(None)")
+  _, log, root = born("t = read('a.txt')\nx = bash('echo hi')\nawait x\nclose(1)", "close(None)")
   act = engine.prompt(int, "run it", on=root)
   assert await act == 1
   await settle()

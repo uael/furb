@@ -22,7 +22,7 @@ async def test_a_show_says_which_lines_of_a_text_to_tell_and_picked_gives_their_
 async def test_a_show_of_the_file_is_plain_data_so_it_is_a_word_of_each_act_that_it_is_given_to() -> None:
   """A show of the file is plain data, which span, grep and differs make, so it is a word of each act that it is given to and a record holds it."""
   assert (span(1, 2), grep("^t"), differs(["one"])) == (("span", 1, 2), ("grep", "^t"), ("differs", ["one"]))
-  sand, log, root = born("x = bash('echo hi', show=span(1, 1), show_err=grep('a'))\nclose(1)")
+  sand, log, root = born("x = bash('echo hi', show=span(1, 1), show_err=grep('a'))\nawait x\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
   (command,) = said(log, "bash")

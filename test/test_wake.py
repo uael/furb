@@ -54,8 +54,9 @@ async def test_a_wake_it_ends_the_pause_over_the_same_act_and_what_waited_is_hea
 
 async def test_delivery_carries_on_the_rungs_that_await_the_result_on_whatever_chain() -> None:
   """Delivery carries on the rungs that await the result, on whatever chain."""
-  sand, _, root = born("x = bash('slow')\nclose(x)", auto=False)
-  which = await engine.prompt(str, "start one", on=root)
+  sand, log, root = born(auto=False)
+  await engine.rung("x = bash('slow')", on=root)
+  which = said(log, "bash")[0][1]
   two = engine.chain("two")
   sand.script[two] = [f"out = await Act({which!r})\nassert isinstance(out, Exit)\nclose(out.code)"]
   act = engine.prompt(int, "await it", on=two)

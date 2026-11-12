@@ -85,7 +85,7 @@ async def test_a_verb_takes_a_chain_and_the_act_it_makes_is_on_that_chain() -> N
 
 async def test_a_model_calls_a_verb_from_a_rung_and_the_operator_calls_the_same_verb_outside_a_rung() -> None:
   """A model calls a verb from a rung, and the operator calls the same verb outside a rung."""
-  _, log, root = born("x = bash('from a rung')\nclose(1)")
+  _, log, root = born("x = bash('from a rung')\nawait x\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   engine.bash("from the operator", on=root)
   step = said(log, "rung")[0][1]
@@ -96,7 +96,7 @@ async def test_an_act_is_on_the_chain_or_the_thread_that_the_verb_names() -> Non
   """An act is on the chain or the thread that the verb names, and a thread is a prompt."""
   sand, log, root = born()
   two = await chained("two")
-  sand.script[root] = [f"x = bash('elsewhere', on={two!r})\nclose(1)"]
+  sand.script[root] = [f"x = bash('elsewhere', on={two!r})\nawait x\nclose(1)"]
   act = engine.prompt(int, "run it", on=root)
   assert await act == 1
   more = engine.prompt(None, "note", to=OPERATOR, on=act)
@@ -141,8 +141,8 @@ async def test_a_prompt_that_a_rung_makes_on_another_chain_is_an_act_of_that_cha
   """A prompt that a rung makes on another chain is an act of that chain."""
   sand, log, root = born()
   two = await chained("two")
-  sand.script[root] = [f"p = prompt(int, 'hi', on={two!r})\nclose(1)"]
-  assert await engine.prompt(int, "delegate", on=root) == 1
+  sand.script[root] = [f"p = prompt(int, 'hi', on={two!r})"]
+  engine.prompt(int, "delegate", on=root)
   await settle()
   theirs = said(log, "prompt")[-1]
   assert theirs[3] == two
