@@ -339,6 +339,15 @@ export function pixels(
   title: string,
   zoom: number,
 ): { width: number; height: number; pixels: Uint8Array<ArrayBuffer> } {
+  const image = new Resvg(svg(frame, palette, title, zoom), {
+    font: { fontFiles: fonts, loadSystemFonts: false, defaultFontFamily: family },
+  }).render();
+  return { width: image.width, height: image.height, pixels: new Uint8Array(image.pixels) };
+}
+
+/** A frame as the SVG of a terminal window at a scale, which a render turns into pixels. It draws nothing, and it fails
+ * on a character that the fonts of the gallery lack, as the picture does. */
+export function svg(frame: CapturedFrame, palette: Window, title: string, zoom = scale): string {
   const inner = { width: frame.cols * cell, height: frame.rows * row };
   const window = { width: inner.width + inset * 2, height: inner.height + bar + inset };
   const width = window.width + margin * 2,
@@ -349,7 +358,7 @@ export function pixels(
         `<circle cx="${margin + 20 + index * 20}" cy="${margin + bar / 2}" r="6" fill="${fill}"/>`,
     )
     .join("");
-  const svg = [
+  return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width * zoom}" height="${height * zoom}" viewBox="0 0 ${width} ${height}">`,
     `<defs><filter id="shadow" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity="0.35"/></filter>`,
     `<clipPath id="window"><rect x="${margin}" y="${margin}" width="${window.width}" height="${window.height}" rx="12"/></clipPath></defs>`,
@@ -362,8 +371,4 @@ export function pixels(
     `<rect x="${margin + 0.5}" y="${margin + 0.5}" width="${window.width - 1}" height="${window.height - 1}" rx="11.5" fill="none" stroke="${palette.border}" stroke-opacity="0.9"/>`,
     `</svg>`,
   ].join("");
-  const image = new Resvg(svg, {
-    font: { fontFiles: fonts, loadSystemFonts: false, defaultFontFamily: family },
-  }).render();
-  return { width: image.width, height: image.height, pixels: new Uint8Array(image.pixels) };
 }

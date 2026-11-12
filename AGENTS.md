@@ -482,7 +482,7 @@ fix what your change broke, and report what was broken before.
   holds its home in `/tmp`, and `FURB_GALLERY_ROOT` names another folder for it, and a root so long that the socket of
   the daemon in the home would pass 100 bytes gives the run a short private cache in `/tmp` for that daemon;
   `tui/script/stage.ts` says how long a run waits.
-  `FURB_GALLERY_ONLY=<pattern>` writes only the captures whose names match, `FURB_GALLERY_TEXT=<folder>` writes the text
+  `FURB_GALLERY_ONLY=<pattern>` writes only the captures whose names match, `FURB_GALLERY_PROOF=<name>` draws the picture of that shot alone and writes the SVG and the text of each other, as the gallery test of the gates does, `FURB_GALLERY_TEXT=<folder>` writes the text
   of each capture, which a model that cannot see an image reads, `FURB_GALLERY_CELLS=<folder>` writes the cells of each
   capture as JSON, which the skill `converge-tui` of the project reads, and `FURB_STILL_CLOCK` sets the time of the
   view, which stands still by default. A model sees a capture as an image when its word reads the PNG.

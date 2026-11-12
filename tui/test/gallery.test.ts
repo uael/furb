@@ -15,10 +15,11 @@ async function tee(stream: ReadableStream<Uint8Array>, log: NodeJS.WriteStream):
 }
 
 /** The whole gallery runs on CI, to its last capture, so that a scene that hangs or fails stops a pull request and not
- * the audit that draws the gallery later. It draws in a home of its own, with a daemon of its own, and writes its
- * pictures to a folder of the test. The gallery draws about 125 shots in about 3 minutes, and a loaded runner takes
- * about twice that. The render does not depend on the system, so it runs on Linux alone, and spares the runners of
- * macOS. */
+ * the audit that draws the gallery later. It draws in a home of its own, with a daemon of its own, and writes to a
+ * folder of the test the text and the SVG of each capture, which fails on a character that the fonts lack, and the
+ * picture of the last one. The pictures of the others are drawn by the workflow of the gallery and by `bun run
+ * screenshots`, outside the path of the gates, where 125 renders would take most of the time of the run. The render does
+ * not depend on the system, so it runs on Linux alone, and spares the runners of macOS. */
 test.skipIf(process.platform !== "linux")(
   "the gallery runs through to its last capture",
   async () => {
@@ -29,11 +30,12 @@ test.skipIf(process.platform !== "linux")(
       // The last capture of the script is the one that its last scene draws.
       const source = await readFile(script, "utf8");
       const last = /capture\("([^"]+)"\)(?![\s\S]*capture\(")/.exec(source)?.[1];
-      expect(last).toBeDefined();
+      if (!last) throw new Error("The script names no capture.");
       const env = { ...process.env };
       delete env.FURB_GALLERY_HOME;
       delete env.FURB_GALLERY_PARENT;
       delete env.FURB_GALLERY_ONLY;
+      env.FURB_GALLERY_PROOF = last;
       env.FURB_GALLERY_ROOT = root;
       env.FURB_GALLERY_OUT = join(root, "out");
       const run = Bun.spawn([process.execPath, script], { env, stdout: "pipe", stderr: "pipe" });
@@ -46,7 +48,11 @@ test.skipIf(process.platform !== "linux")(
       ]);
       if (code !== 0) throw new Error(`The gallery ended with ${code}`);
       expect(out).toMatch(/Wrote \d+ captures/);
-      expect(await readdir(join(root, "out"))).toContain(`${last}.png`);
+      // Each capture that the script named has its file: the SVG, and for the last one its picture.
+      const names = [...new Set([...out.matchAll(/^capture (\S+)$/gm)].map((one) => one[1] ?? ""))];
+      expect(names).toContain(last);
+      const files = new Set(await readdir(join(root, "out")));
+      expect(names.filter((name) => !files.has(name === last ? `${name}.png` : `${name}.svg`))).toEqual([]);
     } finally {
       await remove(root);
     }

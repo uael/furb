@@ -18,7 +18,7 @@ import { Session } from "../src/session.ts";
 import { colorless, paletteOf } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { ownDaemon } from "./daemon.ts";
-import { cells, rasterize } from "./raster.ts";
+import { cells, rasterize, svg } from "./raster.ts";
 import { click, end, find, highlighting, home, mount, watch } from "./stage.ts";
 
 /** The recorded life of a conductor, from the fixtures of the TUI. */
@@ -61,9 +61,12 @@ async function project(name: string): Promise<string> {
 }
 
 // FURB_GALLERY_OUT writes the gallery to another folder, and FURB_GALLERY_ONLY draws only the shots whose names it
-// matches, so that a change of design is seen in a few seconds.
+// matches, so that a change of design is seen in a few seconds. FURB_GALLERY_PROOF names the one shot that is drawn as a
+// picture: each other shot is written as its SVG, which fails on a character that the fonts lack as its picture would,
+// and as its text, so that the run of the scenes is proved with no render of 125 pictures.
 const output = resolve(process.env.FURB_GALLERY_OUT ?? "docs/screenshots");
 const only = process.env.FURB_GALLERY_ONLY ? new RegExp(process.env.FURB_GALLERY_ONLY) : undefined;
+const proof = process.env.FURB_GALLERY_PROOF;
 await mkdir(output, { recursive: true });
 // FURB_GALLERY_CELLS writes the cells of each shot as JSON to a folder, which the audit of the TUI compares and
 // reads as text.
@@ -149,7 +152,11 @@ async function capture(name: string): Promise<void> {
   if (only && !only.test(name)) return;
   written++;
   const frame = test.captureSpans();
-  await writeFile(`${output}/${name}.png`, rasterize(frame, paletteOf(session.theme), "furb"));
+  const palette = paletteOf(session.theme);
+  if (proof && name !== proof) {
+    await writeFile(`${output}/${name}.svg`, svg(frame, palette, "furb"));
+    await writeFile(`${output}/${name}.txt`, test.captureCharFrame());
+  } else await writeFile(`${output}/${name}.png`, rasterize(frame, palette, "furb"));
   if (grid) await writeFile(join(grid, `${name}.json`), cells(frame));
   // The text of each shot goes to a folder that FURB_GALLERY_TEXT names, to read the gallery without its pictures.
   const texts = process.env.FURB_GALLERY_TEXT;
