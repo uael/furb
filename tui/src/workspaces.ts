@@ -6,7 +6,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { furbDirectory, saveFile, scratch, store } from "furb";
 import { openEngine, openingEngine } from "./bridge.ts";
 import { checkoutOf, mainCheckout } from "./checkout.ts";
-import { reach } from "./client.ts";
+import { daemon, reach } from "./client.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { Preferences } from "./preferences.ts";
@@ -281,13 +281,18 @@ export class Workspaces extends EventEmitter {
     for (const { name, path } of found)
       if (!group.sessions.some((entry) => entry.path === path))
         group.sessions.push({ path, name: basename(name, ".jsonl"), status: "saved", unread: false });
-    // A session that opens stands in the list before its record does.
+    // A session that opens stands in the list before its record does. The records of a window of a machine stand on
+    // that machine, whose daemon names them, so this machine reads no file of them.
     const saved = (entry: SessionEntry) => !entry.session && !this.opening.has(entry.path);
-    group.sessions = group.sessions.filter((entry) => !saved(entry) || existsSync(entry.path));
+    const named = new Set(found.map((one) => one.path));
+    const standing = (entry: SessionEntry) =>
+      this.options.machine ? named.has(entry.path) : existsSync(entry.path);
+    group.sessions = group.sessions.filter((entry) => !saved(entry) || standing(entry));
+    const read = (entry: SessionEntry) => saved(entry) && !this.options.machine;
     await Promise.all(
       group.sessions.map(async (entry) => {
         if (entry.session) entry.cost = entry.session.cost;
-        if (!saved(entry)) return;
+        if (!read(entry)) return;
         const info = await stat(entry.path);
         entry.modified = info.mtimeMs;
         entry.size = info.size;
@@ -300,7 +305,7 @@ export class Workspaces extends EventEmitter {
     );
     const changed: string[] = [];
     const replay: string[] = [];
-    for (const entry of group.sessions.filter(saved)) {
+    for (const entry of group.sessions.filter(read)) {
       const key = `${entry.modified}:${entry.size}`;
       if (this.inspected.get(entry.path) === key) continue;
       this.inspected.set(entry.path, key);
@@ -749,14 +754,14 @@ export class Workspaces extends EventEmitter {
     if (!group) throw new Error("This session has no workspace.");
     // A life that another window holds is no life of this window to end, so the delete is refused before this window
     // leaves the session or lets it go. This window counts as one of the windows when it holds the life itself.
-    if ((await reach(this.options.machine).windows(entry.path)) > (entry.session ? 1 : 0))
+    if ((await daemon().windows(entry.path)) > (entry.session ? 1 : 0))
       throw new Error(
         `Another window holds the life of ${entry.path}, so it is not deleted: close it there first.`,
       );
     await this.leave(entry, group);
     await this.release(entry);
     // The daemon ends the life once no window and no pin held it for its grace, and frees its record then.
-    await reach(this.options.machine).ended(entry.path);
+    await daemon().ended(entry.path);
     // The record and its files move to the trash while this store holds the lease, so no other process opens them
     // meanwhile. The lock file stays at its path, empty: on macOS a lookup of a renamed path can go on giving the
     // moved file for seconds, so the lease holds only while no holder moves or removes the lock file. The scratch
