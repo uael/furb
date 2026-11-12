@@ -29,12 +29,12 @@ def span(lo: int, hi: int) -> Show:
   return "span", lo, hi
 
 
-def grep(pattern: str) -> Show:
-  return "grep", pattern
-
-
 def differs(old: list[str]) -> Show:
   return "differs", old
+
+
+def grep(pattern: str) -> Show:
+  return "grep", pattern
 
 
 def picked(show: Show, lines: list[str]) -> list[int]:
