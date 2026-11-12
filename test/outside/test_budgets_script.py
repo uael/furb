@@ -15,7 +15,9 @@ def kept(name: str) -> bool:
 
 
 def test_a_job_of_a_matrix_has_a_budget_for_each_system() -> None:
-  assert kept("the suite on macos-latest") and kept("the bindings and the TUI on windows-latest")
+  assert kept("the jobs on macos-latest / the suite on macos-latest")
+  assert kept("the jobs on windows-latest / the bindings and the TUI on windows-latest")
+  assert not kept("the jobs on macos-latest")
 
 
 def test_a_job_that_no_workflow_names_has_no_budget() -> None:

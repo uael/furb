@@ -196,9 +196,10 @@ jobs:
           name: build-${{ inputs.os }}
           path: .
       - run: |
+          # An artifact keeps no mode, and a test runs the programs and the examples beside it.
+          cut -f4 programs.tsv | while read -r one; do chmod +x "$one"; done
           failed=0
           while IFS="$(printf '\t')" read -r folder kind name program; do
-            chmod +x "$program"
             [ "$kind" = test ] || continue
             filter=""
             if [ "$RUNNER_OS" = macOS ] && [ "$folder" != . ]; then

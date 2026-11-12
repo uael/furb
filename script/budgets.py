@@ -26,11 +26,21 @@ def gh(*args: str) -> object:
 def named(workflow: str = ".github/workflows/gates.yml") -> list[re.Pattern[str]]:
   """The name of each job of the gates that has a budget, as a pattern: a matrix in a name matches any value.
 
-  The job that only holds the check of the others has no budget.
+  A job of a workflow that a job of the gates calls is named under the name of the job that calls it, as GitHub names
+  it, and the job that calls has no budget of its own. The job that only holds the check of the others has no budget.
   """
-  found = re.findall(r"(?m)^    name: (.+)$", Path(workflow).read_text(encoding="utf-8"))
-  parts = [re.split(r"\$\{\{.*?\}\}", x) for x in found if x != "the gates"]
-  return [re.compile(".+".join(map(re.escape, one))) for one in parts]
+  return [re.compile(".+".join(map(re.escape, re.split(r"\$\{\{.*?\}\}", x)))) for x in names(Path(workflow))]
+
+
+def names(workflow: Path, under: str = "") -> list[str]:
+  found: list[str] = []
+  for job in re.split(r"(?m)^(?=  [\w-]+:$)", workflow.read_text(encoding="utf-8")):
+    name = re.search(r"(?m)^    name: (.+)$", job)
+    if not name or name[1] == "the gates":
+      continue
+    called = re.search(r"(?m)^    uses: \./(\S+)$", job)
+    found += names(workflow.parent / Path(called[1]).name, f"{under}{name[1]} / ") if called else [under + name[1]]
+  return found
 
 
 def seconds(stamp: str) -> float:

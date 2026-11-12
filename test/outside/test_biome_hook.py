@@ -38,10 +38,13 @@ def test_the_hook_of_biome_runs_the_lint_of_the_gates_whole_and_reads_each_path_
 
 
 def test_the_job_of_the_hooks_has_no_bun_so_it_skips_the_hook_and_the_job_of_the_bindings_runs_the_lint() -> None:
-  jobs = yaml.safe_load((ROOT / ".github" / "workflows" / "gates.yml").read_text(encoding="utf-8"))["jobs"]
+  jobs = {
+    **yaml.safe_load((ROOT / ".github" / "workflows" / "gates.yml").read_text(encoding="utf-8"))["jobs"],
+    **yaml.safe_load((ROOT / ".github" / "workflows" / "system.yml").read_text(encoding="utf-8"))["jobs"],
+  }
   skipped = [
     step["env"]["SKIP"] for step in jobs["hooks"]["steps"] if "pre-commit run" in step.get("run", "") and "env" in step
   ]
-  assert skipped == ["pytest,biome"]
+  assert skipped == ["pytest,biome,clippy,cargo-test"]
   runs = [step.get("run", "") for job in jobs.values() for step in job.get("steps", [])]
   assert "bun run lint" in runs

@@ -89,8 +89,8 @@ def test_the_hooks_and_the_gates_run_pytest_through_the_one_home_of_its_limit() 
   loaded = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
   hook = next(one for repo in loaded["repos"] for one in repo["hooks"] if one["id"] == "pytest")
   assert hook["entry"] == "python3 script/hooks/reach.py pytest"
-  gates = yaml.safe_load((ROOT / ".github" / "workflows" / "gates.yml").read_text(encoding="utf-8"))
-  runs = [step.get("run", "") for step in gates["jobs"]["suite"]["steps"]]
+  system = yaml.safe_load((ROOT / ".github" / "workflows" / "system.yml").read_text(encoding="utf-8"))
+  runs = [step.get("run", "") for step in system["jobs"]["suite"]["steps"]]
   assert any("script/budget.py pytest -- " in run and "uv run pytest" in run for run in runs)
   cargo = next(one for repo in loaded["repos"] for one in repo["hooks"] if one["id"] == "cargo-test")
   assert cargo["entry"] == "python3 script/hooks/reach.py cargo"
