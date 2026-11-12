@@ -5,7 +5,7 @@ import { composing, framed, ownPreferences } from "./composing.ts";
 
 // The top line of the sidebar holds a head, and a tail of its parts. The tail drops its last parts, one by one,
 // before the head is cut, so that "needs you" stays whole at the least width of the sidebar and the count of active
-// prompts, which comes last, goes first.
+// prompts, which comes last, goes first. It asserts at a width where the head would be cut, and nowhere else.
 test("the top line of the sidebar drops the last part of its tail before its head is cut", async () =>
   composing(
     async ({ session, frame }) => {
@@ -37,12 +37,11 @@ test("the top line of the sidebar drops the last part of its tail before its hea
       expect(wide).toContain("1 needs you");
       expect(wide).toContain("⌥A");
       expect(wide).toContain("1 active · 1 paused");
-      for (const sidebar of [44, 32]) {
-        const line = await top(sidebar);
-        expect(line, `the top line at ${sidebar} cells`).toContain("1 needs you");
-        expect(line, `the top line at ${sidebar} cells`).toContain("⌥A");
-        expect(line, `the top line at ${sidebar} cells`).not.toContain("active");
-      }
+      // At 32 cells the whole tail would leave the head 2 cells, so the count goes before "needs you" is cut.
+      const narrow = await top(32);
+      expect(narrow).toContain("1 needs you");
+      expect(narrow).toContain("⌥A");
+      expect(narrow).not.toContain("active");
     },
     { width: 132, height: 44 },
     await demoSession({ preferences: ownPreferences() }),
