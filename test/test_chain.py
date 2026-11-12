@@ -1771,7 +1771,7 @@ async def test_when_a_thread_is_over_the_chain_asks_each_message_that_no_reply_r
   for _ in range(6):
     await settle()
   assert (engine.peek(act), [a for a in said(log, "rung") if a[2] == read]) == (4, [])
-  sand, log, root = born("await wait(0.05, __name__)\nclose(1)")
+  sand, log, root = born("await bash('slow')\nclose(1)", auto=False)
   one = engine.prompt(int, "one", on=root)
   await settle()
   unread = engine.prompt(None, "also run the tests", on=one)
@@ -1779,6 +1779,7 @@ async def test_when_a_thread_is_over_the_chain_asks_each_message_that_no_reply_r
     await settle()
   assert len(said(log, "reply")) == 2
   sand.script[root] = ["close(None)"]
+  sand.exits(said(log, "bash")[0][1], 0)
   assert await one == 1
   for _ in range(6):
     await settle()
