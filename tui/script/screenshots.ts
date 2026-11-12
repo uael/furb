@@ -120,8 +120,9 @@ async function rest(): Promise<void> {
 }
 /** The captures that this run wrote. */
 let written = 0;
+const began = performance.now();
 async function capture(name: string): Promise<void> {
-  console.log(`capture ${name}`);
+  console.log(`capture ${name} at ${((performance.now() - began) / 1000).toFixed(1)}s`);
   waits(`the screen ${name}`);
   if (!notices.test(name)) session.notice = "";
   if (!/^6[6-8]-/.test(name)) app().session.preferences.view = view;
@@ -129,13 +130,10 @@ async function capture(name: string): Promise<void> {
   if (name !== "25-loading" && name !== "27-view-error")
     do await session.refresh();
     while (session.loading);
-  // The crate folds the ladder of the chain shown, which a frame draws once it came.
-  for (let pass = 0; pass < 3; pass++) {
-    app().render();
-    await session.laddersRead();
-  }
   app().render();
   await test.flush();
+  // The crate folds the ladder of the chain shown in a read that this draw started, which the frame waits for.
+  await session.laddersRead();
   // Code is colored by a parser off the main thread: the frame is taken once every code block is highlighted.
   await Promise.all(highlighting(test.renderer.root));
   // The folded rungs color the first line of their word off the main thread too, and the view draws them again.
