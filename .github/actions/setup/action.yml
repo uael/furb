@@ -30,6 +30,17 @@ inputs:
       Each file beyond the manifests of cargo that decides what the gate builds, as a script of the build, whose hash
       the key of its cache holds.
     default: ""
+  rust:
+    description: >-
+      The rust that the gate needs: `build`, the rust of rust-toolchain.toml with the cache of what cargo built; `tools`,
+      that rust with no cache, for a gate that formats and compiles nothing; or `none`, for a gate that runs what a
+      build of its system gave and compiles nothing.
+    default: build
+  saved:
+    description: >-
+      Whether a run that may save the cache of rust saves the cache of this gate: a gate that builds what no later run
+      of the same ref reads saves none, so the store of 10 GB keeps the caches that the gates read.
+    default: "true"
 
 runs:
   using: composite
@@ -56,7 +67,8 @@ runs:
     # the step after them, so that its key holds this rust alone.
     # A job builds once, so it keeps no incremental state, which a tree of a person keeps. CARGO_PROFILE_DEV_DEBUG is not
     # among them: Cargo.toml turns the debug information of a dependency off for each build.
-    - run: |
+    - if: inputs.rust != 'none'
+      run: |
         set_default() { if [ -z "$(printenv "$1")" ]; then echo "$1=$2" >> "$GITHUB_ENV"; fi; }
         set_default CARGO_INCREMENTAL 0
         set_default CARGO_TERM_COLOR always
@@ -72,7 +84,8 @@ runs:
     # which no build uses. Two images of one runner have each another rust, so the jobs of one key saved two caches,
     # which took the store of the repository past its 10 GB. The step removes each rust but the one of
     # rust-toolchain.toml, so the hash is the same on each image.
-    - run: |
+    - if: inputs.rust != 'none'
+      run: |
         active=$(rustup show active-toolchain | cut -d ' ' -f 1)
         rustup toolchain list --quiet | while read -r toolchain; do
           if [ "${toolchain%% *}" != "$active" ]; then rustup toolchain uninstall "${toolchain%% *}"; fi
@@ -87,18 +100,20 @@ runs:
     # made no new key, so main never saved the cache again and each job built the new crates each time.
     # Main saves the cache, and so does the pull request of w/converge, whose caches only its own runs read: its head
     # stands far from main, so with no save each of its runs built again the crates that changed since main, in up to
-    # 10 minutes. A run on w/converge saves the cache of its own jobs too, such as the render of the gallery that the
-    # desk dispatches there. Any other pull request reads the cache of main.
+    # 10 minutes. A run on w/converge saves the cache of its own jobs too: the render of the gallery, and the run of the
+    # gates of the head of a lane, which the oracle of the lane starts on w/converge since a run on the branch of a lane
+    # reads only the caches of that branch and of main. Any other pull request reads the cache of main.
     # Only a job that passes saves it, or a job that sets CACHE_ON_FAILURE once its build passed. A job that fails or
     # is cancelled holds part of the build, and a key that matches whole is never saved again, so every later run would
     # build again what that part lacks.
     # A script of the build that starts to build a new crate changes no manifest, so with no hash of it the key stayed
     # whole and each run built that crate and each of its dependencies again: the program furb took 8 minutes and 34
     # seconds on Windows, on a cache saved before the script built it.
-    - if: inputs.hashed != ''
+    - if: inputs.rust == 'build' && inputs.hashed != ''
       run: echo "FURB_CACHE_HASHED=${{ hashFiles(inputs.hashed) }}" >> "$GITHUB_ENV"
       shell: bash
     - id: rust
+      if: inputs.rust == 'build'
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
         key: ${{ inputs.key }}
@@ -106,9 +121,10 @@ runs:
         workspaces: ${{ inputs.workspaces }}
         add-rust-environment-hash-key: true
         env-vars: FURB_CACHE
-        save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/w/converge' || github.head_ref == 'w/converge') && inputs.shared == '' }}
+        save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/w/converge' || github.head_ref == 'w/converge') && inputs.shared == '' && inputs.saved == 'true' }}
         cache-on-failure: false
-    - run: echo "RUST_CACHE_HIT=${{ steps.rust.outputs.cache-hit }}" >> "$GITHUB_ENV"
+    - if: inputs.rust == 'build'
+      run: echo "RUST_CACHE_HIT=${{ steps.rust.outputs.cache-hit }}" >> "$GITHUB_ENV"
       shell: bash
     - if: inputs.python != 'none'
       run: uv python install

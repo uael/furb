@@ -236,10 +236,13 @@ jobs:
       # A key for each system, since the two engines for macOS share a job and a system, and a release build of a
       # system is a cache of 600 to 950 MB: with no clear, each change of a manifest stacked a new cache of the five
       # beside the old ones, and the store past its 10 GB ended the caches that the gates restore.
+      # A pull request saves no release build: no run of the gates reads it, and the five of them held 3.6 GB of the
+      # 10 GB of the store, which then ended the caches that the gates restore.
       - uses: ./.github/actions/setup
         with:
           python: none
           key: ${{ matrix.system }}
+          saved: ${{ github.event_name != 'pull_request' }}
       - if: matrix.target
         run: rustup target add "${{ matrix.target }}"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0

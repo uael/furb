@@ -47,7 +47,7 @@ GALLERY = re.compile(r"docs/(screenshots/.*|furb[.]gif)")
 
 
 def scope(paths: list[str]) -> dict[str, object]:
-  """The systems of the suite and of the bindings, and whether the crate on Windows and on macOS runs.
+  """The systems of the suite, of the bindings and of the tests of the crate, and the systems that build for them.
 
   The hooks run unless the change is a render of the gallery alone.
   """
@@ -69,13 +69,14 @@ def scope(paths: list[str]) -> dict[str, object]:
       kinds["other"] = True
   gallery = bool(paths) and all(GALLERY.fullmatch(path) for path in paths)
   every = kinds["rust"] or kinds["other"]
-  return {
+  systems = {
     "suite_os": EVERY if every or kinds["python"] else LINUX,
     "ts_os": EVERY if every or kinds["typescript"] else LINUX,
-    "crate": every,
-    "code": any(kinds.values()),
-    "hooks": not gallery,
+    "crate_os": EVERY if every else LINUX,
   }
+  # Each system that a job of the suite, of the bindings or of the crate runs on builds once, for each of them.
+  built = EVERY if EVERY in systems.values() else LINUX
+  return {**systems, "build_os": built, "code": any(kinds.values()), "hooks": not gallery}
 
 
 def lines(answer: dict[str, object]) -> str:

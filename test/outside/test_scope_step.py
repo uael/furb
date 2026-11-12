@@ -46,4 +46,4 @@ def test_a_render_of_the_gallery_alone_runs_no_job_on_its_pull_request_and_on_it
   env = {**os.environ, "GITHUB_EVENT_NAME": event, "BEFORE": before, "GITHUB_OUTPUT": str(output)}
   subprocess.run([BASH, "-e", "-c", step()], cwd=clone, env=env, check=True, capture_output=True)  # noqa: S603
   got = dict(line.split("=", 1) for line in output.read_text().splitlines())
-  assert got["code"] == "false" and got["crate"] == "false" and got["hooks"] == "false"
+  assert got["code"] == "false" and got["build_os"] == '["ubuntu-latest"]' and got["hooks"] == "false"
