@@ -29,7 +29,7 @@ use monty_types::{
 use self::{error::StoreError, lines::Head};
 use super::{beside, free};
 use crate::{
-  ENGINE, KERNEL,
+  CHECKPOINTER, ENGINE, KERNEL,
   ear::{Co, Ear, Hooks, Next, With, hearing, say},
   engine::ROOT,
   fact::Fact,
@@ -167,27 +167,28 @@ pub fn stood(entry: &Object) -> Option<Object> {
 }
 
 /// The kind of the fact by which a record names the build that made it: `("made", "chain1",
-/// "store", engine, version, schema, release, source, kernel)`, where engine is what [`engine`]
-/// gives, version is null, which a build before the texts gave its version of the replay, schema
-/// is [`RECORD_SCHEMA`], release is the release of furb that
-/// made it, as `0.4.2`, and source and kernel are the texts of its engine and of its Kernel, which
-/// a later life runs to replay the segment that the fact begins, as [`texts`] says. A record of a
-/// build before the texts holds none, one of a build before the versions holds no version, and one
-/// of a build before the schemas holds no schema and no release. No contract holds it, so this is
-/// the one home of its shape.
+/// "store", engine, version, schema, release, source, kernel, checkpointer)`, where engine is what
+/// [`engine`] gives, version is null, which a build before the texts gave its version of the
+/// replay, schema is [`RECORD_SCHEMA`], release is the release of furb that made it, as `0.4.2`,
+/// and source and kernel are the texts of its engine and of its Kernel, which a later life runs to
+/// replay the segment that the fact begins, as [`texts`] says. A record of a build before the texts
+/// holds none, one of a build before the versions holds no version, and one of a build before the
+/// schemas holds no schema and no release. No contract holds it, so this is the one home of its
+/// shape.
 pub const MADE: &str = "made";
 
-/// The engine of this build, which a record names: a digest of the engine and of the Kernel, which make each act of
-/// a replay. Another engine can make other acts from the same record, so a record replays only on the engine that
-/// made it.
+/// The engine of this build, which a record names: a digest of the engine, of the Kernel and of the
+/// checkpointer, which make each act of a replay and each birth. Another engine can make other acts
+/// from the same record, so a record replays only on the engine that made it.
 pub fn engine() -> String {
-  digest(ENGINE, KERNEL)
+  digest(&[ENGINE, KERNEL, CHECKPOINTER])
 }
 
-/// The digest of the texts of an engine and of its Kernel, which a fact made names.
-fn digest(source: &str, kernel: &str) -> String {
+/// The digest of the texts of an engine, of its Kernel and of its checkpointer, which a fact made
+/// names.
+fn digest(texts: &[&str]) -> String {
   let mut hash = Sha256::new();
-  for one in [source, kernel] {
+  for one in texts {
     hash.update(one.as_bytes());
     hash.update([0]);
   }
@@ -202,27 +203,33 @@ pub fn made(record: &[Object]) -> Option<String> {
   })
 }
 
-/// The texts of the engine and of the Kernel that a segment of a record runs on: those that its
-/// last fact made holds, or this build's own when it holds none. Texts that are not the engine that
-/// their fact names refuse the record.
-pub fn texts(record: &[Object]) -> Result<(String, String), Fault> {
-  let Some((Some(named), Some(source), Some(kernel))) = held(record) else {
-    return Ok((ENGINE.to_owned(), KERNEL.to_owned()));
+/// The texts of the engine, of the Kernel and of the checkpointer that a segment of a record runs
+/// on: those that its last fact made holds, or this build's own when it holds none. A fact made of
+/// a build before the checkpointer holds no text of it, which stands as an empty text, since the
+/// engine of that build gathers and seeds its checkpoints itself. Texts that are not the engine
+/// that their fact names refuse the record.
+pub fn texts(record: &[Object]) -> Result<(String, String, String), Fault> {
+  let Some([Some(named), Some(source), Some(kernel), checkpointer]) = held(record) else {
+    return Ok((ENGINE.to_owned(), KERNEL.to_owned(), CHECKPOINTER.to_owned()));
   };
-  if digest(&source, &kernel) != named {
+  let checkpointer = checkpointer.unwrap_or_default();
+  let all = [source.as_str(), kernel.as_str(), checkpointer.as_str()];
+  if digest(if checkpointer.is_empty() { &all[..2] } else { &all }) != named {
     return Err(Fault::refused(format!(
       "the record names the engine {named}, and the texts that it holds are another engine"
     )));
   }
-  adapted(&named, source, &kernel)
+  let (source, kernel) = adapted(&named, source, &kernel)?;
+  Ok((source, kernel, checkpointer))
 }
 
-/// The digest, the engine and the Kernel that the last fact made of a segment names and holds.
-fn held(record: &[Object]) -> Option<(Option<String>, Option<String>, Option<String>)> {
+/// The digest, the engine, the Kernel and the checkpointer that the last fact made of a segment
+/// names and holds.
+fn held(record: &[Object]) -> Option<[Option<String>; 4]> {
   record.iter().rev().find_map(|entry| {
     let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
     let word = |at| fact.word(at).and_then(|one| one.as_str().map(str::to_owned));
-    (fact.kind() == MADE).then(|| (word(0), word(4), word(5)))
+    (fact.kind() == MADE).then(|| [word(0), word(4), word(5), word(6)])
   })
 }
 
@@ -230,8 +237,8 @@ fn held(record: &[Object]) -> Option<(Option<String>, Option<String>, Option<Str
 /// the engine of this build, which [`texts`] then gives in its place.
 pub fn unheld(record: &[Object]) -> Option<String> {
   match held(record)? {
-    (_, Some(_), Some(_)) => None,
-    (named, ..) => named.filter(|one| !one.is_empty() && *one != digest(ENGINE, KERNEL)),
+    [_, Some(_), Some(_), _] => None,
+    [named, ..] => named.filter(|one| !one.is_empty() && *one != engine()),
   }
 }
 
@@ -314,7 +321,7 @@ fn streamed(entry: Object) -> Object {
 }
 
 /// The fact made of this build: its engine, no version, the schema of its record,
-/// its release, and the texts of its engine and of its Kernel.
+/// its release, and the texts of its engine, of its Kernel and of its checkpointer.
 fn named() -> Fact {
   let build = [
     Object::string(engine()),
@@ -323,6 +330,7 @@ fn named() -> Fact {
     Object::string(env!("CARGO_PKG_VERSION")),
     Object::string(ENGINE),
     Object::string(KERNEL),
+    Object::string(CHECKPOINTER),
   ];
   Fact::says(MADE, ROOT, build)
 }

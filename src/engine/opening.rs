@@ -4,8 +4,8 @@ use std::convert::Infallible;
 
 use crate::value::Object;
 
-/// The one piece of python the crate writes: it loads the engine, the sheet and the Kernel, each in
-/// a namespace of its own, and gives what the host calls in the sandbox by.
+/// The one piece of python the crate writes: it loads the engine, the sheet, the Kernel and the
+/// checkpointer, each in a namespace of its own, and gives what the host calls in the sandbox by.
 ///
 /// It gives the park too: a generator that stands in front of an ear of the outside and holds back
 /// from it each act that is parked when the act is put to it, and the parked names, which the host
@@ -45,6 +45,14 @@ __sheet = {}
 exec(__sheet_source, __sheet)
 __kernel = {}
 exec(__kernel_source, __kernel)
+if __checkpointer_source:
+  __checkpointer = {}
+  exec(__checkpointer_source, __checkpointer)
+  __checkpointed = lambda name, /, *args: __checkpointer[name](__engine, *args)
+else:
+  # The fact made of a build before the checkpointer holds no text of it: the engine of that build gathers and
+  # seeds its own checkpoints, and a record of it replays and goes on on that engine alone.
+  __checkpointed = lambda name, /, *args: __engine[name](*args)
 
 def __bounding(step):
   def bounded(*args, **kwargs):
@@ -131,6 +139,7 @@ def __lasting(name, ear):
 {
   "names": lambda: {name: x for name, x in __engine.items() if not name.startswith("_") and callable(x)},
   "call": lambda name, /, *args, **kwargs: __engine[name](*args, **kwargs),
+  "checkpoint": __checkpointed,
   "kernel": __fresh["kernel"](),
   "gate": __fresh["gate"](),
   "site": lambda: __engine["site"].get(),
@@ -158,6 +167,9 @@ pub(crate) struct Opened {
   pub(super) names: Object,
   /// A name of the engine, called where it stands when it is called.
   pub(super) call: Object,
+  /// A function of the checkpointer, `seed` or `gathered`, called by its name on the names of the
+  /// engine.
+  pub(super) checkpoint: Object,
   /// The Kernel of the crate, which boot is given as an ear.
   pub(super) kernel: Object,
   /// The gate of the crate, which boot is given as an ear.
@@ -208,6 +220,7 @@ impl Opened {
     Ok(Self {
       names: at("names")?,
       call: at("call")?,
+      checkpoint: at("checkpoint")?,
       kernel: at("kernel")?,
       gate: at("gate")?,
       site: at("site")?,

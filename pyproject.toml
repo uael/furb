@@ -92,6 +92,9 @@ ignore = ["S101"]
 # The surface speaks the engine's own vocabulary: its parameters shadow builtins on purpose, its exceptions are
 # named as the contract names them, and each sentence of the contract stands on one line of its own.
 "src/furb/engine.pyi" = ["N818", "A002", "E501"]
+"src/furb/checkpoint.pyi" = ["E501"]
+# The checkpoint holds the code that the engine held, in its form, and its contract holds its types.
+"src/furb/checkpoint.py" = ["ANN"]
 ".agents/skills/*/*.pyi" = ["E501"]
 # An example of the framework starts itself again as a process of its own, to show a life that resumes after its
 # process ends.

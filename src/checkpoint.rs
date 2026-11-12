@@ -9,12 +9,13 @@
 //! the names that it lost, and the acts that the checkpoint cut, each word that ran on it among
 //! them, which no later life runs again; and `acts`, each act that a value names, the last stand
 //! and the last clock, with its value and its words, or, for an open prompt, with its shape, its
-//! message, its actor and the ear that held it. `gathered` of the engine gathers it and `seed` of
-//! the engine reads it, so the engine is the one home of its shape, and this file holds the fact,
-//! the store and the boot alone. It holds no word that the crate crafts and no word of a verb by
-//! its place: `seed` of the engine that opens it makes the entries that a life boots on, so any
-//! later engine of the major opens it. Each reader skips each field that it does not know, so a
-//! build opens a checkpoint of each minor of its schema, and refuses only one of another major.
+//! message, its actor and the ear that held it. `gathered` of the checkpointer of the engine
+//! gathers it and `seed` of the checkpointer reads it, so the checkpointer is the one home of its
+//! shape, and this file holds the fact, the store and the boot alone. It holds no word that the
+//! crate crafts and no word of a verb by its place: `seed` of the checkpointer of the engine that
+//! opens it makes the entries that a life boots on, so any later engine of the major opens it. Each
+//! reader skips each field that it does not know, so a build opens a checkpoint of each minor of
+//! its schema, and refuses only one of another major.
 //!
 //! A life ends with its checkpoint, which the ear of its store keeps, since a life born from a
 //! checkpoint makes acts of its own at its birth; [`keep`] writes one on a record that no life
@@ -83,7 +84,7 @@ pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
   });
   let floor = engine.taken().clone();
   // The gather is the engine's own work over the whole life, so no bound of a turn cuts it.
-  let data = engine.unbounded(|engine| engine.gathered(define, floor))?;
+  let data = engine.unbounded(|engine| engine.checkpointed("gathered", vec![define, floor]))?;
   let mut fields = vec![
     (Object::string("schema"), CHECKPOINT_SCHEMA.object()),
     (Object::string("engine"), Object::string(world::engine())),
@@ -256,9 +257,9 @@ pub fn booted(record: Vec<Object>) -> Vec<Object> {
 }
 
 /// The entries that a checkpoint carries: the fact itself when it holds data, which boot gives
-/// `seed` of the engine, or, for the form before [`CHECKPOINT_SCHEMA`], its entries, each reserve
-/// as the questions of the root that it stands for, and the turns of each chain just after that
-/// chain, with the prefix that holds them.
+/// `seed` of the checkpointer, or, for the form before [`CHECKPOINT_SCHEMA`], its entries, each
+/// reserve as the questions of the root that it stands for, and the turns of each chain just after
+/// that chain, with the prefix that holds them.
 fn carried(checkpoint: &Object) -> Vec<Object> {
   let Some(a) = fact(checkpoint) else { return Vec::new() };
   let pairs = a.word(0).and_then(|one| one.pairs()).unwrap_or_default();

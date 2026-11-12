@@ -59,3 +59,7 @@ pub const SHEET: &str = include_str!("furb/sheet.py");
 
 /// The Kernel, which the sandbox loads in a module of its own, as the python package imports it.
 pub const KERNEL: &str = include_str!("furb/kernel.py");
+
+/// The checkpointer, which gathers the data of a checkpoint and seeds a life from it: the sandbox
+/// loads it in a module of its own, as it loads the Kernel, and the python package imports it.
+pub const CHECKPOINTER: &str = include_str!("furb/checkpoint.py");

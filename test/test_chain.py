@@ -42,7 +42,7 @@ from conftest import (
   waiting,
   world_says,
 )
-from furb import engine
+from furb import checkpoint, engine
 from furb.engine import OPERATOR, ROOT, Act, Refused, Text, take
 
 
@@ -614,7 +614,9 @@ async def test_a_chain_with_no_source_whose_standing_names_a_doctrine_tells_its_
   files, stands = TAUGHT_FILES, [*TAUGHT[:4], [*TAUGHT[4], LATE]]
   born(stands=stands, files=files)
   await settle()
-  life(sown(stands=stands, files=files), engine.seed(engine.gathered(definitions, {})))
+  life(
+    sown(stands=stands, files=files), checkpoint.seed(vars(engine), checkpoint.gathered(vars(engine), definitions, {}))
+  )
   await settle()
   kid = await chained("kid")
   await settle()
@@ -1730,7 +1732,10 @@ async def test_a_root_that_holds_no_open_after_its_paragraph_chain_or_no_stand_b
   stands = [*TAUGHT[:4], [*TAUGHT[4], LATE]]
   born(stands=stands, files=TAUGHT_FILES)
   await settle()
-  life(sown(stands=stands, files=TAUGHT_FILES), engine.seed(engine.gathered(definitions, {})))
+  life(
+    sown(stands=stands, files=TAUGHT_FILES),
+    checkpoint.seed(vars(engine), checkpoint.gathered(vars(engine), definitions, {})),
+  )
   await settle()
   late = await chained("late")
   assert [x for x in engine.transcript(late) if x[0] == "tell" and x[3] == ["chain()"]] == []

@@ -842,6 +842,14 @@ impl PyEngine {
     self.said(name, args, kwargs).map(Value)
   }
 
+  /// A function of the checkpointer of the engine, `seed` or `gathered`, said by its name with
+  /// these words, and what it gave.
+  #[pyo3(signature = (name, args = None))]
+  fn checkpointed(&self, name: &str, args: Option<Vec<Value>>) -> Result<Value, Fault> {
+    let (args, _) = words(args, None);
+    self.call(|engine| engine.checkpointed(name, args)).map(Value)
+  }
+
   /// One callable the engine made, called back by the number it went out under, with these words.
   #[pyo3(signature = (n, args = None, kwargs = None))]
   #[expect(

@@ -396,9 +396,9 @@ fn made_of(engine: &str, held: &[&str]) -> Object {
 
 #[test]
 fn the_texts_of_a_segment_are_those_of_its_last_fact_made_and_must_be_the_engine_that_it_names() {
-  let (source, kernel) = ("x = 1\n", "y = 2\n");
-  let (named, other) = (digest(source, kernel), "0".repeat(64));
-  let ours = (crate::ENGINE.to_owned(), crate::KERNEL.to_owned());
+  let (source, kernel, checkpointer) = ("x = 1\n", "y = 2\n", "z = 3\n");
+  let (named, other) = (digest(&[source, kernel]), "0".repeat(64));
+  let ours = (crate::ENGINE.to_owned(), crate::KERNEL.to_owned(), crate::CHECKPOINTER.to_owned());
   assert_eq!(
     texts(&[made_of(&other, &[])]).unwrap(),
     ours,
@@ -407,8 +407,14 @@ fn the_texts_of_a_segment_are_those_of_its_last_fact_made_and_must_be_the_engine
   let segment = [made_of(&other, &[]), made_of(&named, &[source, kernel])];
   assert_eq!(
     texts(&segment).unwrap(),
-    (source.to_owned(), kernel.to_owned()),
-    "the last one counts"
+    (source.to_owned(), kernel.to_owned(), String::new()),
+    "the last one counts, and a fact made before the checkpointer holds no text of it"
+  );
+  let all = [source, kernel, checkpointer];
+  assert_eq!(
+    texts(&[made_of(&digest(&all), &all)]).unwrap(),
+    (source.to_owned(), kernel.to_owned(), checkpointer.to_owned()),
+    "a fact made names the digest of the three texts that it holds"
   );
   assert!(
     texts(&[made_of(&other, &[source, kernel])]).is_err(),
@@ -420,11 +426,11 @@ fn the_texts_of_a_segment_are_those_of_its_last_fact_made_and_must_be_the_engine
 fn a_segment_names_the_engine_of_its_last_fact_made_as_unheld_when_it_holds_no_texts_of_another_engine()
  {
   let (source, kernel) = ("x = 1\n", "y = 2\n");
-  let (named, other) = (digest(source, kernel), "0".repeat(64));
+  let (named, other) = (digest(&[source, kernel]), "0".repeat(64));
   assert_eq!(unheld(&[made_of(&other, &[])]), Some(other.clone()), "no texts of another engine");
   assert_eq!(unheld(&[made_of(&named, &[source, kernel])]), None, "the texts are held");
   assert_eq!(
-    unheld(&[made_of(&digest(crate::ENGINE, crate::KERNEL), &[])]),
+    unheld(&[made_of(&digest(&[crate::ENGINE, crate::KERNEL, crate::CHECKPOINTER]), &[])]),
     None,
     "the engine of this build"
   );

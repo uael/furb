@@ -40,6 +40,9 @@ meanings. The entry of such a name here gives only its form in the engine.
 - World: the ears of the outside that serve the machine, one or many, which reach the disk, the machine, the actors,
   the operator and the record; they answer what is theirs to answer, take what takes time, a command, a wait, a
   prompt to the operator and a reply, and say each done when it ends, and they keep what the journal says to keep.
+- checkpointer: the module of the outside, `checkpoint.py`, that gathers the data of a checkpoint and seeds a later
+  life from it, on the names of the engine; the sandbox loads it as it loads the Kernel, and the fact made holds its
+  text.
 - Kernel: the ear of the outside that runs rungs: it takes a run, makes a wants as the run while the word waits for
   an act that is not done, and says the run done with what the word gave.
 - gate: the ear of the outside that answers a gate, apart from the Kernel, so a word may ask it while the Kernel
@@ -229,7 +232,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   its tip: plain data with a version of its own shape, `schema`, apart from the version of the record. It holds each
   chain that lives with its label, its source, its turns, the definitions of each word, its plain values and whether
   it is paused, each act that a value names with its answer, each open prompt, and the names that each kind took,
-  and no word of a verb by its place. `gathered`, a function of the engine, holds its shape and gives it. `seed` makes
+  and no word of a verb by its place. `gathered` of the checkpointer holds its shape and gives it. Its `seed` makes
   from that data the entries that a later life boots on, before the record after the checkpoint, so the engine that
   opens it, and not the one that wrote it, says how its own journal makes each chain again. Each name of the past
   stays taken, an act that a value names stands known with its answer and runs nothing, and each chain with an open

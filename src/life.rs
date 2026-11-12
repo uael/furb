@@ -309,7 +309,7 @@ impl Opening {
     };
     if let Some(marks) = &marks {
       world::readable(&marks.heads)?;
-      let (source, _) = world::texts(checkpoint::segment(&marks.heads))?;
+      let (source, ..) = world::texts(checkpoint::segment(&marks.heads))?;
       if source != crate::ENGINE {
         let unread = || Fault::refused("this build cannot minify the engine that the record holds");
         system = Some(minify::minified(&source).ok_or_else(unread)?);
@@ -479,7 +479,7 @@ impl Opening {
     let marks = world::marks(path)?;
     world::readable(&marks.heads)?;
     let segment = checkpoint::segment(&marks.heads);
-    let (source, _) = world::texts(segment)?;
+    let (source, ..) = world::texts(segment)?;
     if source == crate::ENGINE || segment.is_empty() {
       return Ok(());
     }

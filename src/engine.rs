@@ -113,8 +113,9 @@ type Words<'a> = (Vec<Object>, Vec<(&'a str, Object)>);
 /// What a host does when an act is done, given what it came to.
 type Watcher = Box<dyn FnMut(&Object)>;
 
-/// The record as boot is given it: a checkpoint that stands first is the data from which `seed`, a
-/// function of this engine, makes the entries that the life boots on, before the entries after it.
+/// The record as boot is given it: a checkpoint that stands first is the data from which `seed` of
+/// the checkpointer of this engine makes the entries that the life boots on, before the entries
+/// after it.
 fn seeded(
   sand: &mut Sand,
   outside: &mut Outside,
@@ -132,7 +133,8 @@ fn seeded(
   let made = sand.enter(outside, |sand, outside| {
     outside.bound(sand)?;
     let data = outside.inward(sand, &data)?;
-    let got = outside.named_call(sand, "seed", vec![data], vec![])?;
+    let seed = outside.opened.checkpoint.clone();
+    let got = sand.call(outside, &seed, vec![Object::string("seed"), data], vec![])?;
     outside.outward(sand, &got)
   })??;
   let mut entries: Vec<Object> =
@@ -222,13 +224,14 @@ impl Host for Outside {
   }
 }
 
-/// The inputs of the opening of a sandbox: the texts of an engine, of the sheet and of a Kernel,
-/// and the functions of the host that the opening binds.
-fn inputs(source: &str, kernel: &str) -> NamedValues {
+/// The inputs of the opening of a sandbox: the texts of an engine, of the sheet, of a Kernel and of
+/// a checkpointer, and the functions of the host that the opening binds.
+fn inputs(source: &str, kernel: &str, checkpointer: &str) -> NamedValues {
   let mut inputs = NamedValues::new();
   inputs.push("__source", Object::string(source));
   inputs.push("__sheet_source", Object::string(SHEET));
   inputs.push("__kernel_source", Object::string(kernel));
+  inputs.push("__checkpointer_source", Object::string(checkpointer));
   inputs.push("__gate", Object::function(GATE, None));
   inputs.push("__gating", Object::function(GATING, None));
   inputs.push("__again", Object::function(AGAIN, None));
@@ -336,6 +339,21 @@ impl Outside {
     args.insert(0, Object::string(name));
     let call = self.opened.call.clone();
     sand.call(self, &call, args, kwargs)
+  }
+
+  /// A function of the checkpointer, `seed` or `gathered`, called by its name on the names of the
+  /// engine with values of the host, and what it gave, as it goes out.
+  fn checkpointed(
+    &mut self,
+    sand: &mut Sand,
+    name: &str,
+    args: &[Object],
+  ) -> Result<Object, Fault> {
+    let (mut args, _) = self.inwards(sand, args, vec![])?;
+    args.insert(0, Object::string(name));
+    let call = self.opened.checkpoint.clone();
+    let got = sand.call(self, &call, args, vec![])?;
+    self.outward(sand, &got)
   }
 
   /// The words of a call, values of the host, as they come in.
@@ -615,13 +633,14 @@ impl Engine {
     let (given, names) = Handed::of(ears)?;
     let record: Vec<Object> = record.into_iter().collect();
     // A record replays on the engine that the fact made of its last segment holds.
-    let (source, kernel) = world::texts(checkpoint::segment(&record))?;
+    let (source, kernel, checkpointer) = world::texts(checkpoint::segment(&record))?;
     let unheld = world::unheld(checkpoint::segment(&record));
     let mut sand = Sand::new();
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
     // they run again.
     sand.bound(false);
-    let opened = sand.run(OPENING, inputs(&source, &kernel), &mut Nobody("the opening"))?;
+    let opened =
+      sand.run(OPENING, inputs(&source, &kernel, &checkpointer), &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
     outside.gating = gated;
     outside.source = source;
@@ -730,6 +749,12 @@ impl Engine {
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     self.run(|sand, outside| outside.verb(sand, name, args, kwargs))
+  }
+
+  /// A function of the checkpointer of the engine, `seed` or `gathered`, by its name, said with
+  /// these words, and what it gave.
+  pub fn checkpointed(&mut self, name: &str, args: Vec<Object>) -> Result<Object, Fault> {
+    self.run(|sand, outside| outside.checkpointed(sand, name, &args))
   }
 
   /// One word run in the names of the engine with these values bound, and what it gave, as it goes out, which is how

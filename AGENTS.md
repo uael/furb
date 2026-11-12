@@ -41,7 +41,7 @@ API of its own:
   fact, and `Held` keeps the acts that a host told, from which it draws the desk, the threads and the moments.
 - `src/checkpoint.rs` holds the checkpoint of a life: a fact at the tip of its record with each chain that lives, its
   turns, its module and its open prompts, from which a later life of any build goes on: the fact, its store and the
-  boot, while `gathered` and `seed` of `engine.py` write and read its data. A life ends with one through
+  boot, while `gathered` and `seed` of the checkpointer write and read its data. A life ends with one through
   `Engine::checkpoint`, which its store keeps as it keeps each fact, as the TUI does at a handover, and
   `furb checkpoint` writes one on a record that no life holds. A life boots on the last checkpoint of its record,
   whatever engine wrote it, and replays the entries after it word by word. When those entries hold the texts of another
@@ -59,7 +59,10 @@ API of its own:
   of the bound of a turn in `src/sand.rs`, cuts the run with no `finally`, so the life stops: it
   refuses each later entry with that fault, and gives it to a host as `stopped`.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
-  names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
+  names of its engine. The checkpointer is `src/furb/checkpoint.py`, which they load the same way, and whose contract
+  is `src/furb/checkpoint.pyi`: its `gathered` gives the data of a checkpoint and its `seed` the entries that a later
+  life boots on, each on the names of its engine, and the fact made holds its text beside the texts of the engine and
+  of the Kernel. A fact made of a build before it holds no such text, and the engine of that build gathers and seeds. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
   of its own, which alone says which module runs. The gate of the python package reads through it too. The key `gate`
   of a config set to false turns it off for a life, whose ear then answers each word with no finding, as
@@ -163,8 +166,8 @@ engine does not serve its meaning, the name is wrong, and the name changes.
 - No hidden control flow and no magic, which is a hard rule: a model can rebuild the whole flow of what it
   read from the exact code that ran. Each change of the module of a chain comes from a word that the transcript of that
   chain shows as a turn, and the transcript is the whole of what ran: no run is made on the side, and no control flow
-  is hidden. furb hosts itself with its own verbs. Only the Kernel and the World stand outside `src/furb/engine.py`,
-  and the seeding of a chain, each turn that furb crafts for it, lives in `engine.py` alone. The test
+  is hidden. furb hosts itself with its own verbs. Only the Kernel, the checkpointer and the World stand outside
+  `src/furb/engine.py`, and the setup of a chain, each turn that furb crafts for it, lives in `engine.py` alone. The test
   `each_run_of_a_chain_of_the_replays_has_a_turn_that_shows_its_word` in `src/life.test.rs` holds the first part.
 - The record is the one truth of a life. A cache of a life is derived from its record and checked against it, and a
   reader drops a cache that does not agree: the log of a life holds every fact that the life said, and each later

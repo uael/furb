@@ -3,7 +3,7 @@
 import ast
 
 from conftest import STANDS, Sand, born, life, said, settle, sown, world_says
-from furb import engine
+from furb import checkpoint, engine
 from furb.engine import OPERATOR, Exit, Refused, Text
 
 SHELL = Exit(0, Text("bash2/stdout", "one\n"), Text("bash2/stderr", ""))
@@ -64,7 +64,7 @@ async def seeded() -> tuple[Sand, list[tuple]]:
   """A life booted on the entries that seed gives of the data in a life before it, once the loop gave it room: the
   World and what was said."""
   life(sown())
-  entries = engine.seed(DATA)
+  entries = checkpoint.seed(vars(engine), DATA)
   sand = sown()
   log, _ = life(sand, entries)
   await settle()
@@ -76,7 +76,7 @@ async def test_seed_gives_the_entries_that_a_life_boots_on_from_the_data_of_a_ch
 ):
   """seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine opens a checkpoint that an earlier engine of its major wrote."""
   life(sown())
-  entries = engine.seed(DATA)
+  entries = checkpoint.seed(vars(engine), DATA)
   assert [*entries[0][0]] == ["chain", "chain1", OPERATOR, "", "root", ""]
   sand = sown()
   life(sand, [*entries, (("wake", "chain3", OPERATOR),)])
@@ -155,7 +155,7 @@ async def test_each_chain_with_an_open_prompt_opens_paused_while_the_seed_binds_
   """Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once."""
   life(sown())
   data = {**DATA, "chains": [chain("chain1", "", "root"), chain("chain3", "chain1", "work")]}
-  entries = engine.seed(data)
+  entries = checkpoint.seed(vars(engine), data)
   kinds = [x[0][:3] for x in entries if x[0][0] in ("pause", "wake")]
   assert kinds == [("pause", "chain3", OPERATOR), ("wake", "chain3", OPERATOR)]
   assert [x[0][0] for x in entries][-1] == "wake"
@@ -176,7 +176,7 @@ async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_
     **DATA,
     "chains": [chain("chain1", "", "root", values={"bad": "nan", "SIZE": "6"}), chain("chain3", "chain1", "work")],
   }
-  log, _ = life(sown(), engine.seed(data))
+  log, _ = life(sown(), checkpoint.seed(vars(engine), data))
   await settle()
   kept = engine.reading("chain1")
   note = "The life goes on from a checkpoint. It lost ['bad'], and it cut no act."
@@ -192,7 +192,7 @@ async def test_the_fact_carried_of_a_chain_holds_the_text_of_each_value_then_the
   root = chain(
     "chain1", "", "root", definitions=["def f():\n  return SIZE", "X = 1"], values={"SIZE": "6"}, lives=["w()"]
   )
-  entries = engine.seed({**DATA, "chains": [root, chain("chain3", "chain1", "work")]})
+  entries = checkpoint.seed(vars(engine), {**DATA, "chains": [root, chain("chain3", "chain1", "work")]})
   assert [x[0] for x in entries if x[0][0] == "carried"] == [
     (
       "carried",
@@ -223,7 +223,7 @@ async def test_seed_reads_the_definitions_that_a_checkpoint_of_an_earlier_build_
   life(sown())
   word = "def f():\n  return 1\n\ndef g():\n  return 2"
   chains = [chain("chain1", "", "root", definitions=word), chain("chain3", "chain1", "work", definitions="")]
-  log, _ = life(sown(), engine.seed({**DATA, "chains": chains}))
+  log, _ = life(sown(), checkpoint.seed(vars(engine), {**DATA, "chains": chains}))
   await settle()
   made = [[x[4] for x in said(log, "rung") if x[2] == operated(log, on)] for on in ("chain1", "chain3")]
   assert made == [[word], []]
@@ -258,7 +258,7 @@ async def test_a_part_that_raises_at_a_birth_tells_its_exception_and_stops_no_pa
     "lived = [f(), g(), isinstance(made, Custom), made.args[0], q() is queue, keep() is held, n() is named]",
   ]
   root = chain("chain1", "", "root", definitions=definitions, values=values, lives=lives)
-  log, _ = life(sown(), engine.seed({**DATA, "chains": [root, chain("chain3", "chain1", "work")]}))
+  log, _ = life(sown(), checkpoint.seed(vars(engine), {**DATA, "chains": [root, chain("chain3", "chain1", "work")]}))
   await settle()
   held = engine.module("chain1")
   assert (held["lived"], held["LIMIT"], held["e"], "h" in held, "bad" in held) == (
@@ -286,7 +286,7 @@ async def test_the_note_of_a_birth_names_each_name_that_the_checkpoint_lost_and_
     chain("chain1", "", "root", definitions=["AGAIN = [1]"], lost=["gone", "AGAIN"], values={"bad": "nan", "k": "1"}),
     chain("chain3", "chain1", "work", definitions=["BOUND = [2]"], lost=["BOUND"]),
   ]
-  log, _ = life(sown(), engine.seed({**DATA, "chains": chains}))
+  log, _ = life(sown(), checkpoint.seed(vars(engine), {**DATA, "chains": chains}))
   await settle()
   notes = [debugs(said(log, "tell"), operated(log, on)) for on in ("chain1", "chain3")]
   assert notes == [["The life goes on from a checkpoint. It lost ['gone', 'bad'], and it cut no act."], []]
@@ -302,7 +302,7 @@ async def test_the_rung_of_the_operator_leaves_no_name_of_its_own_in_the_module_
   root = chain(
     "chain1", "", "root", definitions=["raise ValueError('v')"], values=values, lives=["raise KeyError('k')"]
   )
-  log, _ = life(sown(), engine.seed({**DATA, "chains": [root, chain("chain3", "chain1", "work")]}))
+  log, _ = life(sown(), checkpoint.seed(vars(engine), {**DATA, "chains": [root, chain("chain3", "chain1", "work")]}))
   await settle()
   kid = engine.chain("kid", source="chain1")
   await settle()
@@ -348,7 +348,10 @@ async def test_a_birth_tells_no_turn_of_its_own_and_each_act_that_a_life_word_ma
   await settle()
   before = engine.turns(on="chain1")
   for _ in (1, 2):
-    life(sown(stands=stands, files=HELD_FILES), engine.seed(engine.gathered(defined, {})))
+    life(
+      sown(stands=stands, files=HELD_FILES),
+      checkpoint.seed(vars(engine), checkpoint.gathered(vars(engine), defined, {})),
+    )
     await settle()
     held = [a for a in engine.transcript("chain1") if a[0] == "held" and not engine.over(a[1])]
     assert "__kept" not in engine.module("chain1")
@@ -376,10 +379,10 @@ async def test_a_birth_makes_again_each_life_word_that_asks_the_clock_and_a_life
   born(stands=stands, files=TICKED_FILES)
   await settle()
   before = engine.turns(on="chain1")
-  data = engine.gathered(defined, {})
+  data = checkpoint.gathered(vars(engine), defined, {})
   assert [x["lives"] for x in data["chains"]] == [["ticked()", "tocked()"]]
   for quiet, ends in ((frozenset(), float), (frozenset({"clock"}), Refused)):
-    life(sown(stands=stands, files=TICKED_FILES, quiet=quiet), engine.seed(data))
+    life(sown(stands=stands, files=TICKED_FILES, quiet=quiet), checkpoint.seed(vars(engine), data))
     await settle()
     clocks = [engine.peek(a[1], None) for a in engine.transcript("chain1") if a[0] == "clock" and a[2] != "journal"]
     assert len(clocks) == 2 and all(isinstance(x, ends) for x in clocks), clocks
@@ -408,9 +411,9 @@ async def test_a_birth_makes_again_each_life_word_whose_act_left_an_act_of_its_o
   born(stands=stands, files=DEEP_FILES)
   await settle()
   for _ in (1, 2):
-    data = engine.gathered(defined, {})
+    data = checkpoint.gathered(vars(engine), defined, {})
     assert [x["lives"] for x in data["chains"] if x["id"] == "chain1"] == [["deep()", "pinged()"]]
-    life(sown(stands=stands, files=DEEP_FILES), engine.seed(data))
+    life(sown(stands=stands, files=DEEP_FILES), checkpoint.seed(vars(engine), data))
     await settle()
     inner = [a for a in engine.transcript("chain1") if a[0] == "inner" and not engine.over(a[1])]
     assert [engine.get(engine.get(a[2])[2])[4] for a in inner] == ["deep()"]
@@ -432,9 +435,9 @@ async def test_a_done_prompt_that_a_module_names_pauses_no_chain_at_a_birth_so_a
   await settle()
   engine.close("this one", engine.module(root)["asked"])
   await settle()
-  data = engine.gathered(defined, {})
+  data = checkpoint.gathered(vars(engine), defined, {})
   assert [x["paused"] for x in data["chains"]] == [False]
-  life(sown(stands=stands, files=HELD_FILES), engine.seed(data))
+  life(sown(stands=stands, files=HELD_FILES), checkpoint.seed(vars(engine), data))
   await settle()
   assert not engine.paused(root)
   engine.rung("after = 1", on=root)
@@ -453,7 +456,10 @@ async def test_each_act_of_the_data_with_a_value_is_made_before_each_open_prompt
   engine.pause(root, "held")
   more = engine.prompt(str, "continue", on=one)
   await settle()
-  log, root = life(sown(script={"chain1": ["close('on')"]}), engine.seed(engine.gathered(lambda word: word, {})))
+  log, root = life(
+    sown(script={"chain1": ["close('on')"]}),
+    checkpoint.seed(vars(engine), checkpoint.gathered(vars(engine), lambda word: word, {})),
+  )
   await settle()
   assert engine.paused(more) and said(log, "reply") == []
   engine.wake(root)

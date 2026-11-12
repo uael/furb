@@ -24,7 +24,7 @@ engine holds the record, in the one home of adapters, `src/furb/adapters.py`, ke
 | --- | --- | --- |
 | The contract: the engine and the interface of each official kit | `src/furb/engine.pyi`, `.agents/skills/<name>/<name>.pyi` | frozen at 1.0.0, as now with the breaks that the last section lists |
 | The schema of the record | `RECORD_SCHEMA` in `src/world/store/schema.rs` | 1.1 |
-| The schema of a checkpoint: pure data, which `seed` of `src/furb/engine.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.0 |
+| The schema of a checkpoint: pure data, which `seed` of `src/furb/checkpoint.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.0 |
 | The protocol of the daemon | `PROTOCOL` in `host/src/protocol.rs`, `host/protocol.schema.json` | 13 |
 | The nodes of a view, a closed set that only grows (P5) | `host/protocol.schema.json` | with the protocol |
 
@@ -61,7 +61,7 @@ R2, the exact tip, with a checkpoint and without one (resume and reopen):
 - `src/life.test.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
 - `tests/suite/promise.rs::a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint`
 - `host/tests/suite/daemon.rs::a_life_that_ended_opens_again_from_its_checkpoint`
-- `test/test_gathered.py::test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard`
+- `test/checkpoint/test_gathered.py::test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard`
 - `tests/suite/promise.rs::a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without_one_and_goes_on`, a
   kill of the process of the life at or after a fact that a seed draws, which it prints with the length of
   the record at the kill, so the torn test plays that kill again as a cut

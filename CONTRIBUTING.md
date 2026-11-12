@@ -74,6 +74,7 @@ contract needs a request of the owner.
 | File | What it holds |
 | --- | --- |
 | `src/furb/kernel.py` | The Kernel, which runs the word of a rung in the module of its chain. Both engines load it. |
+| `src/furb/checkpoint.py` | The checkpointer, which gathers the data of a checkpoint and seeds a later life from it, on the names of the engine. Both engines load it, and `src/furb/checkpoint.pyi` is its contract. |
 | `src/furb/sheet.py` | The sheet that the gate reads a word on, and the findings that it reads off it. |
 | `src/gate.rs`, `src/gate/` | The gate: the type checker of monty, which reads a sheet. |
 
@@ -90,7 +91,7 @@ contract needs a request of the owner.
 | `src/world/time.rs` | The clock, a chance, and a wait. |
 | `src/world/store.rs` | The store: the record on the disk, as a file of lines, one fact on each line with the time the store kept it, or as a database of SQLite, which one process at a time owns, and the engine and the version of the build that made it, which the record names. |
 | `src/world/log.rs` | The log of a life beside its record: every fact that the life said, which `logged` reads while it agrees with the record. |
-| `src/checkpoint.rs` | The checkpoint of a life, at the tip of its record, from which a life of any later build goes on: the fact, the store and the boot, while `gathered` of the engine gives its data. |
+| `src/checkpoint.rs` | The checkpoint of a life, at the tip of its record, from which a life of any later build goes on: the fact, the store and the boot, while `gathered` of the checkpointer gives its data. |
 | `src/world/reader.rs` | The reader of a record with no life, which `retold` gives, so a record of any engine opens to read. |
 | `src/world/operator.rs` | The rules by which every console reads what the operator answers. |
 | `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [The provider](#the-provider) gives file by file. |

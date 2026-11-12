@@ -23,7 +23,9 @@ from pathlib import Path
 import pytest
 
 import furb
+import furb.checkpoint
 import furb.kernel
+import furb_monty.checkpoint
 import furb_monty.engine
 from furb import engine, sheet
 from furb.engine import OPERATOR, Act, Exit, Refused, Text, site
@@ -57,13 +59,16 @@ HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
 SKILLS = HERE.parent / ".agents" / "skills"
 """SKILLS is the folder of the skills, whose conftest holds the helpers that only their suites need."""
-SUITES = (HERE, *sorted(SKILLS.glob("*/test")))
-"""SUITES are the suite of the engine and the suite of each extension, each test of which runs on both engines."""
+SUITES = (HERE, HERE / "checkpoint", *sorted(SKILLS.glob("*/test")))
+"""SUITES are the suite of the engine, the suite of its checkpointer and the suite of each extension, each test of which
+runs on both engines."""
 BOUND = (*(f"{suite}{os.sep}" for suite in SUITES), str(SKILLS / "conftest.py"))
 """BOUND are the files whose modules bind the names of the engine under test: the suites, and the conftest of the
 suites of the skills, each as the start of the path of such a file, which every test reads twice."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
+CHECKPOINTERS = {furb.python: furb.checkpoint, furb_monty.engine: furb_monty.checkpoint}
+"""CHECKPOINTERS gives the checkpointer of each engine, which runs where that engine runs."""
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
 MONTY_SKIPS = {
@@ -837,7 +842,8 @@ def gatings(log: Sequence[tuple]) -> list[tuple[str, list[str]]]:
 
 
 def swapped(to: object) -> None:
-  """Every name of the engine that a module of the suite bound at import, rebound to the engine under test.
+  """Every name of the engine that a module of the suite bound at import, and its checkpointer, rebound to the engine
+  under test and to its checkpointer.
 
   A test reads the engine through the module it imported and through the names it took from it, so both are
   rebound, by identity: a name that is the same object in both engines stays as it is.
@@ -853,6 +859,8 @@ def swapped(to: object) -> None:
     for key, value in list(names.items()):
       if value is fro:
         names[key] = to
+      elif value is CHECKPOINTERS[fro]:
+        names[key] = CHECKPOINTERS[to]
       elif key in SURFACE and value is getattr(fro, key):
         names[key] = getattr(to, key)
 

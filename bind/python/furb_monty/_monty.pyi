@@ -233,6 +233,9 @@ class Engine:
   def names(self, chain: str | None = None) -> list[str]:
     """Every name the module of a chain binds, the root when none is given, in the order it bound them."""
 
+  def checkpointed(self, name: str, args: Iterable[object] | None = None) -> object:
+    """A function of the checkpointer of the engine, seed or gathered, said by its name with these words, and what it
+    gave."""
   def checkpoint(self) -> None:
     """The life ends with its checkpoint at the tip of its record, from which a later life on the record opens."""
 

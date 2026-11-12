@@ -970,7 +970,7 @@ async def test_a_fact_that_the_journal_keeps_after_a_fact_that_it_does_not_keep_
 async def test_an_act_whose_maker_is_the_journal_as_seed_gives_one_stands_known_in_the_transcript_of_its_chain_with_no_verb_and_runs_nothing_and_the_journal_says_its_later_facts_at_their_place() -> (
   None
 ):
-  """An act whose maker is the journal, as seed gives one, stands known in the transcript of its chain with no verb and runs nothing, and the journal says its later facts at their place."""
+  """An act whose maker is the journal, as the seed of a checkpoint gives one, stands known in the transcript of its chain with no verb and runs nothing, and the journal says its later facts at their place."""
   sand = sown()
   record = [
     (("chain", "chain1", OPERATOR, "", "root", ""),),

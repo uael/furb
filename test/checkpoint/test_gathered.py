@@ -1,7 +1,7 @@
 """gathered, the data of a checkpoint of a life."""
 
 from conftest import born, definitions, life, paragraphs, settle, sown, world_says
-from furb import engine
+from furb import checkpoint, engine
 from furb.engine import LARGEST, OPERATOR, Refused
 
 WORD = """def f():
@@ -25,7 +25,7 @@ async def gather() -> tuple[str, dict]:
   await engine.rung("await shell", on=root)
   engine.rung("await wait(600, asked)", on=root)
   await settle()
-  return root, engine.gathered(lambda word: word, {"wait": 9})
+  return root, checkpoint.gathered(vars(engine), lambda word: word, {"wait": 9})
 
 
 def value(root: str, name: str) -> str:
@@ -39,7 +39,7 @@ async def test_gathered_gives_the_data_of_a_checkpoint_of_the_life_at_its_tip_wh
   """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts."""
   _, data = await gather()
   assert [*data] == ["taken", "chains", "acts"]
-  assert [*engine.seed(data)[0][0]] == ["chain", "chain1", OPERATOR, "", "root", ""]
+  assert [*checkpoint.seed(vars(engine), data)[0][0]] == ["chain", "chain1", OPERATOR, "", "root", ""]
 
 
 async def test_taken_gives_the_highest_number_of_each_kind_that_an_act_of_a_chain_took_and_at_least_the_number_that_floor_gives_since_a_later_life_makes_no_act_again_that_an_ear_of_the_outside_made() -> (
@@ -63,10 +63,10 @@ async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_ea
   world_says("made", root, "an engine", 9, "1.0", "0.4.2", "its text", "the text of its Kernel")
   await engine.rung("def g():\n  return 2", on=root)
   await settle()
-  assert [x["definitions"] for x in engine.gathered(definitions, {})["chains"]] == [
+  assert [x["definitions"] for x in checkpoint.gathered(vars(engine), definitions, {})["chains"]] == [
     ["def f():\n  return 1", "def g():\n  return 2"]
   ]
-  [one] = engine.gathered(lambda word: word, {"wait": 9})["chains"]
+  [one] = checkpoint.gathered(vars(engine), lambda word: word, {"wait": 9})["chains"]
   assert one["lives"] == []
   assert (one["id"], one["on"], one["label"], one["source"], one["paused"]) == (root, "", "root", "", False)
   assert WORD in one["definitions"]
@@ -80,9 +80,9 @@ async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_ea
   await engine.rung("small = 1", on=rest)
   await settle()
   was = paragraphs(engine.turns(on=rest))
-  data = engine.gathered(lambda word: word, {})
+  data = checkpoint.gathered(vars(engine), lambda word: word, {})
   assert rest in [x["id"] for x in data["chains"]]
-  life(sown(), engine.seed(data))
+  life(sown(), checkpoint.seed(vars(engine), data))
   await settle()
   now = paragraphs(engine.turns(on=rest))
   assert now[: len(was) - 1] == was[:-1] and now[len(was) - 1].startswith(was[-1]), (was, now)
@@ -96,7 +96,7 @@ async def test_acts_holds_the_last_stand_the_last_clock_each_prompt_and_each_com
   thread = engine.prompt(str, "Done?", to=OPERATOR, on=root)
   engine.close("yes", thread)
   await settle()
-  data = engine.gathered(lambda word: word, {"wait": 9})
+  data = checkpoint.gathered(vars(engine), lambda word: word, {"wait": 9})
   acts = {x["id"]: x for x in data["acts"]}
   assert acts[thread] == {"kind": "prompt", "id": thread, "on": root, "words": engine.get(thread)[4:], "value": "yes"}
   shell, asked, later = (value(root, name) for name in ("shell", "asked", "later"))
@@ -112,7 +112,7 @@ async def test_acts_holds_the_last_stand_the_last_clock_each_prompt_and_each_com
   cut = acts[later]["value"]
   assert isinstance(cut, Refused) and str(cut) == f"{later} was interrupted: the life that ran it ended before it did"
   assert [x["kind"] for x in data["acts"]][:1] == ["stand"]
-  life(sown(), engine.seed(data))
+  life(sown(), checkpoint.seed(vars(engine), data))
   await settle()
   went = engine.prompt(None, "Go on.", on=thread)
   assert engine.get(went)[3] == thread
@@ -122,7 +122,7 @@ async def test_gathered_is_a_view_it_makes_nothing_and_says_nothing() -> None:
   """gathered is a view: it makes nothing and says nothing."""
   root, _ = await gather()
   before = engine.transcript(root)
-  engine.gathered(lambda word: word, {})
+  checkpoint.gathered(vars(engine), lambda word: word, {})
   assert engine.transcript(root) == before
 
 
@@ -133,7 +133,7 @@ async def test_paused_says_whether_a_pause_stands_over_the_chain_at_the_tip_and_
   root, data = await gather()
   assert [x["paused"] for x in data["chains"]] == [False]
   engine.pause(root)
-  [one] = engine.gathered(lambda word: word, {})["chains"]
+  [one] = checkpoint.gathered(vars(engine), lambda word: word, {})["chains"]
   assert one["paused"]
 
 
@@ -147,11 +147,11 @@ async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_se
   await settle()
   big, ran = engine.module(rest)["big"], engine.module(rest)["ran"]
   for _ in (1, 2):
-    data = engine.gathered(definitions, {})
+    data = checkpoint.gathered(vars(engine), definitions, {})
     [one] = [x for x in data["chains"] if x["id"] == rest]
     assert (one["values"]["small"], {"big", "ran"} <= one["values"].keys(), one["lost"]) == ("1", True, [])
     assert not [d for d in one["definitions"] if "LARGEST" in d]
-    entries = engine.seed(data)
+    entries = checkpoint.seed(vars(engine), data)
     assert all(len(str(word).encode()) < LARGEST // 8 for x in entries if x[0][0] == "rung" for word in x[0][4:5])
     log, _ = life(sown(), entries)
     await settle()
@@ -168,15 +168,15 @@ async def test_chains_holds_each_chain_whose_ear_still_hears_after_a_number_that
   _, _, root = born()
   engine.chain("lost", on=root)
   await settle()
-  data = engine.gathered(lambda word: word, {})
+  data = checkpoint.gathered(vars(engine), lambda word: word, {})
   data["chains"] = [c for c in data["chains"] if c["id"] != "chain2"]
-  life(sown(), engine.seed(data))
+  life(sown(), checkpoint.seed(vars(engine), data))
   await settle()
   assert engine.get("chain2") is None
   kept = engine.chain("kept", on=root)
   engine.prompt(str, "Which?", to=OPERATOR, on=kept)
   await settle()
-  assert kept in [c["id"] for c in engine.gathered(lambda word: word, {})["chains"]]
+  assert kept in [c["id"] for c in checkpoint.gathered(vars(engine), lambda word: word, {})["chains"]]
 
 
 async def test_gathered_reads_the_questions_of_the_life_alone_so_the_fact_of_an_act_of_an_earlier_life_that_a_carried_turn_holds_raises_nothing() -> (
@@ -187,7 +187,7 @@ async def test_gathered_reads_the_questions_of_the_life_alone_so_the_fact_of_an_
   await settle()
   earlier = ("prompt", "prompt99", OPERATOR, "chain9", "str", "Which?", "")
   engine.say("prefix", root, [earlier])
-  data = engine.gathered(lambda word: word, {})
+  data = checkpoint.gathered(vars(engine), lambda word: word, {})
   assert [c["id"] for c in data["chains"]] == [root]
   assert "prompt99" not in [a["id"] for a in data["acts"]]
 
@@ -199,10 +199,10 @@ async def test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard() ->
   world_says("tell", root, ["A note in prose, which no python parses."])
   await engine.rung("j = 2", on=root)
   await settle()
-  data = engine.gathered(definitions, {})
+  data = checkpoint.gathered(vars(engine), definitions, {})
   [one] = [x for x in data["chains"] if x["id"] == root]
   assert not [d for d in one["definitions"] if "A note in prose" in d]
-  _, again = life(sown(), engine.seed(data))
+  _, again = life(sown(), checkpoint.seed(vars(engine), data))
   await settle()
   assert (engine.module(again)["k"], engine.module(again)["j"]) == (1, 2)
 
@@ -216,6 +216,6 @@ async def test_the_turns_of_a_chain_keep_no_reply_that_is_not_done_so_a_later_li
   engine.prompt(int, "again", on=root)
   await settle()
   (open_reply,) = [a[1] for a in log if a[0] == "reply" and not engine.over(a[1])]
-  (chain,) = [c for c in engine.gathered(lambda word: word, {})["chains"] if c["id"] == root]
+  (chain,) = [c for c in checkpoint.gathered(vars(engine), lambda word: word, {})["chains"] if c["id"] == root]
   replies = [x[1] for x in chain["turns"] if x[0] in ("reply", "started", "done") and x[1].startswith("reply")]
   assert open_reply not in replies and replies != []

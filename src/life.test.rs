@@ -612,16 +612,16 @@ fn made_of(engine: &str) -> String {
   )
 }
 
-/// The fact made of an engine, as a record holds it, with the texts of that engine and of its
-/// Kernel.
-fn made_with(engine: &str, source: &str, kernel: &str) -> String {
-  let texts = serde_json::to_string(&[source, kernel]).unwrap();
+/// The fact made of an engine, as a record holds it, with the texts of that engine, of its Kernel
+/// and of its checkpointer.
+fn made_with(engine: &str, held: &[&str]) -> String {
+  let texts = serde_json::to_string(held).unwrap();
   format!("{},{}]", made_of(engine).trim_end_matches(']'), &texts[1..texts.len() - 1])
 }
 
 /// The fact made of this build, as its record holds it.
 fn ours() -> String {
-  made_with(&world::engine(), crate::ENGINE, crate::KERNEL)
+  made_with(&world::engine(), &[crate::ENGINE, crate::KERNEL, crate::CHECKPOINTER])
 }
 
 /// A record of one rung that a life of a test kept, and the text of the record with its fact made changed.
@@ -657,12 +657,13 @@ fn a_record_of_another_engine_crosses_to_this_build_by_a_checkpoint_and_goes_on_
   let at = place("texts");
   let source = format!("{}\ncrossed = True\n", crate::ENGINE);
   let mut hash = Sha256::new();
-  for one in [source.as_str(), crate::KERNEL] {
+  let held = [source.as_str(), crate::KERNEL, crate::CHECKPOINTER];
+  for one in held {
     hash.update(one.as_bytes());
     hash.update([0]);
   }
   let named = format!("{:x}", hash.finalize());
-  let (record, text) = made_elsewhere(&at, &made_with(&named, &source, crate::KERNEL));
+  let (record, text) = made_elsewhere(&at, &made_with(&named, &held));
   let open = || Opening { skills: Some(false), ..opening(&at, true) };
   let mut later = open().boot::<String>([]).unwrap().0;
   assert_eq!(
@@ -690,6 +691,32 @@ fn a_record_of_another_engine_crosses_to_this_build_by_a_checkpoint_and_goes_on_
     refused.contains("another engine"),
     "texts of another engine refuse the record: {refused}"
   );
+}
+
+#[test]
+fn a_record_whose_fact_made_holds_no_checkpointer_seeds_and_gathers_with_the_engine_that_it_holds()
+{
+  let at = place("checkpointer");
+  let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus").join("next");
+  laid(&corpus.join("work.jsonl"), &at.join("record.jsonl"));
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let made = kept
+    .iter()
+    .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
+    .rfind(|a| a.kind() == world::MADE)
+    .unwrap();
+  assert!(
+    made.word(5).is_some() && made.word(6).is_none(),
+    "the segment after the checkpoint holds an engine and a Kernel, and no checkpointer"
+  );
+  let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
+  let mut life = inspects
+    .boot::<String>([])
+    .unwrap_or_else(|why| panic!("the seed of its own engine opens its checkpoint: {why}"))
+    .0;
+  let written = checkpoint::written(&mut life)
+    .unwrap_or_else(|why| panic!("the gathered of its own engine writes a checkpoint: {why}"));
+  assert!(written.as_ref().py_repr().contains("'id': 'chain1'"), "the checkpoint holds the root");
 }
 
 /// The records that each build of this version replays word by word: the records in `tests/replay`,
