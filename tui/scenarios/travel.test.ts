@@ -21,6 +21,21 @@ async function asks(window: Window) {
 /** The cancels that the record holds on the root. */
 const cancels = (window: Window) => window.engine.transcript({ on: window.root, of: "cancel" });
 
+/** The second ⌃C, which cancels the named ask, and the confirm of the window when work runs under the ask, as the wait
+ * that its word left. */
+async function again(window: Window): Promise<void> {
+  window.screen.mockInput.pressCtrlC();
+  await until(
+    async () => window.app.overlay || (await cancels(window)).length > 0,
+    "the cancel of the named ask, or its confirm",
+  );
+  if (window.app.overlay) {
+    await window.shows((frame) => frame.includes("Take it back"), "the confirm");
+    window.screen.mockInput.pressEnter();
+  }
+  await until(async () => (await cancels(window)).length > 0, "the cancel of the named ask");
+}
+
 /** The script: a first message that its model answers, then two messages on its thread that stay open, the first of
  * them with a worker under it whose model never answers, as the asks of the owner that carried his lanes. */
 const script = [
@@ -85,10 +100,10 @@ test("⌃C on an empty input names the act that a second ⌃C cancels, and cance
     await window.shows((frame) => frame.includes(`Take back ${ask}?`), "the notice drawn");
     await Bun.sleep(1500);
     expect(await cancels(window)).toEqual([]);
-    window.screen.mockInput.pressCtrlC();
+    await again(window);
     await until(
       async () => (await asks(window)).find((one) => one.id === ask)?.over,
-      "the cancel of the named ask",
+      "the end of the named ask",
     );
     await until(() => window.app.composer.plainText === "Travel: ask.", "the message back in the input");
     expect((await cancels(window)).map((fact) => fact[1])).toEqual([ask]);
@@ -109,10 +124,8 @@ test("in a terminal of 80 columns, a second ⌃C ends only the ask that the foot
       await Bun.sleep(500);
       const footer = (await window.frame()).split("\n").at(-2) ?? "";
       expect(await cancels(window)).toEqual([]);
-      window.screen.mockInput.pressCtrlC();
-      await Bun.sleep(2500);
-      await window.session.refresh();
       expect(footer).toContain(`Take back ${ask}?`);
+      await again(window);
       expect((await cancels(window)).map((fact) => fact[1])).toEqual([ask]);
       expect((await asks(window)).find((one) => one.id === hire)?.over).toBe(false);
     } finally {
