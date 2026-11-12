@@ -132,3 +132,48 @@ test("in a terminal of 80 columns, a second ⌃C ends only the ask that the foot
       await window.close(true).catch(() => {});
     }
   }));
+
+// With the sidebar shown the keys of the footer stand in its corner and yield no room, and while a model works the
+// footer counts its time and what it streamed. The notice stands in place of all but the mark of the state, so the
+// footer still names the ask, and the second ⌃C takes it back.
+test("in a terminal of 100 columns, while a model works, a second ⌃C takes back the ask that the footer named", () =>
+  scenario(
+    [
+      { cue: "Travel: begin.", word: 'close("Begun.")' },
+      {
+        cue: "Travel: think.",
+        word: 'close("Done.")',
+        thought: "I weigh each part of the question, one part after the other, before I write a word for it.",
+        hold: "never",
+      },
+    ],
+    async (first, yard) => {
+      await first.close(true).catch(() => {});
+      const window = await Window.open(yard, yard.record, { width: 100, height: 44 });
+      try {
+        await window.type("Travel: begin.");
+        await window.shows((frame) => frame.includes("Begun."), "the answer of the first message");
+        await window.type("Travel: think.");
+        let ask = "";
+        await until(async () => {
+          await window.session.refresh();
+          ask = window.session.lastOwn?.words[1] === "Travel: think." ? window.session.lastOwn.id : "";
+          return ask;
+        }, "the open ask");
+        await window.shows(
+          (frame) => / · \d/.test(frame.split("\n").at(-2) ?? ""),
+          "the time of the work in the footer",
+        );
+        window.screen.mockInput.pressCtrlC();
+        await window.shows(
+          (frame) => (frame.split("\n").at(-2) ?? "").includes(`Take back ${ask}?`),
+          "the name in the footer",
+        );
+        expect(await cancels(window)).toEqual([]);
+        await again(window);
+        expect((await cancels(window)).map((fact) => fact[1])).toEqual([ask]);
+      } finally {
+        await window.close(true).catch(() => {});
+      }
+    },
+  ));

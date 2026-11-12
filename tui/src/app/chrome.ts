@@ -342,7 +342,8 @@ export const chrome = part({
     ];
     const notice = w.error ? "" : w.notice;
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
-    // beside the keys. The keys leave room for a notice that asks for a second press of its key.
+    // beside the keys. A notice that asks for a second press of its key stands in place of all but the mark of the state,
+    // and the keys leave room for it, since the press reads what the footer drew of it.
     const armed = arms(notice);
     // Work reads at a glance: the word of its state under a light that sweeps over it, the time since the work began,
     // and the size of what its models streamed. The key that stops it stands in the keys of the footer.
@@ -354,16 +355,17 @@ export const chrome = part({
     ].filter(Boolean);
     const state: Part[] = [
       [mark, color],
-      ...(work ? shimmer(label) : [[label, moving ? c.text : c.muted] as Part]),
-      ...(tally.length ? [[` · ${tally.join(" · ")}`, c.faint] as Part] : []),
+      ...(armed ? [] : work ? shimmer(label) : [[label, moving ? c.text : c.muted] as Part]),
+      ...(tally.length && !armed ? [[` · ${tally.join(" · ")}`, c.faint] as Part] : []),
     ];
     // The status of each part that is not empty stands at the end of the state, after a notice.
-    const statuses = (this.parts?.status(this.seen()) ?? []).flatMap((line): Part[] => [
+    const statuses = (armed ? [] : (this.parts?.status(this.seen()) ?? [])).flatMap((line): Part[] => [
       ["   ", c.text],
       ...this.partLine(line),
     ]);
     // On a narrow terminal, or with the sidebar hidden, the context of the corner folds into the end of the state.
-    if (!this.sidebarShown || this.drawerOpen) statuses.push(["   ", c.text], [this.contextLine(), c.muted]);
+    if (!armed && (!this.sidebarShown || this.drawerOpen))
+      statuses.push(["   ", c.text], [this.contextLine(), c.muted]);
     // The keys that have no room beside the whole state leave the footer from the last one, so the state is never cut,
     // and neither is a notice that asks for a second press of its key.
     const shown = [...keys];
