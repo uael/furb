@@ -422,8 +422,9 @@ fix what your change broke, and report what was broken before.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `tui/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
-  seconds, and runs as many at once as the machine has cores. A word after `bun run test` filters the files by
-  their path or by `package/file`, as `tui/host`, and a filter that matches no file fails. Use it, and not a plain
+  seconds, and runs as many at once as the machine has cores, or as `FURB_TEST_JOBS` names when it names fewer. A
+  word after `bun run test` filters the files by their path or by `package/file`, as `tui/host`, and a filter
+  that matches no file fails. Use it, and not a plain
   `bun test <file>`, which keeps `claude` on the PATH and fails where a test names a model, and says so; a bunfig.toml
   in the root and in each package gives a plain run the limit of thirty seconds and the folders of the runner.
   `FURB_TEST_OUTPUT=1` shows all that each run wrote. The tests read the built package, so a build older than its

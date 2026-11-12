@@ -1,7 +1,7 @@
 // A run of the tests, which the runner of the suite and the loop that repeats one test share: a process of `bun test`
 // in a yard of its own, and the test files that a filter names.
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Glob } from "bun";
 import { endOf } from "./children.ts";
@@ -21,6 +21,16 @@ export function testFiles(filters: string[]): string[] {
         filters.length === 0 || filters.some((one) => path.includes(one) || named.includes(one)),
     )
     .map(({ path }) => path);
+}
+
+/** How many runs go at once: one for each core, or FURB_TEST_JOBS when it names fewer, as the build slot of a busy
+ * machine gives it: two whole suites at once on the cores of one Mac passed its memory. */
+export function runners(
+  env: Record<string, string | undefined> = process.env,
+  cores: number = availableParallelism(),
+): number {
+  const cap = Number(env.FURB_TEST_JOBS);
+  return Number.isInteger(cap) && cap > 0 ? Math.min(cores, cap) : cores;
 }
 
 /** The pattern of the names of tests, each of them whole. */
