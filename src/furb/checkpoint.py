@@ -69,8 +69,6 @@ def seed(names, data):
     seat = f"rung{numbers['rung'] + 1}"
     for maker, said in [(operator, word), *((seat, one) for one in parts[i])]:
       put("rung", f"rung{numbers['rung'] + 1}", maker, i, said, "", "")
-      put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, said)
-      entries.append((("done", gated, "gate", []),))
   return entries + [(("wake", y["id"], operator),) for y in data["chains"] if y["id"] in asking and not y["paused"]]
 
 

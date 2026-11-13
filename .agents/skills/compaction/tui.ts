@@ -21,7 +21,7 @@ function regrounding(seen: Seen, chain: string, at: number): string | undefined 
 }
 
 /** Whether the command may go on: it takes no argument, and the life runs the extension, since a life that does not
- * has no condense() or clear(), and the gate would refuse the word. */
+ * has no condense() or clear(), and the word would raise. */
 async function ready(name: string, argument: string, seen: Seen): Promise<boolean> {
   if (argument.trim()) seen.say(`/${name} takes no argument`);
   else if (!(await seen.skills()).includes("compaction")) seen.say("This chain has no compaction");

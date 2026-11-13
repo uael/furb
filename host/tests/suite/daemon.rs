@@ -373,14 +373,19 @@ impl Window {
   async fn ran(&mut self, life: &str, word: &str) -> String {
     let verb = Verb::Run { life: life.to_owned(), word: word.to_owned(), on: None };
     let Ok(Answer::Act(rung)) = self.ask(verb).await else { panic!("no rung") };
-    // Each birth names its rungs anew, so a rung of an earlier birth that a window reads late
-    // may hold the same name: the done of this one holds this word.
+    self.done(&rung, word).await;
+    rung
+  }
+
+  /// The done of the rung of a word, once the window read it. Each birth names its rungs anew, so
+  /// a rung of an earlier birth that a window reads late may hold the same name: the done of this
+  /// one holds this word.
+  async fn done(&mut self, rung: &str, word: &str) {
     let this = |frame: &Frame| {
       matches!(frame, Frame::Event { event: Event::Act(act), .. }
         if act.id == rung && matches!(act.phase, Phase::Done(_)) && act.word.as_deref() == Some(word))
     };
     self.until(this).await;
-    rung
   }
 
   /// The last reply of a life, which took the last answer of a model.
@@ -633,13 +638,17 @@ async fn a_window_of_a_life_born_from_its_checkpoint_hears_each_fact_of_the_life
   let mut between = Window::dialed(&local).await;
   opened(&mut between, &at, "a.jsonl").await;
   between.attach(&life).await;
-  between.ran(&life, "z = 0").await;
+  // A window reads the facts of an earlier birth from the log of the record, which stands behind
+  // the record while the life runs a word. So it reads them before the test runs a word.
+  between.done(&first, "x = 41 + 1").await;
+  let second = between.ran(&life, "z = 0").await;
   assert_eq!(between.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   time::sleep(PAST).await;
   assert!(!between.lives(&life).await);
   let mut later = Window::dialed(&local).await;
   opened(&mut later, &at, "a.jsonl").await;
   later.attach(&life).await;
+  later.done(&second, "z = 0").await;
   later.ran(&life, "y = 1").await;
   let facts_of = |window: &Window| -> Vec<Value> {
     let facts = window.pushed.iter().filter_map(|frame| match frame {
@@ -691,19 +700,19 @@ async fn a_fault_of_one_life_leaves_the_daemon_and_the_other_lives() {
   assert!(!daemon.is_finished());
 }
 
-/// A record whose replay drifts at the place of its first stand: its checkpoints dropped, so the
-/// life replays it from its first entry, and its first stand moved to a place that the life does
-/// not stand in.
+/// A record whose replay drifts at its first cd: its checkpoints dropped, so the life replays it
+/// from its first entry, and its first cd moved to a place that the word of the life does not ask
+/// for.
 fn drifted(life: &str) -> Vec<u8> {
   let text = fs::read_to_string(life).unwrap();
   let checkpoint = |line: &&str| line.starts_with(r#"[["checkpoint","#);
   let mut lines: Vec<String> =
     text.lines().filter(|line| !checkpoint(line)).map(str::to_owned).collect();
-  let stood = lines.iter().position(|line| line.starts_with(r#"[["done","stand1","#)).unwrap();
-  let mut entry: Value = serde_json::from_str(&lines[stood]).unwrap();
-  let place = entry[0][3][1].as_str().expect("the stand names its place").to_owned();
-  entry[0][3][1] = Value::from(format!("{place}-elsewhere"));
-  lines[stood] = entry.to_string();
+  let moved = lines.iter().position(|line| line.starts_with(r#"[["cd","cd1","#)).unwrap();
+  let mut entry: Value = serde_json::from_str(&lines[moved]).unwrap();
+  let place = entry[0][4].as_str().expect("the cd names its place").to_owned();
+  entry[0][4] = Value::from(format!("{place}-elsewhere"));
+  lines[moved] = entry.to_string();
   fs::write(life, lines.join("\n") + "\n").unwrap();
   fs::write(format!("{life}.log"), "{\"entries\": 0}\n").unwrap();
   fs::read(life).unwrap()

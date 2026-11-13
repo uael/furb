@@ -27,7 +27,7 @@ def mcp_closed(got: object, show: Show) -> dict:
   """mcp_closed(got, show) gives the words that the done of an mcp act tells, as a dict, and an empty dict for an answer that is none of the following.
   A list of servers tells under the word servers one line for each server, and a server tells its line under the word server, as mcp_line gives them.
   A result tells under the word text the lines of its text that its show picks, and one line of Markdown for each image block of its content, which shows the image.
-  It reads no list from the module of the chain, which a record from before the gate refused such a name may bind to a str.
+  It reads no list from the module of the chain, which a word may bind to a str.
   """
 
 def mcp_act(kind: str, on: str, of: str, fields: dict, show: Show, *words: object) -> Act:
@@ -36,7 +36,7 @@ def mcp_act(kind: str, on: str, of: str, fields: dict, show: Show, *words: objec
   """
 
 def mcp_made[T](_shape: type[T], made: Act) -> Act[T]:
-  """mcp_made(shape, made) gives the act that it is given, typed as an act of the shape that a word awaits for, since the gate reads each act that the engine gives as an act of object."""
+  """mcp_made(shape, made) gives the act that it is given, typed as an act of the shape that a word awaits for."""
 
 def mcp_known(server: str, on: str = "") -> dict:
   """mcp_known(server) gives the dict of a server in the last list of servers that an mcp_servers act on the chain came to.

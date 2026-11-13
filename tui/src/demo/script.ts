@@ -43,7 +43,7 @@ export function messageOf(transcript: string, prompt: string): string | undefine
 }
 
 /** The script that answers the step that the transcript asks, and the number of that step, from 0: each advance on a
- * prompt in the transcript is a step, so a word that the gate refused takes a step too. */
+ * prompt in the transcript is a step, so a word that raised takes a step too. */
 export function scripted(
   scripts: readonly Script[],
   messages: readonly unknown[],

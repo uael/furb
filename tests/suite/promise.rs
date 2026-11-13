@@ -771,18 +771,18 @@ fn a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entrie
     .filter(|at| *at < text.len())
     .collect();
   let picked = starts[usize::try_from(draw(&mut points)).unwrap() % starts.len()];
-  // The cut between the gate of the first stand and its done, which the teach of the extensions
-  // before that gate orders, is cut each time.
-  let gated = text.find("[[\"done\",\"gate1\"").unwrap();
+  // The cut between the stand of the first word of the root and its done, which the teach of the
+  // extensions before that stand orders, is cut each time.
+  let stood = text.find("[[\"done\",\"stand2\"").unwrap();
   let cuts =
-    [("line", picked), ("gate1", gated), ("checkpoint", text.rfind("[[\"checkpoint\"").unwrap())];
+    [("line", picked), ("stand2", stood), ("checkpoint", text.rfind("[[\"checkpoint\"").unwrap())];
   for (name, start) in cuts {
     let line = text[start..].find('\n').map_or(text.len(), |end| start + end) - start;
     // A third of the cuts fall at the end of the line, which leaves it whole and not ended, so the
-    // store reads it as an entry and ends it at its next keep; but none at the done of gate1: that
-    // cut falls inside its line, so gate1 stands with no done. The others fall inside the line.
+    // store reads it as an entry and ends it at its next keep; but none at the done of stand2: that
+    // cut falls inside its line, so stand2 stands with no done. The others fall inside the line.
     let at = usize::try_from(draw(&mut points)).unwrap();
-    let unended = at % 3 == 0 && start != gated;
+    let unended = at % 3 == 0 && start != stood;
     let cut = if unended { start + line } else { start + 1 + at / 3 % (line - 1) };
     let kept_at = if cut == start + line { (start + line + 1).min(text.len()) } else { start };
     let (torn, clean) = (place(&format!("torn-{name}")), place(&format!("clean-{name}")));

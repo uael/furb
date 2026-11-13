@@ -5,7 +5,7 @@ loads the sheet. Each gives the Kernel the names of its engine, which it reads a
 boot binds the bus into the engine and a name rebound is used from the next use on.
 
 A word answers by a close and never by a return: a body of a module takes no return, so a word that holds one is no
-python and the gate says so.
+python and its run is done with a SyntaxError.
 
 A word runs in parts when the World says the statements of it that its model finished, each as a writing of its
 rung, before the model wrote the rest. A writing is a fact and no act: the World says it and awaits nothing, so it

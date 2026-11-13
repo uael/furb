@@ -193,11 +193,6 @@ async fn a_query_is_a_command_that_the_life_answers() {
     panic!("the standing is a value")
   };
   assert!(standing.is_array());
-  let gate = Command::Gate { word: "BAD".to_owned(), on: None };
-  let Reply::Value(found) = life.send(gate).await.unwrap() else {
-    panic!("the gate gives a value")
-  };
-  assert_ne!(found, json!([]));
   let wrong = life.send(Command::Answer { id: id.clone(), line: "1".to_owned() }).await;
   assert!(
     matches!(wrong, Err(LifeError::Refused(why)) if why == format!("No prompt is named {id}."))
@@ -267,14 +262,11 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
   let at = place("meaning");
   let life = Life::spawn(scripted(&at, &[])).unwrap();
   let mut events = Box::pin(life.events(0));
-  let refused = made(&life, rung("BAD")).await;
-  let got = until(&mut events, stands(refused.clone(), State::Failed)).await;
+  let raised = made(&life, rung("BAD")).await;
+  let got = until(&mut events, stands(raised.clone(), State::Failed)).await;
   let Some(Event::Act(failed)) = got.last().map(|one| &*one.1) else { panic!("an act") };
-  assert!(
-    matches!(&failed.run, Some(RunState::Refused(found)) if found.contains("BAD")),
-    "{:?}",
-    failed.run
-  );
+  let why = RunState::Failed("NameError: name 'BAD' is not defined".to_owned());
+  assert_eq!(failed.run, Some(why));
   let prompt = Command::Prompt {
     shape: "str".to_owned(),
     message: "Which base?".to_owned(),

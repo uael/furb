@@ -138,8 +138,6 @@ export declare class Engine {
   clock(options?: { on?: string } | null): number
   /** chance gives a number that is at least zero and under one. */
   chance(options?: { on?: string } | null): number
-  /** Whether the word of a rung may run: the gate reads it after the program of its chain, and it finds nothing when the word may run. */
-  gate(word: string, options?: { on?: string } | null): string[]
   /** A cd: the paths of its chain resolve against the directory it came to from then on, and it does nothing else. */
   cd(path: string, options?: { on?: string } | null): string
   /** The working directory of a chain is the directory that the closest cd back in its transcript came to. */
@@ -160,7 +158,7 @@ export declare class Engine {
   wait(acts?: string[], options?: { seconds?: number; on?: string } | null): Act & PromiseLike<string | null>
   /** The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is. */
   rung(options?: { word?: string; retells?: string; to?: string; on?: string } | null): Act & PromiseLike<unknown>
-  /** A prompt: it makes the rung of the first turn of its model, its chain makes each later rung of it, and it is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike. */
+  /** A prompt: it makes the rung of the first turn of its model, its chain makes each later rung of it, and it is done with the value, so a rung whose word raises is asked again. */
   prompt(shape: unknown, options?: { message?: string; to?: string; on?: string } | null): Act & PromiseLike<unknown>
   /** chain says what a chain does: how it is opened, what it tells, and what it answers for. */
   chain(options?: { label?: string; source?: string; filter?: unknown; on?: string } | null): Act & PromiseLike<unknown>

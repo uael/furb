@@ -5,7 +5,6 @@ from conftest import (
   WORLD,
   Dead,
   born,
-  findings,
   fresh,
   keeping,
   lived,
@@ -58,7 +57,6 @@ async def test_a_fact_reaches_the_world_the_kernel_and_the_journal_only_through_
   sand, log, root = born("close(read('a.txt').content)")
   assert await engine.prompt(str, "read it", on=root) == "one\ntwo\n"
   assert [a[0] for a in sand.calls] == ["stand", "reply", "read"]
-  assert findings(log) == [[]]
   told = fresh(root, prompted("prompt1", "str", "read it"), "#rung1 advance on prompt1")
   assert ran(log) == [told, "close(read('a.txt').content)"]
   assert [entry[0][4] for entry in sand.record if entry[0][0] == "read"] == ["a.txt"]

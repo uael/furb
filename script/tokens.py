@@ -24,7 +24,7 @@ ENGINE = ROOT / "src" / "furb" / "engine.py"
 # will not fit under it is a shape not found yet. BUDGET is one token over the cost of the engine at its last change,
 # so an engine item that adds tokens raises it by its measured cost. The doctrine of furb, which every chain reads in
 # a turn of its setup, gets one thousand.
-BUDGET = 9_180
+BUDGET = 9_082
 DOCTRINE = 1_000
 QUOTE = (ROOT / "DOCTRINE.md").read_text(encoding="utf-8")
 

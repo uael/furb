@@ -6,7 +6,6 @@ from typing import Literal
 import pytest
 
 from conftest import (
-  BAD,
   COST,
   STANDS,
   WORLD,
@@ -29,13 +28,13 @@ from furb.engine import OPERATOR, Act, Refused, Text
 
 
 async def test_a_prompt_it_makes_the_rung_of_one_turn_of_its_model() -> None:
-  """A prompt: it makes the rung of the first turn of its model, its chain makes each later rung of it, and it is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike."""
-  _, log, root = born("k = BAD", "raise ValueError('boom')", "close(7)")
+  """A prompt: it makes the rung of the first turn of its model, its chain makes each later rung of it, and it is done with the value, so a rung whose word raises is asked again."""
+  _, log, root = born("raise ValueError('boom')", "close(7)")
   act = engine.prompt(int, "try", on=root)
   assert await act == 7
   steps = [a[1] for a in said(log, "rung") if a[2] == act]
   assert [a[2] for a in said(log, "reply")] == steps
-  assert [type(engine.peek(one)).__name__ for one in steps] == ["Refused", "ValueError", "CancelledError"]
+  assert [type(engine.peek(one)).__name__ for one in steps] == ["ValueError", "CancelledError"]
 
 
 async def test_the_driver_gives_the_name_of_the_prompt() -> None:
@@ -48,12 +47,13 @@ async def test_the_driver_gives_the_name_of_the_prompt() -> None:
 
 async def test_the_engine_asks_the_model_again_after_a_refusal() -> None:
   """The engine asks the model again after a refusal."""
-  _, log, root = born("k = BAD", "close(7)")
+  _, log, root = born("wait(1)", "close(7)")
   act = engine.prompt(int, "try", on=root)
   assert await act == 7
   first, second = [a[1] for a in said(log, "rung") if a[2] == act]
   assert [a[2] for a in said(log, "reply")] == [first, second]
-  assert engine.turns(on=root)[2][1] == (f"#{first} refused\n{first}_findings = {BAD!r}\n\n#{second} advance on {act}")
+  refusal = "Refused('no act: await the act, or wait(seconds, act)')"
+  assert engine.turns(on=root)[2][1] == f"#{first} raised\n{first}_raised = {refusal}\n\n#{second} advance on {act}"
 
 
 async def test_the_operator_prompts_a_model_to_make_the_model_work() -> None:

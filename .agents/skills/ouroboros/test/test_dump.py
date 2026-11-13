@@ -65,4 +65,4 @@ async def test_dump_reads_the_module_and_the_program_of_the_chain_and_asks_nothi
   await engine.rung(DEFINES, on=root)
   before = len(engine.transcript(on=root))
   assert await engine.rung("close(dump('f'))", on=root)
-  assert {a[0] for a in engine.transcript(on=root)[before:] if engine.question(a)} == {"rung", "gate", "run"}
+  assert {a[0] for a in engine.transcript(on=root)[before:] if engine.question(a)} == {"rung", "run"}

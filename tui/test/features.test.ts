@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { link, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, extname, join } from "node:path";
-import { isDone, isPaused, operated } from "furb/life";
+import { isDone, isPaused, operated, reasonOf } from "furb/life";
 import { executable, programs } from "../../bind/typescript/test/executable.ts";
 import { remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -19,7 +19,7 @@ import { transcriptOf } from "./transcript.ts";
 
 afterAll(removeDemoDirectories);
 
-test("a word of the operator stands as his messages stand, as its program in a panel of his color: its line that waits is lit until its act ends, then says what the act came to, in each view and in a later life, and a word that the gate refused shows a cross and its finding", async () => {
+test("a word of the operator stands as his messages stand, as its program in a panel of his color: its line that waits is lit until its act ends, then says what the act came to, in each view and in a later life, and a word that is no Python shows a cross and what it raised", async () => {
   let record: string | undefined;
   const line = (shown: string) =>
     shown.split("\n").find((row) => row.includes("await wait(60, __name__)")) ?? "";
@@ -50,14 +50,14 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       expect(line(await frame())).toBe(done);
       await session.submit("/run this is invalid python !!!");
-      const refused = () =>
+      const raised = () =>
         session.activity.findLast(
           (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
         );
-      // The daemon gates the word after the submit made its rung, and the window hears the refusal then.
-      await until(session, () => refused()?.run?.run === "refused" && session.findings.length > 0);
+      // The daemon runs the word after the submit made its rung, and the window hears the raise then.
+      await until(session, () => raised()?.run?.run === "failed");
       expect(session.error).toBe("");
-      expect(session.findings.join("\n")).toContain("line 1");
+      expect(reasonOf(raised()?.run)).toContain("line 1");
       await session.refresh();
       const rows = (await frame()).split("\n");
       const at = rows.findIndex((row) => /1 {2}✗ this is invalid python !!!/.test(row));

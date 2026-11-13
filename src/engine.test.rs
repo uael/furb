@@ -1582,20 +1582,26 @@ fn an_ear_that_cannot_start_again_tells_the_operator_why_it_ended() {
   assert!(told[0].contains("probe 1 broke. It cannot start again."), "{told:?}");
 }
 
+/// What the ear of the gate answers a word on the root. The ear makes the act, as [`probe`] does,
+/// since no verb of the engine asks the gate.
+fn gated(engine: &mut Engine, root: &str, word: &str) -> Result<Object, Fault> {
+  let operator = engine.site(Some("gate")).unwrap();
+  let asked = vec![Object::string("gate"), Object::string(root), Object::string(word)];
+  let found = engine.verb("ask", asked, vec![]);
+  engine.site(Some(&operator)).unwrap();
+  found
+}
+
 #[test]
 fn a_gate_that_raises_refuses_the_word_and_a_fresh_gate_reads_the_next_word() {
   let (_yard, mut engine, root) = probed("raising-gate", vec![]);
   // A name of the engine that is no str breaks the sheet of every word, as a fault of the readying does.
   engine.word("globals().update({1: 0})", vec![]).unwrap();
-  let no = engine
-    .verb("gate", vec![Object::string("close(1)")], vec![("on", Object::string(&root))])
-    .unwrap_err();
+  let no = gated(&mut engine, &root, "close(1)").unwrap_err();
   assert_eq!(no.name, "Refused");
   assert!(no.message().contains("The ear gate raised AttributeError"), "{no}");
   engine.word("globals().pop(1)", vec![]).unwrap();
-  let found = engine
-    .verb("gate", vec![Object::string("close(1)")], vec![("on", Object::string(&root))])
-    .unwrap();
+  let found = gated(&mut engine, &root, "close(1)").unwrap();
   assert_eq!(found.py_repr(), "[]");
 }
 
@@ -1604,13 +1610,9 @@ fn the_gate_refuses_a_word_that_monty_cannot_compile_and_reads_the_next_word() {
   let (_yard, mut engine, root) = probed("gate", vec![]);
   let word =
     "from typing import TypedDict\nclass Point(TypedDict, total=False):\n  x: int\nclose(1)";
-  let found =
-    engine.verb("gate", vec![Object::string(word)], vec![("on", Object::string(&root))]).unwrap();
-  let found = found.py_repr();
+  let found = gated(&mut engine, &root, word).unwrap().py_repr();
   assert!(found.starts_with("[\"line ") && found.contains("metaclasses"), "{found}");
-  let next = engine
-    .verb("gate", vec![Object::string("x = 1")], vec![("on", Object::string(&root))])
-    .unwrap();
+  let next = gated(&mut engine, &root, "x = 1").unwrap();
   assert_eq!(next.py_repr(), "[]");
 }
 
@@ -1618,14 +1620,10 @@ fn the_gate_refuses_a_word_that_monty_cannot_compile_and_reads_the_next_word() {
 fn the_gate_answers_a_word_that_it_fails_on_with_a_refusal_and_reads_the_next_word() {
   let (_yard, mut engine, root) = probed("gatefault", vec![]);
   engine.word("globals().update(program_held=program, program=lambda on: 1 / 0)", vec![]).unwrap();
-  let no = engine
-    .verb("gate", vec![Object::string("x = 1")], vec![("on", Object::string(&root))])
-    .unwrap_err();
+  let no = gated(&mut engine, &root, "x = 1").unwrap_err();
   assert!(no.message().contains("ZeroDivisionError"), "{no}");
   engine.word("globals().update(program=program_held)", vec![]).unwrap();
-  let next = engine
-    .verb("gate", vec![Object::string("x = 1")], vec![("on", Object::string(&root))])
-    .unwrap();
+  let next = gated(&mut engine, &root, "x = 1").unwrap();
   assert_eq!(next.py_repr(), "[]");
 }
 

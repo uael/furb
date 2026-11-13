@@ -15,8 +15,8 @@ export type Write = (part: { text?: string; thinking?: string }) => void;
 /** What the demo thinks and answers on a later turn, by what the turn says. */
 const replies: [cue: string, thinking: string, answer: string][] = [
   [
-    "refused",
-    "The gate refused the fence, so the word is Python alone.",
+    "SyntaxError",
+    "The fence is no Python, so the word is Python alone.",
     "Here it is again as plain Python, with no fence around it.",
   ],
   [
@@ -90,9 +90,9 @@ export function demoModels(watch = false): (asked: Asked, write: Write) => Promi
     const [thinking, answer] = first
       ? ["I read the README and run the checks before I answer.", ""]
       : reply(last, actor, JSON.stringify(messages));
-    // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which the gate refuses,
-    // and the model answers again once it reads the refusal.
-    const fenced = !first && last.includes("an answer in a fence") && !last.includes("refused");
+    // A message that asks for an answer in a fence gets one, as a model sometimes writes it, which raises a
+    // SyntaxError, and the model answers again once it reads the raise.
+    const fenced = !first && last.includes("an answer in a fence") && !last.includes("SyntaxError");
     // A message that says to ask first gets a question to the operator and no close, so the model answers again
     // once the operator has answered.
     const asks = !first && last.includes("Ask me first");

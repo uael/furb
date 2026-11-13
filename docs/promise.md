@@ -48,10 +48,9 @@ R1, no drift on the same engine:
 - `test/test_drift.py::test_an_act_whose_words_are_not_the_ones_the_record_holds_is_a_drift`
 - `src/engine.test.rs::a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift`
 - `src/life.test.rs::each_record_of_the_replays_replays_on_its_own_engine_with_no_drift`
-- `src/life.test.rs::a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts`
 - `tests/suite/promise.rs::a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entries_written_whole`, at a
-  random byte of a random line, of the done of the gate of the first stand and of the last checkpoint, from a seed
-  that it prints
+  random byte of a random line, of the done of the stand of the first word of the root and of the last checkpoint,
+  from a seed that it prints
 - `tests/suite/promise.rs::a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_held_live`
 
 R2, the exact tip, with a checkpoint and without one (resume and reopen):
@@ -116,6 +115,8 @@ form must change, and so these breaks stand for the next major, 1.0.0.
 - `src/furb/engine.pyi Show: the alias changes from Callable[[list[str]], list[int]] to tuple | Callable[[list[str]], list[int]]`: a show of the file is plain data, so a replay tells the same; a callable show stays valid.
 - `src/furb/engine.pyi stand: its type of return changes from Standing to Act[Standing]`: a word awaits the stand.
 - `src/furb/engine.pyi chain: the type of filter changes from Filter | None to Filter | list[str] | None`: a filter may be the ids that it kept; a callable filter stays valid.
+- `src/furb/engine.pyi gate: the def goes`: no gate reads a word before it runs; a statement that is not python, or that names what nothing binds, raises where it runs.
+- `src/furb/engine.pyi Gate: the alias goes`: as gate.
 - `.agents/skills/compaction/compaction.pyi carry: the def goes`: compaction keeps a chain by supersede.
 - `.agents/skills/compaction/compaction.pyi inherit: the def goes`: as carry.
 - `.agents/skills/compaction/compaction.pyi imported: the def goes`: as carry.

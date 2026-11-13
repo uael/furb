@@ -6,7 +6,6 @@ import pytest
 
 from conftest import (
   DOOR,
-  STANDS,
   WORD,
   WORLD,
   Dead,
@@ -16,7 +15,6 @@ from conftest import (
   born,
   chained,
   fresh,
-  gated,
   heads,
   ids,
   keeping,
@@ -100,7 +98,7 @@ async def test_a_verb_from_a_rung_takes_the_chain_of_the_rung_when_the_call_leav
 async def test_the_kind_of_an_act_is_the_verb_that_made_the_act_or_the_kind_an_ear_made_it_with() -> None:
   """The kind of an act is the verb that made the act, or the kind an ear made it with."""
   _, log, _ = await lived()
-  kinds = {"chain", "stand", "prompt", "rung", "reply", "gate", "run", "read", "bash", "merged", "wants"}
+  kinds = {"chain", "stand", "prompt", "rung", "reply", "run", "read", "bash", "merged", "wants"}
   assert {engine.get(name)[0] for name in ids(log)} == kinds and engine.get("merged1")[2] == WORLD
   assert [name for name in ids(log) if name.rstrip("0123456789") != engine.get(name)[0]] == []
 
@@ -306,13 +304,13 @@ async def test_a_replay_makes_the_same_acts_in_the_same_order_and_gives_them_the
   assert ours(again) == {**was, **stood(root)}
 
 
-async def test_the_journal_answers_what_the_record_holds_an_answer_for_the_gate_among_them() -> None:
-  """The journal answers what the record holds an answer for, the gate among them, so the outside is asked nothing it answered once."""
+async def test_the_journal_answers_what_the_record_holds_an_answer_for() -> None:
+  """The journal answers what the record holds an answer for, so the outside is asked nothing it answered once."""
   sand, _, _ = await lived()
   later = Sand()
   again, _ = await relived(later, list(sand.record))
-  assert [a[0] for a in later.calls] == ["stand"] and gated(again) == [WORD]
-  assert [a[2] for a in said(again, "done") if a[1].startswith("gate")] == ["journal"]
+  assert [a[0] for a in later.calls] == ["stand"] and ran(again)[-1] == WORD
+  assert [a[2] for a in said(again, "done") if a[1].startswith("read")] == ["journal"]
 
 
 async def test_a_later_life_on_a_kept_record_starts_nothing_and_keeps_the_ids_of_the_earlier_life() -> None:
@@ -379,10 +377,10 @@ async def test_a_later_life_reads_the_same_text_from_a_door() -> None:
 
 
 async def test_it_is_given_what_the_world_kept_of_the_life_before_it() -> None:
-  """It is given what the World kept of the life before it, and the generators of the outside, the Kernel, the gate and the World among them, each under the name it is to hear by, and it brings them to life with its own."""
+  """It is given what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own."""
   sand, log, _ = await lived()
   assert [a[2] for a in said(log, "done") if a[1] == "reply1"] == [WORLD]
-  assert [a[2] for a in said(log, "done") if a[1].startswith("gate")][:1] == ["gate"]
+  assert {WORLD, "kernel"} <= set(engine.listening())
   again, _ = await relived(Sand(), list(sand.record))
   assert [a[1] for a in said(again, "bash")] == [a[1] for a in said(log, "bash")]
 
@@ -434,7 +432,6 @@ async def test_the_journal_an_ear_of_the_engine_which_hears_everything() -> None
     "run",
     "reply",
     "started",
-    "gate",
     "done",
     "read",
     "bash",
@@ -466,8 +463,6 @@ async def test_the_journal_an_ear_of_the_engine_which_hears_everything() -> None
     ("chain", child),
     ("rung", step),
     ("run", "run1"),
-    ("gate", "gate1"),
-    ("done", "gate1"),
     ("run", "run2"),
     ("bash", command),
     ("started", command),
@@ -699,31 +694,6 @@ async def test_a_question_of_the_record_that_no_act_took_on_a_chain_that_the_lif
   at = next(n for n, (e,) in enumerate(record) if e[:2] == ("bash", "bash2"))
   with pytest.raises(Drift, match=r"^bash1 drifts: the life made no act, the record holds \('bash', 'bash1', "):
     life(Sand(), [*record[:at], *extra, *record[at:]])
-
-
-async def test_a_replay_of_a_tail_where_each_chain_gates_stand_at_a_stand_holds_no_drift() -> None:
-  """A later life names each act that it makes again by its kind, its maker, its chain and its words, so the gate of stand() that each chain plays at a stand takes the name that the record holds for that chain, and never the name of the gate of another chain."""
-  files = {"/w/DOCTRINE.md": "Read first.\n"}
-  sand, _, root = born(stands=[*STANDS, "/w/DOCTRINE.md", []], files=files)
-  chains = [root, await chained("two"), await chained("three")]
-  await settle()
-  sand.stands = [STANDS[0], "/z", STANDS[2], "/w/DOCTRINE.md", []]
-  engine.stand(engine.ROOT)
-  await settle()
-  first = plain(sand.record)
-  moved = [STANDS[0], "/y", STANDS[2], "/w/DOCTRINE.md", []]
-  # The second life opens where the stand moved the directory again, so each chain gates stand() live in it.
-  second = Sand(stands=moved, files=files)
-  log, over = await relived(second, first)
-  gates = [(a[1], a[3]) for a in said(log, "gate") if a[4] == "stand()\ncd('/y')"]
-  assert over == root and [on for _, on in gates] == chains
-  assert not {name for name, _ in gates} & {e[1] for (e,) in first}
-  # The third life replays the whole record, where the gates of the second life wait under their names.
-  third = Sand(stands=moved, files=files)
-  log, over = await relived(third, first + plain(second.record))
-  assert over == root and [(a[1], a[3]) for a in said(log, "gate") if a[4] == "stand()\ncd('/y')"] == gates
-  assert [e for (e,) in third.record if e[0] == "gate"] == []
-  assert [engine.cwd(on=one) for one in chains] == ["/y"] * 3
 
 
 async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_gone() -> None:

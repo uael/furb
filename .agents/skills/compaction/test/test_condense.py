@@ -39,9 +39,8 @@ async def test_when_the_model_gives_no_tuple_it_compacts_the_chain_with_filters(
 
 
 async def test_it_chooses_in_a_chain_whose_module_binds_list(tmp_path: Path) -> None:
-  """It reads no builtin from the module of the chain when it asks choice(), as a record from before the gate refused such a name may bind it to a str."""
+  """It reads no builtin from the module of the chain when it asks choice(), as a word may bind it to a str."""
   sand, root, _ = compacting(tmp_path)
-  # The gate refuses that binding in a new word, so the test binds it as a record from before the rule holds it.
   assert await engine.rung("globals()['list'] = 'ls -la'\nwrite(Text('c.txt', 'c'))", on=root) is None
   held = {str(a[4].path): str(a[1]) for a in engine.transcript(root) if a[0] == "write" and isinstance(a[4], Text)}
   sand.script[root] = ["close(await condense())", f"close(([{held['c.txt']!r}], 'gist'))"]

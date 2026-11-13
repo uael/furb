@@ -23,8 +23,8 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
   _, log, root = born("close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
   assert all(isinstance(one, tuple) and isinstance(one[0], str) for one in log)
-  assert {OPERATOR, WORLD, "gate", root, "journal"} <= {one[2] for one in log}
-  kinds = {"chain", "module", "stand", "prompt", "rung", "reply", "gate", "started", "done", "ready", "run", "keep"}
+  assert {OPERATOR, WORLD, root, "journal"} <= {one[2] for one in log}
+  kinds = {"chain", "module", "stand", "prompt", "rung", "reply", "started", "done", "ready", "run", "keep"}
   assert kinds <= {one[0] for one in log}
   assert {name: one[0] for name, one in acts(log).items()} == {
     "chain1": "chain",
@@ -33,7 +33,6 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
     "rung1": "rung",
     "reply1": "reply",
     "run1": "run",
-    "gate1": "gate",
     "run2": "run",
   }
 
@@ -45,7 +44,6 @@ async def test_a_fact_says_who_said_it() -> None:
   assert said(log, "rung")[0][1:3] == ("rung1", "prompt1")
   assert said(log, "read")[0][2] == "rung1"
   assert [one[2] for one in said(log, "done") if one[1].startswith("reply")] == [WORLD]
-  assert [one[2] for one in said(log, "done") if one[1].startswith("gate")] == ["gate"]
   assert [(one[1], one[2]) for one in dones(log, "run")] == [("run1", "run1"), ("run2", "run2")]
   engine.read("a.txt", on=root)
   assert said(log, "read")[-1][2] == OPERATOR

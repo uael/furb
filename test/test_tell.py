@@ -8,14 +8,12 @@ from furb.engine import OPERATOR, Text
 async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state_tells_of_itself() -> None:
   """What a question answered now that shows a text or changes a state tells of itself: a paragraph headed with the name of the question, which binds its path and what it was answered, said by the run that asked it about that question, and nothing at all outside a run; one that only reads a value tells nothing, since the word that asked it holds the value, which it debugs to see."""
   sand, log, root = born()
-  word = (
-    "read('a.txt')\ncd('/x')\nx = bash('echo hi')\nseen = [peek(x), turns(), clock(), chance(), gate('k = 1'), cwd()]\n"
-  )
+  word = "read('a.txt')\ncd('/x')\nx = bash('echo hi')\nseen = [peek(x), turns(), clock(), chance(), cwd()]\n"
   sand.script[root] = [word + "debug(t'{seen[2]}')\nawait x\nclose(1)"]
   assert await engine.prompt(int, "ask things", on=root) == 1
   await settle()
   _, step, *_ = said(log, "rung")[0]
-  kinds = ["reply", "read", "cd", "bash", "clock", "chance", "gate"]
+  kinds = ["reply", "read", "cd", "bash", "clock", "chance"]
   assert [a[0] for a in engine.transcript(root) if engine.question(a) and a[2] == step] == kinds
   told = [(a[1], a[3]) for a in said(log, "tell") if a[2] == step and engine.under(a[1], step)]
   assert told == [
@@ -24,9 +22,9 @@ async def test_what_a_question_answered_now_that_shows_a_text_or_changes_a_state
     (step, [f"#{step} debugged\n{step}_debug = '1001.0'"]),
   ]
   assert "#cd1\ncd1_path = '/x'\n\n#bash1\nbash1_command = 'echo hi'" in engine.turns(on=root)[-1][1]
-  assert [one for one in named(engine.turns(on=root)) if one in ("clock", "chance", "gate")] == []
+  assert [one for one in named(engine.turns(on=root)) if one in ("clock", "chance")] == []
   seen = engine.module(root)["seen"]
-  assert isinstance(seen, list) and seen[2:] == [1001.0, 2 / 7, [], "/x"]
+  assert isinstance(seen, list) and seen[2:] == [1001.0, 2 / 7, "/x"]
   was = engine.turns(on=root)
   assert engine.cd("/w", on=root) == "/w"
   assert engine.read("a.txt", on=root) == Text("/w/a.txt", "one\ntwo\n")

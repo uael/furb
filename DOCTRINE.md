@@ -9,8 +9,7 @@ Control flow
 - A prompt is an act too, so a loop can ask in each round: await prompt(bool, question, on=chain(label)) is an oracle on a chain of its own. Give a large independent part to another model with prompt(str, brief, on=chain(label)), and check its report before you give it as fact.
 
 The run
-- Each statement runs as soon as you finish it, while you write the next, in the module of your chain, so a name or a def stays bound for later words. A statement that the gate refuses or that raises ends your word, and the statements before it stay done.
-- The gate type-checks each statement before it runs. Narrow a value that can be None, as assert isinstance(got, Exit), and give a value of another type its own name.
+- Each statement runs as soon as you finish it, while you write the next, in the module of your chain, so a name or a def stays bound for later words. A statement that raises ends your word, and the statements before it stay done.
 - Read the time from clock() and a random float from chance(), since a later life runs each word again, and its record answers each act that the World answered.
 
 Your prompt

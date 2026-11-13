@@ -819,7 +819,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     );
   }));
 
-test("a word that the gate refused shows a cross on the line that the refusal names and the reason under it, and the word that replaced it follows in the program of its thread", () =>
+test("a word that is no Python shows a cross on the line that its raise names and the reason under it, and the word that replaced it follows in the program of its thread", () =>
   composing(
     async ({ session, frame }) => {
       await session.submit("/newthread");
@@ -830,12 +830,12 @@ test("a word that the gate refused shows a cross on the line that the refusal na
       await idle(session);
       await session.refresh();
       const lines = (await frame()).split("\n");
-      const refused = lines.findIndex((line) => /1 {2}✗ +```python/.test(line));
-      expect(refused).toBeGreaterThan(0);
-      expect(lines[refused + 1]).toMatch(/^[ ┃]+# error\[invalid-syntax\].*Got unexpected token/);
-      // The numbers of the thread go on from the refused word to the word that replaced it.
+      const raised = lines.findIndex((line) => /1 {2}✗ +```python/.test(line));
+      expect(raised).toBeGreaterThan(0);
+      expect(lines[raised + 1]).toMatch(/^[ ┃]+# Got unexpected token/);
+      // The numbers of the thread go on from the word that raised to the word that replaced it.
       const retried = lines.findIndex((line) => / 4 {4}close\("Here it is again as plain Python/.test(line));
-      expect(retried).toBeGreaterThan(refused + 1);
+      expect(retried).toBeGreaterThan(raised + 1);
       expect(lines.slice(retried).join("\n")).not.toContain("✗");
       expect(lines.join("\n")).not.toContain("failed");
     },

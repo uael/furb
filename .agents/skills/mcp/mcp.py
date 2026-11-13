@@ -39,8 +39,8 @@ type McpResult = dict
 
 
 def mcp_items(value: object) -> list[object] | None:
-  """The items of a value that is a list, or None for any other value. It reads no builtin, since a record from before
-  the gate refused such a name may bind list in the module of its chain."""
+  """The items of a value that is a list, or None for any other value. It reads no builtin, since a word may bind list
+  in the module of its chain."""
   match value:
     case [*items]:
       return items

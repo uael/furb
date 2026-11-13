@@ -45,9 +45,6 @@ meanings. The entry of such a name here gives only its form in the engine.
   text.
 - Kernel: the ear of the outside that runs rungs: it takes a run, makes a wants as the run while the word waits for
   an act that is not done, and says the run done with what the word gave.
-- gate: the ear of the outside that answers a gate, apart from the Kernel, so a word may ask it while the Kernel
-  runs that word; what it reads with is its own. It reads the word after the program of its chain, and it finds
-  nothing when the word may run.
 - boot: the life, given the record and the generators of the outside, which binds say, act, drive, get, peek and
   transcript, and gives the root.
 - bus: what boot binds for every verb to speak through: say for a fact, act for an act, and drive for a generator;
@@ -139,8 +136,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - step: one turn of a model and the run of its word, which is one rung.
 - ladder: the rungs of one prompt, in order, which the name of that prompt is the door of.
 - program: the words of rungs, in order, each under the name of its rung; the program of a ladder is the words of
-  its rungs, the words the gate refused among them, which its door shows, and the program of a chain is the words
-  of its runs since its last module, as python, which the gate reads a word after.
+  its rungs, which its door shows, and the program of a chain is the words of its runs since its last module, as
+  python.
 - replay: the making of the rungs of a chain again from a donor, which is how a chain with a source stands on its
   origin and how a write of a door edits the program of a ladder.
 - donor: the rungs a replay retells, and, for one rung, the rung of the record it stands for, whose acts it shares
@@ -270,8 +267,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - engine.pyi is the specification of engine.py: it says what the engine is, what is always true of it and what its
   surface is, and never how it is made; it names the ears and the facts as python reads them, and holds every law, so
   engine.py holds no sentence and no comment.
-- engine.py depends only on the python interpreter and on the ears of the outside that boot is given, the World, the
-  Kernel and the gate among them, which are held by no verb and bound to no name of the engine.
+- engine.py depends only on the python interpreter and on the ears of the outside that boot is given, the World and
+  the Kernel among them, which are held by no verb and bound to no name of the engine.
 - A fact is a tuple, its kind first, deconstructed only by match, and nothing of the engine is a class but a text, an
   exit, the name of an act, and the two exceptions.
 - The verbs and Text carry their signatures, typed, since a model reads them, but a parameter whose default says its
@@ -287,9 +284,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   state of its tip, and goes on with them.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
-  asks a model for, with the message of the prompt each advances, of the prompts and the
-  words it refuses, and of the done of an act that one of its rungs made on another chain, or of the pause of the
-  chain of such a prompt.
+  asks a model for, with the message of the prompt each advances, of the prompts that it refuses, and of the done of
+  an act that one of its rungs made on another chain, or of the pause of the chain of such a prompt.
 - A recoverable error is one a model can correct on another turn: a cut turn, transient provider failure, or refusal of its word. The provider gives the next turn the cause, and never pauses the chain for these errors. It retries transient failures within its backoff first. A failed setting, missing model, unsupported input, a prompt too long for the context of the model or a fault of the host is not recoverable; do not retry it as a model error. A prompt too long is not, since the next turn holds the same turns and more: a chain that asked again at once looped, with 386 refused replies in 11 minutes, so the second such refusal in a row pauses the chain with its why. The refusal is an `Overflow`, a `Refused` of its own kind, so `fitted()`, in the life word of the extension compaction, cuts the chain to its open prompts before the next reply, and only a second refusal in a row pauses it.
 - A drift is a hard error.
 - A change that makes room under the wall and rewrites the code of a fix names that fix, and shows that the test

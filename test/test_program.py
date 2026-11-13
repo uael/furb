@@ -1,6 +1,6 @@
 """program, the words of the rungs that run on a chain."""
 
-from conftest import born, faulted, fresh, prompted, said, settle
+from conftest import born, fresh, prompted, said, settle
 from furb import engine
 from furb.engine import OPERATOR, Text
 
@@ -10,23 +10,20 @@ async def test_program_gives_the_program_of_a_chain() -> None:
   sand, log, root = born()
   mine = engine.rung("mine = 1", on=root)
   await mine
-  sand.script[root] = ["<s:hi>\nhi\n</s:hi>\na = hi\ndebug(t'go')", "b = BAD", "close(len(a))"]
+  sand.script[root] = ["<s:hi>\nhi\n</s:hi>\na = hi\ndebug(t'go')", "close(len(a))"]
   one = engine.prompt(int, "count", on=root)
   assert await one == 3
   await settle()
-  first, refused, last = [a[1] for a in said(log, "rung") if a[2] == one]
+  first, last = [a[1] for a in said(log, "rung") if a[2] == one]
   program = engine.program(root)
-  findings = f"#{refused} refused\n{refused}_findings = {faulted('b = BAD')!r}"
   assert list(program.items()) == [
     (f"{mine}_told", fresh(root)),
     (mine, "mine = 1"),
     (f"{first}_told", f"{prompted(one, 'int', 'count')}\n\n#{first} advance on {one}"),
     (first, "hi = 'hi\\n'\n\n\na = hi\ndebug(t'go')"),
-    (f"{refused}_told", f"#{first} debugged\n{first}_debug = 'go'\n\n#{refused} advance on {one}"),
-    (f"{last}_told", f"{findings}\n\n#{last} advance on {one}"),
+    (f"{last}_told", f"#{first} debugged\n{first}_debug = 'go'\n\n#{last} advance on {one}"),
     (last, "close(len(a))"),
   ]
-  assert refused not in program
   assert {a[4]: a[5] for a in engine.transcript(root) if a[0] == "run"} == program
   asked = engine.prompt(int, "edit", to=OPERATOR, on=root)
   engine.write(Text(asked, "k = 1"), on=root)

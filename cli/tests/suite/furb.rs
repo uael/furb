@@ -468,10 +468,9 @@ fn a_word_that_a_model_wraps_in_a_tool_call_runs_less_its_markup_and_the_next_tu
   assert_eq!(yard.answered(), 2);
   let input = fs::read_to_string(yard.fake.join("in")).expect("the input of the fake");
   let next = input.lines().last().unwrap_or_default();
-  // The refused word goes on the user side, so the turn holds the whole chain again: read only its
-  // last paragraphs.
+  // The turn holds the whole chain again: read only its last paragraphs.
   let tail = &next[next.rfind("wrapped its word").unwrap_or(0)..];
-  assert!(tail.contains("refused") && next.contains("wrapped its word"), "{tail}");
+  assert!(tail.contains("raised") && next.contains("wrapped its word"), "{tail}");
   assert!(!tail.contains("invoke") && !tail.contains("parameter"), "{tail}");
 }
 

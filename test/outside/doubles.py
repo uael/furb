@@ -1,8 +1,9 @@
 """The doubles the modules around the engine are driven by: a model that answers from a script, a World, and a gate.
 
-A test of the World stands its life on the World under test and on a gate that finds nothing; a test of the Kernel
-stands its life on the World in memory of the suite. Neither asks a model: a model of the suite is a function that
-the provider of the crate asks in place of a model, on a thread of its own, so a test waits for what it answers.
+A test of the World stands its life on the World under test; a test of the Kernel stands its life on the World in
+memory of the suite; a test of the gate gives its life the gate, and asks it by an act, since no verb asks it. None
+asks a model: a model of the suite is a function that the provider of the crate asks in place of a model, on a thread
+of its own, so a test waits for what it answers.
 """
 
 import asyncio
@@ -14,6 +15,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import conftest
+import furb
 from conftest import World
 from furb import engine
 from furb.world import Answer, Live
@@ -91,26 +93,30 @@ def speaking(text: str) -> Iterator[None]:
     sys.stdin = held
 
 
-def blind() -> World:
-  """A gate that finds nothing in any word, so every word runs: the gate of a life whose test is not the gate."""
-  while True:
-    match (yield):
-      case ("gate", qid, *_):
-        yield "done", qid, []
+def gates() -> dict[str, conftest.Kernel]:
+  """The gate that a life of a test of the gate is given: the gate of the sheet for the engine of this interpreter, and
+  none for the engine of monty, which holds its own."""
+  return {} if engine is not furb.python else {"gate": conftest.Py().gating()}
 
 
-def booted(said: World, record: Sequence[tuple] = (), *, gated: bool = True, **ears: World) -> str:
-  """A life on a World and these ears, with the Kernel of this interpreter and its gate when it is gated, and the id
-  of its root; a life that is not gated reads every word with a gate that finds nothing, so it refuses no word."""
-  py = conftest.Py()
-  return engine.boot(record, world=said, **ears, kernel=py.kernel(), gate=py.gating() if gated else blind())
+async def gate(root: str, word: str) -> list[str]:
+  """What the gate of a life finds against a word on a chain: the answer of an act of the kind gate, which the ear of
+  the gate takes. No verb of the engine makes that act, so the chain binds one first."""
+  await conftest.verbs(root, "gate")
+  found = engine.ask("gate", root, word)
+  assert isinstance(found, list)
+  return found
+
+
+def booted(said: World, record: Sequence[tuple] = (), **ears: World) -> str:
+  """A life on a World and these ears, with the Kernel of this interpreter, and the id of its root."""
+  return engine.boot(record, world=said, **ears, kernel=conftest.Py().kernel())
 
 
 def life(live: Live, record: Path | None = None) -> str:
-  """A life on the World under test and on the ears of the crate, its provider among them, which enables no extension
-  and is not gated, since reading every word with ty would spend a second of the suite on each of them, so it is
-  driven by the words a model would write."""
-  return booted(live.hears(), live.opened(record, skills=False), gated=False, **live.ears)
+  """A life on the World under test and on the ears of the crate, its provider among them, which enables no extension,
+  so it is driven by the words a model would write."""
+  return booted(live.hears(), live.opened(record, skills=False), **live.ears)
 
 
 async def settle() -> None:

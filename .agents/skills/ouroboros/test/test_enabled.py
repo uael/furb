@@ -11,4 +11,4 @@ async def test_enabled_gives_the_name_of_each_skill_that_the_life_runs(tmp_path:
   _, root = extended("ouroboros", tmp_path, lives=True)
   before = len(engine.transcript(on=root))
   assert await engine.rung("close(enabled())", on=root) == ["ouroboros"]
-  assert {a[0] for a in engine.transcript(on=root)[before:] if engine.question(a)} == {"rung", "gate", "run"}
+  assert {a[0] for a in engine.transcript(on=root)[before:] if engine.question(a)} == {"rung", "run"}

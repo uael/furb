@@ -135,10 +135,6 @@ def chance(on="") -> float:
   return ask("chance", on)
 
 
-def gate(word: str, on="") -> list[str]:
-  return ask("gate", on, unquoted(word))
-
-
 def cd(path: str, on=""):
   path = ask("cd", on, path)
   tell(on, path)
@@ -298,7 +294,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
-    blocked, running, waiting, last, heard, held, due = set(), set(), {}, standing(), [], {}, set()
+    running, waiting, last, heard, held, due = set(), {}, standing(), [], {}, set()
     barren, wrote, inbox, owed, took, awaited, did = {}, {}, {}, {}, {}, {}, {}
     step = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
@@ -340,13 +336,13 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           if (words + "\n").startswith(said + "\n"):
             words = words[len(said) + 1 :]
           else:
-            fresh |= whose not in blocked
+            fresh = True
             del ladder[whose]
             cancel(whose)
       if fresh:
         yield "module", id, {**globals(), "__name__": id, "actor": stood}
         for whose, said in ladder.items():
-          whose in blocked or (said and rung(said, whose))
+          said and rung(said, whose)
       if words:
         with site.set(of):
           rung(words)
@@ -502,19 +498,10 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           if rid in took:
             inbox[p := r[2]] = inbox.get(p, [])[len(took[rid]) :]
             took[rid] = owed[p] = owed.get(p, []) + took[rid]
-          try:
-            rid == step or bind(rid)
-            ladder[(donor := r[5]) or rid] = word
-            found = tells(rid) and gate(word)
-            if not found:
-              act("run", id, None, rid, unquoted(word), donor)
-              running.add(rid)
-          except Refused as e:
-            found = [str(e)]
-          if found:
-            yield told(rid, "refused", findings="\n".join(found))
-            blocked.add(rid)
-            close(Refused(*found), rid)
+          rid == step or bind(rid)
+          ladder[(donor := r[5]) or rid] = word
+          act("run", id, None, rid, unquoted(word), donor)
+          running.add(rid)
         case ("done", _, "", Refused() as why) if r[0] == "reply":
           pause(id, why)
         case ("done", about, *_) if about in barren:

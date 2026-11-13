@@ -100,7 +100,7 @@ async def test_whether_a_name_is_one_of_the_prompts_a_chain_has_heard_on_itself(
 
 
 async def test_a_prompt_is_the_door_of_the_program_of_its_ladder() -> None:
-  """A prompt is the door of the program of its ladder, so a read of its name gives the word of every rung of it in order, the words the gate refused among them, which are none at all for a prompt that ran no word."""
+  """A prompt is the door of the program of its ladder, so a read of its name gives the word of every rung of it in order, which are none at all for a prompt that ran no word."""
   _, _, root = born("x = BAD", "x = bash('echo hi')\nawait x\nclose(1)", "close(None)")
   act = engine.prompt(int, "work", on=root)
   assert await act == 1

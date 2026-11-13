@@ -2,22 +2,7 @@
 
 import pytest
 
-from conftest import (
-  Sand,
-  born,
-  fresh,
-  gated,
-  heads,
-  hushed,
-  paragraphs,
-  plain,
-  prompted,
-  ran,
-  relived,
-  said,
-  settle,
-  slow,
-)
+from conftest import Sand, born, fresh, heads, hushed, paragraphs, plain, prompted, ran, relived, said, settle, slow
 from furb import engine
 from furb.engine import OPERATOR, Act, Exit, Refused
 
@@ -107,15 +92,15 @@ async def test_a_wake_lifts_the_pause_and_delivers_every_held_result() -> None:
   assert heads(engine.turns(on=root))[-3:] == [f"#{root} woke by operator", f"#{one} exited 1", f"#{two} exited 2"]
 
 
-async def test_a_wake_gates_and_runs_a_held_response() -> None:
-  """A wake gates and runs a held response."""
+async def test_a_wake_runs_a_held_response() -> None:
+  """A wake runs a held response."""
   _, log, root, act = await hushed("close(7)")
-  assert gated(log) == [] and [one[4] for one in said(log, "run")] == [said(log, "rung")[0][1] + "_told"]
+  assert [one[4] for one in said(log, "run")] == [said(log, "rung")[0][1] + "_told"]
   engine.wake(root)
   await settle()
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   bound = fresh(root, prompted(act, "int", "count"), f"#{step} advance on {act}")
-  assert gated(log) == ["close(7)"] and ran(log) == [bound, "close(7)"] and (await act) == 7
+  assert ran(log) == [bound, "close(7)"] and (await act) == 7
 
 
 async def test_a_wake_makes_a_prompt_ask_its_model_with_the_transcript_as_it_grew() -> None:

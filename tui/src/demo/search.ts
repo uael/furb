@@ -72,8 +72,7 @@ export const search: Script[] = [
     steps: [
       { thinking: "I look at where search is called.", word: fenced },
       {
-        thinking:
-          "The gate refused the fence, so the word is Python alone. The entry file is the place to look.",
+        thinking: "The fence is no Python, so the word is Python alone. The entry file is the place to look.",
         word: missing,
       },
       {

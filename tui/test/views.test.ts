@@ -284,17 +284,6 @@ test("a window whose life ended says so in plain words, and offers to open the l
     true,
   ));
 
-test("a word of the operator that the gate refused says in one more line what to do", () =>
-  composing(
-    async ({ session, frame }) => {
-      await session.submit("/run this is invalid python !!!").catch(session.fail);
-      await until(session, () => session.findings.length > 0);
-      await session.refresh();
-      expect(await frame()).toContain("Press ↑ in the input to bring the word back");
-    },
-    { width: 150, height: 44 },
-  ));
-
 test("a relative path that the operator types is read from the directory of the selected chain", () =>
   withDemo(async (session) => {
     const directory = join(session.host.directory, "sub");

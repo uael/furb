@@ -35,7 +35,6 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
     "close",
     "stand",
     "rung",
-    "gate",
     "ready",
     "run",
     "module",

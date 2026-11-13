@@ -117,15 +117,6 @@ WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nawait x\nclose
 command is done."""
 
 
-def faulted(line: str) -> str:
-  """What the gate finds against a word whose first line is that line, which names BAD, which nothing binds."""
-  column = line.index("BAD") + 1
-  return f"line 1: error[unresolved-reference] (column {column}) Name `BAD` used when not defined, in {line!r}"
-
-
-BAD = faulted("k = BAD")
-"""BAD is what the gate finds against a word whose first line is k = BAD, which names BAD, which nothing binds."""
-
 TWO = Text("/w/n.txt", "one\ntwo\n")
 """TWO is a text of two lines."""
 
@@ -435,20 +426,9 @@ def seen(held: list[tuple]):  # noqa: ANN201
   return keeps
 
 
-def gated(log: Sequence[tuple]) -> list[str]:
-  """Every word the gate was given in the life, in order, which the ready of each rung says that no chain made: a
-  chain gates no word it wrote itself, and a rung that retells stands with the gate where its donor stood."""
-  return [a[3] for a in said(log, "ready") if (engine.get(engine.get(a[1])[2]) or ("",))[0] != "chain"]
-
-
 def ran(log: Sequence[tuple]) -> list[str]:
   """Every word the Kernel ran in the life, in order, which the run of each rung says."""
   return [a[5] for a in said(log, "run")]
-
-
-def findings(log: Sequence[tuple]) -> list[list[str]]:
-  """What the gate found against each word it was given, in order, which the done of each gate says."""
-  return [a[3] for a in said(log, "done") if a[1].startswith("gate")]
 
 
 class Py:
@@ -505,9 +485,9 @@ def watched(log: list[tuple]) -> Kernel:
 
 
 def kernel() -> dict[str, Kernel]:
-  """The Kernel and the gate a life of the suite is given: the ones that are python for the engine of this
-  interpreter, and none for the engine of monty, which holds its own."""
-  return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py().gating()}
+  """The Kernel a life of the suite is given: the one that is python for the engine of this interpreter, and none for
+  the engine of monty, which holds its own."""
+  return {} if engine is not furb.python else {"kernel": Py().kernel()}
 
 
 def given(record: Sequence[tuple]) -> Sequence[tuple]:
@@ -813,19 +793,6 @@ def fresh(root: str, *told: str) -> str:
   """The text that a fresh root runs as the told rung of its first rung: the paragraph of its open, and each
   paragraph told after it, joined by blank lines."""
   return "\n\n".join([opened(root, "root"), *told])
-
-
-def gatings(log: Sequence[tuple]) -> list[tuple[str, list[str]]]:
-  """Every word the gate was asked of in the life, in order, with the words of the program it read that word after,
-  which is the program of its chain where the gate stands in the transcript of that chain."""
-  got = []
-  for a in said(log, "gate"):
-    held = engine.transcript(a[3])
-    at = next(i for i, x in enumerate(held) if x[:2] == a[:2])
-    since = max([i for i, x in enumerate(held[:at]) if x[0] == "module"], default=0)
-    words = {x[4]: str(x[5]) for x in held[since:at] if x[0] == "run"}
-    got.append((str(a[4]), [*words.values()]))
-  return got
 
 
 def swapped(to: object) -> None:

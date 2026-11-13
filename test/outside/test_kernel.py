@@ -13,10 +13,10 @@ import furb
 import furb.kernel
 import furb.sheet
 import furb_monty.engine
-from conftest import Py, Sand, born, kernel, plain, relived, swapped
+from conftest import QUOTES, Py, Sand, born, kernel, plain, relived, swapped, waiting, wrote
 from furb import engine, sheet
 from furb.engine import OPERATOR, WINDOW, Drift, Refused
-from outside.doubles import booted, worlds
+from outside.doubles import booted, gate, gates, worlds
 
 STANDS = [[[OPERATOR, [], WINDOW], ["opus", ["low"], 1000]], "/w", "opus/low"]
 
@@ -73,19 +73,97 @@ def test_a_word_that_binds_a_name_of_the_engine_at_its_top_is_refused_and_a_def_
   assert said("def read(path: str) -> str:\n  return path\nclose(read('a'))") == []
 
 
+def test_a_word_that_is_not_python_finds_what_a_model_wrote_in_the_place_of_python() -> None:
+  """A word that the interpreter does not take says what the compiler said, and what the line is that a model wrote in
+  the place of python: a fence, markup or prose, a mark of a quote inside a line, a binding with no name, a bracket
+  that stays open, a string of one quote that a newline ends, or a shell command."""
+  stray = (
+    "a reply is python and quotes only, with no fence, no markup and no prose, so nothing of this word ran: delete each"
+    " such line"
+  )
+  for word, line, kind in [
+    ("```python\nclose(1)\n```", "```python", "a fence"),
+    ('<invoke name="bash">\nclose(1)', '<invoke name="bash">', "markup"),
+    ("close(1)\nNow I check the result.", "Now I check the result.", "prose"),
+    ("Let me read `x.py` and run it.\nclose(1)", "Let me read `x.py` and run it.", "prose"),
+    ("Use a well-known name -- and close it.\nclose(1)", "Use a well-known name -- and close it.", "prose"),
+  ]:
+    (found,) = said(word)
+    at = word.split("\n").index(line) + 1
+    assert found.startswith(f"line {at}: ") and found.endswith(f"; line {at} is {kind}: {stray}, in {line!r}")
+  (found,) = said("Total - rest - more\nclose(")
+  assert "is prose" not in found
+  for word, at, mark in [
+    ('write(Text("a.py", <s:body>\nx = 1\n</s:body>))', 1, "<s:body>"),
+    ("text = f(1\n</s:body>))", 2, "</s:body>"),
+  ]:
+    (found,) = said(engine.unquoted(word))
+    assert (
+      f"; line {at}: the mark {mark} stands inside a line, and a quote opens only with <s:body> at the start" in found
+    )
+  (found,) = said('k = "a <s:body> b"\nclose(')
+  assert "stands inside" not in found
+  (found,) = said("k = 1\n= await bash('ls')")
+  assert found.endswith(
+    "; the line starts with =, so its binding has no name: write the name before =, as in got = 1, and nothing of this"
+    " word ran, in \"= await bash('ls')\""
+  )
+  (found,) = said('k = \'a\\\' (\'\nj = """b\\\n("""\n# (\nclose((1, 2)')
+  assert "; the bracket ( of line 5, column 6, stays open," in found
+  (found,) = said("k = 1\nj = foo(1,\n  [2, 3\nclose(j)")
+  assert "; the bracket [ of line 3, column 3, stays open," in found
+  (found,) = said('k = 1\nclose(bash("ls\n-la"))')
+  assert (
+    found.startswith("line 2: error[invalid-syntax] ")
+    and "; a string of one quote ends at the end of its line" in found
+  )
+  (found,) = said("close(1)\ngh pr view 3")
+  assert found.startswith("line 2: ") and '; the line is a shell command, so write it as await bash("...")' in found
+
+
+def test_a_quote_whose_marks_do_not_close_it_is_a_finding_of_its_own() -> None:
+  """An open mark of a quote that has no close mark, and an open mark that stands inside a quote of its own name, are
+  each a finding of their own, and the gate finds in each word of the table of the quotes what the table says."""
+  why = (
+    "the open mark <s:edit> stands inside the quote <s:edit> of line 2, and one close mark </s:edit> ends both:"
+    " close the first quote, or delete this mark"
+  )
+  assert said(engine.unquoted("k = 1\n<s:edit>\nA\n<s:edit>\nB\n</s:edit>\nclose(k)")) == [f"line 4: {why}"]
+  assert said(engine.unquoted("<s:edit>\nA\n<s:old>\nB\n</s:old>\n</s:edit>\nclose(1)")) == []
+  for row in QUOTES:
+    assert said(engine.unquoted(row["word"])) == row["found"], row["word"]
+
+
+async def test_the_ear_of_the_gate_reads_the_writings_of_a_rung_and_finds_a_word_that_is_one_quote() -> None:
+  """The ear of the gate reads a word after the parts that the writings of a rung with no run hold, and a word that is
+  one quote and nothing else is a finding of the ear alone."""
+  _, _, root, _, rung, _ = await waiting()
+  wrote(rung, "def f() -> int:\n  return 1\n", 0)
+  ear = Py().gating()
+  next(ear)
+  typed = ear.send(("gate", "gate1", OPERATOR, root, "y: str = f()"))
+  assert isinstance(typed, tuple) and typed[2][0].startswith("line 1: error[invalid-assignment]")
+  next(ear)
+  lone = engine.unquoted("<s:rung9_word>\nwrite(text)\n</s:rung9_word>\n")
+  why = (
+    "the word is the quote <s:rung9_word> and nothing else, so it only binds rung9_word and nothing of it runs: write"
+    " the code as the word itself, with no quote around it, and quote only a text that the code uses"
+  )
+  found = [f"line 1: {why}, in \"rung9_word = 'write(text)\\\\n'\""]
+  assert ear.send(("gate", "gate2", OPERATOR, root, lone)) == ("done", "gate2", found)
+
+
 @pytest.mark.parametrize("which", [furb.python, furb_monty.engine], ids=["python", "monty"])
 async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last(which: object) -> None:
   """The gate finds what the run finds, on both engines: a rung that bound a name of the engine again leaves that
-  value to the word after it, so a word that calls it raises when it runs, and the gate refuses a word that calls it
-  where it can see it."""
+  value to the word after it, so a word that calls it reads that value when it runs, and the gate finds a fault in a
+  word that calls it where it can see it."""
   swapped(which)
   try:
-    root = engine.boot((), world=worlds(STANDS), **kernel())
+    root = engine.boot((), world=worlds(STANDS), **kernel(), **gates())
     assert await engine.rung("def read(path: str) -> int:\n  return len(path)", on=root) is None
     assert await engine.rung("close(read('ab'))", on=root) == 2
-    assert engine.gate("x: str = read('a')\nclose(x)", on=root)[0].startswith("line 1: error[invalid-assignment]")
-    with pytest.raises(Refused):
-      await engine.rung("x: str = read('a')\nclose(x)", on=root)
+    assert (await gate(root, "x: str = read('a')\nclose(x)"))[0].startswith("line 1: error[invalid-assignment]")
   finally:
     swapped(furb.python)
 
@@ -97,10 +175,10 @@ async def test_a_word_that_the_interpreter_cannot_compile_leaves_the_gate_to_the
   gate now gives the fault as a finding of the word, and reads the next word."""
   swapped(which)
   try:
-    root = engine.boot((), world=worlds(STANDS), **kernel())
-    found = engine.gate("class P(dict, total=False):\n  x: int\nclose(1)", on=root)
+    root = engine.boot((), world=worlds(STANDS), **kernel(), **gates())
+    found = await gate(root, "class P(dict, total=False):\n  x: int\nclose(1)")
     assert found == [] if which is furb.python else found[0].startswith("line 1: ")
-    assert engine.gate("close(1)", on=root) == []
+    assert await gate(root, "close(1)") == []
     assert await engine.rung("close(2)", on=root) == 2
   finally:
     swapped(furb.python)
@@ -200,8 +278,7 @@ def test_a_rung_that_raised_leaves_what_it_bound_and_the_rungs_after_it_to_the_w
 async def test_a_word_awaits_an_act_and_nothing_else() -> None:
   """A rung awaits an act and nothing else, so anything else it awaits is refused where it waited, and a word that
   catches the refusal carries on."""
-  # The gate refuses a read of asyncio in a word first, so the Kernel meets it only past the gate.
-  root = booted(worlds(STANDS), gated=False)
+  root = booted(worlds(STANDS))
   with pytest.raises(Refused, match="a rung awaits an act"):
     await engine.rung("import asyncio\nawait asyncio.sleep(0)", on=root)
   word = "import asyncio\ntry:\n  await asyncio.sleep(0)\nexcept Refused as no:\n  why = str(no)\nclose(why)"
@@ -211,7 +288,7 @@ async def test_a_word_awaits_an_act_and_nothing_else() -> None:
 async def test_a_word_the_interpreter_cannot_compile_is_what_the_run_came_to() -> None:
   """A pin: the compile stands inside the run, so a word the interpreter will not take is what the run came to and
   no more, and never an error out of the life that began the frame."""
-  root = booted(worlds(STANDS), gated=False)
+  root = booted(worlds(STANDS))
   with pytest.raises(SyntaxError, match="'yield' outside function"):
     await engine.rung("x = yield 1", on=root)
   assert await engine.rung("close('alive')", on=root) == "alive"

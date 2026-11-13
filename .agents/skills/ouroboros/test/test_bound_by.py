@@ -18,7 +18,7 @@ async def test_bound_by_gives_the_names_that_the_words_of_a_chain_bind_at_their_
   got = await engine.rung("close(bound_by())", on=root)
   assert isinstance(got, dict)
   assert {name: got[name] for name in ("f", "K", "x", "q")} == {"f": first, "K": second, "x": second, "q": second}
-  assert {a[0] for a in engine.transcript(on=root)[before:] if engine.question(a)} == {"rung", "gate", "run"}
+  assert {a[0] for a in engine.transcript(on=root)[before:] if engine.question(a)} == {"rung", "run"}
 
 
 async def test_the_words_of_the_skills_that_play_on_the_chain_count_each_under_the_rung_that_played_it_and_a_name_that_the_engine_defines_is_not_there_unless_a_word_binds_it_again(

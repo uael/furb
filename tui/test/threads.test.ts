@@ -210,7 +210,7 @@ test("a string too long for its line folds to its start and an underlined …, w
     true,
   ));
 
-test("a hover on the line of a read shows the text that it read, and on a line that the gate refused shows its error", () =>
+test("a hover on the line of a read shows the text that it read, and on a line that raised shows its error", () =>
   composing(
     async ({ session, screen, frame }) => {
       const root = session.engine.root;
@@ -229,11 +229,11 @@ test("a hover on the line of a read shows the text that it read, and on a line t
       await until(screen.renderer, () => screen.captureCharFrame().includes("HOVERTEXT first"), "frame");
       keep("hover-read", screen.captureCharFrame());
       await screen.mockMouse.moveTo(1, 1);
-      const refused = await session.engine.rung({ word: "ok = 1\nbad = = 2", on: root });
-      await session.engine.result(refused).catch(() => undefined);
+      const raised = await session.engine.rung({ word: "ok = 1\nbad = = 2", on: root });
+      await session.engine.result(raised).catch(() => undefined);
       await session.refresh();
       const failed = await frame();
-      keep("gate", failed);
+      keep("raise", failed);
       const lines = failed.split("\n");
       const row = lines.findIndex((line) => line.includes("bad = = 2"));
       expect(row).toBeGreaterThanOrEqual(0);
@@ -241,10 +241,10 @@ test("a hover on the line of a read shows the text that it read, and on a line t
       await screen.mockMouse.moveTo((lines[row] ?? "").indexOf("bad") + 1, row);
       await until(
         screen.renderer,
-        () => screen.captureCharFrame().includes("The gate refused line 2"),
+        () => screen.captureCharFrame().includes(`${raised} raised at line 2`),
         "frame",
       );
-      keep("hover-gate", screen.captureCharFrame());
+      keep("hover-raise", screen.captureCharFrame());
     },
     { ...size, useMouse: true },
     true,

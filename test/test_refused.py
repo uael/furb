@@ -19,7 +19,7 @@ async def test_what_a_call_the_engine_will_not_make_raises_in_the_one_that_made_
 async def test_a_refused_call_raises_refused_in_the_caller() -> None:
   """A refused call raises Refused in the caller."""
   _, _, root = born()
-  act = engine.rung("k = BAD", on=root)
+  act = engine.rung("wait(1)", on=root)
   with pytest.raises(Refused):
     await act
   assert isinstance(engine.peek(act), Refused)

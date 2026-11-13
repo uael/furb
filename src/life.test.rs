@@ -31,18 +31,16 @@ use crate::{
   verbs, wire, world,
 };
 
-/// A directory of its own for one test, and empty, where a life reads its words through the gate
-/// as a life of an operator does.
+/// A directory of its own for one test, and empty, where the provider asks the gate about each
+/// word that a model writes, as in a life of an operator.
 fn yard(name: &str) -> Yard {
   static MADE: AtomicUsize = AtomicUsize::new(0);
   let n = MADE.fetch_add(1, Relaxed);
   Yard::new(format!("furb-life-{name}-{}-{n}", process::id()))
 }
 
-/// A directory of its own for one test, whose project config turns the gate off. A boot reads the
-/// words of its setup through the gate, which is the most of its time. A test of the gate, of a
-/// checkpoint and its seed, or of the form of a record proves what the gate reads, so it boots on
-/// a [`yard`] in place of this.
+/// A directory of its own for one test, whose project config turns the gate off, so the provider
+/// asks the gate about no word.
 fn place(name: &str) -> Yard {
   let at = yard(name);
   fs::create_dir_all(at.join(".furb")).unwrap();
@@ -920,17 +918,18 @@ fn worked(name: &str) -> Yard {
 fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   let at = place("drifts");
   let record = at.join("record.jsonl");
-  // The place where the first stand stood, changed, makes the replay drift at the word that the stand told.
+  // The place that the first cd of the record asks for, changed, makes the replay drift at that
+  // cd: the word of the root asks for the place where its stand stood.
   let mut lines: Vec<String> =
     fs::read_to_string(worked("drifts-work")).unwrap().lines().map(str::to_owned).collect();
-  let stood = lines
+  let moved = lines
     .iter()
-    .position(|line| line.starts_with(r#"[["done","stand1","#))
-    .expect("the record holds the first stand");
-  let mut entry: serde_json::Value = serde_json::from_str(&lines[stood]).unwrap();
-  let place = entry[0][3][1].as_str().expect("the stand names its place").to_owned();
-  entry[0][3][1] = serde_json::Value::from(format!("{place}-elsewhere"));
-  lines[stood] = entry.to_string();
+    .position(|line| line.starts_with(r#"[["cd","cd1","#))
+    .expect("the record holds the first cd");
+  let mut entry: serde_json::Value = serde_json::from_str(&lines[moved]).unwrap();
+  let place = entry[0][4].as_str().expect("the cd names its place").to_owned();
+  entry[0][4] = serde_json::Value::from(format!("{place}-elsewhere"));
+  lines[moved] = entry.to_string();
   // The last line is whole and not ended, which a store mends only at its first keep.
   fs::write(&record, lines.join("\n")).unwrap();
   fs::write(at.join("record.jsonl.log"), "{\"entries\": 0}\n").unwrap();
@@ -941,13 +940,13 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   let config = Some(apart.display().to_string());
   let refused =
     Opening { config, ..opening(&at, true) }.boot::<String>([]).map(|_| ()).unwrap_err();
-  assert!(refused.to_string().starts_with("Drift: "), "{refused}");
-  // The word shows the place as python writes it, and the message as Rust debugs it: four marks for each one.
+  assert!(refused.to_string().starts_with("Drift: cd1 drifts: "), "{refused}");
+  // The drift shows the place as python writes it, and the message as Rust debugs it: four marks
+  // for each one.
   let shown = place.replace('\\', "\\\\\\\\");
-  let moved = format!("stand()\\ncd('{shown}-elsewhere')");
   assert!(
-    refused.to_string().contains(&moved),
-    "the drift is at the word that the stand told: {refused}"
+    refused.to_string().contains(&format!("'{shown}-elsewhere')")),
+    "the drift is at the cd that the record holds: {refused}"
   );
   let mut beside: Vec<String> = fs::read_dir(&at)
     .unwrap()
@@ -1342,13 +1341,13 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
   assert_eq!(again.count(), 0, "no carried act runs again");
 }
 
-/// The words of the seed of the root that the lives after the last checkpoint of a record gave the
-/// gate.
+/// The runs of the word of the seed of the root that the lives after the last checkpoint of a
+/// record made.
 fn seeds(at: &Path) -> usize {
   let kept = world::kept(at.join("record.jsonl")).unwrap();
   let seed = |a: &Fact| {
-    a.kind() == "gate"
-      && a.word(1).and_then(|one| one.as_str()) == Some("debug(t\"{standing()[4]=}\")")
+    a.kind() == "run"
+      && a.word(2).and_then(|one| one.as_str()) == Some("debug(t\"{standing()[4]=}\")")
   };
   checkpoint::segment(&kept)
     .iter()
@@ -1841,68 +1840,6 @@ fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of
   // The catalog gives opus the class dear, so only the config of this directory makes it cheap.
   assert!(standing.starts_with("[[['claude-cli:opus', ["), "{standing}");
   assert!(standing.contains("1000000, 'cheap']"), "{standing}");
-}
-
-/// A word that the gate refuses, since it gives a str to a name of type int, and that runs to its
-/// close.
-const MISTYPED: &str = "x: int = 'one'\nclose(x)";
-
-/// What a word that a rung runs on the root closes with, or why it was refused.
-fn rung(engine: &mut Engine, word: &str) -> Result<Object, Fault> {
-  let word = Some(word.to_owned());
-  let rung =
-    engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() })?;
-  executor::block_on(rung)
-}
-
-/// Each fact of the root, as python shows it.
-fn facts(engine: &mut Engine) -> Vec<String> {
-  let root =
-    engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None }).unwrap();
-  root.iter().map(|one| one.0.as_ref().py_repr()).collect()
-}
-
-#[test]
-fn a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts()
- {
-  let on = yard("gate-on");
-  let open = |at: &Path, keeps: bool| Opening { skills: Some(false), ..opening(at, keeps) };
-  let (mut engine, _) = open(&on, false).boot::<String>([]).unwrap();
-  let refused = rung(&mut engine, MISTYPED).unwrap_err();
-  assert!(refused.to_string().contains("int"), "the gate on refuses the word: {refused}");
-  drop(engine);
-  let off = place("gate-off");
-  let (mut engine, _) = open(&off, true).boot::<String>([]).unwrap();
-  let ran = rung(&mut engine, MISTYPED).unwrap();
-  assert_eq!(ran.as_ref().as_str(), Some("one"), "the gate off lets the word run");
-  let lived = facts(&mut engine);
-  let gated = lived.iter().find(|one| one.starts_with("('gate', ") && one.contains("x: int"));
-  let gated = gated.expect("the record holds the gate of the word");
-  let name = gated.split('\'').nth(3).unwrap_or_default();
-  let answer = format!("('done', '{name}', 'gate', [])");
-  assert!(lived.contains(&answer), "the gate off answers the word with no finding: {gated}");
-  drop(engine);
-  // A config of the project that turns the gate on again: the replay gives the answer that the
-  // record holds.
-  fs::write(off.join(".furb/config.local.json"), r#"{"gate": true}"#).unwrap();
-  let (mut engine, _) = open(&off, false).boot::<String>([]).unwrap();
-  assert!(engine.raised().is_none(), "the replay does not drift: {:?}", engine.raised());
-  let replayed = facts(&mut engine);
-  let mut left = replayed;
-  let missing: Vec<_> = lived
-    .iter()
-    .filter(|one| match left.iter().position(|other| other == *one) {
-      Some(at) => {
-        left.remove(at);
-        false
-      }
-      None => true,
-    })
-    .map(|one| one.chars().take(300).collect::<String>())
-    .collect();
-  assert!(missing.is_empty(), "the replay holds each fact of the life: {missing:#?}");
-  assert_eq!(rung(&mut engine, "close(1)").unwrap().as_ref().as_int(), Some(1));
-  assert!(rung(&mut engine, MISTYPED).is_err(), "the gate on refuses the word again in this life");
 }
 
 #[test]

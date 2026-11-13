@@ -7,9 +7,9 @@ while a word calls it, which crosses whole, a class a word defined held as a typ
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
 holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, an ear the
 crate writes, which serves a life of either engine, a life longer than the tables of its session could count, a
-word that awaits in a lambda, which the gate lets pass and the sandbox refuses as python does, an engine and an
-ear that the collector of cycles drops on another thread, a value too deep or that holds its parts too often,
-which a host is given cut. What the ears of the crate do, the crate proves.
+word that awaits in a lambda, which the sandbox refuses as python does, an engine and an ear that the collector of
+cycles drops on another thread, a value too deep or that holds its parts too often, which a host is given cut. What
+the ears of the crate do, the crate proves.
 """
 
 import asyncio
@@ -29,6 +29,7 @@ from conftest import OPERATOR, STANDS, Dead, Py, Sand, life, settle, swapped, ti
 from furb import engine
 from furb.engine import TIMEOUT, Refused
 from furb_monty import _monty
+from outside.doubles import gate
 
 
 @pytest.fixture(autouse=True)
@@ -84,8 +85,8 @@ async def test_a_word_that_asks_the_operating_system_raises_where_it_asks_and_it
 
 
 async def test_a_word_that_awaits_in_a_function_that_is_not_async_raises_where_it_runs_and_its_chain_goes_on() -> None:
-  """A word that awaits in a lambda, which the gate lets pass, raises the SyntaxError of python, and the chain goes on,
-  so the prompt asks its model again."""
+  """A word that awaits in a lambda raises the SyntaxError of python, and the chain goes on, so the prompt asks its
+  model again."""
   sand = Sand(stands=STANDS)
   root = engine.boot((), world=sand.hears())
   sand.script[root] = ["f = lambda: await wait(0, __name__)\nf()", "close(str(raised))"]
@@ -238,7 +239,7 @@ async def test_a_life_runs_a_word_after_more_names_and_functions_than_a_u16_coun
   for _ in range(66_000):
     engine.say("tick", root)
   # Each rung makes 10 000 functions that each read a new attribute and hold a function of their own. The source is
-  # built as the rung runs, since the gate reads the whole program again for each word.
+  # built as the rung runs, so the program of the chain holds a short word for each rung.
   for k in range(7):
     word = (
       f"exec(''.join(f'def f{k}_{{i}}(x):\\n  def g():\\n    pass\\n  return x.a{k}_{{i}}\\n'"
@@ -261,8 +262,7 @@ async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
 async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_rung_runs_it() -> None:
   """The gate reads a word against the typeshed of the sandbox and a chain of the sandbox, which is a module, so it
   accepts a name of the builtins of python, or a name ty gives every module, exactly when a rung runs a word that
-  names it. A refused word never runs, so a refused name is run as the Kernel runs a word, in the globals of the
-  chain. A word is judged the same on both engines, so the gate of python finds the same of every name, though
+  names it. A name that it refuses is run as the Kernel runs a word, in the globals of the chain. A word is judged the same on both engines, so the gate of python finds the same of every name, though
   python runs some that it refuses."""
   root = engine.boot((), world=Sand(stands=STANDS).hears())
   # The names ty gives every module are those of module_type_implicit_global_symbol in ty_python_semantic: the names
@@ -274,7 +274,7 @@ async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_r
   # Every rung grows the program that each later sheet reads again, so a sheet and a rung for each name cost
   # seconds. One word holds every name, one on each line, and the line of a finding is the name it refuses.
   word = "\n".join(f"got = {name}" for name in names)
-  found = engine.gate(word, on=root)
+  found = await gate(root, word)
   assert Py().gate(word, []) == found
   refused = sorted({names[int(one.split(":")[0].removeprefix("line ")) - 1] for one in found})
   probe = (
@@ -324,7 +324,7 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
   _, store = _monty.store(path)
   ears = {"files": _monty.files(str(tmp_path / "scratch")), "time": _monty.time(), "store": store}
   world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
-  root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), **ears, world=world)
+  root = furb.python.boot((), kernel=Py().kernel(), **ears, world=world)
   furb.python.write(furb.python.Text("a.txt", "one\n"), on=root)
   assert furb.python.read("a.txt", on=root).content == "one\n"
   assert await furb.python.wait(0.01, root, on=root) is None
@@ -346,7 +346,7 @@ async def test_the_ear_of_the_log_writes_the_log_of_a_life_on_the_engine_of_this
   _, store = _monty.store(path)
   log = _monty.log(path)
   world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
-  root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), store=store, log=log, world=world)
+  root = furb.python.boot((), kernel=Py().kernel(), store=store, log=log, world=world)
   assert await furb.python.rung("x = 1\nclose(x)", on=root) == 1
   store.dispose()
   log.dispose()

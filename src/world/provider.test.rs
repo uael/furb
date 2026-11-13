@@ -560,7 +560,7 @@ fn cut(text: &str) -> String {
 }
 
 #[test]
-fn a_reply_ends_at_the_first_statement_that_cannot_be_python_and_the_gate_refuses_its_word() {
+fn a_reply_ends_at_the_first_statement_that_cannot_be_python_and_the_run_of_its_word_raises() {
   let model = Halting::writes(&["Here is the code:\n", "foo()\n", "bar()\n"]);
   let (mut engine, _) = life("stops", vec![Model::new("m", 1000, model.clone())]);
   asked(&mut engine);
@@ -570,10 +570,10 @@ fn a_reply_ends_at_the_first_statement_that_cannot_be_python_and_the_gate_refuse
     "the call of the model ended before it wrote the rest"
   );
   assert!(
-    until(&mut engine, |engine| told_of(engine, &["refused", "line 1"])),
-    "the gate refused the word as far as the statement"
+    until(&mut engine, |engine| told_of(engine, &["raised", "SyntaxError"])),
+    "the run of the word as far as the statement raised"
   );
-  assert!(!ran(&mut engine, "foo"), "no word ran");
+  assert!(!ran(&mut engine, "foo"), "no later statement ran");
 }
 
 #[test]
@@ -603,8 +603,8 @@ fn a_reply_ends_after_the_first_statement_whose_fault_no_later_statement_mends()
     "the call of the model ended before it wrote the rest"
   );
   assert!(
-    until(&mut engine, |engine| told_of(engine, &["refused", "line 2"])),
-    "the gate refused the word as far as the statement"
+    until(&mut engine, |engine| told_of(engine, &["raised", "nothing_binds_this"])),
+    "the run of the word as far as the statement raised"
   );
 }
 
@@ -653,27 +653,6 @@ fn a_word_whose_statements_stand_over_many_lines_is_not_ended_while_the_model_wr
   let id = asked(&mut engine);
   let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
   assert_eq!(got.as_ref().as_int(), Some(3 + 18 + 1 + 6));
-}
-
-#[test]
-fn a_reply_that_is_one_quote_and_nothing_else_is_refused_with_the_fix() {
-  let parts = ["<s:rung9_word>\n", "x = 1\n", "</s:rung9_word>\n"];
-  let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
-  let events: Vec<_> = parts
-    .iter()
-    .map(|part| MockStreamEvent::text(*part))
-    .chain([MockStreamEvent::FinalResponse(StreamFinal::new("mock", usage))])
-    .collect();
-  let model = MockCompletionModel::from_stream_turns([events]);
-  let (mut engine, _) = life("lone", vec![scripted(&model)]);
-  asked(&mut engine);
-  assert!(
-    until(&mut engine, |engine| told_of(
-      engine,
-      &["the word is the quote <s:rung9_word> and nothing else"]
-    )),
-    "the chain is told that the word only binds the name of its quote"
-  );
 }
 
 #[test]
@@ -751,8 +730,8 @@ fn a_quote_that_the_model_writes_in_small_chunks_holds_until_its_close_mark_and_
 #[test]
 fn a_quote_that_the_gate_refuses_while_it_streams_is_cut_at_its_close_mark_not_its_open_mark() {
   // The quote binds the name of an act, which the gate refuses on the line of its open mark, and
-  // its close mark comes in a later chunk: the turn holds the whole quote, so the chain is told
-  // that finding, and not that the quote has no close mark.
+  // its close mark comes in a later chunk: the turn holds the whole quote, so no finding says
+  // that the quote has no close mark.
   let parts = ["<s:reply1", ">\nHel", "lo\nwor", "ld\n</s", ":reply1>\nclo", "se(len(", "reply1))"];
   let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
   let events: Vec<_> = parts
@@ -764,10 +743,6 @@ fn a_quote_that_the_gate_refuses_while_it_streams_is_cut_at_its_close_mark_not_i
   let (mut engine, _) = life("refused-quote", vec![scripted(&model)]);
   asked(&mut engine);
   assert_eq!(replied(&mut engine), cut("<s:reply1>\nHello\nworld\n</s:reply1>"));
-  assert!(
-    until(&mut engine, |engine| told_of(engine, &["refused", "the transcript binds `reply1`"])),
-    "the chain is told the finding of the quote, not that the quote is all of the word"
-  );
   assert!(!told_of(&mut engine, &["has no close mark"]), "the quote that closes is not told open");
 }
 

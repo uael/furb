@@ -155,7 +155,7 @@ async def test_an_ear_is_any_generator_of_that_shape() -> None:
   """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by."""
   sand = sown()
   kept: list[tuple] = []
-  root = engine.boot((), world=sand.hears(), kernel=Py().kernel(), gate=Py().gating(), note=note(kept))
+  root = engine.boot((), world=sand.hears(), kernel=Py().kernel(), note=note(kept))
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "work", on=root) == 1
   assert engine.read("note://one", on=root) == Text("note://one", "kept")
@@ -168,8 +168,8 @@ async def test_an_ear_is_any_generator_of_that_shape() -> None:
   assert {"started", "ready", "done"} <= {a[0] for a in kept} and not {"reply", "run"} & {a[0] for a in kept}
 
 
-async def test_the_chain_has_the_gate_read_and_the_kernel_begin_every_rung() -> None:
-  """The chain has the gate read every rung but the ones it wrote itself, and the Kernel begin every rung, by the acts gate and run."""
+async def test_the_chain_has_the_kernel_begin_every_rung() -> None:
+  """The chain has the Kernel begin every rung, by the act run."""
   sand, log, root = born()
   await engine.rung("k = 1", on=root)
   sand.script[root] = ["close(k + 1)"]
@@ -178,8 +178,6 @@ async def test_the_chain_has_the_gate_read_and_the_kernel_begin_every_rung() -> 
   told = [fresh(root), f"{prompted('prompt1', 'int', 'count')}\n\n#rung2 advance on prompt1"]
   assert ran(log) == [told[0], "k = 1", told[1], "close(k + 1)"]
   assert [a[4] for a in said(log, "run")] == ["rung1_told", "rung1", "rung2_told", "rung2"]
-  assert [one[2] for one in said(log, "done") if one[1].startswith("gate")] == ["gate", "gate"]
-  assert [a[4] for a in said(log, "gate")] == ["k = 1", "close(k + 1)"]
 
 
 async def test_the_kernel_takes_a_run_as_that_run() -> None:

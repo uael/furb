@@ -21,7 +21,6 @@ from conftest import (
   chained,
   definitions,
   fresh,
-  gatings,
   heads,
   ids,
   lasting,
@@ -147,7 +146,7 @@ async def test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_complet
   sand, _, root = born()
   await engine.rung("k = 1", on=root)
   await settle()
-  one = engine.boot(list(sand.record), kernel=Py().kernel(), gate=Py().gating(), world=Sand().hears())
+  one = engine.boot(list(sand.record), kernel=Py().kernel(), world=Sand().hears())
   await settle(300)
   assert one == root and engine.peek(one) is None
 
@@ -239,12 +238,12 @@ async def test_the_chain_holds_the_control_it_says_itself() -> None:
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   assert isinstance(engine.peek(ghost), Refused)
-  sand.script[root] = ["k = BAD", "close(1)"]
+  sand.script[root] = ["close(1)"]
   one = engine.prompt(int, "try", on=root)
   assert await one == 1
-  step, last = steps(log, one)
+  (last,) = steps(log, one)
   held = engine.transcript(root)
-  assert [(a[1], a[2]) for a in said(held, "close")] == [(ghost, root), (step, root), (one, last)]
+  assert [(a[1], a[2]) for a in said(held, "close")] == [(ghost, root), (one, last)]
   assert [a for a in said(held, "tell") if a[3][0].split("\n")[0].split(" ")[1:2] == ["closed"]] == []
   assert [p for p in paragraphs(engine.turns(on=root)) if p.split("\n")[0].split(" ")[1:2] == ["closed"]] == []
 
@@ -328,7 +327,7 @@ async def test_the_transcript_of_a_chain_is_the_facts_on_it_in_the_order_it_hear
   await settle()
   held = engine.transcript(root)
   assert all(on(a) == root for a in held)
-  assert ids(held) == ["stand1", one, *steps(log, one), "run1", "reply1", "gate1", "run2"]
+  assert ids(held) == ["stand1", one, *steps(log, one), "run1", "reply1", "run2"]
   facts, log = lasting(held), lasting(log)
   heard = [log.index(a) for a in facts if not engine.question(a)]
   assert heard == sorted(heard) and [a for a in facts if a not in log] == []
@@ -421,7 +420,7 @@ async def test_a_chain_holds_whole_every_act_made_on_the_chain() -> None:
   held = engine.transcript(root)
   mine = [a for a in held if engine.question(a)]
   assert [a for a in acts(log).values() if a[3] == root and a not in mine] == []
-  kinds = ["stand", "prompt", "rung", "run", "reply", "gate", "run", "read", "bash", "merged", "wants"]
+  kinds = ["stand", "prompt", "rung", "run", "reply", "run", "read", "bash", "merged", "wants"]
   assert [a[0] for a in mine] == kinds
   engine.write(Text(act, ""), on=root)
   await settle()
@@ -1062,8 +1061,8 @@ async def test_every_done_it_holds_answers_a_question_it_holds() -> None:
   held = engine.transcript(root)
   names = {a[1] for a in held if engine.question(a)}
   assert [a[1] for a in held if a[0] == "done" and a[1] not in names] == []
-  assert [a[1] for a in held if engine.question(a) and a[2] == root] == ["run1", "gate1", "run2"]
-  assert [a[1] for a in held if a[0] == "done" and a[1] in ("run1", "gate1", "run2")] == ["run1", "gate1", "run2"]
+  assert [a[1] for a in held if engine.question(a) and a[2] == root] == ["run1", "run2"]
+  assert [a[1] for a in held if a[0] == "done" and a[1] in ("run1", "run2")] == ["run1", "run2"]
 
 
 async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin() -> None:
@@ -1283,15 +1282,13 @@ async def test_a_write_of_a_door_cancels_each_rung_that_it_drops() -> None:
   assert said(log, "cancel")[-1] == ("cancel", ended, root, None)
 
 
-async def test_a_write_of_a_door_that_drops_no_rung_that_ran_keeps_the_module() -> None:
-  """A write of a door that drops no rung that ran, since the gate refused each rung that it drops, keeps the module and every rung of the chain as they stand, and makes only the rung of what is new."""
-  _, log, root = born(
-    "k = 1\ndebug(t'go')", "ok = BAD", "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))", "close(ok)"
-  )
-  act = engine.prompt(int, "fix it", on=root)
+async def test_a_write_of_a_door_that_drops_no_rung_keeps_the_module() -> None:
+  """A write of a door that drops no rung keeps the module and every rung of the chain as they stand, and makes only the rung of what is new."""
+  _, log, root = born("k = 1\ndebug(t'go')", "mine = get(acting())[2]\nwrite(read(mine).append('ok = 2'))", "close(ok)")
+  act = engine.prompt(int, "go on", on=root)
   assert await act == 2
   await settle()
-  one, _, writer, made, _ = [a[1] for a in said(log, "rung") if a[2] == act]
+  one, writer, made, _ = [a[1] for a in said(log, "rung") if a[2] == act]
   assert len(said(engine.transcript(root), "module")) == 1 and engine.module(root)["mine"] == act
   assert [a for a in said(log, "rung") if a[2] == root] == []
   ran = [a[4] for a in said(log, "run")]
@@ -1462,12 +1459,6 @@ async def test_each_act_that_a_told_paragraph_opened_and_each_value_that_it_told
   assert engine.module(root)["got"] == "one\ntwo"
 
 
-async def test_the_gate_never_reads_a_told_rung_as_a_word() -> None:
-  """The gate never reads a told rung as a word, since the engine wrote it."""
-  _, log, _, _, _ = await told_read()
-  assert [word for word, _ in gatings(log)] == ["t = read('a.txt')", "got = read1_text"]
-
-
 async def test_the_turns_do_not_show_a_told_rung() -> None:
   """The turns do not show a told rung, since the turn shows its python already."""
   _, _, root, _, _ = await told_read()
@@ -1618,7 +1609,7 @@ async def test_a_statement_that_the_model_of_a_rung_writes_runs_after_the_told_r
 
 
 async def test_a_step_is_barren_when_it_raises_makes_nothing_repeats_a_word_or_leaves_a_message_owed() -> None:
-  """A step is barren when it raises or the gate refuses it, when it made no act, closed no prompt and no act that it awaited ended, as a step that only passes, binds a name or debugs, when it repeats a word that its thread wrote since the last fact that made the thread due and no act that it awaited ended, and when it leaves a message of a person owed, whatever else it did."""
+  """A step is barren when it raises, when it made no act, closed no prompt and no act that it awaited ended, as a step that only passes, binds a name or debugs, when it repeats a word that its thread wrote since the last fact that made the thread due and no act that it awaited ended, and when it leaves a message of a person owed, whatever else it did."""
   for word in ("raise ValueError('x')", "1/0", "The answer stands.", "close('a')", "pass", "x = 1", "debug(t'{1}')"):
     assert await looped(word) == (3, True, ["made nothing"]), word
   for word in ("prompt(None, 'working', to=OPERATOR)", "x = read('a.txt')", "x = clock()"):
@@ -2110,7 +2101,7 @@ async def asked_again_after_it_awaited() -> None:
 
 
 async def test_when_a_step_ends_its_thread_is_due_again_at_once_or_rests_on_its_open_acts() -> None:
-  """When a step ends and its thread is open, the thread is due again at once when a paragraph was told for it since the advance of the step, as what a read, a write, a cd or a debug of the step shows and the end of an act of the thread that the step did not await and that ended while the step was not over, also one that a part of its word made while its model wrote, when an act that the step awaited ended, when the step raised or the gate refused it, when it leaves a message of a person owed, and when it leaves no act of the thread open; in each other case the thread rests on its open acts until a fact makes it due, so a step that reads a file while a command of its thread runs is asked again at once, and a pass there rests."""
+  """When a step ends and its thread is open, the thread is due again at once when a paragraph was told for it since the advance of the step, as what a read, a write, a cd or a debug of the step shows and the end of an act of the thread that the step did not await and that ended while the step was not over, also one that a part of its word made while its model wrote, when an act that the step awaited ended, when the step raised, when it leaves a message of a person owed, and when it leaves no act of the thread open; in each other case the thread rests on its open acts until a fact makes it due, so a step that reads a file while a command of its thread runs is asked again at once, and a pass there rests."""
   for shows in ("read('a.txt')", "write(Text('b.txt', 'b'))", "cd('.')", "debug(t'{1}')", "raise ValueError('x')"):
     _, log, root = born(f"x = bash('slow')\n{shows}", "pass", "pass", auto=False)
     one = engine.prompt(int, "count", on=root)

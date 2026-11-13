@@ -382,8 +382,10 @@ test("each word stands in a block under its label, with the mark of the line tha
   composing(
     async ({ session, frame }) => {
       await session.command("/run ready = True\nnext = = 2").catch(() => {});
-      // The gate of the daemon answers the word after the verb that sent it, and the session reads its findings then.
-      await until(session, () => session.findings.length > 0);
+      // The daemon runs the word after the verb that sent it, and the session reads its raise then.
+      await until(session, () =>
+        session.activity.some((act) => act.kind === "rung" && act.run?.run === "failed"),
+      );
       let shown = await frame();
       expect(shown).toMatch(/2 {2}✗ next = = 2/);
       expect(shown).toMatch(/┃ +operator +$/m);

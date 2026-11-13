@@ -14,7 +14,7 @@ async function answered(window: Window): Promise<unknown> {
 
 // #1255: a quote whose close mark came in a later chunk than its open mark was cut at its open mark, and the model was
 // told that its quote had no close mark.
-test("a quote that the model streams in small chunks binds whole, and a quote that the gate refuses is told its finding", () =>
+test("a quote that the model streams in small chunks binds whole", () =>
   scenario(
     [
       {
@@ -23,29 +23,11 @@ test("a quote that the model streams in small chunks binds whole, and a quote th
         chunk: 3,
         pause: 5,
       },
-      {
-        cue: "Scenario: quote a name.",
-        word: "<s:prompt1>\nHello\n</s:prompt1>\nclose(str(len(prompt1)))",
-        chunk: 3,
-        pause: 5,
-      },
-      {
-        cue: "binds `prompt1`",
-        word: "<s:text>\nHello\n</s:text>\nclose(str(len(text)))",
-        chunk: 3,
-        pause: 5,
-      },
     ],
     async (window, yard) => {
       await window.type("Scenario: quote.");
       await until(async () => (await answered(window)) === "12", "the quote to bind whole");
-      await window.type("Scenario: quote a name.");
-      await until(() => yard.turns().length === 3, "the turn told the finding");
-      expect(yard.turns().map((one) => one.cue)).toEqual([
-        "Scenario: quote.",
-        "Scenario: quote a name.",
-        "binds `prompt1`",
-      ]);
+      expect(yard.turns().map((one) => one.cue)).toEqual(["Scenario: quote."]);
       expect(yard.turns().some((one) => one.text.includes("has no close mark"))).toBe(false);
     },
   ));
