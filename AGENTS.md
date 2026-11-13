@@ -305,7 +305,8 @@ fix what your change broke, and report what was broken before.
   `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any case. This build,
   `cargo test` and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them,
   so a word runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the
-  release. A build keeps no debug information of a dependency (`Cargo.toml`), which holds a target to about a third of
+  release. The project sets `no-cache` for uv, so a sync that builds them keeps no copy of the wheel in `~/.cache/uv`, where
+  each copy took 110 MB and uv never removed it. A build keeps no debug information of a dependency (`Cargo.toml`), which holds a target to about a third of
   its bytes. A tree keeps the incremental state of its crates (`.cargo/config.toml`), which a job of CI does not keep.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
@@ -364,7 +365,9 @@ fix what your change broke, and report what was broken before.
   `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. It also runs the hooks once on the files of each pushed commit that no remote holds and whose change did not pass them, as after `--no-verify`, an amend or a rebase, and passes a commit that shares no history with `origin/main`, as a branch of captures, and refuses the push when they fail or when the branch is not checked out with a clean work tree, so a checked commit runs no hook a second time. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks only on
   each file whose content differs from its version in every parent: a file that it takes whole from one parent passed the
   hooks of that parent, and the gates check the whole tree. Run the
-  push as its own command after the commit, so that its result stands in the tail of that command. The hook `cargo test` runs only when a file that the crate
+  push as its own command after the commit, so that its result stands in the tail of that command. The hook `cargo test` runs on a cache of its own, `XDG_CACHE_HOME` in `/tmp`, and fails when a test leaves a file
+  there: a test that makes the scratch directory of a record holding a file removes that directory at its end. The hook
+  `cargo test` runs only when a file that the crate
   or its tests read changed, and the gates run every hook on every file. The hook of the links runs only for a README or
   a manifest, and reads git alone. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file. The hook `paths` runs on
   each commit, since a move of a file leaves its old path in a script that the commit does not touch.
@@ -399,6 +402,9 @@ fix what your change broke, and report what was broken before.
   pi-ai in the cache of furb once a day, and the newer of the cache and the snapshot holds for each provider.
   `furb catalog [--update]` shows where the models came from and updates them at once; a source that fails leaves the
   last valid copy, and a life that stands again reads the caches again.
+- `python3 script/clean-caches.py [--scratch DIR] [--uv DIR]`: remove what earlier runs left in the caches of the machine,
+  and nothing else: each scratch directory of a record that holds only its mark file and that no life holds, and, by
+  `uv cache prune`, each copy of a wheel and each editable build of uv that no entry uses.
 - `uv run python script/links.py`: check that each link in a README that a package carries works on the page of the
   package on PyPI, npm or crates.io, which read no relative link. It lists each package and its README from the
   manifests, and fails on a relative link, which `--fix` writes as absolute, at `main` on GitHub. The hooks run it.

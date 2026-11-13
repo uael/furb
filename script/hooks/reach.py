@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -107,6 +109,28 @@ def command(kind: str, files: list[str]) -> list[str] | None:
   return ["cargo", "test", *chosen, "--features", "furb/typescript"]
 
 
+def leaks(cache: Path) -> list[str]:
+  """Each file that a run left in a cache, but the stamp of the reap that a life writes there once a day."""
+  return sorted(
+    one.relative_to(cache).as_posix() for one in cache.rglob("*") if one.is_file() and one.name != ".reaped"
+  )
+
+
+def private(run: list[str]) -> int:
+  """The run of the tests of the crates on a cache of its own, which no test may leave a file in: a test of cargo reads
+  the cache of the machine unless XDG_CACHE_HOME names another, and what it leaves there stays for ever. The folder is
+  short, since a socket that a command makes in a scratch directory under it takes 104 bytes of path at the most."""
+  cache = tempfile.mkdtemp(prefix="furb-cache-", dir=None if os.name == "nt" else "/tmp")  # noqa: S108
+  try:
+    code = subprocess.run(run, env={**os.environ, "XDG_CACHE_HOME": cache}, check=False).returncode  # noqa: S603
+    left = leaks(Path(cache))
+  finally:
+    shutil.rmtree(cache, ignore_errors=True)
+  if left:
+    sys.stderr.write("a test left a file in the cache of the machine:\n" + "".join(f"  {one}\n" for one in left))
+  return code or int(bool(left))
+
+
 def main(args: list[str]) -> int:
   run = command(args[0], args[1:])
   if run is None:
@@ -120,6 +144,8 @@ def main(args: list[str]) -> int:
   if built := subprocess.run(build, check=False).returncode:  # noqa: S603
     return built
   run = [sys.executable, str(ROOT / "script" / "budget.py"), args[0], "--", *run]
+  if args[0] == "cargo":
+    return private(run)
   os.execvp(run[0], run)  # noqa: S606
   return 1
 

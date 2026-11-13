@@ -170,6 +170,10 @@ fn a_life_that_keeps_a_record_writes_a_new_file_and_a_new_file_in_a_new_folder_t
   assert_eq!(note, Text::new("scratch://notes/new.md", "note\n"));
   let read = verbs::Read { on: on(), ..Default::default() };
   assert_eq!(engine.read("scratch://", read).unwrap(), Text::new("scratch://", "notes/\nplan.md"));
+  drop(engine);
+  // The scratch directory of the record holds the two files that the life wrote: remove it.
+  fs::remove_dir_all(world::Scratch::of(&at.join("record.jsonl")).unwrap().unwrap().path())
+    .unwrap();
 }
 
 #[test]

@@ -186,7 +186,9 @@ fn a_whole_directory_stands_a_directory_that_is_not_whole_is_made_again_and_a_ne
   );
   assert!(!at.with_file_name(format!("{}.new", at.file_name().unwrap().display())).exists());
   Scratch::at(&at).unwrap().remade(&[], &quiet);
-  assert!(!at.exists(), "a new record starts with an empty directory");
+  assert!(!at.exists(), "a new record starts with no directory");
+  Scratch::at(&at).unwrap().remade(&[done("bash1", Object::string("out"))], &quiet);
+  assert!(!at.exists(), "a record that no write put a file in makes no directory");
 }
 
 #[test]

@@ -22,6 +22,21 @@ def hooks() -> dict[str, dict]:
   return {one["id"]: one for repo in loaded["repos"] for one in repo["hooks"]}
 
 
+def test_the_tests_of_the_crates_run_on_a_cache_of_their_own_and_a_file_left_in_it_fails_the_hook(
+  tmp_path: Path,
+) -> None:
+  scratch = tmp_path / "furb" / "scratch"
+  (scratch / "a").mkdir(parents=True)
+  (scratch / ".reaped").write_text("", encoding="utf-8")
+  assert reach.leaks(tmp_path) == []
+  (scratch / "a" / ".furb-scratch").write_text("", encoding="utf-8")
+  assert reach.leaks(tmp_path) == ["furb/scratch/a/.furb-scratch"]
+  leave = "import os, pathlib; p = pathlib.Path(os.environ['XDG_CACHE_HOME']); (p / 'x').write_text('')"
+  assert reach.private([sys.executable, "-c", leave]) == 1
+  assert reach.private([sys.executable, "-c", "pass"]) == 0
+  assert reach.private([sys.executable, "-c", "raise SystemExit(3)"]) == 3
+
+
 def test_the_hooks_of_the_tests_give_all_the_files_of_the_commit_to_the_reach_in_one_call() -> None:
   for name, kind in (("pytest", "pytest"), ("cargo-test", "cargo")):
     hook = hooks()[name]

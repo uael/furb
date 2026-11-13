@@ -26,7 +26,10 @@ use furb::{
   life::{Answer, Opening},
   view,
   view::{Act, Kind, Phase, RunState, State},
-  world::config::{Change, Layer},
+  world::{
+    Scratch,
+    config::{Change, Layer},
+  },
 };
 use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
@@ -565,6 +568,9 @@ async fn each_write_keeps_its_change_in_the_journal_beside_the_record_once_the_l
   until(&mut events, done(&id)).await;
   assert_eq!(again.send(Command::End).await.unwrap(), Reply::Done);
   assert_eq!(fs::read_to_string(&journal).unwrap(), lines);
+  // The scratch directory of the record, with the file that the life wrote, stands in the cache.
+  let scratch = Scratch::of(Path::new(&record)).unwrap().unwrap();
+  fs::remove_dir_all(scratch.path()).unwrap();
 }
 #[tokio::test]
 async fn a_verb_of_the_operator_gives_the_words_of_its_act() {

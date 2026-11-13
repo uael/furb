@@ -51,9 +51,10 @@ const REAPED: &str = ".reaped";
 /// How long a reap of the scratch directories of the records stands before the next one.
 const DAY: Duration = Duration::from_hours(24);
 
-/// The scratch directory of a life, which its files and its commands share: the one of its record, which outlives
-/// the life, or one of its own, which goes with the last ear that holds it. Nothing makes it until a write or a
-/// command needs it, or until a life makes it again from its record.
+/// The scratch directory of a life, which its files and its commands share: the one of its
+/// record, which outlives the life but for one that holds nothing but its mark, or one of its
+/// own, which goes with the last ear that holds it. Nothing makes it until a write or a command
+/// needs it, or until a life makes it again from its record.
 #[derive(Clone)]
 pub struct Scratch(Arc<Held>);
 
@@ -70,6 +71,18 @@ impl Drop for Held {
     // A directory that cannot go stays under the temp of the machine, which the machine clears.
     if self.owned {
       fs::remove_dir_all(&self.at).unwrap_or_default();
+      return;
+    }
+    // The directory of a record that holds nothing but its mark holds nothing that a life makes
+    // again from the record, so it goes with the last life that holds it. The lock goes first,
+    // since Windows refuses to remove a file that is open. A file that a life made meanwhile
+    // keeps the directory, and the mark stays with it.
+    drop(self.lock.take());
+    let mark = self.at.join(WHOLE);
+    let bare =
+      fs::read_dir(&self.at).is_ok_and(|each| each.flatten().all(|one| one.file_name() == WHOLE));
+    if bare && fs::remove_file(&mark).is_ok() && fs::remove_dir(&self.at).is_err() {
+      drop(fs::write(&mark, ""));
     }
   }
 }
@@ -200,8 +213,10 @@ impl Scratch {
     )
   }
 
-  /// The directory as a life opens on its record. A new record starts with an empty directory. A directory that is
-  /// missing, or that is not whole, is made again in a directory beside it, which then takes its place: each path of
+  /// The directory as a life opens on its record. A new record starts with no directory, and so
+  /// does a record that no write put a file in: the first write or command makes it. A directory
+  /// that is missing, or that is not whole, is made again in a directory beside it, which then
+  /// takes its place: each path of
   /// the scheme with the last text that a write of it came to, which the journal kept, in the order of those last
   /// writes, and a write puts aside a file or a folder that stands in its way. A file that the machine refuses is
   /// told to the log of the host, since the World renders nothing to a model.
@@ -226,6 +241,10 @@ impl Scratch {
     let mut files: Vec<_> =
       last.into_iter().map(|(path, (place, content))| (place, path, content)).collect();
     files.sort();
+    if files.is_empty() {
+      gone(at, log);
+      return;
+    }
     let mut name = at.file_name().unwrap_or_default().to_os_string();
     name.push(".new");
     let beside = Self::kept(at.with_file_name(name));

@@ -49,6 +49,10 @@ dev = [
 members = ["bind/python", "cli"]
 
 [tool.uv]
+# uv builds the two wheels of the workspace again each time a file of their cache-keys changes, and it keeps each old
+# copy in its cache for ever, 110 MB each time. No cache keeps no copy, and a new environment takes its packages from
+# the index in seconds.
+no-cache = true
 # An environment of development builds the crate in the dev profile, which optimizes each dependency and builds the
 # crates of the workspace quickly. A wheel built for a release takes the release profile of maturin.
 config-settings-package = { furb-monty = { build-args = "--profile=dev" }, furb-cli = { build-args = "--profile=dev" } }

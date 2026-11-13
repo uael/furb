@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-CLEAN = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+# The projects that these tests sync are of their own, so no setting of furb keeps their wheels out of the cache of uv.
+CLEAN = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")} | {"UV_NO_CACHE": "1"}
 SCRIPT = Path(__file__).resolve().parents[2] / "script" / "worktree.sh"
 OWN = SCRIPT.with_name("own-target.sh")
 
