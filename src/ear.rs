@@ -32,7 +32,7 @@
 //! says each statement that a model finished as the fact writing, which the Kernel hears and runs, and not as an
 //! act that it awaits, since a statement that prompts makes a chain ask the provider for a reply.
 //! Each verb that an ear of the crate calls of its own accord keeps the law: the provider calls the views
-//! `unquoted` and `paused`, the gate through `against`, and `pause`, which makes no act; the store calls `prompt` to
+//! `unquoted` and `paused`, and `pause`, which makes no act; the store calls `prompt` to
 //! the operator, and takes no prompt; and the commands, the time and the web call none.
 //! The extensions and memory do no work, so they call each verb while they hear, where the life
 //! answers it in their place.

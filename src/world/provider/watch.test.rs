@@ -1,6 +1,6 @@
 //! The watch over the word of a reply.
 
-use super::{Watch, broken, last, open, refused, settled};
+use super::{Watch, broken, fault, last, open};
 
 /// A whole text less the marks that the watch drops, as [`super::bare`] gives it.
 fn word(text: &str) -> Option<String> {
@@ -158,28 +158,10 @@ fn a_close_mark_inside_a_line_of_a_quote_ends_nothing() {
 }
 
 #[test]
-fn a_statement_that_runs_at_once_is_settled_over_each_of_its_lines() {
-  assert_eq!(settled("x = 1\nif x:\n  y = (\n    2)\n"), vec![(1, 1), (2, 4)]);
-}
-
-#[test]
-fn a_statement_that_holds_a_part_that_runs_later_or_never_is_not_settled() {
-  let word = "def f():\n  return g()\nclass C: ...\nh = lambda: g()\nn = [g() for _ in ()]\nm: G = 1\nz = 1\n";
-  assert_eq!(settled(word), vec![(7, 7)]);
-}
-
-#[test]
-fn a_word_that_is_not_python_has_no_settled_statement() {
-  assert_eq!(settled("x = (1,\n"), vec![]);
-}
-
-#[test]
-fn the_word_is_refused_after_the_first_settled_statement_that_holds_a_finding() {
-  let settled = [(1, 1), (3, 5), (6, 6)];
-  let found =
-    ["line 2: in a def".to_owned(), "line 4: unknown name".to_owned(), "line 6: x".to_owned()];
-  assert_eq!(refused(&settled, &found), Some(5));
-  assert_eq!(refused(&settled, &found[..1]), None);
+fn a_whole_word_that_ends_in_an_open_bracket_is_a_fault_that_more_text_could_mend() {
+  let word = "x = 1\ny = (2,\n";
+  assert_eq!((fault(word), broken(word)), (Some(3), None));
+  assert_eq!(fault("x = 1\n"), None);
 }
 
 #[test]
@@ -225,7 +207,7 @@ fn a_first_line_that_starts_with_a_lone_equal_sign_binds_an_underscore() {
   assert_eq!(named, "_ = read(\"a\")");
   assert_eq!(word("x == 1"), None, "a comparison is no binding");
   assert_eq!(word("== 1"), None, "a lone == is no binding of no name");
-  assert_eq!(word("x = 1\n= 2"), None, "a later line keeps its fault for the gate");
+  assert_eq!(word("x = 1\n= 2"), None, "a later line keeps its fault for its run");
   let mut watch = Watch::default();
   let end = watch.wrote("= await bash(\"ls\")\nclose(1)").expect("a line at the left edge");
   assert_eq!(watch.upto(end), "_ = await bash(\"ls\")\n");
@@ -237,7 +219,7 @@ fn a_break_of_html_alone_goes_before_the_word() {
   assert_eq!(word("<br>").as_deref(), Some(""), "a word of a break alone is empty");
   assert_eq!(word("<br/>\n```\nclose(1)").as_deref(), Some("close(1)"));
   assert_eq!(word("<BR />\nclose(1)").as_deref(), Some("close(1)"));
-  assert_eq!(word("close(1)\n<br>"), None, "a break after a line of the word stays for the gate");
+  assert_eq!(word("close(1)\n<br>"), None, "a break after a line of the word stays for its run");
 }
 
 #[test]

@@ -152,7 +152,6 @@ def __lasting(name, ear):
   "parking": __parking,
   "park": lambda names: __parked.update(names),
   "unpark": lambda name: __parked.discard(name),
-  "against": lambda on, word: __sheet["against"](__engine, __gate, on, word) if __gating() else [],
   "lasting": __lasting,
   "unmade": lambda: __sheet["Recorded"](),
   "recorded": lambda entries: __sheet["recorded"](__engine, entries),
@@ -194,8 +193,6 @@ pub(crate) struct Opened {
   pub(super) park: Object,
   /// A name taken out of the parked names of the park.
   pub(super) unpark: Object,
-  /// What the gate finds against a word on a chain, which makes no fact.
-  pub(super) against: Object,
   /// An ear wrapped so that it starts again after it raises.
   pub(super) lasting: Object,
   /// What stands for a callable of the record of an earlier life: a value equal to each callable.
@@ -233,7 +230,6 @@ impl Opened {
       parking: at("parking")?,
       park: at("park")?,
       unpark: at("unpark")?,
-      against: at("against")?,
       lasting: at("lasting")?,
       unmade: at("unmade")?,
       recorded: at("recorded")?,

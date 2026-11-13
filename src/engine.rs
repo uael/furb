@@ -433,8 +433,8 @@ impl Outside {
     self.inward(sand, &got?)
   }
 
-  /// What the host calls while the life waits on it, answered at once: who speaks, a callable the engine made, what
-  /// the gate finds against a word on a chain with no fact, or a verb of the engine, as it goes out.
+  /// What the host calls while the life waits on it, answered at once: who speaks, a callable the
+  /// engine made, or a verb of the engine, as it goes out.
   fn asked(&mut self, sand: &mut Sand, call: Call) -> Result<Object, Fault> {
     let Call { verb, args, kwargs } = call;
     let kwargs: Vec<_> = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
@@ -451,12 +451,6 @@ impl Outside {
         let named =
           pairs.iter().filter_map(|(key, one)| Some((key.as_str()?, one.to_owned()))).collect();
         self.called_back(sand, n, words, named)
-      }
-      "against" => {
-        let (args, _) = self.inwards(sand, &args, vec![])?;
-        let against = self.opened.against.clone();
-        let got = sand.call(self, &against, args, vec![])?;
-        self.outward(sand, &got)
       }
       _ => self.verb(sand, &verb, args, kwargs),
     }

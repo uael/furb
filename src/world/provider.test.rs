@@ -728,11 +728,11 @@ fn a_quote_that_the_model_writes_in_small_chunks_holds_until_its_close_mark_and_
 }
 
 #[test]
-fn a_quote_that_the_gate_refuses_while_it_streams_is_cut_at_its_close_mark_not_its_open_mark() {
-  // The quote binds the name of an act, which the gate refuses on the line of its open mark, and
-  // its close mark comes in a later chunk: the turn holds the whole quote, so no finding says
-  // that the quote has no close mark.
-  let parts = ["<s:reply1", ">\nHel", "lo\nwor", "ld\n</s", ":reply1>\nclo", "se(len(", "reply1))"];
+fn a_quote_on_the_line_of_a_fault_is_cut_at_its_close_mark_not_its_open_mark() {
+  // The quote stands where the body of the block must, so the statement that cannot be python is
+  // on the line of its open mark, and its close mark comes in a later chunk: the turn holds the
+  // whole quote, so no raise says that the quote has no close mark.
+  let parts = ["if True:\n<s:q", ">\nHel", "lo\nwor", "ld\n</s", ":q>\nclo", "se(len(", "q))"];
   let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
   let events: Vec<_> = parts
     .iter()
@@ -740,9 +740,9 @@ fn a_quote_that_the_gate_refuses_while_it_streams_is_cut_at_its_close_mark_not_i
     .chain([MockStreamEvent::FinalResponse(StreamFinal::new("mock", usage))])
     .collect();
   let model = MockCompletionModel::from_stream_turns([events]);
-  let (mut engine, _) = life("refused-quote", vec![scripted(&model)]);
+  let (mut engine, _) = life("fault-quote", vec![scripted(&model)]);
   asked(&mut engine);
-  assert_eq!(replied(&mut engine), cut("<s:reply1>\nHello\nworld\n</s:reply1>"));
+  assert_eq!(replied(&mut engine), cut("if True:\n<s:q>\nHello\nworld\n</s:q>"));
   assert!(!told_of(&mut engine, &["has no close mark"]), "the quote that closes is not told open");
 }
 
@@ -2481,26 +2481,29 @@ fn a_statement_that_raised_ends_the_reply_with_the_word_that_ran_whose_run_is_do
 #[test]
 fn once_a_part_ran_a_fault_after_it_ends_the_reply_with_the_word_that_ran_and_the_chain_is_told_the_fault()
  {
-  let model = Halting::writes(&["x = 3\n", "y = nothing_binds_this\n", "z = 1\n"]);
+  let model = Halting::writes(&["x = 3\n", "y = = 2\n", "z = 1\n"]);
   let (mut engine, _) = life("after", vec![Model::new("m", 1000, model)]);
   asked(&mut engine);
   assert_eq!(replied(&mut engine), cut("x = 3"));
   assert!(
-    until(&mut engine, |engine| told_of(engine, &["is the word that ran", "nothing_binds_this"])),
+    until(&mut engine, |engine| told_of(
+      engine,
+      &["is the word that ran", "line 2: the statement there cannot be python"]
+    )),
     "the chain is told the fault of the statement after the word that ran"
   );
   assert!(until(&mut engine, |engine| ran(engine, "x = 3")), "the word that ran runs");
 }
 
 #[test]
-fn the_note_of_a_fault_after_the_word_that_ran_is_python_that_binds_the_findings_under_the_rung() {
-  let model = Halting::writes(&["x = 3\n", "y = nothing_binds_this\n", "z = 1\n"]);
+fn the_note_of_a_fault_after_the_word_that_ran_is_python_that_binds_its_why_under_the_rung() {
+  let model = Halting::writes(&["x = 3\n", "y = = 2\n", "z = 1\n"]);
   let (mut engine, _) = life("noted", vec![Model::new("m", 1000, model)]);
   asked(&mut engine);
   assert_eq!(replied(&mut engine), cut("x = 3"));
   assert!(until(&mut engine, |engine| told_of(
     engine,
-    &["is the word that ran", "nothing_binds_this"]
+    &["is the word that ran", "_why = 'line 2: the statement there cannot be python'"]
   )));
   let next = |engine: &mut Engine| {
     said(engine).iter().any(|(kind, about, _)| kind == "done" && about == "reply3")
@@ -2538,7 +2541,7 @@ fn the_note_of_a_fault_after_the_word_that_ran_shows_the_last_lines_that_ran() {
 }
 
 #[test]
-fn a_finding_of_the_gate_on_a_word_whose_part_ran_claims_no_word_that_ran_nothing() {
+fn a_turn_that_is_not_python_after_the_part_that_ran_is_the_word_that_ran() {
   let model = streaming(&[("x = 3\ny = x\nThat is all, the count is done.", Usage::new())]);
   let (mut engine, _) = life("markup", vec![Model::new("m", 1000, model)]);
   asked(&mut engine);
@@ -2546,13 +2549,9 @@ fn a_finding_of_the_gate_on_a_word_whose_part_ran_claims_no_word_that_ran_nothin
   assert!(
     until(&mut engine, |engine| told_of(
       engine,
-      &["line 2: y = x", "no statement after the part that ran runs"]
+      &["line 2: y = x", "line 3: the statement there cannot be python"]
     )),
-    "the chain is told that no statement after the part that ran runs"
-  );
-  assert!(
-    !told_of(&mut engine, &["nothing of this word ran"]),
-    "no note says that nothing of the word ran"
+    "the chain is told the line of the turn that cannot be python"
   );
 }
 

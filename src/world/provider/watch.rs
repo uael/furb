@@ -1,33 +1,25 @@
 //! The watch over the word of a reply while its model writes it.
 //!
-//! A word is python, and a statement of it that cannot be python stays so whatever the model writes after it. So the
-//! provider reads the statements that a model finished, each as it finishes, and ends the reply at the first one
-//! that cannot be python, with the word as far as that statement. The gate refuses that word, as it refuses the
-//! whole one, and the model is not made to write the rest of a word that the chain will refuse.
-//!
-//! A statement that is python can still hold a fault that the gate finds, as a name that nothing binds. A later
-//! statement mends no such fault in a statement at the top of the word, which runs before it, unless the statement
-//! holds a part that python runs later or never: a function, a class, a lambda, a comprehension or an annotation. So
-//! the provider asks the gate about the statements that a model finished, and ends the reply after the first
-//! statement with no such part that holds a fault.
+//! A word is python, and a statement of it that cannot be python stays so whatever the model
+//! writes after it. So the provider reads the statements that a model finished, each as it
+//! finishes, and ends the reply at the first one that cannot be python, with the word as far as
+//! that statement. The run of that word raises there, as the run of the whole one does, and the
+//! model is not made to write the rest of a word that cannot run.
 //!
 //! Whether the statements that a model wrote so far are whole is the answer of the parser of
 //! monty, the one judge of the grammar: a string, a bracket or a block that stands open makes them
 //! incomplete, whatever line starts at the left edge inside it, as a paragraph of a triple quote
 //! does. A line at the left edge after them only says that no block of theirs goes on.
 //!
-//! The statements that a model finished, and that the gate finds nothing against, run as the model writes the rest:
-//! the provider says each new part of the word as a writing of its rung, a fact that the Kernel hears and runs. A
-//! statement that raised ends the word where it raised, which the Kernel says as the fact ran, so the reply ends
-//! there. Once a part ran, the turn of the reply is never a word other than the one that ran: it is the word as far
-//! as the parts that ran, whatever the model wrote after them that the chain would refuse, since a later life runs
-//! the word of the rung and a statement of it must run there as it ran.
+//! The statements that a model finished run as the model writes the rest: the provider says each
+//! new part of the word as a writing of its rung, a fact that the Kernel hears and runs. A
+//! statement that raised ends the word where it raised, which the Kernel says as the fact ran, so
+//! the reply ends there. Once a part ran, the turn of the reply is never a word other than the one
+//! that ran: it is the word as far as the parts that ran, whatever the model wrote after them that
+//! cannot be python, since a later life runs the word of the rung and a statement of it must run
+//! there as it ran.
 
 use monty::{ReplContinuationMode, detect_repl_continuation_mode};
-use ruff_python_ast::{
-  Expr, Stmt,
-  visitor::{self, Visitor},
-};
 use ruff_python_parser::{ParseErrorType, parse_module};
 use ruff_text_size::Ranged;
 
@@ -370,60 +362,10 @@ pub(super) fn broken(word: &str) -> Option<usize> {
   (start < last && !(lexical && end >= last)).then(|| word[..start].matches('\n').count() + 1)
 }
 
-/// The first and the last line, counted from 1, of each statement at the top of a word whose faults no later
-/// statement can mend, or none when the word is not python.
-pub(super) fn settled(word: &str) -> Vec<(usize, usize)> {
-  let Ok(parsed) = parse_module(word) else { return vec![] };
-  let line = |at: usize| word[..at].matches('\n').count() + 1;
-  let body = &parsed.syntax().body;
-  body
-    .iter()
-    .filter(|stmt| {
-      let mut later = Later(false);
-      later.visit_stmt(stmt);
-      !later.0
-    })
-    .map(|stmt| (line(stmt.start().to_usize()), line(stmt.end().to_usize())))
-    .collect()
-}
-
-/// The last line of the first settled statement that holds a finding of the gate, if one does. Each finding starts
-/// with the line of the word that it is found on, as `line 3: ...`.
-pub(super) fn refused(settled: &[(usize, usize)], found: &[String]) -> Option<usize> {
-  let lines: Vec<usize> = found
-    .iter()
-    .filter_map(|one| one.strip_prefix("line ")?.split(':').next()?.parse().ok())
-    .collect();
-  settled
-    .iter()
-    .find(|(first, last)| lines.iter().any(|line| (first..=last).contains(&line)))
-    .map(|(_, last)| *last)
-}
-
-/// Whether a statement holds a part that python runs later or never, which a later statement can change the
-/// meaning of.
-struct Later(bool);
-
-impl<'a> Visitor<'a> for Later {
-  fn visit_stmt(&mut self, stmt: &'a Stmt) {
-    match stmt {
-      Stmt::FunctionDef(_) | Stmt::ClassDef(_) | Stmt::AnnAssign(_) => self.0 = true,
-      _ => visitor::walk_stmt(self, stmt),
-    }
-  }
-
-  fn visit_expr(&mut self, expr: &'a Expr) {
-    match expr {
-      Expr::Lambda(_)
-      | Expr::ListComp(_)
-      | Expr::SetComp(_)
-      | Expr::DictComp(_)
-      | Expr::Generator(_) => {
-        self.0 = true;
-      }
-      _ => visitor::walk_expr(self, expr),
-    }
-  }
+/// The line, counted from 1, of the first fault of a word that is whole, if it is not python.
+pub(super) fn fault(word: &str) -> Option<usize> {
+  let no = parse_module(word).err()?;
+  Some(word[..usize::from(no.location.start())].matches('\n').count() + 1)
 }
 
 #[cfg(test)]

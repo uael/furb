@@ -7,12 +7,12 @@
 //! life polls, and a call that its reply no longer needs ends. It streams, and the host is told
 //! what the model writes as it writes it; what the reply came to the ear says of its own accord.
 //! The ear reads the statements of the word of a reply as the model finishes them, and when one
-//! cannot be python it ends the reply there, with the word as far as that statement, which the gate
-//! refuses. The statements that the gate finds nothing against run as the model writes the rest:
-//! the ear says each new part of them as a writing of the rung, a fact that the Kernel hears and
-//! runs, and a part that raised, which the Kernel says it ran with, ends the reply with the word
-//! that ran. A writing is no act that the ear awaits, since a part that prompts makes a chain ask
-//! this ear for a reply, which it takes only at a yield.
+//! cannot be python it ends the reply there, with the word as far as that statement, whose run
+//! raises there. The statements before it run as the model writes the rest: the ear says each new
+//! part of them as a writing of the rung, a fact that the Kernel hears and runs, and a part that
+//! raised, which the Kernel says it ran with, ends the reply with the word that ran. A writing is
+//! no act that the ear awaits, since a part that prompts makes a chain ask this ear for a reply,
+//! which it takes only at a yield.
 
 mod answer;
 pub mod catalog;
@@ -346,11 +346,11 @@ impl Provider {
   /// backticks at its end, tells its chain so once, before its done. A done of a reply that the ear
   /// did not say ends the call of its model.
   ///
-  /// The ear says each part of a word that the model finished and that the gate finds nothing
-  /// against as a writing of its rung, unless a pause holds the rung. A reply whose part ran is
-  /// done with the word that ran when the Kernel says that the part ran with a raise, when a later
-  /// statement holds a fault, and when its call fails, which is then made no more; and with its
-  /// turn when the gate finds nothing against the whole word, which holds the word that ran.
+  /// The ear says each part of a word that the model finished as a writing of its rung, unless a
+  /// pause holds the rung. A reply whose part ran is done with the word that ran when the Kernel
+  /// says that the part ran with a raise, when a later statement cannot be python, and when its
+  /// call fails, which is then made no more; and with its turn when the whole word is python and
+  /// holds the word that ran.
   ///
   /// A stand from outside an act reads the settings again, after the first: it starts, and the ear
   /// reads them on the runtime of the ears, so every chain of the life goes on meanwhile, and it is

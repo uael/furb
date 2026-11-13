@@ -23,7 +23,7 @@ use super::{
   search::{Error as Unsearched, free},
   thinking::{Thinking, thinks},
   watch::{self, Watch},
-  word::{AFTER, Found, RAN, STOPPED, afterward, ending, judged, kept, unquoted, writing},
+  word::{AFTER, RAN, STOPPED, ending, kept, unpython, unquoted, writing},
 };
 use crate::fact;
 use crate::skill;
@@ -278,8 +278,7 @@ impl Hearer {
   }
 
   /// What the model of a reply that still stands writes, told to the host under the rung it writes
-  /// for, and each new part of its word that the gate finds nothing against, said as a writing of
-  /// that rung.
+  /// for, and each new part of its word, said as a writing of that rung.
   pub(super) async fn wrote(&mut self, co: &mut Co<Replied>, wrote: Wrote) {
     let Wrote { id, text, thinking } = wrote;
     let Some(reply) = self.replies.taken.get_mut(&id) else { return };
@@ -287,7 +286,7 @@ impl Hearer {
     if let Some(writes) = &self.writes {
       writes(&reply.rung, &reply.chain, &text, &thinking);
     }
-    let (chain, rung) = (reply.chain.clone(), reply.rung.clone());
+    let rung = reply.rung.clone();
     let Some(watch) = reply.call.watch.as_mut() else { return };
     let Some(end) = watch.wrote(&text).filter(|_| !text.is_empty()) else { return };
     // The statements before the last line at the left edge, as python: each quote in them bound
@@ -297,44 +296,39 @@ impl Hearer {
       return;
     }
     let Some(word) = unquoted(co, &read).await else { return };
-    let (line, why) = match judged(co, &chain, &word).await {
-      Found::Refused(line, why) => (line, why),
-      Found::Unsettled => return,
-      Found::Nothing => {
-        // The word holds no fault so far, so its new statements run now, as the turn holds them:
-        // from its first line that is not blank, once monty calls them complete. A statement whose
-        // clause starts at the end, as an `else`, waits, and so does a word that monty calls
-        // incomplete or invalid, which the gate of a config turned off finds nothing against.
-        let (word, end) = match watch.clause(end).then(|| watch::last(&word)).flatten() {
-          Some(line) => {
-            let held: String = word.split_inclusive('\n').take(line - 1).collect();
-            (held, watch.start(line))
-          }
-          None if watch.clause(end) => return,
-          None => (word, end),
-        };
-        if watch::complete(&word) != ReplContinuationMode::Complete {
-          return;
+    let Some(line) = watch::broken(&word) else {
+      // The word holds no statement that cannot be python so far, so its new statements run now,
+      // as the turn holds them: from its first line that is not blank, once monty calls them
+      // complete. A statement whose clause starts at the end, as an `else`, waits, and so does a
+      // word that monty calls incomplete or invalid.
+      let (word, end) = match watch.clause(end).then(|| watch::last(&word)).flatten() {
+        Some(line) => {
+          let held: String = word.split_inclusive('\n').take(line - 1).collect();
+          (held, watch.start(line))
         }
-        let given = word.trim_start();
-        let Some((part, before)) = watch.part(given) else { return };
-        if writing(co, &rung, part, before).await {
-          watch.gave(given, end);
-        } else if watch.ran().is_none() {
-          // A word whose first part a pause held is given whole, so no later part of it is given.
-          watch.untaken();
-        }
+        None if watch.clause(end) => return,
+        None => (word, end),
+      };
+      if watch::complete(&word) != ReplContinuationMode::Complete {
         return;
       }
+      let given = word.trim_start();
+      let Some((part, before)) = watch.part(given) else { return };
+      if writing(co, &rung, part, before).await {
+        watch.gave(given, end);
+      } else if watch.ran().is_none() {
+        // A word whose first part a pause held is given whole, so no later part of it is given.
+        watch.untaken();
+      }
+      return;
     };
-    // The word as far as the statement that cannot be python, or that the gate refuses for good,
-    // is the turn of the reply, so the gate refuses it and the chain tells why; and once a part of
-    // the word ran, the turn is the word that ran, which the chain runs as it ran, and the chain
-    // is told why before it. The model wrote no more of it that counts, and its call ends with the
-    // reply.
+    // The word as far as the statement that cannot be python is the turn of the reply, so its run
+    // raises there and the chain tells why; and once a part of the word ran, the turn is the word
+    // that ran, which the chain runs as it ran, and the chain is told why before it. The model
+    // wrote no more of it that counts, and its call ends with the reply.
     let ran = watch.ran().map(str::to_owned);
     let Ok(turn) = cut(ran.as_deref().unwrap_or_else(|| watch.through(line))) else { return };
-    let note = ran.map(|ran| (AFTER, [("findings", afterward(&why)), ("ran", ending(&ran))]));
+    let note = ran.map(|ran| (AFTER, [("why", unpython(line)), ("ran", ending(&ran))]));
     self.replies.end(co, &id, Ending { turn, note }).await;
   }
 
@@ -683,7 +677,7 @@ fn departed(about: &str, names: &[String]) -> String {
   format!("#{about} names left the catalog\n{about}_left = [{list}]")
 }
 
-/// A note of the chain about the turn of a rung: its header, then each text that the gate or the
+/// A note of the chain about the turn of a rung: its header, then each text that the watch or the
 /// call gave, which the engine binds under the rung as it binds a value of an act, so the turn that
 /// holds the note stays python. A text after the header as a line of its own is no python, and the
 /// run of the turn would raise a `SyntaxError`.
