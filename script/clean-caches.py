@@ -5,7 +5,8 @@ Usage: python3 script/clean-caches.py [--scratch DIR] [--uv DIR]
 A scratch directory of a record that holds nothing but its mark file, and that no life holds, goes: a life makes it
 again from its record. A life holds its directory by a shared lock on the mark, so a directory that a life holds, a
 directory that holds a file, the folder of the scratch directories and its stamp stay. The cache of uv is pruned, which
-removes each unpacked wheel and each editable build that no entry points to. The folders default to those of this
+removes each unpacked wheel and each editable build that no entry points to. It reads no config: the project
+sets no-cache for uv, which makes a prune in the tree prune a cache that holds nothing. The folders default to those of this
 machine.
 """
 
@@ -54,7 +55,7 @@ def main(args: list[str]) -> int:
   folders = [one for one in given.scratch.iterdir() if one.is_dir() and RECORD.fullmatch(one.name)]
   sys.stdout.write(f"{sum(map(swept, folders))} scratch directories removed, of {len(folders)}\n")
   env = {**os.environ, **({"UV_CACHE_DIR": str(given.uv)} if given.uv else {})}
-  return subprocess.run(["uv", "cache", "prune"], env=env, check=False).returncode  # noqa: S607
+  return subprocess.run(["uv", "--no-config", "cache", "prune"], env=env, check=False).returncode  # noqa: S607
 
 
 if __name__ == "__main__":
