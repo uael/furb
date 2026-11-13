@@ -23,10 +23,13 @@ def seed(names, data):
     words and entries.append(((sort, called, *words),))
 
   asking = {a["on"] for a in data["acts"] if "value" not in a}
-  # The journal makes no act whose thread it does not know yet, and an open prompt comes after each act with a value,
-  # so seed makes no act with a value on an open prompt again, and its facts stay in the prefix.
-  opened = {a["id"] for a in data["acts"] if "value" not in a}
-  kinds = {x["id"]: x["kind"] for x in data["acts"] if "value" not in x or x["on"] not in opened}
+  # The journal makes an act again only on a chain or an act that it knows when the entry comes, and each act with a
+  # value comes before each open prompt. home gives each act that it makes again the chain that the act is on, and
+  # the facts of each other act, as one with a value on an open prompt, stay in the prefix.
+  home, kinds = {c["id"]: c["id"] for c in data["chains"]}, {}
+  for x in sorted(data["acts"], key=lambda a: "value" not in a):
+    if x["on"] in home:
+      home[x["id"]], kinds[x["id"]] = home[x["on"]], x["kind"]
   parts = {}
   for c in data["chains"]:
     put("chain", i := c["id"], operator, c["on"], c["label"], "")
@@ -35,7 +38,9 @@ def seed(names, data):
       for k in c["values"]
     )
     parts[i] = [*filter(None, [v, *([d] if isinstance(d := c["definitions"], str) else d), v, *c.get("lives", ())])]
-    kept = [t for t in c["turns"] if t[1] not in kinds or t[0] not in ("started", "done", kinds[t[1]])]
+    kept = [
+      t for t in c["turns"] if t[1] not in kinds or home[t[1]] != i or t[0] not in ("started", "done", kinds[t[1]])
+    ]
     entries += [(("carried", i, "journal", c["turns"], c["values"], parts[i]),), (("prefix", i, i, kept),)]
     (c["paused"] or i in asking) and entries.append((("pause", i, operator),))
   for x in data["acts"]:

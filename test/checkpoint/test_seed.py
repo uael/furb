@@ -120,7 +120,7 @@ async def test_each_act_of_the_data_with_a_value_stands_known_on_its_chain_with_
 async def test_a_rung_of_the_operator_on_each_chain_awaits_in_turn_a_rung_of_each_part_of_the_birth_that_the_fact_carried_of_the_chain_holds_and_tells_what_the_checkpoint_lost_and_cut_and_it_runs_no_word_again_so_the_model_of_the_chain_starts_a_cut_word_again_in_a_turn_that_shows() -> (
   None
 ):
-  """A rung of the operator on each chain awaits in turn a rung of each part of the birth that the fact carried of the chain holds, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain holds the turns of its fact carried as its prefix, and once the parts ran, that rung says a cut on the chain that holds no cut, which keeps each fact that the chain reads but what the birth told and did not debug, so a reader reads a birth by the fact carried that the cut keeps, and no clear, and a replay of the rung cuts nothing again."""
+  """A rung of the operator on each chain awaits in turn a rung of each part of the birth that the fact carried of the chain holds, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows; the chain holds as its prefix the turns of its fact carried but the question, the started and the done of each act on it that seed makes again, and once the parts ran, that rung says a cut on the chain that holds no cut, which keeps each fact that the chain reads but what the birth told and did not debug, so a reader reads a birth by the fact carried that the cut keeps, and no clear, and a replay of the rung cuts nothing again."""
   _, log = await seeded()
   root = engine.module("chain1")
   assert (root["f"](), root["shell"], engine.module("chain3").get("SIZE")) == (6, "bash2", None)
@@ -135,9 +135,6 @@ async def test_a_rung_of_the_operator_on_each_chain_awaits_in_turn_a_rung_of_eac
     "The life goes on from a checkpoint. It lost ['gone'], and it cut ['rung9']."
   ]
   assert [x for x in said(log, "cut") if x[1] == "chain3"]
-  assert [x[3] for x in said(log, "prefix") if x[1] == "chain3"] == [
-    x[3] for x in said(log, "carried") if x[1] == "chain3"
-  ]
   assert [x[1] for x in said(log, "cut") for f in x[3] if f[0] == "carried" and f[1] != x[1]] == []
   engine.wake("chain3")
   await settle()
@@ -147,6 +144,17 @@ async def test_a_rung_of_the_operator_on_each_chain_awaits_in_turn_a_rung_of_eac
   )
   assert "late" not in engine.module("chain3")
   assert [x for x in engine.transcript("chain3", "rung") if x[2] == "prompt1"]
+  turns = [
+    ("tell", "prompt1", "prompt1", ["#prompt1"]),
+    ("prompt", "prompt1", OPERATOR, "chain3", "str", "Wait.", ""),
+    ("started", "prompt1", "prompt1"),
+  ]
+  chains = [chain("chain1", "", "root"), chain("chain3", "chain1", "work", turns=turns)]
+  held, _ = life(sown(), checkpoint.seed(vars(engine), {**DATA, "chains": chains}))
+  await settle()
+  heads = lambda kind: [[tuple(f[:2]) for f in x[3]] for x in said(held, kind) if x[1] == "chain3"]  # noqa: E731
+  assert heads("carried") == [[("tell", "prompt1"), ("prompt", "prompt1"), ("started", "prompt1")]]
+  assert heads("prefix") == [[("tell", "prompt1")]]
 
 
 async def test_each_chain_with_an_open_prompt_opens_paused_while_the_seed_binds_it_and_wakes_after_it_unless_the_data_says_it_was_paused_so_an_open_prompt_asks_its_model_again_at_once() -> (
@@ -467,10 +475,10 @@ async def test_each_act_of_the_data_with_a_value_is_made_before_each_open_prompt
   assert len(said(log, "reply")) == 1
 
 
-async def test_the_prefix_of_a_born_chain_holds_no_question_started_or_done_of_an_act_that_seed_makes_again_so_each_act_of_the_data_stands_once_in_the_transcript_of_its_chain() -> (
+async def test_the_prefix_of_a_born_chain_holds_no_question_started_or_done_of_an_act_on_that_chain_that_seed_makes_again_so_each_act_of_the_data_stands_once_in_the_transcript_of_its_chain() -> (
   None
 ):
-  """The prefix of a born chain holds no question, started or done of an act that seed makes again, so each act of the data stands once in the transcript of its chain: after the facts of the prefix, or in the prefix for an act with a value on an open prompt, which seed does not make again."""
+  """The prefix of a born chain holds no question, started or done of an act on that chain that seed makes again, so each act of the data stands once in the transcript of its chain: after the facts of the prefix, or in the prefix for an act that seed does not make again, whose thread the journal does not know when the act comes, as an act with a value on an open prompt and each act on such an act."""
   _, _, root = born()
   work = engine.chain("work", on=root)
   await settle()
@@ -486,19 +494,54 @@ async def test_the_prefix_of_a_born_chain_holds_no_question_started_or_done_of_a
   engine.close(7, engine.module(work)["job"])
   note = engine.prompt(None, "Note.", on=engine.module(root)["waiting"])
   await settle()
+  deep, shut = engine.prompt(str, "Deep?", on=note), engine.prompt(str, "Shut?", on=note)
+  await settle()
+  engine.close("x", shut)
+  await settle()
   data = checkpoint.gathered(vars(engine), lambda one: one, {})
   carried = {a["id"]: (a["kind"], a["on"]) for a in data["acts"]}
   opened = {a["id"] for a in data["acts"] if "value" not in a}
+  inert = {note, deep, shut}
   life(sown(), checkpoint.seed(vars(engine), data))
   await settle()
   assert {"stand", "clock", "prompt", "bash", "read", "write", "wait", "cd", "chance"} <= {
     x for x, _ in carried.values()
   }
   assert carried[note][1] in opened and carried[engine.module(root)["sub"]][1] in opened
+  assert (carried[deep][1], carried[shut][1], deep in opened, shut in opened) == (note, note, True, False)
+
+  def home(on: str) -> str:
+    return on if on in (root, work) else home(carried[on][1])
+
   for one, (kind, on) in carried.items():
-    facts = engine.transcript(engine.scope(on))
+    facts = engine.transcript(home(on))
     asked = [n for n, x in enumerate(facts) if x[:2] == (kind, one)]
     ended = [x for x in facts if x[:2] == ("done", one)]
     told = [n for n, x in enumerate(facts) if x[:2] == ("tell", one)]
     assert (len(asked), len(ended)) == (1, int(one not in opened)), one
-    assert one in opened or on in opened or asked[0] > max(told, default=-1), one
+    assert (engine.get(one) is None) == (one in inert), one
+    assert one in opened or one in inert or asked[0] > max(told, default=-1), one
+
+
+async def test_a_born_chain_with_a_source_keeps_in_its_prefix_each_fact_of_an_act_that_it_inherited_so_a_chain_whose_source_is_the_born_chain_reads_that_act() -> (
+  None
+):
+  """A born chain with a source keeps in its prefix each fact that its fact carried holds of an act that it inherited, since seed makes that act again on the chain that it is on alone, so a chain whose source is the born chain reads that act."""
+  _, _, root = born()
+  await engine.rung("shell = bash('echo one')\nawait shell", on=root)
+  fork = engine.chain("fork", root)
+  await settle()
+  shell = str(engine.module(root)["shell"])
+
+  def held(on: str) -> list[tuple]:
+    return [tuple(x[:2]) for x in engine.transcript(on) if x[1] == shell and x[0] in ("bash", "started", "done")]
+
+  assert held(fork) == [("bash", shell), ("started", shell), ("done", shell)]
+  life(sown(), checkpoint.seed(vars(engine), checkpoint.gathered(vars(engine), lambda one: one, {})))
+  await settle()
+  assert held(fork) == [("bash", shell), ("started", shell), ("done", shell)]
+  assert [x for x in held(root) if x[0] != "started"] == [("bash", shell), ("done", shell)]
+  assert engine.scope(shell) == root
+  again = engine.chain("again", fork)
+  await settle()
+  assert [t[1] for t in engine.turns(on=again) if f"#{shell} exited 0" in str(t[1])] != []
