@@ -23,8 +23,17 @@ test("a value that is no JSON is the text that the operator typed", () => {
 test("/config shows each key with its schema, flips a flag, takes a key out and refuses a value of another kind", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-config-menu-"));
   const path = join(directory, ".furb", "config.json");
-  await mkdir(join(directory, ".furb"));
-  await writeFile(path, JSON.stringify({ other: 1 }));
+  // A skill of the project gives a flag of its own, since furb names none.
+  const skill = join(directory, ".furb", "note");
+  await mkdir(skill, { recursive: true });
+  const manifest =
+    "name: note\ndescription: A test.\nmetadata:\n  furb-word: note.py\n  furb-config: keys.json";
+  await writeFile(join(skill, "SKILL.md"), `---\n${manifest}\n---\n`);
+  await writeFile(join(skill, "note.py"), "");
+  const loud = { type: "boolean", default: true, description: "Say each note aloud." };
+  await writeFile(join(skill, "keys.json"), JSON.stringify({ properties: { loud } }));
+  const held = { other: 1, skills: { note: "note" } };
+  await writeFile(path, JSON.stringify(held));
   const opened = await openEngine({
     cwd: directory,
     record: join(directory, "life.jsonl"),
@@ -35,28 +44,28 @@ test("/config shows each key with its schema, flips a flag, takes a key out and 
   const session = new Session(opened.engine, opened.host, false, new Preferences(join(directory, "ui.json")));
   try {
     await session.refresh();
-    const gate = (await session.host.settings()).find((one) => one.key.join(".") === "gate");
-    expect([gate?.value, gate?.layer, gate?.property?.type]).toEqual([true, undefined, "boolean"]);
+    const flag = (await session.host.settings()).find((one) => one.key.join(".") === "note.loud");
+    expect([flag?.value, flag?.layer, flag?.property?.type]).toEqual([true, undefined, "boolean"]);
     await composing(
       async ({ app, frame, screen }) => {
         app.configs();
         await session.host.settings();
         expect(await frame()).toContain("Not in a schema");
-        await screen.mockInput.typeText("gate");
-        expect(await frame()).toContain("Read each word of a model");
+        await screen.mockInput.typeText("loud");
+        expect(await frame()).toContain("Say each note aloud.");
         // A flag offers its two values, with the one that holds first, then the config to write.
         screen.mockInput.pressEnter();
         expect(await frame()).toContain("the default");
         screen.mockInput.pressArrow("down");
         screen.mockInput.pressEnter();
-        expect(await frame()).toContain("Write gate = false to");
+        expect(await frame()).toContain("Write note.loud = false to");
         screen.mockInput.pressEnter();
-        await until(session, () => session.notice.startsWith("gate is false"));
-        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ other: 1, gate: false });
-        const refusal = await session.command("/config gate maybe").catch(String);
+        await until(session, () => session.notice.startsWith("note.loud is false"));
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ ...held, note: { loud: false } });
+        const refusal = await session.command("/config note.loud maybe").catch(String);
         expect(refusal).toContain("takes a boolean");
-        await session.command("/config gate");
-        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ other: 1 });
+        await session.command("/config note.loud");
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ ...held, note: {} });
       },
       { width: 120, height: 44, useMouse: true },
       session,
@@ -83,7 +92,7 @@ test("the rows of a key with an enum give its values on a row of their own, and 
     ["layer", "project config"],
   ]);
   const flag: Setting = {
-    key: ["gate"],
+    key: ["loud"],
     value: true,
     property: { type: "boolean", default: true, description: "" },
   };

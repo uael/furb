@@ -22,7 +22,7 @@ use crate::{
   Act, Ear, Engine, Fact, Object, Text, checkpoint,
   checkpoint::CHECKPOINT,
   ear::{ear, hear, say},
-  gate, sand,
+  sand,
   sand::BOUND,
   skill::enabled,
   testing,
@@ -31,25 +31,12 @@ use crate::{
   verbs, wire, world,
 };
 
-/// A directory of its own for one test, and empty, where the provider asks the gate about each
-/// word that a model writes, as in a life of an operator.
+/// A directory of its own for one test, and empty.
 fn yard(name: &str) -> Yard {
   static MADE: AtomicUsize = AtomicUsize::new(0);
   let n = MADE.fetch_add(1, Relaxed);
   Yard::new(format!("furb-life-{name}-{}-{n}", process::id()))
 }
-
-/// A directory of its own for one test, whose project config turns the gate off, so the provider
-/// asks the gate about no word.
-fn place(name: &str) -> Yard {
-  let at = yard(name);
-  fs::create_dir_all(at.join(".furb")).unwrap();
-  fs::write(at.join(".furb/config.json"), GATE_OFF).unwrap();
-  at
-}
-
-/// The project config that turns the gate off.
-const GATE_OFF: &str = r#"{"gate": false}"#;
 
 /// A life in a directory of the tests, on its record and on the configs of that directory, whose provider offers
 /// the operator alone.
@@ -83,7 +70,7 @@ fn kinds(record: &[Object]) -> Vec<String> {
 
 #[test]
 fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record_enables() {
-  let at = place("configs");
+  let at = yard("configs");
   let (mut first, _) = opening(&at, true).boot::<String>([]).unwrap();
   assert_eq!(names(&mut first), ["catchup", "memory", "skills", "compaction", "naming"]);
   drop(first);
@@ -110,7 +97,7 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
 #[test]
 fn a_life_that_inspects_its_record_keeps_nothing_enables_nothing_new_and_its_ears_that_do_work_are_silent()
  {
-  let at = place("inspects");
+  let at = yard("inspects");
   fs::write(at.join("a.txt"), "one\n").unwrap();
   drop(Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap());
   let before = fs::read_to_string(at.join("record.jsonl")).unwrap();
@@ -126,7 +113,7 @@ fn a_life_that_inspects_its_record_keeps_nothing_enables_nothing_new_and_its_ear
 #[test]
 fn the_ears_of_the_crate_come_after_the_ears_of_the_host_each_under_the_name_every_host_hears_it_by()
  {
-  let at = place("ears");
+  let at = yard("ears");
   let (_, ears) = opening(&at, true).parts().unwrap();
   let names: Vec<&str> = ears.iter().map(|(name, _)| name.as_str()).collect();
   assert_eq!(
@@ -155,7 +142,7 @@ fn mine() -> Box<dyn Ear> {
 #[test]
 fn a_life_that_keeps_a_record_writes_a_new_file_and_a_new_file_in_a_new_folder_to_its_scratch_directory()
  {
-  let at = place("scratch");
+  let at = yard("scratch");
   let (mut engine, _) =
     Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap();
   let root = engine.root().to_owned();
@@ -177,7 +164,7 @@ fn a_life_that_keeps_a_record_writes_a_new_file_and_a_new_file_in_a_new_folder_t
 #[test]
 fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later_life_writes_it_again_from_its_start()
  {
-  let at = place("log");
+  let at = yard("log");
   let record = at.join("record.jsonl");
   let open = || Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
   let mut engine = open();
@@ -230,7 +217,7 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
 #[test]
 fn a_later_life_writes_in_its_log_each_act_of_its_record_that_an_ear_of_the_outside_made_and_does_not_make_again()
  {
-  let at = place("owed");
+  let at = yard("owed");
   let record = at.join("record.jsonl");
   let open = || {
     let opening = Opening { skills: Some(false), ..opening(&at, true) };
@@ -274,7 +261,7 @@ fn stood(engine: &mut Engine) -> Result<Object, Fault> {
 #[test]
 fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake()
  {
-  let at = place("cut");
+  let at = yard("cut");
   let (asked, heard) = unbounded::<()>();
   let asked = Mutex::new(asked);
   // The first model writes a part of its turn, and the life stops while it writes the rest.
@@ -329,7 +316,7 @@ fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a
   // A bound of one second cuts the word as a longer one would, and the replay of a shorter run
   // takes less time.
   cut_first(Duration::from_secs(1));
-  let at = place("clock-spin");
+  let at = yard("clock-spin");
   let poll = "t0 = clock()\nwhile clock() - t0 < 60:\n  pass\nclose('polled')";
   let twice = "a = clock()\nb = clock()\nclose(b >= a)";
   let mut life =
@@ -394,7 +381,7 @@ fn a_word_that_loops_on_an_answer_of_the_host_ends_at_the_bound_of_a_turn_with_a
   // A bound of one second cuts the word as a longer one would, and the replay of a shorter run
   // takes less time.
   cut_first(Duration::from_secs(1));
-  let at = place("cd-spin");
+  let at = yard("cd-spin");
   let spin = "while True:\n  cd('.')";
   let mut life = Opening { skills: Some(false), ..scripted(&at, &[spin, "close(1)"]) }
     .boot::<String>([])
@@ -422,7 +409,7 @@ fn a_word_that_loops_on_an_answer_of_the_host_ends_at_the_bound_of_a_turn_with_a
 #[test]
 fn a_word_that_catches_the_refusal_of_the_bound_and_loops_ends_its_step_and_leaves_no_deadline() {
   BOUND.set(Duration::from_secs(2));
-  let at = place("clock-caught");
+  let at = yard("clock-caught");
   let caught = "while True:\n  try:\n    clock()\n  except Refused:\n    pass";
   let mut first =
     Opening { skills: Some(false), ..scripted(&at, &[caught]) }.boot::<String>([]).unwrap().0;
@@ -443,7 +430,7 @@ fn a_word_that_catches_the_refusal_of_the_bound_and_loops_ends_its_step_and_leav
 
 #[test]
 fn a_life_whose_open_act_a_verb_of_no_words_made_ends_with_a_checkpoint_in_its_record() {
-  let at = place("ends-kept");
+  let at = yard("ends-kept");
   let mut life = Opening { skills: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   // A verb with no words makes an act that makes an open prompt, as name_session makes the
   // prompt of its chain.
@@ -462,7 +449,7 @@ fn a_life_whose_open_act_a_verb_of_no_words_made_ends_with_a_checkpoint_in_its_r
 #[test]
 fn a_life_whose_module_binds_the_name_of_a_builtin_opens_from_its_checkpoint_with_the_module_of_its_replay()
  {
-  let at = place("builtin");
+  let at = yard("builtin");
   let open = || Opening { skills: Some(false), ..opening(&at, true) };
   let read = |life: &mut Engine| closed(life, "close([list, k, j])").as_ref().py_repr();
   let mut first = open().boot::<String>([]).unwrap().0;
@@ -502,7 +489,7 @@ fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
   // A bound of 100 ms may pass before the loop enters its `try` on a loaded machine, and the
   // refusal then raises outside it, so no `finally` runs and no second excess stops the life.
   BOUND.set(Duration::from_secs(1));
-  let at = place("faulted");
+  let at = yard("faulted");
   let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
   let mut first =
     Opening { skills: Some(false), ..scripted(&at, &[cutter]) }.boot::<String>([]).unwrap().0;
@@ -557,7 +544,7 @@ fn builds(record: &Path) -> Vec<String> {
 #[test]
 fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_database() {
   for name in ["record.jsonl", "record.db"] {
-    let at = place(&format!("made-{name}"));
+    let at = yard(&format!("made-{name}"));
     let record = at.join(name);
     let open = || {
       let path = Some(record.display().to_string());
@@ -585,7 +572,7 @@ fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_datab
 
 #[test]
 fn a_record_that_names_no_engine_replays_as_before_and_names_none() {
-  let at = place("unnamed");
+  let at = yard("unnamed");
   let record = at.join("record.jsonl");
   let open = || Opening { skills: Some(false), ..opening(&at, true) };
   let mut first = open().boot::<String>([]).unwrap().0;
@@ -643,7 +630,7 @@ fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
 
 #[test]
 fn a_record_of_another_engine_that_holds_no_texts_replays_and_goes_on() {
-  let at = place("same-version");
+  let at = yard("same-version");
   let made = made_of(&"0".repeat(64));
   let (record, _) = made_elsewhere(&at, &made);
   let open = || Opening { skills: Some(false), ..opening(&at, true) };
@@ -656,7 +643,7 @@ fn a_record_of_another_engine_that_holds_no_texts_replays_and_goes_on() {
 #[test]
 fn a_record_of_another_engine_crosses_to_this_build_by_a_checkpoint_and_goes_on_with_its_kernel() {
   use sha2::{Digest, Sha256};
-  let at = place("texts");
+  let at = yard("texts");
   let source = format!("{}\ncrossed = True\n", crate::ENGINE);
   let mut hash = Sha256::new();
   let held = [source.as_str(), crate::KERNEL, crate::CHECKPOINTER];
@@ -698,7 +685,7 @@ fn a_record_of_another_engine_crosses_to_this_build_by_a_checkpoint_and_goes_on_
 #[test]
 fn a_record_whose_fact_made_holds_no_checkpointer_seeds_and_gathers_with_the_engine_that_it_holds()
 {
-  let at = place("checkpointer");
+  let at = yard("checkpointer");
   let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus").join("next");
   laid(&corpus.join("work.jsonl"), &at.join("record.jsonl"));
   let kept = world::kept(at.join("record.jsonl")).unwrap();
@@ -757,7 +744,7 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
 #[test]
 fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_stand_again() {
   use std::os::unix::fs::PermissionsExt;
-  let at = place("discovery");
+  let at = yard("discovery");
   let bin = at.join("claude");
   let fake = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/world/provider/claude/fake-claude.sh");
   // A program written now has a stamp of its own, so no discovery of an earlier run in the cache of furb answers it.
@@ -794,7 +781,7 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
 
 #[test]
 fn a_life_opens_when_its_actor_and_a_roster_name_left_the_catalog_and_tells_each_chain_once() {
-  let at = place("catalog-left");
+  let at = yard("catalog-left");
   let (mut engine, _) = Opening {
     skills: Some(false),
     roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:gone".to_owned()].into()),
@@ -817,7 +804,7 @@ fn a_life_opens_when_its_actor_and_a_roster_name_left_the_catalog_and_tells_each
 
 #[test]
 fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_stood_on_last() {
-  let at = place("stood-again");
+  let at = yard("stood-again");
   let both = "close((standing()[2], sorted(a[0] for a in standing()[0])))";
   let given = Opening {
     skills: Some(false),
@@ -843,7 +830,7 @@ fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_sto
 
 #[test]
 fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
-  let at = place("provider-settings");
+  let at = yard("provider-settings");
   fs::create_dir_all(at.join("config")).unwrap();
   fs::write(
     at.join("config/config.json"),
@@ -851,6 +838,7 @@ fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
   )
   .unwrap();
   let path = at.join(".furb/config.json");
+  fs::create_dir_all(at.join(".furb")).unwrap();
   fs::write(&path, r#"{"providers":{"claude-cli":false,"local":false}}"#).unwrap();
   let (mut engine, _) = Opening {
     skills: Some(false),
@@ -898,7 +886,7 @@ const WORK: [&str; 2] = [
 /// life on the record takes one prompt more, so the record holds two openings. Each official
 /// extension runs on it.
 fn worked(name: &str) -> Yard {
-  let at = place(name);
+  let at = yard(name);
   let mut first = scripted(&at, &WORK).boot::<String>([]).unwrap().0;
   assert_eq!(
     closed(&mut first, "close(await prompt(int, 'Work in the directory.'))").as_ref().as_int(),
@@ -916,7 +904,7 @@ fn worked(name: &str) -> Yard {
 
 #[test]
 fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
-  let at = place("drifts");
+  let at = yard("drifts");
   let record = at.join("record.jsonl");
   // The place that the first cd of the record asks for, changed, makes the replay drift at that
   // cd: the word of the root asks for the place where its stand stood. The new place holds a
@@ -954,7 +942,7 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
     .map(|one| one.unwrap().file_name().to_string_lossy().into_owned())
     .collect();
   beside.sort();
-  assert_eq!(beside, [".furb", "record.jsonl", "record.jsonl.lock", "record.jsonl.log"]);
+  assert_eq!(beside, ["record.jsonl", "record.jsonl.lock", "record.jsonl.log"]);
   assert_eq!(held("record.jsonl"), text, "the record stays as it was");
   assert_eq!(held("record.jsonl.log"), log, "the log stays as it was");
 }
@@ -970,7 +958,7 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
   assert!(!records.is_empty(), "tests/replay holds no record");
   for one in records {
     let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
-    let at = place(&format!("replay-{name}"));
+    let at = yard(&format!("replay-{name}"));
     laid(&one, &at.join("record.jsonl"));
     let kept = world::kept(at.join("record.jsonl")).unwrap();
     let made = kept
@@ -997,7 +985,7 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
 fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
   use sha2::{Digest, Sha256};
   for (record, first) in [("ranks.jsonl", "bash2"), ("speaker.jsonl", "reply4")] {
-    let at = place(&format!("unadapted-{first}"));
+    let at = yard(&format!("unadapted-{first}"));
     laid(&replays().join(record), &at.join("record.jsonl"));
     let mut lines: Vec<String> =
       fs::read_to_string(at.join("record.jsonl")).unwrap().lines().map(str::to_owned).collect();
@@ -1024,7 +1012,7 @@ fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the
 #[test]
 fn a_life_of_an_engine_whose_gathered_raised_on_an_act_that_no_rung_made_writes_its_checkpoint_through_its_adapter()
  {
-  let at = place("lives");
+  let at = yard("lives");
   laid(&replays().join("lives.jsonl.zst"), &at.join("record.jsonl"));
   let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
   let mut inspected = inspects.boot::<String>([]).unwrap().0;
@@ -1081,7 +1069,7 @@ fn replayed(by: &str) -> Vec<(String, Engine)> {
   records.push(work);
   let open = |one: PathBuf| {
     let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
-    let at = place(&format!("shown-{by}-{name}"));
+    let at = yard(&format!("shown-{by}-{name}"));
     laid(&one, &at.join("record.jsonl"));
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
     (name, inspects.boot::<String>([]).unwrap().0)
@@ -1261,7 +1249,7 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
 #[test]
 fn a_life_born_on_a_checkpoint_binds_the_function_whose_default_reads_a_tuple_of_constants_each_value_and_each_life_word()
  {
-  let at = place("tuple-default");
+  let at = yard("tuple-default");
   let mut first = opening(&at, true).boot::<String>([]).unwrap().0;
   let word = "EVERY, FLOOR = 300.0, 900.0\ndef desk(every: float = EVERY, floor: float = FLOOR):\n  return every + floor\n\
               limit = 7\nclose(desk())";
@@ -1828,7 +1816,7 @@ fn a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail
 
 #[test]
 fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of_the_machine() {
-  let at = place("classes");
+  let at = yard("classes");
   fs::create_dir_all(at.join("config")).unwrap();
   fs::write(at.join("config/config.json"), r#"{"classes": {"claude-cli:opus": "cheap"}}"#).unwrap();
   let opening = Opening {
@@ -1841,23 +1829,4 @@ fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of
   // The catalog gives opus the class dear, so only the config of this directory makes it cheap.
   assert!(standing.starts_with("[[['claude-cli:opus', ["), "{standing}");
   assert!(standing.contains("1000000, 'cheap']"), "{standing}");
-}
-
-#[test]
-fn the_gate_is_on_unless_the_last_config_that_names_it_says_false() {
-  let at = yard("gate-configs");
-  let (user, furb) = (at.join("user"), at.join(".furb"));
-  fs::create_dir_all(&user).unwrap();
-  fs::create_dir_all(&furb).unwrap();
-  let gated = || gate::configured(&user, &at);
-  assert!(gated(), "no config names the gate");
-  fs::write(user.join("config.json"), r#"{"gate": false}"#).unwrap();
-  assert!(!gated(), "the config of the user turns it off");
-  fs::write(furb.join("config.json"), r#"{"gate": "no"}"#).unwrap();
-  assert!(
-    gated(),
-    "configs that do not read, as with a value of the key that is no bool, leave it on"
-  );
-  fs::write(furb.join("config.local.json"), r#"{"gate": true}"#).unwrap();
-  assert!(gated(), "the local config of the project wins");
 }

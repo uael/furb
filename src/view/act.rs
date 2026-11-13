@@ -201,8 +201,8 @@ pub struct Pause {
   pub why: Option<Value>,
 }
 
-/// How the word of a rung ran: it runs or waits for its word, it ran, a fault or a cancel ended it,
-/// or the gate refused it, each with what a person reads.
+/// How the word of a rung ran: it runs or waits for its word, it ran, or a fault or a cancel ended
+/// it, each with what a person reads.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "run", content = "reason", rename_all = "snake_case")]
 pub enum RunState {
@@ -210,8 +210,6 @@ pub enum RunState {
   Done,
   Failed(String),
   Cancelled(String),
-  /// The findings of the gate, one for each line.
-  Refused(String),
 }
 
 /// One answer of a model: the actor whose reply it answered, and its usage, which is the tokens
@@ -300,11 +298,11 @@ impl Act {
     self.operator && !self.done()
   }
 
-  /// Whether the act failed: a rung that the gate refused or whose run raised, or an act done with
-  /// a fault that is no cancel.
+  /// Whether the act failed: a rung whose run raised, or an act done with a fault that is no
+  /// cancel.
   pub fn failed(&self) -> bool {
     match &self.run {
-      Some(run) => matches!(run, RunState::Failed(_) | RunState::Refused(_)),
+      Some(run) => matches!(run, RunState::Failed(_)),
       None => self.value().and_then(fault).is_some_and(|(is, _)| is != "CancelledError"),
     }
   }

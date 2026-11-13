@@ -305,10 +305,6 @@ def opened(**opening: Unpack[Opening]) -> tuple[list[list[list[object]]], list[t
   the crate opens a life: the provider, the skills, each official extension, the files, the commands, time, and
   the store of the record when the life keeps."""
 
-def gate(sheet: str) -> list[tuple[int, str]]:
-  """The gate of the crate: what the type checker of monty found on a sheet, each error by its line, and no warning.
-  It raises when the checker could not read the sheet."""
-
 def official() -> list[Skill]:
   """The official extensions, in the order a life runs them."""
 

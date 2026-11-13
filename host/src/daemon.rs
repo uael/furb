@@ -515,7 +515,6 @@ fn routed(verb: Verb) -> Routed {
     Verb::Read { life, path, on } => (life, Command::Read { path, on }),
     Verb::Write { life, path, content, on } => (life, Command::Write { path, content, on }),
     Verb::Names { life, on } => (life, Command::Names { on }),
-    Verb::Gate { life, word, on } => (life, Command::Gate { word, on }),
     Verb::Stand { life, roster: None } => (life, Command::Stand),
     Verb::Stand { life, roster: Some(names) } => (life, Command::Roster(names)),
     Verb::Config { life, config } => (life, configured(config)),

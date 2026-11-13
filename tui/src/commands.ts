@@ -41,7 +41,7 @@ export const commands = {
   files: ["Attach file", "", "Search project files for an @ reference"],
   image: ["Attach image", "[path]", "Attach an image file, or paste one from the clipboard"],
   editor: ["External editor", "", "Edit this draft with VISUAL or EDITOR"],
-  run: ["Run Python", "<python>", "Write a rung through the gate"],
+  run: ["Run Python", "<python>", "Write a rung, as a model does"],
   bash: ["Run command", "<command>", "Stream a shell command"],
   read: ["Read file", "<path>", "Show a file to this chain"],
   changes: [

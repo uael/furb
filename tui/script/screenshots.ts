@@ -507,7 +507,7 @@ try {
   await capture("62-model-retry");
   Object.defineProperty(session.host, "streams", { configurable: true, writable: true, value: new Map() });
   await session.submit("/run this is invalid python !!!").catch(session.fail);
-  await capture("20-gate-findings");
+  await capture("20-word-raise");
   // A chain that paused says who paused it and why, from its own pause, and no older error of a word stands in for it.
   await session.engine.pause(session.selected, { why: "reply4 found no ear to take it" });
   await until(session, () => session.paused);
@@ -771,7 +771,7 @@ try {
   app().composer.setText("");
   if (priorHistory) session.histories[session.draftKey] = priorHistory;
   else delete session.histories[session.draftKey];
-  // A word of the model that the gate refused, and that its next word replaced, folds and reads as retried.
+  // A word of the model that raised, and that its next word replaced, folds and reads as retried.
   app().composer.setText("");
   await session.submit("Give me an answer in a fence.");
   await settle();
@@ -1294,7 +1294,7 @@ try {
   app().dispose();
   await library.dispose();
 
-  // A program that lives: a line under the pointer shows what its acts came to, a line that the gate refused shows its
+  // A program that lives: a line under the pointer shows what its acts came to, a line that raised shows its
   // error under the pointer, and a line that awaits the act of an earlier line runs with its time and lights that line.
   await show(await demoSession({ cwd: await project("living") }));
   const point = async (pattern: RegExp, name: string) => {
@@ -1322,7 +1322,7 @@ try {
   await settle();
   app().render();
   await test.flush();
-  await point(/next = = 2/, "98-gate-hover");
+  await point(/next = = 2/, "98-raise-hover");
   void session.command('/run build = bash("sleep 3")\nsize = 1\nbuilt = await build').catch(() => {});
   await new Promise((done) => setTimeout(done, 1600));
   await capture("99-awaited-line");

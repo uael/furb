@@ -1158,12 +1158,6 @@ export const feed = part({
             indent,
             { frame: true, first: act.id, shown: code },
           );
-          // A word of the operator that the gate refused says what to do under it.
-          const hint = this.gateHint(act);
-          if (hint)
-            add(`hint-${act.id}`, `${hint}:${this.theme}`, [], (box) =>
-              box.add(this.inset(space.between, this.text(hint, c.muted))),
-            );
         } else if (line.type === "tail") {
           const maker = rows.get(act.by);
           if (line.model) {

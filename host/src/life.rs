@@ -90,8 +90,6 @@ pub enum Command {
   Transcript { on: Option<String>, of: Option<String> },
   /// One name that the module of a chain binds.
   Inspect { name: String, on: Option<String> },
-  /// What the gate finds in a word on a chain, which runs nothing.
-  Gate { word: String, on: Option<String> },
   /// The facts of an act, or null when no act has its name.
   Get { id: String },
   /// What an act came to, refused while it lives.
@@ -1126,10 +1124,6 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
     Command::Inspect { name, on: chain } => {
       let (kind, repr, value) = engine.inspect(&name, Some(&on(chain)))?;
       Reply::Inspected { kind, repr, value: outward(value.as_ref()) }
-    }
-    Command::Gate { word, on: chain } => {
-      let found = engine.verb("gate", vec![Object::string(word)], named(chain))?;
-      Reply::Value(outward(found.as_ref()))
     }
     Command::Get { id } => {
       Reply::Value(engine.get(&id)?.map_or(Value::Null, |made| outward(made.0.as_ref())))

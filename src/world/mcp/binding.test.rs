@@ -5,16 +5,8 @@ use monty_types::NamedValues;
 use serde_json::{Map, Value, json};
 
 use super::{Function, Shape, binding, quoted, safe, union};
-use crate::{
-  ENGINE, SHEET,
-  gate::checked,
-  sand::{Nobody, Sand},
-  value::{Object, entry},
-};
+use crate::sand::{Nobody, Sand};
 use std::env;
-
-/// The word of the extension as far as a binding reads it, which the gate reads before a binding.
-const WORD: &str = "McpResult = dict[str, Any]\n\n\ndef mcp_call(server: str, tool: str, arguments: dict[str, Any] | None = None) -> Act[McpResult]:\n  return act(\"mcp_call\", \"\", None, server, tool, arguments)\n";
 
 /// What runs before a binding in the sandbox: a `mcp_call` that gives what a call sends.
 const SENDS: &str = "from typing import Any, Literal\nimport json\nMcpResult = dict[str, Any]\n\n\nasync def mcp_call(server, tool, arguments):\n  return {'server': server, 'tool': tool, 'arguments': arguments}\n";
@@ -26,34 +18,6 @@ const SHAPED: [&str; 7] =
 
 /// The most calls of one function that a measure makes.
 const CALLS: usize = 12;
-
-/// The sheet of one word after a program, and how many lines stand above the word, as `furb.sheet` writes it.
-fn sheet(program: &[&str], word: &str) -> (String, usize) {
-  let code = "__engine = {}\nexec(__source, __engine)\n__sheet = {}\nexec(__sheet_source, __sheet)\n__program = {f'rung{n}': one for n, one in enumerate(__words, 1)}\n__sheet['sheet'](__engine, __program, __word, [])";
-  let mut named = NamedValues::new();
-  named.push("__source", Object::string(ENGINE));
-  named.push("__sheet_source", Object::string(SHEET));
-  named.push("__words", Object::list(program.iter().map(|one| Object::string(*one))));
-  named.push("__word", Object::string(word));
-  let got =
-    Sand::new().run(code, named, &mut Nobody("the sheet")).expect("furb.sheet writes the sheet");
-  let got = got.as_ref();
-  let text = entry(&got, 0).and_then(|one| one.as_str()).expect("a sheet is a text").to_owned();
-  let above =
-    entry(&got, 1).and_then(|one| one.as_int()).expect("a sheet counts the lines above the word");
-  (text, usize::try_from(above).expect("a count of lines is no negative number"))
-}
-
-/// What the gate finds on a word after a program, each by its line in the word.
-fn found(program: &[&str], word: &str) -> Vec<String> {
-  let (text, above) = sheet(program, word);
-  checked(&text)
-    .expect("the gate reads the sheet")
-    .into_iter()
-    .filter(|one| one.line > above)
-    .map(|one| format!("line {}: {one}", one.line - above))
-    .collect()
-}
 
 /// What each call sends, in order, when the word of a binding runs in the sandbox and the calls run after it.
 fn sent(word: &str, calls: &[String]) -> Vec<Value> {
@@ -292,26 +256,6 @@ fn the_docstring_sketches_each_object_whose_properties_python_cannot_type() {
 }
 
 #[test]
-fn the_gate_refuses_a_call_that_its_signature_does_not_take() {
-  let input = json!({ "type": "object", "properties": { "a": { "type": "string" }, "b": { "enum": ["x", "y"] } }, "required": ["a"] });
-  let made = binding("s", &[json!({ "name": "t", "inputSchema": input })]);
-  let wrong = "await s.t(1)\nawait s.t('a', b='z')\nawait s.t('a', c=1)\nawait s.u()";
-  let findings: Vec<String> = found(&[WORD, &made.word], wrong)
-    .into_iter()
-    .map(|one| one.split(' ').take(3).collect::<Vec<_>>().join(" "))
-    .collect();
-  assert_eq!(
-    findings,
-    [
-      "line 1: error[invalid-argument-type]",
-      "line 2: error[invalid-argument-type]",
-      "line 3: error[unknown-argument]",
-      "line 4: error[unresolved-attribute]",
-    ]
-  );
-}
-
-#[test]
 fn each_name_becomes_safe_and_unique() {
   assert_eq!(
     [
@@ -428,25 +372,6 @@ fn a_union_is_flat_with_each_shape_once_and_none_last() {
   ];
   assert_eq!(union(shapes).python(), "str | Literal[1, 2] | None");
   assert_eq!(union(vec![Shape::Int, Shape::Any]), Shape::Any);
-}
-
-#[test]
-fn each_word_of_the_corpus_and_each_call_of_its_functions_pass_the_gate() {
-  for (server, file) in corpus() {
-    let made = binding(&server, tools(&file));
-    assert_eq!(found(&[WORD], &made.word), Vec::<String>::new(), "{server}");
-    let made_calls: Vec<String> = made
-      .functions
-      .iter()
-      .flat_map(|one| calls(&server, &made.name, one))
-      .map(|(call, _)| call)
-      .collect();
-    assert_eq!(
-      found(&[WORD, &made.word], &made_calls.join("\n")),
-      Vec::<String>::new(),
-      "{server}"
-    );
-  }
 }
 
 #[test]

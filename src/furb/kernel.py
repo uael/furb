@@ -1,8 +1,8 @@
 """The Kernel, which runs the word of a rung where the engine runs, in the module of its chain.
 
-One Kernel serves both engines: this interpreter imports this module, and the sandbox of the crate loads it as it
-loads the sheet. Each gives the Kernel the names of its engine, which it reads at each use and never holds, since
-boot binds the bus into the engine and a name rebound is used from the next use on.
+One Kernel serves both engines: this interpreter imports this module, and the sandbox of the crate loads it. Each
+gives the Kernel the names of its engine, which it reads at each use and never holds, since boot binds the bus into
+the engine and a name rebound is used from the next use on.
 
 A word answers by a close and never by a return: a body of a module takes no return, so a word that holds one is no
 python and its run is done with a SyntaxError.

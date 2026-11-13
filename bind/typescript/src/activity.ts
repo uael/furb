@@ -10,7 +10,7 @@ import {
   type Spend,
   WORK,
 } from "./life/acts.js";
-import { bound, display, type Fact, isQuestion, usageOf } from "./types.js";
+import { display, type Fact, isQuestion, usageOf } from "./types.js";
 
 /** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
  * the tokens that it read and wrote, of which the tokens that it read again and kept to read again, and its dollars. */
@@ -23,8 +23,6 @@ export interface Answered {
 export interface LiveRun {
   status: "running" | "failed" | "done";
   reason: string;
-  /** Whether the gate refused the word, so that the reason holds its findings, one for each line. */
-  refused?: boolean;
 }
 /** An act as the activity follows it. A host with a daemon reads the acts of the daemon instead, and a host with none
  * reads them as the daemon gives them through [`Activity.hosted`]. */
@@ -105,7 +103,6 @@ export class Activity {
   /** The rung each run runs the word of, and what the word of each rung gave when its run is done. */
   private readonly runs = new Map<string, string>();
   private readonly ran = new Map<string, unknown>();
-  private readonly refused = new Map<string, string>();
   /** The acts that stand in each chain but its chains, in the order they began. */
   private readonly inChain = new Map<string, LiveAct[]>();
   /** How many times the spend of a chain or of a rung changed. */
@@ -195,11 +192,9 @@ export class Activity {
         ? null
         : run.status !== "failed"
           ? { run: run.status }
-          : run.refused
-            ? { run: "refused", reason }
-            : /^CancelledError\b/.test(reason)
-              ? { run: "cancelled", reason }
-              : { run: "failed", reason },
+          : /^CancelledError\b/.test(reason)
+            ? { run: "cancelled", reason }
+            : { run: "failed", reason },
       word: act.word ?? null,
       asking: Boolean(act.asking),
       began: act.began,
@@ -362,13 +357,6 @@ export class Activity {
       }
     } else if (kind === "ready" && act?.kind === "rung" && typeof fact[3] === "string") {
       this.worded(act, fact[3]);
-    } else if (kind === "tell" && act?.kind === "rung" && Array.isArray(fact[3])) {
-      // The chain tells the findings that refused a word under the header refused, and binds them one line for each.
-      const [header, ...lines] = String(fact[3][0] ?? "").split("\n");
-      if (header === `#${id} refused`) {
-        this.refused.set(id, bound(lines, `${id}_findings`) ?? "");
-        this.updateRun(act);
-      }
     } else if (kind === "started" && act?.kind === "bash" && !act.done) {
       // A command that a wake runs again starts its streams again, as its doors do.
       const value = act.value as { stdout: { content: string }; stderr: { content: string } };
@@ -400,11 +388,6 @@ export class Activity {
   private updateRun(act: LiveAct): void {
     if (act.kind !== "rung") return;
     this.mark(act);
-    const refused = this.refused.get(act.id);
-    if (refused !== undefined) {
-      act.run = { status: "failed", reason: refused, refused: true };
-      return;
-    }
     const ran = this.ran.has(act.id);
     const value = ran ? this.ran.get(act.id) : act.value;
     if (isFault(value)) {

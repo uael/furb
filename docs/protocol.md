@@ -128,7 +128,6 @@ it is not given. The daemon answers requests in any order.
 | `read` | `life`, `path`, `on` | write |
 | `write` | `life`, `path`, `content`, `on` | write |
 | `names` | `life`, `on` | read |
-| `gate` | `life`, `word`, `on` | read |
 | `stand` | `life`, `roster` (names of models) | write |
 | `cancel_sign_in` | `life` | write |
 | `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |

@@ -96,14 +96,13 @@ fn the_keys_of_furb_come_first_with_their_defaults_and_each_object_with_its_name
   let (at, layers) = place("schema");
   fs::write(
     at.join("project/.furb/config.json"),
-    json!({"other": 1, "providers": {"b": false}, "gate": false}).to_string(),
+    json!({"other": 1, "providers": {"b": false}, "max_thinking_tokens": 2}).to_string(),
   )
   .unwrap();
   assert_eq!(
     won(&layers),
     vec![
-      ("gate".to_owned(), json!(false), Some(Layer::Project)),
-      ("max_thinking_tokens".to_owned(), json!(32768), None),
+      ("max_thinking_tokens".to_owned(), json!(2), Some(Layer::Project)),
       ("automatic".to_owned(), json!([]), None),
       ("scratch_days".to_owned(), json!(7), None),
       ("classes".to_owned(), json!({}), None),
@@ -113,8 +112,8 @@ fn the_keys_of_furb_come_first_with_their_defaults_and_each_object_with_its_name
       ("other".to_owned(), json!(1), Some(Layer::Project)),
     ]
   );
-  let gate = layers.get().unwrap().into_iter().next().unwrap();
-  assert_eq!(gate.property.map(|one| one.kind), Some(Kind::Boolean));
+  let first = layers.get().unwrap().into_iter().next().unwrap();
+  assert_eq!(first.property.map(|one| one.kind), Some(Kind::Integer));
   fs::remove_dir_all(at).unwrap();
 }
 
@@ -150,15 +149,18 @@ fn a_value_that_the_property_of_its_key_does_not_take_is_refused_and_writes_noth
   let (at, layers) = place("kind");
   keyed(&at, "notes", &json!({"properties": {"mode": {"type": "string", "enum": ["a", "b"]}}}));
   let before = fs::read_to_string(at.join("project/.furb/config.json")).unwrap();
-  let refused = set(&layers, change(&["gate"], Some(json!("no")), Layer::Project));
-  assert!(matches!(&refused, Err(Error::Value { key, .. }) if key == "gate"), "{refused:?}");
+  let refused = set(&layers, change(&["scratch_days"], Some(json!("no")), Layer::Project));
+  assert!(
+    matches!(&refused, Err(Error::Value { key, .. }) if key == "scratch_days"),
+    "{refused:?}"
+  );
   let refused = set(&layers, change(&["notes", "mode"], Some(json!("c")), Layer::Project));
   assert_eq!(
     refused.map_err(|no| no.to_string()),
     Err(r#"The key notes.mode takes one of "a", "b", and "c" is not"#.to_owned())
   );
   assert_eq!(fs::read_to_string(at.join("project/.furb/config.json")).unwrap(), before);
-  set(&layers, change(&["gate"], None, Layer::Project)).unwrap();
+  set(&layers, change(&["scratch_days"], None, Layer::Project)).unwrap();
   fs::remove_dir_all(at).unwrap();
 }
 

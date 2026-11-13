@@ -405,7 +405,6 @@ export class App {
   /** The text typed when a walk of the history began, which a walk keeps to the entries that start with it, as fish
    * does. An empty prefix walks every entry. */
   historyPrefix = "";
-  diagnosticsKey = "";
   /** What the footer shows, set again only when it changes. */
   statusKey = "";
   /** Whether the footer shows a spinner, which the tick turns. */
@@ -1087,7 +1086,7 @@ export class App {
                 : `Your answer to ${pending.id}, as ${pending.shape}${pending.hint ? `: ${pending.hint}` : ""}`,
             ]
           : w.mode === "python"
-            ? ["Python", c.secondary, "Write Python. The gate reads it before it runs."]
+            ? ["Python", c.secondary, "Write Python. It runs as a rung of this chain."]
             : this.setupState().none
               ? [
                   "Prompt",
@@ -1125,11 +1124,6 @@ export class App {
     if (this.corner.visible) this.renderRailUsage();
     this.suggest();
     this.ghosting();
-    const diagnostics = JSON.stringify([w.rejectedWord, w.findings]);
-    if (diagnostics !== this.diagnosticsKey) {
-      this.diagnosticsKey = diagnostics;
-      void this.highlightEditor();
-    }
   };
 
   /** The cards of the feed in their order, read once while no card moves, since each read of them copies them. */
@@ -1154,7 +1148,7 @@ export class App {
   /** The count of the loads of the parts, which a label that a part gives keys on. */
   partsLoaded = 0;
   /** The words that the turns of the chain shown tell of its rungs, by rung, which the program of the chain does not
-   * hold for a word that the gate refused. */
+   * hold for a word that never ran, as one that the gate of an earlier build refused. */
   told: { turns: readonly Turn[]; at: number; rung?: ActRow; words: Map<string, string> } = {
     turns: [],
     at: 0,

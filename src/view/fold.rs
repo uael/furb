@@ -13,10 +13,10 @@ use super::{
   state::{State, chain_state},
 };
 use crate::world::CONSOLE;
-use std::str::Chars;
 
 /// The questions that the engine asks on the way to what an act does, which no person follows: each
-/// is answered for the act that asked it, which shows what it came to.
+/// is answered for the act that asked it, which shows what it came to. A record of an earlier build
+/// holds the questions of the kind gate.
 const STEPS: [&str; 11] =
   ["setup", "stand", "clock", "chance", "gate", "cd", "merged", "run", "writing", "wants", "reply"];
 
@@ -56,11 +56,9 @@ pub struct Fold {
   clock: u64,
   chains: HashMap<String, Chain>,
   replies: HashMap<String, Reply>,
-  /// The rung of each run, what the run of the word of each rung gave once it is done, and the
-  /// findings of the gate on each word that it refused.
+  /// The rung of each run, and what the run of the word of each rung gave once it is done.
   runs: HashMap<String, String>,
   ran: HashMap<String, Value>,
-  refused: HashMap<String, String>,
   children: HashMap<String, Vec<String>>,
   /// The acts that a person follows and that are not done, by the place they began.
   live: BTreeMap<u64, String>,
@@ -355,14 +353,6 @@ impl Fold {
           self.moved.push(about.to_owned());
         }
       }
-      "tell" => {
-        let header = fact.get(3).and_then(|notes| notes.get(0)).and_then(Value::as_str);
-        let lines = header.and_then(|note| note.strip_prefix(&format!("#{about} refused\n")));
-        if let Some(found) = lines.and_then(|lines| bound(lines, &format!("{about}_findings"))) {
-          self.refused.insert(about.to_owned(), found);
-          self.update_run(about);
-        }
-      }
       _ => {}
     }
   }
@@ -421,15 +411,13 @@ impl Fold {
     }
   }
 
-  /// How the word of a rung ran, from the findings of the gate, the value of its run, and its own
-  /// value. A cancel ends it well when it retells, when the rung itself ended well, or when its
-  /// prompt did.
+  /// How the word of a rung ran, from the value of its run and its own value. A cancel ends it
+  /// well when it retells, when the rung itself ended well, or when its prompt did.
   fn update_run(&mut self, id: &str) {
     let Some(act) = self.acts.get(id).filter(|act| act.kind == Kind::Rung) else { return };
     let ran = self.ran.get(id);
-    let run = match (self.refused.get(id), ran.or(act.value()).and_then(fault)) {
-      (Some(found), _) => RunState::Refused(found.clone()),
-      (None, Some((is, args))) => {
+    let run = match ran.or(act.value()).and_then(fault) {
+      Some((is, args)) => {
         let well = |one: &Act| one.done() && one.value().and_then(fault).is_none();
         let parent = self.acts.get(&act.by).filter(|one| one.kind == Kind::Prompt);
         let retells = act.words.get(1).is_some_and(truthy);
@@ -440,8 +428,8 @@ impl Fold {
           _ => RunState::Failed(reason),
         }
       }
-      (None, None) if ran.is_some() => RunState::Done,
-      (None, None) => RunState::Running,
+      None if ran.is_some() => RunState::Done,
+      None => RunState::Running,
     };
     if let Some(act) = self.acts.get_mut(id) {
       act.run = Some(run);
@@ -517,62 +505,6 @@ fn display(value: &Value) -> String {
     Value::String(one) => one.clone(),
     one => serde_json::to_string_pretty(one).unwrap_or_default(),
   }
-}
-
-/// The string that the lines of a note bind to a name: the text of its quote, whose name may take
-/// more underscores, or the string of its statement as python writes it.
-fn bound(lines: &str, name: &str) -> Option<String> {
-  let all: Vec<&str> = lines.split('\n').collect();
-  for (at, line) in all.iter().enumerate() {
-    let quote = line.strip_prefix("<s:").and_then(|rest| rest.strip_suffix('>'));
-    if let Some(quote) =
-      quote.filter(|one| one.strip_prefix(name).is_some_and(|tail| tail.bytes().all(|b| b == b'_')))
-    {
-      let close = format!("</s:{quote}>");
-      let end = all[at + 1..].iter().position(|one| one.ends_with(&close))? + at + 1;
-      let last = &all[end][..all[end].len() - close.len()];
-      let body: Vec<&str> = all[at + 1..end].iter().copied().chain([last]).collect();
-      return Some(body.join("\n"));
-    }
-    if let Some(said) = line.strip_prefix(name).and_then(|rest| rest.strip_prefix(" = ")) {
-      return python(said);
-    }
-  }
-  None
-}
-
-/// A string as python writes it, read back: the text between its quotes, with each escape as the
-/// character that it stands for.
-fn python(said: &str) -> Option<String> {
-  let inner = said.get(1..said.len().checked_sub(1)?)?;
-  if !matches!(said.chars().next(), Some('\'' | '"'))
-    || !matches!(said.chars().last(), Some('\'' | '"'))
-  {
-    return None;
-  }
-  let mut out = String::new();
-  let mut chars = inner.chars();
-  while let Some(one) = chars.next() {
-    if one != '\\' {
-      out.push(one);
-      continue;
-    }
-    let code = |chars: &mut Chars<'_>, n: usize| {
-      let hex: String = chars.by_ref().take(n).collect();
-      u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32)
-    };
-    match chars.next() {
-      Some('n') => out.push('\n'),
-      Some('r') => out.push('\r'),
-      Some('t') => out.push('\t'),
-      Some('x') => out.extend(code(&mut chars, 2)),
-      Some('u') => out.extend(code(&mut chars, 4)),
-      Some('U') => out.extend(code(&mut chars, 8)),
-      Some(other) => out.push(other),
-      None => {}
-    }
-  }
-  Some(out)
 }
 
 #[cfg(test)]

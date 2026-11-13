@@ -408,7 +408,7 @@ export const marks: Record<
     role: "danger",
     attributes: 0,
     label: "Failed",
-    means: "The act raised, or the gate refused its Python",
+    means: "The act raised",
   },
   paused: {
     glyph: glyph.held,
@@ -573,7 +573,6 @@ function styles(): Parameters<typeof SyntaxStyle.fromStyles>[0] {
     // An operator keeps the color of the text, so that a keyword is the one purple on a line.
     operator: { fg: theme.text },
     punctuation: { fg: theme.muted },
-    diagnostic: { fg: theme.danger, bg: theme.removed, underline: true },
     fold: { fg: theme.link, underline: true },
     // The label of the block of a word, and what the acts of a line came to, in the column of its facts.
     "word.label": { fg: theme.muted, bold: true },

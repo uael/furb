@@ -115,8 +115,8 @@ reads it.
   and signs in to a remote server with OAuth 2.1 when it asks for a login: the token stays in the Keychain on macOS,
   else in a file that only the user reads. Its life word, `await mcp_index()`, tells each chain one line for each
   server, with its state and its tools, and binds the tools of each short server as a class of typed functions, so a
-  model writes `await github.create_issue(owner="o", repo="r", title="t")` and the gate checks each argument before the
-  call. `mcp_use(server)` binds a larger server, `mcp_tools(server)` and `mcp_tool(server, name)` tell signatures and
+  model writes `await github.create_issue(owner="o", repo="r", title="t")` and reads the name and the type of each
+  argument in the signature. `mcp_use(server)` binds a larger server, `mcp_tools(server)` and `mcp_tool(server, name)` tell signatures and
   schemas, `mcp_call(server, tool, arguments)` calls a tool by its original names, `mcp_read(server, uri)` reads a
   resource, `mcp_prompt(server, name, arguments)` expands a prompt, and `mcp_control(action, server)` reconnects,
   enables, disables, approves, logs in or logs out. Each answer of a server stays in the record, so a later life asks no
@@ -319,9 +319,9 @@ export default function (furb) {
   a life gives it, `skills()` for the names of the skills that the life runs, and `of(kind)` for the acts of a
   kind. It acts in the life too, and each of its acts goes through
   the record:
-  - `run(word)` runs Python on the chain through the gate, as `/run` does, and gives the value of the last act that
+  - `run(word)` runs Python on the chain, as `/run` does, and gives the value of the last act that
     the word made on the chain, once that act is done, as the record holds it. A word that makes no act gives
-    `undefined`, and a word that raises or that the gate refuses rejects with its error. So a part that needs a value
+    `undefined`, and a word that raises rejects with its error. So a part that needs a value
     gets it from an act of its extension, which the record keeps, as `await seen.run('mcp_control("reconnect", "x")')`.
   - `send(text)` sends a message of the operator to the chain on screen, as Enter sends the input, and
     `draft(text)` puts a text in the input, for the operator to change and send.

@@ -5,15 +5,13 @@ ear of this interpreter that says a verb while it hears and is answered with wha
 engine made that an ear calls back while it hears, a template string that a function of this interpreter debugs
 while a word calls it, which crosses whole, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
-holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, an ear the
-crate writes, which serves a life of either engine, a life longer than the tables of its session could count, a
-word that awaits in a lambda, which the sandbox refuses as python does, an engine and an ear that the collector of
+holds its own, an ear the crate writes, which serves a life of either engine, a life longer than the tables of its
+session could count, a word that awaits in a lambda, which the sandbox refuses as python does, an engine and an ear that the collector of
 cycles drops on another thread, a value too deep or that holds its parts too often, which a host is given cut. What
 the ears of the crate do, the crate proves.
 """
 
 import asyncio
-import builtins
 import gc
 import json
 import sys
@@ -29,7 +27,6 @@ from conftest import OPERATOR, STANDS, Dead, Py, Sand, life, settle, swapped, ti
 from furb import engine
 from furb.engine import TIMEOUT, Refused
 from furb_monty import _monty
-from outside.doubles import gate
 
 
 @pytest.fixture(autouse=True)
@@ -251,42 +248,10 @@ async def test_a_life_runs_a_word_after_more_names_and_functions_than_a_u16_coun
   assert engine.module(root)["raised"] is None
 
 
-async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
-  """boot refuses a Kernel or a gate of this interpreter, since the engine of monty holds its own."""
-  with pytest.raises(Refused, match="kernel hears: the engine of monty holds its Kernel and its gate"):
+async def test_boot_refuses_a_kernel_of_this_interpreter() -> None:
+  """boot refuses a Kernel of this interpreter, since the engine of monty holds its own."""
+  with pytest.raises(Refused, match="kernel hears: the engine of monty holds its Kernel"):
     engine.boot((), world=Sand(stands=STANDS).hears(), kernel=Py().kernel())
-  with pytest.raises(Refused, match="gate hears: the engine of monty holds its Kernel and its gate"):
-    engine.boot((), world=Sand(stands=STANDS).hears(), gate=Py().gating())
-
-
-async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_rung_runs_it() -> None:
-  """The gate reads a word against the typeshed of the sandbox and a chain of the sandbox, which is a module, so it
-  accepts a name of the builtins of python, or a name ty gives every module, exactly when a rung runs a word that
-  names it. A name that it refuses is run as the Kernel runs a word, in the globals of the chain. A word is judged the same on both engines, so the gate of python finds the same of every name, though
-  python runs some that it refuses."""
-  root = engine.boot((), world=Sand(stands=STANDS).hears())
-  # The names ty gives every module are those of module_type_implicit_global_symbol in ty_python_semantic: the names
-  # that the typeshed of the sandbox declares in the class types.ModuleType, but __dict__, __init__ and __getattr__,
-  # and __builtins__, __debug__ and __warningregistry__, which ty adds itself.
-  module = {"__name__", "__file__", "__loader__", "__package__", "__path__", "__spec__", "__doc__", "__annotations__"}
-  module |= {"__annotate__", "__builtins__", "__debug__", "__warningregistry__"}
-  names = sorted({*vars(builtins), *module})
-  # Every rung grows the program that each later sheet reads again, so a sheet and a rung for each name cost
-  # seconds. One word holds every name, one on each line, and the line of a finding is the name it refuses.
-  word = "\n".join(f"got = {name}" for name in names)
-  found = await gate(root, word)
-  assert Py().gate(word, []) == found
-  refused = sorted({names[int(one.split(":")[0].removeprefix("line ")) - 1] for one in found})
-  probe = (
-    f"ran = []\nfor name in {refused!r}:\n  try:\n    eval(compile('got = ' + name, 'probe', 'exec'), dict(globals()))\n"
-    "    ran.append(name)\n  except NameError:\n    pass\nclose(ran)"
-  )
-  tries = "".join(
-    f"try:\n  got = {name}\nexcept NameError:\n  unbound.append({name!r})\n" for name in names if name not in refused
-  )
-  refused_yet_ran = await engine.rung(probe, on=root)
-  accepted_yet_unbound = await engine.rung(f"unbound = []\n{tries}close(unbound)", on=root)
-  assert (refused_yet_ran, accepted_yet_unbound) == ([], [])
 
 
 async def test_an_ear_of_the_crate_crosses_to_the_boot_of_the_door_and_what_it_says_from_a_thread_drives_it() -> None:

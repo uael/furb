@@ -1,4 +1,4 @@
-"""Each word of the extensions of the project passes the gate on the root chain, after the words that play before it."""
+"""Each word of the extensions of the project binds no name of the engine or of an official extension, and reads a name of another word only after the word that defines it."""
 
 import ast
 import inspect
@@ -10,8 +10,6 @@ from pathlib import Path
 import pytest
 
 import furb
-import furb_monty
-from furb import sheet
 from furb_monty import _monty
 
 PROJECT = Path(__file__).resolve().parent.parent
@@ -30,16 +28,6 @@ def word(name: str) -> str:
   file = re.search(r"^  furb-word: (\S+)$", manifest, re.M)
   assert file, f"the manifest of {name} names no word"
   return IMPORT.sub("", (folder / file[1]).read_text(encoding="utf-8"))
-
-
-@pytest.mark.parametrize("name", NAMES)
-def test_word_passes_the_gate(name: str) -> None:
-  """The gate refuses a word of the project on every chain, so a stale name there stops the extension in each life."""
-  program = {f"rung{n}": one["word"] for n, one in enumerate(_monty.official(), 1)}
-  for before in NAMES[: NAMES.index(name)]:
-    program[f"rung{len(program) + 1}"] = word(before)
-  assert BOOTED
-  assert sheet.gate(ENGINE, program, word(name), furb_monty.gate) == []
 
 
 def defines(text: str) -> set[str]:

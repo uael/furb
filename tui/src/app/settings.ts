@@ -422,17 +422,6 @@ export const settings = part({
         this.style.resolveStyleId(group) ?? this.style.resolveStyleId(group.split(".")[0] ?? "default");
       if (styleId !== null) mark(start, end, styleId);
     }
-    if (content === this.session.rejectedWord || content === `/run ${this.session.rejectedWord}`) {
-      const styleId = this.style.resolveStyleId("diagnostic");
-      const lines = content.split("\n");
-      for (const finding of this.session.findings) {
-        const line = Number(finding.match(/line (\d+)/)?.[1] ?? 0) - 1;
-        if (styleId !== null && line >= 0) {
-          const start = lines.slice(0, line).reduce((size, line) => size + line.length + 1, 0);
-          mark(start, start + (lines[line]?.length ?? 0), styleId);
-        }
-      }
-    }
     const cursor = this.beforeCursor().length;
     const at = "()[]{}".includes(content[cursor] ?? " ") ? cursor : cursor - 1;
     const bracket = content[at] ?? "";

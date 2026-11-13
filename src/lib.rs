@@ -6,15 +6,14 @@
 //! by, a coroutine that [`ear::ear`] makes, and [`world`] holds the ears the crate writes: files, commands, time,
 //! the store of the record, and the provider of models. [`extension`] says what an extension is and plays the ones a
 //! life runs as rungs, and [`life::Opening`] opens a life on the record and on the ears of the crate, to which a host
-//! adds its own. The Kernel and the gate are the crate's. [`wire`] carries a value as JSON, as the record keeps it,
-//! and [`binding`] gives the host API to python and to TypeScript. [`view`] folds the facts of a
-//! life into the meaning that every window shows.
+//! adds its own. The Kernel is the crate's. [`wire`] carries a value as JSON, as the record keeps
+//! it, and [`binding`] gives the host API to python and to TypeScript. [`view`] folds the facts of
+//! a life into the meaning that every window shows.
 
 pub mod checkpoint;
 pub mod ear;
 pub mod engine;
 pub mod fact;
-pub mod gate;
 pub mod life;
 mod minify;
 mod sand;
@@ -54,8 +53,9 @@ pub const PROFILE: &str = if cfg!(debug_assertions) { "debug" } else { "release"
 #[cfg_attr(feature = "typescript", napi_derive::napi)]
 pub const SYSTEM: &str = include_str!(concat!(env!("OUT_DIR"), "/system.py"));
 
-/// The sheet the gate reads a word on, which the Kernel of the sandbox writes the same way the python package does.
-pub const SHEET: &str = include_str!("furb/sheet.py");
+/// What stands, in the record that boot is given, for a value that no later life makes again as it
+/// was: the sandbox loads it in a module of its own, and the python package imports it.
+pub const RECORD: &str = include_str!("furb/record.py");
 
 /// The Kernel, which the sandbox loads in a module of its own, as the python package imports it.
 pub const KERNEL: &str = include_str!("furb/kernel.py");

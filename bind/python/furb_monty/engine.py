@@ -224,15 +224,14 @@ class Site:
 def boot(record: Iterable[object] = (), **outside: object) -> Act:
   """A life of the engine in the sandbox, opened from the record and on the ears given, which gives the root.
 
-  An ear is a generator of this interpreter or an ear of the crate. The Kernel and the gate are the crate's, so an
-  ear under either name is refused as the engine refuses one under a name of its own ears. A second boot is a
-  second life, and the first is gone with its ears.
+  An ear is a generator of this interpreter or an ear of the crate. The Kernel is the crate's, so an ear under its
+  name is refused as the engine refuses one under a name of its own ears. A second boot is a second life, and the
+  first is gone with its ears.
   """
   asyncio.get_running_loop()
-  for name in ("kernel", "gate"):
-    if name in outside:
-      why = f"{name} hears: the engine of monty holds its Kernel and its gate"
-      raise python.Refused(why)
+  if "kernel" in outside:
+    why = "kernel hears: the engine of monty holds its Kernel"
+    raise python.Refused(why)
   global LIFE  # noqa: PLW0603
   if LIFE is not None:
     LIFE.end()

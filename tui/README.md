@@ -308,7 +308,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/files` | Search project files for an @ reference |
 | `/image [path]` | Attach an image file, or paste one from the clipboard |
 | `/editor` | Edit this draft with VISUAL or EDITOR |
-| `/run <python>` | Write a rung through the gate |
+| `/run <python>` | Write a rung, as a model does |
 | `/bash <command>` | Stream a shell command |
 | `/read <path>` | Show a file to this chain |
 | `/changes [turn\|chain\|life\|branch]` | Show the files that this turn, this chain, the life or the branch against main changed |
@@ -358,7 +358,7 @@ follow-up once, from any window, and its record keeps the queue, so a reopen fin
 the queue of its chain, with its cause, until you take the follow-up out. Editing a prompt's program writes its door, and the engine
 makes the program again only when the edit drops a word that ran; else it keeps the module and runs only the new words.
 A slash command typed while a program is under edit runs as a command, since no Python program starts with a
-slash. Python input uses the same gate as a model's word and marks a refused line in the word and editor.
+slash. Python input runs as the word of a model does, and a line that raises is marked in its word.
 The editor matches brackets and indents a new Python line.
 `@` opens project file search. A reference that names a file, such as `@README.md` or `@"file name.txt"`, is read
 before the message is sent; any other @word, such as `@dataclass`, stays text. A leading `!` runs a shell

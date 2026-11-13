@@ -2,7 +2,7 @@
 ask, and what the answers of a record cost.
 
 The scripts run the engine of CPython, as the DeepSWE rig needs, on the World of `furb.world`, which opens the life on
-the ears of the crate, the provider of the crate among them, and on the Kernel and the gate of the crate. The command
+the ears of the crate, the provider of the crate among them, and on the Kernel of the crate. The command
 line `furb` runs the engine of the crate; a script runs it as a program of its own.
 """
 
@@ -11,8 +11,7 @@ import shutil
 import sys
 from pathlib import Path
 
-import furb_monty
-from furb import engine, python, sheet
+from furb import engine, python
 from furb.kernel import kernel
 from furb.world import Live, answered, kept
 
@@ -51,7 +50,7 @@ def lived(
   record: Path | None, cwd: Path, actor: str | None, *, keeps: bool, skills: bool = True
 ) -> tuple[Live, str, list[tuple]]:
   """One life on the loop that runs: its World, the ears of the crate as every host opens a life on them, the Kernel
-  and the gate of the crate, and its root. The actor unsaid is the default actor of the crate.
+  of the crate, and its root. The actor unsaid is the default actor of the crate.
 
   The life is made again from what the record holds, and it keeps what it says to the record when it keeps, through
   the store of the crate, which holds the lease of the record until the World ends. It enables at its tip the
@@ -61,9 +60,8 @@ def lived(
   """
   world = Live(str(cwd.absolute()), actor)
   held = world.opened(record, keeps=keeps, skills=skills)
-  gate = sheet.gating(vars(python), furb_monty.gate)
   root = engine.boot(
-    sheet.recorded(vars(python), held), world=world.hears(), kernel=kernel(vars(python)), gate=gate, **world.ears
+    record.recorded(vars(python), held), world=world.hears(), kernel=kernel(vars(python)), **world.ears
   )
   return world, root, held
 

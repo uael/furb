@@ -1,7 +1,7 @@
 # furb
 
 The engine is `src/furb/engine.py`, one file. It depends only on the Python interpreter and on the ears of the outside
-that boot is given: the ears of the World, the Kernel and the gate. The contract, `src/furb/engine.pyi`, defines it, and
+that boot is given: the ears of the World and the Kernel. The contract, `src/furb/engine.pyi`, defines it, and
 the suite in `test/` proves it. `src/furb/AGENTS.md` holds the technical names of the engine and the laws that no test
 can hold. `DOCTRINE.md` tells a model how to work in furb, and the entries doctrine and setup of `src/furb/AGENTS.md`
 say how a life reads it. `script/AGENTS.md` says how to run the DeepSWE rig. Claude Code reads each `AGENTS.md` through
@@ -31,7 +31,7 @@ API of its own:
   another engine, a life that inspects the record, on that engine, first writes a checkpoint after its last entry. The
   life then opens from its last checkpoint and goes on with the engine and the Kernel of this build, so it opens at the
   exact state of its tip whatever build of the major runs it, as `src/checkpoint.rs` says. Its models read the engine of
-  this build, and the gate reads each word on it. `script/engines.py` gives a copy of a record of a build before the
+  this build. `script/engines.py` gives a copy of a record of a build before the
   texts of its engine from git. `tests/replay` holds the records that each build must replay on their own engines with
   no drift. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as `opened` and as `Engine.open`.
@@ -50,9 +50,9 @@ API of its own:
   of its tip. A tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
   read only, and nothing forks it into a new life.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
-  engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
+  engine and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
-  from a fresh ear when it can, as the Kernel, the gate and each ear that `lasting` in `src/ear.rs` made do; the life
+  from a fresh ear when it can, as the Kernel and each ear that `lasting` in `src/ear.rs` made do; the life
   tells the operator once which ear raised and why. A Kernel that raises lost the word of each run it held, so each
   run that is not over then ends refused, with its open wants, and a rung that awaited through a wants is closed, so
   no chain holds a rung as running for ever. A fault that no code of the sandbox catches, as a second excess
@@ -62,13 +62,14 @@ API of its own:
   names of its engine. The checkpointer is `src/furb/checkpoint.py`, which they load the same way, and whose contract
   is `src/furb/checkpoint.pyi`: its `gathered` gives the data of a checkpoint and its `seed` the entries that a later
   life boots on, each on the names of its engine, and the fact made holds its text beside the texts of the engine and
-  of the Kernel. A fact made of a build before it holds no such text, and the engine of that build gathers and seeds. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
-  engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
-  of its own, which alone says which module runs. The gate of the python package reads through it too. The key `gate`
-  of a config set to false turns it off for a life, whose ear then answers each word with no finding, as
-  `docs/config.md` says.
+  of the Kernel. A fact made of a build before it holds no such text, and the engine of that build gathers and seeds.
+  `src/furb/record.py` holds what stands, in the record that boot is given, for a value that no later life makes again
+  as it was, and they load it the same way. No gate reads a word before it runs. A record of an earlier build holds
+  gate acts, which its own engine makes again in a replay and its record answers, and the opening of the sandbox,
+  `src/engine/opening.rs`, gives that engine alone an ear that answers a gate act that the record does not answer
+  with no finding.
 - `src/binding.rs` holds the host API that both doors give, each function once: the ears of the crate, the store, the
-  opening of a life, the catalog, the extensions, the images and the gate. A door holds only how a value of its
+  opening of a life, the catalog, the extensions and the images. A door holds only how a value of its
   language crosses, its `Engine` and its `Act`, and the loop that drives them. The `Engine` of each door has the same
   methods, one for each verb of the contract, which the build makes from the contract.
 - `src/binding/py.rs`, behind the `python` feature, is the door to python. `bind/python` is the package `furb-monty`,
@@ -140,7 +141,7 @@ history of furb before 0.2.0.
 `src/furb/engine.pyi` gives the typed surface of the engine, and the docstring of each definition holds the laws of
 that definition, one sentence per line, in Simplified Technical English.
 
-The contract is a safeguard. It serves the gate and the suite, and it keeps the engine from drift. It is not the
+The contract is a safeguard. It serves the suite and the type check, and it keeps the engine from drift. It is not the
 source of truth: the owner is. A request of the owner changes the contract. Change each signature and each sentence
 that the request makes wrong, in the same work, and name each change. Never refuse a request, and never work around
 it, to keep a sentence of the contract as it is. The contract gives matter for questions: when a request breaks one
@@ -210,8 +211,7 @@ The suite drives the engine through its public API alone, end to end, from the m
   it performed, the entries it kept, and what it fed its commands. It stands on `STANDS`, and a World of one test
   overrides its `hear` for the facts it does otherwise. `Dead` refuses every question but the standing, and `Where`
   asks the chain where it stands at every path. `Py` is the Kernel of `furb.kernel` on the engine of this
-  interpreter, with the gate of the crate, which refuses a word that is not python or that names what nothing binds,
-  such as `BAD`. `life` boots a life on them, `born` boots a life on the World of the suite, which holds one file,
+  interpreter. `life` boots a life on them, `born` boots a life on the World of the suite, which holds one file,
   with the words its models answer the root with, `settle` gives the loop room, `plain` sends a record through the
   wire and back, `said` reads the facts, and `paragraphs` and `heads` read the turns, which are python.
 - One test file per definition of the contract: `test_<name>.py` for a function, a global or a type alias,
@@ -534,7 +534,7 @@ publishes nothing while a dependency stands on git, and says why.
   and `furb` and `furb-cli` on them by their version, as patches of crates.io, then add `furb` to a new crate that
   takes every other crate from crates.io with no lock of furb, run the example chains there, and install `furb-cli`.
   It proves that the crates pack and build as crates.io will give them once monty stands there. A crate that breaks
-  the build in a fresh resolve takes a pin with `=` in `Cargo.toml`, as salsa does. It takes about 5 minutes.
+  the build in a fresh resolve takes a pin with `=` in `Cargo.toml`. It takes about 5 minutes.
 - `sh script/prove-npm.sh <packs>`: install the packs of `@uael/furb` and of `@uael/furb-<system>` for this system, as
   `npm pack` names them, in a new folder, and run the example chains there with node.
 

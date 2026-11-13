@@ -56,10 +56,10 @@ pub(super) fn tail(text: &str, most: usize) -> &str {
 /// opens name, each after the text that names it and once in the request, and one that holds
 /// nothing goes not at all; an assistant turn goes as the blocks its provider gave, less its
 /// thought for a model that forgets it, as [`forgotten`] says, or as its python when a provider of
-/// another kind gave them. A turn of the model whose word the gate refused goes on the user side,
-/// as a quote under the finding of its rung, so the model reads it as a word that the chain refused
-/// and never as one that it would write again. A model that takes no image refuses a turn that
-/// names one.
+/// another kind gave them. A record of an earlier build holds turns of a model whose word its gate
+/// refused: such a turn goes on the user side, as a quote under the finding of its rung, so the
+/// model reads it as a word that the chain refused and never as one that it would write again. A
+/// model that takes no image refuses a turn that names one.
 pub(super) fn messages(
   turns: ObjectRef<'_>,
   model: &Model,
@@ -71,8 +71,8 @@ pub(super) fn messages(
   let mut joins = false;
   // The images that an earlier turn gave, which no later turn gives again.
   let mut given = HashSet::new();
-  // The word of the turn of the model that the gate refused, which the next user turn holds under
-  // its finding.
+  // The word of the turn of the model that the gate of an earlier build refused, which the next
+  // user turn holds under its finding.
   let mut quoted: Option<(String, usize)> = None;
   let all = turns.items().unwrap_or_default();
   // The last turn that a model wrote, whose thought that the provider cut a model that forgets
@@ -190,9 +190,9 @@ pub(super) fn refusal(python: &str) -> Option<usize> {
   Some(body + end)
 }
 
-/// A user turn with the word that the gate refused quoted under the finding that ends at this
-/// place, under the name `rungN_word` that a rung tells its word by, so the model reads it as the
-/// word of that rung.
+/// A user turn with the word that the gate of an earlier build refused quoted under the finding
+/// that ends at this place, under the name `rungN_word` that a rung tells its word by, so the model
+/// reads it as the word of that rung.
 pub(super) fn refused(python: &str, place: usize, word: &str) -> String {
   let start = python[..place].rfind("\n\n").map_or(0, |one| one + 2);
   let rung = python[start + 1..].split(' ').next().unwrap_or_default();
@@ -206,8 +206,8 @@ pub(super) fn refused(python: &str, place: usize, word: &str) -> String {
 
 /// The blocks of a turn of a model less the marks of a fence or of a tool call in each text, which
 /// [`watch::bare`] drops, with each text that held only marks gone, and whether a mark went. A turn
-/// of a record that an older provider made can hold them, as a word that the gate refused for them,
-/// and the model reads the finding of the gate in the next turn, and never the marks, which it
+/// of a record that an older provider made can hold them, as a word that its gate refused for them,
+/// and the model reads the finding of that gate in the next turn, and never the marks, which it
 /// would write again.
 fn unmarked(blocks: Vec<AssistantContent>) -> (Vec<AssistantContent>, bool) {
   let mut bared = false;

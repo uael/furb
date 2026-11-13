@@ -5,7 +5,7 @@
 //! engine until the act is done, which means each ear is polled, and what an ear says of its own accord is said
 //! under its name. Nothing polls in vain: what an ear waits for wakes whoever awaits.
 //!
-//! The sandbox reaches the host by the gate, which reads a sheet, by each ear of the host, which the sandbox holds as
+//! The sandbox reaches the host by each ear of the host, which the sandbox holds as
 //! an object of the host that stands at a yield, and by the functions the host gave, a show or a filter. A call of
 //! one of them comes to [`Outside`], and is answered on the thread of the engine, inside the call.
 //!
@@ -60,12 +60,11 @@ pub(crate) use self::{
   record::{left, looping, settled},
 };
 use crate::{
-  SHEET, checkpoint,
+  RECORD, checkpoint,
   checkpoint::CHECKPOINT,
   ear::{Call, Ear, Heard},
   fact,
   fact::Fact,
-  gate::checked_on,
   sand,
   sand::{Answer, Host, Nobody, Sand, id, object},
   value,
@@ -75,12 +74,6 @@ use crate::{
 };
 use std::{fmt, mem};
 
-/// The name of the function of the host that the gate calls with a sheet, which answers each finding by its line.
-const GATE: &str = "gate";
-/// The function of the host that says whether the gate reads each word, as the key `gate` of the
-/// configs says it when the life opens: when it says no, the ear of the gate answers each word with
-/// no finding.
-const GATING: &str = "gating";
 /// The function of the host that starts an ear of the host again after it raised, by its name.
 const AGAIN: &str = "again";
 /// The function of the host by which the Kernel bounds the turn while a word of a rung steps, and
@@ -171,11 +164,6 @@ struct Outside {
   opened: Opened,
   /// How many ids the host gave, which names the next.
   given: u128,
-  /// The text of the engine that the sandbox runs, on which the gate reads each word.
-  source: String,
-  /// Whether the gate reads each word of this life, as the configs say it when the life opens,
-  /// which the record does not keep: each life reads it again.
-  gating: bool,
   /// The jobs whose word the Kernel steps, the innermost last: a run, or the part of a writing.
   stepping: Vec<String>,
   /// The question that the host refused in this step of a word, past the bound of a turn, and its
@@ -187,7 +175,7 @@ struct Outside {
 }
 
 impl Host for Outside {
-  /// One call of the sandbox, answered: the gate, a function of the host, or a step of an ear of the host.
+  /// One call of the sandbox, answered: a function of the host, or a step of an ear of the host.
   fn answer(
     &mut self,
     sand: &mut Sand,
@@ -196,11 +184,6 @@ impl Host for Outside {
     args: Vec<Object>,
   ) -> Answer {
     let got = match on {
-      // A gate that cannot read a word raises where the gate was called, so the ear of the gate answers that word.
-      None if name == GATE => {
-        return found(&self.source, args.first()).map_or_else(Answer::Fault, Answer::Value);
-      }
-      None if name == GATING => Ok(Object::bool(self.gating)),
       None if name == AGAIN => Ok(Object::bool(self.reborn(args.first()))),
       None if name == TURN => {
         let bounded = args.first().is_some_and(|one| one.as_ref().as_bool().unwrap_or(false));
@@ -224,29 +207,17 @@ impl Host for Outside {
   }
 }
 
-/// The inputs of the opening of a sandbox: the texts of an engine, of the sheet, of a Kernel and of
-/// a checkpointer, and the functions of the host that the opening binds.
+/// The inputs of the opening of a sandbox: the texts of an engine, of the rule of the record, of a
+/// Kernel and of a checkpointer, and the functions of the host that the opening binds.
 fn inputs(source: &str, kernel: &str, checkpointer: &str) -> NamedValues {
   let mut inputs = NamedValues::new();
   inputs.push("__source", Object::string(source));
-  inputs.push("__sheet_source", Object::string(SHEET));
+  inputs.push("__record_source", Object::string(RECORD));
   inputs.push("__kernel_source", Object::string(kernel));
   inputs.push("__checkpointer_source", Object::string(checkpointer));
-  inputs.push("__gate", Object::function(GATE, None));
-  inputs.push("__gating", Object::function(GATING, None));
   inputs.push("__again", Object::function(AGAIN, None));
   inputs.push("__turn", Object::function(TURN, None));
   inputs
-}
-
-/// What the gate found in a sheet, each finding by its line.
-fn found(engine: &str, sheet: Option<&Object>) -> Result<Object, Fault> {
-  let sheet = sheet.and_then(|one| one.as_ref().as_str().map(str::to_owned)).unwrap_or_default();
-  let found = checked_on(engine, &sheet)?;
-  Ok(Object::list(found.into_iter().map(|one| {
-    let line = i64::try_from(one.line).unwrap_or_default();
-    Object::tuple([Object::int(line), Object::string(one.to_string())])
-  })))
 }
 
 impl Outside {
@@ -266,8 +237,6 @@ impl Outside {
       crossing: Crossing { kept, ..Crossing::default() },
       opened,
       given: 0,
-      source: String::new(),
-      gating: true,
       stepping: Vec::new(),
       past: None,
       settled: HashSet::new(),
@@ -606,23 +575,12 @@ impl Engine {
   /// An engine, opened from the record, on these ears, each under the name the engine hears it by, in the order
   /// the engine offers them a question.
   ///
-  /// The record is the entries the store kept, each one fact. The engine, the sheet and the Kernel run first, each
-  /// in a namespace of its own, and `boot` is given the Kernel and the gate of the crate before the ears of the host.
+  /// The record is the entries the store kept, each one fact. The engine and the Kernel run first,
+  /// each in a namespace of its own, and `boot` is given the Kernel of the crate before the ears of
+  /// the host.
   pub fn boot<N: Into<String>>(
     record: impl IntoIterator<Item = Object>,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
-  ) -> Result<Self, Fault> {
-    Self::gated(record, ears, true)
-  }
-
-  /// An engine, opened as [`Engine::boot`] opens it, whose gate reads each word when gated says
-  /// so, and else answers each word with no finding, as the key `gate` of a config set to false
-  /// asks. The record keeps each answer, so a replay gives the answer that the record holds,
-  /// whatever gated says then.
-  pub fn gated<N: Into<String>>(
-    record: impl IntoIterator<Item = Object>,
-    ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
-    gated: bool,
   ) -> Result<Self, Fault> {
     let (given, names) = Handed::of(ears)?;
     let record: Vec<Object> = record.into_iter().collect();
@@ -636,8 +594,6 @@ impl Engine {
     let opened =
       sand.run(OPENING, inputs(&source, &kernel, &checkpointer), &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
-    outside.gating = gated;
-    outside.source = source;
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
     let record = seeded(&mut sand, &mut outside, record)?;
     outside.settled = settled(&record);
@@ -650,7 +606,10 @@ impl Engine {
       let entries = recorded(sand, outside, &record);
       outside.crossing.recorded = false;
       let entries = sand.call(outside, &outside.opened.recorded.clone(), vec![entries?], vec![])?;
-      let mut given = vec![("kernel".to_owned(), kernel), ("gate".to_owned(), gate)];
+      let mut given = vec![("kernel".to_owned(), kernel)];
+      if !gate.as_ref().is_none() {
+        given.push(("gate".to_owned(), gate));
+      }
       for name in names {
         let on = outside.fresh();
         outside.hosted.standing.insert(on, (name.clone(), At::Unborn));

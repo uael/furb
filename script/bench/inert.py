@@ -2,7 +2,7 @@
 
     python script/bench/inert.py <record>
 
-It opens a life that only inspects a copy of the record, on the ears of the crate, the Kernel and the gate, with one
+It opens a life that only inspects a copy of the record, on the ears of the crate and the Kernel, with one
 more ear of the outside first, which hears each fact until the journal says the last entry of the record again. The
 proof fails when, before that tip, the life puts an act on to the outside that the record answers, when an ear of the
 World says that it started an act, or when the journal keeps a fact, which a life that keeps would add to the record.
@@ -18,8 +18,7 @@ import tempfile
 from collections.abc import Generator
 from pathlib import Path
 
-import furb_monty
-from furb import engine, python, sheet
+from furb import engine, python
 from furb.kernel import kernel
 from furb.world import entries
 from furb_monty import _monty
@@ -27,8 +26,8 @@ from furb_monty import _monty
 ACT = re.compile(r"\w+?\d+")
 """ACT matches the name of an act, which a maker of an act of the life is."""
 
-OWN = ("journal", "kernel", "gate", "")
-"""OWN names the sayers that are no ear of the World: the journal, the Kernel, the gate, and the life itself."""
+OWN = ("journal", "kernel", "")
+"""OWN names the sayers that are no ear of the World: the journal, the Kernel, and the life itself."""
 
 
 def spy(last: tuple, seen: dict[str, list], *, made: bool) -> Generator[None, tuple | None]:
@@ -66,7 +65,6 @@ async def replayed(record: Path, directory: Path) -> dict[str, list]:
         or next(f for (f,) in held if f[1] == last[1] and f[0] in ("started", "done")) is last,
       ),
       kernel=kernel(vars(python)),
-      gate=sheet.gating(vars(python), furb_monty.gate),
       **ears,
     )
     await asyncio.sleep(0)

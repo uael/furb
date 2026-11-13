@@ -15,9 +15,10 @@
 //!   keeps no prompt on it, and standing under the chain that its maker ran on;
 //! - each rung that a kept act names as its maker, on the open prompt of its chain that is no
 //!   question to the operator, or on its chain, which ends the rung before it of the same maker;
-//! - the run of the word of each rung, which the rung holds or the reply that it asked for gives,
-//!   once the gate lets it run, and the paragraph that tells the findings of the gate on a rung
-//!   whose word it refused;
+//! - the run of the word of each rung, which the rung holds or the reply that it asked for gives.
+//!   A record of an earlier build holds the gate that read each word before its run: the reader
+//!   says the run once that gate let the word run, and the paragraph that tells the findings of
+//!   the gate on a rung whose word it refused;
 //! - the done of each act that the operator closed or cancelled.
 //!
 //! A question that the reader says names its maker, as the engine names it, and each other fact
@@ -545,11 +546,12 @@ struct Reader<'a> {
   prompts: Vec<Open>,
   /// The rung of each maker that is not done.
   rungs: HashMap<String, String>,
-  /// The word of each rung, the rung of each reply, and the rung of each gate.
+  /// The word of each rung, the rung of each reply, and the rung of each gate of a record of an
+  /// earlier build.
   words: HashMap<String, String>,
   replies: HashMap<String, String>,
   gates: HashMap<String, String>,
-  /// The run of each rung, and each rung whose word the gate read.
+  /// The run of each rung, and each rung whose word such a gate read.
   runs: HashMap<String, String>,
   gated: HashSet<String>,
   /// Whether the segment that the reader reads keeps the question of each act that the life made,
@@ -688,8 +690,8 @@ impl Reader<'_> {
     self.rungs.insert(maker, id.to_owned());
   }
 
-  /// The run of the word of a rung, once, unless the gate refused it, in a segment that does not
-  /// keep it.
+  /// The run of the word of a rung, once, unless the gate of an earlier build refused it, in a
+  /// segment that does not keep it.
   fn ran(&mut self, rung: &str) {
     if self.asks_kept || self.runs.contains_key(rung) || self.done.contains(rung) {
       return;
@@ -700,7 +702,8 @@ impl Reader<'_> {
     self.runs.insert(rung.to_owned(), id);
   }
 
-  /// A done that the record kept: the word of a reply, and the findings of a gate.
+  /// A done that the record kept: the word of a reply, and the findings of a gate of an earlier
+  /// build.
   fn answered(&mut self, fact: &Fact) {
     let about = fact.about();
     self.done.insert(about.to_owned());

@@ -116,7 +116,7 @@ test("the numbers of the lines of a thread go on from each step to the next, acr
   ]);
 });
 
-test("a word that the gate refused marks the line that its reason names", () => {
+test("a word that failed marks the line that its reason names", () => {
   const prompt = act("prompt1", "prompt", "chain1", "operator", 1, 5, {
     words: ["str", "Go", "opus"],
     value: "ok",

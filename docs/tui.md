@@ -143,12 +143,11 @@ colors of a line come from its whole statement, so a line that is cut or folded 
 
 A line of a program shows what it holds when the pointer rests on it, in a card right of the program: the text that a
 read gave, what a command printed, the value of each other act of the line, and a message of a thread whole. A line
-that the gate refused, or that raised, has a red ✗, and its card gives the error whole. A press on the card opens the
-act.
+that raised has a red ✗, and its card gives the error whole. A press on the card opens the act.
 
 ![A read under the pointer](screenshots/97-read-hover.png)
 
-![A refused line under the pointer](screenshots/98-gate-hover.png)
+![A line that raised under the pointer](screenshots/98-raise-hover.png)
 
 While a word awaits an act that an earlier line made, as `built = await build` after `build = bash(...)`, the line
 that awaits runs: it is lit, it names the act and the line that made it, and it shows its time after a second. The
@@ -322,8 +321,7 @@ the code of Python, TypeScript, JavaScript, and JSON, and the code of Python in 
 
 The input grows as you type, and its bar and the line under it name the mode: Prompt, Python, Answer, or Edit
 program. Each part of that line is a button: the mode, the chain, the model, the effort, and the type of the answer.
-⌃R writes Python with the same gate as the model. The bar and the line under the input take the color of
-Python.
+⌃R writes Python, as a model does. The bar and the line under the input take the color of Python.
 
 ![Python input](screenshots/10-python-input.png)
 
@@ -441,9 +439,8 @@ On a narrow terminal the sidebar is hidden, and the top line keeps the session, 
 
 ## Work in progress
 
-A command streams its output while it runs, and a model shows the last lines that it writes. A word that the gate
-refuses shows the line and the reason, and one more line that says what to do: press ↑ to bring your word back to the
-input, fix it and send it again, or wait while the chain asks the model again with the findings.
+A command streams its output while it runs, and a model shows the last lines that it writes. A word that raises
+shows the line and the reason.
 
 When a call of a model fails for a cause that passes, as a lost connection, a provider that is overloaded or a limit
 of the rate, the provider asks the model again after a wait that doubles each time, up to ten attempts. The footer
@@ -457,7 +454,7 @@ limit until 2026-10-30 16:00 (EST), 7 chains wait: /retry or /cancel`.
 
 ![Model progress](screenshots/19-model-progress.png)
 
-![Gate findings](screenshots/20-gate-findings.png)
+![A word that raises](screenshots/20-word-raise.png)
 
 ## Paused work
 
@@ -638,7 +635,7 @@ list of suggestions or a walk of the history with Up and Down is open.
 
 ## Retried words
 
-A word of a model can fail: the gate refuses it, or it raises. When the next word of the same prompt takes its
+A word of a model can fail: it raises. When the next word of the same prompt takes its
 place, the failed word folds and reads as retried, in a quiet color. A failure that nothing replaced stays open, in
 red.
 

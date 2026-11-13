@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 13;
+pub const PROTOCOL: u32 = 14;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -253,12 +253,6 @@ pub enum Verb {
     life: String,
     on: Option<String>,
   },
-  /// What the gate finds in a word on a chain, which runs nothing.
-  Gate {
-    life: String,
-    word: String,
-    on: Option<String>,
-  },
   /// A stand of the life, which reads the roster and the actor again, on the names of models that
   /// it names in place of the roster of the life, when it names some. The life goes on, and the
   /// record keeps the answer of the stand.
@@ -415,7 +409,6 @@ impl Verb {
         | Self::AsOf { .. }
         | Self::Moments { .. }
         | Self::Names { .. }
-        | Self::Gate { .. }
         | Self::Config { config: Config::Get, .. }
         | Self::ViewMount(_)
         | Self::ViewTree(_)

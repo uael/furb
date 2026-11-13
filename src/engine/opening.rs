@@ -4,8 +4,9 @@ use std::convert::Infallible;
 
 use crate::value::Object;
 
-/// The one piece of python the crate writes: it loads the engine, the sheet, the Kernel and the
-/// checkpointer, each in a namespace of its own, and gives what the host calls in the sandbox by.
+/// The one piece of python the crate writes: it loads the engine, the Kernel, the checkpointer and
+/// the rule of the record, each in a namespace of its own, and gives what the host calls in the
+/// sandbox by.
 ///
 /// It gives the park too: a generator that stands in front of an ear of the outside and holds back
 /// from it each act that is parked when the act is put to it, and the parked names, which the host
@@ -27,22 +28,22 @@ use crate::value::Object;
 /// that refusal, and a rung of any other run hears the done of its run.
 ///
 /// It gives what stands for a value of a record that no later life makes again as it was, by the
-/// rule of the sheet, which each build reads the same: a callable, which went out by a number of
-/// the process that made it, stands as a value equal to each callable, and a text in the words of
-/// an act that a word made, which holds the address of an object, stands as a value equal to each
-/// text that differs from it in its addresses alone. The heap of a later life is no function of
-/// the record, so the act that a word makes again agrees with the record.
+/// rule of `furb.record`, which each build reads the same: a callable, which went out by a number
+/// of the process that made it, stands as a value equal to each callable, and a text in the words
+/// of an act that a word made, which holds the address of an object, stands as a value equal to
+/// each text that differs from it in its addresses alone. The heap of a later life is no function
+/// of the record, so the act that a word makes again agrees with the record.
 ///
 /// The module of the engine holds the names python gives a module before the engine runs, so a word
-/// reads them in a chain as it reads them in python, and as the gate reads them. No loader made the
+/// reads them in a chain as it reads them in python. No loader made the
 /// module here, so it has no spec and no loader. Python binds `__debug__` among its builtins, and
 /// the sandbox binds it in its main module alone.
 pub(super) const OPENING: &str = r#"from string.templatelib import Interpolation, Template
 
 __engine = {"__debug__": True, "__doc__": None, "__package__": "furb", "__spec__": None, "__loader__": None}
 exec(__source, __engine)
-__sheet = {}
-exec(__sheet_source, __sheet)
+__record = {}
+exec(__record_source, __record)
 __kernel = {}
 exec(__kernel_source, __kernel)
 if __checkpointer_source:
@@ -104,7 +105,16 @@ def __parking(ear):
   except StopIteration:
     return
 
-__fresh = {"kernel": lambda: __kernel["kernel"](__engine), "gate": lambda: __sheet["gating"](__engine, __gate, __gating)}
+__fresh = {"kernel": lambda: __kernel["kernel"](__engine)}
+
+def __gate():
+  # A record of an earlier build holds gate acts. Its engine makes each again in a replay, reads who answered it by
+  # the name of this ear, and takes its answer from the record. An act that the record does not answer, at the tip of
+  # a life that ended before the answer, needs an owner: this ear answers it with no finding, so its word runs.
+  while True:
+    heard = yield {"gate"}
+    if heard and heard[0] == "gate":
+      yield "done", heard[1], []
 
 def __lasting(name, ear):
   told = False
@@ -141,7 +151,7 @@ def __lasting(name, ear):
   "call": lambda name, /, *args, **kwargs: __engine[name](*args, **kwargs),
   "checkpoint": __checkpointed,
   "kernel": __fresh["kernel"](),
-  "gate": __fresh["gate"](),
+  "gate": __gate() if "gate" in __engine else None,
   "site": lambda: __engine["site"].get(),
   "speaks": lambda by: __engine["site"].set(by),
   "spoke": lambda token: __engine["site"].reset(token),
@@ -153,8 +163,8 @@ def __lasting(name, ear):
   "park": lambda names: __parked.update(names),
   "unpark": lambda name: __parked.discard(name),
   "lasting": __lasting,
-  "unmade": lambda: __sheet["Recorded"](),
-  "recorded": lambda entries: __sheet["recorded"](__engine, entries),
+  "unmade": lambda: __record["Recorded"](),
+  "recorded": lambda entries: __record["recorded"](__engine, entries),
 }"#;
 
 /// What the opening gave, by name: the callables of the sandbox that the host calls it by, each
@@ -171,7 +181,8 @@ pub(crate) struct Opened {
   pub(super) checkpoint: Object,
   /// The Kernel of the crate, which boot is given as an ear.
   pub(super) kernel: Object,
-  /// The gate of the crate, which boot is given as an ear.
+  /// The ear that owns each gate act of an engine of an earlier build, which boot is given as an
+  /// ear, and nothing for an engine that binds no verb gate, as the engine of this build.
   pub(super) gate: Object,
   /// Who speaks: `site`, read.
   pub(super) site: Object,

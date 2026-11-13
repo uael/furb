@@ -141,7 +141,7 @@ async def test_the_world_answers_settings_with_the_keys_of_a_skill_in_the_config
   keys = {"folder": {"type": "string", "default": "notes"}, "depth": {"type": "integer", "default": 2}}
   (folder / "keys.json").write_text(json.dumps({"properties": keys}), encoding="utf-8")
   (tmp_path / "work" / ".furb" / "config.json").write_text(
-    json.dumps({"gate": False, "note": {"folder": "journal"}}), encoding="utf-8"
+    json.dumps({"scratch_days": 3, "note": {"folder": "journal"}}), encoding="utf-8"
   )
   skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
   _, root = extended("skills", tmp_path, _monty.skills)
@@ -151,7 +151,7 @@ async def test_the_world_answers_settings_with_the_keys_of_a_skill_in_the_config
   got = await engine.rung('close(read("settings://", HIDDEN))', on=root)
   assert isinstance(got, Text)
   assert got.path == "settings://"
-  assert json.loads(got.content)["gate"] is False
+  assert json.loads(got.content)["scratch_days"] == 3
   with pytest.raises(Refused, match=r"No config gives settings://none, and no schema names it\."):
     await engine.rung('close(read("settings://none", HIDDEN))', on=root)
 

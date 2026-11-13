@@ -45,7 +45,6 @@ use serde::Serialize;
 
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
-  gate::checked,
   life::Opening,
   skill::{self, Part, Skill},
   view::{
@@ -472,20 +471,6 @@ pub fn opened(opening: Option<Opening>) -> Result<(Record, Vec<(String, NativeEa
     opening.ok_or_else(|| Fault::refused("a life opens on a directory"))?.parts()?;
   let ears = ears.into_iter().map(|(name, ear)| (name, NativeEar::of(ear))).collect();
   Ok((Record(Object::list(record)), ears))
-}
-
-/// The gate of the crate: what the type checker of monty found on a sheet, each error by its line, and no warning.
-/// The checker is the one every engine of this thread gates with, so a word is judged once and the same.
-#[cfg_attr(feature = "python", pyfunction)]
-#[cfg_attr(feature = "typescript", napi)]
-pub fn gate(sheet: String) -> Result<Vec<(i64, String)>, Fault> {
-  let found = checked(&sheet)?;
-  Ok(
-    found
-      .into_iter()
-      .map(|one| (i64::try_from(one.line).unwrap_or(i64::MAX), one.to_string()))
-      .collect(),
-  )
 }
 
 /// The official skills, in the order a life runs them.

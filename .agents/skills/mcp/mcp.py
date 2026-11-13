@@ -137,10 +137,6 @@ def mcp_act(kind: str, on: str, of: str, fields: dict, show: Show, *words: objec
   return act(kind, on, controlled(ear, lasting=True), *words)
 
 
-def mcp_made[T](_shape: type[T], made) -> Act[T]:
-  return made
-
-
 def mcp_known(server: str, on: str = "") -> dict:
   held = answer("mcp_servers", on, [])
   for one in held:
@@ -181,17 +177,17 @@ def mcp_bound(server: dict, on: str = "") -> str:
 
 
 def mcp_servers(on: str = "") -> Act[list[dict]]:
-  return mcp_made(list, mcp_act("mcp_servers", on, "list[dict]", {}, HEAD))
+  return mcp_act("mcp_servers", on, "list[dict]", {}, HEAD)
 
 
 def mcp_call(server: str, tool: str, arguments: dict | None = None, show: Show = HEAD, on: str = "") -> Act[McpResult]:
   given = dict(arguments or {})
   fields = {"server": server, "tool": tool, **({"arguments": given} if given and not repr(given)[200:] else {})}
-  return mcp_made(dict, mcp_act("mcp_call", on, "McpResult", fields, show, server, tool, given))
+  return mcp_act("mcp_call", on, "McpResult", fields, show, server, tool, given)
 
 
 def mcp_read(server: str, uri: str, show: Show = HEAD, on: str = "") -> Act[McpResult]:
-  return mcp_made(dict, mcp_act("mcp_read", on, "McpResult", {"server": server, "uri": uri}, show, server, uri))
+  return mcp_act("mcp_read", on, "McpResult", {"server": server, "uri": uri}, show, server, uri)
 
 
 def mcp_prompt(
@@ -199,14 +195,14 @@ def mcp_prompt(
 ) -> Act[McpResult]:
   given = {str(k): str(v) for k, v in (arguments or {}).items()}
   fields = {"server": server, "name": name, **({"arguments": given} if given else {})}
-  return mcp_made(dict, mcp_act("mcp_prompt", on, "McpResult", fields, show, server, name, given))
+  return mcp_act("mcp_prompt", on, "McpResult", fields, show, server, name, given)
 
 
 def mcp_control(action: str, server: str, on: str = "") -> Act[dict]:
   if action not in ("reconnect", "enable", "disable", "approve", "login", "logout"):
     why = f"No action {action}: use reconnect, enable, disable, approve, login or logout."
     raise Refused(why)
-  return mcp_made(dict, mcp_act("mcp_control", on, "dict", {"action": action, "server": server}, HEAD, action, server))
+  return mcp_act("mcp_control", on, "dict", {"action": action, "server": server}, HEAD, action, server)
 
 
 def mcp_tools(server: str, on: str = "") -> Act[str]:
@@ -220,7 +216,7 @@ def mcp_tools(server: str, on: str = "") -> Act[str]:
     yield opened(id, "str", server=server, tools=text or "none")
     yield "done", id, text
 
-  return mcp_made(str, act("mcp_tools", on, ear, server))
+  return act("mcp_tools", on, ear, server)
 
 
 def mcp_tool(server: str, name: str, on: str = "") -> Act[dict]:
@@ -252,7 +248,7 @@ def mcp_tool(server: str, name: str, on: str = "") -> Act[dict]:
     )
     yield "done", id, tool
 
-  return mcp_made(dict, act("mcp_tool", on, ear, server, name))
+  return act("mcp_tool", on, ear, server, name)
 
 
 def mcp_use(server: str, on: str = "") -> Act:

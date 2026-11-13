@@ -183,8 +183,8 @@ const UNCLOSED: &str = "wrote a line of three backticks alone at the end of its 
 
 /// A word less the line of three backticks alone at its end, which a model writes out of the habit
 /// of a fence that no line opened. A word gets nothing when its last line is not that fence, when
-/// its first line opens a fence, which the gate refuses whole, when a quote stands open before that
-/// line, whose text the line may end, or when nothing stands before that line.
+/// its first line opens a fence, which is no python as a whole, when a quote stands open before
+/// that line, whose text the line may end, or when nothing stands before that line.
 pub(super) fn unclosed(text: &str) -> Option<String> {
   let (word, last) = text.trim_end().rsplit_once('\n')?;
   let opens = word.trim_start().starts_with("```");
@@ -338,7 +338,7 @@ pub(super) struct Served {
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the
 /// blocks it gave.
 ///
-/// A model speaks python alone, so prose around the code stays in the word, for the gate to refuse,
+/// A model speaks python alone, so prose around the code stays in the word, whose run raises on it,
 /// but for the marks of a fence, of a tool call or of a break of HTML around it, which
 /// [`watch::bare`] drops with the name that it gives a first binding of no name, and a line of
 /// three backticks alone at its end, which [`unclosed`] drops, since they hold no code that runs

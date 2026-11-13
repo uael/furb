@@ -26,7 +26,6 @@ use super::{
   scratch,
 };
 use crate::{
-  gate,
   skill::{self, Places, configs},
   value::Fault,
 };
@@ -152,14 +151,6 @@ fn own() -> Vec<Named> {
     skill: None,
   };
   vec![
-    one(
-      gate::KEY,
-      Kind::Boolean,
-      json!(gate::ON),
-      "Read each word of a model before it runs, and refuse a word in which the gate finds an \
-       error. With the gate off, a word runs one statement at a time and stops at the first that \
-       raises. A life reads it when it opens.",
-    ),
     one(
       KEY_THINKING,
       Kind::Integer,

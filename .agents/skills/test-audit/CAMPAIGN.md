@@ -19,7 +19,7 @@ Done when each test file in scope has a recorded result.
 ## 2. Lanes and inventory
 
 Split the surface into lanes along the owners of the product, not along the names of files. For the crate, the
-lanes are the engine, the sandbox, the gate, the wire, the World and its provider, the extensions, and the opening of
+lanes are the engine, the sandbox, the wire, the World and its provider, the extensions, and the opening of
 a life. Include the tests of the part at shared boundaries, such as `test/outside/` for the door to python.
 
 Done when each test file of the part belongs to exactly one lane.

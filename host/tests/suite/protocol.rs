@@ -117,7 +117,6 @@ fn acts() -> Vec<Verb> {
     Verb::Read { life: life(), path: "a.txt".to_owned(), on: on() },
     Verb::Write { life: life(), path: "a.txt".to_owned(), content: "a".to_owned(), on: on() },
     Verb::Names { life: life(), on: on() },
-    Verb::Gate { life: life(), word: "1 + 1".to_owned(), on: on() },
     Verb::Stand { life: life(), roster: Some(vec!["claude-cli:sonnet".to_owned()]) },
     Verb::Config { life: life(), config: Config::Get },
     Verb::Config {
@@ -438,6 +437,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "5b29ad06731843e45d7c3605d43ddcdd15f50836129f7379fabb6c625eeea993",
   "576de143b7304411f1c42b25ae96231bd0047eb769a5565e9630fea6d7d570df",
   "61fea00841a87095db3f78b57c2870504c8bd89d0a9701b6b39391c9a20e8f73",
+  "74ff2fe32edc31516b2111ce32773e5c96cd686dcecf2cfbd7913bc402051da9",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

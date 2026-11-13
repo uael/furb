@@ -1,9 +1,10 @@
 //! The ear: the one thing a life hears by.
 //!
 //! The contract lets `boot`, `act` and `drive` take any generator of one shape: it hears the facts of the life
-//! that it waits for and every question that no ear before it took, and every chain at its birth, and it speaks by yielding a saying. The Kernel, the gate, the
-//! record and each ear of the World are one, whatever language writes it: a generator of python, a generator of
-//! TypeScript, or a coroutine of rust.
+//! that it waits for and every question that no ear before it took, and every chain at its birth,
+//! and it speaks by yielding a saying. The Kernel, the record and each ear of the World are one,
+//! whatever language writes it: a generator of python, a generator of TypeScript, or a coroutine of
+//! rust.
 //!
 //! An ear of rust is an [`Ear`]: it is resumed with what it heard and gives back what it does, which are the steps
 //! of a generator of the engine. It says a saying and hears back the fact the bus made of it; it calls a verb of the

@@ -10,7 +10,7 @@ export type More = Partial<Omit<Act, "run">> & {
   paused?: boolean;
   thread?: string;
   unfinished?: boolean;
-  run?: RunState | { status: "running" | "failed" | "done"; reason: string; refused?: boolean } | null;
+  run?: RunState | { status: "running" | "failed" | "done"; reason: string } | null;
 };
 
 /** Whether a value is a fault that the engine gave, of a class. */
@@ -22,7 +22,7 @@ const fault = (value: unknown, cancel: boolean) =>
 export function stateOf(act: Act, unfinished = false): State {
   const done = act.phase.phase === "done";
   const value = act.phase.phase === "done" ? act.phase.value : null;
-  const failed = act.run ? act.run.run === "failed" || act.run.run === "refused" : fault(value, false);
+  const failed = act.run ? act.run.run === "failed" : fault(value, false);
   const cancelled = act.run ? act.run.run === "cancelled" : fault(value, true);
   if (act.operator && !done) return "asks";
   if ((act.pause || unfinished) && !done) return "paused";
@@ -38,7 +38,6 @@ export function stateOf(act: Act, unfinished = false): State {
 function ran(run: More["run"]): RunState | null {
   if (!run || "run" in run) return run ?? null;
   if (run.status !== "failed") return { run: run.status };
-  if (run.refused) return { run: "refused", reason: run.reason };
   return /^CancelledError\b/.test(run.reason)
     ? { run: "cancelled", reason: run.reason }
     : { run: "failed", reason: run.reason };

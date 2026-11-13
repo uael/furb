@@ -1517,7 +1517,6 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
     wrap_pyfunction!(super::retold, module)?,
     wrap_pyfunction!(super::decode_record, module)?,
     wrap_pyfunction!(super::opened, module)?,
-    wrap_pyfunction!(super::gate, module)?,
     wrap_pyfunction!(super::official, module)?,
     wrap_pyfunction!(super::enabled, module)?,
     wrap_pyfunction!(super::played, module)?,

@@ -27,7 +27,7 @@ use crate::{
   Ear, Engine, Fault, Object, ObjectRef, checkpoint,
   ear::{hear, hearing, lasting},
   engine::OPERATOR,
-  gate, minify,
+  minify,
   skill::{self, Places},
   world::{self, Catalog, Mode, Retries, Scratch, Writes, mcp::mcp, skills::skills},
 };
@@ -42,8 +42,6 @@ struct Prepared {
   /// The line that tells why each extension that the configs turn on does not play.
   refused: Vec<String>,
   provider: world::Provider,
-  /// Whether the gate reads each word, as [`crate::gate::configured`] says.
-  gated: bool,
 }
 
 /// A function of the host that answers each request in place of the models: it is given the request and a function
@@ -231,7 +229,7 @@ impl Opening {
   fn eared(&self, prepared: Prepared, record: &[Object]) -> Result<Ears, Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let Prepared { places, played, refused, provider, .. } = prepared;
+    let Prepared { places, played, refused, provider } = prepared;
     let log = self.log.as_ref().map(|log| log.0.clone());
     let told = |line: &str| match &log {
       Some(log) => log(line),
@@ -338,8 +336,7 @@ impl Opening {
       Some(one) => self.provider(advertised, actor, roster)?.system(one.into()),
       None => self.provider(advertised, actor, roster)?,
     };
-    let gated = gate::configured(&places.config, Path::new(&self.directory));
-    Ok(Prepared { places, played, refused, provider, gated })
+    Ok(Prepared { places, played, refused, provider })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
@@ -448,13 +445,12 @@ impl Opening {
     prepared: Prepared,
   ) -> Result<(Engine, Vec<Object>), Fault> {
     let works = self.works();
-    let gated = prepared.gated;
     if self.whole == Some(true) {
       self.reborn()?;
     }
     let (record, ears) = self.parted(prepared)?;
     let host = host.into_iter().map(|(name, ear)| (name.into(), ear));
-    let mut engine = Engine::gated(record.clone(), host.chain(ears), gated)?;
+    let mut engine = Engine::boot(record.clone(), host.chain(ears))?;
     if let Some(no) = engine.raised() {
       return Err(no.clone());
     }
@@ -486,9 +482,8 @@ impl Opening {
     let record = checkpoint::booted(world::kept(path)?);
     let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     let prepared = inspects.prepared()?;
-    let gated = prepared.gated;
     let ears = inspects.eared(prepared, &record)?;
-    let mut engine = Engine::gated(record, ears, gated)?;
+    let mut engine = Engine::boot(record, ears)?;
     if let Some(no) = engine.raised() {
       return Err(no.clone());
     }
@@ -506,9 +501,8 @@ impl Opening {
     for at in checkpoint::all(&record) {
       let before = checkpoint::booted(record[..at].to_vec());
       let prepared = inspects.prepared()?;
-      let gated = prepared.gated;
       let ears = inspects.eared(prepared, &before)?;
-      let mut engine = Engine::gated(before, ears, gated)?;
+      let mut engine = Engine::boot(before, ears)?;
       if let Some(no) = engine.raised() {
         return Err(no.clone());
       }

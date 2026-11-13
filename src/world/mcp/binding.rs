@@ -1,8 +1,8 @@
 //! The binding of the tools of a server of MCP: a word of Python made from their schemas, which a chain runs so that
-//! each tool is a function that the gate checks.
+//! each tool is a function with the signature of its schema.
 //!
 //! The word is one class under the name of the server, with one async function for each tool, which takes no self and
-//! has no decorator: the sandbox binds no `staticmethod`, and a function of a class reads in the gate and runs on both
+//! has no decorator: the sandbox binds no `staticmethod`, and a function of a class runs on both
 //! engines as a plain function, so a model calls `await github.create_issue(owner="o", repo="r", title="t")`. The
 //! name of the class stands in the word on its first line alone, so a word that finds the name taken renames the class
 //! with one replace. The word imports nothing: it names `Any` and `Literal`, which the module of each chain holds from

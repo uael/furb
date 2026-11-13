@@ -10,7 +10,6 @@ your own, which boots an engine on ears that you choose.
 - `furb_monty.engine` gives every name of the contract,
   [`engine.pyi`](https://github.com/uael/furb/blob/main/src/furb/engine.pyi), over one life of the engine in the
   sandbox of monty. The crate loads the Kernel there, so this package needs none of its own.
-- `furb_monty.gate` is the gate of the crate. The package `furb` reads a word with it too.
 - `furb_monty._monty` is the door itself. It gives the same host API as the package of TypeScript, each name in the
   case of Python. Its `Engine` has one method for each verb of the contract, which takes the words that the verb
   needs by position and the others by name, and gives an `Act` when the verb makes one.

@@ -42,13 +42,12 @@ To work on a second branch beside this clone, make its worktree with `script/wor
 
 1. A prompt asks a model for a response of a shape, such as `str`.
 2. The model answers with Python. That answer is a word, and a rung runs it.
-3. The gate reads the word first: a type checker reads it, and a sandbox runs each of its imports. A word that it
-   refuses does not run, and the model reads the reason in its next turn.
-4. The Kernel runs the word in the module of its chain. Each call such as `read`, `bash`, `prompt`, or `wait`
-   makes an act, which goes to the ears in turn until one owns it: the ear of the act, or an ear of the World,
-   which reaches the disk, the machine, the models, the operator, or the record. The owner answers the act: now, or
-   later.
-5. What an act does and what it comes to are facts about it. The chain folds its facts into turns, which are the
+3. The Kernel runs the word in the module of its chain. A statement that is not Python, or that names what nothing
+   binds, raises where it runs, and the model reads the raise in its next turn. Each call such as `read`, `bash`,
+   `prompt`, or `wait` makes an act, which goes to the ears in turn until one owns it: the ear of the act, or an ear
+   of the World, which reaches the disk, the machine, the models, the operator, or the record. The owner answers the
+   act: now, or later.
+4. What an act does and what it comes to are facts about it. The chain folds its facts into turns, which are the
    Python that the model reads next.
 
 ## The files of each part
@@ -69,14 +68,13 @@ contract needs a request of the owner.
 | `src/ear.rs`, `src/fact.rs` | The ear, the one thing a life hears by, and a fact as the engine says it. |
 | `src/value.rs`, `src/wire.rs` | A value that crosses between the engine and a host, and that value as JSON. |
 
-### The Kernel and the gate
+### The Kernel
 
 | File | What it holds |
 | --- | --- |
 | `src/furb/kernel.py` | The Kernel, which runs the word of a rung in the module of its chain. Both engines load it. |
 | `src/furb/checkpoint.py` | The checkpointer, which gathers the data of a checkpoint and seeds a later life from it, on the names of the engine. Both engines load it, and `src/furb/checkpoint.pyi` is its contract. |
-| `src/furb/sheet.py` | The sheet that the gate reads a word on, and the findings that it reads off it. |
-| `src/gate.rs`, `src/gate/` | The gate: the type checker of monty, which reads a sheet. |
+| `src/furb/record.py` | What stands, in the record that boot is given, for a value that no later life makes again as it was. Both engines load it. |
 
 ### The World and the life
 
@@ -109,7 +107,7 @@ no network.
 | `src/world/provider.rs` | The provider: the models that it offers, the default actor, its refresh, and what the host is told while a model writes. |
 | `src/world/provider/hearer.rs` | The ear: one method for each event that it hears, the replies that it took, and the notes that it tells a chain. |
 | `src/world/provider/model.rs` | A model: its class, its settings, the standing that a chain reads, and the request of a reply. |
-| `src/world/provider/word.rs` | The word of a reply as its model writes it: what the gate finds against it, and each part of it that runs. |
+| `src/world/provider/word.rs` | The word of a reply as its model writes it: each part of it that runs, and what its chain is told when a statement of it cannot be python. |
 | `src/world/provider/messages.rs` | The turns of a chain as the messages that a model reads. |
 | `src/world/provider/answer.rs` | The call of a model for a reply: the stream, the retries, and the turn that its answer gives, with its usage. |
 | `src/world/provider/retry.rs` | The failures of a call that pass, and the wait before the provider asks the model again. |
@@ -123,7 +121,7 @@ no network.
 | `src/world/provider/codex/` | The provider `codex`: the Responses API on a ChatGPT sign-in that furb keeps. |
 | `src/world/provider/search.rs` | The search of the web, which the provider answers: the native search of each provider that has one, else the free search. |
 | `src/world/provider/images.rs` | The images that a message names, each kept under the digest of its bytes. |
-| `src/world/provider/watch.rs` | The watch over the word of a reply while its model writes it, which finds the first statement that cannot be python, or that the gate refuses for a fault that no later statement can mend. |
+| `src/world/provider/watch.rs` | The watch over the word of a reply while its model writes it, which finds the first statement that cannot be python. |
 
 ### The doors
 

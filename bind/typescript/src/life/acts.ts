@@ -9,8 +9,9 @@ export const WORK = ["prompt", "rung", "bash", "wait"];
 /** The questions the engine asks on the way to what an act does, which are no acts a person follows: each is
  * answered for the act that asked it, which shows what it came to. A read and a write are acts that a person follows,
  * since each says which file it read or changed. An older record holds each writing of a model as such a question,
- * where a newer one holds it as a fact. The act setup, which the World makes on the root at the end of the setup that
- * every chain shares, marks a place and does nothing that a person follows. */
+ * where a newer one holds it as a fact, and it holds the questions of the kind gate. The act setup, which the World
+ * makes on the root at the end of the setup that every chain shares, marks a place and does nothing that a person
+ * follows. */
 const STEPS = new Set([
   "setup",
   "stand",
@@ -90,14 +91,13 @@ export interface Measure {
  * held with no pause over it, and it is no work. */
 export const unfinished = (act: Pick<Act, "phase" | "pause" | "state">): boolean =>
   act.state === "paused" && !act.pause && !isDone(act);
-/** What a person reads of how the word of a rung ran: why a fault, a cancel or the gate ended it, and nothing else. */
+/** What a person reads of how the word of a rung ran: why a fault or a cancel ended it, and nothing else. */
 export const reasonOf = (run: RunState | null | undefined): string =>
   run && "reason" in run ? run.reason : "";
 
-/** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
- * than a cancel. */
+/** Whether an act failed: a rung whose run raised, or an act done with an exception other than a cancel. */
 export function failed(act: Pick<Act, "run" | "phase">): boolean {
-  if (act.run) return act.run.run === "failed" || act.run.run === "refused";
+  if (act.run) return act.run.run === "failed";
   const value = outcomeOf(act);
   return Boolean(
     value && typeof value === "object" && "is" in value && "args" in value && value.is !== "CancelledError",

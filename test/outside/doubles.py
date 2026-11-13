@@ -1,8 +1,7 @@
-"""The doubles the modules around the engine are driven by: a model that answers from a script, a World, and a gate.
+"""The doubles the modules around the engine are driven by: a model that answers from a script, and a World.
 
 A test of the World stands its life on the World under test; a test of the Kernel stands its life on the World in
-memory of the suite; a test of the gate gives its life the gate, and asks it by an act, since no verb asks it. None
-asks a model: a model of the suite is a function that the provider of the crate asks in place of a model, on a thread
+memory of the suite. None asks a model: a model of the suite is a function that the provider of the crate asks in place of a model, on a thread
 of its own, so a test waits for what it answers.
 """
 
@@ -15,7 +14,6 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import conftest
-import furb
 from conftest import World
 from furb import engine
 from furb.world import Answer, Live
@@ -91,21 +89,6 @@ def speaking(text: str) -> Iterator[None]:
   finally:
     sys.stdin.close()
     sys.stdin = held
-
-
-def gates() -> dict[str, conftest.Kernel]:
-  """The gate that a life of a test of the gate is given: the gate of the sheet for the engine of this interpreter, and
-  none for the engine of monty, which holds its own."""
-  return {} if engine is not furb.python else {"gate": conftest.Py().gating()}
-
-
-async def gate(root: str, word: str) -> list[str]:
-  """What the gate of a life finds against a word on a chain: the answer of an act of the kind gate, which the ear of
-  the gate takes. No verb of the engine makes that act, so the chain binds one first."""
-  await conftest.verbs(root, "gate")
-  found = engine.ask("gate", root, word)
-  assert isinstance(found, list)
-  return found
 
 
 def booted(said: World, record: Sequence[tuple] = (), **ears: World) -> str:

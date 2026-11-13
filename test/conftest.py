@@ -25,9 +25,10 @@ import pytest
 import furb
 import furb.checkpoint
 import furb.kernel
+import furb.record
 import furb_monty.checkpoint
 import furb_monty.engine
-from furb import engine, sheet
+from furb import engine
 from furb.engine import OPERATOR, Act, Exit, Refused, Text, site
 from furb.world import Live, entries
 from furb_monty import _monty
@@ -54,7 +55,7 @@ def gone() -> None:
 
 
 ENGINE = vars(furb.python)
-"""ENGINE is the module of the engine of this interpreter, whose names the Kernel and the gate read."""
+"""ENGINE is the module of the engine of this interpreter, whose names the Kernel reads."""
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
 SKILLS = HERE.parent / ".agents" / "skills"
@@ -432,17 +433,8 @@ def ran(log: Sequence[tuple]) -> list[str]:
 
 
 class Py:
-  """The Kernel and the gate of this interpreter, outside the engine like the World: the Kernel of `furb.kernel`,
-  which runs a word in the module of its chain, and the gate of the sheet, which reads a word with the gate of the
-  crate."""
-
-  def gate(self, word: str, program: list[str]) -> list[str]:
-    """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
-    return sheet.gate(ENGINE, {f"rung{n}": one for n, one in enumerate(program, 1)}, word, furb_monty.gate)
-
-  def gating(self) -> Kernel:
-    """The gate as the ear of a life, which answers each gate with what it finds against the word."""
-    return sheet.gating(ENGINE, furb_monty.gate)
+  """The Kernel of this interpreter, outside the engine like the World: the Kernel of `furb.kernel`, which runs a word
+  in the module of its chain."""
 
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life."""
@@ -493,7 +485,7 @@ def kernel() -> dict[str, Kernel]:
 def given(record: Sequence[tuple]) -> Sequence[tuple]:
   """A record as boot is given it, as a host gives it: the engine of monty takes it through the opening of its
   sandbox, and a host of the engine of this interpreter gives what recorded of the Kernel makes of it."""
-  return sheet.recorded(ENGINE, list(record)) if engine is furb.python else record
+  return furb.record.recorded(ENGINE, list(record)) if engine is furb.python else record
 
 
 def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list[tuple], str]:
@@ -865,8 +857,8 @@ def pytest_collectstart(collector: pytest.Collector) -> None:  # noqa: ARG001
 
 
 QUOTES = json.loads((Path(__file__).parent / "quotes.json").read_text(encoding="utf-8"))
-"""QUOTES is the table of the quotes, which the engine, the gate and the watch of the provider read alike: each word,
-the python that unquoted makes of it, whether a quote stands open at its end, and what the gate finds in it."""
+"""QUOTES is the table of the quotes, which the engine and the watch of the provider read alike: each word, the python
+that unquoted makes of it, and whether a quote stands open at its end."""
 
 
 async def verbs(root: str, *kinds: str) -> None:

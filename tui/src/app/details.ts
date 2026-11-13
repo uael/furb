@@ -42,7 +42,7 @@ import { Gutter } from "./gutter.ts";
 import { part } from "./part.ts";
 import { hidden, STATE, saidOf, seconds, spell, stateOf } from "./shared.ts";
 
-/** A reason of the gate or of a raise as one line says it: without the line that the row already shows, and
+/** A reason of a raise as one line says it: without the line that the row already shows, and
  * without the place that the parser names, `(<string>, line 2), in 'x = = 1'`, which repeats the line. */
 const plainReason = (why: string) =>
   why.replace(/^line \d+: /, "").replace(/\s*\(<string>, line \d+\)(?:, in '.*'$)?/, "");
@@ -191,9 +191,8 @@ export const details = part({
     return spoken === String(thread.act.words[1] ?? "") ? thread.title : spoken;
   },
 
-  /** A word of Python in a card: its numbered lines, the reason it failed, and what to do after a refusal of the
-   * gate. */
-  word(box: BoxRenderable, word: string, reason?: string, hint?: string): void {
+  /** A word of Python in a card: its numbered lines, and the reason it failed. */
+  word(box: BoxRenderable, word: string, reason?: string): void {
     // The code starts under the name of its rung, past the fold and the glyph of the heading.
     const inner = this.box({ gap: space.stack, paddingLeft: space.inset });
     // A rung whose word has not come yet shows no code.
@@ -201,28 +200,12 @@ export const details = part({
     // The parser names the word as <string> and says its line twice, which the reason leaves out.
     if (reason)
       inner.add(this.branched(shortenHomes(reason.replace(/\s*\(<string>, line \d+\)$/, "")), c.danger));
-    // The line of what to do stands under the reason, at the column of its text.
-    if (hint) inner.add(this.inset(space.between, this.text(hint, c.muted)));
     box.add(inner);
-  },
-
-  /** The one line that says what to do after the gate refused the word of a rung, and nothing for any other rung:
-   * the operator fixes his own word, and the chain asks a model for its word again with the findings. */
-  gateHint(act: ActRow): string | undefined {
-    if (act.kind !== "rung" || !isDone(act) || act.run?.run !== "refused") return undefined;
-    return this.session.own(act)
-      ? "Press ↑ in the input to bring the word back, fix the line that the gate names, and send it again."
-      : "The chain tells the model these findings and asks it for its word again.";
   },
 
   actDetails(box: BoxRenderable, act: ActRow): void {
     if (act.kind === "rung") {
-      this.word(
-        box,
-        String(this.session.program[act.id] || act.words[0] || ""),
-        reasonOf(act.run),
-        this.gateHint(act),
-      );
+      this.word(box, String(this.session.program[act.id] || act.words[0] || ""), reasonOf(act.run));
       return;
     }
     const details = this.box({ paddingLeft: space.between * 2, gap: space.stack });
@@ -836,13 +819,10 @@ export const details = part({
       open = () => this.go("feed", line.step.id);
     } else if (line.kind === "code") {
       if (line.fails) {
-        const refused = Boolean((line.step as ActRow).run?.run === "refused");
         nodes.push(
-          this.text(
-            `${glyph.failed} ${refused ? "The gate refused" : `${line.step.id} raised at`} line ${line.display}`,
-            c.danger,
-            { attributes: bold },
-          ),
+          this.text(`${glyph.failed} ${line.step.id} raised at line ${line.display}`, c.danger, {
+            attributes: bold,
+          }),
           this.text(
             shortenHomes(line.fails.split("\n").map(plainReason).join("\n")).slice(0, 1200),
             c.danger,

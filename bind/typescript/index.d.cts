@@ -328,12 +328,6 @@ export declare const ENGINE: string
 export declare function files(scratch: string, config?: string | undefined | null): NativeEar
 
 /**
- * The gate of the crate: what the type checker of monty found on a sheet, each error by its line, and no warning.
- * The checker is the one every engine of this thread gates with, so a word is judged once and the same.
- */
-export declare function gate(sheet: string): Array<[number, string]>
-
-/**
  * An image a host attached: the name of its file, the uri a message names it by, its media type, and its size in
  * bytes.
  */

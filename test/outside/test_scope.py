@@ -32,7 +32,7 @@ def test_a_change_to_the_crate_runs_every_job() -> None:
 
 def test_a_change_to_the_engine_or_to_the_corpus_alone_runs_every_job_on_linux() -> None:
   linux = {"suite_os": LINUX, "ts_os": LINUX, "crate_os": LINUX, "build_os": LINUX, "code": True, "hooks": True}
-  assert scope.scope(["src/furb/engine.py", "src/furb/engine.pyi", "src/furb/sheet.py", "src/furb/kernel.py"]) == linux
+  assert scope.scope(["src/furb/engine.py", "src/furb/engine.pyi", "src/furb/record.py", "src/furb/kernel.py"]) == linux
   assert scope.scope(["tests/corpus/next/work.jsonl"]) == linux
 
 

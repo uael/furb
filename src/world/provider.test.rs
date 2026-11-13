@@ -93,12 +93,6 @@ fn lived(provider: Provider) -> Engine {
 /// A life of the real engine on a provider in a yard of its own, and the ears of the World, whose files keep each
 /// image that a read gives in a gallery.
 fn seeing(provider: Provider, gallery: Option<PathBuf>) -> Engine {
-  opened(provider, gallery, true)
-}
-
-/// A life as [`seeing`] opens it, whose gate reads each word when gated says so, and finds nothing
-/// against any word else, as when the key gate of a config is false.
-fn opened(provider: Provider, gallery: Option<PathBuf>, gated: bool) -> Engine {
   let scratch = world::Scratch::own();
   // The config directory of the user is a place that no one writes, never the one of the machine.
   let config = env::temp_dir().join(format!("furb-provider-user-{}", process::id()));
@@ -108,7 +102,7 @@ fn opened(provider: Provider, gallery: Option<PathBuf>, gated: bool) -> Engine {
     ("bash", world::bash(scratch)),
     ("time", world::time()),
   ];
-  Engine::gated(Vec::<Object>::new(), ears, gated).expect("the life opens")
+  Engine::boot(Vec::<Object>::new(), ears).expect("the life opens")
 }
 
 /// A life of the real engine on the record that a store keeps at a path, with the ears of the
@@ -124,7 +118,7 @@ fn stored(provider: Provider, record: &Path) -> Engine {
     ("time", world::time()),
     ("store", store),
   ];
-  Engine::gated(kept, ears, true).expect("the life opens")
+  Engine::boot(kept, ears).expect("the life opens")
 }
 
 /// A life of the real engine on the provider of these models and the ears of the World, in a yard of its own.
@@ -679,8 +673,7 @@ fn a_close_mark_inside_a_line_of_a_quote_does_not_end_the_reply_at_its_open_mark
 #[test]
 fn a_triple_quote_whose_paragraph_starts_at_the_left_edge_runs_once_its_word_is_whole() {
   // A chunk ends at the blank line inside the triple quote, and the paragraph after it starts at
-  // the left edge: the string is not whole until its close, though no finding of the gate says
-  // so, as with the gate of a config turned off.
+  // the left edge: the string is not whole until its close.
   let first = "close(\"\"\"My take: a stronger control model, which costs less.\n\n";
   let parts = [first, "What I like: the paragraph at the left edge.\n", "end\"\"\")"];
   let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
@@ -691,8 +684,7 @@ fn a_triple_quote_whose_paragraph_starts_at_the_left_edge_runs_once_its_word_is_
     .collect();
   let model = MockCompletionModel::from_stream_turns([events]);
   let at = yard("triple");
-  let mut engine =
-    opened(Provider::new(at.display().to_string(), vec![scripted(&model)]), None, false);
+  let mut engine = lived(Provider::new(at.display().to_string(), vec![scripted(&model)]));
   let root = engine.root().to_owned();
   let with = verbs::Prompt { message: Some("say".to_owned()), on: on(&root), ..Default::default() };
   let id = engine.prompt(Object::string("str"), with).expect("a prompt is made").id().to_owned();

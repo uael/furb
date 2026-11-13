@@ -46,10 +46,11 @@ use crate::{
   ear::{Co, Ear, hear, hearing, say},
   engine::ROOT,
   fact::{Fact, named},
-  gate,
   value::{Fault, Object, Text, entry},
   world::{config, files},
 };
+
+mod bound;
 
 /// The key of a config that turns the skills on and off, each by its name: true, false, or the
 /// path of its folder.
@@ -523,7 +524,7 @@ pub(crate) fn manifested<T: AsRef<str>>(
     return Err(format!("The manifest gives {DEFAULT} {other:?}, and it is \"true\" or \"false\""));
   }
   let word = word(read(file)?.as_ref());
-  let bound = gate::engine_bound(&word, ENGINE);
+  let bound = bound::engine_bound(&word, ENGINE);
   if !bound.is_empty() {
     let names = bound.join(", ");
     return Err(format!(
@@ -755,7 +756,7 @@ pub fn word(source: &str) -> String {
 /// a constant, an
 /// import, and an assignment to names in capitals, in its order. A word that does not parse is its
 /// own definitions,
-/// so the gate says why it is refused.
+/// so its run says why it is not python.
 pub fn definitions(word: &str) -> String {
   shaped(word, false)
 }

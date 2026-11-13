@@ -18,13 +18,13 @@ Give the audit a record and its sha256, as the person who made the record gives 
    reaches no network.
 3. Lets furb make the life again from the record. The engine runs each word of the record again, and it stops at the
    first act that does not agree with the record.
-4. Hashes each answer of a model and each word that the life gave the gate or ran, as the life made them again, and
+4. Hashes each answer of a model and each word that the life ran, as the life made them again, and
    compares each hash with the hash of the same answer or word in the record. It also compares each act that you or
    the life made with the act that the record holds, where you is the operator of that life.
 
 The audit cannot make an answer of a model again, or what a command printed, since no model and no command runs. The
 sha256 of step 1 binds those answers. The replay of step 3 proves that the life made each act, and each word that it
-gave the gate and ran, from those answers alone.
+ran, from those answers alone.
 
 ## Run it
 
@@ -63,12 +63,12 @@ The audit writes its report as JSON on stdout, and in the file that `--report` n
 - `engine`: the engine that made the record, from its fact `made`.
 - `entries` and `acts`: how many entries the record holds, and how many of them are acts.
 - `answers`: for each reply of a model that came to a turn, the hash of its answer in the record and in the replay.
-- `words`: for each rung that a model answered, the hash of its word in the record, the hash of the word that the
-  replay ran, and the gate that read the word in the replay. A word that the gate refused has a gate and no run.
+- `words`: for each rung that a model answered, the hash of its word in the record, and the hash of the word that the
+  replay ran.
 - `wrong`: each thing that does not agree, and `agrees`: whether that list is empty.
 
 ## The hashes
 
 A hash is the sha256 of a text, as hex. The text of an answer is its JSON with sorted keys, where a tuple is a list,
 and a value that JSON does not hold, such as a text, an exit or a refusal, is its repr. The text of a word is the word
-as the gate reads it: the Python that the model wrote, with each quote made a string.
+as the Kernel runs it: the Python that the model wrote, with each quote made a string.

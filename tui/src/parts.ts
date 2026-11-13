@@ -111,9 +111,9 @@ export interface Seen {
   of(kind: string): Act[];
   /** The names of the extensions that the life runs, in the order that it enabled them. */
   skills(): Promise<string[]>;
-  /** Runs python on the chain on screen, through the gate, as `/run` does, and gives, once the word ended, the value
-   * of the last act that the word made on that chain, as the record holds it once that act is done. A word that makes
-   * no act gives undefined, and a word that raises or that the gate refuses rejects with its error. */
+  /** Runs python on the chain on screen, as `/run` does, and gives, once the word ended, the value of the last act
+   * that the word made on that chain, as the record holds it once that act is done. A word that makes no act gives
+   * undefined, and a word that raises rejects with its error. */
   run(word: string): Promise<unknown>;
   /** Shows a notice in the footer. */
   say(text: string): void;

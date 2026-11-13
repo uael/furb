@@ -5,7 +5,7 @@ import { isQuestion } from "furb";
 /** The kinds of question that are steps of an act, which a view of a life shows not, as the activity says. The run, the
  * reply and the stand stay, since a run carries the word of its rung, a reply the usage of an answer, and a stand the
  * roster and the actor of the life. */
-const steps = new Set(["read", "write", "clock", "chance", "gate", "cd", "merged", "wants"]);
+const steps = new Set(["read", "write", "clock", "chance", "cd", "merged", "wants"]);
 /** The kinds of act that an ear makes under an act of its own, which no view of a life shows, as the questions of the
  * memory that its watcher asks. */
 const unseen = new Set(["memory"]);

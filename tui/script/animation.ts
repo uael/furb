@@ -77,7 +77,7 @@ try {
   test.mockInput.pressEnter();
   await working();
   await still(260);
-  // Python input: the operator writes a word with the same gate as the model.
+  // Python input: the operator writes a word as a model does.
   test.mockInput.pressKey("r", { ctrl: true });
   await still(60);
   await type('write(read("README.md").append("\\nPress Ctrl+K to search.\\n"))', 3, 3);

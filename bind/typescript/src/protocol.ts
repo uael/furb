@@ -186,12 +186,6 @@ export type Request1 =
     }
   | {
       life: string;
-      word: string;
-      on?: string | null;
-      verb: "gate";
-    }
-  | {
-      life: string;
       roster?: string[] | null;
       verb: "stand";
     }
@@ -709,8 +703,8 @@ export type Phase =
       value: unknown;
     };
 /**
- * How the word of a rung ran: it runs or waits for its word, it ran, a fault or a cancel ended it,
- * or the gate refused it, each with what a person reads.
+ * How the word of a rung ran: it runs or waits for its word, it ran, or a fault or a cancel ended
+ * it, each with what a person reads.
  */
 export type RunState =
   | {
@@ -725,10 +719,6 @@ export type RunState =
     }
   | {
       run: "cancelled";
-      reason: string;
-    }
-  | {
-      run: "refused";
       reason: string;
     };
 /**
@@ -1171,4 +1161,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 13;
+export const PROTOCOL = 14;

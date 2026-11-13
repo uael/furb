@@ -826,33 +826,6 @@
         },
         {
           "type": "object",
-          "description": "What the gate finds in a word on a chain, which runs nothing.",
-          "properties": {
-            "life": {
-              "type": "string"
-            },
-            "word": {
-              "type": "string"
-            },
-            "on": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "verb": {
-              "type": "string",
-              "const": "gate"
-            }
-          },
-          "required": [
-            "verb",
-            "life",
-            "word"
-          ]
-        },
-        {
-          "type": "object",
           "description": "A stand of the life, which reads the roster and the actor again, on the names of models that\nit names in place of the roster of the life, when it names some. The life goes on, and the\nrecord keeps the answer of the stand.",
           "properties": {
             "life": {
@@ -3556,26 +3529,9 @@
             "run",
             "reason"
           ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "run": {
-              "type": "string",
-              "const": "refused"
-            },
-            "reason": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "run",
-            "reason"
-          ],
-          "description": "The findings of the gate, one for each line."
         }
       ],
-      "description": "How the word of a rung ran: it runs or waits for its word, it ran, a fault or a cancel ended it,\nor the gate refused it, each with what a person reads."
+      "description": "How the word of a rung ran: it runs or waits for its word, it ran, or a fault or a cancel ended\nit, each with what a person reads."
     },
     "Spend": {
       "type": "object",
@@ -4219,5 +4175,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 13
+  "x-protocol": 14
 }

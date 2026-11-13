@@ -166,7 +166,7 @@ export const keys = [
         chord: "⌃R",
         choice: {
           label: "Python input",
-          detail: "Write code with the same gate as the model",
+          detail: "Write code as a model does",
           before: "run",
         },
       },

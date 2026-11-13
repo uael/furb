@@ -206,9 +206,9 @@ reads a record with no life, so a record of any build opens: it gives the engine
 the record, as the record names them, and `null` for each that it does not name, the engine and the version of this
 build, whether its facts are those of the log, and the facts. The facts are those of the log while the log agrees with
 the record, and else those that the record kept, with the facts that the engine said and the record does not keep, as
-far as the kept facts show them: each chain and each rung that a kept act names, the run of the word of each rung that
-the gate let run, the findings of a word that the gate refused, and the done of each act that the operator closed or
-cancelled.
+far as the kept facts show them: each chain and each rung that a kept act names, the run of the word of each rung,
+which a record of an earlier build holds after its gate let it run, with the findings of a word that the gate refused,
+and the done of each act that the operator closed or cancelled.
 
 ## Read a record
 

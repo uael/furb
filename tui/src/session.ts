@@ -569,8 +569,6 @@ export class Session extends EventEmitter {
   moment?: number;
   /** The models the operator added to the roster of the session from the catalog, which each later life offers. */
   models: string[] = [];
-  findings: string[] = [];
-  rejectedWord = "";
   redo: { from: string; to: string }[] = [];
   private savedCost = 0;
   /** The folder that owns the history of the workspace of the session: the main checkout, for a worktree. */
@@ -1011,10 +1009,6 @@ export class Session extends EventEmitter {
             }
           }
         }
-        // The findings of the gate that refused the last word of the operator on the chain shown.
-        const lastWord = this.indexed().words.get(this.selected);
-        this.findings = lastWord?.run?.run === "refused" ? reasonOf(lastWord.run).split("\n") : [];
-        this.rejectedWord = this.findings.length ? String(lastWord?.words[0] ?? "") : "";
         this.emit("change");
       } while (this.dirty && !this.closed);
     })().finally(() => {
@@ -1719,8 +1713,8 @@ export class Session extends EventEmitter {
   isUserPrompt(act: ActRow): boolean {
     return act.kind === "prompt" && this.own(act);
   }
-  /** Whether a prompt has a program that an edit changes and replays: one of its rungs holds a word the gate let run
-   * on this chain. */
+  /** Whether a prompt has a program that an edit changes and replays: one of its rungs holds a word that ran on this
+   * chain. */
   editable(act: ActRow): boolean {
     return (
       act.kind === "prompt" &&
@@ -2063,8 +2057,7 @@ export class Session extends EventEmitter {
     await this.engine.result(rung);
     await this.refresh();
     const run = this.acts.find((act) => act.id === rung)?.run;
-    if (run?.run === "failed" || run?.run === "refused")
-      throw new Error(`The files were not restored: ${reasonOf(run)}`);
+    if (run?.run === "failed") throw new Error(`The files were not restored: ${reasonOf(run)}`);
   }
   /** A path as a word names it: from the directory of the chain shown when it stands under it, and whole else. */
   private near(path: string): string {
@@ -2360,9 +2353,8 @@ export class Session extends EventEmitter {
 
   /** Runs a word on the chain on screen, as /run does, and gives, once the word ended, the value of the last act that
    * it made on that chain, as the record holds it once that act is done, or undefined for a word that made no act. A
-   * word that raises or that the gate refuses rejects with its error. */
+   * word that raises rejects with its error. */
   async runWord(word: string): Promise<unknown> {
-    this.findings = [];
     const on = this.selected;
     const id = await this.engine.rung({ word, on });
     try {
@@ -2579,7 +2571,6 @@ export class Session extends EventEmitter {
         break;
       }
       case "run": {
-        this.findings = [];
         const id = await this.engine.rung({ word: argument, on: this.selected });
         this.view = "feed";
         if ((await this.engine.outcome(id)).done) {
