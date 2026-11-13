@@ -12,7 +12,8 @@ import { join } from "node:path";
  * them set core.bare = true in the config of the clone, which each worktree shares. The cache holds the socket of the
  * daemon of the tests, which a Unix socket limits to 103 bytes on macOS, and a worktree, or the temporary directory of
  * a life, can stand at a long path. So the cache stands in /tmp, under a short name that holds a hash of the root,
- * which keeps two worktrees apart.
+ * which keeps two worktrees apart. It holds no variable by which bun knows that an agent runs it: `bun test` then
+ * leaves out the line of each test that passes, and the runner and the loop of tui/script/repeat.ts count those lines.
  */
 export function environment(
   base: Record<string, string | undefined> = process.env,
@@ -24,7 +25,7 @@ export function environment(
     `furb-cache-${createHash("sha256").update(root).digest("hex").slice(0, 8)}`,
   );
   const kept = Object.fromEntries(
-    Object.entries(base).filter(([name]) => !name.toUpperCase().startsWith("GIT_")),
+    Object.entries(base).filter(([name]) => !/^(GIT_.*|AGENT|CLAUDECODE|REPL_ID)$/.test(name.toUpperCase())),
   );
   return {
     ...kept,

@@ -26,6 +26,11 @@ test("the environment of the tests hides the claude command line with an empty F
   expect(given.FURB_CLAUDE_BIN).toBe("");
 });
 
+test("the environment of the tests holds no variable that tells bun that an agent runs it", () => {
+  const given = environment({ AGENT: "1", CLAUDECODE: "1", REPL_ID: "1", PATH: "/usr/bin" });
+  expect(Object.keys(given).filter((name) => /AGENT|CLAUDECODE|REPL_ID/.test(name))).toEqual([]);
+});
+
 test("the socket of the daemon of the tests fits a Unix socket in a worktree at a long path, and two worktrees keep two caches", () => {
   const long = join("/", "a".repeat(60), "b".repeat(60), "worktree");
   const here = environment({}, long);
