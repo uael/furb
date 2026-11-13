@@ -9,6 +9,7 @@
 # process and each process of this user whose command names a tree of the clone that holds this script, as git
 # worktree list gives the trees, so it is the same on a runner of CI, on Linux and on macOS. FURB_WATCH_LANE=0 makes
 # the work the cause at each look, as on a runner where nothing else runs.
+# A daemon of furb is no part of the work, since no end of a test process frees its memory.
 # It ends no other process, so a daemon of furb, a window and a process of the owner stay. It prints each process that
 # it ended, with its size.
 # The memory is tight on macOS at the warn level of the kernel or above, which sysctl reports, and on Linux when less
@@ -71,8 +72,9 @@ census() {
       test = ($4 ~ /\/target\/.*\/deps\/[^\/]+-[0-9a-f]+$/ || $4 ~ /(^|\/)pytest$/ ||
         $4 ~ /(^|\/)python[0-9.]*$/ && ($5 ~ /(^|\/)pytest$/ || $5 == "-m" && $6 == "pytest") || $4 ~ /(^|\/)bun$/ && $5 == "test" ||
         $0 ~ /tui\/script\/(screenshots|stage)\.ts|exec\(eval\(sys\.stdin\.readline/)
-      if (test || names(command)) lane += $3
-      if (test && $0 !~ /[ \/]furb host( |$)/ && $3 > size) { size = $3; pid = $2; keep = command }
+      host = $0 ~ /[ \/]furb host( |$)/
+      if ((test || names(command)) && !host) lane += $3
+      if (test && !host && $3 > size) { size = $3; pid = $2; keep = command }
     }
     END { print lane + 0, pid + 0, size + 0, substr(keep, 1, 150) }'
 }

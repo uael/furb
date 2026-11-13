@@ -269,3 +269,26 @@ def test_the_work_is_each_test_process_and_each_process_that_names_a_tree_of_the
     else:
       assert [one.poll() for one in procs] == [None] * 3
   assert ("ended pid" in got.stdout) == ended, got.stdout
+
+
+@pytest.mark.parametrize(
+  ("name", "ended"), [("target/debug/furb host", False), ("target/debug/rustc --crate-name x", True)]
+)
+def test_a_daemon_of_furb_is_no_part_of_the_work_since_no_end_of_a_test_process_frees_it(
+  tmp_path: Path, name: str, *, ended: bool
+) -> None:
+  script, other = clone(tmp_path)
+  names = [
+    "bun test tui/scenarios/picker.test.ts -t beside",
+    f"{other}/{name}",
+    f"{other}/target/debug/furb turns --record /x/r.jsonl",
+  ]
+  sizes = (360, 4600, 4100)
+  with fakes(3) as procs:
+    machine(tmp_path, 2, [(one.pid, size * MB, c, MINE) for one, size, c in zip(procs, sizes, names, strict=True)])
+    got = watch(tmp_path, script, FURB_WATCH_MIN="")
+    if ended:
+      assert procs[0].wait(timeout=10) == -signal.SIGKILL
+    else:
+      assert [one.poll() for one in procs] == [None] * 3
+  assert ("ended pid" in got.stdout) == ended, got.stdout
