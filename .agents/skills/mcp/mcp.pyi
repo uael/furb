@@ -35,6 +35,9 @@ def mcp_act(kind: str, on: str, of: str, fields: dict, show: Show, *words: objec
   An act that the World refuses completes with Refused, which an await raises in the caller, and its done tells nothing.
   """
 
+def mcp_made[T](_shape: type[T], made: Act) -> Act[T]:
+  """mcp_made(shape, made) gives the act that it is given, typed as an act of the shape that a word awaits for."""
+
 def mcp_known(server: str, on: str = "") -> dict:
   """mcp_known(server) gives the dict of a server in the last list of servers that an mcp_servers act on the chain came to.
   A server that the list does not hold raises Refused, which names the servers that it holds.
