@@ -27,12 +27,19 @@ use crate::value::Object;
 /// step. A rung that awaited an act through a wants hears only that act, so it is closed with
 /// that refusal, and a rung of any other run hears the done of its run.
 ///
-/// It gives what stands for a value of a record that no later life makes again as it was, by the
-/// rule of `furb.record`, which each build reads the same: a callable, which went out by a number
-/// of the process that made it, stands as a value equal to each callable, and a text in the words
-/// of an act that a word made, which holds the address of an object, stands as a value equal to
-/// each text that differs from it in its addresses alone. The heap of a later life is no function
-/// of the record, so the act that a word makes again agrees with the record.
+/// It holds the entries that `seed` of the checkpointer makes from the data of a checkpoint, and
+/// gives the host the kind and the name of the fact of each alone: the data of a checkpoint can
+/// hold each turn of a long life, so it comes in one time and its entries never go out. Boot is
+/// given those entries, which it takes once, before the entries of the record that the host hands
+/// in.
+///
+/// It gives boot, in the place of a value of a record that no later life makes again as it was,
+/// what stands for it by the rule of `furb.record`, which each build reads the same: a callable,
+/// which went out by a number of the process that made it, stands as a value equal to each
+/// callable, and a text in the words of an act that a word made, which holds the address of an
+/// object, stands as a value equal to each text that differs from it in its addresses alone. The
+/// heap of a later life is no function of the record, so the act that a word makes again agrees
+/// with the record.
 ///
 /// The module of the engine holds the names python gives a module before the engine runs, so a word
 /// reads them in a chain as it reads them in python. No loader made the
@@ -106,6 +113,16 @@ def __parking(ear):
     return
 
 __fresh = {"kernel": lambda: __kernel["kernel"](__engine)}
+__seeded = []
+
+def __seed(data):
+  __seeded[:] = __checkpointed("seed", data)
+  return [x[:2] for (x,) in __seeded]
+
+def __boot(entries, **ears):
+  record = __record["recorded"](__engine, __seeded + entries)
+  __seeded.clear()
+  return __engine["boot"](record, **ears)
 
 def __gate():
   # A record of an earlier build holds gate acts. Its engine makes each again in a replay, reads who answered it by
@@ -164,7 +181,8 @@ def __lasting(name, ear):
   "unpark": lambda name: __parked.discard(name),
   "lasting": __lasting,
   "unmade": lambda: __record["Recorded"](),
-  "recorded": lambda entries: __record["recorded"](__engine, entries),
+  "seed": __seed,
+  "boot": __boot,
 }"#;
 
 /// What the opening gave, by name: the callables of the sandbox that the host calls it by, each
@@ -208,10 +226,13 @@ pub(crate) struct Opened {
   pub(super) lasting: Object,
   /// What stands for a callable of the record of an earlier life: a value equal to each callable.
   pub(super) unmade: Object,
-  /// The entries of a record, with each text in the words of an act that a word made, that holds
-  /// the address of an object, in the place of a value equal to each text that differs from it in
-  /// its addresses alone.
-  pub(super) recorded: Object,
+  /// The entries that `seed` of the checkpointer makes from the data of a checkpoint, kept in the
+  /// sandbox for boot, and the kind and the name of the fact of each, which it gives.
+  pub(super) seed: Object,
+  /// Boot of the engine on the entries that the seed kept and then on the entries given, with
+  /// each text in the words of an act that a word made, that holds the address of an object, in
+  /// the place of a value equal to each text that differs from it in its addresses alone.
+  pub(super) boot: Object,
 }
 
 impl Default for Opened {
@@ -243,7 +264,8 @@ impl Opened {
       unpark: at("unpark")?,
       lasting: at("lasting")?,
       unmade: at("unmade")?,
-      recorded: at("recorded")?,
+      seed: at("seed")?,
+      boot: at("boot")?,
     })
   }
 }

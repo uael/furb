@@ -68,7 +68,7 @@ use crate::{
   sand,
   sand::{Answer, Host, Nobody, Sand, id, object},
   value,
-  value::{Exit, Fault, Given, Object, Text, entry},
+  value::{Exit, Fault, Given, Object, ObjectRef, Text, entry},
   world,
   world::Schema,
 };
@@ -106,34 +106,43 @@ type Words<'a> = (Vec<Object>, Vec<(&'a str, Object)>);
 /// What a host does when an act is done, given what it came to.
 type Watcher = Box<dyn FnMut(&Object)>;
 
-/// The record as boot is given it: a checkpoint that stands first is the data from which `seed` of
-/// the checkpointer of this engine makes the entries that the life boots on, before the entries
-/// after it.
+/// The record as the host reads it for boot, and how many of its first entries stand for the
+/// entries of a seed. A checkpoint that stands first is the data from which `seed` of the
+/// checkpointer of this engine makes the entries that the life boots on, before the entries after
+/// it. A checkpoint can hold each turn of a long life, so its data crosses into the sandbox one
+/// time, and the entries of the seed stay there, where boot takes them. In the place of each, the
+/// host holds an entry of the kind and the name of its fact alone, which is all that it reads of
+/// them.
 fn seeded(
   sand: &mut Sand,
   outside: &mut Outside,
-  record: Vec<Object>,
-) -> Result<Vec<Object>, Fault> {
+  mut record: Vec<Object>,
+) -> Result<(Vec<Object>, usize), Fault> {
   let first = record.first().and_then(|one| entry(&one.as_ref(), 0)).and_then(Fact::of);
   let Some(data) =
     first.filter(|a| a.kind() == CHECKPOINT).and_then(|a| a.word(0).map(|one| one.to_owned()))
   else {
-    return Ok(record);
+    return Ok((record, 0));
   };
   let pairs = data.as_ref().pairs().unwrap_or_default();
   let schema = pairs.iter().find(|(key, _)| key.as_str() == Some("schema")).map(|one| one.1);
   Schema::opens_checkpoint(schema)?;
-  let made = sand.enter(outside, |sand, outside| {
+  let heads = sand.enter(outside, |sand, outside| {
     outside.bound(sand)?;
     let data = outside.inward(sand, &data)?;
-    let seed = outside.opened.checkpoint.clone();
-    let got = sand.call(outside, &seed, vec![Object::string("seed"), data], vec![])?;
-    outside.outward(sand, &got)
+    sand.call(outside, &outside.opened.seed.clone(), vec![data], vec![])
   })??;
-  let mut entries: Vec<Object> =
-    made.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
-  entries.extend(record.into_iter().skip(1));
-  Ok(entries)
+  // The sandbox gives a part that many heads share as one part, and a copy of a head walks the
+  // arena down to its lowest part, so each head is made here from its two texts.
+  let head = |one: ObjectRef<'_>| {
+    let texts = one.items().unwrap_or_default().into_iter().filter_map(|text| text.as_str());
+    Object::list([Object::tuple(texts.map(Object::string))])
+  };
+  let heads: Vec<Object> =
+    heads.as_ref().items().unwrap_or_default().into_iter().map(head).collect();
+  let born = heads.len();
+  record.splice(..1, heads);
+  Ok((record, born))
 }
 
 /// A template string, as a host says one: each expression beside its value.
@@ -141,8 +150,8 @@ fn templated(pairs: &[(&str, Object)]) -> Object {
   value::paired(pairs.iter().map(|(expression, one)| ((*expression).to_owned(), one.clone())))
 }
 
-/// The entries of a record as boot is given them, each fact alone in an entry, made in the sandbox
-/// as the record of an earlier life comes in.
+/// The entries of a record that the host holds, each fact alone in an entry, made in the sandbox as
+/// the record of an earlier life comes in.
 fn recorded(sand: &mut Sand, outside: &mut Outside, record: &[Object]) -> Result<Object, Fault> {
   let mut entries = Vec::new();
   for one in record {
@@ -595,7 +604,7 @@ impl Engine {
       sand.run(OPENING, inputs(&source, &kernel, &checkpointer), &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
-    let record = seeded(&mut sand, &mut outside, record)?;
+    let (record, born) = seeded(&mut sand, &mut outside, record)?;
     outside.settled = settled(&record);
     let mut engine = Self::new(sand, outside, &record, String::new());
     let names_parked = Object::list(engine.parked.iter().map(|(id, _)| Object::string(id)));
@@ -603,9 +612,8 @@ impl Engine {
     let (root, raised) = engine.run(|sand, outside| {
       outside.bound(sand)?;
       outside.crossing.recorded = true;
-      let entries = recorded(sand, outside, &record);
+      let entries = recorded(sand, outside, &record[born..]);
       outside.crossing.recorded = false;
-      let entries = sand.call(outside, &outside.opened.recorded.clone(), vec![entries?], vec![])?;
       let mut given = vec![("kernel".to_owned(), kernel)];
       if !gate.as_ref().is_none() {
         given.push(("gate".to_owned(), gate));
@@ -627,7 +635,7 @@ impl Engine {
         }
       }
       let given = given.iter().map(|(name, one)| (name.as_str(), one.clone())).collect();
-      let got = outside.named_call(sand, "boot", vec![entries], given);
+      let got = sand.call(outside, &outside.opened.boot.clone(), vec![entries?], given);
       // What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
       // journal and keeps nothing more, so the root stands when the record held it.
       let opened = match got {
