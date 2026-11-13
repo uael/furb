@@ -22,13 +22,17 @@ test("a message of the operator never waits behind a prompt that came after it",
     [
       // Each step reads every message that came since the step before, so a step is told apart by the prompt that it
       // advances: prompt1 is the first message, prompt2 the second, and prompt3 the prompt that the word of prompt2
-      // makes. The first message takes two steps.
+      // makes. The first message takes two steps. The word of prompt2 awaits prompt3, since the engine refuses a close
+      // of a prompt while a prompt under it runs.
       {
         cue: "advance on prompt1",
         word: 'y = globals().get("y", 0) + 1\nif y == 2:\n  close("First done.")',
         hold: "go",
       },
-      { cue: "advance on prompt2", word: 'inner = prompt(str, "Scenario: inner.")\nclose("Second done.")' },
+      {
+        cue: "advance on prompt2",
+        word: 'inner = await prompt(str, "Scenario: inner.")\nclose("Second done.")',
+      },
       { cue: "advance on prompt3", word: 'close("Inner done.")' },
     ],
     async (window, yard) => {
