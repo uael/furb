@@ -6,6 +6,11 @@ import { program } from "./program.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const release = process.argv.includes("--release");
+// napi names a target to cargo for each build, the one of the host when none is asked, and cargo puts what it builds
+// for a named target in a folder of that name. So the build names its target once, to napi and to the path below.
+const target =
+  process.env.CARGO_BUILD_TARGET ??
+  Bun.spawnSync(["rustc", "--print", "host-tuple"], { cwd: root }).stdout.toString().trim();
 const command = [
   process.execPath,
   "x",
@@ -20,6 +25,8 @@ const command = [
   "bind/typescript/package.json",
   "--output-dir",
   "bind/typescript",
+  "--target",
+  target,
   // The engine is furb.<system>.node, as the package of the engine of each system names it, and index.cjs, which napi
   // writes, loads it from beside itself or from that package.
   "--platform",
@@ -45,7 +52,7 @@ const metadata = Bun.spawnSync(["cargo", "metadata", "--format-version", "1", "-
 if (metadata.exitCode) process.exit(1);
 const built = join(
   JSON.parse(metadata.stdout.toString()).target_directory,
-  process.env.CARGO_BUILD_TARGET ?? "",
+  target,
   release ? "release" : "debug",
   process.platform === "win32" ? "furb.exe" : "furb",
 );
