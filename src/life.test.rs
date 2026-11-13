@@ -919,7 +919,8 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   let at = place("drifts");
   let record = at.join("record.jsonl");
   // The place that the first cd of the record asks for, changed, makes the replay drift at that
-  // cd: the word of the root asks for the place where its stand stood.
+  // cd: the word of the root asks for the place where its stand stood. The new place holds a
+  // backslash on each system, as a place of Windows does, which python writes as two.
   let mut lines: Vec<String> =
     fs::read_to_string(worked("drifts-work")).unwrap().lines().map(str::to_owned).collect();
   let moved = lines
@@ -928,7 +929,8 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
     .expect("the record holds the first cd");
   let mut entry: serde_json::Value = serde_json::from_str(&lines[moved]).unwrap();
   let place = entry[0][4].as_str().expect("the cd names its place").to_owned();
-  entry[0][4] = serde_json::Value::from(format!("{place}-elsewhere"));
+  let elsewhere = format!("{place}\\elsewhere");
+  entry[0][4] = serde_json::Value::from(elsewhere.as_str());
   lines[moved] = entry.to_string();
   // The last line is whole and not ended, which a store mends only at its first keep.
   fs::write(&record, lines.join("\n")).unwrap();
@@ -941,11 +943,10 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   let refused =
     Opening { config, ..opening(&at, true) }.boot::<String>([]).map(|_| ()).unwrap_err();
   assert!(refused.to_string().starts_with("Drift: cd1 drifts: "), "{refused}");
-  // The drift shows the place as python writes it, and the message as Rust debugs it: four marks
-  // for each one.
-  let shown = place.replace('\\', "\\\\\\\\");
+  // The drift shows the place as python writes it.
+  let shown = Object::string(elsewhere).py_repr();
   assert!(
-    refused.to_string().contains(&format!("'{shown}-elsewhere')")),
+    refused.to_string().contains(&format!(", {shown})")),
     "the drift is at the cd that the record holds: {refused}"
   );
   let mut beside: Vec<String> = fs::read_dir(&at)

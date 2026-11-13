@@ -1859,18 +1859,31 @@ fn bounded_at(bound: Duration) {
   testing::bound_all(bound);
 }
 
-/// The bound of the replay and the bound of the checkpoint that the test proves, from `gather`,
-/// the least time that the gather of a checkpoint of the life took in this run.
+/// The bound of the replay and the bound of the checkpoint that the test proves: three quarters of
+/// `replay`, the least time that a replay of the record as a whole took in this run, and of
+/// `gather`, the least time that the gather of a checkpoint of the life took in it.
 ///
-/// A step of a word in a replay holds more than the word: it holds the work of each ear that the
-/// word wakes, and each run of the collector of cycles, whose time grows with the heap of the
-/// life. A step takes a few milliseconds in this life, and a gather about 25 ms, so a bound under
-/// the gather is too near a step on a loaded machine. A replay as a whole takes about 13 gathers,
-/// so at six gathers each step stays well under the bound, and the replay as a whole outlasts it.
-/// The gather is one stretch of the work of the engine, and the bound of three quarters of it
-/// holds only while the life writes its checkpoint, when no word steps.
-fn bounds(gather: Duration) -> (Duration, Duration) {
-  (gather * 6, gather * 3 / 4)
+/// Each bound is a share of the work that must outlast it, as this machine ran that work, so the
+/// work outlasts it on each machine. A step of a word in a replay holds more than the word: it
+/// holds the work of each ear that the word wakes, and each run of the collector of cycles, whose
+/// time grows with the heap of the life. The word of this life takes 300 steps, so each step stays
+/// well under three quarters of the replay as a whole. The gather is one stretch of the work of
+/// the engine, and its bound holds only while the life writes its checkpoint, when no word steps.
+fn bounds(replay: Duration, gather: Duration) -> (Duration, Duration) {
+  (replay * 3 / 4, gather * 3 / 4)
+}
+
+/// The least time that a piece of work took of three: a pause of the machine only makes the work
+/// longer, so the least is the work. What the work made goes after its time is read.
+fn least<T>(mut work: impl FnMut() -> T) -> Duration {
+  let timed = (0..3).map(|_| {
+    let began = Instant::now();
+    let made = work();
+    let took = began.elapsed();
+    drop(made);
+    took
+  });
+  timed.min().unwrap_or_default()
 }
 
 #[test]
@@ -1883,18 +1896,15 @@ fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint
     let act = first.engine.prompt(Object::string("int"), with).unwrap();
     assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8), "the life runs its words");
     let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
-    // A pause of the machine only makes a gather longer, so the least of three is the gather.
-    let gather = (0..3)
-      .map(|_| {
-        let began = Instant::now();
-        checkpoint::written(&mut first.engine).expect("the checkpoint of the life is gathered");
-        began.elapsed()
-      })
-      .min()
-      .unwrap_or_default();
+    let gather = least(|| {
+      checkpoint::written(&mut first.engine).expect("the checkpoint of the life is gathered")
+    });
     (root, facts.iter().filter_map(said).collect::<Vec<_>>(), gather, first.end())
   };
-  let (replay, checkpoint) = bounds(gather);
+  // A life that opens on the record and keeps nothing leaves the record as it was, so each replay
+  // does the same work.
+  let whole = least(|| Lived::new("outlasts", &[], false).expect("the replay opens the life"));
+  let (replay, checkpoint) = bounds(whole, gather);
   bounded_at(replay);
   let began = Instant::now();
   let mut second = Lived::new("outlasts", &[], false).expect("the replay opens the life");
