@@ -1,15 +1,19 @@
-//! A life that a program opens on a runtime of its own, in a binary of its own, so that no other
-//! test starts the reactor of the process.
+//! A life that a program opens on a runtime of its own, in a process of its own, so that no other
+//! test starts the reactor of the process: each test of the suite that boots a life on a thread
+//! with no runtime starts it, so a child of the suite runs this one alone.
 #![cfg(unix)]
 
 use crate::yard;
 
 #[cfg(target_os = "linux")]
 use std::fs;
-use std::path::Path;
+use std::{
+  env,
+  path::Path,
+  process::{self, Command},
+};
 
 use furb::{Exit, life::Opening, verbs};
-use std::process;
 use tokio::task::LocalSet;
 
 /// The names of the threads of this process, which Linux gives in its proc file system.
@@ -34,12 +38,34 @@ fn opening(at: &Path) -> Opening {
   }
 }
 
+/// The variable that names the test that a child of the suite runs alone, as in the suite of the
+/// host, and the name of this one.
+const ALONE: &str = "FURB_ALONE";
+const NAME: &str =
+  "async_open::a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits_it";
+
+#[test]
+fn it_runs_alone() {
+  let child = Command::new(env::current_exe().expect("the suite knows its program"))
+    .args([NAME, "--exact", "--ignored", "--nocapture"])
+    .env(ALONE, NAME)
+    .output()
+    .expect("the child of the suite starts");
+  let said = String::from_utf8_lossy(&child.stdout) + String::from_utf8_lossy(&child.stderr);
+  assert!(child.status.success() && said.contains("1 passed"), "{said}");
+}
+
 #[expect(
   clippy::disallowed_methods,
   reason = "the test blocks on the runtime that tokio starts for it"
 )]
 #[tokio::test(flavor = "current_thread")]
+#[ignore = "a child of the suite runs it alone"]
 async fn a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits_it() {
+  // Beside the other ignored tests of the suite, which share its process, it proves nothing.
+  if env::var(ALONE).as_deref() != Ok(NAME) {
+    return;
+  }
   let at = yard::Yard::new(format!("furb-async-open-{}", process::id()));
   LocalSet::new()
     .run_until(async {
