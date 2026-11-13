@@ -1298,7 +1298,14 @@ try {
   // error under the pointer, and a line that awaits the act of an earlier line runs with its time and lights that line.
   await show(await demoSession({ cwd: await project("living") }));
   const point = async (pattern: RegExp, name: string) => {
-    const rows = test.captureCharFrame().split("\n");
+    // The window draws what a command brought a moment after it, so the frame is drawn again until the line shows.
+    let rows = test.captureCharFrame().split("\n");
+    for (let tries = 0; tries < 600 && !rows.some((row) => pattern.test(row)); tries++) {
+      await new Promise((done) => setTimeout(done, 25));
+      app().render();
+      await test.flush();
+      rows = test.captureCharFrame().split("\n");
+    }
     const y = rows.findIndex((row) => pattern.test(row));
     if (y < 0) throw new Error(`No line for ${name} in the feed.`);
     await test.mockMouse.moveTo((rows[y]?.search(pattern) ?? 0) + 2, y);
