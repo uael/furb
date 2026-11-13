@@ -107,7 +107,7 @@ impl Outside {
     id: NodeId,
     shown: &mut HashMap<MontyUuid, Object>,
   ) -> Result<Object, Fault> {
-    let key = |one: &NodeId| graph.value(*one).to_owned();
+    let key = |one: &NodeId| whole(graph, *one);
     Ok(match graph.node(id) {
       MontyNode::Dict(pairs)
         if pairs.iter().any(|(one, _)| graph.value(*one).as_str() == Some(IS)) =>
@@ -148,19 +148,18 @@ impl Outside {
         marked("made", [("id", Object::int(self.number(*handle, &held)))])
       }
       MontyNode::ClassType(class) if !class.host_defined => {
-        self.class(sand, graph.value(id).to_owned(), class.id, &class.name)?
+        self.class(sand, whole(graph, id), class.id, &class.name)?
       }
       MontyNode::ClassInstance { class_type, .. } => match graph.node(*class_type) {
         MontyNode::ClassType(class)
           if !class.host_defined && !self.crossing.named.contains_key(&class.id) =>
         {
-          let class =
-            self.class(sand, graph.value(*class_type).to_owned(), class.id, &class.name)?;
-          marked("instance", [("class", class), ("value", graph.value(id).to_owned())])
+          let class = self.class(sand, whole(graph, *class_type), class.id, &class.name)?;
+          marked("instance", [("class", class), ("value", whole(graph, id))])
         }
-        _ => graph.value(id).to_owned(),
+        _ => whole(graph, id),
       },
-      _ => graph.value(id).to_owned(),
+      _ => whole(graph, id),
     })
   }
 
@@ -353,6 +352,45 @@ impl Outside {
     }
     builtin_of(mark, args.first().map(Object::as_ref))
   }
+}
+
+/// A part of a value of the sandbox as it stands, in an arena of its own, with each part that it
+/// holds more than once held once. The sandbox gives a part that many parts share, as the class of
+/// each instance of it, one time in the arena of a value, and the copy that the interpreter makes
+/// of a part walks that arena down to the lowest part that it holds. So the copy of each instance
+/// of a long fact would walk the fact, and this copy walks the part alone.
+#[expect(
+  clippy::expect_used,
+  reason = "a push gives the place of its node, which stands in the arena, and no type holds that"
+)]
+fn whole(graph: &MontyGraph, id: NodeId) -> Object {
+  let mut arena = MontyGraph::new();
+  let root = copied(graph, id, &mut arena, &mut HashMap::new());
+  unstable::object_from_graph(arena, root).expect("the root of a copy stands in its arena")
+}
+
+/// One part of a value copied into an arena after the parts that it holds, and where it stands
+/// there. `done` holds where each part that holds parts stands, so a part that is held again is
+/// not copied again.
+fn copied(
+  graph: &MontyGraph,
+  id: NodeId,
+  arena: &mut MontyGraph,
+  done: &mut HashMap<NodeId, NodeId>,
+) -> NodeId {
+  if let Some(at) = done.get(&id) {
+    return *at;
+  }
+  let (mut node, mut holds) = (graph.node(id).clone(), false);
+  node.for_each_child_mut(|part| {
+    holds = true;
+    *part = copied(graph, *part, arena, done);
+  });
+  let at = arena.push(node);
+  if holds {
+    done.insert(id, at);
+  }
+  at
 }
 
 /// A builtin value made from its name and the first thing it was made with: a number from its text
