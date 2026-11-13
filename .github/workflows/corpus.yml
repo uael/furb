@@ -16,8 +16,6 @@ concurrency:
 
 permissions:
   contents: read
-  # The step clear deletes the old cache of rust of the job, on main.
-  actions: write
 
 jobs:
   pin:
@@ -69,6 +67,8 @@ jobs:
           python: none
           shared: build
           hashed: bind/typescript/build.ts
-      - run: |
+      # In bash on each system: the shell of a step on Windows is PowerShell, where "$GITHUB_ENV" is an empty string.
+      - shell: bash
+        run: |
           echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
       - run: "cargo test -p furb --features typescript --test suite promise::"
