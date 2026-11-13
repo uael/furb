@@ -2,16 +2,20 @@
 //!
 //! The command line answers control requests with no model prompt: `initialize` lists its aliases with the efforts that
 //! each takes, and `set_model` then `get_context_usage` give the window of the model that an alias resolves to now.
-//! A process of its own asks them once for each program. Furb keeps the answer in memory and in its cache until the
-//! program changes, [`LASTS`] seconds pass, or [`refresh`] is called. A command line that does not
-//! answer, as an older one does not, leaves the fixed table of [`fallback`].
+//! A process of its own asks them. Furb keeps the answer in memory and in its cache, and gives what
+//! they hold with no wait: an answer that is [`LASTS`] seconds old is asked again behind the models
+//! that it gives, for the next ones. The models wait for the command line only while furb holds
+//! nothing of its program: before its first answer, after the program changes, and after
+//! [`refresh`]. A command line that does not answer, as an older one does not, leaves the fixed
+//! table of [`fallback`], and one that left an ask with no answer for [`WITHIN`] is in the cache as
+//! such, so no later process waits for it again.
 
 use std::{
   collections::HashMap,
   env, fs,
   process::{self, Stdio},
   sync::{Mutex, MutexGuard, OnceLock, PoisonError},
-  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+  time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
@@ -25,6 +29,7 @@ use super::{
   EFFORTS, Program,
   protocol::{Control, Event},
 };
+use crate::ear::runtime;
 use crate::world;
 use crate::world::{
   child,
@@ -49,12 +54,13 @@ const FIXED: [(&str, u64); 4] =
 /// How long the whole conversation of a discovery may take.
 const WITHIN: Duration = Duration::from_secs(20);
 
-/// How long a failed discovery holds before the next models ask the command line again.
-const RETRY: Duration = Duration::from_secs(300);
+/// How many seconds an ask that gave no models holds before the next models ask the command line
+/// again.
+const RETRY: u64 = 300;
 
 /// How many seconds a discovery holds, in memory and in the cache, before the next models ask
-/// the command line again: the models that an account may use change while the program of its
-/// command line does not.
+/// the command line again, behind what they give: the models that an account may use change while
+/// the program of its command line does not.
 pub(super) const LASTS: u64 = 3600;
 
 /// The file of the cache of furb that holds the discoveries.
@@ -73,13 +79,29 @@ pub(super) fn fallback() -> Vec<Found> {
     .collect()
 }
 
-enum Seen {
-  Found(Vec<Found>, u64),
-  Failed(Instant),
+/// What furb holds of a program, in memory and in the cache: the models that it said and the second
+/// that it said them, none when it never answered, and the second of the last ask that gave no
+/// models.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+struct Told {
+  at: u64,
+  found: Vec<Found>,
+  #[serde(default)]
+  asked: Option<u64>,
 }
 
-fn seen() -> &'static Mutex<HashMap<String, Seen>> {
-  static SEEN: OnceLock<Mutex<HashMap<String, Seen>>> = OnceLock::new();
+impl Told {
+  /// Whether the program is asked again at a second: it said no models, or said them [`LASTS`]
+  /// seconds before, and no ask of the [`RETRY`] seconds before gave none.
+  fn old(&self, now: u64) -> bool {
+    let since = |then: u64| now.saturating_sub(then);
+    (self.found.is_empty() || since(self.at) >= LASTS)
+      && self.asked.is_none_or(|then| since(then) >= RETRY)
+  }
+}
+
+fn seen() -> &'static Mutex<HashMap<String, Told>> {
+  static SEEN: OnceLock<Mutex<HashMap<String, Told>>> = OnceLock::new();
   SEEN.get_or_init(Default::default)
 }
 
@@ -107,18 +129,10 @@ fn cached() -> Option<path::PathBuf> {
   at.map(|at| at.join(FILE))
 }
 
-/// A discovery as the cache holds it: what the command line said, and the second that it said it.
-#[derive(Serialize, Deserialize)]
-struct Told {
-  at: u64,
-  found: Vec<Found>,
-}
-
-fn stored(file: &path::Path, stamp: &str, now: u64) -> Option<Vec<Found>> {
+fn stored(file: &path::Path, stamp: &str) -> Option<Told> {
   let text = fs::read_to_string(file).ok()?;
   let map: serde_json::Map<String, Value> = serde_json::from_str(&text).ok()?;
-  let told: Told = serde_json::from_value(map.get(stamp)?.clone()).ok()?;
-  (!told.found.is_empty() && now.saturating_sub(told.at) < LASTS).then_some(told.found)
+  serde_json::from_value(map.get(stamp)?.clone()).ok()
 }
 
 /// Holds a store of the cache and a refresh of it apart: the file is read, changed and written
@@ -129,21 +143,16 @@ fn exclusive() -> MutexGuard<'static, ()> {
   LOCK.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn store(file: &path::Path, stamp: &str, found: &[Found], now: u64) {
+fn store(file: &path::Path, stamp: &str, told: &Told) {
   // A cache that cannot be written costs the next life one probe more, so the failure ends here.
-  stored_by(file, stamp, entry(found, now), |file, bytes| {
+  stored_by(file, stamp, told, |file, bytes| {
     drop(disk::write(file, bytes, Access::Shared));
   });
 }
 
-/// A discovery as the cache holds it, which [`stored`] reads: [`Told`] as JSON.
-fn entry(found: &[Found], now: u64) -> Value {
-  json!({"at": now, "found": found})
-}
-
-/// [`store`] of a discovery as the cache holds it, with the write of the file given, so a test of
-/// the race writes with no sync to the disk, whose time grows with the load of the machine.
-fn stored_by(file: &path::Path, stamp: &str, told: Value, write: impl FnOnce(&path::Path, &[u8])) {
+/// [`store`] with the write of the file given, so a test of the race writes with no sync to the
+/// disk, whose time grows with the load of the machine.
+fn stored_by(file: &path::Path, stamp: &str, told: &Told, write: impl FnOnce(&path::Path, &[u8])) {
   let _held = exclusive();
   let mut map: serde_json::Map<String, Value> = fs::read_to_string(file)
     .ok()
@@ -152,7 +161,7 @@ fn stored_by(file: &path::Path, stamp: &str, told: Value, write: impl FnOnce(&pa
   // One entry for each program: an older stamp of it goes.
   let program = stamp.splitn(3, '\0').take(2).collect::<Vec<_>>().join("\0");
   map.retain(|key, _| !key.starts_with(&program));
-  map.insert(stamp.to_owned(), told);
+  map.insert(stamp.to_owned(), json!(told));
   while map.len() > 16 {
     let Some(oldest) = map.keys().next().cloned() else { break };
     map.shift_remove(&oldest);
@@ -174,39 +183,65 @@ fn forget(file: &path::Path, named: &str) {
   drop(disk::write(file, Value::Object(map).to_string().as_bytes(), Access::Shared));
 }
 
-/// The models that the program says, from memory, from the cache, or from the program itself;
-/// none when it does not answer. No lock is held while the program is asked, so two catalogs
-/// that ask at once may each ask it.
+/// The models that the program said last, from memory or from the cache; none when it said none.
+/// They wait for the program only while furb holds nothing of it. An answer that is old is asked
+/// again as a task of the runtime of the ears, which keeps what the program says for the next
+/// models. No lock is held while the program is asked, so two catalogs that ask at once may each
+/// ask it.
 pub(super) async fn models(program: &Program) -> Option<Vec<Found>> {
   let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |one| one.as_secs());
   models_at(program, now).await
 }
 
-/// [`models`] as of a second: a discovery that [`LASTS`] seconds or more came before is asked
-/// again.
+/// [`models`] as of a second.
 pub(super) async fn models_at(program: &Program, now: u64) -> Option<Vec<Found>> {
   let stamp = stamp(program);
-  let held = match seen().lock().unwrap_or_else(PoisonError::into_inner).get(&stamp) {
-    Some(Seen::Found(found, at)) if now.saturating_sub(*at) < LASTS => Some(Some(found.clone())),
-    Some(Seen::Failed(at)) if at.elapsed() < RETRY => Some(None),
-    _ => None,
-  };
-  if let Some(held) = held {
-    return held;
-  }
-  let file = cached();
-  let found = if let Some(found) = file.as_deref().and_then(|file| stored(file, &stamp, now)) {
-    Some(found)
-  } else {
-    let found = probe(program).await;
-    if let (Some(found), Some(file)) = (&found, &file) {
-      store(file, &stamp, found, now);
+  let told = match held(&stamp, now) {
+    Some(told) if told.old(now) => {
+      let (program, was) = (program.clone(), told.clone());
+      runtime().spawn(async move {
+        ask(&program, stamp, was, now).await;
+      });
+      told
     }
-    found
+    Some(told) => told,
+    None => ask(program, stamp, Told::default(), now).await,
   };
-  let kept = found.clone().map_or(Seen::Failed(Instant::now()), |found| Seen::Found(found, now));
-  seen().lock().unwrap_or_else(PoisonError::into_inner).insert(stamp, kept);
-  found
+  (!told.found.is_empty()).then_some(told.found)
+}
+
+/// What furb holds of the program of a stamp: what the memory holds while it is not old, and else
+/// what the cache holds, since another process may have asked the program after this one did. One
+/// that is old comes to one caller, which asks the program: the memory then holds it as asked at
+/// this second, which holds the next ask of this process off while the program answers this one.
+fn held(stamp: &str, now: u64) -> Option<Told> {
+  let mut seen = seen().lock().unwrap_or_else(PoisonError::into_inner);
+  let told = match seen.get(stamp).cloned() {
+    Some(told) if !told.old(now) => told,
+    kept => cached().and_then(|file| stored(&file, stamp)).or(kept)?,
+  };
+  if told.old(now) {
+    seen.insert(stamp.to_owned(), Told { asked: Some(now), ..told.clone() });
+  }
+  Some(told)
+}
+
+/// Ask the program, and keep what it says: its models as of this second, or, when it gives none,
+/// what it said before with the second of this ask.
+async fn ask(program: &Program, stamp: String, was: Told, now: u64) -> Told {
+  let said = time::timeout(WITHIN, probe(program)).await;
+  // A program that says at once that it gives no models costs the next process no wait, so only
+  // the memory keeps that ask. One that left the ask with no answer is in the cache too.
+  let lasts = !matches!(said, Ok(None));
+  let told = match said {
+    Ok(Some(found)) => Told { at: now, found, asked: None },
+    _ => Told { asked: Some(now), ..was },
+  };
+  if lasts && let Some(file) = cached() {
+    store(&file, &stamp, &told);
+  }
+  seen().lock().unwrap_or_else(PoisonError::into_inner).insert(stamp, told.clone());
+  told
 }
 
 /// Whether a turn may spend this effort on this alias: any effort of furb, or one that the command line reported.
@@ -264,7 +299,7 @@ fn plain(alias: &str) -> bool {
 }
 
 /// Ask the program of its models, with one process that spends no model prompt and that is
-/// killed once it answered, or once [`WITHIN`] passed.
+/// killed once it answered, or once the future goes, as when [`WITHIN`] passed.
 async fn probe(program: &Program) -> Option<Vec<Found>> {
   let print =
     ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"];
@@ -275,8 +310,7 @@ async fn probe(program: &Program) -> Option<Vec<Found>> {
   // The group ends the child as it drops, and the runtime reaps it.
   let (mut child, _group) = child::spawn(&mut command).ok()?;
   let (stdin, stdout) = child.stdin.take().zip(child.stdout.take())?;
-  let found = time::timeout(WITHIN, asked(stdin, BufReader::new(stdout).lines())).await;
-  found.ok().flatten()
+  asked(stdin, BufReader::new(stdout).lines()).await
 }
 
 /// The models that the program says over its control requests.

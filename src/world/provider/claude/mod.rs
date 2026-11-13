@@ -264,10 +264,12 @@ impl Claude {
   /// thought of a turn under the setting `max_thinking_tokens`. The command line counts what it
   /// read of the cache apart from the rest of what it read.
   ///
-  /// The command line says its models itself, with no model prompt, once for each version of its
-  /// program: a process of its own asks it, and furb keeps the answer in its cache for an
-  /// hour, until the program changes or [`refresh`] is called. A command line that does not
-  /// answer, as an older one does not, gives the fixed table of furb, within 20 seconds.
+  /// The command line says its models itself, with no model prompt: a process of its own asks it,
+  /// and furb keeps the answer in its cache. The models are what the cache holds, with no wait, and
+  /// an answer that is an hour old is asked again behind them, for the next models. They wait for
+  /// the command line, for 20 seconds at most, only while the cache holds nothing of its program:
+  /// before its first answer, after the program changes, and after [`refresh`]. A command line that
+  /// does not answer, as an older one does not, gives the fixed table of furb.
   pub async fn models(&self) -> Vec<Model> {
     self.family(discover::models(&self.program).await.unwrap_or_else(discover::fallback))
   }

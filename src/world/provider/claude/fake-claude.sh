@@ -37,9 +37,11 @@ if [ -f "$here/orphan" ]; then sleep 600 </dev/null >/dev/null 2>&1 & fi
 # beside it, each of its lines is an alias, its window and its efforts joined by commas, or - for none, and it
 # answers from them; else it answers each request with an error, as a command line that has no discovery does.
 # When the file offline stands too, a process that has CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC set answers initialize
-# with its content, as the real command line lists other models with its traffic off.
+# with its content, as the real command line lists other models with its traffic off. While the file slow stands
+# beside it, it answers no request.
 if [ -n "${FURB_CLAUDE_DISCOVER-}" ]; then
   echo "$$" >> "$here/discoveries"
+  while [ -f "$here/slow" ]; do sleep 0.05; done
   while IFS= read -r line; do
     id=$(printf '%s' "$line" | sed 's/.*"request_id":"\([^"]*\)".*/\1/')
     body=
