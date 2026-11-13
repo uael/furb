@@ -12,6 +12,7 @@ import { isDone } from "furb/life";
 import { until as untilChange } from "../../bind/typescript/test/until.ts";
 import { cells, rasterize } from "../script/raster.ts";
 import { highlighting, mount } from "../script/stage.ts";
+import { rewindNotice } from "../src/app/shared.ts";
 import type { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { bindings } from "../src/keys.ts";
@@ -282,6 +283,10 @@ export class Walk {
       const on = binding.on?.[0];
       if (!run || !on || OUTSIDE.has(run)) continue;
       const label = `${binding.chord ?? key.chord} (${key.action})`;
+      // The notice of an Escape that closed nothing lasts as long as a second Escape rewinds, and the steps of a person
+      // stand further apart, so the frame before a key holds no such notice.
+      const { session } = this.view.app();
+      if (session.notice === rewindNotice) session.notice = "";
       const before = await this.drawn();
       // A frame that moves on its own, as a clock, says nothing of what a key changed.
       const still = before === (await this.drawn());
