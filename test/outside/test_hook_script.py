@@ -4,9 +4,9 @@ import subprocess
 from pathlib import Path
 
 HOOK = Path(__file__).resolve().parents[2] / "script" / "hooks" / "pre-commit"
-# A commit hook runs this suite with GIT_INDEX_FILE and more set, so a git command that inherits them acts on the repo
-# that is committing and not on the repo of the test.
-# The same hook sets PRE_COMMIT=1, which the script reads as the command that runs the hooks.
+# A run of this suite under a hook of git holds GIT_INDEX_FILE and more, so a git command that inherits them acts on
+# the repo of the hook and not on the repo of the test.
+# A run under pre-commit holds PRE_COMMIT=1, which the script reads as the command that runs the hooks.
 CLEAN = {key: value for key, value in os.environ.items() if not key.startswith("GIT_") and key != "PRE_COMMIT"}
 
 

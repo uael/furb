@@ -7,7 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 HOOKS = ROOT / "script" / "hooks"
 TITLE = ROOT / "script" / "title.py"
-# A commit hook runs this suite with GIT_DIR and more set, and PRE_COMMIT=1, which the hook pre-commit reads as a command.
+# A run of this suite under a hook holds GIT_DIR and more, and PRE_COMMIT=1, which the hook pre-commit reads as a
+# command.
 CLEAN = {key: value for key, value in os.environ.items() if not key.startswith("GIT_") and key != "PRE_COMMIT"}
 
 

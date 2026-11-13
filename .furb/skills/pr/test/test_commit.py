@@ -41,7 +41,7 @@ async def test_commit_with_no_entry_gives_no_trailer_and_carries_the_body(pullin
 
 
 async def test_commit_refuses_an_empty_list_of_paths(pulling: Bench) -> None:
-  """It refuses an empty list of paths, and its bash has a timeout of 2400 s, since the hooks run the suites."""
+  """It refuses an empty list of paths, and its bash has a timeout of 2400 s, since the type check of the hooks syncs the environment, which builds the crate again after a change of it."""
   repo(pulling)
   with pytest.raises(Refused, match="at least one path"):
     await pulling.value('await commit("chore(pr): Nothing", [])')

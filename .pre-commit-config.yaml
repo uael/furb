@@ -1,7 +1,11 @@
 default_install_hook_types: [pre-commit]
-# Each hook runs once, before the commit. A hook of no stage also runs at the stage of the message, on that file alone,
-# where each gate says that it found no files to check.
-default_stages: [pre-commit]
+# Each hook runs once, before the commit, but the four that take minutes, which stand at the stage manual alone: the
+# suite, the clippy and the tests of the crate and the lint of TypeScript. No commit and no push runs them, and the
+# gates run each in a job of its own. The stage manual runs every hook, so one command runs every gate on this machine:
+# sh script/hooks/pre-commit run --all-files --hook-stage manual
+# A hook of no stage also runs at the stage of the message, on that file alone, where each gate says that it found no
+# files to check.
+default_stages: [pre-commit, manual]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -45,9 +49,10 @@ repos:
         pass_filenames: false
       - id: pytest
         name: pytest
-        # The tests that the files of the commit reach, which script/hooks/reach.py names; the gates give every file.
+        # The tests that the files of the run reach, which script/hooks/reach.py names; --all-files gives every file.
         entry: python3 script/hooks/reach.py pytest
         language: system
+        stages: [manual]
         # The suite drives the engine through furb-monty, which builds the crate, so a change of the Rust is read too.
         types_or: [python, pyi, toml, json, rust]
         files: ^(src/|build/|test/|\.agents/skills/|\.furb/|bind/python/|script/|tests/|docs/examples/python/)|^(pyproject|Cargo|rust-toolchain)\.toml$
@@ -62,8 +67,8 @@ repos:
         name: no comment of rust goes past 100 characters
         entry: python3 script/rustwidth.py
         language: system
-        # The files that the commit stages, as the hooks of the tests read them, so a long comment that the tree holds
-        # in a file of another topic fails no commit of this one.
+        # The files that the commit stages, so a long comment that the tree holds in a file of another topic fails no
+        # commit of this one.
         files: \.rs$
       - id: clippy
         name: clippy
@@ -71,13 +76,15 @@ repos:
         # run no other clippy on Linux.
         entry: cargo clippy --workspace --all-targets --features furb/typescript -- -D warnings
         language: system
+        stages: [manual]
         types_or: [rust]
         pass_filenames: false
       - id: cargo-test
         name: cargo test
         entry: python3 script/hooks/reach.py cargo
         language: system
-        # The files that the crate and its tests read. The gates run every hook on every file.
+        stages: [manual]
+        # The files that the crate and its tests read.
         files: ^(src|cli|host|\.agents/skills|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$
         require_serial: true
       - id: links
@@ -102,12 +109,13 @@ repos:
         pass_filenames: false
       - id: biome
         name: biome
-        # The lint of the gates, bun run lint, which fails on a warning too and checks the TypeScript, its JSON and the biome config in about a
-        # second: a commit that the gates refuse never lands. The job of the hooks has no bun, so it skips this hook, and
-        # the job of the bindings and the TUI runs the same lint. tsc is not here: it reads the bindings that bun run
-        # build makes, so it fails on a clone with no build.
+        # The lint of the gates, bun run lint, which fails on a warning too and checks the TypeScript, its JSON and the
+        # biome config. The job of the hooks has no bun, so it skips this hook, and the job of the bindings and the TUI
+        # runs the same lint. tsc is not here: it reads the bindings that bun run build makes, so it fails on a clone
+        # with no build.
         entry: bun run lint
         language: system
+        stages: [manual]
         files: ^(bind/typescript/|tui/|docs/examples/|\.agents/skills/[^/]+/tui\.ts$)|^(package|tsconfig|biome)\.json$
         pass_filenames: false
       - id: workflows

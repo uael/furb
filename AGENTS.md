@@ -357,18 +357,29 @@ fix what your change broke, and report what was broken before.
   `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/suite/furb.rs` runs `furb` as
   a process, on a claude command line that answers from a script.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
-- `sh script/hooks/pre-commit run --all-files`: every gate the commit hook runs, with the same pre-commit as the commit
-  hook: the `.venv` of the checkout, else the `.venv` of the main checkout, else the `pre-commit` of PATH. Name
-  `--files <files>` to run some files. In a new worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs
-  the old `pre-commit` of the system, which cannot read the config, so do not use it there. A `git commit` runs the hooks, `cargo test`
-  among them, and takes minutes: give it a timeout in `bash` of twice the time that it took last. The hook
-  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. It also runs the hooks once on the files of each pushed commit that no remote holds and whose change did not pass them, as after `--no-verify`, an amend or a rebase, and passes a commit that shares no history with `origin/main`, as a branch of captures, and refuses the push when they fail or when the branch is not checked out with a clean work tree, so a checked commit runs no hook a second time. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks only on
+- `sh script/hooks/pre-commit run --all-files --hook-stage manual`: every gate of this machine in one command, with the
+  same pre-commit as the commit hook: the `.venv` of the checkout, else the `.venv` of the main checkout, else the
+  `pre-commit` of PATH. The stage `manual` runs every hook of `.pre-commit-config.yaml`: the hooks of a commit, and the
+  four that stand at that stage alone, `pytest`, `clippy`, `cargo-test` and `biome`, which are the suite, the clippy and
+  the tests of the crate and the lint of TypeScript. It takes minutes. Name `--files <files>` in place of `--all-files`
+  to run some files: the hooks `pytest` and `cargo-test` then run the tests that those files reach, as
+  `script/hooks/reach.py` says. With no `--hook-stage manual`, the command runs the hooks of a commit alone. In a new
+  worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs the old `pre-commit` of the system, which cannot
+  read the config, so do not use it there. A `git commit` runs only the hooks that read the change and take seconds: the
+  checks of the files, the format, the lint and the type check of Python, the lock of uv, the format of Rust and the
+  width of its comments, the links, the paths, the unused names, the workflows, the corpus and the stray files. No commit
+  and no push runs a test, clippy or the lint of TypeScript: prove a change before its commit with the checks that it
+  touches, as the skill `testing` says, and the gates run each of the four in a job of its own. The type check runs
+  through `uv run`, which syncs first: after a change of the crate or of the engine, it builds the wheels again unless a
+  sync made them, so run `uv sync` before such a commit. Give a commit a timeout in `bash` of twice the time that it took
+  last. The hook
+  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. It also runs the hooks of a commit once on the files of each pushed commit that no remote holds and whose change did not pass them, as after `--no-verify`, an amend or a rebase, and passes a commit that shares no history with `origin/main`, as a branch of captures, and refuses the push when they fail or when the branch is not checked out with a clean work tree, so a checked commit runs no hook a second time. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks only on
   each file whose content differs from its version in every parent: a file that it takes whole from one parent passed the
   hooks of that parent, and the gates check the whole tree. Run the
   push as its own command after the commit, so that its result stands in the tail of that command. The hook `cargo test` runs on a cache of its own, `XDG_CACHE_HOME` in `/tmp`, and fails when a test leaves a file
   there: a test that makes the scratch directory of a record holding a file removes that directory at its end. The hook
   `cargo test` runs only when a file that the crate
-  or its tests read changed, and the gates run every hook on every file. The hook of the links runs only for a README or
+  or its tests read is among the files of the run, and `--all-files` gives every hook every file. The hook of the links runs only for a README or
   a manifest, and reads git alone. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file. The hook `paths` runs on
   each commit, since a move of a file leaves its old path in a script that the commit does not touch.
 - `uv run python script/smoke.py`: one real life on the default actor of the crate, the first model that the catalog

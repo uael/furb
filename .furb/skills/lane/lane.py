@@ -51,7 +51,7 @@ The rules:
 - Fix each failure at its cause. Add no `#[allow]`, make no timeout longer, skip no test and weaken no assertion. When a test is wrong and the code is right, say why in your report.
 - The owner defines done: the least code, the simplest and the most readable, that says the most coherent meaning. Add no second home for a truth and no second way to do a thing.
 - Give each command a timeout of twice the time that it should take, and make a long command print its progress.
-- A `git commit` and a `git push` each run the hooks, with `cargo test` among them, and each can take 20 minutes: give each a timeout of 2400 seconds, and run the push as its own command. Never commit or push with --no-verify.
+- A `git commit` and a `git push` each run only the hooks that read the change and take seconds, and no test: prove your change before its commit with the checks that it touches, as skill("testing") says. Before you commit a change of the crate or of the engine, run `uv sync`, since the type check of the hooks syncs the environment, which builds the crate again. Run the push as its own command. Never commit or push with --no-verify.
 - Commit with a title that `python3 script/title.py "<title>"` accepts, and a body that says why. Quote no word of a person in a commit.
 <PUSH>
 - Read the log of a job of CI with `gh api repos/uael/furb/actions/jobs/<id>/logs`, where <id> ends the URL of the job. `gh workflow run <file> --ref <branch>` starts a workflow by hand on a pushed branch.

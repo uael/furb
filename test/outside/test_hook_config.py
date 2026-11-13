@@ -12,6 +12,17 @@ def hooks() -> dict[str, dict]:
   return {one["id"]: one for repo in loaded["repos"] for one in repo["hooks"]}
 
 
+def test_a_commit_runs_no_hook_that_takes_minutes_and_the_stage_manual_runs_every_hook() -> None:
+  loaded = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+  assert loaded["default_stages"] == ["pre-commit", "manual"]
+  assert {name: one["stages"] for name, one in hooks().items() if "stages" in one} == {
+    "pytest": ["manual"],
+    "clippy": ["manual"],
+    "cargo-test": ["manual"],
+    "biome": ["manual"],
+  }
+
+
 @pytest.mark.parametrize("hook", ["pytest", "ty"])
 @pytest.mark.parametrize(
   ("path", "runs"),

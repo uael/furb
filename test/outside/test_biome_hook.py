@@ -1,4 +1,4 @@
-"""The lint of the TypeScript that the gates run, bun run lint, runs in the hooks of each commit first."""
+"""The lint of the TypeScript that the gates run, bun run lint, is the hook biome, which a run by hand starts."""
 
 import json
 import re

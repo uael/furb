@@ -1,10 +1,11 @@
 """Run the tests that the files of a change reach, and leave the whole set to the gates.
 
-The hook of pytest and the hook of cargo test call it with the files of the commit. A file of the engine, of its Kernel,
-of the crate that the suite builds, of a manifest or of the harness reaches every test, so the whole suite runs. A test
-file reaches itself, a file of an extension reaches the tests of that extension, and a script reaches the test of its
-own beside the tests of the other scripts. A file of a crate reaches the tests of that crate, and a manifest of cargo
-reaches the workspace. The gates run every hook on every file, so they reach the whole set.
+The hook of pytest and the hook of cargo test call it with the files that a run by hand names, at the stage manual: no
+commit and no push runs them. A file of the engine, of its Kernel, of the crate that the suite builds, of a manifest or
+of the harness reaches every test, so the whole suite runs. A test file reaches itself, a file of an extension reaches
+the tests of that extension, and a script reaches the test of its own beside the tests of the other scripts. A file of a
+crate reaches the tests of that crate, and a manifest of cargo reaches the workspace. A run with --all-files gives every
+file, so it reaches the whole set.
 
 Usage: python3 script/hooks/reach.py pytest|cargo <file>...
 """
@@ -137,9 +138,9 @@ def main(args: list[str]) -> int:
     return 0
   sys.stdout.write(" ".join(run) + "\n")
   sys.stdout.flush()
-  # The build is no part of the limit of time: a commit that changes a crate builds it, its tests and the wheels that the
-  # suite of python imports, which takes minutes of CPU, and the limit holds the run of the tests alone. The sync is the
-  # one that uv run makes.
+  # The build is no part of the limit of time: a run after a change of a crate builds it, its tests and the wheels that
+  # the suite of python imports, which takes minutes of CPU, and the limit holds the run of the tests alone. The sync is
+  # the one that uv run makes.
   build = [*run, "--no-run"] if args[0] == "cargo" else ["uv", "sync", "--inexact"]
   if built := subprocess.run(build, check=False).returncode:  # noqa: S603
     return built

@@ -1,4 +1,4 @@
-"""The hooks of the tests run what the files of a commit reach, and the gates, which give every file, run the whole set."""
+"""The hooks of the tests run what the files of a run by hand reach, and a run with every file runs the whole set."""
 
 import importlib.util
 import os
@@ -37,7 +37,7 @@ def test_the_tests_of_the_crates_run_on_a_cache_of_their_own_and_a_file_left_in_
   assert reach.private([sys.executable, "-c", "raise SystemExit(3)"]) == 3
 
 
-def test_the_hooks_of_the_tests_give_all_the_files_of_the_commit_to_the_reach_in_one_call() -> None:
+def test_the_hooks_of_the_tests_give_all_the_files_of_the_run_to_the_reach_in_one_call() -> None:
   for name, kind in (("pytest", "pytest"), ("cargo-test", "cargo")):
     hook = hooks()[name]
     assert hook["entry"].endswith(f"python3 script/hooks/reach.py {kind}")
@@ -109,7 +109,7 @@ def test_each_file_of_the_harness_is_a_file_that_git_holds_and_reaches_the_whole
     assert reach.suite([path]) is None
 
 
-def test_every_file_of_the_tree_reaches_the_whole_set_as_the_gates_give_it() -> None:
+def test_every_file_of_the_tree_reaches_the_whole_set_as_a_run_with_all_files_gives_it() -> None:
   every = ["script/scope.py", "src/furb/engine.py", "Cargo.toml", "host/src/daemon.rs"]
   assert reach.suite(every) is None and reach.crates(every) is None
 
