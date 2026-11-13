@@ -170,6 +170,20 @@ def test_the_doctrine_lets_a_word_await_an_act_that_an_earlier_word_made() -> No
   assert not re.search(r"\b(never|do not|don't|not) await\b[^.]*\b(earlier|still awaits|it)\b", text)
 
 
+def test_the_doctrine_says_what_a_program_is_and_teaches_to_lower_a_prompt_into_code() -> None:
+  """DOCTRINE.md says what a program is and teaches to lower a prompt into code."""
+  text = normal((TESTS.parent / "DOCTRINE.md").read_text(encoding="utf-8")).lower()
+  for clause in (
+    "a program is code: functions, loops and commands hold its control flow",
+    "its only non-determinism is prompt(shape, message)",
+    "never put a model in an argument",
+    "to lower a prompt into code",
+    "a command that checks",
+    "until none can be lowered",
+  ):
+    assert clause in text
+
+
 def test_the_engine_the_model_reads_is_the_engine_that_runs() -> None:
   """Whatever the minifier takes, it may not be meaning: what the model is handed parses to the program on disk."""
   assert ast.dump(ast.parse(SYSTEM)) == ast.dump(ast.parse(PY.read_text(encoding="utf-8")))
