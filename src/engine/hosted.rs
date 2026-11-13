@@ -13,7 +13,7 @@ use std::{
   time::Duration,
 };
 
-use monty_types::MontyUuid;
+use monty_types::{MontyUuid, unstable};
 
 use super::Outside;
 use crate::{
@@ -151,6 +151,9 @@ pub(super) struct Hosted {
   /// What each ear of the host waits for since its last step, by the id of its object in the
   /// sandbox.
   pub(super) waits: HashMap<MontyUuid, Object>,
+  /// The fact that an ear of the host heard last, as [`Outside::told`] keeps it: the value that
+  /// the sandbox sent, and the fact that it went out as.
+  pub(super) told: Option<(Object, Fact)>,
 }
 
 impl Default for Hosted {
@@ -160,6 +163,7 @@ impl Default for Hosted {
       waker: Waker::noop().clone(),
       standing: HashMap::new(),
       waits: HashMap::new(),
+      told: None,
     }
   }
 }
@@ -273,7 +277,7 @@ impl Outside {
   /// for the next fact. It said a verb, which is said here by its name and its value handed back.
   /// It is over, so the object stops, and it raised, so the object raises. A generator that the
   /// host started before it crossed was born there, so its object begins where it waits.
-  pub(super) fn sent(&mut self, sand: &mut Sand, on: MontyUuid, a: Option<&Object>) -> Answer {
+  pub(super) fn sent(&mut self, sand: &mut Sand, on: MontyUuid, a: Option<Object>) -> Answer {
     let Some((name, at)) = self.hosted.standing.get(&on).cloned() else {
       return Answer::Abort(Fault::refused(format!("{on} is no object of the host")));
     };
@@ -289,7 +293,7 @@ impl Outside {
       (At::Waiting, None) => {
         return Answer::Value(self.hosted.waits.get(&on).cloned().unwrap_or_else(Object::none));
       }
-      (At::Waiting, Some(a)) => match self.outward(sand, a).map(|a| Fact::of(a.as_ref())) {
+      (At::Waiting, Some(a)) => match self.told(sand, a) {
         Ok(Some(fact)) => Heard::Fact(fact),
         Ok(None) => return Answer::Abort(Fault::refused("an ear hears a fact or nothing")),
         Err(fault) => return Answer::Abort(fault),
@@ -319,6 +323,25 @@ impl Outside {
     self.hosted.handed.ears.insert(name.clone(), ear);
     self.hosted.standing.insert(on, (name, at));
     answer
+  }
+
+  /// A fact that the sandbox sends to an ear of the host, as it goes out, or nothing for a value
+  /// that is no fact. The engine sends a fact to each ear that hears it in turn, so the fact that
+  /// went out last stays here beside the value that came, and an ear that is sent the same value
+  /// takes a copy of that fact: a fact goes out one time for all the ears that hear it, whatever
+  /// its size. Two values are the same when their arenas are, which holds for a fact that the
+  /// engine sends again and costs one pass with no walk. A value that holds a handle that went
+  /// out as its representation never comes the same again, since the sandbox let go of that
+  /// handle, and a number that the host forgot drops the fact that named it.
+  fn told(&mut self, sand: &mut Sand, a: Object) -> Result<Option<Fact>, Fault> {
+    if let Some((came, fact)) = &self.hosted.told
+      && unstable::graph_parts(came) == unstable::graph_parts(&a)
+    {
+      return Ok(Some(fact.clone()));
+    }
+    let fact = Fact::owned(self.outward(sand, &a)?);
+    self.hosted.told = fact.clone().map(|fact| (a, fact));
+    Ok(fact)
   }
 
   /// The answer to a question that a step of a word asks past the bound of a turn, in the place of

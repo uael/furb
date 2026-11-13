@@ -209,7 +209,7 @@ impl Host for Outside {
         Ok(Object::bool(sand.bound(bounded)))
       }
       None => self.called(sand, name, &args),
-      Some(on) if name == "send" => return self.sent(sand, on, args.first()),
+      Some(on) if name == "send" => return self.sent(sand, on, args.into_iter().next()),
       Some(on) => Err(Fault::refused(format!("{on} is no generator of the host that has {name}"))),
     };
     got.map_or_else(Answer::Abort, Answer::Value)

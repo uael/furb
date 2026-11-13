@@ -56,8 +56,10 @@ impl Outside {
   }
 
   /// A callable the engine made or a class a word defined, forgotten by the host, so the sandbox
-  /// holds it no more.
+  /// holds it no more, and neither does the host hold the fact that went out last, which can name
+  /// it by its number.
   pub(super) fn forget(&mut self, sand: &mut Sand, n: i64) {
+    self.hosted.told = None;
     if let Some(made) = self.crossing.numbered.remove(&n)
       && let Some(handle) = made.as_ref().handle()
     {
