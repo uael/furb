@@ -175,9 +175,15 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
     expect(await engine.peek(id)).toBeNull();
   }));
 
+// A close of the thread is refused while its command runs, so the answer is a message on the thread.
 test("a thread closes and an act cancels from the commands of the window", () =>
   scenario(
-    [{ cue: "Scenario: run long.", word: 'slow = bash("sleep 600", timeout=700)\nclose("Started.")' }],
+    [
+      {
+        cue: "Scenario: run long.",
+        word: 'slow = bash("sleep 600", timeout=700)\nprompt(None, "Started.", to=OPERATOR)',
+      },
+    ],
     async (window) => {
       const { engine } = window;
       await window.type("Scenario: run long.");
