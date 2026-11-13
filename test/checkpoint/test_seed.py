@@ -465,3 +465,32 @@ async def test_each_act_of_the_data_with_a_value_is_made_before_each_open_prompt
   engine.wake(root)
   assert await more == "on"
   assert len(said(log, "reply")) == 1
+
+
+async def test_the_prefix_of_a_born_chain_holds_no_question_started_or_done_of_an_act_that_seed_makes_again_so_each_act_of_the_data_stands_once_in_the_transcript_of_its_chain_after_the_facts_of_the_prefix() -> (
+  None
+):
+  """The prefix of a born chain holds no question, started or done of an act that seed makes again, so each act of the data stands once in the transcript of its chain, after the facts of the prefix."""
+  _, _, root = born()
+  work = engine.chain("work", on=root)
+  await settle()
+  word = (
+    "cd('/w')\nread('/w/a.txt')\nwrite(Text('/w/b.txt', 'b'))\nchance()\nshell = bash('echo one')\n"
+    "await wait(0, shell)\njob = prompt(int, 'Job.', to=OPERATOR)\n"
+    "made = [x[1] for k in ('cd', 'read', 'write', 'chance', 'wait') for x in transcript(of=k)]"
+  )
+  await engine.rung(word, on=work)
+  await engine.rung("clock()\nstand()", on=root)
+  engine.close(7, engine.module(work)["job"])
+  await settle()
+  data = checkpoint.gathered(vars(engine), lambda one: one, {})
+  carried = {a["id"]: a["kind"] for a in data["acts"]}
+  life(sown(), checkpoint.seed(vars(engine), data))
+  await settle()
+  assert {"stand", "clock", "prompt", "bash", "read", "write", "wait", "cd", "chance"} <= {*carried.values()}
+  for one, kind in carried.items():
+    facts = engine.transcript(engine.scope(one))
+    asked = [n for n, x in enumerate(facts) if x[:2] == (kind, one)]
+    ended = [x for x in facts if x[:2] == ("done", one)]
+    told = [n for n, x in enumerate(facts) if x[:2] == ("tell", one)]
+    assert (len(asked), len(ended), asked[0] > max(told, default=-1)) == (1, 1, True), one

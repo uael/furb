@@ -23,6 +23,7 @@ def seed(names, data):
     words and entries.append(((sort, called, *words),))
 
   asking = {a["on"] for a in data["acts"] if "value" not in a}
+  kinds = {x["id"]: x["kind"] for x in data["acts"]}
   parts = {}
   for c in data["chains"]:
     put("chain", i := c["id"], operator, c["on"], c["label"], "")
@@ -31,7 +32,8 @@ def seed(names, data):
       for k in c["values"]
     )
     parts[i] = [*filter(None, [v, *([d] if isinstance(d := c["definitions"], str) else d), v, *c.get("lives", ())])]
-    entries += [(("carried", i, "journal", c["turns"], c["values"], parts[i]),), (("prefix", i, i, c["turns"]),)]
+    kept = [t for t in c["turns"] if t[1] not in kinds or t[0] not in ("started", "done", kinds[t[1]])]
+    entries += [(("carried", i, "journal", c["turns"], c["values"], parts[i]),), (("prefix", i, i, kept),)]
     (c["paused"] or i in asking) and entries.append((("pause", i, operator),))
   for x in data["acts"]:
     "value" in x and (

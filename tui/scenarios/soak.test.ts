@@ -1,7 +1,7 @@
 // A soak: a life of thousands of facts, whose workers run commands while its host is killed at random points, opens
 // again after each kill, ends each job with its right value, and replays at the end to the same turns and values.
 import { expect } from "bun:test";
-import { copyFileSync } from "node:fs";
+import { copyFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { alive, scenario, test, until, Window } from "./harness.ts";
@@ -95,8 +95,11 @@ test(
           const facts = await size(window);
           expect(facts).toBeGreaterThan(2000);
           const cues = yard.turns().map((one) => one.cue);
+          const born = readFileSync(yard.record, "utf8")
+            .split("\n")
+            .filter((line) => line.startsWith('[["checkpoint"')).length;
           console.log(
-            `The soak said ${facts} facts, and its model took ${cues.length} turns: ${JSON.stringify(cues)}.`,
+            `The soak said ${facts} facts, its model took ${cues.length} turns: ${JSON.stringify(cues)}, and ${born} of its lives were born on a checkpoint.`,
           );
           const turns = async (one: Window) => {
             const all: unknown[] = [];
