@@ -30,6 +30,7 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 
 use crate::{
+  checkpoint::CHECKPOINT,
   fact::{Fact, named},
   value::{Fault, IS, Object, ObjectRef, entry, field},
   view::Named,
@@ -38,7 +39,7 @@ use crate::{
 
 use super::{
   beside,
-  log::{KEEP, Line, agrees, keep},
+  log::{KEEP, Line, agrees, agrees_so_far, counted, keep},
   made,
   store::{MADE, Schema, each},
 };
@@ -212,6 +213,42 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
     said,
     given,
   })
+}
+
+/// What the record at a path tells to a reader of the life that still writes it: a reader of a
+/// life that runs reads the log as far as the last checkpoint that its lines count, which no write
+/// of the life changes, so it waits for nothing and races with nothing.
+///
+/// A record takes an entry before its log takes the line of it, and the log takes its lines at the
+/// end of each run, so while a run is in flight the whole log does not agree with the whole record,
+/// though it is the log of that record. The entries of a record before a checkpoint never change,
+/// and neither do the lines of its log before the line of keep of that checkpoint, which each later
+/// log of the record starts with. So when the log agrees with the record as far as that
+/// checkpoint, its facts are the ones told, and the life itself holds each fact that it said after
+/// its last rebirth. Else the record tells what [`retold`] gives.
+pub fn retold_live(path: impl AsRef<Path>) -> Result<Retold, Fault> {
+  let path = path.as_ref();
+  let told = retold(path)?;
+  if told.logged {
+    return Ok(told);
+  }
+  let log = beside(path, ".log");
+  let counted = counted(&log);
+  let (mut entries, mut sealed) = (0, 0);
+  let (mut asked, mut open) = (HashSet::new(), Vec::new());
+  each(path, &mut |entry| {
+    entries += 1;
+    let Some(fact) = kept(&entry).filter(|_| entries <= counted) else { return };
+    if fact.question() {
+      open.push(fact.about().to_owned());
+    }
+    if fact.kind() == CHECKPOINT {
+      sealed = entries;
+      asked.extend(open.drain(..));
+    }
+  })?;
+  let logged = sealed > 0 && agrees_so_far(path, sealed, &asked);
+  Ok(if logged { Retold { logged, file: log, ..told } } else { told })
 }
 
 /// The facts that the reader says over the record at a path, in a file of their own, with the name

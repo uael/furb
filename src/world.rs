@@ -53,7 +53,7 @@ pub use provider::{
   search::Searches,
 };
 pub(crate) use provider::{Mode, search::timed};
-pub use reader::{Retold, retold};
+pub use reader::{Retold, retold, retold_live};
 pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::Format;
 pub use store::{

@@ -405,15 +405,35 @@ pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
 /// Whether the log of the record at a path agrees with a record of that many entries and of those questions, as
 /// [`logged`] reads it, which the caller read once.
 pub(crate) fn agrees(path: &Path, entries: usize, asked: &HashSet<String>) -> bool {
-  File::open(beside(path, ".log"))
-    .is_ok_and(|file| agreed(BufReader::with_capacity(1 << 20, file), entries, asked.clone()))
+  agreed(path, entries, asked, false)
+}
+
+/// Whether the lines of the log of the record at a path, as far as the line that counts an entry
+/// past `entries`, agree with the first `entries` entries of the record and their questions. A
+/// record takes an entry before its log takes the line of it, so the log of a life that runs stands
+/// behind its record, and agrees with it only so far.
+pub(crate) fn agrees_so_far(path: &Path, entries: usize, asked: &HashSet<String>) -> bool {
+  agreed(path, entries, asked, true)
+}
+
+/// How many entries of a record the lines of the log at a path count: those of its head and one
+/// for each line of keep, and none for a log that does not read.
+pub(crate) fn counted(log: &Path) -> usize {
+  let Ok(file) = File::open(log) else { return 0 };
+  let mut lines = BufReader::with_capacity(1 << 20, file).lines().map_while(Result::ok);
+  let first = lines.next().and_then(|line| serde_json::from_str::<Value>(&line).ok());
+  let held = first.and_then(|one| usize::try_from(one.get("entries")?.as_u64()?).ok());
+  held.map_or(0, |held| held + lines.filter(|line| matches!(Line::of(line), Line::Keep(_))).count())
 }
 
 /// Whether a log agrees with a record of that many entries and of those questions: its head counts the entries that
 /// the record held, its lines of keep count the others in order, each line is JSON but a last one that a crash tore,
 /// and it shows each question of the record. Each line is read from its head alone, one at a time, and no fact is
-/// made.
-fn agreed(mut lines: impl BufRead, record: usize, mut asked: HashSet<String>) -> bool {
+/// made. When `past` says so, the log may count entries past those of the record, and its lines
+/// before the first of them are the ones read.
+fn agreed(path: &Path, record: usize, asked: &HashSet<String>, past: bool) -> bool {
+  let Ok(file) = File::open(beside(path, ".log")) else { return false };
+  let (mut lines, mut asked) = (BufReader::with_capacity(1 << 20, file), asked.clone());
   let mut line = String::new();
   let head = match lines.read_line(&mut line) {
     Ok(_) => serde_json::from_str::<Value>(line.trim_end_matches('\n')).ok(),
@@ -443,6 +463,9 @@ fn agreed(mut lines: impl BufRead, record: usize, mut asked: HashSet<String>) ->
       Line::Keep(at) => {
         if at != entries.checked_add(1) {
           return false;
+        }
+        if entries == record {
+          return past && asked.is_empty();
         }
         entries += 1;
       }

@@ -657,7 +657,7 @@ impl Retell {
     // The whole record: a fact that the life said as it wrote its checkpoint, before its rebirth,
     // may stand after that checkpoint in the record.
     let read = |take: &mut dyn FnMut(usize, Object)| -> Option<()> {
-      world::retold(&self.record).ok()?.each(&mut |one| take(0, one)).ok()
+      world::retold_live(&self.record).ok()?.each(&mut |one| take(0, one)).ok()
     };
     let first = order.front().copied();
     let read = read(&mut |_, one: Object| {

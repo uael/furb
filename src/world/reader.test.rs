@@ -2,7 +2,7 @@
 
 use std::{fs, path::PathBuf};
 
-use super::{retold, told};
+use super::{retold, retold_live, told};
 use crate::testing::Yard;
 use crate::{value::Object, view, wire::parsed};
 use serde_json::Value;
@@ -166,6 +166,42 @@ fn a_prompt_that_the_operator_closed_is_done_with_its_value_and_ends_its_rung() 
     ]
     .map(str::to_owned)
   );
+}
+
+#[test]
+fn a_reader_of_a_life_that_runs_reads_the_log_that_agrees_as_far_as_its_last_checkpoint() {
+  // The record took its entry 4 and the log did not take the line of it yet, as in a run in flight.
+  let at = place("live");
+  let record = [
+    r#"[["made","chain1","store","abc"]]"#,
+    r#"[["stand","stand1","operator","chain1"]]"#,
+    r#"[["checkpoint","chain1","store",{}]]"#,
+    r#"[["cd","cd1","operator","chain1","/tmp"]]"#,
+  ];
+  fs::write(&at, record.join("\n") + "\n").unwrap();
+  let log = format!("{}.log", at.display());
+  let lines = [
+    r#"{"entries":1}"#,
+    r#"["stand","stand1","operator","chain1"]"#,
+    r#"["keep","",2]"#,
+    r##"["tell","chain1","chain1",["#chain1"]]"##,
+    r#"["keep","",3]"#,
+  ];
+  fs::write(&log, lines.join("\n") + "\n").unwrap();
+  assert!(!retold(&at).unwrap().logged, "the whole log stands behind the whole record");
+  let read = retold_live(&at).unwrap();
+  assert_eq!((read.logged, &read.file, read.entries), (true, &PathBuf::from(&log), 4));
+  assert_eq!(
+    shown(&filed(&read)),
+    ["['stand', 'stand1', 'operator', 'chain1']", "['tell', 'chain1', 'chain1', ['#chain1']]"]
+      .map(str::to_owned)
+  );
+  // A log that counts no checkpoint of the record agrees with nothing that stands still.
+  fs::write(&log, lines[..3].join("\n") + "\n").unwrap();
+  assert!(!retold_live(&at).unwrap().logged);
+  // A log that lacks a question that the record asked before its checkpoint is no log of it.
+  fs::write(&log, [lines[0], lines[2], lines[4]].join("\n") + "\n").unwrap();
+  assert!(!retold_live(&at).unwrap().logged);
 }
 
 #[test]
