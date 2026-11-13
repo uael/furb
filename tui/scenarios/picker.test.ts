@@ -15,18 +15,21 @@ async function tree(at: string): Promise<void> {
   }
 }
 
-/** Whether the picker still walked or matched as each key of a query showed: each key is pressed and the next frame
- * shows it. A picker that walks and ranks on the thread of the window ends its walk before the frame of the key, and
- * a picker that never waits shows the key with its walk still running. The order of the frame and of the walk is what
- * the test reads, and the load of the machine only makes the walk run longer, so no load moves the check. */
+/** Whether the picker still walked or matched at each key of a query. The window takes a key in the microtask after
+ * its press, before any timer and any frame, so the picker is read there, at the key, and the frame after it shows
+ * the key. A picker that walks and ranks on the thread of the window ends its walk as it takes the key, and a
+ * picker that never waits takes the key with its walk still running. No frame stands between the key and the read, so
+ * no speed of a frame moves the check. */
 async function keys(window: Window, query: string): Promise<boolean[]> {
   const running: boolean[] = [];
   let typed = "";
   for (const key of query) {
     typed += key;
     window.screen.mockInput.pressKey(key);
-    expect(await window.frame()).toContain(typed);
+    await Promise.resolve();
+    expect(window.app.filePicker?.query, `the window took the key ${typed.length - 1}`).toBe(typed.slice(1));
     running.push(window.app.filePicker?.running ?? false);
+    expect(await window.frame()).toContain(typed);
   }
   return running;
 }
@@ -36,10 +39,7 @@ async function picks(window: Window, query: string, meant: string, at: number): 
   await window.screen.mockInput.typeText("look at the ");
   // The walk starts at the key `at`, which names its folder, and a walk that never waits still runs at that key.
   const running = await keys(window, query);
-  expect(
-    running[at],
-    `the picker walks still at the frame of key ${at}: ${running.map(Number).join("")}`,
-  ).toBe(true);
+  expect(running[at], `the picker walks still at the key ${at}: ${running.map(Number).join("")}`).toBe(true);
   await window.shows((frame) => frame.includes(meant), "the meant file", 30);
 }
 
