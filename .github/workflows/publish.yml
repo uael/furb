@@ -349,7 +349,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # A pull request saves no cache of this job, which no run of the gates reads.
       - uses: ./.github/actions/setup
+        with:
+          saved: ${{ github.event_name != 'pull_request' }}
       - run: uv run python script/promise.py
         env:
           UV_NO_SYNC: "1"

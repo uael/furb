@@ -61,8 +61,14 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           TITLE: ${{ github.event.pull_request.title }}
         run: python3 script/hooks/corpus.py --base "$BASE" --title "$TITLE"
+      # The proof restores the cache of the build of the gates on its system, and saves none: it builds a part of what
+      # that build holds, for the same target and with the same feature, and a set of its own on each system took 1.9
+      # GB of the 10 GB of the store, which then ended the caches that the gates restore.
       - uses: ./.github/actions/setup
         with:
           python: none
-      - run: "cargo test -p furb --test suite promise::"
-      - uses: ./.github/actions/clear
+          shared: build
+          hashed: bind/typescript/build.ts
+      - run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      - run: "cargo test -p furb --features typescript --test suite promise::"
