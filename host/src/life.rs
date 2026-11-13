@@ -605,8 +605,9 @@ struct Since {
 /// and the place and digest of each. The record holds the facts in the order that the engine said
 /// them, which is not always the order in which the life told them, so a fact of the record takes
 /// the first place of its digest that no fact took yet, and the read
-/// gives each in the order of the places, as soon as each place before it is taken. A place that
-/// no fact of the record takes stays a gap, as when the record does not read.
+/// gives each in the order of the places, as soon as each place before it is taken. A place is a
+/// gap only when the read of the record ends with no fact for it, as when the record does not
+/// read: a reader never loses a fact that the record holds.
 struct Retell {
   record: String,
   wanted: Vec<(Seq, Digest)>,
@@ -615,10 +616,6 @@ struct Retell {
 /// The places that wait for a fact of the record, by the kind and the digest of the fact, each with
 /// the speaker of the entry that a `keep` fact says.
 type Places = HashMap<(bool, u64), VecDeque<(Seq, Option<String>)>>;
-
-/// How many facts a read of the record holds that wait for a place before them: past it, that place
-/// stays a gap.
-const AHEAD: usize = 4_096;
 
 impl Retell {
   /// The facts, read on a thread that may block, sent in the order of their places to a reader,
@@ -640,14 +637,20 @@ impl Retell {
       places.entry(key).or_default().push_back((*at, by));
     }
     let mut order: VecDeque<Seq> = self.wanted.iter().map(|one| one.0).collect();
+    // The facts that wait for a place before them. The journal tells the keep of each fact of a
+    // run at the end of that run, so the keeps of a whole run wait here while the read passes the
+    // run. No bound cuts the wait, since a place that is given up before the read reaches its
+    // fact is a fact lost. At its worst, when the record lacks the fact of the first place, each
+    // fact that is retold waits here until the read ends: the facts that the log let go, and no
+    // more, since a fact with no place is not held.
     let mut ready: BTreeMap<Seq, Value> = BTreeMap::new();
-    let send = |ready: &mut BTreeMap<Seq, Value>, order: &mut VecDeque<Seq>, all: bool| {
+    let give = |at: Seq, fact: Value| {
+      sender.blocking_send((at, Arc::new(Event::Fact(fact)))).ok();
+    };
+    let send = |ready: &mut BTreeMap<Seq, Value>, order: &mut VecDeque<Seq>| {
       while let Some(&at) = order.front() {
-        if let Some(fact) = ready.remove(&at) {
-          sender.blocking_send((at, Arc::new(Event::Fact(fact)))).ok();
-        } else if !all && ready.len() < AHEAD {
-          return;
-        }
+        let Some(fact) = ready.remove(&at) else { return };
+        give(at, fact);
         order.pop_front();
       }
     };
@@ -673,7 +676,7 @@ impl Retell {
       if let Some((at, _)) = places.get_mut(&(false, one)).and_then(VecDeque::pop_front) {
         ready.insert(at, fact);
       }
-      send(&mut ready, &mut order, false);
+      send(&mut ready, &mut order);
     });
     if read.is_none()
       && let Some(at) = first
@@ -684,7 +687,11 @@ impl Retell {
       );
       sender.blocking_send((at, Arc::new(Event::Notice(why)))).ok();
     }
-    send(&mut ready, &mut order, true);
+    // The read ended: each place that has no fact is a gap, and each fact that waited behind one
+    // goes in the order of the places.
+    for (at, fact) in ready {
+      give(at, fact);
+    }
   }
 }
 

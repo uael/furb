@@ -33,6 +33,11 @@ use tokio::time;
 /// The events of a life, each under its place in the log.
 type Logged = (Seq, Arc<Event>);
 
+/// The questions that one run of a word asks, enough for a tail of facts. The journal tells their
+/// keeps at the end of the run, so a read of the record holds thousands of facts ahead of the
+/// place that it waits for.
+const ASKED: usize = 2600;
+
 /// The most facts that a life says after its checkpoint before it writes the next one.
 const TAIL: usize = 10_000;
 
@@ -231,7 +236,7 @@ async fn a_life_goes_on_through_each_rebirth() {
   }).await);
   let then = moment(&life).await;
   let before = looked(&life, then).await;
-  ran(&life, "for i in range(2600):\n  chance()").await;
+  ran(&life, &format!("for i in range({ASKED}):\n  chance()")).await;
   log.extend(until(&mut events, reborn(false)).await);
   // The log let go of each fact before the checkpoint, and a read of an earlier moment still
   // gives each act that stood then.
@@ -245,6 +250,12 @@ async fn a_life_goes_on_through_each_rebirth() {
     of.iter().filter(|one| !matches!(*one.1, Event::Act(_) | Event::Text { .. })).cloned().collect()
   };
   assert_eq!(others(&late), others(&log), "a reader that comes late reads the same facts");
+  // A reader that fell behind read the facts that the log let go from the record, as the late
+  // one did, so each of the two holds each question of the run.
+  let asked = |of: &[Logged]| {
+    of.iter().filter(|one| matches!(&*one.1, Event::Fact(fact) if fact[0] == "chance")).count()
+  };
+  assert_eq!((asked(&late), asked(&log)), (ASKED, ASKED), "no reader loses a fact of the run");
   let last = |of: &[Logged]| -> BTreeMap<String, Logged> {
     let acts = of.iter().filter_map(|one| match &*one.1 {
       Event::Act(act) => Some((act.id.clone(), one.clone())),
@@ -353,7 +364,7 @@ async fn a_life_with_the_default_skills_is_born_again_at_its_tail() {
   let life = Life::spawn(Opening { skills: None, ..opening(&at) }).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
   ran(&life, "n = 1").await;
-  ran(&life, "for i in range(2600):\n  chance()").await;
+  ran(&life, &format!("for i in range({ASKED}):\n  chance()")).await;
   until(&mut events, reborn(false)).await;
   assert_eq!(named(&life, "n").await, Ok("1".to_owned()), "the life goes on past its tail");
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
