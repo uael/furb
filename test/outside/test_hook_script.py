@@ -3,11 +3,16 @@ import os
 import subprocess
 from pathlib import Path
 
+import yaml
+
 HOOK = Path(__file__).resolve().parents[2] / "script" / "hooks" / "pre-commit"
 # A run of this suite under a hook of git holds GIT_INDEX_FILE and more, so a git command that inherits them acts on
 # the repo of the hook and not on the repo of the test.
-# A run under pre-commit holds PRE_COMMIT=1, which the script reads as the command that runs the hooks.
-CLEAN = {key: value for key, value in os.environ.items() if not key.startswith("GIT_") and key != "PRE_COMMIT"}
+# A run under pre-commit holds PRE_COMMIT=1, which the script reads as the command that runs the hooks, and may hold a
+# SKIP, which the script adds to its own.
+CLEAN = {
+  key: value for key, value in os.environ.items() if not key.startswith("GIT_") and key not in ("PRE_COMMIT", "SKIP")
+}
 
 
 def run(tmp_path: Path, body: str, *args: str) -> subprocess.CompletedProcess[str]:
@@ -32,6 +37,29 @@ def test_hook_prints_only_what_fails(tmp_path: Path):
   )
   assert got.returncode == 1
   assert got.stdout == "pytest...........Failed\nE assert 1 == 2\n"
+
+
+def test_a_commit_runs_only_the_hooks_that_read_its_files_alone_and_end_at_once(tmp_path: Path):
+  # The stub prints the SKIP that the script gives to pre-commit, and the config gives the hooks of the stage.
+  got = run(tmp_path, 'echo "$SKIP"\nexit 1\n')
+  skipped = got.stdout.strip().split(",")
+  loaded = yaml.safe_load((HOOK.parents[2] / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+  staged = [one["id"] for repo in loaded["repos"] for one in repo["hooks"] if one.get("stages") != ["manual"]]
+  assert set(skipped) < set(staged)
+  assert [one for one in staged if one not in skipped] == [
+    "check-added-large-files",
+    "check-merge-conflict",
+    "check-toml",
+    "check-yaml",
+    "end-of-file-fixer",
+    "mixed-line-ending",
+    "trailing-whitespace",
+    "ruff-format",
+    "ruff-check",
+    "rustwidth",
+    "corpus",
+    "stray",
+  ]
 
 
 def merging(
@@ -145,13 +173,10 @@ def test_hook_takes_the_venv_of_the_main_checkout_in_a_worktree_that_has_none(tm
 PUSH = HOOK.parent / "pre-push"
 
 
-def pushing(
-  tmp_path: Path, *refs: str, verify: bool = False, name: str = "a.txt", amend: bool = False, data: bool = False
-) -> tuple[subprocess.CompletedProcess[str], str, list[str]]:
-  """Pushes of a clone with the hooks of the repository, to each ref named, after one commit of a file that skipped its
-  hooks or ran them, and with amend a second change that runs them and amends it, and with data the push of a commit of
-  captures that git commit-tree makes with no history and no hook, beside origin/main. A stub runs the hooks: it logs each run and fails on bad.txt. Gives the push, the branches of
-  origin after it, and the runs of the hooks."""
+def pushing(tmp_path: Path, *refs: str) -> tuple[subprocess.CompletedProcess[str], str, list[str]]:
+  """A push of a clone with the hooks of the repository, to each ref named, after one commit of bad.txt that skipped its
+  hooks. A stub runs the hooks: it logs each run and fails on bad.txt. Gives the push, the branches of origin after it,
+  and the runs of the hooks."""
   origin, repo = tmp_path / "origin.git", tmp_path / "repo"
   stub, seen = tmp_path / "stub.sh", tmp_path / "seen.txt"
   stub.write_text(
@@ -167,30 +192,11 @@ def pushing(
   def git(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *config, *args], cwd=repo, env=env, capture_output=True, text=True, check=False)
 
-  (repo / name).write_text("a\n")
+  (repo / "bad.txt").write_text("a\n")
   git("add", ".")
-  git("commit", "-q", *([] if verify else ["--no-verify"]), "-m", "chore(ci): Add a file")
-  if amend:
-    (repo / "c.txt").write_text("c\n")
-    git("add", "c.txt")
-    git("commit", "-q", "--amend", "--no-edit")
+  git("commit", "-q", "--no-verify", "-m", "chore(ci): Add a file")
   git("remote", "add", "origin", origin.as_posix())
-  tip = "HEAD"
-  if data:
-    git("update-ref", "refs/remotes/origin/main", "HEAD")
-    (repo / "capture.png").write_bytes(b"\x89PNG\r\n")
-    blob = git("hash-object", "-w", "capture.png").stdout.strip()
-    tree = subprocess.run(
-      ["git", "mktree"],
-      input=f"100644 blob {blob}\tcapture.png\n",
-      cwd=repo,
-      env=env,
-      capture_output=True,
-      text=True,
-      check=True,
-    ).stdout.strip()
-    tip = git("commit-tree", tree, "-m", "The screens of w/converge").stdout.strip()
-  got = git("push", "origin", *[f"{tip}:{one}" for one in refs])
+  got = git("push", "origin", *[f"HEAD:{one}" for one in refs])
   heads = subprocess.run(
     ["git", "for-each-ref", "--format=%(refname)"], cwd=origin, env=CLEAN, capture_output=True, text=True, check=True
   )
@@ -203,31 +209,7 @@ def test_a_push_to_main_is_refused_and_moves_nothing(tmp_path: Path):
   assert "The push to main of origin is refused: main changes only through a pull request." in got.stderr
 
 
-def test_a_push_of_a_branch_of_its_own_goes_through(tmp_path: Path):
-  got, heads, _ = pushing(tmp_path, "refs/heads/w/mine")
+def test_a_push_of_a_branch_of_its_own_goes_through_and_runs_no_hook_on_a_commit_that_skipped_them(tmp_path: Path):
+  got, heads, runs = pushing(tmp_path, "refs/heads/w/mine")
   assert got.returncode == 0 and heads == "refs/heads/w/mine\n"
-
-
-def test_a_push_of_a_commit_that_skipped_its_hooks_runs_them_and_is_refused_when_they_fail(tmp_path: Path):
-  got, heads, runs = pushing(tmp_path, "refs/heads/w/mine", name="bad.txt")
-  assert got.returncode != 0 and heads == ""
-  assert "check...........Failed" in got.stderr
-  assert len(runs) == 1 and runs[0].endswith("--files bad.txt")
-
-
-def test_a_push_of_a_commit_that_an_amend_with_hooks_made_from_one_that_skipped_them_runs_them_again(tmp_path: Path):
-  got, heads, runs = pushing(tmp_path, "refs/heads/w/mine", name="bad.txt", amend=True)
-  assert got.returncode != 0 and heads == ""
-  assert runs[-1].endswith("--files bad.txt c.txt")
-
-
-def test_a_push_of_a_commit_that_ran_its_hooks_runs_them_no_second_time(tmp_path: Path):
-  got, heads, runs = pushing(tmp_path, "refs/heads/w/mine", verify=True)
-  assert got.returncode == 0 and heads == "refs/heads/w/mine\n"
-  assert len(runs) == 1 and runs[0].startswith("hook-impl")
-
-
-def test_a_push_of_a_commit_with_no_history_beside_main_goes_through_and_runs_no_hook(tmp_path: Path):
-  got, heads, runs = pushing(tmp_path, "refs/heads/w/shots", name="bad.txt", data=True)
-  assert got.returncode == 0 and heads == "refs/heads/w/shots\n"
   assert runs == []

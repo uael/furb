@@ -27,7 +27,7 @@ large change, open an issue first, so we can agree on its shape before you do th
 ```sh
 git clone https://github.com/uael/furb && cd furb
 uv sync                              # The Python environment, which builds the crate and the command line.
-git config core.hooksPath script/hooks # The hooks: the fast checks of each commit, with output for failures only.
+git config core.hooksPath script/hooks # The hooks: the form of the files of each commit, in about 2 seconds.
 bun install && bun run build         # The TypeScript workspace, and the N-API package that the TUI uses.
 bun run demo                         # The TUI on a scripted life. It asks no model.
 ```
@@ -190,12 +190,14 @@ sentence.
 
 ## The gates
 
-Run the gates that your change touches before you push. A commit runs only the hooks that take seconds: the format, the
-lint, the type check and the checks of the files. No commit and no push runs a test.
+Run the gates that your change touches before you push. A commit runs only the hooks that read its files alone and end
+at once: the checks of the files, and the format and the lint of Python. A push runs none. So no commit and no push
+runs a test or a type check: the two commands at the top of this table run them when you ask.
 
 | Command | What it checks |
 | --- | --- |
-| `sh script/hooks/pre-commit run --all-files --hook-stage manual` | Every hook: the format and the lint, the type check, the suite, the gates of the crate, and the lint of TypeScript. |
+| `sh script/hooks/pre-commit run --all-files` | Every check that needs no build, in seconds to a minute: the format and the lint, the type check, the links, the paths, the unused names and the workflows. |
+| `sh script/hooks/pre-commit run --all-files --hook-stage manual` | Every gate, in minutes: the checks above, the suite, the gates of the crate, and the lint of TypeScript. |
 | `uv run pytest -q` | The suite on both engines, with a coverage that must be whole. |
 | `uv run pytest -q test/test_hygiene.py` | The hygiene laws alone, after a change of the engine, a contract or a suite. |
 | `uv run ruff format src test script .agents/skills` and `uv run ruff check src test script .agents/skills` | The format and the lint of Python: two spaces of indentation, 120 columns. |

@@ -357,31 +357,40 @@ fix what your change broke, and report what was broken before.
   `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/suite/furb.rs` runs `furb` as
   a process, on a claude command line that answers from a script.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
-- `sh script/hooks/pre-commit run --all-files --hook-stage manual`: every gate of this machine in one command, with the
-  same pre-commit as the commit hook: the `.venv` of the checkout, else the `.venv` of the main checkout, else the
-  `pre-commit` of PATH. The stage `manual` runs every hook of `.pre-commit-config.yaml`: the hooks of a commit, and the
+- `git commit` verifies only the form of its files, and ends in about 2 seconds. Its hook, `script/hooks/pre-commit`,
+  which `git config core.hooksPath script/hooks` turns on, runs only the hooks that read the staged files alone and end
+  at once: the checks of the files, the format and the lint of Python, the width of the comments of Rust, the corpus and
+  the stray files. It names each other hook of the stage `pre-commit` in `SKIP`, and it prints only what fails. So no
+  commit runs a test, a type check, a format of Rust or a check that reads the whole repository: run the one or two
+  tests of your change while you work, as the skill `testing` says, and the two commands below run the rest outside the
+  commit, on a period. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of
+  `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. A merge commit,
+  which `git merge` makes or `git commit` ends after a conflict, runs the hooks of a commit only on each file whose
+  content differs from its version in every parent: a file that it takes whole from one parent passed the hooks of that
+  parent, and the gates check the whole tree. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file.
+- `git push` runs no hook of pre-commit and checks no commit. Its hook, `script/hooks/pre-push`, only refuses each push
+  that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`,
+  which runs no hook here. Run the push as its own command after the commit, so that its result stands in the tail of
+  that command.
+- `sh script/hooks/pre-commit run --all-files`: every check that needs no build, in one command, which takes seconds to
+  a minute. It runs each hook of the stage `pre-commit` on every file, as the job of the hooks in the gates does: the
+  hooks of a commit, and the type check, the lock of uv, the format of Rust, the links, the paths, the unused names and
+  the workflows. It exits with 1 when a hook fails, and prints `Failed` beside the name of that hook, with its output.
+  It takes the same pre-commit as the commit hook: the `.venv` of the checkout, else the `.venv` of the main checkout,
+  else the `pre-commit` of PATH. In a new worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs the
+  old `pre-commit` of the system, which cannot read the config, so do not use it there. The type check runs through
+  `uv run`, which syncs first: after a change of the crate or of the engine, it builds the wheels again unless a sync
+  made them. The hook of the links runs only for a README or a manifest, and reads git alone. The hook `paths` runs
+  whatever the files, since a move of a file leaves its old path in a script that the change does not touch.
+- `sh script/hooks/pre-commit run --all-files --hook-stage manual`: every gate of this machine in one command, which
+  takes minutes. The stage `manual` runs every hook of `.pre-commit-config.yaml`: those of the command above, and the
   four that stand at that stage alone, `pytest`, `clippy`, `cargo-test` and `biome`, which are the suite, the clippy and
-  the tests of the crate and the lint of TypeScript. It takes minutes. Name `--files <files>` in place of `--all-files`
-  to run some files: the hooks `pytest` and `cargo-test` then run the tests that those files reach, as
-  `script/hooks/reach.py` says. With no `--hook-stage manual`, the command runs the hooks of a commit alone. In a new
-  worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs the old `pre-commit` of the system, which cannot
-  read the config, so do not use it there. A `git commit` runs only the hooks that read the change and take seconds: the
-  checks of the files, the format, the lint and the type check of Python, the lock of uv, the format of Rust and the
-  width of its comments, the links, the paths, the unused names, the workflows, the corpus and the stray files. No commit
-  and no push runs a test, clippy or the lint of TypeScript: prove a change before its commit with the checks that it
-  touches, as the skill `testing` says, and the gates run each of the four in a job of its own. The type check runs
-  through `uv run`, which syncs first: after a change of the crate or of the engine, it builds the wheels again unless a
-  sync made them, so run `uv sync` before such a commit. Give a commit a timeout in `bash` of twice the time that it took
-  last. The hook
-  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. It also runs the hooks of a commit once on the files of each pushed commit that no remote holds and whose change did not pass them, as after `--no-verify`, an amend or a rebase, and passes a commit that shares no history with `origin/main`, as a branch of captures, and refuses the push when they fail or when the branch is not checked out with a clean work tree, so a checked commit runs no hook a second time. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks only on
-  each file whose content differs from its version in every parent: a file that it takes whole from one parent passed the
-  hooks of that parent, and the gates check the whole tree. Run the
-  push as its own command after the commit, so that its result stands in the tail of that command. The hook `cargo test` runs on a cache of its own, `XDG_CACHE_HOME` in `/tmp`, and fails when a test leaves a file
-  there: a test that makes the scratch directory of a record holding a file removes that directory at its end. The hook
-  `cargo test` runs only when a file that the crate
-  or its tests read is among the files of the run, and `--all-files` gives every hook every file. The hook of the links runs only for a README or
-  a manifest, and reads git alone. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file. The hook `paths` runs on
-  each commit, since a move of a file leaves its old path in a script that the commit does not touch.
+  the tests of the crate and the lint of TypeScript. The gates run each of the four in a job of its own. It exits with 1
+  when a hook fails, and names that hook as the command above does. Name `--files <files>` in place of `--all-files` in
+  each of the two commands to run some files: the hooks `pytest` and `cargo-test` then run the tests that those files
+  reach, as `script/hooks/reach.py` says. The hook `cargo test` runs on a cache of its own, `XDG_CACHE_HOME` in `/tmp`,
+  and fails when a test leaves a file there: a test that makes the scratch directory of a record holding a file removes
+  that directory at its end. It runs only when a file that the crate or its tests read is among the files of the run.
 - `uv run python script/smoke.py`: one real life on the default actor of the crate, the first model that the catalog
   offers, which may cost dollars. `--model` names the actor, as `--model local:qwen3` on the local server that
   `FURB_LOCAL_URL` names. It is no test of the suite and spends one prompt.
@@ -435,7 +444,7 @@ fix what your change broke, and report what was broken before.
 - `uv run --no-sync python script/workflows.py`: parse each file of `.github/workflows/` with PyYAML, in a second, with no
   build. It fails on a syntax fault, on a key that a mapping holds twice, on a marker of a conflict, on a job with
   neither `runs-on` nor `uses`, on a step with neither `run` nor `uses`, and on a `needs` that names no job. Run it
-  after a merge or a rebase that touched a workflow. The hooks run it on every commit, and on a merge commit with new content.
+  after a merge or a rebase that touched a workflow. The hooks run it whatever the files.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `tui/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty

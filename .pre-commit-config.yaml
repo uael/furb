@@ -1,7 +1,11 @@
 default_install_hook_types: [pre-commit]
-# Each hook runs once, before the commit, but the four that take minutes, which stand at the stage manual alone: the
-# suite, the clippy and the tests of the crate and the lint of TypeScript. No commit and no push runs them, and the
-# gates run each in a job of its own. The stage manual runs every hook, so one command runs every gate on this machine:
+# The stage pre-commit holds every check that needs no build. A run by hand starts them, as the job of the hooks in the
+# gates does: sh script/hooks/pre-commit run --all-files
+# A commit runs only those of them that read its files alone and end at once: script/hooks/pre-commit names each other
+# one in SKIP. A push runs none.
+# The stage manual holds every hook, and it alone holds the four that the job of the hooks skips: the suite, the clippy
+# and the tests of the crate, which build, and the lint of TypeScript, which needs bun. The gates run each of the four
+# in a job of its own. So one command runs every gate on this machine:
 # sh script/hooks/pre-commit run --all-files --hook-stage manual
 # A hook of no stage also runs at the stage of the message, on that file alone, where each gate says that it found no
 # files to check.
@@ -96,7 +100,8 @@ repos:
         pass_filenames: false
       - id: paths
         name: the paths that the scripts and the workflows name
-        # Each commit runs it, since a move of a file in a commit that touches no script leaves the old path in one.
+        # It runs whatever the files, since a move of a file in a change that touches no script leaves the old path in
+        # one.
         entry: uv run --no-sync python script/paths.py
         language: system
         always_run: true
@@ -120,8 +125,7 @@ repos:
         pass_filenames: false
       - id: workflows
         name: the workflows parse and keep their shape
-        # Each commit runs it, and a merge commit with new content, since a bad merge of a workflow shows in CI only after
-        # minutes.
+        # It runs whatever the files, since a bad merge of a workflow shows in CI only after minutes.
         entry: uv run --no-sync python script/workflows.py
         language: system
         always_run: true

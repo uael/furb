@@ -22,7 +22,7 @@ def repo(made: Bench) -> None:
 
 
 async def test_commit_gives_one_qa_trailer_for_each_entry_and_the_sha(pulling: Bench) -> None:
-  """commit(title, paths) commits the named paths alone, in the worktree at where, with git commit and every hook, and gives a tuple of the short sha and the QA trailers of the commit."""
+  """commit(title, paths) commits the named paths alone, in the worktree at where, with git commit and its hooks, and gives a tuple of the short sha and the QA trailers of the commit."""
   repo(pulling)
   sha, trailers = await pulling.value('await commit("chore(pr): Add a", ["a.txt"], "Why.", qa=["open the TUI", "press q"])')
   assert trailers == ["open the TUI", "press q"]
@@ -41,7 +41,7 @@ async def test_commit_with_no_entry_gives_no_trailer_and_carries_the_body(pullin
 
 
 async def test_commit_refuses_an_empty_list_of_paths(pulling: Bench) -> None:
-  """It refuses an empty list of paths, and its bash has a timeout of 2400 s, since the type check of the hooks syncs the environment, which builds the crate again after a change of it."""
+  """It refuses an empty list of paths, and its bash has a timeout of 120 s, since a commit runs only the hooks that end at once."""
   repo(pulling)
   with pytest.raises(Refused, match="at least one path"):
     await pulling.value('await commit("chore(pr): Nothing", [])')

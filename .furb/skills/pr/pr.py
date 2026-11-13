@@ -179,7 +179,7 @@ async def commit(title: str, paths: list[str], body: str = "", qa: tuple[str, ..
     "git rev-parse --short HEAD\n"
     "git log -1 --format='%(trailers:key=QA,valueonly)'\n"
   )
-  got = await bash(run, show=HIDDEN, timeout=2400)
+  got = await bash(run, show=HIDDEN, timeout=120)
   sha, *rest = got.stdout.content.splitlines() or [""]
   return sha, [x for x in rest if x.strip()]
 
