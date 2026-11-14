@@ -221,6 +221,11 @@ def seed(names, data):
   for x in sorted(data["acts"], key=lambda a: "value" not in a):
     if x["on"] in home:
       home[x["id"]], kinds[x["id"]] = home[x["on"]], x["kind"]
+  # The maker of each chain and each act that the data names stands in the fact carried of the chain that the act is
+  # on, or of the first chain, since the seed makes each again as the operator or the journal.
+  made = {c["id"]: {} for c in data["chains"]}
+  for x in [*data["chains"], *data["acts"]]:
+    "by" in x and made[home.get(x["id"], data["chains"][0]["id"])].update({x["id"]: x["by"]})
   parts = {}
   for c in data["chains"]:
     put("chain", i := c["id"], operator, c["on"], c["label"], "")
@@ -232,7 +237,10 @@ def seed(names, data):
     kept = [
       t for t in c["turns"] if t[1] not in kinds or home[t[1]] != i or t[0] not in ("started", "done", kinds[t[1]])
     ]
-    entries += [(("carried", i, "journal", c["turns"], c["values"], parts[i]),), (("prefix", i, i, kept),)]
+    entries += [
+      (("carried", i, "journal", c["turns"], c["values"], parts[i], *[made[i]][: bool(made[i])]),),
+      (("prefix", i, i, kept),),
+    ]
     (c["paused"] or i in asking) and entries.append((("pause", i, operator),))
   for x in data["acts"]:
     "value" in x and (
@@ -295,6 +303,11 @@ def gathered(names, define, floor):
     return int(re.sub(r"^\D+", "", called) or 0)
 
   chains = [x for x in listening() if question(("chain", x))]
+  made = {k: v for c in chains for x in transcript(c, "carried") for k, v in (x[6:] or [{}])[0].items()}
+
+  def maker(called):
+    return made.get(called, get(called)[2])
+
   asked = [*map(get, chains)] + [x for h in chains for x in transcript(h) if x is get(x[1])]
   cut = sorted((x[1] for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=number)
   gone = {x[4] for x in asked if x[0] == "wants" and x[2] in cut and prompted(x[4]) and not over(x[1])}
@@ -327,7 +340,7 @@ def gathered(names, define, floor):
     *borne,
   ]:
     a = get(one)
-    d = {"kind": a[0], "id": one, "on": a[3]}
+    d = {"kind": a[0], "id": one, "on": a[3], "by": maker(one)}
     if prompted(one) and not over(one):
       acts.append(
         {
@@ -357,6 +370,7 @@ def gathered(names, define, floor):
     out.append(
       {
         "id": c,
+        "by": maker(c),
         "on": a[3] * (a[3] in chains),
         "label": a[4],
         "source": a[5],

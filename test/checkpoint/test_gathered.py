@@ -98,12 +98,21 @@ async def test_acts_holds_the_last_stand_the_last_clock_each_prompt_and_each_com
   await settle()
   data = checkpoint.gathered(vars(engine), lambda word: word, {"wait": 9})
   acts = {x["id"]: x for x in data["acts"]}
-  assert acts[thread] == {"kind": "prompt", "id": thread, "on": root, "words": engine.get(thread)[4:], "value": "yes"}
+  by = lambda name: engine.get(name)[2]  # noqa: E731
+  assert acts[thread] == {
+    "kind": "prompt",
+    "id": thread,
+    "on": root,
+    "by": by(thread),
+    "words": engine.get(thread)[4:],
+    "value": "yes",
+  }
   shell, asked, later = (value(root, name) for name in ("shell", "asked", "later"))
   assert acts[shell] == {
     "kind": "bash",
     "id": shell,
     "on": root,
+    "by": by(shell),
     "words": engine.get(shell)[4:],
     "value": engine.peek(shell),
   }
@@ -116,6 +125,23 @@ async def test_acts_holds_the_last_stand_the_last_clock_each_prompt_and_each_com
   await settle()
   went = engine.prompt(None, "Go on.", on=thread)
   assert engine.get(went)[3] == thread
+
+
+async def test_each_chain_and_each_act_of_the_data_names_who_made_it_as_by_the_maker_that_a_fact_carried_names_for_it_since_a_birth_made_it_again_else_the_maker_that_its_question_says() -> (
+  None
+):
+  """Each chain and each act of the data names who made it as by: the maker that a fact carried names for it, since a birth made it again, else the maker that its question says."""
+  root, data = await gather()
+  shell, asked = value(root, "shell"), value(root, "asked")
+  makers = {root: OPERATOR, shell: engine.get(shell)[2], asked: engine.get(asked)[2]}
+  assert makers[shell].startswith("rung") and makers[asked].startswith("rung")
+  named = {x["id"]: x["by"] for x in [*data["chains"], *data["acts"]] if x["id"] in makers}
+  assert named == makers
+  life(sown(), checkpoint.seed(vars(engine), data))
+  await settle()
+  assert (engine.get(shell)[2], engine.get(asked)[2]) == ("journal", OPERATOR)
+  again = checkpoint.gathered(vars(engine), lambda word: word, {})
+  assert {x["id"]: x["by"] for x in [*again["chains"], *again["acts"]] if x["id"] in makers} == makers
 
 
 async def test_gathered_is_a_view_it_makes_nothing_and_says_nothing() -> None:

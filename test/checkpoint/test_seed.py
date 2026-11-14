@@ -224,6 +224,50 @@ async def test_the_fact_carried_of_a_chain_holds_the_text_of_each_value_then_the
   )
 
 
+async def test_the_fact_carried_of_a_chain_names_after_the_parts_of_its_birth_who_made_the_chain_and_each_act_of_the_data_on_it_so_a_later_gathered_gives_each_act_that_seed_makes_again_the_maker_that_the_data_says() -> (
+  None
+):
+  """The fact carried of a chain names after the parts of its birth who made the chain and each act of the data on it, an act on no chain of the data in the fact carried of the first chain, so a later gathered gives each act that seed makes again as the operator or the journal the maker that the data says."""
+  life(sown())
+  prompt = {"kind": "prompt", "id": "prompt1", "on": "chain3", "shape": "str", "message": "Wait.", "to": ""}
+  acts = [
+    {**prompt, "held": "", "by": "rung1"},
+    {"kind": "stand", "id": "stand1", "on": "chain1", "value": STANDS, "by": "rung2"},
+    {"kind": "bash", "id": "bash2", "on": "chain1", "words": ["echo one"], "value": SHELL, "by": "rung3"},
+    {"kind": "bash", "id": "bash1", "on": "chain9", "words": ["echo"], "value": SHELL, "by": "rung7"},
+  ]
+  chains = [chain("chain1", "", "root", by=OPERATOR), chain("chain3", "chain1", "work", by=OPERATOR)]
+  entries = checkpoint.seed(vars(engine), {**DATA, "chains": chains, "acts": acts})
+  assert {x[0][1]: x[0][6] for x in entries if x[0][0] == "carried"} == {
+    "chain1": {"chain1": OPERATOR, "stand1": "rung2", "bash2": "rung3", "bash1": "rung7"},
+    "chain3": {"chain3": OPERATOR, "prompt1": "rung1"},
+  }
+  life(sown(), entries)
+  await settle()
+  assert (engine.get("prompt1")[2], engine.get("bash2")[2]) == (OPERATOR, "journal")
+  data = checkpoint.gathered(vars(engine), lambda word: word, {})
+  assert {x["id"]: x["by"] for x in data["acts"] if x["id"] in ("prompt1", "bash2")} == {
+    "prompt1": "rung1",
+    "bash2": "rung3",
+  }
+
+
+async def test_a_fact_carried_names_no_maker_when_the_data_names_none_as_the_data_of_an_earlier_build_so_that_data_seeds_as_it_did() -> (
+  None
+):
+  """A fact carried names no maker when the data names none, as the data of an earlier build, so that data seeds as it did."""
+  life(sown())
+  entries = checkpoint.seed(vars(engine), DATA)
+  assert [len(x[0]) for x in entries if x[0][0] == "carried"] == [6, 6]
+  life(sown(), entries)
+  await settle()
+  data = checkpoint.gathered(vars(engine), lambda word: word, {})
+  assert {x["id"]: x["by"] for x in data["acts"] if x["id"] in ("prompt1", "bash2")} == {
+    "prompt1": OPERATOR,
+    "bash2": "journal",
+  }
+
+
 async def test_seed_reads_the_definitions_that_a_checkpoint_of_an_earlier_build_holds_as_one_string_as_one_word_of_definitions() -> (
   None
 ):
