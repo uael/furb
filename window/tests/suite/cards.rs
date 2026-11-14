@@ -49,11 +49,17 @@ pub(crate) fn shows(app: &TestApp, text: &str) -> String {
   app.text()
 }
 
-/// The row of a window that shows a text.
+/// The row of a window that shows a text, read in the frame that shows it: each read of the text
+/// draws a new frame, after the frames of the daemon that came, and a card whose state changes
+/// there takes a shorter title, as one that waits for a model.
 pub(crate) fn row(app: &TestApp, text: &str) -> u16 {
-  let at =
-    app.text().lines().position(|line| line.contains(text)).expect("the window shows the text");
-  u16::try_from(at).unwrap()
+  let mut at = None;
+  let shown = app.wait_until(PATIENCE, || {
+    at = app.text().lines().position(|line| line.contains(text));
+    at.is_some()
+  });
+  assert!(shown, "the window never showed {text:?}:\n{}", app.text());
+  u16::try_from(at.expect("the frame that ended the wait shows the text")).unwrap()
 }
 
 #[test]
