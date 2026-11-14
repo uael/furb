@@ -265,10 +265,13 @@ it is not given. The daemon answers requests in any order.
   of its thread, by the list of the acts that each act made. A page holds:
   - `above`, how many exchanges of the thread stand before the first of the page, so a window asks the older page
     with `before` set to that place when the reader scrolls to it;
-  - `exchanges`, each a message of the thread with all that answers it: `at`, its place in the thread, 0 for the
-    prompt; `message`, its act; `by`, who said it; `text`; `block`, the code that answers it once a model answers;
-    and `said`, what the answer says to the operator, in order: each `notice` and `question` of its words, and the
-    `answer`, the text that closed the message. A `question` holds the `shape` of its answer and, once it is closed,
+  - `exchanges`, each a message of the thread with all that answers it: the prompt of the thread, then each message
+    that an operator said on it. A wake or an acknowledgment that the engine says on the thread is no exchange. What
+    answers a message is what came after it and before the next message, whichever prompt of the thread each rung
+    advances. An exchange holds `at`, its place in the thread, 0 for the prompt; `message`, its act; `by`, who said
+    it; `text`; `block`, the code that answers it once a model answers; and `said`, what the answer says to the
+    operator, in the order it was said: each `notice` and `question` of its words, and each `answer`, the text that
+    closed a message there. A `question` holds the `shape` of its answer and, once it is closed,
     `answered`: `by`, who closed it, and `reply`, its `value` as a person reads it or the reason that `refused` it.
     A question that is not closed waits for the operator: `answer` closes it with a line of its shape, and `close`
     with a refusal, `{"is": "Refused", "args": ["why"]}`, closes it with words that its model reads;

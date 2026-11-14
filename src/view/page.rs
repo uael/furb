@@ -10,10 +10,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-  act::{Act, Kind, Maker, RunState, fault},
+  act::{Act, Kind, Maker, RunState, fault, operator},
   cards::{Card, Standing},
   fold::followed,
   held::Held,
+  ladder::lives,
   quote::{quotes, writing},
   state::{State, working},
   threads::{Lookup, message_of},
@@ -30,7 +31,9 @@ pub struct Page {
 
 /// One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
 /// the thread, the act of the message, who said it and its text, the block of code that answers it
-/// once a model answers, and what the answer says to the operator, in order.
+/// once a model answers, and what the answer says to the operator, in the order it was said. A
+/// message is the prompt of the thread or what an operator said on it, and what answers it is what
+/// came after it and before the next message.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Exchange {
   pub at: usize,
@@ -212,6 +215,17 @@ pub struct Reach {
   pub limit: usize,
 }
 
+/// One message of a thread with what answers it: each rung that began after it and before the
+/// next message, each question and notice to the operator said there, each message whose close
+/// came there, and whether more comes.
+struct Answers<'a> {
+  message: &'a Act,
+  rungs: Vec<&'a Act>,
+  asked: Vec<&'a Act>,
+  closes: Vec<&'a Act>,
+  more: bool,
+}
+
 /// The acts that a host holds, with what it heard of them beside their facts.
 #[derive(Clone, Copy)]
 struct Reader<'a> {
@@ -234,17 +248,54 @@ impl<'a> Reader<'a> {
     let on = |act: &&Act| {
       act.kind == Kind::Prompt && act.id != thread && message_of(act, &self.held) == Some(thread)
     };
-    let messages: Vec<&Act> =
+    // Each prompt of the thread, whose rungs answer the thread, and the messages that the operator
+    // said among them: a wake or an acknowledgment that the engine says is no message.
+    let prompts: Vec<&Act> =
       [prompt].into_iter().chain(self.held.on_chain(&prompt.chain).filter(on)).collect();
+    let messages: Vec<&Act> =
+      prompts.iter().copied().filter(|one| one.id == thread || operator(&one.by)).collect();
+    // What answers a message is what came after it and before the next one, whichever prompt of
+    // the thread a rung advances: a model goes on with the prompt of the thread while the operator
+    // says more on it.
+    let after = |place: u64| messages.partition_point(|one| one.began <= place).saturating_sub(1);
+    let mut answers: Vec<Answers> = messages
+      .iter()
+      .map(|message| Answers {
+        message,
+        rungs: Vec::new(),
+        asked: Vec::new(),
+        closes: Vec::new(),
+        more: false,
+      })
+      .collect();
+    let mut rungs: Vec<&Act> = prompts.iter().flat_map(|one| self.rungs(&one.id)).collect();
+    rungs.sort_by_key(|rung| rung.began);
+    for rung in &rungs {
+      answers[after(rung.began)].rungs.push(rung);
+      for asked in self.held.made_by(&rung.id).filter(|act| act.asks_operator()) {
+        answers[after(asked.began)].asked.push(asked);
+      }
+    }
+    for message in &messages {
+      if let Some(ended) = message.ended.filter(|_| message.value().is_some_and(Value::is_string)) {
+        answers[after(ended)].closes.push(message);
+      }
+    }
     let end = before.unwrap_or(messages.len()).min(messages.len());
     let start = end.saturating_sub(limit);
-    let mut number: usize = messages[..start]
+    let mut number: usize = answers[..start]
       .iter()
-      .flat_map(|message| self.rungs(&message.id))
+      .flat_map(|one| &one.rungs)
       .map(|rung| count(rung, self.streams))
       .sum();
-    let exchanges = (start..end).map(|at| self.exchange(messages[at], at, &mut number)).collect();
-    let agents = messages.iter().flat_map(|message| self.rungs(&message.id)).flat_map(|rung| {
+    // More comes after the last message, and in the block of a rung that lives.
+    let busy = prompts.iter().any(|one| !one.done() && State::of(one).busy());
+    for (at, one) in answers.iter_mut().enumerate() {
+      one.more =
+        busy && (at + 1 == messages.len() || one.rungs.last().is_some_and(|rung| lives(rung)));
+    }
+    let exchanges = (start..end).map(|at| self.exchange(at, &answers[at], &mut number)).collect();
+    let agents = rungs.iter().flat_map(|rung| {
       self
         .held
         .made_by(&rung.id)
@@ -258,46 +309,50 @@ impl<'a> Reader<'a> {
     self.held.made_by(prompt).filter(|act| act.kind == Kind::Rung)
   }
 
-  /// One message with all that answers it. `number` is the count of the lines of the thread before
-  /// its block, and after it once it returns.
-  fn exchange(self, message: &Act, at: usize, number: &mut usize) -> Exchange {
-    let rungs: Vec<&Act> = self.rungs(&message.id).collect();
+  /// One message with all that answers it, at its place in the thread. `number` is the count of
+  /// the lines of the thread before its block, and after it once it returns.
+  fn exchange(self, at: usize, answers: &Answers, number: &mut usize) -> Exchange {
     let mut lines = Vec::new();
+    // Each thing said, at the place in the life where it was said.
     let mut said = Vec::new();
-    for rung in &rungs {
+    for rung in &answers.rungs {
       lines.extend(self.lines(rung, *number));
       *number += count(rung, self.streams);
-      for asked in self.held.made_by(&rung.id).filter(|act| act.asks_operator()) {
-        let shape = text(asked.words.first());
-        let kind = if shape == "None" {
-          Saying::Notice
-        } else {
-          Saying::Question { shape, answered: Answered::of(asked) }
-        };
-        said.push(Said { act: asked.id.clone(), kind, text: text(asked.words.get(1)) });
-      }
     }
-    if let Some(Value::String(answer)) = message.value().filter(|value| !value.is_null()) {
-      said.push(Said { act: message.id.clone(), kind: Saying::Answer, text: answer.clone() });
+    for asked in &answers.asked {
+      let shape = text(asked.words.first());
+      let kind = if shape == "None" {
+        Saying::Notice
+      } else {
+        Saying::Question { shape, answered: Answered::of(asked) }
+      };
+      let one = Said { act: asked.id.clone(), kind, text: text(asked.words.get(1)) };
+      said.push((asked.began, one));
     }
-    let thought =
-      rungs.iter().rev().find_map(|rung| self.streams.wrote.get(&rung.id)).and_then(|wrote| {
-        let took = wrote.thought.map(|ended| ended.saturating_sub(wrote.began));
-        (!wrote.thinking.trim().is_empty()).then(|| Thought { text: wrote.thinking.clone(), took })
-      });
-    let block = rungs.last().map(|last| Block {
+    for closed in &answers.closes {
+      let one = Said { act: closed.id.clone(), kind: Saying::Answer, text: text(closed.value()) };
+      said.push((closed.ended.unwrap_or(closed.began), one));
+    }
+    said.sort_by_key(|(place, _)| *place);
+    let streamed = answers.rungs.iter().rev().find_map(|rung| self.streams.wrote.get(&rung.id));
+    let thought = streamed.and_then(|wrote| {
+      let took = wrote.thought.map(|ended| ended.saturating_sub(wrote.began));
+      (!wrote.thinking.trim().is_empty()).then(|| Thought { text: wrote.thinking.clone(), took })
+    });
+    let block = answers.rungs.last().map(|last| Block {
       maker: last.maker.clone(),
       lines,
-      more: !message.done() && State::of(message).busy(),
+      more: answers.more,
       thought,
     });
+    let message = answers.message;
     Exchange {
       at,
       message: message.id.clone(),
       by: message.maker.clone(),
       text: text(message.words.get(1)),
       block,
-      said,
+      said: said.into_iter().map(|(_, one)| one).collect(),
     }
   }
 

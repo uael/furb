@@ -4029,7 +4029,7 @@
         "text",
         "said"
       ],
-      "description": "One message of a thread with all that answers it: its place in the thread, 0 for the prompt of\nthe thread, the act of the message, who said it and its text, the block of code that answers it\nonce a model answers, and what the answer says to the operator, in order."
+      "description": "One message of a thread with all that answers it: its place in the thread, 0 for the prompt of\nthe thread, the act of the message, who said it and its text, the block of code that answers it\nonce a model answers, and what the answer says to the operator, in the order it was said. A\nmessage is the prompt of the thread or what an operator said on it, and what answers it is what\ncame after it and before the next message."
     },
     "Block": {
       "type": "object",

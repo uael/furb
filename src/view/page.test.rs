@@ -231,3 +231,71 @@ fn each_line_that_asks_a_question_that_waits_carries_the_mark_of_a_question() {
   let marks: Vec<&Mark> = block.lines.iter().map(|line| &line.mark).collect();
   assert_eq!(marks, [&Mark::Asks, &Mark::Asks, &Mark::Ran]);
 }
+
+/// A thread whose prompt stays open while the operator says more on it, as a model of a long work
+/// answers each message on the prompt of the thread, and the engine wakes the thread on it.
+fn conversation() -> Vec<Value> {
+  vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "unstick the session", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", "a = 1", ""]),
+    json!(["done", "run1", "chain1", null]),
+    json!(["done", "rung1", "chain1", null]),
+    json!(["prompt", "prompt2", "operator", "prompt1", "None", "merged ?", ""]),
+    json!(["prompt", "prompt3", "chain1", "prompt1", "None", "bash1 done", ""]),
+    json!(["prompt", "prompt4", "prompt1", "prompt1", "None", "prompt2 unanswered", ""]),
+    json!(["rung", "rung2", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["run", "run2", "chain1", "chain1", "rung2", "b = 2", ""]),
+    json!(["prompt", "prompt5", "rung2", "chain1", "None", "Yes, it merged.", "operator"]),
+    json!(["done", "prompt5", "operator", null]),
+    json!(["done", "run2", "chain1", null]),
+    json!(["done", "rung2", "chain1", null]),
+  ]
+}
+
+#[test]
+fn each_answer_stands_after_the_message_that_came_before_it_whichever_prompt_its_rung_advances() {
+  let mut streams = Streamed::default();
+  let held = held(conversation(), &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let [first, second] = page.exchanges.as_slice() else { panic!("{page:?}") };
+  assert_eq!(texts(first.block.as_ref().unwrap()), [(1, "a = 1", &Mark::Ran)]);
+  assert!(first.said.is_empty(), "{first:?}");
+  assert_eq!(second.text, "merged ?");
+  let block = second.block.as_ref().unwrap();
+  assert_eq!(texts(block), [(2, "b = 2", &Mark::Ran)]);
+  let merged =
+    Said { act: "prompt5".to_owned(), kind: Saying::Notice, text: "Yes, it merged.".to_owned() };
+  assert_eq!(second.said, [merged]);
+}
+
+#[test]
+fn a_wake_that_the_engine_says_on_a_thread_is_no_message_of_the_operator() {
+  let mut streams = Streamed::default();
+  let held = held(conversation(), &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_str()).collect();
+  assert_eq!(messages, ["prompt1", "prompt2"]);
+}
+
+#[test]
+fn a_notice_stands_after_the_message_that_came_before_it_though_its_rung_began_before() {
+  let mut streams = Streamed::default();
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "set a goal", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", "goal = await read('plan')", ""]),
+    json!(["prompt", "prompt2", "operator", "prompt1", "None", "your goal is stable", ""]),
+    json!(["prompt", "prompt3", "rung1", "chain1", "None", "Yes: stable.", "operator"]),
+  ];
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let [first, second] = page.exchanges.as_slice() else { panic!("{page:?}") };
+  assert_eq!(first.block.as_ref().unwrap().lines.len(), 1);
+  assert!(first.said.is_empty(), "{first:?}");
+  let yes =
+    Said { act: "prompt3".to_owned(), kind: Saying::Notice, text: "Yes: stable.".to_owned() };
+  assert_eq!(second.said, [yes]);
+}

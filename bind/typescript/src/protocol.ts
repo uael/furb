@@ -1303,7 +1303,9 @@ export interface Page {
 /**
  * One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
  * the thread, the act of the message, who said it and its text, the block of code that answers it
- * once a model answers, and what the answer says to the operator, in order.
+ * once a model answers, and what the answer says to the operator, in the order it was said. A
+ * message is the prompt of the thread or what an operator said on it, and what answers it is what
+ * came after it and before the next message.
  */
 export interface Exchange {
   at: number;
