@@ -160,7 +160,7 @@ const commands: [RegExp, (found: RegExpMatchArray) => string][] = [
   [/\bgit commit\b/, () => "commits"],
   [/\bcargo (test|build|clippy|fmt|run)\b/, (found) => `runs cargo ${found[1]}`],
   [
-    /\b(bun|npm|pnpm|yarn)( run)? (test|build|lint|check|bench|screenshots|animation|format)\b/,
+    /\b(bun|npm|pnpm|yarn)( run)? (test|build|lint|check|format)\b/,
     (found) => `runs ${found[1]}${found[2] ?? ""} ${found[3]}`,
   ],
   [/\b(pytest|ruff|ty check|pre-commit)\b/, (found) => `runs ${found[1]}`],

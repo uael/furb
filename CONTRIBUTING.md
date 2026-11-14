@@ -18,10 +18,10 @@ large change, open an issue first, so we can agree on its shape before you do th
 | Python 3.14 or later | The engine and the suite. |
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
 | Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. |
-| [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings and the TUI. |
+| [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings. |
 | [Zig](https://ziglang.org/download/) 0.17.1, as `zig` on PATH | The native library of OpenTUI, which the build of the window makes once, in about two minutes, and keeps in `target/opentui`. Each cargo command over the workspace builds the window; `uv sync` and `bun run build` do not. The build refuses another version of Zig. |
 | [Git for Windows](https://gitforwindows.org), on Windows | Its sh runs the commands of a life, as /bin/sh does on Linux and on macOS. |
-| The credential of a provider of the network, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`, as [`docs/models.md`](docs/models.md) says. The demo and the suite need no model. |
+| The credential of a provider of the network, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as the window, `furb prompt` or `script/smoke.py`, as [`docs/models.md`](docs/models.md) says. The demo and the suite need no model. |
 
 ## Set up a clone
 
@@ -29,8 +29,8 @@ large change, open an issue first, so we can agree on its shape before you do th
 git clone https://github.com/uael/furb && cd furb
 uv sync                              # The Python environment, which builds the crate and the command line.
 git config core.hooksPath script/hooks # The hooks: the form of the files of each commit, in about 2 seconds.
-bun install && bun run build         # The TypeScript workspace, and the N-API package that the TUI uses.
-bun run demo                         # The TUI on a scripted life. It asks no model.
+bun install && bun run build         # The TypeScript workspace, and the N-API package.
+cargo build -p furb-cli -p furb-window # furb and its window, side by side in target/debug.
 ```
 
 The first `uv sync` builds the crate, and it takes some minutes. After that, `uv run` builds again only what a change
@@ -158,31 +158,24 @@ and `cli/pyproject.toml` say.
 | `cli/src/window.rs` | How furb finds the window and hands the terminal to it. |
 | `cli/tests/suite/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |
 
-### The TUI
-
-| File | What it holds |
-| --- | --- |
-| `tui/src/app.ts` | The screen: the top line, the feed, the sidebar, the composer, the footer, and the dialogs. |
-| `tui/src/session.ts` | The state of one session: its chains, its views, its drafts, its queue, and its record of the UI. |
-| `tui/src/client.ts` | The client of the daemon `furb host`: the socket, its verbs, and a life that a window holds there. |
-| `tui/src/bridge.ts` | The life of a session as the window holds it: in the daemon, or a record open to read. |
-| `tui/src/theme.ts` | The palettes, the marks, and the spacing. One mark says one thing everywhere. |
-| `tui/src/keys.ts`, `tui/src/commands.ts` | The keys and the slash commands, which the keymap, the footer, the help and the docs read. |
-| `tui/script/` | The gallery, the animation, and the rasterizer that turns a frame into a PNG. |
-
 ### The window
 
-`furb-window` is the program of the package `furb-window` in `window/`: the new window, in Rust on the Rust package
-of [OpenTUI](https://github.com/anomalyco/opentui), which takes the place of the TUI screen by screen. Today it holds
-the list of the cards of the machine, one card for each thread, beside a home that says what waits for the operator.
-Its input sends a message to the open thread, to a new thread of a session, or to a new session in the project of
-its folder, as the line of the launcher under it says. `cargo run -p furb-window` starts it on the daemon of this
-machine, which it starts when none listens, and `furb` with no command starts it too.
-Alt+Down and Alt+Up, or Ctrl+X then J or K, open the next and the previous card, Alt+A or Ctrl+X then
-A opens the next thread that waits for the operator, and Ctrl+X then L shows or hides the list. Enter sends,
-Shift+Enter breaks the line, Ctrl+N turns the input to a new thread and back, Ctrl+X then O picks the session, Ctrl+X
-then Y turns the input to a word of Python, Esc twice stops the work of the open thread, Ctrl+C empties the input,
-and Ctrl+D on an empty input leaves the window.
+`furb-window` is the program of the package `furb-window` in `window/`: the window of furb, in Rust on the Rust
+package of [OpenTUI](https://github.com/anomalyco/opentui), which grows screen by screen. Today it holds the list of
+the cards of the machine, one card for each thread, beside a home that says what waits for the operator. Its input
+sends a message to the open thread, to a new thread of a session, or to a new session in the project of its folder,
+as the line of the launcher under it says. It does not yet choose a model, show the chains of a life or reach another
+machine. `cargo build -p furb-cli -p furb-window` builds furb and the window side by side, and `target/debug/furb`
+with no command starts the window. The window reaches the daemon of this machine, and starts it with the `furb`
+beside itself, else the one on PATH, when none listens. The packages of PyPI and npm do not carry the window yet.
+
+Alt+Down and Alt+Up, or Ctrl+X then J or K, open the next and the previous card, Alt+A or Ctrl+X then A opens the
+next thread that waits for the operator, and Ctrl+X then L shows or hides the list. Enter sends, Shift+Enter breaks
+the line, Ctrl+N turns the input to a new thread and back, Ctrl+X then O picks the session, Ctrl+X then Y turns the
+input to a word of Python, Esc twice stops the work of the open thread, Ctrl+C empties the input, and Ctrl+D on an
+empty input leaves the window.
+
+![The list of the threads of the machine beside an open thread](docs/window-cards.png)
 
 | File | What it holds |
 | --- | --- |
@@ -199,10 +192,9 @@ and Ctrl+D on an empty input leaves the window.
 On Linux and on macOS the program holds the library. On Windows it loads `opentui.dll`: `cargo run` and `cargo test`
 find it in `target/opentui`, and a program that you start by hand needs a copy of it beside itself.
 
-A screen must read clearly at first sight. After a change that a screen shows, run `bun run screenshots` and read each
-capture. Do not commit the captures: at most once an hour, on a new head of `w/converge`,
-`.github/workflows/gallery.yml` draws them again on the branch `w/gallery-converge`. The entry
-`bun run screenshots` of [`AGENTS.md`](AGENTS.md#commands) gives each variable that the gallery reads.
+A screen must read clearly at first sight. After a change that a screen shows, run
+`FURB_DRAW=1 cargo test -p furb-window`, which writes each capture of a frame as text in `window/tests/screens`, and
+read each capture that changed.
 
 ### The suite
 
@@ -233,8 +225,6 @@ runs a test or a type check: the two commands at the top of this table run them 
 | `uv run ty check --error-on-warning` | The type check. |
 | `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` | The gates of the crate and of the command line. |
 | `bun run check`, `bun run lint` and `bun run test` | The type check, the lint and the tests of the TypeScript side. |
-| `bun run bench` | The speed of the TUI against its budget, after a change of the TUI. |
-| `bun run memory <record>` | The heap of a window on a long record, which a test of the TUI holds on a life of its own. |
 
 Each pull request runs the gates of `.github/workflows/gates.yml` on Linux, on macOS and on Windows.
 
@@ -259,6 +249,6 @@ Write all prose in Simplified Technical English, with no em dash and no en dash,
 
 - [`AGENTS.md`](AGENTS.md): every rule and every command of the repository.
 - [`src/furb/AGENTS.md`](src/furb/AGENTS.md): the technical names of the engine.
-- [`tui/README.md`](tui/README.md) and [`docs/tui.md`](docs/tui.md): what the TUI does, and a picture of each screen.
+- [The window](#the-window): what the window does today, and its keys.
 - [`bind/typescript/README.md`](bind/typescript/README.md): the TypeScript API.
 - [`docs/skills.md`](docs/skills.md): how an extension works.

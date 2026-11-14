@@ -24,10 +24,10 @@ def repo(made: Bench) -> None:
 async def test_commit_gives_one_qa_trailer_for_each_entry_and_the_sha(pulling: Bench) -> None:
   """commit(title, paths) commits the named paths alone, in the worktree at where, with git commit and its hooks, and gives a tuple of the short sha and the QA trailers of the commit."""
   repo(pulling)
-  sha, trailers = await pulling.value('await commit("chore(pr): Add a", ["a.txt"], "Why.", qa=["open the TUI", "press q"])')
-  assert trailers == ["open the TUI", "press q"]
+  sha, trailers = await pulling.value('await commit("chore(pr): Add a", ["a.txt"], "Why.", qa=["open the window", "press q"])')
+  assert trailers == ["open the window", "press q"]
   assert sha == git(pulling, "rev-parse", "--short", "HEAD").strip()
-  assert git(pulling, "log", "-1", "--format=%(trailers:key=QA,valueonly)").split("\n")[:2] == ["open the TUI", "press q"]
+  assert git(pulling, "log", "-1", "--format=%(trailers:key=QA,valueonly)").split("\n")[:2] == ["open the window", "press q"]
   assert git(pulling, "show", "--name-only", "--format=", "HEAD").split() == ["a.txt"]
 
 

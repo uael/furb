@@ -2,8 +2,7 @@
 
 The engine of furb for Node.js 22 or later and Bun 1.4.2 or later, on macOS, Linux and Windows. It runs the same Rust
 crate and monty sandbox as the Python package, through N-API. Use it to open a life from a program, as [the
-examples](https://github.com/uael/furb/blob/main/docs/examples/README.md) do, or to write a host of your own, as the TUI
-does.
+examples](https://github.com/uael/furb/blob/main/docs/examples/README.md) do, or to write a host of your own.
 
 ## Install
 
@@ -38,7 +37,7 @@ try {
 ```
 
 Views, queries and controls are synchronous. An `Act` has an `id`, converts to its name as a string, and can be awaited.
-Its Promise resolves with its outcome or rejects with an error that names the engine's fault. A TUI is not part of this
+Its Promise resolves with its outcome or rejects with an error that names the engine's fault. A window is not part of this
 package.
 
 ## Sessions
@@ -188,7 +187,7 @@ the whole file again, writes the journal again with each change that it can read
 lines it removed, as `{ kept, removed }`. `session.changes.renew()` starts a new journal and keeps the damaged one
 beside it. Keep both companions with the JSONL record. The session saves `.session.json` whole with `saveFile(path,
 text)`, which writes `<path>.tmp` and gives it the name of the file. A save that fails throws an error that names the
-file, with the error of the system as its cause. The TUI saves its own files with it.
+file, with the error of the system as its cause.
 
 ## The log
 
@@ -246,18 +245,16 @@ gives. It holds no native code and no module of node, so a terminal and a window
 - `asks`: an ask of the desk of the operator, `Ask`, as the crate folds it, with the label of its chain. `aimed` gives
   the ask that the operator acts on, on the chain that he reads, `beside` the ask a step after or before it, and `wants`
   what an ask wants of him, in words.
-- `loom`: the rows of the loom, one for the operator and one for each chain in the order of the tree, with the cells
-  of their moments, what each chain does now, `nowOf`, in words that a person reads, a count of seconds as a person
+- `loom`: what each chain does now, `nowOf`, in words that a person reads, a count of seconds as a person
   reads it, `duration`, and the acts as they stood at a moment, `asOf`.
 - `ladder`: the lines of the thread of a chain as a person reads it at a glance, `thread`: each prompt with the rungs
   of its ladder and their acts, the last steps at each level, and one line in place of each run of earlier ones, read
   from the index of acts that a host holds.
-- `threads`: the types of what the crate gives for the threads of a chain (a thread, an aside, a run of notes, a node
+- `threads`: the types of what the crate gives for the threads of a chain (a thread and a node
   of the tree) and `threadWork`, the acts of a thread. The meaning itself, the nesting of the agents, the order, the
   titles, the unread counts and how a thread concerns the operator, stands in the crate and comes from a life through
   its verbs `threads` and `rail`.
-- `map`: the place of each chain on the map, which no later chain moves, the messages that flow between chains, and
-  the way of a message along the tree of hires.
+- `map`: the messages that flow between chains.
 - `program`: the program of a thread as the feed shows it, `threadProgram`: the words of its steps as one program,
   with each act on the line of the word that made it, `placed`, what the acts of each line came to, and the line that
   runs; and a line of python laid out in rows of a width, `layout`.

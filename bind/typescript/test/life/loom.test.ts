@@ -369,7 +369,7 @@ test("an act that runs says what it does: a question to the operator, the chains
   expect(doingOf(wait("prompt1"), find, label)).toBe("waits for feed");
   expect(doingOf(wait("prompt1", "prompt2"), find, label)).toBe("waits for 2 threads");
   expect(doingOf(wait(), find, label)).toBe("waits 5m");
-  const read = act("read1", "read", "chain1", "rung1", 5, undefined, { words: ["tui/src/theme.ts"] });
+  const read = act("read1", "read", "chain1", "rung1", 5, undefined, { words: ["src/theme.ts"] });
   expect(doingOf(read, find, label)).toBe("reads theme.ts");
   const bash = act("bash1", "bash", "chain1", "rung1", 6, undefined, {
     words: ["cargo clippy -- -D warnings"],

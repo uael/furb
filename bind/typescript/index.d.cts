@@ -274,8 +274,8 @@ export interface CodexAuthInfo {
 }
 
 /**
- * The config directory of the user for this process, where the configs, the extensions of the user and the
- * preferences of the TUI stand.
+ * The config directory of the user for this process, where the configs and the extensions of the
+ * user stand.
  */
 export declare function configDirectory(): string
 

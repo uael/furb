@@ -13,7 +13,7 @@ export function weight(source: string): number {
 }
 
 /** The test files, the longest limit first, and the largest file first among equal limits. A small file can hold the
- * longest test, as the gallery does, so the size of a file alone would start it last and leave it to hold the run open. */
+ * longest test, so the size of a file alone would start it last and leave it to hold the run open. */
 export function longestFirst(paths: string[]): string[] {
   const read = new Map(paths.map((path) => [path, readFileSync(path, "utf8")]));
   const size = (path: string) => read.get(path)?.length ?? 0;

@@ -1,6 +1,6 @@
 #!/bin/sh
 # The oracle of the tests of the TypeScript side on CI. usage: ts-ci.sh <tree> <base>
-# It waits for the three checks "the bindings and the TUI on <system>" of the head of the tree, which must be the head
+# It waits for the three checks "the bindings on <system>" of the head of the tree, which must be the head
 # of origin/<base>, and exits 0 when each test that failed in them is a line of ts-held.txt. 3: the head is not
 # pushed. 4: CI_WAIT seconds (3600) passed.
 kit=$(cd "$(dirname "$0")" && pwd)
@@ -9,7 +9,7 @@ sha=$(git rev-parse HEAD); git fetch -q origin "$2" || exit 2
 [ "$(git rev-parse FETCH_HEAD)" = "$sha" ] || { echo "HEAD $sha is not the head of origin/$2: push it first"; exit 3; }
 end=$(( $(date +%s) + ${CI_WAIT:-3600} ))
 while :; do
-  runs=$(gh api "repos/uael/furb/commits/$sha/check-runs?per_page=100" --paginate --jq '.check_runs[]|select(.name|startswith("the bindings and the TUI"))|[.name,.status,(.conclusion//""),(.id|tostring)]|@tsv')
+  runs=$(gh api "repos/uael/furb/commits/$sha/check-runs?per_page=100" --paginate --jq '.check_runs[]|select(.name|startswith("the bindings on "))|[.name,.status,(.conclusion//""),(.id|tostring)]|@tsv')
   n=$(printf '%s\n' "$runs" | grep -c .); ended=$(printf '%s\n' "$runs" | awk -F'\t' '$2=="completed"' | grep -c .)
   if [ "$n" -ge 3 ] && [ "$ended" = "$n" ]; then break; fi
   if [ "$(date +%s)" -ge "$end" ]; then echo "$sha: the wait ended with $ended of $n jobs done"; exit 4; fi

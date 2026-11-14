@@ -505,8 +505,8 @@ pub fn skills(config: String) -> NativeEar {
   NativeEar::of(world::skills::skills(config.into()))
 }
 
-/// The config directory of the user for this process, where the configs, the extensions of the user and the
-/// preferences of the TUI stand.
+/// The config directory of the user for this process, where the configs and the extensions of the
+/// user stand.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn config_directory() -> String {

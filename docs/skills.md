@@ -63,9 +63,7 @@ reads it.
   `skills://<name>` writes the word in `.furb/skills/<name>` of the project, after a copy of the folder there
   when it stands elsewhere, and reloads the skill when the life runs it. A word that binds a name of the engine at its top is refused, and the write changes no file. Its life word, `await listed()`, reads
   `skills://`
-  in the setup of the root, which every new chain holds. The TUI
-  lists each skill after `/`, and its command reads the skill for the chain. `/skills`, or `/reload-skills`, reads the
-  skills of the disk again.
+  in the setup of the root, which every new chain holds.
 - **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name. `compact()` keeps
   what `FILTERS` keep, binds a summary in its next word, and reads again with `reground()` each file that it kept,
   showing only what changed. The filters are `latest()`, the last read or write of each path, `quiet()`, which drops the
@@ -79,8 +77,7 @@ reads it.
   its reads and its findings. The cut of `fitted()` comes only as the last resort, when one reply grows past the
   window before the compaction. Each compaction costs one turn more on the chain, to the model that wrote its last
   reply, which reads the chain from its cache.
-  A project changes `SHARE`, `FILTERS` or `BRIEF` in an extension of its own. In the TUI, a rule
-  with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
+  A project changes `SHARE`, `FILTERS` or `BRIEF` in an extension of its own.
 - **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
   on the root alone. At the first prompt that the operator makes in the life, even one made before the word plays, it asks the actor that its `automatic()`
   gives for a name of a few words, on a chain of its own labelled `naming`. With no such actor, or with no
@@ -91,8 +88,7 @@ reads it.
   config that turns `naming` off, as `{"skills": {"naming": false}}`, saves the call of that model. A rename in a
   client is the same act, which the client makes with an ear of its own, so it lasts whatever extension plays.
 - **`ouroboros`** gives `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project
-  and turns it on, so every later chain runs it, and `extend(name, *rungs, tui=module)`, which also writes a [part for
-  the TUI](#a-part-for-the-tui). `extend(name, *rungs, session=True)` keeps the kit in the record alone: it writes no
+  and turns it on, so every later chain runs it. `extend(name, *rungs, session=True)` keeps the kit in the record alone: it writes no
   file and says the fact `enable` with the word, so each chain of this session, and of each later life on its record,
   plays it. `view="name"` names in that fact the value of the root that holds the tree of the view of the kit, a node
   of the protocol as a dict: the daemon serves it to each window that mounts the view of the kit, and again each time
@@ -120,9 +116,7 @@ reads it.
   schemas, `mcp_call(server, tool, arguments)` calls a tool by its original names, `mcp_read(server, uri)` reads a
   resource, `mcp_prompt(server, name, arguments)` expands a prompt, and `mcp_control(action, server)` reconnects,
   enables, disables, approves, logs in or logs out. Each answer of a server stays in the record, so a later life asks no
-  server again. Its part for the TUI gives `/mcp`, a dialog of the servers and their actions, a command for each prompt
-  of a server, a status in the footer, a row for each call of a tool, and `@` in the input, which completes the
-  resources of the servers.
+  server again.
 
 `compaction`, `naming`, `web` and `mcp` each hold a short guide for the model, a quote named after the extension, which
 the model reads on each chain where the extension plays.
@@ -160,7 +154,6 @@ is a folder.
   SKILL.md      the manifest
   <name>.py     the word
   <name>.pyi    the interface, which it can have
-  tui.ts        the part for the TUI, which it can have
 ```
 
 The manifest is the file of a skill, so Claude Code reads the folder as an ordinary skill. Its frontmatter gives the
@@ -178,7 +171,6 @@ metadata:
   furb-interface: notes.pyi
   furb-default: "false"
   furb-plays: every
-  furb-view: tui.ts
   furb-process: notes.ts
   furb-config: config.json
 ---
@@ -204,7 +196,6 @@ What the notes are for.
   extension of the root, and a new chain with no source has none. Give `"root"` to an extension whose names only the
   work of the root needs, as a loop that conducts workers: each other chain then reads none of its words, and a model
   there is free to bind each name that it defines.
-- `furb-view` is the file of the [part for the TUI](#a-part-for-the-tui). It can be absent.
 - `furb-process` is the file of the process of the extension, relative to the folder: a module of TypeScript or of
   JavaScript, which bun runs, or any other program. When a life plays the extension, the daemon of the machine starts
   it in the folder of the skill, at the end of the replay of the record, and ends it when the life ends or when
@@ -246,9 +237,7 @@ limit tells a chain names the same two calls.
 
 An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as [the hygiene
 laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/world/<name>.rs` when it reads the disk or
-the network, as `skills` and `compaction` do. The search and the fetch of `web` are questions of the World, which the provider and the ear `fetch` answer, and the client of `mcp` is an ear of the World. Its part for the TUI, `tui.ts` beside its word as
-`compaction` and `mcp` have, is in the crate, so the TUI loads it from an installed package too, where no checkout of
-furb stands. It changes with a build of furb, and not live.
+the network, as `skills` and `compaction` do. The search and the fetch of `web` are questions of the World, which the provider and the ear `fetch` answer, and the client of `mcp` is an ear of the World.
 
 Turn on only the extensions that you trust. A word runs in the sandbox of monty with the engine of the crate, and with
 the rights of your user with the engine of CPython, as a word of a model does there.
@@ -266,101 +255,6 @@ extension that plays on every chain binds it for the whole project:
 def accepts(command, exit):
   return exit.code in (0, 1)
 ```
-
-## A part for the TUI
-
-An extension can give the TUI a part: a module of TypeScript, which its manifest names under `furb-view`. A part can add a
-panel over the input, a row in the feed for each act of a kind, keys, and commands. Nothing builds it: Bun loads the
-module as it stands, and loads it again when it changes, with no restart.
-
-![The part of an extension](screenshots/74-extension-part.png)
-
-The module exports a function as its default, which the TUI calls with `furb`:
-
-```ts
-export default function (furb) {
-  const items = (seen) => seen.of("todo").map((act) => ({ item: String(act.words[0]), done: Boolean(act.words[1]) }));
-  furb.panel("Todo", (seen) => items(seen).map(({ item, done }) => [[done ? "✓ " : "○ ", "accent"], [item]]));
-  furb.row("todo", (act) => ({ label: String(act.words[0]) }));
-  furb.command("todos", "Say how many items are open", (_, seen) => seen.say(`${items(seen).length} items`));
-}
-```
-
-- `furb.panel(title, draw)` adds a panel over the input while the feed shows. `draw(seen)` gives its lines, each a
-  text or a list of `[text, tone]`, where a tone is `text`, `muted`, `faint`, `accent`, `success`, `warning` or
-  `danger`. The TUI draws it again each time that the life changes, and shows twelve lines at most.
-- `furb.row(kind, draw)` draws each act of a kind in the feed: `draw(act, seen)` gives `{ label, details }`, the
-  hint at the end of the line of the program that made the act, and the lines that show under that line when a click
-  opens it. The rows of a rung and of a prompt stay the TUI's own.
-- `furb.mark(draw)` marks places in the feed of a chain: `draw(seen)` gives a list of `{ chain, at, title, lines }`.
-  The feed of that chain shows each mark as a rule with its title, then its lines, after the last act that began
-  before `at`, or at its start. `at` is a place in time, as the `began` of an act, so a mark stands between the acts
-  before it and the acts after it. When the feed shows a moment of the past, it shows only the marks before that
-  moment. A mark that throws shows its error as its title.
-- `furb.key(on, run)` adds a key, as `ctrl+e` or `+`, which acts while no dialog is open. A key with no ctrl, meta or
-  alt acts only on an empty input.
-- `furb.command(name, detail, run, alias)` adds a command to the palette, which `/name` runs too. The optional `alias`
-  is its other name, as `/reset` is for `/clear`: the input completes it to the command, and the palette shows both
-  names. A key of the TUI wins over a key of a part, and a part that names a command of the TUI, or an alias that is
-  one, fails.
-- `furb.commands(draw)` gives commands from the life: `draw(seen)` gives a list of `{ name, detail, run, alias }`, whose `alias` is optional, which the
-  palette, the suggestions of the input and `/name` read again at each use. So a part adds and drops commands as the
-  life changes, as the part of `mcp` gives a command for each prompt of each server that is connected. A command that
-  the TUI or a part names already wins, and a listed command whose name holds a space or a slash is dropped. A list
-  that throws shows its error in the palette.
-- `furb.complete(trigger, list)` completes a word of a message that starts with the trigger, one sign as `@` or `#`:
-  `list(text, seen)` gives `{ label, detail, text }` for the text after the trigger, and a completion that the
-  operator takes puts its `text` in the place of the trigger and of the text after it. `/` and `:` are the TUI's own,
-  and after `@`, the completions of the parts come before the files of the project. A list that throws shows its
-  error under the input.
-- `furb.status(draw)` adds a status to the footer: `draw(seen)` gives a line, which shows after the state of the
-  session only when it is not empty. A status that throws shows its error in its place.
-- `seen` gives the chain on screen, every act of the life, `compactions`, each compaction of a chain as the model of
-  a life gives it, `skills()` for the names of the skills that the life runs, and `of(kind)` for the acts of a
-  kind. It acts in the life too, and each of its acts goes through
-  the record:
-  - `run(word)` runs Python on the chain, as `/run` does, and gives the value of the last act that
-    the word made on the chain, once that act is done, as the record holds it. A word that makes no act gives
-    `undefined`, and a word that raises rejects with its error. So a part that needs a value
-    gets it from an act of its extension, which the record keeps, as `await seen.run('mcp_control("reconnect", "x")')`.
-  - `send(text)` sends a message of the operator to the chain on screen, as Enter sends the input, and
-    `draft(text)` puts a text in the input, for the operator to change and send.
-  - `open(url)` opens an address of http or https in the browser of the system, and rejects any other address.
-  - `say(text)` shows a notice in the footer.
-  - `choose(title, items, { note, actions, selected })` opens a list and gives what the operator chose, as
-    `{ value, action }`. Each item has a `label`, a `detail`, a `tone`, the `lines` that show under it while it is
-    selected, and its `value`. Enter gives the selected item with the action `""`, and the key of an action, as
-    `{ key: "r", label: "reconnect" }`, gives the item with that key. A key that types a sign acts only while the
-    filter of the list is empty.
-  - `form(title, fields, { note })` opens a form and gives the value of each field by its name. A field has a `name`, a
-    `label`, a `detail`, a `value` that it starts with, and can be `secret`, which shows a dot for each sign, or
-    `required`. Tab and Enter go to the next field, ⇧Tab to the one before, and Enter on the last one sends the form,
-    which stays open while a field that it needs is empty.
-  - `confirm(title, text, { yes, no })` asks a question and gives `true` for yes.
-
-  A dialog that Escape closes, or that another dialog replaces, gives `undefined`, or `false` for a confirm. A key or a
-  command whose run awaits a dialog keeps the TUI free while the dialog is open. `furb.life` is [the model of a
-  life](../bind/typescript/README.md#the-model-of-a-life), `furb/life`.
-
-A part imports types alone, so it loads in any project. `tui/src/parts.ts` gives the types, and `tui/fixtures/todo`
-is an extension with a part that uses each of them. The part of `mcp`, `.agents/skills/mcp/tui.ts`, uses only this API.
-
-![The dialog of a list that a part opens](screenshots/75e-part-list.png)
-
-The TUI loads the parts when it opens a session, and again when a file of the folder of a part changes, or when a write
-of the life lands in `.furb` or in the folder of a part, as a write of `extend` does. It loads them also for a life that
-enables no extension, such as the demo, since a part reads only the acts of the life.
-
-When a part fails, the TUI goes on. A module that does not load, that exports no function, or whose function throws
-shows its error in plain words in a panel under its name. A panel or a row that throws shows its error in its place,
-and a key or a command that throws shows its error in the footer.
-
-A model adds a part to a life that runs with `extend(name, *rungs, tui=module)` of `ouroboros`, whose skill
-teaches it. The write lands in `.furb`, so the TUI loads the part at once. The config turns the extension on in
-the same life. A config that sets the extension to `false` takes its part away again. `/skills` opens a dialog of
-the extensions that the life runs, each with what its part gives, or with the error that stopped its load. Only the
-operator sees an error of a part, so the skill tells the model to check its module with `bun build --no-bundle` and to
-read the error that the operator gives it.
 
 ## Permissions
 
@@ -397,8 +291,6 @@ life gets the same answer from the record. So a replay is exact, and the World i
 
 - The command line: `furb skills` prints each skill that a life on a record runs, with its life word. The
   `state` of the protocol names them.
-- The TUI: `/skills` lists what the life runs, and `/run` runs a word of one on the chain on screen, as
-  `/run skill("pdf")`.
 - TypeScript: `Session` takes `skills`, false to enable nothing new, and `config`, the config directory of the
   user.
 - Both doors: `opened` gives the record and the ears of the crate, and `skills` false enables nothing new.

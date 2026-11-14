@@ -21,8 +21,7 @@ API of its own:
   user how furb finds a model and how to choose one.
 - `src/skill.rs` says what an extension is and where a host finds the ones that a life runs. Its ear `extensions`
   enables each by a fact that the record keeps, plays its word as a rung on each chain where its manifest says, every
-  chain or the root alone, and plays the setup of the root on a new record. `parts` gives the part of each extension for
-  the TUI, which `tui/src/parts.ts` loads. `.agents/skills/` holds the official extensions, `catchup`, `memory`, `skills`,
+  chain or the root alone, and plays the setup of the root on a new record. `.agents/skills/` holds the official extensions, `catchup`, `memory`, `skills`,
   `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/world/` holds the ear of
   the World of the one that has one, `skills.rs`. `docs/skills.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
@@ -129,21 +128,22 @@ API of its own:
   a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
-- `window/` is `furb-window`, the fourth package of the workspace of the crate: the new window, in Rust on the Rust
-  package of OpenTUI, which takes the place of the TUI screen by screen. Today it holds the client of the daemon on
+- `window/` is `furb-window`, the fourth package of the workspace of the crate: the window of furb, in Rust on the Rust
+  package of OpenTUI, which grows screen by screen. Today it holds the client of the daemon on
   the protocol and the transport of `furb-host`, the rule by which a part of a screen draws only when the value that
   it shows changes, the tokens of the design, and the list of the cards of each machine beside the home, which shows
   what waits for the operator: the verb `cards` of the daemon gives each card, with its state, its part and its
   order, and the window draws them and keeps them in a file for its next first frame. Its input sends a message to
   the open thread, to a new thread of a session, or to a new session in the project of its folder, as the line of
-  the launcher under it says. `cargo run -p furb-window` starts it, and so does `furb` with no command.
+  the launcher under it says. It does not yet choose a model, show the chains or reach another machine.
+  `cargo run -p furb-window` starts it, and so does `furb` with no command. The packages of PyPI and npm do not carry
+  it yet.
   `window/Cargo.toml` pins OpenTUI at one commit, and `window/build.rs` makes its native library with Zig into
   `target/opentui`, once for each commit. So the first cargo command over the workspace in a tree needs `zig` on PATH
   at the version that the commit asks, 0.17.1, and takes about two minutes more. A tree whose `target/opentui` holds
   the library runs no Zig, as a tree of `script/worktree.sh` does, and `uv sync` and `bun run build` need none. Its tests drive a headless app on a real daemon. `window/tests/screens` holds each
   capture of a frame as text, and `FURB_DRAW=1 cargo test -p furb-window` draws each capture again. `FURB_CELLS=<folder>`
-  writes the cells of each capture there as JSON, with the colors of the frame, which a rasterizer of cells draws
-  as an image.
+  writes the cells of each capture there as JSON, with the colors of the frame.
   [`CONTRIBUTING.md`](CONTRIBUTING.md#the-window) lists its files.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
@@ -152,7 +152,7 @@ on both engines too, and its conftest, `.agents/skills/conftest.py`, hands it th
 only the suites of the extensions need. `test/outside/test_monty.py` proves what the door carries that no sentence of
 the contract says.
 
-The TypeScript side is a bun workspace at the root, whose packages are the three below and the examples of
+The TypeScript side is a bun workspace at the root, whose packages are the door below and the examples of
 `docs/examples`:
 
 - `bind/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
@@ -160,12 +160,7 @@ The TypeScript side is a bun workspace at the root, whose packages are the three
   provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. Its
   model of a life, `furb/life` in `src/life`, gives the views of a life that every host draws, with no native
   code. `furb/skill`, in `src/skill.ts`, is the client of the process of a skill, which dials the daemon of the
-  machine as the protocol says. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
-- `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
-  each screen. A life of the TUI runs in the daemon of the machine, `furb host`, whose protocol `docs/protocol.md`
-  says, so the life outlives each window: `tui/src/client.ts` dials the daemon, or starts it when none listens, and
-  `tui/src/bridge.ts` opens a life there and gives the window its views and its verbs. A recorded life, which runs
-  nothing, stays in the window, open to read.
+  machine as the protocol says. `bun run build` makes its build in `bind/typescript/dist` again, which its tests read.
 
 `docs/examples/` holds the examples of the framework: five short programs for each door, in `python/`,
 `typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on
@@ -355,8 +350,8 @@ fix what your change broke, and report what was broken before.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
   `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
-  to the new commit: the `target` of cargo, the `node_modules` of bun, the build of the TypeScript package and the cache
-  of the tests of the TUI. Each tree builds in a target of its own: cargo gives a crate of the workspace the same name
+  to the new commit: the `target` of cargo, the `node_modules` of bun, the build of the TypeScript package and the
+  configs of its tests. Each tree builds in a target of its own: cargo gives a crate of the workspace the same name
   in each tree, so in a target that trees share, a build of one tree made each other tree build its crates again.
   `script/own-target.sh <tree>` gives a tree whose `target` is a link a copy on write of the target it names, once,
   and the hooks `post-checkout`, `post-merge` and `post-rewrite` run it, so a tree of the shared target of before
@@ -370,7 +365,7 @@ fix what your change broke, and report what was broken before.
   dependencies, against about 35 in a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
-- `sh script/memwatch.sh`: the one guard of memory, a watcher that runs beside the work. No step of the work waits on memory: a hook, a build, a test run and a capture start at once. While the memory is tight (on macOS the pressure level of the kernel is warn or critical, on Linux less than 20% of the memory is available), the watcher ends the largest test process (a test binary of cargo, pytest, bun test, a capture of the gallery) only when the work can be the cause: that process holds `FURB_WATCH_MIN` KB (4 GB), or the work holds `FURB_WATCH_LANE` KB (8 GB). The work is each test process, and each process of the user whose command names a tree of the clone, as `git worktree list` gives the trees, less a daemon of furb, whose memory no end of a test process frees. The watcher prints the pid, the size and the command of the process that it ends, and says so when the work is not the cause. It ends no other process: not a daemon of furb, not a window, not a process of the owner. The desk of the conductor starts it, and `sh script/memwatch.sh --once` looks one time.
+- `sh script/memwatch.sh`: the one guard of memory, a watcher that runs beside the work. No step of the work waits on memory: a hook, a build, a test run and a capture start at once. While the memory is tight (on macOS the pressure level of the kernel is warn or critical, on Linux less than 20% of the memory is available), the watcher ends the largest test process (a test binary of cargo, pytest, bun test) only when the work can be the cause: that process holds `FURB_WATCH_MIN` KB (4 GB), or the work holds `FURB_WATCH_LANE` KB (8 GB). The work is each test process, and each process of the user whose command names a tree of the clone, as `git worktree list` gives the trees, less a daemon of furb, whose memory no end of a test process frees. The watcher prints the pid, the size and the command of the process that it ends, and says so when the work is not the cause. It ends no other process: not a daemon of furb, not a window, not a process of the owner. The desk of the conductor starts it, and `sh script/memwatch.sh --once` looks one time.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
@@ -489,11 +484,11 @@ fix what your change broke, and report what was broken before.
   build. It fails on a syntax fault, on a key that a mapping holds twice, on a marker of a conflict, on a job with
   neither `runs-on` nor `uses`, on a step with neither `run` nor `uses`, and on a `needs` that names no job. Run it
   after a merge or a rebase that touched a workflow. The hooks run it whatever the files.
-- `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
+- `bun install && bun run build`: install the TypeScript workspace, and build the N-API package.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `bind/typescript/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
   seconds, and runs as many at once as the machine has cores, or as `FURB_TEST_JOBS` names when it names fewer. A
-  word after `bun run test` filters the files by their path or by `package/file`, as `tui/host`, and a filter
+  word after `bun run test` filters the files by their path or by `typescript/file`, as `typescript/engine`, and a filter
   that matches no file fails. Use it, and not a plain
   `bun test <file>`, which keeps `claude` on the PATH and fails where a test names a model, and says so; a bunfig.toml
   in the root and in each package gives a plain run the limit of thirty seconds and the folders of the runner.
@@ -502,56 +497,21 @@ fix what your change broke, and report what was broken before.
   failure, and `bun run build` makes the build again. The tests read the configs of `.furb/tests` of the root, and
   their cache in `/tmp/furb-cache-<the first 8 hex digits of the sha256 of the root>`, or in the temporary folder on
   Windows, from any folder, not those of the machine. A plain `bun test` gives them those folders in process.env,
-  which the native part, reading the environment that the process started with, never sees: so each test that builds
-  Preferences or Workspaces gives them a config directory of its own, and the preload fails a test that changes a file
+  which the native part, reading the environment that the process started with, never sees: so each test that writes
+  a config gives it a config directory of its own, and the preload fails a test that changes a file
   of the config directory of the machine, and names the file. As root, the test of a folder that cannot be read fails,
   since root reads every folder.
   A script of bun in `$TMPDIR` cannot import the package `furb`, so write a quick check in the worktree, where
   `node_modules` stands.
-- `bun run test scenarios`: the scenarios of `tui/scenarios`, the path of the owner end to end. A scripted claude
-  command line, `bind/typescript/test/programs/scenario.ts`, answers a real host, and a headless window of the TUI on
-  a test terminal drives it with keys and the mouse, never a window on the terminal of the machine. Each scenario
-  guards a defect that a life of the owner met, and fails on the commit before its fix. `bun run test` runs them with
-  the other tests, on macOS and Linux, so they are a required check of each pull request. Each fix of a path of the
-  operator adds a scenario that fails on the code before the fix.
-  `tui/scenarios/walk.ts` walks the TUI the same way for the audit of the skill converge-tui: each key of the table,
-  each shape of answer, the sizes, and the newest records of the project read-only, with probes that find a defect
-  in a frame with no judge. Its scenario holds only that the walk goes to its end.
-- `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
-- `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
-  `tui/src/commands.ts`. A change of the types of the N-API door, or of the keys and the commands, runs
-  `bun run build` and `bun run docs` before its commit: the CI fails when `bind/typescript/index.d.cts` or
-  `tui/README.md` is not what they make. No hook of pre-commit runs them, since the job of the hooks has no bun.
+- A change of the types of the N-API door runs `bun run build` before its commit: the CI fails when
+  `bind/typescript/index.d.cts` is not what the build makes. No hook of pre-commit runs it, since the job of the hooks
+  has no bun.
 - `cargo test -p furb-host --test suite memory::bench -- --ignored`: the memory of a life, the measure of the bench. A scripted life
   grows to the sizes of `LARGE` in `host/tests/suite/memory.rs`, and the test prints its heap, its footprint and what a window
   that attaches reads at each size. It fails when the log keeps each part of each reply or each state of each act, and
   over its budget, `memory_heap_mib` of `script/budgets.toml`. It takes a few minutes and holds about 2 GB at its
   peak. The suite runs the same test at the sizes of `SMALL`, with no argument, and a slow window on a life of 10k
   facts, in seconds.
-- `bun run bench`: the speed of the TUI on two recorded lives of about 2.6 KB for each fact, one of about 160000 facts
-  and one of a tenth of that: the cost of a new fact, the first frame, the frames while the feed scrolls and a command
-  streams, and the memory on Linux. It fails over its budgets, which the docstring of `tui/script/bench.ts` gives in paces of the
-  machine, and which the gates hold on Linux. `FURB_BENCH_JSON` names a file that takes the measures of each run, and
-  `FURB_BENCH_FACTS` sets the size of the long life. It measures the crate in the release profile alone, and refuses
-  another: run `bun run build --release` before it.
-- `bun run memory <record> [bound in MB]`: the heap that a window holds on a long record. It copies the record, opens
-  the copy in a daemon of its own, and scrolls the feed to its start and back. It fails when the heap passes the bound
-  that it is given, or when the scroll back loses the start of the feed, as the docstring of `tui/script/memory.ts`
-  says. `tui/test/window-heap.test.ts` takes the same measure, `tui/script/heap.ts`, on a real life that it makes, and
-  fails when the heap of the window grows past its bound: the gates hold the memory of a window with it.
-- `bun run screenshots` and `bun run animation`: draw `docs/screenshots/` and `docs/furb.gif` again from the real
-  renderer. Run both after a change that a screen shows, and read each capture. Do not commit them: at most once an hour,
-  on a new head of `w/converge`, `.github/workflows/gallery.yml` draws both again on a runner of CI and keeps one pull
-  request of the branch `w/gallery-converge` into `w/converge` open, whose body names the head that it shows. One run at a time
-  holds its home in `/tmp`, and `FURB_GALLERY_ROOT` names another folder for it, and a root so long that the socket of
-  the daemon in the home would pass 100 bytes gives the run a short private cache in `/tmp` for that daemon;
-  `tui/script/stage.ts` says how long a run waits.
-  `FURB_GALLERY_ONLY=<pattern>` writes only the captures whose names match, `FURB_GALLERY_PROOF=<name>` draws the picture of that shot alone and writes the SVG and the text of each other, as the gallery test of the gates does, `FURB_GALLERY_TEXT=<folder>` writes the text
-  of each capture, which a model that cannot see an image reads, `FURB_GALLERY_CELLS=<folder>` writes the cells of each
-  capture as JSON, which the skill `converge-tui` of the project reads, and `FURB_STILL_CLOCK` sets the time of the
-  view, which stands still by default. A model sees a capture as an image when its word reads the PNG.
-  Both draw in process, with the test renderer of `@opentui/core` and the rasterizer `tui/script/raster.ts`, and open no
-  window.
 - `python script/budgets.py`: set the budget of time of each job of the gates in `.github/budgets.json`, from its last
   green runs on `main`.
 

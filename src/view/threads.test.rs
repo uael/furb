@@ -553,7 +553,7 @@ fn a_read_of_a_life_told_out_of_order_takes_no_copy_of_its_acts() {
 
 #[test]
 fn a_rung_of_the_operator_forks_a_worker_that_is_no_thread_and_no_unread_note() {
-  // A command of the TUI runs its word as a rung of the operator on the chain, and the word can
+  // A command of a window runs its word as a rung of the operator on the chain, and the word can
   // fork a chain that asks a model: the prompt on that chain is the work of an agent, and no
   // conversation.
   let facts = [

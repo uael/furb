@@ -388,7 +388,7 @@ test("a line too wide for one row lays out as ruff format lays it out, and its r
     '  on: str = ""',
     ") -> str:",
   ]);
-  const call = 'extend("todo", next(k for k, w in program().items() if w.startswith("def todo")), tui=part)';
+  const call = 'extend("todo", next(k for k, w in program().items() if w.startswith("def todo")), view=part)';
   expect(layout(call, 60).map((row) => row.text)).toEqual([
     "extend(",
     '  "todo",',
@@ -397,7 +397,7 @@ test("a line too wide for one row lays out as ruff format lays it out, and its r
     "    for k, w in program().items()",
     '    if w.startswith("def todo")',
     "  ),",
-    "  tui=part",
+    "  view=part",
     ")",
   ]);
   // Each part of a row names where it starts in the line, so the colors come from the statement whole.

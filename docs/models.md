@@ -13,8 +13,8 @@ furb looks in two places, in this order:
 2. **A local server.** When `FURB_LOCAL_URL` gives the address of a server, furb offers the models that it lists.
    [A local model](#a-local-model) says more.
 
-The first model that furb offers is the default: a model of the network, else a local model. The TUI checks each place
-on its first run, and says how to fix each one that is missing.
+The first model that furb offers is the default: a model of the network, else a local model. `setup()` of each door
+checks each place, and says how to fix each one that is missing.
 
 ## Choose a model
 
@@ -25,8 +25,7 @@ An **actor** is a model and an effort, which is how hard the model thinks: `off`
 `high`, `xhigh` or `max`. Write the effort after a slash, as `local:qwen3/medium`. An actor with no effort takes
 `high`, and an effort that a model does not take moves to the nearest one that it takes.
 
-- In the TUI, `/model` and `/effort` choose the actor of the chain on screen. ⌃M, and ⇧Tab or ⌃T, do the same.
-- On the command line, `--model` gives the default actor, as `furb --model local:qwen3/low`.
+- On the command line, `--model` gives the default actor, as `furb prompt "Hello" --model local:qwen3/low`.
 - `--roster` gives more models that a life can ask, one name each time. With no `--roster`, a life can ask each
   model that furb offers. A prompt to a model that the roster does not hold is refused.
 
@@ -93,23 +92,12 @@ existing Codex access token, but it does not use the Codex refresh token or chan
 
 Disabling `codex` removes its models from this project and keeps the sign-in for a later connection.
 
-Run `/providers` in the TUI to add or remove a provider for the current project. A built-in provider uses the
-credential in the environment. To add a server that uses OpenAI chat completions, enter:
-
-```text
-/provider add office http://127.0.0.1:8080/v1 qwen3 262144 OFFICE_KEY
-```
-
-The arguments are the provider name, URL, model id, context window and, when needed, the name of the environment
-variable that holds its key. The optional last argument selects the protocol, which is `chat` when unsaid. Use `openai`
-for OpenAI Responses, `anthropic` for Anthropic Messages, or `gemini` for Google Gemini. Use `-` for the key name when
-the server needs no key and a protocol follows it. `/provider remove office` disables the provider and keeps its
-settings for a later add.
-
-The same settings can be written in `config.json` in the user config directory, in `.furb/config.json` in the
-project, or in `.furb/config.local.json` beside it, which git ignores: a project keeps its local models there, as
-those of a server on this machine. Each config is read in that order, and a later one wins for each field that it
-gives. Other config fields stay as they are. `/provider` and the dialog of the providers write `.furb/config.json`.
+A built-in provider uses the credential in the environment. To add a provider, as a server that uses OpenAI chat
+completions, write its settings in `config.json` in the user config directory, in `.furb/config.json` in the project,
+or in `.furb/config.local.json` beside it, which git ignores: a project keeps its local models there, as those of a
+server on this machine. Each config is read in that order, and a later one wins for each field that it gives. The
+protocol is `chat` when unsaid: `openai` is OpenAI Responses, `anthropic` is Anthropic Messages, and `gemini` is
+Google Gemini. A provider set to `false` is turned off, as `openai` below.
 
 ```json
 {
@@ -236,14 +224,14 @@ The system prompt of furb is about 9000 tokens, so a model needs a window of 327
 model in the `num_ctx` of its parameters, or in `OLLAMA_CONTEXT_LENGTH`: set it to 32768 or more. Ollama tells that
 window only for a model that it loaded, so give the same number to `FURB_LOCAL_WINDOW`.
 
-furb asks the server for its list when a host lists the models, as the TUI does, and when no other model can be the
+furb asks the server for its list when a host lists the models, and when no other model can be the
 default. It keeps the list while the process runs. It asks again after 30 seconds for a model that the list did not
 hold, and for a server that did not answer.
 
 ## When a call fails
 
 When a call to a model fails for a cause that passes, such as a lost connection or a provider that is too busy, furb
-asks again after a wait that doubles each time, up to ten attempts. The TUI counts the wait down in its footer.
+asks again after a wait that doubles each time, up to ten attempts.
 A usage limit of the claude command line is no attempt. furb asks again at the reset that the limit names. A failed sign in of that command line is no attempt too. furb asks again every minute, and a stand asks at once. So the user can sign in again outside furb, and the chain goes on with no pause.
 A pause of the chain holds the next call of a reply that waits, and the wake makes it. A call that runs returns.
 
