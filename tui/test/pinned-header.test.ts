@@ -30,8 +30,10 @@ test("the header of a thread that a word opened names the model with its effort,
       expect(app.treeRows().filter((row) => /\brung\d+\b/.test(plain(row.parts)))).toEqual([]);
       app.closeTree();
       // The block of a word of the model and of the operator: the row that heads each reads its writer, with no rung.
+      // The time of the word stands after it when the window saw the word begin and end in two changes, and a word
+      // whose start and end came in one change took no time that the window knows.
       const rows = (await frame()).split("\n").map((row) => row.slice(0, 72).trim());
-      expect(rows.some((row) => /^sonnet\/high\s+\d+ms$/.test(row))).toBe(true);
+      expect(rows.some((row) => /^sonnet\/high(\s+(\d+ms|\d+(\.\d)?s|\d+m \d+s))?$/.test(row))).toBe(true);
       expect(rows).toContain("┃       operator");
       expect(rows.filter((row) => /\brung\d+\b/.test(row))).toEqual([]);
     },
