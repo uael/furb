@@ -278,3 +278,30 @@ fn the_account_that_a_fact_names_stands_in_the_spend_of_its_rung_and_its_chain()
   let last = spends.get("chain1").cloned().flatten().expect("a spend");
   assert_eq!(last.account, None);
 }
+
+#[test]
+fn a_checkpoint_makes_each_act_that_it_carries_and_ends_each_act_that_it_ends() {
+  let mut fold = Fold::default();
+  let words = |all: Value| json!({"is": "tuple", "args": [all]});
+  let data = json!({
+    "schema": "2.0",
+    "chains": [{"id": "chain1", "on": "", "label": "root", "source": ""}],
+    "acts": [
+      {"kind": "prompt", "id": "prompt1", "on": "chain1", "words": words(json!(["str", "go", ""])), "value": "went"},
+      {"kind": "prompt", "id": "prompt2", "on": "chain1", "shape": "None", "message": "more", "to": "", "held": ""},
+    ],
+  });
+  // The fold holds prompt1 with no end, as a record whose log does not agree with it tells it.
+  fold.recorded(&json!(["chain", "chain1", "operator", "", "root", ""]));
+  fold.recorded(&json!(["prompt", "prompt1", "operator", "chain1", "str", "go", ""]));
+  let moved = fold.recorded(&json!(["checkpoint", "chain1", "store", data]));
+  let of = |id: &str| moved.iter().find(|act| act.id == id).cloned().unwrap();
+  let (went, more) = (of("prompt1"), of("prompt2"));
+  assert_eq!((went.by.as_str(), went.value()), ("operator", Some(&json!("went"))));
+  assert_eq!((more.by.as_str(), more.chain.as_str(), more.done()), ("journal", "chain1", false));
+  assert_eq!(more.words, [json!("None"), json!("more"), json!("")]);
+  assert!(
+    moved.iter().all(|act| act.id != "chain1" || act.by == "operator"),
+    "it makes no act it holds"
+  );
+}
