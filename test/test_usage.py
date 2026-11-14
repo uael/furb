@@ -29,7 +29,7 @@ async def test_the_share_of_the_window_it_filled_is_the_words_it_read_against_th
   sand, _, root = born(cost=USAGE)
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
-  sand.script[root] = ["a = 1", "close(2)"]
+  sand.script[root] = ["a = 1\ndebug(t'{a}')", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2
   assert [engine.filled(a[1]) for a in engine.transcript(root) if a[0] == "reply"] == [0.2, 0.2]
   engine.cancel(ceiling)

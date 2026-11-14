@@ -1,11 +1,11 @@
 """The Kernel, which runs the word of a rung where the engine runs, in the module of its chain.
 
-One Kernel serves both engines: this interpreter imports this module, and the sandbox of the crate loads it as it
-loads the sheet. Each gives the Kernel the names of its engine, which it reads at each use and never holds, since
-boot binds the bus into the engine and a name rebound is used from the next use on.
+One Kernel serves both engines: this interpreter imports this module, and the sandbox of the crate loads it. Each
+gives the Kernel the names of its engine, which it reads at each use and never holds, since boot binds the bus into
+the engine and a name rebound is used from the next use on.
 
 A word answers by a close and never by a return: a body of a module takes no return, so a word that holds one is no
-python and the gate says so.
+python and its run is done with a SyntaxError.
 
 A word runs in parts when the World says the statements of it that its model finished, each as a writing of its
 rung, before the model wrote the rest. A writing is a fact and no act: the World says it and awaits nothing, so it
@@ -191,15 +191,15 @@ class Running:
 
   def carry(self, run: str, given: object) -> None:
     """The word stepped as its rung with what it waited for, and stepped again while what it waits for is done."""
-    peek = verb(self.names, "peek")
-    with self.site.set(self.of(run)[2]):
+    peek, rung = verb(self.names, "peek"), self.of(run)[2]
+    with self.site.set(rung):
       while True:
         try:
           frame = self.frames[run]
           got = frame.throw(given) if isinstance(given, BaseException) else frame.send(given)
-          # A rung awaits an act and nothing else, so anything else is refused where the word waited.
-          while not isinstance(got, str):
-            got = frame.throw(self.refusal(got))
+          while (no := self.unsettled(rung, got)) is not None:
+            got = frame.throw(no)
+          assert isinstance(got, str)
         except StopIteration:
           return self.ended(run, None)
         except BaseException as raised:
@@ -245,8 +245,8 @@ class Running:
         ok = (held.get("accepts") or accepted)(str((*asked[4:], "")[0]), value)
       elif ok is not True:
         ok = code in ok
-    # An ok or an accepts of the word is the word's own code, so what it raises is what the word awaited, and the
-    # Kernel, which serves every chain, goes on: ok=lambda e: True raised in the Kernel on 11-04, and lost each word.
+    # An accepts of the word is the word's own code, so what it raises is what the word awaited, and the Kernel, which
+    # serves every chain, goes on.
     except Exception as raised:
       return raised
     if ok:
@@ -254,10 +254,19 @@ class Running:
     ended = f"timed out after {asked[6]}s" if code is None else f"exited {code}"
     return self.refusing(f"{made} {ended}")
 
-  def refusal(self, got: object) -> BaseException:
-    made = verb(self.names, "Refused")(f"a rung awaits an act, and {got!r} is none")
-    assert isinstance(made, BaseException)
-    return made
+  def unsettled(self, rung: str, got: object) -> BaseException | None:
+    """Why the word of a rung cannot wait for what it awaits, as the refusal that it raises where it waited, or
+    nothing: a rung awaits an act and nothing else, a chain and a name of no act never settle, and the end of its own
+    rung or of its own run depends on the word itself."""
+    if not isinstance(got, str):
+      return self.refusing(f"a rung awaits an act, and {got!r} is none")
+    made = verb(self.names, "get")(got)
+    if verb(self.names, "question")(("chain", got)) or not isinstance(made, tuple):
+      return self.refusing(got + " never settles")
+    own = got == rung or (verb(self.names, "question")(("run", got)) and made[4] == rung)
+    if own and not verb(self.names, "over")(got):
+      return self.refusing(f"{rung} cannot await its own completion through {got}")
+    return None
 
   def refusing(self, why: str) -> BaseException:
     """A refusal of the engine, which a job is done with when its part of a word is no part of the word that ran."""
@@ -350,10 +359,45 @@ class Running:
         self.ended(one, self.cancelled())
 
 
+def lost(names: Names) -> Generator[tuple, object]:
+  """What a Kernel says at its birth of each run that an earlier Kernel took and that is not over, whose frame it holds
+  not: the end of each wants of that run that is not over and of the run, and the close of the rung of a run that
+  awaited, each with a refusal that says the word was lost."""
+  get, over, transcript, close = (
+    verb(names, "get"),
+    verb(names, "over"),
+    verb(names, "transcript"),
+    verb(names, "close"),
+  )
+  refused = names["Refused"]
+  assert isinstance(refused, type)
+  why = refused("the Kernel that ran the word of the rung of this run raised, so the word was lost and runs no more")
+  n = 1
+  while get(on := f"chain{n}"):
+    n += 1
+    facts = transcript(on)
+    assert isinstance(facts, list)
+    for run in [x[1] for x in facts if x[0] == "run" and get(x[1]) is x and not over(x[1])]:
+      wants = [x[1] for x in facts if x[0] == "wants" and get(x[1]) is x and x[2] == run and not over(x[1])]
+      for one in wants:
+        yield "done", one, why
+      yield "done", run, why
+      asked = get(run)
+      assert isinstance(asked, tuple)
+      if wants and not over(asked[4]):
+        close(why, asked[4])
+
+
 def kernel(names: Names) -> Ear:
   """The Kernel: it takes each run and begins its word when it hears that it took it, runs the part of each writing
-  of a rung that the life holds when it hears the writing, and carries the word at the done of each wants it made."""
+  of a rung that the life holds when it hears the writing, and carries the word at the done of each wants it made.
+
+  A Kernel holds the frame of each word that it runs, so a Kernel that starts again in the place of one that raised
+  holds none of the runs that the other took. At its birth it ends each run that is not over, each wants of that run
+  that is not over, and the rung of a run that awaited, with a refusal that says the word was lost, so each chain
+  takes its next act. A Kernel born with its life finds no run."""
   held, heard = Running(names), {"run", "writing", "wants", "cancel", "close"}
+  yield from lost(names)
   while True:
     match (yield heard | set(held.awaits) | set(held.lingers)):
       case ("run", run, *_):
@@ -374,53 +418,3 @@ def kernel(names: Names) -> Ear:
         held.carry(held.waits.pop(wants), held.given(str(asked[4]), value))
       case ("cancel" | "close", *_) as control:
         held.dropped(control)
-
-
-class Recorded:
-  """What stands, in the record that a later life is given, for a value that no later life makes again as it was.
-
-  A callable went out of the life that made it as a mark, or as its repr, which names an address of that life. An
-  address of an object is a function of the heap and not of the record, so a text that holds one stands for each
-  text, or each callable, that shows the same with no address, and a mark stands for each callable. The journal then
-  finds the act that a word makes again equal to the act of the record. A host of the engine of this interpreter
-  gives boot what recorded gives. The opening of the sandbox holds the same rule for the engine of monty, and not
-  this one, since a record replays there on the Kernel of the build that made it, which may hold no Recorded."""
-
-  def __init__(self, held: str | None = None) -> None:
-    self.held = held
-
-  def __eq__(self, other: object) -> bool:
-    if isinstance(other, Recorded):
-      return self.held == other.held
-    if self.held is None:
-      return callable(other)
-    unaddressed = lambda text: re.sub(r" at 0x[0-9a-fA-F]+", "", text)  # noqa: E731
-    shown = repr(other) if callable(other) else other
-    return isinstance(shown, str) and unaddressed(shown) == unaddressed(self.held)
-
-  def __repr__(self) -> str:
-    return "<a callable of an earlier life>" if self.held is None else repr(self.held)
-
-  # It equals each value that shows the same with no address, so no hash agrees with its equality.
-  __hash__ = None  # type: ignore[assignment]
-
-
-def recorded(names: Names, entries: list[tuple]) -> list[tuple]:
-  """The entries of a record as boot is given them: in the words of each act that a word made, each text that holds
-  an address stands as a Recorded of it."""
-  text, question = names["Text"], verb(names, "question")
-  assert isinstance(text, type)
-
-  def again(word: object) -> object:
-    if isinstance(word, str) and re.search(r" at 0x[0-9a-fA-F]+", word):
-      return Recorded(word)
-    if isinstance(word, text):
-      return text(getattr(word, "path"), again(getattr(word, "content")))  # noqa: B009
-    if isinstance(word, tuple | list):
-      return type(word)(map(again, word))
-    return word
-
-  return [
-    ((*x[:4], *map(again, x[4:])),) if question(x) and re.fullmatch(r"[a-z_]+\d+", str(x[2])) else (x,)
-    for (x,) in entries
-  ]

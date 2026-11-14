@@ -47,7 +47,7 @@ async def test_a_ceiling_on_a_chain_in_dollars_in_the_share_of_the_window_or_bot
   """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells the dollars of that ledger at each answer of a model, since the advance binds the share before the next reply, so no turn a reply has sent grows a line after it."""
   sand, log, root = born(cost=COST)
   engine.grant(usd=10.0, on=root)
-  sand.script[root] = ["a = 1", "b = 2", "close(a + b)"]
+  sand.script[root] = ["a = 1\ndebug(t'{a}')", "b = 2\ndebug(t'{b}')", "close(a + b)"]
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
   assert len(said(log, "reply")) == 3
@@ -168,7 +168,7 @@ async def test_a_later_grant_that_stands_closes_every_grant_of_the_chain_before_
   """A later grant that stands closes every grant of the chain before it that stands, and none that is over, so the ledger counts from the new one alone; one that is no ceiling closes nothing, and the ceiling that stands stands on."""
   sand, log, root = born(cost=COST)
   ceiling = engine.grant(usd=2.0, on=root)
-  sand.script[root] = ["a = 1", "b = 2", "close(a + b)"]
+  sand.script[root] = ["a = 1\ndebug(t'{a}')", "b = 2\ndebug(t'{b}')", "close(a + b)"]
   act = engine.prompt(int, "count", on=root)
   await settle()
   assert engine.peek(act, ...) is ...
@@ -205,7 +205,7 @@ async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_othe
   engine.cancel(ceiling)
   await settle()
   assert isinstance(engine.peek(ceiling), CancelledError)
-  sand.script[root] = ["a = 1", "close(2)"]
+  sand.script[root] = ["a = 1\ndebug(t'go')", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   assert said(log, "pause") == []

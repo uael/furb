@@ -1,5 +1,5 @@
-//! The word of a reply as its model writes it: what the gate finds against it, and the part of it
-//! that runs.
+//! The word of a reply as its model writes it: the part of it that runs, and what its chain is
+//! told when a statement of it cannot be python.
 
 use std::fmt::{self, Write};
 
@@ -17,31 +17,6 @@ use crate::{
   value::Object,
 };
 
-/// What the gate finds against the word that a model wrote so far.
-pub(super) enum Found {
-  /// Nothing, so its new statements run.
-  Nothing,
-  /// A fault that a later line of the word may still settle.
-  Unsettled,
-  /// A statement that cannot be python, or that the gate refuses for good, at this line, and why.
-  Refused(usize, String),
-}
-
-/// What the gate finds against the word that a model wrote so far, on its chain.
-pub(super) async fn judged(co: &mut Co<Replied>, chain: &str, word: &str) -> Found {
-  if let Some(line) = watch::broken(word) {
-    return Found::Refused(line, format!("line {line}: the statement there cannot be python"));
-  }
-  let found = findings(co, chain, word).await;
-  if found.is_empty() {
-    return Found::Nothing;
-  }
-  match watch::refused(&watch::settled(word), &found) {
-    Some(line) => Found::Refused(line, found.join("\n")),
-    None => Found::Unsettled,
-  }
-}
-
 /// A word as python, each quote in it bound as a string by the Kernel, and nothing when the
 /// Kernel binds none.
 pub(super) async fn unquoted(co: &mut Co<Replied>, word: &str) -> Option<String> {
@@ -53,9 +28,8 @@ pub(super) async fn unquoted(co: &mut Co<Replied>, word: &str) -> Option<String>
 }
 
 /// What a reply came to once a part of its word ran. Its turn when the turn holds the word that
-/// ran and the gate finds nothing against it, so the chain runs it whole; any other end of the
-/// reply is the word that ran, after a note that tells the chain why, and nothing when that word
-/// is no turn.
+/// ran and is python, so the chain runs it whole; any other end of the reply is the word that
+/// ran, after a note that tells the chain why, and nothing when that word is no turn.
 pub(super) async fn kept(
   co: &mut Co<Replied>,
   reply: &Reply,
@@ -66,7 +40,7 @@ pub(super) async fn kept(
     got.as_ref().ok().and_then(|turn| Some(turn.as_ref().items()?.get(1)?.as_str()?.to_owned()));
   let why = match &word {
     Some(word) if word.starts_with(ran.trim()) => match unquoted(co, word).await {
-      Some(python) => findings(co, &reply.chain, &python).await.join("\n"),
+      Some(python) => watch::fault(&python).map(unpython).unwrap_or_default(),
       None => "the word holds a quote that is not whole".to_owned(),
     },
     Some(_) => "the turn does not hold the word that ran".to_owned(),
@@ -81,17 +55,22 @@ pub(super) async fn kept(
   let turn = cut(ran).ok()?;
   let (what, fields) = match &got {
     Err(no) => (STOPPED, [("why", failure(no)), ("ran", ending(ran))]),
-    Ok(_) => (AFTER, [("findings", afterward(&why)), ("ran", ending(ran))]),
+    Ok(_) => (AFTER, [("why", why), ("ran", ending(ran))]),
   };
-  noted(co, &reply.chain, &reply.rung, what, &fields).await;
+  noted(co, &reply.rung, what, &fields).await;
   Some(Ok(turn))
 }
 
-/// What the chain is told after the rung of a turn whose model wrote a fault after the part of its
-/// word that ran.
-pub(super) const AFTER: &str = "ran a part of its word, whose last lines its ran shows, then wrote a statement that the chain \
-  would refuse, so its turn is the word that ran: each act, close and name of that part stands, and no later statement \
+/// What the chain is told after the rung of a turn whose model wrote a statement that cannot be
+/// python after the part of its word that ran.
+pub(super) const AFTER: &str = "ran a part of its word, whose last lines its ran shows, then wrote a statement that cannot \
+  be python, so its turn is the word that ran: each act, close and name of that part stands, and no later statement \
   runs";
+
+/// Why a word is not python, as a note tells it: the line of its first fault, counted from 1.
+pub(super) fn unpython(line: usize) -> String {
+  format!("line {line}: the statement there cannot be python")
+}
 
 /// How many lines of the end of the word that ran a note shows.
 const ENDING: usize = 3;
@@ -109,27 +88,9 @@ pub(super) fn ending(ran: &str) -> String {
   ended.unwrap_or_default()
 }
 
-/// The findings of the gate on a word whose part ran. The gate says of a word that is not python
-/// that nothing of it ran, which holds only while no part of it ran.
-pub(super) fn afterward(findings: &str) -> String {
-  findings.replace("nothing of this word ran", "no statement after the part that ran runs")
-}
-
 /// What the chain is told after the rung of a reply whose call ended after a part of its word ran.
 pub(super) const STOPPED: &str =
   "is the word that ran, since the call of its model ended after a part of it ran";
-
-/// What the gate finds against a word, as python, on a chain, and nothing when the gate gives no
-/// answer.
-pub(super) async fn findings(co: &mut Co<Replied>, chain: &str, word: &str) -> Vec<String> {
-  let words = vec![Object::string(chain), Object::string(word)];
-  let found = co.call("against", words, vec![]).await.ok();
-  let found = found.and_then(|one| {
-    let items = one.as_ref().items()?;
-    Some(items.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect())
-  });
-  found.unwrap_or_default()
-}
 
 /// The kind of the fact that the Kernel says, as a rung, once the part of a writing of that rung is
 /// over: `("ran", rung, rung, before, raised)`, with how many characters of the word stand before

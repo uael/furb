@@ -1,6 +1,7 @@
 """Compare the contract of a build with the contract of the last release, and name each change that breaks a caller.
 
-The contract is `src/furb/engine.pyi` and the interface of each official kit, `extensions/<name>/<name>.pyi`. The
+The contract is `src/furb/engine.pyi`, the interface of each official kit, `.agents/skills/<name>/<name>.pyi`, and the
+closed set of the nodes of a view in `host/protocol.schema.json`, each node with its fields. The
 script reads each one at the last tag, with `git show <tag>:<path>`, and in the working tree. It reads a contract as the
 signatures of its top-level definitions, the fields and the methods of each class, its constants and its aliases, and
 the sentences of its docstrings. A change is a break, a wording or a minor.
@@ -12,10 +13,15 @@ the sentences of its docstrings. A change is a break, a wording or a minor.
   the pull request holds the label wording.
 - A minor: a name more, a keyword more with a default that no caller passes by position, a default that a keyword
   gains, a sentence more, and the value of a policy that changes.
+- Of the nodes of a view, which only grow within a major: a node or a field of a node that goes is a break, and a node
+  or a field more is a minor.
 
 The line of the policy is the sentence of the contract that starts `A minor may change the default of each policy:`.
 The names of the release rule when it holds the line, so one pull request cannot add a name and change its value;
 the names of the working tree rule before the first release that holds the line.
+
+Each break must also stand on the page of the promise, docs/promise.md, as a line `- `<where>: <what>`: <its fate>`.
+When the page exists, the script fails on a break that it does not name, whatever the title.
 
 With a title, the breaks are declared when the title holds `!` before its colon, and the script says so and passes.
 Without a title, it fails on each break.
@@ -29,6 +35,7 @@ Usage: python3 script/contract.py [--base TAG] [--since REF] [--title TITLE] [--
 import argparse
 import ast
 import inspect
+import json
 import re
 import shutil
 import subprocess
@@ -39,7 +46,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ENGINE = "src/furb/engine.pyi"
-KIT = re.compile(r"extensions/[^/]+/[^/]+\.pyi")
+PAGE = "docs/promise.md"
+SCHEMA = "host/protocol.schema.json"
+KIT = re.compile(r"(?:extensions|\.agents/skills)/([^/]+/[^/]+\.pyi)")
+"""KIT is the interface of a kit, in .agents/skills, or in extensions, its folder in a release before the kits moved."""
+HOME = ".agents/skills/"
+FORMER = "extensions/"
 POLICY = "A minor may change the default of each policy:"
 POSITIONAL = ("posonly", "pos")
 
@@ -318,6 +330,36 @@ def diff(where: str, old: str | None, new: str | None) -> list[Finding]:
   return compare(where, before, after, allowed)
 
 
+def nodes(text: str | None) -> dict[str, set[str]]:
+  """Each node of a view that the schema of the protocol gives, with its fields: those of every node and its own."""
+  if text is None:
+    return {}
+  defs = json.loads(text).get("definitions", {})
+  node = defs.get("Node", {})
+  shared = set(node.get("properties", {}))
+  found: dict[str, set[str]] = {}
+  for one in node.get("oneOf", []):
+    props = one.get("properties", {})
+    name = props.get("node", {}).get("const")
+    if isinstance(name, str):
+      found[name] = shared | (set(props) - {"node"})
+  return found
+
+
+def node_diff(where: str, old: str | None, new: str | None) -> list[Finding]:
+  before, after = nodes(old), nodes(new)
+  found = [Finding("break", where, f"the node {name} goes") for name in sorted(before.keys() - after.keys())]
+  found += [Finding("minor", where, f"the node {name} is more") for name in sorted(after.keys() - before.keys())]
+  for name in sorted(before.keys() & after.keys()):
+    found += [
+      Finding("break", where, f"the field {f} of the node {name} goes") for f in sorted(before[name] - after[name])
+    ]
+    found += [
+      Finding("minor", where, f"the field {f} of the node {name} is more") for f in sorted(after[name] - before[name])
+    ]
+  return found
+
+
 def git(root: Path, *args: str) -> tuple[int, str]:
   got = subprocess.run([shutil.which("git") or "git", *args], cwd=root, capture_output=True, text=True, check=False)  # noqa: S603
   return got.returncode, got.stdout
@@ -329,12 +371,20 @@ def last_tag(root: Path) -> str:
 
 
 def paths(root: Path, *refs: str) -> list[str]:
-  here = {x.relative_to(root).as_posix() for x in root.glob("extensions/*/*.pyi")}
+  here = {x.relative_to(root).as_posix() for x in root.glob(".agents/skills/*/*.pyi")}
   there: set[str] = set()
   for ref in refs:
-    _, out = git(root, "ls-tree", "-r", "--name-only", ref, "--", "extensions")
-    there |= {x for x in out.split() if KIT.fullmatch(x)}
-  return [ENGINE, *sorted(here | there)]
+    _, out = git(root, "ls-tree", "-r", "--name-only", ref, "--", FORMER, HOME)
+    there |= {HOME + found[1] for x in out.split() if (found := KIT.fullmatch(x))}
+  return [ENGINE, *sorted(here | there), SCHEMA]
+
+
+def shown(root: Path, ref: str, path: str) -> tuple[int, str]:
+  """The text of a path at a ref, or for a kit, of its file in extensions at a ref before the kits moved."""
+  code, text = git(root, "show", f"{ref}:{path}")
+  if code and path.startswith(HOME):
+    code, text = git(root, "show", f"{ref}:{FORMER}{path.removeprefix(HOME)}")
+  return code, text
 
 
 def declared(title: str) -> bool:
@@ -344,14 +394,14 @@ def declared(title: str) -> bool:
 def compared(root: Path, tag: str, files: list[str], ref: str = "") -> list[Finding]:
   found: list[Finding] = []
   for path in files:
-    code, old = git(root, "show", f"{tag}:{path}")
+    code, old = shown(root, tag, path)
     if ref:
-      kept, text = git(root, "show", f"{ref}:{path}")
+      kept, text = shown(root, ref, path)
       new = text if kept == 0 else None
     else:
       file = root / path
       new = file.read_text(encoding="utf-8") if file.exists() else None
-    found += diff(path, old if code == 0 else None, new)
+    found += (node_diff if path == SCHEMA else diff)(path, old if code == 0 else None, new)
   return found
 
 
@@ -368,7 +418,8 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     return 0
   files = paths(root, tag, *([args.since] if args.since else []))
   known = {str(x) for x in compared(root, tag, files, args.since)} if args.since else set()
-  found = [x for x in compared(root, tag, files) if str(x) not in known]
+  every = compared(root, tag, files)
+  found = [x for x in every if str(x) not in known]
   for one in found:
     sys.stdout.write(f"{one}\n")
   blocking = [x for x in found if x.level == "break" or (x.level == "wording" and not args.wording)]
@@ -377,6 +428,18 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
   sys.stdout.write(
     f"Against {tag}: {counts['break']} breaks, {counts['wording']} sentences that change, {counts['minor']} minors.{stand}\n"
   )
+  page = root / PAGE
+  if page.exists():
+    listed = page.read_text(encoding="utf-8")
+    unlisted = [
+      f"{x.where}: {x.what}"
+      for x in every
+      if x.level == "break" and not re.search(rf"^- `{re.escape(f'{x.where}: {x.what}')}`: \S", listed, re.M)
+    ]
+    for one in unlisted:
+      sys.stderr.write(f"{PAGE} does not list the break {one}, with its fate.\n")
+    if unlisted:
+      return 1
   if not blocking:
     return 0
   if args.title is not None and declared(args.title):

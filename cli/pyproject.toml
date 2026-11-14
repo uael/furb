@@ -2,7 +2,7 @@
 name = "furb-cli"
 # maturin takes the version of the crate, which is the version of the workspace.
 dynamic = ["version"]
-description = "furb, the command line: the TUI, and one command on one life."
+description = "furb, the command line: the window, and one command on one life."
 readme = "README.md"
 requires-python = ">=3.14"
 # The license of the repository stands over this too; maturin reads no file above its own directory, so the
@@ -45,11 +45,10 @@ cache-keys = [
   { file = "../src/**/*.py" },
   { file = "../src/**/*.pyi" },
   { file = "../src/**/*.json" },
-  { file = "../extensions/*/*.py" },
-  { file = "../extensions/*/*.pyi" },
-  { file = "../extensions/*/SKILL.md" },
-  { file = "../extensions/*/tui.ts" },
-  { file = "../extensions/*/*/SKILL.md" },
+  { file = "../.agents/skills/*/*.py" },
+  { file = "../.agents/skills/*/*.pyi" },
+  { file = "../.agents/skills/*/SKILL.md" },
+  { file = "../.agents/skills/*/*/SKILL.md" },
   { file = "Cargo.toml" },
   { file = "src/**/*.rs" },
 ]

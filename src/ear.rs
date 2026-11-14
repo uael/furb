@@ -1,9 +1,10 @@
 //! The ear: the one thing a life hears by.
 //!
 //! The contract lets `boot`, `act` and `drive` take any generator of one shape: it hears the facts of the life
-//! that it waits for and every question that no ear before it took, and every chain at its birth, and it speaks by yielding a saying. The Kernel, the gate, the
-//! record and each ear of the World are one, whatever language writes it: a generator of python, a generator of
-//! TypeScript, or a coroutine of rust.
+//! that it waits for and every question that no ear before it took, and every chain at its birth,
+//! and it speaks by yielding a saying. The Kernel, the record and each ear of the World are one,
+//! whatever language writes it: a generator of python, a generator of TypeScript, or a coroutine of
+//! rust.
 //!
 //! An ear of rust is an [`Ear`]: it is resumed with what it heard and gives back what it does, which are the steps
 //! of a generator of the engine. It says a saying and hears back the fact the bus made of it; it calls a verb of the
@@ -32,7 +33,7 @@
 //! says each statement that a model finished as the fact writing, which the Kernel hears and runs, and not as an
 //! act that it awaits, since a statement that prompts makes a chain ask the provider for a reply.
 //! Each verb that an ear of the crate calls of its own accord keeps the law: the provider calls the views
-//! `unquoted` and `paused`, the gate through `against`, and `pause`, which makes no act; the store calls `prompt` to
+//! `unquoted` and `paused`, and `pause`, which makes no act; the store calls `prompt` to
 //! the operator, and takes no prompt; and the commands, the time and the web call none.
 //! The extensions and memory do no work, so they call each verb while they hear, where the life
 //! answers it in their place.
@@ -52,6 +53,8 @@ use futures::{
   Stream, StreamExt,
   stream::{LocalBoxStream, SelectAll},
 };
+use serde::{Serialize, de::DeserializeOwned};
+use serde_json::{Value, json};
 use tokio::{
   runtime::Handle,
   task::{AbortHandle, JoinError},
@@ -63,6 +66,8 @@ use crate::{
   fact::Fact,
   value::{Fault, Given, Object, ObjectRef},
 };
+use std::{future, mem};
+use tokio::runtime::Builder;
 
 /// What an ear is resumed with.
 #[derive(Debug)]
@@ -106,13 +111,13 @@ impl Step {
     not(any(feature = "python", feature = "typescript")),
     expect(dead_code, reason = "only a door calls it")
   )]
-  pub(crate) fn of(yielded: &Object) -> Result<Step, Fault> {
+  pub(crate) fn of(yielded: &Object) -> Result<Self, Fault> {
     let got = yielded.as_ref();
     if got.is_none() {
-      return Ok(Step::Wait(None));
+      return Ok(Self::Wait(None));
     }
     if matches!(got.type_name(), "set" | "frozenset") {
-      return Ok(Step::Wait(Some(yielded.clone())));
+      return Ok(Self::Wait(Some(yielded.clone())));
     }
     if let Some(pairs) = got.pairs() {
       let field =
@@ -125,7 +130,7 @@ impl Step {
       let kwargs =
         kwargs.iter().filter_map(|(key, one)| Some((key.as_str()?.to_owned(), one.to_owned())));
       let args = args.into_iter().map(|one| one.to_owned()).collect();
-      return Ok(Step::Call(Call { verb, args, kwargs: kwargs.collect() }));
+      return Ok(Self::Call(Call { verb, args, kwargs: kwargs.collect() }));
     }
     let items = got.items().ok_or_else(|| Fault::refused("an ear yields a saying or nothing"))?;
     let saying = Object::tuple(items.into_iter().map(|one| one.to_owned()));
@@ -175,6 +180,19 @@ pub trait Ear {
   fn restart(&mut self) -> bool {
     false
   }
+
+  /// What a fresh ear of the same make needs to stand where this ear stands, for the image of its
+  /// life: the acts that it took and did not end, and what it keeps of the facts that it heard.
+  /// Nothing when the ear cannot say it, as a generator of a host, and a life with such an ear
+  /// writes no image.
+  fn image(&self) -> Option<Value> {
+    None
+  }
+
+  /// What [`Ear::image`] gave of an ear of an earlier process, given to this fresh ear before it
+  /// hears anything: it stands where that ear stood, takes each act that the ear held as an act
+  /// that an earlier life took, and reads no fact of the record.
+  fn imaged(&mut self, _part: Value) {}
 }
 
 /// What an ear adds to the ear that [`With`] wraps: its end of a run, its restart and what it
@@ -241,6 +259,14 @@ impl<H: Hooks> Ear for With<H> {
   fn unkept(&self) -> usize {
     self.hooks.unkept(&*self.ear)
   }
+
+  fn image(&self) -> Option<Value> {
+    self.ear.image()
+  }
+
+  fn imaged(&mut self, part: Value) {
+    self.ear.imaged(part);
+  }
 }
 
 /// What an ear says of its own accord: a saying, or a verb of the engine with its words, which the life answers.
@@ -264,6 +290,21 @@ pub enum Next<W> {
 /// end together, so a side that leaves something never finds the other gone, and what it left
 /// waits to be taken.
 type Queue<T> = Rc<RefCell<VecDeque<T>>>;
+
+/// What both sides of an ear of rust hold for the image of its life: each question that the ear
+/// heard and that is not done, the acts among them that it started, which are its acts in flight,
+/// the acts that an earlier life took and that no wake put to it yet, whether an image gave the
+/// acts in flight and the body does not hold them yet, how its body gives what it keeps, and what
+/// an image gave of that until the body takes it.
+#[derive(Default)]
+struct Imaged {
+  asked: HashMap<String, Fact>,
+  started: Vec<String>,
+  resumed: HashSet<String>,
+  owed: bool,
+  gives: Option<Box<dyn Fn() -> Option<Value>>>,
+  given: Option<Value>,
+}
 
 /// The first thing of a queue, taken.
 fn take<T>(queue: &Queue<T>) -> Option<T> {
@@ -289,7 +330,7 @@ pub struct Co<W = ()> {
   unsaid: Rc<Cell<usize>>,
   works: SelectAll<LocalBoxStream<'static, W>>,
   taken: HashMap<String, oneshot::Sender<()>>,
-  resumed: HashSet<String>,
+  imaged: Rc<RefCell<Imaged>>,
   heard: VecDeque<Fact>,
   driven: bool,
   began: bool,
@@ -321,7 +362,7 @@ impl<W: 'static> Co<W> {
       if let Some(fact) = self.heard.pop_front() {
         return Poll::Ready(self.noted(fact));
       }
-      if std::mem::take(&mut self.began) {
+      if mem::take(&mut self.began) {
         cx.waker().wake_by_ref();
       }
       // The life polls an ear again until it says no more, so the ear goes on once what it said landed.
@@ -340,18 +381,45 @@ impl<W: 'static> Co<W> {
   /// earlier life took it, a started that the journal says again is of an act that an earlier life
   /// took, and such an act, put to the ear, is resumed.
   fn noted(&mut self, fact: Fact) -> Next<W> {
+    let mut imaged = self.imaged.borrow_mut();
     match fact.kind() {
       "done" => {
         self.taken.remove(fact.about());
-        self.resumed.remove(fact.about());
+        imaged.resumed.remove(fact.about());
+        imaged.asked.remove(fact.about());
+        imaged.started.retain(|one| one != fact.about());
       }
       "started" if fact.by() == "journal" => {
-        self.resumed.insert(fact.about().to_owned());
+        imaged.resumed.insert(fact.about().to_owned());
       }
-      _ if fact.question() && self.resumed.contains(fact.about()) => return Next::Resumed(fact),
+      _ if fact.question() => {
+        imaged.asked.insert(fact.about().to_owned(), fact.clone());
+        if imaged.resumed.contains(fact.about()) {
+          return Next::Resumed(fact);
+        }
+      }
       _ => {}
     }
     Next::Heard(fact)
+  }
+
+  /// What the body keeps of the facts that it heard, which the image of the life holds: what an
+  /// image gave of it to this fresh ear, or else `first`. The body holds no borrow of it across
+  /// an await, so the life reads it between two runs.
+  pub fn keeps<S: Serialize + DeserializeOwned + 'static>(
+    &mut self,
+    first: S,
+  ) -> Result<Rc<RefCell<S>>, Fault> {
+    let mut imaged = self.imaged.borrow_mut();
+    let kept = match imaged.given.take() {
+      Some(given) => serde_json::from_value(given)
+        .map_err(|no| Fault::refused(format!("the image holds another state of the ear: {no}")))?,
+      None => first,
+    };
+    let kept = Rc::new(RefCell::new(kept));
+    let held = Rc::clone(&kept);
+    imaged.gives = Some(Box::new(move || serde_json::to_value(&*held.try_borrow().ok()?).ok()));
+    Ok(kept)
   }
 
   /// What the coroutine told since, taken, and what the verb the body called last came to, when it came. The coroutine
@@ -394,6 +462,14 @@ impl<W: 'static> Co<W> {
 
   /// What the ear says or tells, to the coroutine, which counts it until it gives it to the life.
   fn spoke(&mut self, spoken: Spoken) {
+    if let Spoken::Saying(saying) = &spoken
+      && saying.kind() == "started"
+    {
+      let mut imaged = self.imaged.borrow_mut();
+      if !imaged.started.iter().any(|one| one == saying.about()) {
+        imaged.started.push(saying.about().to_owned());
+      }
+    }
     self.unsaid.set(self.unsaid.get() + 1);
     self.spoken.borrow_mut().push_back(spoken);
   }
@@ -417,6 +493,7 @@ struct Coroutine {
   answer: Option<Result<Object, Fault>>,
   ended: Option<Step>,
   given: bool,
+  imaged: Rc<RefCell<Imaged>>,
 }
 
 impl Ear for Coroutine {
@@ -424,7 +501,7 @@ impl Ear for Coroutine {
     if let Heard::Answer(got) = heard {
       self.tell(Event::Answer(got));
     } else if let Heard::Fact(fact) = heard
-      && !std::mem::take(&mut self.given)
+      && !mem::take(&mut self.given)
     {
       self.tell(Event::Heard(fact));
     }
@@ -437,6 +514,7 @@ impl Ear for Coroutine {
   /// past the first waits here for the next poll, so a resume never gives it and the work of an ear never speaks
   /// while the ear hears: each thing it says lands in the log alone, as a later life says it again.
   fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+    self.flown();
     self.tell(Event::Driven);
     if let Some(spoken) = self.accord.pop_front() {
       return Poll::Ready(self.given(spoken));
@@ -454,12 +532,64 @@ impl Ear for Coroutine {
   fn answered(&mut self, got: Result<Object, Fault>) {
     self.answer = Some(got);
   }
+
+  /// Each act in flight goes out as the question that the ear heard.
+  fn image(&self) -> Option<Value> {
+    let imaged = self.imaged.borrow();
+    let asked = imaged.started.iter().filter_map(|id| imaged.asked.get(id));
+    let flight =
+      asked.map(|fact| serde_json::to_value(&fact.0).ok()).collect::<Option<Vec<_>>>()?;
+    let resumed: Vec<&String> = imaged.resumed.iter().collect();
+    let kept = match &imaged.gives {
+      Some(gives) => gives()?,
+      None => Value::Null,
+    };
+    Some(json!({ "flight": flight, "resumed": resumed, "kept": kept }))
+  }
+
+  /// The body is not polled yet, so it finds its state where it asks for what it keeps. It holds
+  /// each act in flight as the ear before it did, each an act that an earlier life took, and the
+  /// body is told them the first time the life drives the ear, as [`Coroutine::flown`] says.
+  fn imaged(&mut self, mut part: Value) {
+    let mut imaged = self.imaged.borrow_mut();
+    let names = |part: &Value| -> Vec<String> {
+      let held = part.as_array().into_iter().flatten();
+      held.filter_map(|one| one.as_str().map(str::to_owned)).collect()
+    };
+    imaged.resumed.extend(names(&part["resumed"]));
+    let flight = part["flight"].take();
+    let flight = serde_json::from_value::<Vec<Object>>(flight).unwrap_or_default();
+    for fact in flight.into_iter().filter_map(Fact::owned) {
+      imaged.resumed.insert(fact.about().to_owned());
+      imaged.started.push(fact.about().to_owned());
+      imaged.asked.insert(fact.about().to_owned(), fact);
+    }
+    imaged.owed = true;
+    imaged.given = Some(part["kept"].take()).filter(|kept| !kept.is_null());
+  }
 }
 
 impl Coroutine {
   /// One event, told to the body.
   fn tell(&mut self, event: Event) {
     self.events.borrow_mut().push_back(event);
+  }
+
+  /// Each act that an image gave in flight, told to the body as the question that the ear before
+  /// it heard, the first time the life drives the ear. A life that opens from an image says each
+  /// entry after the image first, and the ear hears them: an act that such an entry ended is done
+  /// by then, so the body is not told it, and the ear takes no act that the record ended.
+  fn flown(&mut self) {
+    let flight: Vec<Fact> = {
+      let mut imaged = self.imaged.borrow_mut();
+      if !mem::take(&mut imaged.owed) {
+        return;
+      }
+      imaged.started.iter().filter_map(|id| imaged.asked.get(id).cloned()).collect()
+    };
+    for fact in flight {
+      self.tell(Event::Heard(fact));
+    }
   }
 
   /// What the body said, given to the life, which says it before it polls the body again.
@@ -552,13 +682,14 @@ where
 {
   let (events, spoken) = (Queue::default(), Queue::default());
   let unsaid = Rc::new(Cell::new(0));
+  let imaged = Rc::new(RefCell::new(Imaged::default()));
   let co = Co {
     events: Rc::clone(&events),
     spoken: Rc::clone(&spoken),
     unsaid: Rc::clone(&unsaid),
     works: SelectAll::new(),
     taken: HashMap::new(),
-    resumed: HashSet::new(),
+    imaged: Rc::clone(&imaged),
     heard: VecDeque::new(),
     driven: false,
     began: false,
@@ -574,6 +705,7 @@ where
     answer: None,
     ended: None,
     given: false,
+    imaged,
   })
 }
 
@@ -634,14 +766,14 @@ pub(crate) fn spawned<T: Send + 'static>(
 pub fn reactor() -> &'static Handle {
   static REACTOR: OnceLock<Handle> = OnceLock::new();
   REACTOR.get_or_init(|| {
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    let runtime = Builder::new_current_thread()
       .enable_all()
       .build()
       .expect("the machine gives the ears a reactor");
     let handle = runtime.handle().clone();
     thread::Builder::new()
       .name("furb-reactor".to_owned())
-      .spawn(move || runtime.block_on(std::future::pending::<()>()))
+      .spawn(move || runtime.block_on(future::pending::<()>()))
       .expect("the machine gives the reactor a thread");
     handle
   })

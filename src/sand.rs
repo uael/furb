@@ -10,15 +10,20 @@
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{mem, time::Duration};
 
-use monty::{MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError};
+use monty::{Dump, MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError, Session, SessionRef};
 use monty_types::{
   CallArgs, CompileOptions, ExcType, MontyException, MontyUuid, NameLookupResult, NamedValues,
   OsFunctionCall, PrintWriter, ResourceLimits, ResourceTracker,
 };
 
 use crate::value::{Fault, Object};
+use std::{cell::Cell, time::Instant};
 
 /// How many allocations the collector of cycles lets pass between two of its runs. Monty runs it after 100000
 /// allocations by default, and each run walks every candidate of a cycle and all that it reaches, which in a life
@@ -38,7 +43,7 @@ pub(crate) const TURN: Duration = Duration::from_secs(30);
 #[cfg(test)]
 thread_local! {
   /// The bound of each sandbox that this thread makes, which a test sets short.
-  pub(crate) static BOUND: std::cell::Cell<Duration> = const { std::cell::Cell::new(TURN) };
+  pub(crate) static BOUND: Cell<Duration> = const { Cell::new(TURN) };
 }
 
 /// The name of the function of the host that an entry calls first, whose answer is the body of the entry.
@@ -114,9 +119,29 @@ impl Sand {
   }
 
   /// How many runs the session began.
-  #[cfg_attr(not(test), expect(dead_code, reason = "only the tests call it"))]
   pub(crate) fn fed(&self) -> usize {
     self.fed
+  }
+
+  /// The session between two runs, as the image that monty dumps of it.
+  pub(crate) fn image(&self) -> Result<Vec<u8>, Fault> {
+    let State::Idle(repl) = &self.state else {
+      return Err(Fault::refused("a sandbox gives its image only between two runs"));
+    };
+    monty::dump("furb", None, &[], SessionRef::Idle(repl))
+      .map_err(|no| Fault::refused(format!("monty dumps no image: {no}")))
+  }
+
+  /// A sandbox on the session that monty loads from an image, which began `fed` runs. The image
+  /// holds the bound of a turn that the session held and no clock of the process, so the bound of
+  /// this process is set again.
+  pub(crate) fn of_image(image: &[u8], fed: usize) -> Result<Self, Fault> {
+    let loaded = Dump::load(image).map_err(|no| Fault::refused(no.to_string()))?;
+    let Session::Idle(mut repl) = loaded.state else {
+      return Err(Fault::refused("the image holds no session between two runs"));
+    };
+    repl.tracker_mut().set_max_turn_duration(turn());
+    Ok(Self { state: State::Idle(*repl), fed, bounded: true, applied: true })
   }
 
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.
@@ -150,7 +175,7 @@ impl Sand {
   pub(crate) fn enter<H: Host, T>(
     &mut self,
     host: &mut H,
-    body: impl FnOnce(&mut Sand, &mut H) -> T,
+    body: impl FnOnce(&mut Self, &mut H) -> T,
   ) -> Result<T, Fault> {
     let mut entering = Entering { body: Some(body), host, got: None };
     let mut inputs = NamedValues::new();
@@ -305,6 +330,24 @@ impl Sand {
       }
     }
   }
+}
+
+thread_local! {
+  /// When the step of a word that runs on this thread began, while one runs under the bound.
+  static STEP: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+/// A step of a word under the bound begins on this thread, or it ends when `on` is false.
+pub(crate) fn step(on: bool) {
+  STEP.set(on.then(Instant::now));
+}
+
+/// Whether the step of a word that runs on this thread has run for longer than the bound of a
+/// turn. monty counts a turn again from each round trip to the host, so a word that loops on an
+/// answer of the host, as a reading of the clock, never meets the bound of monty; the host refuses
+/// such an answer once the step ran past it, and the refusal raises in the word.
+pub(crate) fn past() -> Option<Duration> {
+  STEP.get().filter(|at| at.elapsed() >= turn()).map(|_| turn())
 }
 
 /// The bound of the turn of a sandbox: [`TURN`], or what the test set.

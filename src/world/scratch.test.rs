@@ -1,15 +1,27 @@
 //! The scratch directory, proved where no life reaches it: its place, the paths of its scheme, and the files that a
 //! record makes again in it. The tests of the World drive it in a life.
 
-use std::{fs, path::PathBuf};
+use std::{
+  fs,
+  path::PathBuf,
+  time::{Duration, SystemTime},
+};
 
-use super::{SCRATCH, Scratch, WHOLE};
+use super::{SCRATCH, Scratch, WHOLE, reaped};
 use crate::testing::Yard;
 use crate::value::{Object, Text};
+use crate::world;
+use std::env;
+use std::ffi;
+#[cfg(unix)]
+use std::os::unix::fs as unix_fs;
+use std::process;
+use std::slice;
+use std::sync;
 
 /// A directory of its own for one test, which does not stand yet.
 fn place(name: &str) -> Yard {
-  Yard::unmade(format!("furb-scratch-{name}-{}", std::process::id()))
+  Yard::unmade(format!("furb-scratch-{name}-{}", process::id()))
 }
 
 /// A log of the host that keeps nothing, for a record whose files the machine takes.
@@ -32,7 +44,7 @@ fn a_record_has_one_scratch_directory_in_the_cache_of_furb_under_a_short_name_of
   let at = place("canonical");
   fs::create_dir_all(at.join("real")).unwrap();
   #[cfg(unix)]
-  std::os::unix::fs::symlink(at.join("real"), at.join("link")).unwrap();
+  unix_fs::symlink(at.join("real"), at.join("link")).unwrap();
   let of = |path: PathBuf| {
     Scratch::of(&path).unwrap().expect("the machine of the test has a cache of furb")
   };
@@ -45,11 +57,11 @@ fn a_record_has_one_scratch_directory_in_the_cache_of_furb_under_a_short_name_of
     "a link to the folder names the same record"
   );
   assert_ne!(of(at.join("real").join("b.jsonl")).path(), one.path());
-  let cache = crate::world::cache()
-    .map(|cache| Scratch::at(cache.join("scratch")).unwrap().path().to_path_buf());
+  let cache =
+    world::cache().map(|cache| Scratch::at(cache.join("scratch")).unwrap().path().to_path_buf());
   assert_eq!(one.path().parent(), cache.as_deref());
-  assert_eq!(one.path().file_name().map(std::ffi::OsStr::len), Some(16));
-  assert_eq!(Scratch::at("a/../b").unwrap().path(), std::env::current_dir().unwrap().join("b"));
+  assert_eq!(one.path().file_name().map(ffi::OsStr::len), Some(16));
+  assert_eq!(Scratch::at("a/../b").unwrap().path(), env::current_dir().unwrap().join("b"));
   fs::remove_dir_all(&at).unwrap();
 }
 
@@ -85,7 +97,7 @@ fn a_link_that_leads_out_of_the_directory_is_refused_and_a_listing_reads_no_link
   fs::write(away.join("secret.md"), "secret").unwrap();
   let scratch = Scratch::at(&at).unwrap();
   scratch.made().unwrap();
-  std::os::unix::fs::symlink(&away, at.join("away")).unwrap();
+  unix_fs::symlink(&away, at.join("away")).unwrap();
   let refused = |path: &str, content: Option<&str>| {
     scratch.served(path, content.map(str::to_owned), None).unwrap_err().message()
   };
@@ -135,7 +147,7 @@ fn a_missing_directory_takes_the_last_write_of_each_path_in_the_order_of_those_w
 #[test]
 fn a_file_that_the_machine_refuses_is_told_to_the_log_of_the_host() {
   let at = place("refused");
-  let told = std::sync::Mutex::new(Vec::new());
+  let told = sync::Mutex::new(Vec::new());
   Scratch::at(&at).unwrap().remade(
     &[wrote("write1", "../out.md", "out"), wrote("write2", "plan.md", "in")],
     &|line| {
@@ -174,7 +186,9 @@ fn a_whole_directory_stands_a_directory_that_is_not_whole_is_made_again_and_a_ne
   );
   assert!(!at.with_file_name(format!("{}.new", at.file_name().unwrap().display())).exists());
   Scratch::at(&at).unwrap().remade(&[], &quiet);
-  assert!(!at.exists(), "a new record starts with an empty directory");
+  assert!(!at.exists(), "a new record starts with no directory");
+  Scratch::at(&at).unwrap().remade(&[done("bash1", Object::string("out"))], &quiet);
+  assert!(!at.exists(), "a record that no write put a file in makes no directory");
 }
 
 #[test]
@@ -182,11 +196,83 @@ fn a_scratch_directory_of_its_own_has_a_short_name_and_goes_with_the_last_ear_th
   let own = Scratch::own();
   let held = own.clone();
   let at = own.made().unwrap().to_path_buf();
-  assert!(at.starts_with(std::env::temp_dir()));
+  assert!(at.starts_with(env::temp_dir()));
   let socket = at.join("pymp-abcdefgh").join("listener-abcdefgh");
   assert!(socket.as_os_str().len() < 104, "a socket of python fits under {}", at.display());
   drop(own);
   assert!(at.is_dir());
   drop(held);
   assert!(!at.exists());
+}
+
+#[test]
+fn a_reap_removes_the_scratch_of_a_record_past_its_days_that_no_life_holds_and_a_reopen_makes_it_again()
+ {
+  let at = place("reap");
+  let root = at.join("scratch");
+  let named = |one: char| root.join(one.to_string().repeat(16));
+  let (old, held, recent, reopened) = (named('a'), named('b'), named('c'), named('d'));
+  let record = [wrote("write1", "notes.md", "kept")];
+  Scratch::at(&old).unwrap().remade(&record, &quiet);
+  Scratch::at(&reopened).unwrap().remade(&record, &quiet);
+  // A life that opens again on a whole directory holds it too.
+  let again = Scratch::at(&reopened).unwrap();
+  again.remade(&record, &quiet);
+  Scratch::at(&recent).unwrap().remade(&record, &quiet);
+  let life = Scratch::at(&held).unwrap();
+  life.remade(&record, &quiet);
+  fs::write(old.join("made"), "a file that a command made").unwrap();
+  let later = SystemTime::now() + Duration::from_hours(24 * 8);
+  let mark = fs::File::options().write(true).open(recent.join(WHOLE)).unwrap();
+  mark.set_modified(later).unwrap();
+  let gone = reaped(&root, Duration::from_hours(24 * 7), later);
+  assert_eq!(
+    gone,
+    slice::from_ref(&old),
+    "only the directory that no life holds and no use kept goes"
+  );
+  assert!(held.join("notes.md").is_file() && recent.join("notes.md").is_file());
+  assert!(reopened.join("notes.md").is_file(), "a life that reopened a whole directory holds it");
+  Scratch::at(&old).unwrap().remade(&record, &quiet);
+  assert_eq!(fs::read_to_string(old.join("notes.md")).unwrap(), "kept", "a reopen writes it again");
+  assert!(!old.join("made").exists(), "a file that a command made is lost");
+  drop((life, again));
+  fs::remove_dir_all(&at).unwrap();
+}
+
+#[test]
+fn a_reap_keeps_a_directory_whose_file_changed_within_the_days_and_goes_on_past_one_that_will_not_go()
+ {
+  let at = place("reap-kept");
+  let root = at.join("scratch");
+  let named = |one: char| root.join(one.to_string().repeat(16));
+  let (written, stuck, free) = (named('a'), named('b'), named('c'));
+  let record = [wrote("write1", "notes.md", "kept")];
+  for one in [&written, &stuck, &free] {
+    Scratch::at(one).unwrap().remade(&record, &quiet);
+  }
+  let later = SystemTime::now() + Duration::from_hours(24 * 8);
+  fs::create_dir_all(written.join("deep/down")).unwrap();
+  let file = fs::File::create(written.join("deep/down/log")).unwrap();
+  file.set_modified(later).unwrap();
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt;
+    fs::create_dir_all(stuck.join("locked")).unwrap();
+    fs::write(stuck.join("locked/file"), "").unwrap();
+    fs::set_permissions(stuck.join("locked"), fs::Permissions::from_mode(0o555)).unwrap();
+  }
+  let gone = reaped(&root, Duration::from_hours(24 * 7), later);
+  assert!(gone.contains(&free), "a directory past its days goes");
+  assert!(!gone.contains(&written), "a change at any depth keeps a directory");
+  #[cfg(unix)]
+  assert_eq!(gone, slice::from_ref(&free), "a directory that will not go stays");
+  assert!(written.join("deep/down/log").is_file());
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt;
+    assert!(stuck.join("locked/file").is_file(), "a directory that will not go stays");
+    fs::set_permissions(stuck.join("locked"), fs::Permissions::from_mode(0o755)).unwrap();
+  }
+  fs::remove_dir_all(&at).unwrap();
 }

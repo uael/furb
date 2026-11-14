@@ -1,0 +1,30 @@
+ furb · how long does an open take              [ Resolve ]    All projects ▾         this machine
+┃
+┃ how long does an open take                                   Resolved 1 ▾
+┃ (the model answers)
+┃                                                              ▌✓ how long does an open take   now▌
+
+       opus/high
+    1  found = 2
+    2  close('The open takes **329 s**. Two stages ho…+250
+
+  The open takes 329 s. Two stages hold most of it: 181 s
+  to send each entry to the ears of the host, and 104 s in
+  the boot.
+
+  • seed reads each chain once
+  • the image skips the boot
+
+      python
+   1  open = boot + seed
+
+  See the trace.
+
+
+
+
+
+
+┃ Reply to this thread
+  This computer   furb ▾               opus/high   ○ Python
+  ~/src/furb-try                              ⌃N new thread

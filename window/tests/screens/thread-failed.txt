@@ -1,0 +1,30 @@
+ furb · why is the window stuck after a…        [ Resolve ]    All projects ▾         this machine
+┃
+┃ why is the window stuck after a switch of model              Resolved 1 ▸
+┃ (the model fails)
+┃
+
+       opus/high
+    1  x = 1
+    ✗  raise ValueError('a maximum of 4 blocks with ca…+29
+       ValueError: a maximum of 4 blocks with
+       cache_control may be provided
+    3  close(None)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+┃ Reply to this thread
+  This computer   furb ▾               opus/high   ○ Python
+  ~/src/furb-try                              ⌃N new thread

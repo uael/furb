@@ -10,11 +10,12 @@ use crate::value::Fault;
 /// Why a store could not open, read or keep the record at a path.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum StoreError {
-  /// A file of the record or of its lease could not be opened, read or written.
-  #[error("{source}: {}", .path.display())]
+  /// A file of the record or of its lease could not be opened, read or written. The text of the
+  /// system comes last, since it differs on each system.
+  #[error("Could not use {}: {source}", .path.display())]
   Io { path: PathBuf, source: io::Error },
   /// The database of the record refused.
-  #[error("{source}: {}", .path.display())]
+  #[error("Could not use {}: {source}", .path.display())]
   Sqlite { path: PathBuf, source: rusqlite::Error },
   /// An entry of the record is no fact.
   #[error("Invalid record entry at {at} in {}.", .path.display())]

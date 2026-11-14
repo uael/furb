@@ -2,8 +2,7 @@
 
 The engine of furb for Node.js 22 or later and Bun 1.4.2 or later, on macOS, Linux and Windows. It runs the same Rust
 crate and monty sandbox as the Python package, through N-API. Use it to open a life from a program, as [the
-examples](https://github.com/uael/furb/blob/main/docs/examples/README.md) do, or to write a host of your own, as the TUI
-does.
+examples](https://github.com/uael/furb/blob/main/docs/examples/README.md) do, or to write a host of your own.
 
 ## Install
 
@@ -38,7 +37,7 @@ try {
 ```
 
 Views, queries and controls are synchronous. An `Act` has an `id`, converts to its name as a string, and can be awaited.
-Its Promise resolves with its outcome or rejects with an error that names the engine's fault. A TUI is not part of this
+Its Promise resolves with its outcome or rejects with an error that names the engine's fault. A window is not part of this
 package.
 
 ## Sessions
@@ -48,7 +47,7 @@ this package writes. `Engine.open(ears, opening)` opens it as every host of the 
 the ears of the host, and then on the ears of the crate, which are the provider of the models, the extensions, the ear
 of each official extension, the files, the commands, time, and the store of the record. Its `record` getter gives the
 record it opened on. The extensions enable at the start of the life what the configs of the user and of the directory
-turn on, which [Extensions](https://github.com/uael/furb/blob/main/docs/extensions.md) says: `SessionOptions.extensions`
+turn on, which [Extensions](https://github.com/uael/furb/blob/main/docs/skills.md) says: `SessionOptions.skills`
 is false to enable nothing new, and `config` names the config directory of the user. A life runs what its record enables
 either way. The package also gives the ears of the files, the commands, time and the store one by one, as
 `files(scratch)`, `bash(scratch)`, `time()` and `store(path)`, for a host that boots an engine by hand. The
@@ -188,7 +187,7 @@ the whole file again, writes the journal again with each change that it can read
 lines it removed, as `{ kept, removed }`. `session.changes.renew()` starts a new journal and keeps the damaged one
 beside it. Keep both companions with the JSONL record. The session saves `.session.json` whole with `saveFile(path,
 text)`, which writes `<path>.tmp` and gives it the name of the file. A save that fails throws an error that names the
-file, with the error of the system as its cause. The TUI saves its own files with it.
+file, with the error of the system as its cause.
 
 ## The log
 
@@ -206,9 +205,9 @@ reads a record with no life, so a record of any build opens: it gives the engine
 the record, as the record names them, and `null` for each that it does not name, the engine and the version of this
 build, whether its facts are those of the log, and the facts. The facts are those of the log while the log agrees with
 the record, and else those that the record kept, with the facts that the engine said and the record does not keep, as
-far as the kept facts show them: each chain and each rung that a kept act names, the run of the word of each rung that
-the gate let run, the findings of a word that the gate refused, and the done of each act that the operator closed or
-cancelled.
+far as the kept facts show them: each chain and each rung that a kept act names, the run of the word of each rung,
+which a record of an earlier build holds after its gate let it run, with the findings of a word that the gate refused,
+and the done of each act that the operator closed or cancelled.
 
 ## Read a record
 
@@ -225,8 +224,8 @@ not what an extension started on it.
 ## Images
 
 `session.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type, size, and
-`furb-image://` reference. A session with no record copies it into `.furb/images` of its directory. The `.furb` that it
-makes holds a `.gitignore` that keeps it out of version control but its `config.json`, as `furbDirectory` makes it. Put
+`furb-image://` reference. A session with no record copies it into `.furb/images` of its directory. Each open of it writes a `.gitignore` in `.furb`, when it has none, that keeps it out of version control but its
+`config.json`, as `furbDirectory` does. Put
 that reference in the prompt as a Markdown image, `![design](furb-image://...)`, which `imageReference(name, uri)`
 writes and `imageReferences(message)` reads. The provider hands the python of the turn as it is, and adds each image
 that the message of a prompt of that turn references, to a model that takes images. The stored bytes are checked against
@@ -238,26 +237,24 @@ record when moving a session.
 The model of a life is the views that a host derives from the acts of a life, in `src/life`, which `furb/life`
 gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
 
-- `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, whether a site is the operator or a member
-  of the operator, `operated`, what a command came to, `Exit`, the measure of a chain, `Measure`, which `measureOf`
-  gives from the answers of its models, a compaction of a chain, `Compaction`, which an `Activity` keeps for each
-  prefix said on a chain after its birth, and whether an act failed or was cancelled.
-- `asks`: the desk of the operator, `desk`: each question that waits for him and each notice that he did not dismiss,
-  the oldest first, each with its chain and the choices of its shape, `choicesOf`: yes and no for a bool, and each
-  value of a Literal. `aimed` gives the ask that the operator acts on, on the chain that he reads, `beside` the ask a
-  step after or before it, and `wants` what an ask wants of him, in words.
-- `loom`: the rows of the loom, one for the operator and one for each chain in the order of the tree, with the cells
-  of their moments, what each chain does now, `nowOf`, in words that a person reads, a count of seconds as a person
+- `acts`: the act as a view reads it, `Act`, which the daemon gives with its meaning, and what a view reads of it:
+  whether it is done, `isDone`, what it came to, `outcomeOf`, whether a pause holds it, `isPaused`, and whether it
+  failed or was cancelled; the kinds of work, `WORK`, whether a site is the operator or a member of the operator,
+  `operated`, what a command came to, `Exit`, the measure of a chain, `Measure`, and a compaction of a chain,
+  `Compaction`, which an `Activity` keeps for each prefix said on a chain after its birth.
+- `asks`: an ask of the desk of the operator, `Ask`, as the crate folds it, with the label of its chain. `aimed` gives
+  the ask that the operator acts on, on the chain that he reads, `beside` the ask a step after or before it, and `wants`
+  what an ask wants of him, in words.
+- `loom`: what each chain does now, `nowOf`, in words that a person reads, a count of seconds as a person
   reads it, `duration`, and the acts as they stood at a moment, `asOf`.
 - `ladder`: the lines of the thread of a chain as a person reads it at a glance, `thread`: each prompt with the rungs
   of its ladder and their acts, the last steps at each level, and one line in place of each run of earlier ones, read
   from the index of acts that a host holds.
-- `threads`: the threads of a chain, `chainThreads`, where a thread is a prompt to a model with the messages that came
-  to it, and the asides of the chain, `chainAsides`; the tree of a list of threads, `nestThreads`, where each thread
-  that the ladder of a thread made is its agent, in the order of the list of the threads, `orderThreads`; and how a
-  thread concerns the operator, `concerns` and `attentionOf`.
-- `map`: the place of each chain on the map, which no later chain moves, the messages that flow between chains, and
-  the way of a message along the tree of hires.
+- `threads`: the types of what the crate gives for the threads of a chain (a thread and a node
+  of the tree) and `threadWork`, the acts of a thread. The meaning itself, the nesting of the agents, the order, the
+  titles, the unread counts and how a thread concerns the operator, stands in the crate and comes from a life through
+  its verbs `threads` and `rail`.
+- `map`: the messages that flow between chains.
 - `program`: the program of a thread as the feed shows it, `threadProgram`: the words of its steps as one program,
   with each act on the line of the word that made it, `placed`, what the acts of each line came to, and the line that
   runs; and a line of python laid out in rows of a width, `layout`.

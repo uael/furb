@@ -7,12 +7,12 @@
 //! life polls, and a call that its reply no longer needs ends. It streams, and the host is told
 //! what the model writes as it writes it; what the reply came to the ear says of its own accord.
 //! The ear reads the statements of the word of a reply as the model finishes them, and when one
-//! cannot be python it ends the reply there, with the word as far as that statement, which the gate
-//! refuses. The statements that the gate finds nothing against run as the model writes the rest:
-//! the ear says each new part of them as a writing of the rung, a fact that the Kernel hears and
-//! runs, and a part that raised, which the Kernel says it ran with, ends the reply with the word
-//! that ran. A writing is no act that the ear awaits, since a part that prompts makes a chain ask
-//! this ear for a reply, which it takes only at a yield.
+//! cannot be python it ends the reply there, with the word as far as that statement, whose run
+//! raises there. The statements before it run as the model writes the rest: the ear says each new
+//! part of them as a writing of the rung, a fact that the Kernel hears and runs, and a part that
+//! raised, which the Kernel says it ran with, ends the reply with the word that ran. A writing is
+//! no act that the ear awaits, since a part that prompts makes a chain ask this ear for a reply,
+//! which it takes only at a yield.
 
 mod answer;
 pub mod catalog;
@@ -38,8 +38,13 @@ use std::{
 
 use futures::future::BoxFuture;
 use serde_json::Value;
+use tokio::task::JoinError;
 
 use self::search::Searches;
+pub(crate) use self::{
+  model::{KEY_AUTOMATIC, KEY_CLASSES},
+  thinking::{KEY_THINKING, THINKING},
+};
 use super::interrupted;
 use crate::{
   ear::{Co, Ear, Next, hearing},
@@ -51,7 +56,7 @@ use self::hearer::{Hearer, Replied, searched};
 use self::messages::banner;
 use self::model::{Class, Streams, streams};
 use self::retry::{LIMIT_POLL, resets};
-use self::thinking::{ENV_THINKING, KEY_THINKING, Thinking, Thought, thinking};
+use self::thinking::{ENV_THINKING, Thinking, Thought, thinking};
 use self::word::RAN;
 pub use self::{
   model::Model,
@@ -87,7 +92,7 @@ pub type Search = Arc<dyn Fn(&str) -> Option<Searches> + Send + Sync>;
 pub struct Provider {
   directory: String,
   config: Option<PathBuf>,
-  extensions: Option<Vec<Advertised>>,
+  skills: Option<Vec<Advertised>>,
   models: Arc<RwLock<Vec<Model>>>,
   actor: Option<String>,
   thinking: Thinking,
@@ -97,10 +102,70 @@ pub struct Provider {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  inspecting: bool,
-  held: bool,
+  members: Members,
+  mode: Mode,
   /// The system prompt of each request: the engine of the life, minified.
   system: Arc<str>,
+}
+
+/// A home of what a life offers, which each clone shares, so a host that changes it changes the
+/// standing of each life that holds it at its next stand.
+#[derive(Clone, Default)]
+pub struct Shared<T>(Arc<RwLock<T>>);
+
+impl<T: Clone> Shared<T> {
+  /// A home that holds this value.
+  #[must_use]
+  pub fn new(value: T) -> Self {
+    Self(Arc::new(RwLock::new(value)))
+  }
+
+  /// Put this value in place of the one that the home held.
+  pub fn set(&self, value: T) {
+    *self.0.write().unwrap_or_else(PoisonError::into_inner) = value;
+  }
+
+  /// The value that the home holds now.
+  #[must_use]
+  pub fn get(&self) -> T {
+    self.0.read().unwrap_or_else(PoisonError::into_inner).clone()
+  }
+}
+
+/// The one home of the logins of the members who answer as the operator, which a host changes
+/// as its access list changes.
+pub type Members = Shared<Vec<String>>;
+
+/// The one home of the names of the models of the roster of a life, which a host changes to offer
+/// another model: the stand that reads the catalog again keeps them. None is unsaid.
+pub type Roster = Shared<Option<Vec<String>>>;
+
+impl From<Vec<String>> for Roster {
+  fn from(names: Vec<String>) -> Self {
+    Self::new(Some(names))
+  }
+}
+
+/// What a life does with its provider. A life that only inspects its record asks no model and
+/// refuses the question search. When the record holds the standing of its root already, the
+/// provider also answers no stand: the standing of the life stays the one that its record holds,
+/// and no change of it reaches a chain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Mode {
+  Live,
+  Inspecting,
+  Held,
+}
+
+impl Mode {
+  /// The mode of a life that does work or not, whose record holds the standing of its root or not.
+  pub(crate) fn of(works: bool, stood: bool) -> Self {
+    match (works, stood) {
+      (true, _) => Self::Live,
+      (false, true) => Self::Held,
+      (false, false) => Self::Inspecting,
+    }
+  }
 }
 
 /// An extension as the standing gives it: its name, the file of its word, its life word, and
@@ -111,17 +176,29 @@ pub type Advertised = (String, String, String, bool);
 /// settings give them.
 type Settings = (Vec<Model>, Option<String>, Thinking);
 
-type Refresh = Arc<dyn Fn() -> BoxFuture<'static, Result<Settings, String>> + Send + Sync>;
+type Refresh = Arc<dyn Fn() -> BoxFuture<'static, Result<Settings, Unrefreshed>> + Send + Sync>;
+
+/// Why a refresh read no settings: the configs refused them, the roster names a model that the
+/// catalog does not hold, or its task ended before it read them.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Unrefreshed {
+  #[error(transparent)]
+  Settings(#[from] catalog::Error),
+  #[error(transparent)]
+  Roster(#[from] catalog::Unknown),
+  #[error(transparent)]
+  Lost(#[from] JoinError),
+}
 
 impl Provider {
   /// A provider of these models, on a directory, whose model thinks
   /// [`THINKING`](thinking::THINKING) tokens at most in one turn.
-  pub fn new(directory: impl Into<String>, models: Vec<Model>) -> Provider {
+  pub fn new(directory: impl Into<String>, models: Vec<Model>) -> Self {
     let directory = directory.into();
-    Provider {
+    Self {
       directory,
       config: None,
-      extensions: None,
+      skills: None,
       models: Arc::new(RwLock::new(models)),
       actor: None,
       thinking: Thinking::default(),
@@ -131,46 +208,37 @@ impl Provider {
       retries: None,
       refresh: None,
       gone: Vec::new(),
-      inspecting: false,
-      held: false,
+      members: Members::default(),
+      mode: Mode::Live,
       system: Arc::from(crate::SYSTEM),
     }
   }
 
   /// The config directory of the user whose `config.json` the standing reads for the classes
-  /// and the list of automatic work, else the one that [`crate::extension::Places::here`]
+  /// and the list of automatic work, else the one that [`crate::skill::Places::here`]
   /// names: a life that opens on a config directory of its own reads no file of the machine.
   #[must_use]
-  pub fn config(mut self, config: impl Into<PathBuf>) -> Provider {
+  pub fn config(mut self, config: impl Into<PathBuf>) -> Self {
     self.config = Some(config.into());
     self
   }
 
   /// The most tokens of thought of a model in one turn.
   #[must_use]
-  pub fn thinking(mut self, thinking: Thinking) -> Provider {
+  pub fn thinking(mut self, thinking: Thinking) -> Self {
     self.thinking = thinking;
     self
   }
 
-  /// Whether the life only inspects its record. Such a provider refuses the question search.
+  /// What the life does with the provider, as [`Mode`] says.
   #[must_use]
-  pub(crate) fn inspecting(mut self, yes: bool) -> Provider {
-    self.inspecting = yes;
-    self
-  }
-
-  /// Whether the record of the life holds the standing of its root already, and the life only
-  /// inspects it. Such a provider answers no stand: the standing of the life stays the one that its
-  /// record holds, and no change of it reaches a chain.
-  #[must_use]
-  pub(crate) fn held(mut self, yes: bool) -> Provider {
-    self.held = yes;
+  pub(crate) fn mode(mut self, mode: Mode) -> Self {
+    self.mode = mode;
     self
   }
 
   #[must_use]
-  pub(crate) fn refreshing(mut self, refresh: Refresh) -> Provider {
+  pub(crate) fn refreshing(mut self, refresh: Refresh) -> Self {
     self.refresh = Some(refresh);
     self
   }
@@ -178,7 +246,7 @@ impl Provider {
   /// The system prompt of each request: the engine that the life runs, minified, which is this
   /// build's own, [`crate::SYSTEM`], unless the record of the life holds another.
   #[must_use]
-  pub fn system(mut self, system: Arc<str>) -> Provider {
+  pub fn system(mut self, system: Arc<str>) -> Self {
     self.system = system;
     self
   }
@@ -186,7 +254,7 @@ impl Provider {
   /// The names of the roster and of the actor that the catalog lacked when the life opened. The ear
   /// tells each chain once, at its first stand, and the standing leaves them out.
   #[must_use]
-  pub fn gone(mut self, names: Vec<String>) -> Provider {
+  pub fn gone(mut self, names: Vec<String>) -> Self {
     self.gone = names;
     self
   }
@@ -196,45 +264,55 @@ impl Provider {
     (models, self.actor, self.thinking)
   }
 
+  /// The home of the logins of the members who answer as the operator, which the operator entry of
+  /// the roster lists in place of its efforts at each stand, so a prompt asks one person with
+  /// `to="operator/<login>"`.
+  #[must_use]
+  pub fn members(mut self, members: Members) -> Self {
+    self.members = members;
+    self
+  }
+
   /// The actor a prompt goes to when it names none, which is the first model at the level of an
   /// actor that names none when none is given, and the operator when there is no model.
   #[must_use]
-  pub fn actor(mut self, actor: Option<String>) -> Provider {
+  pub fn actor(mut self, actor: Option<String>) -> Self {
     self.actor = actor;
     self
   }
 
   /// The extensions that the standing gives, from which the engine seeds the root of a new record.
   #[must_use]
-  pub fn advertises(mut self, extensions: Vec<Advertised>) -> Provider {
-    self.extensions = Some(extensions);
+  pub fn advertises(mut self, skills: Vec<Advertised>) -> Self {
+    self.skills = Some(skills);
     self
   }
 
   /// The directory of the images that a turn names.
   #[must_use]
-  pub fn images(mut self, directory: impl Into<PathBuf>) -> Provider {
+  pub fn images(mut self, directory: impl Into<PathBuf>) -> Self {
     self.images = Some(directory.into());
     self
   }
 
   /// Whom the provider tells what a model writes, as it writes it.
   #[must_use]
-  pub fn writes(mut self, writes: Writes) -> Provider {
+  pub fn writes(mut self, writes: Writes) -> Self {
     self.writes = Some(writes);
     self
   }
 
   /// How the provider asks a model again after a failure that passes.
+  #[cfg(test)]
   #[must_use]
-  pub fn backoff(mut self, backoff: Backoff) -> Provider {
+  pub(crate) fn backoff(mut self, backoff: Backoff) -> Self {
     self.backoff = backoff;
     self
   }
 
   /// Whom the provider tells each retry of a call of a model, before its wait.
   #[must_use]
-  pub fn retries(mut self, retries: Retries) -> Provider {
+  pub fn retries(mut self, retries: Retries) -> Self {
     self.retries = Some(retries);
     self
   }
@@ -262,17 +340,17 @@ impl Provider {
   /// provider gave. It is done with the turn of the model, or with a refusal; a recoverable refusal
   /// gives the model another turn with its cause, and never pauses the chain. A prompt too long for
   /// the context of the model is no recoverable refusal, so a second one in a row pauses the chain.
-  /// Its refusal says first that the prompt passes the window of the model, so the extension
-  /// compaction cuts the chain before its next reply.
+  /// Its refusal is an `Overflow`, so the extension compaction cuts the chain before its next
+  /// reply.
   /// A turn whose word lost the marks of a fence or of a tool call around it, or the line of three
   /// backticks at its end, tells its chain so once, before its done. A done of a reply that the ear
   /// did not say ends the call of its model.
   ///
-  /// The ear says each part of a word that the model finished and that the gate finds nothing
-  /// against as a writing of its rung, unless a pause holds the rung. A reply whose part ran is
-  /// done with the word that ran when the Kernel says that the part ran with a raise, when a later
-  /// statement holds a fault, and when its call fails, which is then made no more; and with its
-  /// turn when the gate finds nothing against the whole word, which holds the word that ran.
+  /// The ear says each part of a word that the model finished as a writing of its rung, unless a
+  /// pause holds the rung. A reply whose part ran is done with the word that ran when the Kernel
+  /// says that the part ran with a raise, when a later statement cannot be python, and when its
+  /// call fails, which is then made no more; and with its turn when the whole word is python and
+  /// holds the word that ran.
   ///
   /// A stand from outside an act reads the settings again, after the first: it starts, and the ear
   /// reads them on the runtime of the ears, so every chain of the life goes on meanwhile, and it is
@@ -297,7 +375,8 @@ impl Provider {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the
       // life too.
       let life = uuid().map_err(|no| Fault::refused(no.to_string()))?;
-      let mut hearer = Hearer::new(self, life);
+      let stood = co.keeps(hearer::Stood::default())?;
+      let mut hearer = Hearer::new(self, life, stood);
       loop {
         hearer.answer(&mut co).await?;
         match co.next().await {
@@ -308,6 +387,7 @@ impl Provider {
           Next::Worked(Replied::Retried(retried)) => hearer.retried(&mut co, retried).await,
           Next::Worked(Replied::Came(came)) => hearer.came(&mut co, came).await,
           Next::Worked(Replied::Searched { id, got }) => searched(&mut co, &id, got),
+          Next::Worked(Replied::Woken { chain }) => hearer.woke(&mut co, &chain).await,
         }
       }
     })

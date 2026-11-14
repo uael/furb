@@ -4,6 +4,9 @@ use std::{fs, path::PathBuf};
 
 use super::{crlf, homed, native, placed, read, text, tilded};
 use crate::testing::Yard;
+use std::env;
+use std::path;
+use std::process;
 
 #[test]
 fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_resolves_against_the_home_of_the_user() {
@@ -24,7 +27,7 @@ fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_resolves_against_the_ho
 fn a_path_under_the_home_of_the_user_is_written_with_a_tilde_in_place_of_the_home() {
   let home = PathBuf::from("/h");
   let at = |path: &str| tilded(&PathBuf::from(path), Some(&home));
-  let slash = std::path::MAIN_SEPARATOR;
+  let slash = path::MAIN_SEPARATOR;
   assert_eq!(at("/h"), "~");
   assert_eq!(at("/h/a.txt"), format!("~{slash}a.txt"));
   assert_eq!(at("/h/x/a.txt"), format!("~{slash}{}", PathBuf::from("x/a.txt").display()));
@@ -53,19 +56,19 @@ fn a_path_that_a_chain_names_is_placed_against_the_home_or_else_against_its_dire
   let here = PathBuf::from("/w");
   assert_eq!(placed(&here, "a/../b.txt").unwrap(), here.join("b.txt"));
   assert_eq!(placed(&here, "/x/b.txt").unwrap(), PathBuf::from("/x/b.txt"));
-  if let Some(home) = std::env::home_dir() {
+  if let Some(home) = env::home_dir() {
     assert_eq!(placed(&here, "~/b.txt").unwrap(), home.join("b.txt"));
   }
 }
 
 #[test]
 fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_the_entries_of_a_folder() {
-  let at = Yard::unmade(format!("furb-files-large-{}", std::process::id()));
+  let at = Yard::unmade(format!("furb-files-large-{}", process::id()));
   fs::create_dir_all(&at).unwrap();
   let content = "x".repeat(1_000_000) + "\n";
   fs::write(at.join("large.txt"), &content).unwrap();
   assert_eq!(read(&at.join("large.txt")).unwrap().content, content);
-  let shown = tilded(&at, std::env::home_dir().as_deref());
+  let shown = tilded(&at, env::home_dir().as_deref());
   fs::create_dir(at.join("sub")).unwrap();
   fs::create_dir(at.join("sub").join("deep")).unwrap();
   fs::write(at.join("B.txt"), "b").unwrap();
@@ -75,7 +78,7 @@ fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_the_entries_of_a_folder
 
 #[test]
 fn a_read_of_an_image_keeps_it_in_the_gallery_and_gives_the_markdown_image_that_names_it() {
-  let at = Yard::unmade(format!("furb-files-image-{}", std::process::id()));
+  let at = Yard::unmade(format!("furb-files-image-{}", process::id()));
   fs::create_dir_all(&at).unwrap();
   fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nthe rest").unwrap();
   fs::write(at.join("b.bin"), b"\x89 no image").unwrap();

@@ -22,6 +22,10 @@ use crate::{
   value::Fault,
   world::child::{self, Group, Unborn},
 };
+use std::process;
+use tokio::process as tokio_process;
+use tokio::sync;
+use tokio::time;
 
 /// The POSIX sh that runs a command: `/bin/sh`, and on Windows, which has none of its own, the sh
 /// of Git for Windows, which [`git_sh`] finds, or `sh` when it finds none, which a command then
@@ -47,7 +51,7 @@ const LOGIN_LIMIT: Duration = Duration::from_secs(5);
 /// service has the short PATH of its parent, which lacks the folders that the profile of the user
 /// adds, as `/opt/homebrew/bin`.
 async fn login_path() -> Option<&'static OsString> {
-  static FOUND: tokio::sync::OnceCell<Option<OsString>> = tokio::sync::OnceCell::const_new();
+  static FOUND: sync::OnceCell<Option<OsString>> = sync::OnceCell::const_new();
   let found = async {
     if cfg!(windows) {
       None
@@ -67,12 +71,12 @@ async fn asked_path(shell: &Path, limit: Duration) -> Option<OsString> {
   static MADE: AtomicUsize = AtomicUsize::new(0);
   let file = env::temp_dir().join(format!(
     "furb-login-path-{}-{}",
-    std::process::id(),
+    process::id(),
     MADE.fetch_add(1, Ordering::Relaxed)
   ));
   let stdout = fs::OpenOptions::new().write(true).create_new(true).open(&file).ok()?;
   let ran = async {
-    let mut command = tokio::process::Command::new(shell);
+    let mut command = tokio_process::Command::new(shell);
     command.args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""]);
     command.stdin(Stdio::null()).stdout(stdout).stderr(Stdio::null());
     let (mut child, mut group) = child::spawn(&mut command).ok()?;
@@ -81,7 +85,7 @@ async fn asked_path(shell: &Path, limit: Duration) -> Option<OsString> {
     group.free();
     status
   };
-  let status = tokio::time::timeout(limit, ran).await.ok().flatten();
+  let status = time::timeout(limit, ran).await.ok().flatten();
   let said = fs::read(&file);
   drop(fs::remove_file(&file));
   let said = String::from_utf8_lossy(&said.ok()?).into_owned();
@@ -142,7 +146,7 @@ pub(super) async fn spawned(
   shown: &str,
   dir: &Path,
 ) -> Result<(Child, Group), Fault> {
-  let mut command = tokio::process::Command::from(command);
+  let mut command = tokio_process::Command::from(command);
   if let Some(login) = login_path().await {
     command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
   }

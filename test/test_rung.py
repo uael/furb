@@ -4,7 +4,9 @@ from asyncio import CancelledError
 
 import pytest
 
+import furb.kernel
 from conftest import (
+  ENGINE,
   STANDS,
   WORLD,
   Py,
@@ -14,10 +16,9 @@ from conftest import (
   chained,
   counted,
   dones,
-  findings,
   fresh,
-  gated,
   heads,
+  journaled,
   keeping,
   kept,
   life,
@@ -78,9 +79,10 @@ async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
   steps = [a[1] for a in said(log, "rung") if a[2] == act]
+  assert len(said(log, "reply")) == 2
   assert len(steps) == 2 and [a for a in said(log, "tell") if a[1] in steps and a[2] in steps] == []
   assert [of(engine.turns(on=root), step) for step in steps] == [
-    [f"#{steps[0]} advance on {act}", f"#{steps[0]} told nothing"],
+    [f"#{steps[0]} advance on {act}"],
     [f"#{steps[1]} advance on {act}"],
   ]
 
@@ -146,7 +148,7 @@ async def test_a_word_that_raises_a_cancellederror_tells_cancelled_and_no_raised
 
 async def test_a_rung_that_retells_another_rung_names_its_acts_under_that_one() -> None:
   """A rung that retells another rung names its acts under that one, so it makes the same acts and shares them."""
-  _, log, root = born("x = bash('echo hi')\nclose(1)")
+  _, log, root = born("x = bash('echo hi')\nawait x\nclose(1)")
   act = engine.prompt(int, "run it", on=root)
   assert await act == 1
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
@@ -220,7 +222,7 @@ async def test_the_kernel_gives_nothing_for_a_word_that_ran_to_its_end() -> None
 
 
 async def test_the_kernel_gives_what_a_word_raised() -> None:
-  """The Kernel gives what a word raised, and a top-level return is no python, which the gate refuses as it refuses any word that is not python."""
+  """The Kernel gives what a word raised, and a top-level return is no python, so its run is done with a SyntaxError, as the run of any word that is not python."""
   _, log, root = born()
   ended = engine.rung("k = 1", on=root)
   assert await ended is None
@@ -230,15 +232,14 @@ async def test_the_kernel_gives_what_a_word_raised() -> None:
     await hurt
   assert isinstance(dones(log, "run")[2][3], ValueError)
   broken = engine.rung("k = (", on=root)
-  with pytest.raises(Refused):
+  with pytest.raises(SyntaxError):
     await broken
-  raised = f"#{hurt} raised\n{hurt}_raised = ValueError('boom')"
-  assert gated(log)[-1] == "k = (" and ran(log) == [fresh(root), "k = 1", "raise ValueError('boom')", raised]
   back = engine.rung("return 1", on=root)
-  with pytest.raises(Refused):
+  with pytest.raises(SyntaxError):
     await back
-  assert gated(log)[-1] == "return 1" and [one.split(":")[0] for one in findings(log)[-1]] == ["line 1"]
-  assert "return 1" not in ran(log)
+  assert [type(a[3]).__name__ for a in dones(log, "run") if engine.get(a[1])[4] in (broken, back)] == [
+    "SyntaxError"
+  ] * 2
 
 
 async def test_the_word_of_a_rung_runs_to_its_next_await_and_continues_when_the_close_it_awaits_comes() -> None:
@@ -281,18 +282,6 @@ async def test_rung_is_given_a_word_and_runs_it_on_a_chain_in_the_globals_of_tha
   assert [(a[4], a[3]) for a in said(log, "rung")] == [("k = 1", two)]
 
 
-async def test_the_gate_reads_the_word_its_caller_wrote_like_any_word() -> None:
-  """The gate reads the word its caller wrote like any word."""
-  _, log, root = born()
-  laid = engine.rung("k = 1", on=root)
-  await laid
-  assert gated(log) == ["k = 1"]
-  bad = engine.rung("k = BAD", on=root)
-  with pytest.raises(Refused):
-    await bad
-  assert gated(log) == ["k = 1", "k = BAD"] and ran(log) == [fresh(root), "k = 1"]
-
-
 async def test_a_rung_with_a_word_completes_with_what_that_word_raises() -> None:
   """A rung with a word completes with what that word raises, and with nothing when the word runs to its end."""
   _, _, root = born()
@@ -312,7 +301,7 @@ async def test_a_close_ends_the_rung_that_runs_in_a_prompt_at_its_next_await() -
 
 async def test_a_chain_with_a_source_and_its_origin_share_the_one_act() -> None:
   """A chain with a source and its origin share the one act, the record's."""
-  sand, log, root = born("x = bash('echo hi')\nclose(1)")
+  sand, log, root = born("x = bash('echo hi')\nawait x\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   _, command, *_ = said(log, "bash")[0]
   twin = await chained("twin", root, 300)
@@ -323,8 +312,8 @@ async def test_a_chain_with_a_source_and_its_origin_share_the_one_act() -> None:
 
 async def test_a_chain_with_a_source_awaits_what_its_origin_started() -> None:
   """A chain with a source awaits what its origin started, through the name of the act."""
-  sand, log, root = born("x = bash('slow')\nclose(1)", auto=False)
-  assert await engine.prompt(int, "start one", on=root) == 1
+  sand, log, root = born(auto=False)
+  await engine.rung("x = bash('slow')", on=root)
   _, command, *_ = said(log, "bash")[0]
   twin = await chained("twin", root, 300)
   sand.script[twin] = ["close((await x).code)"]
@@ -340,7 +329,6 @@ async def test_it_says_its_word_may_run_as_soon_as_it_holds_one() -> None:
   """It says its word may run as soon as it holds one, whichever way that word came, and what the chain makes of the word is the chain's."""
   log, _, laid, _, step = await counted()
   assert [a[1:] for a in said(log, "ready")] == [(laid, laid, "k = 1"), (step, step, "close(k + 1)")]
-  assert [q[4] for q in acts(log).values() if q[0] == "gate"] == ["k = 1", "close(k + 1)"]
   assert [a[4] for a in said(log, "run")] == [f"{laid}_told", laid, f"{step}_told", step]
 
 
@@ -400,12 +388,11 @@ async def test_of_the_acts_its_word_made_and_read_at_once_it_tells_nothing() -> 
 
 
 async def test_an_answer_with_no_text_is_a_word_like_any_other() -> None:
-  """An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again."""
+  """An answer with no text is a word like any other, so the run gives no value, and the chain asks the model again as after any word that leaves no act of its thread open."""
   _, log, root = born("", "close(1)")
   act = engine.prompt(int, "work", on=root)
   assert await act == 1
   first, second = [a[1] for a in said(log, "rung") if a[2] == act]
-  assert [q[4] for q in acts(log).values() if q[0] == "gate"] == ["", "close(1)"]
   assert [(a[4], a[5]) for a in said(log, "run") if a[4] in (first, second)] == [(first, ""), (second, "close(1)")]
   assert engine.peek(first) is None and [a[2] for a in said(log, "reply")] == [first, second]
 
@@ -425,7 +412,10 @@ async def test_a_replay_makes_a_rung_of_its_own_retelling_each_rung_of_the_donor
 async def test_a_replay_makes_no_rung_for_a_word_that_is_empty() -> None:
   """A replay makes no rung for a word that is empty, since a rung with no word asks a model for a word."""
   _, log, root = born("", "close(1)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  engine.prompt(None, "go on", on=act)
+  assert await act == 1
   await settle()
   side = await chained("side", root, 300)
   assert "" in engine.program(root).values()
@@ -473,7 +463,7 @@ async def test_a_rung_that_retells_is_done_with_nothing() -> None:
   assert theirs == {**told, step: "NoneType", hurt: "ValueError", stopped: "NoneType"}
   other = sown()
   mine: list[tuple] = []
-  over = engine.boot(kernel=kept(Py().kernel()), gate=Py().gating(), probe=watched(mine), world=other.hears())
+  over = engine.boot(journaled(), kernel=kept(Py().kernel()), probe=watched(mine), world=other.hears())
   other.script[over] = ["k = 1\nclose(21)", "close(None)"]
   assert await engine.prompt(int, "count", on=over) == 21
   await settle()
@@ -496,7 +486,7 @@ async def test_a_rung_that_awaits_an_act_nobody_settles_waits_until_the_operator
 
 async def test_a_rung_that_retells_says_each_question_it_makes_as_the_rung_it_retells() -> None:
   """A rung that retells says each question it makes as the rung it retells, so the question it makes at a place is the one that rung made there."""
-  _, log, root = born("t = read('a.txt')\nx = bash('echo hi')\nclose(1)", "close(None)")
+  _, log, root = born("t = read('a.txt')\nx = bash('echo hi')\nawait x\nclose(1)", "close(None)")
   act = engine.prompt(int, "run it", on=root)
   assert await act == 1
   await settle()
@@ -665,3 +655,22 @@ async def test_a_later_life_makes_that_reply_again_in_the_ear_of_the_rung() -> N
   again, root = await relived(Sand(stands=STANDS), plain(sand.record))
   assert engine.turns(on=root) == before
   assert [a[1:4] for a in again if a[0] == "reply"] == [a[1:4] for a in log if a[0] == "reply"]
+
+
+async def test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_took_and_the_rung_of_a_run_that_awaited() -> (
+  None
+):
+  """A Kernel born into a life that holds a run that is not over ends that run, each wants of it that is not over, and the rung of a run that awaited, each with a refusal that says the word was lost, since it holds no frame of that run."""
+  _, _, root = born()
+  engine.rung("got = await prompt(str, 'q', to=OPERATOR)", on=root)
+  await settle()
+  runs = [x[1] for x in engine.transcript(root, "run") if not engine.over(x[1])]
+  wants = [x[1] for x in engine.transcript(root, "wants") if not engine.over(x[1])]
+  rungs = [str(engine.get(run)[4]) for run in runs]
+  assert runs and wants and not any(engine.over(rung) for rung in rungs)
+  with engine.site.set("kernel2"):
+    engine.lives(furb.kernel.kernel(ENGINE), None)
+  await settle()
+  lost = [engine.peek(x) for x in [*wants, *runs]]
+  assert all(isinstance(x, engine.Refused) and "the word was lost" in str(x) for x in lost), lost
+  assert all(engine.over(rung) for rung in rungs)

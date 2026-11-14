@@ -12,6 +12,8 @@ import sys
 
 python = globals().get("python") or importlib.import_module("furb.engine")
 """python is the engine of this interpreter, kept across a reload of the package, since a reload rebinds the switch."""
+# The operator awaits an act of that engine through the Act of furb.awaits, which the module binds in it once.
+importlib.import_module("furb.awaits")
 MONTY = os.environ.get("FURB_ENGINE") == "monty"
 """MONTY says whether the engine of this process runs in the sandbox of monty."""
 

@@ -1,6 +1,13 @@
 //! The call of a model for a reply, and the turn that its answer gives.
 
-use std::{collections::HashSet, time::Duration};
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
+use std::{
+  collections::HashSet,
+  time::{Duration, SystemTime},
+};
 
 use futures::{Stream, StreamExt, stream};
 use jiff::{Timestamp, Zoned};
@@ -17,14 +24,18 @@ use super::{
   hearer::{Came, Replied, Retried, released, reply_gone},
   messages::CUT,
   model::{Answer, Asked, Model, Streams},
-  retry::{Backoff, LIMIT_POLL, LIMIT_SLACK, Retry, SIGN_POLL, passing},
+  retry::{Backoff, LIMIT_POLL, LIMIT_SLACK, Limit, Retry, SIGN_POLL, limited, passing},
   thinking::merged,
   watch,
 };
+use crate::value;
 use crate::{
   value::{Object, ObjectRef, entry},
   wire,
 };
+use std::future;
+use std::mem;
+use tokio::time;
 
 /// One response of a model of rig, streamed: what it writes is told as it comes, and the response
 /// holds it whole, with the raw record of its end, where a model says what the turn cost. A model
@@ -172,8 +183,8 @@ const UNCLOSED: &str = "wrote a line of three backticks alone at the end of its 
 
 /// A word less the line of three backticks alone at its end, which a model writes out of the habit
 /// of a fence that no line opened. A word gets nothing when its last line is not that fence, when
-/// its first line opens a fence, which the gate refuses whole, when a quote stands open before that
-/// line, whose text the line may end, or when nothing stands before that line.
+/// its first line opens a fence, which is no python as a whole, when a quote stands open before
+/// that line, whose text the line may end, or when nothing stands before that line.
 pub(super) fn unclosed(text: &str) -> Option<String> {
   let (word, last) = text.trim_end().rsplit_once('\n')?;
   let opens = word.trim_start().starts_with("```");
@@ -206,19 +217,19 @@ pub(super) fn answered(call: Answering) -> impl Stream<Item = Replied> {
       Ok((model, asked)) => waits.attempted(&model, &asked, again).await,
       Err(no) => Err(no),
     };
-    let (got, dropped) = match got {
-      Ok((turn, dropped)) => (Ok(turn), dropped),
-      Err(no) => (Err(no), None),
+    let (got, dropped, account) = match got {
+      Ok(Served { turn, dropped, account }) => (Ok(turn), dropped, account),
+      Err(no) => (Err(no), None, None),
     };
     let Waits { id, tells, .. } = waits;
     // The stream holds the receiver, so a send that fails means the stream is going.
     // The stream then gives the reply itself.
-    tells.send(Replied::Came(Came { id, got, dropped })).err().map(|no| no.0)
+    tells.send(Replied::Came(Came { id, got, dropped, account })).err().map(|no| no.0)
   };
   // The reply comes through the channel alone, so it comes after all that its model wrote before
   // it.
   let told = stream::poll_fn(move |cx| told.poll_recv(cx));
-  let came = stream::once(came).filter_map(std::future::ready);
+  let came = stream::once(came).filter_map(future::ready);
   stream::select(told, came)
 }
 
@@ -257,21 +268,23 @@ impl Waits {
     model: &Model,
     asked: &Asked,
     again: bool,
-  ) -> Result<(Object, Option<String>), CompletionError> {
+  ) -> Result<Served, CompletionError> {
     if again {
       released(&mut self.hold).await?;
     }
     loop {
       let no = match (model.answers)(asked.clone()).await {
         Ok(Answer::Response(response)) => return turn(model, &response),
-        Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()).map(|one| (one, None)),
+        Ok(Answer::Turn(turn)) => {
+          return hosted(turn.as_ref()).map(|turn| Served { turn, dropped: None, account: None });
+        }
         Err(no) => no,
       };
       let (retry, limit) = self.retry(no)?;
       let wait = retry.wait;
       let retried = Retried { id: self.id.clone(), retry, limit };
       self.tells.send(Replied::Retried(retried)).map_err(reply_gone)?;
-      tokio::time::sleep(wait).await;
+      time::sleep(wait).await;
       released(&mut self.hold).await?;
     }
   }
@@ -280,8 +293,8 @@ impl Waits {
   /// the first wait of a usage limit and of a failed sign in; or the failure, which ends the call.
   fn retry(&mut self, no: CompletionError) -> Result<(Retry, bool), CompletionError> {
     let most = self.backoff.most;
-    if let Some(claude::Error::Limit { until }) = claude::error(&no) {
-      let now = Zoned::now();
+    let now = Zoned::now();
+    if let Some(Limit { until }) = limited(&no, SystemTime::from(now.timestamp())) {
       let reset = until
         .and_then(|at| Timestamp::try_from(at).ok())
         .map(|at| at.to_zoned(now.time_zone().clone()));
@@ -296,12 +309,15 @@ impl Waits {
         reset.map_or(String::new(), |at| at.strftime(" until %Y-%m-%d %H:%M (%Q)").to_string());
       let why = format!("usage limit{until}");
       let retry = Retry { attempt: self.attempt + 1, most, wait, why };
-      return Ok((retry, !std::mem::replace(&mut self.limited, true)));
+      return Ok((retry, !mem::replace(&mut self.limited, true)));
     }
-    if let Some(claude::Error::SignedOut(_)) = claude::error(&no) {
+    if let Some(
+      claude::Error::SignedOut(_) | claude::Error::NoToken(_) | claude::Error::Exhausted,
+    ) = claude::error(&no)
+    {
       let why = "signed out, sign in again".to_owned();
       let retry = Retry { attempt: self.attempt + 1, most, wait: SIGN_POLL, why };
-      return Ok((retry, !std::mem::replace(&mut self.signed, true)));
+      return Ok((retry, !mem::replace(&mut self.signed, true)));
     }
     let Some(why) = passing(&no).filter(|_| self.attempt < most) else { return Err(no) };
     self.attempt += 1;
@@ -310,10 +326,19 @@ impl Waits {
   }
 }
 
+/// What a call of a model gave: its turn, the note of the marks that the turn lost, and the name of
+/// the account that served it when the provider names one, which is never a token. The name stands
+/// beside the turn and not in its usage, whose items are numbers, the last of them the cost.
+pub(super) struct Served {
+  pub(super) turn: Object,
+  pub(super) dropped: Option<String>,
+  pub(super) account: Option<String>,
+}
+
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the
 /// blocks it gave.
 ///
-/// A model speaks python alone, so prose around the code stays in the word, for the gate to refuse,
+/// A model speaks python alone, so prose around the code stays in the word, whose run raises on it,
 /// but for the marks of a fence, of a tool call or of a break of HTML around it, which
 /// [`watch::bare`] drops with the name that it gives a first binding of no name, and a line of
 /// three backticks alone at its end, which [`unclosed`] drops, since they hold no code that runs
@@ -328,7 +353,7 @@ impl Waits {
 pub(super) fn turn(
   model: &Model,
   response: &CompletionResponse,
-) -> Result<(Object, Option<String>), CompletionError> {
+) -> Result<Served, CompletionError> {
   let cut = match response.finish_reason() {
     _ if !model.ends => None,
     None => Some(format!("the stream of {} stopped before its end", model.name)),
@@ -373,7 +398,8 @@ pub(super) fn turn(
     Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
   let turn =
     Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]);
-  Ok((turn, dropped))
+  let account = response.raw.get("account").and_then(Value::as_str).map(str::to_owned);
+  Ok(Served { turn, dropped, account })
 }
 
 /// These blocks with the word as their one text, at the place of their first text.
@@ -475,7 +501,7 @@ fn untagged(choice: Vec<AssistantContent>) -> Vec<AssistantContent> {
 }
 
 /// A count of tokens as a float, which holds it whole up to `u32::MAX`, more than a turn counts.
-fn counted(tokens: u64) -> f64 {
+pub(super) fn counted(tokens: u64) -> f64 {
   f64::from(u32::try_from(tokens).unwrap_or(u32::MAX))
 }
 
@@ -523,7 +549,7 @@ pub(super) fn uuid_from(
   })?;
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  let digits = crate::value::hex(&bytes);
+  let digits = value::hex(&bytes);
   Ok(format!(
     "{}-{}-{}-{}-{}",
     &digits[..8],

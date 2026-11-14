@@ -5,17 +5,19 @@ use std::{
   mem,
 };
 
-use crate::fact::named;
-use serde_json::Value;
+use crate::{fact::named, skill};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 
 use super::{
-  act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, fault},
+  act::{Act, Answer, Kind, Maker, Pause, Phase, RunState, Spend, fault, operator},
   state::{State, chain_state},
 };
-use crate::world::CONSOLE;
+use crate::world::{CONSOLE, interruption};
 
 /// The questions that the engine asks on the way to what an act does, which no person follows: each
-/// is answered for the act that asked it, which shows what it came to.
+/// is answered for the act that asked it, which shows what it came to. A record of an earlier build
+/// holds the questions of the kind gate.
 const STEPS: [&str; 11] =
   ["setup", "stand", "clock", "chance", "gate", "cd", "merged", "run", "writing", "wants", "reply"];
 
@@ -27,7 +29,7 @@ pub fn followed(kind: &str) -> bool {
 /// What the fold holds of a chain, each act by the place it began: its live acts of work, its last
 /// act of work, its last prompt, and the live prompts that its words made on other chains. These
 /// are all the acts that the state of the chain reads.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 struct Chain {
   open: BTreeMap<u64, String>,
   last: Option<String>,
@@ -37,35 +39,48 @@ struct Chain {
 
 /// A reply that is not done: the chain that it stands on, the actor that answers it, and the rung
 /// that waits for the word that it writes.
+#[derive(Serialize, Deserialize)]
 struct Reply {
   chain: String,
   actor: String,
   maker: String,
+  /// The account that served it, once a fact says so.
+  account: Option<String>,
 }
 
 /// The acts of a life, folded from its facts in the order of its log. It reads from each fact what
 /// the fact says alone, and takes from the engine what the engine alone can say: which acts a pause
 /// or a wake covers.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Fold {
   acts: HashMap<String, Act>,
   /// How many facts the fold heard, which is the place in time of the fact that it hears.
   clock: u64,
   chains: HashMap<String, Chain>,
   replies: HashMap<String, Reply>,
-  /// The rung of each run, what the run of the word of each rung gave once it is done, and the
-  /// findings of the gate on each word that it refused.
+  /// The rung of each run, and what the run of the word of each rung gave once it is done.
   runs: HashMap<String, String>,
   ran: HashMap<String, Value>,
-  refused: HashMap<String, String>,
   children: HashMap<String, Vec<String>>,
   /// The acts that a person follows and that are not done, by the place they began.
   live: BTreeMap<u64, String>,
   /// The acts that the fact that the fold hears changed, in order.
   moved: Vec<String>,
+  /// Each pause and each wake that the fold heard, in order, which [`Fold::recorded`] reads to find
+  /// what a pause or a wake covers and the pause that holds a new act.
+  pauses: Vec<Value>,
+  /// The models of the roster and the logins of the members of the operator, as the last stand
+  /// gave them, which the role of an actor reads.
+  models: Vec<String>,
+  members: Vec<String>,
 }
 
 impl Fold {
+  /// How many facts the fold heard, the place of the last one.
+  pub fn clock(&self) -> u64 {
+    self.clock
+  }
+
   /// The chain that an act stands in.
   pub fn chain_of(&self, id: &str) -> Option<&str> {
     self.acts.get(id).map(|act| act.chain.as_str())
@@ -76,6 +91,68 @@ impl Fold {
   pub fn open(&self, pausing: bool) -> Vec<String> {
     let acts = self.live.values().filter_map(|id| self.acts.get(id));
     acts.filter(|act| act.pause.is_some() != pausing).map(|act| act.id.clone()).collect()
+  }
+
+  /// The acts that a fact of a record changes, each as it stands after the fact, for a reader with
+  /// no engine: the fold finds itself, as the engine does, each live act that a pause or a wake
+  /// covers, and the last pause or wake that covers a new act, so a record folds as its life did.
+  pub fn recorded(&mut self, fact: &Value) -> Vec<Act> {
+    let text = |at: usize| fact.get(at).and_then(Value::as_str).unwrap_or_default();
+    let (kind, about, by) = (text(0), text(1), text(2));
+    if named(about, kind) {
+      let on = text(3);
+      let chain = if kind == "chain" { about } else { self.chain_of(on).unwrap_or(on) };
+      let covers = |of: &str| {
+        of == about
+          || (kind == "prompt" && self.reaches(of, on))
+          || self.lineage_reaches(of, by)
+          || chain == of
+      };
+      let last =
+        self.pauses.iter().rev().find(|one| one.get(1).and_then(Value::as_str).is_some_and(covers));
+      let born = last.and_then(Pause::of);
+      return self.hear(fact, &[], born);
+    }
+    if matches!(kind, "pause" | "wake") {
+      let open = self.open(kind == "pause");
+      let covered: Vec<String> = open.into_iter().filter(|id| self.covers(about, id)).collect();
+      return self.hear(fact, &covered, None);
+    }
+    self.hear(fact, &[], None)
+  }
+
+  /// Whether a pause or a wake of `of` covers an act, as the engine finds: the act or a maker of it
+  /// is `of`, or stands on `of` through the prompts that it was made on, or its chain is `of`.
+  fn covers(&self, of: &str, id: &str) -> bool {
+    self.lineage_reaches(of, id) || self.chain_of(id) == Some(of)
+  }
+
+  /// Whether an act or a maker of it reaches `of` through the prompts that it stands on.
+  fn lineage_reaches(&self, of: &str, id: &str) -> bool {
+    let mut name = Some(id);
+    for _ in 0..=self.acts.len() {
+      let Some(one) = name else { return false };
+      if self.reaches(of, one) {
+        return true;
+      }
+      name = self.acts.get(one).map(|act| act.by.as_str());
+    }
+    false
+  }
+
+  /// Whether a name is `of`, or a prompt that stands on `of` through the prompts it was made on.
+  fn reaches(&self, of: &str, name: &str) -> bool {
+    let mut name = name;
+    for _ in 0..=self.acts.len() {
+      if name == of {
+        return true;
+      }
+      match self.acts.get(name) {
+        Some(act) if act.kind == Kind::Prompt => name = &act.on,
+        _ => return false,
+      }
+    }
+    false
   }
 
   /// The acts that a fact changes, each as it stands after the fact. `covered` names each live act
@@ -116,16 +193,23 @@ impl Fold {
         self.runs.insert(id.to_owned(), rung);
       }
       Kind::Reply => {
-        let reply = Reply { chain: on.clone(), actor: text(1), maker: by.to_owned() };
+        let reply =
+          Reply { chain: on.clone(), actor: text(1), maker: by.to_owned(), account: None };
+        if let Some(maker) = self.acts.get_mut(by).filter(|act| act.kind == Kind::Rung) {
+          maker.asking = true;
+          self.moved.push(by.to_owned());
+        }
         self.replies.insert(id.to_owned(), reply);
       }
       _ => {}
     }
+    let maker = self.maker(&kind, by, rest);
     let run = (kind == Kind::Rung).then_some(RunState::Running);
     let act = Act {
       kind,
       id: id.to_owned(),
       by: by.to_owned(),
+      maker,
       on,
       chain,
       words: rest.get(1..).unwrap_or_default().to_vec(),
@@ -134,14 +218,62 @@ impl Fold {
       pause: born.filter(|_| followed),
       run,
       word: None,
+      asking: false,
+      taken: Vec::new(),
       began: self.clock,
       ended: None,
       spend: None,
+      closer: None,
       state: State::Idle,
     };
+    let taken = if act.kind == Kind::Chain { self.carried(rest) } else { Vec::new() };
+    let act = Act { taken, ..act };
     self.placed(&act);
     self.moved.push(act.id.clone());
     self.acts.insert(act.id.clone(), act);
+  }
+
+  /// Who made a new act of a kind, by its maker and its words after its kind, its name and its
+  /// maker. A rung with no word that waits for an actor is the rung of that actor; else the
+  /// operator, a member or a skill made the act, or an act whose role it takes, as the word of a
+  /// rung takes the role of its rung, and the engine made any other.
+  fn maker(&self, kind: &Kind, by: &str, rest: &[Value]) -> Maker {
+    let text = |at: usize| rest.get(at).and_then(Value::as_str).unwrap_or_default();
+    match (kind, by, self.acts.get(by)) {
+      (Kind::Rung, ..) if text(1).is_empty() && !text(3).is_empty() => {
+        Maker::of(text(3), &self.models, &self.members)
+      }
+      (_, by, _) if operator(by) => Maker::of(by, &self.models, &self.members),
+      (_, skill::EAR, _) => Maker::Skill,
+      (_, _, Some(made)) if made.kind != Kind::Chain => made.maker.clone(),
+      _ => Maker::Engine,
+    }
+  }
+
+  /// What a stand gave: the models of its roster, and the logins that the entry of the operator
+  /// lists in place of its efforts.
+  fn stood(&mut self, standing: &Value) {
+    let Some(roster) = standing.get(0).and_then(Value::as_array) else { return };
+    let name = |one: &Value| one.get(0).and_then(Value::as_str).unwrap_or_default().to_owned();
+    self.models = roster.iter().map(name).filter(|one| !operator(one)).collect();
+    let listed = roster.iter().filter(|one| operator(&name(one)));
+    let logins = listed.filter_map(|one| one.get(1).and_then(Value::as_array)).flatten();
+    self.members = logins.filter_map(Value::as_str).map(str::to_owned).collect();
+  }
+
+  /// The messages that a chain with a source takes from it: its fact names the acts of the source
+  /// that it carries, which a record holds though it holds no prefix, and the prompts of the
+  /// operator among them are its messages.
+  fn carried(&self, rest: &[Value]) -> Vec<String> {
+    let named = rest.get(3).and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
+    named
+      .iter()
+      .filter_map(Value::as_str)
+      .filter(|id| {
+        self.acts.get(*id).is_some_and(|one| one.kind == Kind::Prompt && operator(&one.by))
+      })
+      .map(str::to_owned)
+      .collect()
   }
 
   /// A new act in the places that the fold reads it from: the live acts, the children of its maker,
@@ -176,6 +308,7 @@ impl Fold {
   fn said(&mut self, [kind, about, by]: [&str; 3], fact: &Value, covered: &[String]) {
     match kind {
       "pause" | "wake" => {
+        self.pauses.push(fact.clone());
         let pause = Pause::of(fact);
         for id in covered {
           if let Some(act) = self.acts.get_mut(id) {
@@ -184,14 +317,29 @@ impl Fold {
           }
         }
       }
+      // A done act stays done, as the engine keeps the first done of an act: a start that the
+      // World tells after it changes nothing.
       "started" => {
-        if let Some(act) = self.acts.get_mut(about) {
+        if let Some(act) = self.acts.get_mut(about).filter(|act| !act.done()) {
           act.phase = Phase::Started;
           act.operator |= by == CONSOLE;
           self.moved.push(about.to_owned());
         }
       }
+      "account" => {
+        let name = fact.get(3).and_then(Value::as_str);
+        if let Some(reply) = self.replies.get_mut(about) {
+          reply.account = name.map(str::to_owned);
+        }
+      }
       "done" => self.done(about, fact.get(3).cloned().unwrap_or_default()),
+      // The done that a close makes tells the act with its closer, so the close moves nothing.
+      "close" => {
+        let closer = self.acts.get(about).map(|act| self.maker(&act.kind, by, &[]));
+        if let Some((act, closer)) = self.acts.get_mut(about).zip(closer) {
+          act.closer = Some(closer);
+        }
+      }
       "ready" => {
         let word = fact.get(3).and_then(Value::as_str);
         if let Some((act, word)) =
@@ -201,27 +349,103 @@ impl Fold {
           self.moved.push(about.to_owned());
         }
       }
-      "tell" => {
-        let header = fact.get(3).and_then(|notes| notes.get(0)).and_then(Value::as_str);
-        let lines = header.and_then(|note| note.strip_prefix(&format!("#{about} refused\n")));
-        if let Some(found) = lines.and_then(|lines| bound(lines, &format!("{about}_findings"))) {
-          self.refused.insert(about.to_owned(), found);
-          self.update_run(about);
+      "prefix" => {
+        let carried = fact.get(3).and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
+        let mut taken: Vec<String> = Vec::new();
+        for entry in carried {
+          let text = |at: usize| entry.get(at).and_then(Value::as_str).unwrap_or_default();
+          let (kind, id) = (text(0), text(1));
+          let message = kind == "prompt" && named(id, kind) && operator(text(2));
+          if message && !taken.iter().any(|one| one == id) {
+            taken.push(id.to_owned());
+          }
+        }
+        if let Some(chain) = self.acts.get_mut(about).filter(|act| act.kind == Kind::Chain) {
+          chain.taken = taken;
+          self.moved.push(about.to_owned());
         }
       }
+      "checkpoint" => self.checkpointed(fact.get(3).unwrap_or(&Value::Null)),
       _ => {}
+    }
+  }
+
+  /// What a checkpoint carries: each chain that lives, each act that a value names with its value,
+  /// and each open prompt. A record whose past stands in a checkpoint holds no other fact of them,
+  /// and a record whose log does not agree with it keeps no end of an act that a model closed. So
+  /// the fold makes each act that it does not hold, by the maker that the checkpoint names for it,
+  /// or by `journal`, as a birth on a checkpoint of an earlier build that names none says it again,
+  /// and ends each act that the checkpoint ends, and each run of a word.
+  fn checkpointed(&mut self, data: &Value) {
+    let list = |key: &str| data.get(key).and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
+    let text = |one: &Value, key: &str| one.get(key).cloned().unwrap_or_default();
+    let by = |one: &Value| one.get("by").and_then(Value::as_str).unwrap_or(JOURNAL).to_owned();
+    for chain in list("chains") {
+      let id = chain.get("id").and_then(Value::as_str).unwrap_or_default();
+      if !self.acts.contains_key(id) {
+        let rest = [text(chain, "on"), text(chain, "label"), text(chain, "source")];
+        self.asked(["chain", id, &by(chain)], &rest, None);
+      }
+    }
+    for act in list("acts") {
+      let (kind, id) = (text(act, "kind"), text(act, "id"));
+      let (Some(kind), Some(id)) = (kind.as_str(), id.as_str()) else { continue };
+      let value = act.get("value");
+      if !self.acts.contains_key(id) {
+        let words = match value {
+          Some(_) => words(act.get("words")),
+          None => vec![text(act, "shape"), text(act, "message"), text(act, "to")],
+        };
+        let rest: Vec<Value> = [text(act, "on")].into_iter().chain(words).collect();
+        self.asked([kind, id, &by(act)], &rest, None);
+      }
+      if let Some(value) = value.filter(|_| self.acts.get(id).is_some_and(|one| !one.done())) {
+        self.done(id, value.clone());
+      }
+    }
+    // The life that wrote the checkpoint ended each run of a word that the fold holds as running,
+    // though the record holds no end of most of them: a run that the checkpoint cut with the
+    // refusal that says so, which is no failure, and each other run well.
+    let cut: HashSet<&str> = list("chains")
+      .iter()
+      .filter_map(|chain| chain.get("cut").and_then(Value::as_array))
+      .flatten()
+      .filter_map(Value::as_str)
+      .collect();
+    let mut running: Vec<String> = self
+      .runs
+      .iter()
+      .filter(|(_, rung)| !self.ran.contains_key(*rung))
+      .map(|one| one.0.clone())
+      .collect();
+    running.sort();
+    for run in running {
+      let ended =
+        cut.contains(run.as_str()).then(|| json!({"is": "Refused", "args": [interruption(&run)]}));
+      self.done(&run, ended.unwrap_or(Value::Null));
     }
   }
 
   /// The end of an act, with what it came to: the answer of a reply costs its chain and its rung,
   /// the run of a word ends its rung, and the act ends with its value.
   fn done(&mut self, about: &str, value: Value) {
+    if self.acts.get(about).is_some_and(|act| act.kind == Kind::Stand) {
+      self.stood(&value);
+    }
     if let Some(reply) = self.replies.remove(about) {
+      if let Some(maker) = self.acts.get_mut(&reply.maker).filter(|act| act.asking) {
+        maker.asking = false;
+        self.moved.push(reply.maker.clone());
+      }
       let usage = value.get(2).and_then(Value::as_array);
       if let Some(usage) = usage {
         let part = |at: usize| usage.get(at).and_then(Value::as_f64).unwrap_or_default();
-        let answer =
-          Answer { actor: reply.actor, usage: [part(0), part(1), part(2), part(3), part(4)] };
+        // A record of fdc46c95b holds the account as the sixth item of the usage: it is read
+        // there too.
+        let legacy = || usage.get(5).and_then(Value::as_str).map(str::to_owned);
+        let account = reply.account.or_else(legacy);
+        let usage = [part(0), part(1), part(2), part(3), part(4)];
+        let answer = Answer { actor: reply.actor, usage, account };
         for id in [reply.chain, reply.maker] {
           if let Some(act) =
             self.acts.get_mut(&id).filter(|act| matches!(act.kind, Kind::Chain | Kind::Rung))
@@ -233,7 +457,11 @@ impl Fold {
       }
     }
     if let Some(rung) = self.runs.get(about).cloned() {
-      self.ran.insert(rung.clone(), value.clone());
+      // A run that the end of its life cut did not fail, as no act that it cut did.
+      let cut = fault(&value).is_some_and(
+        |(_, args)| matches!(args, [Value::String(why)] if *why == interruption(about)),
+      );
+      self.ran.insert(rung.clone(), if cut { Value::Null } else { value.clone() });
       self.update_run(&rung);
     }
     let Some(act) = self.acts.get(about) else { return };
@@ -256,15 +484,13 @@ impl Fold {
     }
   }
 
-  /// How the word of a rung ran, from the findings of the gate, the value of its run, and its own
-  /// value. A cancel ends it well when it retells, when the rung itself ended well, or when its
-  /// prompt did.
+  /// How the word of a rung ran, from the value of its run and its own value. A cancel ends it
+  /// well when it retells, when the rung itself ended well, or when its prompt did.
   fn update_run(&mut self, id: &str) {
     let Some(act) = self.acts.get(id).filter(|act| act.kind == Kind::Rung) else { return };
     let ran = self.ran.get(id);
-    let run = match (self.refused.get(id), ran.or(act.value()).and_then(fault)) {
-      (Some(found), _) => RunState::Refused(found.clone()),
-      (None, Some((is, args))) => {
+    let run = match ran.or(act.value()).and_then(fault) {
+      Some((is, args)) => {
         let well = |one: &Act| one.done() && one.value().and_then(fault).is_none();
         let parent = self.acts.get(&act.by).filter(|one| one.kind == Kind::Prompt);
         let retells = act.words.get(1).is_some_and(truthy);
@@ -275,8 +501,9 @@ impl Fold {
           _ => RunState::Failed(reason),
         }
       }
-      (None, None) if ran.is_some() => RunState::Done,
-      (None, None) => RunState::Running,
+      // A rung that is done ran its word, though a birth tells the rung again and not its run.
+      None if ran.is_some() || act.done() => RunState::Done,
+      None => RunState::Running,
     };
     if let Some(act) = self.acts.get_mut(id) {
       act.run = Some(run);
@@ -299,6 +526,9 @@ impl Fold {
         self.acts.entry(id.clone()).and_modify(|act| act.state = state);
       }
     }
+    // A chain is read once, however many of its acts moved.
+    let mut read = HashSet::new();
+    chains.retain(|chain| read.insert(chain.clone()));
     for chain in chains {
       let state = self.chain_state(&chain);
       let Some(act) = self.acts.get_mut(&chain).filter(|act| act.kind == Kind::Chain) else {
@@ -331,6 +561,16 @@ impl Fold {
   }
 }
 
+/// Who makes an act that a checkpoint of an earlier build carries with no maker: the name by which
+/// a birth on it says each act again.
+const JOURNAL: &str = "journal";
+
+/// The words of an act that a checkpoint carries: a list, or a tuple as the record marks it.
+fn words(said: Option<&Value>) -> Vec<Value> {
+  let said = said.map(|one| one.get("args").and_then(|args| args.get(0)).unwrap_or(one));
+  said.and_then(Value::as_array).cloned().unwrap_or_default()
+}
+
 /// Whether a value is true as python reads it.
 fn truthy(value: &Value) -> bool {
   match value {
@@ -351,58 +591,6 @@ fn display(value: &Value) -> String {
   }
 }
 
-/// The string that the lines of a note bind to a name: the text of its quote, whose name may take
-/// more underscores, or the string of its statement as python writes it.
-fn bound(lines: &str, name: &str) -> Option<String> {
-  let all: Vec<&str> = lines.split('\n').collect();
-  for (at, line) in all.iter().enumerate() {
-    let quote = line.strip_prefix("<s:").and_then(|rest| rest.strip_suffix('>'));
-    if let Some(quote) =
-      quote.filter(|one| one.strip_prefix(name).is_some_and(|tail| tail.bytes().all(|b| b == b'_')))
-    {
-      let close = format!("</s:{quote}>");
-      let end = all[at + 1..].iter().position(|one| one.ends_with(&close))? + at + 1;
-      let last = &all[end][..all[end].len() - close.len()];
-      let body: Vec<&str> = all[at + 1..end].iter().copied().chain([last]).collect();
-      return Some(body.join("\n"));
-    }
-    if let Some(said) = line.strip_prefix(name).and_then(|rest| rest.strip_prefix(" = ")) {
-      return python(said);
-    }
-  }
-  None
-}
-
-/// A string as python writes it, read back: the text between its quotes, with each escape as the
-/// character that it stands for.
-fn python(said: &str) -> Option<String> {
-  let inner = said.get(1..said.len().checked_sub(1)?)?;
-  if !matches!(said.chars().next(), Some('\'' | '"'))
-    || !matches!(said.chars().last(), Some('\'' | '"'))
-  {
-    return None;
-  }
-  let mut out = String::new();
-  let mut chars = inner.chars();
-  while let Some(one) = chars.next() {
-    if one != '\\' {
-      out.push(one);
-      continue;
-    }
-    let code = |chars: &mut std::str::Chars<'_>, n: usize| {
-      let hex: String = chars.by_ref().take(n).collect();
-      u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32)
-    };
-    match chars.next() {
-      Some('n') => out.push('\n'),
-      Some('r') => out.push('\r'),
-      Some('t') => out.push('\t'),
-      Some('x') => out.extend(code(&mut chars, 2)),
-      Some('u') => out.extend(code(&mut chars, 4)),
-      Some('U') => out.extend(code(&mut chars, 8)),
-      Some(other) => out.push(other),
-      None => {}
-    }
-  }
-  Some(out)
-}
+#[cfg(test)]
+#[path = "fold.test.rs"]
+mod test;

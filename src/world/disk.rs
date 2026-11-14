@@ -2,6 +2,7 @@
 //! target, and a rename puts them in its place, so a reader sees the old file or the new one and
 //! never a part of either, and a failure midway, as on a full disk, leaves the old file whole.
 
+use std::process;
 use std::{
   fs::{self, OpenOptions},
   io::{self, ErrorKind, Write},
@@ -33,15 +34,15 @@ pub(crate) enum Access {
 /// they are missing, so a link stays a link. A file that the user cannot write is refused as a
 /// plain write refuses it. A failure leaves the old file whole and no part file beside it.
 pub(crate) fn write(path: &Path, bytes: &[u8], access: Access) -> Result<(), Error> {
-  filled(path, bytes, access, Write::write_all)
+  filled(path, access, |file| file.write_all(bytes))
 }
 
-/// [`write`] with the fill of the part file given, so a test can make it fail midway.
-fn filled(
+/// [`write`] with the fill of the part file given, for a file whose bytes no one buffer holds: the
+/// fill writes them in turn, and may go back in the part file to write what it knows last.
+pub(crate) fn filled(
   path: &Path,
-  bytes: &[u8],
   access: Access,
-  fill: impl FnOnce(&mut fs::File, &[u8]) -> io::Result<()>,
+  fill: impl FnOnce(&mut fs::File) -> io::Result<()>,
 ) -> Result<(), Error> {
   let failed = |source| Error { path: path.to_owned(), source };
   let target = linked(path).map_err(failed)?;
@@ -57,7 +58,7 @@ fn filled(
     Err(no) => return Err(failed(no)),
   };
   let (part, mut opened) = beside(&target, access, &PARTS).map_err(failed)?;
-  let done = fill(&mut opened, bytes)
+  let done = fill(&mut opened)
     .and_then(|()| opened.sync_all())
     .and_then(|()| kept.map_or(Ok(()), |mode| opened.set_permissions(mode)));
   drop(opened);
@@ -73,7 +74,7 @@ fn beside(target: &Path, access: Access, counts: &AtomicU32) -> io::Result<(Path
   let name = target.file_name().unwrap_or_default().to_string_lossy();
   loop {
     let count = counts.fetch_add(1, Ordering::Relaxed);
-    let part = target.with_file_name(format!(".{name}.{}.{count}.part", std::process::id()));
+    let part = target.with_file_name(format!(".{name}.{}.{count}.part", process::id()));
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     restrict(&mut options, access);

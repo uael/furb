@@ -37,6 +37,8 @@ on:
       - bind/typescript/npm/**
       - script/prove-crate.sh
       - script/prove-npm.sh
+      - script/promise.py
+      - docs/promise.md
   pull_request:
     branches: [main]
     paths:
@@ -51,6 +53,8 @@ on:
       - bind/typescript/npm/**
       - script/prove-crate.sh
       - script/prove-npm.sh
+      - script/promise.py
+      - docs/promise.md
   workflow_dispatch:
 
 # One run for one ref: a push that follows another on a branch or a pull request ends the run before it, so a rehearsal
@@ -82,12 +86,16 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: ${{ env.UV_VERSION }}
+          # uv keeps no cache, as no-cache of pyproject.toml says: with the cache of the action on, its post step fails.
+          enable-cache: false
       - run: uv python install
       # A tag publishes the version that it names, and no other.
       - if: github.ref_type == 'tag'
         run: |
           test "v$(uv version --short)" = "$GITHUB_REF_NAME"
       - run: uv build
+      # The source of a release ships the page of its promise.
+      - run: tar -tzf dist/furb-*.tar.gz | grep -q '/docs/promise.md$'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: furb
@@ -209,6 +217,10 @@ jobs:
     name: the engine of npm for ${{ matrix.system }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # The step clear deletes the cache of rust that this job replaces.
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -223,9 +235,16 @@ jobs:
       # Before the setup, so the key of the cache of rust names the target.
       - if: matrix.target
         run: echo "CARGO_BUILD_TARGET=${{ matrix.target }}" >> "$GITHUB_ENV"
+      # A key for each system, since the two engines for macOS share a job and a system, and a release build of a
+      # system is a cache of 600 to 950 MB: with no clear, each change of a manifest stacked a new cache of the five
+      # beside the old ones, and the store past its 10 GB ended the caches that the gates restore.
+      # A pull request saves no release build: no run of the gates reads it, and the five of them held 3.6 GB of the
+      # 10 GB of the store, which then ended the caches that the gates restore.
       - uses: ./.github/actions/setup
         with:
           python: none
+          key: ${{ matrix.system }}
+          saved: ${{ github.event_name != 'pull_request' }}
       - if: matrix.target
         run: rustup target add "${{ matrix.target }}"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -240,6 +259,9 @@ jobs:
           path: |
             bind/typescript/furb.${{ matrix.system }}.node
             bind/typescript/index.cjs
+      - uses: ./.github/actions/clear
+        with:
+          key: ${{ matrix.system }}
 
   npm:
     name: npm pack
@@ -317,10 +339,28 @@ jobs:
           path: packs
       - run: sh script/prove-npm.sh packs
 
+  # The promise of docs/promise.md binds from 1.0.0: within a major, each life opens and resumes with no drift. Each
+  # proof that the page names runs here, and no job publishes while one of them fails.
+  promise:
+    name: the proofs of the promise
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # A pull request saves no cache of this job, which no run of the gates reads.
+      - uses: ./.github/actions/setup
+        with:
+          saved: ${{ github.event_name != 'pull_request' }}
+      - run: uv run python script/promise.py
+        env:
+          UV_NO_SYNC: "1"
+
   publish:
     name: publish to PyPI
     if: github.ref_type == 'tag'
-    needs: [furb, wheels, source, proof, crates, npm-proof]
+    needs: [furb, wheels, source, proof, crates, npm-proof, promise]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi
@@ -336,13 +376,15 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: ${{ env.UV_VERSION }}
+          # uv keeps no cache, as no-cache of pyproject.toml says: with the cache of the action on, its post step fails.
+          enable-cache: false
       # A run again after a failure skips each file that PyPI holds.
       - run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/
 
   crates-io:
     name: publish to crates.io
     if: github.ref_type == 'tag'
-    needs: [furb, wheels, source, proof, crates, npm-proof]
+    needs: [furb, wheels, source, proof, crates, npm-proof, promise]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     environment: crates-io
@@ -393,7 +435,7 @@ jobs:
   npm-publish:
     name: publish to npm
     if: github.ref_type == 'tag'
-    needs: [furb, wheels, source, proof, crates, npm-proof]
+    needs: [furb, wheels, source, proof, crates, npm-proof, promise]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: npm

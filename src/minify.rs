@@ -6,14 +6,15 @@ use ruff_python_ast::{
 };
 use ruff_python_parser::parse_module;
 use ruff_text_size::Ranged;
+use std::mem;
 
 /// One logical line of the engine: how deep it stands, and its parts, each the text of one token as
 /// the engine writes it and the kind of that token. A string that holds expressions is one part,
 /// whole.
 #[derive(Clone)]
-struct Line<'a> {
-  depth: usize,
-  parts: Vec<(TokenKind, &'a str)>,
+pub(crate) struct Line<'a> {
+  pub(crate) depth: usize,
+  pub(crate) parts: Vec<(TokenKind, &'a str)>,
 }
 
 impl Line<'_> {
@@ -62,7 +63,7 @@ impl Line<'_> {
   /// The line as the prompt writes it: the parts with a space only where two would run together,
   /// and a pattern of a case without the parentheses around it, which change nothing when a colon
   /// or a guard follows them.
-  fn text(&self) -> String {
+  pub(crate) fn text(&self) -> String {
     let mut parts: Vec<_> = self.parts.iter().collect();
     if let [(TokenKind::Case, _), (TokenKind::Lpar, _), ..] = parts[..] {
       let mut open = 0;
@@ -104,7 +105,7 @@ impl Line<'_> {
 /// every string that holds expressions as the one part it is in the source, so what stands between
 /// its quotes stays as it is. A comma that the formatter adds to break a long line goes with the
 /// line break: one that a line break and a closing bracket follow.
-fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
+pub(crate) fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
   let (mut lines, mut depth, mut parts) = (Vec::new(), 0, Vec::new());
   let mut at = 0;
   while at < tokens.len() {
@@ -113,7 +114,7 @@ fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
     let broken = tokens.get(at).map(Token::kind) == Some(TokenKind::NonLogicalNewline);
     match token.kind() {
       TokenKind::Newline if !parts.is_empty() => {
-        lines.push(Line { depth, parts: std::mem::take(&mut parts) });
+        lines.push(Line { depth, parts: mem::take(&mut parts) });
       }
       TokenKind::Comma
         if broken

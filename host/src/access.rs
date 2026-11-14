@@ -43,10 +43,10 @@ pub struct Access(HashMap<String, Role>);
 
 impl Config {
   /// The settings in a file, or the settings that turn nothing on when no file stands there.
-  pub fn load(path: &Path) -> Result<Config, AccessError> {
+  pub fn load(path: &Path) -> Result<Self, AccessError> {
     let shown = || PathBuf::from(path);
     match fs::read_to_string(path) {
-      Err(no) if no.kind() == io::ErrorKind::NotFound => Ok(Config::default()),
+      Err(no) if no.kind() == io::ErrorKind::NotFound => Ok(Self::default()),
       Err(source) => Err(AccessError::Read { path: shown(), source }),
       Ok(text) => {
         serde_json::from_str(&text).map_err(|source| AccessError::Parse { path: shown(), source })
@@ -56,6 +56,13 @@ impl Config {
 }
 
 impl Access {
+  /// Each login that the list names, in the order of their names.
+  pub fn logins(&self) -> Vec<String> {
+    let mut all: Vec<String> = self.0.keys().cloned().collect();
+    all.sort_unstable();
+    all
+  }
+
   /// The role of a login, or its refusal when the list does not name it.
   pub fn role(&self, login: &str) -> Result<Role, AccessError> {
     self.0.get(login).copied().ok_or_else(|| AccessError::Unlisted { login: login.to_owned() })
@@ -64,6 +71,6 @@ impl Access {
 
 impl FromIterator<(String, Role)> for Access {
   fn from_iter<I: IntoIterator<Item = (String, Role)>>(roles: I) -> Self {
-    Access(roles.into_iter().collect())
+    Self(roles.into_iter().collect())
   }
 }

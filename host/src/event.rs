@@ -1,6 +1,8 @@
 //! The events of a life: one scheme of deltas, which each client of the host reads in the same
 //! order.
 
+use std::sync::Arc;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -21,7 +23,7 @@ pub enum Event {
   Fact(Value),
   /// An act with its meaning as it stands after a fact about it, which takes the place of each
   /// earlier event of the same act.
-  Act(Box<Act>),
+  Act(Arc<Act>),
   /// What a model added to its text and to its thought, as it writes the reply of a rung on a
   /// chain. It is no fact, and the turn of the reply holds all of it.
   Text { rung: String, chain: String, text: String, thinking: String },
@@ -32,9 +34,8 @@ pub enum Event {
   Notice(String),
   /// A chain whose queries give another answer now, once each fact that changed it was told.
   Changed(String),
-  /// The life opened again from its checkpoint, on the same thread and for the same readers, with
-  /// the fault that stopped it when one did. Each event after it is of the new open, which tells
-  /// each chain, its turns and each open prompt again as it stood.
+  /// The life told the past of its record and is born on it, with no fault: each event after it
+  /// is of the birth, which tells each chain, its turns and each open prompt again as it stood.
   Reborn(Option<String>),
   /// The end of the life, with the fault that ended it, or none when a client ended it. It is the
   /// last event.

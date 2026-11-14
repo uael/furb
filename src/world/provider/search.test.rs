@@ -1,10 +1,6 @@
 //! The native searches: what each API answers comes to an answer with its sources, and the claude command line
 //! searches with its tool WebSearch alone.
 
-#![cfg_attr(
-  unix,
-  expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")
-)]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 #![cfg_attr(
   unix,
@@ -20,7 +16,12 @@ use serde_json::json;
 use super::claude;
 use super::{anthropic, deepseek, found, gemini, responses, sourced};
 #[cfg(unix)]
-use crate::{ear::reactor, testing::Yard, world::provider::claude::Program};
+use crate::{
+  testing::{Yard, on_reactor},
+  world::provider::claude::Program,
+};
+#[cfg(unix)]
+use std::process;
 
 fn pair(title: &str, url: &str) -> (String, String) {
   (title.to_owned(), url.to_owned())
@@ -54,6 +55,29 @@ fn the_messages_api_answers_with_its_texts_and_the_sources_they_cite_or_else_the
     anthropic(&json!({"content": [result]})),
     None,
     "a response with no text answers nothing"
+  );
+}
+
+#[test]
+fn a_search_of_the_messages_api_that_failed_or_a_block_it_does_not_read_leaves_the_text_alone() {
+  let failed = json!({"type": "web_search_tool_result", "content": {"type": "web_search_tool_result_error", "error_code": "too_many_requests"}});
+  let thought = json!({"type": "server_tool_use", "id": "s", "name": "web_search", "input": {}});
+  let text = json!({"type": "text", "text": "an answer"});
+  let got = json!({"content": [thought, failed, text]});
+  assert_eq!(anthropic(&got).as_deref(), Some("an answer"));
+  let untitled = json!({"type": "text", "text": "cited", "citations": [{"type": "web_search_result_location", "url": "https://u", "title": null}]});
+  assert_eq!(
+    anthropic(&json!({"content": [untitled]})),
+    anthropic(
+      &json!({"content": [{"type": "text", "text": "cited", "citations": [{"url": "https://u", "title": ""}]}]})
+    ),
+    "a citation whose title is null reads as one with no title"
+  );
+  assert!(anthropic(&json!({"content": [untitled]})).is_some_and(|one| one.contains("https://u")));
+  assert_eq!(
+    anthropic(&json!({"content": "no list"})),
+    None,
+    "a response of another shape gives no answer"
   );
 }
 
@@ -98,7 +122,7 @@ fn deepseek_answers_with_each_result_its_title_its_address_and_its_summary() {
 /// of its own.
 #[cfg(unix)]
 fn program(name: &str, args: &[&str], body: &str) -> (Yard, Program) {
-  let at = Yard::new(format!("furb-search-{name}-{}", std::process::id()));
+  let at = Yard::new(format!("furb-search-{name}-{}", process::id()));
   let bin = at.join("claude");
   fs::write(&bin, format!("#!/bin/sh\n{body}\n")).unwrap();
   use std::os::unix::fs::PermissionsExt;
@@ -111,7 +135,7 @@ fn program(name: &str, args: &[&str], body: &str) -> (Yard, Program) {
 fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_and_the_query_on_its_stdin()
  {
   let (_yard, bin) = program("echo", &[], r#"echo "$@"; cat"#);
-  let got = reactor().block_on(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
+  let got = on_reactor(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
   let (args, query) = got.split_once('\n').unwrap();
   assert!(
     args.starts_with("-p --model haiku --output-format text --system-prompt Search the web"),
@@ -120,7 +144,7 @@ fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_
   assert!(args.ends_with("--allowedTools WebSearch --tools WebSearch"), "{args}");
   assert_eq!(query, "what is rust");
   let (_yard, bin) = program("fails", &[], "echo out; echo 'no credit' >&2; exit 3");
-  let no = reactor().block_on(claude(bin, "haiku".to_owned())("q".to_owned())).unwrap_err();
+  let no = on_reactor(claude(bin, "haiku".to_owned())("q".to_owned())).unwrap_err();
   assert_eq!(no.to_string(), "claude exit status: 3: no credit");
 }
 
@@ -129,7 +153,7 @@ fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_
 fn the_claude_command_line_searches_with_its_command_prefix_once_before_its_flags() {
   let show = r#"printf '[%s]\n' "$@"; echo ---; cat"#;
   let (_yard, bin) = program("prefix", &["run", "two words"], show);
-  let got = reactor().block_on(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
+  let got = on_reactor(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
   let (args, query) = got.split_once("---\n").unwrap();
   assert!(args.starts_with("[run]\n[two words]\n[-p]\n[--model]\n[haiku]\n"), "{args}");
   assert_eq!(args.matches("[run]").count() + args.matches("[two words]").count(), 2);

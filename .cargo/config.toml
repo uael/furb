@@ -1,0 +1,14 @@
+# A tree keeps the incremental state of its crates in its own target, so a change of one file of a crate rebuilds it in
+# seconds, whatever a config above the clone says. A job of CI builds once and turns it off with CARGO_INCREMENTAL in
+# .github/actions/setup/action.yml.
+[build]
+incremental = true
+
+# The build script of opentui-sys links a native library of OpenTUI that stands already, and fails when none stands.
+# window/build.rs makes that library with Zig and says its link, and cargo cannot run it before the script of another
+# package. So that script is turned off, by its `links` key, on each system that furb ships for.
+[target.aarch64-apple-darwin.opentui]
+[target.x86_64-apple-darwin.opentui]
+[target.x86_64-unknown-linux-gnu.opentui]
+[target.aarch64-unknown-linux-gnu.opentui]
+[target.x86_64-pc-windows-msvc.opentui]

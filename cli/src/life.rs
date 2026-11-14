@@ -3,71 +3,30 @@
 
 use std::{
   future::{Future, poll_fn},
+  path::PathBuf,
   pin::Pin,
   task::Poll,
 };
 
 use furb::{
-  Act, Engine, Fact, Fault, Object,
-  ear::{ear, hear},
+  Act, Engine, Fault, Object,
   engine::OPERATOR,
-  extension::{self, Extension},
-  fact,
-  life::Opening,
+  fact, image,
+  life::{Opening, Progress},
+  skill::{self, Skill},
   verbs,
+  wire::outward,
   world::Catalog,
 };
 
-use futures::FutureExt;
-use unsync::spsc;
-
 use crate::{console, error::CliError};
 
-/// One life, as the operator holds it: its engine, its root, the facts of the record it was made again from, and what
-/// the operator hears of its root.
+/// One life, as the operator holds it: its engine, its root, the record that it keeps, when it
+/// keeps one, and what the operator hears of its root.
 pub(crate) struct Life {
   pub(crate) engine: Engine,
   pub(crate) root: String,
-  held: Vec<Fact>,
-  quiet: Quiet,
-  /// Each fact the life said, as the observer heard it, which the quiet reads.
-  heard: spsc::Receiver<Fact>,
-}
-
-/// Whether a pause stands over the acts the operator watches, the root and the act it awaits, and the last refusal
-/// of a reply, which says why the World paused a chain. A control is over the act it names and over every act on the
-/// chain it names, and an act of the operator has no maker above it, so the controls about these acts are all the
-/// controls over them.
-#[derive(Default)]
-struct Quiet {
-  acts: Vec<String>,
-  paused: bool,
-  refused: String,
-}
-
-impl Quiet {
-  /// The acts it watches, and what the facts said so far say of them, from the first.
-  fn watch(&mut self, acts: Vec<String>, facts: &[Fact]) {
-    (self.acts, self.paused) = (acts, false);
-    for one in facts {
-      self.heard(one);
-    }
-  }
-
-  /// What one more fact says.
-  fn heard(&mut self, a: &Fact) {
-    let watched = self.acts.iter().any(|one| one == a.about());
-    let reply = fact::named(a.about(), "reply");
-    match a.kind() {
-      "pause" | "wake" if watched => self.paused = a.kind() == "pause",
-      "done" if reply => {
-        if let Some(no) = a.word(0).and_then(Fault::of) {
-          self.refused = no.message();
-        }
-      }
-      _ => {}
-    }
-  }
+  record: Option<PathBuf>,
 }
 
 impl Life {
@@ -77,34 +36,29 @@ impl Life {
   ///
   /// The journal says the whole record again before boot returns, so the life stands whole on its record here, and a
   /// life whose record drifted is refused, since it would keep nothing more.
-  pub(crate) async fn lived(opening: Opening) -> Result<Life, CliError> {
-    let (mut engine, held) = opening.open([("console", console::terminal())]).await?;
+  pub(crate) async fn lived(opening: Opening) -> Result<Self, CliError> {
+    let record = opening.record.as_ref().filter(|_| opening.keeps()).map(PathBuf::from);
+    let ears = [("console", console::terminal())];
+    let (engine, _) = opening.open(ears, Progress::default(), &mut |_| true).await?;
     let root = engine.root().to_owned();
-    let mut quiet = Quiet::default();
-    let facts = engine.transcript(verbs::Transcript { on: Some(root.clone()), of: None })?;
-    quiet.watch(vec![root.clone()], &facts);
-    let (mut tells, told) = spsc::unbounded();
-    let observer = ear(move |mut co| async move {
-      loop {
-        let a = hear(&mut co).await;
-        if tells.try_send(a).is_err() {
-          // The life that read the facts dropped its end, so no one hears more of them: the
-          // observer ends, and the engine drives the rest of the life without it.
-          eprintln!("furb: the facts of the life go unread from here on");
-          return Ok(());
-        }
-      }
-    });
-    engine.drive(observer, "observer")?;
-    let held: Vec<Fact> =
-      held.iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?)).collect();
-    Ok(Life { engine, root, held, quiet, heard: told })
+    Ok(Self { engine, root, record })
   }
 
-  /// The extensions that the life runs, in the order it enabled them.
-  pub(crate) fn extensions(&mut self) -> Result<Vec<Extension>, CliError> {
+  /// The end of a command on a life that keeps its record: the life writes its image beside the
+  /// record, so the next command opens from it. A life that writes none loses nothing, since the
+  /// next command then opens by the record, so the operator is told and the command goes on.
+  pub(crate) fn ended(&mut self) {
+    if let Some(record) = &self.record
+      && let Err(no) = image::keep(&mut self.engine, record, &())
+    {
+      eprintln!("furb: {no}");
+    }
+  }
+
+  /// The skills that the life runs, in the order it enabled them.
+  pub(crate) fn skills(&mut self) -> Result<Vec<Skill>, CliError> {
     let root = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None });
-    Ok(extension::enabled(&root?))
+    Ok(skill::enabled(&root?))
   }
 
   /// The name of the prompt the record already holds for this message: of the operator, on the root, of this shape
@@ -112,23 +66,25 @@ impl Life {
   ///
   /// The engine matches nothing the operator says again, so a life stood up on its own record would open a second
   /// prompt beside the one that record stands on, and ask a model for what it was answered once.
-  pub(crate) fn again(&self, shape: &str, message: &str, to: &str) -> Option<String> {
+  pub(crate) fn again(
+    &mut self,
+    shape: &str,
+    message: &str,
+    to: &str,
+  ) -> Result<Option<String>, CliError> {
     let wanted = [OPERATOR, self.root.as_str(), shape, message, to];
-    self.held.iter().find_map(|a| {
+    let prompts = verbs::Transcript { on: Some(self.root.clone()), of: Some("prompt".to_owned()) };
+    Ok(self.engine.transcript(prompts)?.iter().find_map(|a| {
       let words =
         a.0.as_ref().items()?.iter().map(furb::ObjectRef::as_str).collect::<Option<Vec<_>>>()?;
-      (words.len() == 7 && a.kind() == "prompt" && words[2..] == wanted)
-        .then(|| a.about().to_owned())
-    })
+      (words.len() == 7 && words[2..] == wanted).then(|| a.about().to_owned())
+    }))
   }
 
-  /// Whether a pause stands over an act of the operator on the root, or over the root.
+  /// Whether a pause stands over an act of the operator on the root, or over the root, as the
+  /// engine reads it.
   pub(crate) fn paused(&mut self, id: &str) -> Result<bool, CliError> {
-    let facts =
-      self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None })?;
-    let mut quiet = Quiet::default();
-    quiet.watch(vec![self.root.clone(), id.to_owned()], &facts);
-    Ok(quiet.paused)
+    paused(&mut self.engine, id)
   }
 
   /// What an act of the operator on the root came to, awaited until it is done, as the operator waits on its own
@@ -136,32 +92,41 @@ impl Life {
   /// runs, or work that an earlier life left and that the act awaits alone, which no wake runs while one command
   /// runs.
   pub(crate) async fn settled(&mut self, id: &str) -> Result<Object, CliError> {
-    let facts =
-      self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None })?;
-    quieted(&mut self.quiet, &mut self.heard);
-    self.quiet.watch(vec![self.root.clone(), id.to_owned()], &facts);
-    let Life { engine, quiet, heard, .. } = self;
+    let Self { engine, root, .. } = self;
     poll_fn(|cx| {
       if let Poll::Ready(got) = Pin::new(&mut Act::<Object>::of(engine, id)).poll(cx) {
         return Poll::Ready(got.map_err(CliError::from));
       }
-      let quiet = quieted(quiet, heard);
-      if !quiet.paused {
-        return Poll::Pending;
+      match paused(engine, id) {
+        Ok(false) => Poll::Pending,
+        Ok(true) => Poll::Ready(
+          refused(engine, root)
+            .and_then(|refused| Err(CliError::Paused { id: id.to_owned(), refused })),
+        ),
+        Err(no) => Poll::Ready(Err(no)),
       }
-      let refused = Some(quiet.refused.clone()).filter(|why| !why.is_empty());
-      Poll::Ready(Err(CliError::Paused { id: id.to_owned(), refused }))
     })
     .await
   }
 }
 
-/// The quiet, once it read every fact the observer heard since.
-fn quieted<'a>(quiet: &'a mut Quiet, heard: &mut spsc::Receiver<Fact>) -> &'a Quiet {
-  while let Some(Some(a)) = heard.recv().now_or_never() {
-    quiet.heard(&a);
-  }
-  quiet
+/// Whether the engine reads a pause over an act.
+fn paused(engine: &mut Engine, id: &str) -> Result<bool, CliError> {
+  let paused = engine.verb("paused", vec![Object::string(id)], vec![])?;
+  Ok(outward(paused.as_ref()) == serde_json::Value::Bool(true))
+}
+
+/// Why a reply of the root was refused last, which says why the World paused a chain.
+fn refused(engine: &mut Engine, root: &str) -> Result<Option<String>, CliError> {
+  let done = verbs::Transcript { on: Some(root.to_owned()), of: Some("done".to_owned()) };
+  let facts = engine.transcript(done)?;
+  let mut why = facts.iter().rev().filter(|a| fact::named(a.about(), "reply"));
+  Ok(
+    why
+      .find_map(|a| a.word(0).and_then(Fault::of))
+      .map(|no| no.message())
+      .filter(|why| !why.is_empty()),
+  )
 }
 
 /// The shape of a prompt of the operator that names none: a str, so the model works until it closes the prompt with
@@ -180,7 +145,7 @@ pub(crate) struct Actor {
 /// the effort moved to the nearest one that model takes; or the name as it is, and no model, when
 /// the catalog knows no model by it, the operator among them.
 pub(crate) async fn actor(to: &str) -> Actor {
-  match Catalog::loaded().await.rostered(Some(&[]), Some(to)).await {
+  match Catalog::loaded(None).await.rostered(Some(&[]), Some(to)).await {
     Ok((models, actor)) => Actor {
       name: actor.unwrap_or_else(|| to.to_owned()),
       model: models.first().map(|one| one.name().to_owned()),

@@ -1,0 +1,29 @@
+"""compaction, the doctrine of the extension."""
+
+from pathlib import Path
+
+from furb import engine
+from skills.conftest import compacting
+
+
+async def test_compaction_is_the_doctrine_of_the_skill(tmp_path: Path) -> None:
+  """compaction is the doctrine of the extension, a quote that says what each part does and how a project changes the defaults."""
+  sand, root, _ = compacting(tmp_path)
+  sand.script[root] = ["close(compaction)"]
+  doctrine = await engine.prompt(str, "doctrine", on=root)
+  parts = [
+    "compact()",
+    "latest()",
+    "quiet()",
+    "recent(n)",
+    "chosen()",
+    "choice()",
+    "together(",
+    "compacted()",
+    "fitted()",
+    "condense()",
+    "clear()",
+    "SHARE",
+    "FILTERS",
+  ]
+  assert [part for part in [*parts, "BRIEF", "skill of its own"] if part not in doctrine] == []

@@ -16,13 +16,6 @@ concurrency:
 
 permissions:
   contents: read
-  # The step clear deletes the old cache of rust of the job, on main.
-  actions: write
-
-env:
-  # A gate builds once and runs no debugger, so a build writes no debug information and keeps no incremental state.
-  CARGO_PROFILE_DEV_DEBUG: "0"
-  CARGO_PROFILE_DEV_INCREMENTAL: "false"
 
 jobs:
   pin:
@@ -66,8 +59,16 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           TITLE: ${{ github.event.pull_request.title }}
         run: python3 script/hooks/corpus.py --base "$BASE" --title "$TITLE"
+      # The proof restores the cache of the build of the gates on its system, and saves none: it builds a part of what
+      # that build holds, for the same target and with the same feature, and a set of its own on each system took 1.9
+      # GB of the 10 GB of the store, which then ended the caches that the gates restore.
       - uses: ./.github/actions/setup
         with:
           python: none
-      - run: cargo test -p furb --test promise
-      - uses: ./.github/actions/clear
+          shared: build
+          hashed: bind/typescript/build.ts
+      # In bash on each system: the shell of a step on Windows is PowerShell, where "$GITHUB_ENV" is an empty string.
+      - shell: bash
+        run: |
+          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+      - run: "cargo test -p furb --features typescript --test suite promise::"

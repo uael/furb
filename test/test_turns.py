@@ -13,7 +13,7 @@ def notes(held: list[tuple]) -> list[list[object]]:
 
 
 async def test_the_turns_of_a_chain_folded_from_what_it_has_heard() -> None:
-  """The turns of a chain, folded from what it has heard."""
+  """The turns of a chain, folded from its reading."""
   _, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   got = engine.turns(on=root)
@@ -35,7 +35,6 @@ async def test_the_turns_of_what_a_chain_has_heard() -> None:
     "close",
     "stand",
     "rung",
-    "gate",
     "ready",
     "run",
     "module",
@@ -105,7 +104,7 @@ async def test_a_turn_once_phrased_is_phrased_the_same_on_every_later_reply() ->
   """A turn once phrased is phrased the same on every later reply."""
   sand, _, root = born()
   engine.grant(usd=10.0, on=root)
-  sand.script[root] = ["a = 1", "b = 2", "close(3)"]
+  sand.script[root] = ["a = 1\ndebug(t'{a}')", "b = 2\ndebug(t'{b}')", "close(3)"]
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
   asks = list(sand.turns.values())
@@ -116,7 +115,7 @@ async def test_a_turn_once_phrased_is_phrased_the_same_on_every_later_reply() ->
 
 async def test_the_turns_are_folded_whole_at_each_reply() -> None:
   """The turns are folded whole at each reply, and a user turn holds every paragraph told before its reply and since the reply before it, so a paragraph told while a reply is in flight goes to the turn after the answer."""
-  sand, log, root = born("x = bash('slow')", "y = 2", "close(3)")
+  sand, log, root = born("x = bash('slow')", "y = 2\ndebug(t'go')", "close(3)")
   assert await engine.prompt(int, "count", on=root) == 3
   await settle()
   asks = list(sand.turns.values())
@@ -127,7 +126,7 @@ async def test_the_turns_are_folded_whole_at_each_reply() -> None:
   ]
   assert [one[: len(asks[1])] for one in asks[1:]] == [asks[1]] * 2
   assert heads(asks[1][-1:]) == ["#bash1", "#bash1 exited 0", "#rung2 advance on prompt1"]
-  assert heads(asks[2][-1:]) == ["#rung2 told nothing", "#rung3 advance on prompt1"]
+  assert heads(asks[2][-1:]) == ["#rung2 debugged", "#rung3 advance on prompt1"]
   assert said(log, "bash")[0][1] == "bash1"
 
 
@@ -151,7 +150,7 @@ async def test_the_next_reply_tells_everything_that_the_step_told() -> None:
 
 async def test_the_turns_hold_every_answer_of_the_model_as_the_turn_it_is() -> None:
   """The turns hold every answer of the model as the turn it is."""
-  _, log, root = born("a = 1", "close(2)")
+  _, log, root = born("a = 1\ndebug(t'go')", "close(2)")
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   got = engine.turns(on=root)

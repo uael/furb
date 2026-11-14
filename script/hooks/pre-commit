@@ -1,6 +1,6 @@
 #!/bin/sh
-# Runs the hooks of pre-commit and prints only what fails or what they changed, so that the tail of a command that
-# commits and pushes shows the push. PRE_COMMIT names the command that runs them, which a test replaces.
+# Runs the hooks of pre-commit that a commit runs and prints only what fails or what they changed, so that the tail of a
+# command that commits and pushes shows the push. PRE_COMMIT names the command that runs them, which a test replaces.
 top=$(git rev-parse --show-toplevel) || exit 1
 if [ -z "$PRE_COMMIT" ]; then
   # A worktree has no .venv until uv sync makes it, and uv run makes one with no pre-commit in it. The pre-commit on
@@ -14,28 +14,51 @@ if [ -z "$PRE_COMMIT" ]; then
     fi
   done
 fi
-# A hand run takes the same pre-commit as a commit: sh script/hooks/pre-commit run --files <files>
+# A hand run takes the same pre-commit as a commit, and runs each hook of its stage: sh script/hooks/pre-commit run
+# --all-files runs every check that needs no build, and with --hook-stage manual every gate.
 if [ "${1:-}" = run ]; then
   # shellcheck disable=SC2086
   exec $PRE_COMMIT "$@"
 fi
+# A commit runs only the hooks that read its files alone and end at once. Each hook named here reads the whole
+# repository or takes more than half a second, so only a run by hand starts it.
+export SKIP="ty,uv-lock,fmt,links,paths,unused,workflows${SKIP:+,$SKIP}"
 out=$(mktemp "${TMPDIR:-/tmp}/furb-hook.XXXXXX") || exit 1
 trap 'rm -f "$out"' EXIT
+# Run the hooks on each file that stdin names and the index holds, and print only what fails.
+hooks() {
+  set --
+  while IFS= read -r one; do
+    if [ -n "$one" ] && git cat-file -e ":$one" 2>/dev/null; then set -- "$@" "$one"; fi
+  done
+  # shellcheck disable=SC2086
+  [ "$#" -eq 0 ] || $PRE_COMMIT run --config=.pre-commit-config.yaml --hook-stage=pre-commit --files "$@" >"$out" 2>&1 ||
+    { grep -vE '(Passed|Skipped)$' "$out"; return 1; }
+}
 if [ "$1" = merge ] || git rev-parse -q --verify MERGE_HEAD >/dev/null; then
   # Git gives a merge no staged diff that the hooks read well: they read only the files that a conflict touched, and a
-  # merge with no conflict reaches no pre-commit hook. So a merge is checked on every file that it changes against its
-  # first parent, as a commit is.
+  # merge with no conflict reaches no pre-commit hook. So the hooks read the merge as a commit of its own, on each file
+  # whose content differs from its version in every parent: a resolution of a conflict or new content. A file that the
+  # merge takes whole from one parent passed the hooks of that parent, and the gates check the whole tree.
+  # The other parents of the merge. A merge that ends a conflict holds them in MERGE_HEAD. A merge with no conflict
+  # writes none before its hook, and git names them in GIT_REFLOG_ACTION, as "merge <commit>...". With neither, the
+  # merge is read against HEAD alone, so each file that it changes is checked.
+  # shellcheck disable=SC2086
+  heads=$(cat "$(git rev-parse --git-path MERGE_HEAD)" 2>/dev/null) || case $GIT_REFLOG_ACTION in
+    "merge "*) heads=$(git rev-list --no-walk ${GIT_REFLOG_ACTION#merge } 2>/dev/null) || heads= ;;
+  esac
+  parents="-p HEAD"
+  for one in $heads; do parents="$parents -p $one"; done
   tree=$(git write-tree) || exit 1
+  # shellcheck disable=SC2086
   merge=$(GIT_AUTHOR_NAME=hook GIT_AUTHOR_EMAIL=hook@furb GIT_COMMITTER_NAME=hook GIT_COMMITTER_EMAIL=hook@furb \
-    git commit-tree "$tree" -p HEAD -m merge) || exit 1
-  # shellcheck disable=SC2086
-  $PRE_COMMIT run --config=.pre-commit-config.yaml --hook-stage=pre-commit --from-ref=HEAD --to-ref="$merge" >"$out" 2>&1
-else
-  # shellcheck disable=SC2086
-  $PRE_COMMIT hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$(dirname "$0")" -- "$@" >"$out" 2>&1
+    git commit-tree "$tree" $parents -m merge) || exit 1
+  git -c core.quotePath=false diff-tree -r --cc --name-only --no-commit-id "$merge" | hooks || exit 1
+  exit 0
 fi
-code=$?
-if [ "$code" -ne 0 ]; then
-  grep -vE '(Passed|Skipped)$' "$out"
+# shellcheck disable=SC2086
+if $PRE_COMMIT hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$(dirname "$0")" -- "$@" >"$out" 2>&1; then
+  exit 0
 fi
-exit "$code"
+grep -vE '(Passed|Skipped)$' "$out"
+exit 1

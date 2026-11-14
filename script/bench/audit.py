@@ -9,8 +9,8 @@ The audit checks first that the record hashes as the one who gives it says: the 
 life that only inspects a copy of the record. That life keeps nothing, enables no new extension and asks no model, and
 the files, the commands, time and the web are silent, so it runs no command, touches no file and reaches no network.
 The journal makes the record again from its words, and the life stops at the first act that does not agree with the
-record. Last, the audit hashes each answer of a model and each word that the life gave the gate or ran, as the life
-made them again, and checks each against the hash of the same answer and the same word in the record.
+record. Last, the audit hashes each answer of a model and each word that the life ran, as the life made them again,
+and checks each against the hash of the same answer and the same word in the record.
 
 The audit writes its report as JSON, and exits 0 when everything agrees, and 1 when something does not, or when the
 life refuses the record, as when the engine that made it is not the engine of this build.
@@ -25,8 +25,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-import furb_monty
-from furb import engine, python, sheet
+from furb import engine, python
+from furb.checkpoint import journal
 from furb.kernel import kernel
 from furb.world import entries
 from furb_monty import _monty
@@ -48,7 +48,7 @@ def plain(value: object) -> str:
 
 def said(record: list[tuple]) -> tuple[dict[str, str], dict[str, str]]:
   """What the record says: the hash of the answer of each reply that came to a turn, by its reply, and the hash of the
-  word of that answer as the gate reads it, by the rung that asked for it."""
+  word of that answer as the Kernel runs it, by the rung that asked for it."""
   makers = {str(fact[1]): str(fact[2]) for (fact,) in record if fact[0] == "reply"}
   answers, words = {}, {}
   for (fact,) in record:
@@ -69,11 +69,10 @@ def chains() -> list[str]:
   return found
 
 
-def made(record: list[tuple]) -> tuple[dict[str, str], dict[str, str], dict[str, str], list[str]]:
+def made(record: list[tuple]) -> tuple[dict[str, str], dict[str, str], list[str]]:
   """What the life made again: the hash of the outcome of each reply, by its reply; the hash of each word that the
-  life ran, by its rung; the gate that read each word, by the hash of that word; and each act of the record that the
-  life did not make again as the record holds it."""
-  answers, words, gated = {}, {}, {}
+  life ran, by its rung; and each act of the record that the life did not make again as the record holds it."""
+  answers, words = {}, {}
   for one in chains():
     for fact in engine.transcript(one):
       match fact:
@@ -81,8 +80,6 @@ def made(record: list[tuple]) -> tuple[dict[str, str], dict[str, str], dict[str,
           answers[reply] = digest(plain(engine.peek(reply)))
         case ("run", str(run), _, _, rung, str(word), _) if engine.question(("run", run)):
           words[str(rung)] = digest(word)
-        case ("gate", str(gate), _, _, str(word)) if engine.question(("gate", gate)):
-          gated.setdefault(digest(word), gate)
   # An act that an ear of the outside made, as the merged of a command, is of the World, which a life that inspects
   # holds silent, so the life makes again only the acts of the operator and of its own acts.
   missed = [
@@ -92,19 +89,17 @@ def made(record: list[tuple]) -> tuple[dict[str, str], dict[str, str], dict[str,
     and (fact[2] == engine.OPERATOR or ACT.fullmatch(str(fact[2])))
     and plain(engine.get(str(fact[1]))) != plain(fact)
   ]
-  return answers, words, gated, missed
+  return answers, words, missed
 
 
-async def replayed(record: Path, directory: Path) -> tuple[dict[str, str], dict[str, str], dict[str, str], list[str]]:
-  """The life that inspects the record, on the ears of the crate, the Kernel and the gate, and what it made again.
+async def replayed(record: Path, directory: Path) -> tuple[dict[str, str], dict[str, str], list[str]]:
+  """The life that inspects the record, on the ears of the crate and the Kernel, and what it made again.
   The journal says the whole record again before boot returns."""
-  stored, pairs = _monty.opened(
-    directory=str(directory), record=str(record), inspecting=True, extensions=False, roster=[]
-  )
+  stored, pairs = _monty.opened(directory=str(directory), record=str(record), inspecting=True, skills=False, roster=[])
   ears = dict(pairs)
   try:
     held = entries(stored)
-    engine.boot(held, kernel=kernel(vars(python)), gate=sheet.gating(vars(python), furb_monty.gate), **ears)
+    engine.boot(journal(vars(python), held), kernel=kernel(vars(python)), **ears)
     await asyncio.sleep(0)
     return made(held)
   finally:
@@ -131,22 +126,17 @@ def audited(path: Path, sha256: str) -> dict[str, object]:
     report["acts"] = sum(1 for (fact,) in record if engine.question(fact))
     answers, words = said(record)
     try:
-      again, ran, gated, missed = asyncio.run(replayed(copy, Path(tmp)))
+      again, ran, missed = asyncio.run(replayed(copy, Path(tmp)))
     except Exception as no:
       # A record that this build refuses, or an act that does not agree with it, stops the life before it makes
       # what the audit checks.
       wrong.append(f"the replay stops: {type(no).__name__}: {no}")
       return report
   report["answers"] = [{"reply": k, "record": v, "replay": again.get(k)} for k, v in answers.items()]
-  report["words"] = [{"rung": k, "record": v, "run": ran.get(k), "gate": gated.get(v)} for k, v in words.items()]
+  report["words"] = [{"rung": k, "record": v, "run": ran.get(k)} for k, v in words.items()]
   wrong += [f"the life did not make {one} again as the record holds it" for one in missed]
   wrong += [f"the answer of {k} does not hash as the record says" for k, v in answers.items() if again.get(k) != v]
-  # A word that the gate refused has a gate and no run, and a word that ran has both.
-  wrong += [
-    f"the word of {k} does not hash as the record says"
-    for k, v in words.items()
-    if ran.get(k) not in (None, v) or (k not in ran and v not in gated)
-  ]
+  wrong += [f"the word of {k} does not hash as the record says" for k, v in words.items() if ran.get(k) != v]
   return report
 
 

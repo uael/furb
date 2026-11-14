@@ -5,8 +5,9 @@
 //! command line runs as it did. With several, a turn that meets a usage limit or a failed sign in parks its account,
 //! and the next turn takes another: a limit parks it until its reset, and a failed sign in until a reload.
 
+use std::sync;
 use std::{
-  env, fs,
+  env, fs, io,
   path::{Path, PathBuf},
   process::Command,
   sync::{Mutex, MutexGuard},
@@ -79,14 +80,14 @@ pub(super) struct Accounts {
 }
 
 impl Accounts {
-  pub(super) fn new(list: Vec<Account>, switch: Switch) -> Accounts {
+  pub(super) fn new(list: Vec<Account>, switch: Switch) -> Self {
     let count = list.len().max(1);
     let state = State { parked: vec![Park::Free; count], given: vec![0; count], tick: 0 };
-    Accounts { list, switch, state: Mutex::new(state) }
+    Self { list, switch, state: Mutex::new(state) }
   }
 
   fn state(&self) -> MutexGuard<'_, State> {
-    self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    self.state.lock().unwrap_or_else(sync::PoisonError::into_inner)
   }
 
   /// How many accounts the command line may run as.
@@ -122,11 +123,11 @@ impl Accounts {
 
   /// Whether an account is not parked at this time.
   pub(super) fn free(&self, at: usize, now: SystemTime) -> bool {
-    Accounts::free_in(&self.state(), at, now)
+    Self::free_in(&self.state(), at, now)
   }
 
   fn choose(&self, state: &State, now: SystemTime) -> Option<usize> {
-    let mut free = (0..self.count()).filter(|at| Accounts::free_in(state, *at, now));
+    let mut free = (0..self.count()).filter(|at| Self::free_in(state, *at, now));
     match self.switch {
       Switch::Failover => free.next(),
       Switch::Spread => free.min_by_key(|at| state.given[*at]),
@@ -151,7 +152,7 @@ impl Accounts {
   /// The account that a command of no conversation runs as: the first that is not parked.
   pub(super) fn first_free(&self, now: SystemTime) -> usize {
     let state = self.state();
-    (0..self.count()).find(|at| Accounts::free_in(&state, *at, now)).unwrap_or(0)
+    (0..self.count()).find(|at| Self::free_in(&state, *at, now)).unwrap_or(0)
   }
 
   /// Park an account until a time, or until a new command line stands when no time is given.
@@ -174,36 +175,49 @@ impl Accounts {
       .min()
   }
 
-  /// Give a command the credential of an account, and take away each other one that would win over it. It fails with
-  /// the reason when the token cannot be read, and the reason never holds a token.
-  pub(super) fn apply(&self, at: usize, command: &mut Command) -> Result<(), String> {
+  /// Give a command the credential of an account, and take away each other one that would win
+  /// over it. It fails when the token cannot be read, and the failure never holds a token.
+  pub(super) fn apply(&self, at: usize, command: &mut Command) -> Result<(), Token> {
     let Some(account) = self.list.get(at) else { return Ok(()) };
     for name in OTHERS {
       command.env_remove(name);
     }
-    let name = &account.name;
-    let none = |what: String| format!("The account {name} has no token: {what}");
-    let token = match &account.source {
+    let name = account.name.clone();
+    let (token, empty) = match &account.source {
       Source::ConfigDir(dir) => {
         command.env_remove(TOKEN).env(CONFIG, dir);
         return Ok(());
       }
       Source::TokenFile(file) => {
-        let said = fs::read_to_string(file)
-          .map_err(|no| none(format!("its token file {} cannot be read: {no}", file.display())))?;
-        (said.trim().to_owned(), format!("its token file {} is empty", file.display()))
+        let said = fs::read_to_string(file).map_err(|source| Token::Unread {
+          name: name.clone(),
+          file: file.clone(),
+          source,
+        })?;
+        (said, Token::EmptyFile { name, file: file.clone() })
       }
       Source::TokenEnv(var) => {
-        let said = env::var(var).unwrap_or_default();
-        (said.trim().to_owned(), format!("its token variable {var} is empty or not set"))
+        (env::var(var).unwrap_or_default(), Token::EmptyEnv { name, var: var.clone() })
       }
     };
-    if token.0.is_empty() {
-      return Err(none(token.1));
+    let token = token.trim();
+    if token.is_empty() {
+      return Err(empty);
     }
-    command.env(TOKEN, token.0);
+    command.env(TOKEN, token);
     Ok(())
   }
+}
+
+/// Why an account has no token to give a command.
+#[derive(Debug, thiserror::Error)]
+pub enum Token {
+  #[error("The account {name} has no token: its token file {} cannot be read: {source}", file.display())]
+  Unread { name: String, file: PathBuf, source: io::Error },
+  #[error("The account {name} has no token: its token file {} is empty", file.display())]
+  EmptyFile { name: String, file: PathBuf },
+  #[error("The account {name} has no token: its token variable {var} is empty or not set")]
+  EmptyEnv { name: String, var: String },
 }
 
 #[cfg(test)]

@@ -1,0 +1,1 @@
+{"properties": {"cap": {"type": "integer", "default": 2, "description": "The most rows of the lane that run at once."}}}

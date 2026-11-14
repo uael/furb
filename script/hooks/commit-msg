@@ -1,0 +1,4 @@
+#!/bin/sh
+# Refuses a commit whose title breaks the rules that CI checks on the pull request, so that no commit is amended and
+# pushed again after the check. It needs no build and no .venv: script/title.py reads the standard library alone.
+exec python3 "$(dirname "$0")/../title.py" --file "$1"

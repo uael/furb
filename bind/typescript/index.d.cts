@@ -104,6 +104,8 @@ export declare class Engine {
   drive(g: Generator<unknown, unknown, unknown> | NativeEar, name: string): void
   /** transcript gives the facts on a chain, each of which the life adds when it is said, so a chain reads at once what it said itself. */
   transcript(options?: { on?: string; of?: string } | null): Array<[string, string, string, ...unknown[]]>
+  /** reading gives what the model of a chain reads: the facts that the last cut on the chain kept, then each fact said on the chain after that cut, or the whole transcript of a chain that holds no cut. */
+  reading(options?: { on?: string } | null): Array<[string, string, string, ...unknown[]]>
   /** The way to put a question that is answered now: it makes the act, and gives back what the act came to. */
   ask(kind: string, on: string, words?: unknown[]): unknown
   /** span(lo, hi) is the show of the lines lo through hi, where a line under one is counted back from the end, so that span(1, 20) is the first twenty lines and span(-20, -1) is the last twenty. */
@@ -122,14 +124,12 @@ export declare class Engine {
   write(text: TextValue, options?: { on?: string } | null): TextValue
   /** What the act it is at came to, as the record stands where the call is made, which it gives and never raises. */
   peek(at: string, options?: { waiting?: unknown } | null): unknown
-  /** The turns of a chain, folded from what it has heard. */
+  /** The turns of a chain, folded from its reading. */
   turns(options?: { on?: string } | null): Array<['user' | 'assistant', string, [number, number, number, number, number] | null, unknown]>
   /** module gives the globals of a chain: the dict that the last module of its transcript carries, in which every rung of the chain runs. */
   module(options?: { on?: string } | null): unknown
-  /** program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its transcript say. */
+  /** program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its reading say. */
   program(options?: { on?: string } | null): unknown
-  /** dump gives names of the module of a chain as python, which a word of another life runs to bind them again, so no verb loads them. */
-  dump(names?: string[], options?: { on?: string } | null): string
   /** standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first. */
   standing(): unknown
   /** stand asks the World what the chains stand on and gives the act, whose answer is the standing, which boot does on the root at the tip of every life. */
@@ -138,8 +138,6 @@ export declare class Engine {
   clock(options?: { on?: string } | null): number
   /** chance gives a number that is at least zero and under one. */
   chance(options?: { on?: string } | null): number
-  /** Whether the word of a rung may run: the gate reads it after the program of its chain, and it finds nothing when the word may run. */
-  gate(word: string, options?: { on?: string } | null): string[]
   /** A cd: the paths of its chain resolve against the directory it came to from then on, and it does nothing else. */
   cd(path: string, options?: { on?: string } | null): string
   /** The working directory of a chain is the directory that the closest cd back in its transcript came to. */
@@ -160,20 +158,67 @@ export declare class Engine {
   wait(acts?: string[], options?: { seconds?: number; on?: string } | null): Act & PromiseLike<string | null>
   /** The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is. */
   rung(options?: { word?: string; retells?: string; to?: string; on?: string } | null): Act & PromiseLike<unknown>
-  /** A prompt: it makes the rung of one turn of its model, makes another when no rung that it made runs, and is done with the value, so a rung whose word is refused and a rung whose word raises are asked again alike. */
+  /** A prompt: it makes the rung of the first turn of its model, its chain makes each later rung of it, and it is done with the value, so a rung whose word raises is asked again. */
   prompt(shape: unknown, options?: { message?: string; to?: string; on?: string } | null): Act & PromiseLike<unknown>
   /** chain says what a chain does: how it is opened, what it tells, and what it answers for. */
   chain(options?: { label?: string; source?: string; filter?: unknown; on?: string } | null): Act & PromiseLike<unknown>
-  /** seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine opens a checkpoint that an earlier engine of its major wrote. */
-  seed(data: unknown): unknown
-  /** gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts. */
-  gathered(define: unknown, floor: unknown): unknown
   /** A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells the dollars of that ledger at each answer of a model, since the advance binds the share before the next reply, so no turn a reply has sent grows a line after it. */
   grant(options?: { usd?: number; share?: number; on?: string } | null): Act & PromiseLike<null>
   /** A command: its streams as they come, its exit, the door of its streams and of its stdin, and what it came to. */
   bash(command: string, options?: { stdin?: string | null; timeout?: number; ok?: unknown; show?: unknown; show_err?: unknown; on?: string } | null): Act & PromiseLike<ExitValue>
 }
 export type JsEngine = Engine
+
+/**
+ * The meaning of a life that each window draws, folded in the crate from the facts of the life in
+ * the order of its log, as a daemon folds it: the acts, the desk, the threads of a chain, the acts
+ * as they stood at a moment, and the moments. A window that reads a record with no daemon folds it
+ * here, so it draws the meaning that a daemon serves.
+ */
+export declare class Meaning {
+  /** A meaning that heard no fact yet. */
+  constructor()
+  /**
+   * The acts that a fact changes, each as it stands after the fact. `covered` names each act of
+   * `open` that a pause or a wake covers, and `born` the last pause or wake that covers a new act,
+   * as the engine finds them. A reader with no engine gives neither, and the fold finds both
+   * itself, as the engine does, so a record folds as its life did.
+   */
+  hear(fact: unknown[], covered?: string[], born?: unknown[] | null): Array<import("./dist/protocol.js").Act>
+  /**
+   * A fact of a record, as the JSON of its line, which the meaning folds as [`Meaning::hear`]
+   * does with neither `covered` nor `born`, and gives back nothing: a window that reads a record
+   * asks the meaning later for what it draws, so no act crosses the door again for each fact.
+   */
+  told(line: string): void
+  /**
+   * The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
+   * that one holds.
+   */
+  open(pausing: boolean): Array<string>
+  /** What waits for the operator, with each notice that the window still shows. */
+  desk(notices?: Array<string> | undefined | null): import("./dist/protocol.js").Desk
+  /**
+   * The threads of a chain, now or as they stood just after a moment. `read` is the place up to
+   * which the window read the chain, from which its runs of notes count the notes not yet read.
+   */
+  threads(chain: string, at?: number | undefined | null, read?: number | undefined | null): import("./dist/protocol.js").Threads
+  /**
+   * The threads of every chain of the life but those that `hidden` names, as one tree in the order
+   * of the list of the threads, now or as they stood just after a moment.
+   */
+  rail(hidden?: Array<string> | undefined | null, at?: number | undefined | null): Array<import("./dist/protocol.js").ThreadNode>
+  /**
+   * The ladder of a chain, now or as it stood just after a moment, as the daemon folds it: the
+   * folds that the window opened, the prompts that the operator owes, the only acts at its top
+   * when `taken` names them, and how many last prompts and rungs show.
+   */
+  ladder(chain: string, at?: number, opened?: string[], owed?: string[], taken?: string[], shown?: import("./dist/protocol.js").Shown): Array<import("./dist/protocol.js").Rung>
+  /** The acts as they stood just after a moment. */
+  asOf(at: number): Array<import("./dist/protocol.js").Act>
+  /** Each moment at which an act began or ended, in order, of the life or of the acts of one chain. */
+  moments(on?: string | undefined | null): number[]
+}
 
 /**
  * An ear that the crate writes: given once, to the boot of an engine or to a verb that takes an ear. It is let go
@@ -212,12 +257,16 @@ export declare function attachImage(directory: string, path: string): ImageAttac
 export declare function bash(scratch: string): NativeEar
 
 /**
- * Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.
- * The config directory is the user config directory when unsaid. A start returns before the browser completes.
+ * Read, start, refresh or cancel `ChatGPT` sign-in for codex. The default action reads its state.
+ * The config directory is the user config directory when unsaid. A start returns before the
+ * browser completes.
  */
 export declare function codexAuth(action?: string | undefined | null, config?: string | undefined | null): CodexAuthInfo
 
-/** A ChatGPT sign-in state, with its browser address while it waits and a message when it fails. It holds no token. */
+/**
+ * A `ChatGPT` sign-in state, with its browser address while it waits and a message when it
+ * fails. It holds no token.
+ */
 export interface CodexAuthInfo {
   state: string
   url?: string
@@ -225,8 +274,8 @@ export interface CodexAuthInfo {
 }
 
 /**
- * The config directory of the user for this process, where the configs, the extensions of the user and the
- * preferences of the TUI stand.
+ * The config directory of the user for this process, where the configs and the extensions of the
+ * user stand.
  */
 export declare function configDirectory(): string
 
@@ -241,8 +290,8 @@ export declare function configSet(directory: string, change: string, config?: st
 /** One line of a record, read with every number exact, as the record keeps it. */
 export declare function decodeRecord(line: string): unknown
 
-/** The extensions that a life runs, in the order it enabled them, as the facts of its root say them. */
-export declare function enabled(root: unknown[][]): Array<Extension>
+/** The skills that a life runs, in the order it enabled them, as the facts of its root say them. */
+export declare function enabled(root: unknown[][]): Array<Skill>
 
 /**
  * The engine: the one file the sandbox runs, and the whole system prompt of a model.
@@ -253,38 +302,11 @@ export declare function enabled(root: unknown[][]): Array<Extension>
 export declare const ENGINE: string
 
 /**
- * An extension: its name, its word, its life word, which is empty when it has none, whether it plays on the root
- * alone, and the path of the file of its word, with `~` for the home of the user as the World writes a path for a
- * model, which each chain reads as a turn of its setup, and which is empty when no file stands for the word. An
- * extension that plays on the root alone plays on no other chain but one whose source had it, since that chain makes
- * the rung of its source again; any other extension plays on every chain.
- */
-export interface Extension {
-  name: string
-  word: string
-  life: string
-  root: boolean
-  file: string
-}
-
-/**
- * The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
- * unless the record enables it, and plays each as a rung on each chain.
- */
-export declare function extensions(given: Array<Extension>): NativeEar
-
-/**
  * The ear of the files, which reads and writes a path, a path of `scratch://` in the scratch
  * directory that the host names, which the ear of commands is given too, and a path of `config://`
  * in the config directory of the user, the one of this process when the host names none.
  */
 export declare function files(scratch: string, config?: string | undefined | null): NativeEar
-
-/**
- * The gate of the crate: what the type checker of monty found on a sheet, each error by its line, and no warning.
- * The checker is the one every engine of this thread gates with, so a word is judged once and the same.
- */
-export declare function gate(sheet: string): Array<[number, string]>
 
 /**
  * An image a host attached: the name of its file, the uri a message names it by, its media type, and its size in
@@ -321,13 +343,16 @@ export declare function imageReference(name: string, uri: string): string
 /** Each image a message names, as its text in the message, its name, and its uri. */
 export declare function imageReferences(message: string): Array<Named>
 
-/** The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP. */
+/**
+ * The type of an image by its first bytes: its media type and the suffix of the name of its
+ * file, for a PNG, a JPEG, a GIF or a WebP.
+ */
 export declare function imageType(data: Uint8Array): ImageType
 
-/** The type of an image: its media type and its extension. */
+/** The type of an image: its media type and the suffix of the name of its file. */
 export interface ImageType {
   mimeType: string
-  extension: string
+  suffix: string
 }
 
 /**
@@ -346,6 +371,13 @@ export declare function kept(path: string): unknown[]
 
 /** LARGEST is the largest number of bytes that a read tells of the lines that its show picks. */
 export declare const LARGEST: number
+
+/**
+ * The model and the effort that an actor names, as the crate reads an actor: the model whole
+ * when `models` holds its whole name, else the model and the level after its last slash when
+ * that word is one of the levels. The effort is `off` when the actor names none.
+ */
+export declare function leveled(actor: string, models?: Array<string> | undefined | null): Array<string>
 
 /** The levels of effort, from least to most, which an actor names after its model. */
 export declare function levels(): Array<string>
@@ -404,8 +436,8 @@ export interface Named {
   uri: string
 }
 
-/** The official extensions, in the order a life runs them. */
-export declare function official(): Array<Extension>
+/** The official skills, in the order a life runs them. */
+export declare function official(): Array<Skill>
 
 /**
  * Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
@@ -452,26 +484,29 @@ export interface Opening {
   inspecting?: boolean
   /**
    * Whether the life opens from the first entry of its record, born again at each checkpoint as
-   * each life of the
-   * record was, and not from its last checkpoint alone; false when unsaid. Each checkpoint then
-   * has to end the life
-   * that wrote it and to hold what a life born on the entries before it gathers, or the open is
-   * refused, as
-   * [`checkpoint::reborn`] says. Both opens reach one state at the tip, so the tests and the
-   * gates open this way to
-   * prove each checkpoint of a record.
+   * each life of the record was, and not from its last checkpoint alone; false when unsaid. Each
+   * checkpoint then has to end the life that wrote it and to hold what a life born on the entries
+   * before it gathers, or the open is refused, as [`checkpoint::reborn`] says. Both opens reach
+   * one state at the tip, so the tests and the gates open this way to prove each checkpoint of a
+   * record.
    */
   whole?: boolean
   /**
    * Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs what
    * its record enables either way.
    */
-  extensions?: boolean
+  skills?: boolean
   /**
    * The config directory of the user, which the configs and the official extensions read; the one of this process
    * when unsaid.
    */
   config?: string
+  /**
+   * The home of the logins of the members who answer as the operator, as the access list of a host
+   * and its local login give them, each of which a prompt can ask with `to="operator/<login>"`;
+   * none when unsaid. A host that changes it changes the roster at the next stand.
+   */
+  members?: Array<string>
   /**
    * The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
    * level as [`world::Model::at`] moves it. When unsaid, the default actor of the last stand
@@ -481,13 +516,15 @@ export interface Opening {
    */
   actor?: string
   /**
-   * The models the provider offers beside the model of the actor, as the catalog names them;
-   * a name that the catalog lacks is dropped, and each chain is told so once.
-   * When it is unsaid, the
+   * The home of the models the provider offers beside the model of the actor, as the catalog
+   * names them; a name that the catalog lacks is dropped, and each chain is told so once.
+   * When it is unsaid or holds none, the
    * roster of the last stand that the record answered, less the operator, so a life opened
    * again goes on with the roster it had, and on a record with no stand, the
    * provider offers every model that the catalog offers, after the model of the actor; a roster that names none
-   * offers the model of the actor alone, and, with no actor, the operator alone.
+   * offers the model of the actor alone, and, with no actor, the operator alone. A host that
+   * puts other names in the home changes the roster at the next stand that reads the catalog
+   * again, with no new life, and the record keeps the answer of that stand.
    */
   roster?: Array<string>
   /** The claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine holds. */
@@ -522,22 +559,10 @@ export interface Outcome {
 }
 
 /**
- * The part of an extension that a TUI loads: the name of the extension, the path of its module of TypeScript, which
- * the manifest names under `tui`, beside the word, and the text of that module when the crate carries it. The crate
- * carries the part of an official extension, so a TUI loads it from the text where no checkout of furb stands, as in
- * an installed package, and the path is then its place in the repository of furb.
+ * The ear that plays each skill that the life runs: it enables each at the tip of the life,
+ * unless the record enables it, and plays each as a rung on each chain.
  */
-export interface Part {
-  name: string
-  file: string
-  text?: string
-}
-
-/**
- * The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
- * one, as the configs of the user and of the project say it now, which a TUI loads beside the life.
- */
-export declare function parts(project: string): Array<Part>
+export declare function played(given: Array<Skill>): NativeEar
 
 /**
  * A provider as a first run checks it: its name, the names of its credential in the environment, whether the
@@ -552,15 +577,31 @@ export interface ProviderInfo {
 }
 
 /**
+ * Each quote of a word, in order: of a word that ran, each that closes, and of a word that a model
+ * still writes, `open`, the last one too while its close mark has not come. Each window reads the
+ * quotes of a word here, as the fold reads them.
+ */
+export declare function quotes(text: string, open?: boolean | undefined | null): Array<{ start: number; name: string; body: string; end: number; closed: boolean; binding: string }>
+
+/**
+ * Acts each in the state that the crate gives it, and each chain in the state that the acts that
+ * stand in it give, as a daemon tells them: what a window that makes acts of its own, as a test
+ * does, reads in place of a state of its own.
+ */
+export declare function restated(acts: Array<import("./dist/protocol.js").Act>): Array<import("./dist/protocol.js").Act>
+
+/**
  * What the record at a path tells, read with no life, so no word runs again and a record of any
  * engine opens: the engine that made it, as the record names it, and nothing when it names none;
  * the engine of this build; whether the facts are those of its log; and the file that holds the
  * facts, one on each line, in order. The facts are those of the log when it agrees with the
  * record, and else those that the record kept, with the chains, the rungs, the runs and the dones
  * that they name. A line of the file that does not start with `[`, and a line `["keep", "", n]`,
- * holds no fact.
+ * holds no fact. The name of the session is the one that the operator said last on the root,
+ * which wins, else the one that the extension naming gave, and `said` is the one that the
+ * operator said alone; an empty name takes the default name again.
  */
-export declare function retold(path: string): { made: string | null; engine: string; logged: boolean; file: string }
+export declare function retold(path: string): { made: string | null; engine: string; logged: boolean; file: string; name: string | null; said: string | null }
 
 /** ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life. */
 export declare const ROOT: string
@@ -596,6 +637,25 @@ export declare function shapes(): Array<string>
 /** The POSIX shell that runs a command of this machine, which a host runs its own commands in too. */
 export declare function shell(): string
 
+/**
+ * A skill: its name, its word, its life word, which is empty when it has none, whether it
+ * plays on the root
+ * alone, and the path of the file of its word, with `~` for the home of the user as the World
+ * writes a path for a
+ * model, which each chain reads as a turn of its setup, and which is empty when no file stands for
+ * the word. An
+ * extension that plays on the root alone plays on no other chain but one whose source had it,
+ * since that chain makes
+ * the rung of its source again; any other extension plays on every chain.
+ */
+export interface Skill {
+  name: string
+  word: string
+  life: string
+  root: boolean
+  file: string
+}
+
 /** The ear of the skills extension, which finds skills in the folders of a chain and in the config directory. */
 export declare function skills(config: string): NativeEar
 
@@ -621,3 +681,10 @@ export declare const TIMEOUT: number
 
 /** WINDOW is the window, in tokens, of a model whose roster entry does not say one. */
 export declare const WINDOW: number
+
+/**
+ * What a model writes while its word has not come yet, from the text of its word that came and
+ * the text that it thinks: the lines of the word that it finished, the line that it still writes,
+ * the line of the word where each line starts, and the count of the lines of the word.
+ */
+export declare function writing(text: string, thinking: string): { lines: string; tail: string; numbers: number[]; count: number }

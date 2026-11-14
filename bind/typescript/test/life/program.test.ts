@@ -1,15 +1,12 @@
 import { expect, test } from "bun:test";
+import "../../src/index.ts";
 import {
-  actLines,
-  earProgram,
   foldStrings,
   hintOf,
   joinedLines,
   layout,
   literals,
   placed,
-  quoteBinding,
-  quoteParts,
   stepLines,
   threadProgram,
   wrap,
@@ -116,7 +113,7 @@ test("the numbers of the lines of a thread go on from each step to the next, acr
   ]);
 });
 
-test("a word that the gate refused marks the line that its reason names", () => {
+test("a word that failed marks the line that its reason names", () => {
   const prompt = act("prompt1", "prompt", "chain1", "operator", 1, 5, {
     words: ["str", "Go", "opus"],
     value: "ok",
@@ -222,25 +219,6 @@ test("a program that keeps its last steps makes their lines alone, after the cou
   ]);
 });
 
-test("an act that no word made stands as one line of python, its call bound to its name, lit while it runs with what its command prints under it", () => {
-  const bash = act("bash1", "bash", "chain1", "operator", 1, undefined, {
-    words: ["printf 'a\\nb\\n'", "", 600],
-    value: { code: null, stdout: { path: "", content: "a\nb\n" }, stderr: { path: "", content: "" } },
-  });
-  expect(actLines(bash, new Set(), label).map((line) => [line.kind, line.text])).toEqual([
-    ["code", `bash1 = bash("printf 'a\\\\nb\\\\n'")`],
-    ["output", "a"],
-    ["output", "b"],
-  ]);
-  const wait = act("wait1", "wait", "chain1", "operator", 1, 2, { words: [60, "bash1"], value: "bash1" });
-  const [line] = actLines(wait, new Set(), label);
-  expect(line?.kind === "code" && [line.text, line.runs, line.hint]).toEqual([
-    'wait1 = wait(60, "bash1")',
-    false,
-    "woke by bash1",
-  ]);
-});
-
 test("the hint of a line says what the line did: no word of another act, no empty wake", () => {
   const label = (chain: string) => chain;
   const woke = act("wait1", "wait", "chain1", "operator", 1, 2, { words: [30, "bash1"], value: "bash1" });
@@ -330,17 +308,6 @@ test("a quote that a model still writes stands as its binding from its opening m
   expect(shown("<s:no").lines).toBe("");
 });
 
-test("a text parts into its runs of python and each quote that closes, which binds as the engine binds it", () => {
-  const parts = quoteParts("#read1\n<s:read1_text>\nit's\n</s:read1_text>\nx = 1\n<s:open>\nno close");
-  expect(parts).toEqual([
-    { code: "#read1" },
-    { quote: { name: "read1_text", body: "it's\n", end: 3, closed: true } },
-    { code: "x = 1\n<s:open>\nno close" },
-  ]);
-  const quote = parts[1];
-  expect(quote && "quote" in quote ? quoteBinding(quote.quote) : "").toBe(`read1_text = "it's\\n"`);
-});
-
 test("a string of three marks that runs over many lines stands in its statement as one string with its escapes, on the line that starts the statement", () => {
   const word = ['text = f"""first', 'second "x" line', 'third""" + "!"', "print(text)"].join("\n");
   const rung = act("rung1", "rung", "chain1", "prompt1", 2, 3);
@@ -369,7 +336,7 @@ test("a line with no string that runs past it stands as it is", () => {
 
 test("a line too wide wraps between tokens in rows of a width at most, and the rows hold the line whole", () => {
   const line =
-    '  result = await prompt(tuple[list[str], str], "Choose what it keeps: each act that holds a decision", to=CHOOSER, on=here)';
+    '  result = await prompt(tuple[list[str], str], "Choose what it keeps: each act that holds a decision", to=wrote, on=here)';
   for (const width of [30, 40, 60, 100]) {
     const rows = wrap(line, width);
     expect(rows.length).toBeGreaterThan(line.length > width ? 1 : 0);
@@ -421,7 +388,7 @@ test("a line too wide for one row lays out as ruff format lays it out, and its r
     '  on: str = ""',
     ") -> str:",
   ]);
-  const call = 'extend("todo", next(k for k, w in program().items() if w.startswith("def todo")), tui=part)';
+  const call = 'extend("todo", next(k for k, w in program().items() if w.startswith("def todo")), view=part)';
   expect(layout(call, 60).map((row) => row.text)).toEqual([
     "extend(",
     '  "todo",',
@@ -430,7 +397,7 @@ test("a line too wide for one row lays out as ruff format lays it out, and its r
     "    for k, w in program().items()",
     '    if w.startswith("def todo")',
     "  ),",
-    "  tui=part",
+    "  view=part",
     ")",
   ]);
   // Each part of a row names where it starts in the line, so the colors come from the statement whole.
@@ -452,48 +419,6 @@ test("a line that a layout folds keeps each fold in its row, and a string that t
     '  "short"',
     ")",
   ]);
-});
-
-test("an act that no word made shows a text, a float, a list and a map of its words as python writes them, never as an object", () => {
-  const write = act("write1", "write", "chain1", "operator", 1, 2, {
-    words: [
-      { is: "Text", path: "notes.md", content: "a\n" },
-      { is: "float", args: ["3"] },
-      [1, null],
-      { x: true },
-    ],
-  });
-  const [line] = actLines(write, new Set(), label);
-  expect(line?.kind === "code" && line.text).toBe(
-    `write1 = write(Text(path="notes.md", content="a\\n"), 3.0, [1, None], {"x": True})`,
-  );
-});
-
-test("the last line of the setup of an ear runs while an act of its word is at work, and not while an act that is no work lives on after its done", () => {
-  const ear = act("rung1", "rung", "chain1", "extensions", 1, 9);
-  const rung = act("rung2", "rung", "chain1", "extensions", 2, 9);
-  // The watcher of an extension says its act done, then lives on, as a lasting ear does, and the memory ear never says it.
-  const watcher = act("mcp_index1", "mcp_index", "chain1", "rung2", 3, 4);
-  const keeper = act("remember1", "remember", "chain1", "rung2", 5);
-  const word = "catchup()\nawait mcp_index()";
-  const lines = (acts: ReturnType<typeof act>[]) =>
-    earProgram(
-      ear,
-      [rung],
-      [],
-      () => acts,
-      () => word,
-      new Set(),
-      label,
-    ).flatMap((line) => (line.kind === "code" ? [[line.text, line.runs]] : []));
-  expect(lines([watcher, keeper])).toEqual([
-    ["catchup()", false],
-    ["await mcp_index()", false],
-  ]);
-  const command = act("bash1", "bash", "chain1", "rung2", 6);
-  expect(lines([watcher, keeper, command]).at(-1)).toEqual(["await mcp_index()", true]);
-  const done = act("bash1", "bash", "chain1", "rung2", 6, 7);
-  expect(lines([watcher, keeper, done]).at(-1)).toEqual(["await mcp_index()", false]);
 });
 
 test("the acts of a word stand on the lines that call their verbs, and a loop puts again on its line the acts that it makes again", () => {

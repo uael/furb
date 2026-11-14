@@ -2,6 +2,10 @@
 //! that furb writes for its first process to resume, and each turn, which writes to its process
 //! only what the command line has not heard and settles what that turn came to.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   env,
   path::PathBuf,
@@ -21,13 +25,19 @@ use tokio::io::AsyncWriteExt;
 use super::{
   Deltas, Error, Program, discover, error, failed,
   process::{GRACE, Line, Process, Spend, absent, exited, last, stalled},
-  protocol::{Event, Finished, Reply, unexplained},
+  protocol::{Event, Finished, Reply, Spent, unexplained},
   refused, worded,
 };
+use crate::world::provider::{self, answer::counted};
 use crate::world::{
   disk::{self, Access},
   provider::{ENV_THINKING, uuid},
 };
+use std::fs;
+use std::mem;
+use std::slice;
+use tokio::process;
+use tokio::time;
 
 /// The flag by which the command line records its system prompt once for a conversation.
 const SNAPSHOT: &str = "--system-prompt-snapshot";
@@ -36,8 +46,8 @@ const SNAPSHOT: &str = "--system-prompt-snapshot";
 /// memory of no project, and keeps the conversations of furb under one name.
 fn home() -> Result<PathBuf, CompletionError> {
   let folder = env::temp_dir().join("furb-claude");
-  std::fs::create_dir_all(&folder)
-    .and_then(|()| std::fs::canonicalize(&folder))
+  fs::create_dir_all(&folder)
+    .and_then(|()| fs::canonicalize(&folder))
     .map_err(|no| failed(format!("{} was not made: {no}", folder.display())))
 }
 
@@ -85,13 +95,44 @@ pub(super) struct Conversation {
   pub(super) process: Option<Process>,
   pub(super) used: Instant,
   /// Whether a block of this conversation holds the mark of the cache that ends the setup of its
-  /// chain.
-  marked: bool,
+  /// chain, as a fork holds each block of the conversation it forks.
+  pub(super) marked: bool,
+  /// What the command line holds of this conversation, entry by entry, which the first process of
+  /// a conversation that replaces this one resumes as far as the two share their turns.
+  pub(super) said: Vec<Said>,
+  /// What each request of a turn that came to no result read, the request of the turn that streams
+  /// among them, which the next turn that comes to a result pays.
+  unpaid: Vec<Unpaid>,
+}
+
+/// What a request read as far as its stream said: the model that read it and its usage. The command
+/// line counts no cost for a request of a turn that came to no result, as a turn that the provider
+/// cut at a statement that cannot be python, though the API read its prompt.
+#[derive(Default)]
+struct Unpaid {
+  model: Option<String>,
+  spent: Spent,
+}
+
+impl Unpaid {
+  /// What it cost at the price that the catalog gives its model, with a write of the cache at the
+  /// price of the time that the mark of the cache lasts: twice a fresh read for an hour.
+  fn cost(&self) -> f64 {
+    let model = self.model.as_deref().unwrap_or_default();
+    // The command line runs the models of Anthropic, which the catalog lists under that provider.
+    let Some([fresh, out, cached, cache]) = provider::catalog::priced("anthropic", model) else {
+      return 0.0;
+    };
+    let write = if lasting() == "1h" { 2.0 * fresh } else { cache };
+    let Spent { input, output, cache_read, cache_creation } = &self.spent;
+    let read = counted(*input) * fresh + counted(*cache_read) * cached;
+    (read + counted(*output) * out + counted(*cache_creation) * write) / 1e6
+  }
 }
 
 impl Conversation {
-  pub(super) fn new(name: &str, system: &str, id: String) -> Conversation {
-    Conversation {
+  pub(super) fn new(name: &str, system: &str, id: String) -> Self {
+    Self {
       name: name.to_owned(),
       system: system.to_owned(),
       id,
@@ -106,16 +147,22 @@ impl Conversation {
       process: None,
       used: Instant::now(),
       marked: false,
+      said: Vec::new(),
+      unpaid: Vec::new(),
     }
   }
 
-  /// A new conversation under a new id, on the same account and in the same config dir.
+  /// A new conversation under a new id, on the same account and in the same config dir, which knows
+  /// what the command line held of the one that it replaces.
   fn renew(&mut self) -> Result<(), CompletionError> {
     let id = uuid()?;
-    let (account, store) = (self.account, self.store.take());
-    *self = Conversation::new(&self.name, &self.system, id);
+    let (account, store, said) = (self.account, self.store.take(), mem::take(&mut self.said));
+    let unpaid = mem::take(&mut self.unpaid);
+    *self = Self::new(&self.name, &self.system, id);
+    self.unpaid = unpaid;
     self.account = account;
     self.store = store;
+    self.said = said;
     Ok(())
   }
 
@@ -135,36 +182,16 @@ impl Conversation {
     let name: String =
       cwd.chars().map(|one| if one.is_ascii_alphanumeric() { one } else { '-' }).collect();
     let now = jiff::Timestamp::now().to_string();
+    self.resumes(past)?;
     let mut lines = String::new();
     let mut parent = Value::Null;
-    // The last message of the user in the past ends the setup that every chain with no source
-    // shares, since the turn after it tells the chain where it stands, so its last block takes the
-    // mark of the cache.
-    let shared = past.iter().rposition(|one| matches!(one, Message::User { .. }));
-    for (at, message) in past.iter().enumerate() {
-      let (kind, blocks): (&str, Vec<Value>) = match message {
-        Message::System { .. } => continue,
-        Message::User { content } => {
-          let mut blocks: Vec<Value> = content.iter().map(said).collect::<Result<_, _>>()?;
-          if Some(at) == shared
-            && !self.marked
-            && let Some(last) = blocks.last_mut()
-          {
-            last["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});
-            self.marked = true;
-          }
-          ("user", blocks)
-        }
-        Message::Assistant { content, .. } => {
-          ("assistant", content.iter().flat_map(resumed).collect())
-        }
-      };
-      if blocks.is_empty() {
+    for Said { role, content, .. } in &self.said {
+      if content.is_empty() {
         continue;
       }
       let id = uuid()?;
-      let message = json!({"role": kind, "content": blocks});
-      let entry = json!({"type": kind, "uuid": id, "parentUuid": parent, "sessionId": self.id, "cwd": cwd,
+      let message = json!({"role": role, "content": content});
+      let entry = json!({"type": role, "uuid": id, "parentUuid": parent, "sessionId": self.id, "cwd": cwd,
         "isSidechain": false, "userType": "external", "timestamp": now, "message": message});
       lines.push_str(&entry.to_string());
       lines.push('\n');
@@ -178,6 +205,46 @@ impl Conversation {
     disk::write(&file, lines.as_bytes(), Access::Shared).map_err(|no| failed(no.to_string()))?;
     self.resumed = true;
     Ok(true)
+  }
+
+  /// What the command line holds of this conversation once it resumes the turns before the last
+  /// message: the entries of the conversation that it replaces as far as the two share their turns,
+  /// as the command line held them, with the thought and the text that the model wrote, so the API
+  /// reads them again from its cache, then each turn after them as the chain gives it.
+  fn resumes(&mut self, past: &[Message]) -> Result<(), CompletionError> {
+    let meaning: Vec<String> = past.iter().map(canonical).collect();
+    let (kept, covered) = shared(&self.said, &meaning);
+    self.said.truncate(kept);
+    self.marked = self
+      .said
+      .iter()
+      .flat_map(|one| &one.content)
+      .any(|block| block.get("cache_control").is_some());
+    // The last message of the user in the past ends the setup that every chain with no source
+    // shares, since the turn after it tells the chain where it stands, so its last block takes the
+    // mark of the cache.
+    let setup = past.iter().rposition(|one| matches!(one, Message::User { .. }));
+    for (at, message) in past.iter().enumerate().skip(covered) {
+      let (role, content): (&'static str, Vec<Value>) = match message {
+        Message::System { .. } => continue,
+        Message::User { content } => {
+          let mut blocks: Vec<Value> = content.iter().map(said).collect::<Result<_, _>>()?;
+          if Some(at) == setup
+            && !self.marked
+            && let Some(last) = blocks.last_mut()
+          {
+            last["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});
+            self.marked = true;
+          }
+          ("user", blocks)
+        }
+        Message::Assistant { content, .. } => {
+          ("assistant", content.iter().flat_map(resumed).collect())
+        }
+      };
+      self.said.push(Said { start: at, meaning: vec![meaning[at].clone()], role, content });
+    }
+    Ok(())
   }
 
   /// One turn at what it spends: the messages that the command line has not heard, written as one
@@ -220,7 +287,7 @@ impl Conversation {
     let again = grown.is_some() || start.is_some_and(|at| at > 0 && at == incoming.len());
     let anew = start.is_none() || again && self.again;
     let mut delta = match (start, &grown) {
-      (Some(_), Some(one)) if !anew => std::slice::from_ref(one),
+      (Some(_), Some(one)) if !anew => slice::from_ref(one),
       (Some(at), None) if !anew => &messages[if again { last } else { at }..],
       _ => {
         self.renew()?;
@@ -236,7 +303,8 @@ impl Conversation {
       let got = self.flight(delta, &spend, run, &mut outcome).await.map_err(worded);
       let got = got.map(|(response, process)| {
         let reply = Message::Assistant { id: None, content: response.choice.clone() };
-        outcome.replied = Some((canonical(&reply), process));
+        let content = response.choice.iter().flat_map(resumed).collect();
+        outcome.replied = Some((canonical(&reply), content, process));
         response
       });
       self.settle(outcome);
@@ -267,7 +335,7 @@ impl Conversation {
     gone: Duration,
   ) -> Result<Process, CompletionError> {
     let print = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"];
-    let mut command = program.base_command(&print).map_err(|why| refused(Error::SignedOut(why)))?;
+    let mut command = program.base_command(&print, true).map_err(|why| refused(why.into()))?;
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
     let prompt = prompt_file(&self.system)?;
     command.arg("--system-prompt-file").arg(&prompt);
@@ -315,7 +383,9 @@ impl Conversation {
     if let Some(resumed) = outcome.restored {
       self.resumed = resumed;
     }
-    if let Some((reply, process)) = outcome.replied {
+    if let Some((reply, content, process)) = outcome.replied {
+      let start = self.chain.len();
+      self.said.push(Said { start, meaning: vec![reply.clone()], role: "assistant", content });
       self.chain.push(reply);
       self.asked = None;
       self.again = false;
@@ -328,12 +398,15 @@ impl Conversation {
   /// so that a turn dropped before it settles leaves it, and the next turn sends only what it
   /// gained. It gives what the conversation held before, which it holds again when the process
   /// found no program to run.
-  fn heard(&mut self, outcome: &Outcome<'_>) -> Heard {
+  fn heard(&mut self, outcome: &Outcome<'_>, line: Said) -> Heard {
     self.requested = outcome.incoming.to_vec();
+    let said = self.said.len();
+    self.said.push(line);
     Heard {
-      chain: std::mem::replace(&mut self.chain, outcome.incoming.to_vec()),
-      asked: std::mem::replace(&mut self.asked, outcome.asked.cloned()),
-      again: std::mem::replace(&mut self.again, outcome.again),
+      said,
+      chain: mem::replace(&mut self.chain, outcome.incoming.to_vec()),
+      asked: mem::replace(&mut self.asked, outcome.asked.cloned()),
+      again: mem::replace(&mut self.again, outcome.again),
     }
   }
 
@@ -355,11 +428,19 @@ impl Conversation {
     // that furb writes.
     let delta = match delta.split_last() {
       Some((last, past)) if !self.resumed && self.parent.is_none() && self.seed(past)? => {
-        std::slice::from_ref(last)
+        slice::from_ref(last)
       }
       _ => delta,
     };
-    let line = input(delta, &mut self.marked)?;
+    let content = input(delta, &mut self.marked)?;
+    // The client composed the turn, so the command line delivers its text as written: no file
+    // mention, no slash command and no attachment pass at the start of the turn.
+    let message = json!({"role": "user", "content": content});
+    let line =
+      format!("{}\n", json!({"type": "user", "message": message, "client_composed": true}));
+    let start = outcome.incoming.len().saturating_sub(delta.len());
+    let meaning = outcome.incoming[start..].to_vec();
+    let line_said = Said { start, meaning, role: "user", content };
     // A process spends what it started at, so a turn at another effort or another most of thought
     // ends it.
     let kept = held.and_then(|mut one| (one.spend == *spend && one.stands()).then_some(one));
@@ -369,17 +450,17 @@ impl Conversation {
     };
     // The stall bounds each wait of the turn: for the process to take its input, to write a line,
     // and to end once its stdout closed.
-    let due = tokio::time::Instant::now() + run.stall;
+    let due = time::Instant::now() + run.stall;
     let Process { stdin, tail, .. } = &mut process;
     let wrote = async {
       stdin.write_all(line.as_bytes()).await?;
       stdin.flush().await
     };
-    match tokio::time::timeout_at(due, tail.beside(wrote)).await {
+    match time::timeout_at(due, tail.beside(wrote)).await {
       Ok(Ok(())) => {}
       Ok(Err(no)) => {
         // A process that took no input ended, and the failure says all that it wrote on its stderr.
-        tokio::time::timeout(GRACE, process.tail.drained()).await.ok();
+        time::timeout(GRACE, process.tail.drained()).await.ok();
         let said = process.tail.said();
         if absent(&process.tail.kept) {
           outcome.restored = Some(before);
@@ -390,7 +471,7 @@ impl Conversation {
       }
       Err(_) => return Err(stalled(run.stall, "")),
     }
-    let was = self.heard(outcome);
+    let was = self.heard(outcome, line_said);
     outcome.unheard = Some(was);
     self.listened(process, run, outcome, before).await
   }
@@ -399,14 +480,22 @@ impl Conversation {
   /// is due.
   async fn ended_by(
     process: &mut Process,
-    due: tokio::time::Instant,
+    due: time::Instant,
     stall: Duration,
     odd: &str,
   ) -> Result<Option<i32>, CompletionError> {
     let waited = process.tail.beside(process.child.wait());
-    match tokio::time::timeout_at(due, waited).await {
+    match time::timeout_at(due, waited).await {
       Ok(status) => Ok(status.ok().and_then(|one| one.code())),
       Err(_) => Err(stalled(stall, odd)),
+    }
+  }
+
+  /// What the request of the turn that streams read as far as its reply says, which the next turn
+  /// that comes to a result pays when this one comes to none.
+  fn owes(&mut self, reply: &Reply) {
+    if let (Some(open), Some(spent)) = (self.unpaid.last_mut(), &reply.spent) {
+      *open = Unpaid { model: reply.model.clone(), spent: spent.clone() };
     }
   }
 
@@ -425,7 +514,13 @@ impl Conversation {
       let said = result.result.as_deref().filter(|one| !one.is_empty());
       return Err(failed(said.map_or_else(|| unexplained(result), str::to_owned)));
     }
-    let response = reply.response(result, &self.name, &self.id, &mut process.paid);
+    let mut response = reply.response(result, &self.name, &self.id, &mut process.paid);
+    // The cost that the result says holds the request of this turn, and no request of an earlier
+    // turn that came to no result, which this turn pays.
+    self.unpaid.pop();
+    let owed: f64 = mem::take(&mut self.unpaid).iter().map(Unpaid::cost).sum();
+    let cost = response.raw["cost"].as_f64().unwrap_or_default();
+    response.raw["cost"] = json!(cost + owed);
     Ok((response, process))
   }
 
@@ -441,22 +536,23 @@ impl Conversation {
   ) -> Result<(CompletionResponse, Process), CompletionError> {
     let stall = run.stall;
     let mut reply = Reply::new(run.deltas);
+    self.unpaid.push(Unpaid::default());
     let mut odd = String::new();
     // Whether the process wrote a line, as a process that found no program to run writes none.
     let mut spoke = false;
     // The code of a process that ended. A process that it started may hold its stdout open, so the
     // turn sees the end of the process itself, and then reads what its stdout holds for a grace.
     let mut ended = None;
-    let mut due = tokio::time::Instant::now() + stall;
+    let mut due = time::Instant::now() + stall;
     let code = loop {
       let heard = tokio::select! {
         line = process.tail.beside(process.out.line()) => line,
         status = process.child.wait(), if ended.is_none() => {
           ended = Some(status.ok().and_then(|one| one.code()));
-          due = tokio::time::Instant::now() + GRACE;
+          due = time::Instant::now() + GRACE;
           continue;
         }
-        () = tokio::time::sleep_until(due) => {
+        () = time::sleep_until(due) => {
           let Some(code) = ended else { return Err(stalled(stall, &odd)) };
           break code;
         }
@@ -479,22 +575,21 @@ impl Conversation {
       };
       spoke = true;
       if !matches!(event, Event::Other) {
-        due = tokio::time::Instant::now() + stall;
+        due = time::Instant::now() + stall;
       }
       match event {
         Event::Stream { event } => reply.streamed(&event),
-        Event::Assistant { message } => {
-          reply.spent = message.usage.or_else(|| reply.spent.take());
-          reply.settled(&message.content);
-        }
+        Event::Assistant { message } => reply.said(&message),
         Event::Result(result) => return self.concluded(&result, reply, process),
-        Event::Other => {}
+        Event::ControlResponse { .. } | Event::Other => {}
       }
+      self.owes(&reply);
     };
     let (no, missing) = exited(code, &mut process.tail, run.program, spoke).await;
     if missing {
       if let Some(was) = outcome.unheard.take() {
         (self.chain, self.asked, self.again) = (was.chain, was.asked, was.again);
+        self.said.truncate(was.said);
       }
       outcome.restored = Some(before);
     }
@@ -528,20 +623,52 @@ struct Outcome<'a> {
   /// the turn found no program to run, since the command line then holds nothing of the turn.
   restored: Option<bool>,
   /// The reply of the turn, as its meaning alone, and the process that wrote it.
-  replied: Option<(String, Process)>,
+  replied: Option<(String, Vec<Value>, Process)>,
+}
+
+/// An entry of a conversation as the command line holds it: its role, its blocks, and the messages
+/// of the chain that it says, from the place of the first of them. A reply says the message that
+/// the model wrote, and a line of input says each message of the turn that it holds.
+#[derive(Clone)]
+pub(super) struct Said {
+  start: usize,
+  meaning: Vec<String>,
+  role: &'static str,
+  content: Vec<Value>,
+}
+
+/// How many entries of what a conversation held say the messages of a request as they stand, and
+/// how many of those messages they say. An entry that says other messages counts once a later entry
+/// that counts says each of them again, as the line that holds the turn that the chain gave in
+/// place of the reply before it.
+fn shared(said: &[Said], meaning: &[String]) -> (usize, usize) {
+  let (mut kept, mut covered) = (0, 0);
+  for (at, one) in said.iter().enumerate() {
+    if one.start > covered {
+      break;
+    }
+    let end = one.start + one.meaning.len();
+    if meaning.get(one.start..end) == Some(one.meaning.as_slice()) {
+      (kept, covered) = (at + 1, end);
+    } else if said.get(at + 1).is_none_or(|next| next.start > one.start) {
+      break;
+    }
+  }
+  (kept, covered)
 }
 
 /// What a conversation held of what the command line heard: the messages, the last message that
 /// came to no reply, and whether it was given again.
 struct Heard {
+  said: usize,
   chain: Vec<String>,
   asked: Option<Message>,
   again: bool,
 }
 
-/// The one line of input that holds every message the command line has not heard: an earlier turn
-/// framed as such, and the last message of the user as itself.
-fn input(messages: &[Message], marked: &mut bool) -> Result<String, CompletionError> {
+/// The blocks of the one line of input that holds every message the command line has not heard: an
+/// earlier turn framed as such, and the last message of the user as itself.
+fn input(messages: &[Message], marked: &mut bool) -> Result<Vec<Value>, CompletionError> {
   let mut content = Vec::new();
   for (at, message) in messages.iter().enumerate() {
     let (you, blocks): (bool, Vec<Value>) = match message {
@@ -566,10 +693,7 @@ fn input(messages: &[Message], marked: &mut bool) -> Result<String, CompletionEr
     return Err(failed("There is no new message for Claude."));
   }
   cached(&mut content, marked);
-  // The client composed the turn, so the command line delivers its text as written: no file
-  // mention, no slash command and no attachment pass at the start of the turn.
-  let line = json!({"type": "user", "message": {"role": "user", "content": content}, "client_composed": true});
-  Ok(format!("{line}\n"))
+  Ok(content)
 }
 
 /// What the last message of a request gained over the message the command line heard at its place,
@@ -607,7 +731,7 @@ pub(super) fn lasting() -> &'static str {
 /// for an hour the turns of a subscription within its limits alone, and for five minutes its
 /// compaction, its turns past the limits and every turn on a key of the API, so a mark of an hour
 /// in a message made its compaction fail.
-fn pinned(command: &mut tokio::process::Command) {
+fn pinned(command: &mut process::Command) {
   command.env("CLAUDE_CODE_PROMPT_CACHE_TTL", lasting());
   command.env("CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL", lasting());
   command.env_remove("CLAUDE_CODE_MESSAGES_PROMPT_CACHE_TTL");
@@ -620,9 +744,7 @@ fn pinned(command: &mut tokio::process::Command) {
 /// line takes four marks in all.
 pub(super) fn cached(blocks: &mut [Value], marked: &mut bool) {
   let opens = |one: &Value| {
-    one["text"]
-      .as_str()
-      .is_some_and(|text| crate::world::provider::banner(&format!("\n\n{text}")) == Some(2))
+    one["text"].as_str().is_some_and(|text| provider::banner(&format!("\n\n{text}")) == Some(2))
   };
   if let Some(at) = (1..blocks.len()).find(|&at| !*marked && opens(&blocks[at])) {
     blocks[at - 1]["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});
@@ -632,12 +754,13 @@ pub(super) fn cached(blocks: &mut [Value], marked: &mut bool) {
 
 /// One block of a turn of the model as a conversation of the command line holds it: its text, or
 /// each part of its thought that the model signed, whole with its signature, so the next reply
-/// reads the thought of the turn before it. A thought with no signature, as one that the provider
-/// cut, and one that a record emptied go not at all, since the API takes no thought that its
-/// signature does not prove.
+/// reads the thought of the turn before it. A signed thought with no text goes too: the API gives
+/// one when it omits the display of a thought, and its signature holds the thought. A thought with
+/// no signature, as one that the provider cut, goes not at all, since the API takes no thought
+/// that its signature does not prove.
 fn resumed(block: &AssistantContent) -> Vec<Value> {
   let signed = |one: &ReasoningContent| match one {
-    ReasoningContent::Text { text, signature: Some(signature) } if !text.is_empty() => {
+    ReasoningContent::Text { text, signature: Some(signature) } => {
       Some(json!({"type": "thinking", "thinking": text, "signature": signature}))
     }
     ReasoningContent::Redacted { data } => Some(json!({"type": "redacted_thinking", "data": data})),
@@ -669,7 +792,7 @@ fn said(block: &UserContent) -> Result<Value, CompletionError> {
 }
 
 /// A message as its meaning alone, so two requests that say the same thing agree. A thought counts
-/// by its place alone, since a reply that a record gives back may hold a thought that was emptied.
+/// by its place alone.
 pub(super) fn canonical(message: &Message) -> String {
   let (role, blocks): (&str, Vec<Value>) = match message {
     Message::System { content } => ("system", vec![json!(["text", content])]),

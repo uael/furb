@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[2]
 
 
-def test_a_test_of_an_extension_sees_no_skill_of_a_folder_above_the_temporary_folder(tmp_path: Path) -> None:
+def test_a_test_of_a_skill_sees_no_skill_of_a_folder_above_the_temporary_folder(tmp_path: Path) -> None:
   """A test of an extension sees only the skills that it gives, when the temporary folder of the system lies under a
   home that holds a skill."""
   skills = tmp_path / "home" / ".claude" / "skills" / "stray"
@@ -19,7 +19,18 @@ def test_a_test_of_an_extension_sees_no_skill_of_a_folder_above_the_temporary_fo
   (temp := tmp_path / "home" / "tmp").mkdir()
   env = {key: value for key, value in os.environ.items() if not key.startswith(("PYTEST_", "COV_CORE_"))}
   ran = subprocess.run(
-    [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-n", "0", "--no-cov", "extensions/skills/test"],
+    [
+      sys.executable,
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "-n",
+      "0",
+      "--no-cov",
+      ".agents/skills/skills/test/test_skills.py::test_the_skills_of_a_chain_as_a_text_that_the_chain_reads",
+    ],
     env={**env, "TMPDIR": str(temp)},
     cwd=ROOT,
     capture_output=True,
@@ -27,6 +38,7 @@ def test_a_test_of_an_extension_sees_no_skill_of_a_folder_above_the_temporary_fo
     check=False,
   )
   assert ran.returncode == 0, ran.stdout[-4000:]
+  assert "2 passed" in ran.stdout, ran.stdout[-4000:]
 
 
 def test_a_conftest_of_another_folder_does_not_shadow_the_harness() -> None:
@@ -59,3 +71,9 @@ def test_a_conftest_of_another_folder_does_not_shadow_the_harness() -> None:
   finally:
     shutil.rmtree(folder, ignore_errors=True)
   assert ran.returncode == 0, ran.stdout[-4000:]
+
+
+def test_the_suite_finds_no_claude_command_line_of_the_machine() -> None:
+  """A World that opens a life asks the claude of the machine for its models, which takes ten seconds in each process
+  of the run, so the suite hides it, as the tests of TypeScript do."""
+  assert os.environ["FURB_CLAUDE_BIN"] == ""

@@ -13,6 +13,7 @@ use crate::{
   fact::Fact,
   value::{Fault, Given, Object},
 };
+use tokio::time;
 
 /// The ear of time: it answers a clock with the seconds since the epoch and a chance with a number drawn, at least
 /// zero and under one, and it takes a wait and says it done when its time is up.
@@ -22,7 +23,8 @@ use crate::{
 /// that a control ended first ends at once, and says nothing more.
 pub fn time() -> Box<dyn Ear> {
   hearing(&["clock", "chance", "wait", "due"], |mut co: Co<String>| async move {
-    let mut due: HashMap<String, f64> = HashMap::new();
+    // The deadline of each wait that is not done, which a wait that a later life takes again keeps.
+    let due = co.keeps(HashMap::<String, f64>::new())?;
     loop {
       let a = match co.next().await {
         Next::Heard(a) | Next::Resumed(a) => a,
@@ -43,8 +45,9 @@ pub fn time() -> Box<dyn Ear> {
         "wait" if a.question() => {
           say(&mut co, Fact::says("started", &about, []));
           let seconds = a.word(1).and_then(|one| one.seconds());
-          let deadline = if let Some(deadline) = due.get(&about) {
-            *deadline
+          let known = due.borrow().get(&about).copied();
+          let deadline = if let Some(deadline) = known {
+            deadline
           } else {
             let deadline = now() + seconds.unwrap_or_default();
             say(&mut co, Fact::says("due", &about, [Object::float(deadline)]));
@@ -54,11 +57,11 @@ pub fn time() -> Box<dyn Ear> {
         }
         "due" => {
           if let Some(deadline) = a.word(0).and_then(|one| one.as_float()) {
-            due.insert(about, deadline);
+            due.borrow_mut().insert(about, deadline);
           }
         }
         "done" => {
-          due.remove(&about);
+          due.borrow_mut().remove(&about);
         }
         _ => {}
       }
@@ -72,7 +75,7 @@ fn waited(id: String, deadline: f64) -> impl Stream<Item = String> {
   let left = Duration::try_from_secs_f64((deadline - now()).max(0.0)).ok();
   stream::once(async move {
     match left {
-      Some(left) => tokio::time::sleep(left).await,
+      Some(left) => time::sleep(left).await,
       None => future::pending().await,
     }
     id

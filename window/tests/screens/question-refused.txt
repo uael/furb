@@ -1,0 +1,30 @@
+ furb · how many rows                           [ Resolve ]    All projects ▾         this machine
+┃
+┃ how many rows                                                Needs you 1
+┃ (the model asks a number)                                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                              ▌how many rows              ◆ Input▌
+                                                               ▌FU furb                       opus▌
+       opus/high                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    ◆  rows = await prompt(int, 'How many rows does th…+27
+    2  close(str(rows))
+    …
+
+  ◆ How many rows does the form take?
+
+
+
+
+
+
+
+
+
+
+
+┃ ◆ opus/high asks
+┃ How many rows does the form take?
+┃
+┃ many
+┃ Refused: "many" is no int: invalid digit found in string
+  This computer   furb ▾               opus/high   ○ Python
+  ⏎ answer                                        ⌃C refuse

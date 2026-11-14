@@ -3,10 +3,10 @@
 # crate that stands on git, and furb stands on the fork of monty by git, so the proof stands in for the day when monty
 # stands on crates.io with what furb needs: it copies this checkout, and there it gives each dependency on monty the
 # version of the fork at the revision that Cargo.toml names. cargo packs the crates of the fork that furb runs at that
-# revision, and furb, furb-host and furb-cli on them. Each packed crate stands in for crates.io as a patch of crates.io, and cargo
-# takes every other crate from crates.io and resolves each version afresh, with no lock of furb, as a user gets them.
-# A new crate takes furb as cargo add writes it, runs the example chains of docs/examples/rust there, on a claude
-# command line that answers from a script, and cargo install puts furb-cli on it and runs furb --help. The first
+# revision, and furb, furb-host and furb-cli on them. Each packed crate stands in for crates.io as a patch of crates.io,
+# and cargo takes every other crate from crates.io and resolves each version afresh, with no lock of furb, as a user
+# gets them. A new crate takes furb as cargo add writes it, runs the example chains of docs/examples/rust there, on a
+# claude command line that answers from a script, and cargo install puts furb-cli on it and runs furb --help. The first
 # argument is the folder of the proof, a new folder by default, which keeps the packed crates in crates/.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -21,13 +21,16 @@ mkdir "$work/crates" "$work/unpacked" "$work/furb"
 git clone -q https://github.com/uael/monty "$work/monty"
 git -C "$work/monty" checkout -q "$rev"
 fork=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' "$work/monty/Cargo.toml")
-monty="monty-macros monty-types monty monty-typeshed monty-type-checking"
+# The crates of the fork that furb runs are the ones that its lock takes from the fork.
+monty=$(awk -F'"' '/^name = /{name=$2} /^source = "git\+https:\/\/github.com\/uael\/monty\?/{print name}' \
+  "$root/Cargo.lock")
 (cd "$work/monty" && cargo package --quiet --no-verify $(printf -- '-p %s ' $monty))
 # The copy of the checkout: each file that git tracks, as it stands now, and each dependency on monty by its version.
 (cd "$root" && git ls-files -z | tar --null -T - -cf -) | tar -xf - -C "$work/furb"
 sed -i.git 's/^\(monty[a-z-]* = { git = "https:\/\/github.com\/uael\/monty", rev = "[0-9a-f]*"\) }$/\1, version = "'"$fork"'" }/' \
   "$work/furb/Cargo.toml"
-test "$(grep -c "version = \"$fork\" }" "$work/furb/Cargo.toml")" = 3
+test "$(grep -c "version = \"$fork\" }" "$work/furb/Cargo.toml")" = \
+  "$(grep -c 'git = "https://github.com/uael/monty"' "$root/Cargo.toml")"
 rm "$work/furb/Cargo.lock"
 printf '[patch.crates-io]\n' > "$work/config.toml"
 unpack() {
@@ -56,7 +59,7 @@ cp "$root/src/world/provider/claude/fake-claude.sh" "$work/yard/fake/claude"
 chmod +x "$work/yard/fake/claude"
 printf '%s' '"close(\"Login is twice as fast.\")"' > "$work/yard/fake/word.1"
 printf '%s' '"close(\"The notes read well.\")"' > "$work/yard/fake/word.2"
-said=$(cd "$work/yard/work" && env -u FURB_LOCAL_URL -u FURB_LOCAL_KEY -u FURB_TUI \
+said=$(cd "$work/yard/work" && env -u FURB_LOCAL_URL -u FURB_LOCAL_KEY -u FURB_WINDOW \
   FURB_CLAUDE_BIN="$work/yard/fake/claude" FURB_CONFIG_DIR="$work/yard/config" XDG_CACHE_HOME="$work/yard/cache" \
   "$CARGO_TARGET_DIR/debug/demo" </dev/null)
 want=$(printf 'The notes read well.\nreviewer under root')

@@ -11,9 +11,9 @@ use super::{
 /// The acts of a life as they stood just after a moment: each act that began by then, and an act
 /// that ended after it as one that runs, with no value and no pause, each in the state that this
 /// gives.
-pub fn as_of(acts: &[Act], at: u64) -> Vec<Act> {
+pub fn as_of<'a>(acts: impl IntoIterator<Item = &'a Act>, at: u64) -> Vec<Act> {
   let mut then: Vec<Act> = acts
-    .iter()
+    .into_iter()
     .filter(|act| act.began <= at)
     .map(|act| match act.ended {
       Some(ended) if ended > at => Act {
@@ -31,8 +31,8 @@ pub fn as_of(acts: &[Act], at: u64) -> Vec<Act> {
 }
 
 /// The moments of a life, in order: each start and each end of an act.
-pub fn moments_of(acts: &[Act]) -> Vec<u64> {
+pub fn moments_of<'a>(acts: impl IntoIterator<Item = &'a Act>) -> Vec<u64> {
   let moments: BTreeSet<u64> =
-    acts.iter().flat_map(|act| [Some(act.began), act.ended]).flatten().collect();
+    acts.into_iter().flat_map(|act| [Some(act.began), act.ended]).flatten().collect();
   moments.into_iter().filter(|moment| *moment > 0).collect()
 }

@@ -4,26 +4,40 @@
 
 use std::{
   collections::VecDeque,
-  fs,
+  env, fs, future, io,
+  io::Write,
   path::{Path, PathBuf},
-  sync::{Arc, Mutex},
+  process, slice,
+  sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering::Relaxed},
+  },
+  time::{Duration, Instant},
 };
 
-use super::{Answer, Opening};
-use crate::testing::Yard;
+use futures::{channel::mpsc::unbounded, executor, future::select};
+use sha2::{Digest, Sha256};
+use tokio::runtime;
+
+use super::{Answer, Opening, Progress, Stage};
 use crate::{
-  Act, Ear, Engine, Fact, Object, Text,
+  Act, Ear, Engine, Fact, Object, Text, checkpoint,
+  checkpoint::CHECKPOINT,
   ear::{ear, hear, say},
-  extension::enabled,
-  value::entry,
-  verbs, world,
+  image, sand,
+  sand::BOUND,
+  skill::enabled,
+  testing,
+  testing::{LOADED, Yard, cut_first},
+  value::{Fault, entry},
+  verbs, wire, world,
 };
 
 /// A directory of its own for one test, and empty.
-fn place(name: &str) -> Yard {
-  static MADE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-  let n = MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-  Yard::new(format!("furb-life-{name}-{}-{n}", std::process::id()))
+fn yard(name: &str) -> Yard {
+  static MADE: AtomicUsize = AtomicUsize::new(0);
+  let n = MADE.fetch_add(1, Relaxed);
+  Yard::new(format!("furb-life-{name}-{}-{n}", process::id()))
 }
 
 /// A life in a directory of the tests, on its record and on the configs of that directory, whose provider offers
@@ -31,11 +45,14 @@ fn place(name: &str) -> Yard {
 fn opening(at: &Path, keeps: bool) -> Opening {
   let place = |name: &str| Some(at.join(name).display().to_string());
   Opening {
+    // A life asks the claude command line of the machine for its models, which takes seconds: a
+    // test names none.
+    claude: Some(at.join("no-claude").display().to_string()),
     directory: at.display().to_string(),
     record: place("record.jsonl"),
     keeps: Some(keeps),
     config: place("config"),
-    roster: Some(Vec::new()),
+    roster: Some(Vec::new().into()),
     ..Opening::default()
   }
 }
@@ -55,19 +72,16 @@ fn kinds(record: &[Object]) -> Vec<String> {
 
 #[test]
 fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record_enables() {
-  let at = place("configs");
+  let at = yard("configs");
   let (mut first, _) = opening(&at, true).boot::<String>([]).unwrap();
-  assert_eq!(
-    names(&mut first),
-    ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"]
-  );
+  assert_eq!(names(&mut first), ["catchup", "memory", "skills", "compaction", "naming"]);
   drop(first);
   fs::create_dir_all(at.join("config")).unwrap();
-  fs::write(at.join("config").join("config.json"), r#"{"extensions": {"skills": false}}"#).unwrap();
+  fs::write(at.join("config").join("config.json"), r#"{"skills": {"skills": false}}"#).unwrap();
   let (mut later, record) = opening(&at, true).boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut later),
-    ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"],
+    ["catchup", "memory", "skills", "compaction", "naming"],
     "the record wins over the configs"
   );
   drop(later);
@@ -77,7 +91,7 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
   let (mut fresh, _) = Opening { record: fresh, ..opening(&at, true) }.boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut fresh),
-    ["catchup", "memory", "compaction", "naming", "ouroboros", "web", "mcp"],
+    ["catchup", "memory", "compaction", "naming"],
     "a life on a new record enables what the configs turn on"
   );
 }
@@ -85,9 +99,9 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
 #[test]
 fn a_life_that_inspects_its_record_keeps_nothing_enables_nothing_new_and_its_ears_that_do_work_are_silent()
  {
-  let at = place("inspects");
+  let at = yard("inspects");
   fs::write(at.join("a.txt"), "one\n").unwrap();
-  drop(Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap());
+  drop(Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap());
   let before = fs::read_to_string(at.join("record.jsonl")).unwrap();
   let (mut engine, _) =
     Opening { inspecting: Some(true), ..opening(&at, true) }.boot::<String>([]).unwrap();
@@ -101,7 +115,7 @@ fn a_life_that_inspects_its_record_keeps_nothing_enables_nothing_new_and_its_ear
 #[test]
 fn the_ears_of_the_crate_come_after_the_ears_of_the_host_each_under_the_name_every_host_hears_it_by()
  {
-  let at = place("ears");
+  let at = yard("ears");
   let (_, ears) = opening(&at, true).parts().unwrap();
   let names: Vec<&str> = ears.iter().map(|(name, _)| name.as_str()).collect();
   assert_eq!(
@@ -130,9 +144,9 @@ fn mine() -> Box<dyn Ear> {
 #[test]
 fn a_life_that_keeps_a_record_writes_a_new_file_and_a_new_file_in_a_new_folder_to_its_scratch_directory()
  {
-  let at = place("scratch");
+  let at = yard("scratch");
   let (mut engine, _) =
-    Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap();
+    Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap();
   let root = engine.root().to_owned();
   let on = || Some(root.clone());
   let write = verbs::Write { on: on() };
@@ -143,20 +157,23 @@ fn a_life_that_keeps_a_record_writes_a_new_file_and_a_new_file_in_a_new_folder_t
   assert_eq!(note, Text::new("scratch://notes/new.md", "note\n"));
   let read = verbs::Read { on: on(), ..Default::default() };
   assert_eq!(engine.read("scratch://", read).unwrap(), Text::new("scratch://", "notes/\nplan.md"));
+  drop(engine);
+  // The scratch directory of the record holds the two files that the life wrote: remove it.
+  fs::remove_dir_all(world::Scratch::of(&at.join("record.jsonl")).unwrap().unwrap().path())
+    .unwrap();
 }
 
 #[test]
 fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later_life_writes_it_again_from_its_start()
  {
-  let at = place("log");
+  let at = yard("log");
   let record = at.join("record.jsonl");
-  let open =
-    || Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  let open = || Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
   let mut engine = open();
   let word = Some("x = 1\nclose(x)".to_owned());
   let rung =
     engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() }).unwrap();
-  assert_eq!(futures::executor::block_on(rung).unwrap().as_ref().as_int(), Some(1));
+  assert_eq!(executor::block_on(rung).unwrap().as_ref().as_int(), Some(1));
   drop(engine);
   let shown =
     |facts: Vec<Object>| facts.iter().map(|one| one.as_ref().py_repr()).collect::<Vec<_>>();
@@ -192,8 +209,7 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
     "a later life says the log again before its own facts"
   );
   let mut kept = fs::OpenOptions::new().append(true).open(&record).unwrap();
-  std::io::Write::write_all(&mut kept, b"[[\"stand\",\"stand9\",\"operator\",\"chain1\"]]\n")
-    .unwrap();
+  Write::write_all(&mut kept, b"[[\"stand\",\"stand9\",\"operator\",\"chain1\"]]\n").unwrap();
   assert!(
     world::logged(&record).unwrap().is_none(),
     "a log that its record outgrew does not agree"
@@ -203,10 +219,10 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
 #[test]
 fn a_later_life_writes_in_its_log_each_act_of_its_record_that_an_ear_of_the_outside_made_and_does_not_make_again()
  {
-  let at = place("owed");
+  let at = yard("owed");
   let record = at.join("record.jsonl");
   let open = || {
-    let opening = Opening { extensions: Some(false), ..opening(&at, true) };
+    let opening = Opening { skills: Some(false), ..opening(&at, true) };
     opening.boot::<String>([]).unwrap().0
   };
   let mut engine = open();
@@ -235,31 +251,31 @@ fn closed(engine: &mut Engine, word: &str) -> Object {
   let word = Some(word.to_owned());
   let rung =
     engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() }).unwrap();
-  futures::executor::block_on(rung).unwrap()
+  executor::block_on(rung).unwrap()
 }
 
 /// The standing that a stand on the root gives, once the World answered it, or why it refused it.
-fn stood(engine: &mut Engine) -> Result<Object, crate::Fault> {
+fn stood(engine: &mut Engine) -> Result<Object, Fault> {
   let stand = engine.stand(verbs::Stand { on: Some("chain1".to_owned()) })?;
-  futures::executor::block_on(stand)
+  executor::block_on(stand)
 }
 
 #[test]
 fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake()
  {
-  let at = place("cut");
-  let (asked, heard) = futures::channel::mpsc::unbounded::<()>();
+  let at = yard("cut");
+  let (asked, heard) = unbounded::<()>();
   let asked = Mutex::new(asked);
   // The first model writes a part of its turn, and the life stops while it writes the rest.
   let streams = Answer(Arc::new(move |_, told| {
     told("x = ", "");
     drop(asked.lock().unwrap().unbounded_send(()));
-    Box::pin(std::future::pending())
+    Box::pin(future::pending())
   }));
   let first = Opening {
-    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    roster: Some(vec!["claude-cli:opus".to_owned()].into()),
     answer: Some(streams),
-    extensions: Some(false),
+    skills: Some(false),
     ..opening(&at, true)
   };
   let mut first = first.boot::<String>([]).unwrap().0;
@@ -272,10 +288,10 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
     let mut heard = heard;
     let streamed = futures::StreamExt::next(&mut heard);
     let act = Act::<Object>::of(&mut first, &prompt);
-    futures::executor::block_on(futures::future::select(act, streamed));
+    executor::block_on(select(act, streamed));
   }
   drop(first);
-  let mut later = Opening { extensions: Some(false), ..scripted(&at, &["close('again')"]) }
+  let mut later = Opening { skills: Some(false), ..scripted(&at, &["close('again')"]) }
     .boot::<String>([])
     .unwrap()
     .0;
@@ -283,7 +299,7 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
     later.pending().unwrap().is_empty(),
     "the open put the work that the stop cut to the outside"
   );
-  let got = futures::executor::block_on(Act::<Object>::of(&mut later, &prompt)).unwrap();
+  let got = executor::block_on(Act::<Object>::of(&mut later, &prompt)).unwrap();
   assert_eq!(got.as_ref().as_str(), Some("again"), "the reply that the stop cut is asked again");
   let command = later.word("repr(peek('bash1'))", vec![]).unwrap();
   let command = command.as_ref().as_str().unwrap_or_default().to_owned();
@@ -297,6 +313,228 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
   assert_eq!(running, "[]", "no act stays running with no process");
 }
 
+#[test]
+fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a_row_still_run() {
+  // A bound of one second cuts the word as a longer one would, and the replay of a shorter run
+  // takes less time.
+  cut_first(Duration::from_secs(1));
+  let at = yard("clock-spin");
+  let poll = "t0 = clock()\nwhile clock() - t0 < 60:\n  pass\nclose('polled')";
+  let twice = "a = clock()\nb = clock()\nclose(b >= a)";
+  let mut life =
+    Opening { skills: Some(false), ..scripted(&at, &[poll, twice]) }.boot::<String>([]).unwrap().0;
+  let asked = verbs::Prompt {
+    message: Some("go".to_owned()),
+    on: Some("chain1".to_owned()),
+    ..Default::default()
+  };
+  let started = Instant::now();
+  let prompt = life.prompt(Object::string("object"), asked).unwrap().id().to_owned();
+  let got = executor::block_on(Act::<Object>::of(&mut life, &prompt)).unwrap();
+  let took = started.elapsed();
+  assert!(life.stopped().is_none(), "the cut of the poll leaves the life whole");
+  assert_eq!(got.as_ref().as_bool(), Some(true), "two readings in a row run");
+  let raised = life
+    .word("repr([x[3] for x in transcript('chain1', 'tell') if 'raised' in x[3][0]][:1])", vec![])
+    .unwrap();
+  let raised = raised.as_ref().as_str().unwrap_or_default().to_owned();
+  assert!(
+    raised.contains("past the bound of a turn"),
+    "the poll ends at the bound of a turn: {raised}"
+  );
+  let clocks = life.word("len(transcript('chain1', 'clock'))", vec![]).unwrap();
+  eprintln!("the poll made {:?} acts of clock in {took:?}", clocks.as_ref().as_int());
+  // The readings of the clock count what the word did, which no load changes: a poll that its
+  // own loop ended would span 60 s of them.
+  let readings = life.word("[peek(x[1]) for x in transcript('chain1', 'clock')]", vec![]).unwrap();
+  let readings: Vec<f64> = readings
+    .as_ref()
+    .items()
+    .unwrap_or_default()
+    .iter()
+    .filter_map(monty_types::ObjectRef::as_float)
+    .collect();
+  assert!(readings.len() >= 3, "the poll and the word after it read the clock: {readings:?}");
+  // The readings of the poll, before the two of the word after it, count what the poll did, which
+  // no load changes: a poll that its own loop ended would span 60 s of them.
+  let poll = &readings[..readings.len() - 2];
+  let span =
+    poll.iter().copied().fold(f64::MIN, f64::max) - poll.iter().copied().fold(f64::MAX, f64::min);
+  assert!(span < 30.0, "the poll was cut at the bound, not by its own loop: {span} s");
+  drop(life);
+  let again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert!(again.raised().is_none(), "a later life replays the poll and its refusal with no drift");
+}
+
+/// A prompt of the root, in a life that a test opened, and what it came to: an error when the life
+/// stopped before it closed.
+fn asked_of(life: &mut Engine, message: &str) -> Result<Object, Fault> {
+  let asked = verbs::Prompt {
+    message: Some(message.to_owned()),
+    on: Some("chain1".to_owned()),
+    ..Default::default()
+  };
+  let prompt = life.prompt(Object::string("object"), asked).unwrap().id().to_owned();
+  executor::block_on(Act::<Object>::of(life, &prompt))
+}
+
+#[test]
+fn a_word_that_loops_on_an_answer_of_the_host_ends_at_the_bound_of_a_turn_with_a_bounded_record() {
+  // A bound of one second cuts the word as a longer one would, and the replay of a shorter run
+  // takes less time.
+  cut_first(Duration::from_secs(1));
+  let at = yard("cd-spin");
+  let spin = "while True:\n  cd('.')";
+  let mut life = Opening { skills: Some(false), ..scripted(&at, &[spin, "close(1)"]) }
+    .boot::<String>([])
+    .unwrap()
+    .0;
+  let started = Instant::now();
+  let got = asked_of(&mut life, "go").unwrap();
+  let took = started.elapsed();
+  assert!(life.stopped().is_none(), "the refusal raises in the word and leaves the life whole");
+  assert_eq!(got.as_ref().as_int(), Some(1), "the prompt asks its model again");
+  let raised = life
+    .word("repr([x[3] for x in transcript('chain1', 'tell') if 'raised' in x[3][0]][:1])", vec![])
+    .unwrap();
+  let raised = raised.as_ref().as_str().unwrap_or_default().to_owned();
+  assert!(raised.contains("past the bound of a turn"), "the loop ends at the bound: {raised}");
+  let cds = life.word("len(transcript('chain1', 'cd'))", vec![]).unwrap();
+  let cds = cds.as_ref().as_int().unwrap_or_default();
+  eprintln!("the loop made {cds} acts of cd in {took:?}");
+  assert!(cds < 200_000, "the record holds the acts of the bound alone: {cds}");
+  drop(life);
+  let again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert!(again.raised().is_none(), "a later life replays the loop and its refusal with no drift");
+}
+
+#[test]
+fn a_word_that_catches_the_refusal_of_the_bound_and_loops_ends_its_step_and_leaves_no_deadline() {
+  BOUND.set(Duration::from_secs(2));
+  let at = yard("clock-caught");
+  let caught = "while True:\n  try:\n    clock()\n  except Refused:\n    pass";
+  let mut first =
+    Opening { skills: Some(false), ..scripted(&at, &[caught]) }.boot::<String>([]).unwrap().0;
+  drop(asked_of(&mut first, "go"));
+  assert!(first.stopped().is_some(), "a word that asks past the refusal ends its step");
+  assert!(sand::past().is_none(), "the stop leaves no deadline on the thread");
+  drop(first);
+  BOUND.set(LOADED);
+  let mut later =
+    Opening { skills: Some(false), ..scripted(&at, &["close(clock() > 0)", "close(clock() > 0)"]) }
+      .boot::<String>([])
+      .expect("a life that the bound stopped opens again")
+      .0;
+  assert!(later.stopped().is_none() && later.raised().is_none(), "{:?}", later.raised());
+  let got = asked_of(&mut later, "go on").unwrap();
+  assert_eq!(got.as_ref().as_bool(), Some(true), "the next step reads the clock");
+}
+
+#[test]
+fn a_life_whose_open_act_a_verb_of_no_words_made_ends_with_a_checkpoint_in_its_record() {
+  let at = yard("ends-kept");
+  let mut life = Opening { skills: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  // A verb with no words makes an act that makes an open prompt, as name_session makes the
+  // prompt of its chain.
+  let word = "with site.set(act('named', ROOT, None)):\n  named = prompt(str, 'Name?', to=OPERATOR)\nclose(1)";
+  assert_eq!(closed(&mut life, word).as_ref().as_int(), Some(1));
+  drop(life);
+  let mut inspected =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let written = checkpoint::written(&mut inspected).expect("the life gathers its checkpoint");
+  drop(inspected);
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  assert!(checkpoint::last(&kept).is_some(), "the record holds a checkpoint entry");
+}
+
+#[test]
+fn a_life_whose_module_binds_the_name_of_a_builtin_opens_from_its_checkpoint_with_the_module_of_its_replay()
+ {
+  let at = yard("builtin");
+  let open = || Opening { skills: Some(false), ..opening(&at, true) };
+  let read = |life: &mut Engine| closed(life, "close([list, k, j])").as_ref().py_repr();
+  let mut first = open().boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut first, "globals()['list'] = 'ls -la'\nk = 1\nclose(1)").as_ref().as_int(),
+    Some(1)
+  );
+  // An ear tells the chain a note in prose, as the ear of the skills tells a change of a
+  // config, and the next word binds what the chain heard.
+  let note = "with site.set('extensions'):\n  say('tell', ROOT, ['The key extensions of a config is now skills.'])";
+  assert_eq!(closed(&mut first, &format!("{note}\nclose(1)")).as_ref().as_int(), Some(1));
+  assert_eq!(closed(&mut first, "j = 2\nclose(1)").as_ref().as_int(), Some(1));
+  drop(first);
+  let mut replayed = open().boot::<String>([]).unwrap().0;
+  let by_replay = read(&mut replayed);
+  drop(replayed);
+  assert_eq!(
+    by_replay, "['ls -la', 1, 2]",
+    "a replay binds the name of the builtin as the life bound it"
+  );
+  let mut inspected = Opening { inspecting: Some(true), ..open() }.boot::<String>([]).unwrap().0;
+  let written = checkpoint::written(&mut inspected).expect("the life gathers its checkpoint");
+  drop(inspected);
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  for _ in 0..2 {
+    let mut again = open().boot::<String>([]).unwrap().0;
+    assert_eq!(
+      read(&mut again),
+      by_replay,
+      "the open from the checkpoint reaches the module of the replay"
+    );
+  }
+}
+
+#[test]
+fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
+  // A bound of 100 ms may pass before the loop enters its `try` on a loaded machine, and the
+  // refusal then raises outside it, so no `finally` runs and no second excess stops the life.
+  BOUND.set(Duration::from_secs(1));
+  let at = yard("faulted");
+  let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
+  let mut first =
+    Opening { skills: Some(false), ..scripted(&at, &[cutter]) }.boot::<String>([]).unwrap().0;
+  let on = Some("chain1".to_owned());
+  let message = Some("go".to_owned());
+  let asked = verbs::Prompt { message, on: on.clone(), ..Default::default() };
+  let prompt = first.prompt(Object::string("str"), asked).unwrap().id().to_owned();
+  drop(executor::block_on(Act::<Object>::of(&mut first, &prompt)));
+  assert!(first.stopped().is_some(), "the second excess of the turn stops the life");
+  drop(first);
+  BOUND.set(LOADED);
+  let mut later =
+    Opening { skills: Some(false), ..scripted(&at, &["close('again')", "close('on')"]) }
+      .boot::<String>([])
+      .expect("a life that a fault stopped opens again")
+      .0;
+  assert!(later.stopped().is_none(), "the open does not run the word into the same stop");
+  let message = Some("go on".to_owned());
+  let asked = verbs::Prompt { message, on, ..Default::default() };
+  let next = later.prompt(Object::string("str"), asked).unwrap().id().to_owned();
+  let got = executor::block_on(Act::<Object>::of(&mut later, &next)).unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("on"), "the life goes on");
+  let state = format!(
+    "repr([peek('{prompt}'), peek([x[1] for x in transcript('chain1', 'rung') if x[2] == '{prompt}'][0])])"
+  );
+  let ended = later.word(&state, vec![]).unwrap();
+  let ended = ended.as_ref().as_str().unwrap_or_default().to_owned();
+  assert!(
+    ended.starts_with("['again', Refused(") && ended.contains("was interrupted"),
+    "the rung that stopped the life ends as interrupted, and its prompt asks its model again: {ended}"
+  );
+  drop(later);
+  let mut again =
+    Opening { skills: Some(false), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  assert!(again.stopped().is_none(), "a second open replays the end of the rung");
+  let replayed = again.word(&state, vec![]).unwrap();
+  assert_eq!(
+    replayed.as_ref().as_str().unwrap_or_default(),
+    ended,
+    "the replay holds the same state"
+  );
+}
+
 /// The engine that each fact made of a record names, in its order.
 fn builds(record: &Path) -> Vec<String> {
   let kept = world::kept(record).unwrap();
@@ -308,11 +546,11 @@ fn builds(record: &Path) -> Vec<String> {
 #[test]
 fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_database() {
   for name in ["record.jsonl", "record.db"] {
-    let at = place(&format!("made-{name}"));
+    let at = yard(&format!("made-{name}"));
     let record = at.join(name);
     let open = || {
       let path = Some(record.display().to_string());
-      Opening { record: path, extensions: Some(false), ..opening(&at, true) }.boot::<String>([])
+      Opening { record: path, skills: Some(false), ..opening(&at, true) }.boot::<String>([])
     };
     drop(open().unwrap());
     let made = vec![world::engine()];
@@ -336,9 +574,9 @@ fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_datab
 
 #[test]
 fn a_record_that_names_no_engine_replays_as_before_and_names_none() {
-  let at = place("unnamed");
+  let at = yard("unnamed");
   let record = at.join("record.jsonl");
-  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+  let open = || Opening { skills: Some(false), ..opening(&at, true) };
   let mut first = open().boot::<String>([]).unwrap().0;
   closed(&mut first, "x = 1\nclose(x)");
   drop(first);
@@ -365,23 +603,23 @@ fn made_of(engine: &str) -> String {
   )
 }
 
-/// The fact made of an engine, as a record holds it, with the texts of that engine and of its
-/// Kernel.
-fn made_with(engine: &str, source: &str, kernel: &str) -> String {
-  let texts = serde_json::to_string(&[source, kernel]).unwrap();
+/// The fact made of an engine, as a record holds it, with the texts of that engine, of its Kernel
+/// and of its checkpointer.
+fn made_with(engine: &str, held: &[&str]) -> String {
+  let texts = serde_json::to_string(held).unwrap();
   format!("{},{}]", made_of(engine).trim_end_matches(']'), &texts[1..texts.len() - 1])
 }
 
 /// The fact made of this build, as its record holds it.
 fn ours() -> String {
-  made_with(&world::engine(), crate::ENGINE, crate::KERNEL)
+  made_with(&world::engine(), &[crate::ENGINE, crate::KERNEL, crate::CHECKPOINTER])
 }
 
 /// A record of one rung that a life of a test kept, and the text of the record with its fact made changed.
 fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
   let record = at.join("record.jsonl");
   let mut first =
-    Opening { extensions: Some(false), ..opening(at, true) }.boot::<String>([]).unwrap().0;
+    Opening { skills: Some(false), ..opening(at, true) }.boot::<String>([]).unwrap().0;
   closed(&mut first, "x = 1\nclose(x)");
   drop(first);
   let ours = ours();
@@ -394,44 +632,68 @@ fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
 
 #[test]
 fn a_record_of_another_engine_that_holds_no_texts_replays_and_goes_on() {
-  let at = place("same-version");
+  let at = yard("same-version");
   let made = made_of(&"0".repeat(64));
   let (record, _) = made_elsewhere(&at, &made);
-  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+  let open = || Opening { skills: Some(false), ..opening(&at, true) };
   let mut later = open().boot::<String>([]).unwrap().0;
   assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
   drop(later);
   assert_eq!(builds(&record), ["0".repeat(64)], "the build that made it stays named");
 }
 
-#[test]
-fn a_record_of_another_engine_replays_on_the_texts_that_it_holds_and_goes_on_with_them() {
-  use sha2::{Digest, Sha256};
-  let at = place("texts");
-  let source = format!("{}\ncrossed = True\n", crate::ENGINE);
+/// The fact made of the engine of this build with one more line, as a line of the record holds it,
+/// with its digest.
+fn elsewhere(line: &str) -> (String, String) {
+  let source = format!("{}\n{line}\n", crate::ENGINE);
   let mut hash = Sha256::new();
-  for one in [source.as_str(), crate::KERNEL] {
+  let held = [source.as_str(), crate::KERNEL, crate::CHECKPOINTER];
+  for one in held {
     hash.update(one.as_bytes());
     hash.update([0]);
   }
   let named = format!("{:x}", hash.finalize());
-  let (record, text) = made_elsewhere(&at, &made_with(&named, &source, crate::KERNEL));
-  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+  (made_with(&named, &held), named)
+}
+
+/// A life that opens by a record of another engine goes on with that engine and writes no
+/// checkpoint; its own checkpoint keeps that engine, and only the crossing of the command line
+/// `furb checkpoint` moves the record to the engine of this build.
+#[test]
+fn a_record_of_another_engine_goes_on_with_it_until_a_crossing_moves_it_to_this_build() {
+  let at = yard("texts");
+  let (made, named) = elsewhere("crossed = True");
+  let (record, text) = made_elsewhere(&at, &made);
+  let open = || Opening { skills: Some(false), ..opening(&at, true) };
+  let read = |life: &mut Engine, n: i64| {
+    closed(life, &format!("close([x + {n}, globals().get('crossed')])")).as_ref().py_repr()
+  };
   let mut later = open().boot::<String>([]).unwrap().0;
-  assert_eq!(
-    closed(&mut later, "close(crossed and x + 1)").as_ref().as_int(),
-    Some(2),
-    "the life replays and goes on on the engine that its record holds"
-  );
+  assert_eq!(read(&mut later, 1), "[2, True]", "the life goes on with the engine of its record");
   drop(later);
-  assert_eq!(builds(&record), std::slice::from_ref(&named), "the record names it alone");
-  let mut again = open().boot::<String>([]).unwrap().0;
   assert_eq!(
-    closed(&mut again, "close(x + 2)").as_ref().as_int(),
-    Some(3),
-    "it replays its tail on it"
+    world::checkpoints(&record).unwrap(),
+    Vec::<usize>::new(),
+    "an open writes no checkpoint"
   );
+  assert_eq!(builds(&record), slice::from_ref(&named));
+  open().boot::<String>([]).unwrap().0.checkpoint().unwrap();
+  assert_eq!(
+    builds(&record),
+    [named.clone(), named.clone()],
+    "a checkpoint keeps the engine of its life"
+  );
+  let mut again = open().boot::<String>([]).unwrap().0;
+  assert_eq!(read(&mut again, 2), "[3, True]", "the life born on it runs that engine");
   drop(again);
+  let inspects = Opening { inspecting: Some(true), ..open() };
+  let mut inspected = inspects.boot::<String>([]).unwrap().0;
+  checkpoint::crossed(&record, &mut inspected).unwrap();
+  drop(inspected);
+  assert_eq!(builds(&record), [named.clone(), named.clone(), world::engine()]);
+  let mut crossed = open().boot::<String>([]).unwrap().0;
+  assert_eq!(read(&mut crossed, 3), "[4, None]", "the crossing moves the life to this build");
+  drop(crossed);
   fs::write(&record, text.replace(&named, &"0".repeat(64))).unwrap();
   let refused = open().boot::<String>([]).err().map(|one| format!("{one:?}")).unwrap_or_default();
   assert!(
@@ -440,20 +702,131 @@ fn a_record_of_another_engine_replays_on_the_texts_that_it_holds_and_goes_on_wit
   );
 }
 
+/// An image holds the engine that its life runs, so the life goes on with that engine on a build
+/// that holds another one. A life that keeps nothing goes on with the engine that its record
+/// holds, as a life on a build of that engine does, and its image stands in for an image that such
+/// a build wrote.
+#[test]
+fn a_life_that_opens_from_its_image_goes_on_with_the_engine_that_the_image_holds() {
+  let at = yard("image-texts");
+  let open = || Opening { skills: Some(false), ..opening(&at, false) }.boot::<String>([]).unwrap();
+  let mut later = imaged_elsewhere(&at, open);
+  assert_eq!(
+    closed(&mut later, "close([x, globals().get('elsewhere')])").as_ref().py_repr(),
+    "[1, True]",
+    "the life goes on with the engine that its image holds, not with the engine of this build"
+  );
+}
+
+/// The opening of a life whose model is the claude command line of a test, which writes the words
+/// that it was given beside the folder.
+#[cfg(unix)]
+fn faked(at: &Path) -> Opening {
+  use std::os::unix::fs::PermissionsExt;
+  let bin = at.join("claude");
+  let fake = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/world/provider/claude/fake-claude.sh");
+  fs::write(&bin, fs::read(fake).unwrap()).unwrap();
+  fs::set_permissions(&bin, PermissionsExt::from_mode(0o755)).unwrap();
+  fs::write(at.join("models"), "nova 100 low\n").unwrap();
+  let roster = Some(vec!["claude-cli:nova".to_owned()].into());
+  let claude = Some(bin.display().to_string());
+  Opening { claude, roster, skills: Some(false), ..opening(at, false) }
+}
+
+/// The system prompt that the command line of the model of a life read, once a prompt asked it.
+#[cfg(unix)]
+fn system(at: &Path, life: &mut Engine) -> String {
+  assert_eq!(closed(life, "close(await prompt(str, 'Say.'))").py_repr(), "'reply 1'");
+  let args = fs::read_dir(at)
+    .unwrap()
+    .filter_map(|one| one.ok().map(|one| one.path()))
+    .find(|one| one.file_name().is_some_and(|name| name.to_string_lossy().starts_with("args.")))
+    .map(|one| fs::read_to_string(one).unwrap())
+    .expect("the command line ran");
+  let args: Vec<&str> = args.split('\0').collect();
+  let file = args.iter().position(|one| *one == "--system-prompt-file").map(|at| args[at + 1]);
+  fs::read_to_string(file.expect("a file of the system prompt")).unwrap()
+}
+
+/// The model of a life that opens from its image reads the engine that the image holds, which the
+/// command line takes as the file of its system prompt.
+#[cfg(unix)]
+#[test]
+fn the_model_of_a_life_that_opens_from_its_image_reads_the_engine_that_the_image_holds() {
+  let at = yard("image-system");
+  let mut later = imaged_elsewhere(&at, || faked(&at).boot::<String>([]).unwrap());
+  let system = system(&at, &mut later);
+  assert!(system.contains("elsewhere"), "the model reads the engine of the life: {system:.200}");
+}
+
+/// The model of a life that opens by a record of another engine reads that engine.
+#[cfg(unix)]
+#[test]
+fn the_model_of_a_life_that_opens_by_its_record_reads_the_engine_that_the_record_holds() {
+  let at = yard("record-system");
+  made_elsewhere(&at, &elsewhere("elsewhere = True").0);
+  let mut later = faked(&at).boot::<String>([]).unwrap().0;
+  let system = system(&at, &mut later);
+  assert!(system.contains("elsewhere"), "the model reads the engine of the life: {system:.200}");
+}
+
+/// The life that opens from the image of a record of an engine that this build does not hold, its
+/// engine with one more line, `elsewhere = True`: a first life opens by the record and writes its
+/// image, and the life given opens from that image.
+fn imaged_elsewhere(at: &Path, open: impl Fn() -> (Engine, Vec<Object>)) -> Engine {
+  let (record, _) = made_elsewhere(at, &elsewhere("elsewhere = True").0);
+  let (mut first, replayed) = open();
+  assert!(!replayed.is_empty(), "a record with no image opens by its entries");
+  assert!(image::keep(&mut first, &record, &()).unwrap(), "the life writes its image");
+  drop(first);
+  let (later, replayed) = open();
+  assert!(replayed.is_empty(), "a life that opens from its image reads no entry");
+  later
+}
+
+#[test]
+fn a_record_whose_fact_made_holds_no_checkpointer_seeds_and_gathers_with_the_engine_that_it_holds()
+{
+  let at = yard("checkpointer");
+  let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus").join("next");
+  laid(&corpus.join("work.jsonl"), &at.join("record.jsonl"));
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let made = kept
+    .iter()
+    .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
+    .rfind(|a| a.kind() == world::MADE)
+    .unwrap();
+  assert!(
+    made.word(5).is_some() && made.word(6).is_none(),
+    "the segment after the checkpoint holds an engine and a Kernel, and no checkpointer"
+  );
+  let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
+  let mut life = inspects
+    .boot::<String>([])
+    .unwrap_or_else(|why| panic!("the seed of its own engine opens its checkpoint: {why}"))
+    .0;
+  let written = checkpoint::written(&mut life)
+    .unwrap_or_else(|why| panic!("the gathered of its own engine writes a checkpoint: {why}"));
+  assert!(written.as_ref().py_repr().contains("'id': 'chain1'"), "the checkpoint holds the root");
+}
+
 /// The records that each build of this version replays word by word: the records in `tests/replay`,
 /// which `tests/replay/README.md` says. The records of the promise of a release are in
-/// `tests/corpus`, which `tests/promise.rs` opens.
+/// `tests/corpus`, which `tests/suite/promise.rs` opens.
 fn replays() -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("replay")
 }
 
 /// A life of a test whose model answers each request with the next word of a script, and with close(None) once the
-/// script runs out.
+/// script runs out. A test that cuts its first word alone sets its bound with [`cut_first`].
 fn scripted(at: &Path, words: &[&str]) -> Opening {
   let said: VecDeque<String> = words.iter().map(|one| (*one).to_owned()).collect();
-  let said = Arc::new(Mutex::new(said));
+  let said = Arc::new(Mutex::new((said, 0)));
   let answer = Answer(Arc::new(move |_, _| {
-    let word = said.lock().unwrap().pop_front().unwrap_or_else(|| "close(None)".to_owned());
+    let mut said = said.lock().unwrap();
+    said.1 += 1;
+    testing::answering(said.1);
+    let word = said.0.pop_front().unwrap_or_else(|| "close(None)".to_owned());
     let turn = Object::tuple([
       Object::string("assistant"),
       Object::string(word),
@@ -463,7 +836,7 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
     Box::pin(async move { Ok(turn) })
   }));
   Opening {
-    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    roster: Some(vec!["claude-cli:opus".to_owned()].into()),
     answer: Some(answer),
     ..opening(at, true)
   }
@@ -472,18 +845,19 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
 #[cfg(unix)]
 #[test]
 fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_stand_again() {
-  let at = place("discovery");
+  use std::os::unix::fs::PermissionsExt;
+  let at = yard("discovery");
   let bin = at.join("claude");
   let fake = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/world/provider/claude/fake-claude.sh");
   // A program written now has a stamp of its own, so no discovery of an earlier run in the cache of furb answers it.
   fs::write(&bin, fs::read(fake).unwrap()).unwrap();
-  fs::set_permissions(&bin, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+  fs::set_permissions(&bin, PermissionsExt::from_mode(0o755)).unwrap();
   fs::write(at.join("models"), "nova 100 low\n").unwrap();
   let asked = || fs::read_to_string(at.join("discoveries")).unwrap_or_default().lines().count();
   let (mut engine, _) = Opening {
     claude: Some(bin.display().to_string()),
-    roster: Some(vec!["claude-cli:nova".to_owned()]),
-    extensions: Some(false),
+    roster: Some(vec!["claude-cli:nova".to_owned()].into()),
+    skills: Some(false),
     ..opening(&at, true)
   }
   .boot::<String>([])
@@ -500,7 +874,7 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
     "the opening asked the models, and the stand of the boot holds what it found; {}",
     saw()
   );
-  let started = std::time::Instant::now();
+  let started = Instant::now();
   let stand = stood(&mut engine);
   let took = started.elapsed();
   assert!(stand.is_ok(), "the stand took {took:?} and failed: {stand:?}; {}", saw());
@@ -509,10 +883,10 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
 
 #[test]
 fn a_life_opens_when_its_actor_and_a_roster_name_left_the_catalog_and_tells_each_chain_once() {
-  let at = place("catalog-left");
+  let at = yard("catalog-left");
   let (mut engine, _) = Opening {
-    extensions: Some(false),
-    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:gone".to_owned()]),
+    skills: Some(false),
+    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:gone".to_owned()].into()),
     actor: Some("claude-cli:vanished/high".to_owned()),
     ..scripted(&at, &[])
   }
@@ -532,11 +906,11 @@ fn a_life_opens_when_its_actor_and_a_roster_name_left_the_catalog_and_tells_each
 
 #[test]
 fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_stood_on_last() {
-  let at = place("stood-again");
+  let at = yard("stood-again");
   let both = "close((standing()[2], sorted(a[0] for a in standing()[0])))";
   let given = Opening {
-    extensions: Some(false),
-    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:sonnet".to_owned()]),
+    skills: Some(false),
+    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:sonnet".to_owned()].into()),
     actor: Some("claude-cli:sonnet/low".to_owned()),
     ..scripted(&at, &[])
   };
@@ -547,7 +921,7 @@ fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_sto
     "('claude-cli:sonnet/low', ['claude-cli:opus', 'claude-cli:sonnet', 'operator'])"
   );
   drop(first);
-  let unsaid = Opening { extensions: Some(false), roster: None, actor: None, ..scripted(&at, &[]) };
+  let unsaid = Opening { skills: Some(false), roster: None, actor: None, ..scripted(&at, &[]) };
   let (mut later, _) = unsaid.boot::<String>([]).unwrap();
   assert_eq!(
     closed(&mut later, both).py_repr(),
@@ -556,20 +930,80 @@ fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_sto
   );
 }
 
+/// A birth makes each chain again and keeps its turns, so the turns of a chain hold its start once
+/// at most, however many births come.
+#[test]
+fn each_chain_holds_its_start_once_at_most_through_births_in_a_row() {
+  let at = yard("reborn-twice");
+  let open = || Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  let mut first = open();
+  closed(&mut first, "x = 1\nwork = chain('work')\nclose(x)");
+  first.checkpoint().unwrap();
+  for _ in 0..3 {
+    open().checkpoint().unwrap();
+  }
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let all = checkpoint::all(&kept);
+  assert_eq!(all.len(), 4);
+  for at in all {
+    let data =
+      entry(&kept[at].as_ref(), 0).and_then(Fact::of).and_then(|a| a.word(0).map(wire::record));
+    let chains = data.unwrap()["chains"].as_array().cloned().unwrap_or_default();
+    for chain in &chains {
+      let id = &chain["id"];
+      let turns = chain["turns"].as_array().cloned().unwrap_or_default();
+      // Each turn is a fact, which the wire writes as a tuple of its words.
+      let facts = turns.iter().map(|turn| &turn["args"][0]);
+      let starts = facts.filter(|fact| fact[0] == "started" && fact[1] == *id).count();
+      assert!(starts <= 1, "the turns of {id} hold its start {starts} times");
+    }
+  }
+}
+
+#[test]
+fn a_life_on_a_record_that_ends_with_its_checkpoint_goes_on_with_the_standing_that_it_carries() {
+  let at = yard("stood-checkpoint");
+  let both = "close((standing()[2], sorted(a[0] for a in standing()[0])))";
+  let given = Opening {
+    skills: Some(false),
+    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:sonnet".to_owned()].into()),
+    actor: Some("claude-cli:sonnet/low".to_owned()),
+    ..scripted(&at, &[])
+  };
+  let (mut first, _) = given.boot::<String>([]).unwrap();
+  let had = closed(&mut first, both).py_repr();
+  first.checkpoint().unwrap();
+  // No stand follows the checkpoint, which carries the standing that the last stand before it gave.
+  let record = at.join("record.jsonl");
+  let last = world::last(&record, &mut |_| {}).unwrap();
+  assert_eq!(
+    kinds(&last.entries),
+    ["checkpoint", "made"],
+    "the record ends with its checkpoint and the fact made of the texts of its life"
+  );
+  let carried = checkpoint::standing(&last.entries).map(|one| one.as_ref().py_repr());
+  let stood = world::stood_before(&record, last.from).unwrap().map(|one| one.as_ref().py_repr());
+  assert!(carried.is_some());
+  assert_eq!(carried, stood);
+  let unsaid = Opening { skills: Some(false), roster: None, actor: None, ..scripted(&at, &[]) };
+  let (mut later, _) = unsaid.boot::<String>([]).unwrap();
+  assert_eq!(closed(&mut later, both).py_repr(), had);
+}
+
 #[test]
 fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
-  let at = place("provider-settings");
+  let at = yard("provider-settings");
   fs::create_dir_all(at.join("config")).unwrap();
-  fs::create_dir_all(at.join(".furb")).unwrap();
   fs::write(
     at.join("config/config.json"),
     r#"{"providers":{"bench":{"url":"http://127.0.0.1:9/v1","models":{"one":{"window":65536}}}}}"#,
   )
   .unwrap();
   let path = at.join(".furb/config.json");
+  fs::create_dir_all(at.join(".furb")).unwrap();
   fs::write(&path, r#"{"providers":{"claude-cli":false,"local":false}}"#).unwrap();
   let (mut engine, _) = Opening {
-    extensions: Some(false),
+    skills: Some(false),
     roster: None,
     actor: Some("bench:one".to_owned()),
     ..scripted(&at, &["close(23)", "close(29)"])
@@ -614,7 +1048,7 @@ const WORK: [&str; 2] = [
 /// life on the record takes one prompt more, so the record holds two openings. Each official
 /// extension runs on it.
 fn worked(name: &str) -> Yard {
-  let at = place(name);
+  let at = yard(name);
   let mut first = scripted(&at, &WORK).boot::<String>([]).unwrap().0;
   assert_eq!(
     closed(&mut first, "close(await prompt(int, 'Work in the directory.'))").as_ref().as_int(),
@@ -632,36 +1066,38 @@ fn worked(name: &str) -> Yard {
 
 #[test]
 fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
-  let at = place("drifts");
+  let at = yard("drifts");
   let record = at.join("record.jsonl");
-  // The place where the first stand stood, changed, makes the replay drift at the word that the stand told.
+  // The place that the first cd of the record asks for, changed, makes the replay drift at that
+  // cd: the word of the root asks for the place where its stand stood. The new place holds a
+  // backslash on each system, as a place of Windows does, which python writes as two.
   let mut lines: Vec<String> =
     fs::read_to_string(worked("drifts-work")).unwrap().lines().map(str::to_owned).collect();
-  let stood = lines
+  let moved = lines
     .iter()
-    .position(|line| line.starts_with(r#"[["done","stand1","#))
-    .expect("the record holds the first stand");
-  let mut entry: serde_json::Value = serde_json::from_str(&lines[stood]).unwrap();
-  let place = entry[0][3][1].as_str().expect("the stand names its place").to_owned();
-  entry[0][3][1] = serde_json::Value::from(format!("{place}-elsewhere"));
-  lines[stood] = entry.to_string();
+    .position(|line| line.starts_with(r#"[["cd","cd1","#))
+    .expect("the record holds the first cd");
+  let mut entry: serde_json::Value = serde_json::from_str(&lines[moved]).unwrap();
+  let place = entry[0][4].as_str().expect("the cd names its place").to_owned();
+  let elsewhere = format!("{place}\\elsewhere");
+  entry[0][4] = serde_json::Value::from(elsewhere.as_str());
+  lines[moved] = entry.to_string();
   // The last line is whole and not ended, which a store mends only at its first keep.
   fs::write(&record, lines.join("\n")).unwrap();
   fs::write(at.join("record.jsonl.log"), "{\"entries\": 0}\n").unwrap();
   let held = |name: &str| fs::read(at.join(name)).unwrap();
   let (text, log) = (held("record.jsonl"), held("record.jsonl.log"));
   // The config directory of the user stands apart, since a life writes there the copy of each word.
-  let apart = Yard::unmade(format!("furb-life-drifts-config-{}", std::process::id()));
+  let apart = Yard::unmade(format!("furb-life-drifts-config-{}", process::id()));
   let config = Some(apart.display().to_string());
   let refused =
     Opening { config, ..opening(&at, true) }.boot::<String>([]).map(|_| ()).unwrap_err();
-  assert!(refused.to_string().starts_with("Drift: "), "{refused}");
-  // The word shows the place as python writes it, and the message as Rust debugs it: four marks for each one.
-  let shown = place.replace('\\', "\\\\\\\\");
-  let moved = format!("stand()\\ncd('{shown}-elsewhere')");
+  assert!(refused.to_string().starts_with("Drift: cd1 drifts: "), "{refused}");
+  // The drift shows the place as python writes it.
+  let shown = Object::string(elsewhere).py_repr();
   assert!(
-    refused.to_string().contains(&moved),
-    "the drift is at the word that the stand told: {refused}"
+    refused.to_string().contains(&format!(", {shown})")),
+    "the drift is at the cd that the record holds: {refused}"
   );
   let mut beside: Vec<String> = fs::read_dir(&at)
     .unwrap()
@@ -678,14 +1114,14 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
   let mut records: Vec<PathBuf> = fs::read_dir(replays())
     .unwrap()
     .map(|one| one.unwrap().path())
-    .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
+    .filter(|one| one.extension().is_some_and(|named| named == "jsonl" || named == "zst"))
     .collect();
   records.sort();
   assert!(!records.is_empty(), "tests/replay holds no record");
   for one in records {
-    let name = one.file_stem().unwrap().to_string_lossy().into_owned();
-    let at = place(&format!("replay-{name}"));
-    fs::copy(&one, at.join("record.jsonl")).unwrap();
+    let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
+    let at = yard(&format!("replay-{name}"));
+    laid(&one, &at.join("record.jsonl"));
     let kept = world::kept(at.join("record.jsonl")).unwrap();
     let made = kept
       .iter()
@@ -696,10 +1132,63 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
       "{name} holds no texts of its engine: give them with script/engines.py, as tests/replay/README.md says"
     );
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-    if let Err(drift) = inspects.boot::<String>([]) {
+    if let Err(drift) = inspects.clone().boot::<String>([]) {
       panic!("{name} drifts on its own engine, a defect of this build: {drift}");
     }
+    if checkpoint::last(&kept).is_some()
+      && let Err(drift) = (Opening { whole: Some(true), ..inspects }).boot::<String>([])
+    {
+      panic!("{name} drifts from its first entry, born again at each checkpoint: {drift}");
+    }
   }
+}
+
+#[test]
+fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
+  for (record, first) in [("ranks.jsonl", "bash2"), ("speaker.jsonl", "reply4")] {
+    let at = yard(&format!("unadapted-{first}"));
+    laid(&replays().join(record), &at.join("record.jsonl"));
+    let mut lines: Vec<String> =
+      fs::read_to_string(at.join("record.jsonl")).unwrap().lines().map(str::to_owned).collect();
+    let made = lines.iter().position(|one| one.starts_with(r#"[["made""#)).unwrap();
+    let mut entry: serde_json::Value = serde_json::from_str(&lines[made]).unwrap();
+    let fact = entry[0].as_array_mut().unwrap();
+    // The same engine with one more line at its end, which no adapter names.
+    let engine = format!("{}\n", fact[7].as_str().unwrap());
+    let mut hash = Sha256::new();
+    for one in [engine.as_str(), fact[8].as_str().unwrap()] {
+      hash.update(one.as_bytes());
+      hash.update([0]);
+    }
+    fact[3] = format!("{:x}", hash.finalize()).into();
+    fact[7] = engine.into();
+    lines[made] = entry.to_string();
+    fs::write(at.join("record.jsonl"), lines.join("\n") + "\n").unwrap();
+    let drift =
+      Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]).unwrap_err();
+    assert!(format!("{drift:?}").contains(&format!("{first} drifts")), "{record}: {drift:?}");
+  }
+}
+
+#[test]
+fn a_life_of_an_engine_whose_gathered_raised_on_an_act_that_no_rung_made_writes_its_checkpoint_through_its_adapter()
+ {
+  let at = yard("lives");
+  laid(&replays().join("lives.jsonl.zst"), &at.join("record.jsonl"));
+  let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
+  let mut inspected = inspects.boot::<String>([]).unwrap().0;
+  let written = checkpoint::written(&mut inspected)
+    .expect("the adapter gives the engine lives that raise nothing");
+  drop(inspected);
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  let kept = fs::read_to_string(at.join("record.jsonl")).unwrap();
+  let tip: serde_json::Value = serde_json::from_str(kept.lines().last().unwrap()).unwrap();
+  assert_eq!(tip[0][0], "checkpoint");
+  let lives = tip[0][3]["chains"][0]["lives"].as_array().unwrap();
+  assert!(
+    lives.iter().any(|one| one == "compacted(); fitted()"),
+    "the checkpoint carries the life word of compaction, whose act holds the act of its own ear open: {lives:?}"
+  );
 }
 
 /// Each run of each chain whose word no turn of that chain shows, as a python expression in the names of the engine.
@@ -714,13 +1203,25 @@ const UNSEEDED: &str = "[e[3] for e in transcript('chain1', 'enable') if e[4].st
                         ('user', e[4]) for n, t in enumerate(turns(on='chain1'))) or not all(m in \
                         module('chain1') for m in re.findall(r'^(?:def|class) (\\w+)', e[4], re.M)))]";
 
+/// A record of the replays, written whole at `to`: one that is too large to keep plain is kept
+/// by zstd with a long window, and read through it.
+fn laid(from: &Path, to: &Path) {
+  if from.extension().is_some_and(|named| named == "zst") {
+    let mut plain = zstd::Decoder::new(fs::File::open(from).unwrap()).unwrap();
+    plain.window_log_max(27).unwrap();
+    io::copy(&mut plain, &mut fs::File::create(to).unwrap()).unwrap();
+  } else {
+    fs::copy(from, to).unwrap();
+  }
+}
+
 /// Each record of `tests/replay`, and the record of the life of `WORK`, replayed in a life that
 /// only inspects it, by its name.
 fn replayed(by: &str) -> Vec<(String, Engine)> {
   let mut records: Vec<PathBuf> = fs::read_dir(replays())
     .unwrap()
     .map(|one| one.unwrap().path())
-    .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
+    .filter(|one| one.extension().is_some_and(|named| named == "jsonl" || named == "zst"))
     .collect();
   records.sort();
   let made = worked(&format!("shown-{by}-made"));
@@ -728,9 +1229,9 @@ fn replayed(by: &str) -> Vec<(String, Engine)> {
   fs::rename(work.with_file_name("record.jsonl"), &work).unwrap();
   records.push(work);
   let open = |one: PathBuf| {
-    let name = one.file_stem().unwrap().to_string_lossy().into_owned();
-    let at = place(&format!("shown-{by}-{name}"));
-    fs::copy(&one, at.join("record.jsonl")).unwrap();
+    let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
+    let at = yard(&format!("shown-{by}-{name}"));
+    laid(&one, &at.join("record.jsonl"));
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
     (name, inspects.boot::<String>([]).unwrap().0)
   };
@@ -751,13 +1252,13 @@ fn each_run_of_a_chain_of_the_replays_has_a_turn_that_shows_its_word() {
 }
 
 #[test]
-fn a_replay_of_work_shows_each_file_of_an_extension_as_the_rung_of_its_read_then_its_code_alone() {
+fn a_replay_of_work_shows_each_file_of_a_skill_as_the_rung_of_its_read_then_its_code_alone() {
   let (_, mut engine) = replayed("seeded").into_iter().find(|one| one.0 == "work").unwrap();
   let enables = engine.word("len(transcript('chain1', 'enable'))", vec![]).unwrap();
   assert_eq!(
     enables.as_ref().as_int(),
-    Some(8),
-    "each official extension runs on the life of work"
+    Some(5),
+    "each official extension that plays by default runs on the life of work"
   );
   let unseeded = engine.word(UNSEEDED, vec![]).unwrap();
   assert_eq!(unseeded.as_ref().items().unwrap().len(), 0, "{}", unseeded.as_ref().py_repr());
@@ -768,7 +1269,7 @@ fn a_replay_of_work_shows_each_file_of_an_extension_as_the_rung_of_its_read_then
 fn measure_how_long_a_life_opens_from_its_checkpoint_and_by_a_replay() {
   let open = |at: &Path| scripted(at, &[]).boot::<String>([]).unwrap().0;
   let number = |name: &str, or: usize| -> usize {
-    std::env::var(name).ok().and_then(|one| one.parse().ok()).unwrap_or(or)
+    env::var(name).ok().and_then(|one| one.parse().ok()).unwrap_or(or)
   };
   let (n, size, tail) = (number("RUNGS", 200), number("CHARS", 0), number("TAIL", 20));
   let word = |name: &str, i: usize| match size {
@@ -780,7 +1281,7 @@ fn measure_how_long_a_life_opens_from_its_checkpoint_and_by_a_replay() {
   // One record that a life of n rungs made, and one where that life ended with its checkpoint and a
   // later life added a tail of TAIL rungs: a later life replays the first whole, and opens on the
   // second from the checkpoint and the tail.
-  let (whole, cut) = (place("measure"), place("measure-checkpoint"));
+  let (whole, cut) = (yard("measure"), yard("measure-checkpoint"));
   for at in [&whole, &cut] {
     let mut engine = open(at);
     for i in 0..n {
@@ -800,9 +1301,9 @@ fn measure_how_long_a_life_opens_from_its_checkpoint_and_by_a_replay() {
   }
   for at in [&whole, &cut] {
     let kept = world::kept(at.join("record.jsonl")).unwrap();
-    let after = kept.len() - crate::checkpoint::last(&kept).map_or(0, |one| one + 1);
+    let after = kept.len() - checkpoint::last(&kept).map_or(0, |one| one + 1);
     let bytes = fs::metadata(at.join("record.jsonl")).unwrap().len();
-    let t = std::time::Instant::now();
+    let t = Instant::now();
     let engine = open(at);
     let spent = t.elapsed();
     drop(engine);
@@ -814,9 +1315,52 @@ fn measure_how_long_a_life_opens_from_its_checkpoint_and_by_a_replay() {
 }
 
 #[test]
+fn an_open_that_inspects_a_record_whose_tip_is_a_checkpoint_replays_the_life_words_that_ask_the_clock_with_no_drift()
+ {
+  let at = yard("tip-clock");
+  let mut first = scripted(&at, &["close('one')"]).boot::<String>([]).unwrap().0;
+  let word = "close(await prompt(str, 'Reply with the word one.'))";
+  assert_eq!(closed(&mut first, word).as_ref().as_str(), Some("one"));
+  // The turns up to the tip, which the pending turn of the operator ends.
+  let upto = |life: &mut Engine, n: i64| {
+    let word = format!("repr(turns(on='chain1')[:{n}])");
+    life.word(&word, vec![]).unwrap().as_ref().py_repr()
+  };
+  let n = first.word("len(turns(on='chain1')) - 1", vec![]).unwrap().as_ref().as_int().unwrap();
+  let tip = upto(&mut first, n);
+  drop(first);
+  // The checkpoint is written as the command line writes it, in a life that only replays.
+  let mut inspected =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let written = checkpoint::written(&mut inspected).unwrap();
+  drop(inspected);
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  // As furb turns opens it, and from its first entry, born again at each checkpoint.
+  let inspects = Opening { inspecting: Some(true), ..scripted(&at, &[]) };
+  let mut inspected =
+    inspects.clone().boot::<String>([]).expect("the open replays to its tip with no drift").0;
+  let refused =
+    "len([x for x in transcript('chain1', 'clock') if isinstance(peek(x[1], None), Refused)])";
+  let refused = inspected.word(refused, vec![]).unwrap().as_ref().as_int().unwrap_or_default();
+  assert!(
+    refused > 0,
+    "the birth asks the clock again, and the open that inspects hears it silent"
+  );
+  (Opening { whole: Some(true), ..inspects })
+    .boot::<String>([])
+    .expect("the whole open replays with no drift");
+  // Each turn up to the tip is as in the life that wrote it and as in a live reopen.
+  let seen = upto(&mut inspected, n);
+  drop(inspected);
+  assert_eq!(seen, tip, "the open that inspects stands at the tip");
+  let mut live = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(upto(&mut live, n), seen, "the open that inspects stands where a live reopen stands");
+}
+
+#[test]
 fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_prompt_of_each_chain() {
-  let at = place("checkpoint");
-  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
+  let at = yard("checkpoint");
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose(f'round {rounds}')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nran = await bash('echo one')\nqueue = [ran]\nSIZE = 6\ndef f():\n  return SIZE\n\
               waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
@@ -825,9 +1369,9 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
   // The checkpoint is written as the command line writes it: in a life that only replays the record.
   let mut inspected =
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
-  let written = crate::checkpoint::written(&mut inspected).unwrap();
+  let written = checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
-  crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
   let mut later =
     scripted(&at, &["rounds += 1\nclose(f'round {rounds}')"]).boot::<String>([]).unwrap().0;
   let word = format!(
@@ -851,7 +1395,7 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
     entry(&one.as_ref(), 0).and_then(Fact::of).is_some_and(|a| a.kind() == world::MADE)
   };
   assert_eq!(
-    crate::checkpoint::segment(&kept).iter().filter(|one| made(one)).count(),
+    checkpoint::segment(&kept).iter().filter(|one| made(one)).count(),
     1,
     "the build that goes on names itself once"
   );
@@ -864,17 +1408,42 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
 }
 
 #[test]
+fn a_life_born_on_a_checkpoint_binds_the_function_whose_default_reads_a_tuple_of_constants_each_value_and_each_life_word()
+ {
+  let at = yard("tuple-default");
+  let mut first = opening(&at, true).boot::<String>([]).unwrap().0;
+  let word = "EVERY, FLOOR = 300.0, 900.0\ndef desk(every: float = EVERY, floor: float = FLOOR):\n  return every + floor\n\
+              limit = 7\nclose(desk())";
+  assert_eq!(closed(&mut first, word).as_ref().as_float(), Some(1200.0));
+  drop(first);
+  let mut inspected =
+    Opening { inspecting: Some(true), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  let written = checkpoint::written(&mut inspected).unwrap();
+  drop(inspected);
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  let mut later = opening(&at, true).boot::<String>([]).unwrap().0;
+  let kinds = "sorted({x[0] for x in transcript('chain1') if x[0] in ('catchup', 'remember', 'compacted', 'fitted')})";
+  assert_eq!(
+    closed(&mut later, &format!("close([desk(), desk(1.0), EVERY, FLOOR, limit, {kinds}])"))
+      .as_ref()
+      .py_repr(),
+    "[1200.0, 901.0, 300.0, 900.0, 7, ['catchup', 'compacted', 'fitted', 'remember']]",
+    "the born life holds the function, each value and each life word of the chain, whatever the function read when it was made"
+  );
+}
+
+#[test]
 fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no_act_run_again() {
-  let at = place("checkpoint-data");
-  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose('late')";
+  let at = yard("checkpoint-data");
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose('late')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nshell = bash('echo one')\nawait shell\nqueue = [shell]\nSIZE = 6\n\
               def f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   first.checkpoint().unwrap();
   let kept = world::kept(at.join("record.jsonl")).unwrap();
-  let fact = entry(&kept[crate::checkpoint::last(&kept).unwrap()].as_ref(), 0).and_then(Fact::of);
-  let data = crate::wire::outward(fact.unwrap().word(0).unwrap());
+  let fact = entry(&kept[checkpoint::last(&kept).unwrap()].as_ref(), 0).and_then(Fact::of);
+  let data = wire::outward(fact.unwrap().word(0).unwrap());
   assert_eq!(data["schema"], serde_json::json!(world::CHECKPOINT_SCHEMA.to_string()));
   assert!(
     data.get("version").is_none(),
@@ -886,7 +1455,11 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
   assert_eq!(chains, ["chain1", "chain2"]);
   let root = &data["chains"][0];
   assert_eq!(root["values"]["queue"], serde_json::json!("[Act('bash1')]"));
-  assert!(root["definitions"].as_str().unwrap().contains("def f():"));
+  assert_eq!(
+    root["definitions"].as_array().and_then(|each| each.last()),
+    Some(&serde_json::json!("SIZE = 6\n\ndef f():\n  return SIZE")),
+    "the definitions hold one string for each word, the last word last"
+  );
   let acts: Vec<(&str, bool)> = data["acts"]
     .as_array()
     .unwrap()
@@ -895,7 +1468,7 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
     .collect();
   assert!(acts.contains(&("bash1", true)) && acts.contains(&(waiting.as_str(), false)), "{acts:?}");
   assert!(
-    !data.to_string().contains("say('prefix'"),
+    !data.to_string().contains("say('cut'"),
     "the checkpoint holds no word that the crate crafts"
   );
   let mut later = scripted(&at, &["close('late')"]).boot::<String>([]).unwrap().0;
@@ -910,7 +1483,7 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
   );
   drop(later);
   let kept = world::kept(at.join("record.jsonl")).unwrap();
-  let tail = crate::checkpoint::segment(&kept);
+  let tail = checkpoint::segment(&kept);
   let again = tail
     .iter()
     .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
@@ -918,15 +1491,15 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
   assert_eq!(again.count(), 0, "no carried act runs again");
 }
 
-/// The words of the seed of the root that the lives after the last checkpoint of a record gave the
-/// gate.
+/// The runs of the word of the seed of the root that the lives after the last checkpoint of a
+/// record made.
 fn seeds(at: &Path) -> usize {
   let kept = world::kept(at.join("record.jsonl")).unwrap();
   let seed = |a: &Fact| {
-    a.kind() == "gate"
-      && a.word(1).and_then(|one| one.as_str()) == Some("debug(t\"{standing()[4]=}\")")
+    a.kind() == "run"
+      && a.word(2).and_then(|one| one.as_str()) == Some("debug(t\"{standing()[4]=}\")")
   };
-  crate::checkpoint::segment(&kept)
+  checkpoint::segment(&kept)
     .iter()
     .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
     .filter(seed)
@@ -935,9 +1508,8 @@ fn seeds(at: &Path) -> usize {
 
 #[test]
 fn a_checkpoint_of_a_later_life_of_a_record_opens_with_no_drift_and_seeds_the_root_once() {
-  let at = place("checkpoint-relife");
-  let open =
-    || Opening { extensions: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let at = yard("checkpoint-relife");
+  let open = || Opening { skills: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   let mut first = open();
   assert_eq!(closed(&mut first, "n = 1\nclose(n)").as_ref().as_int(), Some(1));
   assert_eq!(seeds(&at), 1, "the first life of a record seeds the root once");
@@ -955,9 +1527,29 @@ fn a_checkpoint_of_a_later_life_of_a_record_opens_with_no_drift_and_seeds_the_ro
   }
 }
 
+#[test]
+fn a_large_value_and_an_exit_come_back_from_the_checkpoint_at_each_later_open_and_no_rung_of_the_seed_raises()
+ {
+  let at = yard("checkpoint-large");
+  let open = || scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  let mut first = open();
+  let word = "big = 'x' * LARGEST\nran = Exit(0, Text('o', 'y' * LARGEST), Text('e', ''))\nsmall = 1\nclose(small)";
+  assert_eq!(closed(&mut first, word).as_ref().as_int(), Some(1));
+  first.checkpoint().unwrap();
+  for _ in 0..2 {
+    let mut later = open();
+    let read = "close([len(big), len(ran.stdout.content), small, repr(raised)])";
+    assert_eq!(
+      closed(&mut later, read).as_ref().py_repr(),
+      "[524288, 524288, 1, 'None']",
+      "the definitions make no value again, so each comes back from the checkpoint"
+    );
+    later.checkpoint().unwrap();
+  }
+}
+
 /// The word of the first life of a record whose module, chain and open prompt a later life holds.
-const WAITED: &str =
-  "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose('late')";
+const WAITED: &str = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose('late')";
 
 /// A life on a record that holds a value, a definition, a chain and a prompt open on it, which ends
 /// with its checkpoint, and the name of that prompt.
@@ -1000,7 +1592,7 @@ fn changed(at: &Path, piece: &str, change: impl Fn(&str) -> String) {
 #[test]
 fn a_checkpoint_of_a_later_minor_of_its_schema_with_fields_more_opens_with_each_chain_and_its_prompts()
  {
-  let at = place("checkpoint-minor");
+  let at = yard("checkpoint-minor");
   let waiting = checkpointed(&at);
   let ours = format!("\"schema\":\"{}\"", world::CHECKPOINT_SCHEMA);
   let later =
@@ -1020,8 +1612,13 @@ fn a_checkpoint_of_a_later_minor_of_its_schema_with_fields_more_opens_with_each_
 #[test]
 fn a_record_whose_tail_holds_a_kind_of_fact_that_this_build_does_not_know_opens_with_each_chain_and_its_prompts()
  {
-  let at = place("record-kind");
+  let at = yard("record-kind");
   let waiting = checkpointed(&at);
+  reopened(
+    &at,
+    &waiting,
+    "the first life after the checkpoint goes on from it and asks the open prompt again",
+  );
   let later = format!(
     "[[\"made\",\"chain1\",\"store\",\"{}\",null,\"{}.9\",\"9.9.9\"]]",
     "0".repeat(64),
@@ -1045,7 +1642,7 @@ fn a_record_whose_tail_holds_a_kind_of_fact_that_this_build_does_not_know_opens_
 
 #[test]
 fn a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keeps_nothing() {
-  let at = place("record-major");
+  let at = yard("record-major");
   checkpointed(&at);
   let ours = format!(",\"{}\",", world::RECORD_SCHEMA);
   let theirs = format!(",\"{}.0\",", world::RECORD_SCHEMA.major + 1);
@@ -1067,7 +1664,7 @@ fn a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keep
 
 #[test]
 fn a_checkpoint_of_another_major_of_its_schema_is_refused_with_both_schemas() {
-  let at = place("checkpoint-schema");
+  let at = yard("checkpoint-schema");
   let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   closed(&mut first, "kept = 1\nclose(kept)");
   first.checkpoint().unwrap();
@@ -1090,7 +1687,7 @@ fn a_checkpoint_of_another_major_of_its_schema_is_refused_with_both_schemas() {
 #[test]
 fn a_checkpoint_of_the_form_before_its_schema_that_a_later_life_wrote_opens_and_seeds_no_root_again()
  {
-  let at = place("checkpoint-1034-relife");
+  let at = yard("checkpoint-1034-relife");
   fs::copy(replays().join("handover").join("relife.jsonl"), at.join("record.jsonl")).unwrap();
   for n in 3..=4 {
     let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
@@ -1111,7 +1708,7 @@ fn a_checkpoint_of_the_form_before_its_schema_that_a_later_life_wrote_opens_and_
 
 #[test]
 fn a_checkpoint_of_the_form_before_its_schema_opens_on_this_build() {
-  let at = place("checkpoint-1034");
+  let at = yard("checkpoint-1034");
   fs::copy(replays().join("handover").join("checkpoint.jsonl"), at.join("record.jsonl")).unwrap();
   let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert_eq!(
@@ -1130,8 +1727,8 @@ fn a_checkpoint_of_the_form_before_its_schema_opens_on_this_build() {
 
 #[test]
 fn a_later_life_of_the_engine_that_wrote_a_checkpoint_boots_on_it_and_on_the_tail_alone() {
-  let at = place("checkpoint-live");
-  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
+  let at = yard("checkpoint-live");
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose(f'round {rounds}')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   closed(&mut first, "await bash('echo kept')\nclose(None)");
   let word = "work = chain('work')\nSIZE = 6\ndef f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\n\
@@ -1144,14 +1741,14 @@ fn a_later_life_of_the_engine_that_wrote_a_checkpoint_boots_on_it_and_on_the_tai
   assert_eq!(closed(&mut second, "after = f() + 1\nclose(after)").as_ref().as_int(), Some(7));
   drop(second);
   let kept = world::kept(at.join("record.jsonl")).unwrap();
-  let at_checkpoint = crate::checkpoint::last(&kept).expect("the life kept its checkpoint");
+  let at_checkpoint = checkpoint::last(&kept).expect("the life kept its checkpoint");
   let ours = format!("\"engine\":\"{}\"", world::engine());
   assert!(
     fs::read_to_string(at.join("record.jsonl")).unwrap().contains(&ours),
     "the engine of this build wrote the checkpoint"
   );
   let tail = &kept[at_checkpoint + 1..];
-  let carried = crate::checkpoint::booted(kept[..=at_checkpoint].to_vec()).len();
+  let carried = checkpoint::booted(kept[..=at_checkpoint].to_vec()).len();
   let again = "rounds += 1\nclose(f'round {rounds}')";
   let (mut later, booted) = scripted(&at, &[again]).boot::<String>([]).unwrap();
   assert_eq!(
@@ -1174,7 +1771,7 @@ fn a_later_life_of_the_engine_that_wrote_a_checkpoint_boots_on_it_and_on_the_tai
 
 #[test]
 fn a_command_that_ran_at_a_checkpoint_ends_in_the_life_that_goes_on_from_it_as_interrupted() {
-  let at = place("checkpoint-running");
+  let at = yard("checkpoint-running");
   let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   let with = verbs::Bash { on: Some("chain1".to_owned()), ..Default::default() };
   drop(first.bash("sleep 60", with).unwrap());
@@ -1191,7 +1788,7 @@ fn a_command_that_ran_at_a_checkpoint_ends_in_the_life_that_goes_on_from_it_as_i
 #[test]
 fn a_word_that_awaits_a_command_at_a_checkpoint_ends_as_cut_and_its_model_starts_it_again_in_a_turn()
  {
-  let at = place("checkpoint-cut-word");
+  let at = yard("checkpoint-cut-word");
   let work = "await bash('sleep 60')\nclose('late')";
   let mut first = scripted(&at, &[work]).boot::<String>([]).unwrap().0;
   let asked = "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.3, __name__)\nclose(str(waiting))";
@@ -1217,7 +1814,7 @@ fn a_word_that_awaits_a_command_at_a_checkpoint_ends_as_cut_and_its_model_starts
   );
   drop(later);
   let kept = world::kept(at.join("record.jsonl")).unwrap();
-  let ran = crate::checkpoint::segment(&kept)
+  let ran = checkpoint::segment(&kept)
     .iter()
     .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
     .filter(|a| {
@@ -1230,7 +1827,7 @@ fn a_word_that_awaits_a_command_at_a_checkpoint_ends_as_cut_and_its_model_starts
 
 #[test]
 fn a_life_that_keeps_no_record_refuses_a_checkpoint() {
-  let at = place("checkpoint-unkept");
+  let at = yard("checkpoint-unkept");
   let life = Opening { keeps: Some(false), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   assert_eq!(
     life.checkpoint().unwrap_err().message(),
@@ -1241,7 +1838,7 @@ fn a_life_that_keeps_no_record_refuses_a_checkpoint() {
 #[test]
 fn the_log_of_a_life_after_a_checkpoint_holds_the_facts_of_the_lives_before_it_and_agrees_with_its_record()
  {
-  let at = place("checkpoint-log");
+  let at = yard("checkpoint-log");
   let record = at.join("record.jsonl");
   let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   let before = "before = 'said before'\nclose(before)";
@@ -1249,9 +1846,9 @@ fn the_log_of_a_life_after_a_checkpoint_holds_the_facts_of_the_lives_before_it_a
   drop(first);
   let mut inspected =
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
-  let written = crate::checkpoint::written(&mut inspected).unwrap();
+  let written = checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
-  crate::checkpoint::keep(&record, written).unwrap();
+  checkpoint::keep(&record, written).unwrap();
   for word in ["close('said after')", "close('said last')"] {
     let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
     closed(&mut later, word);
@@ -1274,15 +1871,15 @@ fn the_log_of_a_life_after_a_checkpoint_holds_the_facts_of_the_lives_before_it_a
 
 #[test]
 fn a_chain_that_only_a_value_names_goes_on_from_a_checkpoint_with_its_own_module() {
-  let at = place("checkpoint-named");
+  let at = yard("checkpoint-named");
   let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   closed(&mut first, "kids = [chain('kid')]\nawait rung('n = 5', on=kids[0])\nclose(None)");
   drop(first);
   let mut inspected =
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
-  let written = crate::checkpoint::written(&mut inspected).unwrap();
+  let written = checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
-  crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
   let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert_eq!(
     closed(&mut later, "close([kids, module(kids[0]).get('n')])").as_ref().py_repr(),
@@ -1293,7 +1890,7 @@ fn a_chain_that_only_a_value_names_goes_on_from_a_checkpoint_with_its_own_module
 
 #[test]
 fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
-  let at = place("checkpoint-asked");
+  let at = yard("checkpoint-asked");
   let work = "got = await prompt(str, 'Ask.', on=chain('asked'))\nclose(got)";
   let mut first = scripted(&at, &[work, "await wait(3600, __name__)\nclose('late')"])
     .boot::<String>([])
@@ -1304,9 +1901,9 @@ fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
   drop(first);
   let mut inspected =
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
-  let written = crate::checkpoint::written(&mut inspected).unwrap();
+  let written = checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
-  crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
   let mut later = scripted(&at, &["close('fresh')"]).boot::<String>([]).unwrap().0;
   let again = format!(
     "wake('chain2')\ngot = await Act('{waiting}')\nclose([got, [x[1] for c in ['chain1', 'chain2', 'chain3', 'chain4'] for x in transcript(c, 'prompt') if not over(x[1])], str(chain('more'))])"
@@ -1322,8 +1919,8 @@ fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
 #[test]
 fn a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip()
  {
-  let at = place("crossed");
-  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
+  let at = yard("crossed");
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose(f'round {rounds}')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nqueue = [1]\nSIZE = 6\ndef f():\n  return SIZE\n\
               waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
@@ -1358,9 +1955,7 @@ fn a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail
   drop(later);
   let kept = world::kept(&path).unwrap();
   let checkpoints = kept.iter().filter(|one| {
-    entry(&one.as_ref(), 0)
-      .and_then(Fact::of)
-      .is_some_and(|a| a.kind() == crate::checkpoint::CHECKPOINT)
+    entry(&one.as_ref(), 0).and_then(Fact::of).is_some_and(|a| a.kind() == CHECKPOINT)
   });
   assert_eq!(checkpoints.count(), 1, "the life writes no checkpoint that carries the tail");
   fs::remove_file(format!("{}.log", path.display())).unwrap();
@@ -1382,12 +1977,12 @@ fn a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail
 
 #[test]
 fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of_the_machine() {
-  let at = place("classes");
+  let at = yard("classes");
   fs::create_dir_all(at.join("config")).unwrap();
   fs::write(at.join("config/config.json"), r#"{"classes": {"claude-cli:opus": "cheap"}}"#).unwrap();
   let opening = Opening {
-    roster: Some(vec!["claude-cli:opus".to_owned()]),
-    extensions: Some(false),
+    roster: Some(vec!["claude-cli:opus".to_owned()].into()),
+    skills: Some(false),
     ..opening(&at, false)
   };
   let (mut engine, _) = opening.boot::<String>([]).unwrap();
@@ -1397,82 +1992,39 @@ fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of
   assert!(standing.contains("1000000, 'cheap']"), "{standing}");
 }
 
-/// A word that the gate refuses, since it gives a str to a name of type int, and that runs to its
-/// close.
-const MISTYPED: &str = "x: int = 'one'\nclose(x)";
-
-/// What a word that a rung runs on the root closes with, or why it was refused.
-fn rung(engine: &mut Engine, word: &str) -> Result<Object, crate::Fault> {
-  let word = Some(word.to_owned());
-  let rung =
-    engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() })?;
-  futures::executor::block_on(rung)
-}
-
-/// Each fact of the root, as python shows it.
-fn facts(engine: &mut Engine) -> Vec<String> {
-  let root =
-    engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None }).unwrap();
-  root.iter().map(|one| one.0.as_ref().py_repr()).collect()
-}
-
 #[test]
-fn a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts()
- {
-  let on = place("gate-on");
-  let open = |at: &Path, keeps: bool| Opening { extensions: Some(false), ..opening(at, keeps) };
-  let (mut engine, _) = open(&on, false).boot::<String>([]).unwrap();
-  let refused = rung(&mut engine, MISTYPED).unwrap_err();
-  assert!(refused.to_string().contains("int"), "the gate on refuses the word: {refused}");
-  drop(engine);
-  let off = place("gate-off");
-  fs::create_dir_all(off.join(".furb")).unwrap();
-  fs::write(off.join(".furb/config.json"), r#"{"gate": false}"#).unwrap();
-  let (mut engine, _) = open(&off, true).boot::<String>([]).unwrap();
-  let ran = rung(&mut engine, MISTYPED).unwrap();
-  assert_eq!(ran.as_ref().as_str(), Some("one"), "the gate off lets the word run");
-  let lived = facts(&mut engine);
-  let gated = lived.iter().find(|one| one.starts_with("('gate', ") && one.contains("x: int"));
-  let gated = gated.expect("the record holds the gate of the word");
-  let name = gated.split('\'').nth(3).unwrap_or_default();
-  let answer = format!("('done', '{name}', 'gate', [])");
-  assert!(lived.contains(&answer), "the gate off answers the word with no finding: {gated}");
-  drop(engine);
-  // A config of the project that turns the gate on again: the replay gives the answer that the
-  // record holds.
-  fs::write(off.join(".furb/config.local.json"), r#"{"gate": true}"#).unwrap();
-  let (mut engine, _) = open(&off, false).boot::<String>([]).unwrap();
-  assert!(engine.raised().is_none(), "the replay does not drift: {:?}", engine.raised());
-  let replayed = facts(&mut engine);
-  let mut left = replayed;
-  let missing: Vec<_> = lived
-    .iter()
-    .filter(|one| match left.iter().position(|other| other == *one) {
-      Some(at) => {
-        left.remove(at);
-        false
-      }
-      None => true,
-    })
-    .map(|one| one.chars().take(300).collect::<String>())
-    .collect();
-  assert!(missing.is_empty(), "the replay holds each fact of the life: {missing:#?}");
-  assert_eq!(rung(&mut engine, "close(1)").unwrap().as_ref().as_int(), Some(1));
-  assert!(rung(&mut engine, MISTYPED).is_err(), "the gate on refuses the word again in this life");
-}
-
-#[test]
-fn the_gate_is_on_unless_the_last_config_that_names_it_says_false() {
-  let at = place("gate-configs");
-  let (user, furb) = (at.join("user"), at.join(".furb"));
-  fs::create_dir_all(&user).unwrap();
-  fs::create_dir_all(&furb).unwrap();
-  let gated = || crate::gate::configured(&user, &at);
-  assert!(gated(), "no config names the gate");
-  fs::write(user.join("config.json"), r#"{"gate": false}"#).unwrap();
-  assert!(!gated(), "the config of the user turns it off");
-  fs::write(furb.join("config.json"), r#"{"gate": "no"}"#).unwrap();
-  assert!(!gated(), "a value that is no bool is as unsaid");
-  fs::write(furb.join("config.local.json"), r#"{"gate": true}"#).unwrap();
-  assert!(gated(), "the local config of the project wins");
+fn an_open_tells_each_stage_in_order_and_ends_with_each_entry_of_its_boot_counted() {
+  let at = yard("stages");
+  let mut first = opening(&at, true).boot::<String>([]).unwrap().0;
+  closed(&mut first, "x = 1\nclose(x)");
+  first.checkpoint().unwrap();
+  let mut tail = opening(&at, true).boot::<String>([]).unwrap().0;
+  closed(&mut tail, "y = x + 1\nclose(y)");
+  drop(tail);
+  let bytes = fs::metadata(at.join("record.jsonl")).unwrap().len();
+  let told = Arc::new(Mutex::new(Vec::new()));
+  let heard = Arc::clone(&told);
+  let progress =
+    Progress(Arc::new(move |stage, done, of| heard.lock().unwrap().push((stage, done, of))));
+  let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
+  let later =
+    reactor.block_on(opening(&at, true).open::<String>([], progress, &mut |_| true)).unwrap();
+  let told = told.lock().unwrap().clone();
+  assert_eq!(told.first(), Some(&(Stage::Find, 0, bytes)), "the open tells its first stage first");
+  let mut stages: Vec<Stage> = told.iter().map(|one| one.0).collect();
+  stages.dedup();
+  // The boot takes the entries that the stage find read, so no stage reads the record again.
+  assert_eq!(stages, [Stage::Find, Stage::Seed, Stage::Boot]);
+  let back = |pair: &[(Stage, u64, u64)]| {
+    pair[0].0 == pair[1].0 && (pair[1].1 < pair[0].1 || pair[1].2 < pair[0].2)
+  };
+  assert!(!told.windows(2).any(back), "no number of a stage goes back: {told:?}");
+  let last = |stage| told.iter().rev().find(|one| one.0 == stage).map(|one| (one.1, one.2));
+  assert_eq!(last(Stage::Find), Some((bytes, bytes)), "the scan passed each byte of the record");
+  assert_eq!(last(Stage::Seed), Some((0, 0)), "the seed counts nothing");
+  let (done, of) = last(Stage::Boot).unwrap();
+  assert!(of > 0 && done == of, "the boot ends with each entry counted: {done} of {of}");
+  let within = |one: &&(Stage, u64, u64)| one.0 == Stage::Boot && 0 < one.1 && one.1 < of;
+  assert!(told.iter().any(|one| within(&one)), "the replay counts entries as it passes them");
+  drop(later);
 }

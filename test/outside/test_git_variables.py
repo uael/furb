@@ -5,15 +5,19 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 CLEAN = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "COVERAGE_PROCESS_"))}
 GITS = [
   "test/outside/test_paths.py::test_a_folder_that_a_rule_of_git_ignores_as_a_folder_stands_before_a_build_makes_it",
-  ".furb/extensions/conductor/test/test_conductor.py"
-  "::test_settle_gives_no_workspace_with_work_off_a_branch_and_gives_one_on_the_head_of_a_merged_pr",
+  ".furb/skills/lane/test/test_lane_land.py",
 ]
 
 
+# The run of pytest that this test starts has the one limit of the test, which ends that run and says so. The limit of
+# the suite is shorter than that run on a loaded machine, and it ends the worker of the test with no word of why.
+@pytest.mark.timeout(0)
 def test_the_tests_that_run_git_under_the_hook_of_a_worktree_leave_its_clone_as_it_was(tmp_path: Path) -> None:
   def git(*args: str) -> None:
     who = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]

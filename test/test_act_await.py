@@ -19,7 +19,7 @@ async def test_to_await_an_act_gives_the_value_of_the_act_when_the_act_completes
 
 async def test_an_act_is_awaited_from_any_chain() -> None:
   """An act is awaited from any chain."""
-  sand, _, root = born("x = bash('echo hi')\nclose(x)")
+  sand, _, root = born("x = bash('echo hi')\nawait x\nclose(x)")
   which = await engine.prompt(str, "start one", on=root)
   two = engine.chain("two")
   sand.script[two] = [f"out = await Act({which!r})\nassert isinstance(out, Exit)\nclose(out.code)"]

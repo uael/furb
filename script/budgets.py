@@ -9,6 +9,7 @@ to a whole minute. Run it from the root of the repository, on `gh`:
 import argparse
 import json
 import math
+import re
 import shutil
 import statistics
 import subprocess
@@ -22,6 +23,26 @@ def gh(*args: str) -> object:
   return json.loads(subprocess.run(command, capture_output=True, text=True, check=True).stdout)  # noqa: S603
 
 
+def named(workflow: str = ".github/workflows/gates.yml") -> list[re.Pattern[str]]:
+  """The name of each job of the gates that has a budget, as a pattern: a matrix in a name matches any value.
+
+  A job of a workflow that a job of the gates calls is named under the name of the job that calls it, as GitHub names
+  it, and the job that calls has no budget of its own. The job that only holds the check of the others has no budget.
+  """
+  return [re.compile(".+".join(map(re.escape, re.split(r"\$\{\{.*?\}\}", x)))) for x in names(Path(workflow))]
+
+
+def names(workflow: Path, under: str = "") -> list[str]:
+  found: list[str] = []
+  for job in re.split(r"(?m)^(?=  [\w-]+:$)", workflow.read_text(encoding="utf-8")):
+    name = re.search(r"(?m)^    name: (.+)$", job)
+    if not name or name[1] == "the gates":
+      continue
+    called = re.search(r"(?m)^    uses: \./(\S+)$", job)
+    found += names(workflow.parent / Path(called[1]).name, f"{under}{name[1]} / ") if called else [under + name[1]]
+  return found
+
+
 def seconds(stamp: str) -> float:
   return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
 
@@ -33,12 +54,13 @@ def main() -> None:
   path = "repos/{owner}/{repo}/actions/workflows/gates.yml/runs"
   green = gh(f"{path}?branch=main&status=success&per_page={runs}", "--jq", "[.workflow_runs[].id]")
   assert isinstance(green, list)
+  kept = named()
   took: dict[str, list[float]] = {}
   for run in green:
     jobs = gh(f"repos/{{owner}}/{{repo}}/actions/runs/{run}/jobs?per_page=100", "--jq", ".jobs")
     assert isinstance(jobs, list)
     for job in jobs:
-      if job["conclusion"] == "success":
+      if job["conclusion"] == "success" and any(x.fullmatch(job["name"]) for x in kept):
         took.setdefault(job["name"], []).append(seconds(job["completed_at"]) - seconds(job["started_at"]))
   budgets = {name: 60 * math.ceil(1.5 * statistics.median(times) / 60) for name, times in sorted(took.items())}
   Path(".github/budgets.json").write_text(json.dumps(budgets, indent=2) + "\n")

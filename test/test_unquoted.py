@@ -3,6 +3,8 @@
 import re
 import time
 
+import pytest
+
 from conftest import QUOTES, born, ran, said
 from furb import engine
 
@@ -56,23 +58,21 @@ async def test_a_quote_becomes_its_name_bound_to_its_value_on_the_line_of_the_op
   """A quote becomes its name bound to its value as python writes it, on the line of the open mark, and each other line of the quote becomes an empty line, so every line after it keeps its number."""
   word = "a = 1\n<s:two>\none\ntwo\n</s:two>\nb = nowhere"
   assert engine.unquoted(word).split("\n") == ["a = 1", "two = 'one\\ntwo\\n'", "", "", "", "b = nowhere"]
-  _, _, root = born()
-  assert [one.split(":")[0] for one in engine.gate(word, on=root)] == ["line 6"]
 
 
 async def test_an_open_mark_that_has_no_close_mark_stays_as_it_is() -> None:
-  """An open mark that has no close mark stays as it is, and the gate reads it as the python it is not."""
+  """An open mark that has no close mark stays as it is, so its word is not python, and its run is done with a SyntaxError."""
   word = "<s:hi>\nhello"
   assert engine.unquoted(word) == word
   for row in QUOTES:
     assert bool(re.search(r"(?m)^<s:\w+>", engine.unquoted(row["word"]))) == row["open"], row["word"]
   _, _, root = born()
-  found = engine.gate(word, on=root)
-  assert len(found) == 1 and found[0].startswith("line 1: ")
+  with pytest.raises(SyntaxError):
+    await engine.rung(word, on=root)
 
 
-async def test_the_engine_unquotes_a_word_before_the_gate_reads_it_and_before_the_kernel_runs_it() -> None:
-  """The engine unquotes a word before the gate reads it and before the Kernel runs it, and the door of a ladder and the turns keep the quotes as the word wrote them."""
+async def test_the_engine_unquotes_a_word_before_the_kernel_runs_it() -> None:
+  """The engine unquotes a word before the Kernel runs it, and the door of a ladder and the turns keep the quotes as the word wrote them."""
   sand, log, root = born()
   word = "<s:hi>\nhi\n</s:hi>\nclose(len(hi))"
   sand.script[root] = [word]
@@ -102,16 +102,21 @@ async def test_a_word_unquotes_in_a_time_that_grows_with_its_length_alone() -> N
   def least(small: str, large: str) -> tuple[float, float]:
     spent: tuple[list[float], list[float]] = ([], [])
     for _ in range(9):
-      for word, into in ((small, spent[0]), (large, spent[1])):
-        start = time.perf_counter()
-        engine.unquoted(word)
-        into.append(time.perf_counter() - start)
+      for word, into, times in ((small, spent[0], 32), (large, spent[1], 4)):
+        start = time.process_time()
+        for _ in range(times):
+          engine.unquoted(word)
+        into.append(time.process_time() - start)
     return min(spent[0]), min(spent[1])
 
   repeated = quotes(5000)
   assert engine.unquoted(repeated) == "".join(f"q{n % 50} = {'y' * 1000 + chr(10)!r}\n\n\n" for n in range(5000))
   small, large = least(quotes(625), repeated)
-  assert large < 24 * small
+  # The word is 8 times longer, and the small one runs 8 times as often as the large one, so that each measure lasts
+  # past the tick of a clock of 15.6 ms, as on Windows: linear gives a ratio of 1, quadratic gives 8. The bound lies
+  # between them with room for a loaded machine, where the large word, 5 MB, runs slower than its share when its cache
+  # is shared.
+  assert large < 5 * small
   many = "".join(f"<s:q{n}>\n{'y </s:q' * 2000}\n</s:q{n}>\n" for n in range(100))
   assert len(many) > 1_000_000
   assert await engine.rung(many + "k = len(q99)", on=root) is None

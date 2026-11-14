@@ -16,19 +16,19 @@ tests.
 `AGENTS.md` gives the laws of each suite. Read it first, and read `src/furb/AGENTS.md` for the laws of the engine.
 
 - The contract suite, `test/`, holds one test for each sentence of `src/furb/engine.pyi`, and the suite of each
-  extension, `extensions/<name>/test/`, does the same for its contract. `test/test_hygiene.py` holds each suite to
+  extension, `.agents/skills/<name>/test/`, does the same for its contract. `test/test_hygiene.py` holds each suite to
   its laws. A test of these suites is owned by its sentence: you never delete it alone. When its assertions do not
   prove its sentence, repair them. When the sentence is wrong, the owner decides, and the sentence and its test
   change together.
 - `test/outside/` proves the World, the Kernel, the door to python, the switch of the package, the harness, the
   examples and the life as a program. The hygiene laws do not hold these tests, so this gate holds them.
-- The tests of the crate stand beside each module, `src/<name>.test.rs`, `tests/examples.rs` runs the examples, and
-  `cli/tests/furb.rs` runs the command line as a process.
-- The TypeScript tests stand in `bind/typescript/test/` and `tui/test/`.
+- The tests of the crate stand beside each module, `src/<name>.test.rs`, `tests/suite/examples.rs` runs the examples, and
+  `cli/tests/suite/furb.rs` runs the command line as a process.
+- The TypeScript tests stand in `bind/typescript/test/`, and the tests of the window in `window/tests/suite/`.
 
 Each contract has one primary test at its strongest boundary. A sentence of the contract is proved once, by the
 contract suite, on both engines. A test of a door proves what the door carries that no sentence says. A test of
-the crate proves what the crate adds under the engine. A test of the TUI proves what a person sees and does.
+the crate proves what the crate adds under the engine. A test of the window proves what a person sees and does.
 
 ## Authoring gate
 
@@ -92,10 +92,10 @@ claims a behavior of a dependency, such as monty, rig or napi, read that depende
 Keep discovery read-only, and report the evidence before you edit. For a wide scope, split the work into lanes:
 
 - the engine and its contract suite, `src/furb/` and `test/`;
-- the extensions, `extensions/`;
+- the extensions, `.agents/skills/`;
 - the crate and the command line, `src/*.rs` and `cli/`;
 - the doors, `src/binding*`, `bind/python` and `bind/typescript`;
-- the TUI, `tui/`;
+- the window, `window/`;
 - one sweep across all of them for one pattern.
 
 Outside a campaign, prefer a few candidates you are sure of to a long list of guesses.
@@ -104,7 +104,7 @@ Outside a campaign, prefer a few candidates you are sure of to a long list of gu
 
 Keep a test when it alone enforces a contract: a sentence of a contract, a hygiene law, the wire and the record, a
 default, a byte of the system prompt, the crossing of a value through a door, a process of the command line, or a
-screen of the TUI. Also keep:
+screen of the window. Also keep:
 
 - a test of an order of calls, when the order is a behavior someone sees;
 - a regression test whose failure can occur;

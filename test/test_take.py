@@ -38,7 +38,7 @@ async def test_take_is_given_ids_and_keeps_the_acts_with_those_ids() -> None:
 
 async def test_take_keeps_everything_that_the_acts_with_those_ids_caused() -> None:
   """take keeps everything that the acts with those ids caused."""
-  _, log, root = born("x = bash('echo hi')\nclose(1)", "close(None)")
+  _, log, root = born("x = bash('echo hi')\nawait x\nclose(1)", "close(None)")
   first = engine.prompt(int, "first", on=root)
   assert await first == 1
   await settle()

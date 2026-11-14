@@ -2,6 +2,10 @@
 //! conversation to one turn at a time, takes it back, and sweeps the processes and the
 //! conversations that no turn needs.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::{HashMap, VecDeque},
   sync::Arc,
@@ -16,6 +20,8 @@ use super::{
   conversation::{Conversation, canonical},
   failed,
 };
+use std::mem;
+use tokio::time;
 
 /// How many conversations keep a process at most.
 const WARM: usize = 8;
@@ -77,7 +83,7 @@ impl Drop for Lent {
     if let Some(conversation) = self.conversation.take()
       && let Some(keeper) = self.keeper.upgrade()
     {
-      let key = std::mem::take(&mut self.key);
+      let key = mem::take(&mut self.key);
       drop(keeper.send(Kept::Back { key, conversation }));
     }
   }
@@ -94,7 +100,7 @@ pub(super) async fn kept(
   back: mpsc::WeakUnboundedSender<Kept>,
 ) {
   let mut keeper = Keeper { held: HashMap::new(), accounts, back };
-  let mut ticks = tokio::time::interval(IDLE);
+  let mut ticks = time::interval(IDLE);
   ticks.tick().await;
   loop {
     tokio::select! {
@@ -171,6 +177,10 @@ impl Keeper {
     if let Some(donor) = donor {
       made.parent = Some(donor.id.clone());
       made.chain.clone_from(&donor.chain);
+      made.said.clone_from(&donor.said);
+      // The fork resumes each block of its parent, with the mark of the cache that one holds, so
+      // it marks none more, and a fork of a fork stays within the four marks that the API takes.
+      made.marked = donor.marked;
     }
     made
   }

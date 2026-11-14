@@ -812,16 +812,16 @@ def watched(record: Path, root: str, began: float, mark: dict[str, float]) -> st
 
 
 def enable_compaction(app: Path) -> None:
-  """Enable the official compaction extension in the local config of a task checkout."""
+  """Enable the official compaction skill in the local config of a task checkout."""
   config = app / ".furb" / "config.local.json"
   config.parent.mkdir(parents=True, exist_ok=True)
   held = json.loads(config.read_text(encoding="utf-8")) if config.is_file() else {}
   if not isinstance(held, dict):
     raise TypeError(type(held).__name__)
-  extensions = held.setdefault("extensions", {})
-  if not isinstance(extensions, dict):
-    raise TypeError(type(extensions).__name__)
-  extensions["compaction"] = True
+  skills = held.setdefault("skills", {})
+  if not isinstance(skills, dict):
+    raise TypeError(type(skills).__name__)
+  skills["compaction"] = True
   config.write_text(json.dumps(held, indent=2) + "\n", encoding="utf-8")
 
 
@@ -841,7 +841,6 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace, 
   record = run_dir / "record.jsonl"
   enable_compaction(app)
   world, root, held = lived(record, app, args.to or None, keeps=True)
-  await engine.rung("compacted()", on=root)
   # The actor that the life stands on is the one the archive names, the default actor of the crate when unsaid.
   args.to = args.to or str(engine.standing()[2])
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")

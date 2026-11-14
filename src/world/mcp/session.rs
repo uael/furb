@@ -10,6 +10,7 @@ use super::{
   config::Transport,
   wire::{Failure, Heard, Peer},
 };
+use tokio::time;
 
 /// The version of the protocol that furb asks for.
 pub(super) const VERSION: &str = "2025-06-18";
@@ -51,11 +52,11 @@ pub(super) enum Changed {
 
 impl Changed {
   /// The list that a notification of a server says has changed.
-  pub(super) fn of(method: &str) -> Option<Changed> {
+  pub(super) fn of(method: &str) -> Option<Self> {
     match method {
-      "notifications/tools/list_changed" => Some(Changed::Tools),
-      "notifications/resources/list_changed" => Some(Changed::Resources),
-      "notifications/prompts/list_changed" => Some(Changed::Prompts),
+      "notifications/tools/list_changed" => Some(Self::Tools),
+      "notifications/resources/list_changed" => Some(Self::Resources),
+      "notifications/prompts/list_changed" => Some(Self::Prompts),
       _ => None,
     }
   }
@@ -69,7 +70,7 @@ pub(super) async fn start(
   roots: Value,
   bound: Duration,
 ) -> Result<(Session, mpsc::UnboundedReceiver<Heard>), Failure> {
-  let Ok(opened) = tokio::time::timeout(bound, Peer::open(transport, token, roots)).await else {
+  let Ok(opened) = time::timeout(bound, Peer::open(transport, token, roots)).await else {
     return Err(Failure::Late(bound));
   };
   let (peer, heard) = opened?;

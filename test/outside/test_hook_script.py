@@ -3,11 +3,16 @@ import os
 import subprocess
 from pathlib import Path
 
+import yaml
+
 HOOK = Path(__file__).resolve().parents[2] / "script" / "hooks" / "pre-commit"
-# A commit hook runs this suite with GIT_INDEX_FILE and more set, so a git command that inherits them acts on the repo
-# that is committing and not on the repo of the test.
-# The same hook sets PRE_COMMIT=1, which the script reads as the command that runs the hooks.
-CLEAN = {key: value for key, value in os.environ.items() if not key.startswith("GIT_") and key != "PRE_COMMIT"}
+# A run of this suite under a hook of git holds GIT_INDEX_FILE and more, so a git command that inherits them acts on
+# the repo of the hook and not on the repo of the test.
+# A run under pre-commit holds PRE_COMMIT=1, which the script reads as the command that runs the hooks, and may hold a
+# SKIP, which the script adds to its own.
+CLEAN = {
+  key: value for key, value in os.environ.items() if not key.startswith("GIT_") and key not in ("PRE_COMMIT", "SKIP")
+}
 
 
 def run(tmp_path: Path, body: str, *args: str) -> subprocess.CompletedProcess[str]:
@@ -34,15 +39,42 @@ def test_hook_prints_only_what_fails(tmp_path: Path):
   assert got.stdout == "pytest...........Failed\nE assert 1 == 2\n"
 
 
-def merging(tmp_path: Path, *, conflict: bool) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
-  """A merge of a branch that adds bad.txt, run through the hooks, with a stub that lists what the merge changes."""
+def test_a_commit_runs_only_the_hooks_that_read_its_files_alone_and_end_at_once(tmp_path: Path):
+  # The stub prints the SKIP that the script gives to pre-commit, and the config gives the hooks of the stage.
+  got = run(tmp_path, 'echo "$SKIP"\nexit 1\n')
+  skipped = got.stdout.strip().split(",")
+  loaded = yaml.safe_load((HOOK.parents[2] / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+  staged = [one["id"] for repo in loaded["repos"] for one in repo["hooks"] if one.get("stages") != ["manual"]]
+  assert set(skipped) < set(staged)
+  assert [one for one in staged if one not in skipped] == [
+    "check-added-large-files",
+    "check-merge-conflict",
+    "check-toml",
+    "check-yaml",
+    "end-of-file-fixer",
+    "mixed-line-ending",
+    "trailing-whitespace",
+    "ruff-format",
+    "ruff-check",
+    "rustwidth",
+    "corpus",
+    "stray",
+  ]
+
+
+def merging(
+  tmp_path: Path, *, conflict: bool, both: bool = False, tag: bool = False
+) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
+  """A merge of a branch that adds bad.txt and deletes gone.txt, run through the hooks, with a stub that lists the files
+  that it checks and fails on each one. With conflict, both branches change a.txt on one line; with both, they change
+  b.txt on two lines apart, which git merges. With tag, it merges an annotated tag of the branch."""
   stub = tmp_path / "stub.sh"
   seen = tmp_path / "seen.txt"
   stub.write_text(
     "#!/bin/sh\n"
-    'for one; do case "$one" in --to-ref=*) to=${one#--to-ref=};; esac; done\n'
-    f'[ -n "$to" ] || exit 0\ngit diff --name-only HEAD "$to" >"{seen.as_posix()}"\n'
-    f'grep -q bad.txt "{seen.as_posix()}" && echo "nobad...........Failed" && exit 1\nexit 0\n'
+    'while [ "$#" -gt 0 ] && [ "$1" != --files ]; do shift; done\n'
+    '[ "$#" -eq 0 ] || shift\n'
+    f'printf "%s\\n" "$@" >"{seen.as_posix()}"\necho "check...........Failed"\nexit 1\n'
   )
   stub.chmod(0o755)
   repo = tmp_path / "repo"
@@ -54,19 +86,25 @@ def merging(tmp_path: Path, *, conflict: bool) -> tuple[subprocess.CompletedProc
 
   subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True, env=CLEAN)
   (repo / "a.txt").write_text("a\n")
+  (repo / "gone.txt").write_text("x\n")
+  (repo / "b.txt").write_text("1\n2\n3\n4\n5\n")
   git("add", ".")
   git("commit", "-q", "--no-verify", "-m", "base")
   git("switch", "-q", "-c", "side")
   (repo / "bad.txt").write_text("x\n")
+  (repo / "gone.txt").unlink()
   (repo / "a.txt").write_text("side\n" if conflict else "a\n")
-  git("add", ".")
+  (repo / "b.txt").write_text("side\n2\n3\n4\n5\n" if both else "1\n2\n3\n4\n5\n")
+  git("add", "-A")
   git("commit", "-q", "--no-verify", "-m", "side")
+  git("tag", "-a", "-m", "v", "v1", "side")
   git("switch", "-q", "main")
   (repo / "c.txt").write_text("x\n")
   (repo / "a.txt").write_text("main\n" if conflict else "a\n")
+  (repo / "b.txt").write_text("1\n2\n3\n4\nmain\n" if both else "1\n2\n3\n4\n5\n")
   git("add", ".")
   git("commit", "-q", "--no-verify", "-m", "other")
-  merged = git("merge", "--no-ff", "side", "-m", "merge", check=False)
+  merged = git("merge", "--no-ff", "v1" if tag else "side", "-m", "chore(ci): Merge the side branch", check=False)
   if conflict:
     (repo / "a.txt").write_text("resolved\n")
     git("add", "a.txt")
@@ -81,18 +119,32 @@ def parents(repo: Path) -> int:
   return len(head.stdout.split()) - 1
 
 
-def test_hook_gates_a_merge_that_git_makes_with_no_conflict_on_each_file_that_it_changes(tmp_path: Path):
+def test_hook_checks_no_file_that_a_merge_takes_whole_from_one_parent(tmp_path: Path):
   merged, seen, repo = merging(tmp_path, conflict=False)
+  assert merged.returncode == 0, merged.stderr
+  assert not seen.exists()
+  assert parents(repo) == 2
+
+
+def test_hook_checks_no_file_that_a_merge_of_an_annotated_tag_takes_whole(tmp_path: Path):
+  merged, seen, repo = merging(tmp_path, conflict=False, tag=True)
+  assert merged.returncode == 0, merged.stderr
+  assert not seen.exists()
+  assert parents(repo) == 2
+
+
+def test_hook_gates_a_merge_that_git_makes_with_no_conflict_on_each_file_that_it_merges(tmp_path: Path):
+  merged, seen, repo = merging(tmp_path, conflict=False, both=True)
   assert merged.returncode != 0
-  assert seen.read_text().splitlines() == ["bad.txt"]
-  assert "nobad...........Failed" in merged.stderr
+  assert seen.read_text().splitlines() == ["b.txt"]
   assert parents(repo) == 1
 
 
-def test_hook_gates_the_commit_of_a_merge_with_a_conflict_on_each_file_that_it_changes(tmp_path: Path):
+def test_hook_gates_the_commit_of_a_merge_on_each_file_whose_content_differs_from_every_parent(tmp_path: Path):
   merged, seen, repo = merging(tmp_path, conflict=True)
   assert merged.returncode != 0
-  assert sorted(seen.read_text().splitlines()) == ["a.txt", "bad.txt"]
+  assert seen.read_text().splitlines() == ["a.txt"]
+  assert "check...........Failed" in merged.stdout + merged.stderr
   assert parents(repo) == 1
 
 
@@ -121,33 +173,43 @@ def test_hook_takes_the_venv_of_the_main_checkout_in_a_worktree_that_has_none(tm
 PUSH = HOOK.parent / "pre-push"
 
 
-def pushing(tmp_path: Path, *refs: str) -> tuple[subprocess.CompletedProcess[str], str]:
-  """Pushes of a clone with the hooks of the repository, to each ref named, and the branches of origin after them."""
+def pushing(tmp_path: Path, *refs: str) -> tuple[subprocess.CompletedProcess[str], str, list[str]]:
+  """A push of a clone with the hooks of the repository, to each ref named, after one commit of bad.txt that skipped its
+  hooks. A stub runs the hooks: it logs each run and fails on bad.txt. Gives the push, the branches of origin after it,
+  and the runs of the hooks."""
   origin, repo = tmp_path / "origin.git", tmp_path / "repo"
+  stub, seen = tmp_path / "stub.sh", tmp_path / "seen.txt"
+  stub.write_text(
+    f'#!/bin/sh\necho "$*" >>"{seen.as_posix()}"\n'
+    'for one; do [ "$one" = bad.txt ] && echo "check...........Failed" && exit 1; done\nexit 0\n'
+  )
+  stub.chmod(0o755)
   subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True, env=CLEAN)
   subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True, env=CLEAN)
+  env = {**CLEAN, "PRE_COMMIT": stub.as_posix(), "TMPDIR": tmp_path.as_posix()}
   config = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", f"core.hooksPath={PUSH.parent.as_posix()}"]
 
   def git(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *config, *args], cwd=repo, env=CLEAN, capture_output=True, text=True, check=False)
+    return subprocess.run(["git", *config, *args], cwd=repo, env=env, capture_output=True, text=True, check=False)
 
-  (repo / "a.txt").write_text("a\n")
+  (repo / "bad.txt").write_text("a\n")
   git("add", ".")
-  git("commit", "-q", "--no-verify", "-m", "base")
+  git("commit", "-q", "--no-verify", "-m", "chore(ci): Add a file")
   git("remote", "add", "origin", origin.as_posix())
   got = git("push", "origin", *[f"HEAD:{one}" for one in refs])
   heads = subprocess.run(
     ["git", "for-each-ref", "--format=%(refname)"], cwd=origin, env=CLEAN, capture_output=True, text=True, check=True
   )
-  return got, heads.stdout
+  return got, heads.stdout, seen.read_text().splitlines() if seen.exists() else []
 
 
 def test_a_push_to_main_is_refused_and_moves_nothing(tmp_path: Path):
-  got, heads = pushing(tmp_path, "refs/heads/w/mine", "refs/heads/main")
+  got, heads, _ = pushing(tmp_path, "refs/heads/w/mine", "refs/heads/main")
   assert got.returncode != 0 and heads == ""
   assert "The push to main of origin is refused: main changes only through a pull request." in got.stderr
 
 
-def test_a_push_of_a_branch_of_its_own_goes_through(tmp_path: Path):
-  got, heads = pushing(tmp_path, "refs/heads/w/mine")
+def test_a_push_of_a_branch_of_its_own_goes_through_and_runs_no_hook_on_a_commit_that_skipped_them(tmp_path: Path):
+  got, heads, runs = pushing(tmp_path, "refs/heads/w/mine")
   assert got.returncode == 0 and heads == "refs/heads/w/mine\n"
+  assert runs == []

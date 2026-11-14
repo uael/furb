@@ -5,7 +5,7 @@
 //! engine until the act is done, which means each ear is polled, and what an ear says of its own accord is said
 //! under its name. Nothing polls in vain: what an ear waits for wakes whoever awaits.
 //!
-//! The sandbox reaches the host by the gate, which reads a sheet, by each ear of the host, which the sandbox holds as
+//! The sandbox reaches the host by each ear of the host, which the sandbox holds as
 //! an object of the host that stands at a yield, and by the functions the host gave, a show or a filter. A call of
 //! one of them comes to [`Outside`], and is answered on the thread of the engine, inside the call.
 //!
@@ -27,20 +27,28 @@
   clippy::unreadable_literal,
   reason = "debt: a constant that the build makes is a long literal with no separator"
 )]
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 
 mod crossing;
 mod hosted;
+mod image;
 mod opening;
 mod plain;
 mod record;
 
-use std::{collections::HashMap, task::Waker};
+use std::{
+  collections::{HashMap, HashSet},
+  task::Waker,
+};
 
 use monty_types::{ExcType, MontyUuid, NamedValues};
 
 use self::{
   crossing::Crossing,
-  hosted::{At, Handed, Hosted},
+  hosted::{At, Handed, Hosted, Replay},
   opening::OPENING,
 };
 pub use self::{
@@ -49,28 +57,30 @@ pub use self::{
   record::CRASHES,
 };
 pub(crate) use self::{
+  image::Half,
   opening::Opened,
-  record::{left, looping},
+  record::{left, looping, settled},
 };
 use crate::{
-  SHEET,
-  ear::{Call, Ear},
+  RECORD, checkpoint,
+  checkpoint::CHECKPOINT,
+  ear::{Call, Ear, Heard},
+  fact,
   fact::Fact,
-  gate::checked_on,
+  sand,
   sand::{Answer, Host, Nobody, Sand, id, object},
-  value::{Exit, Fault, Given, Object, Text, entry},
+  value,
+  value::{Exit, Fault, Given, Object, ObjectRef, Text, entry},
+  world,
+  world::Schema,
 };
+use std::{fmt, mem};
 
-/// The name of the function of the host that the gate calls with a sheet, which answers each finding by its line.
-const GATE: &str = "gate";
-/// The function of the host that says whether the gate reads each word, as the key `gate` of the
-/// configs says it when the life opens: when it says no, the ear of the gate answers each word with
-/// no finding.
-const GATED: &str = "gated";
 /// The function of the host that starts an ear of the host again after it raised, by its name.
 const AGAIN: &str = "again";
 /// The function of the host by which the Kernel bounds the turn while a word of a rung steps, and
-/// says whether it was bounded before.
+/// says whether it was bounded before. It names the job that steps as the step begins, so a stop
+/// of the sandbox in the step of a run ends that run.
 const TURN: &str = "turn";
 
 /// The kinds of act that are work an operator waits for: a prompt, a rung, a command and a wait.
@@ -98,44 +108,52 @@ type Words<'a> = (Vec<Object>, Vec<(&'a str, Object)>);
 /// What a host does when an act is done, given what it came to.
 type Watcher = Box<dyn FnMut(&Object)>;
 
-/// The record as boot is given it: a checkpoint that stands first is the data from which `seed`, a
-/// function of this engine, makes the entries that the life boots on, before the entries after it.
+/// The record as the host reads it for boot, and how many of its first entries stand for the
+/// entries of a seed. A checkpoint that stands first is the data from which `seed` of the
+/// checkpointer of this engine makes the entries that the life boots on, before the entries after
+/// it. A checkpoint can hold each turn of a long life, so its data crosses into the sandbox one
+/// time, and the entries of the seed stay there, where boot takes them. In the place of each, the
+/// host holds an entry of the kind and the name of its fact alone, which is all that it reads of
+/// them.
 fn seeded(
   sand: &mut Sand,
   outside: &mut Outside,
-  record: Vec<Object>,
-) -> Result<Vec<Object>, Fault> {
+  mut record: Vec<Object>,
+) -> Result<(Vec<Object>, usize), Fault> {
   let first = record.first().and_then(|one| entry(&one.as_ref(), 0)).and_then(Fact::of);
-  let Some(data) = first
-    .filter(|a| a.kind() == crate::checkpoint::CHECKPOINT)
-    .and_then(|a| a.word(0).map(|one| one.to_owned()))
+  let Some(data) =
+    first.filter(|a| a.kind() == CHECKPOINT).and_then(|a| a.word(0).map(|one| one.to_owned()))
   else {
-    return Ok(record);
+    return Ok((record, 0));
   };
   let pairs = data.as_ref().pairs().unwrap_or_default();
   let schema = pairs.iter().find(|(key, _)| key.as_str() == Some("schema")).map(|one| one.1);
-  crate::world::Schema::opens_checkpoint(schema)?;
-  let made = sand.enter(outside, |sand, outside| {
+  Schema::opens_checkpoint(schema)?;
+  let heads = sand.enter(outside, |sand, outside| {
     outside.bound(sand)?;
     let data = outside.inward(sand, &data)?;
-    let got = outside.named_call(sand, "seed", vec![data], vec![])?;
-    outside.outward(sand, &got)
+    sand.call(outside, &outside.opened.seed.clone(), vec![data], vec![])
   })??;
-  let mut entries: Vec<Object> =
-    made.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
-  entries.extend(record.into_iter().skip(1));
-  Ok(entries)
+  // The sandbox gives a part that many heads share as one part, and a copy of a head walks the
+  // arena down to its lowest part, so each head is made here from its two texts.
+  let head = |one: ObjectRef<'_>| {
+    let texts = one.items().unwrap_or_default().into_iter().filter_map(|text| text.as_str());
+    Object::list([Object::tuple(texts.map(Object::string))])
+  };
+  let heads: Vec<Object> =
+    heads.as_ref().items().unwrap_or_default().into_iter().map(head).collect();
+  let born = heads.len();
+  record.splice(..1, heads);
+  Ok((record, born))
 }
 
 /// A template string, as a host says one: each expression beside its value.
 fn templated(pairs: &[(&str, Object)]) -> Object {
-  crate::value::paired(
-    pairs.iter().map(|(expression, one)| ((*expression).to_owned(), one.clone())),
-  )
+  value::paired(pairs.iter().map(|(expression, one)| ((*expression).to_owned(), one.clone())))
 }
 
-/// The entries of a record as boot is given them, each fact alone in an entry, made in the sandbox
-/// as the record of an earlier life comes in.
+/// The entries of a record that the host holds, each fact alone in an entry, made in the sandbox as
+/// the record of an earlier life comes in.
 fn recorded(sand: &mut Sand, outside: &mut Outside, record: &[Object]) -> Result<Object, Fault> {
   let mut entries = Vec::new();
   for one in record {
@@ -157,15 +175,18 @@ struct Outside {
   opened: Opened,
   /// How many ids the host gave, which names the next.
   given: u128,
-  /// The text of the engine that the sandbox runs, on which the gate reads each word.
-  source: String,
-  /// Whether a config turned the gate off for this life, which the record does not keep: each
-  /// life reads it again.
-  ungated: bool,
+  /// The jobs whose word the Kernel steps, the innermost last: a run, or the part of a writing.
+  stepping: Vec<String>,
+  /// The question that the host refused in this step of a word, past the bound of a turn, and its
+  /// maker.
+  past: Option<(String, String)>,
+  /// The questions of the record that the life opened on, as [`settled`] gives them: while boot
+  /// replays the record, no bound of a turn holds a step of the word of such a run.
+  settled: HashSet<String>,
 }
 
 impl Host for Outside {
-  /// One call of the sandbox, answered: the gate, a function of the host, or a step of an ear of the host.
+  /// One call of the sandbox, answered: a function of the host, or a step of an ear of the host.
   fn answer(
     &mut self,
     sand: &mut Sand,
@@ -174,52 +195,46 @@ impl Host for Outside {
     args: Vec<Object>,
   ) -> Answer {
     let got = match on {
-      // A gate that cannot read a word raises where the gate was called, so the ear of the gate answers that word.
-      None if name == GATE => {
-        return gated(&self.source, args.first()).map_or_else(Answer::Fault, Answer::Value);
-      }
-      None if name == GATED => Ok(Object::bool(!self.ungated)),
       None if name == AGAIN => Ok(Object::bool(self.reborn(args.first()))),
       None if name == TURN => {
         let bounded = args.first().is_some_and(|one| one.as_ref().as_bool().unwrap_or(false));
+        match args.get(1).and_then(|one| one.as_ref().as_str().map(str::to_owned)) {
+          Some(job) => self.stepping.push(job),
+          None => drop(self.stepping.pop()),
+        }
+        let bounded =
+          bounded && !self.stepping.last().is_some_and(|job| self.settled.contains(job));
+        // Each step of a word starts a stretch of the bound, and a round trip to the host
+        // starts none.
+        sand::step(bounded && !self.stepping.is_empty());
+        self.past = None;
         Ok(Object::bool(sand.bound(bounded)))
       }
       None => self.called(sand, name, &args),
-      Some(on) if name == "send" => return self.sent(sand, on, args.first()),
+      Some(on) if name == "send" => return self.sent(sand, on, args.into_iter().next()),
       Some(on) => Err(Fault::refused(format!("{on} is no generator of the host that has {name}"))),
     };
     got.map_or_else(Answer::Abort, Answer::Value)
   }
 }
 
-/// The inputs of the opening of a sandbox: the texts of an engine, of the sheet and of a Kernel,
-/// and the functions of the host that the opening binds.
-fn inputs(source: &str, kernel: &str) -> NamedValues {
+/// The inputs of the opening of a sandbox: the texts of an engine, of the rule of the record, of a
+/// Kernel and of a checkpointer, and the functions of the host that the opening binds.
+fn inputs(source: &str, kernel: &str, checkpointer: &str) -> NamedValues {
   let mut inputs = NamedValues::new();
   inputs.push("__source", Object::string(source));
-  inputs.push("__sheet_source", Object::string(SHEET));
+  inputs.push("__record_source", Object::string(RECORD));
   inputs.push("__kernel_source", Object::string(kernel));
-  inputs.push("__gate", Object::function(GATE, None));
-  inputs.push("__gated", Object::function(GATED, None));
+  inputs.push("__checkpointer_source", Object::string(checkpointer));
   inputs.push("__again", Object::function(AGAIN, None));
   inputs.push("__turn", Object::function(TURN, None));
   inputs
 }
 
-/// What the gate found in a sheet, each finding by its line.
-fn gated(engine: &str, sheet: Option<&Object>) -> Result<Object, Fault> {
-  let sheet = sheet.and_then(|one| one.as_ref().as_str().map(str::to_owned)).unwrap_or_default();
-  let found = checked_on(engine, &sheet)?;
-  Ok(Object::list(found.into_iter().map(|one| {
-    let line = i64::try_from(one.line).unwrap_or_default();
-    Object::tuple([Object::int(line), Object::string(one.to_string())])
-  })))
-}
-
 impl Outside {
   /// The side of the host, on what the opening gave: a dict of its callables by name, each of which
   /// the engine keeps.
-  fn new(handed: Handed, opened: &Object) -> Result<Outside, Fault> {
+  fn new(handed: Handed, opened: &Object) -> Result<Self, Fault> {
     let mut held: HashMap<String, Object> = (opened.as_ref().pairs().unwrap_or_default())
       .into_iter()
       .filter_map(|(name, one)| Some((name.as_str()?.to_owned(), one.to_owned())))
@@ -228,14 +243,46 @@ impl Outside {
     let opened = Opened::of(|name| {
       held.remove(name).ok_or_else(|| Fault::refused(format!("the opening gives no {name}")))
     })?;
-    Ok(Outside {
+    Ok(Self {
       hosted: Hosted { handed, ..Hosted::default() },
       crossing: Crossing { kept, ..Crossing::default() },
       opened,
       given: 0,
-      source: String::new(),
-      ungated: false,
+      stepping: Vec::new(),
+      past: None,
+      settled: HashSet::new(),
     })
+  }
+
+  /// The end of the run whose word a stop of the sandbox cut, kept as the refusal of an act that a
+  /// life ended before the act did: a later life that makes that run again finds it done in the
+  /// record, so the Kernel never runs its word into the same stop, and the prompt of its rung asks
+  /// its model again. The sandbox hears nothing after the stop, so each ear of the host hears the
+  /// keep from here.
+  fn cut(&mut self) {
+    let Some(run) = self.stepping.pop().filter(|job| fact::named(job, "run")) else {
+      return;
+    };
+    let why = world::interruption(&run);
+    let done = [
+      Object::string("done"),
+      Object::string(&run),
+      Object::string(""),
+      Fault::refused(why).object(),
+    ];
+    let keep = Object::tuple([
+      Object::string("keep"),
+      Object::string(""),
+      Object::string("journal"),
+      Object::tuple([Object::tuple(done)]),
+    ]);
+    let Some(fact) = Fact::of(keep.as_ref()) else { return };
+    let mut cx = std::task::Context::from_waker(&self.hosted.waker);
+    for ear in self.hosted.handed.ears.values_mut() {
+      drop(ear.resume(Heard::Fact(fact.clone()), &mut cx));
+      // A store that refuses the entry holds it, and Engine::unkept counts it for the host.
+      drop(ear.ran());
+    }
   }
 
   /// A new id of the host, for an object of the host or for an instance made again in the sandbox.
@@ -272,6 +319,21 @@ impl Outside {
     args.insert(0, Object::string(name));
     let call = self.opened.call.clone();
     sand.call(self, &call, args, kwargs)
+  }
+
+  /// A function of the checkpointer, `seed` or `gathered`, called by its name on the names of the
+  /// engine with values of the host, and what it gave, as it goes out.
+  fn checkpointed(
+    &mut self,
+    sand: &mut Sand,
+    name: &str,
+    args: &[Object],
+  ) -> Result<Object, Fault> {
+    let (mut args, _) = self.inwards(sand, args, vec![])?;
+    args.insert(0, Object::string(name));
+    let call = self.opened.checkpoint.clone();
+    let got = sand.call(self, &call, args, vec![])?;
+    self.outward(sand, &got)
   }
 
   /// The words of a call, values of the host, as they come in.
@@ -351,8 +413,8 @@ impl Outside {
     self.inward(sand, &got?)
   }
 
-  /// What the host calls while the life waits on it, answered at once: who speaks, a callable the engine made, what
-  /// the gate finds against a word on a chain with no fact, or a verb of the engine, as it goes out.
+  /// What the host calls while the life waits on it, answered at once: who speaks, a callable the
+  /// engine made, or a verb of the engine, as it goes out.
   fn asked(&mut self, sand: &mut Sand, call: Call) -> Result<Object, Fault> {
     let Call { verb, args, kwargs } = call;
     let kwargs: Vec<_> = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
@@ -370,12 +432,6 @@ impl Outside {
           pairs.iter().filter_map(|(key, one)| Some((key.as_str()?, one.to_owned()))).collect();
         self.called_back(sand, n, words, named)
       }
-      "against" => {
-        let (args, _) = self.inwards(sand, &args, vec![])?;
-        let against = self.opened.against.clone();
-        let got = sand.call(self, &against, args, vec![])?;
-        self.outward(sand, &got)
-      }
       _ => self.verb(sand, &verb, args, kwargs),
     }
   }
@@ -390,6 +446,25 @@ impl Outside {
     match made.and_then(|args| self.named_call(sand, &fault.name, args, vec![])) {
       Ok(exception) => Answer::Raise(exception),
       Err(fault) => Answer::Abort(fault),
+    }
+  }
+}
+
+/// The state of a record while no life holds it, as [`Engine::kept`] gives it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kept {
+  /// It holds work that the open of the next life on it resumes at once.
+  Runs,
+  /// It holds no such work.
+  Saved,
+}
+
+impl Kept {
+  /// The name of the state, as a list of records shows it.
+  pub fn name(self) -> &'static str {
+    match self {
+      Self::Runs => "runs",
+      Self::Saved => "saved",
     }
   }
 }
@@ -419,6 +494,10 @@ pub struct Engine {
   /// a checkpoint of the life keeps taken: the journal does not make again an act that an ear of
   /// the outside made, so the transcripts of the life do not hold each of those names.
   taken: Object,
+  /// The entry of the fact made of the texts that the life runs, as [`world::running`] gives it,
+  /// which its checkpoint names and writes after it. It is the build only for a life that was born
+  /// on it.
+  made: Object,
 }
 
 impl Engine {
@@ -466,6 +545,8 @@ impl Engine {
       Err(cut) => {
         // No act that a watcher waits on comes to anything after the cut, so each watcher goes, unanswered.
         self.watchers.clear();
+        sand::step(false);
+        self.outside.cut();
         self.stopped = Some(cut.clone());
         return Err(cut);
       }
@@ -492,65 +573,71 @@ impl Engine {
 
   /// An engine on a sandbox and the side of its host, before any run: the record says what work it
   /// left and what loops.
-  fn new(sand: Sand, outside: Outside, record: &[Object], root: String) -> Engine {
-    Engine {
+  fn new(sand: Sand, outside: Outside, record: &[Object], made: Object) -> Self {
+    Self {
       sand,
       outside,
       watchers: HashMap::new(),
-      root,
+      root: String::new(),
       raised: None,
       stopped: None,
       holding: left(record),
       parked: looping(record),
-      taken: crate::checkpoint::taken(record),
+      taken: checkpoint::taken(record),
+      made,
     }
   }
 
   /// An engine, opened from the record, on these ears, each under the name the engine hears it by, in the order
   /// the engine offers them a question.
   ///
-  /// The record is the entries the store kept, each one fact. The engine, the sheet and the Kernel run first, each
-  /// in a namespace of its own, and `boot` is given the Kernel and the gate of the crate before the ears of the host.
+  /// The record is the entries the store kept, each one fact. The engine and the Kernel run first,
+  /// each in a namespace of its own, and `boot` is given the Kernel of the crate before the ears of
+  /// the host.
   pub fn boot<N: Into<String>>(
     record: impl IntoIterator<Item = Object>,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
-  ) -> Result<Engine, Fault> {
-    Engine::gated(record, ears, true)
+  ) -> Result<Self, Fault> {
+    Self::booting(record, ears, Box::new(|_, _| {}))
   }
 
-  /// An engine, opened as [`Engine::boot`] opens it, whose gate reads each word when gated says
-  /// so, and else answers each word with no finding, as the key `gate` of a config set to false
-  /// asks. The record keeps each answer, so a replay gives the answer that the record holds,
-  /// whatever gated says then.
-  pub fn gated<N: Into<String>>(
+  /// An engine, as [`Engine::boot`] opens it, with the replay told: how many of the entries that
+  /// the life boots on the journal passed, and how many it boots on, from the moment that the seed
+  /// gave them, and each of them once boot ended with no fault.
+  pub(crate) fn booting<N: Into<String>>(
     record: impl IntoIterator<Item = Object>,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
-    gated: bool,
-  ) -> Result<Engine, Fault> {
+    replayed: Box<dyn Fn(u64, u64)>,
+  ) -> Result<Self, Fault> {
     let (given, names) = Handed::of(ears)?;
     let record: Vec<Object> = record.into_iter().collect();
     // A record replays on the engine that the fact made of its last segment holds.
-    let (source, kernel) = crate::world::texts(crate::checkpoint::segment(&record))?;
+    let (source, kernel, checkpointer) = world::texts(checkpoint::segment(&record))?;
+    let unheld = world::unheld(checkpoint::segment(&record));
     let mut sand = Sand::new();
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
     // they run again.
     sand.bound(false);
-    let opened = sand.run(OPENING, inputs(&source, &kernel), &mut Nobody("the opening"))?;
+    let opened =
+      sand.run(OPENING, inputs(&source, &kernel, &checkpointer), &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
-    outside.ungated = !gated;
-    outside.source = source;
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
-    let record = seeded(&mut sand, &mut outside, record)?;
-    let mut engine = Engine::new(sand, outside, &record, String::new());
+    let (record, born) = seeded(&mut sand, &mut outside, record)?;
+    outside.settled = settled(&record);
+    outside.hosted.replay = Some(Replay::of(&record, replayed));
+    let made = world::running(checkpoint::segment(&record));
+    let mut engine = Self::new(sand, outside, &record, made);
     let names_parked = Object::list(engine.parked.iter().map(|(id, _)| Object::string(id)));
     let parks = !engine.parked.is_empty();
     let (root, raised) = engine.run(|sand, outside| {
       outside.bound(sand)?;
       outside.crossing.recorded = true;
-      let entries = recorded(sand, outside, &record);
+      let entries = recorded(sand, outside, &record[born..]);
       outside.crossing.recorded = false;
-      let entries = sand.call(outside, &outside.opened.recorded.clone(), vec![entries?], vec![])?;
-      let mut given = vec![("kernel".to_owned(), kernel), ("gate".to_owned(), gate)];
+      let mut given = vec![("kernel".to_owned(), kernel)];
+      if !gate.as_ref().is_none() {
+        given.push(("gate".to_owned(), gate));
+      }
       for name in names {
         let on = outside.fresh();
         outside.hosted.standing.insert(on, (name.clone(), At::Unborn));
@@ -568,7 +655,7 @@ impl Engine {
         }
       }
       let given = given.iter().map(|(name, one)| (name.as_str(), one.clone())).collect();
-      let got = outside.named_call(sand, "boot", vec![entries], given);
+      let got = sand.call(outside, &outside.opened.boot.clone(), vec![entries?], given);
       // What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
       // journal and keeps nothing more, so the root stands when the record held it.
       let opened = match got {
@@ -576,7 +663,7 @@ impl Engine {
         Err(fault) => {
           let root = outside.named_call(sand, "get", vec![Object::string("chain1")], vec![])?;
           let root = if root.as_ref().is_none() { "" } else { "chain1" };
-          (root.to_owned(), Some(fault))
+          (root.to_owned(), Some(lacking(fault, unheld.as_deref())))
         }
       };
       // Boot binds the verbs of a life in place of those that stand before it.
@@ -584,14 +671,37 @@ impl Engine {
       Ok(opened)
     })?;
     engine.sand.bound(true);
+    // The replay ends with boot: a run of the record that goes on after it is live, and the bound
+    // holds it.
+    engine.outside.settled.clear();
+    engine.outside.hosted.replayed(raised.is_none());
     engine.root = root;
     engine.raised = raised;
     Ok(engine)
   }
 
+  /// Gives the journal of the life the entries that follow its tip, as the record of a life that
+  /// went on from this state holds them, and the journal says them again at once, as boot says a
+  /// record again: each word runs again with no bound of a turn, each act takes the answer that
+  /// the entries hold, and no ear of the World is asked for one. The engine of a build whose
+  /// checkpointer holds no journal refuses it.
+  pub fn feed(&mut self, tail: &[Object]) -> Result<(), Fault> {
+    self.outside.settled = settled(tail);
+    let fed = self.unbounded(|engine| {
+      engine.run(|sand, outside| {
+        outside.crossing.recorded = true;
+        let entries = recorded(sand, outside, tail);
+        outside.crossing.recorded = false;
+        sand.call(outside, &outside.opened.fed.clone(), vec![entries?], vec![]).map(drop)
+      })
+    });
+    self.outside.settled.clear();
+    fed
+  }
+
   /// What `body` gives, run as the engine's own work, with no bound of the turn but for each word
   /// that it steps.
-  pub(crate) fn unbounded<T>(&mut self, body: impl FnOnce(&mut Engine) -> T) -> T {
+  pub(crate) fn unbounded<T>(&mut self, body: impl FnOnce(&mut Self) -> T) -> T {
     let was = self.sand.bound(false);
     let got = body(self);
     self.sand.bound(was);
@@ -601,6 +711,11 @@ impl Engine {
   /// The highest number that each kind took in the record that the life opened on.
   pub(crate) fn taken(&self) -> &Object {
     &self.taken
+  }
+
+  /// The entry of the fact made of the texts that the life runs.
+  pub(crate) fn running(&self) -> &Object {
+    &self.made
   }
 
   /// Whether an ear of the host hears under a name.
@@ -640,6 +755,12 @@ impl Engine {
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     self.run(|sand, outside| outside.verb(sand, name, args, kwargs))
+  }
+
+  /// A function of the checkpointer of the engine, `seed` or `gathered`, by its name, said with
+  /// these words, and what it gave.
+  pub fn checkpointed(&mut self, name: &str, args: Vec<Object>) -> Result<Object, Fault> {
+    self.run(|sand, outside| outside.checkpointed(sand, name, &args))
   }
 
   /// One word run in the names of the engine with these values bound, and what it gave, as it goes out, which is how
@@ -683,7 +804,7 @@ impl Engine {
   /// when that act is a prompt, a rung, a command or a wait that is not done and that no pause holds.
   pub fn pending(&mut self) -> Result<Vec<(String, String)>, Fault> {
     let mut holding = Vec::new();
-    for id in std::mem::take(&mut self.holding) {
+    for id in mem::take(&mut self.holding) {
       if !self.whether(TOOK, &id)? {
         holding.push(id);
       }
@@ -698,7 +819,7 @@ impl Engine {
       while let Some(act) = self.get(&at)? {
         let by = act.by().to_owned();
         if WORK.contains(&act.kind()) && self.whether(WAITS, &at)? {
-          made.push((std::mem::replace(&mut at, by), act.kind().to_owned()));
+          made.push((mem::replace(&mut at, by), act.kind().to_owned()));
         } else {
           at = by;
         }
@@ -716,11 +837,16 @@ impl Engine {
     Ok(pending)
   }
 
-  /// The state of the record as a list of records shows it while no life holds it: `runs` when
-  /// it holds the work of [`Engine::pending`], which the open of the next life on it resumes at
-  /// once, so that work runs and no pause holds it, and `saved` when it holds none.
+  /// The state of the record as a list of records shows it while no life holds it: [`Kept::Runs`]
+  /// when it holds the work of [`Engine::pending`], which the open of the next life on it resumes
+  /// at once, so that work runs and no pause holds it, and [`Kept::Saved`] when it holds none.
+  pub fn kept(&mut self) -> Result<Kept, Fault> {
+    Ok(if self.pending()?.is_empty() { Kept::Saved } else { Kept::Runs })
+  }
+
+  /// The name of [`Engine::kept`], as a door gives it: `runs` or `saved`.
   pub fn saved(&mut self) -> Result<&'static str, Fault> {
-    Ok(if self.pending()?.is_empty() { "saved" } else { "runs" })
+    self.kept().map(Kept::name)
   }
 
   /// The work that an earlier life left, put to the outside again with no wake from a host: a
@@ -867,8 +993,8 @@ impl Engine {
 include!(concat!(env!("OUT_DIR"), "/methods.rs"));
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
-impl std::fmt::Debug for Engine {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Engine {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("Engine").field("root", &self.root).finish_non_exhaustive()
   }
 }
@@ -877,6 +1003,19 @@ impl std::fmt::Debug for Engine {
 /// the default of the engine.
 pub mod verbs {
   include!(concat!(env!("OUT_DIR"), "/verbs.rs"));
+}
+
+/// A fault that boot raised, with its cause when it is a drift of a record that names an
+/// engine whose texts it does not hold, since the record then replayed on this build's engine.
+fn lacking(mut fault: Fault, unheld: Option<&str>) -> Fault {
+  if let Some(named) = unheld.filter(|_| fault.name == "Drift") {
+    fault.args = vec![Object::string(format!(
+      "{} The record names the engine {named}, whose texts it does not hold, so it replayed on the \
+       engine of this build: python3 script/engines.py on a copy of the record gives them.",
+      fault.message()
+    ))];
+  }
+  fault
 }
 
 #[cfg(test)]

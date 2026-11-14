@@ -1,14 +1,19 @@
 import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+/** The text of `.furb/.gitignore`: it keeps all the state that furb writes out of git, but the config of the project
+ * and its extensions. */
+export const IGNORED = "*\n!config.json\n!skills/\n!skills/**\n";
+
 /** The directory `.furb/<parts>` of a project, made when it is absent. Records, file contents, shares and images
- * stay there, so the `.furb` it makes holds an ignore rule that keeps all of it out of version control, but the
- * config of the project and its extensions, which a project shares. */
+ * stay there, so each open writes the ignore rule of `.furb` that keeps all of it out of version control, but the
+ * config of the project and its extensions, which a project shares, when the `.furb` has none: a `.furb` that
+ * stood before, and one whose `.gitignore` was removed, get it too, and one that the user wrote stays as it is. */
 export function furbDirectory(project: string, ...parts: string[]): string {
   const furb = join(project, ".furb");
+  mkdirSync(furb, { recursive: true });
   try {
-    mkdirSync(furb);
-    writeFileSync(join(furb, ".gitignore"), "*\n!config.json\n!extensions/\n!extensions/**\n");
+    writeFileSync(join(furb, ".gitignore"), IGNORED, { flag: "wx" });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
   }

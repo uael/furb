@@ -8,6 +8,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 
 use crate::world::images;
+use std::slice;
 
 /// The most characters of a text that an answer holds.
 pub(super) const LONGEST: usize = 100_000;
@@ -41,7 +42,7 @@ pub(super) fn read(got: &Value, gallery: Option<&Path>) -> Value {
 pub(super) fn prompted(got: &Value, gallery: Option<&Path>) -> Value {
   let (mut texts, mut messages) = (Vec::new(), Vec::new());
   for one in listed(&got["messages"]) {
-    let (text, mut content) = blocks(std::slice::from_ref(&one["content"]), gallery);
+    let (text, mut content) = blocks(slice::from_ref(&one["content"]), gallery);
     texts.push(text);
     let role = one["role"].as_str().unwrap_or("user");
     messages.push(json!({"role": role, "content": content.pop().unwrap_or(Value::Null)}));

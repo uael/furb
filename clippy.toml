@@ -1,5 +1,6 @@
 # The bar of the Rust of furb, beside the lints of Cargo.toml, which the skill rust says.
 too-many-lines-threshold = 60
+too-many-arguments-threshold = 4
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 disallowed-methods = [
@@ -11,3 +12,6 @@ disallowed-methods = [
   { path = "std::thread::park_timeout", reason = "an ear awaits; a park on a timer hides a hang" },
   { path = "std::process::Child::try_wait", reason = "await tokio::process::Child::wait under a timeout" },
 ]
+absolute-paths-max-segments = 2
+# The names of products that a doc comment writes as they are, beside the names that clippy knows.
+doc-valid-idents = ["..", "OpenTUI", "FFmpeg", "MinGW"]

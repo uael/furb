@@ -88,8 +88,8 @@ jobs:
             echo "::error::The gates of #$n at $sha ended with $gates (run $id), so no release comes today."
             exit 1
           fi
-          # A push to main cancels the run of main that waits for the run before it, so a cancelled run gives no verdict:
-          # the job reads the last run of main that ran to its end.
+          # A push to main cancels the run of main that waits for the run before it, so a cancelled run gives no
+          # verdict: the job reads the last run of main that ran to its end.
           read -r main ran <<EOF
           $(gh run list --workflow gates.yml --branch main --status completed --limit 100 --json conclusion,headSha \
             --jq '[.[] | select(.conclusion != "cancelled" and .conclusion != "skipped")][0] // {} | "\(.conclusion // "") \(.headSha // "")"')
@@ -136,9 +136,10 @@ jobs:
       # The pull request of release-please changes the version in each manifest, and in Cargo.lock and uv.lock, and
       # bun.lock follows here, since it is no file that release-please reads. A pull request that the token of a
       # workflow opens starts no workflow, so the job starts the check of its title by hand on its branch, and its
-      # check stands on its head. The job daily starts the gates of the head that it merges. Each step after release-please runs only when release-please succeeded, and it
-      # reads the pull request through `|| '{}'`, since a failed or skipped step gives an empty output, which fromJSON
-      # refuses, and the runner reads the template of a step even when its condition skips it.
+      # check stands on its head. The job daily starts the gates of the head that it merges. Each step after
+      # release-please runs only when release-please succeeded, and it reads the pull request through `|| '{}'`, since
+      # a failed or skipped step gives an empty output, which fromJSON refuses, and the runner reads the template of a
+      # step even when its condition skips it.
       - if: steps.release.outcome == 'success' && steps.release.outputs.prs_created == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -16,6 +16,7 @@ use std::{
 
 use serde_json::{Map, Value};
 
+use crate::world;
 use crate::world::disk::{self, Access};
 
 /// How long a call of a tool may take when its server names no `"timeout"`.
@@ -37,11 +38,11 @@ pub(super) enum Kind {
 impl fmt::Display for Kind {
   fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
     out.write_str(match self {
-      Kind::String => "string",
-      Kind::Map => "map",
-      Kind::List => "list",
-      Kind::Port => "port",
-      Kind::Seconds => "number of seconds above 0",
+      Self::String => "string",
+      Self::Map => "map",
+      Self::List => "list",
+      Self::Port => "port",
+      Self::Seconds => "number of seconds above 0",
     })
   }
 }
@@ -80,14 +81,14 @@ pub(super) enum Error {
 }
 
 impl Error {
-  fn shape(key: &str, kind: Kind) -> Error {
-    Error::Shape { key: key.to_owned(), kind }
+  fn shape(key: &str, kind: Kind) -> Self {
+    Self::Shape { key: key.to_owned(), kind }
   }
 }
 
 /// Two errors are the same when they say the same, since no source of an error compares.
 impl PartialEq for Error {
-  fn eq(&self, other: &Error) -> bool {
+  fn eq(&self, other: &Self) -> bool {
     self.to_string() == other.to_string()
   }
 }
@@ -104,9 +105,9 @@ impl Scope {
   /// The name of the scope, as a server dict gives it.
   pub(super) fn name(self) -> &'static str {
     match self {
-      Scope::User => "user",
-      Scope::Project => "project",
-      Scope::Local => "local",
+      Self::User => "user",
+      Self::Project => "project",
+      Self::Local => "local",
     }
   }
 }
@@ -133,37 +134,37 @@ impl Transport {
   /// The client of its login that the definition names; none for a server that runs on this machine.
   pub(super) fn oauth(&self) -> Login {
     match self {
-      Transport::Http { oauth, .. } | Transport::Sse { oauth, .. } => oauth.clone(),
-      Transport::Stdio { .. } => Login::default(),
+      Self::Http { oauth, .. } | Self::Sse { oauth, .. } => oauth.clone(),
+      Self::Stdio { .. } => Login::default(),
     }
   }
 
   /// The kind of the transport, as a server dict gives it.
   pub(super) fn kind(&self) -> &'static str {
     match self {
-      Transport::Stdio { .. } => "stdio",
-      Transport::Http { .. } => "http",
-      Transport::Sse { .. } => "sse",
+      Self::Stdio { .. } => "stdio",
+      Self::Http { .. } => "http",
+      Self::Sse { .. } => "sse",
     }
   }
 
   /// What the transport reaches: the command line of a process, or the address of a server.
   pub(super) fn target(&self) -> String {
     match self {
-      Transport::Stdio { command, args, .. } => [command.as_str()]
+      Self::Stdio { command, args, .. } => [command.as_str()]
         .into_iter()
         .chain(args.iter().map(String::as_str))
         .collect::<Vec<_>>()
         .join(" "),
-      Transport::Http { url, .. } | Transport::Sse { url, .. } => url.clone(),
+      Self::Http { url, .. } | Self::Sse { url, .. } => url.clone(),
     }
   }
 
   /// The address of a remote server, and none for a process.
   pub(super) fn url(&self) -> Option<&str> {
     match self {
-      Transport::Stdio { .. } => None,
-      Transport::Http { url, .. } | Transport::Sse { url, .. } => Some(url),
+      Self::Stdio { .. } => None,
+      Self::Http { url, .. } | Self::Sse { url, .. } => Some(url),
     }
   }
 }
@@ -193,8 +194,8 @@ pub(super) struct Server {
 
 impl Server {
   /// A server that cannot run, under a name, with why.
-  fn broken(name: String, scope: Scope, why: Error) -> Server {
-    Server { name, scope, disabled: false, approved: true, run: Err(Arc::new(why)) }
+  fn broken(name: String, scope: Scope, why: Error) -> Self {
+    Self { name, scope, disabled: false, approved: true, run: Err(Arc::new(why)) }
   }
 
   /// The client of its login that the definition names.
@@ -248,14 +249,14 @@ struct Choices {
 }
 
 impl Choices {
-  fn of(local: &Result<Option<Map<String, Value>>, Error>) -> Choices {
+  fn of(local: &Result<Option<Map<String, Value>>, Error>) -> Self {
     let empty = Map::new();
     let held = local.as_ref().ok().and_then(Option::as_ref).unwrap_or(&empty);
     let listed = |key: &str| -> Vec<String> {
       let names = held.get(key).and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
       names.iter().filter_map(Value::as_str).map(str::to_owned).collect()
     };
-    Choices {
+    Self {
       approved: listed("approved"),
       disabled: listed("disabled"),
       enabled: listed("enabled"),
@@ -425,7 +426,7 @@ impl Fields<'_> {
     let command =
       self.text("command")?.filter(|command| !command.is_empty()).ok_or(Error::NoCommand)?;
     let args = self.args()?;
-    let cwd = self.text("cwd")?.map(|cwd| crate::world::resolved(project, &cwd));
+    let cwd = self.text("cwd")?.map(|cwd| world::resolved(project, &cwd));
     Ok(Transport::Stdio { command, args, env: self.pairs("env")?, cwd })
   }
 

@@ -30,66 +30,53 @@ pub enum State {
 }
 
 impl State {
-  /// Each state, in the order of the roll-up.
-  pub const ALL: [State; 10] = [
-    State::Asks,
-    State::Unread,
-    State::Failed,
-    State::Paused,
-    State::Thinks,
-    State::Runs,
-    State::Delegates,
-    State::Done,
-    State::Cancelled,
-    State::Idle,
-  ];
-
-  /// The state of a whole: the first state that any of its parts holds, and idle for no part.
-  pub fn roll_up(states: impl IntoIterator<Item = State>) -> State {
-    states.into_iter().min().unwrap_or(State::Idle)
-  }
-
   /// Whether the state is work that is not done: a model that thinks, a word or a command that
   /// runs, or a word that awaits another chain.
   pub fn busy(self) -> bool {
-    matches!(self, State::Thinks | State::Runs | State::Delegates)
+    matches!(self, Self::Thinks | Self::Runs | Self::Delegates)
   }
 
-  /// The state of one act. A rung whose word has not come yet is its model that thinks, and an act
-  /// that is no work and lives, as a chain or a grant, is work that waits on another chain.
-  pub fn of(act: &Act) -> State {
+  /// The state of one act. A rung whose word has not come yet is its model that thinks while a
+  /// reply of it runs, and rests while it waits for its turn, and an act that is no work and lives,
+  /// as a chain or a grant, is work that waits on another chain.
+  pub fn of(act: &Act) -> Self {
     let done = act.done();
     if act.owed() {
-      State::Asks
+      Self::Asks
     } else if act.pause.is_some() && !done {
-      State::Paused
+      Self::Paused
     } else if act.cancelled() {
-      State::Cancelled
+      Self::Cancelled
     } else if act.failed() {
-      State::Failed
+      Self::Failed
     } else if !done && !act.kind.work() {
-      State::Delegates
+      Self::Delegates
     } else if done && (act.kind != Kind::Rung || act.run != Some(RunState::Running)) {
-      State::Done
+      Self::Done
     } else if act.kind == Kind::Rung && !done && act.word.is_none() {
-      State::Thinks
+      if act.asking { Self::Thinks } else { Self::Idle }
     } else {
-      State::Runs
+      Self::Runs
     }
   }
 }
 
 /// What the work of a chain that is not done does, from its own acts and the prompts that its words
-/// made on other chains: a model that writes a word of it thinks, a command or a wait of it runs,
-/// and a word of it that awaits only another chain delegates.
+/// made on other chains: a model that writes a word of it thinks, a command or a wait of it runs, a
+/// word of it that awaits only another chain delegates, and a chain whose open rungs only wait for
+/// their turn rests.
 pub fn working(local: &[&Act], remote: &[&Act]) -> State {
-  let mut open = local.iter().filter(|act| !act.done());
-  if open.clone().any(|act| act.kind == Kind::Rung && act.word.is_none()) {
+  let open: Vec<&Act> = local.iter().copied().filter(|act| !act.done()).collect();
+  let turn = |act: &Act| act.kind == Kind::Rung && act.word.is_none();
+  let rungs = || open.iter().filter(|act| act.kind == Kind::Rung);
+  if open.iter().any(|act| turn(act) && act.asking) {
     State::Thinks
-  } else if open.any(|act| matches!(act.kind, Kind::Bash | Kind::Wait)) {
+  } else if open.iter().any(|act| matches!(act.kind, Kind::Bash | Kind::Wait)) {
     State::Runs
   } else if remote.iter().any(|act| !act.done()) {
     State::Delegates
+  } else if rungs().any(|act| turn(act)) && rungs().all(|act| turn(act)) {
+    State::Idle
   } else {
     State::Runs
   }

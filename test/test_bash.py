@@ -267,8 +267,8 @@ async def test_the_stdout_and_the_stderr_doors_are_readable_while_the_command_ru
 
 async def test_a_wake_on_a_chain_with_a_source_starts_no_inherited_command_again() -> None:
   """A wake on a chain with a source starts no inherited command again, since only the owner starts an act."""
-  sand, log, root = born("x = bash('slow')\nclose(1)", auto=False)
-  assert await engine.prompt(int, "start one", on=root) == 1
+  sand, log, root = born(auto=False)
+  await engine.rung("x = bash('slow')", on=root)
   command = said(log, "bash")[0][1]
   twin = await chained("twin", root)
   engine.pause(twin)
@@ -576,13 +576,40 @@ async def test_a_command_accepts_the_codes_that_its_ok_names_and_every_code_when
   assert [a[7] for a in said(log, "bash")] == [(0, 1), True, (0,)]
 
 
-async def test_what_an_ok_or_an_accepts_raises_the_word_that_awaits_the_command_raises_and_every_other_word_goes_on() -> (
+async def test_bash_refuses_an_ok_or_a_show_that_is_a_callable_since_no_later_life_makes_it_again_as_it_was_so_a_later_life_tells_each_command_as_its_life_told_it() -> (
   None
 ):
-  """What an ok or an accepts raises as it judges the code of a command, the word that awaits the command raises at its await, and every other word goes on."""
+  """bash refuses an ok or a show that is a callable, since no later life makes it again as it was, so a later life tells each command as its life told it."""
+  word = (
+    "got = []\n"
+    + "".join(
+      f"try:\n  bash('one', {one}=lambda lines: [1])\nexcept Refused as no:\n  got.append(str(no))\n"
+      for one in ("ok", "show", "show_err")
+    )
+    + "close(got)"
+  )
+  _, log, root = born(word, auto=False)
+  assert await engine.prompt(list, "run it", on=root) == ["no callable"] * 3
+  assert said(log, "bash") == []
+  sand, _, root = born(auto=False)
+  for show, show_err in ((span(1, 1), grep("e")), (span(2, 2), None)):
+    ran = engine.bash("two lines", show=show, show_err=show_err, on=root)
+    await settle()
+    sand.writes(ran, "one\ntwo\n", "stdout")
+    sand.writes(ran, "err\n", "stderr")
+    sand.exits(ran, 0)
+    await ran
+  told = [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#bash")]
+  assert len(told) == 4, told
+  before = engine.turns(on=root)
+  await relived(Sand(), plain(sand.record))
+  assert engine.turns(on=root) == before
+
+
+async def test_what_an_accepts_raises_the_word_that_awaits_the_command_raises_and_every_other_word_goes_on() -> None:
+  """What an accepts raises as it judges the code of a command, the word that awaits the command raises at its await, and every other word goes on."""
   sand, log, root = born(
-    "x = bash('one', ok=lambda e: True)\ntry:\n  await x\nexcept TypeError:\n  got = ['type']\n"
-    "accepts = lambda command, exit: 1 / 0\ny = bash('two')\ntry:\n  await y\nexcept ZeroDivisionError:\n  got.append('zero')\n"
+    "accepts = lambda command, exit: 1 / 0\ny = bash('two')\ntry:\n  await y\nexcept ZeroDivisionError:\n  got = ['zero']\n"
     "close(got)",
     "close(3)",
     auto=False,
@@ -590,9 +617,7 @@ async def test_what_an_ok_or_an_accepts_raises_the_word_that_awaits_the_command_
   asked = engine.prompt(list, "run them", on=root)
   await settle()
   sand.exits(said(log, "bash")[0][1], 0)
-  await settle()
-  sand.exits(said(log, "bash")[1][1], 0)
-  assert await asked == ["type", "zero"]
+  assert await asked == ["zero"]
   assert await engine.prompt(int, "then", on=root) == 3
 
 

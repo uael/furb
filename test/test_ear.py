@@ -17,6 +17,7 @@ from conftest import (
   born,
   dones,
   fresh,
+  journaled,
   life,
   machine,
   paragraphs,
@@ -105,7 +106,7 @@ async def test_the_world_hears_every_fact(tmp_path: Path) -> None:
   assert not (tmp_path / "scratch:").exists() and not (tmp_path / "plan.md").exists()
 
 
-async def test_the_world_performs_any_fact_that_an_extension_defines_and_that_the_world_knows() -> None:
+async def test_the_world_performs_any_fact_that_a_skill_defines_and_that_the_world_knows() -> None:
   """The World performs any fact that an extension defines and that the World knows."""
   sand = Knows()
   _, root = life(sand)
@@ -155,7 +156,7 @@ async def test_an_ear_is_any_generator_of_that_shape() -> None:
   """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by."""
   sand = sown()
   kept: list[tuple] = []
-  root = engine.boot((), world=sand.hears(), kernel=Py().kernel(), gate=Py().gating(), note=note(kept))
+  root = engine.boot(journaled(), world=sand.hears(), kernel=Py().kernel(), note=note(kept))
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "work", on=root) == 1
   assert engine.read("note://one", on=root) == Text("note://one", "kept")
@@ -168,8 +169,8 @@ async def test_an_ear_is_any_generator_of_that_shape() -> None:
   assert {"started", "ready", "done"} <= {a[0] for a in kept} and not {"reply", "run"} & {a[0] for a in kept}
 
 
-async def test_the_chain_has_the_gate_read_and_the_kernel_begin_every_rung() -> None:
-  """The chain has the gate read every rung but the ones it wrote itself, and the Kernel begin every rung, by the acts gate and run."""
+async def test_the_chain_has_the_kernel_begin_every_rung() -> None:
+  """The chain has the Kernel begin every rung, by the act run."""
   sand, log, root = born()
   await engine.rung("k = 1", on=root)
   sand.script[root] = ["close(k + 1)"]
@@ -178,8 +179,6 @@ async def test_the_chain_has_the_gate_read_and_the_kernel_begin_every_rung() -> 
   told = [fresh(root), f"{prompted('prompt1', 'int', 'count')}\n\n#rung2 advance on prompt1"]
   assert ran(log) == [told[0], "k = 1", told[1], "close(k + 1)"]
   assert [a[4] for a in said(log, "run")] == ["rung1_told", "rung1", "rung2_told", "rung2"]
-  assert [one[2] for one in said(log, "done") if one[1].startswith("gate")] == ["gate", "gate"]
-  assert [a[4] for a in said(log, "gate")] == ["k = 1", "close(k + 1)"]
 
 
 async def test_the_kernel_takes_a_run_as_that_run() -> None:
@@ -278,7 +277,7 @@ async def test_a_later_life_on_a_record_finds_its_scratch_directory_again(tmp_pa
   assert empty == ""
 
 
-def listening(heard: list[tuple], names: set[str]) -> Generator[set[str], tuple]:
+def hearing(heard: list[tuple], names: set[str]) -> Generator[set[str], tuple]:
   """An ear that waits for these names and keeps each fact it hears."""
   while True:
     heard.append((yield names))
@@ -289,7 +288,7 @@ async def test_an_ear_that_yields_a_set_of_names_waits_for_the_facts_that_name_o
   _, _, root = born()
   other = engine.chain("other", on=root)
   heard: list[tuple] = []
-  engine.drive(listening(heard, {other, "clock"}), "listener")
+  engine.drive(hearing(heard, {other, "clock"}), "listener")
   engine.read("a.txt", on=root)
   engine.read("a.txt", on=other)
   engine.clock(on=root)
@@ -306,7 +305,7 @@ async def test_an_ear_that_yields_nothing_or_an_empty_set_waits_for_every_fact()
   """An ear that yields nothing, or an empty set, waits for every fact."""
   _, _, root = born()
   every: list[tuple] = []
-  engine.drive(listening(every, set()), "every")
+  engine.drive(hearing(every, set()), "every")
   read = engine.act("read", root, None, "a.txt")
   await settle()
   assert [a[:2] for a in every if a[1] == read] == [("read", read), ("done", read)]
@@ -317,7 +316,7 @@ async def test_every_ear_hears_every_pause_wake_cancel_and_close() -> None:
   """Every ear hears every pause, wake, cancel and close, whatever it waits for, so a control reaches each act that it is over."""
   _, _, _, act = slow()
   heard: list[tuple] = []
-  engine.drive(listening(heard, {"none"}), "listener")
+  engine.drive(hearing(heard, {"none"}), "listener")
   engine.pause(act)
   engine.wake(act)
   engine.cancel(act)

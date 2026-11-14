@@ -1,5 +1,5 @@
 //! The holders of a life (D2 of #983): each window that attached it and each pin. A life with no
-//! holder lives for the grace of the daemon, then writes its checkpoint and ends. Work that runs
+//! holder lives for the grace of the daemon, then writes its image and ends. Work that runs
 //! in the life holds nothing.
 
 use std::{collections::BTreeSet, time::Duration};
@@ -31,7 +31,7 @@ impl Holders {
   /// No holder yet: a life that no window attaches and no pin holds ends after the grace.
   pub(crate) fn new(grace: Duration) -> Self {
     let idle = Some(Instant::now() + grace);
-    Holders { windows: Vec::new(), pins: BTreeSet::new(), grace, idle }
+    Self { windows: Vec::new(), pins: BTreeSet::new(), grace, idle }
   }
 
   /// When the life ends, while it has no holder.

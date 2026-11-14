@@ -5,7 +5,7 @@ Each folder here holds records. A build made them on a model that answers from a
 - `next` holds the records of the coming release.
 - Each release has its own folder, named by its version, as `1.0.0`.
 
-The test `make_the_corpus` in `tests/promise.rs` makes the records of `next`. Each record has a checkpoint and a tail:
+The test `make_the_corpus` in `tests/suite/promise.rs` makes the records of `next`. Each record has a checkpoint and a tail:
 
 - `work.jsonl` runs each default kit. Its root writes, reads, runs a command, waits, reads the clock and chance, asks a
   chain of its own, and defines a value and a function. A word of a model waits for an hour. That word is open when the
@@ -20,7 +20,7 @@ The test `make_the_corpus` in `tests/promise.rs` makes the records of `next`. Ea
   a kit and its defaults.
 
 The test `each_record_of_each_folder_of_the_corpus_opens_gives_back_its_modules_and_takes_one_more_turn` in
-`tests/promise.rs` runs in `cargo test`. It also runs in `.github/workflows/corpus.yml`, on each pull request: on Linux, and on Linux, macOS and Windows when
+`tests/suite/promise.rs` runs in `cargo test`. It also runs in `.github/workflows/corpus.yml`, on each pull request: on Linux, and on Linux, macOS and Windows when
 the pull request changes a line of `Cargo.toml` that names monty, since a move of the pin of monty may change what a
 stored definition gives.
 For each record of each folder, it does these steps:
@@ -39,17 +39,18 @@ as an operator does.
   folder of the version of that release.
 - After the tag of that version exists, no file of that folder changes. `script/hooks/corpus.py` refuses such a change,
   in the hooks and in `corpus.yml`.
-- A change that makes a record of a release folder fail breaks the promise of its major version.
-- A later build of a major version can write a record that an earlier build of that major opens. Each reader skips each
-  field that it does not know. The test `a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens`
-  proves it on this build.
-- Before 1.0.0, no promise covers a release. A change with `!` in its title may make `next` again and delete the
+- `docs/promise.md` says what the corpus promises and which test proves each part. The test
+  `test_each_record_of_next_opens_on_the_last_release_of_its_major_once_that_release_holds_a_corpus` in
+  `test/outside/test_promise_rollback.py` installs the program furb of the last release of the major of the build that
+  holds a folder, and opens each record of `next` there with no refusal and no drift. It skips a major with no such
+  release: 0.4.2 refuses each record of `next` as made by a later version of the record.
+- Before 1.0.0, a change with `!` in its title may make `next` again and delete the
   folders of 0.x. Make `next` with an empty home and an empty temporary folder. Then no file of your machine goes into
   a record:
 
   ```sh
   CARGO_HOME=${CARGO_HOME:-$HOME/.cargo} RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup} HOME=$(mktemp -d) \
-    TMPDIR=$(mktemp -d) cargo test -p furb --test promise make_the_corpus -- --ignored
+    TMPDIR=$(mktemp -d) cargo test -p furb --test suite promise::make_the_corpus -- --ignored
   ```
 
 Each record holds the texts of its engine in its fact made, so it replays on that engine, and no change of the engine

@@ -1,7 +1,12 @@
 //! The one protocol of the host: what a peer says to the daemon, and what the daemon says to a
 //! peer, each frame one line of JSON.
 
+use furb::{
+  life::Stage,
+  view::{self, Act, Desk, Page, Rung, Shown, ThreadNode, Threads},
+};
 use schemars::JsonSchema;
+use schemars::generate::SchemaSettings;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -11,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 19;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -71,13 +76,22 @@ pub struct Request {
 /// Each thing that a peer may ask the daemon. A life is named by the path of its record, and a
 /// verb that names no chain says it on the root.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "verb", rename_all = "snake_case")]
+#[serde(tag = "verb", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Verb {
   Hello(Hello),
-  /// The lives and the records of the machine.
-  List,
+  /// The records of the machine: each record of the sessions of each workspace that
+  /// `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer
+  /// names none, as a window keeps its list there, and each record that a life of the daemon holds.
+  List {
+    #[serde(default)]
+    config: Option<String>,
+  },
+  /// The cards of the machine: each thread that an operator started in each record that `list`
+  /// gives with no config. The peer then hears a frame `cards` at each change of them, until it
+  /// leaves.
+  Cards,
   /// The life of a record opened, in a folder or in the folder of its record. A life that this
-  /// open makes stands on the actor, the roster and the extensions that the peer names, reads the
+  /// open makes stands on the actor, the roster and the skills that the peer names, reads the
   /// settings of the user in the folder `config` and runs the claude command line `claude` when
   /// the peer names them, as the window of the peer reads them, and the peer answers each request
   /// of its models in their place when it asks to, as a demo does.
@@ -88,7 +102,7 @@ pub enum Verb {
     cwd: Option<String>,
     actor: Option<String>,
     roster: Option<Vec<String>>,
-    extensions: Option<bool>,
+    skills: Option<bool>,
     #[serde(default)]
     config: Option<String>,
     #[serde(default)]
@@ -246,21 +260,23 @@ pub enum Verb {
     life: String,
     on: Option<String>,
   },
-  /// What the gate finds in a word on a chain, which runs nothing.
-  Gate {
-    life: String,
-    word: String,
-    on: Option<String>,
-  },
-  /// A stand of the life, which reads the roster and the actor again.
+  /// A stand of the life, which reads the roster and the actor again, on the names of models that
+  /// it names in place of the roster of the life, when it names some. The life goes on, and the
+  /// record keeps the answer of the stand.
   Stand {
     life: String,
+    roster: Option<Vec<String>>,
   },
   /// The configs of the folder of the life, in their layers: what each key holds, a change of a
   /// key, or a stand on them as the disk holds them now.
   Config {
     life: String,
     config: Config,
+  },
+  /// A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config
+  /// that asked it. It writes no config.
+  CancelSignIn {
+    life: String,
   },
   /// The fact that the operator read a chain or a thread up to now, which each window and each
   /// later life reads in the record.
@@ -294,20 +310,62 @@ pub enum Verb {
     #[serde(default)]
     notices: Vec<String>,
   },
-  /// The threads of a chain with their meaning, now or as they stood just after a moment.
+  /// The threads of a chain with their meaning, now or as they stood just after a moment. `read`
+  /// is the place up to which the window read the chain, from which the runs of notes count the
+  /// ones not yet read; none reads nothing.
   Threads {
     life: String,
     on: Option<String>,
     at: Option<u64>,
+    #[serde(default)]
+    read: Option<u64>,
+  },
+  /// The threads of every chain of a life but those it names, as one tree in the order of the
+  /// list of the threads, now or as they stood just after a moment.
+  Rail {
+    life: String,
+    #[serde(default)]
+    hidden: Vec<String>,
+    at: Option<u64>,
+  },
+  /// The ladder of a chain, now or as it stood just after a moment: the steps that show and the
+  /// folds of the others, with the folds that the window opened, the prompts that the operator
+  /// owes, the only acts at its top when `taken` names them, and how many last steps show.
+  Ladder {
+    life: String,
+    on: Option<String>,
+    at: Option<u64>,
+    #[serde(default)]
+    opened: Vec<String>,
+    #[serde(default)]
+    owed: Vec<String>,
+    #[serde(default)]
+    taken: Option<Vec<String>>,
+    #[serde(default)]
+    shown: Option<Shown>,
   },
   /// The acts of a life as they stood just after a moment, each with its meaning then.
   AsOf {
     life: String,
     at: u64,
   },
+  /// A page of a thread of a life, its prompt: the exchanges before the one at `before`, or
+  /// before the end, at most `limit` of them, the newest page first. The page of the end also
+  /// makes the peer hear a frame `thread` at each change of that thread, until it reads the end
+  /// of another thread or leaves: a peer reads one thread at a time.
+  Thread {
+    life: String,
+    thread: String,
+    #[serde(default)]
+    before: Option<usize>,
+    limit: usize,
+  },
   /// Each moment of a life at which an act began or ended, in order.
   Moments {
     life: String,
+    /// The chain whose acts give the moments; none gives those of the whole life.
+    #[serde(default)]
+    on: Option<String>,
   },
   /// The turn that the peer gave for a request of a model of a life that it answers, written as
   /// the record writes a value, or why it gives none.
@@ -347,7 +405,8 @@ impl Verb {
     let reads = matches!(
       self,
       Self::Hello(_)
-        | Self::List
+        | Self::List { .. }
+        | Self::Cards
         | Self::Attach { .. }
         | Self::Detach { .. }
         | Self::Presence { .. }
@@ -364,10 +423,12 @@ impl Verb {
         | Self::Queued { .. }
         | Self::Desk { .. }
         | Self::Threads { .. }
+        | Self::Rail { .. }
+        | Self::Ladder { .. }
         | Self::AsOf { .. }
+        | Self::Thread { .. }
         | Self::Moments { .. }
         | Self::Names { .. }
-        | Self::Gate { .. }
         | Self::Config { config: Config::Get, .. }
         | Self::ViewMount(_)
         | Self::ViewTree(_)
@@ -399,30 +460,9 @@ pub enum Config {
   /// value, then a stand of the life on the configs. A change that the catalog refuses puts its
   /// config back as it was, and the life does not stand.
   Set { key: Vec<String>, value: Option<Value>, layer: Option<Layer> },
-  /// A stand of the life on the configs as the disk holds them, which asks again each model that
-  /// waits to retry.
-  Reload,
 }
 
-/// A layer of the configs, from the one that wins least to the one that wins most: the config of
-/// the user, the config of the project, and its local config, which git ignores.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum Layer {
-  User,
-  Project,
-  Local,
-}
-
-impl From<Layer> for furb::world::config::Layer {
-  fn from(layer: Layer) -> Self {
-    match layer {
-      Layer::User => Self::User,
-      Layer::Project => Self::Project,
-      Layer::Local => Self::Local,
-    }
-  }
-}
+pub use furb::world::config::Layer;
 
 /// What the daemon says to a peer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -437,10 +477,29 @@ pub enum Frame {
   Event { life: String, seq: Seq, event: Event },
   /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
   Presence { life: String, peers: Vec<Peer> },
+  /// A change of the cards of one record, pushed to each peer that asked the cards: each card that
+  /// is new or that changed, and the prompt of each card that the record holds no more.
+  Cards { life: String, changed: Vec<Card>, gone: Vec<String> },
+  /// A change of the thread that the peer reads: each exchange that is new or that changed, how
+  /// many exchanges stand before the first of the page of the end now, and the agents of the
+  /// thread.
+  Thread { life: String, thread: String, page: Page },
+  /// How far the open of a life stands, pushed to each of its windows while the life opens: the
+  /// stage, its work done and its work known, each in the unit of the stage, and both 0 for a
+  /// stage that counts nothing. The stages of one open come in their order, the numbers of a stage
+  /// never go back, and `done` never passes `of`. A window hears a frame at once for each stage
+  /// that the open reaches, and at most four each second for a stage that goes on. The frame of
+  /// `log` with `done` equal to `of` ends the open, and comes before the first event that the open
+  /// tells. It is no event of the log and no fact of the record.
+  Opening { life: String, stage: Stage, done: u64, of: u64 },
   /// A life that holds open acts and said no fact for the bound of the daemon, pushed once to each
   /// of its windows by the watch of the daemon, which no word of the life runs: each open act, and
   /// the notice that a window shows as it stands.
   Stalled { life: String, acts: Vec<Open>, notice: String },
+  /// The state of the sign-in of codex that this peer asked with a config of its provider, pushed
+  /// at each change of the state, so no window asks it again: the word of the state, the browser
+  /// address while it waits, and what to tell the operator when it needs him or failed.
+  SignIn { state: String, url: Option<String>, message: Option<String> },
   /// A request of a model of a life that the peer answers: its number, and the request with the
   /// actor, the chain, the messages and the settings.
   Ask { life: String, ask: u64, request: Value },
@@ -459,7 +518,7 @@ pub enum Frame {
 impl Frame {
   /// The refusal of a request, or of a frame with no id.
   pub fn refused(id: Option<u64>, error: ProtocolError) -> Self {
-    Frame::Refused { id, why: error.to_string(), error }
+    Self::Refused { id, why: error.to_string(), error }
   }
 }
 
@@ -468,12 +527,19 @@ impl Frame {
 #[serde(tag = "answer", content = "data", rename_all = "snake_case")]
 pub enum Answer {
   Done,
-  /// The answer to a hello: the protocol of the daemon, and the peer as the daemon knows it.
+  /// The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name
+  /// of the machine of the daemon, its build, and the id of the view of the peer, which names this
+  /// connection among those of its login and stands in no record.
   Welcome {
     protocol: u32,
     peer: Peer,
+    machine: String,
+    build: String,
+    view: u64,
   },
   Lives(Vec<Listed>),
+  /// The cards of the machine.
+  Cards(Vec<Card>),
   /// The name of the act that the verb made.
   Act(String),
   Value(Value),
@@ -487,6 +553,20 @@ pub enum Answer {
   Presence(Vec<Peer>),
   /// The lives that a daemon gave at its handover.
   Handed(Vec<Handed>),
+  /// What waits for the operator.
+  Desk(Desk),
+  /// The threads of a chain.
+  Threads(Threads),
+  /// The threads of every chain of a life, as one tree.
+  Rail(Vec<ThreadNode>),
+  /// The ladder of a chain.
+  Ladder(Vec<Rung>),
+  /// The acts as they stood at a moment.
+  Acts(Vec<Act>),
+  /// Each moment at which an act began or ended.
+  Moments(Vec<u64>),
+  /// A page of a thread.
+  Page(Page),
 }
 
 /// An act that stays open in a life that stalled: its name, its kind, and the chain that it stands
@@ -506,15 +586,57 @@ pub struct Handed {
   pub pins: Vec<String>,
 }
 
-/// A record of the machine, and whether a life of the daemon holds it now.
+/// A record of the machine: the main checkout of the workspace whose sessions hold it, when the
+/// list names one, else the checkout whose `.furb/sessions` holds a record that a life holds,
+/// whether a life of the daemon holds it now, whether that life lives and does not
+/// end, whether a window holds that life, and the name of its session while a life holds it: the
+/// one that the operator said last on the root, which wins, else the one that the skill naming
+/// gave. An empty name takes the default name again.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Listed {
   pub life: String,
+  pub workspace: Option<String>,
+  pub held: bool,
   pub open: bool,
+  /// Whether a window of any connection holds the life now: a pin holds it with no window.
+  #[serde(default)]
+  pub watched: bool,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub name: Option<String>,
+}
+
+/// A card of the machine: one thread that an operator started, in the record of its session. It
+/// holds the name of the session when it has one, the main checkout of the project whose sessions
+/// hold the record, when the list of the machine names one, else the checkout whose
+/// `.furb/sessions` holds a record that a life holds, whether a life holds the record now,
+/// the login of each person whose window holds that life, and the second of the epoch since which
+/// the thread stands as it does. A record that has no index of its threads yet gives one card with
+/// no prompt, under the name of its file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Card {
+  pub life: String,
+  pub session: Option<String>,
+  pub project: Option<String>,
+  pub held: bool,
+  pub viewers: Vec<String>,
+  pub since: u64,
+  #[serde(flatten)]
+  pub thread: view::Card,
+}
+
+impl Card {
+  /// Where a member finds the card in a list: its part, its rank in that part, and its time. What
+  /// needs him waits the longest first, and each other part shows the newest first.
+  pub fn place(&self, login: &str) -> (view::Part, u8, i64) {
+    let (part, rank) = self.thread.part(login);
+    let since = i64::try_from(self.since).unwrap_or(i64::MAX);
+    (part, rank, if part == view::Part::NeedsYou { since } else { -since })
+  }
 }
 
 /// A view that a window mounts in a slot of a life, which the process of a skill serves.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Mount {
   pub viewer: String,
   pub life: String,
@@ -524,6 +646,7 @@ pub struct Mount {
 
 /// The tree of a view, which takes the place of each tree of a lower version.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Tree {
   pub viewer: String,
   pub slot: Slot,
@@ -533,6 +656,7 @@ pub struct Tree {
 
 /// What a person did to a node of a view, with the value of an input.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ViewEvent {
   pub viewer: String,
   pub node: String,
@@ -542,6 +666,7 @@ pub struct ViewEvent {
 
 /// What a skill asks of the one window of a view.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ViewEffect {
   pub viewer: String,
   pub effect: Effect,
@@ -549,6 +674,7 @@ pub struct ViewEffect {
 
 /// The end of a view in its window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Dispose {
   pub viewer: String,
 }
@@ -610,7 +736,7 @@ pub struct Node {
 impl Node {
   /// The node as a window that only reads gets it: each node that acts, inert.
   #[must_use]
-  pub fn inert(self) -> Node {
+  pub fn inert(self) -> Self {
     let shape = match self.shape {
       Shape::Input { value, hint, .. } => Shape::Input { value, hint, inert: true },
       Shape::Button { label, .. } => Shape::Button { label, inert: true },
@@ -627,7 +753,7 @@ impl Node {
       | Shape::Diff { .. }
       | Shape::Markdown { .. }) => shape,
     };
-    Node { shape, ..self }
+    Self { shape, ..self }
   }
 }
 
@@ -727,7 +853,7 @@ struct Wire {
 /// The JSON Schema of the protocol: a request and a frame, with the version of the protocol under
 /// the key `x-protocol`.
 pub fn schema() -> Value {
-  let generator = schemars::generate::SchemaSettings::draft07().into_generator();
+  let generator = SchemaSettings::draft07().into_generator();
   let mut schema = generator.into_root_schema_for::<Wire>();
   schema.insert("x-protocol".to_owned(), PROTOCOL.into());
   schema.to_value()

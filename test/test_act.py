@@ -4,7 +4,21 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import Kernel, Sand, born, keeping, kernel, paragraphs, plain, relived, said, settle, verbs, watched
+from conftest import (
+  Kernel,
+  Sand,
+  born,
+  journaled,
+  keeping,
+  kernel,
+  paragraphs,
+  plain,
+  relived,
+  said,
+  settle,
+  verbs,
+  watched,
+)
 from furb import engine
 from furb.engine import HIDDEN, OPERATOR, TIMEOUT, Act, Exit, Refused, Text, take
 
@@ -108,7 +122,7 @@ async def test_an_ear_of_the_outside_that_is_busy_when_its_turn_comes_and_waits_
         case ("note", about, *_) if engine.get(about) == a:
           yield "started", about
 
-  root = engine.boot((), **kernel(), probe=watched(log), taker=taker(), world=sand.hears())
+  root = engine.boot(journaled(), **kernel(), probe=watched(log), taker=taker(), world=sand.hears())
   engine.say("tell", root, ["#chain1 hello"])
   await settle()
   (one,) = made
@@ -121,7 +135,9 @@ async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes
   sand = Sand()
   log: list[tuple] = []
   after: list[tuple] = []
-  root = engine.boot((), **kernel(), probe=watched(log), taker=taking("note"), after=keeping(after), world=sand.hears())
+  root = engine.boot(
+    journaled(), **kernel(), probe=watched(log), taker=taking("note"), after=keeping(after), world=sand.hears()
+  )
   await verbs(root, "note", "seen")
   one = engine.act("note", root, noting([], takes=False))
   assert engine.peek(one, ...) is ... and [a for a in after if a[0] == "note"] == []
@@ -213,7 +229,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
   heard: list[object] = []
   named = engine.act("note", two, noting(heard), "one")
   assert engine.get(named)[3] == two
-  sand.script[root] = ["close(bash('echo hi'))"]
+  sand.script[root] = ["x = bash('echo hi')\nawait x\nclose(x)"]
   unsaid = await engine.prompt(str, "start one", on=root)
   assert engine.get(unsaid)[3] == root
 

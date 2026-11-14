@@ -25,7 +25,7 @@ printf '{ "name": "proof", "private": true, "type": "module" }\n' > package.json
 cp "$packs"/uael-furb-[0-9]*.tgz .
 npm install --no-audit --no-fund --no-save "$packs/uael-furb-$system-"[0-9]*.tgz "furb@file:./$(ls uael-furb-[0-9]*.tgz)"
 cp "$root/docs/examples/typescript/chains.ts" chains.ts
-said=$(env -u FURB_LOCAL_URL -u FURB_LOCAL_KEY -u FURB_TUI FURB_CLAUDE_BIN="$claude" \
+said=$(env -u FURB_LOCAL_URL -u FURB_LOCAL_KEY -u FURB_WINDOW FURB_CLAUDE_BIN="$claude" \
   FURB_CONFIG_DIR="$yard/config" XDG_CACHE_HOME="$yard/cache" node chains.ts)
 want=$(printf 'The notes read well.\nreviewer under root')
 if [ "$said" != "$want" ]; then

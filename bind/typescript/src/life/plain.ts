@@ -1,4 +1,4 @@
-import { failed, type LiveAct } from "./acts.js";
+import { type Act, failed, outcomeOf, reasonOf } from "./acts.js";
 
 /** The names of exceptions that a message of furb can start with. */
 const exception = /^(?:[A-Z]\w*(?:Error|Exception)|Refused|Drift|KeyboardInterrupt)$/;
@@ -19,10 +19,10 @@ export function plain(text: string, directory = ""): string {
 
 /** What a failed act says, as a person reads it: the reason of a rung that failed, or the exception that its value is,
  * and nothing for an act that did not fail. */
-export function reason(act: LiveAct, directory = ""): string | undefined {
+export function reason(act: Act, directory = ""): string | undefined {
   if (!failed(act)) return undefined;
-  if (act.run) return plain(act.run.reason, directory);
-  const value = act.value as { is?: string; args?: unknown[] };
+  if (act.run) return plain(reasonOf(act.run), directory);
+  const value = outcomeOf(act) as { is?: string; args?: unknown[] };
   const first = value.args?.[0];
   return typeof first === "string" && first ? plain(first, directory) : (value.is ?? "");
 }

@@ -3,9 +3,12 @@
 The rule lives in `.github/pull_request_template.md`, and the types in `changelog-sections` of
 `release-please-config.json`, which is their one home. A title is a type, its area in parentheses, a ! for a breaking
 change if any, then a colon, a space and a sentence that starts with a capital letter, in 70 characters or fewer, as
-`fix(tui): Reap the shell of a command that drops before its exit`.
+`fix(world): Reap the shell of a command that drops before its exit`.
 
 Usage: python3 script/title.py "<title>"
+
+With `--file <path>`, which the hook commit-msg gives, it checks the first line of a message that is no comment, and lets a
+merge pass. It prints nothing when the title is right, so that the hook prints only what fails.
 """
 
 import json
@@ -29,15 +32,22 @@ def fits(title: str, kinds: list[str]) -> bool:
 
 
 def main() -> int:
-  title, kinds = " ".join(sys.argv[1:]), types()
+  args, kinds = sys.argv[1:], types()
+  named = args[:1] == ["--file"]
+  title = " ".join(args)
+  if named:
+    title = next((x for x in Path(args[1]).read_text().splitlines() if x.strip() and not x.startswith("#")), "")
+    if title.startswith("Merge "):
+      return 0
   if fits(title, kinds):
-    sys.stdout.write(f"The title is right: {title}\n")
+    if not named:
+      sys.stdout.write(f"The title is right: {title}\n")
     return 0
   sys.stderr.write(
     f"The title is wrong: {title!r}\n"
     f"Start it with a type of {', '.join(kinds)}, its area in parentheses, a ! for a breaking change if any, then a"
     f" colon, a space and a sentence that starts with a capital letter, in {LONGEST} characters or fewer, as"
-    " 'fix(tui): Reap the shell of a command that drops before its exit'. .github/pull_request_template.md says"
+    " 'fix(world): Reap the shell of a command that drops before its exit'. .github/pull_request_template.md says"
     " the rule.\n"
   )
   return 1

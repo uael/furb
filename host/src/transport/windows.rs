@@ -3,8 +3,9 @@
 //! access list of that user alone.
 
 use std::{
-  future,
+  fs, future,
   io::{self, Write},
+  mem,
   os::windows::{ffi::OsStrExt, io::FromRawHandle},
   path::Path,
   ptr,
@@ -14,6 +15,7 @@ use std::{
 use tokio::net::windows::named_pipe::{
   ClientOptions, NamedPipeClient, NamedPipeServer, ServerOptions,
 };
+use tokio::time::sleep;
 use windows_sys::Win32::{
   Foundation::{
     ERROR_ACCESS_DENIED, ERROR_ALREADY_EXISTS, ERROR_PIPE_BUSY, GENERIC_WRITE,
@@ -63,7 +65,7 @@ impl Listener {
   pub(crate) async fn accept(&mut self) -> Result<Accepted, TransportError> {
     self.next.connect().await.map_err(TransportError::Accept)?;
     let next = instance(&self.place, false)?;
-    Ok(std::mem::replace(&mut self.next, next))
+    Ok(mem::replace(&mut self.next, next))
   }
 }
 
@@ -73,7 +75,7 @@ pub(crate) async fn dial(folder: &Path) -> Result<Dialed, TransportError> {
   loop {
     match ClientOptions::new().open(&place) {
       Err(no) if no.raw_os_error() == Some(ERROR_PIPE_BUSY.cast_signed()) => {
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        sleep(Duration::from_millis(20)).await;
       }
       opened => return opened.map_err(|source| TransportError::Dial { place, source }),
     }
@@ -86,6 +88,10 @@ pub(crate) fn login(_: &Accepted) -> Result<String, TransportError> {
 }
 
 /// The login of the user of the daemon.
+#[expect(
+  unsafe_code,
+  reason = "the login of the user is a call of Windows that no safe crate of the lock makes"
+)]
 pub(crate) fn own() -> Result<String, TransportError> {
   let mut name = [0u16; 257];
   let mut size: u32 = 257;
@@ -105,6 +111,10 @@ fn piped(folder: &Path) -> String {
 
 /// A security descriptor that gives all rights to the owner alone, the user of the daemon, and
 /// none to another, handed to `made` and freed once `made` returns.
+#[expect(
+  unsafe_code,
+  reason = "an access list of Windows is made and freed only through calls of Windows"
+)]
 fn owner_alone<T>(made: impl FnOnce(*mut SECURITY_ATTRIBUTES) -> T) -> io::Result<T> {
   let sddl: Vec<u16> = OWNER_ALONE.encode_utf16().chain([0]).collect();
   let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
@@ -133,8 +143,12 @@ fn owner_alone<T>(made: impl FnOnce(*mut SECURITY_ATTRIBUTES) -> T) -> io::Resul
 
 /// One instance of the pipe, under the access list of the owner alone. The first instance is
 /// refused when another daemon holds the pipe.
+#[expect(
+  unsafe_code,
+  reason = "tokio makes a pipe under an access list only through an unsafe call"
+)]
 fn instance(place: &str, first: bool) -> Result<NamedPipeServer, TransportError> {
-  let listening = |source| TransportError::Listen { place: place.to_owned(), source };
+  let listening = |cause| TransportError::Listen { place: place.to_owned(), cause };
   let mut options = ServerOptions::new();
   options.first_pipe_instance(first).reject_remote_clients(true);
   // SAFETY: the attributes, and the descriptor that they point at, live until the call returns.
@@ -152,10 +166,14 @@ fn instance(place: &str, first: bool) -> Result<NamedPipeServer, TransportError>
 
 /// The folder of the files of the daemon made, under the access list of its owner alone when it
 /// is new, and refused when it is not a folder, as a link that points elsewhere.
+#[expect(
+  unsafe_code,
+  reason = "std makes no folder under an access list, which only a call of Windows does"
+)]
 pub(crate) fn guarded(folder: &Path) -> Result<(), TransportError> {
   let made = |source| TransportError::Folder { folder: folder.to_owned(), source };
   if let Some(parent) = folder.parent().filter(|parent| !parent.as_os_str().is_empty()) {
-    std::fs::create_dir_all(parent).map_err(made)?;
+    fs::create_dir_all(parent).map_err(made)?;
   }
   let wide = widened(folder);
   // SAFETY: wide ends with a NUL, and the attributes live until the call returns.
@@ -167,7 +185,7 @@ pub(crate) fn guarded(folder: &Path) -> Result<(), TransportError> {
       return Err(made(no));
     }
   }
-  let held = std::fs::symlink_metadata(folder).map_err(made)?;
+  let held = fs::symlink_metadata(folder).map_err(made)?;
   if !held.is_dir() || held.file_type().is_symlink() {
     return Err(TransportError::Exposed { folder: folder.to_owned() });
   }
@@ -176,8 +194,12 @@ pub(crate) fn guarded(folder: &Path) -> Result<(), TransportError> {
 
 /// A new file that only its owner reaches, written whole, in the place of any that stood there:
 /// its access list is given at its creation, so no other user opens it, even for a moment.
+#[expect(
+  unsafe_code,
+  reason = "std makes no file under an access list, which only a call of Windows does"
+)]
 pub(crate) fn private(file: &Path, bytes: &[u8]) -> io::Result<()> {
-  match std::fs::remove_file(file) {
+  match fs::remove_file(file) {
     Err(no) if no.kind() != io::ErrorKind::NotFound => return Err(no),
     _ => {}
   }
@@ -198,7 +220,7 @@ pub(crate) fn private(file: &Path, bytes: &[u8]) -> io::Result<()> {
     return Err(io::Error::last_os_error());
   }
   // SAFETY: CreateFileW gave this handle, which nothing else owns.
-  let mut out = unsafe { std::fs::File::from_raw_handle(handle) };
+  let mut out = unsafe { fs::File::from_raw_handle(handle) };
   out.write_all(bytes)?;
   out.sync_all()
 }
@@ -210,7 +232,7 @@ fn widened(path: &Path) -> Vec<u16> {
 
 #[cfg(test)]
 mod tests {
-  use std::{path::Path, ptr};
+  use std::{env, fs, path::Path, process, ptr, slice};
 
   use windows_sys::Win32::{
     Foundation::LocalFree,
@@ -226,6 +248,7 @@ mod tests {
   use super::{guarded, private, widened};
 
   /// The access list of a file or a folder, as SDDL.
+  #[expect(unsafe_code, reason = "the access list of a file is read only through calls of Windows")]
   fn listed(path: &Path) -> String {
     let wide = widened(path);
     let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
@@ -257,7 +280,7 @@ mod tests {
     };
     assert_ne!(made, 0);
     // SAFETY: the call wrote size units at text.
-    let sddl = unsafe { std::slice::from_raw_parts(text, usize::try_from(size).unwrap()) };
+    let sddl = unsafe { slice::from_raw_parts(text, usize::try_from(size).unwrap()) };
     let sddl = String::from_utf16_lossy(sddl).trim_end_matches('\0').to_owned();
     // SAFETY: text came from the call above, and nothing reads it after.
     unsafe { LocalFree(text.cast()) };
@@ -273,17 +296,17 @@ mod tests {
 
   #[test]
   fn the_folder_and_the_file_of_the_door_let_in_their_owner_alone() {
-    let yard = std::env::temp_dir().join(format!("furb-acl-{}", std::process::id()));
-    drop(std::fs::remove_dir_all(&yard));
+    let yard = env::temp_dir().join(format!("furb-acl-{}", process::id()));
+    drop(fs::remove_dir_all(&yard));
     let folder = yard.join("cold").join("host");
     guarded(&folder).unwrap();
     assert!(owner_alone(&listed(&folder)), "{}", listed(&folder));
     let file = folder.join("window.draft");
-    std::fs::write(&file, "open to all").unwrap();
+    fs::write(&file, "open to all").unwrap();
     private(&file, b"{}").unwrap();
-    assert_eq!(std::fs::read(&file).unwrap(), b"{}");
+    assert_eq!(fs::read(&file).unwrap(), b"{}");
     assert!(owner_alone(&listed(&file)), "{}", listed(&file));
     guarded(&folder).unwrap();
-    std::fs::remove_dir_all(&yard).unwrap();
+    fs::remove_dir_all(&yard).unwrap();
   }
 }

@@ -10,7 +10,9 @@ use std::{
 use jiff::Timestamp;
 
 use super::{Source, Status, Updater, applied, pi, stamp};
+use crate::testing;
 use crate::world::provider::catalog::parsed;
+use std::process;
 
 const SNAPSHOT: &str =
   r#"{"radius": {"rig": "pi", "env": ["RADIUS_API_KEY"], "models": {"old": {}}}}"#;
@@ -36,7 +38,7 @@ fn a_stale_or_absent_copy_updates_once_for_each_backoff() {
   let updater = Updater::new(|| {
     RAN.fetch_add(1, Ordering::SeqCst);
   });
-  let dir = crate::testing::Yard::unmade(format!("furb-update-{}", std::process::id()));
+  let dir = testing::Yard::unmade(format!("furb-update-{}", process::id()));
   fs::create_dir_all(&dir).unwrap();
   let fresh = dir.join("models.json");
   fs::write(&fresh, "{}").unwrap();

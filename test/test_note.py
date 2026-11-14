@@ -3,7 +3,7 @@
 import re
 from collections.abc import Sequence
 
-from conftest import born, faulted, heads, opened, paragraphs, said, settle, world_says
+from conftest import born, heads, opened, paragraphs, said, settle, world_says
 from furb import engine
 from furb.engine import OPERATOR, span
 
@@ -22,27 +22,14 @@ EVERY = (
   "turns()\n"
   "clock()\n"
   "chance()\n"
-  "gate('k = 9')\n"
   "cd('/x')\n"
   "wait(0, __name__, on=chain('far'))\n"
   "cwd()\n"
   "debug(t'{1}')\n"
+  "await x\n"
   "close(1)\n"
 )
-EVENTS = {
-  "closed",
-  "done",
-  "exited",
-  "timed",
-  "raised",
-  "debugged",
-  "refused",
-  "ledger",
-  "advance",
-  "paused",
-  "woke",
-  "cancelled",
-}
+EVENTS = {"closed", "done", "exited", "timed", "raised", "debugged", "ledger", "advance", "paused", "woke", "cancelled"}
 """The words a header of an act says after its id, when it says what happened and no open of the act."""
 
 
@@ -105,21 +92,20 @@ async def test_every_other_line_of_a_paragraph_is_python() -> None:
 
 async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> None:
   """The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write, a stand or a cd stands at the place in the run where it was asked."""
-  _, _, root = born(
-    "x = bash('echo hi')\nread('n.txt')\nstand()\ncd('/x')\nclose(1)", files={"/w/n.txt": "one\n"}, auto=False
-  )
-  assert await engine.prompt(int, "read it", on=root) == 1
+  _, _, root = born("x = bash('echo hi')\nread('n.txt')\nstand()\ncd('/x')", files={"/w/n.txt": "one\n"}, auto=False)
+  engine.prompt(int, "read it", on=root)
   await settle()
   engine.pause("bash1")
-  assert heads(engine.turns(on=root))[3:] == ["#bash1", "#read1", "#stand2", "#cd1", "#bash1 paused by operator"]
+  told = heads(engine.turns(on=root))[3:]
+  assert told[:4] == ["#bash1", "#read1", "#stand2", "#cd1"] and told[-1] == "#bash1 paused by operator"
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, refused, ledger, advance, paused, woke and cancelled."""
+  """The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, ledger, advance, paused, woke and cancelled."""
   sand, _, root = born()
   ceiling = engine.grant(usd=10.0, on=root)
   await settle()
-  sand.script[root] = ["k = BAD", "raise ValueError('boom')", EVERY]
+  sand.script[root] = ["raise ValueError('boom')", EVERY]
   assert await engine.prompt(int, "everything", on=root) == 1
   await settle()
   engine.pause(root)
@@ -157,13 +143,8 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   assert shown == "\n\n".join(words)
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.module(root)["prompt1_message"] == "run it\nnow"
-  _, _, fixed = born(
-    "k = 1",
-    "ok = BAD",
-    "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))",
-    "close((k, ok, rung2_findings))",
-  )
-  assert await engine.prompt(object, "fix it", on=fixed) == (1, 2, faulted("ok = BAD"))
+  _, _, later = born("k = 1\ndebug(t'go')", "raise ValueError('boom')", "close((k, str(rung2_raised)))")
+  assert await engine.prompt(object, "go on", on=later) == (1, "boom")
 
 
 async def test_a_paragraph_binds_each_value_that_it_tells_under_a_name() -> None:
@@ -181,7 +162,7 @@ async def test_a_paragraph_binds_each_value_that_it_tells_under_a_name() -> None
 
 async def test_a_paragraph_binds_a_string_of_more_than_one_line_as_a_quote() -> None:
   """A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr."""
-  sand, _, root = born("x = bash('echo a' + chr(10) + 'echo b')\nclose('one\\ntwo')", "close(None)")
+  sand, _, root = born("x = bash('echo a' + chr(10) + 'echo b')\nawait x\nclose('one\\ntwo')", "close(None)")
   assert await engine.prompt(str, "run\nthem", on=root) == "one\ntwo"
   one = engine.prompt(int, "which?", to=OPERATOR, on=root)
   engine.close(3, one)

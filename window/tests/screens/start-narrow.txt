@@ -1,0 +1,30 @@
+ furb · Debug stuck TUI after merge                                [ Resolve ]
+┃
+┃ Debug stuck TUI after merge
+┃ (the model works on it)
+┃
+
+       opus/high
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+┃ Reply to this thread
+  This computer   furb ▾                                  opus/high   ○ Python
+  ~/src/furb-try                         ◆ 1 other thread asks   ⌃N new thread

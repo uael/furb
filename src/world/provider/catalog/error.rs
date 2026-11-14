@@ -20,8 +20,10 @@ pub enum Error {
   Builtin(String),
   #[error("Invalid provider {name}: {source}")]
   Invalid { name: String, source: serde_json::Error },
-  #[error("{0}")]
-  Codex(String),
+  #[error("Invalid codex settings: {0}")]
+  CodexSettings(serde_json::Error),
+  #[error("The codex model_context_window must be positive")]
+  CodexWindow,
   #[error("The URL of {name} is invalid")]
   Url { name: String, source: url::ParseError },
   #[error("The URL of {0} must use HTTP or HTTPS with no credential")]
@@ -54,4 +56,15 @@ pub enum Error {
   NoHome(String),
   #[error("A path of the account {name} of claude-cli must be absolute or start with ~: {path}")]
   Path { name: String, path: String },
+}
+
+/// Why the environment does not say how to reach a model of a provider of the network.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum Unreached {
+  #[error("no credential of it stands in the environment: set {}", .env.join(" or "))]
+  NoCredential { env: Vec<String> },
+  #[error("no project of Google stands in the environment: set GOOGLE_CLOUD_PROJECT")]
+  NoProject,
+  #[error("its address needs {name}: set it in the environment")]
+  Unfilled { name: String },
 }

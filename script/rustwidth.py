@@ -6,7 +6,10 @@ added line that holds only a comment, a doc comment or a part of one, and is lon
 holds already are no debt of the change, and each goes with the next change of its file. A line inside a string, as a
 fixture of another language, is no comment. A line of code is rustfmt's: it leaves a long string as it stands.
 
-Usage: python3 script/rustwidth.py [base]
+Usage: python3 script/rustwidth.py [base] [file.rs ...]
+
+Given files, as the hook gives the files that a commit stages, it reads those files alone. Given none, it reads each Rust
+file of the tree.
 """
 
 from __future__ import annotations
@@ -124,7 +127,9 @@ def parse(diff: str) -> dict[str, set[int]]:
 
 def main(argv: list[str] | None = None) -> int:
   args = sys.argv[1:] if argv is None else argv
-  added = parse(git("diff", "-U0", args[0] if args else base(), "--", "*.rs").stdout)
+  files = [x for x in args if x.endswith(".rs")]
+  named = [x for x in args if not x.endswith(".rs")]
+  added = parse(git("diff", "-U0", named[0] if named else base(), "--", *(files or ["*.rs"])).stdout)
   texts = {x: (ROOT / x).read_text(encoding="utf-8", errors="replace") for x in added if (ROOT / x).is_file()}
   found = failures(texts, added)
   for line in found:

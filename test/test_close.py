@@ -4,7 +4,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, chained, paragraphs, posed, prompted, said, settle, slow, stalled
+from conftest import born, chained, heads, paragraphs, posed, prompted, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused, Text
 
@@ -16,7 +16,7 @@ async def test_an_act_ended_from_outside_by_its_name_with_a_value() -> None:
   await settle()
   assert (await act) == 21
   assert isinstance(engine.peek(step), CancelledError)
-  assert engine.peek(command) is None
+  assert engine.over(command)
 
 
 async def test_the_close_of_the_operator_enters_the_record_as_a_fact_of_its_own() -> None:
@@ -177,16 +177,78 @@ async def test_a_close_that_answers_a_prompt_with_a_value_that_does_not_have_the
   ]
 
 
+async def test_a_close_in_the_wrong_shape_is_a_raise_of_its_step_which_is_barren() -> None:
+  """A close in the wrong shape is a raise of its step, which is barren, so the third such step in a row pauses the thread when no act of it is open, and else the thread rests until an act of it ends."""
+  _, log, root = born(*["close('bad')"] * 8, auto=False)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  assert len([a for a in said(log, "rung") if a[2] == act]) == 3 and engine.paused(act)
+  assert [a[3] for a in said(log, "pause") if a[1] == act] == ["made nothing"]
+  sand, log, root = born("x = bash('slow')\nclose('bad')", "close('bad')", "close('bad')", "close(4)", auto=False)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  assert len([a for a in said(log, "rung") if a[2] == act]) == 3 and not engine.paused(act)
+  sand.exits(said(log, "bash")[0][1], 0)
+  assert await act == 4
+
+
+async def test_a_close_of_a_prompt_that_a_word_under_that_prompt_says_raises_refused_while_an_act_under_it_runs() -> (
+  None
+):
+  """A close of a prompt that a word under that prompt says raises Refused in that word while a command or a prompt under the prompt is not over and no cancel or close was said over it, and the refusal names each such act, so the prompt stays open and the word awaits or cancels each."""
+  _, log, root = born("x = bash('slow')\nclose(1)", "cancel(x)\nclose(2)", auto=False)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  first, _ = (a[1] for a in said(log, "rung") if a[2] == act)
+  command = said(log, "bash")[0][1]
+  assert str(engine.peek(first)) == f"{act} runs [{command!r}]: await or cancel each"
+  assert await act == 2 and isinstance(engine.peek(command), CancelledError)
+
+
+async def test_a_wait_under_the_prompt_neither_refuses_its_close_nor_is_cancelled_by_it() -> None:
+  """A wait under the prompt neither refuses its close nor is cancelled by it, since a wait does no work: each act that it waits for counts by itself, and the close ends the word that awaits it."""
+  _, log, root = born("w = wait(600, __name__)\nclose(1)", auto=False)
+  act = engine.prompt(int, "count", on=root)
+  assert await act == 1
+  (waiting,) = [a[1] for a in said(log, "wait")]
+  assert not engine.over(waiting)
+  _, log, root = born("await wait(600, __name__)", auto=False)
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
+  (waiting,) = [a[1] for a in said(log, "wait")]
+  engine.close(2, act)
+  await settle()
+  assert await act == 2 and isinstance(engine.peek(step), CancelledError) and not engine.over(waiting)
+
+
+async def test_a_close_of_a_prompt_that_another_says_first_cancels_each_act_under_it() -> None:
+  """A close of a prompt that another says, the operator, an ear or a word that is not under the prompt, first cancels each command and each prompt under the prompt that is not over, so the transcript shows the cancel of each, and then ends the prompt."""
+  _, _, root, act, _, command = await stalled()
+  engine.close(21, act)
+  await settle()
+  assert (await act) == 21 and isinstance(engine.peek(command), CancelledError)
+  assert f"#{command} cancelled by operator" in heads(engine.turns(on=root))
+  _, log, root, act, _, command = await stalled()
+  two = engine.chain("two")
+  shut = f"def shut(id):\n  yield 'started', id\n  close(22, {act!r})\n  while True:\n    yield {{id}}\n\nact('shut', '', shut)"
+  await engine.rung(shut, on=two)
+  await settle()
+  (ear,) = [a[1] for a in log if a[0] == "shut"]
+  assert (await act) == 22 and isinstance(engine.peek(command), CancelledError)
+  assert f"#{command} cancelled by {ear}" in heads(engine.turns(on=root))
+
+
 async def test_a_close_on_an_act_that_is_over_reaches_only_the_words_that_still_run_under_it() -> None:
   """A close on an act that is over tells nothing, and reaches only the words that still run under it."""
   sand, log, root = born(auto=False)
   act = engine.bash("echo hi", on=root)
   sand.exits(act, 0)
-  sand.script[root] = ["y = bash('slow')\nclose(7)"]
+  running = engine.bash("slow", on=root)
+  sand.script[root] = ["close(7)"]
   answered = engine.prompt(int, "go", on=root)
   assert await answered == 7
   await settle()
-  running = said(log, "bash")[1][1]
   closes, was = said(log, "close"), engine.turns(on=root)
   engine.close(21, act)
   engine.close(9, answered)
@@ -218,6 +280,8 @@ async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_tha
   assert [one[1] for one in said(log, "close")] == [act, mine]
   sand.script[root] = ["close(5, 'rung3')", "close(6)"]
   named = engine.prompt(int, "count", on=root)
+  await settle()
+  engine.prompt(None, "go on", on=named)
   assert await named == 6
   assert [one[1] for one in said(log, "close")][2:] == ["rung3", named] and engine.peek("rung3") == 5
 

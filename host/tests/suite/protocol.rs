@@ -1,0 +1,625 @@
+//! The proofs of the protocol: the role of each verb, the bound of a frame, the version of a hello,
+//! and a round trip of each verb on each transport of the system.
+
+#![cfg(test)]
+#![expect(
+  clippy::disallowed_methods,
+  reason = "the tests block on the runtime that tokio starts for them"
+)]
+
+use crate::yard;
+
+use std::collections::BTreeSet;
+use yard::Yard;
+
+use std::{
+  env, fs, future,
+  path::PathBuf,
+  process,
+  sync::atomic::{AtomicU32, Ordering},
+};
+
+use furb_host::{
+  Host, Outbox, ProtocolError, fixed,
+  protocol::{
+    Answer, Axis, BOUND, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Layer, Mount, Node,
+    PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect, ViewEvent,
+    schema,
+  },
+  serve,
+  transport::{Dialer, Identity, Local, Who},
+};
+use serde_json::{Value, json};
+use tokio::io::{
+  AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, DuplexStream, duplex,
+};
+
+/// A host that answers each verb with the verb itself, as JSON.
+struct Echo;
+
+impl Host for Echo {
+  fn answer(
+    &self,
+    _: &Peer,
+    verb: Verb,
+    _: &Outbox,
+  ) -> impl Future<Output = Result<Answer, ProtocolError>> + Send {
+    let answer = serde_json::to_value(&verb)
+      .map(Answer::Value)
+      .map_err(|no| ProtocolError::Refused { why: no.to_string() });
+    future::ready(answer)
+  }
+}
+
+/// One of each verb but the hello.
+fn verbs() -> Vec<Verb> {
+  let life = || "a.jsonl".to_owned();
+  let id = || "prompt1".to_owned();
+  let on = || Some("chain1".to_owned());
+  vec![
+    Verb::List { config: None },
+    Verb::Open {
+      life: life(),
+      cwd: None,
+      actor: Some("claude-cli:opus/high".to_owned()),
+      roster: None,
+      skills: Some(false),
+      config: Some("config".to_owned()),
+      claude: Some("claude".to_owned()),
+      answers: true,
+      attach: Some(0),
+    },
+    Verb::Attach { life: life(), from: 0 },
+    Verb::Detach { life: life() },
+    Verb::Pin { life: life(), holder: "job".to_owned() },
+    Verb::Unpin { life: life(), holder: "job".to_owned() },
+    Verb::Presence { life: life() },
+    Verb::Get { life: life(), act: id() },
+    Verb::Peek { life: life(), act: id() },
+    Verb::Transcript { life: life(), on: on(), of: Some("bash".to_owned()) },
+    Verb::Turns { life: life(), on: on() },
+    Verb::Program { life: life(), on: on() },
+    Verb::Standing { life: life() },
+    Verb::Filled { life: life(), act: "reply1".to_owned() },
+    Verb::Cwd { life: life(), on: on() },
+    Verb::Inspect { life: life(), name: "x".to_owned(), on: on() },
+    Verb::Pending { life: life() },
+    Verb::Prompt {
+      life: life(),
+      shape: "str".to_owned(),
+      message: "hi".to_owned(),
+      to: None,
+      on: on(),
+    },
+    Verb::Answer { life: life(), act: id(), line: "yes".to_owned() },
+    Verb::Pause { life: life(), act: id(), why: Some("later".to_owned()) },
+    Verb::Wake { life: life(), act: id() },
+    Verb::Cancel { life: life(), act: id(), why: None },
+    Verb::Chain { life: life(), label: Some("work".to_owned()), source: on(), on: on() },
+    Verb::Run { life: life(), word: "1 + 1".to_owned(), on: on() },
+    Verb::Handover,
+  ]
+  .into_iter()
+  .chain(acts())
+  .chain(views().into_iter().filter(|verb| verb.speaker() != Some(Kind::Skill)))
+  .collect()
+}
+
+/// The verbs of the acts of an operator and of the models that a window answers.
+fn acts() -> Vec<Verb> {
+  let life = || "a.jsonl".to_owned();
+  let id = || "prompt1".to_owned();
+  let on = || Some("chain1".to_owned());
+  vec![
+    Verb::Close { life: life(), act: id(), value: "2.0".to_owned() },
+    Verb::Grant { life: life(), usd: Some(2.0), share: None, on: on() },
+    Verb::Bash { life: life(), command: "ls".to_owned(), stdin: None, feed: true, on: on() },
+    Verb::Read { life: life(), path: "a.txt".to_owned(), on: on() },
+    Verb::Write { life: life(), path: "a.txt".to_owned(), content: "a".to_owned(), on: on() },
+    Verb::Names { life: life(), on: on() },
+    Verb::Stand { life: life(), roster: Some(vec!["claude-cli:sonnet".to_owned()]) },
+    Verb::Config { life: life(), config: Config::Get },
+    Verb::Config {
+      life: life(),
+      config: Config::Set {
+        key: vec!["providers".to_owned(), "codex".to_owned()],
+        value: Some(json!(false)),
+        layer: Some(Layer::Local),
+      },
+    },
+    Verb::Seen { life: life(), about: "chain1".to_owned() },
+    Verb::Queue {
+      life: life(),
+      entry: "q1".to_owned(),
+      shape: "None".to_owned(),
+      message: "hi".to_owned(),
+      on: on(),
+    },
+    Verb::Unqueue { life: life(), entry: "q1".to_owned() },
+    Verb::Queued { life: life(), on: on() },
+    Verb::Desk { life: life(), notices: vec![id()] },
+    Verb::Threads { life: life(), on: on(), at: Some(3), read: Some(2) },
+    Verb::AsOf { life: life(), at: 3 },
+    Verb::Moments { life: life(), on: None },
+    Verb::Answered {
+      life: life(),
+      ask: 1,
+      turn: Some(json!(["assistant", "1", null, null])),
+      why: None,
+    },
+    Verb::Wrote { life: life(), ask: 1, text: "1".to_owned(), thinking: String::new() },
+  ]
+}
+
+/// A node of a view under an id.
+fn node(id: &str, shape: Shape) -> Node {
+  Node { id: id.to_owned(), shape }
+}
+
+/// A tree that holds each node and each tone.
+fn every_node() -> Node {
+  let text =
+    |id: &str, tone| node(id, Shape::Text { runs: vec![Run { text: id.to_owned(), tone }] });
+  let tones = [
+    Tone::Text,
+    Tone::Muted,
+    Tone::Faint,
+    Tone::Accent,
+    Tone::Success,
+    Tone::Warning,
+    Tone::Danger,
+  ];
+  node(
+    "root",
+    Shape::Box {
+      axis: Axis::Column,
+      gap: 1,
+      border: true,
+      children: vec![
+        node(
+          "line",
+          Shape::Box {
+            axis: Axis::Row,
+            gap: 0,
+            border: false,
+            children: tones
+              .iter()
+              .enumerate()
+              .map(|(n, &tone)| text(&format!("t{n}"), tone))
+              .collect(),
+          },
+        ),
+        node("l", Shape::List { items: vec![text("i", Tone::Text)] }),
+        node(
+          "tb",
+          Shape::Table { header: vec!["a".to_owned()], rows: vec![vec![text("c", Tone::Text)]] },
+        ),
+        node(
+          "in",
+          Shape::Input { value: String::new(), hint: Some("name".to_owned()), inert: false },
+        ),
+        node("b", Shape::Button { label: "go".to_owned(), inert: false }),
+        node("p", Shape::Progress { done: Some(0.5) }),
+        node("spin", Shape::Progress { done: None }),
+        node("co", Shape::Code { text: "x = 1".to_owned(), language: Some("python".to_owned()) }),
+        node("d", Shape::Diff { text: "-a\n+b\n".to_owned() }),
+        node("m", Shape::Markdown { text: "# hi".to_owned() }),
+      ],
+    },
+  )
+}
+
+/// Each frame of a view, with each slot, each gesture and each effect, on a tree of each node.
+fn views() -> Vec<Verb> {
+  let viewer = || "v1".to_owned();
+  let root = every_node();
+  let slots = [
+    Slot::Dock { on: "chain1".to_owned() },
+    Slot::Sidebar,
+    Slot::Row { act: "bash1".to_owned() },
+    Slot::Detail { act: "bash1".to_owned() },
+    Slot::Mark { act: "bash1".to_owned() },
+    Slot::Footer,
+    Slot::Screen,
+    Slot::Overlay,
+  ];
+  let effects = [
+    Effect::Open { url: "https://example.com".to_owned() },
+    Effect::Draft { text: "x".to_owned() },
+    Effect::Notice { text: "done".to_owned() },
+  ];
+  let mounts = slots.into_iter().map(|slot| {
+    Verb::ViewMount(Mount {
+      viewer: viewer(),
+      life: "life.jsonl".to_owned(),
+      slot,
+      skill: "k".to_owned(),
+    })
+  });
+  let tree = Verb::ViewTree(Tree {
+    viewer: viewer(),
+    slot: Slot::Dock { on: "chain1".to_owned() },
+    version: 2,
+    tree: root,
+  });
+  let events = [Gesture::Press, Gesture::Change, Gesture::Submit].map(|kind| {
+    Verb::ViewEvent(ViewEvent {
+      viewer: viewer(),
+      node: "b".to_owned(),
+      kind,
+      value: (kind != Gesture::Press).then(|| "typed".to_owned()),
+    })
+  });
+  let effected = effects.map(|effect| Verb::ViewEffect(ViewEffect { viewer: viewer(), effect }));
+  mounts
+    .chain([tree])
+    .chain(events)
+    .chain(effected)
+    .chain([Verb::ViewDispose(Dispose { viewer: viewer() })])
+    .collect()
+}
+
+/// A peer of a stream: it writes lines and reads frames.
+struct Client<S> {
+  lines: BufReader<S>,
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
+  async fn say(&mut self, line: &str) {
+    let stream = self.lines.get_mut();
+    stream.write_all(line.as_bytes()).await.unwrap();
+    stream.write_all(b"\n").await.unwrap();
+  }
+
+  async fn ask(&mut self, id: u64, verb: Verb) -> Frame {
+    self.say(&serde_json::to_string(&Request { id, verb }).unwrap()).await;
+    self.heard().await.expect("the daemon answers each request")
+  }
+
+  async fn heard(&mut self) -> Option<Frame> {
+    let mut line = String::new();
+    let read = self.lines.read_line(&mut line).await.unwrap();
+    (read > 0).then(|| serde_json::from_str(&line).unwrap())
+  }
+
+  async fn hello(&mut self, protocol: u32) -> Frame {
+    self.hello_as(protocol, Kind::Window, None).await
+  }
+
+  async fn hello_as(&mut self, protocol: u32, kind: Kind, name: Option<&str>) -> Frame {
+    let name = name.map(str::to_owned);
+    self.ask(0, Verb::Hello(Hello { protocol, kind, name, role: None })).await
+  }
+}
+
+/// A peer served on a stream in memory, under a role.
+fn served(role: Role) -> Client<DuplexStream> {
+  let (ours, theirs) = duplex(1 << 16);
+  let who = Who { login: "uael".to_owned(), role };
+  tokio::spawn(async move { serve(&Echo, theirs, who, fixed(role)).await });
+  Client { lines: BufReader::new(ours) }
+}
+
+async fn hello_asking(client: &mut Client<DuplexStream>, role: Role) -> Frame {
+  let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: Some(role) };
+  client.ask(0, Verb::Hello(hello)).await
+}
+
+/// The peer of a window as a welcome names it.
+fn welcomed(role: Role) -> Peer {
+  Peer { login: "uael".to_owned(), role, kind: Kind::Window, name: None }
+}
+
+/// The peer that the welcome of a daemon of this protocol names.
+fn peer(frame: Frame) -> Peer {
+  match frame {
+    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => peer,
+    other => panic!("no welcome: {other:?}"),
+  }
+}
+
+#[tokio::test]
+async fn a_reader_is_refused_each_verb_that_writes() {
+  let mut client = served(Role::Read);
+  assert_eq!(peer(client.hello(PROTOCOL).await), welcomed(Role::Read));
+  for (id, verb) in (1..).zip(verbs()) {
+    let needs = verb.needs();
+    match client.ask(id, verb.clone()).await {
+      Frame::Reply { id: got, .. } if needs == Role::Read => assert_eq!(got, id),
+      Frame::Refused { id: got, error, .. } if needs == Role::Write => {
+        assert_eq!((got, error), (Some(id), ProtocolError::Role { needs, has: Role::Read }));
+      }
+      other => panic!("{verb:?} gave {other:?}"),
+    }
+  }
+}
+
+#[tokio::test]
+async fn a_peer_that_asked_read_is_refused_each_verb_that_writes_on_a_transport_to_write() {
+  let mut client = served(Role::Write);
+  assert_eq!(peer(hello_asking(&mut client, Role::Read).await), welcomed(Role::Read));
+  let verb = verbs().into_iter().find(|verb| verb.needs() == Role::Write).unwrap();
+  match client.ask(1, verb).await {
+    Frame::Refused { id, error, .. } => {
+      assert_eq!(
+        (id, error),
+        (Some(1), ProtocolError::Role { needs: Role::Write, has: Role::Read })
+      );
+    }
+    other => panic!("a write verb of a reader gave {other:?}"),
+  }
+}
+
+#[tokio::test]
+async fn a_peer_never_has_more_than_the_role_that_its_transport_proved() {
+  let mut client = served(Role::Read);
+  assert_eq!(peer(hello_asking(&mut client, Role::Write).await), welcomed(Role::Read));
+}
+
+#[test]
+fn each_verb_that_writes_needs_the_role_to_write() {
+  let writes: Vec<_> = verbs().into_iter().filter(|verb| verb.needs() == Role::Write).collect();
+  let names: Vec<_> =
+    writes.iter().map(|verb| serde_json::to_value(verb).unwrap()["verb"].clone()).collect();
+  let expected = [
+    "open",
+    "pin",
+    "unpin",
+    "prompt",
+    "answer",
+    "pause",
+    "wake",
+    "cancel",
+    "chain",
+    "run",
+    "handover",
+    "close",
+    "grant",
+    "bash",
+    "read",
+    "write",
+    "stand",
+    "config",
+    "seen",
+    "queue",
+    "unqueue",
+    "answered",
+    "wrote",
+    "view.event",
+    "view.event",
+    "view.event",
+  ];
+  assert_eq!(names, expected.map(|name| json!(name)));
+}
+
+#[tokio::test]
+async fn a_frame_of_a_view_is_refused_to_the_kind_of_peer_that_does_not_say_it() {
+  for (kind, name) in [(Kind::Window, None), (Kind::Skill, Some("k"))] {
+    let mut client = served(Role::Write);
+    client.hello_as(PROTOCOL, kind, name).await;
+    for (id, verb) in (1..).zip(views()) {
+      let needs = verb.speaker().expect("a frame of a view has the kind that says it");
+      match client.ask(id, verb.clone()).await {
+        Frame::Reply { id: got, .. } if needs == kind => assert_eq!(got, id),
+        Frame::Refused { id: got, error, .. } if needs != kind => {
+          assert_eq!((got, error), (Some(id), ProtocolError::Speaker { needs, has: kind }));
+        }
+        other => panic!("{verb:?} said by {kind:?} gave {other:?}"),
+      }
+    }
+  }
+}
+
+#[tokio::test]
+async fn a_skill_that_gives_no_name_is_refused_at_its_hello() {
+  let mut client = served(Role::Write);
+  let refused = client.hello_as(PROTOCOL, Kind::Skill, None).await;
+  assert_eq!(refused, Frame::refused(Some(0), ProtocolError::Nameless));
+  assert_eq!(client.heard().await, None);
+}
+
+#[tokio::test]
+async fn a_frame_past_the_bound_closes_the_peer() {
+  let mut client = served(Role::Write);
+  assert_eq!(peer(client.hello(PROTOCOL).await), welcomed(Role::Write));
+  client.say(&"x".repeat(BOUND + 1)).await;
+  let large = ProtocolError::Large { bound: BOUND };
+  assert_eq!(client.heard().await, Some(Frame::refused(None, large)));
+  assert_eq!(client.heard().await, None);
+}
+
+/// The digest of the shape of the schema of each version, the version 1 first: the SHA-256 of
+/// the schema with no `x-protocol`, no `description` and no `title`, so the words of a doc
+/// comment take no new version. Its length is the version, so a new shape takes one.
+const SCHEMAS: [&str; PROTOCOL as usize] = [
+  "43cd8affad009b9de1c73c355ae4822f1de6149d95d919a5f02171f8c7072604",
+  "3d67e6b3dc718819064aae275d0f84cdd16c0f39b92d2a82a945461a19589713",
+  "b7fcc6ef6baf1e729e50bc4c81bd3ea06e83a906a66e62709d6aa40607e5a2cf",
+  "31c217c979811fbf74d11684749ed59de0ca097e387b59820826b22478069d41",
+  "3bf734627359e905bb82818100a056d1000631abb9650b1d8adda626e84fe3b8",
+  "ab1e26ad2062fc235028a54bc0b393b108885469e2e7e4a7fd414e325d13b340",
+  "ac081ea7adb80dcd8b017c2b13ccc2a191bedc76f48399ea4e4af332e8eebbfb",
+  "0eba18a0cee335a618490601a27a6088e88594de3163b840fb38b5b587f774d4",
+  "69e3c729852b81913c0d5b655b932779333b094b1d59b10e317f5aed228afeca",
+  "d4701b917dda8f385353dc9a29459ac18d730319489ed375481c2631116b1b1d",
+  "5b29ad06731843e45d7c3605d43ddcdd15f50836129f7379fabb6c625eeea993",
+  "576de143b7304411f1c42b25ae96231bd0047eb769a5565e9630fea6d7d570df",
+  "61fea00841a87095db3f78b57c2870504c8bd89d0a9701b6b39391c9a20e8f73",
+  "74ff2fe32edc31516b2111ce32773e5c96cd686dcecf2cfbd7913bc402051da9",
+  "2799c36fb8e8a61cc3a3bde7817ccdeab3937e2e93959c61f0975cca4d195a41",
+  "35b67fc67cff393f0d4d6f877666046e8be15b8cb87c14cc511eb5ea02b6aaa6",
+  "30a7854bf1d7f3c8b1ebd382e6f51253450d0b3f09253fb724ab25d665a0de68",
+  "7ee1043d9b32ce2ed7063360435d8e0376f0e7a18dcc567106de2520d7c29d3d",
+  "b74eeedc5d00c8b06c07b4554af3b54da957dc551f4682be6e3994e14aef5927",
+];
+
+/// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
+/// and no property that bears such a name.
+fn shape(schema: &mut Value) {
+  match schema {
+    Value::Object(map) => {
+      map.remove("description");
+      map.remove("title");
+      for (key, one) in map.iter_mut() {
+        match (key.as_str(), one.as_object_mut()) {
+          ("properties" | "definitions" | "$defs", Some(named)) => {
+            named.values_mut().for_each(shape);
+          }
+          _ => shape(one),
+        }
+      }
+    }
+    Value::Array(all) => all.iter_mut().for_each(shape),
+    _ => {}
+  }
+}
+
+#[test]
+fn each_change_of_the_schema_raises_the_protocol() {
+  use sha2::{Digest, Sha256};
+  let mut made = schema();
+  made.as_object_mut().unwrap().remove("x-protocol");
+  shape(&mut made);
+  let digest = format!("{:x}", Sha256::digest(made.to_string()));
+  assert_eq!(
+    SCHEMAS.last().copied(),
+    Some(digest.as_str()),
+    "the schema of the protocol changed: raise PROTOCOL and end SCHEMAS with {digest}"
+  );
+  let distinct: BTreeSet<_> = SCHEMAS.iter().collect();
+  assert_eq!(distinct.len(), SCHEMAS.len(), "each version has a schema of its own");
+}
+
+#[tokio::test]
+async fn a_hello_of_another_version_is_refused_with_both_versions() {
+  let mut client = served(Role::Write);
+  let error = ProtocolError::Protocol { ours: PROTOCOL, theirs: PROTOCOL + 1 };
+  let refused = client.hello(PROTOCOL + 1).await;
+  assert_eq!(refused, Frame::refused(Some(0), error));
+  let Frame::Refused { why, .. } = refused else { unreachable!() };
+  assert!(
+    why.contains(&PROTOCOL.to_string()) && why.contains(&(PROTOCOL + 1).to_string()),
+    "{why}"
+  );
+  assert_eq!(client.heard().await, None);
+}
+
+#[tokio::test]
+async fn a_first_frame_that_is_no_hello_is_refused() {
+  let mut client = served(Role::Write);
+  assert_eq!(
+    client.ask(4, Verb::List { config: None }).await,
+    Frame::refused(Some(4), ProtocolError::First)
+  );
+  assert_eq!(client.heard().await, None);
+}
+
+#[tokio::test]
+async fn a_frame_that_is_no_request_is_refused_and_the_peer_stays() {
+  let mut client = served(Role::Write);
+  client.hello(PROTOCOL).await;
+  client.say("{\"id\": 1, \"verb\": \"fly\"}").await;
+  let heard = client.heard().await;
+  let Some(Frame::Refused { id, error: ProtocolError::Unread { .. }, why }) = heard else {
+    panic!("no refusal: {heard:?}")
+  };
+  assert_eq!(id, Some(1), "a verb that the daemon does not know is refused to its request");
+  assert!(why.contains("fly"), "the refusal names the verb: {why}");
+  assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
+}
+
+#[tokio::test]
+async fn an_open_that_names_the_old_field_is_refused_with_the_fields_that_it_takes() {
+  let mut client = served(Role::Write);
+  client.hello(PROTOCOL).await;
+  client.say(r#"{"id": 1, "verb": "open", "life": "/a.jsonl", "extensions": false}"#).await;
+  let heard = client.heard().await;
+  let Some(Frame::Refused { id, why, .. }) = heard else { panic!("no refusal: {heard:?}") };
+  assert_eq!(id, Some(1), "the open that names extensions is refused to its request");
+  assert!(
+    why.contains("extensions") && why.contains("skills"),
+    "the refusal names the field that it does not take and the field skills: {why}"
+  );
+  assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
+}
+
+#[tokio::test]
+async fn an_open_that_names_skills_gets_its_skills() {
+  let mut client = served(Role::Write);
+  client.hello(PROTOCOL).await;
+  client.say(r#"{"id": 1, "verb": "open", "life": "/a.jsonl", "skills": false}"#).await;
+  let heard = client.heard().await;
+  let Some(Frame::Reply { id: 1, answer: Answer::Value(opened) }) = heard else {
+    panic!("no answer: {heard:?}")
+  };
+  assert_eq!(opened["skills"], json!(false), "the open holds the skills that it named");
+}
+
+#[test]
+fn a_verb_of_a_view_that_names_a_field_that_it_does_not_take_is_refused() {
+  let line = |extra: &str| format!(r#"{{"id": 1, "verb": "view.dispose", "viewer": "v"{extra}}}"#);
+  assert!(serde_json::from_str::<Request>(&line("")).is_ok());
+  let no = serde_json::from_str::<Request>(&line(r#", "viewr": "w""#)).unwrap_err();
+  assert!(no.to_string().contains("viewr"), "the refusal names the field: {no}");
+}
+
+/// A folder of its own for the transport of one test, short enough for the path of a socket.
+fn folder() -> Yard {
+  static NEXT: AtomicU32 = AtomicU32::new(0);
+  let n = NEXT.fetch_add(1, Ordering::Relaxed);
+  Yard::unmade(format!("fh{}-{n}", process::id()))
+}
+
+#[tokio::test]
+async fn each_verb_makes_a_round_trip_on_the_local_transport() {
+  let place = folder();
+  let local = Local::new(place.to_path_buf());
+  let mut listener = local.listen().await.unwrap();
+  let door = local.clone();
+  tokio::spawn(async move {
+    let stream = listener.accept().await.unwrap();
+    let who = door.identify(&stream).await.unwrap();
+    let granted = fixed(who.role);
+    serve(&Echo, stream, who, granted).await
+  });
+  let mut client = Client { lines: BufReader::new(local.dial().await.unwrap()) };
+  let Frame::Reply { answer: Answer::Welcome { peer, .. }, .. } = client.hello(PROTOCOL).await
+  else {
+    panic!("no welcome");
+  };
+  assert_eq!((peer.role, peer.login.is_empty()), (Role::Write, false));
+  for (id, verb) in (1..).zip(verbs()) {
+    let answer = Answer::Value(serde_json::to_value(&verb).unwrap());
+    assert_eq!(client.ask(id, verb).await, Frame::Reply { id, answer });
+  }
+}
+
+#[tokio::test]
+async fn a_second_daemon_cannot_listen_where_one_listens() {
+  let place = folder();
+  let local = Local::new(place.to_path_buf());
+  let _first = local.listen().await.unwrap();
+  assert!(matches!(local.listen().await, Err(furb_host::TransportError::Taken { .. })));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_folder_open_to_others_holds_no_socket() {
+  use std::os::unix::fs::PermissionsExt;
+  let place = folder();
+  fs::create_dir_all(&place).unwrap();
+  fs::set_permissions(&place, fs::Permissions::from_mode(0o755)).unwrap();
+  let refused = Local::new(&place).listen().await;
+  assert!(matches!(refused, Err(furb_host::TransportError::Exposed { .. })));
+}
+
+#[test]
+fn the_schema_on_disk_is_the_schema_of_the_protocol() {
+  let place = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("protocol.schema.json");
+  let made = serde_json::to_string_pretty(&schema()).unwrap() + "\n";
+  if env::var_os("FURB_BLESS").is_some() {
+    fs::write(&place, &made).unwrap();
+  }
+  let held = fs::read_to_string(&place).unwrap_or_default();
+  assert!(held == made, "{} is stale: run FURB_BLESS=1 cargo test -p furb-host", place.display());
+}

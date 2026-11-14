@@ -16,11 +16,13 @@ from conftest import (
   relived,
   said,
   settle,
+  sown,
   stood,
   tip,
 )
-from furb import engine
+from furb import checkpoint, engine
 from furb.engine import OPERATOR, Refused
+from test_chain import TAUGHT_FILES
 
 
 def restanding(*chains: str) -> World:
@@ -78,7 +80,7 @@ async def test_the_world_answers_a_stand_with_the_roster_the_directory_and_the_a
   answered = next(a for a in said(log, "done") if a[1] == asked[1])
   assert answered[2] == WORLD and answered[3] == [*STANDS, doctrine, []]
   assert answered[3] == [STANDS[0], "/w", "m/low", doctrine, []]
-  assert said(sand.calls, "stand") == [asked, ("stand", "stand2", "rung3", "chain1")]
+  assert said(sand.calls, "stand") == [asked, ("stand", "stand2", "rung1", "chain1")]
 
 
 async def test_a_model_asked_on_any_chain_of_a_later_life_finds_the_new_roster() -> None:
@@ -141,6 +143,15 @@ async def test_at_its_tip_boot_stands_the_life_again() -> None:
     assert engine.module(one)["actor"] == "o/low"
   twin = await chained("twin", root, 300)
   assert engine.module(twin)["actor"] == "o/low"
+  taught = [STANDS[0], "/w", STANDS[2], "/w/DOCTRINE.md", []]
+  first, _, base = born(stands=taught, files=TAUGHT_FILES)
+  chains = [base, engine.chain("two"), engine.chain("side", source=base)]
+  await settle(300)
+  second = Sand(stands=[taught[0], "/v", *taught[2:]], files=TAUGHT_FILES)
+  await relived(second, plain(first.record))
+  third = Sand(stands=[taught[0], "/u", *taught[2:]], files=TAUGHT_FILES)
+  await relived(third, [*plain(first.record), *plain(second.record)])
+  assert [engine.cwd(on=one) for one in chains] == ["/u"] * 3
 
 
 async def test_a_standing_binds_the_default_actor_of_the_chain_when_its_actor_differs() -> None:
@@ -185,7 +196,7 @@ async def test_every_chain_hears_the_done_of_every_stand() -> None:
   await engine.rung("k = 1", on=root)
   await settle()
   last = lambda: [one[1] for one in engine.turns(on=root) if one[0] == "assistant"][-1]  # noqa: E731
-  assert last() == "stand()\ncd('/w')"
+  assert next(one[1] for one in engine.turns(on=root) if one[0] == "assistant") == "stand()\ncd('/w')"
   taught.stands = [STANDS[0], "/z", STANDS[2], "/w/DOCTRINE.md", []]
   engine.stand(engine.ROOT)
   await settle()
@@ -195,3 +206,41 @@ async def test_every_chain_hears_the_done_of_every_stand() -> None:
   engine.stand(engine.ROOT)
   await settle()
   assert last() == "stand()" and engine.cwd(on=root) == "/y"
+
+
+async def test_a_cd_whose_maker_is_no_act_of_the_life_as_a_cd_that_a_checkpoint_carries_is_a_cd_that_moved_the_chain_so_a_stand_that_gives_another_directory_plays_no_cd_on_it_and_the_chain_stays_where_it_stood() -> (
+  None
+):
+  """A cd whose maker is no act of the life, as a cd that a checkpoint carries, is a cd that moved the chain, so a stand that gives another directory plays no cd on it, and the chain stays where it stood."""
+  life(sown())
+  data = {
+    "taken": {"chain": 1, "cd": 1, "prompt": 2, "stand": 1},
+    "chains": [
+      {
+        "id": "chain1",
+        "on": "",
+        "label": "root",
+        "source": "",
+        "turns": [],
+        "definitions": [],
+        "values": {"went": "'cd1'"},
+        "lost": [],
+        "cut": [],
+        "paused": False,
+      }
+    ],
+    "acts": [
+      {"kind": "stand", "id": "stand1", "on": "chain1", "value": STANDS},
+      {"kind": "cd", "id": "cd1", "on": "chain1", "words": ["/x"], "value": "/x"},
+      {"kind": "prompt", "id": "prompt2", "on": "chain1", "shape": "str", "message": "Go on.", "to": "", "held": ""},
+    ],
+  }
+  log, root = life(sown(stands=[STANDS[0], "/v", STANDS[2], "/v/DOCTRINE.md"]), checkpoint.seed(vars(engine), data))
+  await settle()
+  word = engine.rung("x = 1", on=root)
+  for _ in range(20):
+    await settle()
+  assert engine.get("cd1")[2] == "journal"
+  assert (engine.peek(root), engine.over(word), engine.module(root).get("x")) == (None, True, 1)
+  assert [x[4] for x in said(log, "rung") if x[3] == root and x[4].startswith("stand()")] == ["stand()"]
+  assert engine.cwd(root) == "/x"

@@ -15,7 +15,7 @@ use furb::{
   world::{Asked, answered},
 };
 use futures::{Stream, stream};
-use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin};
+use tokio::io::{AsyncBufReadExt, BufReader, Lines, Stdin, stdin};
 use unsync::oneshot;
 
 /// The lines of stdin, which one read holds at a time.
@@ -28,7 +28,7 @@ type Input = Lines<BufReader<Stdin>>;
 pub(crate) fn terminal() -> Box<dyn Ear> {
   hearing(&["prompt"], |mut co: Co<Read>| async move {
     // The lines of stdin, while no read holds them.
-    let mut lines = Some(BufReader::new(tokio::io::stdin()).lines());
+    let mut lines = Some(BufReader::new(stdin()).lines());
     let mut waiting: VecDeque<Asked> = VecDeque::new();
     // The prompt shown, and the stop of its read.
     let mut shown: Option<(Asked, oneshot::Sender<()>)> = None;

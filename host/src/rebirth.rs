@@ -1,138 +1,85 @@
-//! The rebirth of a life: its actor writes its checkpoint, drops its engine and opens it again
-//! from that checkpoint on the same thread, for the same readers. A life is born again when it
-//! said [`TAIL`] facts since it opened while no command, no reply and no word runs, so an open
-//! after a crash replays a short tail, and the engine lets go of what its words left. A life whose
-//! record does not hold each fact that it said, as on a full disk, holds its rebirth until the
-//! record takes them, since the drop of its engine would lose them. A word that runs, as one that
-//! awaits a wait or a prompt, holds the rebirth until [`BOUND`] facts, and the rebirth then cuts
-//! it, which the new open ends as interrupted. The rebirth also cuts each act whose ear no
-//! checkpoint keeps. The new open tells the root each act that it cut, by name, in a prompt of
-//! None, so the one who runs the root starts again the work that it still needs, and each chain
-//! goes on as it stood.
+//! The image of a life as it goes and at its end, from which a later life goes on.
+//!
+//! What bounds an open after a crash is the image that a life writes as it goes: once [`TAIL`]
+//! facts of the life stand in no image of it, the life writes its image between two runs, and goes
+//! on, with no checkpoint. Those facts are the ones that it said since its last image, or each fact
+//! of its log when it stands on no image, as after an open by its record, since its next open would
+//! read its whole record. An image keeps each act in flight, so no act holds it. A later open goes
+//! on from that image and feeds only the entries that the record took after it.
 //!
 //! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
-//! each fact up to the fault, and a later open replays them.
+//! each fact up to the fault, and a later open goes on from the last image, or replays them. A life
+//! that ends with no fault writes its image and no checkpoint, as [`ended`] says.
 
-use std::collections::{BTreeMap, HashSet};
+use std::path::Path;
 
-use furb::{
-  Engine, Fault, verbs,
-  view::{Act, Kind, Phase},
-  world::Shape,
-};
+use furb::{Engine, Fault, image};
+use serde::{Deserialize, Serialize};
 
 use crate::event::Event;
 
-/// How many facts a life says after it opened before it writes its checkpoint and is born again,
-/// at the first moment when no command, no reply and no word runs, which a rebirth would cut.
+/// How many facts of a life stand in no image of it before the life writes its image. A later
+/// open feeds each fact after the image: 0.3 to 0.5 ms each on this build, against 2 to 13 s to
+/// write the image of a large life, so a tail of this length keeps the open after a crash a few
+/// seconds longer than an open with no tail.
 pub(crate) const TAIL: u64 = 10_000;
 
-/// How many facts a life says after it opened before a word that runs no longer holds its rebirth,
-/// which then cuts that word.
-pub(crate) const BOUND: u64 = 2 * TAIL;
-
-/// The kinds of the acts that a rebirth never names as cut: the chains and the rungs, which the
-/// checkpoint carries as chains and ladders, and the acts that a word or a command makes for
-/// itself, which go with it.
-const CARRIED: [&str; 6] = ["chain", "rung", "wants", "merged", "gate", "stand"];
-
-/// What the actor watches of a life since it opened: the facts that it said, the commands and the
-/// replies that run, the words that run, and each act that lives, which a rebirth may cut.
-#[derive(Default)]
+/// What the actor watches of a life since it opened: the facts that it said, those that it said
+/// up to its last image, and whether it stands on an image.
+#[derive(Default, Serialize, Deserialize)]
 pub(crate) struct Watch {
   facts: u64,
-  running: HashSet<String>,
-  words: HashSet<String>,
-  open: BTreeMap<String, Act>,
-  before: BTreeMap<String, Act>,
+  imaged: u64,
+  /// Whether the life wrote an image or opened from one, since it last opened by its record.
+  on_image: bool,
 }
 
 impl Watch {
   /// One event that the life told.
   pub(crate) fn heard(&mut self, event: &Event) {
-    match event {
-      Event::Fact(_) => self.facts += 1,
-      Event::Act(act) => {
-        let done = matches!(act.phase, Phase::Done(_));
-        let held = match act.kind {
-          Kind::Bash | Kind::Reply => Some(&mut self.running),
-          Kind::Run => Some(&mut self.words),
-          _ => None,
-        };
-        if let Some(held) = held {
-          if done {
-            held.remove(&act.id)
-          } else {
-            held.insert(act.id.clone())
-          };
-        }
-        if done || CARRIED.contains(&act.kind.as_str()) {
-          self.open.remove(&act.id);
-        } else {
-          self.open.insert(act.id.clone(), (**act).clone());
-        }
-      }
-      _ => {}
+    if let Event::Fact(_) = event {
+      self.facts += 1;
     }
   }
 
-  /// Whether the life is born again now: it said [`TAIL`] facts since it opened, no command and no
-  /// reply runs, and no word runs, or it said [`BOUND`] facts.
-  pub(crate) fn due(&self) -> bool {
-    self.facts >= TAIL && self.running.is_empty() && (self.words.is_empty() || self.facts >= BOUND)
+  /// Whether the life writes its image now: [`TAIL`] facts of it stand in no image, those that it
+  /// said since its last image, or, on no image, the facts that its log `said`.
+  pub(crate) fn images(&self, said: u64) -> bool {
+    (if self.on_image { self.facts - self.imaged } else { said }) >= TAIL
   }
 
-  /// The life opened again, with no fact said and nothing that runs: each act that lived before it
-  /// waits for [`Watch::cut`].
+  /// The life wrote its image, or tried to, after the facts that it said so far.
+  pub(crate) fn imaged(&mut self) {
+    self.imaged = self.facts;
+    self.on_image = true;
+  }
+
+  /// The life told the past of its record, which no image holds: it stands on no image, with no
+  /// fact said.
   pub(crate) fn reborn(&mut self) {
-    self.facts = 0;
-    self.running.clear();
-    self.words.clear();
-    self.before = std::mem::take(&mut self.open);
-  }
-
-  /// Each act that lived before the rebirth and that the new open does not hold open, in order, but
-  /// an act that another of them made, which goes with its maker.
-  fn cut(&mut self, mut lives: impl FnMut(&str) -> bool) -> Vec<Act> {
-    let before = std::mem::take(&mut self.before);
-    let gone: Vec<Act> = before.into_values().filter(|one| !lives(&one.id)).collect();
-    let makers: HashSet<&str> = gone
-      .iter()
-      .flat_map(|one| {
-        let rung =
-          one.words.first().and_then(|word| word.as_str()).filter(|_| one.kind == Kind::Run);
-        [Some(one.id.as_str()), rung]
-      })
-      .flatten()
-      .collect();
-    gone.iter().filter(|one| !makers.contains(one.by.as_str())).cloned().collect()
+    *self = Self::default();
   }
 }
 
-/// The engine of a life dropped, with its checkpoint when the life keeps its record, and the fault
-/// of that checkpoint when it fails.
-pub(crate) fn ended(engine: Engine, keeps: bool) -> Option<Fault> {
-  keeps.then(|| engine.checkpoint()).and_then(Result::err)
+/// The engine of a life dropped at the end of the life. A life that keeps its record ends with its
+/// image, which holds what the host keeps of the life, so the next life of the record opens from
+/// it and reads no fact of its past, and a build that reads no image of this one opens it by the
+/// record, on the texts that the record names. A life that writes no image, as one that holds a
+/// function of a host, ends with its checkpoint, from which the next life opens by the record. It
+/// gives the fault of the end, when one came.
+pub(crate) fn ended(
+  mut engine: Engine,
+  record: Option<&Path>,
+  kept: &impl Serialize,
+) -> Option<Fault> {
+  let record = record?;
+  match image::keep(&mut engine, record, kept) {
+    Ok(true) => None,
+    Ok(false) => engine.checkpoint().err(),
+    Err(no) => Some(engine.checkpoint().err().unwrap_or(no)),
+  }
 }
 
-/// The prompt of None on the root that names each act that the rebirth cut, when it cut one, or the
-/// fault of the engine that refused it.
-pub(crate) fn told(engine: &mut Engine, watch: &mut Watch) -> Result<(), Fault> {
-  let cut =
-    watch.cut(|id| matches!(engine.get(id), Ok(Some(_))) && matches!(engine.outcome(id), Ok(None)));
-  if cut.is_empty() {
-    return Ok(());
-  }
-  let line = |one: &Act| match (&one.kind, one.words.first().and_then(|word| word.as_str())) {
-    (Kind::Run, Some(rung)) => format!("{} on {} (the word of {rung})", one.id, one.chain),
-    _ => format!("{} on {}", one.id, one.chain),
-  };
-  let lines: Vec<String> = cut.iter().map(line).collect();
-  let message = format!(
-    "The life was born again from its checkpoint, and it cut each of these acts, which runs no more: {}. Start again in a turn that shows each one that the work still needs.",
-    lines.join(", ")
-  );
-  let root = engine.root().to_owned();
-  let with = verbs::Prompt { message: Some(message), to: None, on: Some(root) };
-  engine.prompt(Shape::object("None"), with).map(|_| ())
-}
+#[cfg(test)]
+#[path = "rebirth.test.rs"]
+mod tests;

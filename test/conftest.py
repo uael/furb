@@ -5,6 +5,7 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 (kind, about, by, *words), and a question (kind, id, by, on, *words), deconstructed only by match.
 """
 
+import ast
 import asyncio
 import atexit
 import json
@@ -14,7 +15,7 @@ import shlex
 import shutil
 import sys
 import tempfile
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -22,9 +23,12 @@ from pathlib import Path
 import pytest
 
 import furb
+import furb.checkpoint
 import furb.kernel
+import furb.record
+import furb_monty.checkpoint
 import furb_monty.engine
-from furb import engine, sheet
+from furb import checkpoint, engine
 from furb.engine import OPERATOR, Act, Exit, Refused, Text, site
 from furb.world import Live, entries
 from furb_monty import _monty
@@ -34,6 +38,11 @@ CONFIG = Path(tempfile.mkdtemp(prefix="furb-config-"))
 process and each process that it starts: a provider, an extension or a memory file in the config directory of the
 machine changes no test. A test that needs a config of the user writes it in a directory of its own."""
 os.environ["FURB_CONFIG_DIR"] = str(CONFIG)
+# The tests find no claude command line and no local model, as on a machine that has none, as
+# bind/typescript/script/environment.ts says for the tests of TypeScript: a World that opens a life asks the claude of
+# the machine which models it has, and that takes about ten seconds in each process of the run, for each of its tests
+# that opens a life.
+os.environ["FURB_CLAUDE_BIN"] = ""
 
 
 @atexit.register
@@ -47,27 +56,35 @@ def gone() -> None:
 
 
 ENGINE = vars(furb.python)
-"""ENGINE is the module of the engine of this interpreter, whose names the Kernel and the gate read."""
+"""ENGINE is the module of the engine of this interpreter, whose names the Kernel reads."""
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
-EXTENSIONS = HERE.parent / "extensions"
-"""EXTENSIONS is the folder of the extensions, whose conftest holds the helpers that only their suites need."""
-SUITES = (HERE, *sorted(EXTENSIONS.glob("*/test")))
-"""SUITES are the suite of the engine and the suite of each extension, each test of which runs on both engines."""
-BOUND = (*(f"{suite}{os.sep}" for suite in SUITES), str(EXTENSIONS / "conftest.py"))
+SKILLS = HERE.parent / ".agents" / "skills"
+"""SKILLS is the folder of the skills, whose conftest holds the helpers that only their suites need."""
+SUITES = (HERE, HERE / "checkpoint", *sorted(SKILLS.glob("*/test")))
+"""SUITES are the suite of the engine, the suite of its checkpointer and the suite of each extension, each test of which
+runs on both engines."""
+BOUND = (*(f"{suite}{os.sep}" for suite in SUITES), str(SKILLS / "conftest.py"))
 """BOUND are the files whose modules bind the names of the engine under test: the suites, and the conftest of the
-suites of the extensions, each as the start of the path of such a file, which every test reads twice."""
+suites of the skills, each as the start of the path of such a file, which every test reads twice."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
+CHECKPOINTERS = {furb.python: furb.checkpoint, furb_monty.engine: furb_monty.checkpoint}
+"""CHECKPOINTERS gives the checkpointer of each engine, which runs where that engine runs."""
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
 MONTY_SKIPS = {
+  "test_fed_on_a_life_that_no_journal_of_the_checkpointer_keeps_is_refused",
+  "test_boot_gives_the_journal_the_tables_of_the_life",
+  "test_each_scan_of_all_its_facts_that_the_ear_of_a_chain_makes_at_a_fact_reads_its_reading",
+  "test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_took_and_the_rung_of_a_run_that_awaited",
+  "test_a_name_of_a_function_or_of_a_class_whose_own_name_is_another_raises_refused",
   "test_an_ear_is_any_generator_of_that_shape",
   "test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_completes",
   "test_a_run_names_the_rung_that_the_word_retells",
   "test_a_rung_that_retells_is_done_with_nothing",
   "test_a_word_that_the_chain_cannot_gate_or_run_is_refused_as_the_gate_refuses_a_word",
-  "test_an_act_that_the_life_makes_under_no_site_is_no_fact_of_the_world_in_a_replay",
+  "test_the_chain_asks_no_reply_for_the_advance_of_a_rung_that_ended_before_it_so_no_act_is_made_under_no_site",
 }
 """MONTY_SKIPS names the tests the engine of monty does not run, for the one reason the skip gives: what the test reads
 is a fact of one interpreter, which the boundary does not carry."""
@@ -99,19 +116,10 @@ LATER: list = [[[OPERATOR, [], 200000], ["o", ["low"], 200000]], "/z", "o/low"]
 COST = (80000, 0, 0, 0, 1.5)
 """One answer of a model: a dollar and a half, and a fifth of the window of the actor the suite stands on."""
 
-WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nclose(k)"
-"""A word of a rung that reads a file, starts a command and gives back how many lines the file holds, before the
+WORD = "t = read('a.txt')\nx = bash('echo hi')\nk = len(t.lines)\nawait x\nclose(k)"
+"""A word of a rung that reads a file, starts a command and gives back how many lines the file holds, once the
 command is done."""
 
-
-def faulted(line: str) -> str:
-  """What the gate finds against a word whose first line is that line, which names BAD, which nothing binds."""
-  column = line.index("BAD") + 1
-  return f"line 1: error[unresolved-reference] (column {column}) Name `BAD` used when not defined, in {line!r}"
-
-
-BAD = faulted("k = BAD")
-"""BAD is what the gate finds against a word whose first line is k = BAD, which names BAD, which nothing binds."""
 
 TWO = Text("/w/n.txt", "one\ntwo\n")
 """TWO is a text of two lines."""
@@ -147,6 +155,28 @@ NUMS = (
 """A word of a rung that opens a door of its own, which answers a read of nums:// with a list."""
 
 
+def definitions(word: str) -> str:
+  """The definitions of a word, as the crate gives them to gathered (definitions of src/skill.rs): each statement at
+  its top that defines a function, a class or a type, an import, and an assignment to names in capitals, in order. A
+  word that does not parse is its own definitions."""
+  try:
+    body = ast.parse(word).body
+  except SyntaxError:
+    return word
+  kept = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.TypeAlias, ast.Import, ast.ImportFrom)
+
+  def capital(target: ast.expr) -> bool:
+    return isinstance(target, ast.Name) and target.id.isupper()
+
+  return "\n".join(
+    ast.get_source_segment(word, one) or ""
+    for one in body
+    if isinstance(one, kept)
+    or (isinstance(one, ast.Assign) and all(map(capital, one.targets)))
+    or (isinstance(one, ast.AnnAssign) and one.value is not None and capital(one.target))
+  )
+
+
 def plain(record: Sequence[tuple]) -> list:
   """A record as a later life is given it: kept by the store of the crate and read again, so every value is what the
   crate makes of it."""
@@ -179,7 +209,7 @@ class Sand:
   the readings of its clock and the chances it drew, so a later life reads what the life before it read. `outs`
   holds each command it runs: whether its stderr flows into its stdout, which it writes into its stdout then, and
   its two streams as they came. `gone`
-  names the directories that are not there, which a cd into is refused; every other directory is there. `home` is
+  names the directories that are not there, which a cd into is refused; every other directory is there. `quiet` names the kinds of question that it hears silent, as a life that inspects its record hears the clock, so nothing takes them. `home` is
   the home of its user, which a cd, a read or a write of a path that is ~ or starts with ~/ resolves against, and which
   each path that it gives under the home names as ~. `timers`
   holds the timer of each wait that it took, which a done of that wait stops. `cut` holds each command that the record
@@ -203,6 +233,7 @@ class Sand:
   home: str = "/h"
   timers: dict[str, asyncio.TimerHandle] = field(default_factory=dict)
   cut: dict[str, tuple] = field(default_factory=dict)
+  quiet: frozenset[str] = frozenset()
   loop: asyncio.AbstractEventLoop = field(init=False, repr=False, compare=False)
 
   def writes(self, about: str, text: str, stream: str) -> None:
@@ -225,6 +256,8 @@ class Sand:
     self.loop = asyncio.get_running_loop()
     while True:
       a = yield
+      if a[0] in self.quiet:
+        continue
       if a[0] in ("bash", "wait", "prompt", "reply", "stand", "cd", "read", "write", "clock", "chance"):
         self.calls.append(a)
       yield from self.hear(a)
@@ -397,34 +430,14 @@ def seen(held: list[tuple]):  # noqa: ANN201
   return keeps
 
 
-def gated(log: Sequence[tuple]) -> list[str]:
-  """Every word the gate was given in the life, in order, which the ready of each rung says that no chain made: a
-  chain gates no word it wrote itself, and a rung that retells stands with the gate where its donor stood."""
-  return [a[3] for a in said(log, "ready") if (engine.get(engine.get(a[1])[2]) or ("",))[0] != "chain"]
-
-
 def ran(log: Sequence[tuple]) -> list[str]:
   """Every word the Kernel ran in the life, in order, which the run of each rung says."""
   return [a[5] for a in said(log, "run")]
 
 
-def findings(log: Sequence[tuple]) -> list[list[str]]:
-  """What the gate found against each word it was given, in order, which the done of each gate says."""
-  return [a[3] for a in said(log, "done") if a[1].startswith("gate")]
-
-
 class Py:
-  """The Kernel and the gate of this interpreter, outside the engine like the World: the Kernel of `furb.kernel`,
-  which runs a word in the module of its chain, and the gate of the sheet, which reads a word with the gate of the
-  crate."""
-
-  def gate(self, word: str, program: list[str]) -> list[str]:
-    """What the gate finds against a word: the sheet of the engine, read by the gate of the crate."""
-    return sheet.gate(ENGINE, {f"rung{n}": one for n, one in enumerate(program, 1)}, word, furb_monty.gate)
-
-  def gating(self) -> Kernel:
-    """The gate as the ear of a life, which answers each gate with what it finds against the word."""
-    return sheet.gating(ENGINE, furb_monty.gate)
+  """The Kernel of this interpreter, outside the engine like the World: the Kernel of `furb.kernel`, which runs a word
+  in the module of its chain."""
 
   def kernel(self) -> Kernel:
     """The Kernel as one generator for one life."""
@@ -467,15 +480,21 @@ def watched(log: list[tuple]) -> Kernel:
 
 
 def kernel() -> dict[str, Kernel]:
-  """The Kernel and the gate a life of the suite is given: the ones that are python for the engine of this
-  interpreter, and none for the engine of monty, which holds its own."""
-  return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py().gating()}
+  """The Kernel a life of the suite is given: the one that is python for the engine of this interpreter, and none for
+  the engine of monty, which holds its own."""
+  return {} if engine is not furb.python else {"kernel": Py().kernel()}
 
 
 def given(record: Sequence[tuple]) -> Sequence[tuple]:
   """A record as boot is given it, as a host gives it: the engine of monty takes it through the opening of its
   sandbox, and a host of the engine of this interpreter gives what recorded of the Kernel makes of it."""
-  return furb.kernel.recorded(ENGINE, list(record)) if engine is furb.python else record
+  return furb.record.recorded(ENGINE, list(record)) if engine is furb.python else record
+
+
+def journaled(record: Sequence[tuple] = ()) -> Callable[..., Kernel]:
+  """The journal a life of the suite is given: the journal of the checkpointer of its engine, on a record as a host
+  gives it. The door of monty gives what its boot takes in the place of that journal, which its sandbox makes."""
+  return checkpoint.journal(ENGINE, given(record))
 
 
 def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list[tuple], str]:
@@ -486,14 +505,14 @@ def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list
   ended = {fact[1] for (fact,) in record if fact[0] == "done"}
   left = {fact[1] for (fact,) in record if fact[0] == "started" and fact[1] not in ended}
   world.cut = {fact[1]: tuple(fact) for (fact,) in record if fact[0] == "bash" and fact[1] in left}
-  return log, engine.boot(given(record), **kernel(), probe=watched(log), world=world.hears(), **ears)
+  return log, engine.boot(journaled(record), **kernel(), probe=watched(log), world=world.hears(), **ears)
 
 
 def machine(directory: Path, record: Path | None = None) -> tuple[Live, str]:
   """A life on the World of this machine, in a directory, on a record that it keeps when it is given one, which asks
   no model and offers the operator alone: the World, which a test ends, and the root."""
   live = Live(str(directory), roster=[])
-  return live, engine.boot(live.opened(record, extensions=False), world=live.hears(), **live.ears, **kernel())
+  return live, engine.boot(journaled(live.opened(record, skills=False)), world=live.hears(), **live.ears, **kernel())
 
 
 async def scratched(on: str) -> Path:
@@ -511,6 +530,17 @@ def world_says(kind: str, about: str, *words: object) -> tuple:
     return engine.say(kind, about, *words)
   finally:
     site.reset(token)
+
+
+async def until(fact: Callable[[], object], turns: int = 100_000) -> None:
+  """Room for the loop until the fact holds, so that a test reads a state once the step that makes it is done, never
+  after a count of turns that a slower engine or machine can leave short. The bound fails a step that never comes."""
+  for _ in range(turns):
+    if fact():
+      return
+    await asyncio.sleep(0)
+  said = f"the fact never held in {turns} turns of the loop"
+  raise AssertionError(said)
 
 
 async def settle(n: int = 80) -> None:
@@ -562,21 +592,6 @@ async def lived() -> tuple[Sand, list[tuple], str]:
   return sand, log, root
 
 
-async def acknowledged() -> tuple[Sand, list[tuple], str, str]:
-  """A life whose task starts a command, then waits for a second one, so the chain acknowledges the end of the first
-  on the task, which is open: the World, what was said, the root and the task."""
-  sand, log, root = born("x = bash('slow')\nawait bash('slow')", "close(3)", auto=False)
-  task = engine.prompt(int, "task", on=root)
-  await settle()
-  first, second = (one[1] for one in said(log, "bash"))
-  sand.exits(first, 0)
-  await settle()
-  sand.exits(second, 0)
-  assert await task == 3
-  await settle()
-  return sand, log, root, task
-
-
 def slow() -> tuple[Sand, list[tuple], str, Act[Exit]]:
   """A life on the World of the suite whose command runs on until the test ends it: the World, what was said, the
   root and the command."""
@@ -622,6 +637,23 @@ async def counted() -> tuple[list[tuple], str, Act, Act[int], str]:
   assert await act == 2
   (step,) = [a[1] for a in said(log, "rung") if a[2] == act]
   return log, root, laid, act, step
+
+
+def viewed(root: str) -> dict[str, dict]:
+  """What a word reads of a life: each view of each chain by kind and by speaker, the outcome of each act, and each
+  plain name of each module, which a module fact holds with the functions of its life."""
+  facts: dict[tuple[str, str], list[str]] = {}
+  outcomes: dict[str, str] = {}
+  modules: dict[str, dict[str, str]] = {}
+  kinds = (str, int, float, tuple, list, dict, engine.Text, engine.Exit, type(None))
+  for one in [root, *[a[1] for a in engine.transcript(root, "chain")]]:
+    every = engine.transcript(one)
+    for of in {"", *(x[0] for x in every), *(x[2] for x in every)}:
+      facts[one, of] = [repr(x[:3] if x[0] == "module" else x) for x in engine.transcript(one, of)]
+    outcomes |= {x[1]: repr(engine.peek(x[1], ...)) for x in every if engine.question(x)}
+    held = engine.module(one).items()
+    modules[one] = {k: repr(v) for k, v in held if not k.startswith("__") and isinstance(v, kinds)}
+  return {"facts": facts, "outcomes": outcomes, "modules": modules}
 
 
 async def relived(sand: Sand, record: Sequence[tuple]) -> tuple[list[tuple], str]:
@@ -764,21 +796,9 @@ def fresh(root: str, *told: str) -> str:
   return "\n\n".join([opened(root, "root"), *told])
 
 
-def gatings(log: Sequence[tuple]) -> list[tuple[str, list[str]]]:
-  """Every word the gate was asked of in the life, in order, with the words of the program it read that word after,
-  which is the program of its chain where the gate stands in the transcript of that chain."""
-  got = []
-  for a in said(log, "gate"):
-    held = engine.transcript(a[3])
-    at = next(i for i, x in enumerate(held) if x[:2] == a[:2])
-    since = max([i for i, x in enumerate(held[:at]) if x[0] == "module"], default=0)
-    words = {x[4]: str(x[5]) for x in held[since:at] if x[0] == "run"}
-    got.append((str(a[4]), [*words.values()]))
-  return got
-
-
 def swapped(to: object) -> None:
-  """Every name of the engine that a module of the suite bound at import, rebound to the engine under test.
+  """Every name of the engine that a module of the suite bound at import, and its checkpointer, rebound to the engine
+  under test and to its checkpointer.
 
   A test reads the engine through the module it imported and through the names it took from it, so both are
   rebound, by identity: a name that is the same object in both engines stays as it is.
@@ -794,6 +814,8 @@ def swapped(to: object) -> None:
     for key, value in list(names.items()):
       if value is fro:
         names[key] = to
+      elif value is CHECKPOINTERS[fro]:
+        names[key] = CHECKPOINTERS[to]
       elif key in SURFACE and value is getattr(fro, key):
         names[key] = getattr(to, key)
 
@@ -832,18 +854,20 @@ def engine_of(request: pytest.FixtureRequest) -> Generator[str]:
 
 # pytest loads this file as its plugin under a name of its own; the tests and the probe import it as conftest. One
 # module object under both names keeps isinstance true against the classes above.
-sys.modules.setdefault("conftest", sys.modules[__name__])
+HARNESS = sys.modules[__name__]
+"""HARNESS is this module, which the tests import as conftest, whatever name pytest loaded it under."""
+sys.modules.setdefault("conftest", HARNESS)
 
 
 def pytest_collectstart(collector: pytest.Collector) -> None:  # noqa: ARG001
   """Every collector sees this module under the name conftest: pytest drops that name before it loads a conftest of a
-  folder outside a package, as one under .furb/extensions, and a test would then import a second copy."""
-  sys.modules["conftest"] = sys.modules[__name__]
+  folder outside a package, as one under .furb/skills, and a test would then import a second copy."""
+  sys.modules["conftest"] = HARNESS
 
 
 QUOTES = json.loads((Path(__file__).parent / "quotes.json").read_text(encoding="utf-8"))
-"""QUOTES is the table of the quotes, which the engine, the gate and the watch of the provider read alike: each word,
-the python that unquoted makes of it, whether a quote stands open at its end, and what the gate finds in it."""
+"""QUOTES is the table of the quotes, which the engine and the watch of the provider read alike: each word, the python
+that unquoted makes of it, and whether a quote stands open at its end."""
 
 
 async def verbs(root: str, *kinds: str) -> None:

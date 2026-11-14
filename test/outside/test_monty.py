@@ -5,30 +5,35 @@ ear of this interpreter that says a verb while it hears and is answered with wha
 engine made that an ear calls back while it hears, a template string that a function of this interpreter debugs
 while a word calls it, which crosses whole, a class a word defined held as a type of this interpreter
 and its instances as objects of it, both ways, the Kernel of this interpreter refused, since the engine of monty
-holds its own, a gate that accepts a builtin or a name of a module exactly when the sandbox runs it, an ear the
-crate writes, which serves a life of either engine, a life longer than the tables of its session could count, a
-word that awaits in a lambda, which the gate lets pass and the sandbox refuses as python does, an engine and an
-ear that the collector of cycles drops on another thread, a value too deep or that holds its parts too often,
-which a host is given cut. What the ears of the crate do, the crate proves.
+holds its own, an ear the crate writes, which serves a life of either engine, a life longer than the tables of its
+session could count, a word that awaits in a lambda, which the sandbox refuses as python does, an engine and an ear that the collector of
+cycles drops on another thread, a value too deep or that holds its parts too often, which a host is given cut. What
+the ears of the crate do, the crate proves.
 """
 
 import asyncio
-import builtins
 import gc
 import json
 import sys
 import threading
-from collections.abc import Generator
+from collections.abc import Callable, Generator, Iterable, Sequence
 from pathlib import Path
 
 import pytest
 
 import furb
+import furb.checkpoint
+import furb_monty.checkpoint
 import furb_monty.engine
-from conftest import OPERATOR, STANDS, Dead, Py, Sand, life, settle, swapped, tilded
+from conftest import OPERATOR, STANDS, Dead, Py, Sand, journaled, life, settle, swapped, tilded
 from furb import engine
 from furb.engine import TIMEOUT, Refused
 from furb_monty import _monty
+
+
+def journal(record: Iterable[Sequence[object]] = ()) -> Callable[..., Iterable[object]]:
+  """The journal of a life on the engine of monty, as boot of its door takes it."""
+  return furb_monty.checkpoint.journal({}, record)
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +56,7 @@ async def test_an_ear_that_says_a_verb_the_world_refuses_is_answered_with_the_re
         except Refused as no:
           caught.append(str(no))
 
-  root = engine.boot((), world=Dead(stands=STANDS).hears(), asking=asking())
+  root = engine.boot(journaled(), world=Dead(stands=STANDS).hears(), asking=asking())
   engine.say("poke", root)
   await settle()
   assert caught == ["a dead World answers no read"]
@@ -67,7 +72,7 @@ async def test_a_show_the_engine_made_is_called_back_by_an_ear_while_it_hears() 
       if (a := (yield)) is not None and a[0] == "shown":
         picked.append(a[3](["one", "two"]))
 
-  root = engine.boot((), world=sand.hears(), looking=looking())
+  root = engine.boot(journaled(), world=sand.hears(), looking=looking())
   sand.script[root] = ["say('shown', acting(), lambda lines: [len(lines)])\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1
   assert picked == [[2]]
@@ -77,17 +82,17 @@ async def test_a_word_that_asks_the_operating_system_raises_where_it_asks_and_it
   """A word that asks the operating system raises there, as the sandbox refuses it, and the chain goes on, so the
   prompt asks its model again."""
   sand = Sand(stands=STANDS)
-  root = engine.boot((), world=sand.hears())
+  root = engine.boot(journaled(), world=sand.hears())
   sand.script[root] = ["open('a.txt')", "close(str(raised))"]
   said = await engine.prompt(str, "open it", on=root)
   assert said == "open asks the operating system, and a life asks nothing of it"
 
 
 async def test_a_word_that_awaits_in_a_function_that_is_not_async_raises_where_it_runs_and_its_chain_goes_on() -> None:
-  """A word that awaits in a lambda, which the gate lets pass, raises the SyntaxError of python, and the chain goes on,
-  so the prompt asks its model again."""
+  """A word that awaits in a lambda raises the SyntaxError of python, and the chain goes on, so the prompt asks its
+  model again."""
   sand = Sand(stands=STANDS)
-  root = engine.boot((), world=sand.hears())
+  root = engine.boot(journaled(), world=sand.hears())
   sand.script[root] = ["f = lambda: await wait(0, __name__)\nf()", "close(str(raised))"]
   said = await engine.prompt(str, "await it", on=root)
   assert said == "'await' outside async function (<string>, line 1)"
@@ -105,7 +110,7 @@ async def test_a_template_string_that_a_function_of_this_interpreter_debugs_cros
       if (a := (yield)) is not None and a[0] == "hand":
         yield "done", a[1], look
 
-  root = engine.boot((), handing=handing(), world=Sand(stands=STANDS).hears())
+  root = engine.boot(journaled(), handing=handing(), world=Sand(stands=STANDS).hears())
   step = engine.rung("look = ask('hand', '')\nassert callable(look)\nlook()", on=root)
   await step
   made = f"{n=} {s!a} {n:03} and {s!r:>5}"
@@ -118,7 +123,7 @@ async def test_a_class_a_word_defined_is_a_type_of_this_interpreter_and_its_inst
   in the sandbox; an instance of it crosses as an object of that type with its fields; and both go back in as
   themselves, the class by its handle and the instance made from its fields."""
   sand = Sand(stands=STANDS)
-  root = engine.boot((), world=sand.hears())
+  root = engine.boot(journaled(), world=sand.hears())
   word = "class Plan:\n  n = 21\n  def __init__(self, x=1):\n    self.x = x\n  def total(self):\n    return self.n + self.x\np = Plan(3)"
   await engine.rung(word, on=root)
   plan = engine.module(root)["Plan"]
@@ -151,7 +156,7 @@ async def test_a_class_a_word_defined_derives_from_the_type_its_base_is_here() -
   from catches, a subclass of a class of a word is one of its type, and a string of a class that inherits str is
   a string."""
   sand = Sand(stands=STANDS)
-  root = engine.boot((), world=sand.hears())
+  root = engine.boot(journaled(), world=sand.hears())
   word = (
     "class Boom(ValueError):\n  pass\nclass Plan:\n  n = 21\nclass Sub(Plan):\n  pass\nclass Hurt(Refused):\n  pass\n"
     "class Word(str):\n  pass\ne = Boom('boom')\ns = Sub()\nw = Word('x')"
@@ -178,7 +183,7 @@ async def test_a_class_a_word_defined_derives_from_the_type_its_base_is_here() -
 async def test_a_map_that_holds_the_key_is_crosses_both_ways_as_the_map_it_is() -> None:
   """A map of this interpreter and a map of a word that hold the key `is` cross as the maps they are, both ways, and
   never as a mark: the word reads the map a close of the operator gave, and a word gives its own map back."""
-  root = engine.boot((), world=Sand(stands=STANDS).hears())
+  root = engine.boot(journaled(), world=Sand(stands=STANDS).hears())
   refusal = {"is": "Refused", "args": ["x"]}
   act = engine.prompt(None, "give", on=engine.chain("held"))
   engine.close(refusal, act)
@@ -195,7 +200,7 @@ async def test_a_value_deeper_than_a_host_is_given_crosses_with_its_first_levels
   """A value that a word makes deeper than a host is given crosses with its first 64 levels, and the last holds what
   monty gives a part deeper than its recursion, so no walk of the door ends the process."""
   sand = Sand(stands=STANDS)
-  root = engine.boot((), world=sand.hears())
+  root = engine.boot(journaled(), world=sand.hears())
   sand.script[root] = ["x = []\nfor _ in range(1000):\n  x = [x]\nclose(x)"]
   cut: object = "Repr('<deeply nested>')"
   for _ in range(63):
@@ -214,7 +219,7 @@ async def test_a_value_that_holds_its_parts_too_often_crosses_to_an_ear_within_i
       if (a := (yield)) is not None and a[0] == "shared":
         heard.append(a[3])
 
-  root = engine.boot((), world=sand.hears(), listening=listening())
+  root = engine.boot(journaled(), world=sand.hears(), listening=listening())
   sand.script[root] = ["x = []\nfor _ in range(30):\n  x = [x, x]\nsay('shared', acting(), x)\nclose(1)"]
   assert await engine.prompt(int, "share", on=root) == 1
   [got] = heard
@@ -233,12 +238,12 @@ async def test_a_life_runs_a_word_after_more_names_and_functions_than_a_u16_coun
   """A life is one session of monty for its whole length, and the session keeps a name for each piece of code the host
   fed it, and each name, literal and function that a rung compiled. After more of each than a u16 counts, a word that
   names what the session never saw still runs, since the interpreter bounds an operand by the code that holds it."""
-  root = engine.boot((), world=Sand(stands=STANDS).hears())
+  root = engine.boot(journaled(), world=Sand(stands=STANDS).hears())
   # Each saying of the operator is one piece of code that the host feeds the session.
   for _ in range(66_000):
     engine.say("tick", root)
   # Each rung makes 10 000 functions that each read a new attribute and hold a function of their own. The source is
-  # built as the rung runs, since the gate reads the whole program again for each word.
+  # built as the rung runs, so the program of the chain holds a short word for each rung.
   for k in range(7):
     word = (
       f"exec(''.join(f'def f{k}_{{i}}(x):\\n  def g():\\n    pass\\n  return x.a{k}_{{i}}\\n'"
@@ -250,49 +255,16 @@ async def test_a_life_runs_a_word_after_more_names_and_functions_than_a_u16_coun
   assert engine.module(root)["raised"] is None
 
 
-async def test_boot_refuses_a_kernel_or_a_gate_of_this_interpreter() -> None:
-  """boot refuses a Kernel or a gate of this interpreter, since the engine of monty holds its own."""
-  with pytest.raises(Refused, match="kernel hears: the engine of monty holds its Kernel and its gate"):
-    engine.boot((), world=Sand(stands=STANDS).hears(), kernel=Py().kernel())
-  with pytest.raises(Refused, match="gate hears: the engine of monty holds its Kernel and its gate"):
-    engine.boot((), world=Sand(stands=STANDS).hears(), gate=Py().gating())
-
-
-async def test_the_gate_accepts_a_builtin_or_a_name_of_a_module_exactly_when_a_rung_runs_it() -> None:
-  """The gate reads a word against the typeshed of the sandbox and a chain of the sandbox, which is a module, so it
-  accepts a name of the builtins of python, or a name ty gives every module, exactly when a rung runs a word that
-  names it. A refused word never runs, so a refused name is run as the Kernel runs a word, in the globals of the
-  chain. A word is judged the same on both engines, so the gate of python finds the same of every name, though
-  python runs some that it refuses."""
-  root = engine.boot((), world=Sand(stands=STANDS).hears())
-  # The names ty gives every module are those of module_type_implicit_global_symbol in ty_python_semantic: the names
-  # that the typeshed of the sandbox declares in the class types.ModuleType, but __dict__, __init__ and __getattr__,
-  # and __builtins__, __debug__ and __warningregistry__, which ty adds itself.
-  module = {"__name__", "__file__", "__loader__", "__package__", "__path__", "__spec__", "__doc__", "__annotations__"}
-  module |= {"__annotate__", "__builtins__", "__debug__", "__warningregistry__"}
-  names = sorted({*vars(builtins), *module})
-  # Every rung grows the program that each later sheet reads again, so a sheet and a rung for each name cost
-  # seconds. One word holds every name, one on each line, and the line of a finding is the name it refuses.
-  word = "\n".join(f"got = {name}" for name in names)
-  found = engine.gate(word, on=root)
-  assert Py().gate(word, []) == found
-  refused = sorted({names[int(one.split(":")[0].removeprefix("line ")) - 1] for one in found})
-  probe = (
-    f"ran = []\nfor name in {refused!r}:\n  try:\n    eval(compile('got = ' + name, 'probe', 'exec'), dict(globals()))\n"
-    "    ran.append(name)\n  except NameError:\n    pass\nclose(ran)"
-  )
-  tries = "".join(
-    f"try:\n  got = {name}\nexcept NameError:\n  unbound.append({name!r})\n" for name in names if name not in refused
-  )
-  refused_yet_ran = await engine.rung(probe, on=root)
-  accepted_yet_unbound = await engine.rung(f"unbound = []\n{tries}close(unbound)", on=root)
-  assert (refused_yet_ran, accepted_yet_unbound) == ([], [])
+async def test_boot_refuses_a_kernel_of_this_interpreter() -> None:
+  """boot refuses a Kernel of this interpreter, since the engine of monty holds its own."""
+  with pytest.raises(Refused, match="kernel hears: the engine of monty holds its Kernel"):
+    engine.boot(journaled(), world=Sand(stands=STANDS).hears(), kernel=Py().kernel())
 
 
 async def test_an_ear_of_the_crate_crosses_to_the_boot_of_the_door_and_what_it_says_from_a_thread_drives_it() -> None:
   """An ear of the crate crosses to the boot of the door beside the generators the contract says, and what it says
   from a thread of its own drives the life from the loop: time ends a wait from its thread."""
-  root = furb_monty.engine.boot((), time=_monty.time(), world=Dead(stands=STANDS).hears())
+  root = furb_monty.engine.boot(journal(), time=_monty.time(), world=Dead(stands=STANDS).hears())
   assert await engine.wait(0.01, root, on=root) is None
 
 
@@ -303,7 +275,7 @@ async def test_an_ear_of_the_crate_that_the_host_lets_go_goes_while_the_life_it_
   crossed to lives on: the store lets its record go, so a second life on that record owns it."""
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
-  root = furb_monty.engine.boot(record, time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
+  root = furb_monty.engine.boot(journal(record), time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
   assert await engine.wait(0.01, root, on=root) is None
   with pytest.raises(Refused, match="Another process owns"):
     _monty.store(path)
@@ -324,7 +296,7 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
   _, store = _monty.store(path)
   ears = {"files": _monty.files(str(tmp_path / "scratch")), "time": _monty.time(), "store": store}
   world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
-  root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), **ears, world=world)
+  root = furb.python.boot(furb.checkpoint.journal(vars(furb.python)), kernel=Py().kernel(), **ears, world=world)
   furb.python.write(furb.python.Text("a.txt", "one\n"), on=root)
   assert furb.python.read("a.txt", on=root).content == "one\n"
   assert await furb.python.wait(0.01, root, on=root) is None
@@ -346,7 +318,9 @@ async def test_the_ear_of_the_log_writes_the_log_of_a_life_on_the_engine_of_this
   _, store = _monty.store(path)
   log = _monty.log(path)
   world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
-  root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), store=store, log=log, world=world)
+  root = furb.python.boot(
+    furb.checkpoint.journal(vars(furb.python)), kernel=Py().kernel(), store=store, log=log, world=world
+  )
   assert await furb.python.rung("x = 1\nclose(x)", on=root) == 1
   store.dispose()
   log.dispose()
@@ -373,11 +347,11 @@ async def test_an_engine_and_an_ear_that_the_collector_of_cycles_drops_on_anothe
   hook = sys.unraisablehook
   sys.unraisablehook = lambda one: heard.append(str(one.exc_value))
   try:
-    engine.boot((), world=Dead(stands=STANDS).hears())
+    engine.boot(journaled(), world=Dead(stands=STANDS).hears())
     cycle: list[object] = [furb_monty.engine.held_engine(), _monty.time()]
     cycle.append(cycle)
     # The second life ends the first, and the cycle alone holds its engine.
-    engine.boot((), world=Dead(stands=STANDS).hears())
+    engine.boot(journaled(), world=Dead(stands=STANDS).hears())
     del cycle
     collector = threading.Thread(target=gc.collect)
     collector.start()
@@ -390,14 +364,16 @@ async def test_an_engine_and_an_ear_that_the_collector_of_cycles_drops_on_anothe
 
 async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> None:
   """A life opens on its record and on the ears of the crate, in the order every host boots them after its own, and
-  enables at its tip what the configs turn on; a life that turns the extensions off enables nothing new."""
+  enables at its tip what the configs turn on; a life that turns the skills off enables nothing new."""
   path, config = str(tmp_path / "record.jsonl"), str(tmp_path / "config")
   record, ears = _monty.opened(directory=str(tmp_path), record=path, config=config)
   assert (record, [name for name, _ in ears]) == (
     [],
     ["provider", "extensions", "skills", "mcp", "fetch", "files", "bash", "time", "store", "log"],
   )
-  root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
+  root = furb_monty.engine.boot(
+    journal(record), **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+  )
   await settle()
   assert [one["name"] for one in _monty.enabled(engine.transcript(on=root))] == [
     "catchup",
@@ -405,19 +381,18 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
     "skills",
     "compaction",
     "naming",
-    "ouroboros",
-    "web",
-    "mcp",
   ]
   for _, one in ears:
     one.dispose()
   fresh = str(tmp_path / "fresh.jsonl")
-  record, ears = _monty.opened(directory=str(tmp_path), record=fresh, config=config, keeps=False, extensions=False)
+  record, ears = _monty.opened(directory=str(tmp_path), record=fresh, config=config, keeps=False, skills=False)
   assert (record, [name for name, _ in ears]) == (
     [],
     ["provider", "extensions", "skills", "mcp", "fetch", "files", "bash", "time"],
   )
-  root = furb_monty.engine.boot(record, **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears())
+  root = furb_monty.engine.boot(
+    journal(record), **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+  )
   await settle()
   assert _monty.enabled(engine.transcript(on=root)) == []
 
@@ -425,7 +400,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
 async def test_the_door_gives_none_where_the_contract_holds_none_beside_a_default_of_its_own() -> None:
   """A verb of the door takes None as a word where its type holds None beside a default of its own, as the stdin of
   bash, and takes the default of the contract when the word is left out."""
-  root = furb_monty.engine.boot(world=Dead(stands=STANDS).hears())
+  root = furb_monty.engine.boot(journal(), world=Dead(stands=STANDS).hears())
   held = furb_monty.engine.held_engine()
   opened, shut = held.bash("cat", stdin=None, on=root), held.bash("cat", on=root)
   assert [held.get(str(one)) for one in (opened, shut)] == [
@@ -439,9 +414,9 @@ async def test_the_door_names_the_work_that_an_earlier_life_left_pending(tmp_pat
   says, as the engine of the crate finds it."""
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
-  root = furb_monty.engine.boot(record, time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
+  root = furb_monty.engine.boot(journal(record), time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
   engine.wait(600, root, on=root)
-  furb_monty.engine.boot(_monty.kept(path), time=_monty.time(), world=Dead(stands=STANDS).hears())
+  furb_monty.engine.boot(journal(_monty.kept(path)), time=_monty.time(), world=Dead(stands=STANDS).hears())
   assert furb_monty.engine.pending() == [("wait1", "wait")]
 
 
@@ -451,14 +426,14 @@ async def test_the_door_parks_a_reply_that_five_lives_left_and_runs_it_again_at_
   crate does."""
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
-  root = furb_monty.engine.boot(record, store=store, world=Sand().hears())
+  root = furb_monty.engine.boot(journal(record), store=store, world=Sand().hears())
   engine.prompt(int, "count", on=root)
   await settle()
   lines = Path(path).read_text().splitlines(keepends=True)
   started = next(i for i, line in enumerate(lines) if json.loads(line)[0][:2] == ["started", "reply1"])
   crashed = tmp_path / "crashed.jsonl"
   crashed.write_text("".join(lines[: started + 1]) + lines[started] * 4)
-  furb_monty.engine.boot(_monty.kept(str(crashed)), world=Sand().hears())
+  furb_monty.engine.boot(journal(_monty.kept(str(crashed))), world=Sand().hears())
   assert (furb_monty.engine.parked(), furb_monty.engine.pending()) == ([("reply1", "reply")], [])
 
   def started() -> list[tuple]:
@@ -480,7 +455,7 @@ async def test_the_ear_of_commands_closes_as_interrupted_a_command_that_its_reco
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
   root = furb_monty.engine.boot(
-    record,
+    journal(record),
     bash=_monty.bash(str(tmp_path)),
     store=store,
     world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears(),
@@ -492,7 +467,7 @@ async def test_the_ear_of_commands_closes_as_interrupted_a_command_that_its_reco
     await asyncio.sleep(0.05)
   kept = _monty.kept(path)
   furb_monty.engine.boot(
-    kept, bash=_monty.bash(str(tmp_path)), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+    journal(kept), bash=_monty.bash(str(tmp_path)), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
   )
   assert furb_monty.engine.pending() == [("bash1", "bash")]
   engine.wake(root)
@@ -507,11 +482,11 @@ async def test_a_key_of_the_client_makes_its_act_once_in_a_life_and_in_a_later_l
   record, and another key makes another act."""
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
-  root = furb_monty.engine.boot(record, time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
+  root = furb_monty.engine.boot(journal(record), time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
   first = furb_monty.engine.keyed("k1", "wait", 600, root, on=root)
   assert (first, furb_monty.engine.keyed("k1", "wait", 600, root, on=root)) == ("wait1", "wait1")
   assert furb_monty.engine.keyed("k2", "wait", 600, root) == "wait2"
-  furb_monty.engine.boot(_monty.kept(path), time=_monty.time(), world=Dead(stands=STANDS).hears())
+  furb_monty.engine.boot(journal(_monty.kept(path)), time=_monty.time(), world=Dead(stands=STANDS).hears())
   assert furb_monty.engine.keyed("k1", "wait", 600, root, on=root) == "wait1"
 
 

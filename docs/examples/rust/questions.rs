@@ -3,6 +3,7 @@
 use std::{error::Error, io::Write};
 
 use furb::life::Life;
+use std::io;
 
 #[expect(
   clippy::disallowed_methods,
@@ -14,9 +15,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
   let deploy = life.prompt::<String>("Deploy version 2. Ask me before you deploy.")?;
   while let Some(question) = life.question(&deploy).await? {
     print!("{} ", question.message);
-    std::io::stdout().flush()?;
+    io::stdout().flush()?;
     let mut line = String::new();
-    std::io::stdin().read_line(&mut line)?;
+    io::stdin().read_line(&mut line)?;
     question.answer(&mut life, line.trim())?;
   }
   println!("{}", life.wait(deploy).await?);

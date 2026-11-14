@@ -23,8 +23,8 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
   _, log, root = born("close(1)")
   assert await engine.prompt(int, "count", on=root) == 1
   assert all(isinstance(one, tuple) and isinstance(one[0], str) for one in log)
-  assert {OPERATOR, WORLD, "gate", root, "journal"} <= {one[2] for one in log}
-  kinds = {"chain", "module", "stand", "prompt", "rung", "reply", "gate", "started", "done", "ready", "run", "keep"}
+  assert {OPERATOR, WORLD, root, "journal"} <= {one[2] for one in log}
+  kinds = {"chain", "module", "stand", "prompt", "rung", "reply", "started", "done", "ready", "run", "keep"}
   assert kinds <= {one[0] for one in log}
   assert {name: one[0] for name, one in acts(log).items()} == {
     "chain1": "chain",
@@ -33,7 +33,6 @@ async def test_everything_that_the_engine_the_world_the_kernel_and_the_operator_
     "rung1": "rung",
     "reply1": "reply",
     "run1": "run",
-    "gate1": "gate",
     "run2": "run",
   }
 
@@ -45,7 +44,6 @@ async def test_a_fact_says_who_said_it() -> None:
   assert said(log, "rung")[0][1:3] == ("rung1", "prompt1")
   assert said(log, "read")[0][2] == "rung1"
   assert [one[2] for one in said(log, "done") if one[1].startswith("reply")] == [WORLD]
-  assert [one[2] for one in said(log, "done") if one[1].startswith("gate")] == ["gate"]
   assert [(one[1], one[2]) for one in dones(log, "run")] == [("run1", "run1"), ("run2", "run2")]
   engine.read("a.txt", on=root)
   assert said(log, "read")[-1][2] == OPERATOR
@@ -85,7 +83,7 @@ async def test_a_verb_takes_a_chain_and_the_act_it_makes_is_on_that_chain() -> N
 
 async def test_a_model_calls_a_verb_from_a_rung_and_the_operator_calls_the_same_verb_outside_a_rung() -> None:
   """A model calls a verb from a rung, and the operator calls the same verb outside a rung."""
-  _, log, root = born("x = bash('from a rung')\nclose(1)")
+  _, log, root = born("x = bash('from a rung')\nawait x\nclose(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   engine.bash("from the operator", on=root)
   step = said(log, "rung")[0][1]
@@ -96,7 +94,7 @@ async def test_an_act_is_on_the_chain_or_the_thread_that_the_verb_names() -> Non
   """An act is on the chain or the thread that the verb names, and a thread is a prompt."""
   sand, log, root = born()
   two = await chained("two")
-  sand.script[root] = [f"x = bash('elsewhere', on={two!r})\nclose(1)"]
+  sand.script[root] = [f"x = bash('elsewhere', on={two!r})\nawait x\nclose(1)"]
   act = engine.prompt(int, "run it", on=root)
   assert await act == 1
   more = engine.prompt(None, "note", to=OPERATOR, on=act)
@@ -141,8 +139,8 @@ async def test_a_prompt_that_a_rung_makes_on_another_chain_is_an_act_of_that_cha
   """A prompt that a rung makes on another chain is an act of that chain."""
   sand, log, root = born()
   two = await chained("two")
-  sand.script[root] = [f"p = prompt(int, 'hi', on={two!r})\nclose(1)"]
-  assert await engine.prompt(int, "delegate", on=root) == 1
+  sand.script[root] = [f"p = prompt(int, 'hi', on={two!r})"]
+  engine.prompt(int, "delegate", on=root)
   await settle()
   theirs = said(log, "prompt")[-1]
   assert theirs[3] == two

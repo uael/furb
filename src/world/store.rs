@@ -10,9 +10,11 @@ use std::{
   cell::RefCell,
   collections::VecDeque,
   ffi::OsStr,
-  fs::{File, OpenOptions, TryLockError, create_dir_all},
+  fs::{self, File, OpenOptions, TryLockError, create_dir_all},
+  io::{BufRead, BufReader, Read, Seek, SeekFrom},
   path::Path,
   rc::Rc,
+  slice,
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -21,22 +23,32 @@ use futures::stream;
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 
-use monty_types::unstable::{MontyGraph, MontyNode};
+use monty_types::{
+  NamedValues,
+  unstable::{MontyGraph, MontyNode},
+};
 
 use self::error::StoreError;
 use super::{beside, free};
 use crate::{
-  ENGINE, KERNEL,
+  CHECKPOINTER, ENGINE, KERNEL,
   ear::{Co, Ear, Hooks, Next, With, hearing, say},
   engine::ROOT,
   fact::Fact,
-  value::{Fault, Object, ObjectRef},
+  sand::{Nobody, Sand},
+  value::{Fault, Object, ObjectRef, entry},
   wire::{built, whole},
 };
 
+use crate::checkpoint;
+use crate::fact;
 pub use lines::Lines;
+use lines::Tail;
+pub(crate) use lines::spoken;
 pub use schema::{CHECKPOINT_SCHEMA, RECORD_SCHEMA, Schema, SchemaError};
 pub use sqlite::Sqlite;
+use std::io;
+use tokio::time;
 
 /// The place that keeps the record of a life, which a host can write for a place of its own and give to `keeping`.
 ///
@@ -64,6 +76,13 @@ pub trait Store {
   fn room(&self) -> Option<(&Path, u64)> {
     None
   }
+
+  /// The bytes of a last line that a stop tore as it was written, which the entries passed over and
+  /// the next keep cuts, so the life tells the operator once. A store that tears no line gives
+  /// nothing.
+  fn cut(&self) -> Option<u64> {
+    None
+  }
 }
 
 /// The room of the record at a path: the folder that holds it and the bytes that its disk still
@@ -81,6 +100,112 @@ pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Faul
   keeping(Format::of(path).open(path)?)
 }
 
+/// The entries of a record that a life opens on: those from its last checkpoint on, or each entry
+/// of a record that holds none. A file of lines is read from that checkpoint, which the read finds
+/// from the end of the file, so an open passes and parses no line before it. A database gives each
+/// of its entries.
+#[derive(Default)]
+pub(crate) struct Last {
+  pub entries: Vec<Object>,
+  /// The byte of the file of lines where the first of them starts, and 0 for a database.
+  pub from: u64,
+  /// The byte of the file of lines where the read ended, and how the last line ends there.
+  end: u64,
+  tail: Tail,
+}
+
+/// The last entries of the record at a path, under its lease, and the ear that [`store`] gives. A
+/// file of lines that still ends where a read with no lease ended holds what that read gave, so
+/// the store takes those entries and reads no line. Else it reads them, with the bytes that the
+/// read passed told after each line. A database reads each time and tells none.
+pub(crate) fn stored(
+  path: &Path,
+  read: Option<Last>,
+  reached: &mut dyn FnMut(u64),
+) -> Result<(Last, Box<dyn Ear>), Fault> {
+  match Format::of(path) {
+    Format::Sqlite => {
+      let (entries, ear) = keeping(Sqlite::open(path)?)?;
+      Ok((Last { entries, ..Last::default() }, ear))
+    }
+    Format::Lines => {
+      let mut store = Lines::open(path)?;
+      let Last { entries, from, end, tail } = store.last(read, reached)?;
+      let (entries, ear) = kept_by(store, Some(entries));
+      Ok((Last { entries, from, end, tail }, ear))
+    }
+  }
+}
+
+/// The entries of the record at a path that stand after the first `bytes` bytes of its file of
+/// lines, where the image of a life stands, and, for a life that keeps the record, the ear that
+/// [`store`] gives, under the lease of the record. The life of the image kept each entry before
+/// those bytes, so the record names its engine already, and a life that crashed after it went on
+/// from the image kept each entry after them: the life that opens from the image says them again,
+/// as a boot says a record again. Nothing when no life goes on from the image: the record is
+/// shorter than those bytes, or an entry after them is a checkpoint or names an engine, since each
+/// fact after such an entry comes from a life that was born on it.
+pub(crate) fn stored_after(path: &Path, bytes: u64, keeps: bool) -> Result<Option<After>, Fault> {
+  let mut store = keeps.then(|| Lines::open(path)).transpose()?;
+  if fs::metadata(path).is_ok_and(|held| held.len() < bytes) {
+    return Ok(None);
+  }
+  let (entries, tail) = lines::after(path, bytes)?;
+  let fact = |entry: &Object| entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+  if entries.iter().any(|entry| fact(entry).is_some_and(|one| born(one.kind()))) {
+    return Ok(None);
+  }
+  if let Some(store) = &mut store {
+    store.ends(tail);
+  }
+  Ok(Some(After { entries, store: store.map(|store| kept_by(store, None).1) }))
+}
+
+/// Whether a fact of this kind is a birth that the facts after it come from: a checkpoint, or the
+/// fact that names an engine.
+fn born(kind: &str) -> bool {
+  matches!(kind, checkpoint::CHECKPOINT | MADE)
+}
+
+/// Whether a life of the image that stands at the first `bytes` bytes of the file of lines at a
+/// path can go on from it, as [`stored_after`] says, read from the start of each line after those
+/// bytes alone, with no lease and no parse: a host asks it before an open.
+pub(crate) fn goes_after(path: &Path, bytes: u64) -> bool {
+  let from = |mut file: File| file.seek(SeekFrom::Start(bytes)).map(|_| file);
+  let Ok(file) = File::open(path).and_then(from) else { return false };
+  let (mut lines, mut head) = (BufReader::with_capacity(1 << 16, file), Vec::new());
+  loop {
+    head.clear();
+    match lines.by_ref().take(256).read_until(b'\n', &mut head) {
+      Ok(0) => return true,
+      Ok(_) if spoken(&head).is_some_and(|[kind, ..]| born(kind)) => return false,
+      Ok(_) if head.ends_with(b"\n") => {}
+      Ok(_) if lines.skip_until(b'\n').is_ok() => {}
+      _ => return false,
+    }
+  }
+}
+
+/// What [`stored_after`] gives: the entries after an image, and the ear of the store of a life
+/// that keeps the record.
+#[derive(Default)]
+pub(crate) struct After {
+  pub entries: Vec<Object>,
+  pub store: Option<Box<dyn Ear>>,
+}
+
+/// The last entries of the record at a path, read with no lease and changed in nothing, as a later
+/// life would open on them, with the bytes of a file of lines that the read passed told after each
+/// line.
+pub(crate) fn last(path: &Path, reached: &mut dyn FnMut(u64)) -> Result<Last, Fault> {
+  let format = Format::of(path);
+  let last = match format {
+    Format::Sqlite => Last { entries: format.kept(path)?, ..Last::default() },
+    Format::Lines => lines::last(path, reached)?,
+  };
+  Ok(Last { entries: last.entries.into_iter().map(streamed).collect(), ..last })
+}
+
 /// What the store kept at a path, read with no lease and changed in nothing on the disk, as a later life would open
 /// on it.
 pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
@@ -95,64 +220,113 @@ pub(crate) fn each(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Resu
   Ok(Format::of(path).each(path, take)?)
 }
 
-/// The entries that the store kept at a path whose fact is of one of some kinds, in order, read with no lease and
-/// changed in nothing. A file of lines is read from the head of each line, and parses only the lines of those kinds.
-pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Fault> {
+/// The place of each checkpoint of the record at a path among its entries, counted from 0, in
+/// order, read with no lease and changed in nothing. A file of lines is read from the start of each
+/// line, and no line is parsed.
+pub fn checkpoints(path: impl AsRef<Path>) -> Result<Vec<usize>, Fault> {
   let path = path.as_ref();
-  let format = Format::of(path);
-  if format == Format::Lines {
-    let starts: Vec<String> = kinds.iter().map(|kind| format!("[[\"{kind}\",")).collect();
-    return Ok(lines::heads(path, &starts)?);
-  }
-  let of = |entry: &Object| {
-    let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-    fact.is_some_and(|one| kinds.contains(&one.kind()))
+  let (mut places, mut place) = (Vec::new(), 0);
+  let mut pass = |checkpoint: bool| {
+    places.extend(checkpoint.then_some(place));
+    place += 1;
   };
-  Ok(format.kept(path)?.into_iter().filter(of).collect())
+  match Format::of(path) {
+    Format::Lines => {
+      let checkpoint = format!("[[\"{}\",", checkpoint::CHECKPOINT);
+      let mut wanted = |line: &[u8]| {
+        pass(line.starts_with(checkpoint.as_bytes()));
+        false
+      };
+      lines::heads(path, u64::MAX, &mut wanted, &mut |_| {})?;
+      // A checkpoint that a stop tore as the store wrote it is the last line, and no entry.
+      if lines::torn(path, checkpoint.as_bytes())? {
+        places.pop();
+      }
+    }
+    Format::Sqlite => sqlite::each(path, &mut |entry| {
+      let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+      pass(fact.is_some_and(|a| a.kind() == checkpoint::CHECKPOINT));
+    })?,
+  }
+  Ok(places)
 }
 
-/// The standing that the last answered stand of the record at a path gave, read as [`heads`]
-/// reads, or nothing when it holds none. A file of lines parses only the lines of the done of a
-/// stand.
-pub fn standing(path: impl AsRef<Path>) -> Result<Option<Object>, Fault> {
-  let path = path.as_ref();
-  let format = Format::of(path);
-  let entries = if format == Format::Lines {
-    lines::heads(path, &[r#"[["done","stand"#.to_owned()])?
-  } else {
-    format.kept(path)?
-  };
-  Ok(entries.iter().rev().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
-    let value = fact.word(0)?;
-    let stood =
-      fact.kind() == "done" && crate::fact::named(fact.about(), "stand") && value.items().is_some();
-    stood.then(|| value.to_owned())
-  }))
+/// The start of each line of the file of lines at a path that starts before a byte, and the entry
+/// of each line that `wanted` says to parse, as [`lines::heads`] gives them: what a reader takes of
+/// the entries before the last ones with no parse of them, each entry as this build reads it. A
+/// database holds none before byte 0.
+pub(crate) fn heads(
+  path: &Path,
+  to: u64,
+  wanted: &mut dyn FnMut(&[u8]) -> bool,
+  take: &mut dyn FnMut(Object),
+) -> Result<(), Fault> {
+  match to {
+    0 => Ok(()),
+    _ => Ok(lines::heads(path, to, wanted, &mut |entry| take(streamed(entry)))?),
+  }
+}
+
+/// The name of the act that the fact of a line of a record asks, read from the start of the line
+/// alone: nothing for a fact that is no question, and for a writing that an older build kept as a
+/// question, which this build reads as a fact, as [`streamed`] says.
+pub(crate) fn asks(line: &[u8]) -> Option<&str> {
+  let [kind, name, _] = spoken(line)?;
+  (fact::named(name, kind) && kind != WRITING).then_some(name)
+}
+
+/// The fact made of the build that wrote the checkpoint which the last entries of the record at a
+/// path start with, at a byte of its file of lines: the last fact made before that byte, which the
+/// read finds from it toward the start of the file. Nothing before byte 0.
+pub(crate) fn made_before(path: &Path, to: u64) -> Result<Option<Object>, Fault> {
+  match to {
+    0 => Ok(None),
+    _ => Ok(lines::before(path, format!("[[\"{MADE}\",").as_bytes(), to)?),
+  }
+}
+
+/// The standing that the last answered stand gave among the entries of the file of lines at a path
+/// that start before a byte, of which the read parses only the done of each stand.
+pub(crate) fn stood_before(path: &Path, to: u64) -> Result<Option<Object>, Fault> {
+  let mut standing = None;
+  let mut wanted = |line: &[u8]| line.starts_with(b"[[\"done\",\"stand");
+  heads(path, to, &mut wanted, &mut |entry| standing = stood(&entry).or(standing.take()))?;
+  Ok(standing)
+}
+
+/// The standing that an entry gives, when it is the done of a stand of the root: the value of that
+/// done, when it is a list. This is the one place that finds the answer of a stand.
+pub fn stood(entry: &Object) -> Option<Object> {
+  let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+  let value = fact.word(0)?;
+  let stood =
+    fact.kind() == "done" && fact::named(fact.about(), "stand") && value.items().is_some();
+  stood.then(|| value.to_owned())
 }
 
 /// The kind of the fact by which a record names the build that made it: `("made", "chain1",
-/// "store", engine, version, schema, release, source, kernel)`, where engine is what [`engine`]
-/// gives, version is null, which a build before the texts gave its version of the replay, schema
-/// is [`RECORD_SCHEMA`], release is the release of furb that
-/// made it, as `0.4.2`, and source and kernel are the texts of its engine and of its Kernel, which
-/// a later life runs to replay the segment that the fact begins, as [`texts`] says. A record of a
-/// build before the texts holds none, one of a build before the versions holds no version, and one
-/// of a build before the schemas holds no schema and no release. No contract holds it, so this is
-/// the one home of its shape.
+/// "store", engine, version, schema, release, source, kernel, checkpointer)`, where engine is what
+/// [`engine`] gives, version is null, which a build before the texts gave its version of the
+/// replay, schema is [`RECORD_SCHEMA`], release is the release of furb that made it, as `0.4.2`,
+/// and source and kernel are the texts of its engine and of its Kernel, which a later life runs to
+/// replay the segment that the fact begins, as [`texts`] says. A record of a build before the texts
+/// holds none, one of a build before the versions holds no version, and one of a build before the
+/// schemas holds no schema and no release. No contract holds it, so this is the one home of its
+/// shape.
 pub const MADE: &str = "made";
 
-/// The engine of this build, which a record names: a digest of the engine and of the Kernel, which make each act of
-/// a replay. Another engine can make other acts from the same record, so a record replays only on the engine that
-/// made it.
+/// The engine of this build, which a record names: a digest of the engine, of the Kernel and of the
+/// checkpointer, which make each act of a replay and each birth. Another engine can make other acts
+/// from the same record, so a record replays only on the engine that made it.
 pub fn engine() -> String {
-  digest(ENGINE, KERNEL)
+  digest(&[ENGINE, KERNEL, CHECKPOINTER])
 }
 
-/// The digest of the texts of an engine and of its Kernel, which a fact made names.
-fn digest(source: &str, kernel: &str) -> String {
+/// The digest of the texts of an engine, of its Kernel and of its checkpointer, which a fact made
+/// names.
+fn digest(texts: &[&str]) -> String {
   let mut hash = Sha256::new();
-  for one in [source, kernel] {
+  for one in texts {
     hash.update(one.as_bytes());
     hash.update([0]);
   }
@@ -167,22 +341,92 @@ pub fn made(record: &[Object]) -> Option<String> {
   })
 }
 
-/// The texts of the engine and of the Kernel that a segment of a record runs on: those that its
-/// last fact made holds, or this build's own when it holds none. Texts that are not the engine that
-/// their fact names refuse the record.
-pub fn texts(record: &[Object]) -> Result<(String, String), Fault> {
-  let held = record.iter().rev().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
-    let word = |at| fact.word(at).and_then(|one| one.as_str().map(str::to_owned));
-    (fact.kind() == MADE).then(|| (word(0), word(4), word(5)))
-  });
-  let Some((Some(named), Some(source), Some(kernel))) = held else {
-    return Ok((ENGINE.to_owned(), KERNEL.to_owned()));
+/// The texts of the engine, of the Kernel and of the checkpointer that a segment of a record runs
+/// on: those that its last fact made holds, or this build's own when it holds none. A fact made of
+/// a build before the checkpointer holds no text of it, which stands as an empty text, since the
+/// engine of that build gathers and seeds its checkpoints itself. Texts that are not the engine
+/// that their fact names refuse the record.
+pub fn texts(record: &[Object]) -> Result<(String, String, String), Fault> {
+  let Some([Some(named), Some(source), Some(kernel), checkpointer]) = held(record) else {
+    return Ok((ENGINE.to_owned(), KERNEL.to_owned(), CHECKPOINTER.to_owned()));
   };
-  if digest(&source, &kernel) != named {
+  let checkpointer = checkpointer.unwrap_or_default();
+  let all = [source.as_str(), kernel.as_str(), checkpointer.as_str()];
+  if digest(if checkpointer.is_empty() { &all[..2] } else { &all }) != named {
     return Err(Fault::refused(format!(
       "the record names the engine {named}, and the texts that it holds are another engine"
     )));
+  }
+  let (source, kernel) = adapted(&named, source, &kernel)?;
+  Ok((source, kernel, checkpointer))
+}
+
+/// The entry of the fact made of the texts that a segment of a record runs on, as [`texts`] gives
+/// them: its last fact made when that fact holds the texts of its engine, or the fact made of this
+/// build. A life writes it after its checkpoint, so the life born on that checkpoint runs the same
+/// texts.
+pub fn running(record: &[Object]) -> Object {
+  let made = |entry: &&Object| {
+    entry
+      .as_ref()
+      .items()
+      .and_then(|held| Fact::of(*held.first()?))
+      .is_some_and(|one| one.kind() == MADE)
+  };
+  match record.iter().rev().find(made) {
+    Some(last) if matches!(held(slice::from_ref(last)), Some([Some(_), Some(_), Some(_), _])) => {
+      last.clone()
+    }
+    _ => {
+      let said = [MADE, ROOT, "store"].map(Object::string);
+      Object::list([Object::list(said.into_iter().chain(build()))])
+    }
+  }
+}
+
+/// The digest, the engine, the Kernel and the checkpointer that the last fact made of a segment
+/// names and holds.
+fn held(record: &[Object]) -> Option<[Option<String>; 4]> {
+  record.iter().rev().find_map(|entry| {
+    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    let word = |at| fact.word(at).and_then(|one| one.as_str().map(str::to_owned));
+    (fact.kind() == MADE).then(|| [word(0), word(4), word(5), word(6)])
+  })
+}
+
+/// The engine that the last fact made of a segment names when it holds no texts of it and it is not
+/// the engine of this build, which [`texts`] then gives in its place.
+pub fn unheld(record: &[Object]) -> Option<String> {
+  match held(record)? {
+    [_, Some(_), Some(_), _] => None,
+    [named, ..] => named.filter(|one| !one.is_empty() && *one != engine()),
+  }
+}
+
+/// The adapters of the engines of this major, by the digest of an engine, as `src/furb/adapters.py`
+/// says.
+const ADAPTERS: &str = include_str!("../furb/adapters.py");
+
+/// The texts of the engine that a digest names and of its Kernel: the engine with each change of
+/// its adapter made, or as it is when no adapter names it, and the Kernel as `kernel` of the
+/// adapters gives it. A change whose text the engine does not hold is refused, since the adapter
+/// is then of another engine.
+fn adapted(named: &str, mut source: String, kernel: &str) -> Result<(String, String), Fault> {
+  let mut inputs = NamedValues::new();
+  inputs.push("__named", Object::string(named));
+  inputs.push("__kernel", Object::string(kernel));
+  inputs.push("__ours", Object::string(KERNEL));
+  let word = format!("{ADAPTERS}\n(ADAPTERS.get(__named, []), kernel(__kernel, __ours))");
+  let got = Sand::new().run(&word, inputs, &mut Nobody("the adapters"))?;
+  let got = got.as_ref();
+  let kernel = entry(&got, 1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+  for change in entry(&got, 0).and_then(|one| one.items()).unwrap_or_default() {
+    let text = |at| entry(&change, at).and_then(|one| one.as_str().map(str::to_owned));
+    let (Some(old), Some(new)) = (text(0), text(1)) else { continue };
+    if !source.contains(&old) {
+      return Err(Fault::refused(format!("the adapter of the engine {named} finds no {old:?}")));
+    }
+    source = source.replacen(&old, &new, 1);
   }
   Ok((source, kernel))
 }
@@ -237,22 +481,28 @@ fn streamed(entry: Object) -> Object {
   Object::list([Object::list(said)])
 }
 
-/// The fact made of this build: its engine, no version, the schema of its record,
-/// its release, and the texts of its engine and of its Kernel.
+/// The fact made of this build, as the store says it.
 fn named() -> Fact {
-  let build = [
+  Fact::says(MADE, ROOT, build())
+}
+
+/// The words of the fact made of this build: its engine, no version, the schema of its record, its
+/// release, and the texts of its engine, of its Kernel and of its checkpointer.
+fn build() -> [Object; 7] {
+  [
     Object::string(engine()),
     Object::none(),
     RECORD_SCHEMA.object(),
     Object::string(env!("CARGO_PKG_VERSION")),
     Object::string(ENGINE),
     Object::string(KERNEL),
-  ];
-  Fact::says(MADE, ROOT, build)
+    Object::string(CHECKPOINTER),
+  ]
 }
 
 /// How long the ear of the record waits before it tries again to write the entries that it could not write.
-const AGAIN: Duration = Duration::from_secs(5);
+/// A try that fails costs one write that the system refuses.
+const AGAIN: Duration = Duration::from_secs(1);
 
 /// The free bytes of the disk of the record under which the ear tells the operator that the disk is
 /// almost full. It tells again only once the disk held twice as much, so a disk that stands near
@@ -272,28 +522,35 @@ enum Told {
 
 /// The record that a store holds, and the ear that keeps in the store what the journal says to keep.
 ///
-/// A new record names the engine and the version of this build: the ear says them as it hears the root at its birth,
-/// so a later life says them again at the same place. A record of a build before the fact made names no engine, and
-/// stays so, since this engine did not make it.
+/// A new record names the engine and the version of this build: the ear says them as it hears the
+/// root at its birth, so a later life says them again at the same place, and so does the first life
+/// after a checkpoint of an earlier build that holds no fact made after it. A record of a build
+/// before the fact made names no engine, and stays so, since this engine did not make it.
 ///
-/// The ear tells the operator once when the disk of the record holds less than [`LOW`] free, with
+/// The ear tells the operator once of the bytes of a torn last line that the open passed over.
+/// It tells the operator once when the disk of the record holds less than [`LOW`] free, with
 /// the folder and the space left, before a keep fails. An entry that the store cannot keep, as on a
 /// full disk, waits in memory with each entry after it, and the ear tries again in order at each
 /// keep, at the end of each run and every few seconds, until they land: no entry is lost or kept
 /// twice, and the life goes on. The ear tells the operator once when the record stops growing, with
 /// the fault, and once when it grows again. A message that did not go is said again at the next
 /// pass.
-pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
-  let mut store = Held { store, waiting: VecDeque::new(), fault: None };
-  let entries: Vec<Object> = store.store.entries()?.into_iter().map(streamed).collect();
+pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
+  let entries = store.entries()?;
+  Ok(kept_by(store, Some(entries)))
+}
+
+/// The record and the ear of [`keeping`], for a store whose entries were read. A store that read
+/// none, of a record that names its engine, gives no record.
+fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Object>, Box<dyn Ear>) {
+  let store = Held { store, waiting: VecDeque::new(), fault: None };
   let store = Rc::new(RefCell::new(store));
   let held = Rc::clone(&store);
-  // A record whose last checkpoint has no fact made after it is new to the build that goes on from it.
-  let new = entries.is_empty()
-    || crate::checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
+  let new = read.as_deref().is_some_and(unnamed);
+  let entries: Vec<Object> = read.into_iter().flatten().map(streamed).collect();
   let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
     // What the ear told the operator last, and whether a try waits for its time.
-    let (mut said, mut again) = (Told::Room, false);
+    let (mut said, mut again, mut cut) = (Told::Room, false, held.borrow().store.cut());
     loop {
       match co.next().await {
         Next::Heard(a) | Next::Resumed(a) => match a.kind() {
@@ -309,12 +566,17 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
         },
         Next::Worked(()) => again = false,
       }
+      if let Some(bytes) = cut
+        && told(&mut co, torn(bytes)).await.is_ok()
+      {
+        cut = None;
+      }
       let fault = held.borrow_mut().flushed();
       match fault {
         Some(fault) => {
           if !again {
             again = true;
-            co.work(stream::once(tokio::time::sleep(AGAIN)));
+            co.work(stream::once(time::sleep(AGAIN)));
           }
           if said != Told::Stopped {
             // A message that cannot go leaves what the ear said, so the next pass says it again.
@@ -341,7 +603,14 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
       }
     }
   });
-  Ok((entries, With::ear(kept, store)))
+  (entries, With::ear(kept, store))
+}
+
+/// Whether a record names no engine for the build that goes on from it: it holds no entry, or its
+/// last checkpoint has no fact made after it.
+fn unnamed(entries: &[Object]) -> bool {
+  entries.is_empty()
+    || checkpoint::last(entries).is_some_and(|at| made(&entries[at + 1..]).is_none())
 }
 
 /// The message that the record stopped growing, with the fault of the store.
@@ -349,8 +618,17 @@ fn stopped(fault: &Fault) -> String {
   format!(
     "The record of this life cannot be written: {}. The life goes on, and holds in memory each fact \
      that the record does not hold yet. It tries again until the record takes them, in order, and tells \
-     you then. Until then, an end of the life loses them: give the disk room, and keep the life open.",
+     you then. Give the disk room.",
     fault.message()
+  )
+}
+
+/// The message that the open of the record passed over a last line that a stop tore as it was
+/// written.
+fn torn(bytes: u64) -> String {
+  format!(
+    "The last line of the record of this life was torn as it was written, so the life opened \
+     without it: it cut {bytes} bytes, a part of one fact that the record never held whole."
   )
 }
 
@@ -381,8 +659,7 @@ impl<S: Store> Held<S> {
     (free < LOW && *said == Told::Room).then(|| {
       format!(
         "The disk of the record of this life is almost full: {} has {} MB left. When it is full, the \
-         life holds each fact in memory until the record takes them again, and an end of the life then \
-         loses them: give the disk room.",
+         life holds each fact in memory until the record takes them again: give the disk room.",
         folder.display(),
         free / 1_000_000
       )
@@ -440,6 +717,10 @@ impl<S: Store + ?Sized> Store for Box<S> {
 
   fn room(&self) -> Option<(&Path, u64)> {
     (**self).room()
+  }
+
+  fn cut(&self) -> Option<u64> {
+    (**self).cut()
   }
 }
 
@@ -517,7 +798,7 @@ impl Drop for Lease {
     reason = "a drop cannot return the fault of an unlock, and the kernel ends the lock with the process"
   )]
   fn drop(&mut self) {
-    let _: std::io::Result<()> = self.0.unlock();
+    let _: io::Result<()> = self.0.unlock();
   }
 }
 

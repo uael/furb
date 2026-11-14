@@ -4,10 +4,13 @@
 //! crate reads a fact as the tuple it is and nothing more: what a kind means is the engine's, and a host that
 //! hears facts reads the ones it knows by position, as the contract declares them.
 
+use serde::{Deserialize, Serialize};
+
 use crate::value::{Object, ObjectRef, entry};
 
 /// One fact of a life, as the tuple the engine said.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Fact(pub Object);
 
 impl Fact {
@@ -16,24 +19,24 @@ impl Fact {
   pub fn says(kind: &str, about: &str, words: impl IntoIterator<Item = Object>) -> Self {
     let mut held = vec![Object::string(kind), Object::string(about)];
     held.extend(words);
-    Fact(Object::tuple(held))
+    Self(Object::tuple(held))
   }
 
   /// One fact or saying from an object, which must be a tuple whose kind and about are text: a fact has who said
   /// it third, and a saying has its first word there.
-  pub fn of(said: ObjectRef<'_>) -> Option<Fact> {
+  pub fn of(said: ObjectRef<'_>) -> Option<Self> {
     let held = said.items()?;
     (held.len() >= 2 && held[..2].iter().all(|one| one.as_str().is_some()))
-      .then(|| Fact(said.to_owned()))
+      .then(|| Self(said.to_owned()))
   }
 
   /// One fact or saying from an object that it takes, as [`Fact::of`] reads it, with no copy of the object.
-  pub fn owned(said: Object) -> Option<Fact> {
+  pub fn owned(said: Object) -> Option<Self> {
     let fits = said
       .as_ref()
       .items()
       .is_some_and(|held| held.len() >= 2 && held[..2].iter().all(|one| one.as_str().is_some()));
-    fits.then_some(Fact(said))
+    fits.then_some(Self(said))
   }
 
   /// The kind of the fact, which is its first entry.

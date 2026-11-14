@@ -3,16 +3,19 @@
 
 use std::{fs, path::Path};
 
-use super::{Lines, Sqlite, Store, digest, keeping, kept, store, texts};
+use super::{Lines, Sqlite, Store, checkpoints, digest, keeping, kept, last, store, texts, unheld};
+use crate::checkpoint::standing;
 use crate::testing::Yard;
+use crate::value;
 use crate::{
   value::{Fault, Object},
   wire::parsed,
 };
+use std::process;
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str, file: &str) -> Yard {
-  Yard::new(format!("furb-store-{name}-{}", std::process::id())).within(file)
+  Yard::new(format!("furb-store-{name}-{}", process::id())).within(file)
 }
 
 /// The entries that the suite keeps: facts that hold text on many lines and past ASCII, numbers, nothing, and lists
@@ -126,6 +129,46 @@ macro_rules! conformance {
       }
 
       #[test]
+      fn the_standing_of_a_record_is_the_list_that_its_last_done_of_a_stand_gave() {
+        let path = at("standing");
+        let stood = |path: &Path| standing(&last(path, &mut |_| {}).unwrap().entries);
+        assert!(stood(&path).is_none());
+        let mut one = open(&path).unwrap();
+        one.entries().unwrap();
+        let first = "[['first'], 1]";
+        let last = "[['last'], '\u{2665}', None]";
+        for (entry, want) in [
+          (r#"[["done","stand1","operator",[["first"],1]]]"#, first),
+          (r#"[["tell","rung2","chain1",["a stand is not here"]]]"#, first),
+          (r#"[["done","stand7","operator",[["last"],"\u2665",null]]]"#, last),
+          (r#"[["done","stand9","operator","refused"]]"#, last),
+          (r#"[["done","bash3","operator",[["not","a","stand"]]]]"#, last),
+          (r#"[["stand","stand11","operator","chain1"]]"#, last),
+        ] {
+          one.keep(parsed(entry).unwrap().as_ref()).unwrap();
+          let held = stood(&path).map(|got| got.as_ref().py_repr());
+          assert_eq!(held.as_deref(), Some(want), "{entry}");
+        }
+      }
+
+      #[test]
+      fn the_places_of_the_checkpoints_of_a_record_count_each_entry_before_them() {
+        let path = at("checkpoints");
+        assert_eq!(checkpoints(&path).unwrap(), [0usize; 0]);
+        let mut one = open(&path).unwrap();
+        one.entries().unwrap();
+        for entry in [
+          r#"[["stand","stand1","operator","chain1"]]"#,
+          r#"[["checkpoint","chain1","store",{}]]"#,
+          r#"[["tell","rung2","chain1",["[[\"checkpoint\", in a text"]]]"#,
+          r#"[["checkpoint","chain1","store",{"schema":"2.0"}]]"#,
+        ] {
+          one.keep(parsed(entry).unwrap().as_ref()).unwrap();
+        }
+        assert_eq!(checkpoints(&path).unwrap(), [1, 3]);
+      }
+
+      #[test]
       fn the_store_of_a_path_whose_name_ends_so_is_this_store() {
         let path = at("named");
         let (record, ear) = store(&path).unwrap();
@@ -192,7 +235,7 @@ impl Store for Refusing {
     Ok(Vec::new())
   }
 
-  fn keep(&mut self, _: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+  fn keep(&mut self, _: value::ObjectRef<'_>) -> Result<(), Fault> {
     Err(Fault::refused("No space left on device (os error 28): the record"))
   }
 
@@ -253,7 +296,7 @@ impl Store for Disk {
     self.lines.entries()
   }
 
-  fn keep(&mut self, entry: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+  fn keep(&mut self, entry: value::ObjectRef<'_>) -> Result<(), Fault> {
     if self.space.full.get() {
       return Err(Fault::refused("No space left on device (os error 28): the record"));
     }
@@ -346,25 +389,74 @@ fn a_record_on_a_disk_that_is_almost_full_tells_the_operator_once_with_its_folde
 }
 
 #[test]
+fn a_record_whose_last_line_a_stop_tore_tells_the_operator_once_the_bytes_that_its_open_cut() {
+  let path = place("torn-told", "record.jsonl");
+  let entries = facts();
+  Lines::open(&path).unwrap().keep(entries[0].as_ref()).unwrap();
+  let mut text = fs::read(&path).unwrap();
+  text.extend_from_slice(b"[[\"stand\",\"sta");
+  fs::write(&path, text).unwrap();
+  let (record, mut ear) = keeping(Lines::open(&path).unwrap()).unwrap();
+  assert_eq!(record.len(), 1, "the open holds each line written whole");
+  let wake = waker();
+  assert!(matches!(ear.resume(Heard::Born, &mut Context::from_waker(&wake)), Step::Wait(_)));
+  let told = pass(&mut ear, &entries[1]).expect("the first pass tells the bytes that the open cut");
+  assert!(told.contains("it cut 14 bytes"), "{told}");
+  assert_eq!(pass(&mut ear, &entries[2]), None, "the operator knows already");
+  assert_eq!(kept(&path).unwrap().len(), 3, "the keep cut the torn line and kept each entry");
+}
+
+/// A fact made of the engine that a digest names, with the texts given.
+fn made_of(engine: &str, held: &[&str]) -> Object {
+  let mut fact = serde_json::json!(["made", "chain1", "store", engine, 9, "1.0", "0.4.2"]);
+  fact.as_array_mut().unwrap().extend(held.iter().map(|one| serde_json::json!(one)));
+  parsed(&serde_json::json!([fact]).to_string()).unwrap()
+}
+
+#[test]
 fn the_texts_of_a_segment_are_those_of_its_last_fact_made_and_must_be_the_engine_that_it_names() {
-  let made = |engine: &str, held: &[&str]| {
-    let mut fact = serde_json::json!(["made", "chain1", "store", engine, 9, "1.0", "0.4.2"]);
-    fact.as_array_mut().unwrap().extend(held.iter().map(|one| serde_json::json!(one)));
-    parsed(&serde_json::json!([fact]).to_string()).unwrap()
-  };
-  let (source, kernel) = ("x = 1\n", "y = 2\n");
-  let (named, other) = (digest(source, kernel), "0".repeat(64));
-  let ours = (crate::ENGINE.to_owned(), crate::KERNEL.to_owned());
+  let (source, kernel, checkpointer) = ("x = 1\n", "y = 2\n", "z = 3\n");
+  let (named, other) = (digest(&[source, kernel]), "0".repeat(64));
+  let ours = (crate::ENGINE.to_owned(), crate::KERNEL.to_owned(), crate::CHECKPOINTER.to_owned());
   assert_eq!(
-    texts(&[made(&other, &[])]).unwrap(),
+    texts(&[made_of(&other, &[])]).unwrap(),
     ours,
     "a fact made with no texts runs this build"
   );
-  let segment = [made(&other, &[]), made(&named, &[source, kernel])];
+  let segment = [made_of(&other, &[]), made_of(&named, &[source, kernel])];
   assert_eq!(
     texts(&segment).unwrap(),
-    (source.to_owned(), kernel.to_owned()),
+    (source.to_owned(), kernel.to_owned(), String::new()),
+    "the last one counts, and a fact made before the checkpointer holds no text of it"
+  );
+  let all = [source, kernel, checkpointer];
+  assert_eq!(
+    texts(&[made_of(&digest(&all), &all)]).unwrap(),
+    (source.to_owned(), kernel.to_owned(), checkpointer.to_owned()),
+    "a fact made names the digest of the three texts that it holds"
+  );
+  assert!(
+    texts(&[made_of(&other, &[source, kernel])]).is_err(),
+    "texts of another engine refuse it"
+  );
+}
+
+#[test]
+fn a_segment_names_the_engine_of_its_last_fact_made_as_unheld_when_it_holds_no_texts_of_another_engine()
+ {
+  let (source, kernel) = ("x = 1\n", "y = 2\n");
+  let (named, other) = (digest(&[source, kernel]), "0".repeat(64));
+  assert_eq!(unheld(&[made_of(&other, &[])]), Some(other.clone()), "no texts of another engine");
+  assert_eq!(unheld(&[made_of(&named, &[source, kernel])]), None, "the texts are held");
+  assert_eq!(
+    unheld(&[made_of(&digest(&[crate::ENGINE, crate::KERNEL, crate::CHECKPOINTER]), &[])]),
+    None,
+    "the engine of this build"
+  );
+  assert_eq!(
+    unheld(&[made_of(&other, &[]), made_of(&named, &[source, kernel])]),
+    None,
     "the last one counts"
   );
-  assert!(texts(&[made(&other, &[source, kernel])]).is_err(), "texts of another engine refuse it");
+  assert_eq!(unheld(&[]), None, "a record of a build before the fact made");
 }

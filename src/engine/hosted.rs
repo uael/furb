@@ -1,22 +1,29 @@
 //! The ears that a host hands a life, the functions it hands it, and how the life steps each ear as
 //! a generator of the sandbox and lends itself to the code of the host.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   cell::RefCell,
-  collections::HashMap,
+  collections::{HashMap, HashSet, VecDeque},
   sync::atomic::{AtomicI64, Ordering},
   task::{Context, Poll, Waker},
+  time::Duration,
 };
 
-use monty_types::MontyUuid;
+use monty_types::{MontyUuid, unstable};
 
 use super::Outside;
 use crate::{
   ear::{Call, Ear, Heard, Spoken, Step},
   fact::Fact,
+  sand,
   sand::{Answer, Sand},
-  value::{Fault, Given, Object, marked},
+  value::{Fault, Given, Object, entry, marked},
 };
+use std::mem;
 
 /// The prefix of the name a function of the host crosses in under: `call:` and its number.
 pub(super) const CALL: &str = "call:";
@@ -24,6 +31,9 @@ pub(super) const CALL: &str = "call:";
 /// The prefix of the name an ear of the host is heard under when a verb is given it: `ear:` and its
 /// number.
 pub(super) const EAR: &str = "ear:";
+
+/// Who says a fact of the record again, as an ear of the outside hears it.
+const JOURNAL: &str = "journal";
 
 /// A function of the host, as the sandbox may call it back, with the life lent to it while it runs.
 type Callable = Box<dyn FnMut(Vec<Object>, Life) -> (Result<Object, Fault>, Life)>;
@@ -40,8 +50,8 @@ impl Handed {
   /// them. A name given twice is refused.
   pub(super) fn of<N: Into<String>>(
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
-  ) -> Result<(Handed, Vec<String>), Fault> {
-    let mut given = Handed::default();
+  ) -> Result<(Self, Vec<String>), Fault> {
+    let mut given = Self::default();
     let mut names = Vec::new();
     for (name, ear) in ears {
       let name = name.into();
@@ -112,7 +122,7 @@ impl Life {
 }
 
 /// Where an ear of the host stands, as its object in the sandbox steps it.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(super) enum At {
   /// Not yet born: its first step is its birth.
   Unborn,
@@ -144,15 +154,85 @@ pub(super) struct Hosted {
   /// What each ear of the host waits for since its last step, by the id of its object in the
   /// sandbox.
   pub(super) waits: HashMap<MontyUuid, Object>,
+  /// The fact that an ear of the host heard last, as [`Outside::told`] keeps it: the value that
+  /// the sandbox sent, and the fact that it went out as.
+  pub(super) told: Option<(Object, Fact)>,
+  /// The count of the replay, while the life boots.
+  pub(super) replay: Option<Replay>,
+}
+
+/// The count of a replay: of the entries that a life boots on, how many the journal passed so far.
+/// The journal takes the entries in the order of the record, so an entry that it says or makes
+/// again stands after each entry that it passed, and its place is the count. An ear of the host
+/// hears a fact that the journal says again as said by the journal, and a question that the life
+/// makes again under the name that the record holds. The first `started` or `done` of an act is
+/// said again as the act is made, before the journal reaches its place, so it counts nothing.
+/// The count stands still while no ear of the host hears the facts, and the end of a boot that
+/// raised nothing counts each entry.
+pub(super) struct Replay {
+  /// The places in the record of the entries of each kind about each name, in order, each with
+  /// whether the journal says or makes it again at its place.
+  places: HashMap<(String, String), VecDeque<(u64, bool)>>,
+  done: u64,
+  of: u64,
+  told: Box<dyn Fn(u64, u64)>,
+}
+
+impl Replay {
+  /// The count of the replay of a record, as boot takes it, which tells that it passed no entry.
+  pub(super) fn of(record: &[Object], told: Box<dyn Fn(u64, u64)>) -> Self {
+    let mut places: HashMap<_, VecDeque<_>> = HashMap::new();
+    let mut answered = HashSet::new();
+    let facts = record.iter().map(|one| entry(&one.as_ref(), 0).and_then(Fact::of));
+    for (place, fact) in (0..).zip(facts) {
+      let Some(fact) = fact else { continue };
+      let first =
+        matches!(fact.kind(), "started" | "done") && answered.insert(fact.about().to_owned());
+      let key = (fact.kind().to_owned(), fact.about().to_owned());
+      places.entry(key).or_default().push_back((place, !first));
+    }
+    let of = record.len() as u64;
+    told(0, of);
+    Self { places, done: 0, of, told }
+  }
+
+  /// A fact that went out to an ear of the host.
+  fn heard(&mut self, fact: &Fact) {
+    if !fact.question() && fact.by() != JOURNAL {
+      return;
+    }
+    let key = (fact.kind().to_owned(), fact.about().to_owned());
+    let place = self.places.get_mut(&key).and_then(VecDeque::pop_front);
+    if let Some((place, true)) = place
+      && place >= self.done
+    {
+      self.done = place + 1;
+      (self.told)(self.done, self.of);
+    }
+  }
+}
+
+impl Hosted {
+  /// The end of the replay, which lets go of its count: the journal of a boot that raised nothing
+  /// took each entry.
+  pub(super) fn replayed(&mut self, whole: bool) {
+    if let Some(replay) = self.replay.take()
+      && whole
+    {
+      (replay.told)(replay.of, replay.of);
+    }
+  }
 }
 
 impl Default for Hosted {
-  fn default() -> Hosted {
-    Hosted {
+  fn default() -> Self {
+    Self {
       handed: Handed::default(),
       waker: Waker::noop().clone(),
       standing: HashMap::new(),
       waits: HashMap::new(),
+      told: None,
+      replay: None,
     }
   }
 }
@@ -266,7 +346,7 @@ impl Outside {
   /// for the next fact. It said a verb, which is said here by its name and its value handed back.
   /// It is over, so the object stops, and it raised, so the object raises. A generator that the
   /// host started before it crossed was born there, so its object begins where it waits.
-  pub(super) fn sent(&mut self, sand: &mut Sand, on: MontyUuid, a: Option<&Object>) -> Answer {
+  pub(super) fn sent(&mut self, sand: &mut Sand, on: MontyUuid, a: Option<Object>) -> Answer {
     let Some((name, at)) = self.hosted.standing.get(&on).cloned() else {
       return Answer::Abort(Fault::refused(format!("{on} is no object of the host")));
     };
@@ -282,12 +362,18 @@ impl Outside {
       (At::Waiting, None) => {
         return Answer::Value(self.hosted.waits.get(&on).cloned().unwrap_or_else(Object::none));
       }
-      (At::Waiting, Some(a)) => match self.outward(sand, a).map(|a| Fact::of(a.as_ref())) {
+      (At::Waiting, Some(a)) => match self.told(sand, a) {
         Ok(Some(fact)) => Heard::Fact(fact),
         Ok(None) => return Answer::Abort(Fault::refused("an ear hears a fact or nothing")),
         Err(fault) => return Answer::Abort(fault),
       },
     };
+    if let Heard::Fact(fact) = &heard
+      && fact.question()
+      && let Some(bound) = sand::past()
+    {
+      return self.refused(sand, on, fact, bound);
+    }
     let Some(mut ear) = self.hosted.handed.ears.remove(&name) else {
       return Answer::Abort(Fault::refused(format!("no ear of the host is named {name}")));
     };
@@ -308,6 +394,52 @@ impl Outside {
     answer
   }
 
+  /// A fact that the sandbox sends to an ear of the host, as it goes out, or nothing for a value
+  /// that is no fact. The engine sends a fact to each ear that hears it in turn, so the fact that
+  /// went out last stays here beside the value that came, and an ear that is sent the same value
+  /// takes a copy of that fact: a fact goes out one time for all the ears that hear it, whatever
+  /// its size. Two values are the same when their arenas are, which holds for a fact that the
+  /// engine sends again and costs one pass with no walk. A value that holds a handle that went
+  /// out as its representation never comes the same again, since the sandbox let go of that
+  /// handle, and a number that the host forgot drops the fact that named it.
+  fn told(&mut self, sand: &mut Sand, a: Object) -> Result<Option<Fact>, Fault> {
+    if let Some((came, fact)) = &self.hosted.told
+      && unstable::graph_parts(came) == unstable::graph_parts(&a)
+    {
+      return Ok(Some(fact.clone()));
+    }
+    let fact = Fact::owned(self.outward(sand, &a)?);
+    if let (Some(fact), Some(replay)) = (&fact, &mut self.hosted.replay) {
+      replay.heard(fact);
+    }
+    self.hosted.told = fact.clone().map(|fact| (a, fact));
+    Ok(fact)
+  }
+
+  /// The answer to a question that a step of a word asks past the bound of a turn, in the place of
+  /// its ear. monty counts a turn again from each round trip to the host, so a word that loops on
+  /// what the host answers at once never meets the bound of monty: the host refuses the question,
+  /// once for all the ears that hear it, and the refusal raises in the word. A word that asks again
+  /// past that refusal goes on in its loop, so its step ends there, as a second excess of the bound
+  /// of monty ends it.
+  fn refused(&mut self, sand: &mut Sand, on: MontyUuid, fact: &Fact, bound: Duration) -> Answer {
+    let asked = (fact.about().to_owned(), fact.by().to_owned());
+    match self.past.replace(asked.clone()) {
+      Some(one) if one.0 == asked.0 => {
+        Answer::Value(self.hosted.waits.get(&on).cloned().unwrap_or_else(Object::none))
+      }
+      Some(one) if one.1 == asked.1 => Answer::Abort(Fault::refused(format!(
+        "{} asked {} past the refusal of the bound of a turn of {bound:?}",
+        asked.1, asked.0
+      ))),
+      _ => {
+        let why = format!("the step of the word ran past the bound of a turn of {bound:?}");
+        let done = Fact::says("done", &asked.0, [Fault::refused(why).object()]);
+        self.inward(sand, &done.0).map_or_else(Answer::Abort, Answer::Value)
+      }
+    }
+  }
+
   /// What the host does in `step`, with this life lent to it, which answers at once each verb that
   /// the host calls while it runs, since the sandbox takes a call before the call of the sandbox
   /// that the host answers.
@@ -315,7 +447,7 @@ impl Outside {
   /// Every frame of the life waits until `step` is done, so the life goes to it by value, with a
   /// life of nothing in its place, and comes back with what `step` gave.
   pub(super) fn lent<R>(&mut self, sand: &mut Sand, step: impl FnOnce(Life) -> (R, Life)) -> R {
-    let life = Life { sand: std::mem::replace(sand, Sand::none()), outside: std::mem::take(self) };
+    let life = Life { sand: mem::replace(sand, Sand::none()), outside: mem::take(self) };
     let (got, life) = step(life);
     (*sand, *self) = (life.sand, life.outside);
     got

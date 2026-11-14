@@ -1,13 +1,13 @@
 //! The local server of the catalog, asked on servers of the tests on ports of this machine, so no test asks a real
 //! one.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 
+use crate::testing::{on_reactor, pause};
 use std::{
   io::{BufRead, BufReader, Read, Write},
   net::TcpListener,
@@ -346,7 +346,7 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
     "a server that listed nothing is not asked again before the delay"
   );
   assert_eq!(lists(&told), 1);
-  thread::sleep(AGAIN);
+  pause(AGAIN);
   let names = |heard: Heard| heard.models.iter().map(|one| one.name.clone()).collect::<Vec<_>>();
   let first = ["local:m", "local:Qwen/Qwen3-8B"];
   assert_eq!(names(server.heard_now(None)), first);
@@ -356,7 +356,7 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
     "a list is not asked again before the delay"
   );
   assert_eq!(lists(&told), 1, "a list that the server gave holds");
-  thread::sleep(AGAIN);
+  pause(AGAIN);
   for wanted in [None, Some("local:Qwen/Qwen3-8B/high"), Some("Qwen/Qwen3-8B"), Some("local:m")] {
     assert_eq!(
       names(server.heard_now(wanted)),
@@ -374,7 +374,7 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
   );
   let why = server.heard_now(Some("local:z/high")).why("local:z/high").map(str::to_owned);
   assert_eq!(why.as_deref(), Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"));
-  thread::sleep(AGAIN);
+  pause(AGAIN);
   server.heard_now(Some("local:z"));
   assert_eq!(
     lists(&told),
@@ -383,7 +383,7 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
   );
   server.heard_now(None);
   assert_eq!(lists(&told), 0, "a list is not asked again before the delay");
-  thread::sleep(AGAIN);
+  pause(AGAIN);
   server.heard_now(None);
   assert_eq!(
     lists(&told),
@@ -425,7 +425,7 @@ fn a_server_whose_windows_elsewhere_do_not_come_in_time_offers_the_models_whose_
     if at(request, "/v1/models") {
       Some(json!({"data": [{"id": "a", "max_model_len": 1000}, {"id": "b"}]}))
     } else {
-      thread::sleep(DEADLINE * 2);
+      pause(DEADLINE * 2);
       None
     }
   });
@@ -446,6 +446,6 @@ trait Hears {
 
 impl Hears for Server {
   fn heard_now(&self, wanted: Option<&str>) -> Heard {
-    crate::ear::reactor().block_on(self.heard(wanted))
+    on_reactor(self.heard(wanted))
   }
 }

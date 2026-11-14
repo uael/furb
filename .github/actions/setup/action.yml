@@ -30,34 +30,46 @@ inputs:
       Each file beyond the manifests of cargo that decides what the gate builds, as a script of the build, whose hash
       the key of its cache holds.
     default: ""
+  rust:
+    description: >-
+      The rust that the gate needs: `build`, the rust of rust-toolchain.toml with the cache of what cargo built; `tools`,
+      that rust with no cache, for a gate that formats and compiles nothing; or `none`, for a gate that runs what a
+      build of its system gave and compiles nothing.
+    default: build
+  saved:
+    description: >-
+      Whether a run that may save the cache of rust saves the cache of this gate: a gate that builds what no later run
+      of the same ref reads saves none, so the store of 10 GB keeps the caches that the gates read.
+    default: "true"
 
 runs:
   using: composite
   steps:
     # Windows Defender scans each file that the job reads or writes. With these folders excluded, the steps that touch
-    # many files took less time: in three runs the bindings and the TUI took 227 to 232 s, against a median of 328 to
+    # many files took less time: in three runs the job of the bindings took 227 to 232 s, against a median of 328 to
     # 364 s on main.
     - if: runner.os == 'Windows'
       shell: pwsh
       run: |
         Add-MpPreference -ExclusionPath "$env:USERPROFILE\.cargo", "$env:USERPROFILE\.rustup", $env:GITHUB_WORKSPACE, $env:RUNNER_TEMP
         Get-MpPreference | Select-Object -ExpandProperty ExclusionPath
-    # A python restored from the cache on Windows holds a link to its directory that the restore breaks, so uv
-    # install fails there on every run after the first: Windows installs its python each time.
+    # uv keeps no cache, as no-cache of pyproject.toml says, so the action has nothing to restore or to save: with
+    # its cache on, its post step fails on a cache path that does not exist, and each job that sets python up is red.
     - if: inputs.python != 'none'
       uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       with:
         version: ${{ env.UV_VERSION }}
-        enable-cache: true
-        cache-python: ${{ runner.os != 'Windows' }}
+        enable-cache: false
     # The rust of rust-toolchain.toml, with the variables of cargo that actions-rust-lang/setup-rust-toolchain v2.0.0
     # set, at the same values, so the key of the cache stays the same. That action installed a bash of brew on each
     # macOS job before its own scripts, in 12 s to 47 s, and these steps run in the bash of the system. The cache is
     # the step after them, so that its key holds this rust alone.
-    - run: |
+    # A job builds once, so it keeps no incremental state, which a tree of a person keeps. CARGO_PROFILE_DEV_DEBUG is not
+    # among them: Cargo.toml turns the debug information of a dependency off for each build.
+    - if: inputs.rust != 'none'
+      run: |
         set_default() { if [ -z "$(printenv "$1")" ]; then echo "$1=$2" >> "$GITHUB_ENV"; fi; }
         set_default CARGO_INCREMENTAL 0
-        set_default CARGO_PROFILE_DEV_DEBUG 0
         set_default CARGO_TERM_COLOR always
         set_default RUST_BACKTRACE short
         set_default CARGO_BUILD_WARNINGS deny
@@ -71,7 +83,8 @@ runs:
     # which no build uses. Two images of one runner have each another rust, so the jobs of one key saved two caches,
     # which took the store of the repository past its 10 GB. The step removes each rust but the one of
     # rust-toolchain.toml, so the hash is the same on each image.
-    - run: |
+    - if: inputs.rust != 'none'
+      run: |
         active=$(rustup show active-toolchain | cut -d ' ' -f 1)
         rustup toolchain list --quiet | while read -r toolchain; do
           if [ "${toolchain%% *}" != "$active" ]; then rustup toolchain uninstall "${toolchain%% *}"; fi
@@ -84,16 +97,22 @@ runs:
     # A key of files that are not those of cargo restores nothing when one of them changes: a change of a
     # pyproject.toml then made every job build every crate again, in up to 25 minutes, and a change of Cargo.lock
     # made no new key, so main never saved the cache again and each job built the new crates each time.
-    # Only main saves the cache, and a pull request reads the cache of main.
-    # Only a job that passes saves it. A job that fails or is cancelled holds part of the build, and a key that
-    # matches whole is never saved again, so every later run would build again what that part lacks.
+    # Main saves the cache, and so does the pull request of w/converge, whose caches only its own runs read: its head
+    # stands far from main, so with no save each of its runs built again the crates that changed since main, in up to
+    # 10 minutes. A run on w/converge saves the cache of its own jobs too: the run of the gates of the head of a lane,
+    # which the oracle of the lane starts on w/converge since a run on the branch of a lane reads only the caches of
+    # that branch and of main. Any other pull request reads the cache of main.
+    # Only a job that passes saves it, or a job that sets CACHE_ON_FAILURE once its build passed. A job that fails or
+    # is cancelled holds part of the build, and a key that matches whole is never saved again, so every later run would
+    # build again what that part lacks.
     # A script of the build that starts to build a new crate changes no manifest, so with no hash of it the key stayed
     # whole and each run built that crate and each of its dependencies again: the program furb took 8 minutes and 34
     # seconds on Windows, on a cache saved before the script built it.
-    - if: inputs.hashed != ''
+    - if: inputs.rust == 'build' && inputs.hashed != ''
       run: echo "FURB_CACHE_HASHED=${{ hashFiles(inputs.hashed) }}" >> "$GITHUB_ENV"
       shell: bash
     - id: rust
+      if: inputs.rust == 'build'
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
         key: ${{ inputs.key }}
@@ -101,9 +120,10 @@ runs:
         workspaces: ${{ inputs.workspaces }}
         add-rust-environment-hash-key: true
         env-vars: FURB_CACHE
-        save-if: ${{ github.ref == 'refs/heads/main' && inputs.shared == '' }}
+        save-if: ${{ (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/w/converge' || github.head_ref == 'w/converge') && inputs.shared == '' && inputs.saved == 'true' }}
         cache-on-failure: false
-    - run: echo "RUST_CACHE_HIT=${{ steps.rust.outputs.cache-hit }}" >> "$GITHUB_ENV"
+    - if: inputs.rust == 'build'
+      run: echo "RUST_CACHE_HIT=${{ steps.rust.outputs.cache-hit }}" >> "$GITHUB_ENV"
       shell: bash
     - if: inputs.python != 'none'
       run: uv python install

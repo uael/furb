@@ -1,0 +1,30 @@
+ furb · ground the branch, message by message   [ Resolve ]    All projects ▾         this machine
+┃
+┃ ground the branch, message by message                        Resolved 1 ▸
+┃
+
+       opus/high
+    1  close(None)
+
+┃
+┃ and the step 1
+┃
+
+       opus/high
+    2  close(None)
+
+┃
+┃ and the step 2
+┃
+
+       opus/high
+    3  close(None)
+
+┃
+┃ and the step 3
+┃
+
+  Jump to latest ↓                                      end
+┃ Reply to this thread
+  This computer   furb ▾               opus/high   ○ Python
+  ~/src/furb-try                              ⌃N new thread

@@ -1,8 +1,8 @@
 //! The binding of the tools of a server of MCP: a word of Python made from their schemas, which a chain runs so that
-//! each tool is a function that the gate checks.
+//! each tool is a function with the signature of its schema.
 //!
 //! The word is one class under the name of the server, with one async function for each tool, which takes no self and
-//! has no decorator: the sandbox binds no `staticmethod`, and a function of a class reads in the gate and runs on both
+//! has no decorator: the sandbox binds no `staticmethod`, and a function of a class runs on both
 //! engines as a plain function, so a model calls `await github.create_issue(owner="o", repo="r", title="t")`. The
 //! name of the class stands in the word on its first line alone, so a word that finds the name taken renames the class
 //! with one replace. The word imports nothing: it names `Any` and `Literal`, which the module of each chain holds from
@@ -18,9 +18,10 @@
   clippy::single_match_else,
   reason = "debt: a match of one arm and else, where if let serves"
 )]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
 use serde_json::{Map, Value};
+use std::mem;
+use std::slice;
 
 /// The most characters of the first sentence of a description that a docstring holds.
 const SENTENCE: usize = 200;
@@ -72,31 +73,31 @@ pub enum Shape {
   /// None, which sends null.
   None,
   /// A list of values of one shape.
-  List(Box<Shape>),
+  List(Box<Self>),
   /// A dict of keys of str and values of one shape.
-  Dict(Box<Shape>),
+  Dict(Box<Self>),
   /// One of these values, each a str, an int or a bool.
   Literal(Vec<Value>),
   /// One of these shapes, each once, with no union and no `Any` among them, and None last.
-  Union(Vec<Shape>),
+  Union(Vec<Self>),
 }
 
 impl Shape {
   /// The shape as an annotation of Python.
-  pub fn python(&self) -> String {
+  fn python(&self) -> String {
     match self {
-      Shape::Any => "Any".to_owned(),
-      Shape::Str => "str".to_owned(),
-      Shape::Int => "int".to_owned(),
-      Shape::Float => "float".to_owned(),
-      Shape::Bool => "bool".to_owned(),
-      Shape::None => "None".to_owned(),
-      Shape::List(item) => format!("list[{}]", item.python()),
-      Shape::Dict(value) => format!("dict[str, {}]", value.python()),
-      Shape::Literal(values) => {
+      Self::Any => "Any".to_owned(),
+      Self::Str => "str".to_owned(),
+      Self::Int => "int".to_owned(),
+      Self::Float => "float".to_owned(),
+      Self::Bool => "bool".to_owned(),
+      Self::None => "None".to_owned(),
+      Self::List(item) => format!("list[{}]", item.python()),
+      Self::Dict(value) => format!("dict[str, {}]", value.python()),
+      Self::Literal(values) => {
         format!("Literal[{}]", values.iter().map(literal).collect::<Vec<_>>().join(", "))
       }
-      Shape::Union(members) => members.iter().map(Shape::python).collect::<Vec<_>>().join(" | "),
+      Self::Union(members) => members.iter().map(Self::python).collect::<Vec<_>>().join(" | "),
     }
   }
 }
@@ -226,7 +227,7 @@ fn function(tool: &str, about: &Value, taken: &mut Vec<String>) -> Function {
   let input = about.get("inputSchema").or_else(|| about.get("input")).unwrap_or(&ANY);
   let mut mapper = Mapper { root: input, seen: Vec::new(), notes: Vec::new(), opaque: 0 };
   let (fields, rest) = mapper.fields();
-  let mut loose = std::mem::take(&mut mapper.notes);
+  let mut loose = mem::take(&mut mapper.notes);
   let mut said = loose.clone();
   let mut names = vec![CALL.to_owned()];
   let mut params = Vec::new();
@@ -235,7 +236,7 @@ fn function(tool: &str, about: &Value, taken: &mut Vec<String>) -> Function {
   for (key, schema, required) in fields {
     let objects = mapper.opaque;
     let shape = mapper.shape(&schema);
-    let reasons = std::mem::take(&mut mapper.notes);
+    let reasons = mem::take(&mut mapper.notes);
     let name = unique(safe(&key, "argument", false), &mut names);
     if !reasons.is_empty() {
       loose.push(format!("{key}: {}", reasons.join(", ")));
@@ -304,31 +305,10 @@ impl<'a> Mapper<'a> {
   /// The arguments of the tool, each as its key, its schema and whether the tool requires it, and the shape of the
   /// arguments that the schema takes and names nowhere, when it takes them.
   fn fields(&mut self) -> (Vec<(String, Value, bool)>, Option<Shape>) {
-    let Some(object) = self.followed(self.root) else {
-      self
-        .notes
-        .push("the schema of its arguments refers to a part that it does not hold".to_owned());
-      return (Vec::new(), Some(Shape::Any));
+    let one = match self.arguments() {
+      Ok(one) => one,
+      Err(rest) => return (Vec::new(), rest),
     };
-    let one = match object {
-      Value::Object(one) => one,
-      Value::Bool(true) => return (Vec::new(), None),
-      other => {
-        self
-          .notes
-          .push(format!("the schema of its arguments is {}", cut(&other.to_string(), QUOTED)));
-        return (Vec::new(), Some(Shape::Any));
-      }
-    };
-    if let Some(kind) = one.get("type")
-      && kind.as_str() != Some("object")
-      && !kind
-        .as_array()
-        .is_some_and(|kinds| kinds.iter().any(|one| one.as_str() == Some("object")))
-    {
-      self.notes.push(format!("its arguments are of the type {kind}, and not an object"));
-      return (Vec::new(), Some(Shape::Any));
-    }
     let mut fields = Vec::new();
     let mut required: Vec<String> = Vec::new();
     let mut parts = vec![one];
@@ -376,6 +356,37 @@ impl<'a> Mapper<'a> {
       _ => None,
     };
     (fields, rest)
+  }
+
+  /// The object of the schema of the arguments, or, when the schema holds no object, the shape of
+  /// the arguments that it takes and names nowhere.
+  fn arguments(&mut self) -> Result<&'a Map<String, Value>, Option<Shape>> {
+    let Some(object) = self.followed(self.root) else {
+      self
+        .notes
+        .push("the schema of its arguments refers to a part that it does not hold".to_owned());
+      return Err(Some(Shape::Any));
+    };
+    let one = match object {
+      Value::Object(one) => one,
+      Value::Bool(true) => return Err(None),
+      other => {
+        self
+          .notes
+          .push(format!("the schema of its arguments is {}", cut(&other.to_string(), QUOTED)));
+        return Err(Some(Shape::Any));
+      }
+    };
+    if let Some(kind) = one.get("type")
+      && kind.as_str() != Some("object")
+      && !kind
+        .as_array()
+        .is_some_and(|kinds| kinds.iter().any(|one| one.as_str() == Some("object")))
+    {
+      self.notes.push(format!("its arguments are of the type {kind}, and not an object"));
+      return Err(Some(Shape::Any));
+    }
+    Ok(one)
   }
 
   /// The sketch of a schema for a docstring: an object that names its properties shows each, as `"key": shape`, with
@@ -458,20 +469,10 @@ impl<'a> Mapper<'a> {
   /// The shape of a schema that is an object, before `nullable`.
   fn core(&mut self, one: &Map<String, Value>) -> Shape {
     if let Some(at) = one.get("$ref").and_then(Value::as_str) {
-      if self.seen.iter().any(|seen| seen == at) {
-        return self.note(format!("{at} holds itself"));
-      }
-      let root = self.root;
-      let Some(found) = at.strip_prefix('#').and_then(|path| root.pointer(path)) else {
-        return self.note(format!("{at} is no part of its schema"));
-      };
-      self.seen.push(at.to_owned());
-      let got = self.shape(found);
-      self.seen.pop();
-      return got;
+      return self.referred(at);
     }
     if let Some(value) = one.get("const") {
-      return self.literal(std::slice::from_ref(value));
+      return self.literal(slice::from_ref(value));
     }
     if let Some(values) = one.get("enum") {
       return match values.as_array() {
@@ -487,18 +488,10 @@ impl<'a> Mapper<'a> {
         return union(parts);
       }
     }
-    if let Some(Value::Array(members)) = one.get("allOf") {
-      let members: Vec<&Value> = members.iter().filter(|member| typed(member)).collect();
-      if !members.is_empty() {
-        let shapes: Vec<Shape> = members.into_iter().map(|member| self.shape(member)).collect();
-        if shapes.iter().all(|shape| matches!(shape, Shape::Dict(_))) {
-          return Shape::Dict(Box::new(Shape::Any));
-        }
-        if shapes.windows(2).all(|pair| pair[0] == pair[1]) {
-          return shapes[0].clone();
-        }
-        return self.note("its allOf joins schemas of several types".to_owned());
-      }
+    if let Some(Value::Array(members)) = one.get("allOf")
+      && let Some(joined) = self.joined(members)
+    {
+      return joined;
     }
     match one.get("type") {
       Some(Value::String(kind)) => self.kind(kind, one),
@@ -528,6 +521,37 @@ impl<'a> Mapper<'a> {
         None => Shape::Any,
       },
     }
+  }
+
+  /// The shape of the part of the schema that a `$ref` names.
+  fn referred(&mut self, at: &str) -> Shape {
+    if self.seen.iter().any(|seen| seen == at) {
+      return self.note(format!("{at} holds itself"));
+    }
+    let root = self.root;
+    let Some(found) = at.strip_prefix('#').and_then(|path| root.pointer(path)) else {
+      return self.note(format!("{at} is no part of its schema"));
+    };
+    self.seen.push(at.to_owned());
+    let got = self.shape(found);
+    self.seen.pop();
+    got
+  }
+
+  /// The shape that the members of an `allOf` join to, none when no member has a type.
+  fn joined(&mut self, members: &[Value]) -> Option<Shape> {
+    let members: Vec<&Value> = members.iter().filter(|member| typed(member)).collect();
+    if members.is_empty() {
+      return None;
+    }
+    let shapes: Vec<Shape> = members.into_iter().map(|member| self.shape(member)).collect();
+    if shapes.iter().all(|shape| matches!(shape, Shape::Dict(_))) {
+      return Some(Shape::Dict(Box::new(Shape::Any)));
+    }
+    if shapes.windows(2).all(|pair| pair[0] == pair[1]) {
+      return Some(shapes[0].clone());
+    }
+    Some(self.note("its allOf joins schemas of several types".to_owned()))
   }
 
   /// The shape of one type of JSON, with the rest of its schema.

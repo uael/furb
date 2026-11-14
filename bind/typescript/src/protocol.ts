@@ -13,14 +13,18 @@ export type Request1 =
       verb: "hello";
     })
   | {
+      config?: string | null;
       verb: "list";
+    }
+  | {
+      verb: "cards";
     }
   | {
       life: string;
       cwd?: string | null;
       actor?: string | null;
       roster?: string[] | null;
-      extensions?: boolean | null;
+      skills?: boolean | null;
       config?: string | null;
       claude?: string | null;
       answers?: boolean;
@@ -185,18 +189,17 @@ export type Request1 =
     }
   | {
       life: string;
-      word: string;
-      on?: string | null;
-      verb: "gate";
-    }
-  | {
-      life: string;
+      roster?: string[] | null;
       verb: "stand";
     }
   | {
       life: string;
       config: Config;
       verb: "config";
+    }
+  | {
+      life: string;
+      verb: "cancel_sign_in";
     }
   | {
       life: string;
@@ -230,7 +233,24 @@ export type Request1 =
       life: string;
       on?: string | null;
       at?: number | null;
+      read?: number | null;
       verb: "threads";
+    }
+  | {
+      life: string;
+      hidden?: string[];
+      at?: number | null;
+      verb: "rail";
+    }
+  | {
+      life: string;
+      on?: string | null;
+      at?: number | null;
+      opened?: string[];
+      owed?: string[];
+      taken?: string[] | null;
+      shown?: Shown | null;
+      verb: "ladder";
     }
   | {
       life: string;
@@ -239,6 +259,17 @@ export type Request1 =
     }
   | {
       life: string;
+      thread: string;
+      before?: number | null;
+      limit: number;
+      verb: "thread";
+    }
+  | {
+      life: string;
+      /**
+       * The chain whose acts give the moments; none gives those of the whole life.
+       */
+      on?: string | null;
       verb: "moments";
     }
   | {
@@ -258,21 +289,36 @@ export type Request1 =
   | {
       verb: "handover";
     }
-  | (Mount & {
+  | {
+      viewer: string;
+      life: string;
+      slot: Slot;
+      skill: string;
       verb: "view.mount";
-    })
-  | (Tree & {
+    }
+  | {
+      viewer: string;
+      slot: Slot;
+      version: number;
+      tree: Node;
       verb: "view.tree";
-    })
-  | (ViewEvent & {
+    }
+  | {
+      viewer: string;
+      node: string;
+      kind: Gesture;
+      value?: string | null;
       verb: "view.event";
-    })
-  | (ViewEffect & {
+    }
+  | {
+      viewer: string;
+      effect: Effect;
       verb: "view.effect";
-    })
-  | (Dispose & {
+    }
+  | {
+      viewer: string;
       verb: "view.dispose";
-    });
+    };
 /**
  * What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,
  * which asks the handover.
@@ -294,13 +340,9 @@ export type Config =
       value?: unknown;
       layer?: Layer | null;
       action: "set";
-    }
-  | {
-      action: "reload";
     };
 /**
- * A layer of the configs, from the one that wins least to the one that wins most: the config of
- * the user, the config of the project, and its local config, which git ignores.
+ * A layer of the configs, from the one that wins least to the one that wins most.
  */
 export type Layer = "user" | "project" | "local";
 /**
@@ -452,9 +494,34 @@ export type Frame =
     }
   | {
       life: string;
+      changed: Card[];
+      gone: string[];
+      frame: "cards";
+    }
+  | {
+      life: string;
+      thread: string;
+      page: Page;
+      frame: "thread";
+    }
+  | {
+      life: string;
+      stage: Stage;
+      done: number;
+      of: number;
+      frame: "opening";
+    }
+  | {
+      life: string;
       acts: Open[];
       notice: string;
       frame: "stalled";
+    }
+  | {
+      state: string;
+      url?: string | null;
+      message?: string | null;
+      frame: "sign_in";
     }
   | {
       life: string;
@@ -462,21 +529,36 @@ export type Frame =
       request: unknown;
       frame: "ask";
     }
-  | (Mount & {
+  | {
+      viewer: string;
+      life: string;
+      slot: Slot;
+      skill: string;
       frame: "view.mount";
-    })
-  | (Tree & {
+    }
+  | {
+      viewer: string;
+      slot: Slot;
+      version: number;
+      tree: Node;
       frame: "view.tree";
-    })
-  | (ViewEvent & {
+    }
+  | {
+      viewer: string;
+      node: string;
+      kind: Gesture;
+      value?: string | null;
       frame: "view.event";
-    })
-  | (ViewEffect & {
+    }
+  | {
+      viewer: string;
+      effect: Effect;
       frame: "view.effect";
-    })
-  | (Dispose & {
+    }
+  | {
+      viewer: string;
       frame: "view.dispose";
-    });
+    };
 /**
  * What a verb comes to.
  */
@@ -489,11 +571,18 @@ export type Answer =
       data: {
         protocol: number;
         peer: Peer;
+        machine: string;
+        build: string;
+        view: number;
       };
     }
   | {
       answer: "lives";
       data: Listed[];
+    }
+  | {
+      answer: "cards";
+      data: Card[];
     }
   | {
       answer: "act";
@@ -522,6 +611,239 @@ export type Answer =
   | {
       answer: "handed";
       data: Handed[];
+    }
+  | {
+      answer: "desk";
+      data: Desk;
+    }
+  | {
+      answer: "threads";
+      data: Threads;
+    }
+  | {
+      answer: "rail";
+      data: ThreadNode[];
+    }
+  | {
+      answer: "ladder";
+      data: Rung[];
+    }
+  | {
+      answer: "acts";
+      data: Act[];
+    }
+  | {
+      answer: "moments";
+      data: number[];
+    }
+  | {
+      answer: "page";
+      data: Page;
+    };
+/**
+ * How the thread of a card stands. It asks one member by his login, or each operator. A pause
+ * names who said it. A thread whose model closed its prompt is resolved, and one that a cancel
+ * ended is stopped.
+ */
+export type Standing =
+  | {
+      of?: string | null;
+      is: "asks";
+    }
+  | {
+      is: "failed";
+    }
+  | {
+      by: string;
+      is: "paused";
+    }
+  | {
+      is: "thinks";
+    }
+  | {
+      is: "runs";
+    }
+  | {
+      is: "delegates";
+    }
+  | {
+      is: "stopped";
+    }
+  | {
+      is: "rests";
+    }
+  | {
+      is: "resolved";
+    };
+/**
+ * The state of work: it asks the operator, it ended while the operator looked away, it failed, a
+ * pause holds it, its model thinks or writes its word, a word or a command of it runs, its word
+ * awaits a prompt on another chain, it ended well, a cancel ended it, or it rests. The order is
+ * the order of the roll-up. Only a window says unread, since only it knows what its operator saw.
+ */
+export type State =
+  | "asks"
+  | "unread"
+  | "failed"
+  | "paused"
+  | "thinks"
+  | "runs"
+  | "delegates"
+  | "done"
+  | "cancelled"
+  | "idle";
+/**
+ * Who made the prompt of a thread: the operator, a rung of a word, or an ear.
+ */
+export type Origin = "operator" | "rung" | "ear";
+/**
+ * What a prompt of a chain is that is no conversation, which the feed of its chain draws as what
+ * it is and the list of its threads leaves out.
+ */
+export type Aside =
+  | {
+      aside: "notice";
+    }
+  | {
+      aside: "rung";
+    }
+  | {
+      aside: "wake";
+    }
+  | {
+      aside: "question";
+      from: string;
+    }
+  | {
+      aside: "agent";
+    };
+/**
+ * One line of a ladder, in the order that the window draws it.
+ */
+export type Rung =
+  | {
+      id: string;
+      depth: number;
+      type: "step";
+    }
+  | {
+      rungs: string[];
+      depth: number;
+      type: "ear";
+    }
+  | {
+      head: string;
+      depth: number;
+      count: number;
+      of: string;
+      key: string;
+      heads: string[];
+      type: "more";
+    };
+/**
+ * Who made an act, as a window names it: the operator, a member who answers as him by his login,
+ * a model with its effort when its actor names one, a skill, or the engine itself.
+ */
+export type Maker =
+  | {
+      role: "operator";
+    }
+  | {
+      login: string;
+      role: "member";
+    }
+  | {
+      model: string;
+      effort?: string | null;
+      role: "model";
+    }
+  | {
+      role: "skill";
+    }
+  | {
+      role: "engine";
+    };
+/**
+ * Where an act stands: asked, started by the ear that owns it, or done, with what it came to.
+ */
+export type Phase =
+  | {
+      phase: "asked";
+    }
+  | {
+      phase: "started";
+    }
+  | {
+      phase: "done";
+      value: unknown;
+    };
+/**
+ * How the word of a rung ran: it runs or waits for its word, it ran, or a fault or a cancel ended
+ * it, each with what a person reads.
+ */
+export type RunState =
+  | {
+      run: "running";
+    }
+  | {
+      run: "done";
+    }
+  | {
+      run: "failed";
+      reason: string;
+    }
+  | {
+      run: "cancelled";
+      reason: string;
+    };
+/**
+ * How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
+ * second of the epoch since which it does when the host saw it begin; it asks the operator; or it
+ * failed, with the reason that a person reads.
+ */
+export type Mark =
+  | {
+      is: "ran";
+    }
+  | {
+      work: Work;
+      since?: number | null;
+      is: "runs";
+    }
+  | {
+      is: "asks";
+    }
+  | {
+      why: string;
+      is: "failed";
+    };
+/**
+ * What a line that runs waits for: its model that writes it, a command or a wait, or an agent.
+ */
+export type Work = "writes" | "command" | "agent";
+/**
+ * What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and
+ * `hint` of the view read, and what answered it once it is closed: it is open until then.
+ */
+export type Saying =
+  | ("answer" | "notice")
+  | {
+      question: {
+        shape: string;
+        answered?: Answered | null;
+      };
+    };
+/**
+ * What a question came to: a value, as a person reads it, or a refusal with its reason.
+ */
+export type Reply =
+  | {
+      is: "value";
+      text: string;
+    }
+  | {
+      is: "refused";
+      text: string;
     };
 /**
  * Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text.
@@ -590,6 +912,10 @@ export type ProtocolError =
       error: "answerless";
     }
   | {
+      life: string;
+      error: "answering";
+    }
+  | {
       needs: Kind;
       has: Kind;
       error: "speaker";
@@ -655,59 +981,11 @@ export type Event =
       data: string | null;
     };
 /**
- * Where an act stands: asked, started by the ear that owns it, or done, with what it came to.
+ * A stage of the open of a life, in the order that an open passes them. An open skips a stage that
+ * it has no work for, and a stage never comes again in one open. Each stage counts its work in a
+ * unit of its own, and a stage that counts nothing tells 0 of 0.
  */
-export type Phase =
-  | {
-      phase: "asked";
-    }
-  | {
-      phase: "started";
-    }
-  | {
-      phase: "done";
-      value: unknown;
-    };
-/**
- * How the word of a rung ran: it runs or waits for its word, it ran, a fault or a cancel ended it,
- * or the gate refused it, each with what a person reads.
- */
-export type RunState =
-  | {
-      run: "running";
-    }
-  | {
-      run: "done";
-    }
-  | {
-      run: "failed";
-      reason: string;
-    }
-  | {
-      run: "cancelled";
-      reason: string;
-    }
-  | {
-      run: "refused";
-      reason: string;
-    };
-/**
- * The state of work: it asks the operator, it ended while the operator looked away, it failed, a
- * pause holds it, its model thinks or writes its word, a word or a command of it runs, its word
- * awaits a prompt on another chain, it ended well, a cancel ended it, or it rests. The order is
- * the order of the roll-up. Only a window says unread, since only it knows what its operator saw.
- */
-export type State =
-  | "asks"
-  | "unread"
-  | "failed"
-  | "paused"
-  | "thinks"
-  | "runs"
-  | "delegates"
-  | "done"
-  | "cancelled"
-  | "idle";
+export type Stage = "recall" | "find" | "read" | "seed" | "boot" | "log";
 
 /**
  * Both ways of the protocol, which its schema holds.
@@ -729,22 +1007,11 @@ export interface Hello {
   role?: Role | null;
 }
 /**
- * A view that a window mounts in a slot of a life, which the process of a skill serves.
+ * How many of the last prompts of a thread, and of the last rungs of each ladder, show.
  */
-export interface Mount {
-  viewer: string;
-  life: string;
-  slot: Slot;
-  skill: string;
-}
-/**
- * The tree of a view, which takes the place of each tree of a lower version.
- */
-export interface Tree {
-  viewer: string;
-  slot: Slot;
-  version: number;
-  tree: Node;
+export interface Shown {
+  prompts: number;
+  rungs: number;
 }
 /**
  * A run of a text, in a tone.
@@ -752,28 +1019,6 @@ export interface Tree {
 export interface Run {
   text: string;
   tone?: Tone & string;
-}
-/**
- * What a person did to a node of a view, with the value of an input.
- */
-export interface ViewEvent {
-  viewer: string;
-  node: string;
-  kind: Gesture;
-  value?: string | null;
-}
-/**
- * What a skill asks of the one window of a view.
- */
-export interface ViewEffect {
-  viewer: string;
-  effect: Effect;
-}
-/**
- * The end of a view in its window.
- */
-export interface Dispose {
-  viewer: string;
 }
 /**
  * A peer as the daemon knows it after its hello: the login that its transport proved, its role,
@@ -786,11 +1031,46 @@ export interface Peer {
   name?: string | null;
 }
 /**
- * A record of the machine, and whether a life of the daemon holds it now.
+ * A record of the machine: the main checkout of the workspace whose sessions hold it, when the
+ * list names one, else the checkout whose `.furb/sessions` holds a record that a life holds,
+ * whether a life of the daemon holds it now, whether that life lives and does not
+ * end, whether a window holds that life, and the name of its session while a life holds it: the
+ * one that the operator said last on the root, which wins, else the one that the skill naming
+ * gave. An empty name takes the default name again.
  */
 export interface Listed {
   life: string;
+  workspace?: string | null;
+  held: boolean;
   open: boolean;
+  /**
+   * Whether a window of any connection holds the life now: a pin holds it with no window.
+   */
+  watched?: boolean;
+  name?: string | null;
+}
+/**
+ * A card of the machine: one thread that an operator started, in the record of its session. It
+ * holds the name of the session when it has one, the main checkout of the project whose sessions
+ * hold the record, when the list of the machine names one, else the checkout whose
+ * `.furb/sessions` holds a record that a life holds, whether a life holds the record now,
+ * the login of each person whose window holds that life, and the second of the epoch since which
+ * the thread stands as it does. A record that has no index of its threads yet gives one card with
+ * no prompt, under the name of its file.
+ */
+export interface Card {
+  life: string;
+  session?: string | null;
+  project?: string | null;
+  held: boolean;
+  viewers: string[];
+  since: number;
+  prompt: string;
+  title: string;
+  standing: Standing;
+  model?: string | null;
+  agents?: number;
+  readers?: string[];
 }
 /**
  * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
@@ -801,12 +1081,137 @@ export interface Handed {
   pins: string[];
 }
 /**
+ * What waits for the operator in a life: each ask, the oldest first, and how many of them are
+ * questions and notices.
+ */
+export interface Desk {
+  asks: Ask[];
+  questions: number;
+  notices: number;
+}
+/**
+ * A prompt to the operator that waits for him. A question waits for an answer of its shape. A
+ * notice is a prompt of None, which the console closed as it took it, and which waits only until
+ * the operator dismisses it.
+ */
+export interface Ask {
+  id: string;
+  /**
+   * The chain that the prompt stands in.
+   */
+  chain: string;
+  /**
+   * Who made the prompt: a rung, an ear, or the operator.
+   */
+  by: string;
+  shape: string;
+  message: string;
+  notice: boolean;
+  /**
+   * The lines that answer a choice, one for each value that the shape allows.
+   */
+  choices: string[];
+  /**
+   * The values of a list of a Literal, which the operator ticks.
+   */
+  ticks: Tick[];
+  /**
+   * What the line of the operator is, in words, when its shape is more than text or a choice.
+   */
+  hint: string;
+  began: number;
+}
+/**
+ * A value of a list of a Literal: as the operator reads it, and as the line of the list writes it.
+ */
+export interface Tick {
+  shown: string;
+  json: string;
+}
+/**
+ * The threads of one chain as a window draws them: the tree of its threads, its asides, the runs
+ * of its notes, what the tree says to the operator, and the state of the chain.
+ */
+export interface Threads {
+  threads: ThreadNode[];
+  asides: ChainAside[];
+  notes: NoteRun[];
+  attention: Attention;
+  state: State;
+}
+/**
+ * A thread with the threads that its ladder made, its agents. Its state is its own, or asks while
+ * a question waits in an agent under it: a failure or an unread in an agent does not roll up.
+ */
+export interface ThreadNode {
+  thread: ChainThread;
+  agents: ThreadNode[];
+  state: State;
+}
+/**
+ * One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it
+ * made and the questions of them that wait, and its state. A thread is over once its prompt
+ * and each of its messages is done, and a message to a thread that is over opens it again until
+ * its model closes the message.
+ */
+export interface ChainThread {
+  prompt: string;
+  /**
+   * The name of the thread: the label of its chain for the first thread that no operator made on
+   * a chain under the root, the name of the session for the first thread of the operator on the
+   * root, and else the first line of its message that is not empty.
+   */
+  title: string;
+  messages: string[];
+  asked: string[];
+  asks: string[];
+  state: State;
+  over: boolean;
+  origin: Origin;
+  /**
+   * Whether the operator started it, himself or by a word of his own.
+   */
+  yours: boolean;
+}
+/**
+ * A prompt of a chain that is no thread, with what it is and the prompts on it, in order.
+ */
+export interface ChainAside {
+  prompt: string;
+  aside: Aside;
+  messages: string[];
+}
+/**
+ * A run of notes: the asides of a chain that are no question and follow one another in its feed
+ * with no card of another kind between them, which a window draws as one block. `unread` counts
+ * the notes that began or ended after the place up to which the operator read the chain.
+ */
+export interface NoteRun {
+  prompts: string[];
+  count: number;
+  unread: number;
+}
+/**
+ * What a tree of threads says to the operator, counted by thread.
+ */
+export interface Attention {
+  asks: number;
+  failed: number;
+  paused: number;
+  unread: number;
+}
+/**
  * One act of a life with its meaning, as it stands after the last fact about it.
  */
 export interface Act {
   kind: string;
   id: string;
   by: string;
+  /**
+   * Who made the act: for a rung that waits for the word of an actor, that actor; for any
+   * other act, the role of the act or the person that made it.
+   */
+  maker?: Maker;
   /**
    * What the act is on: a chain, or the prompt of a thread for a prompt on a thread.
    */
@@ -837,6 +1242,16 @@ export interface Act {
    */
   word?: string | null;
   /**
+   * Whether a reply of a rung runs, while its model writes its word. A rung with no word and no
+   * reply that runs waits for its turn.
+   */
+  asking?: boolean;
+  /**
+   * The messages of the operator that a chain with a source took from it, in their order: each
+   * prompt of the operator that the prefix of the chain carries, with the id it has on the source.
+   */
+  taken?: string[];
+  /**
    * How many facts the life had said when the act was made, which is its place in time.
    */
   began: number;
@@ -848,6 +1263,10 @@ export interface Act {
    * What the models cost: the answers that wrote the word of a rung, or each answer on a chain.
    */
   spend?: Spend | null;
+  /**
+   * Who closed the act, as a window names who made an act, once a close of it was said.
+   */
+  closer?: Maker | null;
   /**
    * The state of the act, or of the work of a chain for a chain.
    */
@@ -867,6 +1286,90 @@ export interface Spend {
   dollars: number;
   answers: number;
   actor?: string | null;
+  /**
+   * The account of the last answer, none when that answer named none.
+   */
+  account?: string | null;
+}
+/**
+ * Some exchanges of a thread, the oldest first, with how many exchanges stand before them, and the
+ * agents of the whole thread.
+ */
+export interface Page {
+  exchanges: Exchange[];
+  above: number;
+  agents: Card2[];
+}
+/**
+ * One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
+ * the thread, the act of the message, who said it and its text, the block of code that answers it
+ * once a model answers, and what the answer says to the operator, in the order it was said. A
+ * message is the prompt of the thread or what an operator said on it, and what answers it is what
+ * came after it and before the next message.
+ */
+export interface Exchange {
+  at: number;
+  message: string;
+  by: Maker;
+  text: string;
+  block?: Block | null;
+  said: Said[];
+}
+/**
+ * The code of one answer: the model that wrote its last word, each line of its words, whether more
+ * comes since the answer works, and the thought of its model.
+ */
+export interface Block {
+  maker: Maker;
+  lines: Line[];
+  more: boolean;
+  thought?: Thought | null;
+}
+/**
+ * One line of a block: its number in the thread, its text, in which each quote stands as the
+ * binding that it makes and a string of many lines as one line with its escapes, and its mark.
+ */
+export interface Line {
+  number: number;
+  text: string;
+  mark: Mark;
+}
+/**
+ * What a model thought before it wrote, and in how many seconds, which is none while it thinks.
+ */
+export interface Thought {
+  text: string;
+  took?: number | null;
+}
+/**
+ * What an answer says to the operator: the value of the close of its message, a notice, or a
+ * question, with its act and its text.
+ */
+export interface Said {
+  act: string;
+  kind: Saying;
+  text: string;
+}
+/**
+ * What closed a question: who closed it, and what it came to.
+ */
+export interface Answered {
+  by: Maker;
+  reply: Reply;
+}
+/**
+ * One thread that the operator started, as a card of a list shows it: its prompt, its title, how
+ * it stands, the model that wrote its last word, how many agents work under it, and the site of
+ * each operator who read it to its end, `operator` for each of them and `operator/<login>` for
+ * one member. A question of an agent under it is a question of the card.
+ */
+export interface Card2 {
+  prompt: string;
+  title: string;
+  standing: Standing;
+  model?: string | null;
+  agents?: number;
+  readers?: string[];
 }
 /**
  * One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
@@ -890,4 +1393,10 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 1;
+export type Mount = Omit<Extract<Request1, { verb: "view.mount" }>, "verb">;
+export type Tree = Omit<Extract<Request1, { verb: "view.tree" }>, "verb">;
+export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
+export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
+export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
+
+export const PROTOCOL = 19;

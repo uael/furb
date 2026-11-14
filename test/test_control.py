@@ -27,7 +27,7 @@ async def test_a_control_said_over_the_act_it_names_with_a_header_of_its_name() 
 
 async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
   """The call gives the control as the life made it whole, so a close that named no act reads which act it is over."""
-  _, log, root = born("b = bash('slow')\nk = control('pause', 'paused', b)\nclose(3)", auto=False)
+  _, log, root = born("b = bash('slow')\nk = control('pause', 'paused', b)\ncancel(b)\nclose(3)", auto=False)
   act = engine.prompt(int, "count", on=root)
   assert await act == 3
   await settle()
@@ -38,11 +38,12 @@ async def test_the_call_gives_the_control_as_the_life_made_it_whole() -> None:
 
 async def test_a_control_is_said_over_any_act_and_tells_its_header_only_while_the_act_it_names_is_not_over() -> None:
   """A control is said over any act of the life, and it tells its header only while the act it names is not over, so a control over an act that is over tells nothing and still reaches each act under it that is not over."""
-  sand, log, root = born("x = bash('slow')\nclose(7)", auto=False)
+  sand, log, root = born("x = bash('slow')\nawait x\nclose(7)", auto=False)
   act = engine.prompt(int, "go", on=root)
-  assert await act == 7
+  await settle()
   command = said(log, "bash")[0][1]
   sand.exits(command, 0)
+  assert await act == 7
   await settle()
   told = len(said(log, "tell"))
   engine.close(1, act)

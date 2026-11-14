@@ -35,7 +35,24 @@ use crate::{
   verbs, world,
 };
 
-use crate::testing::{Yard, block_on, waker};
+use crate::{
+  checkpoint,
+  sand::BOUND,
+  testing,
+  testing::{Yard, block_on, waker},
+  value,
+  value::ObjectRef,
+  wire,
+};
+use std::{
+  cell::Cell,
+  collections::HashSet,
+  env, future,
+  path::Path,
+  process,
+  process::Command,
+  sync::atomic::{AtomicUsize, Ordering},
+};
 
 /// A fact of a done of an act with a value.
 fn done(about: &str, value: Object) -> Fact {
@@ -76,6 +93,7 @@ fn provider(
           say(&mut co, Fact::says("started", a.about(), []));
           let turns = co.call("turns", vec![], vec![("on", Object::string(a.on()))]).await?;
           read.borrow_mut().push(turns.py_repr());
+          testing::answering(read.borrow().len());
           let word = words.borrow_mut().pop_front().unwrap_or_else(|| "close(None)".to_owned());
           if word == "WAIT" {
             continue;
@@ -106,9 +124,9 @@ struct Lived {
 impl Lived {
   /// A life in a yard of its own, fresh, or opened on what the store kept there.
   fn new(yard: &str, words: &[&str], fresh: bool) -> Result<Self, Fault> {
-    let name = format!("furb-engine-{yard}-{}", std::process::id());
+    let name = format!("furb-engine-{yard}-{}", process::id());
     let yard = fresh.then(|| Yard::new(&name));
-    let at = std::env::temp_dir().join(name);
+    let at = env::temp_dir().join(name);
     fs::create_dir_all(&at).expect("a yard of the test");
     let (record, store) = world::store(at.join("record.jsonl"))?;
     let read = Rc::default();
@@ -122,7 +140,7 @@ impl Lived {
       ("store", store),
     ];
     let engine = Engine::boot(record, ears)?;
-    Ok(Lived { engine, at, read, yard })
+    Ok(Self { engine, at, read, yard })
   }
 
   /// The end of a fresh life, and its folder, for a later life on what the store kept there.
@@ -154,7 +172,7 @@ fn the_files_serve_a_read_and_a_write_of_the_real_engine() {
   assert_eq!(
     got,
     Text::new(
-      world::files::tilded(&lived.at.join("a.txt"), std::env::home_dir().as_deref()),
+      world::files::tilded(&lived.at.join("a.txt"), env::home_dir().as_deref()),
       "one\ntwo\n"
     )
   );
@@ -310,6 +328,46 @@ fn a_timeout_or_a_wait_past_the_longest_timer_runs_its_full_time() {
 }
 
 #[test]
+fn a_command_runs_where_a_request_for_an_editor_or_a_terminal_fails_at_once() {
+  let mut lived = Lived::new("unasked", &[], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Bash { timeout: Some(30.0), on: on(&root), ..Default::default() };
+  let line = r#"printf '%s %s %s %s' "$GIT_EDITOR" "$VISUAL" "$EDITOR" "$GIT_TERMINAL_PROMPT""#;
+  let exit: Exit = block_on(lived.engine.bash(line, with).unwrap()).unwrap();
+  assert_eq!(exit.stdout.content, "false false false 0");
+  // A commit with no message opens the editor, which is `false` here: the commit fails at once.
+  let with = verbs::Bash { timeout: Some(30.0), on: on(&root), ..Default::default() };
+  // A hook of git hands its own index to each command that it runs, which the repository of the
+  // test must not use.
+  let line = "unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX; cd \"$TMPDIR\" && rm -rf unasked && git init -q unasked && cd unasked && echo a > a \
+              && git add a && git -c user.name=t -c user.email=t@t commit";
+  let begun = Instant::now();
+  let exit: Exit = block_on(lived.engine.bash(line, with).unwrap()).unwrap();
+  assert!(matches!(exit.code, Some(code) if code != 0), "{exit:?}");
+  assert!(begun.elapsed() < Duration::from_secs(25), "the commit waited for an editor");
+  assert!(exit.stdout.content.to_lowercase().contains("editor"), "{}", exit.stdout.content);
+}
+
+#[test]
+#[cfg(unix)]
+fn a_timeout_ends_the_command_though_a_process_of_it_left_its_group_holding_the_stream() {
+  // A process in a session of its own is in no group that the World ends, and it holds the stdout
+  // of the command for LONG seconds, so an exit before LONG has passed proves that the timeout
+  // ended the act, not the stream.
+  const LONG: u64 = 60;
+  let mut lived = Lived::new("escaped", &[], true).unwrap();
+  let with = verbs::Bash { timeout: Some(0.3), on: on(&lived.root()), ..Default::default() };
+  let line = format!("perl -e 'use POSIX; POSIX::setsid(); sleep {LONG}' & echo $!; sleep {LONG}");
+  let begun = Instant::now();
+  let exit: Exit = block_on(lived.engine.bash(&line, with).unwrap()).unwrap();
+  let took = begun.elapsed();
+  let pid = exit.stdout.content.lines().next().unwrap_or_default().to_owned();
+  Command::new("kill").arg(&pid).status().unwrap();
+  assert_eq!(exit.code, None);
+  assert!(took < Duration::from_secs(LONG / 2), "the act outlived its timeout, for {took:?}");
+}
+
+#[test]
 fn a_command_that_outlives_its_timeout_ends_with_no_code() {
   // Each process of the command sleeps for LONG, and the one in the background holds the stdout of the command, which
   // the World reads to its end before it says the exit. So an exit before LONG has passed proves that the World ended
@@ -340,7 +398,7 @@ fn a_command_ends_once_its_shell_exited_and_a_drain_passed_though_a_process_of_i
   let exit: Exit = block_on(lived.engine.bash(&line, with).unwrap()).unwrap();
   let took = begun.elapsed();
   let pid = exit.stdout.content.lines().last().unwrap_or_default().to_owned();
-  std::process::Command::new("kill").arg(&pid).status().unwrap();
+  Command::new("kill").arg(&pid).status().unwrap();
   assert_eq!(exit.code, Some(0));
   assert!(
     exit.stdout.content.starts_with("before\n"),
@@ -366,7 +424,7 @@ fn a_command_ends_though_a_process_that_left_its_group_holds_its_streams() {
   let exit: Exit = block_on(lived.engine.bash(&line, with).unwrap()).unwrap();
   let took = begun.elapsed();
   let pid = exit.stdout.content.trim().to_owned();
-  std::process::Command::new("kill").arg(&pid).status().unwrap();
+  Command::new("kill").arg(&pid).status().unwrap();
   assert_eq!(exit.code, Some(0));
   assert!(pid.parse::<u32>().is_ok(), "the stdout says the child: {:?}", exit.stdout.content);
   assert!(
@@ -381,7 +439,7 @@ fn a_cd_comes_to_the_directory_that_stands_there_and_a_cd_where_none_stands_is_r
   let root = lived.root();
   let into = lived.at.join("into");
   fs::create_dir_all(&into).expect("a directory of the test");
-  let shown = world::files::tilded(&into, std::env::home_dir().as_deref());
+  let shown = world::files::tilded(&into, env::home_dir().as_deref());
   let into = into.display().to_string();
   assert_eq!(lived.engine.cd(&into, verbs::Cd { on: on(&root) }).unwrap(), shown);
   let no = lived.engine.cd("nowhere", verbs::Cd { on: on(&root) }).unwrap_err();
@@ -409,7 +467,7 @@ fn a_command_that_does_not_start_is_closed_with_why_and_the_chain_is_told() {
 
 #[test]
 fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it() {
-  let words = ["await bash('sleep 5')", "c = bash('sleep 0.2; echo late')\nclose(1)"];
+  let words = ["await bash('sleep 5')", "c = bash('sleep 0.2; echo late')\nawait c\nclose(1)"];
   let mut lived = Lived::new("controls", &words, true).unwrap();
   let root = lived.root();
   let cancelled = lived
@@ -443,7 +501,7 @@ fn the_world_ends_a_command_at_a_cancel_of_its_prompt_and_never_at_a_close_of_it
 #[cfg(unix)]
 #[test]
 fn a_cancel_of_a_command_ends_the_process_that_it_started_and_not_only_its_shell() {
-  let pid = std::env::temp_dir().join(format!("furb-cancel-{}.pid", std::process::id()));
+  let pid = env::temp_dir().join(format!("furb-cancel-{}.pid", process::id()));
   drop(fs::remove_file(&pid));
   let word = format!("await bash('sleep 30 & echo $! > {}; wait')", pid.display());
   let mut lived = Lived::new("slay", &[word.as_str()], true).unwrap();
@@ -464,8 +522,7 @@ fn a_cancel_of_a_command_ends_the_process_that_it_started_and_not_only_its_shell
   let sleeper = fs::read_to_string(&pid).unwrap().trim().to_owned();
   lived.engine.cancel(&cancelled, verbs::Cancel::default()).unwrap();
   assert_eq!(lived.settled("bash1").unwrap_err().name, "CancelledError");
-  let alive =
-    || std::process::Command::new("kill").args(["-0", &sleeper]).output().unwrap().status.success();
+  let alive = || Command::new("kill").args(["-0", &sleeper]).output().unwrap().status.success();
   let waited = Instant::now();
   while alive() && waited.elapsed() < Duration::from_secs(10) {
     thread::sleep(Duration::from_millis(20));
@@ -552,7 +609,7 @@ fn a_wait_that_a_wake_starts_again_in_a_later_life_ends_when_it_was_due() {
 fn a_template_string_of_the_host_comes_in_whole_and_a_pair_comes_in_as_its_expression_with_an_equals_sign()
  {
   let mut lived = Lived::new("templates", &[], true).unwrap();
-  let whole = crate::value::templated([
+  let whole = value::templated([
     Object::string("n is "),
     Object::list([Object::int(5), Object::string("n"), Object::none(), Object::string("03")]),
   ]);
@@ -563,7 +620,7 @@ fn a_template_string_of_the_host_comes_in_whole_and_a_pair_comes_in_as_its_expre
     "each string and each interpolation came in as it was, its conversion and its format spec among it"
   );
   let pairs =
-    crate::value::paired([("n".to_owned(), Object::int(5)), ("s".to_owned(), Object::string("a"))]);
+    value::paired([("n".to_owned(), Object::int(5)), ("s".to_owned(), Object::string("a"))]);
   let got = lived.engine.word("repr(list(t))", vec![("t", pairs)]).unwrap();
   assert_eq!(
     got.as_ref().as_str(),
@@ -661,7 +718,7 @@ impl world::Store for Ledger {
     Ok(Vec::new())
   }
 
-  fn keep(&mut self, _: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+  fn keep(&mut self, _: ObjectRef<'_>) -> Result<(), Fault> {
     self.0.borrow_mut().push("keep");
     Ok(())
   }
@@ -676,7 +733,7 @@ impl world::Store for Ledger {
 fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
   let ledger = Rc::new(RefCell::new(Vec::new()));
   let (record, store) = world::keeping(Ledger(Rc::clone(&ledger))).unwrap();
-  let at = Yard::new(format!("furb-engine-ledger-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-ledger-{}", process::id()));
   let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned()])));
   let scratch = world::Scratch::own();
   let ears = [
@@ -701,7 +758,7 @@ fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
 /// A store whose disk can be full: while it is, it refuses each entry and each sync. It writes in a ledger each entry
 /// that it keeps and each entry that it refuses.
 struct Full {
-  refusing: Rc<std::cell::Cell<bool>>,
+  refusing: Rc<Cell<bool>>,
   kept: Rc<RefCell<Vec<String>>>,
   refused: Rc<RefCell<Vec<String>>>,
 }
@@ -711,8 +768,8 @@ impl world::Store for Full {
     Ok(Vec::new())
   }
 
-  fn keep(&mut self, entry: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
-    let line = crate::wire::record(entry).to_string();
+  fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
+    let line = wire::record(entry).to_string();
     if self.refusing.get() {
       self.refused.borrow_mut().push(line);
       return Err(Fault::refused("No space left on device (os error 28): the record"));
@@ -732,12 +789,12 @@ impl world::Store for Full {
 
 #[test]
 fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator() {
-  let full = Rc::new(std::cell::Cell::new(true));
+  let full = Rc::new(Cell::new(true));
   let (kept, refused) = (Rc::new(RefCell::new(Vec::new())), Rc::new(RefCell::new(Vec::new())));
   let store =
     Full { refusing: Rc::clone(&full), kept: Rc::clone(&kept), refused: Rc::clone(&refused) };
   let (record, store) = world::keeping(store).unwrap();
-  let at = Yard::new(format!("furb-engine-full-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-full-{}", process::id()));
   let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned(), "close(2)".to_owned()])));
   let scratch = world::Scratch::own();
   let ears = [
@@ -775,7 +832,7 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));
   settle(&mut engine);
   let kept = kept.borrow();
-  let once: std::collections::HashSet<_> = kept.iter().collect();
+  let once: HashSet<_> = kept.iter().collect();
   assert_eq!(once.len(), kept.len(), "an entry was kept twice: {kept:?}");
   let refused = refused.borrow();
   let mut waited: Vec<&String> = Vec::new();
@@ -1036,7 +1093,7 @@ fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
 
 /// A life on the provider of the test and on the ear that pauses, and the gate of the work of that ear.
 fn paused(yard: &str) -> (Engine, oneshot::Sender<()>) {
-  let at = std::env::temp_dir().join(format!("furb-engine-{yard}-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-engine-{yard}-{}", process::id()));
   let (gate, opens) = oneshot::channel();
   let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("pauser", pauser(opens))];
   (Engine::boot(Vec::<Object>::new(), ears).unwrap(), gate)
@@ -1090,7 +1147,7 @@ fn quick() -> Box<dyn Ear> {
         Next::Heard(a) | Next::Resumed(a) => {
           if a.kind() == "wait" && a.question() {
             say(&mut co, Fact::says("started", a.about(), []));
-            co.work(stream::once(std::future::ready(a.about().to_owned())));
+            co.work(stream::once(future::ready(a.about().to_owned())));
           }
         }
         Next::Worked(about) => {
@@ -1103,7 +1160,7 @@ fn quick() -> Box<dyn Ear> {
 
 #[test]
 fn what_the_work_of_an_ear_came_to_lands_after_the_run_that_began_it() {
-  let at = std::env::temp_dir().join(format!("furb-engine-landed-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-engine-landed-{}", process::id()));
   let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("quick", quick())];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   let root = engine.root().to_owned();
@@ -1125,8 +1182,8 @@ fn the_work_of_an_ear_speaks_when_the_life_drives_it_and_never_while_the_ear_hea
   // Two waits end in one drive. The first wakes a word that waits on a rung that waits on it, the second a word
   // that waits on it alone, and each word then makes a wait. What the second wait came to lands after all that the
   // first one caused, as a later life says it again, so the later life makes each act under the name it had.
-  let at = Yard::new(format!("furb-engine-alone-{}", std::process::id()));
-  let life = |at: &std::path::Path| {
+  let at = Yard::new(format!("furb-engine-alone-{}", process::id()));
+  let life = |at: &Path| {
     let (record, store) = world::store(at.join("record.jsonl")).unwrap();
     let ears = [
       ("provider", provider(at.to_path_buf(), Rc::default(), Rc::default())),
@@ -1175,7 +1232,7 @@ fn early() -> Box<dyn Ear> {
         Next::Heard(a) | Next::Resumed(a) => {
           if a.kind() == "wait" && a.question() && a.by() == "caller" {
             say(&mut co, Fact::says("started", a.about(), []));
-            co.work(stream::once(std::future::ready(a.about().to_owned())));
+            co.work(stream::once(future::ready(a.about().to_owned())));
           }
         }
         Next::Worked(about) => say(&mut co, done(&about, Object::none())),
@@ -1193,7 +1250,7 @@ fn caller() -> Box<dyn Ear> {
         Next::Heard(a) | Next::Resumed(a) => {
           if a.kind() == "wait" && a.question() && a.by() == "operator" {
             say(&mut co, Fact::says("started", a.about(), []));
-            co.work(stream::once(std::future::ready((a.about().to_owned(), a.on().to_owned()))));
+            co.work(stream::once(future::ready((a.about().to_owned(), a.on().to_owned()))));
           }
         }
         Next::Worked((about, on)) => {
@@ -1229,7 +1286,7 @@ fn the_work_of_an_ear_takes_what_its_verb_came_to_when_the_life_drives_it_and_ne
  {
   // The work of caller makes wait2, which early ends while the work of caller has not taken what its verb gave.
   // The work of caller goes on at the next drive, so the done of wait1 lands after all that the done of wait2 made.
-  let at = std::env::temp_dir().join(format!("furb-engine-answered-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-engine-answered-{}", process::id()));
   let ears = [
     ("provider", provider(at, Rc::default(), Rc::default())),
     ("early", early()),
@@ -1249,28 +1306,24 @@ fn the_work_of_an_ear_takes_what_its_verb_came_to_when_the_life_drives_it_and_ne
 }
 
 /// A waker that counts how often it is woken.
-struct Counted(std::sync::atomic::AtomicUsize);
+struct Counted(AtomicUsize);
 
 impl Wake for Counted {
   fn wake(self: Arc<Self>) {
-    self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    self.0.fetch_add(1, Ordering::SeqCst);
   }
 }
 
 #[test]
 fn a_drive_that_finds_nothing_to_do_wakes_nobody() {
   let mut lived = Lived::new("idle", &[], true).unwrap();
-  let counted = Arc::new(Counted(std::sync::atomic::AtomicUsize::new(0)));
+  let counted = Arc::new(Counted(AtomicUsize::new(0)));
   let waker = Waker::from(Arc::clone(&counted));
   lived.engine.pump(&waker).unwrap();
-  let woken = counted.0.load(std::sync::atomic::Ordering::SeqCst);
+  let woken = counted.0.load(Ordering::SeqCst);
   lived.engine.pump(&waker).unwrap();
   lived.engine.pump(&waker).unwrap();
-  assert_eq!(
-    counted.0.load(std::sync::atomic::Ordering::SeqCst),
-    woken,
-    "a drive with nothing to do wakes nobody"
-  );
+  assert_eq!(counted.0.load(Ordering::SeqCst), woken, "a drive with nothing to do wakes nobody");
 }
 
 /// An ear that keeps the kind and the subject of every fact it hears.
@@ -1341,15 +1394,21 @@ fn said(fact: &Fact) -> Option<String> {
     .then(|| format!("{} {} {:?}", fact.kind(), fact.about(), words.collect::<Vec<_>>()))
 }
 
-/// Each sandbox that this thread makes from now on, with a turn bound short enough for a test.
+/// Each sandbox that this thread makes from now on, with a turn bound short enough for a
+/// test, which the first word of the script meets; each word after it runs under
+/// [`crate::testing::LOADED`],
+/// since the test proves what the first word did, not how fast the machine runs the others.
 fn bounded() {
-  crate::sand::BOUND.set(Duration::from_millis(500));
+  testing::cut_first(Duration::from_millis(500));
 }
 
 #[test]
 fn a_word_that_never_yields_raises_at_the_bound_and_the_chain_asks_again() {
   bounded();
-  let mut lived = Lived::new("spun", &["while True:\n  pass", "close(8)"], true).unwrap();
+  // The second word polls the clock for a second, past the short bound, and runs whole
+  // under the bound of the words that the test does not cut.
+  let polls = "t0 = clock()\nwhile clock() - t0 < 1:\n  pass\nclose(8)";
+  let mut lived = Lived::new("spun", &["while True:\n  pass", polls, "close(0)"], true).unwrap();
   let root = lived.root();
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = lived.engine.prompt(Object::string("int"), with).unwrap();
@@ -1362,7 +1421,7 @@ fn a_word_that_never_yields_raises_at_the_bound_and_the_chain_asks_again() {
 fn a_word_that_never_yields_on_another_chain_raises_and_the_root_goes_on() {
   bounded();
   let word = "c = chain('w')\nr = rung('while True:\\n  pass', on=c)\nawait wait(1, __name__)\nclose(repr(peek(r)))";
-  let mut lived = Lived::new("apart", &[word], true).unwrap();
+  let mut lived = Lived::new("apart", &[word, "pass"], true).unwrap();
   let root = lived.root();
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = lived.engine.prompt(Object::string("str"), with).unwrap();
@@ -1373,7 +1432,8 @@ fn a_word_that_never_yields_on_another_chain_raises_and_the_root_goes_on() {
 #[test]
 fn an_ear_that_spins_past_the_bound_is_dropped_as_an_ear_that_raises_and_the_life_goes_on() {
   bounded();
-  let word = "def spin():\n  yield\n  while True:\n    pass\ndrive(spin(), 'spin')";
+  let word =
+    "def spin():\n  yield\n  while True:\n    pass\ndrive(spin(), 'spin')\ndebug(t'driven')";
   let again =
     "def calm():\n  yield\ntry:\n  drive(calm(), 'spin')\n  close(8)\nexcept Refused:\n  close(0)";
   let mut lived = Lived::new("ear", &[word, again], true).unwrap();
@@ -1400,6 +1460,7 @@ fn a_record_whose_word_never_yields_replays_to_the_same_facts() {
     let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
     (root, facts.iter().filter_map(said).collect::<Vec<_>>(), first.end())
   };
+  bounded();
   let mut second = Lived::new("replayed", &[], false).unwrap();
   assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
   assert_eq!(second.read.borrow().len(), 0, "a later life asks no model for what the record holds");
@@ -1434,7 +1495,7 @@ fn prober(count: Rc<RefCell<i64>>, raises: &'static [i64]) -> Box<dyn Ear> {
 
 /// A life on the provider of the test and on these ears, and its root.
 fn probed(yard: &str, ears: Vec<(&str, Box<dyn Ear>)>) -> (Yard, Engine, String) {
-  let at = Yard::new(format!("furb-engine-{yard}-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-{yard}-{}", process::id()));
   let mut all = vec![("provider", provider(at.to_path_buf(), Rc::default(), Rc::default()))];
   all.extend(ears);
   let engine = Engine::boot(Vec::new(), all).unwrap();
@@ -1467,6 +1528,30 @@ fn notices(engine: &mut Engine) -> Vec<String> {
     .collect()
 }
 
+/// An ear of the test that answers each probe with an Overflow, as the provider does past a window.
+fn overflowing() -> Box<dyn Ear> {
+  hearing(&["probe"], move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if a.kind() == "probe" && a.question() {
+        let why = Fault::new("Overflow", vec![Object::string("m answered nothing: too long")]);
+        say(&mut co, done(a.about(), why.object()));
+      }
+    }
+  })
+}
+
+#[test]
+fn an_overflow_that_an_ear_gives_comes_into_the_life_as_the_class_of_the_engine_that_is_a_refused()
+{
+  let (_yard, mut engine, root) = probed("overflow", vec![("probe", overflowing())]);
+  let no = probe(&mut engine, &root).unwrap_err();
+  assert_eq!(no.name, "Overflow");
+  assert!(no.message().contains("too long"), "{no}");
+  let kept = engine.word("issubclass(Overflow, Refused)", vec![]).unwrap();
+  assert_eq!(kept.as_ref().as_bool(), Some(true));
+}
+
 #[test]
 fn an_ear_of_the_crate_that_raises_refuses_that_act_starts_again_and_tells_the_operator_once() {
   let count = Rc::new(RefCell::new(0));
@@ -1495,53 +1580,6 @@ fn an_ear_that_cannot_start_again_tells_the_operator_why_it_ended() {
   let told = notices(&mut engine);
   assert_eq!(told.len(), 1, "{told:?}");
   assert!(told[0].contains("probe 1 broke. It cannot start again."), "{told:?}");
-}
-
-#[test]
-fn a_gate_that_raises_refuses_the_word_and_a_fresh_gate_reads_the_next_word() {
-  let (_yard, mut engine, root) = probed("raising-gate", vec![]);
-  // A name of the engine that is no str breaks the sheet of every word, as a fault of the readying does.
-  engine.word("globals().update({1: 0})", vec![]).unwrap();
-  let no = engine
-    .verb("gate", vec![Object::string("close(1)")], vec![("on", Object::string(&root))])
-    .unwrap_err();
-  assert_eq!(no.name, "Refused");
-  assert!(no.message().contains("The ear gate raised AttributeError"), "{no}");
-  engine.word("globals().pop(1)", vec![]).unwrap();
-  let found = engine
-    .verb("gate", vec![Object::string("close(1)")], vec![("on", Object::string(&root))])
-    .unwrap();
-  assert_eq!(found.py_repr(), "[]");
-}
-
-#[test]
-fn the_gate_refuses_a_word_that_monty_cannot_compile_and_reads_the_next_word() {
-  let (_yard, mut engine, root) = probed("gate", vec![]);
-  let word =
-    "from typing import TypedDict\nclass Point(TypedDict, total=False):\n  x: int\nclose(1)";
-  let found =
-    engine.verb("gate", vec![Object::string(word)], vec![("on", Object::string(&root))]).unwrap();
-  let found = found.py_repr();
-  assert!(found.starts_with("[\"line ") && found.contains("metaclasses"), "{found}");
-  let next = engine
-    .verb("gate", vec![Object::string("x = 1")], vec![("on", Object::string(&root))])
-    .unwrap();
-  assert_eq!(next.py_repr(), "[]");
-}
-
-#[test]
-fn the_gate_answers_a_word_that_it_fails_on_with_a_refusal_and_reads_the_next_word() {
-  let (_yard, mut engine, root) = probed("gatefault", vec![]);
-  engine.word("globals().update(program_held=program, program=lambda on: 1 / 0)", vec![]).unwrap();
-  let no = engine
-    .verb("gate", vec![Object::string("x = 1")], vec![("on", Object::string(&root))])
-    .unwrap_err();
-  assert!(no.message().contains("ZeroDivisionError"), "{no}");
-  engine.word("globals().update(program=program_held)", vec![]).unwrap();
-  let next = engine
-    .verb("gate", vec![Object::string("x = 1")], vec![("on", Object::string(&root))])
-    .unwrap();
-  assert_eq!(next.py_repr(), "[]");
 }
 
 /// What the provider took, in the chains of the root: the number of replies that it took, and each
@@ -1591,7 +1629,7 @@ fn taken_replies(engine: &mut Engine, root: &str) -> (usize, Vec<(String, String
 #[test]
 fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply_taken_by_the_same_provider()
  {
-  let at = Yard::new(format!("furb-engine-streamed-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-streamed-{}", process::id()));
   let turn = |text: &str| {
     [
       MockStreamEvent::text(text),
@@ -1687,7 +1725,7 @@ fn noter() -> Box<dyn Ear> {
 fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes_each_act_that_it_makes()
  {
   // The note lands before teller calls the verb of its second thing, so teller takes the wait that the note makes.
-  let at = std::env::temp_dir().join(format!("furb-engine-yield-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-engine-yield-{}", process::id()));
   let ears = [
     ("provider", provider(at, Rc::default(), Rc::default())),
     ("teller", teller()),
@@ -1719,7 +1757,9 @@ fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes
 
 #[test]
 fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry() {
-  crate::sand::BOUND.set(Duration::from_millis(100));
+  // A bound of 100 ms may pass before the loop enters its `try` on a loaded machine, as in
+  // life.test.rs.
+  BOUND.set(Duration::from_secs(1));
   let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
   let mut lived = Lived::new("stopped", &[cutter, "close(8)"], true).unwrap();
   let root = lived.root();
@@ -1756,7 +1796,7 @@ fn briefly() -> Box<dyn Ear> {
 
 #[test]
 fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
-  let at = std::env::temp_dir().join(format!("furb-engine-briefly-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-engine-briefly-{}", process::id()));
   let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("briefly", briefly())];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
   let root = engine.root().to_owned();
@@ -1771,27 +1811,41 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
 /// Each sandbox that this thread makes from now on, and each that holds the bound again after
 /// the work of the engine, with this bound of the turn.
 fn bounded_at(bound: Duration) {
-  crate::sand::BOUND.set(bound);
+  testing::bound_all(bound);
 }
 
-/// The bound of the replay and the bound of the checkpoint that the test proves, from `gather`,
-/// the least time that the gather of a checkpoint of the life took in this run.
+/// The bound of the replay and the bound of the checkpoint that the test proves: half of `replay`,
+/// the least time that a replay of the record as a whole took in this run, and of `gather`, the
+/// least time that the gather of a checkpoint of the life took in it.
 ///
-/// A step of a word in a replay holds more than the word: it holds the work of each ear that the
-/// word wakes, and each run of the collector of cycles, whose time grows with the heap of the
-/// life. In the last life of this test, one step took 15 ms with the collector and 0.6 ms with no
-/// collector, and a gather took 190 ms, so a bound under the gather is too near a step on a loaded
-/// machine. A replay as a whole took 50 to 110 gathers, so at eight gathers each step stays about
-/// 100 times under the bound, and the replay as a whole outlasts it. The gather is one stretch of
-/// the work of the engine, and the bound of three quarters of it holds only while the life writes
-/// its checkpoint, when no word steps.
-fn bounds(gather: Duration) -> (Duration, Duration) {
-  (gather * 8, gather * 3 / 4)
+/// Each bound is a share of the work that must outlast it, as this machine ran that work, so the
+/// work outlasts it on each machine. One run of the same replay takes up to two thirds more than
+/// another on a quiet machine, so the share leaves a single run that margin. A step of a word in a
+/// replay holds more than the word: it holds the work of each ear that the word wakes, and each run
+/// of the collector of cycles, whose time grows with the heap of the life. The word of this life
+/// takes 300 steps, so each step stays well under half of the replay as a whole. The gather is one
+/// stretch of the work of the engine, and its bound holds only while the life writes its
+/// checkpoint, when no word steps.
+fn bounds(replay: Duration, gather: Duration) -> (Duration, Duration) {
+  (replay / 2, gather / 2)
+}
+
+/// The least time that a piece of work took of three: a pause of the machine only makes the work
+/// longer, so the least is the work. What the work made goes after its time is read.
+fn least<T>(mut work: impl FnMut() -> T) -> Duration {
+  let timed = (0..3).map(|_| {
+    let began = Instant::now();
+    let made = work();
+    let took = began.elapsed();
+    drop(made);
+    took
+  });
+  timed.min().unwrap_or_default()
 }
 
 #[test]
 fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint_past_it() {
-  let word = "for i in range(3000):\n  await wait(0, __name__)\nclose(8)";
+  let word = "for i in range(300):\n  await wait(0, __name__)\nclose(8)";
   let (root, facts, gather, _yard) = {
     let mut first = Lived::new("outlasts", &[word], true).unwrap();
     let root = first.root();
@@ -1799,19 +1853,15 @@ fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint
     let act = first.engine.prompt(Object::string("int"), with).unwrap();
     assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8), "the life runs its words");
     let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
-    // A pause of the machine only makes a gather longer, so the least of three is the gather.
-    let gather = (0..3)
-      .map(|_| {
-        let began = Instant::now();
-        crate::checkpoint::written(&mut first.engine)
-          .expect("the checkpoint of the life is gathered");
-        began.elapsed()
-      })
-      .min()
-      .unwrap_or_default();
+    let gather = least(|| {
+      checkpoint::written(&mut first.engine).expect("the checkpoint of the life is gathered")
+    });
     (root, facts.iter().filter_map(said).collect::<Vec<_>>(), gather, first.end())
   };
-  let (replay, checkpoint) = bounds(gather);
+  // A life that opens on the record and keeps nothing leaves the record as it was, so each replay
+  // does the same work.
+  let whole = least(|| Lived::new("outlasts", &[], false).expect("the replay opens the life"));
+  let (replay, checkpoint) = bounds(whole, gather);
   bounded_at(replay);
   let began = Instant::now();
   let mut second = Lived::new("outlasts", &[], false).expect("the replay opens the life");
@@ -1843,14 +1893,40 @@ fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint
 
 #[test]
 fn a_kernel_that_raises_ends_each_run_whose_word_it_lost_so_a_later_message_gets_its_step() {
-  let words = [
-    "await wait(600, __name__)\nclose(1)",
-    "await wait(0.2, __name__)\nclose(2)",
-    "close(7)",
-    "close(7)",
-    "close(7)",
-  ];
-  let mut lived = Lived::new("lost", &words, true).unwrap();
+  lost_runs_end(Lived::new("lost", &LOST, true).unwrap());
+}
+
+#[test]
+fn a_kernel_of_the_major_from_before_it_ended_its_lost_runs_ends_them_through_its_adapter() {
+  // The root and the fact made of a record of 0.4.2, whose Kernel has no lost, as a record that a
+  // life of that build began.
+  let old = include_str!("../tests/corpus/next/language.jsonl");
+  let head: Vec<&str> = old.lines().take(2).collect();
+  assert!(
+    head[1].contains("\"made\"") && !head[1].contains("def lost("),
+    "the record holds an older Kernel"
+  );
+  let name = format!("furb-engine-lost-old-{}", process::id());
+  let yard = Yard::new(&name);
+  fs::create_dir_all(env::temp_dir().join(&name)).unwrap();
+  fs::write(env::temp_dir().join(&name).join("record.jsonl"), head.join("\n") + "\n").unwrap();
+  let mut lived = Lived::new("lost-old", &LOST, false).unwrap();
+  lived.yard = Some(yard);
+  lost_runs_end(lived);
+}
+
+/// The words of the model in a life whose Kernel raises while two runs await.
+const LOST: [&str; 5] = [
+  "await wait(600, __name__)\nclose(1)",
+  "await wait(0.2, __name__)\nclose(2)",
+  "close(7)",
+  "close(7)",
+  "close(7)",
+];
+
+/// The scenario of the lost runs: the Kernel raises while two runs await, and each prompt is asked
+/// again after the loss, a later one first.
+fn lost_runs_end(mut lived: Lived) {
   let root = lived.root();
   // The Kernel asserts that Exit is a type as it carries a word past an act that it awaited,
   // so with Exit rebound it raises at the end of the short wait, and loses the word that
@@ -1937,7 +2013,7 @@ fn a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_
   let at =
     record.find("A object at 0x").expect("the record holds the address") + "A object at 0x".len();
   let end = at + record[at..].find(|one: char| !one.is_ascii_hexdigit()).unwrap_or(0);
-  let path = std::env::temp_dir().join(format!("furb-engine-address-{}", std::process::id()));
+  let path = env::temp_dir().join(format!("furb-engine-address-{}", process::id()));
   fs::write(path.join("record.jsonl"), format!("{}1{}", &record[..at], &record[end..])).unwrap();
   let second = Lived::new("address", &[], false).expect("the replay opens the life");
   assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
@@ -1946,22 +2022,22 @@ fn a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_
 }
 
 /// A work that gives nothing, and counts its end in `ends` as it drops.
-fn counted(ends: &Rc<std::cell::Cell<u8>>) -> impl futures::Stream<Item = ()> + 'static {
+fn counted(ends: &Rc<Cell<u8>>) -> impl futures::Stream<Item = ()> + 'static {
   /// What ends with the work.
-  struct Ends(Rc<std::cell::Cell<u8>>);
+  struct Ends(Rc<Cell<u8>>);
   impl Drop for Ends {
     fn drop(&mut self) {
       self.0.set(self.0.get() + 1);
     }
   }
   stream::unfold(Ends(Rc::clone(ends)), |held| async move {
-    std::future::pending::<()>().await;
+    future::pending::<()>().await;
     Some(((), held))
   })
 }
 
 /// An ear that takes each wait twice, each time with a work that gives nothing.
-fn twice(ends: Rc<std::cell::Cell<u8>>) -> Box<dyn Ear> {
+fn twice(ends: Rc<Cell<u8>>) -> Box<dyn Ear> {
   ear(move |mut co: Co<()>| async move {
     loop {
       if let Next::Heard(a) = co.next().await
@@ -1978,8 +2054,8 @@ fn twice(ends: Rc<std::cell::Cell<u8>>) -> Box<dyn Ear> {
 
 #[test]
 fn the_work_of_an_act_ends_at_a_later_take_of_it_and_at_its_first_done_whoever_says_it() {
-  let at = std::env::temp_dir().join(format!("furb-engine-taken-{}", std::process::id()));
-  let ends = Rc::new(std::cell::Cell::new(0));
+  let at = env::temp_dir().join(format!("furb-engine-taken-{}", process::id()));
+  let ends = Rc::new(Cell::new(0));
   let ears =
     [("provider", provider(at, Rc::default(), Rc::default())), ("twice", twice(Rc::clone(&ends)))];
   let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
@@ -2013,7 +2089,7 @@ fn holder(ends: bool) -> Box<dyn Ear> {
 
 #[test]
 fn an_ear_that_hears_with_no_work_takes_again_an_act_that_an_earlier_life_took() {
-  let at = Yard::new(format!("furb-engine-held-{}", std::process::id()));
+  let at = Yard::new(format!("furb-engine-held-{}", process::id()));
   let life = |ends: bool| {
     let (record, store) = world::store(at.join("record.jsonl")).unwrap();
     let ears = [
@@ -2032,4 +2108,117 @@ fn an_ear_that_hears_with_no_work_takes_again_an_act_that_an_earlier_life_took()
   let mut second = life(true);
   second.wake(&root).unwrap();
   assert!(block_on(Act::<Object>::of(&mut second, "wait1")).is_ok(), "the ear took the wait again");
+}
+
+#[test]
+fn a_replay_takes_the_answer_of_each_question_that_the_record_holds_and_a_live_word_past_the_bound_is_refused()
+ {
+  bounded_at(Duration::from_secs(30));
+  // A word that asks the clock again and again in one step, well within the bound of its life.
+  let word = "n = 0\nfor i in range(3000):\n  n += clock() > 0\nclose(8)";
+  let (root, facts, took, _yard) = {
+    let mut first = Lived::new("settled", &[word], true).unwrap();
+    let root = first.root();
+    let with = verbs::Prompt { on: on(&root), ..Default::default() };
+    let began = Instant::now();
+    let act = first.engine.prompt(Object::string("int"), with).unwrap();
+    assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8), "the life runs its word");
+    let took = began.elapsed();
+    let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+    (root, facts.iter().filter_map(said).collect::<Vec<_>>(), took, first.end())
+  };
+  assert!(took > Duration::from_millis(40), "the word runs long enough to pass a bound: {took:?}");
+  // A machine under load runs the replay slower than the life ran it: a bound of a twentieth of the
+  // word stands for it.
+  bounded_at(took / 20);
+  let spin = "while True:\n  pass";
+  let mut second = Lived::new("settled", &[spin, "close(9)"], false).expect("the replay opens");
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert!(second.engine.stopped().is_none(), "{:?}", second.engine.stopped());
+  let again = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let again = again.iter().filter_map(said).collect::<Vec<_>>();
+  let ends: Vec<_> = facts.iter().filter(|one| one.starts_with("done")).collect();
+  let missing: Vec<_> = ends.iter().filter(|one| !again.contains(one)).collect();
+  assert!(missing.is_empty(), "the replay ends each act as the record does: {missing:?}");
+  // The live steps that follow run under a bound that a machine under load keeps, and the spin
+  // passes any bound.
+  bounded_at(Duration::from_secs(2));
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = second.engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(9), "the chain asks again");
+  let read = second.read.borrow();
+  assert!(
+    read.iter().any(|one| one.contains("TimeoutError('turn time limit exceeded")),
+    "a live word past the bound is refused: {read:?}"
+  );
+  drop(read);
+  drop(second);
+  // The record keeps the end that the bound gave the word that spins, so its replay ends it so.
+  let third = Lived::new("settled", &[], false).expect("the replay of the spin opens");
+  assert!(third.engine.raised().is_none(), "{:?}", third.engine.raised());
+  assert!(third.engine.stopped().is_none(), "{:?}", third.engine.stopped());
+}
+
+#[test]
+fn a_run_of_the_record_that_goes_on_live_after_the_replay_is_bounded() {
+  bounded_at(Duration::from_secs(2));
+  // The word waits, and the life ends while it waits: the record holds the run but not its end.
+  let word = "await wait(1.5, __name__)\nwhile True:\n  pass";
+  let (root, _yard) = {
+    let mut first = Lived::new("held-live", &[word], true).unwrap();
+    let root = first.root();
+    let with = verbs::Prompt { on: on(&root), ..Default::default() };
+    let _asked = first.engine.prompt(Object::string("int"), with).unwrap();
+    let pause = first
+      .engine
+      .wait(&[root.as_str()], verbs::Wait { seconds: Some(0.3), on: on(&root) })
+      .unwrap();
+    block_on(pause).unwrap();
+    (root, first.end())
+  };
+  let mut second = Lived::new("held-live", &["pass", "close(9)"], false).expect("the replay opens");
+  // The wake covers the thread, so the chain asks it one reply while its word waits, and a pass
+  // leaves the thread to rest on that wait.
+  second.engine.wake(&root).unwrap();
+  // The life runs in short waits until the bound refuses the word, which it does after 2 s.
+  let refused =
+    |read: &[String]| read.iter().any(|one| one.contains("TimeoutError('turn time limit exceeded"));
+  let started = Instant::now();
+  while !refused(&second.read.borrow()) && started.elapsed() < Duration::from_secs(8) {
+    let pause = second
+      .engine
+      .wait(&[root.as_str()], verbs::Wait { seconds: Some(0.2), on: on(&root) })
+      .unwrap();
+    block_on(pause).unwrap();
+  }
+  let read = second.read.borrow();
+  assert!(refused(&read), "the word that spins after its wait is refused by the bound: {read:?}");
+}
+
+#[test]
+fn a_record_of_an_older_engine_opens_through_its_adapter_and_keeps_no_fact_of_its_record_again() {
+  // The adapter of c63db8af says each fact of the outside again under its speaker, which the
+  // journal of that engine hears as a new fact unless it knows that it said it.
+  let at = Yard::new(format!("furb-engine-c63db8af-{}", process::id()));
+  let path = at.join("record.jsonl");
+  fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/replay/speaker.jsonl"), &path).unwrap();
+  let before = fs::read_to_string(&path).unwrap().lines().count();
+  let (record, store) = world::store(path.clone()).unwrap();
+  let scratch = world::Scratch::own();
+  let ears = [
+    ("provider", provider(at.to_path_buf(), Rc::default(), Rc::default())),
+    ("files", world::files(scratch.clone(), at.join("config"), None)),
+    ("bash", world::bash(scratch)),
+    ("time", world::time()),
+    ("store", store),
+  ];
+  let engine = Engine::boot(record, ears).unwrap();
+  assert!(engine.raised().is_none(), "{:?}", engine.raised());
+  drop(engine);
+  let text = fs::read_to_string(&path).unwrap();
+  let added: Vec<&str> = text.lines().skip(before).collect();
+  assert!(
+    added.iter().all(|one| one.contains(r#""stand2""#)),
+    "only the stand of this life is new: {added:?}"
+  );
 }

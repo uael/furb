@@ -1,7 +1,7 @@
 # Test-pruning campaign
 
 A campaign prunes the whole test surface of one part in one pull request: one door, the crate, the command line, the
-TUI, or the outside tests of the engine. The value bar, the retention bar, the candidate evidence and the validation
+window, or the outside tests of the engine. The value bar, the retention bar, the candidate evidence and the validation
 of [SKILL.md](SKILL.md) hold in each lane. This file gives the order of the work. Each step ends on its criterion; do
 not start the next step early.
 
@@ -19,7 +19,7 @@ Done when each test file in scope has a recorded result.
 ## 2. Lanes and inventory
 
 Split the surface into lanes along the owners of the product, not along the names of files. For the crate, the
-lanes are the engine, the sandbox, the gate, the wire, the World and its provider, the extensions, and the opening of
+lanes are the engine, the sandbox, the wire, the World and its provider, the extensions, and the opening of
 a life. Include the tests of the part at shared boundaries, such as `test/outside/` for the door to python.
 
 Done when each test file of the part belongs to exactly one lane.
@@ -53,7 +53,7 @@ keepers, and the seams of the product it lets go.
 
 ## 5. Cutover
 
-Edit lane by lane. One owner changes the shared harness, `test/conftest.py` and `extensions/conftest.py`, one change
+Edit lane by lane. One owner changes the shared harness, `test/conftest.py` and `.agents/skills/conftest.py`, one change
 at a time. With each lane, remove the seams of the product it lets go: the parameters that only tests inject, the
 getters, the exports, and the layers of indirection. Keep the hygiene laws green.
 

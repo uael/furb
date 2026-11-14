@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  value::Object,
+  value::{Fault, Object},
   wire::outward,
   world::{Shape, named},
 };
@@ -52,7 +52,7 @@ pub struct Desk {
 
 /// The desk of a life: each question that the operator owes, and each notice that a window still
 /// shows, of the acts that the life made, the oldest first.
-pub fn desk(acts: &[Act], notices: &[&str]) -> Desk {
+pub fn desk<'a>(acts: impl IntoIterator<Item = &'a Act>, notices: &[&str]) -> Desk {
   let asked = |act: &Act, notice: bool| {
     let word = |at: usize| act.words.get(at).and_then(|one| one.as_str()).unwrap_or_default();
     let shape = if notice { "None" } else { word(0) };
@@ -69,12 +69,25 @@ pub fn desk(acts: &[Act], notices: &[&str]) -> Desk {
       began: act.began,
     }
   };
-  let questions = acts.iter().filter(|act| act.owed()).map(|act| asked(act, false));
-  let shown = acts.iter().filter(|act| notices.contains(&act.id.as_str()));
-  let mut asks: Vec<Ask> = questions.chain(shown.map(|act| asked(act, true))).collect();
-  asks.sort_by_key(|ask| ask.began);
+  let asks = acts.into_iter().flat_map(|act| {
+    let question = act.owed().then(|| asked(act, false));
+    question.into_iter().chain(notices.contains(&act.id.as_str()).then(|| asked(act, true)))
+  });
+  let mut asks: Vec<Ask> = asks.collect();
+  // A question stands before a notice of the same moment.
+  asks.sort_by_key(|ask| (ask.began, ask.notice));
   let questions = asks.iter().filter(|ask| !ask.notice).count();
   Desk { notices: asks.len() - questions, questions, asks }
+}
+
+/// The reason of the refusal of a question that the operator refused with no words.
+pub const REFUSED: &str = "The operator refused the question.";
+
+/// The close of a question that the operator refused with words, as the record writes a value: the
+/// await of the word that asked raises a refusal with those words, so its model reads them. The
+/// words of the operator that take none of the values of a choice close it so too.
+pub fn declined(words: &str) -> String {
+  outward(Fault::refused(words).object().as_ref()).to_string()
 }
 
 /// A value of a Literal as JSON.

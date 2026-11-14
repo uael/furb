@@ -1,14 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import {
-  bound,
   decodeRecord,
   display,
   type Ear,
   Engine,
   type Fact,
   isQuestion,
-  paragraphs,
-  plain,
   speaking,
   time,
 } from "../src/index.ts";
@@ -317,29 +314,4 @@ test("a function of JavaScript answers from its words alone, and a verb it calls
     ["one"],
   );
   expect(refused).toContain("a function answers from its words alone");
-});
-
-test("the text of a paragraph drops the two marks of each quote, and a binding reads back the string it binds", () => {
-  const [told] = paragraphs(
-    "#prompt1\n<s:prompt1_message>\ncount\n# them\n</s:prompt1_message>\nprompt1: Act[int] = Act('prompt1')",
-  );
-  expect(told?.name).toBe("prompt1");
-  expect(plain(told?.lines ?? [])).toBe("count\n# them\nprompt1: Act[int] = Act('prompt1')");
-  expect(plain(["x = 1", "<s:a>", "b</s:a>", "c</s:a>"])).toBe("x = 1\nb\nc</s:a>");
-  expect(bound(told?.lines ?? [], "prompt1_message")).toBe("count\n# them\n");
-  expect(bound(["<s:a__>", "b</s:a_>", "c</s:a__>"], "a")).toBe("b</s:a_>\nc");
-  expect(bound(["x = 1", "a = 'it\\'s\\n\\x07\\u00e9\\\\'", 'b = "it\'s"'], "a")).toBe("it's\n\x07é\\");
-  expect(bound(['b = "it\'s"'], "b")).toBe("it's");
-  expect(bound(["x = 1"], "x")).toBeUndefined();
-});
-
-test("a quote that holds a blank line and a heading of markdown stays in its paragraph", () => {
-  const told = paragraphs(
-    "#memory1\n<s:memory1_text>\n# furb\n\n## The bar\n\n#rung9 x\n</s:memory1_text>\n\n#read1\nread1_path = 'a'",
-  );
-  expect(told.map((one) => [one.name, one.words])).toEqual([
-    ["memory1", ""],
-    ["read1", ""],
-  ]);
-  expect(bound(told[0]?.lines ?? [], "memory1_text")).toBe("# furb\n\n## The bar\n\n#rung9 x\n");
 });

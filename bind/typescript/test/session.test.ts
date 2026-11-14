@@ -5,20 +5,21 @@ import { join, sep } from "node:path";
 import { FileChanges } from "../src/changes.ts";
 import {
   Activity,
-  actorParts,
   boot,
   DamagedJournal,
   type Ear,
+  type Engine,
   enabled,
   type Fact,
   inspectRecord,
   Life,
+  leveled,
   ROOT,
   Session,
   saveFile,
-  type Turn,
 } from "../src/index.ts";
-import { pauseSaid } from "../src/life/acts.ts";
+
+import { addressOf } from "../src/skill.ts";
 import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
 
@@ -26,7 +27,7 @@ import { until } from "./until.ts";
 // the crate, and its `answer` replaces the request, so no model is asked.
 const modeled = { model: "claude-cli:sonnet" };
 /** A turn of a model whose word is the one given. */
-const said = (word: string): Turn => ["assistant", word, null, null];
+const said = (word: string): ReturnType<Engine["turns"]>[number] => ["assistant", word, null, null];
 /** What a command has printed so far, as the act table holds it. */
 const printed = (session: Session, id: string) =>
   (session.activity.acts.get(id)?.value as { stdout?: { content: string } } | undefined)?.stdout?.content ??
@@ -118,12 +119,9 @@ test("the act table holds an act paused while the last pause or wake that covers
 });
 
 test("an actor names its model and its effort after the last slash that follows the name of a model", () => {
-  expect(actorParts("claude-cli:org/plain")).toEqual({ model: "claude-cli:org/plain", effort: "off" });
-  expect(actorParts("claude-cli:org/plain/high")).toEqual({ model: "claude-cli:org/plain", effort: "high" });
-  expect(actorParts("claude-cli:org/high", ["claude-cli:org/high"])).toEqual({
-    model: "claude-cli:org/high",
-    effort: "off",
-  });
+  expect(leveled("claude-cli:org/plain")).toEqual(["claude-cli:org/plain", "off"]);
+  expect(leveled("claude-cli:org/plain/high")).toEqual(["claude-cli:org/plain", "high"]);
+  expect(leveled("claude-cli:org/high", ["claude-cli:org/high"])).toEqual(["claude-cli:org/high", "off"]);
 });
 
 test("a session offers the models its host names, and keeps the model and the effort chosen last as a preference", async () => {
@@ -215,8 +213,8 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rung that answers the prompt comes after the twenty-one rungs of the setup of the root, so it is found as the
-    // rung that the prompt made.
+    // The rung that answers the prompt comes after the rungs of the setup of the root, however many they are, so it is
+    // found as the rung that the prompt made.
     const answering = () =>
       [...session.activity.acts.values()].find((act) => act.kind === "rung" && act.by === prompt.id)?.id ??
       "";
@@ -224,7 +222,7 @@ test("what a model writes streams into the session under its rung until its repl
     const turn = (role: string, text: unknown) =>
       expect.objectContaining({ role, content: [{ type: "text", text }] });
     await until(session, () => session.streams.get(answering())?.text === "close(3)");
-    expect(answering()).toBe("rung22");
+    expect(answering()).toMatch(/^rung\d+$/);
     expect(session.streams.get(answering())).toEqual({
       chain: engine.root,
       text: "close(3)",
@@ -236,48 +234,58 @@ test("what a model writes streams into the session under its rung until its repl
         chain: engine.root,
         // The setup of the root as turns of the default actor whose words furb writes: the bare paragraph chain(), the
         // debug of the extensions of the standing, whose user turn holds them, the read of the doctrine, for each official extension the word rung(read('<file>', HIDDEN).content) and the turn
-        // of the rung that it made, which holds the code alone, then the life words in one turn, whose user turn holds
-        // what they read, then the stand and the cd, whose user turn holds what they tell, then the open of the root and
-        // the prompt.
+        // of the rung that it made, which holds the code alone, then each life word in a turn of its own, the user turn
+        // after the word that reads holding what it read, then the stand and the cd, whose user turn holds what they
+        // tell, then the open of the root and the prompt.
         messages: [
           turn("user", "chain()"),
+          // The stand and the cd come first, a turn of their own, whose user turn holds what they tell.
+          turn("assistant", expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/)),
+          turn(
+            "user",
+            expect.stringMatching(
+              /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1\ncd1_path = '.*'$/,
+            ),
+          ),
           turn("assistant", 'debug(t"{standing()[4]=}")'),
           turn(
             "user",
-            expect.stringMatching(/^#rung1 debugged\nrung1_debug = "standing\(\)\[4\]=\[\['catchup', /),
+            expect.stringMatching(/^#rung2 debugged\nrung2_debug = "standing\(\)\[4\]=\[\['catchup', /),
           ),
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           turn("assistant", expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/)),
           turn("user", expect.stringMatching(/^#read1\nread1_path = '.*[/\\]DOCTRINE\.md'\n/)),
-          ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].flatMap((name) => [
+          ...["catchup", "memory", "skills", "compaction"].flatMap((name) => [
             turn(
               "assistant",
               expect.stringMatching(
                 new RegExp(
-                  `^rung\\(read\\('.*[/\\\\]+words[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\.content\\)$`,
+                  `^rung\\(read\\('.*[/\\\\]+words[/\\\\]+${name}[/\\\\]+[0-9a-f]{16}[/\\\\]+${name}\\.py', HIDDEN\\)\\.content\\)$`,
                 ),
               ),
             ),
             // The turn of the rung that the word made holds the code of the file alone, which that rung ran.
             turn("user", expect.stringMatching(/^(?!#)[\s\S]*\ndef \w+\(/)),
           ]),
-          turn("assistant", "catchup()\nawait recall()\nawait listed()\nfitted()\nawait mcp_index()"),
+          turn("assistant", "catchup()"),
+          turn("assistant", "await recall()"),
+          turn("assistant", "await listed()"),
           turn(
             "user",
             expect.stringMatching(
               /^#read(\d+)\nread\1_path = 'skills:\/\/'\n(<s:read\1_text>\n[\s\S]*<\/s:read\1_text>|read\1_text = '.*')$/,
             ),
           ),
+          turn("assistant", "compacted(); fitted()"),
           // An extension that plays on the root alone comes after the others, with its life word.
           turn(
             "assistant",
             expect.stringMatching(
-              /^rung\(read\('.*[/\\]+words[/\\]+naming[/\\]+naming\.py', HIDDEN\)\.content\)$/,
+              /^rung\(read\('.*[/\\]+words[/\\]+naming[/\\]+[0-9a-f]{16}[/\\]+naming\.py', HIDDEN\)\.content\)$/,
             ),
           ),
           turn("user", expect.stringMatching(/^(?!#)[\s\S]*\ndef \w+\(/)),
           turn("assistant", "name_session()"),
-          turn("assistant", expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/)),
           // The open of the root goes as a block of its own after the setup, which ends the block before it.
           expect.objectContaining({
             role: "user",
@@ -285,13 +293,7 @@ test("what a model writes streams into the session under its rung until its repl
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1\ncd1_path = '.*'$/,
-                ),
-              },
-              {
-                type: "text",
-                text: expect.stringMatching(
-                  /^#chain1\nchain1_label = 'root'\nchain1_actor = 'claude-cli:sonnet\/high'\nchain1_actor_via = 'stand'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung22 advance on prompt1$/,
+                  /^#chain1\nchain1_label = 'root'\nchain1_actor = 'claude-cli:sonnet\/high'\nchain1_actor_via = 'stand'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung\d+ advance on prompt1$/,
                 ),
               },
             ],
@@ -411,7 +413,7 @@ test("a fact seen that the operator says covers what came before it, and a later
   const cwd = await mkdtemp(join(tmpdir(), "furb-seen-"));
   const record = join(cwd, "life.jsonl");
   const place = (session: Session, id: string) => session.activity.acts.get(id)?.began ?? 0;
-  const first = new Session({ cwd, record, extensions: false });
+  const first = new Session({ cwd, record, skills: false });
   const engine = first.open();
   const before = engine.prompt("None", { message: "noted", to: "operator", on: engine.root }).id;
   engine.say("seen", engine.root, []);
@@ -419,7 +421,7 @@ test("a fact seen that the operator says covers what came before it, and a later
   const seen = first.activity.seen.get(engine.root) ?? 0;
   expect([place(first, before) < seen, place(first, after) > seen]).toEqual([true, true]);
   await first.dispose();
-  const second = new Session({ cwd, record, extensions: false });
+  const second = new Session({ cwd, record, skills: false });
   try {
     second.open();
     const again = second.activity.seen.get(second.engine?.root ?? "") ?? 0;
@@ -430,16 +432,16 @@ test("a fact seen that the operator says covers what came before it, and a later
   }
 });
 
-test("a session that ends keeps the checkpoint of its life at the tip of its record, and a later session opens on it", async () => {
+test("a session that ends keeps the checkpoint of its life and the fact made of its texts at the tip of its record, and a later session opens on it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-checkpoint-"));
   const record = join(cwd, "life.jsonl");
-  const first = new Session({ cwd, record, extensions: false });
+  const first = new Session({ cwd, record, skills: false });
   const engine = first.open();
   engine.prompt("None", { message: "noted", to: "operator", on: engine.root });
   await first.end();
-  const second = new Session({ cwd, record, extensions: false });
+  const second = new Session({ cwd, record, skills: false });
   try {
-    expect((await kinds(record)).at(-1)).toBe("checkpoint");
+    expect((await kinds(record)).slice(-2)).toEqual(["checkpoint", "made"]);
     second.open();
     expect(second.activity.acts.get("prompt1")?.kind).toBe("prompt");
   } finally {
@@ -586,24 +588,6 @@ test("a chain that its provider paused names the provider and its error as the c
     expect(broken.pauseOf(root)).toBeUndefined();
   } finally {
     await broken.dispose();
-  }
-});
-
-test("a pause of the operator names the operator and the reason that it gave", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-pause-cause-"));
-  const life = boot({ ...modeled, record: join(cwd, "life.jsonl") });
-  try {
-    const root = life.engine.root;
-    life.engine.pause(root, { why: "wait for the owner" });
-    expect(life.pauseOf(root)).toEqual({ by: "operator", why: "wait for the owner" });
-    const cause = life.pauseOf(root);
-    expect(cause && pauseSaid(cause)).toEqual({ text: "the operator: wait for the owner", error: false });
-    life.engine.wake(root);
-    life.engine.pause(root);
-    expect(life.pauseOf(root)).toEqual({ by: "operator" });
-  } finally {
-    await life.dispose();
-    await rm(cwd, { recursive: true, force: true });
   }
 });
 
@@ -824,9 +808,8 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await until(first, () => printed(first, "bash2") === "hello\n");
   await first.dispose();
   try {
-    // The stand, the read of the doctrine, the rungs of the eight official extensions, and the stand and the cd come
-    // before the two rungs.
-    expect([sleeps, feeds]).toEqual(["rung22", "rung23"]);
+    // The setup of the root comes before the two rungs, which are made one after the other.
+    expect(Number(feeds.slice(4)) - Number(sleeps.slice(4))).toBe(1);
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
       sleeps,
       "bash1",
@@ -1070,7 +1053,7 @@ function tilded(path: string): string {
   return path === home ? "~" : path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
 }
 
-test("a session enables the extensions of the configs, and a later session on its record runs them whatever it says", async () => {
+test("a session enables the skills of the configs, and a later session on its record runs them whatever it says", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-extensions-"));
   const record = join(cwd, "life.jsonl");
   const config = join(cwd, "config");
@@ -1081,16 +1064,7 @@ test("a session enables the extensions of the configs, and a later session on it
   const first = new Session({ cwd, record, config });
   try {
     first.open();
-    expect(running(first)).toEqual([
-      "catchup",
-      "memory",
-      "skills",
-      "compaction",
-      "naming",
-      "ouroboros",
-      "web",
-      "mcp",
-    ]);
+    expect(running(first)).toEqual(["catchup", "memory", "skills", "compaction", "naming"]);
     // The life words of the setup read each memory file, after the reads of the doctrine and of the files of the
     // extensions, and the user turn after them shows what each read gave.
     const found = (first.engine?.transcript({ on: ROOT }) ?? []).find(
@@ -1100,25 +1074,28 @@ test("a session enables the extensions of the configs, and a later session on it
     );
     const read = found?.[1];
     expect(read).toMatch(/^read\d+$/);
-    // The stand and the cd come after the life words, and the extension naming, which plays on the root alone, comes
-    // after the others with its life word, so the turn of the life words is the eighth from the end.
+    // The stand and the cd come first, a turn of their own, and the extension naming, which plays on
+    // the root alone, comes after the others with its life word.
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
-    expect(turns.at(-8)).toBe("catchup()\nawait recall()\nawait listed()\nfitted()\nawait mcp_index()");
-    expect(turns.at(-2)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+    expect(
+      turns.filter((turn) => /^(catchup\(\)|await recall\(\)|await listed\(\)|compacted\()/.test(turn)),
+    ).toEqual(["catchup()", "await recall()", "await listed()", "compacted(); fitted()"]);
+    expect(turns[1]).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+    expect(turns.at(-2)).toBe("name_session()");
     // The turn writes the path with the separators of the platform, and the transcript keeps its last one as `/`.
-    expect(turns.at(-7)?.replaceAll("\\\\", "/")).toContain(
+    expect(turns.find((turn) => turn.startsWith(`#${read}\n`))?.replaceAll("\\\\", "/")).toContain(
       `#${read}\n${read}_path = '${String(found?.[4]).replaceAll("\\", "/")}'\n${read}_text = 'Use two spaces.'`,
     );
   } finally {
     await first.dispose();
   }
-  const later = new Session({ cwd, record, config, extensions: false });
-  const fresh = new Session({ cwd, config, extensions: false });
+  const later = new Session({ cwd, record, config, skills: false });
+  const fresh = new Session({ cwd, config, skills: false });
   try {
     later.open();
     fresh.open();
     expect([running(later), running(fresh)]).toEqual([
-      ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"],
+      ["catchup", "memory", "skills", "compaction", "naming"],
       [],
     ]);
   } finally {
@@ -1206,18 +1183,18 @@ test("a rung is asking while a reply of it runs, and no more once that reply is 
   expect(activity.acts.get("rung1")?.asking).toBeUndefined();
 });
 
-test("the activity keeps each compaction of a chain: a prefix said on it after its birth", () => {
+test("the activity keeps each compaction of a chain: a cut said on it, but the cut of a birth", () => {
   const activity = new Activity();
   const hear = (fact: Fact) => {
     const heard = activity.hear(fact);
     while (!heard.next().done);
   };
   hear(["chain", "chain2", "rung1", ROOT, "work", ROOT]);
-  // A chain with a source says its own prefix at its birth, which cuts nothing.
-  hear(["prefix", "chain2", "chain2", [["bash", "bash1", "rung1", ROOT, "ls", "", 600]]]);
+  // A birth from a checkpoint cuts the chain to what keeps its fact carried, which compacts nothing.
+  hear(["cut", "chain2", "rung2", [["carried", "chain2", "journal", [], {}, []]]]);
   hear(["bash", "bash2", "rung2", "chain2", "ls", "", 600]);
   hear([
-    "prefix",
+    "cut",
     "chain2",
     "rung3",
     [
@@ -1226,4 +1203,19 @@ test("the activity keeps each compaction of a chain: a prefix said on it after i
     ],
   ]);
   expect(activity.compactions).toEqual([{ chain: "chain2", by: "rung3", at: 4 }]);
+});
+
+test("a place names a machine only as host:port or [address]:port, and a socket or a pipe of this machine stays a place", () => {
+  expect(addressOf("100.64.0.2:7431")).toEqual({ host: "100.64.0.2", port: 7431 });
+  expect(addressOf("[fd7a:115c::1]:7431")).toEqual({ host: "fd7a:115c::1", port: 7431 });
+  expect(addressOf("box.tailnet.ts.net:7431")).toEqual({ host: "box.tailnet.ts.net", port: 7431 });
+  for (const place of [
+    "fd7a::1:7431",
+    "100.64.0.2:0",
+    "100.64.0.2:65536",
+    "100.64.0.2",
+    "/tmp/furb/host.sock",
+    "\\\\.\\pipe\\furb",
+  ])
+    expect(addressOf(place)).toBeUndefined();
 });

@@ -1,7 +1,7 @@
 # The protocol of the host
 
 `furb-host` is the daemon of a machine: it holds each life, and each window or skill reaches it over one protocol. This
-page says that protocol. Its version is `PROTOCOL`, now 1. The crate gives its JSON Schema in
+page says that protocol. Its version is `PROTOCOL`. The crate gives its JSON Schema in
 `host/protocol.schema.json`, and `bind/typescript/src/protocol.ts` holds the types that `bun run protocol` makes from
 that schema. A test of each side fails when the schema or the types do not agree with the code.
 
@@ -46,7 +46,10 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   its role, and the daemon closes the peer of a login that it does not name, before its hello.
 - `stall` gives the seconds after which the daemon tells that a life with an open act and no new fact stalled, as
   the section on attach says. With no `stall`, the bound is 1200 seconds.
-- The daemon reads `host.json` when it starts. A change takes effect at the next start or upgrade.
+- The daemon reads `host.json` when it starts and at each change of the file, and a file that does not parse keeps
+  the list before. A change of `roles` takes effect at once on each connected peer: a login that the file drops gets
+  a refusal and loses its connection, and a login whose role changes holds the new role from its next verb. A change
+  of `tailnet` or `stall` takes effect at the next start or upgrade.
 - The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
   standalone download. It does not find the app of the App Store.
 - Plain TCP listens only on loopback or on the tailnet, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, since no other
@@ -65,7 +68,7 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
 The first frame of a peer is its hello:
 
 ```json
-{"id": 0, "verb": "hello", "protocol": 1, "kind": "window", "name": null, "role": null}
+{"id": 0, "verb": "hello", "protocol": 3, "kind": "window", "name": null, "role": null}
 ```
 
 - `kind` is `window`, `skill`, or `daemon` for the daemon of a new build that asks the handover, and a skill gives
@@ -73,14 +76,23 @@ The first frame of a peer is its hello:
 - `role` is optional. The daemon gives the peer the lesser of the role that it asks and the role that its transport
   proved, so a peer that asks `read` is a reader on any transport, and a peer never has more than its transport
   proved. With no `role`, the peer has the role that its transport proved.
-- The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name.
+- The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name. The
+  answer also names the `machine` of the daemon, without its domain, the `build` of the daemon, which is its version
+  of furb, and the `view` of the peer: an id that names this connection among the connections of its login. The id
+  stands in no record.
 
   ```json
-  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 1, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}}}
+  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}, "machine": "studio", "build": "0.4.2", "view": 7}}
   ```
 
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A first frame
   that is no hello gets the refusal `first`, and the daemon closes the peer. A second hello gets the refusal `again`.
+- The version rises with each change of the schema, `host/protocol.schema.json`: a test of the crate keeps the digest
+  of the schema of each version. A window that meets a daemon of another version does not wait and asks no handover,
+  so it ends no life of another window: it says that the daemon of this machine is of another build. That daemon ends
+  once its last window quits and its grace passes, and the next window starts one of its own build.
+- A request that the daemon cannot read, as a verb of a later version, gets the refusal `unread` under its `id`, with
+  why it names the verb, so no request waits for an answer that never comes.
 
 ## Requests and answers
 
@@ -90,8 +102,9 @@ it is not given. The daemon answers requests in any order.
 
 | Verb | Fields | Role |
 | --- | --- | --- |
-| `list` | | read |
-| `open` | `life`, `cwd`, `actor`, `roster`, `extensions`, `config`, `claude`, `answers`, `attach` | write |
+| `list` | `config` | read |
+| `cards` | | read |
+| `open` | `life`, `cwd`, `actor`, `roster`, `skills`, `config`, `claude`, `answers`, `attach` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
 | `pin`, `unpin` | `life`, `holder` | write |
@@ -114,17 +127,18 @@ it is not given. The daemon answers requests in any order.
 | `read` | `life`, `path`, `on` | write |
 | `write` | `life`, `path`, `content`, `on` | write |
 | `names` | `life`, `on` | read |
-| `gate` | `life`, `word`, `on` | read |
-| `stand` | `life` | write |
-| `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` or `{"action": "reload"}` | read for get, else write |
+| `stand` | `life`, `roster` (names of models) | write |
+| `cancel_sign_in` | `life` | write |
+| `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
 | `unqueue` | `life`, `entry` | write |
 | `queued` | `life`, `on` | read |
 | `desk` | `life`, `notices` | read |
-| `threads` | `life`, `on`, `at` | read |
+| `threads` | `life`, `on`, `at`, `read` | read |
 | `as_of` | `life`, `at` | read |
 | `moments` | `life` | read |
+| `thread` | `life`, `thread`, `before`, `limit` | read |
 | `answered` | `life`, `ask`, `turn`, `why` | write |
 | `wrote` | `life`, `ask`, `text`, `thinking` | write |
 | `handover` | | write |
@@ -132,28 +146,56 @@ it is not given. The daemon answers requests in any order.
 | `view.event` | see below | write |
 | `view.tree`, `view.effect` | see below | read |
 
+- `stand` makes the life stand again: it reads the catalog, the configs and the actor again, and the answer is the
+  act of the stand. A `roster` names the models that the life offers from that stand on, in place of its roster, as
+  the catalog names them, so a window offers a model that the roster lacks with no new life. The record keeps the
+  answer of the stand, so a later life of the record goes on with that roster.
 - `config` reads and changes the configs of the folder of a life, which the World writes, so no window writes a disk.
   A get gives `values`, each key with the value that wins for it and its layer, `user`, `project` or `local`. A key has
-  one or two names, as `["providers", "codex"]`. A set writes the key in its layer, `project` when none is named, or
+  one or two names, as `["providers", "codex"]`. A key that a schema names comes with its `property`, as
+  [`config.md`](config.md#the-schema) says, and with the `skill` that adds it, when one does; such a key that no
+  layer gives comes with its default and no layer, and an object of furb, as `providers`, comes with the object of
+  the values that win and no layer, then with a value for each of its names. A set refuses a value that the property
+  of its key does not take, and writes nothing. A set writes the key in its layer, `project` when none is named, or
   takes it out when no value is given, and then the life stands, so the answer is the act of the stand. A change that
-  the catalog cannot read puts its config back as it was, and the life does not stand. A reload is a stand on the
-  configs as the disk holds them, which asks again each model that waits to retry.
+  the catalog cannot read puts its config back as it was, and the life does not stand.
+  A set of `["providers", "codex"]` to `true` starts the sign-in of codex on the machine of the daemon, unless an
+  account is connected or a sign-in runs. The daemon pushes to the peer that asked the frame `sign_in` at the current
+  state and at each change of it, with the `state` (`disconnected`, `waiting`, `connecting`, `connected`,
+  `needs-login`, `failed` or `canceled`), the `url` of the browser while it waits, and the `message` that a person
+  reads when it needs login or failed. The answer of the set comes when the sign-in ends: the act of the stand when
+  it connects, and a refusal when the operator cancels it or it fails. A set to `false` cancels a sign-in that runs. A
+  window keeps no state of the sign-in beside these frames and asks for none. The verb `cancel_sign_in` cancels the
+  sign-in that the daemon runs for a life and writes no config, so the set that asked it is refused.
+- `list` gives each record of the machine as `lives`: each record of the sessions of each workspace that
+  `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
+  `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each
+  record that a life of the daemon holds, whose `workspace` is the checkout whose `.furb/sessions` holds it when the
+  list names no workspace for it. `held` says whether a life holds the record now, and `open` whether that
+  life lives and does not end, and `watched` whether a window of any connection holds the life, which a pin
+  does not make, so a window finds the sessions that no window holds from the one list. A window lists its sessions from it, so a window on another machine lists them the
+  same way.
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
 - An answer is a frame `reply` with the `id`, an `answer` that names its kind, and its `data`: `done`, `welcome`,
   `lives`, `act` (the name of the act that the verb made), `value`, `values`, `inspected` or `presence`.
 - A refusal is a frame `refused` with the `id`, or none for a frame that could not be read, the `error` as data, and
   `why`, the text that a person reads.
-- An `open` that makes a life gives it the `actor`, the `roster` and the `extensions` that it names, and the settings
+- An `open` that makes a life gives it the `actor`, the `roster` and the `skills` that it names, and the settings
   of the daemon give each one that it does not name. It reads the settings of the user in the folder `config` and runs
   the claude command line `claude` that it names, as the window that opens it reads them. An open of a life that
   lives changes none of them.
+  A verb that names a field that it does not take is refused, and does nothing: an `open` that names `extensions`, the
+  field that protocol 4 renamed `skills`, is refused with a refusal that names `extensions` and the fields that the
+  verb takes, `skills` among them, and opens no life. The hello alone takes a field that it does not know, so that a peer
+  of another protocol reaches the refusal that names both versions. The schema does not show this rule, since JSON
+  Schema cannot close the fields of a request that flattens its verb.
 - An `open` with `answers` makes its peer answer the models of the life in their place, as a demo or a test does. The
   daemon pushes each request of a model to that peer as a frame `ask`, with the `life`, the number `ask` and the
   `request`: its `actor`, `chain`, `messages` and `settings`. The peer tells what it writes with `wrote`, and gives the
   turn, written as the record writes a value, or `why` it gives none, with `answered`. That peer alone speaks for each
   request of the life, by its connection, for the whole life: the daemon refuses a `wrote` or an `answered` of any
-  other peer with `foreign`, and the request still waits for its peer. A later `open` with `answers` moves nothing. A
+  other peer with `foreign`, and the request still waits for its peer. Once that peer is gone, a later `open` with `answers` of the life makes its peer answer each later request; while it lives, such an `open` is refused with `answering`. A
   request ends at its turn, when the life drops it, or when the connection of its peer ends, and fails in the last
   case. A `wrote` or an `answered` after its end is refused with `unasked`.
 - An `open` with `attach` attaches its peer in the same step, from that place in the log, as `attach` does. The life
@@ -168,26 +210,131 @@ it is not given. The daemon answers requests in any order.
 - `desk`, `threads`, `as_of` and `moments` give the meaning of the acts that the life told as events, which each
   window draws the same way: `desk` each question that the operator owes and each of the `notices` that the window
   still shows, the oldest first, with the lines that answer each; `threads` the tree of the threads of a chain, its
-  asides, what the tree says to the operator and the state of the chain, now or just after the moment `at`; `as_of`
-  the acts as they stood just after a moment; `moments` each moment at which an act began or ended.
+  asides, its runs of notes, what the tree says to the operator and the state of the chain, now or just after the
+  moment `at`; `as_of` the acts as they stood just after a moment; `moments` each moment at which an act began or
+  ended. A run of notes is the asides that are no question and follow one another in the feed of the chain, with its
+  `count` and its `unread` count: the notes that began or ended after the place `read`, which the window says since
+  only it knows what the operator saw. A `threads` with no `read` reads nothing, so each note is unread.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
   in the log of the life and the `event`: `fact`, `act`, `text`, `queued`, `notice`, `changed`, `reborn` or `ended`. After
-  `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.
+  `reborn`, which a life tells once it told the past of its record, the life goes on from its last checkpoint, and its
+  acts come again as they stand.
 - The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
-  checkpoint, as the log after a rebirth holds them. So a window of a life that a later open, a handover or an end
+  checkpoint. The log lets go of each of them once it told it, since the record holds it, and of each fact that an open
+  told, which the file of the log of the record holds, and a window that attaches before them reads them again from the
+  record or from that file. So a window of a life that a later open, a handover or an end
   brought back from its checkpoint hears the life whole, and hears no fact twice.
+- `cards` gives the cards of the machine as `cards`, and the peer then hears a frame `cards` at each change of them,
+  until it leaves. A card is one thread that an operator started: a prompt of his at the top of the threads of its
+  life, with all that answers it. The answer holds the cards of each record that `list` gives with no `config`. A
+  card holds:
+  - `life`, the record of its session, `session`, the name of the session when it has one, and `project`, the main
+    checkout of the project whose sessions hold the record, when the list of the machine names one, else for a
+    record that a life of the daemon holds, the checkout whose `.furb/sessions` holds it;
+  - `prompt`, the name of the prompt of the thread, and `title`, the first line of its message;
+  - `standing`, how the thread stands, as `{"is": ...}`: `asks` with `of`, the login of the one member that its
+    question waits for, or null when it waits for each operator; `failed`; `paused` with `by`, who said the pause;
+    `thinks`, `runs` or `delegates` while it works; `stopped` after a cancel; `rests` while it is open and nothing
+    works; and `resolved` once its model closed its prompt;
+  - `since`, the second of the epoch since which the thread stands so. A thread that works keeps the time of the
+    start of its work while its model and its commands take turns;
+  - `model`, the model that wrote its last word, and `agents`, how many threads work under it;
+  - `readers`, the site of each operator who read the thread to its end: `operator` for each of them, or
+    `operator/<login>` for one member;
+  - `held`, whether a life holds the record now, and `viewers`, the login of each person whose window holds that
+    life. A card that is `held` with no viewer works with no view.
+
+  A frame `cards` names one `life`, each card of it that is new or that `changed`, and the `prompt` of each card
+  that is `gone`. A life tells its cards once in 250 ms at most, whatever the count of its events.
+
+  The cards of a record at rest come from the index of its threads, the file `<record>.threads.json` beside it,
+  which the life writes at its end, before its image. The index is a cache: it names the tip of the record that it
+  was made from, which is the length of the record and the sha256 of its last 4096 bytes, and the daemon drops an
+  index whose tip is not the tip of the record. So the list reads the index and the end of each record, and never the past of a
+  record. A record with no index that agrees with it gives one card with an empty `prompt`, under the name of its
+  file. The daemon then makes its index from a fold of the record with no life, one record at a time and off the
+  path of each verb, and pushes the cards in a frame `cards` once the index stands. A record tells no time, so each
+  card of such an index stands since the record last changed. Nothing works in a record at rest, so a thread that
+  worked when its life ended rests there, and counts no agent that works.
+- `thread` gives a page of one thread of a life as `page`: the exchanges of the thread before the one at the place
+  `before`, or before its end when `before` is null, at most `limit` of them, the oldest first. The thread is named
+  by its prompt. Nobody reads the past of a record for it: the life holds each act, and a page reads only the acts
+  of its thread, by the list of the acts that each act made. A page holds:
+  - `above`, how many exchanges of the thread stand before the first of the page, so a window asks the older page
+    with `before` set to that place when the reader scrolls to it;
+  - `exchanges`, each a message of the thread with all that answers it: the prompt of the thread, then each message
+    that an operator said on it. A wake or an acknowledgment that the engine says on the thread is no exchange. What
+    answers a message is what came after it and before the next message, whichever prompt of the thread each rung
+    advances. An exchange holds `at`, its place in the thread, 0 for the prompt; `message`, its act; `by`, who said
+    it; `text`; `block`, the code that answers it once a model answers; and `said`, what the answer says to the
+    operator, in the order it was said: each `notice` and `question` of its words, and each `answer`, the text that
+    closed a message there. A `question` holds the `shape` of its answer and, once it is closed,
+    `answered`: `by`, who closed it, and `reply`, its `value` as a person reads it or the reason that `refused` it.
+    A question that is not closed waits for the operator: `answer` closes it with a line of its shape, and `close`
+    with a refusal, `{"is": "Refused", "args": ["why"]}`, closes it with words that its model reads;
+  - a `block` holds `maker`, the model that wrote its last word, `more`, whether more comes since the answer works,
+    `thought`, the `text` that its model thought before it wrote and the seconds that it `took`, null while it
+    thinks, and `lines`. A line has its `number` in the thread, which goes on from block to block, its `text`, in
+    which a quote stands as the binding that it makes and a string of many lines as one line with its escapes, and
+    its `mark`: `ran`; `runs` with the `work` that it waits for, `writes` while its model writes it, `command` or
+    `agent`, and `since`, the second of the epoch at which the daemon saw that work begin; `asks`; or `failed` with
+    `why`;
+  - `agents`, each thread that a word of the thread started on another chain, as a card without its life.
+
+  The page of the end also makes the peer hear a frame `thread` with the `life`, the `thread` and a `page` at each
+  change of that thread, until it reads the end of another thread or leaves: a peer reads one thread at a time. The
+  page of a frame holds each exchange of the end that is new or that changed, by its `at`, with `above` and
+  `agents` as they stand. The daemon asks the life a page at most once in 100 ms, after an act of the life or a part
+  that a model wrote. What a model thought, and when each work began, are no facts of the record: the life holds
+  them while it lives, so a life that opens again shows no thought of the words before it.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
+- While a life opens, the daemon pushes to each window of the life a frame
+  `opening` with the `life`, the `stage` of the open, and two numbers: `done`, the work done of that stage, and `of`,
+  the work known of it. A window draws a progress bar from them.
+
+  ```json
+  {"frame": "opening", "life": "/work/a.jsonl", "stage": "boot", "done": 1730, "of": 2649}
+  ```
+
+  - The stages are a closed list, and they come in this order. An open skips a stage that it has no work for.
+
+    | Stage | The work | `done` of `of` |
+    | --- | --- | --- |
+    | `recall` | The daemon reads what the record told before its last checkpoint, for the log of the life. | Entries of the record that the facts told stand after, of its entries as far as that checkpoint. Both are 0 until the daemon found the checkpoint. |
+    | `find` | The record is read from its last checkpoint, for the build of its last life. | Bytes passed, of the bytes of the record. |
+    | `read` | The record is read again from its last checkpoint under its lease, when it changed after `find`. | Bytes passed, of the bytes of the record. |
+    | `seed` | The sandbox loads the engine and makes the entries of the checkpoint. | Both are 0: the stage counts nothing. |
+    | `boot` | The life replays the entries that it boots on. | Entries that the replay passed, of those entries. |
+    | `log` | The daemon puts what the open told in the log of the life, which its windows read. | Events put, of those events. |
+
+  - The numbers of a stage never go back, `done` never passes `of`, and a stage never comes again in one open. A
+    record in a database tells no bytes, so its `find` stays at 0 of the bytes of the record. The
+    replay passes at once the entries that it says to no ear, so `done` of `boot` can go forward by many entries.
+  - The first frame comes when the open starts. Then the window hears a frame at once for each stage that the open
+    reaches, with the last numbers of each stage before it, and at most four frames each second for a stage that goes
+    on. A window that attaches while the life opens hears one frame for each stage that the open reached.
+  - The frame of `log` with `done` equal to `of` ends the open. It comes before the first event that the open tells,
+    so a window ends its bar there. An open that fails sends no such frame, and the life ends with the event `ended`.
+    A window that attaches to a life that stands hears no frame `opening`.
+  - The frame is no event of the log of the life and no fact of the record.
+- A verb of a life that a peer says while the life opens waits for the life, which answers it once it stands, in the
+  order that it heard each verb. A life that ends on a fault, as an open that fails, refuses with that fault each
+  verb that waited for it, and each such verb that comes after its end, in the place of `closed`, until the next
+  open of the record: a peer that heard the answer to its open cannot know when the open failed. The daemon answers
+  each other verb at once.
 - The daemon watches each life that it holds, from outside the life: no word and no ear of the life runs the watch.
-  When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact for the bound of
-  a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes to each window of the life
-  a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
+  When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact and no model
+  writes for the bound of a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes
+  to each window of the life a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
   `notice` that a window shows as it stands. It also sends the notice to the root chain of the life as a prompt of
   `None`, so that its actor wakes.
 - The watch also holds the last change of each chain. A chain stalls when it holds a rung that no run, reply, command
   or wait lives beside on it, or a prompt to a model with no rung and nothing else on it, and no act of it changes for
-  60 seconds, or for the bound of a stall when that is shorter, even while other chains work. A paused act and a prompt
-  to the operator never stall a chain. The daemon pushes the frame `stalled` with the acts of that chain alone, and
+  60 seconds, or when a reply of a model on it writes nothing and no act of it changes for 5 minutes, each bound or
+  the bound of a stall when that is shorter, even while other chains work. Work that waits for the operator never
+  stalls a chain or the life: a paused act, a prompt to the operator, an act on a chain that asks him, and a rung or
+  a run whose word awaits such a prompt. The daemon pushes the frame `stalled` with the acts of that chain alone, and
   sends the notice as a prompt of `None` on that chain, so that its own actor wakes and no other.
 - The watch tells each stall once: nothing more until a fact of an act that its message did not make, on that chain
   for the stall of a chain, and a new stall after that fact. A stall is no fact of the record.
@@ -205,21 +352,32 @@ once it listens. A second daemon refuses to start there.
   made the file, and `unread` with why when the file could not be read as text, whose `before` is then empty and
   no undo puts back. A window reads it to show and to undo what each write changed. One journal serves each birth
   of the life, in the order of the writes, and the life ends, and replies to its end, only once the disk holds each
-  change; a fault of the disk is told at once as a notice, and the end of the life says what the journal lost.
+  change; a fault of the disk is told as a notice when the journal begins to lose changes, and again when it takes changes again, and the end of the life says what the journal lost.
 - A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
-  otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
-  that ends waits for its end, then opens it again from its checkpoint.
+  otherwise, writes its image and ends, and `list` gives it as not `open` from then on. An `open` of a life
+  that ends waits for its end, then opens it again from its image.
+- The daemon of a machine ends once it holds no peer and no life for its grace, so it does not outlive the windows
+  that started it; a window that dials later starts a new one. A daemon waits for its first peer before this bound
+  runs, and a daemon with a door on the tailnet does not end by it.
+- A life whose record does not hold each fact that it said yet, as on a full disk, does not end: its end, after the
+  grace, at a handover or at the end of the daemon, waits until the record holds them, and the life tells why in a
+  notice. Past 20000 facts that the record lacks, the life pauses each chain that lives and each chain
+  that opens while it holds, and tells in a notice the folder of the record and the space left on its disk; once the record holds each
+  fact, it wakes each chain that it paused, and a pause of the operator stays. The life drops no fact.
 - `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
 - `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
-  The new daemon says `handover`. The daemon that runs writes the checkpoint of each life, ends it, stops to listen
+  The new daemon says `handover`. The daemon that runs ends each life, which writes its image, stops to listen
   and answers `handed` with each life, its folder and its pins. The new daemon listens and opens each life again with
   its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
-  from its checkpoint. A life that does not end within 60 seconds is given up with no checkpoint, the log of the
-  daemon names it, and the new daemon opens it from its record.
+  from its image when the new build reads it, else from its record, on the texts of the engine that its record names. The handover waits for each life to end, however long it takes, and the log of the daemon
+  names each life that it waits for: a life given up before its end would still hold its record and the facts that
+  its record does not hold yet. A life that ends already ends there and goes to no daemon, and the next `open` opens
+  it from its record.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. Each verb of
-  a skill that says an act or a fact, as `run`, `prompt`, `bash` or `close`, speaks in the life under `skill/<name>`, and
-  the verbs of a window speak under `operator`. It holds no
+  a skill that says an act or a fact, as `run`, `prompt`, `bash` or `close`, speaks in the life under `skill/<name>`, but `seen`, `queue`, `unqueue` and `config` speak as the operator, whoever says them, since they are the operator's own, and
+  the verbs of a window speak under `operator/<login>`, the member that its transport proved, so a model asks one
+  person with `to="operator/<login>"`. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
 - The daemon starts the process that the manifest of a skill names under `furb-process` when a life plays the skill: at
@@ -230,7 +388,7 @@ once it listens. A second daemon refuses to start there.
   `skill/<name>`, with its exit and the last 20 lines of its stderr, and starts again at the next fact `enable` of its
   skill. The variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` of the process give the folder of the local
   transport, the record of the life and the name of the skill. `@uael/furb/skill` gives its client, and
-  `docs/extensions.md` says the field.
+  `docs/skills.md` says the field.
 
 ## Views
 
@@ -261,4 +419,5 @@ the other kind is refused with `speaker`, and a frame of a viewer that the peer 
 
 Each node has an `id`, and its `node` names one of a closed set: `box` (a row or a column, with a gap and a border),
 `text` (runs, each in a tone), `list`, `table`, `input`, `button`, `progress`, `code`, `diff` and `markdown`. A window
-that reads gets each tree with its `input` and `button` nodes `inert`: it draws them and takes no gesture.
+that reads gets each tree with its `input` and `button` nodes `inert`: it draws them and takes no gesture. The set and the fields of each node only grow within a major: script/contract.py reads them from
+host/protocol.schema.json, and a node or a field that goes is a break.

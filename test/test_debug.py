@@ -137,8 +137,6 @@ async def test_debug_enters_nothing_in_the_record() -> None:
     ("done", "stand1"),
     ("rung", step),
     ("run", "run1"),
-    ("gate", "gate1"),
-    ("done", "gate1"),
     ("run", "run2"),
   ]
 
@@ -150,7 +148,7 @@ async def test_it_is_no_act_and_it_enters_no_record() -> None:
   act = engine.rung("n = 1\ndebug(t'{n}')", on=root)
   await act
   await settle()
-  assert {a[0] for a in acts(log).values() if a[1] not in made} == {"rung", "gate", "run"}
+  assert {a[0] for a in acts(log).values() if a[1] not in made} == {"rung", "run"}
   assert [fact for fact, *_ in sand.record if fact[0] == "tell"] == []
   assert heads(engine.turns(on=root)) == [f"#{root}", "n = 1", f"#{act} debugged"]
 

@@ -5,7 +5,7 @@
 
 use std::{
   collections::{HashMap, HashSet},
-  fs, io,
+  fs, io, mem,
   path::{Path, PathBuf},
   time::SystemTime,
 };
@@ -14,6 +14,8 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use rig_core::message::{ImageMediaType, MimeType, UserContent};
 use sha2::{Digest, Sha256};
 
+use crate::fact;
+use crate::value;
 use crate::world::disk::{self, Access};
 
 /// The most bytes an image holds: 20 MiB.
@@ -72,15 +74,15 @@ pub fn kind(bytes: &[u8]) -> Result<(&'static str, &'static str), Error> {
   let webp = bytes.get(8..12) == Some(b"WEBP");
   KINDS
     .iter()
-    .find(|(_, extension, head)| {
+    .find(|(_, suffix, head)| {
       bytes.starts_with(head)
-        && match *extension {
+        && match *suffix {
           "gif" => gif,
           "webp" => webp,
           _ => true,
         }
     })
-    .map(|(media, extension, _)| (*media, *extension))
+    .map(|(media, suffix, _)| (*media, *suffix))
     .ok_or(Error::NotImage)
 }
 
@@ -101,8 +103,8 @@ pub fn keep(directory: &Path, bytes: &[u8]) -> Result<(String, &'static str), Er
   if bytes.len() as u64 > LARGEST {
     return Err(Error::TooLarge);
   }
-  let (media, extension) = kind(bytes)?;
-  let file = format!("{}.{extension}", digest(bytes));
+  let (media, suffix) = kind(bytes)?;
+  let file = format!("{}.{suffix}", digest(bytes));
   let at = directory.join(&file);
   // An image is named by the digest of its bytes, and lands whole, so a file that stands under that
   // name is that image.
@@ -155,6 +157,11 @@ pub fn reference(name: &str, uri: &str) -> String {
 
 /// Each image a message names, in order.
 pub fn references(message: &str) -> Vec<Named> {
+  placed(message).into_iter().map(|(_, one)| one).collect()
+}
+
+/// Each image a message names, in order, with the place in the message where its text starts.
+fn placed(message: &str) -> Vec<(usize, Named)> {
   let mut found = Vec::new();
   let mut from = 0;
   while let Some(at) = message[from..].find("![") {
@@ -171,7 +178,7 @@ pub fn references(message: &str) -> Vec<Named> {
     }
     let end = from + close + 1 + uri.len() + 2;
     let (name, uri) = (rest[..close].to_owned(), uri.to_owned());
-    found.push(Named { text: message[open..end].to_owned(), name, uri });
+    found.push((open, Named { text: message[open..end].to_owned(), name, uri }));
     from = end;
   }
   found
@@ -179,15 +186,15 @@ pub fn references(message: &str) -> Vec<Named> {
 
 /// The digest and the extension a uri names, when it is the uri of an image.
 fn parts(uri: &str) -> Option<(&str, &str)> {
-  let (digest, extension) = uri.strip_prefix(SCHEME)?.split_once('.')?;
+  let (digest, suffix) = uri.strip_prefix(SCHEME)?.split_once('.')?;
   let hex =
     digest.len() == 64 && digest.bytes().all(|one| matches!(one, b'0'..=b'9' | b'a'..=b'f'));
-  (hex && KINDS.iter().any(|(_, known, _)| *known == extension)).then_some((digest, extension))
+  (hex && KINDS.iter().any(|(_, known, _)| *known == suffix)).then_some((digest, suffix))
 }
 
 /// The digest of bytes, as lowercase hex.
 fn digest(bytes: &[u8]) -> String {
-  crate::value::hex(&Sha256::digest(bytes))
+  value::hex(&Sha256::digest(bytes))
 }
 
 /// The images of one life: the directory they stand in, and the content of each that a turn named, by its file,
@@ -195,6 +202,10 @@ fn digest(bytes: &[u8]) -> String {
 pub(super) struct Images {
   directory: Option<PathBuf>,
   held: HashMap<PathBuf, Held>,
+  /// The uri of each image whose file was lost, which a turn named, and those that were not told
+  /// yet.
+  lost: HashSet<String>,
+  fresh: Vec<String>,
 }
 
 /// The content of an image, with the size and the time of the change of the file it was read at.
@@ -205,44 +216,63 @@ struct Held {
 }
 
 impl Images {
-  pub(super) fn new(directory: Option<PathBuf>) -> Images {
-    Images { directory, held: HashMap::new() }
+  pub(super) fn new(directory: Option<PathBuf>) -> Self {
+    Self { directory, held: HashMap::new(), lost: HashSet::new(), fresh: Vec::new() }
   }
 
-  /// The images that the prompts a user turn opens name, and the images that its reads give, as images of rig, each
-  /// after a text that names it as the turn names it, so a model knows which image is which; and none when the life
-  /// has no directory of images. A prompt tells its message in its open, and a read of an image tells its text as
-  /// that image alone, so an image that anything else names, as a text file that a read shows, is no image of the
-  /// turn. An image comes once in a request: an image that an earlier turn of it gave, as the turns of the origin of
-  /// a fork, is not given again, since the model reads it there under its name.
+  /// The uri of each image that a turn names and whose file is lost, which came since the last
+  /// call: each image comes once in the life, so the life tells it once.
+  pub(super) fn lost(&mut self) -> Vec<String> {
+    mem::take(&mut self.fresh)
+  }
+
+  /// The images that the prompts a user turn opens name, and the images that its reads give, each
+  /// with the place of the python of the turn where the text that names it ends, so [`sequence`]
+  /// hands them to a model after that text, in the order of the turn; and none when the life has no
+  /// directory of images. A prompt tells its message in its open, and a read of an image tells its
+  /// text as that image alone, so an image that anything else names, as a text file that a read
+  /// shows, is no image of the turn. An image comes once in a request: an image that an earlier
+  /// turn of it gave, as the turns of the origin of a fork, is not given again, since the model
+  /// reads it there under its name. An image whose file is lost is given to no model, and the text
+  /// of the turn still names it, so the turn goes with the rest of it; [`Images::lost`] tells it.
   pub(super) fn named(
     &mut self,
     python: &str,
     given: &mut HashSet<String>,
-  ) -> Result<Vec<UserContent>, Error> {
+  ) -> Result<Vec<Seen>, Error> {
     let Some(directory) = self.directory.clone() else { return Ok(Vec::new()) };
-    let mut uris: Vec<Named> = Vec::new();
+    let mut uris: Vec<(usize, Named)> = Vec::new();
+    let mut start = 0;
     for paragraph in paragraphs(python) {
+      let at = start;
+      start += paragraph.len() + 2;
       let name = paragraph.strip_prefix('#').and_then(|rest| rest.split([' ', '\n']).next());
       let name = name.unwrap_or_default();
-      let opens = crate::fact::named(name, "prompt")
+      let opens = fact::named(name, "prompt")
         && paragraph.lines().last().is_some_and(|last| last.starts_with(&format!("{name}: Act[")));
-      let reads = crate::fact::named(name, "read");
+      let reads = fact::named(name, "read");
       if !opens && !reads {
         continue;
       }
-      for one in references(&paragraph) {
+      for (place, one) in placed(&paragraph) {
         if (opens || alone(&paragraph, name, &one)) && given.insert(one.uri.clone()) {
-          uris.push(one);
+          uris.push((at + place + one.text.len(), one));
         }
       }
     }
-    let mut content = Vec::new();
-    for one in uris {
-      content.push(UserContent::text(one.text));
-      content.push(self.image(&directory, &one.uri)?);
+    let mut seen = Vec::new();
+    for (end, one) in uris {
+      match self.image(&directory, &one.uri) {
+        Ok(content) => seen.push(Seen { end, content }),
+        Err(Error::Unloaded { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
+          if self.lost.insert(one.uri.clone()) {
+            self.fresh.push(one.uri);
+          }
+        }
+        Err(no) => return Err(no),
+      }
     }
-    Ok(content)
+    Ok(seen)
   }
 
   /// The content of the image of a uri: the one read before while its file stays the same, or read now.
@@ -295,6 +325,49 @@ fn paragraphs(python: &str) -> Vec<String> {
     }
   }
   paragraphs
+}
+
+/// An image that a model is handed with a user turn: the place in the python of the turn where the
+/// text that names it ends, and its content.
+#[derive(Debug)]
+pub(super) struct Seen {
+  pub(super) end: usize,
+  pub(super) content: UserContent,
+}
+
+/// The parts that a model is handed for a user turn, in the order of its text: the text up to the
+/// end of the text that names an image, the image, and the text after it, so each image stands
+/// where the turn names it, as the APIs of Anthropic and of `OpenAI` take a message. `banner` is
+/// where the open of a chain starts, as [`super::banner`] finds it, which two line breaks stand
+/// before: the text from there is a block of its own, so the setup before it ends a block that a
+/// provider can keep in its cache.
+pub(super) fn sequence(
+  python: &str,
+  seen: Vec<Seen>,
+  mut banner: Option<usize>,
+) -> Vec<UserContent> {
+  let mut parts = Vec::new();
+  let mut from = 0;
+  let text = |parts: &mut Vec<UserContent>, from: usize, to: usize| {
+    if let Some(one) = python.get(from..to).filter(|one| !one.is_empty()) {
+      parts.push(UserContent::text(one));
+    }
+  };
+  for one in seen {
+    if let Some(at) = banner.filter(|at| one.end > at.saturating_sub(2)) {
+      text(&mut parts, from, at.saturating_sub(2));
+      (from, banner) = (at, None);
+    }
+    text(&mut parts, from, one.end);
+    parts.push(one.content);
+    from = one.end;
+  }
+  if let Some(at) = banner {
+    text(&mut parts, from, at.saturating_sub(2));
+    from = at;
+  }
+  text(&mut parts, from, python.len());
+  parts
 }
 
 #[cfg(test)]

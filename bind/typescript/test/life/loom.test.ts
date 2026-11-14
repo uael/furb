@@ -1,130 +1,59 @@
 import { expect, test } from "bun:test";
-import type { LiveAct, Measure } from "../../src/life/acts.ts";
-import { measureOf } from "../../src/life/acts.ts";
-import { thread } from "../../src/life/ladder.ts";
-import {
-  asOf,
-  commandDoing,
-  doingOf,
-  duration,
-  type Loom,
-  momentsOf,
-  nowOf,
-  orderOf,
-  owedAt,
-  spans,
-  subjectOf,
-  weave,
-} from "../../src/life/loom.ts";
-import { act, actIndex } from "./acts.ts";
+import { Meaning } from "../../index.cjs";
+import type { Act } from "../../src/life/acts.ts";
+import { isDone } from "../../src/life/acts.ts";
+import { thread as drawn } from "../../src/life/ladder.ts";
+import { commandDoing, doingOf, duration, subjectOf } from "../../src/life/loom.ts";
+import { act, actIndex, changed } from "./acts.ts";
 
-const loomOf = (
-  acts: LiveAct[],
-  options: { folds?: string[]; prompts?: { id: string; shape: string; message: string }[] } = {},
-) =>
-  weave({
-    acts,
-    prompts: options.prompts ?? [],
-    measures: {},
-    folds: new Set(options.folds ?? []),
-    width: 40,
-    label: (id) => (id === "chain1" ? "conduct" : `w ${id}`),
-  });
+/** A fault of the engine as a record holds it, of a class and with its reason. */
+const fault = (reason: string) => {
+  const [is = "Exception", ...why] = reason.split(": ");
+  return { is: /^\w+$/.test(is) ? is : "Exception", args: [why.join(": ") || reason] };
+};
 
-test("the newest moments take a column each, and older moments share a column, so a long life fits its width", () => {
-  const moments = Array.from({ length: 300 }, (_, index) => index + 1);
-  const times = spans(moments, 40);
-  expect(times).toHaveLength(40);
-  expect(times.at(-1)).toEqual([300, 300]);
-  expect(times.at(-10)).toEqual([291, 291]);
-  expect(times[0]?.[0]).toBe(1);
-  // Each span begins after the one before it ends, so no moment is lost and none counts twice.
-  for (let index = 1; index < times.length; index++)
-    expect(times[index]?.[0]).toBe((times[index - 1]?.[1] ?? 0) + 1);
-  expect(spans([1, 2, 3], 40)).toEqual([
-    [1, 1],
-    [2, 2],
-    [3, 3],
-  ]);
-});
+/** The facts of a record that tell these acts, each at the moment it began and at the moment it ended: the fact
+ * that asks the act and its done, and for a rung whose word ran, the run of its word between them. */
+const factsOf = (acts: readonly Act[]): unknown[][] => {
+  const facts: [number, number, unknown[]][] = [];
+  for (const [place, one] of acts.entries()) {
+    const asked = [one.kind, one.id, one.by, one.kind === "chain" ? "" : one.on, ...one.words];
+    facts.push([one.began, 0, asked]);
+    const end = one.ended ?? one.began;
+    if (one.kind === "rung" && one.run && one.run.run !== "running") {
+      const run = `run${10_000 + place}`;
+      const reason = "reason" in one.run ? one.run.reason : "";
+      const value = one.run.run === "done" ? null : fault(reason);
+      facts.push([one.began, 1, ["run", run, one.chain, one.chain, one.id, "", ""]]);
+      facts.push([end, 2, ["done", run, one.chain, value]]);
+    }
+    if (one.phase.phase === "done") facts.push([end, 3, ["done", one.id, one.by, one.phase.value]]);
+  }
+  return facts.sort((one, other) => one[0] - other[0] || one[1] - other[1]).map(([, , fact]) => fact);
+};
 
-test("a chain whose model answers and a chain whose command runs both show work that runs at the present", () => {
-  const acts = [
-    act("chain1", "chain", "", "operator", 1),
-    act("rung1", "rung", "chain1", "operator", 2),
-    act("chain2", "chain", "", "rung1", 3),
-    act("chain3", "chain", "", "rung1", 4),
-    act("chain4", "chain", "", "rung1", 5),
-    act("prompt1", "prompt", "chain2", "rung1", 6),
-    // The rung of the prompt waits for the turn of its model, whose reply is in flight.
-    act("rung2", "rung", "chain2", "prompt1", 7, undefined, { asking: true }),
-    act("prompt2", "prompt", "chain3", "rung1", 8),
-    { ...act("rung3", "rung", "chain3", "prompt2", 9), word: 'await bash("make")' },
-    act("bash1", "bash", "chain3", "rung3", 10),
-    act("prompt3", "prompt", "chain4", "rung1", 11, 14),
-    act("rung4", "rung", "chain4", "prompt3", 12, 13),
-    act("read1", "read", "chain3", "rung3", 15, 15),
-  ];
-  const { rows } = loomOf(acts);
-  const of = (id: string) => rows.find((thread) => thread.id === id);
-  expect(of("chain2")?.state).toBe("thinks");
-  expect(of("chain3")?.state).toBe("runs");
-  expect(of("chain3")?.waits).toBe("bash1");
-  expect(of("chain2")?.waits).toBe("rung2");
-  expect(of("chain2")?.cells.at(-1)).toEqual({ mark: "▁", tone: "work" });
-  expect(of("chain3")?.cells.at(-1)).toEqual({ mark: "▃", tone: "work" });
-  expect(of("chain4")?.state).toBe("done");
-  expect(of("chain4")?.cells.at(-1)).toEqual({ mark: " ", tone: "none" });
-});
-
-test("the loom stands each worker under the chain whose rung made it, and a fold counts the workers by state", () => {
-  const acts = [
-    act("chain1", "chain", "", "operator", 1),
-    act("rung1", "rung", "chain1", "operator", 2),
-    act("chain2", "chain", "", "rung1", 3),
-    act("chain3", "chain", "", "rung1", 4),
-    act("prompt1", "prompt", "chain2", "rung1", 5),
-    act("prompt2", "prompt", "chain3", "rung1", 6, 7),
-    act("chain5", "chain", "", "operator", 8),
-  ];
-  const open = loomOf(acts);
-  expect(open.rows.map((thread) => [thread.lines, thread.label])).toEqual([
-    ["", "you"],
-    ["", "conduct"],
-    ["├ ", "w chain2"],
-    ["└ ", "w chain3"],
-    ["", "w chain5"],
-  ]);
-  const folded = loomOf(acts, { folds: ["chain1"] });
-  expect(folded.rows.map((thread) => thread.id)).toEqual(["operator", "chain1", "chain5"]);
-  expect(folded.rows[1]).toMatchObject({ folded: true, workers: 2, tally: { runs: 1, done: 1 } });
-});
-
-test("the operator owes the prompts that wait for it, the oldest first, and no prompt whose act is done, and its thread and the thread of each asks", () => {
-  const acts = [
-    act("chain1", "chain", "", "operator", 1),
-    act("rung1", "rung", "chain1", "operator", 2),
-    act("chain2", "chain", "", "rung1", 3),
-    act("prompt3", "prompt", "chain1", "rung1", 4, 5, { words: ["str", "Which name?", "operator"] }),
-    act("prompt1", "prompt", "chain2", "rung1", 6, undefined, {
-      words: ["str", "Which effort?", "operator"],
-    }),
-    act("prompt2", "prompt", "chain1", "rung1", 7, undefined, { words: ["bool", "Merge?", "operator"] }),
-  ];
-  const { owed, rows } = loomOf(acts, {
-    prompts: [
-      { id: "prompt3", shape: "str", message: "Which name?" },
-      { id: "prompt2", shape: "bool", message: "Merge?" },
-      { id: "prompt1", shape: "str", message: "Which effort?" },
-    ],
-  });
-  expect(owed.map((prompt) => [prompt.id, prompt.chain])).toEqual([
-    ["prompt1", "chain2"],
-    ["prompt2", "chain1"],
-  ]);
-  expect(rows.map((thread) => thread.state)).toEqual(["asks", "asks", "asks"]);
-  expect(rows[0]?.cells.at(-1)?.tone).toBe("asks");
-});
+/** The thread of a chain from the ladder that the crate folds of the facts of the acts of an index, read through
+ * Meaning, the door that a window reads, and drawn as a host draws it. */
+const thread = (
+  chain: string,
+  word: (rung: Act) => string,
+  streams: ReadonlyMap<string, { text: string; thinking: string }>,
+  owed: ReadonlySet<string>,
+  opened: ReadonlySet<string>,
+  index: Parameters<typeof drawn>[5],
+  shown?: { prompts: number; rungs: number },
+) => {
+  const meaning = new Meaning();
+  for (const fact of factsOf([...index.ids.values()])) meaning.hear(fact);
+  return drawn(
+    meaning.ladder(chain, undefined, [...opened], [...owed], undefined, shown),
+    chain,
+    word,
+    streams,
+    owed,
+    index,
+  );
+};
 
 test("a thread shows each prompt with the rungs of its ladder, the acts of each rung as chips, and what the prompt closed with", () => {
   const acts = [
@@ -211,13 +140,13 @@ test("a thread that a host stamps reads a step again only where an act under it 
     seed = (seed * 1103515245 + 12345) % 2147483648;
     return seed % n;
   };
-  const acts: LiveAct[] = [act("chain1", "chain", "", "operator", 1)];
-  const add = (one: LiveAct) => {
+  const acts: Act[] = [act("chain1", "chain", "", "operator", 1)];
+  const add = (one: Act) => {
     acts.push(one);
     return one;
   };
   const open = () => (next(9) ? acts.length + 1 : undefined);
-  const nest = (prompt: LiveAct, depth: number) => {
+  const nest = (prompt: Act, depth: number) => {
     for (let rung = next(12); rung >= 0; rung--) {
       const made = add(act(`rung${acts.length}`, "rung", "chain1", prompt.id, acts.length, open()));
       if (!next(4))
@@ -256,7 +185,7 @@ test("a thread that a host stamps reads a step again only where an act under it 
     acts.filter((one) => one.kind === "prompt" && one.words[2] === "operator").map((one) => one.id),
   );
   const index = actIndex(acts, "chain1");
-  const word = (rung: LiveAct) => `${rung.id}\nmore`;
+  const word = (rung: Act) => `${rung.id}\nmore`;
   // A host that stamps the changes of what each act made has its thread read again only where an act changed.
   const stamps = new Map<string, number>();
   const stamped = { ...index, stamp: (id: string) => stamps.get(id) ?? 0 };
@@ -266,8 +195,8 @@ test("a thread that a host stamps reads a step again only where an act under it 
   expect(read().some((line) => line.type === "more")).toBe(true);
   expect(read()).toEqual(whole());
   for (const [place, one] of acts.entries())
-    if (one.kind === "bash" && !one.done) {
-      const done = { ...one, done: true, ended: acts.length + 1 };
+    if (one.kind === "bash" && !isDone(one)) {
+      const done = changed(one, { done: true, ended: acts.length + 1 });
       acts[place] = done;
       index.ids.set(done.id, done);
       const made = index.made.get(done.by) ?? [];
@@ -275,235 +204,13 @@ test("a thread that a host stamps reads a step again only where an act under it 
       stamps.set(done.by, (stamps.get(done.by) ?? 0) + 1);
     }
   index.live = new Map(
-    acts.filter((one) => !one.done || one.run?.status === "running").map((one) => [one.id, one]),
+    acts.filter((one) => !isDone(one) || one.run?.run === "running").map((one) => [one.id, one]),
   );
   expect(read()).toEqual(whole());
 });
 
-/** The acts of a life of eight chains under the root, each with a prompt and commands in each state. */
-function boardActs(): LiveAct[] {
-  const acts: LiveAct[] = [act("chain1", "chain", "", "operator", 1)];
-  const states: Partial<LiveAct>[] = [
-    {},
-    { paused: true },
-    { value: { is: "ValueError", args: ["no"] } },
-    { value: { is: "CancelledError", args: [] } },
-  ];
-  for (let chain = 2; chain <= 9; chain++) {
-    const maker = `rung${10 * chain}`;
-    acts.push(act(maker, "rung", "chain1", "operator", acts.length + 1, acts.length + 1));
-    acts.push(act(`chain${chain}`, "chain", "", maker, acts.length + 1));
-    acts.push(
-      act(
-        `prompt${chain}`,
-        "prompt",
-        `chain${chain}`,
-        maker,
-        acts.length + 1,
-        chain % 3 ? acts.length + 9 : undefined,
-        {
-          words: ["str", "Work", chain === 4 ? "operator" : ""],
-        },
-      ),
-    );
-    for (let step = 0; step < chain; step++) {
-      const ended = (chain + step) % 4 ? acts.length + 2 : undefined;
-      acts.push(
-        act(`bash${10 * chain + step}`, "bash", `chain${chain}`, `prompt${chain}`, acts.length + 1, ended, {
-          ...(ended === undefined ? {} : states[(chain * step) % states.length]),
-          ...(step === 1 && chain === 6 ? { paused: true } : {}),
-          // A pause of the operator holds a command of chain7 that runs.
-          ...(step === 1 && chain === 7 ? { paused: true } : {}),
-        }),
-      );
-    }
-  }
-  return acts;
-}
-
-test("a loom of no width read from the index of a host gives the rows that it gives from every act", () => {
-  const acts = boardActs();
-  const prompts = [{ id: "prompt4", shape: "str", message: "Work" }];
-  const index = {
-    ids: new Map(acts.map((one) => [one.id, one])),
-    on: Map.groupBy(acts, (one) => one.on),
-    chains: acts.filter((one) => one.kind === "chain"),
-    live: acts.filter((one) => !one.done),
-  };
-  const base = { acts, prompts, measures: {}, width: 0, label: (id: string) => id };
-  for (const folds of [new Set<string>(), new Set(["chain1"])]) {
-    const whole = weave({ ...base, folds });
-    if (!folds.size) expect(new Set(whole.rows.map((row) => row.state)).size).toBeGreaterThan(3);
-    expect(weave({ ...base, folds, index })).toEqual(whole);
-  }
-  // A host that stamps the changes of the acts on each chain has the board read again only the chains that changed.
-  const stamps = new Map<string, number>();
-  const stamped = { ...index, stamp: (chain: string) => stamps.get(chain) ?? 0 };
-  expect(weave({ ...base, folds: new Set(), index: stamped })).toEqual(weave({ ...base, folds: new Set() }));
-  for (const [place, one] of acts.entries())
-    if (one.kind === "bash" && !one.done && one.on !== "chain7") {
-      const done = { ...one, done: true, ended: acts.length + 1 };
-      acts[place] = done;
-      index.ids.set(done.id, done);
-      const list = index.on.get(done.on) ?? [];
-      list[list.indexOf(one)] = done;
-      stamps.set(done.on, (stamps.get(done.on) ?? 0) + 1);
-    }
-  index.live = acts.filter((one) => !one.done);
-  stamped.live = index.live;
-  expect(weave({ ...base, folds: new Set(), index: stamped })).toEqual(weave({ ...base, folds: new Set() }));
-});
-
-test("a board read from the chains that a host names as touched gives the rows and the order of a whole board", () => {
-  const acts = boardActs();
-  let prompts = [{ id: "prompt4", shape: "str", message: "Work" }];
-  let measures: Record<string, Measure> = {};
-  const touched: string[] = [];
-  const index = {
-    ids: new Map(acts.map((one) => [one.id, one])),
-    on: Map.groupBy(acts, (one) => one.on),
-    chains: acts.filter((one) => one.kind === "chain"),
-    live: acts.filter((one) => !one.done),
-    stamp: (chain: string) => touched.filter((one) => one === chain).length,
-    touched,
-  };
-  const order = ({ rows, asking, looking, place, counts }: ReturnType<typeof orderOf>, loom: Loom) => ({
-    loom,
-    rows,
-    asking,
-    looking,
-    resting: orderOf(loom).resting(3),
-    place: [...place],
-    counts: [...counts].filter(([, count]) => count).sort(([one], [other]) => one.localeCompare(other)),
-  });
-  const same = () => {
-    const base = {
-      acts,
-      prompts,
-      measures,
-      folds: new Set<string>(),
-      width: 0,
-      label: (id: string) => id,
-    };
-    const read = weave({ ...base, index });
-    const whole = weave(base);
-    expect(order(orderOf(read), read)).toEqual(order(orderOf(whole), whole));
-  };
-  same();
-  same();
-  // Each command that runs ends, but on chain7, whose held work waits.
-  for (const [place, one] of acts.entries())
-    if (one.kind === "bash" && !one.done && one.on !== "chain7") {
-      const done = { ...one, done: true, ended: acts.length + 1 };
-      acts[place] = done;
-      index.ids.set(done.id, done);
-      const list = index.on.get(done.on) ?? [];
-      list[list.indexOf(one)] = done;
-      touched.push(done.on);
-    }
-  index.live = acts.filter((one) => !one.done);
-  same();
-  // The question of the operator moves to another chain, and a chain is measured.
-  prompts = [{ id: "prompt5", shape: "str", message: "Work" }];
-  same();
-  measures = { chain3: { answers: 2, dollars: 0.5, spent: 0.5, actor: "a" } };
-  same();
-});
-
-test("the acts as they stood at a moment hold what began by then, and an act that ended later runs, with no value yet", () => {
-  const acts = [
-    act("chain1", "chain", "", "operator", 1),
-    act("prompt1", "prompt", "chain1", "rung1", 2, 9, {
-      words: ["str", "Which?", "operator"],
-      value: "this",
-    }),
-    act("rung2", "rung", "chain1", "operator", 3, 5),
-    act("bash1", "bash", "chain1", "rung2", 4, 8, {
-      value: { stdout: { content: "all\n" }, stderr: { content: "" } },
-    }),
-    act("read1", "read", "chain1", "rung2", 7, 7),
-  ];
-  expect(momentsOf(acts)).toEqual([1, 2, 3, 4, 5, 7, 8, 9]);
-  const then = asOf(acts, 5);
-  expect(then.map((one) => [one.id, one.done])).toEqual([
-    ["chain1", false],
-    ["prompt1", false],
-    ["rung2", true],
-    ["bash1", false],
-  ]);
-  expect(then.find((one) => one.id === "prompt1")?.value).toBeNull();
-  expect(then.find((one) => one.id === "bash1")?.value).toMatchObject({
-    code: null,
-    stdout: { content: "" },
-  });
-  expect(owedAt(then)).toEqual([{ id: "prompt1", shape: "str", message: "Which?" }]);
-  expect(owedAt(asOf(acts, 9))).toEqual([]);
-});
-
-test("a chain that asks the operator says its first question now, and counts the others", () => {
-  const acts = [
-    act("chain1", "chain", "", "operator", 1),
-    act("prompt1", "prompt", "chain1", "operator", 2, undefined, {
-      words: ["bool", "Apply it?\nIt is safe.", "operator"],
-    }),
-    act("prompt2", "prompt", "chain1", "operator", 3, undefined, {
-      words: ["str", "Which name?", "operator"],
-    }),
-  ];
-  const loom = loomOf(acts, {
-    prompts: [
-      { id: "prompt1", shape: "bool", message: "Apply it?\nIt is safe." },
-      { id: "prompt2", shape: "str", message: "Which name?" },
-    ],
-  });
-  const row = loom.rows.find((one) => one.id === "chain1");
-  expect(row && nowOf(row, loom, acts, () => "")).toEqual({
-    tone: "asks",
-    act: "prompt1",
-    more: 1,
-    text: "Apply it?",
-  });
-});
-
-test("a chain at work says the act that it waits on, and a chain at rest says nothing", () => {
-  const acts = [
-    act("chain1", "chain", "", "operator", 1),
-    act("chain2", "chain", "", "operator", 2),
-    act("prompt1", "prompt", "chain1", "operator", 3),
-    act("rung1", "rung", "chain1", "prompt1", 4),
-    act("bash1", "bash", "chain1", "rung1", 5, undefined, { words: ["\nuv run pytest -q\necho done"] }),
-  ];
-  const loom = loomOf(acts);
-  const of = (id: string) => {
-    const row = loom.rows.find((one) => one.id === id);
-    return row && nowOf(row, loom, acts, () => "");
-  };
-  expect(of("chain1")).toEqual({ tone: "work", act: "bash1", more: 0, text: "uv run pytest -q" });
-  expect(of("chain2")).toEqual({ tone: "none", more: 0, text: "" });
-});
-
-test("a chain that failed says why, and a chain whose prompts closed says the first line of its last answer", () => {
-  const acts = [
-    act("chain1", "chain", "", "operator", 1),
-    act("prompt1", "prompt", "chain1", "operator", 2, 5),
-    act("rung1", "rung", "chain1", "prompt1", 3, 4, {
-      run: { status: "failed", reason: "NameError: BAD\nline 2" },
-    }),
-    act("chain2", "chain", "", "operator", 6),
-    act("prompt2", "prompt", "chain2", "operator", 7, 9, { value: "\n## The **tests** pass.\nAll of them." }),
-    act("rung2", "rung", "chain2", "prompt2", 8, 9),
-  ];
-  const loom = loomOf(acts);
-  const of = (id: string) => {
-    const row = loom.rows.find((one) => one.id === id);
-    return row && nowOf(row, loom, acts, () => "");
-  };
-  expect(of("chain1")).toEqual({ tone: "failed", act: "rung1", more: 0, text: "NameError: BAD" });
-  expect(of("chain2")).toEqual({ tone: "past", act: "prompt2", more: 0, text: "The tests pass." });
-});
-
 test("an act says what it is about on one line: the word of a rung, the message of a prompt, the time and the acts of a wait", () => {
-  const word = (rung: LiveAct) => (rung.id === "rung1" ? "\nx = 1\ny = 2" : "");
+  const word = (rung: Act) => (rung.id === "rung1" ? "\nx = 1\ny = 2" : "");
   expect(subjectOf(act("rung1", "rung", "chain1", "operator", 1), word)).toBe("x = 1");
   expect(
     subjectOf(
@@ -625,15 +332,6 @@ test("a question deep in an early step of a long thread stays shown with each st
   ]);
 });
 
-test("the measure of a chain counts its answers, sums their dollars, and names the actor of the last", () => {
-  expect(
-    measureOf([
-      { actor: "claude-cli:sonnet/high", usage: [100, 10, 0, 0, 0.25] },
-      { actor: "claude-cli:opus/high", usage: [200, 20, 0, 0, 0.5] },
-    ]),
-  ).toEqual({ dollars: 0.75, spent: 0.75, answers: 2, actor: "claude-cli:opus/high" });
-});
-
 test("a count of seconds reads as seconds, minutes or hours", () => {
   expect([duration(45), duration(600), duration(10800)]).toEqual(["45s", "10m", "3h"]);
 });
@@ -671,7 +369,7 @@ test("an act that runs says what it does: a question to the operator, the chains
   expect(doingOf(wait("prompt1"), find, label)).toBe("waits for feed");
   expect(doingOf(wait("prompt1", "prompt2"), find, label)).toBe("waits for 2 threads");
   expect(doingOf(wait(), find, label)).toBe("waits 5m");
-  const read = act("read1", "read", "chain1", "rung1", 5, undefined, { words: ["tui/src/theme.ts"] });
+  const read = act("read1", "read", "chain1", "rung1", 5, undefined, { words: ["src/theme.ts"] });
   expect(doingOf(read, find, label)).toBe("reads theme.ts");
   const bash = act("bash1", "bash", "chain1", "rung1", 6, undefined, {
     words: ["cargo clippy -- -D warnings"],
@@ -679,42 +377,5 @@ test("an act that runs says what it does: a question to the operator, the chains
   expect(doingOf(bash, find, label)).toBe("runs cargo clippy");
   expect(doingOf(wait("bash1"), (id) => (id === "bash1" ? bash : acts.get(id)), label)).toBe(
     "runs cargo clippy",
-  );
-});
-
-test("a reopened session with work that an earlier life left shows that work as it runs, not as paused", () => {
-  // The open of a life on its record resumes its cut work at once (#1193), so the work that an earlier life left is
-  // work, on the loom of each width and on the board of a host, and the loom reads no list of pending work.
-  const acts = [
-    act("chain1", "chain", "", "operator", 1),
-    act("rung1", "rung", "chain1", "operator", 2),
-    act("chain2", "chain", "", "rung1", 3),
-    act("prompt1", "prompt", "chain2", "rung1", 4),
-    { ...act("rung2", "rung", "chain2", "prompt1", 5), word: 'await bash("make")' },
-    act("bash1", "bash", "chain2", "rung2", 6),
-  ];
-  const base = {
-    acts,
-    prompts: [],
-    measures: {},
-    folds: new Set<string>(),
-    label: (id: string) => id,
-  };
-  const index = {
-    ids: new Map(acts.map((one) => [one.id, one])),
-    on: Map.groupBy(acts, (one) => one.on),
-    chains: acts.filter((one) => one.kind === "chain"),
-    live: acts.filter((one) => !one.done),
-  };
-  for (const loom of [weave({ ...base, width: 40 }), weave({ ...base, width: 0, index })]) {
-    const of = (id: string) => loom.rows.find((row) => row.id === id);
-    expect(of("chain2")?.state).toBe("runs");
-    expect(of("chain2")?.waits).toBe("bash1");
-    expect(loom.rows.map((row) => row.state)).not.toContain("paused");
-  }
-  // A pause of the operator still holds the same work as paused.
-  const held = acts.map((one) => (one.id === "bash1" ? { ...one, paused: true } : one));
-  expect(weave({ ...base, acts: held, width: 40 }).rows.find((row) => row.id === "chain2")?.state).toBe(
-    "paused",
   );
 });

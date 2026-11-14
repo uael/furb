@@ -3,9 +3,12 @@
 
 use std::{io, net::SocketAddr, path::PathBuf};
 
+use furb::world::config;
+use hyper::http;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio_tungstenite::tungstenite;
 use tokio_util::codec::LinesCodecError;
 
 use crate::protocol::{Kind, Role};
@@ -42,13 +45,13 @@ pub(crate) enum JournalError {
 
 impl From<furb::Fault> for LifeError {
   fn from(fault: furb::Fault) -> Self {
-    LifeError::Refused(fault.to_string())
+    Self::Refused(fault.to_string())
   }
 }
 
-impl From<furb::world::config::Error> for LifeError {
-  fn from(no: furb::world::config::Error) -> Self {
-    LifeError::Refused(no.to_string())
+impl From<config::Error> for LifeError {
+  fn from(no: config::Error) -> Self {
+    Self::Refused(no.to_string())
   }
 }
 
@@ -98,6 +101,9 @@ pub enum ProtocolError {
   /// A turn for a life whose models no peer answers.
   #[error("no peer answers the models of the life on the record {life}")]
   Answerless { life: String },
+  /// An open with `answers` of a life whose models a peer that lives answers already.
+  #[error("a peer that lives answers the models of the life on the record {life}")]
+  Answering { life: String },
   /// A frame of a view that only a window says, or only a skill, and the peer is of another kind.
   #[error("the verb is said by a peer of the kind {needs:?}, and the peer is of the kind {has:?}")]
   Speaker { needs: Kind, has: Kind },
@@ -131,7 +137,7 @@ pub enum DaemonError {
 
 impl From<LifeError> for ProtocolError {
   fn from(no: LifeError) -> Self {
-    ProtocolError::Refused { why: no.to_string() }
+    Self::Refused { why: no.to_string() }
   }
 }
 
@@ -145,8 +151,9 @@ pub enum TransportError {
   Exposed { folder: PathBuf },
   #[error("a daemon already listens at {place}")]
   Taken { place: String },
-  #[error("the daemon cannot listen at {place}: {source}")]
-  Listen { place: String, source: io::Error },
+  /// The cause is in the text and not in `source`, since the daemon reports an error by its text.
+  #[error("the daemon cannot listen at {place}: {cause}")]
+  Listen { place: String, cause: io::Error },
   /// The path of a Unix socket is longer than the platform lets a socket address hold.
   #[error(
     "the socket path {place} is {length} bytes, over the bound of {bound} bytes of this platform"
@@ -179,7 +186,7 @@ pub enum TransportError {
   #[error("a peer of the door of the windows gave no token of the daemon")]
   Tokenless,
   #[error("the WebSocket of a peer did not open")]
-  Upgrade(#[source] Box<tokio_tungstenite::tungstenite::Error>),
+  Upgrade(#[source] Box<tungstenite::Error>),
   #[error(transparent)]
   Access(#[from] AccessError),
 }
@@ -199,7 +206,7 @@ pub enum AccessError {
   #[error("the local API of Tailscale broke the exchange")]
   Http(#[from] hyper::Error),
   #[error("the request to the local API of Tailscale is not valid")]
-  Asked(#[from] hyper::http::Error),
+  Asked(#[from] http::Error),
   #[error("the local API of Tailscale refused {path} with {status}: {why}")]
   Status { path: String, status: u16, why: String },
   #[error("the local API of Tailscale answered {path} with no JSON that furb reads")]

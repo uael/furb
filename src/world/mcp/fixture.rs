@@ -2,6 +2,10 @@
 //! of its own, and one program of HTTP on 127.0.0.1 that serves the streamable HTTP, with JSON or with a stream of
 //! events, the older HTTP with SSE, a server that asks for a login, and its authorization server.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::HashMap,
   fmt::Write as _,
@@ -18,12 +22,33 @@ use base64::{
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use std::env;
+use std::fs;
+use std::io;
+use std::process;
+use url::form_urlencoded;
 
 /// The variable that makes the test program the server over stdio.
 pub(crate) const FIXTURE: &str = "FURB_MCP_FIXTURE";
 
 /// The variable that names the file where the server over stdio writes a line at each start.
 pub(crate) const STARTS: &str = "FURB_MCP_FIXTURE_STARTS";
+
+/// The variable that names a file of the names of more tools, one on each line, which the server
+/// over stdio reads at each list of its tools and at each call, so a test changes the tools while
+/// the server runs.
+pub(crate) const TOOLS: &str = "FURB_MCP_FIXTURE_TOOLS";
+
+/// The names that the file of [`TOOLS`] holds now, none when no file is named or it cannot be read.
+fn named() -> Vec<String> {
+  let text = env::var_os(TOOLS).and_then(|file| fs::read_to_string(file).ok());
+  text
+    .iter()
+    .flat_map(|text| text.lines())
+    .filter(|one| !one.is_empty())
+    .map(str::to_owned)
+    .collect()
+}
 
 /// The bytes of the image that the tool picture gives.
 pub(crate) const PICTURE: &[u8] = b"\x89PNG\r\n\x1a\nfixture";
@@ -80,6 +105,11 @@ fn tools_list(held: &Mutex<Fixture>, params: &Value) -> Value {
   if held.lock().unwrap().added {
     tools.push(tool("added", "Was added.", &json!({"type": "object"})));
   }
+  tools.extend(
+    named()
+      .iter()
+      .map(|name| tool(name, "Named by the file of the test.", &json!({"type": "object"}))),
+  );
   match params["cursor"].as_str() {
     None => json!({"tools": tools[..3], "nextCursor": "2"}),
     Some(_) => json!({"tools": tools[3..]}),
@@ -115,7 +145,8 @@ fn call(held: &Mutex<Fixture>, params: &Value, sent: &mut Vec<Value>) -> Result<
       sent.push(json!({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}));
       Ok(said("changed"))
     }
-    "crash" => std::process::exit(3),
+    "crash" => process::exit(3),
+    other if named().iter().any(|one| one == other) => Ok(said(&format!("called {other}"))),
     other => Err(format!("no tool {other}")),
   }
 }
@@ -163,14 +194,14 @@ pub(crate) fn answer(held: &Mutex<Fixture>, message: &Value) -> Vec<Value> {
 /// The server over stdio: it writes a line to the file of its starts, then answers each line of its stdin on a
 /// thread of its own, and ends at the end of its stdin.
 pub(crate) fn stdio() {
-  if let Some(path) = std::env::var_os(STARTS) {
-    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(path).unwrap();
-    writeln!(file, "start {}", std::process::id()).unwrap();
+  if let Some(path) = env::var_os(STARTS) {
+    let mut file = fs::OpenOptions::new().create(true).append(true).open(path).unwrap();
+    writeln!(file, "start {}", process::id()).unwrap();
   }
   let held = Arc::new(Mutex::new(Fixture::default()));
-  let out = Arc::new(Mutex::new(std::io::stdout()));
+  let out = Arc::new(Mutex::new(io::stdout()));
   writeln!(out.lock().unwrap(), "a line of a log that is no JSON").unwrap();
-  for line in std::io::stdin().lock().lines() {
+  for line in io::stdin().lock().lines() {
     let Ok(line) = line else { break };
     let Ok(message) = serde_json::from_str::<Value>(&line) else { continue };
     let (held, out) = (Arc::clone(&held), Arc::clone(&out));
@@ -182,7 +213,7 @@ pub(crate) fn stdio() {
       }
     });
   }
-  std::process::exit(0);
+  process::exit(0);
 }
 
 /// What the program of HTTP holds: the server, the streams of the older HTTP with SSE, the token that the server
@@ -371,7 +402,7 @@ fn authorize(stream: &mut TcpStream, held: &Served, base: &str, query: &HashMap<
 
 /// The token endpoint: a token for a code that the login gave, or for the refresh token.
 fn token(stream: &mut TcpStream, held: &Served, body: &[u8]) {
-  let form: HashMap<String, String> = url::form_urlencoded::parse(body).into_owned().collect();
+  let form: HashMap<String, String> = form_urlencoded::parse(body).into_owned().collect();
   let field = |key: &str| form.get(key).map(String::as_str).unwrap_or_default();
   let verified = URL_SAFE_NO_PAD.encode(Sha256::digest(field("code_verifier").as_bytes()));
   let granted = match field("grant_type") {
@@ -398,7 +429,7 @@ fn handle(mut stream: TcpStream, held: &Served, base: &str) {
   let Some((method, target, headers, body)) = request(&mut stream) else { return };
   let (path, query) = target.split_once('?').unwrap_or((&target, ""));
   let query: HashMap<String, String> =
-    url::form_urlencoded::parse(query.as_bytes()).into_owned().collect();
+    form_urlencoded::parse(query.as_bytes()).into_owned().collect();
   if let Some(value) = headers.get("x-test") {
     held.headers.lock().unwrap().push(value.clone());
   }

@@ -7,10 +7,11 @@ use serde_json::{Value, json};
 
 use super::{CALL, Choice, Places, Run, Scope, Server, Transport, choose, expand, servers};
 use crate::testing::Yard;
+use std::process;
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> Yard {
-  Yard::new(format!("furb-mcp-config-{name}-{}", std::process::id()))
+  Yard::new(format!("furb-mcp-config-{name}-{}", process::id()))
 }
 
 /// A file, written with its folder.
