@@ -235,9 +235,9 @@ it is not given. The daemon answers requests in any order.
     | Stage | The work | `done` of `of` |
     | --- | --- | --- |
     | `recall` | The daemon reads what the record told before its last checkpoint, for the log of the life. | Facts told, of those facts. Both are 0 until the daemon read them. |
-    | `find` | The record is scanned for its checkpoints. | Bytes passed, of the bytes of the record. |
+    | `find` | The record is read from its last checkpoint, for the build of its last life. | Bytes passed, of the bytes of the record. |
     | `cross` | A record that another build of furb wrote is replayed on the engine of that build, and gets a checkpoint. | Both are 0: the stage counts nothing. |
-    | `read` | The record is read under its lease. | Bytes read, of the bytes of the record. |
+    | `read` | The record is read from its last checkpoint under its lease. | Bytes passed, of the bytes of the record. |
     | `seed` | The sandbox loads the engine and makes the entries of the checkpoint. | Both are 0: the stage counts nothing. |
     | `boot` | The life replays the entries that it boots on. | Entries that the replay passed, of those entries. |
     | `log` | The daemon puts what the open told in the log of the life, which its windows read. | Events put, of those events. |

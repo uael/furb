@@ -508,7 +508,7 @@ impl Life {
     (told.0)(Stage::Recall, 0, 0);
     // One pass over the heads of the lines gives the place of each checkpoint, and a record with
     // none tells nothing here.
-    let Ok(world::Marks { checkpoints, .. }) = world::marks(record, &mut |_| {}) else { return };
+    let Ok(checkpoints) = world::checkpoints(record) else { return };
     let marks: Vec<usize> = checkpoints.into_iter().map(|at| at + 1).collect();
     let Some(&last) = marks.last() else { return };
     let Ok(retold) = world::retold(record) else { return };

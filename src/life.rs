@@ -78,14 +78,16 @@ pub enum Stage {
   /// A host tells its readers what the record told before its last checkpoint: the facts told, of
   /// those facts, which are known once the host read them. The crate never tells this stage.
   Recall,
-  /// The record is scanned for its checkpoints and for the build of its last life: the bytes
-  /// passed, of the bytes of the record. It is the first stage that the crate tells, at once, and
-  /// the life then reads its settings and the catalog of its models in it.
+  /// The record is read from its last checkpoint, which the read finds from the end of the record,
+  /// for the build of its last life: the bytes passed, of the bytes of the record. It is the first
+  /// stage that the crate tells, at once, and the life then reads its settings and the catalog of
+  /// its models in it.
   Find,
   /// A record whose last life ran another engine is carried across to this build, by a life that
   /// inspects it and writes its checkpoint. It counts nothing.
   Cross,
-  /// The record is read under its lease: the bytes read, of the bytes of the record.
+  /// The record is read from its last checkpoint under its lease: the bytes passed, of the bytes
+  /// of the record.
   Read,
   /// The sandbox loads the engine, takes the data of the checkpoint, and the checkpointer makes the
   /// entries of it. It counts nothing.
@@ -258,19 +260,21 @@ impl Opening {
   /// waited for.
   fn parted(self, prepared: Prepared, told: &Progress) -> Result<(Vec<Object>, Ears), Fault> {
     let keeps = self.keeps != Some(false) && self.works();
-    let (record, store) = match (&self.record, keeps) {
+    let (last, store) = match (&self.record, keeps) {
       (Some(path), true) => {
         let (path, bytes) = (Path::new(path), size(path));
         (told.0)(Stage::Read, 0, bytes);
-        let (held, store) = world::stored(path, &mut |at| (told.0)(Stage::Read, at, bytes))?;
-        (held, Some(store))
+        let (last, store) = world::stored(path, &mut |at| (told.0)(Stage::Read, at, bytes))?;
+        (last, Some(store))
       }
-      (Some(path), false) => (world::kept(path)?, None),
-      (None, _) => (Vec::new(), None),
+      (Some(path), false) => (world::last(Path::new(path), &mut |_| {})?, None),
+      (None, _) => (world::Last { entries: Vec::new(), from: 0 }, None),
     };
-    // The log reads the record whole, so a life after a checkpoint writes on after the log of the lives before it.
-    let logs = self.record.as_ref().filter(|_| keeps).map(|path| world::log(path, &record));
-    let record = checkpoint::booted(record);
+    // The log takes where the last entries start, so a life after a checkpoint writes on after the
+    // log of the lives before it.
+    let logs = self.record.as_ref().filter(|_| keeps);
+    let logs = logs.map(|path| world::logging(path, &last.entries, last.from));
+    let record = checkpoint::booted(last.entries);
     let mut ears = self.eared(prepared, &record)?;
     ears.extend(store.map(|store| ("store".to_owned(), store)));
     ears.extend(logs.map(|log| ("log".to_owned(), log)));
@@ -352,25 +356,29 @@ impl Opening {
     // waits for the first one behind the catalog.
     let bytes = self.record.as_deref().map_or(0, size);
     (told.0)(Stage::Find, 0, bytes);
-    let read = |told: &Progress| match self.record.as_deref() {
-      Some(path) if Path::new(path).exists() => {
-        world::marks(path, &mut |at| (told.0)(Stage::Find, at, bytes)).map(Some)
+    let read = |told: &Progress| match self.record.as_deref().map(Path::new) {
+      Some(path) if path.exists() => {
+        world::last(path, &mut |at| (told.0)(Stage::Find, at, bytes)).map(Some)
       }
       _ => Ok(None),
     };
-    // A record of another major of its schema is refused before any build reads it whole or writes
-    // on it, and the models of a life on a record that holds another engine read that engine.
+    // A record of another major of its schema is refused before any build writes on it, and the
+    // models of a life on a record that holds another engine read that engine.
     let mut system = None;
-    let mut marks = read(told)?;
-    if let Some(held) = &marks {
-      world::readable(&held.heads)?;
-      // A crossing writes a checkpoint, so the marks of before it are those of another record.
-      if self.keeps() && self.crossed(held, told)? {
-        marks = read(&Progress::default())?;
+    let mut last = read(told)?;
+    if let (Some(held), Some(path)) = (&last, self.record.as_deref()) {
+      // The build that wrote the checkpoint names the schema of the record before it, and each
+      // build after it the schema of what it wrote.
+      world::readable(world::made_before(Path::new(path), held.from)?.as_slice())?;
+      world::readable(&held.entries)?;
+      // A crossing writes a checkpoint, so the last entries of before it are those of another
+      // record.
+      if self.keeps() && self.crossed(&held.entries, told)? {
+        last = read(&Progress::default())?;
       }
     }
-    if let Some(marks) = &marks {
-      let (source, ..) = world::texts(checkpoint::segment(&marks.heads))?;
+    if let Some(last) = &last {
+      let (source, ..) = world::texts(checkpoint::segment(&last.entries))?;
       if source != crate::ENGINE {
         let unread = || Fault::refused("this build cannot minify the engine that the record holds");
         system = Some(minify::minified(&source).ok_or_else(unread)?);
@@ -392,7 +400,15 @@ impl Opening {
       })
       .collect();
     // A life that names no actor or no roster goes on with the ones that its record stood on last.
-    let stood = marks.and_then(|marks| marks.standing);
+    let stood = match (&last, self.record.as_deref()) {
+      (Some(last), Some(path)) => match checkpoint::standing(&last.entries) {
+        // A checkpoint whose last stand was refused carries no standing, and the record still holds
+        // the one that the stand before it gave.
+        None => world::stood_before(Path::new(path), last.from)?,
+        stood => stood,
+      },
+      _ => None,
+    };
     let (actor, roster) = stood.as_ref().map_or((None, None), |one| offered(one.as_ref()));
     let actor = self.actor.clone().or(actor);
     let provider = match system {
@@ -538,16 +554,16 @@ impl Opening {
   /// record, born on the engine that its fact made holds, writes its checkpoint after its last
   /// entry, as a life that ends writes one, and the life opens from that checkpoint on the engine
   /// of this build. A record of this build, or of a build whose fact made holds no texts, stays as
-  /// it is. It reads the marks of the record, and says whether it wrote that checkpoint.
-  fn crossed(&self, marks: &world::Marks, told: &Progress) -> Result<bool, Fault> {
-    let segment = checkpoint::segment(&marks.heads);
+  /// it is. It reads the last entries of the record, and says whether it wrote that checkpoint.
+  fn crossed(&self, last: &[Object], told: &Progress) -> Result<bool, Fault> {
+    let segment = checkpoint::segment(last);
     let (source, ..) = world::texts(segment)?;
     let crosses = source != crate::ENGINE && !segment.is_empty();
     let Some(path) = self.record.as_deref().filter(|_| crosses) else {
       return Ok(false);
     };
     (told.0)(Stage::Cross, 0, 0);
-    let record = checkpoint::booted(world::kept(path)?);
+    let record = checkpoint::booted(world::last(Path::new(path), &mut |_| {})?.entries);
     let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     let prepared = inspects.prepared(&Progress::default())?;
     let ears = inspects.eared(prepared, &record)?;

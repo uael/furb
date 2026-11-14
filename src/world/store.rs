@@ -26,7 +26,7 @@ use monty_types::{
   unstable::{MontyGraph, MontyNode},
 };
 
-use self::{error::StoreError, lines::Head};
+use self::error::StoreError;
 use super::{beside, free};
 use crate::{
   CHECKPOINTER, ENGINE, KERNEL,
@@ -41,6 +41,7 @@ use crate::{
 use crate::checkpoint;
 use crate::fact;
 pub use lines::Lines;
+pub(crate) use lines::spoken;
 pub use schema::{CHECKPOINT_SCHEMA, RECORD_SCHEMA, Schema, SchemaError};
 pub use sqlite::Sqlite;
 use std::io;
@@ -92,23 +93,51 @@ fn room(path: &Path) -> Option<(&Path, u64)> {
 /// The record at a path, read under its lease, and the ear that keeps on it what the journal says to keep: a
 /// database of SQLite when the name of the path ends in `.sqlite`, `.sqlite3` or `.db`, and else a file of lines.
 pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
-  stored(path.as_ref(), &mut |_| {})
+  let path = path.as_ref();
+  keeping(Format::of(path).open(path)?)
 }
 
-/// The record and the ear that [`store`] gives, with the bytes of a file of lines that the read
-/// passed told after each line. A database tells none.
+/// The entries of a record that a life opens on: those from its last checkpoint on, or each entry
+/// of a record that holds none. A file of lines is read from that checkpoint, which the read finds
+/// from the end of the file, so an open passes and parses no line before it. A database gives each
+/// of its entries.
+pub(crate) struct Last {
+  pub entries: Vec<Object>,
+  /// The byte of the file of lines where the first of them starts, and 0 for a database.
+  pub from: u64,
+}
+
+/// The last entries of the record at a path, read under its lease, and the ear that [`store`]
+/// gives, with the bytes of a file of lines that the read passed told after each line. A database
+/// tells none.
 pub(crate) fn stored(
   path: &Path,
   reached: &mut dyn FnMut(u64),
-) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
-  match Format::of(path) {
-    Format::Sqlite => keeping(Sqlite::open(path)?),
+) -> Result<(Last, Box<dyn Ear>), Fault> {
+  let (from, (entries, ear)) = match Format::of(path) {
+    Format::Sqlite => (0, keeping(Sqlite::open(path)?)?),
     Format::Lines => {
       let mut store = Lines::open(path)?;
-      let entries = store.read(reached)?;
-      Ok(kept_by(store, entries))
+      let (from, entries) = store.last(reached)?;
+      (from, kept_by(store, entries))
     }
-  }
+  };
+  Ok((Last { entries, from }, ear))
+}
+
+/// The last entries of the record at a path, read with no lease and changed in nothing, as a later
+/// life would open on them, with the bytes of a file of lines that the read passed told after each
+/// line.
+pub(crate) fn last(path: &Path, reached: &mut dyn FnMut(u64)) -> Result<Last, Fault> {
+  let format = Format::of(path);
+  let (from, entries) = match format {
+    Format::Sqlite => (0, format.kept(path)?),
+    Format::Lines => {
+      let (from, entries, _) = lines::last(path, reached)?;
+      (from, entries)
+    }
+  };
+  Ok(Last { entries: entries.into_iter().map(streamed).collect(), from })
 }
 
 /// What the store kept at a path, read with no lease and changed in nothing on the disk, as a later life would open
@@ -125,51 +154,78 @@ pub(crate) fn each(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Resu
   Ok(Format::of(path).each(path, take)?)
 }
 
-/// What the heads of the lines of a record tell, which one pass over the record reads: the entries
-/// of its facts made and of its checkpoints, in order, the place of each checkpoint among the
-/// entries, counted from 0, and the standing that its last answered stand gave.
-#[derive(Default)]
-pub struct Marks {
-  pub heads: Vec<Object>,
-  pub checkpoints: Vec<usize>,
-  pub standing: Option<Object>,
-}
-
-impl Marks {
-  fn hear(&mut self, place: usize, entry: Object) {
-    if let Some(standing) = stood(&entry) {
-      self.standing = Some(standing);
-      return;
-    }
-    let kind = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-    match kind.as_ref().map(Fact::kind) {
-      Some(checkpoint::CHECKPOINT) => {
-        self.checkpoints.push(place);
-        self.heads.push(entry);
-      }
-      Some(MADE) => self.heads.push(entry),
-      _ => {}
-    }
-  }
-}
-
-/// The marks of the record at a path, read with no lease and changed in nothing. A file of lines is
-/// read from the head of each line in one pass, and parses only the lines of a fact made, of a
-/// checkpoint and of the done of a stand, and the bytes of the file that the pass read are told
-/// after each line. A database tells none.
-pub fn marks(path: impl AsRef<Path>, reached: &mut dyn FnMut(u64)) -> Result<Marks, Fault> {
+/// The place of each checkpoint of the record at a path among its entries, counted from 0, in
+/// order, read with no lease and changed in nothing. A file of lines is read from the start of each
+/// line, and no line is parsed.
+pub fn checkpoints(path: impl AsRef<Path>) -> Result<Vec<usize>, Fault> {
   let path = path.as_ref();
-  let format = Format::of(path);
-  let mut marks = Marks::default();
-  if format == Format::Lines {
-    let heads = [Head::Kind(MADE), Head::Kind(checkpoint::CHECKPOINT), Head::Done("stand")];
-    lines::heads(path, &heads, &mut |place, entry| marks.hear(place, entry), reached)?;
-  } else {
-    for (place, entry) in format.kept(path)?.into_iter().enumerate() {
-      marks.hear(place, entry);
+  let (mut places, mut place) = (Vec::new(), 0);
+  let mut pass = |checkpoint: bool| {
+    places.extend(checkpoint.then_some(place));
+    place += 1;
+  };
+  match Format::of(path) {
+    Format::Lines => {
+      let checkpoint = format!("[[\"{}\",", checkpoint::CHECKPOINT);
+      let mut wanted = |line: &[u8]| {
+        pass(line.starts_with(checkpoint.as_bytes()));
+        false
+      };
+      lines::heads(path, u64::MAX, &mut wanted, &mut |_| {})?;
+      // A checkpoint that a stop tore as the store wrote it is the last line, and no entry.
+      if lines::torn(path, checkpoint.as_bytes())? {
+        places.pop();
+      }
     }
+    Format::Sqlite => sqlite::each(path, &mut |entry| {
+      let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+      pass(fact.is_some_and(|a| a.kind() == checkpoint::CHECKPOINT));
+    })?,
   }
-  Ok(marks)
+  Ok(places)
+}
+
+/// The start of each line of the file of lines at a path that starts before a byte, and the entry
+/// of each line that `wanted` says to parse, as [`lines::heads`] gives them: what a reader takes of
+/// the entries before the last ones with no parse of them, each entry as this build reads it. A
+/// database holds none before byte 0.
+pub(crate) fn heads(
+  path: &Path,
+  to: u64,
+  wanted: &mut dyn FnMut(&[u8]) -> bool,
+  take: &mut dyn FnMut(Object),
+) -> Result<(), Fault> {
+  match to {
+    0 => Ok(()),
+    _ => Ok(lines::heads(path, to, wanted, &mut |entry| take(streamed(entry)))?),
+  }
+}
+
+/// The name of the act that the fact of a line of a record asks, read from the start of the line
+/// alone: nothing for a fact that is no question, and for a writing that an older build kept as a
+/// question, which this build reads as a fact, as [`streamed`] says.
+pub(crate) fn asks(line: &[u8]) -> Option<&str> {
+  let [kind, name, _] = spoken(line)?;
+  (fact::named(name, kind) && kind != WRITING).then_some(name)
+}
+
+/// The fact made of the build that wrote the checkpoint which the last entries of the record at a
+/// path start with, at a byte of its file of lines: the last fact made before that byte, which the
+/// read finds from it toward the start of the file. Nothing before byte 0.
+pub(crate) fn made_before(path: &Path, to: u64) -> Result<Option<Object>, Fault> {
+  match to {
+    0 => Ok(None),
+    _ => Ok(lines::before(path, format!("[[\"{MADE}\",").as_bytes(), to)?),
+  }
+}
+
+/// The standing that the last answered stand gave among the entries of the file of lines at a path
+/// that start before a byte, of which the read parses only the done of each stand.
+pub(crate) fn stood_before(path: &Path, to: u64) -> Result<Option<Object>, Fault> {
+  let mut standing = None;
+  let mut wanted = |line: &[u8]| line.starts_with(b"[[\"done\",\"stand");
+  heads(path, to, &mut wanted, &mut |entry| standing = stood(&entry).or(standing.take()))?;
+  Ok(standing)
 }
 
 /// The standing that an entry gives, when it is the done of a stand of the root: the value of that

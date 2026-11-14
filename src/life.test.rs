@@ -830,6 +830,32 @@ fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_sto
 }
 
 #[test]
+fn a_life_on_a_record_that_ends_with_its_checkpoint_goes_on_with_the_standing_that_it_carries() {
+  let at = yard("stood-checkpoint");
+  let both = "close((standing()[2], sorted(a[0] for a in standing()[0])))";
+  let given = Opening {
+    skills: Some(false),
+    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:sonnet".to_owned()].into()),
+    actor: Some("claude-cli:sonnet/low".to_owned()),
+    ..scripted(&at, &[])
+  };
+  let (mut first, _) = given.boot::<String>([]).unwrap();
+  let had = closed(&mut first, both).py_repr();
+  first.checkpoint().unwrap();
+  // No stand follows the checkpoint, which carries the standing that the last stand before it gave.
+  let record = at.join("record.jsonl");
+  let last = world::last(&record, &mut |_| {}).unwrap();
+  assert_eq!(last.entries.len(), 1, "the record ends with its checkpoint");
+  let carried = checkpoint::standing(&last.entries).map(|one| one.as_ref().py_repr());
+  let stood = world::stood_before(&record, last.from).unwrap().map(|one| one.as_ref().py_repr());
+  assert!(carried.is_some());
+  assert_eq!(carried, stood);
+  let unsaid = Opening { skills: Some(false), roster: None, actor: None, ..scripted(&at, &[]) };
+  let (mut later, _) = unsaid.boot::<String>([]).unwrap();
+  assert_eq!(closed(&mut later, both).py_repr(), had);
+}
+
+#[test]
 fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
   let at = yard("provider-settings");
   fs::create_dir_all(at.join("config")).unwrap();

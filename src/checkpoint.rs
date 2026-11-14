@@ -51,7 +51,7 @@ use crate::{
   engine::{OPERATOR, ROOT, callable},
   fact::Fact,
   skill::definitions,
-  value::{Fault, Object, ObjectRef, entry},
+  value::{Fault, Object, ObjectRef, entry, field},
   wire,
   world::{self, CHECKPOINT_SCHEMA, Store},
 };
@@ -238,6 +238,24 @@ pub fn opened(kind: &str, by: &str, on: Option<&str>) -> bool {
 /// Whether a record holds a stand of the root that was answered.
 pub fn stood(record: &[Object]) -> bool {
   record.iter().any(|one| world::stood(one).is_some())
+}
+
+/// The standing that the last answered stand gave in the last entries of a record: the done of a
+/// stand after its last checkpoint, or else the stand that the checkpoint carries, when it was
+/// answered.
+pub(crate) fn standing(record: &[Object]) -> Option<Object> {
+  let said = |entries: &[Object]| entries.iter().rev().find_map(world::stood);
+  said(record).or_else(|| {
+    let checkpoint = &record[last(record)?];
+    said(&carried(checkpoint)).or_else(|| {
+      let data = fact(checkpoint)?.word(0)?.to_owned();
+      let acts = field(&data.as_ref(), "acts")?.items()?;
+      let stand =
+        |act: &&ObjectRef<'_>| field(act, "kind").is_some_and(|one| one.as_str() == Some("stand"));
+      let stood = acts.iter().rev().find(stand)?;
+      field(stood, "value").filter(|value| value.items().is_some()).map(|value| value.to_owned())
+    })
+  })
 }
 
 /// The entries that the build of the last life on a record made: those after its last checkpoint,

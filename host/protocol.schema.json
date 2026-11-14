@@ -4197,7 +4197,7 @@
         {
           "type": "string",
           "const": "find",
-          "description": "The record is scanned for its checkpoints and for the build of its last life: the bytes\npassed, of the bytes of the record. It is the first stage that the crate tells, at once, and\nthe life then reads its settings and the catalog of its models in it."
+          "description": "The record is read from its last checkpoint, which the read finds from the end of the record,\nfor the build of its last life: the bytes passed, of the bytes of the record. It is the first\nstage that the crate tells, at once, and the life then reads its settings and the catalog of\nits models in it."
         },
         {
           "type": "string",
@@ -4207,7 +4207,7 @@
         {
           "type": "string",
           "const": "read",
-          "description": "The record is read under its lease: the bytes read, of the bytes of the record."
+          "description": "The record is read from its last checkpoint under its lease: the bytes passed, of the bytes\nof the record."
         },
         {
           "type": "string",

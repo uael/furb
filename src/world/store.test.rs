@@ -3,7 +3,8 @@
 
 use std::{fs, path::Path};
 
-use super::{Lines, Sqlite, Store, digest, keeping, kept, marks, store, texts, unheld};
+use super::{Lines, Sqlite, Store, checkpoints, digest, keeping, kept, last, store, texts, unheld};
+use crate::checkpoint::standing;
 use crate::testing::Yard;
 use crate::value;
 use crate::{
@@ -130,7 +131,8 @@ macro_rules! conformance {
       #[test]
       fn the_standing_of_a_record_is_the_list_that_its_last_done_of_a_stand_gave() {
         let path = at("standing");
-        assert!(marks(&path, &mut |_| {}).unwrap().standing.is_none());
+        let stood = |path: &Path| standing(&last(path, &mut |_| {}).unwrap().entries);
+        assert!(stood(&path).is_none());
         let mut one = open(&path).unwrap();
         one.entries().unwrap();
         let first = "[['first'], 1]";
@@ -144,9 +146,26 @@ macro_rules! conformance {
           (r#"[["stand","stand11","operator","chain1"]]"#, last),
         ] {
           one.keep(parsed(entry).unwrap().as_ref()).unwrap();
-          let held = marks(&path, &mut |_| {}).unwrap().standing.map(|got| got.as_ref().py_repr());
+          let held = stood(&path).map(|got| got.as_ref().py_repr());
           assert_eq!(held.as_deref(), Some(want), "{entry}");
         }
+      }
+
+      #[test]
+      fn the_places_of_the_checkpoints_of_a_record_count_each_entry_before_them() {
+        let path = at("checkpoints");
+        assert_eq!(checkpoints(&path).unwrap(), [0usize; 0]);
+        let mut one = open(&path).unwrap();
+        one.entries().unwrap();
+        for entry in [
+          r#"[["stand","stand1","operator","chain1"]]"#,
+          r#"[["checkpoint","chain1","store",{}]]"#,
+          r#"[["tell","rung2","chain1",["[[\"checkpoint\", in a text"]]]"#,
+          r#"[["checkpoint","chain1","store",{"schema":"2.0"}]]"#,
+        ] {
+          one.keep(parsed(entry).unwrap().as_ref()).unwrap();
+        }
+        assert_eq!(checkpoints(&path).unwrap(), [1, 3]);
       }
 
       #[test]

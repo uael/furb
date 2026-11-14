@@ -48,7 +48,10 @@ use crate::{
   fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
-  world::{beside, kept},
+  world::{
+    beside, kept,
+    store::{asks, heads, spoken},
+  },
 };
 use serde::de;
 use std::fs;
@@ -108,7 +111,14 @@ impl<'a> Line<'a> {
 /// The ear of the log of the record at a path, which held a number of entries when the life opened: it hears every
 /// fact, and writes the log again from its first line.
 pub fn log(record: impl AsRef<Path>, held: &[Object]) -> Box<dyn Ear> {
-  heard(Log::open(record.as_ref(), held))
+  logging(record, held, 0)
+}
+
+/// The ear of [`log`] for the last entries of a record, which start at a byte of its file of lines.
+/// The log reads the start of each line before that byte and parses none, but the lines of the
+/// acts that a new log owes.
+pub(crate) fn logging(record: impl AsRef<Path>, last: &[Object], from: u64) -> Box<dyn Ear> {
+  heard(Log::open(record.as_ref(), last, from))
 }
 
 /// The ear that writes a log.
@@ -187,22 +197,22 @@ struct Log {
   owed: Vec<(String, Value)>,
 }
 
-/// The lines of the log at a path that come before a checkpoint, the entries before which a record holds, with its
-/// head, and each name that they show: nothing when the log does not agree with those entries, as [`agreed`] reads it.
-/// A log of a life that went on from an earlier checkpoint holds a line of keep for this checkpoint, where they end.
-fn earlier(log: &Path, before: &[Object]) -> Option<(String, HashSet<String>)> {
+/// The lines of the log at a path that come before a checkpoint, with its head, and each name that
+/// they show: nothing when the log does not agree with the entries that a record holds before that
+/// checkpoint, of which it is given the count and the questions, as [`agreed`] reads it. A log of a
+/// life that went on from an earlier checkpoint holds a line of keep for this checkpoint, where
+/// they end.
+fn earlier(
+  log: &Path,
+  before: usize,
+  mut asked: HashSet<String>,
+) -> Option<(String, HashSet<String>)> {
   let text = fs::read_to_string(log).ok()?;
   let mut lines = text.split_inclusive('\n');
   let head = lines.next()?;
   let mut entries =
     usize::try_from(serde_json::from_str::<Value>(head.trim_end()).ok()?.get("entries")?.as_u64()?)
       .ok()?;
-  let mut asked: HashSet<String> = before
-    .iter()
-    .filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?))
-    .filter(Fact::question)
-    .map(|one| one.about().to_owned())
-    .collect();
   let (mut kept, mut seen) = (head.to_owned(), HashSet::new());
   for line in lines {
     let whole = line.strip_suffix('\n')?;
@@ -213,7 +223,7 @@ fn earlier(log: &Path, before: &[Object]) -> Option<(String, HashSet<String>)> {
         if at != entries + 1 {
           return None;
         }
-        if at > before.len() {
+        if at > before {
           break;
         }
         entries = at;
@@ -228,7 +238,41 @@ fn earlier(log: &Path, before: &[Object]) -> Option<(String, HashSet<String>)> {
     }
     kept.push_str(line);
   }
-  (entries == before.len() && asked.is_empty()).then_some((kept, seen))
+  (entries == before && asked.is_empty()).then_some((kept, seen))
+}
+
+/// Whether the speaker of a question is an ear of the outside, and not an act, the operator or the
+/// journal.
+fn outside(by: &str) -> bool {
+  !named_act(by) && !matches!(by, "" | "operator" | "journal")
+}
+
+/// What the entries of a record before a byte of its file of lines tell from the start of each
+/// line, with no parse: how many they are, and the name of each question among them.
+fn before(record: &Path, to: u64) -> Result<(usize, HashSet<String>), Fault> {
+  let (mut entries, mut asked) = (0, HashSet::new());
+  let mut heard = |line: &[u8]| {
+    entries += 1;
+    asked.extend(asks(line).map(str::to_owned));
+    false
+  };
+  heads(record, to, &mut heard, &mut |_| {})?;
+  Ok((entries, asked))
+}
+
+/// The entries of a record before a byte of its file of lines about each act that an ear of the
+/// outside made, in order, which are the only lines of them that the read parses.
+fn theirs(record: &Path, to: u64) -> Result<Vec<Object>, Fault> {
+  let (mut made, mut about) = (HashSet::new(), Vec::new());
+  let mut wanted = |line: &[u8]| {
+    let Some([_, name, by]) = spoken(line) else { return false };
+    if asks(line).is_some() && outside(by) {
+      made.insert(name.to_owned());
+    }
+    made.contains(name)
+  };
+  heads(record, to, &mut wanted, &mut |entry| about.push(entry))?;
+  Ok(about)
 }
 
 /// Whether a name is the name of an act, as `bash3`, and not the name of an ear.
@@ -239,15 +283,14 @@ fn named_act(name: &str) -> bool {
 
 /// The entries of a record about each act that an ear of the outside made, which a later life does not say again
 /// unless that ear makes the act again.
-fn owed(held: &[Object]) -> Vec<(String, Value)> {
+fn owed<'a>(held: impl Iterator<Item = &'a Object>) -> Vec<(String, Value)> {
   let mut theirs = HashSet::new();
   let mut owed = Vec::new();
   for entry in held {
     let Some(fact) = entry.as_ref().items().and_then(|one| Fact::of(*one.first()?)) else {
       continue;
     };
-    if fact.question() && !named_act(fact.by()) && !matches!(fact.by(), "" | "operator" | "journal")
-    {
+    if fact.question() && outside(fact.by()) {
       theirs.insert(fact.about().to_owned());
     }
     if theirs.contains(fact.about()) {
@@ -258,24 +301,39 @@ fn owed(held: &[Object]) -> Vec<(String, Value)> {
 }
 
 impl Log {
-  /// The log of the record at a path, which holds these entries, written again from its first line, or from the
-  /// lines of the log before it that come before the checkpoint that the life boots on.
-  fn open(record: &Path, held: &[Object]) -> Self {
+  /// The log of the record at a path, whose last entries are these and start at a byte of its file
+  /// of lines, written again from its first line, or from the lines of the log before it that come
+  /// before the checkpoint that the life boots on.
+  fn open(record: &Path, last: &[Object], from: u64) -> Self {
     let path = beside(record, ".log");
     let fresh = beside(record, ".log.new");
-    let earlier = checkpoint::last(held)
-      .and_then(|at| earlier(&path, &held[..at]).map(|(text, seen)| (at, text, seen)));
-    // A log that cannot be opened is not written: the record holds each fact, and a later
-    // life writes the log again from it, so the life goes on with no log and loses nothing.
+    let past = before(record, from);
+    let reads = past.is_ok();
+    let (held, mut asked) = past.unwrap_or_default();
+    let earlier = checkpoint::last(last).and_then(|at| {
+      let facts = last[..at].iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?));
+      asked.extend(facts.filter(Fact::question).map(|one| one.about().to_owned()));
+      earlier(&path, held + at, asked).map(|(text, seen)| (held + at, text, seen))
+    });
+    // A log that goes on from an earlier one shows each act of the entries before the last ones.
+    let made = match &earlier {
+      None => theirs(record, from),
+      Some(_) => Ok(Vec::new()),
+    };
+    let reads = reads && made.is_ok();
+    let made = made.unwrap_or_default();
+    // A log that cannot be opened, or whose record does not read, is not written: the record holds
+    // each fact, and a later life writes the log again from it, so the life goes on with no log
+    // and loses nothing.
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
-    let entries = held.len();
+    let entries = held + last.len();
     let mut log = Self {
       path,
-      sink: Self::sink(file),
+      sink: Self::sink(file.filter(|_| reads)),
       fresh: Some(fresh),
       entries,
       seen: HashSet::new(),
-      owed: owed(held),
+      owed: owed(made.iter().chain(last)),
     };
     match earlier {
       Some((at, mut text, seen)) => {

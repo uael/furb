@@ -43,6 +43,7 @@ pub use bash::{bash, program, shell};
 pub use child::{Group, Unborn, spawn};
 pub use fetch::fetch;
 pub use files::{CONFIG, files};
+pub(crate) use log::logging;
 pub use log::{log, logged};
 pub use operator::{Asked, CONSOLE, SHAPES, Shape, answered, answers, named};
 pub use provider::{
@@ -56,10 +57,10 @@ pub(crate) use provider::{Mode, search::timed};
 pub use reader::{Retold, retold, retold_live};
 pub use scratch::{SCRATCH, Scratch};
 pub use store::{
-  CHECKPOINT_SCHEMA, Lines, MADE, Marks, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, engine,
-  keeping, kept, made, marks, readable, release, stood, store, texts, unheld,
+  CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, checkpoints,
+  engine, keeping, kept, made, readable, release, stood, store, texts, unheld,
 };
-pub(crate) use store::{Format, stored};
+pub(crate) use store::{Format, Last, last, made_before, stood_before, stored};
 pub use time::time;
 
 use crate::{
