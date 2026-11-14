@@ -122,6 +122,37 @@ fn differ(one: &BTreeMap<String, String>, other: &BTreeMap<String, String>) -> V
   found
 }
 
+/// What a life of the record at a place reads by one way to open it: at the open, and after a
+/// word that it runs then.
+async fn read_by(
+  way: &str,
+  at: &Path,
+  chains: &[String],
+  threads: &[String],
+) -> (BTreeMap<String, String>, Option<BTreeMap<String, String>>) {
+  let image = at.join("record.jsonl.image");
+  match way {
+    "replay" => fs::remove_file(&image).expect("the image"),
+    "checkpoint" => {
+      checkpointed(opening(at)).await;
+      fs::remove_file(&image).ok();
+    }
+    _ => {}
+  }
+  let life = Life::spawn(opening(at)).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  until(&mut events, |event| matches!(event, Event::Act(_))).await;
+  let opened = read(&life, chains, threads).await;
+  // A word after the open: each way goes on from the same state, so its acts take the same
+  // moments. A birth on a checkpoint does not go on as the replay does yet: the ear of the
+  // extensions teaches again, and a chain tells again what it heard before the checkpoint.
+  let after = made(&life, rung("z = 3")).await;
+  until(&mut events, done(&after)).await;
+  let went = if way == "checkpoint" { None } else { Some(read(&life, chains, threads).await) };
+  ended(life).await;
+  (opened, went)
+}
+
 #[tokio::test]
 async fn a_life_by_its_record_by_its_image_and_by_a_checkpoint_reads_the_same() {
   let at = place("equal");
@@ -166,26 +197,7 @@ async fn a_life_by_its_record_by_its_image_and_by_a_checkpoint_reads_the_same() 
   let mut truth = None;
   for way in ["replay", "image", "checkpoint"] {
     restored(&kept, &at);
-    let image = at.join("record.jsonl.image");
-    match way {
-      "replay" => fs::remove_file(&image).expect("the image"),
-      "checkpoint" => {
-        checkpointed(opening(&at)).await;
-        fs::remove_file(&image).ok();
-      }
-      _ => {}
-    }
-    let life = Life::spawn(opening(&at)).expect("the life has a thread");
-    let mut events = Box::pin(life.events(0));
-    until(&mut events, |event| matches!(event, Event::Act(_))).await;
-    let opened = read(&life, &chains, &threads).await;
-    // A word after the open: each way goes on from the same state, so its acts take the same
-    // moments. A birth on a checkpoint does not go on as the replay does yet: the ear of the
-    // extensions teaches again, and a chain tells again what it heard before the checkpoint.
-    let after = made(&life, rung("z = 3")).await;
-    until(&mut events, done(&after)).await;
-    let went = if way == "checkpoint" { None } else { Some(read(&life, &chains, &threads).await) };
-    ended(life).await;
+    let (opened, went) = read_by(way, &at, &chains, &threads).await;
     // The whole replay of the record is the one truth, and each other way is read against it.
     match &truth {
       None => truth = Some((opened, went)),

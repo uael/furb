@@ -34,3 +34,8 @@ def seed(names: dict[str, object], data: object) -> object:  # noqa: ARG001
 def gathered(names: dict[str, object], define: Callable[[str], str], floor: dict[str, int]) -> object:  # noqa: ARG001
   """The data of a checkpoint of the life at its tip, as the checkpointer in the sandbox gathers it."""
   return held_engine().checkpointed("gathered", [define, floor])
+
+
+def held(names: dict[str, object]) -> object:  # noqa: ARG001
+  """The acts that the journal in the sandbox holds now, each that an ear of the outside took and that is not done."""
+  return held_engine().checkpointed("held", [])

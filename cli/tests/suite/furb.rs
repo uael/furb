@@ -267,7 +267,7 @@ fn a_life_goes_on_from_its_image_and_its_record_replays_with_no_drift() {
   fs::remove_file(PathBuf::from(format!("{}.image", twin.record().display()))).expect("its image");
   let heads = |yard: &Yard, from: usize| -> Vec<String> {
     let record = fs::read_to_string(yard.record()).expect("the record");
-    let entries = record.lines().skip(from).map(|line| serde_json::from_str::<Value>(line));
+    let entries = record.lines().skip(from).map(serde_json::from_str::<Value>);
     entries
       .map(|entry| entry.map_or_else(|no| no.to_string(), |one| format!("{}", one[0][1])))
       .collect()

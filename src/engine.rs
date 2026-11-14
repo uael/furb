@@ -813,8 +813,9 @@ impl Engine {
     self.above(holding)
   }
 
-  /// Each act of a list that waits and that no pause holds, and each act above it that made it, directly or not,
-  /// when that act is a prompt, a rung, a command or a wait that is not done and that no pause holds, in order.
+  /// Each act of a list that waits and that no pause holds, and each act above it that made it,
+  /// directly or not, when that act is a prompt, a rung, a command or a wait that is not done and
+  /// that no pause holds, in order.
   fn above(&mut self, holding: Vec<String>) -> Result<Vec<(String, String)>, Fault> {
     let mut pending = Vec::new();
     for id in holding {

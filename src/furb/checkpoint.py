@@ -242,7 +242,8 @@ def fed(names, entries):
 
 def held(names):
   if names["numbered"] is not LIFE.get("numbered"):
-    raise names["Refused"]("no journal of the checkpointer keeps this life, so it holds no act")
+    why = "no journal of the checkpointer keeps this life, so it holds no act"
+    raise names["Refused"](why)
   return LIFE["flying"]()
 
 

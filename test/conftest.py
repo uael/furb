@@ -75,6 +75,7 @@ SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
 MONTY_SKIPS = {
   "test_fed_on_a_life_that_no_journal_of_the_checkpointer_keeps_is_refused",
+  "test_held_on_a_life_that_no_journal_of_the_checkpointer_keeps_is_refused",
   "test_boot_gives_the_journal_the_tables_of_the_life",
   "test_each_scan_of_all_its_facts_that_the_ear_of_a_chain_makes_at_a_fact_reads_its_reading",
   "test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_took_and_the_rung_of_a_run_that_awaited",
