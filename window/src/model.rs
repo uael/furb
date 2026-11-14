@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
   Options,
   code::Colors,
-  input::{Asked, Draft, Outgoing, Target},
+  input::{Armed, Asked, Draft, Outgoing, Target},
   keys::{self, Does, System},
   link::Heard,
   list::Row,
@@ -118,8 +118,13 @@ pub(crate) struct Model {
   pub(crate) outgoing: VecDeque<Outgoing>,
   /// Each request of the input that waits for its answer, by its machine and its id.
   pub(crate) asked: HashMap<(usize, u64), Asked>,
-  /// The text that comes back to the input after a refusal, until the editor takes it.
+  /// The text that comes back to the input after a refusal or a take back, until the editor takes
+  /// it.
   pub(crate) restore: Option<String>,
+  /// What a first press of a key named, which a second press does.
+  pub(crate) armed: Option<Armed>,
+  /// What the last key did not do, and why, until the next key.
+  pub(crate) notice: Option<String>,
   /// The list part, while it is open.
   pub(crate) picker: Option<Picker>,
   /// Each life that the window holds, and how far its open stands.
@@ -159,6 +164,8 @@ impl Model {
       outgoing: VecDeque::new(),
       asked: HashMap::new(),
       restore: None,
+      armed: None,
+      notice: None,
       picker: None,
       holds: HashMap::new(),
     }
@@ -233,13 +240,20 @@ impl Model {
     let name = self.machines[at].name.clone();
     self.machines[at].link = Link::Lost(why);
     let gone: Vec<Asked> = self.asked.extract_if(|key, _| key.0 == at).map(|one| one.1).collect();
+    // A take back that the machine may not have done gives its text back all the same: the input
+    // never loses a word, and the thread shows whether the message still runs.
+    for one in &gone {
+      if let Asked::Back(text) = one {
+        self.restore = Some(self.before_draft(text.clone()));
+      }
+    }
     if gone.contains(&Asked::Answer) {
       self.unanswered(format!("{name} went away before it took the answer. Send it again."));
     }
     if self.outgoing.iter().any(|one| one.at == at) {
       let why =
         format!("{name} went away before it took your message. If the thread shows it, it went.");
-      self.restore = self.refused(Asked::Say, why);
+      self.restore = Some(self.refused(why));
     }
     for (_, hold) in self.holds.iter_mut().filter(|one| one.0.0 == at) {
       hold.ask = Ask::Due;
@@ -265,15 +279,17 @@ impl Model {
       (Asked::Open, Ok(Frame::Reply { .. })) => self.answered_open(at, id),
       (Asked::Open, Ok(Frame::Refused { why, .. })) => self.restore = self.unopened(at, id, why),
       (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
+      (Asked::Back(text), Ok(Frame::Reply { .. })) => self.restore = Some(self.before_draft(text)),
       (Asked::Answer, Ok(Frame::Refused { why, .. })) => self.unanswered(why),
-      (Asked::Seen | Asked::List | Asked::Resolve, Ok(Frame::Refused { why, .. })) => {
-        self.fault = Some(why);
-      }
+      (
+        Asked::Seen | Asked::List | Asked::Control | Asked::Back(_),
+        Ok(Frame::Refused { why, .. }),
+      ) => self.fault = Some(why),
       (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {
         self.machines[at].lives = lives;
       }
       (Asked::Answer, _) => {}
-      (_, Ok(Frame::Refused { why, .. })) => self.restore = self.refused(asked, why),
+      (_, Ok(Frame::Refused { why, .. })) => self.restore = Some(self.refused(why)),
       _ => {}
     }
   }

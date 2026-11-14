@@ -130,8 +130,8 @@ const THREAD: &[Bound] = &[
 /// The keys of the input.
 const INPUT: &[Bound] = &[
   bound(Does::Send, "send", false, &[&[plain(KeyCode::Enter)]]),
-  bound(Does::Empty, "empty the input", false, &[&[ctrl('c')]]),
-  bound(Does::Leave, "leave, on an empty input", true, &[&[ctrl('d')]]),
+  bound(Does::Empty, "empty the input, or take back your last message", false, &[&[ctrl('c')]]),
+  bound(Does::Leave, "leave, twice on an empty input", true, &[&[ctrl('d')]]),
   bound(Does::Sessions, "the session that the input sends to", true, &[&led('o')]),
   bound(Does::Python, "a word of Python, and back to a message", true, &[&led('y')]),
 ];

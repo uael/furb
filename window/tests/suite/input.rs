@@ -211,12 +211,39 @@ fn a_resolve_of_a_thread_that_works_waits_for_its_confirm() {
 }
 
 #[test]
-fn ctrl_c_empties_the_input() {
-  let (app, _daemon, _sessions) = started();
+fn ctrl_c_empties_the_input_then_names_his_last_message_that_runs_and_takes_it_back() {
+  let (app, daemon, sessions) = started();
   app.paste("a draft to drop");
   shows(&app, "┃ a draft to drop");
   app.press("ctrl+c");
   shows(&app, "┃ Ask for a change, a review or an answer");
+  // A message on a thread that works is read at its next step, so the thread is what still runs.
+  for word in ["one", "two", "three"] {
+    sent(&app, &format!("{word} {WORKS}"));
+  }
+  assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions).len() == 3));
+  paged(&app);
+  app.press("ctrl+c");
+  let frame = shows(&app, "⌃C again takes back “one (the model works…");
+  assert!(frame.contains("Working 1"), "{frame}");
+  screen("input-take-back", &app);
+  app.press("ctrl+c");
+  let frame = shows(&app, "Stopped");
+  assert!(frame.contains(&format!("┃ one {WORKS}")), "{frame}");
+  // The first press empties the input, and the second says that nothing of his runs now.
+  app.press("ctrl+c");
+  app.press("ctrl+c");
+  shows(&app, "Nothing that you sent still runs here.");
+}
+
+#[test]
+fn ctrl_d_leaves_on_an_empty_input_once_it_named_it_and_another_key_forgets_it() {
+  let (app, _daemon, _sessions) = started();
+  app.press("ctrl+d");
+  shows(&app, "⌃D again leaves the window");
+  app.press("ctrl+n");
+  let left = app.wait_until(PATIENCE, || !app.text().contains("again leaves"));
+  assert!(left, "{}", app.text());
 }
 
 #[test]

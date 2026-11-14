@@ -63,18 +63,36 @@ pub(crate) struct Draft {
   pub(crate) python: bool,
 }
 
-/// What a request of the window asked of a daemon: the open of a life, a message, a stop, the
-/// resolve of a thread, the answer to a question, what the operator saw, or the records of the
-/// machine.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What a request of the window asked of a daemon: the open of a life, a message, a control of a
+/// thread, as a stop or a resolve, the take back of a message with its text, the answer to a
+/// question, what the operator saw, or the records of the machine.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Asked {
   Open,
   Say,
-  Stop,
-  Resolve,
+  Control,
+  Back(String),
   Answer,
   Seen,
   List,
+}
+
+/// What a first press of a key named, which a second press of that key does: the resolve of the
+/// open thread while it works, which stops its work, the take back of his last message that still
+/// runs, or the leave of the window. Any other key leaves it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Armed {
+  Resolve(Key),
+  Back(Back),
+  Leave,
+}
+
+/// His last message that still runs, with its text: one that waits in the queue of the input, by
+/// its place there, or one of the open thread, by its act.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Back {
+  Queued(usize, String),
+  Said(String, String),
 }
 
 /// A message of the operator that the thread shows before the daemon tells it: its text, and the
@@ -227,12 +245,114 @@ impl Model {
       (self.aim, self.draft.python, opened.top) = (None, false, None);
       return None;
     }
-    if works && !mem::replace(&mut opened.confirm, true) {
+    let armed = Armed::Resolve(opened.key.clone());
+    if works && self.armed.replace(armed.clone()) != Some(armed) {
       return None;
     }
-    opened.confirm = false;
+    self.armed = None;
     let (at, life, thread) = opened.key.clone();
     Some((at, Verb::Resolve { life, thread }))
+  }
+
+  /// A key that he pressed: what a first press of another key named goes, and so does what the key
+  /// before did not do.
+  pub(crate) fn pressed(&mut self, does: Does) {
+    let again = matches!(
+      (&self.armed, does),
+      (Some(Armed::Resolve(_)), Does::Resolve)
+        | (Some(Armed::Back(_)), Does::Empty)
+        | (Some(Armed::Leave), Does::Leave)
+    );
+    if !again {
+      self.armed = None;
+    }
+    self.notice = None;
+  }
+
+  /// A press of the key that empties the input, on an empty input: the first names his last
+  /// message that still runs, and a second takes it back. A message that waits in the queue
+  /// leaves it, and its text comes back to the input at once; one of the open thread is cancelled
+  /// on its machine, and its text comes back once the machine did it. The cancel to ask, with that
+  /// text.
+  pub(crate) fn take_back(&mut self) -> Option<((usize, Verb), String)> {
+    let Some(last) = self.last_own() else {
+      self.notice = Some("Nothing that you sent still runs here.".to_owned());
+      return None;
+    };
+    let armed = Armed::Back(last.clone());
+    if self.armed.replace(armed.clone()) != Some(armed) {
+      return None;
+    }
+    self.armed = None;
+    match last {
+      Back::Queued(at, text) => {
+        self.unqueued(at, &text);
+        self.restore = Some(self.before_draft(text));
+        None
+      }
+      Back::Said(act, text) => {
+        let (at, life, _) = self.thread.as_ref()?.key.clone();
+        Some(((at, Verb::Cancel { life, act, why: None }), text))
+      }
+    }
+  }
+
+  /// His last message that still runs: the last one of the queue that is not on its way, else the
+  /// last one of his on the open thread whose act runs.
+  fn last_own(&self) -> Option<Back> {
+    let flying = self.asked.values().any(|one| *one == Asked::Say);
+    let queued = self.outgoing.iter().enumerate().skip(usize::from(flying)).next_back();
+    if let Some((at, one)) = queued {
+      return Some(Back::Queued(at, one.text.clone()));
+    }
+    let opened = self.thread.as_ref()?;
+    let login = &self.machines[opened.key.0].login;
+    let his = |by: &Maker| match by {
+      Maker::Operator => true,
+      Maker::Member { login: one } => one == login,
+      _ => false,
+    };
+    let said = opened.exchanges.values().rev().find(|one| one.runs && his(&one.by))?;
+    Some(Back::Said(said.message.clone(), said.text.clone()))
+  }
+
+  /// A message out of the queue, by its place and its text, and out of the thread that shows it. A
+  /// new thread that it alone made goes with it.
+  fn unqueued(&mut self, at: usize, text: &str) {
+    self.outgoing.remove(at);
+    let Some(opened) = self.thread.as_mut() else { return };
+    if let Some(shown) =
+      opened.pending.iter().rposition(|one| one.act.is_none() && one.text == text)
+    {
+      opened.pending.remove(shown);
+    }
+    if opened.key.2.is_empty() && opened.pending.is_empty() {
+      self.thread = None;
+    }
+  }
+
+  /// A text that comes back to the input, before what the operator wrote since.
+  pub(crate) fn before_draft(&mut self, text: String) -> String {
+    let back = [text, self.draft.text.clone()].into_iter().filter(|one| !one.is_empty());
+    let text = back.collect::<Vec<_>>().join("\n\n");
+    self.draft.text.clone_from(&text);
+    text
+  }
+
+  /// What a second press of the key that a first press armed does, as the row of hints says it.
+  /// The button of the head says the resolve of a thread that works.
+  fn armed_says(&self) -> Option<String> {
+    match self.armed.as_ref()? {
+      Armed::Back(back) => {
+        let text = match back {
+          Back::Queued(_, text) | Back::Said(_, text) => text,
+        };
+        let first = text.lines().next().unwrap_or_default();
+        Some(format!("{} again takes back “{first}”", self.key(Does::Empty)))
+      }
+      Armed::Leave => Some(format!("{} again leaves the window", self.key(Does::Leave))),
+      Armed::Resolve(_) => None,
+    }
   }
 
   /// The answer to the first message of the queue, with the act that it made: a new thread opens
@@ -275,11 +395,8 @@ impl Model {
   /// A request of the input that the daemon refused, and why: each message that waits comes back
   /// to the input before what the operator wrote since, and the thread shows none of them. The
   /// text that the input holds now.
-  pub(crate) fn refused(&mut self, asked: Asked, why: String) -> Option<String> {
+  pub(crate) fn refused(&mut self, why: String) -> String {
     self.fault = Some(why);
-    if asked == Asked::Stop {
-      return None;
-    }
     let back: Vec<String> = mem::take(&mut self.outgoing).into_iter().map(|one| one.text).collect();
     if let Some(opened) = self.thread.as_mut() {
       opened.pending.retain(|one| one.act.is_some());
@@ -287,10 +404,7 @@ impl Model {
         self.thread = None;
       }
     }
-    let back = back.into_iter().chain([self.draft.text.clone()]).filter(|one| !one.is_empty());
-    let text = back.collect::<Vec<_>>().join("\n\n");
-    self.draft.text.clone_from(&text);
-    Some(text)
+    self.before_draft(back.join("\n\n"))
   }
 
   /// How many rows the text of the input takes, as the editor wraps it at its columns.
@@ -465,10 +579,13 @@ impl Model {
     let mut hot = Vec::new();
     // The thread says why it has no page, so the row says it once more only for another fault.
     let shown = self.thread.as_ref().and_then(|one| one.fault.as_ref());
-    let (left, loader) = match self.fault.as_ref().filter(|one| Some(*one) != shown) {
-      Some(fault) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], None),
-      None if self.form().is_some() => (self.form_hints().unwrap_or_default(), None),
-      None if works => {
+    let notice = self.notice.clone().map(|one| (one, t.muted));
+    let says = self.armed_says().map(|one| (one, t.attention)).or(notice);
+    let (left, loader) = match (self.fault.as_ref().filter(|one| Some(*one) != shown), says) {
+      (Some(fault), _) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], None),
+      (None, Some((says, color))) => (vec![run(format!("  {says}"), Style::new().fg(color))], None),
+      (None, None) if self.form().is_some() => (self.form_hints().unwrap_or_default(), None),
+      (None, None) if works => {
         let age = card.and_then(|card| self.age(card.since)).map(|age| format!(" {age}"));
         let working = format!("    Working{}", age.unwrap_or_default());
         let stop = format!(" · {} stop", self.key(Does::Stop));
@@ -477,7 +594,7 @@ impl Model {
         hot.push((at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop))));
         (working, Some((2, Loader::Model)))
       }
-      None => (vec![run(format!("  {}", self.folder_shown()), muted)], None),
+      (None, None) => (vec![run(format!("  {}", self.folder_shown()), muted)], None),
     };
     let (does, says) = match (&self.aim, &self.thread) {
       _ if self.form().is_some() => (Does::Empty, "refuse"),

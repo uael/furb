@@ -13,7 +13,6 @@ use opentui::style::Style;
 
 use crate::{
   feed::timer,
-  input::Asked,
   line::{Line, run, spread},
   model::Model,
   thread::Row,
@@ -176,7 +175,7 @@ impl Model {
     {
       opened.fault = Some(why.clone());
     }
-    (!self.outgoing.is_empty()).then(|| self.refused(Asked::Open, why)).flatten()
+    (!self.outgoing.is_empty()).then(|| self.refused(why))
   }
 
   /// A stage of the open of a life that a machine told, as the window hears it now: whether the

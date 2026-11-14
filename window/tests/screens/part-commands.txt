@@ -20,7 +20,7 @@
                        Resolve the thread, or reply to open it again     ⌃X R
 
                       The input
-                       Leave, on an empty input                            ⌃D
+                       Leave, twice on an empty input                      ⌃D
                        The session that the input sends to               ⌃X O
 
                       ↑↓ move · ⏎ run · ⎋ close

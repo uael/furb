@@ -55,6 +55,7 @@ fn asked(shape: &str, system: System) -> Model {
     at: 0,
     message: "prompt0".to_owned(),
     by: Maker::Operator,
+    runs: false,
     text: "where does the list stand".to_owned(),
     block: Some(block),
     said: vec![said],

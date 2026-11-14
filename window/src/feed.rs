@@ -10,6 +10,7 @@ use opentui::style::{Color, Style};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::{
+  input::Armed,
   keys::Does,
   line::{self, Line, run, spread, wrapped},
   list::project,
@@ -116,7 +117,9 @@ impl Feed<'_> {
         };
         (Some(mark), Some(run("[ Reopen ]", prose)))
       }
-      Some(thread) if thread.works() && self.opened.confirm => {
+      Some(thread)
+        if thread.works() && self.model.armed == Some(Armed::Resolve(self.opened.key.clone())) =>
+      {
         (None, Some(run("[ Stop and resolve ]", Style::new().fg(t.attention))))
       }
       _ => (None, Some(run("[ Resolve ]", prose))),

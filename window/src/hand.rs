@@ -24,7 +24,7 @@ use furb_host::protocol::Verb;
 
 use crate::{
   Machine, Options, Screen,
-  input::Asked,
+  input::{Armed, Asked},
   kept,
   keys::{self, Does},
   line::Line,
@@ -129,7 +129,13 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   let on = Rc::clone(&window);
   area.on_change(move |cx, text| {
     let text = text.to_owned();
-    tell(cx.app(), &on, |model| model.draft.text = text);
+    tell(cx.app(), &on, |model| {
+      // A word that he writes leaves what a first press of a key named.
+      if !text.is_empty() {
+        model.armed = None;
+      }
+      model.draft.text = text;
+    });
     colored(&on);
   });
   let on = Rc::clone(&window);
@@ -478,14 +484,10 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
   }
 }
 
-/// What a key does, which a click on its text does too. Any other key leaves the confirm of a
-/// resolve.
+/// What a key does, which a click on its text does too. Any other key leaves what a first press of
+/// a key named, and what the key before did not do.
 fn act(app: &App, window: &Shared, does: Does) {
-  if does != Does::Resolve
-    && let Some(opened) = window.borrow_mut().screen.model.thread.as_mut()
-  {
-    opened.confirm = false;
-  }
+  window.borrow_mut().screen.model.pressed(does);
   let change: fn(&mut Model) = match does {
     Does::Next => |model| model.step(1),
     Does::Previous => |model| model.step(-1),
@@ -502,14 +504,26 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.draft.python = !model.draft.python,
     Does::Close => return escaped(app, window),
-    Does::Stop => return stopped(app, window),
-    Does::Resolve => return resolved(app, window),
+    Does::Stop => return controlled(app, window, |model| Some((model.stop()?, Asked::Control))),
+    Does::Resolve => {
+      return controlled(app, window, |model| Some((model.resolve()?, Asked::Control)));
+    }
     Does::Send => return sent(app, window),
-    Does::Empty => {
+    Does::Empty if !window.borrow().area.text().is_empty() => {
       window.borrow().area.set_text("");
       return tell(app, window, |model| model.draft.text.clear());
     }
-    Does::Leave => return app.quit(),
+    Does::Empty => {
+      return controlled(app, window, |model| {
+        model.take_back().map(|(asked, text)| (asked, Asked::Back(text)))
+      });
+    }
+    Does::Leave => {
+      if tell(app, window, |model| model.armed.replace(Armed::Leave) == Some(Armed::Leave)) {
+        app.quit();
+      }
+      return;
+    }
     Does::PageUp | Does::PageDown => {
       // A page keeps two rows of the screen before it in view.
       let verb = tell(app, window, |model| {
@@ -562,7 +576,7 @@ fn escaped(app: &App, window: &Shared) {
   }
   let armed = window.borrow_mut().armed.take();
   if armed.is_some_and(|at| app.now().saturating_duration_since(at) <= LEADER) {
-    return stopped(app, window);
+    return act(app, window, Does::Stop);
   }
   let closes = {
     let model = &window.borrow().screen.model;
@@ -575,27 +589,18 @@ fn escaped(app: &App, window: &Shared) {
   }
 }
 
-/// The work of the open thread stopped: the cancel of its prompt, asked of its machine.
-fn stopped(app: &App, window: &Shared) {
-  let stop = window.borrow().screen.model.stop();
-  let Some((at, verb)) = stop else { return };
+/// A control of the open thread that a key asks, as a stop, a resolve or a take back, asked of its
+/// machine with what the window waits for. A machine that the window dials again takes nothing.
+fn controlled(
+  app: &App,
+  window: &Shared,
+  change: impl FnOnce(&mut Model) -> Option<((usize, Verb), Asked)>,
+) {
+  let Some(((at, verb), waits)) = tell(app, window, change) else { return colored(window) };
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
   match asker(askers, &screen.model, at) {
-    Some(asker) => drop(screen.model.asked.insert((at, asker.ask(verb)), Asked::Stop)),
-    None => screen.model.fault = screen.model.away(at),
-  }
-  drop(held);
-  tell(app, window, |_| ());
-}
-
-/// The open thread resolved, once its confirm is given: the resolve asked of its machine.
-fn resolved(app: &App, window: &Shared) {
-  let Some((at, verb)) = tell(app, window, Model::resolve) else { return colored(window) };
-  let mut held = window.borrow_mut();
-  let Window { askers, screen, .. } = &mut *held;
-  match asker(askers, &screen.model, at) {
-    Some(asker) => drop(screen.model.asked.insert((at, asker.ask(verb)), Asked::Resolve)),
+    Some(asker) => drop(screen.model.asked.insert((at, asker.ask(verb)), waits)),
     None => screen.model.fault = screen.model.away(at),
   }
   drop(held);

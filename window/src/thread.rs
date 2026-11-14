@@ -62,9 +62,6 @@ pub(crate) struct Opened {
   /// The time of the card of the thread when the window last said that the operator saw its end,
   /// so the window says it once each time the thread ends.
   pub(crate) seen: Option<u64>,
-  /// Whether a resolve of the thread waits for its confirm, since the thread works and a resolve
-  /// stops its work.
-  pub(crate) confirm: bool,
   /// Whether the window asks the page of the end again, since the connection to its machine ended
   /// and the new one tells no change of the thread until the window reads its end there.
   pub(crate) again: bool,
