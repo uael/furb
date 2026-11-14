@@ -930,6 +930,36 @@ fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_sto
   );
 }
 
+/// A birth makes each chain again and keeps its turns, so the turns of a chain hold its start once
+/// at most, however many births come.
+#[test]
+fn each_chain_holds_its_start_once_at_most_through_births_in_a_row() {
+  let at = yard("reborn-twice");
+  let open = || Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  let mut first = open();
+  closed(&mut first, "x = 1\nwork = chain('work')\nclose(x)");
+  first.checkpoint().unwrap();
+  for _ in 0..3 {
+    open().checkpoint().unwrap();
+  }
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let all = checkpoint::all(&kept);
+  assert_eq!(all.len(), 4);
+  for at in all {
+    let data =
+      entry(&kept[at].as_ref(), 0).and_then(Fact::of).and_then(|a| a.word(0).map(wire::record));
+    let chains = data.unwrap()["chains"].as_array().cloned().unwrap_or_default();
+    for chain in &chains {
+      let id = &chain["id"];
+      let turns = chain["turns"].as_array().cloned().unwrap_or_default();
+      // Each turn is a fact, which the wire writes as a tuple of its words.
+      let facts = turns.iter().map(|turn| &turn["args"][0]);
+      let starts = facts.filter(|fact| fact[0] == "started" && fact[1] == *id).count();
+      assert!(starts <= 1, "the turns of {id} hold its start {starts} times");
+    }
+  }
+}
+
 #[test]
 fn a_life_on_a_record_that_ends_with_its_checkpoint_goes_on_with_the_standing_that_it_carries() {
   let at = yard("stood-checkpoint");

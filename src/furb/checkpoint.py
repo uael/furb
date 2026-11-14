@@ -213,9 +213,11 @@ def seed(names, data):
 
   asking = {a["on"] for a in data["acts"] if "value" not in a}
   # The journal makes an act again only on a chain or an act that it knows when the entry comes, and each act with a
-  # value comes before each open prompt. home gives each act that it makes again the chain that the act is on, and
-  # the facts of each other act, as one with a value on an open prompt, stay in the prefix.
-  home, kinds = {c["id"]: c["id"] for c in data["chains"]}, {}
+  # value comes before each open prompt. home gives each act that it makes again the chain that the act is on, a
+  # chain being on itself, and the facts of each other act, as one with a value on an open prompt, stay in the
+  # prefix.
+  home = {c["id"]: c["id"] for c in data["chains"]}
+  kinds = {c["id"]: "chain" for c in data["chains"]}
   for x in sorted(data["acts"], key=lambda a: "value" not in a):
     if x["on"] in home:
       home[x["id"]], kinds[x["id"]] = home[x["on"]], x["kind"]
