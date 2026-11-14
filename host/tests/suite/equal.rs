@@ -1,6 +1,7 @@
-//! One life read two ways once it ended: by a whole replay of its record, and by a birth on a
-//! checkpoint at its tip. Each way reaches the state that the replay reaches, so a model and the
-//! owner read the same turns, the same module, the same acts, the same threads and the same pages.
+//! One life read three ways once it ended: by a whole replay of its record, by its image, and by a
+//! birth on a checkpoint at its tip. Each way reaches the state that the replay reaches, so a model
+//! and the owner read the same turns, the same module, the same acts, the same threads and the same
+//! pages.
 
 #![expect(
   clippy::disallowed_methods,
@@ -122,7 +123,7 @@ fn differ(one: &BTreeMap<String, String>, other: &BTreeMap<String, String>) -> V
 }
 
 #[tokio::test]
-async fn a_life_by_its_record_and_by_a_checkpoint_reads_the_same() {
+async fn a_life_by_its_record_by_its_image_and_by_a_checkpoint_reads_the_same() {
   let at = place("equal");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
@@ -163,13 +164,17 @@ async fn a_life_by_its_record_and_by_a_checkpoint_reads_the_same() {
 
   let mut found = Vec::new();
   let mut truth = None;
-  for way in ["replay", "checkpoint"] {
+  for way in ["replay", "image", "checkpoint"] {
     restored(&kept, &at);
     let image = at.join("record.jsonl.image");
-    if way == "checkpoint" {
-      checkpointed(opening(&at)).await;
+    match way {
+      "replay" => fs::remove_file(&image).expect("the image"),
+      "checkpoint" => {
+        checkpointed(opening(&at)).await;
+        fs::remove_file(&image).ok();
+      }
+      _ => {}
     }
-    fs::remove_file(&image).ok();
     let life = Life::spawn(opening(&at)).expect("the life has a thread");
     let mut events = Box::pin(life.events(0));
     until(&mut events, |event| matches!(event, Event::Act(_))).await;

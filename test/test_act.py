@@ -130,6 +130,18 @@ async def test_an_ear_of_the_outside_that_is_busy_when_its_turn_comes_and_waits_
   assert [(a[1], a[2]) for a in said(log, "started") if a[1] == one] == [(one, "taker")]
 
 
+async def test_an_ear_of_the_outside_that_is_not_busy_hears_each_fact_of_the_log_before_the_act_first() -> None:
+  """An ear of the outside that is not busy hears each fact of the log before the act that it did not hear yet, in the order of the log, before its turn comes, so each ear of the outside hears the facts and the acts in the order of the record."""
+  sand, log, root = born("c = chain('c')\nb = bash('echo hi')\nclose('ok')")
+  engine.prompt(str, "go", on=root)
+  await settle(200)
+  # The probe hears after the Kernel, which takes each run and runs its word before the probe hears the run.
+  places = {repr(a): at for at, a in enumerate(log)}
+  kept = [places[repr(x)] for (x,) in sand.record if repr(x) in places]
+  assert len(kept) > 15
+  assert kept == sorted(kept)
+
+
 async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes_it() -> None:
   """It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it, a chain apart, which every ear of the outside hears at its birth after its own ear took it, so an ear of the outside plays on a chain before the call that made it returns."""
   sand = Sand()

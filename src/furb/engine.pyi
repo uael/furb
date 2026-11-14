@@ -95,6 +95,7 @@ def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) ->
   Its own ear is born after the ears of the engine heard it, so the acts that ear makes stand after it.
   It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it, a chain apart, which every ear of the outside hears at its birth after its own ear took it, so an ear of the outside plays on a chain before the call that made it returns.
   An ear of the outside that is busy when its turn comes and waits for the act hears it once it is done speaking, and the act is refused only when no ear of the outside took it by then.
+  An ear of the outside that is not busy hears each fact of the log before the act that it did not hear yet, in the order of the log, before its turn comes, so each ear of the outside hears the facts and the acts in the order of the record.
   To take an act is to say a started or a done about it: a done settles it now, and a started says that its done comes later.
   An act that no ear takes and that the record does not hold is refused: the life says it done with a refusal that names its kind.
   An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to.

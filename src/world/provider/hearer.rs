@@ -73,7 +73,9 @@ pub(super) struct Hearer {
 pub(super) struct Stood {
   /// Whether the ear heard a stand. The opening of the life loaded the settings just now, so the
   /// first stand, which the boot asks, reads them again only after it: a refresh there asks each
-  /// program of a model, as the claude command line, a second time.
+  /// program of a model, as the claude command line, a second time. An open by an image loads
+  /// them too, so the image keeps no such stand.
+  #[serde(skip)]
   first: bool,
   /// The chains that the ear told which names left the catalog.
   lacked: HashSet<String>,

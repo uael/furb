@@ -828,7 +828,7 @@ def controlled(ear, lasting=False):
 def boot(journal, **outside):
   global say, act, drive, get, peek, transcript, reading, listening, numbered, offers
   get_running_loop()
-  made, known, done, held, cuts, log, alive, born, busy, left, heed, taken, top = (
+  made, known, done, held, cuts, log, alive, born, busy, left, heed, taken, top, upto = (
     Counter(),
     {},
     {},
@@ -842,6 +842,7 @@ def boot(journal, **outside):
     {},
     set(),
     Counter(),
+    {},
   )
 
   def numbered(kind, *words):
@@ -856,7 +857,7 @@ def boot(journal, **outside):
     holds(on := scope(about), words[0] if kind == "prefix" else [a])
     if kind == "cut" and on:
       cuts[on] = words[0], len(held[on, ""])
-    log.append((a, ()))
+    log.append((a, set()))
     dispatch()
     return a
 
@@ -894,7 +895,19 @@ def boot(journal, **outside):
 
   def offers(a):
     for n, g in outside.items():
-      (a[1] in taken and a[0] != "chain") or hear(n, g, a)
+      (a[1] in taken and a[0] != "chain") or n in busy or caught(n, g, a) or hear(n, g, a)
+
+  def caught(n, g, a):
+    for x in [*left]:
+      x[0] == n and (left.remove(x), hear(*x))
+    k = len(log)
+    while k and log[k - 1][0] is not upto.get(n):
+      k -= 1
+    upto[n] = a
+    for b, heard in log[k:]:
+      if b is a:
+        return
+      n in heard or n not in dict(ears(b)) or heard.add(n) or hear(n, g, b)
 
   def ears(a):
     q = get(a[1]) or a[:1] * 4
