@@ -15,8 +15,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Glob } from "bun";
+import { ownDaemon } from "../../../tui/script/daemon.ts";
 import { endedByMemory } from "./children.ts";
-import { ownDaemon } from "./daemon.ts";
 import { environment } from "./environment.ts";
 import { LIMIT, longestFirst } from "./order.ts";
 import { exactly, runners, runTest, testFiles } from "./run.ts";
@@ -30,7 +30,7 @@ if (files.length === 0) {
   console.log(`0 pass, 0 fail: no test file matches ${filters.join(" ")}`);
   process.exit(1);
 }
-const behind = process.env.CI === "true" ? [] : stale(join(import.meta.dir, "../.."));
+const behind = process.env.CI === "true" ? [] : stale(join(import.meta.dir, "../../.."));
 if (behind.length > 0) console.log(warning(behind));
 const cores = runners();
 const everything = process.env.FURB_TEST_OUTPUT === "1";
@@ -61,7 +61,7 @@ async function deal<T, R>(works: T[], slots: number, work: (one: T) => Promise<R
   return results;
 }
 
-const programs = join(import.meta.dir, "../../bind/typescript/test/programs");
+const programs = join(import.meta.dir, "../test/programs");
 const compiling = Promise.all(
   [...new Glob("*.ts").scanSync(programs)].map(async (file) => {
     const run = Bun.spawn([process.execPath, join(programs, "../executable.ts"), join(programs, file)], {

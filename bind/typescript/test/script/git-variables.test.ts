@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { environment } from "../script/environment.ts";
+import { environment } from "../../script/environment.ts";
 
 // A run of the runner under the hook of a worktree starts git with the environment of the tests. The test gives git
 // that environment itself and runs no second runner: a second runner shares the daemon of the tests with the run that

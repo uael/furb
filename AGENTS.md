@@ -491,7 +491,7 @@ fix what your change broke, and report what was broken before.
   after a merge or a rebase that touched a workflow. The hooks run it whatever the files.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
-  `tui/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
+  `bind/typescript/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
   seconds, and runs as many at once as the machine has cores, or as `FURB_TEST_JOBS` names when it names fewer. A
   word after `bun run test` filters the files by their path or by `package/file`, as `tui/host`, and a filter
   that matches no file fails. Use it, and not a plain

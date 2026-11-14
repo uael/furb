@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { LIMIT, longestFirst, weight } from "../script/order.ts";
+import { LIMIT, longestFirst, weight } from "../../script/order.ts";
 
 const limited = (limit: string) => `test("a", async () => {}, ${limit});`;
 

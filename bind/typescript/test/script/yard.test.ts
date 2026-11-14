@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // On Windows an open file keeps its folder busy, so the removal of the yard folder after this test raises EBUSY. The
-// cleanup of tui/script/preload.ts must leave the folder with one line on stderr, and this test must still pass.
+// cleanup of bind/typescript/script/preload.ts must leave the folder with one line on stderr, and this test must still pass.
 let held: number | undefined;
 afterAll(() => {
   if (held !== undefined) closeSync(held);

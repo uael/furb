@@ -14,7 +14,7 @@
     "animation": "bun run tui/script/animation.ts",
     "docs": "bun run tui/script/docs.ts",
     "check": "tsc --noEmit",
-    "test": "bun run tui/script/test.ts",
+    "test": "bun run bind/typescript/script/test.ts",
     "bench": "bun run tui/script/bench.ts",
     "memory": "bun run tui/script/memory.ts",
     "protocol": "bun run bind/typescript/script/protocol.ts",

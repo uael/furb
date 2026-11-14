@@ -17,7 +17,7 @@ import { join } from "node:path";
  */
 export function environment(
   base: Record<string, string | undefined> = process.env,
-  root = join(import.meta.dir, "../.."),
+  root = join(import.meta.dir, "../../.."),
 ): Record<string, string | undefined> {
   const tests = join(root, ".furb/tests");
   const cache = join(

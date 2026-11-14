@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { stale, warning } from "../script/stale.ts";
+import { stale, warning } from "../../script/stale.ts";
 
 const built = ["bind/typescript/index.cjs", "bind/typescript/dist/index.js"];
 

@@ -9,11 +9,11 @@
 import { existsSync, rmSync } from "node:fs";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { endedByMemory } from "./children.ts";
+import { endedByMemory } from "../../bind/typescript/script/children.ts";
+import { environment } from "../../bind/typescript/script/environment.ts";
+import { LIMIT } from "../../bind/typescript/script/order.ts";
+import { exactly, runTest, testFiles } from "../../bind/typescript/script/run.ts";
 import { ownDaemon, signalExit } from "./daemon.ts";
-import { environment } from "./environment.ts";
-import { LIMIT } from "./order.ts";
-import { exactly, runTest, testFiles } from "./run.ts";
 
 const root = join(import.meta.dir, "../..");
 process.chdir(root);

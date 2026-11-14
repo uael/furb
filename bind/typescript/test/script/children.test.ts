@@ -5,8 +5,8 @@ import { expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { endedByMemory, endOf } from "../script/children.ts";
-import { runTest } from "../script/run.ts";
+import { endedByMemory, endOf } from "../../script/children.ts";
+import { runTest } from "../../script/run.ts";
 
 const child = (script: string) =>
   Bun.spawn([process.execPath, "-e", script], { stdout: "ignore", stderr: "ignore" });
@@ -25,7 +25,7 @@ test("a child that SIGKILL ends is ended by memory, and a child that fails or pa
   expect(endedByMemory("a.test.ts")).toContain("was ended by SIGKILL");
 });
 
-const watcher = join(import.meta.dir, "../../script/memwatch.sh");
+const watcher = join(import.meta.dir, "../../../../script/memwatch.sh");
 const MB = 1024;
 
 test.skipIf(process.platform === "win32")(

@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { saveFile } from "furb";
-import { realConfigs, watch } from "../script/guard.ts";
+import { realConfigs, watch } from "../../script/guard.ts";
+import { saveFile } from "../../src/index.ts";
 
 test("a file that appears or goes in a watched folder shows by its path, once", () => {
   const folder = mkdtempSync(join(tmpdir(), "furb-guard-"));

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { runners } from "../script/run.ts";
+import { runners } from "../../script/run.ts";
 
 test("the runs of the tests go one for each core", () => {
   expect(runners({}, 8)).toBe(8);

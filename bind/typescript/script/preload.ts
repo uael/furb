@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeEach, mock, setDefaultTimeout } from "bun:te
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
-import * as furb from "furb";
+import * as furb from "../src/index.ts";
 import { environment } from "./environment.ts";
 import { realConfigs, recording, watch } from "./guard.ts";
 
@@ -47,7 +47,7 @@ if (resolve(native) !== tests)
   );
 // The guard blames a file that changed only if this run saved it. Other processes write the same folder while the
 // tests run. So each save of the run is noted as it goes.
-mock.module("furb", () => ({ ...furb, saveFile: recording(furb.saveFile) }));
+mock.module("../src/index.ts", () => ({ ...furb, saveFile: recording(furb.saveFile) }));
 const written = watch(realConfigs(tests, native));
 let before = new Set<string>();
 beforeEach(() => {
