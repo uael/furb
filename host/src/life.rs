@@ -682,14 +682,20 @@ impl Life {
     // Each fact is folded as the read gives it and let go at once, since the record holds it: the
     // life holds the acts of its past, and no list of its facts.
     let mut take = |kept: usize, one: Object| {
-      let Some(a) = Fact::of(one.as_ref()).filter(|a| a.kind() != checkpoint::CHECKPOINT) else {
+      let Some(a) = Fact::of(one.as_ref()) else { return };
+      let fact = json_of(&a);
+      // A checkpoint ends each run of the past, which the record holds no end of: the fold hears
+      // it, and no reader hears the fact itself.
+      if a.kind() == checkpoint::CHECKPOINT {
+        for act in fold.hear(&fact, &[], None) {
+          self.put(Event::Act(Arc::new(act)));
+        }
         return;
-      };
+      }
       (told.0)(Stage::Recall, kept as u64, last as u64);
       while marks.get(passed).is_some_and(|mark| kept >= *mark) {
         (passed, opening) = (passed + 1, true);
       }
-      let fact = json_of(&a);
       if !self.restates(&mut opening, &fact) {
         let acts = fold.hear(&fact, &[], None);
         self.put(Event::Fact(fact));

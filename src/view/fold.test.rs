@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 use super::Fold;
-use crate::view::{Maker, Pause, State};
+use crate::view::{Maker, Pause, RunState, State};
 use crate::world::catalog::leveled;
 
 /// A paused prompt, a rung born under its pause, and a later wake, with what the engine of the live
@@ -338,4 +338,44 @@ fn a_checkpoint_makes_each_act_that_it_carries_by_the_maker_that_it_names() {
     (by("chain1"), by("prompt1"), by("prompt2")),
     (Some("operator".to_owned()), Some("operator".to_owned()), Some("rung4".to_owned()))
   );
+}
+
+#[test]
+fn a_rung_told_done_with_no_run_ran_its_word() {
+  let mut fold = Fold::default();
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "go", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
+  ];
+  for fact in &facts {
+    fold.recorded(fact);
+  }
+  // A birth tells the rung again as done, and not the run of its word, which its record holds.
+  let moved = fold.recorded(&json!(["done", "rung1", "journal", null]));
+  let rung = moved.iter().find(|act| act.id == "rung1").unwrap();
+  assert_eq!(rung.run, Some(RunState::Done));
+}
+
+#[test]
+fn a_checkpoint_ends_each_run_of_a_word_and_a_run_that_it_cut_did_not_fail() {
+  let mut fold = Fold::default();
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "go", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", "close('went')", ""]),
+    json!(["rung", "rung2", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["run", "run2", "chain1", "chain1", "rung2", "await wait(60)", ""]),
+  ];
+  for fact in &facts {
+    fold.recorded(fact);
+  }
+  let data = json!({"chains": [{"id": "chain1", "on": "", "label": "root", "source": "", "cut": ["run2"]}], "acts": []});
+  let moved = fold.recorded(&json!(["checkpoint", "chain1", "store", data]));
+  let run = |id: &str| moved.iter().find(|act| act.id == id).and_then(|act| act.run.clone());
+  assert_eq!((run("rung1"), run("rung2")), (Some(RunState::Done), Some(RunState::Done)));
+  let cut = moved.iter().find(|act| act.id == "run2").and_then(|act| act.value().cloned());
+  let why = "run2 was interrupted: the life that ran it ended before it did";
+  assert_eq!(cut, Some(json!({"is": "Refused", "args": [why]})));
 }

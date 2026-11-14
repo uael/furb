@@ -7,13 +7,13 @@ use std::{
 
 use crate::{fact::named, skill};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{
   act::{Act, Answer, Kind, Maker, Pause, Phase, RunState, Spend, fault, operator},
   state::{State, chain_state},
 };
-use crate::world::CONSOLE;
+use crate::world::{CONSOLE, interruption};
 
 /// The questions that the engine asks on the way to what an act does, which no person follows: each
 /// is answered for the act that asked it, which shows what it came to. A record of an earlier build
@@ -375,7 +375,7 @@ impl Fold {
   /// and a record whose log does not agree with it keeps no end of an act that a model closed. So
   /// the fold makes each act that it does not hold, by the maker that the checkpoint names for it,
   /// or by `journal`, as a birth on a checkpoint of an earlier build that names none says it again,
-  /// and ends each act that the checkpoint ends.
+  /// and ends each act that the checkpoint ends, and each run of a word.
   fn checkpointed(&mut self, data: &Value) {
     let list = |key: &str| data.get(key).and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
     let text = |one: &Value, key: &str| one.get(key).cloned().unwrap_or_default();
@@ -402,6 +402,27 @@ impl Fold {
       if let Some(value) = value.filter(|_| self.acts.get(id).is_some_and(|one| !one.done())) {
         self.done(id, value.clone());
       }
+    }
+    // The life that wrote the checkpoint ended each run of a word that the fold holds as running,
+    // though the record holds no end of most of them: a run that the checkpoint cut with the
+    // refusal that says so, which is no failure, and each other run well.
+    let cut: HashSet<&str> = list("chains")
+      .iter()
+      .filter_map(|chain| chain.get("cut").and_then(Value::as_array))
+      .flatten()
+      .filter_map(Value::as_str)
+      .collect();
+    let mut running: Vec<String> = self
+      .runs
+      .iter()
+      .filter(|(_, rung)| !self.ran.contains_key(*rung))
+      .map(|one| one.0.clone())
+      .collect();
+    running.sort();
+    for run in running {
+      let ended =
+        cut.contains(run.as_str()).then(|| json!({"is": "Refused", "args": [interruption(&run)]}));
+      self.done(&run, ended.unwrap_or(Value::Null));
     }
   }
 
@@ -436,7 +457,11 @@ impl Fold {
       }
     }
     if let Some(rung) = self.runs.get(about).cloned() {
-      self.ran.insert(rung.clone(), value.clone());
+      // A run that the end of its life cut did not fail, as no act that it cut did.
+      let cut = fault(&value).is_some_and(
+        |(_, args)| matches!(args, [Value::String(why)] if *why == interruption(about)),
+      );
+      self.ran.insert(rung.clone(), if cut { Value::Null } else { value.clone() });
       self.update_run(&rung);
     }
     let Some(act) = self.acts.get(about) else { return };
@@ -476,7 +501,8 @@ impl Fold {
           _ => RunState::Failed(reason),
         }
       }
-      None if ran.is_some() => RunState::Done,
+      // A rung that is done ran its word, though a birth tells the rung again and not its run.
+      None if ran.is_some() || act.done() => RunState::Done,
       None => RunState::Running,
     };
     if let Some(act) = self.acts.get_mut(id) {
