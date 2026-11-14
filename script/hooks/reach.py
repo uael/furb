@@ -83,7 +83,7 @@ def suite(files: list[str]) -> list[str] | None:
 
 
 # The crate of each folder, and the root crate for each other file of the crate.
-CRATES = {"host/": "furb-host", "cli/": "furb-cli"}
+CRATES = {"host/": "furb-host", "cli/": "furb-cli", "window/": "furb-window"}
 
 
 def crates(files: list[str]) -> list[str] | None:

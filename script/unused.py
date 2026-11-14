@@ -35,7 +35,7 @@ DOOR = re.compile(r"napi|pyo3|pyclass|pyfunction|pymethods")
 PACKAGE = "bind/typescript/src/"
 BARRELS = {"furb": PACKAGE + "index.ts", "furb/life": PACKAGE + "life/index.ts"}
 BARRELS |= {"furb/protocol": PACKAGE + "protocol.ts", "furb/skill": PACKAGE + "skill.ts"}
-SOURCES = ("tui/src/", PACKAGE, "src/", "cli/src/", "host/src/", "build/")
+SOURCES = ("tui/src/", PACKAGE, "src/", "cli/src/", "host/src/", "window/src/", "build/")
 GENERATED = {PACKAGE + "protocol.ts"}
 WHOLE = {"interface", "type", "enum", "struct", "trait", "class"}
 

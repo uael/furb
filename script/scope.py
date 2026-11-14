@@ -29,6 +29,9 @@ PYTHON = re.compile(r"(test/.*|bind/python/.*|pyproject\.toml|uv\.lock|docs/exam
 TYPESCRIPT = re.compile(
   r"((tui|bind/typescript)/.*|package\.json|bun\.lock|biome\.json|tsconfig.*\.json|docs/examples/typescript/.*)"
 )
+# A path that only the window reads. No other package depends on the window, so its change runs the tests of the crate
+# on each system, where it draws with a native library of that system, and the other jobs on Linux alone.
+WINDOW = re.compile(r"window/.*")
 # A path that the suite of python reads on Linux alone: the extensions of the project and the config that enables
 # them, whose suite in .furb/skills checks each word as a chain plays it.
 PROJECT = re.compile(r"\.furb/(skills/.*|config\.json)")
@@ -51,7 +54,7 @@ def scope(paths: list[str]) -> dict[str, object]:
 
   The hooks run unless the change is a render of the gallery alone.
   """
-  kinds = {"python": False, "typescript": False, "rust": False, "other": False, "project": False, "logic": False}
+  kinds = dict.fromkeys(("python", "typescript", "window", "rust", "other", "project", "logic"), False)
   for path in paths:
     if INERT.fullmatch(path):
       continue
@@ -63,6 +66,8 @@ def scope(paths: list[str]) -> dict[str, object]:
       kinds["python"] = True
     elif TYPESCRIPT.fullmatch(path):
       kinds["typescript"] = True
+    elif WINDOW.fullmatch(path):
+      kinds["window"] = True
     elif RUST.fullmatch(path):
       kinds["rust"] = True
     else:
@@ -72,7 +77,7 @@ def scope(paths: list[str]) -> dict[str, object]:
   systems = {
     "suite_os": EVERY if every or kinds["python"] else LINUX,
     "ts_os": EVERY if every or kinds["typescript"] else LINUX,
-    "crate_os": EVERY if every else LINUX,
+    "crate_os": EVERY if every or kinds["window"] else LINUX,
   }
   # Each system that a job of the suite, of the bindings or of the crate runs on builds once, for each of them.
   built = EVERY if EVERY in systems.values() else LINUX

@@ -89,7 +89,7 @@ repos:
         language: system
         stages: [manual]
         # The files that the crate and its tests read.
-        files: ^(src|cli|host|\.agents/skills|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$
+        files: ^(src|cli|host|window|\.agents/skills|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$
         require_serial: true
       - id: links
         name: the links of the READMEs of the packages
@@ -110,7 +110,7 @@ repos:
         name: the names that nothing but a test names
         entry: python3 -I script/unused.py
         language: system
-        files: ^(tui/src/|bind/typescript/(src/|README\.md$)|src/|cli/src/|host/src/|build/|script/unused\.py$)
+        files: ^(tui/src/|bind/typescript/(src/|README\.md$)|src/|cli/src/|host/src/|window/src/|build/|script/unused\.py$)
         pass_filenames: false
       - id: biome
         name: biome

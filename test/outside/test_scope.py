@@ -23,6 +23,11 @@ def test_a_change_to_the_tests_of_python_alone_runs_the_suite_on_each_system_and
   assert got == {"suite_os": EVERY, "ts_os": LINUX, "crate_os": LINUX, "build_os": EVERY, "code": True, "hooks": True}
 
 
+def test_a_change_to_the_window_alone_runs_the_crate_on_each_system_and_the_other_jobs_on_linux() -> None:
+  got = scope.scope(["window/src/proof.rs", "window/tests/screens/machine.txt"])
+  assert got == {"suite_os": LINUX, "ts_os": LINUX, "crate_os": EVERY, "build_os": EVERY, "code": True, "hooks": True}
+
+
 def test_a_change_to_the_crate_runs_every_job() -> None:
   every = {"suite_os": EVERY, "ts_os": EVERY, "crate_os": EVERY, "build_os": EVERY, "code": True, "hooks": True}
   assert scope.scope(["src/furb/world.py"]) == every

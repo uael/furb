@@ -33,8 +33,8 @@ env:
 jobs:
   build:
     # Each system builds once, and each job after it runs what it built and compiles nothing: the program furb and the
-    # engine of TypeScript, from one invocation of cargo over the workspace, the tests of the crate, the wheel of
-    # furb-monty and the clippy of the crate. A second selection of cargo resolves other features of the dependencies,
+    # engine of TypeScript, from one invocation of cargo over the workspace, the tests of the crate and of the window,
+    # the wheel of furb-monty and the clippy of the crate. A second selection of cargo resolves other features of the dependencies,
     # so the tests of the crate build again only the crates that their dev-dependencies change. The copy of the build
     # goes to the jobs after it as an artifact of a day: the programs and the tests, never the target, which is ten
     # times as large. A build that fails ends each job after it on its system, which reports skipped and gives no test
@@ -58,6 +58,20 @@ jobs:
         with:
           python: tools
           hashed: bind/typescript/build.ts
+      # The native library of OpenTUI, which the build of the window makes with Zig in minutes and keeps in
+      # target/opentui, under the commit that window/Cargo.toml pins. The cache of rust keeps no file of a package of
+      # the workspace, so the folder has a cache of its own, restored after that one. A build that finds the library
+      # runs no Zig, so only a miss installs it: the Zig that the build.zig.zon of that commit names, and no other.
+      - id: opentui
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/opentui
+          key: opentui-${{ inputs.os }}-${{ hashFiles('window/Cargo.toml', 'window/build.rs') }}
+      - if: steps.opentui.outputs.cache-hit != 'true'
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.17.1
+          use-cache: false
       # napi builds for the triple of the machine, in a folder of its own: cargo builds for it too, so the tests and
       # the package share every dependency.
       - run: |
@@ -89,6 +103,12 @@ jobs:
           cut -f4 "$RUNNER_TEMP/programs.tsv" | while read -r one; do
             mkdir -p "$copy/$(dirname "$one")" && cp "$one" "$copy/$one"
           done
+          # On Windows a program of the window loads the DLL of OpenTUI, which it finds beside itself.
+          if [ "$RUNNER_OS" = Windows ]; then
+            grep "^window" "$RUNNER_TEMP/programs.tsv" | cut -f4 | while read -r one; do
+              cp target/opentui/*/opentui.dll "$copy/$(dirname "$one")/"
+            done
+          fi
           mkdir -p "$copy/bind/typescript"
           cp bind/typescript/furb.*.node bind/typescript/index.cjs bind/typescript/index.d.cts "$copy/bind/typescript/"
           cp bind/typescript/furb* "$copy/bind/typescript/" 2> /dev/null || true
@@ -172,8 +192,9 @@ jobs:
   crate:
     # The tests of the crate and of the command line, which the build of each system compiled: each program runs in the
     # folder of its package, as cargo runs it, and a program that fails leaves the others to run, so the log names each
-    # red test. The clippy of the crate ran in the build. On macOS the job runs the tests of the crate and the kill
-    # matrix of the daemon alone, which ends it with the signals of Unix, as it did when it built them there.
+    # red test. The clippy of the crate ran in the build. On macOS the job runs the tests of the crate, the tests of the
+    # window, which draws with a native library of each system, and the kill matrix of the daemon alone, which ends it
+    # with the signals of Unix, as it did when it built them there.
     name: the crate on ${{ inputs.os }}
     needs: build
     if: inputs.crate
@@ -202,7 +223,7 @@ jobs:
           while IFS="$(printf '\t')" read -r folder kind name program; do
             [ "$kind" = test ] || continue
             filter=""
-            if [ "$RUNNER_OS" = macOS ] && [ "$folder" != . ]; then
+            if [ "$RUNNER_OS" = macOS ] && [ "$folder" != . ] && [ "$folder" != window ]; then
               [ "$folder" = cli ] && [ "$name" = suite ] || continue
               filter=kills::
             fi
