@@ -30,7 +30,7 @@ use tokio::task;
 use crate::{
   Ear, Engine, Fault, Object, ObjectRef, checkpoint,
   ear::{hear, hearing, lasting},
-  engine::OPERATOR,
+  engine::{OPERATOR, ROOT},
   image::{self, Image},
   minify,
   skill::{self, Places},
@@ -613,7 +613,8 @@ impl Opening {
   /// as one that crashed, kept entries after it: the journal of the life says them again, as a boot
   /// says a record again, so the open costs that tail alone. Each act that an ear of the life of
   /// the image held in flight, and that no such entry ended, is put to its fresh ear as an act that
-  /// an earlier life took, at the first time the life is driven, which this does once.
+  /// an earlier life took, at the first time the life is driven, which this does once. A life that
+  /// works then stands the root once, as a boot does, so each way to open reaches the same state.
   ///
   /// The session steps the ears that the life before had, by their names, so the life needs each
   /// of them and no other: a life that inspects hears a silent ear in the place of each that it
@@ -663,6 +664,11 @@ impl Opening {
       if let Some(no) = engine.raised() {
         return Err(no.clone());
       }
+    }
+    // Each later life that works stands the root once after the state that it opens at, as a boot
+    // does. A life that inspects keeps no fact, so it stands at the tip of the record as it is.
+    if self.works() {
+      engine.verb("stand", vec![Object::string(ROOT)], vec![])?;
     }
     engine.pump(Waker::noop())?;
     Ok(Ok(engine))

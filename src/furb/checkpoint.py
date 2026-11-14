@@ -35,8 +35,8 @@ def journal(names, record=()):
   asked, strays, back = {}, {}, []
 
   def ear(outside, known, taken, held, holds, log, left, top, a=(), last=None):
-    say, act, get, drive, counted, offers, carried = (
-      names[x] for x in ("say", "act", "get", "drive", "numbered", "offers", "lives")
+    say, act, get, drive, counted, offers, carried, transcript = (
+      names[x] for x in ("say", "act", "get", "drive", "numbered", "offers", "lives", "transcript")
     )
     if carried is LIFE.get("lives"):
       carried = LIFE["carried"]
@@ -111,6 +111,13 @@ def journal(names, record=()):
               act(kind, on, None, *words) if by in outside else verb(*words, on=on)
             except refused:
               pass
+        case ("carried", about, _, _, values, definitions, *_):
+          repeat(*entry)
+          bind(module(about), about, values, definitions)
+        case ("cut", about, "journal", turns, lost, cut):
+          lost = [n for n in lost if n not in module(about)]
+          note = f"The life goes on from a checkpoint. It lost {lost or 'no name'}, and it cut {cut or 'no act'}."
+          repeat("cut", about, "journal", [*turns, *[("tell", about, "journal", [note])][: bool(lost + cut)]])
         case (_, about, *_) if scope(about):
           repeat(*entry)
         case (_, about, by, *_) if by in outside and about in saved and get(saved[about][3]) and not get(about):
@@ -182,11 +189,37 @@ def journal(names, record=()):
                 del pending[name]
                 taken.discard(name)
                 offers(known[name])
+        # The program of a born chain starts with its birth, so each module that a chain makes again, as a fork of a
+        # born chain makes its own, takes the bind of the last fact carried of that chain, or of the chain it forks.
+        if a and a[0] == "module":
+          born = a[1]
+          while not transcript(born, "carried") and get(born)[5]:
+            born = get(born)[5]
+          for x in transcript(born, "carried")[-1:]:
+            bind(a[3], a[1], x[4], x[5])
     finally:
       for pile in log, left, due, first, saved, back:
         pile.clear()
 
   return ear
+
+
+def bind(module, about, values, definitions):
+  # The module of a chain at the tip, made again as data: each value from its text, each definition, then each value
+  # that a definition bound again, while a value whose object the module still holds stays that object, which a
+  # definition took. A value or a definition that raises loses only itself, which the cut of the birth names.
+  bound = {}
+  for word in [None, *definitions, None]:
+    for k, text in values.items() if word is None else ():
+      if k not in bound or module.get(k) is not bound[k]:
+        try:
+          module[k] = bound[k] = eval(text, module)  # noqa: S307
+        except Exception:  # noqa: S110
+          pass
+    try:
+      word and eval(compile(word, about, "exec"), module)  # noqa: S307
+    except Exception:  # noqa: S110
+      pass
 
 
 def fed(names, entries):
@@ -226,21 +259,16 @@ def seed(names, data):
   made = {c["id"]: {} for c in data["chains"]}
   for x in [*data["chains"], *data["acts"]]:
     "by" in x and made[home.get(x["id"], data["chains"][0]["id"])].update({x["id"]: x["by"]})
-  parts = {}
+  # Each chain is made before any chain holds its prefix, so a chain with a source takes no turn of its source again.
   for c in data["chains"]:
-    put("chain", i := c["id"], operator, c["on"], c["label"], "")
-    v = "".join(
-      f"try:\n if {k!r} not in __bound or {k} is not __bound[{k!r}]: {k} = __bound[{k!r}] = eval(__carried[4][{k!r}])\nexcept Exception: pass\n"
-      for k in c["values"]
-    )
-    parts[i] = [*filter(None, [v, *([d] if isinstance(d := c["definitions"], str) else d), v, *c.get("lives", ())])]
+    put("chain", c["id"], operator, c["on"], c["label"], c["source"])
+  for c in data["chains"]:
+    i = c["id"]
+    definitions = [d] if isinstance(d := c["definitions"], str) else d
     kept = [
       t for t in c["turns"] if t[1] not in kinds or home[t[1]] != i or t[0] not in ("started", "done", kinds[t[1]])
     ]
-    entries += [
-      (("carried", i, "journal", c["turns"], c["values"], parts[i], *[made[i]][: bool(made[i])]),),
-      (("prefix", i, i, kept),),
-    ]
+    entries += [(("carried", i, "journal", c["turns"], c["values"], definitions, made[i]),), (("prefix", i, i, kept),)]
     (c["paused"] or i in asking) and entries.append((("pause", i, operator),))
   for x in data["acts"]:
     "value" in x and (
@@ -256,18 +284,15 @@ def seed(names, data):
     put(kind, f"{kind}{most + 1}")
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
+    entries.append((("cut", i, "journal", c["turns"], c["lost"] + [*c["values"]], cut),))
     word = (
-      "for __carried in [] if transcript(of='cut') else transcript(of='carried')[-1:]:\n"
-      " __bound, __part = {}, None\n"
-      " for __part in __carried[5]:\n  try: await rung(__part)\n  except Exception as __raised: debug(t'{__raised!r}')\n"
+      f"if not get(acting())[5]:\n for __part in {c.get('lives', [])!r}:\n"
+      "  try: await rung(__part)\n  except Exception as __raised: debug(t'{__raised!r}')\n"
       " say('cut', scope(acting()), "
       "[x for x in reading() if x[0] != 'tell' or not under(x[1], acting()) or x[3][0].startswith(f'#{acting()} debugged')])\n"
-      f' (__lost := [n for n in {c["lost"]} + [*__carried[4]] if n not in globals()]) + {cut} and debug(t"The life goes on from a checkpoint. '
-      f"It lost {{__lost or 'no name'}}, and it cut {cut or 'no act'}.\")\n del __carried, __bound, __part, __lost"
+      " del __part"
     )
-    seat = f"rung{numbers['rung'] + 1}"
-    for maker, said in [(operator, word), *((seat, one) for one in parts[i])]:
-      put("rung", f"rung{numbers['rung'] + 1}", maker, i, said, "", "")
+    c.get("lives") and put("rung", f"rung{numbers['rung'] + 1}", operator, i, word, "", "")
   return entries + [(("wake", y["id"], operator),) for y in data["chains"] if y["id"] in asking and not y["paused"]]
 
 
@@ -377,7 +402,8 @@ def gathered(names, define, floor):
         "paused": paused(c),
         "turns": [x for x in saved if x[0] not in ("started", "done") or x[1] in held],
         "definitions": [
-          *filter(None, [define(w) for r, w in program(c).items() if get(r) and get(r)[2] != "extensions"])
+          *[d for x in transcript(c, "carried")[-1:] for d in x[5]],
+          *filter(None, [define(w) for r, w in program(c).items() if get(r) and get(r)[2] != "extensions"]),
         ],
         "values": values[c],
         "lost": lost[c],

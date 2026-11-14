@@ -21,7 +21,7 @@ pub use cards::{Card, Part, Standing};
 pub use desk::{
   Ask, Desk, REFUSED, Tick, choices, declined, desk, hint, takes_nothing, ticks, wants,
 };
-pub use fold::{Fold, followed};
+pub use fold::{Fold, followed, timed};
 pub use held::{Held, Threads};
 pub use ladder::{Rung, SHOWN, Shown};
 #[cfg(any(test, feature = "test-support"))]

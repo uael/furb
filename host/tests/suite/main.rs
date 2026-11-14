@@ -12,6 +12,7 @@ mod counted;
 
 mod apart;
 mod daemon;
+mod equal;
 mod image;
 mod life;
 mod memory;

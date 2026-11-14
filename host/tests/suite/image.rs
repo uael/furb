@@ -19,7 +19,7 @@ use std::{
 use furb::{
   Object,
   life::{Answer, Opening},
-  view::{Act, Reach},
+  view::{Act, Kind, Reach},
 };
 use furb_host::{Command, Event, Life, LifeHandle, Reply};
 use futures::StreamExt;
@@ -125,11 +125,49 @@ async fn a_life_opens_from_its_image_where_the_life_before_it_stood() {
   assert!(image.is_file(), "a life that keeps its record ends with its image");
   let lines = fs::read(&record).expect("the record");
   let life = Life::spawn(answering(&at, Some("close('ok')"))).expect("the third life");
-  assert_eq!(views(&life).await, stood, "the first screen of the life is the one it left");
+  // The life stands the root once as it opens, as each later life does, which adds the moments of
+  // that stand alone.
+  let mut first = views(&life).await;
+  let Ok(Reply::Acts(acts)) = life.send(Command::AsOf { at: u64::MAX }).await else {
+    panic!("the acts of the life")
+  };
+  for (now, was) in first.iter_mut().zip(&stood) {
+    if let (Reply::Moments(now), Reply::Moments(was)) = (now, was) {
+      let added: Vec<u64> = now.iter().filter(|one| !was.contains(one)).copied().collect();
+      let stand =
+        acts.iter().find(|act| act.kind == Kind::Stand && added.first() == Some(&act.began));
+      let moments = stand.map(|act| [Some(act.began), act.ended].into_iter().flatten().collect());
+      assert_eq!(moments, Some(added), "the open adds the moments of its stand alone");
+      now.retain(|one| was.contains(one));
+    }
+  }
+  assert_eq!(first, stood, "the first screen of the life is the one it left");
   let tip = until(&mut Box::pin(life.events(0)), |event| *event == *told[told.len() - 1].1).await;
-  assert_eq!(tip, told, "a reader reads each event of the life before at its place");
+  // The stand of the open takes the log past the bound after which it drops each event of an act
+  // that a later event of that act replaced, so a reader from the first place reads that later
+  // event alone, as `Spent` says.
+  let act = |event: &Event| match event {
+    Event::Act(act) => Some(act.id.clone()),
+    _ => None,
+  };
+  let replaced = |(at, event): &Logged| {
+    act(event)
+      .is_some_and(|id| told.iter().any(|(later, one)| later > at && act(one) == Some(id.clone())))
+  };
+  let kept: Vec<Logged> =
+    told.iter().filter(|one| tip.contains(one) || !replaced(one)).cloned().collect();
+  assert_eq!(tip, kept, "a reader reads each event of the life before at its place");
+  // The open adds the facts of the stand of the root alone to the record.
   let said = fs::read(&record).expect("the record");
-  assert!(said == lines, "an open from an image says no fact");
+  let added = said.strip_prefix(lines.as_slice()).map(String::from_utf8_lossy);
+  let stand = |line: &str| {
+    serde_json::from_str::<Value>(line)
+      .is_ok_and(|entry| entry[0][1].as_str().is_some_and(|id| id.starts_with("stand")))
+  };
+  assert!(
+    added.as_deref().is_some_and(|added| added.lines().all(stand)),
+    "an open from an image says no fact but the stand of the root"
+  );
   ended(life).await;
 }
 

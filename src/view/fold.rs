@@ -26,6 +26,13 @@ pub fn followed(kind: &str) -> bool {
   !STEPS.contains(&kind)
 }
 
+/// Whether a fact takes a place in the time of a life. A fact `keep` says that the record kept an
+/// entry, which a whole replay of the record never says again, so it takes none, and a moment is
+/// the same place by each way to open a record.
+pub fn timed(fact: &Value) -> bool {
+  fact.get(0).and_then(Value::as_str) != Some("keep")
+}
+
 /// What the fold holds of a chain, each act by the place it began: its live acts of work, its last
 /// act of work, its last prompt, and the live prompts that its words made on other chains. These
 /// are all the acts that the state of the chain reads.
@@ -54,7 +61,8 @@ struct Reply {
 #[derive(Default, Serialize, Deserialize)]
 pub struct Fold {
   acts: HashMap<String, Act>,
-  /// How many facts the fold heard, which is the place in time of the fact that it hears.
+  /// How many facts the fold heard that take a place in time, which is the place of the fact that
+  /// it hears.
   clock: u64,
   chains: HashMap<String, Chain>,
   replies: HashMap<String, Reply>,
@@ -76,7 +84,7 @@ pub struct Fold {
 }
 
 impl Fold {
-  /// How many facts the fold heard, the place of the last one.
+  /// How many facts the fold heard that take a place in time, the place of the last one.
   pub fn clock(&self) -> u64 {
     self.clock
   }
@@ -158,7 +166,7 @@ impl Fold {
   /// The acts that a fact changes, each as it stands after the fact. `covered` names each live act
   /// that a pause or a wake covers, and `born` the pause that holds a new act, as the engine found.
   pub fn hear(&mut self, fact: &Value, covered: &[String], born: Option<Pause>) -> Vec<Act> {
-    self.clock += 1;
+    self.clock += u64::from(timed(fact));
     let text = |at: usize| fact.get(at).and_then(Value::as_str).unwrap_or_default();
     let (kind, about, by) = (text(0), text(1), text(2));
     let rest = fact.as_array().map_or(&[][..], |all| all.get(3..).unwrap_or_default());

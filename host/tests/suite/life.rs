@@ -23,7 +23,7 @@ use std::{
 };
 
 use furb::{
-  Ear, Object,
+  Ear, Object, checkpoint,
   ear::{ear, hear},
   life::{Answer, Opening, Progress},
   view,
@@ -666,10 +666,13 @@ pub(crate) fn facts_of(log: &[Logged]) -> Vec<serde_json::Value> {
 }
 
 /// The checkpoint of the life of a record whose life ended with its image, written at its tip by
-/// a life that opens from that image, on ears with the names of the ears of a host that hear and
-/// say nothing: it says no fact, so the record takes the checkpoint alone, as at a rebirth. The
-/// image then names the tip before it, so the next life opens by the record, on this checkpoint.
+/// a life that opens from that image and only inspects it, on ears with the names of the ears of a
+/// host that hear and say nothing: it says no fact, so the record takes the checkpoint alone, as
+/// `furb checkpoint` writes one. The image then names the tip before it, so the next life opens by
+/// the record, on this checkpoint.
 pub(crate) async fn checkpointed(opening: Opening) {
+  let Some(record) = opening.record.clone() else { panic!("the life keeps no record") };
+  let opening = Opening { inspecting: Some(true), ..opening };
   let idle = || -> Box<dyn Ear> {
     ear(|mut co| async move {
       loop {
@@ -678,11 +681,11 @@ pub(crate) async fn checkpointed(opening: Opening) {
     })
   };
   let ears = [(CONSOLE, idle()), ("events", idle()), ("changes", idle())];
-  let engine = match opening.open(ears, Progress::default(), &mut |_| true).await {
+  let mut engine = match opening.open(ears, Progress::default(), &mut |_| true).await {
     Ok((engine, _)) => engine,
     Err(no) => panic!("no life opens on the image of the record: {no}"),
   };
-  if let Err(no) = engine.checkpoint() {
+  if let Err(no) = checkpoint::crossed(Path::new(&record), &mut engine) {
     panic!("the life writes no checkpoint: {no}");
   }
 }
@@ -782,12 +785,12 @@ async fn a_life_on_its_checkpoint_tells_the_acts_of_its_history_each_at_the_plac
   let mut log = until(&mut events, done(&id)).await;
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
   log.extend(until(&mut events, |event| matches!(event, Event::Ended(_))).await);
-  // The place of an act is the count of the facts that the log told up to its question, as a
-  // window that hears the log counts them.
+  // The place of an act is the count of the facts that the log told up to its question, but each
+  // fact that takes no place in time, as a whole replay of the record says it.
   let (mut facts, mut acts) = (Vec::new(), Vec::new());
   for one in &log {
     match &*one.1 {
-      Event::Fact(fact) => facts.push(fact.clone()),
+      Event::Fact(fact) if view::timed(fact) => facts.push(fact.clone()),
       Event::Act(act) => acts.push((**act).clone()),
       _ => {}
     }

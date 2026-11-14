@@ -55,7 +55,7 @@ async def test_taken_gives_the_highest_number_of_each_kind_that_an_act_of_a_chai
 async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_each_with_its_parent_its_label_its_source_whether_it_is_paused_its_turns_but_the_facts_made_what_define_gives_of_each_word_that_ran_on_it_as_one_string_for_each_word_that_defines_a_name_in_order_the_text_that_binds_each_plain_value_of_its_module_again_the_names_of_the_other_values_and_the_acts_that_it_cut_each_word_that_ran_on_it_among_them() -> (
   None
 ):
-  """chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, as one string for each word that defines a name, in order, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose rung stands in the lineage of an act whose ear still hears on it at the tip, an open act or a done act with a lasting ear, as lives."""
+  """chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, the definitions of its last fact carried, then what define gives of each word that ran on it, as one string for each word that defines a name, in order, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose rung stands in the lineage of an act whose ear still hears on it at the tip, an open act or a done act with a lasting ear, as lives."""
   root, _ = await gather()
   # A verb with no words makes an act that makes an open prompt, as name_session makes the prompt of its chain.
   await engine.rung("with site.set(act('named', ROOT, None)):\n  named = prompt(str, 'Name?', to=OPERATOR)", on=root)
@@ -86,6 +86,8 @@ async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_ea
   await settle()
   now = paragraphs(engine.turns(on=rest))
   assert now[: len(was) - 1] == was[:-1] and now[len(was) - 1].startswith(was[-1]), (was, now)
+  again = checkpoint.gathered(vars(engine), lambda word: word, {})
+  assert [x["definitions"] for x in again["chains"]] == [x["definitions"] for x in data["chains"]]
 
 
 async def test_acts_holds_the_last_stand_the_last_clock_each_prompt_and_each_command_of_a_chain_in_chains_and_each_act_of_a_verb_that_a_value_names_so_a_later_life_holds_each_thread_of_a_chain_a_closed_one_too() -> (

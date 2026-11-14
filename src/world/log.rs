@@ -52,7 +52,7 @@ use crate::{
   wire::{outward, parsed},
   world::{
     beside, kept,
-    store::{asks, heads, spoken},
+    store::{MADE, asks, heads, spoken},
   },
 };
 use serde::de;
@@ -521,17 +521,23 @@ pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
 
 /// Whether the log of the record at a path agrees with a record of that many entries and of those
 /// questions, as [`logged`] reads it, which the caller read once. The record ends with `sealed`
-/// checkpoints: a checkpoint is no fact, and one that no life wrote, as the one of
-/// `furb checkpoint`, has no line of keep, so a log that lacks the lines of keep of those entries
-/// alone still holds each fact of the record.
+/// entries that are no facts of a life: a checkpoint, and the fact made that names the texts of the
+/// life born on it. The ones that no life wrote, as those of `furb checkpoint`, have no line of
+/// keep, so a log that lacks the lines of keep of those entries alone still holds each fact of the
+/// record.
 pub(crate) fn agrees(path: &Path, entries: usize, asked: &HashSet<String>, sealed: usize) -> bool {
   agreed(path, entries.saturating_sub(sealed)..=entries, asked, false)
 }
 
-/// How many checkpoints end a record, given each kept fact of it in order: the count before a
-/// fact, and after it.
+/// How many entries that are no facts of a life end a record, given each kept fact of it in order:
+/// the count before a fact, and after it. Such an entry is a checkpoint, or the fact made that
+/// follows one.
 pub(crate) fn sealed(before: usize, fact: Option<&Fact>) -> usize {
-  if fact.is_some_and(|one| one.kind() == checkpoint::CHECKPOINT) { before + 1 } else { 0 }
+  match fact.map(Fact::kind) {
+    Some(checkpoint::CHECKPOINT) => before + 1,
+    Some(MADE) if before > 0 => before + 1,
+    _ => 0,
+  }
 }
 
 /// Whether the lines of the log of the record at a path, as far as the line that counts an entry

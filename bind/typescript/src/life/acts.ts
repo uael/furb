@@ -27,6 +27,10 @@ const STEPS = new Set([
 ]);
 /** Whether a person follows an act of a kind, as the daemon reads it: each kind but the steps of the engine. */
 export const followed = (kind: string): boolean => !STEPS.has(kind);
+/** Whether a fact of a kind takes a place in the time of a life, as the crate reads it. A fact keep says that the
+ * record kept an entry, which a whole replay of the record never says again, so it takes none, and a moment is the
+ * same place by each way to open a record. */
+export const timed = (kind: string): boolean => kind !== "keep";
 
 /** Whether a site is the operator or a member of the operator: the site operator, or a site of the form operator/id,
  * as operated of the engine reads it. */

@@ -144,7 +144,17 @@ async fn a_life_that_rests_past_its_tail_writes_its_image_and_no_checkpoint_and_
   let lines = fs::read(&record).expect("the record");
   let again = Life::spawn(opening(&at)).expect("the life has a thread");
   assert_eq!(named(&again, "n").await, Ok("2".to_owned()), "a later life feeds the tail");
-  assert!(fs::read(&record).expect("the record") == lines, "it opens from the image");
+  // It opens from the image, and stands the root once, as each later life does.
+  let now = fs::read(&record).expect("the record");
+  let added = now.strip_prefix(lines.as_slice()).map(String::from_utf8_lossy);
+  let stand = |line: &str| {
+    serde_json::from_str::<serde_json::Value>(line)
+      .is_ok_and(|entry| entry[0][1].as_str().is_some_and(|id| id.starts_with("stand")))
+  };
+  assert!(
+    added.as_deref().is_some_and(|added| added.lines().all(stand)),
+    "it opens from the image"
+  );
   assert!(matches!(again.send(Command::End).await, Ok(Reply::Done)));
 }
 

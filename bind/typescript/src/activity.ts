@@ -8,6 +8,7 @@ import {
   operated,
   type PauseCause,
   type Spend,
+  timed,
   WORK,
 } from "./life/acts.js";
 import { display, type Fact, isQuestion, usageOf } from "./types.js";
@@ -76,7 +77,7 @@ export class Activity {
    * he said of it, which covers each change that the record holds before it. An act whose place is past it, as it began
    * or ended, is new to him. */
   readonly seen = new Map<string, number>();
-  /** How many facts the activity has heard, which is the place in time of the fact that it hears. */
+  /** How many facts the activity has heard that take a place in time, which is the place of the fact that it hears. */
   private clock = 0;
   /** The chain, the actor and the maker of each reply that is not done. The maker of a reply is the rung that waits
    * for the word that the reply writes. */
@@ -238,7 +239,7 @@ export class Activity {
 
   *hear(fact: Fact): Generator<Call, void, unknown> {
     const [kind, id, by] = fact;
-    const at = ++this.clock;
+    const at = timed(kind) ? ++this.clock : this.clock;
     const question = isQuestion(kind, id);
     if (question) this.scopes.set(id, kind === "chain" ? id : this.scope(String(fact[3])) || String(fact[3]));
     if (question && kind === "run") {

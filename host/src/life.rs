@@ -34,8 +34,8 @@ use furb::{
   life::{Log, Opening, Progress, Stage, Stream},
   verbs,
   view::{
-    Act, Desk, Fold, Held, Named, Page, Phase, Reach, Rung, SHOWN, Shown, Streamed, ThreadNode,
-    Threads,
+    self, Act, Desk, Fold, Held, Named, Page, Phase, Reach, Rung, SHOWN, Shown, Streamed,
+    ThreadNode, Threads,
   },
   wire::{outward, parsed},
   world::{
@@ -321,7 +321,8 @@ pub struct Life {
 /// What a life keeps of the events that it told, which is the part of the host in the image of the
 /// life, so a later life of the record stands where this one stood and reads no fact of its past:
 /// the log, which is each event that it told, less those that a later event replaced (see
-/// `Spent`), how many facts it told and the place of each by its digest, the place in the log of
+/// `Spent`), how many facts it told, the place in the time of the life of the last fact that
+/// takes one, as [`view::timed`] says, the place in that time of each fact by its digest and of
 /// each fact that the engine of this birth heard, what the actor watches to know when the life
 /// writes its image, the queue of the follow-ups, the acts with their meaning, the work that the
 /// life holds for its record, the name of the session, folded from each fact of the life, the facts
@@ -333,6 +334,7 @@ struct Kept {
   log: Vec<Option<Slot>>,
   spent: Spent,
   said: Seq,
+  time: Seq,
   facts: HashMap<u64, Seq>,
   births: Vec<Seq>,
   watch: Watch,
@@ -477,9 +479,10 @@ impl Life {
   fn put(&mut self, mut event: Event) {
     if let Event::Fact(fact) = &event {
       self.kept.said += 1;
-      self.kept.held.noted(fact, self.kept.said);
+      self.kept.time += u64::from(view::timed(fact));
+      self.kept.held.noted(fact, self.kept.time);
       self.stale |= fact[0] == "seen";
-      self.kept.facts.entry(digest(fact)).or_insert(self.kept.said);
+      self.kept.facts.entry(digest(fact)).or_insert(self.kept.time);
       if self.kept.named.hear(fact, false) {
         self.named();
         self.stale = true;
@@ -575,8 +578,11 @@ impl Life {
         Event::Changed(chain) if !changed.contains(&chain) => changed.push(chain),
         Event::Changed(_) => {}
         Event::Fact(fact) => {
+          let timed = view::timed(&fact);
           self.put(Event::Fact(fact));
-          self.kept.births.push(self.kept.said);
+          if timed {
+            self.kept.births.push(self.kept.time);
+          }
         }
         Event::Act(act) => {
           let act = self.placed(act);
@@ -590,18 +596,20 @@ impl Life {
     }
   }
 
-  /// What an open told, less each fact of its opening that restates one that the log told before
-  /// it: an open on a checkpoint says again what the checkpoint restates, which each reader
-  /// already heard, then goes on with facts of its own, which the log tells whole.
-  fn opened(&mut self, told: Vec<Event>, progress: &Progress) {
+  /// What an open told, less each fact of the opening of a birth on a checkpoint: that opening
+  /// says again what the checkpoint restates, which each reader already heard, and the facts by
+  /// which the life is born there, which a whole replay of the record never says, so none of them
+  /// takes a place in the time of the life. The life then goes on with facts of its own, which the
+  /// log tells whole.
+  fn opened(&mut self, told: Vec<Event>, born: bool, progress: &Progress) {
     self.kept.births.clear();
     let start = self.kept.log.len();
-    let (mut opening, of) = (true, told.len() as u64);
+    let (mut opening, of) = (born, told.len() as u64);
     (progress.0)(Stage::Log, 0, of);
     for (at, event) in (1..).zip(told) {
       match &event {
-        Event::Fact(fact) if self.restates(&mut opening, fact) => {
-          let place = self.kept.facts.get(&digest(fact)).copied().unwrap_or(self.kept.said);
+        Event::Fact(fact) if birth(&mut opening, fact) => {
+          let place = self.kept.facts.get(&digest(fact)).copied().unwrap_or(self.kept.time);
           self.kept.births.push(place);
         }
         _ => self.told(Some(event)),
@@ -648,35 +656,25 @@ impl Life {
     at.and_then(|one| self.kept.births.get(one)).copied().unwrap_or(clock)
   }
 
-  /// Whether a fact of an opening restates a fact that the log told, which ends the opening when it
-  /// is the stand of its boot: the facts after it are those of the life, each occurrence of an
-  /// equal fact among them.
-  fn restates(&self, opening: &mut bool, fact: &Value) -> bool {
-    let word = |at: usize| fact.get(at).and_then(Value::as_str);
-    *opening &=
-      !checkpoint::opened(word(0).unwrap_or_default(), word(2).unwrap_or_default(), word(3));
-    *opening && self.kept.facts.contains_key(&digest(fact))
-  }
-
   /// The facts of a record before its last checkpoint, told first, in order, each with the acts
   /// that it changed, then the birth on that checkpoint: the life boots on it and replays none of
   /// them, so each reader hears the life whole, and the watch of a stall holds
   /// only the acts that the open tells again. No engine reads them, so no pause covers their acts.
-  /// Each birth on a checkpoint before the last opened by saying again what that checkpoint
-  /// restates, which its log told no reader twice, and this one tells none twice either; each other
-  /// fact is told, though it equals one before it, as a second pause of a chain. A record that the
-  /// store cannot read tells nothing here, and its open says why.
-  fn recalled(&mut self, record: &str, told: &Progress) {
+  /// The facts of the opening of each birth on a checkpoint before the last are told to no reader,
+  /// as [`Life::opened`] says; each other fact is told, though it equals one before it, as a
+  /// second pause of a chain. A record that the store cannot read tells nothing here, and its open
+  /// says why. It gives whether the life is born on a checkpoint of the record.
+  fn recalled(&mut self, record: &str, told: &Progress) -> bool {
     if !Path::new(record).exists() {
-      return;
+      return false;
     }
     (told.0)(Stage::Recall, 0, 0);
     // One pass over the heads of the lines gives the place of each checkpoint, and a record with
     // none tells nothing here.
-    let Ok(checkpoints) = world::checkpoints(record) else { return };
+    let Ok(checkpoints) = world::checkpoints(record) else { return false };
     let marks: Vec<usize> = checkpoints.into_iter().map(|at| at + 1).collect();
-    let Some(&last) = marks.last() else { return };
-    let Ok(retold) = world::retold(record) else { return };
+    let Some(&last) = marks.last() else { return false };
+    let Ok(retold) = world::retold(record) else { return true };
     let (mut passed, mut opening) = (0, false);
     let mut fold = Fold::default();
     // Each fact is folded as the read gives it and let go at once, since the record holds it: the
@@ -696,7 +694,7 @@ impl Life {
       while marks.get(passed).is_some_and(|mark| kept >= *mark) {
         (passed, opening) = (passed + 1, true);
       }
-      if !self.restates(&mut opening, &fact) {
+      if !birth(&mut opening, &fact) {
         let acts = fold.hear(&fact, &[], None);
         self.put(Event::Fact(fact));
         for act in acts {
@@ -711,6 +709,7 @@ impl Life {
       (told.0)(Stage::Recall, last as u64, last as u64);
       self.reborn();
     }
+    true
   }
 
   /// Each fact of the log let go, since the record holds it: those that a checkpoint of the record
@@ -941,6 +940,15 @@ fn read_log(log: &str, take: &mut Take<'_>) -> Option<()> {
   Some(())
 }
 
+/// Whether a fact is of the opening of a birth on a checkpoint, which ends with the stand of its
+/// boot: the facts after that stand are those of the life.
+fn birth(opening: &mut bool, fact: &Value) -> bool {
+  let word = |at: usize| fact.get(at).and_then(Value::as_str);
+  *opening &=
+    !checkpoint::opened(word(0).unwrap_or_default(), word(2).unwrap_or_default(), word(3));
+  *opening
+}
+
 /// Whether a fact tells that the record kept a checkpoint, or a fact made, which a life keeps
 /// after its checkpoint and the store at the birth of a record.
 fn kept_checkpoint(fact: &Value) -> bool {
@@ -1080,9 +1088,8 @@ async fn lives(
   let progress = life.opens.progress();
   life.opens.born();
   let images = record.as_deref().is_some_and(|one| image::agrees(Path::new(one)));
-  if let Some(one) = record.as_deref().filter(|_| !images) {
-    life.recalled(one, &progress);
-  }
+  let mut born =
+    record.as_deref().filter(|_| !images).is_some_and(|one| life.recalled(one, &progress));
   let ears = ears(told.clone(), journal);
   let mut kept = None::<Kept>;
   // A life that told its past stands on it, and on no image that came after.
@@ -1103,9 +1110,9 @@ async fn lives(
       // the life opened by its record before it told its past: it tells its past, then the
       // birth that its record already keeps.
       if let (true, Some(one)) = (images, record) {
-        life.recalled(one, &progress);
+        born = life.recalled(one, &progress);
       }
-      life.opened(birth, &progress);
+      life.opened(birth, born, &progress);
     }
   }
   let (fault, asked) = driven(engine, life, received, record.as_deref()).await;
