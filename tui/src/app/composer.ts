@@ -159,7 +159,6 @@ export const composer = part({
   },
 
   async submit(): Promise<void> {
-    if (this.submitting) return;
     if (this.session.host.reading) {
       const typed = canonical(this.composer.plainText.trim());
       this.composer.setText("");
@@ -176,36 +175,42 @@ export const composer = part({
       this.render();
       return;
     }
-    this.submitting = true;
     const key = this.draftKey;
     const base = this.session.draftKey;
     const content = canonical(this.composer.plainText);
     const python = this.session.mode === "python" && !this.session.editing && !content.startsWith("/");
     // The text leaves its draft as it is sent, so what is typed while it is sent stays in the composer.
     this.composer.setText("");
-    try {
-      const declined = this.picking();
-      const ask = this.session.operatorPrompt;
-      if (declined && this.choice.other && !content.startsWith("/")) {
-        if (content.trim()) await this.session.decline(declined, content);
-        else this.session.notice = "Write your own words, or press Esc to go back to the values.";
-      } else if (!content.trim() && ask && !ask.notice && !declined && takesNothing(ask.shape)) {
-        await this.session.answer(ask, "");
-      } else if (!(await this.globalCommand(content.trim()))) {
-        const woke = !content.startsWith("/") && (await this.session.wakeForInput());
-        await this.session.submit(python ? `/run ${content}` : content);
-        if (woke) this.session.notice = "This message woke the paused chain.";
+    const declined = this.picking();
+    const other = this.choice.other;
+    const ask = this.session.operatorPrompt;
+    // A text goes once the text sent before it is in, so the life takes the texts in the order of their keys, and an
+    // Enter while a text is sent is never lost.
+    const before = this.sending;
+    this.sending = (async () => {
+      await before;
+      try {
+        if (declined && other && !content.startsWith("/")) {
+          if (content.trim()) await this.session.decline(declined, content);
+          else this.session.notice = "Write your own words, or press Esc to go back to the values.";
+        } else if (!content.trim() && ask && !ask.notice && !declined && takesNothing(ask.shape)) {
+          await this.session.answer(ask, "");
+        } else if (!(await this.globalCommand(content.trim()))) {
+          const woke = !content.startsWith("/") && (await this.session.wakeForInput());
+          await this.session.submit(python ? `/run ${content}` : content);
+          if (woke) this.session.notice = "This message woke the paused chain.";
+        }
+        this.session.remember(base, content);
+        this.historyIndex = -1;
+        this.historyPrefix = "";
+      } catch (error) {
+        this.unsent(key, content);
+        this.report(error);
+      } finally {
+        this.render();
       }
-      this.session.remember(base, content);
-      this.historyIndex = -1;
-      this.historyPrefix = "";
-    } catch (error) {
-      this.unsent(key, content);
-      this.report(error);
-    } finally {
-      this.submitting = false;
-      this.render();
-    }
+    })();
+    await this.sending;
   },
 
   /** The composer holds a text in place of the draft that the session shows, and an undo gives the draft back. */

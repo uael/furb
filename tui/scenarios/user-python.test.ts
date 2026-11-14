@@ -57,3 +57,22 @@ test("a word of the operator in Python draws as a word of a model, live and afte
       await again.close(true);
     }
   }));
+
+test("two words that the operator sends at once both run, in the order that he sent them", () =>
+  scenario([], async (window) => {
+    window.screen.mockInput.pressKey("r", { ctrl: true });
+    await window.frame();
+    // The second Enter comes while the input still sends the first word, as a key does on a machine under load.
+    for (const word of ["first = 1", "second = first + 1"]) {
+      window.app.composer.setText(word);
+      window.screen.mockInput.pressEnter();
+    }
+    const ran = (frame: string, word: string) =>
+      frame.split("\n").some((row) => /┃\s+1\s+(.*)$/.exec(row)?.[1]?.trim() === word);
+    const frame = await window.shows(
+      (shown) => ran(shown, "first = 1") && ran(shown, "second = first + 1"),
+      "each word of the operator in the feed",
+    );
+    expect(window.app.composer.plainText).toBe("");
+    expect(frame).not.toContain("NameError");
+  }));

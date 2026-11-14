@@ -399,7 +399,8 @@ export class App {
   lastView = "";
   /** Whether this run is the first one, whose welcome shows the check of the setup. */
   readonly firstRun: boolean;
-  submitting = false;
+  /** The text that the input sends now, after which the next Enter sends its own. */
+  sending: Promise<void> = Promise.resolve();
   historyIndex = -1;
   historyDraft = "";
   /** The text typed when a walk of the history began, which a walk keeps to the entries that start with it, as fish

@@ -229,9 +229,6 @@ export class Window {
   }
   /** Type a line in the input, and send it with Enter, as the operator does. */
   async type(line: string): Promise<void> {
-    // The composer takes no Enter while it sends the text before, and a life in the daemon answers that send later
-    // than a life in the window did.
-    await until(() => !this.app.submitting, "the send before this line", 30);
     this.app.composer.focus();
     await this.screen.mockInput.typeText(line);
     this.screen.mockInput.pressEnter();
