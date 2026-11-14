@@ -325,9 +325,6 @@ pub struct Life {
   due: Instant,
   /// The time of each card that the life tells first: when its record last changed.
   first: Option<u64>,
-  /// What the models wrote and thought, and when each act that lives began, which no fact holds
-  /// and a page of a thread reads.
-  streams: Streamed,
 }
 
 /// What a life keeps of the events that it told, which is the part of the host in the image of the
@@ -336,9 +333,10 @@ pub struct Life {
 /// `Spent`), how many facts it told and the place of each by its digest, the place in the log of
 /// each fact that the engine of this birth heard, what the actor watches to know when the life is
 /// born again, the queue of the follow-ups, the acts with their meaning, the work that the life
-/// holds for its record, the name of the session, folded from each fact of the life, and the
-/// facts that the log let go since the record holds them, as [`Life::let_go`] says. The image holds
-/// it as a [`Part`].
+/// holds for its record, the name of the session, folded from each fact of the life, the facts
+/// that the log let go since the record holds them, as [`Life::let_go`] says, and what the models
+/// wrote and thought and when each act that lives began, which no fact holds and a page of a
+/// thread reads. The image holds it as a [`Part`].
 #[derive(Default, Serialize, Deserialize)]
 struct Kept {
   log: Vec<Option<Arc<Event>>>,
@@ -352,6 +350,7 @@ struct Kept {
   backlog: Backlog,
   named: Named,
   gone: Gone,
+  streams: Streamed,
 }
 
 /// The part of the host in the image of a life: what the life keeps, under the digest of the files
@@ -492,12 +491,12 @@ impl Life {
     let queued = self.kept.queue.heard(&event);
     match &event {
       Event::Act(act) => {
-        self.streams.heard(act, cards::now());
+        self.kept.streams.heard(act, cards::now());
         self.kept.held.heard(act);
         self.stale = true;
       }
       Event::Text { rung, text, thinking, .. } => {
-        self.streams.wrote(rung, [text, thinking], cards::now());
+        self.kept.streams.wrote(rung, [text, thinking], cards::now());
       }
       _ => {}
     }
@@ -993,7 +992,6 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
     cards,
     stale: false,
     due: Instant::now(),
-    streams: Streamed::default(),
   };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
@@ -1306,7 +1304,7 @@ fn viewed(life: &Life, root: &str, command: Command) -> Result<Reply, LifeError>
     Command::AsOf { at } => Ok(Reply::Acts(life.kept.held.as_of(at))),
     Command::Moments { on } => Ok(Reply::Moments(life.kept.held.moments(on.as_deref()))),
     Command::Thread { thread, reach } => {
-      Ok(Reply::Page(life.kept.held.page(&life.streams, &thread, reach)))
+      Ok(Reply::Page(life.kept.held.page(&life.kept.streams, &thread, reach)))
     }
     other => Err(LifeError::Refused(format!("{other:?} is no view"))),
   }

@@ -7,12 +7,19 @@
 )]
 #![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
 
-use std::{fs, future, path::Path, sync::Arc};
+use std::{
+  fs, future,
+  path::Path,
+  sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+  },
+};
 
 use furb::{
   Object,
   life::{Answer, Opening},
-  view::Act,
+  view::{Act, Reach},
 };
 use furb_host::{Command, Event, Life, LifeHandle, Reply};
 use futures::StreamExt;
@@ -291,4 +298,35 @@ async fn opens_by_its_record_after_its_past(name: &str, change: impl FnOnce(&mut
   ended(life).await;
   let held = fs::read(&image).expect("the image of the life that opened by the record");
   assert!(held.starts_with(b"{\"build\":"), "the life ends with an image that agrees");
+}
+
+#[tokio::test]
+async fn a_life_that_opens_from_its_image_shows_each_thread_as_the_life_before_it_did() {
+  let at = place("image-page");
+  // The model answers its first request with a word that waits on a second request, which it
+  // never answers, so the line of the word runs and its page says since when.
+  let asked = Arc::new(AtomicUsize::new(0));
+  let answer = Answer(Arc::new(move |_, _| {
+    let first = asked.fetch_add(1, Ordering::Relaxed) == 0;
+    Box::pin(async move {
+      if !first {
+        return future::pending().await;
+      }
+      let word = Object::string("await wait(3600, prompt(str, 'Say late.'))");
+      Ok(Object::tuple([Object::string("assistant"), word, Object::none(), Object::none()]))
+    })
+  }));
+  let life = Life::spawn(Opening { answer: Some(answer), ..kept(&at) }).expect("the first life");
+  let mut events = Box::pin(life.events(0));
+  let prompt =
+    Command::Prompt { shape: "str".to_owned(), message: "Wait.".to_owned(), to: None, on: None };
+  let thread = made(&life, prompt).await;
+  until(&mut events, |event| matches!(event, Event::Fact(fact) if fact[0] == "due")).await;
+  let page = |thread: String| Command::Thread { thread, reach: Reach { before: None, limit: 20 } };
+  let before = life.send(page(thread.clone())).await.expect("the page of the thread");
+  ended(life).await;
+  let life = Life::spawn(answering(&at, None)).expect("the second life");
+  let after = life.send(page(thread)).await.expect("the page of the thread");
+  assert_eq!(after, before, "the line runs since the second that the life before saw it begin");
+  ended(life).await;
 }
