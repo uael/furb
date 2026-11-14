@@ -90,7 +90,7 @@ impl Feed<'_> {
   }
 
   /// The head of the thread, which never scrolls: its project, its session or its title, and the
-  /// button that resolves it.
+  /// button that resolves it, once the daemon made the thread and gave its page.
   pub(crate) fn head(&self) -> Row {
     let card = self.model.told_card(&self.opened.key);
     let project = card.map(project).unwrap_or_default();
@@ -100,7 +100,8 @@ impl Feed<'_> {
       run(format!(" {project} · "), self.style(Role::Muted)),
       run(title, self.style(Role::Title)),
     ];
-    let button = vec![run("[ Resolve ]", self.style(Role::Prose))];
+    let made = !self.opened.key.2.is_empty() && !self.model.leaves();
+    let button = if made { vec![run("[ Resolve ]", self.style(Role::Prose))] } else { Vec::new() };
     let line = spread(left, button.clone(), self.wide.saturating_sub(2), Style::new());
     let end = width(&line);
     Row { hot: vec![(end - width(&button)..end, None)], ..Row::of(line) }

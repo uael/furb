@@ -179,9 +179,9 @@ fn a_refused_message_comes_back_to_the_input_with_why() {
   shows(&app, "No thread yet in this project.");
   sent(&app, "how long does an open take");
   app.paste("draft after");
-  let refused = app.wait_until(PATIENCE, || !app.text().contains("[ Resolve ]"));
-  let frame = app.text();
-  assert!(refused && frame.contains("┃ how long does an open take"), "{frame}");
+  // The row of hints says why the daemon refused the open, which no other frame says.
+  let frame = shows(&app, "  Refused: ");
+  assert!(frame.contains("┃ how long does an open take"), "{frame}");
   // The card of the record that the refused open left, as its machine tells it.
   shows(&app, "BR broken");
   screen("input-refused", &app);
