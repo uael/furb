@@ -140,34 +140,35 @@ impl Held {
   /// The cards of the life: each thread at the top of its rail that the operator started, in the
   /// order that they began.
   pub fn cards(&self) -> Vec<Card> {
-    let acts = self.now();
-    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
-    let mut models: HashMap<&str, &str> = HashMap::new();
-    for act in acts.iter().filter(|act| act.kind == Kind::Rung) {
-      if let Maker::Model { model, .. } = &act.maker {
-        models.insert(act.by.as_str(), model);
+    self.then(None, |acts| {
+      let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), *act)).collect();
+      let mut models: HashMap<&str, &str> = HashMap::new();
+      for act in acts.iter().filter(|act| act.kind == Kind::Rung) {
+        if let Maker::Model { model, .. } = &act.maker {
+          models.insert(act.by.as_str(), model);
+        }
       }
-    }
-    let sites: Vec<(&str, HashMap<String, u64>)> =
-      self.sites().map(|site| (site, self.seen_by(site))).collect();
-    let mut nodes: Vec<ThreadNode> =
-      self.rail(&[], None).into_iter().filter(|node| node.thread.yours).collect();
-    nodes.sort_by_key(|node| rows.get(node.thread.prompt.as_str()).map_or(0, |act| act.began));
-    let card = |node: ThreadNode| {
-      let readers = sites.iter().filter(|(_, seen)| !unseen(&node.thread, &rows, seen));
-      let said = |id: &String| models.get(id.as_str()).map(|one| (*one).to_owned());
-      let model =
-        node.thread.messages.iter().rev().find_map(said).or_else(|| said(&node.thread.prompt));
-      Card {
-        standing: standing(&node, &rows),
-        model,
-        agents: working(&node.agents),
-        readers: readers.map(|(site, _)| (*site).to_owned()).collect(),
-        prompt: node.thread.prompt,
-        title: node.thread.title,
-      }
-    };
-    nodes.into_iter().map(card).collect()
+      let sites: Vec<(&str, HashMap<String, u64>)> =
+        self.sites().map(|site| (site, self.seen_by(site))).collect();
+      let mut nodes: Vec<ThreadNode> =
+        self.rail(&[], None).into_iter().filter(|node| node.thread.yours).collect();
+      nodes.sort_by_key(|node| rows.get(node.thread.prompt.as_str()).map_or(0, |act| act.began));
+      let card = |node: ThreadNode| {
+        let readers = sites.iter().filter(|(_, seen)| !unseen(&node.thread, &rows, seen));
+        let said = |id: &String| models.get(id.as_str()).map(|one| (*one).to_owned());
+        let model =
+          node.thread.messages.iter().rev().find_map(said).or_else(|| said(&node.thread.prompt));
+        Card {
+          standing: standing(&node, &rows),
+          model,
+          agents: working(&node.agents),
+          readers: readers.map(|(site, _)| (*site).to_owned()).collect(),
+          prompt: node.thread.prompt,
+          title: node.thread.title,
+        }
+      };
+      nodes.into_iter().map(card).collect()
+    })
   }
 }
 

@@ -31,8 +31,8 @@ pub fn as_of(acts: &[Act], at: u64) -> Vec<Act> {
 }
 
 /// The moments of a life, in order: each start and each end of an act.
-pub fn moments_of(acts: &[Act]) -> Vec<u64> {
+pub fn moments_of<'a>(acts: impl IntoIterator<Item = &'a Act>) -> Vec<u64> {
   let moments: BTreeSet<u64> =
-    acts.iter().flat_map(|act| [Some(act.began), act.ended]).flatten().collect();
+    acts.into_iter().flat_map(|act| [Some(act.began), act.ended]).flatten().collect();
   moments.into_iter().filter(|moment| *moment > 0).collect()
 }

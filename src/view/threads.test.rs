@@ -10,7 +10,7 @@ use super::{
   chain_tree, open,
 };
 use crate::view::{Act, Fold, Held, State};
-use std::{fs, iter, slice};
+use std::{fs, hint::black_box, iter, slice, time::Instant};
 
 /// The acts of the record of a conductor that the tests of the TUI read, with after it what a
 /// record of the owner holds and it lacks, scrubbed: a wake of the round, and a word of the
@@ -513,6 +513,42 @@ fn acts_told_out_of_order_still_read_in_the_order_they_began() {
   let one = serde_json::to_value(told.threads("chain1", None, 0)).unwrap();
   let other = serde_json::to_value(reversed.threads("chain1", None, 0)).unwrap();
   assert_eq!(one, other);
+}
+
+#[test]
+fn a_read_of_a_life_told_out_of_order_takes_no_copy_of_its_acts() {
+  // A life of the daemon holds some hundred thousand acts, and its host was told some of them out
+  // of order: each read of its threads, its desk and its cards orders them, and a copy of each act
+  // there held gigabytes for a moment. So the read of a life told out of order costs what the
+  // read of the same life told in order costs, whatever its acts weigh. Each time is the least of
+  // several runs, measured in this one run.
+  let word = format!("x = '{}'", "x".repeat(1 << 17));
+  let rungs =
+    (1..=250).map(|n| json!(["rung", format!("rung{n}"), "operator", "chain2", word, "", ""]));
+  let chains = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "Fix the setup.", ""]),
+    json!(["chain", "chain2", "operator", "", "worker", ""]),
+  ];
+  let acts = folded(chains.into_iter().chain(rungs));
+  let mut told = Held::default();
+  for act in &acts {
+    told.heard(act);
+  }
+  let mut reversed = Held::default();
+  for act in acts.iter().rev() {
+    reversed.heard(act);
+  }
+  let least = |held: &Held| {
+    let runs = (0..7).map(|_| {
+      let at = Instant::now();
+      black_box((held.threads("chain1", None, 0), held.desk(&[]), held.cards()));
+      at.elapsed()
+    });
+    runs.min().unwrap_or_default()
+  };
+  let (ordered, unordered) = (least(&told), least(&reversed));
+  assert!(unordered < ordered * 3, "{unordered:?} out of order against {ordered:?} in order");
 }
 
 #[test]
