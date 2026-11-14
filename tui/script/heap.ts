@@ -11,7 +11,6 @@
 import { heapStats } from "bun:jsc";
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { isDone } from "furb/life";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
@@ -68,14 +67,18 @@ export async function hold(record: string, folder: string, before = heapNow()): 
   const screen = await createTestRenderer({ width: 152, height: 46, exitSignals: [] });
   const app = new App(screen.renderer, session, { quit() {}, workspaces: library });
   app.render();
-  // The feed lays out its cards over a few frames, after which it holds the whole height of the life. The window hears
-  // the life as the daemon sends it, so its last acts end a moment after the feed stands still, and the measure starts
-  // once no act is open: a frame of the scroll back would else show an act that the first frame showed running.
-  const open = () => session.activity.some((act) => !isDone(act));
-  for (let k = 0, height = -1, still = 0; k < 600 && (still < 20 || open()); k++) {
+  // The life stands, so the daemon holds each of its moments, while the window still hears the life as the daemon sends
+  // it, and the session reads the acts of each batch of facts in a read of its own. The feed is whole once the window
+  // heard the fact of the last moment and the session read its acts, with the ladder that the frame asked for, and
+  // once the feed laid out its cards, which takes a few frames. A measure that starts before shows a part of the feed
+  // at the first scroll and more of it at the scroll back.
+  const tip = (await session.host.moments()).at(-1) ?? 0;
+  const whole = () => session.host.seq >= tip && !session.loading;
+  for (let height = -1, still = 0; still < 20 || !whole(); ) {
     still = app.scroll.scrollHeight === height ? still + 1 : 0;
     height = app.scroll.scrollHeight;
     await screen.renderOnce();
+    await session.laddersRead();
     await Bun.sleep(50);
   }
   const seconds = (performance.now() - began) / 1000;
