@@ -57,7 +57,7 @@ async function lived(directory: string, name: string): Promise<string> {
     await engine.rung({ word: 'write(Text("note.txt", "x"))\nawait bash("echo hi")', on: engine.root }),
   );
   await first.host.dispose();
-  // The life ends with its checkpoint once its window let it go, and the record is whole then.
+  // The life ends with its image once its window let it go, and the record is whole then.
   await ended(record);
   return record;
 }
@@ -74,7 +74,7 @@ async function drifting(record: string): Promise<void> {
 }
 
 /** The record as another engine made it, which it names, or which it does not name, as a crash of its life leaves it:
- * with no checkpoint at its tip, from which this build would go on. A life that ends writes its checkpoint. */
+ * with no checkpoint at its tip, from which this build would go on. */
 async function made(record: string, named: boolean): Promise<void> {
   const text = (await readFile(record, "utf8"))
     .split("\n")

@@ -54,7 +54,8 @@ API of its own:
   make, as `Ear::image` and `Ear::imaged` say, and the part of the host of the life, which that host gives and takes
   back before the life loads the image. It is a cache: its key names the tip of the record, the dump version of
   monty, the texts of the build, whether the scratch directory of the record holds a file, and the digest of its
-  body, and a life that keeps its record drops an image that does not agree. A life of the command line or of the
+  body, and a life that keeps its record drops the image once it stands on the record by the record, so a read and
+  an open that fails leave it. A life of the command line or of the
   host that keeps its record ends with its image, and writes no checkpoint there. The next life of the same build
   on the same ears opens from it: it runs no boot, reads no entry and says no stand, and each ear takes each act that
   the ear before it held in flight as an act that an earlier life took: it takes a reply, a wait or a prompt again,

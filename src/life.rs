@@ -442,7 +442,7 @@ impl Opening {
   /// its record opens by the record.
   fn image(&self, images: bool) -> Option<Image> {
     let record = self.record.as_deref().filter(|_| images && self.whole != Some(true))?;
-    image::read(Path::new(record), self.keeps())
+    image::read(Path::new(record))
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
@@ -588,6 +588,7 @@ impl Opening {
     if self.whole == Some(true) {
       self.reborn()?;
     }
+    let kept = self.record.as_ref().filter(|_| self.keeps()).map(PathBuf::from);
     let (record, ears) = self.parted(prepared, told)?;
     (told.0)(Stage::Seed, 0, 0);
     let boots = told.clone();
@@ -595,6 +596,11 @@ impl Opening {
     let mut engine = Engine::booting(record.clone(), host.into_iter().chain(ears), replayed)?;
     if let Some(no) = engine.raised() {
       return Err(no.clone());
+    }
+    // The life stands on its record by the record, so the image beside it is of no life that
+    // goes on.
+    if let Some(record) = &kept {
+      image::drop_of(record);
     }
     // A resume returns to the state at the tip of the record, so the work that the stop cut goes
     // on with no wake.
@@ -618,10 +624,10 @@ impl Opening {
   /// does not load: its ears are not those of this life, no life goes on from it on the record,
   /// as [`world::stored_after`] says,
   /// monty does not load its session, or the host does not stand on its part, which it is asked
-  /// last, so a host that takes its part opens from the image. A life that keeps then drops the
-  /// image, and the life opens
-  /// by its record, on what it waits for again with no image. The ears come back too when no
-  /// image agrees with the record, with what the life waited for, on which it opens by its record.
+  /// last, so a host that takes its part opens from the image. The life then opens by its record,
+  /// on what it waits for again with no image, and a life that keeps drops the image once it
+  /// stands. The ears come back too when no image agrees with the record, with what the life
+  /// waited for, on which it opens by its record.
   fn imaged(
     &self,
     host: Ears,
@@ -649,7 +655,6 @@ impl Opening {
     let loads = known && goes && (lacked.is_empty() || !self.works());
     let sand = loads.then(|| image.half.sand(image.session()).ok()).flatten();
     let Some(sand) = sand.filter(|_| stands(image.host())) else {
-      path.map(image::drop_of);
       return Ok(Err((host, None)));
     };
     ears.extend(lacked.into_iter().map(|name| (name, silent())));

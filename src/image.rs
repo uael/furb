@@ -1,7 +1,8 @@
 //! The image of a life beside its record, `<record>.image`: the state that the replay of the record
 //! gives at its tip, kept so that a later life of the same build opens with no replay. It is a
-//! cache: it is derived from the record and checked against it, and a reader drops an image that
-//! does not agree, so the open then goes by the record. The record holds no fact of it.
+//! cache: it is derived from the record and checked against it, and a reader takes no image that
+//! does not agree, so the open then goes by the record, and a life that keeps the record drops the
+//! image once it stands so. The record holds no fact of it.
 //!
 //! The file holds its key, one line of JSON, then its body. The key names the tip of
 //! the record that the life stood at, the shape of the body, the dump version of monty, the digest
@@ -18,7 +19,7 @@
 //! names: a life that went on from the image and wrote no later one, as a life that crashed, kept
 //! them. The life that opens from the image says them again, as a boot says a record again, so a
 //! crash costs its tail alone. A checkpoint or a fact that names an engine after the image is a
-//! birth of its own, which no life of the image went on to: the image is then dropped.
+//! birth of its own, which no life of the image went on to: the image agrees no more.
 
 use std::{
   fmt::Display,
@@ -131,23 +132,20 @@ fn path(record: &Path) -> PathBuf {
 
 /// The image of a record, when one stands beside it that this build reads and that names the
 /// record as it stands now, as far as the tip of the life that wrote it. A record that is no file
-/// of lines has none. A life that keeps
-/// the record drops an image that does not agree, and a life that only reads leaves it, since the
-/// life that keeps the record may write the next one meanwhile.
-pub(crate) fn read(record: &Path, keeps: bool) -> Option<Image> {
+/// of lines has none. The read changes no file: an image that does not agree stays until a life
+/// that keeps the record stands on it by the record, as [`drop_of`] says.
+pub(crate) fn read(record: &Path) -> Option<Image> {
   if !matches!(Format::of(record), Format::Lines) {
     return None;
   }
-  let held = fs::read(path(record)).ok()?;
-  let image = agreed(record, held);
-  if image.is_none() && keeps {
-    drop_of(record);
-  }
-  image
+  agreed(record, fs::read(path(record)).ok()?)
 }
 
-/// The image of a record, dropped. One that cannot go is refused again at the next open, until a
-/// later one takes its place.
+/// The image of a record, dropped, once a life that keeps the record stands on it by the record:
+/// that life goes on from no image, so none is the image of what it keeps. A life that only reads
+/// the record, and one whose open fails, as on a record that drifts, leaves each file beside the
+/// record as it was. One that cannot go is refused again at the next open, until a later one takes
+/// its place.
 pub(crate) fn drop_of(record: &Path) {
   fs::remove_file(path(record)).ok();
 }
