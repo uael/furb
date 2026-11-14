@@ -650,8 +650,10 @@ impl Opening {
       image.half.names().filter(|name| !given(name)).map(str::to_owned).collect();
     let known = host.iter().chain(&ears).all(|one| image.half.names().any(|name| name == one.0));
     let loads = known && goes && (lacked.is_empty() || !self.works());
-    let sand = loads.then(|| image.half.sand(image.session()).ok()).flatten();
-    let Some(sand) = sand.filter(|_| stands(image.host())) else {
+    let session = loads.then(|| image.session().ok()).flatten();
+    let sand = session.and_then(|session| image.half.sand(&session).ok());
+    let stood = |_: &_| image.host().is_ok_and(|part| stands(&part));
+    let Some(sand) = sand.filter(stood) else {
       return Ok(Err((host, None)));
     };
     ears.extend(lacked.into_iter().map(|name| (name, silent())));

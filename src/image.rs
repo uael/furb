@@ -114,26 +114,40 @@ impl Key {
   }
 }
 
-/// An image that agrees with its record: its half of the host, its session and the part of the
-/// host of the life in the body, and the bytes of the record at the tip that it names, which each
-/// entry that a later life kept stands after.
+/// An image that agrees with its record: its half of the host, the file that holds its session and
+/// the part of the host of the life, with where each stands in it, and the bytes of the record at
+/// the tip that it names, which each entry that a later life kept stands after. The image holds no
+/// byte of its file: a session and a part of the host are each as large as the life, so each is
+/// read from the file when it is asked for, and the part of the host as it is parsed.
 pub(crate) struct Image {
   pub(crate) half: Half,
   pub(crate) bytes: u64,
-  file: Vec<u8>,
-  session: Range<usize>,
-  host: usize,
+  file: File,
+  session: Range<u64>,
+  host: Range<u64>,
 }
 
 impl Image {
   /// The session of the image, as monty loads it.
-  pub(crate) fn session(&self) -> &[u8] {
-    &self.file[self.session.clone()]
+  pub(crate) fn session(&self) -> io::Result<Vec<u8>> {
+    let mut session = Vec::new();
+    self.part(&self.session)?.read_to_end(&mut session)?;
+    Ok(session)
   }
 
-  /// The part of the host of the life, as that host gave it to [`keep`].
-  pub(crate) fn host(&self) -> &[u8] {
-    &self.file[self.host..]
+  /// The part of the host of the life, as that host gave it to [`keep`]. It is read whole, since a
+  /// parse of JSON from a reader takes its bytes one at a time, several times slower.
+  pub(crate) fn host(&self) -> io::Result<Vec<u8>> {
+    let mut host = Vec::new();
+    self.part(&self.host)?.read_to_end(&mut host)?;
+    Ok(host)
+  }
+
+  /// The bytes of a part of the file.
+  fn part(&self, part: &Range<u64>) -> io::Result<impl Read + '_> {
+    let mut file = &self.file;
+    file.seek(SeekFrom::Start(part.start))?;
+    Ok(file.take(part.end - part.start))
   }
 }
 
@@ -150,7 +164,7 @@ pub(crate) fn read(record: &Path) -> Option<Image> {
   if !matches!(Format::of(record), Format::Lines) {
     return None;
   }
-  agreed(record, fs::read(path(record)).ok()?)
+  agreed(record, File::open(path(record)).ok()?).ok().flatten()
 }
 
 /// The image of a record, dropped, once a life that keeps the record stands on it by the record:
@@ -174,19 +188,29 @@ pub fn agrees(record: &Path) -> bool {
   read.is_ok() && serde_json::from_slice::<Key>(&key).is_ok_and(|key| key.stands(record))
 }
 
-/// The image that the bytes of a file hold, when its key is the key of its body at the bytes of
-/// the record that it names.
-fn agreed(record: &Path, file: Vec<u8>) -> Option<Image> {
-  let end = file.iter().position(|byte| *byte == b'\n')?;
-  let key: Key = serde_json::from_slice(&file[..end]).ok()?;
-  let body = file.get(end + 1..)?;
-  if key.parts.body != format!("{:x}", Sha256::digest(body)) || !key.stands(record) {
-    return None;
+/// The image that a file holds, when its key is the key of its body at the bytes of the record that
+/// it names. The digest of the body is read in one pass that keeps no byte of it.
+fn agreed(record: &Path, file: File) -> io::Result<Option<Image>> {
+  let mut read = BufReader::with_capacity(BUFFER, file);
+  let mut key = Vec::new();
+  let start = read.read_until(b'\n', &mut key)? as u64;
+  let Ok(key) = serde_json::from_slice::<Key>(&key) else { return Ok(None) };
+  let mut summed = Summed::new(io::sink());
+  let end = start + io::copy(&mut read, &mut summed)?;
+  if key.parts.body != format!("{:x}", summed.digest.finalize()) || !key.stands(record) {
+    return Ok(None);
   }
-  let session = end + 1..(end + 1).checked_add(key.parts.session)?;
-  let host = session.end.checked_add(key.parts.half)?;
-  let half = serde_json::from_slice(file.get(session.end..host)?).ok()?;
-  Some(Image { half, bytes: key.bytes, file, session, host })
+  let size = |bytes: usize| u64::try_from(bytes).unwrap_or(u64::MAX);
+  let session = start..start.saturating_add(size(key.parts.session));
+  let host = session.end.saturating_add(size(key.parts.half))..end;
+  if host.start > end {
+    return Ok(None);
+  }
+  let mut file = read.into_inner();
+  file.seek(SeekFrom::Start(session.end))?;
+  let half = BufReader::new((&file).take(host.start - session.end));
+  let Ok(half) = serde_json::from_reader(half) else { return Ok(None) };
+  Ok(Some(Image { half, bytes: key.bytes, file, session, host }))
 }
 
 /// The image of the life of an engine, written beside its record, which stands at its tip: each
