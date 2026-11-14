@@ -240,6 +240,26 @@ fn a_record_names_its_engine_and_reads_its_log_while_the_log_agrees() {
 }
 
 #[test]
+fn a_log_agrees_with_a_record_that_ends_with_a_checkpoint_that_no_life_wrote() {
+  let at = place("sealed");
+  let stand = "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n";
+  let checkpoint = "[[\"checkpoint\",\"chain1\",\"store\",{}]]\n";
+  let log = "{\"entries\":0}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n[\"keep\",\"\",1]\n";
+  fs::write(format!("{}.log", at.display()), log).unwrap();
+  // The record of a life, then the checkpoint that `furb checkpoint` keeps after it: the log holds
+  // no line of keep for it, and it holds each fact of the record.
+  fs::write(&at, stand).unwrap();
+  assert!(retold(&at).unwrap().logged);
+  fs::write(&at, format!("{stand}{checkpoint}{checkpoint}")).unwrap();
+  let read = retold(&at).unwrap();
+  assert!(read.logged, "a checkpoint is no fact, so the log lacks none");
+  assert_eq!(shown(&filed(&read)), ["['stand', 'stand1', 'operator', 'chain1']".to_owned()]);
+  // An entry of another kind that the log does not count is a fact that the log lacks.
+  fs::write(&at, format!("{stand}{checkpoint}{stand}")).unwrap();
+  assert!(!retold(&at).unwrap().logged);
+}
+
+#[test]
 fn a_kept_rung_with_a_word_runs_it_once_the_gate_lets_it_run() {
   let kept = facts(&[
     OPENS[0],

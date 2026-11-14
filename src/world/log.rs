@@ -37,6 +37,7 @@ use std::{
   fmt::Display,
   fs::{File, OpenOptions},
   io::{BufRead, BufReader, BufWriter, Write},
+  ops::RangeInclusive,
   path::{Path, PathBuf},
   rc::Rc,
 };
@@ -471,13 +472,11 @@ impl Drop for Log {
 pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
   let path = path.as_ref();
   let record = kept(path)?;
-  let asked: HashSet<String> = record
-    .iter()
-    .filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?))
-    .filter(Fact::question)
-    .map(|one| one.about().to_owned())
-    .collect();
-  if !agrees(path, record.len(), &asked) {
+  let facts = record.iter().map(|entry| Fact::of(*entry.as_ref().items()?.first()?));
+  let last = facts.clone().fold(0, |before, fact| sealed(before, fact.as_ref()));
+  let asked: HashSet<String> =
+    facts.flatten().filter(Fact::question).map(|one| one.about().to_owned()).collect();
+  if !agrees(path, record.len(), &asked, last) {
     return Ok(None);
   }
   let Ok(text) = fs::read_to_string(beside(path, ".log")) else {
@@ -492,10 +491,19 @@ pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
   Ok(Some(facts))
 }
 
-/// Whether the log of the record at a path agrees with a record of that many entries and of those questions, as
-/// [`logged`] reads it, which the caller read once.
-pub(crate) fn agrees(path: &Path, entries: usize, asked: &HashSet<String>) -> bool {
-  agreed(path, entries, asked, false)
+/// Whether the log of the record at a path agrees with a record of that many entries and of those
+/// questions, as [`logged`] reads it, which the caller read once. The record ends with `sealed`
+/// checkpoints: a checkpoint is no fact, and one that no life wrote, as the one of
+/// `furb checkpoint`, has no line of keep, so a log that lacks the lines of keep of those entries
+/// alone still holds each fact of the record.
+pub(crate) fn agrees(path: &Path, entries: usize, asked: &HashSet<String>, sealed: usize) -> bool {
+  agreed(path, entries.saturating_sub(sealed)..=entries, asked, false)
+}
+
+/// How many checkpoints end a record, given each kept fact of it in order: the count before a
+/// fact, and after it.
+pub(crate) fn sealed(before: usize, fact: Option<&Fact>) -> usize {
+  if fact.is_some_and(|one| one.kind() == checkpoint::CHECKPOINT) { before + 1 } else { 0 }
 }
 
 /// Whether the lines of the log of the record at a path, as far as the line that counts an entry
@@ -503,7 +511,7 @@ pub(crate) fn agrees(path: &Path, entries: usize, asked: &HashSet<String>) -> bo
 /// record takes an entry before its log takes the line of it, so the log of a life that runs stands
 /// behind its record, and agrees with it only so far.
 pub(crate) fn agrees_so_far(path: &Path, entries: usize, asked: &HashSet<String>) -> bool {
-  agreed(path, entries, asked, true)
+  agreed(path, entries..=entries, asked, true)
 }
 
 /// How many entries of a record the lines of the log at a path count: those of its head and one
@@ -520,8 +528,10 @@ pub(crate) fn counted(log: &Path) -> usize {
 /// the record held, its lines of keep count the others in order, each line is JSON but a last one that a crash tore,
 /// and it shows each question of the record. Each line is read from its head alone, one at a time, and no fact is
 /// made. When `past` says so, the log may count entries past those of the record, and its lines
-/// before the first of them are the ones read.
-fn agreed(path: &Path, record: usize, asked: &HashSet<String>, past: bool) -> bool {
+/// before the first of them are the ones read. The record holds the last of `counts` entries, and
+/// the log may count as few as the first of them, when the entries that it lacks are no facts.
+fn agreed(path: &Path, counts: RangeInclusive<usize>, asked: &HashSet<String>, past: bool) -> bool {
+  let record = *counts.end();
   let Ok(file) = File::open(beside(path, ".log")) else { return false };
   let (mut lines, mut asked) = (BufReader::with_capacity(1 << 20, file), asked.clone());
   let mut line = String::new();
@@ -565,7 +575,7 @@ fn agreed(path: &Path, record: usize, asked: &HashSet<String>, past: bool) -> bo
       Line::Head | Line::Other => {}
     }
   }
-  asked.is_empty() && entries == record
+  asked.is_empty() && counts.contains(&entries)
 }
 
 #[cfg(test)]

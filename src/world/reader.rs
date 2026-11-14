@@ -40,7 +40,7 @@ use crate::{
 
 use super::{
   beside,
-  log::{KEEP, Line, agrees, agrees_so_far, counted, keep},
+  log::{KEEP, Line, agrees, agrees_so_far, counted, keep, sealed},
   made,
   store::{MADE, Schema, each},
 };
@@ -159,13 +159,15 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
     return Ok(found);
   }
   let (mut maker, mut entries, mut last) = (None, 0, None);
-  let (mut asked, mut makers) = (HashSet::new(), Makers::default());
+  let (mut asked, mut makers, mut ends) = (HashSet::new(), Makers::default(), 0);
   each(path, &mut |entry| {
     let one = slice::from_ref(&entry);
     if maker.is_none() {
       maker = made(one);
     }
-    if let Some(fact) = kept(&entry) {
+    let fact = kept(&entry);
+    ends = sealed(ends, fact.as_ref());
+    if let Some(fact) = fact {
       makers.hear(&fact);
       if fact.question() {
         asked.insert(fact.about().to_owned());
@@ -174,7 +176,7 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
     entries += 1;
     last = Some(entry);
   })?;
-  let logged = agrees(path, entries, &asked);
+  let logged = agrees(path, entries, &asked, ends);
   let last = last.as_ref().map(digest);
   // Each retelling writes under names of its own, so two readers that retell one record at once,
   // as two windows of a life whose log let go of its facts, never write over each other.
