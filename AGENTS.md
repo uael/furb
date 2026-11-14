@@ -49,6 +49,13 @@ API of its own:
   replays no word on another engine, goes on with the engine and the Kernel of this build, and opens at the exact state
   of its tip. A tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
   read only, and nothing forks it into a new life.
+- `src/image.rs` holds the image of a life, `<record>.image` beside its record: the session that monty dumps between
+  two runs, and the half of the host, which `src/engine/image.rs` gives, with what each ear gives a fresh ear of its
+  make, as `Ear::image` and `Ear::imaged` say. It is a cache: its key names the tip of the record, the dump version of
+  monty, the texts of the build and the digest of its body, and a life that keeps its record drops an image that does
+  not agree. A life of the command line that keeps its record ends with its image, and the next life of the same build
+  on the same ears opens from it: it runs no boot, reads no entry and says no stand, and each ear takes each act that
+  the ear before it held in flight as an act that an earlier life took. Each other open goes by the record.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
   engine and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again

@@ -14,6 +14,7 @@ pub mod checkpoint;
 pub mod ear;
 pub mod engine;
 pub mod fact;
+pub mod image;
 pub mod life;
 mod minify;
 mod sand;

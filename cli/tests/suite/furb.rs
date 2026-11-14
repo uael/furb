@@ -228,8 +228,9 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
     .collect();
   let stands = kinds.iter().filter(|kind| *kind == "\"stand\"").count();
   assert_eq!(
-    stands, 3,
-    "each life that keeps keeps its stand, and the setup keeps the stand it tells: {kinds:?}"
+    stands, 2,
+    "the first life keeps its stand and the stand that its setup tells, and the second opens \
+     from the image of the first, with no birth: {kinds:?}"
   );
   let before = fs::read(yard.record()).expect("the record");
   assert_eq!(
@@ -248,6 +249,33 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   );
   assert!(!said.contains("remember()"), "an inspection enables no extension: {said}");
   assert_eq!(fs::read(yard.record()).expect("the record"), before, "an inspection keeps nothing");
+}
+
+/// The law of a checkpoint holds for an image too: the facts after a birth come from a life born
+/// on it. A life that opens from its image is the life that the replay of the record gives, so
+/// the entries that it writes replay in a life that opens by the record.
+#[test]
+fn a_life_goes_on_from_its_image_and_its_record_replays_with_no_drift() {
+  let yard = Yard::new("imaged");
+  assert_eq!(printed(yard.kept(&["run", "k = 41"]), ""), "None\n");
+  let image = PathBuf::from(format!("{}.image", yard.record().display()));
+  assert!(image.is_file(), "a life that keeps its record ends with its image");
+  let lines = || fs::read_to_string(yard.record()).expect("the record").lines().count();
+  let born = lines();
+  assert_eq!(printed(yard.kept(&["run", "k += 1"]), ""), "None\n");
+  assert_eq!(lines(), born + 2, "a life that opens from its image says its rung and no birth");
+  let turns = || {
+    let mut turns = yard.furb(&["turns", "--record"]);
+    turns.arg(yard.record());
+    printed(turns, "")
+  };
+  let imaged = turns();
+  fs::write(&image, "an image that names no tip").expect("a torn image");
+  assert_eq!(turns(), imaged, "the turns of the image are the turns of the record");
+  assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "42\n");
+  let held = fs::read(&image).expect("the image of the life that opened by the record");
+  assert!(held.starts_with(b"{\"shape\":"), "a life that keeps drops an image that does not agree");
+  assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "43\n");
 }
 
 #[test]

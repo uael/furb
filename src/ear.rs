@@ -53,6 +53,8 @@ use futures::{
   Stream, StreamExt,
   stream::{LocalBoxStream, SelectAll},
 };
+use serde::{Serialize, de::DeserializeOwned};
+use serde_json::{Value, json};
 use tokio::{
   runtime::Handle,
   task::{AbortHandle, JoinError},
@@ -178,6 +180,19 @@ pub trait Ear {
   fn restart(&mut self) -> bool {
     false
   }
+
+  /// What a fresh ear of the same make needs to stand where this ear stands, for the image of its
+  /// life: the acts that it took and did not end, and what it keeps of the facts that it heard.
+  /// Nothing when the ear cannot say it, as a generator of a host, and a life with such an ear
+  /// writes no image.
+  fn image(&self) -> Option<Value> {
+    None
+  }
+
+  /// What [`Ear::image`] gave of an ear of an earlier process, given to this fresh ear before it
+  /// hears anything: it stands where that ear stood, takes each act that the ear held as an act
+  /// that an earlier life took, and reads no fact of the record.
+  fn imaged(&mut self, _part: Value) {}
 }
 
 /// What an ear adds to the ear that [`With`] wraps: its end of a run, its restart and what it
@@ -244,6 +259,14 @@ impl<H: Hooks> Ear for With<H> {
   fn unkept(&self) -> usize {
     self.hooks.unkept(&*self.ear)
   }
+
+  fn image(&self) -> Option<Value> {
+    self.ear.image()
+  }
+
+  fn imaged(&mut self, part: Value) {
+    self.ear.imaged(part);
+  }
 }
 
 /// What an ear says of its own accord: a saying, or a verb of the engine with its words, which the life answers.
@@ -267,6 +290,19 @@ pub enum Next<W> {
 /// end together, so a side that leaves something never finds the other gone, and what it left
 /// waits to be taken.
 type Queue<T> = Rc<RefCell<VecDeque<T>>>;
+
+/// What both sides of an ear of rust hold for the image of its life: each question that the ear
+/// heard and that is not done, the acts among them that it started, which are its acts in flight,
+/// the acts that an earlier life took and that no wake put to it yet, how its body gives what it
+/// keeps, and what an image gave of that until the body takes it.
+#[derive(Default)]
+struct Imaged {
+  asked: HashMap<String, Fact>,
+  started: Vec<String>,
+  resumed: HashSet<String>,
+  gives: Option<Box<dyn Fn() -> Option<Value>>>,
+  given: Option<Value>,
+}
 
 /// The first thing of a queue, taken.
 fn take<T>(queue: &Queue<T>) -> Option<T> {
@@ -292,7 +328,7 @@ pub struct Co<W = ()> {
   unsaid: Rc<Cell<usize>>,
   works: SelectAll<LocalBoxStream<'static, W>>,
   taken: HashMap<String, oneshot::Sender<()>>,
-  resumed: HashSet<String>,
+  imaged: Rc<RefCell<Imaged>>,
   heard: VecDeque<Fact>,
   driven: bool,
   began: bool,
@@ -343,18 +379,45 @@ impl<W: 'static> Co<W> {
   /// earlier life took it, a started that the journal says again is of an act that an earlier life
   /// took, and such an act, put to the ear, is resumed.
   fn noted(&mut self, fact: Fact) -> Next<W> {
+    let mut imaged = self.imaged.borrow_mut();
     match fact.kind() {
       "done" => {
         self.taken.remove(fact.about());
-        self.resumed.remove(fact.about());
+        imaged.resumed.remove(fact.about());
+        imaged.asked.remove(fact.about());
+        imaged.started.retain(|one| one != fact.about());
       }
       "started" if fact.by() == "journal" => {
-        self.resumed.insert(fact.about().to_owned());
+        imaged.resumed.insert(fact.about().to_owned());
       }
-      _ if fact.question() && self.resumed.contains(fact.about()) => return Next::Resumed(fact),
+      _ if fact.question() => {
+        imaged.asked.insert(fact.about().to_owned(), fact.clone());
+        if imaged.resumed.contains(fact.about()) {
+          return Next::Resumed(fact);
+        }
+      }
       _ => {}
     }
     Next::Heard(fact)
+  }
+
+  /// What the body keeps of the facts that it heard, which the image of the life holds: what an
+  /// image gave of it to this fresh ear, or else `first`. The body holds no borrow of it across
+  /// an await, so the life reads it between two runs.
+  pub fn keeps<S: Serialize + DeserializeOwned + 'static>(
+    &mut self,
+    first: S,
+  ) -> Result<Rc<RefCell<S>>, Fault> {
+    let mut imaged = self.imaged.borrow_mut();
+    let kept = match imaged.given.take() {
+      Some(given) => serde_json::from_value(given)
+        .map_err(|no| Fault::refused(format!("the image holds another state of the ear: {no}")))?,
+      None => first,
+    };
+    let kept = Rc::new(RefCell::new(kept));
+    let held = Rc::clone(&kept);
+    imaged.gives = Some(Box::new(move || serde_json::to_value(&*held.try_borrow().ok()?).ok()));
+    Ok(kept)
   }
 
   /// What the coroutine told since, taken, and what the verb the body called last came to, when it came. The coroutine
@@ -397,6 +460,14 @@ impl<W: 'static> Co<W> {
 
   /// What the ear says or tells, to the coroutine, which counts it until it gives it to the life.
   fn spoke(&mut self, spoken: Spoken) {
+    if let Spoken::Saying(saying) = &spoken
+      && saying.kind() == "started"
+    {
+      let mut imaged = self.imaged.borrow_mut();
+      if !imaged.started.iter().any(|one| one == saying.about()) {
+        imaged.started.push(saying.about().to_owned());
+      }
+    }
     self.unsaid.set(self.unsaid.get() + 1);
     self.spoken.borrow_mut().push_back(spoken);
   }
@@ -420,6 +491,7 @@ struct Coroutine {
   answer: Option<Result<Object, Fault>>,
   ended: Option<Step>,
   given: bool,
+  imaged: Rc<RefCell<Imaged>>,
 }
 
 impl Ear for Coroutine {
@@ -456,6 +528,38 @@ impl Ear for Coroutine {
 
   fn answered(&mut self, got: Result<Object, Fault>) {
     self.answer = Some(got);
+  }
+
+  /// Each act in flight goes out as the question that the ear heard.
+  fn image(&self) -> Option<Value> {
+    let imaged = self.imaged.borrow();
+    let asked = imaged.started.iter().filter_map(|id| imaged.asked.get(id));
+    let flight =
+      asked.map(|fact| serde_json::to_value(&fact.0).ok()).collect::<Option<Vec<_>>>()?;
+    let resumed: Vec<&String> = imaged.resumed.iter().collect();
+    let kept = match &imaged.gives {
+      Some(gives) => gives()?,
+      None => Value::Null,
+    };
+    Some(json!({ "flight": flight, "resumed": resumed, "kept": kept }))
+  }
+
+  /// The body is not polled yet, so it finds each act in flight as the first facts that it hears,
+  /// each an act that an earlier life took, and its state where it asks for what it keeps.
+  fn imaged(&mut self, mut part: Value) {
+    let mut imaged = self.imaged.borrow_mut();
+    let names = |part: &Value| -> Vec<String> {
+      let held = part.as_array().into_iter().flatten();
+      held.filter_map(|one| one.as_str().map(str::to_owned)).collect()
+    };
+    imaged.resumed.extend(names(&part["resumed"]));
+    let flight = part["flight"].take();
+    let flight = serde_json::from_value::<Vec<Object>>(flight).unwrap_or_default();
+    for fact in flight.into_iter().filter_map(Fact::owned) {
+      imaged.resumed.insert(fact.about().to_owned());
+      self.events.borrow_mut().push_back(Event::Heard(fact));
+    }
+    imaged.given = Some(part["kept"].take()).filter(|kept| !kept.is_null());
   }
 }
 
@@ -555,13 +659,14 @@ where
 {
   let (events, spoken) = (Queue::default(), Queue::default());
   let unsaid = Rc::new(Cell::new(0));
+  let imaged = Rc::new(RefCell::new(Imaged::default()));
   let co = Co {
     events: Rc::clone(&events),
     spoken: Rc::clone(&spoken),
     unsaid: Rc::clone(&unsaid),
     works: SelectAll::new(),
     taken: HashMap::new(),
-    resumed: HashSet::new(),
+    imaged: Rc::clone(&imaged),
     heard: VecDeque::new(),
     driven: false,
     began: false,
@@ -577,6 +682,7 @@ where
     answer: None,
     ended: None,
     given: false,
+    imaged,
   })
 }
 

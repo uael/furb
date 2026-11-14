@@ -122,7 +122,7 @@ impl Life {
 }
 
 /// Where an ear of the host stands, as its object in the sandbox steps it.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(super) enum At {
   /// Not yet born: its first step is its birth.
   Unborn,

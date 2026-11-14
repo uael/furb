@@ -29,6 +29,7 @@
 //! [`Line`] reads a line of a log from its head, and [`keep`] writes the line of keep, so the
 //! format of the log has this one home, which the reader of a record with no life shares.
 
+use serde::{Deserialize, Serialize};
 use std::{
   borrow::Cow,
   cell::RefCell,
@@ -121,10 +122,22 @@ pub(crate) fn logging(record: impl AsRef<Path>, last: &[Object], from: u64) -> B
   heard(Log::open(record.as_ref(), last, from))
 }
 
+/// The ear of [`log`] for a life that opens from its image, which reads no entry: the log goes on
+/// after its last line, with what the ear of the life before it knew of it.
+pub(crate) fn logging_on(record: impl AsRef<Path>) -> Box<dyn Ear> {
+  heard(Log::tipped(record.as_ref()))
+}
+
 /// The ear that writes a log.
 fn heard(mut log: Log) -> Box<dyn Ear> {
   let sink = Rc::clone(&log.sink);
   let ear = ear(move |mut co| async move {
+    let first = log.tip.take();
+    log.tip = co.keeps(first)?;
+    // A log that never took its place holds no line of the life before, so no line goes after.
+    if log.fresh.is_none() && !log.tip.borrow().placed {
+      log.sink.borrow_mut().out = None;
+    }
     loop {
       let a = hear(&mut co).await;
       match a.kind() {
@@ -188,13 +201,21 @@ struct Log {
   sink: Rc<RefCell<Sink>>,
   /// The file that a life writes the log again in, beside the log, until it keeps its first entry.
   fresh: Option<PathBuf>,
-  /// How many entries the record holds.
-  entries: usize,
-  /// Each name that a line of the log shows as an act, or that names no act.
-  seen: HashSet<String>,
+  /// What the ear knows of the lines of the log, which the image of the life holds.
+  tip: Rc<RefCell<Tip>>,
   /// The entries of the record about each act that an ear of the outside made, by the name of that act, in the order
   /// of the record, which the log writes when the life keeps its first entry and no line shows that act.
   owed: Vec<(String, Value)>,
+}
+
+/// What the ear of a log knows of its lines: how many entries the record holds, each name that a
+/// line of the log shows as an act, or that names no act, and whether the log stands at its path,
+/// which it does once the life kept an entry.
+#[derive(Default, Serialize, Deserialize)]
+struct Tip {
+  entries: usize,
+  seen: HashSet<String>,
+  placed: bool,
 }
 
 /// The lines of the log at a path that come before a checkpoint, with its head, and each name that
@@ -331,13 +352,12 @@ impl Log {
       path,
       sink: Self::sink(file.filter(|_| reads)),
       fresh: Some(fresh),
-      entries,
-      seen: HashSet::new(),
+      tip: Rc::new(RefCell::new(Tip { entries, ..Tip::default() })),
       owed: owed(made.iter().chain(last)),
     };
     match earlier {
       Some((at, mut text, seen)) => {
-        log.seen = seen;
+        log.tip.borrow_mut().seen = seen;
         for n in at + 1..=entries {
           text.push_str(&keep(n));
           text.push('\n');
@@ -349,6 +369,14 @@ impl Log {
       None => log.line(&serde_json::json!({ "entries": entries })),
     }
     log
+  }
+
+  /// The log of a record that goes on after its last line, for a life that opens from its image,
+  /// which gives the ear what it knows of the lines.
+  fn tipped(record: &Path) -> Self {
+    let path = beside(record, ".log");
+    let file = OpenOptions::new().append(true).open(&path).ok();
+    Self { path, sink: Self::sink(file), fresh: None, tip: Rc::default(), owed: Vec::new() }
   }
 
   /// The sink of a log file, when it opened.
@@ -369,12 +397,12 @@ impl Log {
     }
     let about = a.about();
     if a.question() {
-      if self.seen.insert(about.to_owned()) {
+      if self.tip.borrow_mut().seen.insert(about.to_owned()) {
         self.line(&outward(a.0.as_ref()));
       }
       return;
     }
-    if !about.is_empty() && self.seen.insert(about.to_owned()) {
+    if !about.is_empty() && self.tip.borrow_mut().seen.insert(about.to_owned()) {
       let made = co.call("get", vec![Object::string(about)], vec![]).await;
       if let Ok(made) = made.as_ref().map(Object::as_ref)
         && made.type_name() != "NoneType"
@@ -394,11 +422,11 @@ impl Log {
       .owed
       .iter()
       .map(|(about, _)| about.clone())
-      .filter(|one| !self.seen.contains(one))
+      .filter(|one| !self.tip.borrow().seen.contains(one))
       .collect();
     for (about, line) in mem::take(&mut self.owed) {
       if missed.contains(&about) {
-        self.seen.insert(about);
+        self.tip.borrow_mut().seen.insert(about);
         self.line(&line);
       }
     }
@@ -410,8 +438,12 @@ impl Log {
       // The next life truncates the file, so one that stays does no harm.
       fs::remove_file(&fresh).unwrap_or_default();
     }
-    self.entries += 1;
-    self.line(&keep(self.entries));
+    let entries = {
+      let mut tip = self.tip.borrow_mut();
+      (tip.entries, tip.placed) = (tip.entries + 1, self.live());
+      tip.entries
+    };
+    self.line(&keep(entries));
   }
 
   /// One line, written after each line that waits, or waiting with them when the file cannot take

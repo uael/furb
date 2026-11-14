@@ -16,7 +16,7 @@
 )]
 use std::{mem, time::Duration};
 
-use monty::{MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError};
+use monty::{Dump, MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError, Session, SessionRef};
 use monty_types::{
   CallArgs, CompileOptions, ExcType, MontyException, MontyUuid, NameLookupResult, NamedValues,
   OsFunctionCall, PrintWriter, ResourceLimits, ResourceTracker,
@@ -119,9 +119,29 @@ impl Sand {
   }
 
   /// How many runs the session began.
-  #[cfg_attr(not(test), expect(dead_code, reason = "only the tests call it"))]
   pub(crate) fn fed(&self) -> usize {
     self.fed
+  }
+
+  /// The session between two runs, as the image that monty dumps of it.
+  pub(crate) fn image(&self) -> Result<Vec<u8>, Fault> {
+    let State::Idle(repl) = &self.state else {
+      return Err(Fault::refused("a sandbox gives its image only between two runs"));
+    };
+    monty::dump("furb", None, &[], SessionRef::Idle(repl))
+      .map_err(|no| Fault::refused(format!("monty dumps no image: {no}")))
+  }
+
+  /// A sandbox on the session that monty loads from an image, which began `fed` runs. The image
+  /// holds the bound of a turn that the session held and no clock of the process, so the bound of
+  /// this process is set again.
+  pub(crate) fn of_image(image: &[u8], fed: usize) -> Result<Self, Fault> {
+    let loaded = Dump::load(image).map_err(|no| Fault::refused(no.to_string()))?;
+    let Session::Idle(mut repl) = loaded.state else {
+      return Err(Fault::refused("the image holds no session between two runs"));
+    };
+    repl.tracker_mut().set_max_turn_duration(turn());
+    Ok(Self { state: State::Idle(*repl), fed, bounded: true, applied: true })
   }
 
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.

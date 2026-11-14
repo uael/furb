@@ -34,6 +34,7 @@
 
 mod crossing;
 mod hosted;
+mod image;
 mod opening;
 mod plain;
 mod record;
@@ -56,6 +57,7 @@ pub use self::{
   record::CRASHES,
 };
 pub(crate) use self::{
+  image::Half,
   opening::Opened,
   record::{left, looping, settled},
 };

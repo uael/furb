@@ -308,7 +308,7 @@ async fn catalog(update: bool) -> Result<(), CliError> {
 async fn prompt(opening: Opening, shape: &str, message: String, to: &str) -> Result<(), CliError> {
   let mut life = Life::lived(opening).await?;
   let to = life::actor(to).await.name;
-  let id = if let Some(id) = life.again(shape, &message, &to) {
+  let id = if let Some(id) = life.again(shape, &message, &to)? {
     if life.paused(&id)? {
       life.engine.wake(&id)?;
     }
@@ -318,6 +318,7 @@ async fn prompt(opening: Opening, shape: &str, message: String, to: &str) -> Res
     life.engine.prompt(world::Shape::object(shape), with)?.id().to_owned()
   };
   say(life.settled(&id).await?.py_repr())?;
+  life.ended();
   Ok(())
 }
 
@@ -365,6 +366,7 @@ async fn run(opening: Opening, word: String) -> Result<(), CliError> {
   let with = verbs::Rung { word: Some(word), on: Some(life.root.clone()), ..Default::default() };
   let id = life.engine.rung(with)?.id().to_owned();
   say(life.settled(&id).await?.py_repr())?;
+  life.ended();
   Ok(())
 }
 

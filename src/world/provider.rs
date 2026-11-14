@@ -375,7 +375,8 @@ impl Provider {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the
       // life too.
       let life = uuid().map_err(|no| Fault::refused(no.to_string()))?;
-      let mut hearer = Hearer::new(self, life);
+      let stood = co.keeps(hearer::Stood::default())?;
+      let mut hearer = Hearer::new(self, life, stood);
       loop {
         hearer.answer(&mut co).await?;
         match co.next().await {

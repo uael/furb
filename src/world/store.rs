@@ -10,7 +10,7 @@ use std::{
   cell::RefCell,
   collections::VecDeque,
   ffi::OsStr,
-  fs::{File, OpenOptions, TryLockError, create_dir_all},
+  fs::{self, File, OpenOptions, TryLockError, create_dir_all},
   path::Path,
   rc::Rc,
   time::{Duration, SystemTime, UNIX_EPOCH},
@@ -129,10 +129,21 @@ pub(crate) fn stored(
     Format::Lines => {
       let mut store = Lines::open(path)?;
       let Last { entries, from, end, tail } = store.last(read, reached)?;
-      let (entries, ear) = kept_by(store, entries);
+      let (entries, ear) = kept_by(store, Some(entries));
       Ok((Last { entries, from, end, tail }, ear))
     }
   }
+}
+
+/// The ear that [`store`] gives for a life that opens from its image, under the lease of the
+/// record at a path, which reads no entry. The record is a file of lines that ends whole at the
+/// tip that the image names, since the life before kept each entry that it said, and it names its
+/// engine already. Nothing when the record does not end at those bytes, as when another life wrote
+/// after the image was read.
+pub(crate) fn stored_on(path: &Path, bytes: u64) -> Result<Option<Box<dyn Ear>>, Fault> {
+  let store = Lines::open(path)?;
+  let ends = fs::metadata(path).is_ok_and(|held| held.len() == bytes);
+  Ok(ends.then(|| kept_by(store, None).1))
 }
 
 /// The last entries of the record at a path, read with no lease and changed in nothing, as a later
@@ -450,18 +461,17 @@ enum Told {
 /// pass.
 pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let entries = store.entries()?;
-  Ok(kept_by(store, entries))
+  Ok(kept_by(store, Some(entries)))
 }
 
-/// The record and the ear of [`keeping`], for a store whose entries were read.
-fn kept_by(store: impl Store + 'static, entries: Vec<Object>) -> (Vec<Object>, Box<dyn Ear>) {
+/// The record and the ear of [`keeping`], for a store whose entries were read. A store that read
+/// none, of a record that names its engine, gives no record.
+fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Object>, Box<dyn Ear>) {
   let store = Held { store, waiting: VecDeque::new(), fault: None };
-  let entries: Vec<Object> = entries.into_iter().map(streamed).collect();
   let store = Rc::new(RefCell::new(store));
   let held = Rc::clone(&store);
-  // A record whose last checkpoint has no fact made after it is new to the build that goes on from it.
-  let new = entries.is_empty()
-    || checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
+  let new = read.as_deref().is_some_and(unnamed);
+  let entries: Vec<Object> = read.into_iter().flatten().map(streamed).collect();
   let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
     // What the ear told the operator last, and whether a try waits for its time.
     let (mut said, mut again, mut cut) = (Told::Room, false, held.borrow().store.cut());
@@ -518,6 +528,13 @@ fn kept_by(store: impl Store + 'static, entries: Vec<Object>) -> (Vec<Object>, B
     }
   });
   (entries, With::ear(kept, store))
+}
+
+/// Whether a record names no engine for the build that goes on from it: it holds no entry, or its
+/// last checkpoint has no fact made after it.
+fn unnamed(entries: &[Object]) -> bool {
+  entries.is_empty()
+    || checkpoint::last(entries).is_some_and(|at| made(&entries[at + 1..]).is_none())
 }
 
 /// The message that the record stopped growing, with the fault of the store.

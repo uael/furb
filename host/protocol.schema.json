@@ -4197,7 +4197,7 @@
         {
           "type": "string",
           "const": "find",
-          "description": "The record is read from its last checkpoint, which the read finds from the end of the record,\nfor the build of its last life: the bytes passed, of the bytes of the record. It is the first\nstage that the crate tells, at once, and the life then reads its settings and the catalog of\nits models in it."
+          "description": "The record is read from its last checkpoint, which the read finds from the end of the record,\nfor the build of its last life: the bytes passed, of the bytes of the record. It is the first\nstage that the crate tells, at once, and the life then reads its settings and the catalog of\nits models in it. A life that opens from its image reads no entry, and tells each byte passed\nonce the image agrees with the record."
         },
         {
           "type": "string",
@@ -4212,7 +4212,7 @@
         {
           "type": "string",
           "const": "seed",
-          "description": "The sandbox loads the engine, takes the data of the checkpoint, and the checkpointer makes the\nentries of it. It counts nothing."
+          "description": "The sandbox loads the engine, takes the data of the checkpoint, and the checkpointer makes the\nentries of it, or the sandbox loads the session of the image of the life, which then boots on\nno entry. It counts nothing."
         },
         {
           "type": "string",

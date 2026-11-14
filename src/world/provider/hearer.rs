@@ -1,14 +1,17 @@
 //! The ear of the provider: one method for each event that it hears, and the replies that it took.
 
 use std::{
+  cell::RefCell,
   collections::{HashMap, HashSet},
   path::PathBuf,
+  rc::Rc,
   sync::{Arc, PoisonError, RwLock},
 };
 
 use futures::{FutureExt, stream};
 use monty::ReplContinuationMode;
 use rig_core::completion::CompletionError;
+use serde::{Deserialize, Serialize};
 use tokio::{
   sync::{mpsc, watch as holding},
   time,
@@ -59,12 +62,19 @@ pub(super) struct Hearer {
   system: Arc<str>,
   native: Search,
   replies: Replies,
+  /// What the ear keeps of the stands that it heard, which the image of a life holds.
+  stood: Rc<RefCell<Stood>>,
+  /// The stand that the ear answers next with the standing, and whether a word made it.
+  stands: Option<(String, bool)>,
+}
+
+/// What the ear of the provider keeps of the stands that it heard.
+#[derive(Default, Serialize, Deserialize)]
+pub(super) struct Stood {
   /// Whether the ear heard a stand. The opening of the life loaded the settings just now, so the
   /// first stand, which the boot asks, reads them again only after it: a refresh there asks each
   /// program of a model, as the claude command line, a second time.
-  stood: bool,
-  /// The stand that the ear answers next with the standing, and whether a word made it.
-  stands: Option<(String, bool)>,
+  first: bool,
   /// The chains that the ear told which names left the catalog.
   lacked: HashSet<String>,
 }
@@ -74,7 +84,7 @@ pub(super) struct Hearer {
 pub(super) const WOKEN: u32 = 3;
 
 impl Hearer {
-  pub(super) fn new(provider: Provider, life: String) -> Self {
+  pub(super) fn new(provider: Provider, life: String, stood: Rc<RefCell<Stood>>) -> Self {
     let native = provider.search();
     let Provider {
       directory,
@@ -119,9 +129,8 @@ impl Hearer {
       system,
       native,
       replies: Replies::default(),
-      stood: false,
+      stood,
       stands: None,
-      lacked: HashSet::new(),
     }
   }
 
@@ -153,7 +162,7 @@ impl Hearer {
       return;
     }
     let word = fact::named(a.by(), "rung");
-    let first = !mem::replace(&mut self.stood, true);
+    let first = !mem::replace(&mut self.stood.borrow_mut().first, true);
     if let Some(refresh) = self.refresh.as_ref().filter(|_| !first && !word) {
       // Reading the settings asks each program of a model, which can take seconds, so the
       // stand awaits them as a task of the runtime of the ears, and every chain of the life
@@ -169,7 +178,7 @@ impl Hearer {
       );
       return;
     }
-    if !self.gone.is_empty() && self.lacked.insert(a.on().to_owned()) {
+    if !self.gone.is_empty() && self.stood.borrow_mut().lacked.insert(a.on().to_owned()) {
       told(co, a.on(), &departed(&about, &self.gone));
     }
     self.stands = Some((about, word));

@@ -24,6 +24,11 @@ use crate::{
 /// The next number a callable or a class goes out under, in this process.
 static NUMBERS: AtomicI64 = AtomicI64::new(1);
 
+/// No later callable of this process goes out under a number that the image of a life holds.
+pub(super) fn numbered_past(n: i64) {
+  NUMBERS.fetch_max(n.saturating_add(1), Ordering::Relaxed);
+}
+
 /// What the host holds of the sandbox, by which each value crosses.
 #[derive(Default)]
 pub(super) struct Crossing {
