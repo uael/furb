@@ -227,6 +227,9 @@ fn the_start_shows_what_waits_and_what_worked_while_no_window_was_open() {
   app.press("alt+a");
   app.press("ctrl+x");
   app.press("j");
+  // The page of the thread that opened came: it holds the second line of its message, which no
+  // card holds.
+  shows(&app, "┃ (the model works on it)");
   app.click(70, row(&app, " Resolved 1 ▸"));
   app.hover(70, row(&app, "where does the time go"));
   screen("start-selected", &app);

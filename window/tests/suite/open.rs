@@ -50,6 +50,12 @@ fn resting(app: &TestApp, titles: &[&str]) -> (Daemon, PathBuf) {
     peer.rested(&record(&daemon, at), &message(title), None);
   }
   open(app, vec![daemon.machine("mac")], homed(&daemon));
+  // The daemon ends once it holds no peer and no life, so the peer of the test goes only once the
+  // window holds the daemon and its cards.
+  for title in titles {
+    row(app, &title[..15]);
+  }
+  drop(peer);
   (daemon, go)
 }
 
@@ -230,6 +236,8 @@ fn an_open_that_fails_says_why_and_how_to_go_back_and_loses_no_draft() {
   assert!(!frame.contains("Opening"), "{frame}");
   let frame = shows(&app, "┃ and the replay");
   assert!(frame.contains("┃ a draft"), "{frame}");
+  // The machine says that no life holds the record: the card rests again.
+  shows(&app, "● now");
   screen("open-failed", &app);
   // The way back takes a click, as its key does, and lights under the pointer.
   let (x, y) = at(&app, "⎋ back", 0);

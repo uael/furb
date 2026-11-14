@@ -40,6 +40,12 @@ fn started() -> (TestApp, Daemon, PathBuf) {
   (app, daemon, sessions)
 }
 
+/// The frame of a window once the page of its open thread came: the block of the thread names the
+/// model of the test with its effort, which no card names.
+fn paged(app: &TestApp) -> String {
+  shows(app, "opus/high")
+}
+
 /// The text of the input sent.
 fn sent(app: &TestApp, text: &str) {
   app.paste(text);
@@ -78,7 +84,9 @@ fn a_message_starts_a_new_session_and_its_answer_shows_in_its_thread() {
   assert!(frame.contains("┃ how long does an open take"), "{frame}");
   assert!(frame.contains("┃ Reply to this thread"), "{frame}");
   shows(&app, "Two stages hold most");
+  // The card of the thread, which the model answered, as its machine tells it after the page.
   shows(&app, "FT furb-try");
+  shows(&app, "● now");
   screen("input-new-session", &app);
   assert_eq!(told(&daemon, &sessions), [format!("how long does an open take {ANSWERS}")]);
 }
@@ -96,11 +104,14 @@ fn three_enters_in_a_row_send_three_messages_in_order_and_the_up_arrow_cancels_n
   assert!(app.wait_until(PATIENCE, || all(told(&daemon, &sessions))));
   let words = ["one", "two", "three"].map(|word| format!("{word} {WORKS}"));
   assert_eq!(told(&daemon, &sessions), words);
+  // The card of the thread, which works, and its page came.
+  shows(&app, " Working 1");
+  paged(&app);
   // The up arrow moves in the input: the text stays, and the thread still works.
   app.paste("a draft");
   app.press("up");
   let frame = shows(&app, "┃ a draft");
-  assert!(frame.contains("Working"), "{frame}");
+  assert!(frame.contains(" Working 1") && !frame.contains("Stopped"), "{frame}");
   screen("input-in-order", &app);
 }
 
@@ -109,6 +120,7 @@ fn the_key_of_a_new_thread_turns_the_input_and_its_bar_and_a_reply_reaches_a_thr
   let (app, daemon, sessions) = started();
   sent(&app, &format!("where does the time go {WORKS}"));
   shows(&app, "Working · ⎋ ⎋ stop");
+  paged(&app);
   let hue = bar(&app);
   app.press("ctrl+n");
   let frame = shows(&app, "┃ Ask in a new thread");
@@ -170,6 +182,8 @@ fn a_refused_message_comes_back_to_the_input_with_why() {
   let refused = app.wait_until(PATIENCE, || !app.text().contains("[ Resolve ]"));
   let frame = app.text();
   assert!(refused && frame.contains("┃ how long does an open take"), "{frame}");
+  // The card of the record that the refused open left, as its machine tells it.
+  shows(&app, "BR broken");
   screen("input-refused", &app);
   assert!(frame.contains("┃ draft after"), "{frame}");
   assert!(!frame.contains("Reply to this thread"), "{frame}");
@@ -180,7 +194,9 @@ fn the_python_switch_runs_a_word_of_the_operator() {
   let (app, daemon, sessions) = started();
   sent(&app, &format!("how long does an open take {ANSWERS}"));
   shows(&app, "Two stages hold most");
+  // The card of the thread, which the model answered, as its machine tells it after the page.
   shows(&app, "FT furb-try");
+  shows(&app, "● now");
   let (x, y) = at(&app, "○ Python", 0);
   lights(&app, x, y);
   app.click(x, y);
@@ -208,6 +224,7 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   let (app, _daemon, _sessions) = started();
   sent(&app, &format!("where does the time go {WORKS}"));
   shows(&app, "Working · ⎋ ⎋ stop");
+  paged(&app);
   let (x, y) = at(&app, "This computer", 0);
   let x = x + 16;
   lights(&app, x, y);
