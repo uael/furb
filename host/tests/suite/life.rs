@@ -15,8 +15,9 @@ use std::{
   path::{Path, PathBuf},
   process,
   sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
+    mpsc::channel,
   },
   time::Duration,
 };
@@ -35,7 +36,7 @@ use furb::{
 use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
 use serde_json::json;
-use tokio::time;
+use tokio::{task, time};
 
 /// The events of a life, each under its place in the log.
 pub(crate) type Logged = (Seq, Arc<Event>);
@@ -165,6 +166,42 @@ async fn a_reader_that_stands_behind_the_life_reads_its_events_again_from_the_lo
   let last = heard.last().map_or(0, |one| one.0);
   let mut tail = Box::pin(life.events(last));
   assert_eq!(until(&mut tail, done(&id)).await, heard[heard.len() - 1..]);
+}
+
+/// A fact that a command said while the reply of a command at the tip waited in the inbox stands
+/// once: after the place where the reply was given, so in the events and not in the reply.
+#[tokio::test]
+async fn a_fact_said_while_a_reply_at_the_tip_waits_is_in_its_events_and_not_in_the_reply() {
+  let at = place("after");
+  // The model holds the thread of the life from its first request until the test drops `hold`.
+  let (hold, gate) = channel::<()>();
+  let (began, entered) = channel::<()>();
+  let (gate, began) = (Mutex::new(gate), Mutex::new(began));
+  let inner = scripted(&at, &[]).answer.unwrap();
+  let answer = Answer(Arc::new(move |kind, message| {
+    began.lock().unwrap().send(()).ok();
+    gate.lock().unwrap().recv().ok();
+    (inner.0)(kind, message)
+  }));
+  let opening = Opening { answer: Some(answer), ..scripted(&at, &[]) };
+  let life = Life::spawn(opening).unwrap();
+  made(&life, rung("prompt(None, 'go', on=chain('side'))")).await;
+  let began = task::spawn_blocking(move || entered.recv_timeout(Duration::from_secs(60)));
+  assert!(began.await.unwrap().is_ok(), "the model of the life holds its thread");
+  let of = Some("rung".to_owned());
+  let mut asked = Box::pin(life.after(Command::Transcript { on: None, of }));
+  assert!(futures::poll!(&mut asked).is_pending(), "the thread holds the reply at the tip");
+  let mut later = Box::pin(life.send(rung("y = 2")));
+  assert!(futures::poll!(&mut later).is_pending(), "the thread holds the rung after it");
+  drop(hold);
+  let (replied, events) = asked.await.expect("the life gives the reply at its tip");
+  let Ok(Reply::Act(id)) = later.await else { panic!("the rung is made") };
+  let Ok(Reply::Values(rungs)) = replied else { panic!("the transcript is given") };
+  assert!(!rungs.iter().any(|one| one[1] == json!(id)), "the reply holds no later rung: {rungs:?}");
+  let mut events = Box::pin(events);
+  let rung =
+    |event: &Event| matches!(event, Event::Fact(fact) if fact[0] == "rung" && fact[1] == json!(id));
+  until(&mut events, rung).await;
 }
 
 #[tokio::test]

@@ -266,12 +266,41 @@ type Replier = oneshot::Sender<Result<Reply, LifeError>>;
 /// What a handle says to the thread of its life.
 enum Message {
   Command(Command, Replier),
-  /// The events of the log from a place, for a reader that stands behind the life.
-  Since(Seq, oneshot::Sender<Since>),
+  /// What a reader of the log asks.
+  Read(Read),
   /// A rebirth that the daemon asks when its heap passes its share, or takes back once the heap
   /// fell under the share: a life that keeps its record writes its checkpoint and is born again at
   /// the first moment when it holds no act that a checkpoint does not keep, as at its tail.
   Rebirth(bool),
+}
+
+/// What a reader of the log asks of the thread of a life.
+enum Read {
+  /// The events of the log from a place, for a reader that stands behind the life.
+  Since(Seq, oneshot::Sender<Since>),
+  /// The reply of a command, with the place in the log where the life gave it.
+  After(Command, oneshot::Sender<(Result<Reply, LifeError>, Seq)>),
+}
+
+impl Read {
+  /// The reply, once the log took each event that the ears told, so each fact that the life said
+  /// before it stands before the place that it gives. A life that ended answers no command.
+  async fn answered(self, engine: Option<&mut Engine>, life: &mut Life) {
+    match self {
+      Self::Since(from, reply) => {
+        life.told(None);
+        reply.send(life.since(from)).ok();
+      }
+      Self::After(command, reply) => {
+        let replied = match engine {
+          Some(engine) => commanded(engine, life, command).await,
+          None => Err(LifeError::Ended),
+        };
+        life.told(None);
+        reply.send((replied, life.since(Seq::MAX).tip)).ok();
+      }
+    }
+  }
 }
 
 /// A life on its thread: what it keeps of the events that it told, the readers that hear each next
@@ -990,10 +1019,10 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
   life.put(Event::Ended(fault));
   while let Some(message) = received.recv().await {
     match message {
-      Message::Since(from, reply) => reply.send(life.since(from)).ok(),
-      Message::Command(_, reply) => reply.send(Err(LifeError::Ended)).ok(),
-      Message::Rebirth(_) => None,
-    };
+      Message::Read(read) => read.answered(None, &mut life).await,
+      Message::Command(_, reply) => drop(reply.send(Err(LifeError::Ended))),
+      Message::Rebirth(_) => {}
+    }
   }
 }
 
@@ -1132,10 +1161,7 @@ async fn driven(
       }
       Woke::Said(None) if engine.unkept() > 0 => gone = true,
       Woke::Said(None) => return Drove::Ended(ended(engine, life, hands), asked),
-      Woke::Said(Some(Message::Since(from, reply))) => {
-        life.told(None);
-        reply.send(life.since(from)).ok();
-      }
+      Woke::Said(Some(Message::Read(read))) => read.answered(Some(&mut engine), life).await,
       Woke::Said(Some(Message::Command(end @ (Command::End | Command::Hand), reply))) => {
         hands |= end == Command::Hand;
         asked.push(reply);
@@ -1518,6 +1544,19 @@ impl LifeHandle {
     Some(stream::unfold(self.reader(receiver, tip, true), Reader::next))
   }
 
+  /// The reply of a command, and the events of the life from the place where the life gave that
+  /// reply, as [`LifeHandle::events`] gives them, or none once the thread of the life is gone.
+  pub async fn after(
+    &self,
+    command: Command,
+  ) -> Option<(Result<Reply, LifeError>, impl Streams<Item = Logged> + Send + 'static)> {
+    let receiver = self.readers.subscribe();
+    let (reply, replied) = oneshot::channel();
+    self.inbox.send(Message::Read(Read::After(command, reply))).ok()?;
+    let (got, tip) = replied.await.ok()?;
+    Some((got, stream::unfold(self.reader(receiver, tip, true), Reader::next)))
+  }
+
   /// A reader of the events of the life from a place, which reads again from the record or the
   /// file of its log the facts that the log let go when it `retells`.
   fn reader(&self, receiver: broadcast::Receiver<Logged>, from: Seq, retells: bool) -> Reader {
@@ -1537,7 +1576,7 @@ impl LifeHandle {
   /// The events of the log of the life from a place, or none once the thread of the life is gone.
   async fn since(&self, from: Seq) -> Option<Since> {
     let (reply, replied) = oneshot::channel();
-    self.inbox.send(Message::Since(from, reply)).ok()?;
+    self.inbox.send(Message::Read(Read::Since(from, reply))).ok()?;
     replied.await.ok()
   }
 }
