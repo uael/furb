@@ -191,15 +191,15 @@ class Running:
 
   def carry(self, run: str, given: object) -> None:
     """The word stepped as its rung with what it waited for, and stepped again while what it waits for is done."""
-    peek = verb(self.names, "peek")
-    with self.site.set(self.of(run)[2]):
+    peek, rung = verb(self.names, "peek"), self.of(run)[2]
+    with self.site.set(rung):
       while True:
         try:
           frame = self.frames[run]
           got = frame.throw(given) if isinstance(given, BaseException) else frame.send(given)
-          # A rung awaits an act and nothing else, so anything else is refused where the word waited.
-          while not isinstance(got, str):
-            got = frame.throw(self.refusal(got))
+          while (no := self.unsettled(rung, got)) is not None:
+            got = frame.throw(no)
+          assert isinstance(got, str)
         except StopIteration:
           return self.ended(run, None)
         except BaseException as raised:
@@ -254,10 +254,19 @@ class Running:
     ended = f"timed out after {asked[6]}s" if code is None else f"exited {code}"
     return self.refusing(f"{made} {ended}")
 
-  def refusal(self, got: object) -> BaseException:
-    made = verb(self.names, "Refused")(f"a rung awaits an act, and {got!r} is none")
-    assert isinstance(made, BaseException)
-    return made
+  def unsettled(self, rung: str, got: object) -> BaseException | None:
+    """Why the word of a rung cannot wait for what it awaits, as the refusal that it raises where it waited, or
+    nothing: a rung awaits an act and nothing else, a chain and a name of no act never settle, and the end of its own
+    rung or of its own run depends on the word itself."""
+    if not isinstance(got, str):
+      return self.refusing(f"a rung awaits an act, and {got!r} is none")
+    made = verb(self.names, "get")(got)
+    if verb(self.names, "question")(("chain", got)) or not isinstance(made, tuple):
+      return self.refusing(got + " never settles")
+    own = got == rung or (verb(self.names, "question")(("run", got)) and made[4] == rung)
+    if own and not verb(self.names, "over")(got):
+      return self.refusing(f"{rung} cannot await its own completion through {got}")
+    return None
 
   def refusing(self, why: str) -> BaseException:
     """A refusal of the engine, which a job is done with when its part of a word is no part of the word that ran."""

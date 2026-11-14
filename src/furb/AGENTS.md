@@ -44,7 +44,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   checkpoint and seeds a later life from it, on the names of the engine; the sandbox loads it as it loads the Kernel,
   and the fact made holds its text.
 - Kernel: the ear of the outside that runs rungs: it takes a run, makes a wants as the run while the word waits for
-  an act that is not done, and says the run done with what the word gave.
+  an act that is not done, and says the run done with what the word gave. It refuses, where the word waited, an await
+  that cannot settle: of what is no act, of a chain, of a name of no act, and of the rung or the run of the word itself.
 - boot: the life, given the journal and the generators of the outside, which binds say, act, drive, get, peek,
   transcript, numbered and offers, and gives the root. It brings the journal to life last, so the journal says its
   record again before boot makes the root that the record does not hold and stands the life.

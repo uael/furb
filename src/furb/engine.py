@@ -650,12 +650,10 @@ class Exit:
 
 class Act[T = object](str):
   def __await__(self) -> Generator[object, Any, T]:
-    if (acting() and question(("chain", self))) or not get(self):
-      raise Refused(self + " never settles")
-    if who := acting():
-      if not over(self) and (self == who or (question(("run", self)) and get(self)[4] == who)):
-        raise Refused(f"{who} cannot await its own completion through {self}")
+    if acting():
       return (yield self)
+    if not get(self):
+      raise Refused(self + " never settles")
     f = get_running_loop().create_future()
 
     def pend():
