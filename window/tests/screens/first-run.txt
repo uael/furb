@@ -25,6 +25,6 @@
 
 
 
-┃ ▌Ask for a change, a review or an answer
-┃ + new session in furb-try
-  /home/ada/src/furb-try                        ⌃P commands
+┃ Ask for a change, a review or an answer
+  This computer   furb-try · new session ▾         ○ Python
+  ~/src/furb-try                                ⌃P commands

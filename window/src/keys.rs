@@ -29,14 +29,18 @@ pub(crate) enum Does {
   List,
   Close,
   Stop,
-  Open,
+  Send,
+  Empty,
+  Leave,
+  NewThread,
+  Sessions,
+  Python,
   PageUp,
   PageDown,
   Jump,
   GoTo,
   Commands,
   Keys,
-  NewThread,
 }
 
 /// One stroke of a key: whether it holds control and alt, and its key.
@@ -77,14 +81,18 @@ const TABLE: &[(Does, &[&[Stroke]])] = &[
   (Does::List, &[&led('l')]),
   (Does::Close, &[&[plain(KeyCode::Escape)]]),
   (Does::Stop, &[&[plain(KeyCode::Escape), plain(KeyCode::Escape)]]),
-  (Does::Open, &[&[plain(KeyCode::Enter)]]),
+  (Does::Send, &[&[plain(KeyCode::Enter)]]),
+  (Does::Empty, &[&[ctrl('c')]]),
+  (Does::Leave, &[&[ctrl('d')]]),
+  (Does::NewThread, &[&[ctrl('n')]]),
+  (Does::Sessions, &[&led('o')]),
+  (Does::Python, &[&led('y')]),
   (Does::PageUp, &[&[plain(KeyCode::PageUp)]]),
   (Does::PageDown, &[&[plain(KeyCode::PageDown)]]),
   (Does::Jump, &[&[plain(KeyCode::End)]]),
   (Does::GoTo, &[&[ctrl('o')]]),
   (Does::Commands, &[&[ctrl('p')]]),
   (Does::Keys, &[&led('?')]),
-  (Does::NewThread, &[&[ctrl('n')]]),
 ];
 
 impl Stroke {

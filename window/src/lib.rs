@@ -15,6 +15,7 @@ mod error;
 mod feed;
 mod hand;
 mod home;
+mod input;
 mod kept;
 mod keys;
 mod line;
@@ -51,6 +52,8 @@ use screen::Screen;
 pub struct Options {
   /// The folder of the window, whose project a new session starts in.
   pub folder: PathBuf,
+  /// The home folder of the operator, which a path shows as `~`.
+  pub home: Option<PathBuf>,
   /// The file where the window keeps the cards that it saw.
   pub kept: PathBuf,
   /// The zone of each hour that the window writes.
@@ -68,7 +71,8 @@ impl Options {
     let folder = env::current_dir().map_err(Error::Folder)?;
     let kept = world::cache().ok_or(Error::NoCache)?.join("window").join("cards.json");
     let clock = || SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs());
-    Ok(Self { folder, kept, zone: TimeZone::system(), clock, system: System::here() })
+    let (zone, system) = (TimeZone::system(), System::here());
+    Ok(Self { folder, home: env::home_dir(), kept, zone, clock, system })
   }
 }
 

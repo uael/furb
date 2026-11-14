@@ -1,16 +1,10 @@
- furb
+ furb · Debug stuck TUI after merge                                [ Resolve ]
+┃
+┃ Debug stuck TUI after merge
+┃ (the model works on it)
+┃
 
-  3 threads need you.                                           ⌥A goes to one
-
-  While no window was open
-  ◌ which key sends the queue · photowroom                   works since 22:10
-  ‖ Ground the branch on the carrier                           paused at 22:10
-
-  studio is offline: the daemon closed the connection
-
-  ⌃O        go to a project, a session or a machine
-  ⌃P        commands
-  ⌃X ?      each key
+       opus/high
 
 
 
@@ -25,6 +19,12 @@
 
 
 
-┃ ▌Ask for a change, a review or an answer
-┃ + new session in furb-try
-  /home/ada/src/furb-try                                         ⌃X L the list
+
+
+
+
+
+
+┃ Reply to this thread
+  This computer   furb ▾                                  opus/high   ○ Python
+  ~/src/furb-try                                                 ⌃N new thread

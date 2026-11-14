@@ -15,10 +15,12 @@ use std::{
 
 use furb::view::{Card as Agent, Exchange, Page};
 use furb_host::protocol::{Card, Verb};
-use opentui::style::{Color, Style};
+use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
+  input::Pending,
+  keys::Does,
   line::Line,
   list::hash,
   model::{Key, Model},
@@ -27,9 +29,6 @@ use crate::{
 
 /// How many exchanges a page holds.
 pub(crate) const PAGE: usize = 20;
-
-/// The rows under the feed that stand in each frame: the input, the row under it, and the hints.
-const INPUT: usize = 3;
 
 /// The thread that the operator reads: its card, the exchanges that the daemon gave, how many
 /// stand before them, its agents, where the operator reads it, and what he opened.
@@ -51,6 +50,8 @@ pub(crate) struct Opened {
   pub(crate) asked: HashMap<u64, Option<usize>>,
   /// Why the daemon gave no page.
   pub(crate) fault: Option<String>,
+  /// The messages of the operator that the thread does not show yet, in their order.
+  pub(crate) pending: Vec<Pending>,
 }
 
 /// A row of the feed as a place that holds when rows come above it: a count of rows from the
@@ -68,19 +69,24 @@ pub(crate) enum Fold {
   Thought(String),
 }
 
-/// What a click on a row does.
+/// What a click on a row does: it opens or folds a part of the feed, it does what a key does, or
+/// it picks an entry of the picker of the sessions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Click {
   Fold(Fold),
-  Jump,
+  Key(Does),
+  Pick(usize),
 }
 
-/// A row of the left side: its runs, the columns that go bright under the pointer and what a click
-/// there does, and the column of its loader, a blank cell that a widget of its own draws.
+/// The columns of a row that go bright under the pointer, and what a click there does.
+pub(crate) type Hot = (Range<usize>, Option<Click>);
+
+/// A row of the left side: its runs, the parts that go bright under the pointer, and the column of
+/// its loader, a blank cell that a widget of its own draws.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct Row {
   pub(crate) line: Line,
-  pub(crate) hot: Option<(Range<usize>, Option<Click>)>,
+  pub(crate) hot: Vec<Hot>,
   pub(crate) loader: Option<(usize, Loader)>,
 }
 
@@ -92,13 +98,18 @@ impl Row {
   /// A row that takes a click in each column of its text.
   pub(crate) fn clicked(line: Line, click: Click) -> Self {
     let wide = width(&line);
-    Self { line, hot: Some((0..wide, Some(click))), loader: None }
+    Self { line, hot: vec![(0..wide, Some(click))], loader: None }
+  }
+
+  /// What a click on a column of the row does.
+  fn click(&self, x: usize) -> Option<Click> {
+    self.hot.iter().find(|hot| hot.0.contains(&x)).and_then(|hot| hot.1.clone())
   }
 
   /// The row with its text bright where the pointer is on a thing that takes a click: its hot
   /// columns, or a link.
   fn lit(mut self, x: usize, hover: Color) -> Self {
-    let hot = self.hot.as_ref().map(|hot| hot.0.clone()).filter(|hot| hot.contains(&x));
+    let hot = self.hot.iter().map(|hot| hot.0.clone()).find(|hot| hot.contains(&x));
     let mut start = 0;
     for one in &mut self.line {
       let end = start + one.content.width();
@@ -113,8 +124,18 @@ impl Row {
 }
 
 /// The columns that a line takes.
-pub(crate) fn width(line: &Line) -> usize {
+pub(crate) fn width(line: &[Span<'_>]) -> usize {
   line.iter().map(|one| one.content.width()).sum()
+}
+
+/// The columns of each run of a line.
+pub(crate) fn columns(line: &[Span<'_>]) -> Vec<Range<usize>> {
+  let mut start = 0;
+  let column = |one: &Span<'_>| {
+    let end = start + one.content.width();
+    (mem::replace(&mut start, end))..end
+  };
+  line.iter().map(column).collect()
 }
 
 /// What the left side shows of an open thread: its rows, each loader of which stands blank, and
@@ -177,7 +198,7 @@ impl<V> Items<'_, V> {
     from.map(|one| Item::At(*one.0))
   }
 
-  fn last(&self) -> Option<Item> {
+  pub(crate) fn last(&self) -> Option<Item> {
     let last = self.held.keys().next_back().map(|at| Item::At(*at));
     last.or_else(|| self.head.then_some(Item::Head))
   }
@@ -283,6 +304,13 @@ impl Opened {
     self.agents = page.agents;
     self.fault = None;
     self.exchanges.extend(page.exchanges.into_iter().map(|one| (one.at, one)));
+    self.shown();
+  }
+
+  /// The messages of the operator that the thread shows now let go.
+  pub(crate) fn shown(&mut self) {
+    let told = |act: &String| self.exchanges.values().any(|one| one.message == *act);
+    self.pending.retain(|one| !one.act.as_ref().is_some_and(told));
   }
 
   /// The page of the thread before the exchange at a place, or the page of its end.
@@ -291,25 +319,30 @@ impl Opened {
     Verb::Thread { life, thread, before, limit: PAGE }
   }
 
-  /// The parts of the feed. The head shows until the first exchange of the thread is held.
+  /// The parts of the feed. The head shows until the first exchange of the thread is held, and
+  /// holds the messages of a thread that the daemon did not make yet.
   pub(crate) fn items(&self) -> Items<'_, Exchange> {
-    let head = self.fault.is_some() || self.above != Some(0);
+    let head = self.fault.is_some() || self.above != Some(0) || self.exchanges.is_empty();
     Items { held: &self.exchanges, head }
   }
 }
 
 impl Model {
-  /// The thread of the selected card opened, and the page of its end, which the window asks of its
-  /// machine.
-  pub(crate) fn open_thread(&mut self) -> Option<Verb> {
-    let key = self.selected.clone()?;
+  /// The thread of the selected card opened, and the input turned to it.
+  pub(crate) fn open_thread(&mut self) {
+    let Some(key) = self.selected.clone() else { return };
     if key.2.is_empty() || self.thread.as_ref().is_some_and(|one| one.key == key) {
-      return None;
+      return;
     }
-    let opened = Opened { key, ..Opened::default() };
-    let verb = opened.page(None);
-    self.thread = Some(opened);
-    Some(verb)
+    self.thread = Some(Opened { key, ..Opened::default() });
+    self.aim = None;
+  }
+
+  /// The page of the end of the open thread, when the window holds none of it and asked none.
+  pub(crate) fn page_due(&self) -> Option<Verb> {
+    let opened = self.thread.as_ref()?;
+    let held = opened.above.is_some() || !opened.asked.is_empty() || opened.fault.is_some();
+    (!opened.key.2.is_empty() && !held).then(|| opened.page(None))
   }
 
   /// The open thread on a machine, while it waits for the page of a request.
@@ -364,28 +397,31 @@ impl Model {
     }
   }
 
-  /// A click on a cell of the left side: a block or a thought opens or folds, or the feed goes to
-  /// its end.
-  pub(crate) fn clicked_feed(&mut self, x: usize, y: usize) {
-    let Some(rows) = self.left_rows() else { return };
-    let click = rows.into_iter().nth(y).and_then(|row| row.hot).filter(|hot| hot.0.contains(&x));
-    let Some(opened) = self.thread.as_mut() else { return };
-    match click.and_then(|hot| hot.1) {
-      Some(Click::Fold(fold)) => {
+  /// A click on a cell of the left side: a block or a thought opens or folds, or a session of the
+  /// picker is picked. The key that the click does the thing of.
+  pub(crate) fn clicked_left(&mut self, x: usize, y: usize) -> Option<Does> {
+    let click = self.left_rows().into_iter().nth(y).and_then(|row| row.click(x));
+    match click? {
+      Click::Fold(fold) => {
+        let opened = self.thread.as_mut()?;
         if !opened.unfolded.remove(&fold) {
           opened.unfolded.insert(fold);
         }
+        None
       }
-      Some(Click::Jump) => opened.top = None,
-      None => {}
+      Click::Pick(at) => {
+        self.picked(at);
+        None
+      }
+      Click::Key(does) => Some(does),
     }
   }
 
-  /// The rows of the left side and the cell of each loader, while a thread is open. The text of a
-  /// thing under the pointer that takes a click goes bright, and nothing else changes.
-  pub(crate) fn left(&self) -> Option<Left> {
+  /// The rows of the left side and the cell of each loader. The text of a thing under the pointer
+  /// that takes a click goes bright, and nothing else changes.
+  pub(crate) fn left(&self) -> Left {
     let pointer = self.pointer.filter(|(x, _)| !self.on_list(*x));
-    let mut rows = self.left_rows()?;
+    let mut rows = self.left_rows();
     if let Some((x, y)) = pointer
       && let Some(row) = rows.get_mut(usize::from(y))
     {
@@ -397,31 +433,41 @@ impl Model {
       Some(Spot { x: u16::try_from(x).ok()?, y: u16::try_from(y).ok()?, loader, style })
     });
     let loaders = loaders.collect();
-    Some(Left { rows: rows.into_iter().map(|row| row.line).collect(), loaders })
+    Left { rows: rows.into_iter().map(|row| row.line).collect(), loaders }
   }
 
-  /// Each row of the left side: the head, the feed in its room, the dock, the input and the hints.
-  fn left_rows(&self) -> Option<Vec<Row>> {
-    let feed = self.feed()?;
-    let room = self.feed_room();
-    let shown = feed.opened.items().shown(feed.opened.top, room, |item| feed.rows(item));
-    let mut rows = vec![feed.head()];
-    rows.extend(shown.rows);
-    rows.resize(1 + room, Row::default());
-    if !shown.end
-      && let Some(last) = rows.last_mut()
-    {
-      *last = feed.jump();
-    }
-    rows.extend(feed.dock());
-    rows.extend(feed.input());
-    Some(rows)
+  /// Each row of the left side: the home, or the head of the open thread, the feed in its room and
+  /// the dock; then the input, with the picker of the sessions over the rows above it.
+  fn left_rows(&self) -> Vec<Row> {
+    let mut rows = match self.feed() {
+      None => self.home(),
+      Some(feed) => {
+        let room = self.feed_room();
+        let shown = feed.opened.items().shown(feed.opened.top, room, |item| feed.rows(item));
+        let mut rows = vec![feed.head()];
+        rows.extend(shown.rows);
+        rows.resize(1 + room, Row::default());
+        if !shown.end
+          && let Some(last) = rows.last_mut()
+        {
+          *last = feed.jump();
+        }
+        rows.extend(feed.dock());
+        rows
+      }
+    };
+    rows.resize(usize::from(self.size.1).saturating_sub(self.input_rows()), Row::default());
+    let picker = self.picker_rows();
+    let (count, from) = (picker.len(), rows.len().saturating_sub(picker.len()));
+    rows.splice(from.., picker.into_iter().skip(count.saturating_sub(rows.len())));
+    rows.extend(self.input());
+    rows
   }
 
-  /// How many rows the feed takes: the window less the head, the dock, the input and the hints.
+  /// How many rows the feed takes: the window less the head, the dock and the input.
   pub(crate) fn feed_room(&self) -> usize {
     let docked = self.feed().map_or(0, |feed| feed.dock().len());
-    usize::from(self.size.1).saturating_sub(1 + docked + INPUT)
+    usize::from(self.size.1).saturating_sub(1 + docked + self.input_rows())
   }
 
   /// The card of a key, as its machine last told it.

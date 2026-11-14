@@ -48,7 +48,7 @@ fn moved(before: &Capture, after: &Capture) -> Vec<(usize, usize, String)> {
 
 /// The pointer on a cell of a thing that takes a click: the text of that thing goes bright white,
 /// with no other change of any cell, and comes back when the pointer leaves.
-fn lights(app: &TestApp, x: u16, y: u16) {
+pub(crate) fn lights(app: &TestApp, x: u16, y: u16) {
   app.hover(0, 0);
   let before = app.render();
   app.hover(x, y);
@@ -66,7 +66,7 @@ fn lights(app: &TestApp, x: u16, y: u16) {
 }
 
 /// The first cell of a text in the window, at a column or after it: its column and its row.
-fn at(app: &TestApp, text: &str, from: usize) -> (u16, u16) {
+pub(crate) fn at(app: &TestApp, text: &str, from: usize) -> (u16, u16) {
   let frame = app.text();
   let found = frame.lines().enumerate().find_map(|(y, line)| {
     let after: String = line.chars().skip(from).collect();

@@ -62,6 +62,7 @@ fn opened(end: Page) -> Model {
   };
   let options = Options {
     folder: PathBuf::from("/home/ada/furb"),
+    home: Some(PathBuf::from("/home/ada")),
     kept: PathBuf::new(),
     zone: TimeZone::UTC,
     clock: || 0,
@@ -76,7 +77,7 @@ fn opened(end: Page) -> Model {
 
 /// The text of each row of the left side.
 fn texts(model: &Model) -> Vec<String> {
-  let left = model.left().expect("a thread is open");
+  let left = model.left();
   left.rows.iter().map(|row| row.iter().map(|one| one.content.as_ref()).collect()).collect()
 }
 

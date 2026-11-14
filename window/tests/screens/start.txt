@@ -25,6 +25,6 @@
                                                                 FU furb                       opus
 
                                                                 Ground the branch…    ‖ Paused 11h
-┃ ▌Ask for a change, a review or an answer                      FU furb                       opus
-┃ + new session in furb-try
-  /home/ada/src/furb-try                        ⌃P commands    Resolved 1 ▸
+┃ Ask for a change, a review or an answer                       FU furb                       opus
+  This computer   furb-try · new session ▾         ○ Python
+  ~/src/furb-try                                ⌃P commands    Resolved 1 ▸

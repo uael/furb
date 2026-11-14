@@ -1,16 +1,16 @@
- furb                                                          All projects ▾       studio offline
-
-  3 threads need you.                        ⌥A goes to one     TUI scope for the new…     ◆ Input
-                                                                FU furb                       opus
-  While no window was open                                     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-  ◌ which key sends the queue…            works since 22:10    ▌Debug stuck TUI after…    ✗ Failed▌
-  ‖ Ground the branch on the carrier        paused at 22:10    ▌FU furb                       opus▌
+ furb · Debug stuck TUI after merge             [ Resolve ]    All projects ▾       studio offline
+┃
+┃ Debug stuck TUI after merge                                   TUI scope for the new…     ◆ Input
+┃ (the model works on it)                                       FU furb                       opus
+┃                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+                                                               ▌Debug stuck TUI after…    ✗ Failed▌
+       opus/high                                               ▌FU furb                       opus▌
                                                                ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-  studio is offline: the daemon closed the connection           remove the gate from the…     ● 5h
+                                                                remove the gate from the…     ● 5h
                                                                 FU furb                       opus
-  ⌃O        go to a project, a session or a machine
-  ⌃P        commands                                           Working 2
-  ⌃X ?      each key
+
+                                                               Working 2
+
                                                                 run the bench of…      as of 09:12
                                                                 FC furb-cloud@studio        opus ◌
 
@@ -25,6 +25,6 @@
                                                                 Ground the branch…    ‖ Paused 11h
                                                                 FU furb                       opus
 
-┃ ▌Ask for a change, a review or an answer                     Resolved 1 ▾
-┃ + new session in furb-try
-  /home/ada/src/furb-try                        ⌃P commands     ✓ which fold reads the whole…   2d
+┃ Reply to this thread                                         Resolved 1 ▾
+  This computer   furb ▾               opus/high   ○ Python
+  ~/src/furb-try                              ⌃N new thread     ✓ which fold reads the whole…   2d

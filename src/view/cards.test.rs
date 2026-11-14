@@ -49,3 +49,10 @@ fn a_thread_that_worked_rests_once_no_life_holds_its_record() {
     [Standing::Rests, Standing::Rests, Standing::Rests, Standing::Failed, Standing::Resolved];
   assert_eq!(rests, wanted);
 }
+
+#[test]
+fn a_message_on_an_open_thread_is_a_notice_and_on_an_ended_thread_a_question() {
+  let shapes = [Standing::Thinks, Standing::Rests, Standing::Resolved, Standing::Stopped]
+    .map(|standing| card(standing, &[]).reply());
+  assert_eq!(shapes, ["None", "None", "str", "str"]);
+}

@@ -134,8 +134,9 @@ API of its own:
   the protocol and the transport of `furb-host`, the rule by which a part of a screen draws only when the value that
   it shows changes, the tokens of the design, and the list of the cards of each machine beside the home, which shows
   what waits for the operator: the verb `cards` of the daemon gives each card, with its state, its part and its
-  order, and the window draws them and keeps them in a file for its next first frame. It opens no session yet.
-  `cargo run -p furb-window` starts it, and so does `FURB_TUI=<the program furb-window> furb`.
+  order, and the window draws them and keeps them in a file for its next first frame. Its input sends a message to
+  the open thread, to a new thread of a session, or to a new session in the project of its folder, as the line of
+  the launcher under it says. `cargo run -p furb-window` starts it, and so does `FURB_TUI=<the program furb-window> furb`.
   `window/Cargo.toml` pins OpenTUI at one commit, and `window/build.rs` makes its native library with Zig into
   `target/opentui`, once for each commit. So the first cargo command over the workspace in a tree needs `zig` on PATH
   at the version that the commit asks, 0.17.1, and takes about two minutes more. A tree whose `target/opentui` holds

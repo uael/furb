@@ -147,16 +147,19 @@ impl Peer {
 
   /// The answer of the daemon to a verb.
   pub(crate) fn ask(&mut self, verb: Verb) -> Answer {
+    self.tried(verb).unwrap_or_else(|why| panic!("the daemon refused: {why}"))
+  }
+
+  /// The answer of the daemon to a verb, or why it refused it.
+  pub(crate) fn tried(&mut self, verb: Verb) -> Result<Answer, String> {
     let id = self.next;
     self.next += 1;
     let line = serde_json::to_string(&Request { id, verb }).unwrap();
     self.runtime.block_on(self.lines.send(line)).unwrap();
     loop {
       match self.read() {
-        Frame::Reply { id: got, answer } if got == id => return answer,
-        Frame::Refused { id: Some(got), why, .. } if got == id => {
-          panic!("the daemon refused: {why}")
-        }
+        Frame::Reply { id: got, answer } if got == id => return Ok(answer),
+        Frame::Refused { id: Some(got), why, .. } if got == id => return Err(why),
         _ => {}
       }
     }

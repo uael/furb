@@ -25,6 +25,6 @@
 ┃
 
   Jump to latest ↓                                      end
-┃ ▌Reply to this thread
-┃ ↳ ground the branch, message by message              opus
-  /home/ada/src/furb-try                      ⌃N new thread
+┃ Reply to this thread
+  This computer   furb ▾               opus/high   ○ Python
+  ~/src/furb-try                              ⌃N new thread

@@ -25,6 +25,6 @@
 
 
 
-┃ ▌Reply to this thread
-┃ ↳ how long does an open take                         opus
-  /home/ada/src/furb-try                      ⌃N new thread
+┃ Reply to this thread
+  This computer   furb ▾               opus/high   ○ Python
+  ~/src/furb-try                              ⌃N new thread

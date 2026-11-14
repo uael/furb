@@ -34,6 +34,7 @@ pub(crate) fn options(kept: &Path) -> Options {
   let folder = PathBuf::from("/home/ada/src/furb-try");
   Options {
     folder,
+    home: Some(PathBuf::from("/home/ada")),
     kept: kept.to_owned(),
     zone: TimeZone::UTC,
     clock: || CLOCK,

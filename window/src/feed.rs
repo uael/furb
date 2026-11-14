@@ -1,9 +1,7 @@
 //! The rows of an open thread, from the exchanges that its daemon gave: the message of the operator
 //! on its band, the block of code of the answer, which rolls in seven rows, the thought of its
-//! model on one row, what the answer said as markdown, then the dock of the agents of the thread,
-//! the input and the hints.
-
-use std::env;
+//! model on one row, what the answer said as markdown, and the messages of the operator that the
+//! thread does not show yet, then the dock of the agents of the thread.
 
 use furb::view::{
   Block, Exchange, Line as Code, Maker, Mark, Said, Saying, Standing, Thought, Work,
@@ -43,14 +41,19 @@ impl Model {
 }
 
 impl Feed<'_> {
-  /// The rows of one part of the feed.
+  /// The rows of one part of the feed. The last part holds each message of the operator that the
+  /// thread does not show yet.
   pub(crate) fn rows(&self, item: Item) -> Vec<Row> {
-    match item {
+    let mut rows = match item {
       Item::Head => self.before(),
       Item::At(at) => {
         self.opened.exchanges.get(&at).map(|one| self.exchange(one)).unwrap_or_default()
       }
+    };
+    if self.opened.items().last() == Some(item) {
+      rows.extend(self.opened.pending.iter().flat_map(|one| self.message(&one.text)));
     }
+    rows
   }
 
   fn style(&self, role: Role) -> Style {
@@ -67,6 +70,7 @@ impl Feed<'_> {
         lines.iter().map(|line| says(line, Style::new().fg(self.model.tokens.danger))).collect()
       }
       (None, None) => vec![says("Loading the thread…", muted)],
+      (None, Some(0)) => return Vec::new(),
       (None, Some(above)) => {
         let noun = if above == 1 { "message" } else { "messages" };
         vec![says(&format!("… {above} earlier {noun}"), muted)]
@@ -82,7 +86,7 @@ impl Feed<'_> {
     let card = self.model.told_card(&self.opened.key);
     let project = card.map(project).unwrap_or_default();
     let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
-    let title = named.or_else(|| card.map(|card| card.thread.title.clone())).unwrap_or_default();
+    let title = named.or_else(|| self.model.title()).unwrap_or_default();
     let left = vec![
       run(format!(" {project} · "), self.style(Role::Muted)),
       run(title, self.style(Role::Title)),
@@ -90,14 +94,15 @@ impl Feed<'_> {
     let button = vec![run("[ Resolve ]", self.style(Role::Prose))];
     let line = spread(left, button.clone(), self.wide.saturating_sub(2), Style::new());
     let end = width(&line);
-    Row { hot: Some((end - width(&button)..end, None)), ..Row::of(line) }
+    Row { hot: vec![(end - width(&button)..end, None)], ..Row::of(line) }
   }
 
   /// The last row of the feed while the operator reads away from its end.
   pub(crate) fn jump(&self) -> Row {
     let jump = vec![run("  Jump to latest ↓", Style::new().fg(self.model.tokens.accent))];
     let end = vec![run("end", self.style(Role::Muted))];
-    Row::clicked(spread(jump, end, self.wide.saturating_sub(2), Style::new()), Click::Jump)
+    let line = spread(jump, end, self.wide.saturating_sub(2), Style::new());
+    Row::clicked(line, Click::Key(Does::Jump))
   }
 
   /// The rows of one exchange: the message of the operator on its band, the block, the thought,
@@ -124,7 +129,9 @@ impl Feed<'_> {
       line.extend(spread(text, Vec::new(), self.wide.saturating_sub(4), band));
       Row::of(line)
     };
-    let lines = home(text)
+    let lines = self
+      .model
+      .homed(text)
       .lines()
       .flat_map(|line| wrapped(line, self.wide.saturating_sub(6)))
       .collect::<Vec<_>>();
@@ -162,8 +169,9 @@ impl Feed<'_> {
     let head = vec![run(format!("{:gutter$}  {}", "", maker(&block.maker)), muted)];
     let mut rows = vec![Row::of(self.boxed(head, t.raised))];
     let code = self.style(Role::Prose).bg(t.raised);
-    let text =
-      home(&block.lines.iter().map(|one| one.text.as_str()).collect::<Vec<_>>().join("\n"));
+    let text = self
+      .model
+      .homed(&block.lines.iter().map(|one| one.text.as_str()).collect::<Vec<_>>().join("\n"));
     let colored = self.model.colors.lines(&text, code);
     let all = block.lines.len();
     let fold = Fold::Block(message.to_owned());
@@ -255,7 +263,12 @@ impl Feed<'_> {
   /// What an answer said, as markdown from the column of the text: a question opens with its mark.
   fn said(&self, said: &Said) -> Vec<Row> {
     let t = &self.model.tokens;
-    let lines = prose::lines(&home(&said.text), self.wide.saturating_sub(4), t, &self.model.colors);
+    let lines = prose::lines(
+      &self.model.homed(&said.text),
+      self.wide.saturating_sub(4),
+      t,
+      &self.model.colors,
+    );
     let mut rows: Vec<Row> = lines
       .into_iter()
       .enumerate()
@@ -308,41 +321,6 @@ impl Feed<'_> {
     }
     rows
   }
-
-  /// The input of the open thread, which sends nothing yet, the row under it, which says where it
-  /// goes, and the row of hints: the state of the thread while it works, else its folder.
-  pub(crate) fn input(&self) -> [Row; 3] {
-    let muted = self.style(Role::Muted);
-    let card = self.model.told_card(&self.opened.key);
-    let title = card.map(|card| card.thread.title.clone()).unwrap_or_default();
-    let model =
-      card.and_then(|card| card.thread.model.as_deref()).and_then(|one| one.rsplit(':').next());
-    let target = (
-      vec![run(format!("↳ {title}"), muted)],
-      vec![run(model.unwrap_or_default().to_owned(), muted)],
-    );
-    let [ask, under] =
-      self.model.input(self.model.hue(&self.opened.key), "Reply to this thread", target);
-    let works = card.is_some_and(|card| card.thread.works());
-    let (state, loader) = if works {
-      let age = card
-        .and_then(|card| self.model.age(card.since))
-        .map(|age| format!(" {age}"))
-        .unwrap_or_default();
-      let working = run(format!("    Working{age}"), Style::new().fg(self.model.tokens.accent));
-      let stop = format!(" · {} stop", self.model.key(Does::Stop));
-      (vec![working, run(stop, muted)], Some((2, Loader::Model)))
-    } else {
-      (vec![run(format!("  {}", self.model.folder_shown()), muted)], None)
-    };
-    let hints = spread(
-      state,
-      vec![run(format!("{} new thread", self.model.key(Does::NewThread)), muted)],
-      self.wide.saturating_sub(2),
-      Style::new(),
-    );
-    [Row::of(ask), Row::of(under), Row { loader, ..Row::of(hints) }]
-  }
 }
 
 /// A row of prose from the column of the text.
@@ -387,12 +365,6 @@ fn tail(text: &str, room: usize) -> String {
     return flat;
   }
   format!("…{}", flat.chars().skip(skip + 1).collect::<String>())
-}
-
-/// A text with the home folder of the user as `~`.
-fn home(text: &str) -> String {
-  env::home_dir()
-    .map_or_else(|| text.to_owned(), |home| text.replace(&*home.to_string_lossy(), "~"))
 }
 
 /// A count of seconds as a person reads it.

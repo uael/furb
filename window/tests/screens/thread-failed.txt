@@ -25,6 +25,6 @@
 
 
 
-┃ ▌Reply to this thread
-┃ ↳ why is the window stuck after a switch of model    opus
-  /home/ada/src/furb-try                      ⌃N new thread
+┃ Reply to this thread
+  This computer   furb ▾               opus/high   ○ Python
+  ~/src/furb-try                              ⌃N new thread

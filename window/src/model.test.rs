@@ -34,6 +34,7 @@ fn model(cards: Vec<Card>, rows: u16) -> Model {
   let folder = PathBuf::from("/home/ada/furb");
   let options = Options {
     folder,
+    home: Some(PathBuf::from("/home/ada")),
     kept: PathBuf::new(),
     zone: TimeZone::UTC,
     clock: || 0,

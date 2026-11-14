@@ -9,24 +9,28 @@ use std::{
   time::{Duration, Instant},
 };
 
+use unicode_width::UnicodeWidthStr;
+
 use opentui::{
   App,
   input::KeyEventKind,
   prelude::{
-    Container, Edge, KeyEvent, MouseButton, MouseEvent, MouseEventKind, Span, Text, TimerId, View,
-    Widget, WrapMode,
+    Container, Edge, EditorAction, ExtmarkOptions, KeyCode, KeyEvent, Modifiers, MouseButton,
+    MouseEvent, MouseEventKind, Span, Text, Textarea, TimerId, View, Widget, WrapMode,
   },
 };
 
 use furb_host::protocol::Verb;
 
 use crate::{
-  Machine, Options, Screen, kept,
+  Machine, Options, Screen,
+  input::Asked,
+  kept,
   keys::{self, Does},
   line::Line,
   link::{self, Asker, Heard},
   model::{Model, SIDE, Told},
-  tokens::Tokens,
+  tokens::{Role, Tokens},
 };
 
 /// How long the hand stays away from the list before a card changes its place.
@@ -35,7 +39,7 @@ const AWAY: Duration = Duration::from_millis(1500);
 /// How long the window waits for a machine before it says that it waits.
 const PATIENCE: Duration = Duration::from_millis(400);
 
-/// How long the leader key waits for the key that follows it.
+/// How long the leader key waits for the key that follows it, and the first escape for the second.
 const LEADER: Duration = Duration::from_secs(2);
 
 /// How long the window waits after a change of the cards before it writes them, so the changes of
@@ -65,6 +69,11 @@ struct Window {
   touched: Option<Instant>,
   /// When the leader key was pressed, until the key that follows it.
   led: Option<Instant>,
+  /// When the first escape was pressed, which a second one within the bound of the leader makes
+  /// the stop of the work of the open thread.
+  armed: Option<Instant>,
+  /// The editor of the text of the input, which has the focus.
+  area: Textarea,
   /// Whether a timer waits to settle the list.
   settles: bool,
   /// Whether a timer waits to write the cards.
@@ -92,13 +101,16 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   let mut model = Model::new(told, app.size(), tokens, &options);
   model.now = (options.clock)();
   model.settle();
+  let area = edited(app, &tokens);
   let window = Window {
-    screen: drawn(app, model),
+    screen: drawn(app, model, &area),
     clock: options.clock,
     kept: options.kept,
     born: app.now(),
     touched: None,
     led: None,
+    armed: None,
+    area: area.clone(),
     settles: false,
     keeps: false,
     moves: None,
@@ -107,7 +119,17 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   let window = Rc::new(RefCell::new(window));
 
   let on = Rc::clone(&window);
-  app.on_key(move |cx, pressed| key(cx.app(), &on, pressed));
+  app.on_key_capture(move |cx, pressed| {
+    if key(cx.app(), &on, pressed) {
+      cx.stop_propagation();
+    }
+  });
+  let on = Rc::clone(&window);
+  area.on_change(move |cx, text| {
+    let text = text.to_owned();
+    tell(cx.app(), &on, |model| model.draft.text = text);
+    colored(&on);
+  });
   let on = Rc::clone(&window);
   app.on_mouse(move |cx, event| mouse(cx.app(), &on, *event));
   let on = Rc::clone(&window);
@@ -125,9 +147,18 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   }
 }
 
-/// The widgets of the window on a model: the home, and the list at its right, over it. Each is one
-/// text, which is written only when a row of it changes.
-fn drawn(app: &App, model: Model) -> Screen<Model> {
+/// The editor of the text of the input, which has the focus. Enter sends, so a line breaks with
+/// shift and enter, and the end goes to the end of the feed, as the table of the keys says.
+fn edited(app: &App, tokens: &Tokens) -> Textarea {
+  let area = Textarea::new(app).absolute().wrap(WrapMode::Char);
+  let area = area.colors(tokens.text, tokens.raised).focused_colors(tokens.text, tokens.raised);
+  let area = area.placeholder_color(tokens.muted).cursor_color(tokens.text);
+  area.bind("shift+enter", EditorAction::Newline).unbind("end")
+}
+
+/// The widgets of the window on a model: the left side, the editor of the input over it, and the
+/// list at its right. Each side is one text, which is written only when a row of it changes.
+fn drawn(app: &App, model: Model, area: &Textarea) -> Screen<Model> {
   let tokens = model.tokens;
   let column = || Text::new(app, "").wrap(WrapMode::None);
   let (home, list) = (column(), column());
@@ -136,7 +167,8 @@ fn drawn(app: &App, model: Model) -> Screen<Model> {
   let side =
     side.position(Edge::Bottom, 0).width(SIDE).bg(tokens.panel).padding_edge(Edge::Left, 1);
   let side = side.child(&list);
-  app.root().child(&home).child(&side);
+  app.root().child(&home).child(area).child(&side);
+  app.focus(area);
 
   let mut screen = Screen::new(model);
   let written = |lines: &Vec<Line>| {
@@ -146,9 +178,16 @@ fn drawn(app: &App, model: Model) -> Screen<Model> {
     });
     rows.collect::<Vec<_>>()
   };
-  let left = |model: &Model| model.left().map_or_else(|| model.home(), |left| left.rows);
-  screen.part(left, move |lines| {
-    home.set_text(written(lines));
+  screen.part(
+    |model: &Model| model.left().rows,
+    move |lines| {
+      home.set_text(written(lines));
+    },
+  );
+  let area = area.clone();
+  screen.part(Model::area, move |shown| {
+    let area = area.position(Edge::Top, shown.y).position(Edge::Left, shown.x);
+    area.width(shown.width).height(shown.height).placeholder(shown.placeholder);
   });
   // A loader is a cell of its own, so its step draws no other cell.
   let cells: Vec<Text> =
@@ -157,7 +196,7 @@ fn drawn(app: &App, model: Model) -> Screen<Model> {
     app.root().child(cell);
   }
   let frames = |model: &Model| {
-    let spots = model.left().map(|left| left.loaders).unwrap_or_default();
+    let spots = model.left().loaders;
     spots.into_iter().map(|spot| (spot, spot.loader.frame(model.moved))).collect::<Vec<_>>()
   };
   screen.part(frames, move |shown| {
@@ -186,6 +225,13 @@ fn drawn(app: &App, model: Model) -> Screen<Model> {
 /// A change of the model at this moment of the two clocks, which each part then shows. The loaders
 /// move on one timer, which runs only while a mark moves.
 fn tell<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> T {
+  let given = told(app, window, change);
+  pump(window);
+  given
+}
+
+/// A change of the model, which each part then shows, and the timer of the loaders.
+fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> T {
   let mut held = window.borrow_mut();
   let (now, moved) = ((held.clock)(), app.now().saturating_duration_since(held.born));
   let given = held.screen.tell(|model| {
@@ -214,7 +260,13 @@ fn tick(app: &App, window: &Shared) {
 /// What a machine told. A card shows its new state at once, and the list settles when the hand is
 /// away.
 fn hear(app: &App, window: &Shared, at: usize, heard: Heard) {
-  if tell(app, window, |model| model.hear(at, heard)) {
+  let changed = tell(app, window, |model| model.hear(at, heard));
+  let back = window.borrow_mut().screen.model.restore.take();
+  if let Some(text) = back {
+    window.borrow().area.set_text(text);
+    colored(window);
+  }
+  if changed {
     rest(app, window);
     keep(app, window);
   }
@@ -253,9 +305,28 @@ fn keep(app: &App, window: &Shared) {
   });
 }
 
-/// A page that the open thread asks of its machine, said, with the id of its request kept until
-/// its answer comes.
-fn ask(window: &Shared, verb: Option<Verb>) {
+/// Each request that is due asked of its machine: the page of the end of the open thread, and the
+/// next request of the queue of the input, each with its id kept until its answer comes.
+fn pump(window: &Shared) {
+  let mut held = window.borrow_mut();
+  let Window { askers, screen, .. } = &mut *held;
+  let model = &mut screen.model;
+  if let Some(verb) = model.page_due()
+    && let Some(opened) = model.thread.as_mut()
+    && let Some(asker) = askers.get_mut(opened.key.0)
+  {
+    opened.asked.insert(asker.ask(verb), None);
+  }
+  if let Some((at, verb, asked)) = model.due()
+    && let Some(asker) = askers.get_mut(at)
+  {
+    model.asked.insert((at, asker.ask(verb)), asked);
+  }
+}
+
+/// A page of older exchanges that the open thread asks of its machine, said, with the id of its
+/// request kept until its answer comes.
+fn older(window: &Shared, verb: Option<Verb>) {
   let Some(verb @ Verb::Thread { before, .. }) = verb else { return };
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
@@ -264,72 +335,199 @@ fn ask(window: &Shared, verb: Option<Verb>) {
   opened.asked.insert(asker.ask(verb), before);
 }
 
-/// A key of the window, from the one table of the keys.
-fn key(app: &App, window: &Shared, key: &KeyEvent) {
+/// A key of the window, from the one table of the keys, before the editor of the input hears it:
+/// whether the window took it. A key that follows the leader never reaches the editor.
+fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   if key.kind == KeyEventKind::Release {
-    return;
+    return false;
   }
   let led = window.borrow_mut().led.take();
   let led = led.is_some_and(|at| app.now().saturating_duration_since(at) <= LEADER);
   if keys::leads(key) {
     window.borrow_mut().led = Some(app.now());
-    return;
+    return true;
   }
-  let change: fn(&mut Model) = match keys::pressed(key, led) {
-    Some(Does::Next) => |model| model.step(1),
-    Some(Does::Previous) => |model| model.step(-1),
-    Some(Does::Needed) => Model::needed,
-    Some(Does::List) => Model::toggle,
-    Some(Does::Close) => Model::close,
-    Some(Does::Jump) => Model::jump,
-    Some(Does::Open) => {
-      let verb = tell(app, window, Model::open_thread);
-      return ask(window, verb);
+  if window.borrow().screen.model.picker.is_some() && picking(app, window, key) {
+    return true;
+  }
+  match keys::pressed(key, led) {
+    Some(Does::Leave) if !window.borrow().area.text().is_empty() => false,
+    Some(does) => {
+      act(app, window, does);
+      true
     }
-    Some(page @ (Does::PageUp | Does::PageDown)) => {
+    None => led,
+  }
+}
+
+/// A key while the picker of the sessions is open: it filters the list, moves in it, picks an
+/// entry or closes it. Whether the picker took the key.
+fn picking(app: &App, window: &Shared, key: &KeyEvent) -> bool {
+  let text = key.text().filter(|_| key.modifiers.is_empty() || key.modifiers == Modifiers::SHIFT);
+  tell(app, window, |model| {
+    let count = model.sessions().len();
+    let Some(picker) = model.picker.as_mut() else { return false };
+    match (key.code, text) {
+      (KeyCode::Escape, _) => model.picker = None,
+      (KeyCode::Enter, _) => {
+        let at = picker.at;
+        model.picked(at);
+      }
+      (KeyCode::Up, _) => picker.at = picker.at.saturating_sub(1),
+      (KeyCode::Down, _) => picker.at = (picker.at + 1).min(count.saturating_sub(1)),
+      (KeyCode::Backspace, _) => {
+        picker.filter.pop();
+        picker.at = 0;
+      }
+      (_, Some(one)) => {
+        picker.filter.push(one);
+        picker.at = 0;
+      }
+      _ => return false,
+    }
+    true
+  })
+}
+
+/// What a key does, which a click on its text does too.
+fn act(app: &App, window: &Shared, does: Does) {
+  let change: fn(&mut Model) = match does {
+    Does::Next => |model| model.step(1),
+    Does::Previous => |model| model.step(-1),
+    Does::Needed => Model::needed,
+    Does::List => Model::toggle,
+    Does::Jump => Model::jump,
+    Does::NewThread => Model::turn,
+    Does::Sessions => Model::pick_session,
+    Does::Python => |model| model.draft.python = !model.draft.python,
+    Does::Close => return escaped(app, window),
+    Does::Stop => return stopped(app, window),
+    Does::Send => return sent(app, window),
+    Does::Empty => {
+      window.borrow().area.set_text("");
+      return tell(app, window, |model| model.draft.text.clear());
+    }
+    Does::Leave => return app.quit(),
+    Does::PageUp | Does::PageDown => {
       // A page keeps two rows of the screen before it in view.
       let verb = tell(app, window, |model| {
         let rows = isize::try_from(model.feed_room()).unwrap_or_default() - 2;
-        model.scroll_feed(if page == Does::PageUp { -rows } else { rows })
+        model.scroll_feed(if does == Does::PageUp { -rows } else { rows })
       });
-      return ask(window, verb);
+      return older(window, verb);
     }
     // The keys that the window names and that no screen of it does yet.
-    Some(Does::Stop | Does::GoTo | Does::Commands | Does::Keys | Does::NewThread) | None => return,
+    Does::GoTo | Does::Commands | Does::Keys => return,
   };
-  window.borrow_mut().touched = Some(app.now());
-  tell(app, window, change);
+  if matches!(does, Does::Next | Does::Previous | Does::Needed) {
+    window.borrow_mut().touched = Some(app.now());
+  }
+  tell(app, window, |model| {
+    change(model);
+    model.open_thread();
+  });
+  colored(window);
 }
 
-/// The pointer: it is on the list or on the thread, it clicks a row, and its wheel moves the rows
-/// under it. A click on a card opens its thread.
+/// The text of the input sent to its target, and the input empty.
+fn sent(app: &App, window: &Shared) {
+  let text = window.borrow().area.text();
+  if text.trim().is_empty() {
+    return;
+  }
+  window.borrow().area.set_text("");
+  tell(app, window, |model| {
+    model.draft.text.clear();
+    model.send(text);
+  });
+}
+
+/// An escape: it closes the list that stands over the home, or arms the stop of the work of the
+/// open thread, which a second escape within the bound makes.
+fn escaped(app: &App, window: &Shared) {
+  let armed = window.borrow_mut().armed.take();
+  if armed.is_some_and(|at| app.now().saturating_duration_since(at) <= LEADER) {
+    return stopped(app, window);
+  }
+  let closes = {
+    let model = &window.borrow().screen.model;
+    model.toggled && !model.listed()
+  };
+  if closes {
+    tell(app, window, Model::close);
+  } else {
+    window.borrow_mut().armed = Some(app.now());
+  }
+}
+
+/// The work of the open thread stopped: the cancel of its prompt, asked of its machine.
+fn stopped(app: &App, window: &Shared) {
+  let stop = window.borrow().screen.model.stop();
+  let Some((at, verb)) = stop else { return };
+  let mut held = window.borrow_mut();
+  let Window { askers, screen, .. } = &mut *held;
+  if let Some(asker) = askers.get_mut(at) {
+    screen.model.asked.insert((at, asker.ask(verb)), Asked::Stop);
+  }
+  drop(held);
+  tell(app, window, |_| ());
+}
+
+/// The text of the input in the colors of python while it is a word, and plain otherwise.
+fn colored(window: &Shared) {
+  let held = window.borrow();
+  let (area, model) = (&held.area, &held.screen.model);
+  area.clear_extmarks();
+  if !model.draft.python {
+    return;
+  }
+  let plain = model.tokens.style(Role::Prose);
+  let mut offset = 0;
+  for (row, line) in model.colors.lines(&model.draft.text, plain).iter().enumerate() {
+    offset += u32::from(row > 0);
+    for one in line {
+      let wide = u32::try_from(one.content.width()).unwrap_or_default();
+      if one.style != plain {
+        area.add_extmark(offset..offset + wide, ExtmarkOptions::default().style(one.style));
+      }
+      offset += wide;
+    }
+  }
+}
+
+/// The pointer: it is on the list or on the left side, it clicks a row, and its wheel moves the
+/// rows under it. A click on a card opens its thread, and a click on a thing of the left side does
+/// what its key does.
 fn mouse(app: &App, window: &Shared, event: MouseEvent) {
-  let (on, verb) = tell(app, window, |model| {
+  let (on, does, verb) = tell(app, window, |model| {
     let (x, y) = (usize::from(event.x), usize::from(event.y));
     model.pointer = Some((event.x, event.y));
     let on = model.on_list(event.x);
-    let verb = match (event.kind, on) {
-      (MouseEventKind::Down(MouseButton::Left), true) => model.clicked(y),
-      (MouseEventKind::Down(MouseButton::Left), false) => {
-        model.clicked_feed(x, y);
-        None
+    let (does, verb) = match (event.kind, on) {
+      (MouseEventKind::Down(MouseButton::Left), true) => {
+        model.clicked(y);
+        (None, None)
       }
+      (MouseEventKind::Down(MouseButton::Left), false) => (model.clicked_left(x, y), None),
       (MouseEventKind::ScrollUp, true) => {
         model.scrolled(-WHEEL);
-        None
+        (None, None)
       }
       (MouseEventKind::ScrollDown, true) => {
         model.scrolled(WHEEL);
-        None
+        (None, None)
       }
-      (MouseEventKind::ScrollUp, false) => model.scroll_feed(-WHEEL),
-      (MouseEventKind::ScrollDown, false) => model.scroll_feed(WHEEL),
-      _ => None,
+      (MouseEventKind::ScrollUp, false) => (None, model.scroll_feed(-WHEEL)),
+      (MouseEventKind::ScrollDown, false) => (None, model.scroll_feed(WHEEL)),
+      _ => (None, None),
     };
-    (on, verb)
+    (on, does, verb)
   });
-  ask(window, verb);
+  older(window, verb);
   if on {
     window.borrow_mut().touched = Some(app.now());
+  }
+  if let Some(does) = does {
+    act(app, window, does);
   }
 }

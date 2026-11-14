@@ -1,0 +1,30 @@
+ furb-try · one (the model works on it)         [ Resolve ]    All projects ▾         this machine
+┃
+┃ one (the model works on it)                                  Working 1
+┃                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+                                                               ▌one (the model works…    ⠋ Working▌
+       opus/high                                               ▌FT furb-try                   opus▌
+    …                                                          ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+
+┃
+┃ two (the model works on it)
+┃
+
+┃
+┃ three (the model works on it)
+┃
+
+
+
+
+
+
+
+
+
+
+
+
+┃ a draft
+  This computer   furb-try ▾           opus/high   ○ Python
+  ⠋ Working · ⎋ ⎋ stop                        ⌃N new thread

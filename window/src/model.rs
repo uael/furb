@@ -6,16 +6,21 @@
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
 
-use std::{path::PathBuf, time::Duration};
+use std::{
+  collections::{HashMap, VecDeque},
+  path::PathBuf,
+  time::Duration,
+};
 
 use furb::view::Part;
-use furb_host::protocol::{Answer, Card, Frame, Verb};
+use furb_host::protocol::{Answer, Card, Frame};
 use jiff::{Timestamp, tz::TimeZone};
 use serde::{Deserialize, Serialize};
 
 use crate::{
   Options,
   code::Colors,
+  input::{Asked, Draft, Outgoing, Picker, Target},
   keys::{self, Does, System},
   link::Heard,
   list::Row,
@@ -88,6 +93,8 @@ pub(crate) struct Model {
   pub(crate) size: (u16, u16),
   /// The folder of the window, whose project a new session starts in.
   pub(crate) folder: PathBuf,
+  /// The home folder of the operator, which a path shows as `~`.
+  pub(crate) home: Option<PathBuf>,
   pub(crate) zone: TimeZone,
   /// The system of the client, which says how a text writes a key.
   pub(crate) system: System,
@@ -98,6 +105,18 @@ pub(crate) struct Model {
   pub(crate) thread: Option<Opened>,
   /// The colors of each text of python that the window drew.
   pub(crate) colors: Colors,
+  /// Where the operator turned the input, away from the open thread.
+  pub(crate) aim: Option<Target>,
+  /// The text of the input, as its editor holds it, and whether it is a word of python that runs.
+  pub(crate) draft: Draft,
+  /// The messages that wait to be sent, the first one first.
+  pub(crate) outgoing: VecDeque<Outgoing>,
+  /// Each request of the input that waits for its answer, by its machine and its id.
+  pub(crate) asked: HashMap<(usize, u64), Asked>,
+  /// The text that comes back to the input after a refusal, until the editor takes it.
+  pub(crate) restore: Option<String>,
+  /// The picker of the sessions, while it is open.
+  pub(crate) picker: Option<Picker>,
 }
 
 impl Model {
@@ -121,18 +140,35 @@ impl Model {
       moved: Duration::ZERO,
       size,
       folder: options.folder.clone(),
+      home: options.home.clone(),
       zone: options.zone.clone(),
       system: options.system,
       tokens,
       fault: None,
       thread: None,
       colors: Colors::new(),
+      aim: None,
+      draft: Draft::default(),
+      outgoing: VecDeque::new(),
+      asked: HashMap::new(),
+      restore: None,
+      picker: None,
     }
   }
 
   /// One frame of the daemon of a machine, or the end of its connection: whether what the machine
   /// told changed. The first cause of a loss stays.
   pub(crate) fn hear(&mut self, at: usize, heard: Heard) -> bool {
+    if let Ok(Frame::Reply { id, .. } | Frame::Refused { id: Some(id), .. }) = &heard
+      && let Some(asked) = self.asked.remove(&(at, *id))
+    {
+      match heard {
+        Ok(Frame::Reply { answer, .. }) => self.replied(asked, answer),
+        Ok(Frame::Refused { why, .. }) => self.restore = self.refused(asked, why),
+        _ => {}
+      }
+      return true;
+    }
     match heard {
       Ok(Frame::Reply { id, answer: Answer::Page(page) }) => {
         return self.answered(at, id, Ok(page));
@@ -187,7 +223,9 @@ impl Model {
       (part, (at, card.life.clone(), card.thread.prompt.clone()), card.clone())
     };
     self.settled = cards.into_iter().map(keyed).collect();
-    let stands = |key: &Key| self.settled.iter().any(|one| one.1 == *key);
+    // The thread that the window opened stays selected while its card is not told yet.
+    let open = self.thread.as_ref().map(|one| &one.key);
+    let stands = |key: &Key| open == Some(key) || self.settled.iter().any(|one| one.1 == *key);
     self.selected = self.selected.take().filter(stands);
     self.scrolled(0);
   }
@@ -221,20 +259,19 @@ impl Model {
   }
 
   /// A click on a row of the window, in the list: a card is selected and its thread opens, and the
-  /// head of the resolved threads shows or folds their rows. The page that the thread asks.
-  pub(crate) fn clicked(&mut self, y: usize) -> Option<Verb> {
+  /// head of the resolved threads shows or folds their rows.
+  pub(crate) fn clicked(&mut self, y: usize) {
     match self.row(y) {
       Some(Row::Card(at, _) | Row::Resolved(at)) => {
         self.selected = self.settled.get(at).map(|one| one.1.clone());
-        self.open_thread()
+        self.open_thread();
       }
       Some(Row::Head(Part::Resolved)) => {
         self.open = !self.open;
         // The resolved threads end the list, so the list moves to its end to show them.
         self.scrolled(isize::MAX);
-        None
       }
-      _ => None,
+      _ => {}
     }
   }
 
@@ -302,6 +339,15 @@ impl Model {
   /// Whether the machine of a card told the card in this connection.
   pub(crate) fn confirmed(&self, key: &Key) -> bool {
     self.machines[key.0].link == Link::Listed
+  }
+
+  /// A text with the home folder of the operator as `~`.
+  pub(crate) fn homed(&self, text: &str) -> String {
+    let Some(home) = self.home.as_ref().map(|one| one.display().to_string()) else {
+      return text.to_owned();
+    };
+    let text = text.replace(&format!("{home}/"), "~/");
+    if text == home { "~".to_owned() } else { text }
   }
 
   /// The hour and the minute of a second, in the zone of the window.
