@@ -11,7 +11,7 @@ use furb_window::open;
 use opentui::testing::TestApp;
 
 use crate::{
-  cards::{app, options, row, shows},
+  cards::{AWAY, app, options, row, shows},
   daemon::{
     ANSWERS, ASKS, CHOOSES, CONFIRMS, COUNTS, Daemon, PATIENCE, Peer, READ, TELLS, TICKS, TWICE,
   },
@@ -83,7 +83,8 @@ fn a_choice_is_answered_by_its_key_and_the_word_that_asked_goes_on() {
   // thread with the value that he chose.
   shows(&app, "left · you");
   said(&app, "left");
-  shows(&app, "● now");
+  app.advance(AWAY);
+  shows(&app, "Resolved 1");
   assert!(formless(&app), "{}", app.text());
   assert!(app.text().contains("┃ Reply to this thread"), "{}", app.text());
   screen("question-answered", &app);
@@ -222,6 +223,9 @@ fn a_question_of_another_thread_marks_its_card_and_shows_no_form() {
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
   app.click(80, row(&app, "how long does an ope"));
   shows(&app, "Two stages hold most");
+  // He reads the end of the open thread, so it rests with the resolved ones.
+  app.advance(AWAY);
+  shows(&app, "Resolved 1");
   let frame = shows(&app, "◆ 1 other thread asks");
   assert!(
     frame.contains("Needs you") && frame.contains("which key sends the queue  ◆ Input"),
@@ -239,7 +243,8 @@ fn a_question_of_another_thread_marks_its_card_and_shows_no_form() {
 #[test]
 fn a_notice_is_a_line_of_its_thread_with_no_form() {
   let (app, _daemon, ..) = opened(&format!("run the bench\n{TELLS}"), "The bench ran.");
-  let came = app.wait_until(PATIENCE, || app.text().contains("● now"));
+  app.advance(AWAY);
+  let came = app.wait_until(PATIENCE, || app.text().contains("Resolved 1"));
   assert!(came && formless(&app), "{}", app.text());
   assert!(app.text().contains("┃ Reply to this thread"), "{}", app.text());
 }

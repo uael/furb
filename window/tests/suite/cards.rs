@@ -23,6 +23,9 @@ use crate::{
 pub(crate) const CLOCK: u64 = 1_767_258_720;
 const HOUR: u64 = 3600;
 
+/// How long the hand of the operator is away from the list before the list settles.
+pub(crate) const AWAY: Duration = Duration::from_millis(1500);
+
 /// A window of 100 columns and 30 rows, as the design draws each screen.
 pub(crate) fn app() -> TestApp {
   TestApp::new(100, 30)

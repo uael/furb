@@ -59,6 +59,9 @@ pub(crate) struct Opened {
   pub(crate) since: Duration,
   /// The form of the question of the thread that the input answers.
   pub(crate) form: Option<Form>,
+  /// The time of the card of the thread when the window last said that the operator saw its end,
+  /// so the window says it once each time the thread ends.
+  pub(crate) seen: Option<u64>,
 }
 
 /// A row of the feed as a place that holds when rows come above it: a count of rows from the
@@ -514,6 +517,22 @@ impl Model {
     let docked = self.feed().map_or(0, |feed| feed.dock().len());
     let taken = 1 + self.open_rows().len() + docked + self.input_rows();
     usize::from(self.size.1).saturating_sub(taken)
+  }
+
+  /// What the operator saw, once the feed of the open thread follows its end and its card says
+  /// that the thread ended and that he did not read it: the window says it once each time the
+  /// thread ends, so a thread that he reads never waits for him.
+  pub(crate) fn seen_due(&mut self) -> Option<(usize, Verb)> {
+    let opened = self.thread.as_ref().filter(|one| one.top.is_none() && one.above.is_some())?;
+    let card = self.told_card(&opened.key)?;
+    if !card.thread.unread(&self.machines[opened.key.0].login) || opened.seen == Some(card.since) {
+      return None;
+    }
+    let since = card.since;
+    let opened = self.thread.as_mut()?;
+    opened.seen = Some(since);
+    let (at, life, about) = opened.key.clone();
+    Some((at, Verb::Seen { life, about }))
   }
 
   /// The card of a key, as its machine last told it.

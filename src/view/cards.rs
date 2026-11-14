@@ -111,24 +111,32 @@ impl Card {
     self
   }
 
-  /// Whether the thread waits for a member: it asks him or each operator, it failed or ended and he
-  /// did not read it, or a pause holds it that no operator said.
+  /// Whether the thread failed or ended after what a member read of it.
+  pub fn unread(&self, login: &str) -> bool {
+    matches!(self.standing, Standing::Failed | Standing::Resolved) && !self.read_by(login)
+  }
+
+  /// Whether the thread waits for a member: it asks him or each operator, it failed and he did not
+  /// read it, or a pause holds it that no operator said. An end that he did not read waits for
+  /// nobody: it rests, with its mark, whether a life holds the session or not.
   pub fn needs(&self, login: &str) -> bool {
     match &self.standing {
       Standing::Asks { of } => of.as_deref().is_none_or(|of| of == login),
       Standing::Paused { by } => !operator(by),
-      Standing::Failed | Standing::Resolved => !self.read_by(login),
+      Standing::Failed => self.unread(login),
       _ => false,
     }
   }
 
   /// The part of the list where a member finds the card, and its rank in that part: in what needs
-  /// him, a question stands before a failure and a pause, and those before a thread that ended.
+  /// him, a question stands before a failure and a pause. A thread that ended and that he did not
+  /// read rests.
   pub fn part(&self, login: &str) -> (Part, u8) {
+    let needs = self.needs(login);
     match &self.standing {
-      Standing::Asks { .. } if self.needs(login) => (Part::NeedsYou, 0),
-      Standing::Failed | Standing::Paused { .. } if self.needs(login) => (Part::NeedsYou, 1),
-      Standing::Resolved if self.needs(login) => (Part::NeedsYou, 2),
+      Standing::Asks { .. } if needs => (Part::NeedsYou, 0),
+      Standing::Failed | Standing::Paused { .. } if needs => (Part::NeedsYou, 1),
+      Standing::Resolved if self.unread(login) => (Part::Resting, 0),
       Standing::Resolved => (Part::Resolved, 0),
       _ if self.works() => (Part::Working, 0),
       _ => (Part::Resting, 0),

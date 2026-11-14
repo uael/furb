@@ -2330,12 +2330,13 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
     thread,
   };
   assert_eq!(told, wanted);
-  assert!(told.thread.needs(&login), "a thread that ended and that he did not read needs him");
+  assert!(told.thread.unread(&login), "he did not read the end of the thread");
+  assert_eq!(told.place(&login).0, view::Part::Resting);
   // What he read is told as a change of the card, and a later peer gets the card as it stands.
   let seen = Verb::Seen { life: life.clone(), about: prompt };
   assert_eq!(window.ask(seen).await, Ok(Answer::Done));
   let read = card(&mut window, |card| card.thread.read_by(&login)).await;
-  assert_eq!(read.thread.part(&login), (view::Part::Resolved, 0));
+  assert_eq!(read.place(&login).0, view::Part::Resolved);
   let mut late = Window::dialed(&local).await;
   assert_eq!(cards(&mut late).await, vec![read]);
 }

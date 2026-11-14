@@ -260,7 +260,7 @@ impl Model {
       }
       Standing::Delegates => run(aged("↳ Working"), colored(t.accent)),
       Standing::Stopped => run(aged("Stopped"), muted),
-      Standing::Resolved if needs => {
+      Standing::Resolved if card.thread.unread(&self.machines[key.0].login) => {
         return vec![run("● ", colored(t.accent)), run(since(), muted)];
       }
       Standing::Rests | Standing::Resolved => run(since(), muted),

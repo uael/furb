@@ -2,20 +2,15 @@
 
 #![cfg(test)]
 
-use std::time::Duration;
-
 use furb_host::protocol::{Answer, Verb};
 use furb_window::{open, tokens::Loader};
 use opentui::{native::Capture, style::Color, testing::TestApp};
 
 use crate::{
-  cards::{app, options, row, shows},
+  cards::{AWAY, app, options, row, shows},
   daemon::{ANSWERS, Daemon, FAILS, LONG, PATIENCE, Peer, THINKS},
   screens::screen,
 };
-
-/// How long the hand stays away from the list before a card changes its place.
-const AWAY: Duration = Duration::from_millis(1500);
 
 /// The columns of the thread, at the left of the list.
 const LEFT: usize = 61;
@@ -140,6 +135,10 @@ fn a_model_that_thinks_shows_its_thought_on_one_row_and_the_line_that_it_writes(
 fn a_thread_at_rest_shows_its_answer_as_prose_and_a_hover_lights_only_the_text() {
   let message = format!("how long does an open take\n{ANSWERS}");
   let (app, _daemon, _peer) = opened(&message, "Two stages hold most");
+  // He reads the end of the thread, so its card rests with the resolved ones, which he opens.
+  app.advance(AWAY);
+  app.click(80, row(&app, "Resolved 1"));
+  shows(&app, "Resolved 1 ▾");
   screen("thread-rests", &app);
   // The card, the button that resolves, and the link of the answer.
   for (text, from) in [("how long does an open", LEFT), ("[ Resolve ]", 0), ("the trace", 0)] {
@@ -152,7 +151,9 @@ fn a_thread_at_rest_shows_its_answer_as_prose_and_a_hover_lights_only_the_text()
 fn a_line_that_failed_shows_its_cross_and_its_error_under_it() {
   let message = format!("why is the window stuck after a switch of model\n{FAILS}");
   let (app, _daemon, _peer) = opened(&message, "ValueError");
-  let frame = app.text();
+  // He reads the end of the thread, so its card rests with the resolved ones.
+  app.advance(AWAY);
+  let frame = shows(&app, "Resolved 1");
   assert!(frame.contains("✗  raise ValueError("), "{frame}");
   screen("thread-failed", &app);
 }
@@ -177,10 +178,10 @@ fn an_older_page_keeps_the_rows_that_the_operator_reads() {
   // The model answers the messages in their order: once the last has its answer, each has, so no
   // answer lands while the operator scrolls.
   shows(&app, "24  close(None)");
-  // The card rests at once, and takes its place in the list once the hand is away from it.
-  shows(&app, "● now");
+  // He reads the end of the thread, so its card goes with the resolved threads once the hand is
+  // away from it.
   app.advance(AWAY);
-  shows(&app, "Needs you 1");
+  shows(&app, "Resolved 1");
   // The page of the end holds the twenty last exchanges. Near its top the window asks the four
   // before them, which come above the rows that he reads, and the feed goes on up to the first.
   let first = "┃ ground the branch, message by message";

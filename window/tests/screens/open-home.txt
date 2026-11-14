@@ -1,11 +1,11 @@
  furb                                                          All projects ▾         this machine
 
-  2 threads need you.                        ⌥A goes to one    Needs you 2
+  Nothing needs you.                                           Resting 2
 
-  ⌃O        go to a project, a session or a machine             remove the gate from…    ⠴ Opening
+  ⌃O        go to a project, a session or a machine             where does the time of…  ⠴ Opening
   ⌃P        commands                                            FU furb                       opus
   ⌃X ?      each key
-                                                                where does the time of…  ⠴ Opening
+                                                                remove the gate from…    ⠴ Opening
                                                                 FU furb                       opus
 
 

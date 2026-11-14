@@ -1,10 +1,10 @@
  furb · ground the branch, message by message   [ Resolve ]    All projects ▾         this machine
 ┃
-┃ ground the branch, message by message                        Needs you 1
-┃                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-                                                               ▌ground the branch, message…  ● now▌
-       opus/high                                               ▌FU furb                       opus▌
-    1  close(None)                                             ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+┃ ground the branch, message by message                        Resolved 1 ▸
+┃
+
+       opus/high
+    1  close(None)
 
 ┃
 ┃ and the step 1

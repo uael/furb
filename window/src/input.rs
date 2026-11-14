@@ -63,14 +63,15 @@ pub(crate) struct Draft {
   pub(crate) python: bool,
 }
 
-/// What a request of the window asked of a daemon: the open of a life, a message, a stop, or the
-/// answer to a question.
+/// What a request of the window asked of a daemon: the open of a life, a message, a stop, the
+/// answer to a question, or what the operator saw.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Asked {
   Open,
   Say,
   Stop,
   Answer,
+  Seen,
 }
 
 /// A message of the operator that the thread shows before the daemon tells it: its text, and the

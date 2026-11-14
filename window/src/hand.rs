@@ -318,8 +318,8 @@ fn keep(app: &App, window: &Shared) {
 }
 
 /// Each request that is due asked of its machine: the open of each life that the window holds,
-/// the page of the end of the open thread, and the next message of the queue of the input, each
-/// with its id kept until its answer comes.
+/// the page of the end of the open thread, the next message of the queue of the input, and what
+/// the operator saw of the open thread, each with its id kept until its answer comes.
 fn pump(window: &Shared) {
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
@@ -339,6 +339,11 @@ fn pump(window: &Shared) {
     && let Some(asker) = askers.get_mut(at)
   {
     model.asked.insert((at, asker.ask(verb)), Asked::Say);
+  }
+  if let Some((at, verb)) = model.seen_due()
+    && let Some(asker) = askers.get_mut(at)
+  {
+    model.asked.insert((at, asker.ask(verb)), Asked::Seen);
   }
 }
 

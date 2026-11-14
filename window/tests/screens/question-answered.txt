@@ -1,10 +1,10 @@
  furb · where does the list stand               [ Resolve ]    All projects ▾         this machine
 ┃
-┃ where does the list stand                                    Needs you 1
-┃ (the model asks a choice)                                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                              ▌where does the list stand    ● now▌
-                                                               ▌FU furb                       opus▌
-       opus/high                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+┃ where does the list stand                                    Resolved 1 ▸
+┃ (the model asks a choice)
+┃
+
+       opus/high
     1  side = await prompt(Literal['right', 'left'], '…+50
     2  close(side)
 

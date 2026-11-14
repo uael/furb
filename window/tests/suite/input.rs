@@ -84,9 +84,11 @@ fn a_message_starts_a_new_session_and_its_answer_shows_in_its_thread() {
   assert!(frame.contains("┃ how long does an open take"), "{frame}");
   assert!(frame.contains("┃ Reply to this thread"), "{frame}");
   shows(&app, "Two stages hold most");
-  // The card of the thread, which the model answered, as its machine tells it after the page.
+  // The card of the thread, which the model answered, as its machine tells it after the page. He
+  // reads its end, so it waits for him in no part of the list.
   shows(&app, "FT furb-try");
-  shows(&app, "● now");
+  let frame = shows(&app, "Resolved 1");
+  assert!(!frame.contains("Needs you"), "{frame}");
   screen("input-new-session", &app);
   assert_eq!(told(&daemon, &sessions), [format!("how long does an open take {ANSWERS}")]);
 }
@@ -196,7 +198,7 @@ fn the_python_switch_runs_a_word_of_the_operator() {
   shows(&app, "Two stages hold most");
   // The card of the thread, which the model answered, as its machine tells it after the page.
   shows(&app, "FT furb-try");
-  shows(&app, "● now");
+  shows(&app, "Resolved 1");
   let (x, y) = at(&app, "○ Python", 0);
   lights(&app, x, y);
   app.click(x, y);

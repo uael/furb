@@ -15,7 +15,7 @@ use furb_window::{Options, open};
 use opentui::testing::TestApp;
 
 use crate::{
-  cards::{app, options, row, shows},
+  cards::{AWAY, app, options, row, shows},
   daemon::{ANSWERS, Daemon, PATIENCE},
   screens::screen,
 };
@@ -23,7 +23,11 @@ use crate::{
 // What only the tests of a session at rest use, which run on unix alone.
 #[cfg(unix)]
 use {
-  crate::thread::{at, lights},
+  crate::{
+    cards::CLOCK,
+    daemon::aged,
+    thread::{at, lights},
+  },
   opentui::style::Color,
   std::fs,
 };
@@ -45,7 +49,8 @@ fn homed(daemon: &Daemon) -> Options {
 
 /// A machine with sessions at rest, one for each title, whose model answered the one thread of
 /// each: its daemon, which holds each open that a window asks, and the file that lets the opens
-/// go. The window shows their cards.
+/// go. The window shows their cards, each record a second newer than the one before it, so the
+/// list gives them one order whatever the second at which each life ended.
 #[cfg(unix)]
 fn resting(app: &TestApp, titles: &[&str]) -> (Daemon, PathBuf) {
   let mut daemon = Daemon::bound(app);
@@ -54,7 +59,8 @@ fn resting(app: &TestApp, titles: &[&str]) -> (Daemon, PathBuf) {
   daemon.served();
   let mut peer = daemon.peer();
   for (at, title) in titles.iter().enumerate() {
-    peer.rested(&record(&daemon, at), &message(title), None);
+    let life = peer.rested(&record(&daemon, at), &message(title), None);
+    aged(&life, CLOCK, u64::try_from(titles.len() - at).unwrap());
   }
   open(app, vec![daemon.machine("mac")], homed(&daemon));
   // The daemon ends once it holds no peer and no life, so the peer of the test goes only once the
@@ -77,9 +83,11 @@ fn clicked(app: &TestApp, title: &str) {
   app.click(80, row(app, &title[..15]));
 }
 
-/// The rows of the left side of a frame.
+/// The rows of the left side of a frame, with no blank at their end, which the list beside them
+/// pads.
 fn left(app: &TestApp) -> Vec<String> {
-  app.text().lines().map(|line| line.chars().take(LEFT).collect::<String>()).collect()
+  let left = |line: &str| line.chars().take(LEFT).collect::<String>().trim_end().to_owned();
+  app.text().lines().map(left).collect()
 }
 
 #[test]
@@ -95,6 +103,10 @@ fn a_session_whose_daemon_ended_opens_in_a_window_of_a_new_daemon_and_shows_the_
   open(&first, vec![daemon.machine("mac")], homed(&daemon));
   clicked(&first, title);
   shows(&first, "Two stages hold most");
+  // The window says that he read the end of the thread, and the record keeps it once its card
+  // tells it.
+  first.advance(AWAY);
+  shows(&first, "Resolved 1");
   let before = left(&first);
   // The daemon ends with the app whose runtime serves it, and its lives with it.
   drop((peer, first));
@@ -104,6 +116,8 @@ fn a_session_whose_daemon_ended_opens_in_a_window_of_a_new_daemon_and_shows_the_
   let free = || File::open(lease(&record)).is_ok_and(|lease| lease.try_lock().is_ok());
   assert!(second.wait_until(PATIENCE, free), "the life of the first daemon keeps its record");
   open(&second, vec![daemon.machine("mac")], homed(&daemon));
+  // So the thread stands with the resolved ones.
+  second.click(80, row(&second, "Resolved 1"));
   clicked(&second, title);
   shows(&second, "Two stages hold most");
   assert_eq!(left(&second), before);

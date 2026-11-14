@@ -225,6 +225,7 @@ impl Model {
       (Asked::Open, Ok(Frame::Refused { why, .. })) => self.restore = self.unopened(at, id, why),
       (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
       (Asked::Answer, Ok(Frame::Refused { why, .. })) => self.unanswered(why),
+      (Asked::Seen, Ok(Frame::Refused { why, .. })) => self.fault = Some(why),
       (Asked::Answer, _) => {}
       (_, Ok(Frame::Refused { why, .. })) => self.restore = self.refused(asked, why),
       _ => {}

@@ -1,6 +1,6 @@
  furb · how long does an open take              [ Resolve ]    All projects ▾         this machine
 
-  The open takes 329 s. Two stages hold most of it: 181 s      Needs you 1
+  The open takes 329 s. Two stages hold most of it: 181 s      Resting 1
   to send each entry to the ears of the host, and 104 s in     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
   the boot.                                                    ▌how long does an open…     ◆ Input▌
                                                                ▌FU furb                       opus▌

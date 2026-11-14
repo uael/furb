@@ -1,10 +1,10 @@
  furb · how long does an open take              [ Resolve ]    All projects ▾         this machine
 ┃
-┃ how long does an open take                                   Needs you 1
-┃ (the model answers)                                          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                              ▌how long does an open take   ● now▌
-                                                               ▌FU furb                       opus▌
-       opus/high                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+┃ how long does an open take                                   Resolved 1 ▾
+┃ (the model answers)
+┃                                                              ▌✓ how long does an open take   now▌
+
+       opus/high
     1  found = 2
     2  close('The open takes **329 s**. Two stages ho…+250
 

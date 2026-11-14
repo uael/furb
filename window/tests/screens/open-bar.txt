@@ -1,6 +1,6 @@
  furb · remove the gate from the engine                        All projects ▾         this machine
   Opening · reads the record                          1.0 s
-                                                               Needs you 1
+                                                               Resting 1
 ┃                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
 ┃ remove the gate from the engine                              ▌remove the gate from…    ⠹ Opening▌
 ┃                                                              ▌FU furb                       opus▌
