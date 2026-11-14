@@ -64,7 +64,7 @@ use crate::{
   access::{Access, Ports},
   answers::Answerer,
   cards::{self, Told},
-  error::{DaemonError, ProtocolError, TransportError},
+  error::{DaemonError, LifeError, ProtocolError, TransportError},
   event::{Event, Seq},
   holders::{Holders, Window},
   life::{Command, Life, LifeHandle, Reply},
@@ -401,8 +401,8 @@ enum Asked {
   Life { life: String, reply: oneshot::Sender<Result<(LifeHandle, Option<String>), ProtocolError>> },
   /// A window whose peer is gone.
   Left { life: String, outbox: Outbox },
-  /// A life whose thread told its end, in one of its births.
-  Ended { life: String, born: u64 },
+  /// A life whose thread told its end, in one of its births, with the fault that ended it.
+  Ended { life: String, born: u64, fault: Option<String> },
   /// A life that told its cards, or a record whose index of the threads the daemon made.
   Carded { life: String },
   /// A life that stalled, in one of its births: each open act, and the notice.
@@ -437,6 +437,7 @@ impl Daemon {
       told: Told::default(),
       indexing: HashSet::new(),
       index,
+      faults: HashMap::new(),
       changes,
       weigh,
       rebirths: Asks::default(),
@@ -659,6 +660,10 @@ struct Lives {
   /// record goes there twice: a record whose index cannot be made is not asked again.
   indexing: HashSet<String>,
   index: mpsc::UnboundedSender<String>,
+  /// The fault that ended the last life of each record, until its next open: a peer that heard
+  /// the answer to its open cannot know when the open failed, so each verb that it says after
+  /// hears why, as a verb that waited for the open does.
+  faults: HashMap<String, String>,
 }
 
 /// The index of the threads of each record that the daemon asks, made one at a time on a thread
@@ -843,7 +848,8 @@ impl Lives {
       Asked::Reads { outbox, task } => self.readers.read(outbox, task),
       Asked::Life { life, reply } => {
         let found = self.held.get(&life).map(|held| (held.handle.clone(), held.config.clone()));
-        reply.send(found.ok_or(ProtocolError::Closed { life })).ok();
+        let fault = self.faults.get(&life).map(|why| LifeError::Refused(why.clone()).into());
+        reply.send(found.ok_or_else(|| fault.unwrap_or(ProtocolError::Closed { life }))).ok();
       }
       Asked::Left { life, outbox } => {
         self.views.left(&life, &outbox);
@@ -855,7 +861,7 @@ impl Lives {
         }
       }
       Asked::Carded { life } => self.carded(&life),
-      Asked::Ended { life, born } => self.ended(&life, born),
+      Asked::Ended { life, born, fault } => self.ended(&life, born, fault),
       Asked::Stalled { life, born, acts, notice } => {
         if let Some(Held { born: now, stage: Stage::Living(holders), .. }) = self.held.get(&life)
           && *now == born
@@ -995,6 +1001,7 @@ impl Lives {
     };
     let places = processes::places(&opening);
     let handle = Life::spawn(opening)?;
+    self.faults.remove(life);
     self.born += 1;
     let watch = Watch {
       life: handle.clone(),
@@ -1232,11 +1239,14 @@ impl Lives {
     }
   }
 
-  /// A life that ended, in the birth that the daemon holds: gone, and opened again for each open
-  /// that waited for its end.
-  fn ended(&mut self, life: &str, born: u64) {
+  /// A life that ended, in the birth that the daemon holds: gone, with the fault that ended it,
+  /// and opened again for each open that waited for its end.
+  fn ended(&mut self, life: &str, born: u64, fault: Option<String>) {
     if self.held.get(life).is_none_or(|held| held.born != born) {
       return;
+    }
+    if let Some(fault) = fault {
+      self.faults.insert(life.to_owned(), fault);
     }
     self.views.ended(life);
     let gone = self.held.remove(life);
@@ -1345,14 +1355,14 @@ impl Watch {
         }
       }
     }
-    let why = match end {
+    let why = match &end {
       Some(Some(fault)) => fault,
-      Some(None) => "with no fault".to_owned(),
-      None => "with no event of its end".to_owned(),
+      Some(None) => "with no fault",
+      None => "with no event of its end",
     };
     report(self.log.as_ref(), &format_args!("the life of {} ended: {why}", self.record));
     if let Some(asks) = asks.upgrade() {
-      asks.send(Asked::Ended { life: self.record, born: self.born }).ok();
+      asks.send(Asked::Ended { life: self.record, born: self.born, fault: end.flatten() }).ok();
     }
   }
 }

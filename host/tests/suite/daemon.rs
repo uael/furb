@@ -827,6 +827,30 @@ async fn a_verb_that_waited_for_an_open_that_failed_hears_why() {
   assert_eq!(why, format!("Refused: Another process owns {life}."));
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn a_verb_said_after_an_open_failed_hears_why_until_the_next_open() {
+  let at = place();
+  let (local, _daemon) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let life = at.join("a.jsonl").display().to_string();
+  // Another holder owns the lease of the record, so the open fails at once.
+  let lease = File::create(format!("{life}.lock")).unwrap();
+  lease.try_lock().unwrap();
+  open(&mut window, &at, "a.jsonl", None).await;
+  // The daemon holds the life no more before the verb comes, as for a window that said it after
+  // the answer to its open.
+  window.ended(&life).await;
+  let inspect = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
+  let why = format!("Refused: Another process owns {life}.");
+  assert_eq!(window.ask(inspect).await, Err(ProtocolError::Refused { why }));
+  drop(lease);
+  open(&mut window, &at, "a.jsonl", None).await;
+  let pending = window.ask(Verb::Pending { life }).await;
+  assert!(pending.is_ok(), "{pending:?}");
+}
+
 #[tokio::test]
 async fn a_life_that_ended_opens_again_from_its_checkpoint() {
   let at = place();

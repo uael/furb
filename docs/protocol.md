@@ -319,8 +319,10 @@ it is not given. The daemon answers requests in any order.
     A window that attaches to a life that stands hears no frame `opening` until the next rebirth of the life.
   - The frame is no event of the log of the life and no fact of the record.
 - A verb of a life that a peer says while the life opens waits for the life, which answers it once it stands, in the
-  order that it heard each verb. An open that fails refuses each verb that waited for it with the fault of the open.
-  The daemon answers each other verb at once.
+  order that it heard each verb. A life that ends on a fault, as an open that fails, refuses with that fault each
+  verb that waited for it, and each such verb that comes after its end, in the place of `closed`, until the next
+  open of the record: a peer that heard the answer to its open cannot know when the open failed. The daemon answers
+  each other verb at once.
 - The daemon watches each life that it holds, from outside the life: no word and no ear of the life runs the watch.
   When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact and no model
   writes for the bound of a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes
