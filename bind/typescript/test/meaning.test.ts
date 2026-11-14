@@ -36,7 +36,8 @@ test("a recorded life folds its acts, its desk, its threads and its moments in t
     ["stand", "stand1", "done"],
     ["prompt", "prompt1", "runs"],
     ["rung", "rung1", "idle"],
-    ["reply", "reply1", "delegates"],
+    // The record tells a start of the reply after its refusal, and a done act stays done.
+    ["reply", "reply1", "failed"],
     ["chain", "chain2", "thinks"],
     ["prompt", "prompt2", "runs"],
     ["rung", "rung2", "thinks"],

@@ -317,8 +317,10 @@ impl Fold {
           }
         }
       }
+      // A done act stays done, as the engine keeps the first done of an act: a start that the
+      // World tells after it changes nothing.
       "started" => {
-        if let Some(act) = self.acts.get_mut(about) {
+        if let Some(act) = self.acts.get_mut(about).filter(|act| !act.done()) {
           act.phase = Phase::Started;
           act.operator |= by == CONSOLE;
           self.moved.push(about.to_owned());

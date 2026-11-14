@@ -305,3 +305,19 @@ fn a_checkpoint_makes_each_act_that_it_carries_and_ends_each_act_that_it_ends() 
     "it makes no act it holds"
   );
 }
+
+#[test]
+fn a_start_that_the_world_tells_after_the_done_of_an_act_leaves_it_done() {
+  let mut fold = Fold::default();
+  let refused = json!({"is": "Refused", "args": ["nothing takes reply"]});
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "are the lives stopped?", ""]),
+    json!(["reply", "reply1", "rung1", "chain1", "claude-cli:opus/high"]),
+    json!(["done", "reply1", "", refused]),
+  ];
+  for fact in &facts {
+    fold.recorded(fact);
+  }
+  assert_eq!(fold.recorded(&json!(["started", "reply1", "provider"])), Vec::new());
+}
