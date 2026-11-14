@@ -16,10 +16,9 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-added-large-files
-        # The animation of the TUI in the README is sharp at the cost of its size.
         # A record of the corpus holds a whole life with a checkpoint, and git keeps a copy of a record that a release
         # does not change once.
-        exclude: ^(docs/furb\.gif|tests/corpus/.*\.jsonl)$
+        exclude: ^tests/corpus/.*\.jsonl$
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
@@ -110,18 +109,17 @@ repos:
         name: the names that nothing but a test names
         entry: python3 -I script/unused.py
         language: system
-        files: ^(tui/src/|bind/typescript/(src/|README\.md$)|src/|cli/src/|host/src/|window/src/|build/|script/unused\.py$)
+        files: ^(bind/typescript/(src/|README\.md$)|src/|cli/src/|host/src/|window/src/|build/|script/unused\.py$)
         pass_filenames: false
       - id: biome
         name: biome
         # The lint of the gates, bun run lint, which fails on a warning too and checks the TypeScript, its JSON and the
-        # biome config. The job of the hooks has no bun, so it skips this hook, and the job of the bindings and the TUI
-        # runs the same lint. tsc is not here: it reads the bindings that bun run build makes, so it fails on a clone
-        # with no build.
+        # biome config. The job of the hooks has no bun, so it skips this hook, and the job of the bindings runs the same
+        # lint. tsc is not here: it reads the bindings that bun run build makes, so it fails on a clone with no build.
         entry: bun run lint
         language: system
         stages: [manual]
-        files: ^(bind/typescript/|tui/|docs/examples/|\.agents/skills/[^/]+/tui\.ts$)|^(package|tsconfig|biome)\.json$
+        files: ^(bind/typescript/|docs/examples/)|^(package|tsconfig|biome)\.json$
         pass_filenames: false
       - id: workflows
         name: the workflows parse and keep their shape

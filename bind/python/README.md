@@ -68,8 +68,8 @@ deletes the record.
 - `answered(shape, line)` reads a line of the operator as a value of one of the `shapes()`, by the rules that every
   console of the crate reads a line by.
 - `_monty.SYSTEM` is the system prompt of every model: the engine, minified with its program kept as it is.
-- `setup()` says what a first run checks of each place of the models, `parts(project)` gives the part for the TUI of
-  each extension, `enabled(root)` the extensions that a record enabled, and `kept(path)` the entries of a record.
+- `setup()` says what a first run checks of each place of the models, `enabled(root)` the extensions that a record
+  enabled, and `kept(path)` the entries of a record.
   `furb_monty/_monty.pyi` gives each other name, with its types.
 
 ## Work that waits

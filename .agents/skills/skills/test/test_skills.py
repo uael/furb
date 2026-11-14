@@ -106,8 +106,8 @@ async def test_the_world_answers_a_file_of_the_folder_of_a_skill(tmp_path: Path)
   assert got == Text("skills://catchup/catchup.py", carried.read_text(encoding="utf-8"))
   with pytest.raises(Refused, match=r"The skill brew holds no file \.\./x\."):
     await engine.rung('close(read("skills://brew/../x", HIDDEN))', on=root)
-  with pytest.raises(Refused, match=r"The skill catchup holds no file tui\.ts\."):
-    await engine.rung('close(read("skills://catchup/tui.ts", HIDDEN))', on=root)
+  with pytest.raises(Refused, match=r"The skill catchup holds no file notes\.md\."):
+    await engine.rung('close(read("skills://catchup/notes.md", HIDDEN))', on=root)
 
 
 async def test_the_world_answers_the_name_of_a_skill_with_its_word_or_its_skill_md(tmp_path: Path) -> None:

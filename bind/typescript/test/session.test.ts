@@ -8,6 +8,7 @@ import {
   boot,
   DamagedJournal,
   type Ear,
+  type Engine,
   enabled,
   type Fact,
   inspectRecord,
@@ -16,9 +17,8 @@ import {
   ROOT,
   Session,
   saveFile,
-  type Turn,
 } from "../src/index.ts";
-import { pauseSaid } from "../src/life/acts.ts";
+
 import { addressOf } from "../src/skill.ts";
 import { alive, printPid, remove } from "./processes.ts";
 import { until } from "./until.ts";
@@ -27,7 +27,7 @@ import { until } from "./until.ts";
 // the crate, and its `answer` replaces the request, so no model is asked.
 const modeled = { model: "claude-cli:sonnet" };
 /** A turn of a model whose word is the one given. */
-const said = (word: string): Turn => ["assistant", word, null, null];
+const said = (word: string): ReturnType<Engine["turns"]>[number] => ["assistant", word, null, null];
 /** What a command has printed so far, as the act table holds it. */
 const printed = (session: Session, id: string) =>
   (session.activity.acts.get(id)?.value as { stdout?: { content: string } } | undefined)?.stdout?.content ??
@@ -588,24 +588,6 @@ test("a chain that its provider paused names the provider and its error as the c
     expect(broken.pauseOf(root)).toBeUndefined();
   } finally {
     await broken.dispose();
-  }
-});
-
-test("a pause of the operator names the operator and the reason that it gave", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-pause-cause-"));
-  const life = boot({ ...modeled, record: join(cwd, "life.jsonl") });
-  try {
-    const root = life.engine.root;
-    life.engine.pause(root, { why: "wait for the owner" });
-    expect(life.pauseOf(root)).toEqual({ by: "operator", why: "wait for the owner" });
-    const cause = life.pauseOf(root);
-    expect(cause && pauseSaid(cause)).toEqual({ text: "the operator: wait for the owner", error: false });
-    life.engine.wake(root);
-    life.engine.pause(root);
-    expect(life.pauseOf(root)).toEqual({ by: "operator" });
-  } finally {
-    await life.dispose();
-    await rm(cwd, { recursive: true, force: true });
   }
 });
 

@@ -149,8 +149,8 @@ if ! clone "$src/Cargo.toml" "$path/.worktree-probe" 2>/dev/null; then
 fi
 rm -f "$path/.worktree-probe"
 
-# The target of cargo, the packages of bun, the build of the TypeScript package, and the cache of the tests of the TUI.
-for dir in target node_modules bind/typescript/node_modules tui/node_modules bind/typescript/dist .furb/tests; do
+# The target of cargo, the packages of bun, the build of the TypeScript package, and the configs of its tests.
+for dir in target node_modules bind/typescript/node_modules bind/typescript/dist .furb/tests; do
   if [ -e "$src/$dir" ] && [ ! -e "$path/$dir" ]; then
     mkdir -p "$(dirname "$path/$dir")"
     clone "$src/$dir" "$path/$dir"

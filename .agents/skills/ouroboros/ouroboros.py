@@ -22,7 +22,7 @@ def bound_by(on: str = "") -> dict[str, str]:
   return found
 
 
-def extend(name: str, *rungs: str, tui: str = "", session: bool = False, view: str = "") -> Text:
+def extend(name: str, *rungs: str, session: bool = False, view: str = "") -> Text:
   words, folder = program(), f".furb/skills/{name}"
   if session:
     held = next((str(x[4]) for x in reversed(transcript(ROOT)) if x[0] == "enable" and x[3] == name), "")
@@ -33,13 +33,6 @@ def extend(name: str, *rungs: str, tui: str = "", session: bool = False, view: s
     held = read(f"{folder}/{name}.py", HIDDEN).content
   except Refused:
     held = ""
-  if tui:
-    write(Text(f"{folder}/tui.ts", tui.strip("\n") + "\n"))
-  else:
-    try:
-      tui = read(f"{folder}/tui.ts", HIDDEN).content
-    except Refused:
-      tui = ""
   try:
     skill = read(f"{folder}/SKILL.md", HIDDEN).content
   except Refused:
@@ -47,10 +40,10 @@ def extend(name: str, *rungs: str, tui: str = "", session: bool = False, view: s
       f"---\nname: {name}\ndescription: The skill {name} of this project.\n---\nThe skill {name} of this project.\n"
     )
   head, _, body = skill[4:].partition("\n---\n") if skill.startswith("---\n") else ("", "", skill)
-  kept = [x for x in head.splitlines() if not x.strip().startswith(("furb-word:", "furb-view:"))]
+  kept = [x for x in head.splitlines() if not x.strip().startswith("furb-word:")]
   kept = kept if "metadata:" in kept else [*kept, "metadata:"]
   at = kept.index("metadata:") + 1
-  kept[at:at] = [f"  furb-word: {name}.py", *(["  furb-view: tui.ts"] if tui else [])]
+  kept[at:at] = [f"  furb-word: {name}.py"]
   write(Text(f"{folder}/SKILL.md", "---\n" + "\n".join(kept) + "\n---\n" + body))
   landed = write(
     Text(f"{folder}/{name}.py", "\n\n".join([held.strip("\n"), *(words[one] for one in rungs)]).strip("\n") + "\n")

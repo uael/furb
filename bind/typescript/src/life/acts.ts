@@ -47,9 +47,6 @@ export const outcomeOf = (act?: Pick<Act, "phase">): unknown =>
   act?.phase.phase === "done" ? act.phase.value : null;
 /** Whether a pause holds an act that is not done. */
 export const isPaused = (act?: Pick<Act, "phase" | "pause">): boolean => Boolean(act?.pause) && !isDone(act);
-/** The thread that a prompt on a thread is on: the prompt that it is on, and nothing for any other act. */
-export const onThread = (act?: Pick<Act, "kind" | "on" | "chain">): string | undefined =>
-  act?.kind === "prompt" && act.on !== act.chain ? act.on : undefined;
 /** Whether a fact compacts its chain: a cut, which names what the model of the chain reads from then on, but the cut of
  * a birth, which keeps the fact carried of its checkpoint; and a prefix that another said on a chain, which is how an
  * engine from before the cut compacted it, where a chain says its own prefix at its birth. */
@@ -87,10 +84,6 @@ export interface Measure {
   actor?: string;
 }
 
-/** Whether an act had no end when its record ended, in a record open to read, where nothing runs to end it: it stands
- * held with no pause over it, and it is no work. */
-export const unfinished = (act: Pick<Act, "phase" | "pause" | "state">): boolean =>
-  act.state === "paused" && !act.pause && !isDone(act);
 /** What a person reads of how the word of a rung ran: why a fault or a cancel ended it, and nothing else. */
 export const reasonOf = (run: RunState | null | undefined): string =>
   run && "reason" in run ? run.reason : "";
@@ -102,31 +95,6 @@ export function failed(act: Pick<Act, "run" | "phase">): boolean {
   return Boolean(
     value && typeof value === "object" && "is" in value && "args" in value && value.is !== "CancelledError",
   );
-}
-
-/** The error that a value is, once the engine gave it as a value of python: its class and its message. */
-export function errorOf(value: unknown): { is: string; message: string } | undefined {
-  if (!value || typeof value !== "object" || !("is" in value) || !("args" in value)) return undefined;
-  const args = (value as { args: unknown }).args;
-  return {
-    is: String((value as { is: unknown }).is),
-    message: Array.isArray(args) ? args.map(String).join(" ") : "",
-  };
-}
-
-/** The words of the cause of a pause: who paused, and the error or the reason that it gave. Whether
- * the cause is an error says which tone it takes. */
-export function pauseSaid(cause: PauseCause): { text: string; error: boolean } {
-  const who = operated(cause.by) ? "the operator" : cause.by;
-  const error = errorOf(cause.why);
-  const why = error
-    ? `${error.is}: ${error.message}`
-    : typeof cause.why === "string"
-      ? cause.why
-      : cause.why == null
-        ? ""
-        : JSON.stringify(cause.why);
-  return { text: why ? `${who}: ${why}` : `${who} paused it`, error: error !== undefined };
 }
 
 /** Whether an act was cancelled: a rung whose run ended with a cancel, or an act done with a cancel. A cancel is what

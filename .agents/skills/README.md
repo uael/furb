@@ -17,9 +17,8 @@ write your own.
 
 Each folder holds these parts:
 
-- `SKILL.md`, the manifest: a skill, whose metadata names the word and the interface, and the life word, whether it
-  plays by default and the part for the TUI when the extension has them.
-- `tui.ts`, the part for the TUI, in `compaction` and `mcp`.
+- `SKILL.md`, the manifest: a skill, whose metadata names the word and the interface, and the life word and whether it
+  plays by default when the extension has them.
 - `<name>.py`, the word: the Python that each chain runs.
 - `<name>.pyi`, the contract: the laws of the extension, one sentence on each line.
 -  `test/`, the suite, with one test for each sentence of the contract. `uv run pytest -q .agents/skills/<name> --no-cov`

@@ -12,11 +12,11 @@ use super::{
 use crate::view::{Act, Fold, Held, State};
 use std::{fs, hint::black_box, iter, slice, time::Instant};
 
-/// The acts of the record of a conductor that the tests of the TUI read, with after it what a
-/// record of the owner holds and it lacks, scrubbed: a wake of the round, and a word of the
-/// operator that tells the chain, with the acknowledgment of his rung.
+/// The acts of the record of a conductor, a life of 23 chains made from scripted words, with after
+/// it what a record of the owner holds and it lacks, scrubbed: a wake of the round, and a word of
+/// the operator that tells the chain, with the acknowledgment of his rung.
 fn conductor() -> Vec<Act> {
-  let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tui/fixtures/conductor.jsonl");
+  let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/conductor.jsonl");
   let Ok(record) = fs::read_to_string(path) else { panic!("no record at {path}") };
   let wake = "An ask of the ledger is missing, and no item carries it now.";
   let more = [

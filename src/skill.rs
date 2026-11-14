@@ -4,11 +4,10 @@
 //! Claude Code reads the folder as an ordinary skill. Its frontmatter gives the name and the
 //! description, and the fields of furb under `metadata`, where the open format of skills puts the
 //! fields of a client: the file of its word, its life word, the file of its interface, whether it
-//! plays by default, where it plays, the file of its view for a TUI, and the program of its
-//! process, which the daemon starts when a life plays it. The file of the word is a python module
-//! that imports what it uses from `furb.engine`, so an editor reads it. The word is that file less
-//! those imports. The official extensions are the crate's own, which it carries in
-//! the same form.
+//! plays by default, where it plays, and the program of its process, which the daemon starts when a
+//! life plays it. The file of the word is a python module that imports what it uses from
+//! `furb.engine`, so an editor reads it. The word is that file less those imports. The official
+//! extensions are the crate's own, which it carries in the same form.
 //!
 //! A host finds the extensions in the configs that [`configs`] gives, in its order, each
 //! `{"skills": {name:
@@ -123,9 +122,6 @@ pub(crate) const DEFAULT: &str = "furb-default";
 /// The field of the manifest that says where the extension plays.
 const PLAYS: &str = "furb-plays";
 
-/// The field of the manifest that names the file of the view of the extension for a TUI.
-const VIEW: &str = "furb-view";
-
 /// The field of the manifest that names the file of the process of the extension, which the daemon
 /// of the host starts when a life plays the extension: a module of TypeScript or JavaScript, which
 /// bun runs, or a program.
@@ -138,7 +134,7 @@ pub(crate) const PROCESS: &str = "furb-process";
 pub(crate) const CONFIG: &str = "furb-config";
 
 /// Each field of furb that a manifest can give.
-const FIELDS: [&str; 8] = [WORD, LIFE, INTERFACE, DEFAULT, PLAYS, VIEW, PROCESS, CONFIG];
+const FIELDS: [&str; 7] = [WORD, LIFE, INTERFACE, DEFAULT, PLAYS, PROCESS, CONFIG];
 
 /// The marks that open a block of lines as the value of a key of a frontmatter.
 const BLOCKS: [&str; 6] = ["|", "|-", "|+", ">", ">-", ">+"];
@@ -152,56 +148,47 @@ const EVERY: &str = "every";
 /// carries after the life word for it.
 const ROOTED: &str = "root";
 
-/// The official extensions, each as its manifest, the file of its word, and the file of the part
-/// for a TUI that its
-/// manifest names, in the order a life runs them.
-const OFFICIAL: [(&str, &str, Option<&str>, &str); 8] = [
+/// The official extensions, each as its manifest, the file of its word and the file of its
+/// interface, in the order a life runs them.
+const OFFICIAL: [(&str, &str, &str); 8] = [
   (
     include_str!("../.agents/skills/catchup/SKILL.md"),
     include_str!("../.agents/skills/catchup/catchup.py"),
-    None,
     include_str!("../.agents/skills/catchup/catchup.pyi"),
   ),
   (
     include_str!("../.agents/skills/memory/SKILL.md"),
     include_str!("../.agents/skills/memory/memory.py"),
-    None,
     include_str!("../.agents/skills/memory/memory.pyi"),
   ),
   (
     include_str!("../.agents/skills/skills/SKILL.md"),
     include_str!("../.agents/skills/skills/skills.py"),
-    None,
     include_str!("../.agents/skills/skills/skills.pyi"),
   ),
   (
     include_str!("../.agents/skills/compaction/SKILL.md"),
     include_str!("../.agents/skills/compaction/compaction.py"),
-    Some(include_str!("../.agents/skills/compaction/tui.ts")),
     include_str!("../.agents/skills/compaction/compaction.pyi"),
   ),
   (
     include_str!("../.agents/skills/naming/SKILL.md"),
     include_str!("../.agents/skills/naming/naming.py"),
-    None,
     include_str!("../.agents/skills/naming/naming.pyi"),
   ),
   (
     include_str!("../.agents/skills/ouroboros/SKILL.md"),
     include_str!("../.agents/skills/ouroboros/ouroboros.py"),
-    None,
     include_str!("../.agents/skills/ouroboros/ouroboros.pyi"),
   ),
   (
     include_str!("../.agents/skills/web/SKILL.md"),
     include_str!("../.agents/skills/web/web.py"),
-    None,
     include_str!("../.agents/skills/web/web.pyi"),
   ),
   (
     include_str!("../.agents/skills/mcp/SKILL.md"),
     include_str!("../.agents/skills/mcp/mcp.py"),
-    Some(include_str!("../.agents/skills/mcp/tui.ts")),
     include_str!("../.agents/skills/mcp/mcp.pyi"),
   ),
 ];
@@ -396,7 +383,7 @@ fn officials(places: &Places) -> Vec<Skill> {
   let whole = "an official extension is whole";
   OFFICIAL
     .iter()
-    .map(|(manifest, word, _, _)| {
+    .map(|(manifest, word, _)| {
       let mut one = manifested(manifest, |_| Ok(word)).expect(whole);
       one.file = copy(&one.name, &one.file, &one.word, places);
       one
@@ -410,14 +397,13 @@ pub(crate) fn manifests() -> impl Iterator<Item = &'static str> {
 }
 
 /// Each file that the crate carries of the official extension of a name, by its name in the folder
-/// of that extension: its manifest, its word and its view.
+/// of that extension: its manifest, its word and its interface.
 pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
-  OFFICIAL.iter().find_map(|(manifest, word, view, interface)| {
+  OFFICIAL.iter().find_map(|(manifest, word, interface)| {
     let front = frontmatter(manifest);
     (front.field("name") == Some(name)).then(|| {
       let file = front.meta(WORD).unwrap_or_default().to_owned();
       let mut files = vec![(MANIFEST.to_owned(), *manifest), (file, *word)];
-      files.extend(front.meta(VIEW).zip(*view).map(|(one, text)| (one.to_owned(), text)));
       files.extend(front.meta(INTERFACE).map(|one| (one.to_owned(), *interface)));
       files
     })
@@ -627,44 +613,6 @@ pub(crate) fn turned_on(places: &Places, project: &Path) -> Result<Turned, Fault
   Ok((on, moved))
 }
 
-/// The part of an extension that a TUI loads: the name of the extension, the path of its module of
-/// TypeScript, which
-/// the manifest names under `tui`, beside the word, and the text of that module when the crate
-/// carries it. The crate
-/// carries the part of an official extension, so a TUI loads it from the text where no checkout of
-/// furb stands, as in
-/// an installed package, and the path is then its place in the repository of furb.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "typescript", napi_derive::napi(object))]
-#[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
-pub struct Part {
-  pub name: String,
-  pub file: String,
-  pub text: Option<String>,
-}
-
-/// The part for a TUI of each extension that the configs turn on and whose manifest names one, in
-/// the order a life
-/// runs them. The part of an official extension is the one that the crate carries, and the manifest
-/// of each other
-/// folder is read again, so a part that a later write names is found.
-pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
-  let mut out = Vec::new();
-  for (name, root) in turned_on(places, project)?.0 {
-    let Some(root) = root else {
-      out.extend(carried(&name));
-      continue;
-    };
-    let file = root.join(MANIFEST);
-    let text = fs::read_to_string(&file)
-      .map_err(|no| Fault::refused(format!("{no}: {}", file.display())))?;
-    if let Some(view) = frontmatter(&text).meta(VIEW) {
-      out.push(Part { name, file: root.join(view).display().to_string(), text: None });
-    }
-  }
-  Ok(out)
-}
-
 /// The name and the text of the file of the keys of each extension that the configs turn on and
 /// whose manifest names one, in the order a life runs them. An official extension names none, a
 /// folder whose manifest cannot be read gives none, since its extension does not play, and a file
@@ -681,19 +629,6 @@ pub(crate) fn contributed(places: &Places, project: &Path) -> Result<Vec<(String
     }
   }
   Ok(out)
-}
-
-/// The part that the crate carries for an official extension, when its manifest names one.
-fn carried(name: &str) -> Option<Part> {
-  OFFICIAL.iter().find_map(|(manifest, _, text, _)| {
-    let manifest = frontmatter(manifest);
-    let file = format!(".agents/skills/{name}/{}", manifest.meta(VIEW)?);
-    (manifest.field("name") == Some(name)).then(|| Part {
-      name: name.to_owned(),
-      file,
-      text: text.map(str::to_owned),
-    })
-  })
 }
 
 /// A path that a config gives, resolved against the folder of the config, with `~` as the home. The

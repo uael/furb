@@ -39,9 +39,9 @@ compaction = """Compaction cuts this chain to the work that it still needs, and 
 - choice() asks on this chain the model that wrote its last reply, which reads the chain from its cache, which acts
   the work still needs, and what the rest holds, as ids and a summary. The turn of that answer stays in the chain.
 - await condense() compacts this chain at once to what choice() chose, with the summary of the model, as compacted()
-  does once. The command /compact of the TUI runs it on the chain on screen.
+  does once.
 - clear() cuts this chain to nothing, with no summary: its model reads from zero, and the chain keeps its name, its
-  module, its prompts and its threads. The command /clear of the TUI runs it on the chain on screen.
+  module, its prompts and its threads.
 - compacted() wraps a chain: after an answer that reads more than SHARE of the window, it asks choice(), and at the
   next reply once that came, it compacts the chain to what the model chose. It moves, stops and pauses nothing.
 - fitted() watches a chain: when its model refuses a reply because the prompt passes its window, it cuts the chain at

@@ -6,7 +6,7 @@
 
 [![gates](https://github.com/uael/furb/actions/workflows/gates.yml/badge.svg)](https://github.com/uael/furb/actions/workflows/gates.yml)
 
-<img src="https://raw.githubusercontent.com/uael/furb/main/docs/furb.gif" alt="The furb TUI: a message, the Python that the model writes, a Python word of the operator, the three views, the command palette, the rewind tree, and a change of theme" width="880">
+<img src="https://raw.githubusercontent.com/uael/furb/main/docs/window.png" alt="The window of furb: a thread whose model runs the Python that it wrote, beside the list of the threads of the machine" width="880">
 
 </div>
 
@@ -56,16 +56,25 @@ furb asks the models of each provider whose key stands in the environment, such 
 
 ## A first life
 
-The TUI runs from a clone of this repository, with no Python. It needs Git, [Bun](https://bun.sh) 1.4.2 or later and
-the Rust toolchain, and [the TUI](https://github.com/uael/furb/blob/main/tui/README.md#start-it) says how to install
-them on macOS, Linux and Windows. The first build takes some minutes:
+The window of furb runs from a clone of this repository: the packages of PyPI and npm do not carry it yet. It needs
+Git, the Rust toolchain and [Zig](https://ziglang.org/download/) 0.17.1, whose first build of the window takes some
+minutes:
 
 ```sh
 git clone https://github.com/uael/furb && cd furb
-bun install && bun run build         # The TypeScript package that the TUI runs on.
-bun run demo                         # Watch a life that plays by itself. It asks no model and costs nothing.
-bun run tui                          # Start a real life on your models.
+cargo build -p furb-cli -p furb-window  # furb and its window, side by side in target/debug.
+target/debug/furb                       # The window, on the daemon of this machine, which it starts when none runs.
 ```
+
+On Windows the window also needs the library of OpenTUI beside it, as
+[the window](https://github.com/uael/furb/blob/main/CONTRIBUTING.md#the-window) says.
+
+Type a message and press Enter: it starts a new session in the project of the folder, and its thread shows each word
+that the model writes and runs. The list at the right holds each thread of the machine, and what waits for you
+first. The window is new, and it grows screen by screen: it does not choose a model or show the tree of the chains
+yet. `furb` with no command starts the same window.
+
+<img src="https://raw.githubusercontent.com/uael/furb/main/docs/window-cards.png" alt="The list of the threads of the machine, which says the thread that waits for an input, the one that failed, those that work and those that rest" width="880">
 
 In a program, a life is a few lines. This one asks for a plan, and keeps its record in `release.jsonl`:
 
@@ -101,7 +110,7 @@ same program in TypeScript and in Rust, and four more.
 
 | To | Read |
 | --- | --- |
-| Use the TUI | [The TUI](https://github.com/uael/furb/blob/main/tui/README.md), and [a picture of each screen](https://github.com/uael/furb/blob/main/docs/tui.md) |
+| Use the window | [The window](https://github.com/uael/furb/blob/main/CONTRIBUTING.md#the-window): its keys, and how to build it |
 | Choose a model, or use a local one | [Models](https://github.com/uael/furb/blob/main/docs/models.md) |
 | Use furb from a program | [The examples](https://github.com/uael/furb/blob/main/docs/examples/README.md), [Python](https://github.com/uael/furb/blob/main/bind/python/README.md), [TypeScript](https://github.com/uael/furb/blob/main/bind/typescript/README.md) |
 | Use the command line | [The command line](https://github.com/uael/furb/blob/main/cli/README.md), and [its protocol](https://github.com/uael/furb/blob/main/docs/protocol.md) |

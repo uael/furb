@@ -37,13 +37,14 @@ Object.assign(process.env, {
   TEMP: yard,
 });
 // No test writes the config of the machine, whatever the way that it runs. The native part reads the environment that
-// the process started with, so a plain `bun test` gives it the folder of the tests nowhere, and a test that builds
-// Preferences with no path then writes the file of the user. A test that changes a file there fails with its name.
+// the process started with, so a plain `bun test` gives it the folder of the tests nowhere, and a test that writes a
+// config with no folder of its own then writes the file of the user. A test that changes a file there fails with its
+// name.
 const tests = resolve(environment().FURB_CONFIG_DIR ?? "");
 const native = furb.configDirectory();
 if (resolve(native) !== tests)
   console.error(
-    `The native part reads ${native}, not ${tests}: a plain bun test cannot give it that folder, so give each test that builds Preferences or Workspaces a config directory of its own, or run \`bun run test <filter>\`.`,
+    `The native part reads ${native}, not ${tests}: a plain bun test cannot give it that folder, so give each test that writes a config a config directory of its own, or run \`bun run test <filter>\`.`,
   );
 // The guard blames a file that changed only if this run saved it. Other processes write the same folder while the
 // tests run. So each save of the run is noted as it goes.

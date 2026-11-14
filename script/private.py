@@ -50,8 +50,8 @@ TRACES: list[tuple[str, re.Pattern[str], str]] = [
   ),
   ("the scratch folder of a session", re.compile(r"(?<=scratch/)(?![0-9]{16}\b|1{16}\b)[0-9a-f]{16}\b"), "{n:016d}"),
 ]
-# The prompts of the operator that a script wrote in the records of the replay, in place of the words of a person, beside
-# the messages of the record of the conductor that tui/script/scripted.ts writes, and the task and the nudge of the
+# The prompts of the operator that a script wrote in the records of the replay, in place of the words of a person: those
+# of the replay, the messages of the record of the conductor, tests/conductor.jsonl, and the task and the nudge of the
 # bench of script/deepswe.py.
 SCRIPTED = {
   "Are the other lives of the sample stopped?",
@@ -59,18 +59,29 @@ SCRIPTED = {
   "Stop the other lives of the sample.",
   "Read the sample image, then finish the sample change.",
   "Hold on.",
+  "(removed)",
+  (
+    "You are the conductor of a scripted life, in its third round. The second round stopped at noon, and "
+    "its record cannot open again, so notes.md at the root hands over what it knew.\n"
+    "1. Read notes.md whole first. Then read plan.md, board.md, rules.md and the guide at the root, "
+    "which hold the rules of the scripted work and the way each agent reports.\n"
+    "2. List the open items of the board, order them by their rank, and hire one agent for each of the "
+    "first three, with a brief that names its files and its checks.\n"
+    "3. Watch each agent until its pull request is green, then merge it, and tell the next agent on the "
+    "list to start.\n"
+    "4. Report the state of the board to the operator each time that an item ends, in one short line.\n"
+    "… 9 more lines"
+  ),
+  "Have a worker loading the sample skill and renaming its panel, the labels are unclear.",
+  "A second task is a bit more complex: a sample file that you read, and a note to hire a worker on this thread.",
+  "tell the sample lane to add colors to the minimal panels, then report the state of the lane to the cond…",
+  "the sample flow of how an answer is given to a question is confusing and hard to follow",
+  "Report progress.",
 }
 HARNESS = re.compile(r"confidence level [0-9.]+ is too low, continue|- Update the `display` style property to accept")
 # The place of the maker, of the word of a rung and of the message of a prompt: ("rung", id, by, on, word, ...) and
 # ("prompt", id, by, on, shape, message, to).
 BY, WORD, MESSAGE = 2, 4, 5
-
-
-def scripted_of_the_tui() -> set[str]:
-  """The messages of the operator that tui/script/scripted.ts scripts, read from its list of string literals."""
-  text = (ROOT / "tui" / "script" / "scripted.ts").read_text(encoding="utf-8")
-  listed = text.split("export const SCRIPTED", 1)[1].split("];", 1)[0]
-  return {json.loads(one) for one in re.findall(r'^\s*("(?:[^"\\]|\\.)*"),?\s*$', listed, re.M)}
 
 
 def operator_prompts(line: str) -> list[str]:
@@ -141,8 +152,7 @@ def main(argv: list[str]) -> int:
         made = zstd.compress(made)
       one.write_bytes(made)
     return 0
-  scripted = {*SCRIPTED, *scripted_of_the_tui()}
-  found = [one for path in (map(Path, argv) if argv else records()) for one in traces(path, scripted)]
+  found = [one for path in (map(Path, argv) if argv else records()) for one in traces(path, SCRIPTED)]
   said = f"private: {len(found)} traces of a person in the records" if found else "private: no record holds a trace"
   sys.stdout.write("".join(f"{one}\n" for one in [*found, said]))
   return 1 if found else 0

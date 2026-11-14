@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
-import { daemonFolder } from "../../../../tui/src/client.ts";
+import { basename, delimiter, join } from "node:path";
 import { environment } from "../../script/environment.ts";
-import { daemonPlace } from "../../src/skill.ts";
 
 /** A folder that holds a claude command line and node, as /opt/homebrew/bin does. */
 function shared(): string {
@@ -31,10 +29,10 @@ test("the environment of the tests holds no variable that tells bun that an agen
   expect(Object.keys(given).filter((name) => /AGENT|CLAUDECODE|REPL_ID/.test(name))).toEqual([]);
 });
 
-test("the socket of the daemon of the tests fits a Unix socket in a worktree at a long path, and two worktrees keep two caches", () => {
+test("the cache of the tests has a short name that holds a hash of the root, so two worktrees keep two caches, and the configs stand in the root", () => {
   const long = join("/", "a".repeat(60), "b".repeat(60), "worktree");
   const here = environment({}, long);
-  expect(Buffer.byteLength(daemonPlace(daemonFolder(here)))).toBeLessThan(104);
+  expect(basename(here.XDG_CACHE_HOME ?? "")).toMatch(/^furb-cache-[0-9a-f]{8}$/);
   expect(here.XDG_CACHE_HOME).not.toBe(environment({}, `${long}2`).XDG_CACHE_HOME);
   expect(here.FURB_CONFIG_DIR).toBe(join(long, ".furb/tests"));
 });

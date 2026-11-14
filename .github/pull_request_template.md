@@ -11,13 +11,13 @@ you debugged, and what you decided. Do not summarize the commit messages. An age
 own session, never from `git log`.
 
 Title: `type(area): What changed`, 70 characters or fewer, as
-`fix(tui): Reap the shell of a command that drops before its exit`.
+`fix(world): Reap the shell of a command that drops before its exit`.
 - The type comes first, since release-please reads it to make the next version and CHANGELOG.md:
   `feat` for a thing that a user can do now and could not do before, `fix` for a thing that was
   wrong, `perf` for a thing that is faster or smaller, and `chore` for a change that no user of a
   package sees. Below 1.0, a feat, a fix or a perf raises the patch version, and a break raises the minor.
   A chore raises nothing and stays out of the changelog. Add a `!` after the area for a break.
-- The area is required. It is the part that owns the change, such as `engine`, `crate`, `tui`,
+- The area is required. It is the part that owns the change, such as `engine`, `crate`, `window`,
   `provider`, `ci`, or an extension by its name, as `compaction`. Give the primary area when
   the change touches more than one.
 - What changed is one sentence in Simplified Technical English that starts with a capital letter.
@@ -46,7 +46,7 @@ Name the PR below this one when this PR is one of a chain. -->
 read what changed for the people the code serves.
 Give what is true now that was not true before. Give what it costs a caller: a program that uses
 the crate, the Python package or the TypeScript package, a model that reads the engine, or a user
-of the TUI or the command line. Give any gap you leave in on purpose. Link the sibling PRs, such as
+of the window or the command line. Give any gap you leave in on purpose. Link the sibling PRs, such as
 one in the fork of monty, when this change has any.
 Give the evidence under each claim you make here: what you ran, and what it showed. Nothing that
 did not run goes in. CI reports itself, so give only what CI cannot: a real life of a model, a

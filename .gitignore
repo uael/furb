@@ -12,9 +12,9 @@ target
 *.so
 *.pyd
 *.node
-# The loader of the engine, which napi writes at each build of the TypeScript package, and the program furb of the tree,
-# which the build copies beside it.
+# The loader of the engine, which napi writes at each build of the TypeScript package.
 bind/typescript/index.cjs
+# The program furb that a build of an earlier version copied beside the loader, which a clone may still hold.
 bind/typescript/furb
 bind/typescript/furb.exe
 bind/typescript/furb.new

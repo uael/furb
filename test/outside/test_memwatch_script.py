@@ -64,17 +64,17 @@ WORKER = "python -u -c import sys;exec(eval(sys.stdin.readline()))"
 
 
 def rows(procs: list[subprocess.Popen[bytes]]) -> list[Row]:
-  """A cargo test binary, bun test, a pytest, a daemon of furb, a window, a capture of the gallery, a worker of pytest
-  (the largest test process of this user), and a bun test of another user, which is larger still."""
+  """A cargo test binary, bun test, a pytest, a daemon of furb, a window, a second bun test, a worker of pytest (the
+  largest test process of this user), and a bun test of another user, which is larger still."""
   commands = [
     ("/w/furb/target/debug/deps/furb-1a2b3c4d5e6f7a8b --exact life::test", 800, MINE),
-    ("/opt/bun/bin/bun test ./tui/test/walk.test.ts", 2000, MINE),
+    ("/opt/bun/bin/bun test ./bind/typescript/test/session.test.ts", 2000, MINE),
     ("/w/furb/.venv/bin/python -m pytest -q test/boot", 1000, MINE),
     ("/w/furb/target/debug/furb host --grace 5", 9000, MINE),
     ("/Applications/Terminal.app/Contents/MacOS/Terminal", 6000, MINE),
-    ("/opt/bun/bin/bun /w/furb/tui/script/screenshots.ts", 1500, MINE),
+    ("/opt/bun/bin/bun test ./bind/typescript/test/engine.test.ts", 1500, MINE),
     (WORKER, 2500, MINE),
-    ("/opt/bun/bin/bun test ./tui/test/other.test.ts", 9999, MINE + 1),
+    ("/opt/bun/bin/bun test ./bind/typescript/test/other.test.ts", 9999, MINE + 1),
   ]
   return [(one.pid, size * MB, command, uid) for one, (command, size, uid) in zip(procs, commands, strict=True)]
 
@@ -226,9 +226,9 @@ def test_a_tight_memory_that_the_work_does_not_hold_ends_no_test_process_and_say
   assert got.stdout == f"memwatch: pressure level 2, and {said}\n"
 
 
-def test_a_capture_of_the_gallery_is_no_runaway_while_the_work_holds_little(tmp_path: Path) -> None:
+def test_a_test_process_under_4_gb_is_no_runaway_while_the_work_holds_little(tmp_path: Path) -> None:
   with fakes(1) as procs:
-    machine(tmp_path, 2, [(procs[0].pid, 1500 * MB, "/opt/bun/bin/bun /w/tui/script/screenshots.ts", MINE)])
+    machine(tmp_path, 2, [(procs[0].pid, 1500 * MB, "/opt/bun/bin/bun test ./a.test.ts", MINE)])
     got = watch(tmp_path, FURB_WATCH_MIN="")
     assert procs[0].poll() is None
   assert "the work is not the cause (it holds 1500 MB, its largest test process 1500 MB): none ended" in got.stdout
@@ -279,7 +279,7 @@ def test_a_daemon_of_furb_is_no_part_of_the_work_since_no_end_of_a_test_process_
 ) -> None:
   script, other = clone(tmp_path)
   names = [
-    "bun test tui/scenarios/picker.test.ts -t beside",
+    "bun test bind/typescript/test/engine.test.ts -t beside",
     f"{other}/{name}",
     f"{other}/target/debug/furb turns --record /x/r.jsonl",
   ]

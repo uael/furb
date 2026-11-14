@@ -1,8 +1,8 @@
 import { type Act, byOperator, type Exit, failed, isDone, outcomeOf } from "./acts.js";
-import { type Chip, tailOf, valueText } from "./ladder.js";
+import { tailOf, valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
 import { reason } from "./plain.js";
-import { type Quote, quoteReader } from "./quotes.js";
+import { quoteReader } from "./quotes.js";
 
 /** One line of the program of a thread, as the feed shows it.
  *
@@ -172,20 +172,6 @@ function handled(acts: readonly Act[]): readonly Act[] {
 }
 
 export type { Quote } from "./quotes.js";
-
-/** A text in its parts: the runs of its lines that are no quote, and each quote that closes, as the crate reads them. */
-export function quoteParts(text: string): ({ code: string } | { quote: Quote })[] {
-  const source = text.split("\n");
-  const out: ({ code: string } | { quote: Quote })[] = [];
-  let at = 0;
-  for (const quote of quoteReader().quotes(text)) {
-    if (quote.start > at) out.push({ code: source.slice(at, quote.start).join("\n") });
-    out.push({ quote });
-    at = quote.end + 1;
-  }
-  if (at < source.length) out.push({ code: source.slice(at).join("\n") });
-  return out;
-}
 
 /** What a model writes while its word has not come yet, as the crate reads it: the lines of the word that it
  * finished, which are python, and the line that it still writes, or the last line that it thinks while it writes no
@@ -365,112 +351,6 @@ export function threadProgram(
     else out.push(...stepLines(step, made, word, owed, label, streams, starts.get(step)));
   }
   flush(last);
-  return out;
-}
-
-/** A value of an act as python writes it. */
-function python(value: unknown): string {
-  if (value === null || value === undefined) return "None";
-  if (typeof value === "boolean") return value ? "True" : "False";
-  if (typeof value === "number") return String(value);
-  if (typeof value === "string") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(python).join(", ")}]`;
-  if (typeof value !== "object") return JSON.stringify(String(value));
-  // The life marks what JSON cannot hold, as a float with no fraction, with its class in `is`.
-  const held = value as Record<string, unknown>;
-  const args = Array.isArray(held.args) ? held.args : [];
-  if (held.is === "float") {
-    const digits = String(args[0]);
-    return /^-?\d+$/.test(digits)
-      ? `${digits}.0`
-      : /inf|nan/i.test(digits)
-        ? `float(${JSON.stringify(digits)})`
-        : digits;
-  }
-  if (held.is === "int") return String(args[0]);
-  if (held.is === "dict" && Array.isArray(args[0]))
-    return `{${(args[0] as [unknown, unknown][]).map(([key, one]) => `${python(key)}: ${python(one)}`).join(", ")}}`;
-  if (typeof held.is === "string") {
-    const fields = Object.entries(held).filter(([key]) => key !== "is" && key !== "args");
-    return `${held.is}(${[...args.map(python), ...fields.map(([key, one]) => `${key}=${python(one)}`)].join(", ")})`;
-  }
-  return `{${Object.entries(held)
-    .map(([key, one]) => `${JSON.stringify(key)}: ${python(one)}`)
-    .join(", ")}}`;
-}
-
-/** The program of the rungs that one maker wrote with no word of its own, as the words of the extensions that an ear of
- * the outside made or the setup that the root wrote on itself: a comment that names the ear, or setup for a chain, then
- * the calls that end each word, which are the life words of the setup, each on a line, with what the acts of the word
- * came to on the last line. A word that only defines shows no line. The last line runs while an act of the word is at
- * work, and not while an act lives that is no work, as the watcher of an extension does after it said it done. */
-export function earProgram(
-  ear: Act,
-  rungs: readonly Act[],
-  chips: readonly Chip[],
-  made: (id: string) => readonly Act[],
-  subject: (rung: Act) => string,
-  owed: ReadonlySet<string>,
-  label: (chain: string) => string,
-): ProgramLine[] {
-  // A chain that wrote rungs on itself, as the root writes its setup, has an id that names no maker for a reader.
-  const who = ear.by === ear.chain ? "setup" : ear.by;
-  const out: ProgramLine[] = [{ kind: "note", step: ear, text: `# ${who}` }];
-  for (const rung of rungs) {
-    const source = subject(rung).trimEnd().split("\n");
-    let first = source.length;
-    while (first > 0 && /^(await )?[A-Za-z_][\w.]*\(/.test(source[first - 1] ?? "")) first--;
-    if (first === source.length) continue;
-    const acts = [...made(rung.id)];
-    for (let at = first; at < source.length; at++)
-      out.push({
-        kind: "code",
-        step: rung,
-        number: at + 1,
-        display: out.length,
-        text: source[at] ?? "",
-        acts: at === source.length - 1 ? acts : [],
-        runs: at === source.length - 1 && acts.some((one) => ["thinks", "runs"].includes(one.state)),
-        hint: at === source.length - 1 ? hintOf(acts, owed, label) : "",
-      });
-  }
-  // A word that only defines has no line to show, so the note stands alone, with the rungs and what they made.
-  if (out.length === 1) {
-    // The row counts the words, and names no rung: an id of the engine is no word of a reader.
-    const words = `${rungs.length} ${rungs.length === 1 ? "word" : "words"}`;
-    const acts = chips.map((chip) => chip.label).join(" ");
-    out[0] = { kind: "note", step: ear, text: `# ${who}  ${words}  ${acts}`.trimEnd() };
-  }
-  return out;
-}
-
-/** An act that no word made, as the operator or an ear makes it, as one line of python: its call, bound to its name,
- * with its hint, lit while it runs, and the last lines that its command prints under it. */
-export function actLines(
-  act: Act,
-  owed: ReadonlySet<string>,
-  label: (chain: string) => string,
-): ProgramLine[] {
-  // A command shows its text alone, since its input and its timeout are those of each command.
-  const words = act.kind === "bash" ? act.words.slice(0, 1) : [...act.words];
-  while (words.length && (words.at(-1) === "" || words.at(-1) === null || words.at(-1) === undefined))
-    words.pop();
-  const runs = ["thinks", "runs"].includes(act.state);
-  const out: ProgramLine[] = [
-    {
-      kind: "code",
-      step: act,
-      number: 1,
-      display: 1,
-      text: `${act.id} = ${act.kind}(${words.map(python).join(", ")})`,
-      acts: [act],
-      runs,
-      hint: hintOf([act], owed, label),
-    },
-  ];
-  if (runs && act.kind === "bash")
-    for (const printed of tailOf(act, OUTPUT_LINES).split("\n"))
-      if (printed) out.push({ kind: "output", step: act, act, text: printed });
   return out;
 }
 

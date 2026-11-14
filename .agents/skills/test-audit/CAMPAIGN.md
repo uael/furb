@@ -1,7 +1,7 @@
 # Test-pruning campaign
 
 A campaign prunes the whole test surface of one part in one pull request: one door, the crate, the command line, the
-TUI, or the outside tests of the engine. The value bar, the retention bar, the candidate evidence and the validation
+window, or the outside tests of the engine. The value bar, the retention bar, the candidate evidence and the validation
 of [SKILL.md](SKILL.md) hold in each lane. This file gives the order of the work. Each step ends on its criterion; do
 not start the next step early.
 

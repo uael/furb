@@ -1,11 +1,11 @@
 #!/bin/sh
 # The one guard of memory. No step of the work waits on memory: a hook, a build and a test run start at once, since a
 # wait on memory stalled them while the machine had room. This watcher runs beside the work instead. While the memory
-# is tight, it ends the largest test process: a test binary of cargo, a pytest, a bun test or a capture of the gallery.
+# is tight, it ends the largest test process: a test binary of cargo, a pytest or a bun test.
 # It ends one only when the work can be the cause, since a tight memory that the work does not hold is the memory of
 # other work, and each process that it ends is a run lost. The work can be the cause when that process holds
 # FURB_WATCH_MIN KB, 4194304 (4 GB), as a test that runs away does, or when the work holds FURB_WATCH_LANE KB, 8388608
-# (8 GB). A capture of the gallery holds 1.1 to 1.5 GB, and a test process 274 MB in the mean. The work is each test
+# (8 GB). A test process holds 274 MB in the mean. The work is each test
 # process and each process of this user whose command names a tree of the clone that holds this script, as git
 # worktree list gives the trees, so it is the same on a runner of CI, on Linux and on macOS. FURB_WATCH_LANE=0 makes
 # the work the cause at each look, as on a runner where nothing else runs.
@@ -71,7 +71,7 @@ census() {
       command = $0; sub(/^ *[0-9]+ +[0-9]+ +[0-9]+ +/, "", command)
       test = ($4 ~ /\/target\/.*\/deps\/[^\/]+-[0-9a-f]+$/ || $4 ~ /(^|\/)pytest$/ ||
         $4 ~ /(^|\/)python[0-9.]*$/ && ($5 ~ /(^|\/)pytest$/ || $5 == "-m" && $6 == "pytest") || $4 ~ /(^|\/)bun$/ && $5 == "test" ||
-        $0 ~ /tui\/script\/(screenshots|stage)\.ts|exec\(eval\(sys\.stdin\.readline/)
+        $0 ~ /exec\(eval\(sys\.stdin\.readline/)
       host = $0 ~ /[ \/]furb host( |$)/
       if ((test || names(command)) && !host) lane += $3
       if (test && !host && $3 > size) { size = $3; pid = $2; keep = command }

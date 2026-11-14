@@ -46,7 +46,7 @@ runs:
   using: composite
   steps:
     # Windows Defender scans each file that the job reads or writes. With these folders excluded, the steps that touch
-    # many files took less time: in three runs the bindings and the TUI took 227 to 232 s, against a median of 328 to
+    # many files took less time: in three runs the job of the bindings took 227 to 232 s, against a median of 328 to
     # 364 s on main.
     - if: runner.os == 'Windows'
       shell: pwsh
@@ -99,9 +99,9 @@ runs:
     # made no new key, so main never saved the cache again and each job built the new crates each time.
     # Main saves the cache, and so does the pull request of w/converge, whose caches only its own runs read: its head
     # stands far from main, so with no save each of its runs built again the crates that changed since main, in up to
-    # 10 minutes. A run on w/converge saves the cache of its own jobs too: the render of the gallery, and the run of the
-    # gates of the head of a lane, which the oracle of the lane starts on w/converge since a run on the branch of a lane
-    # reads only the caches of that branch and of main. Any other pull request reads the cache of main.
+    # 10 minutes. A run on w/converge saves the cache of its own jobs too: the run of the gates of the head of a lane,
+    # which the oracle of the lane starts on w/converge since a run on the branch of a lane reads only the caches of
+    # that branch and of main. Any other pull request reads the cache of main.
     # Only a job that passes saves it, or a job that sets CACHE_ON_FAILURE once its build passed. A job that fails or
     # is cancelled holds part of the build, and a key that matches whole is never saved again, so every later run would
     # build again what that part lacks.

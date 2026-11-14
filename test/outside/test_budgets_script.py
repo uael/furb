@@ -16,7 +16,7 @@ def kept(name: str) -> bool:
 
 def test_a_job_of_a_matrix_has_a_budget_for_each_system() -> None:
   assert kept("the jobs on macos-latest / the suite on macos-latest")
-  assert kept("the jobs on windows-latest / the bindings and the TUI on windows-latest")
+  assert kept("the jobs on windows-latest / the bindings on windows-latest")
   assert not kept("the jobs on macos-latest")
 
 

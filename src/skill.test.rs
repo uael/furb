@@ -7,12 +7,12 @@
 use std::{
   fs,
   path::{Path, PathBuf},
-  process, slice,
+  process,
 };
 
 use super::{
-  COPY_DIGEST, Enabled, Part, Places, Skill, configs, configured, copy, definitions, digest,
-  enabled, enabled_by, frontmatter, load, parts, played, projected, reloads, telling, turned, word,
+  COPY_DIGEST, Enabled, Places, Skill, configs, configured, copy, definitions, digest, enabled,
+  enabled_by, frontmatter, load, played, projected, reloads, telling, turned, word,
 };
 use crate::testing::Yard;
 use crate::value::{ObjectRef, Text, entry};
@@ -241,20 +241,20 @@ fn the_process_of_a_skill_is_the_file_of_its_folder_that_its_manifest_names() {
 }
 
 #[test]
-fn a_manifest_names_the_view_of_a_skill_for_a_tui_and_no_other_field_of_furb() {
-  let at = place("tui");
-  folder(&at.join("good"), &skill("note", &[("word", "note.py"), ("view", "tui.ts")]), "x = 1\n");
+fn a_manifest_names_no_field_of_furb_but_those_that_it_knows() {
+  let at = place("fields");
+  folder(&at.join("good"), &skill("note", &[("word", "note.py")]), "x = 1\n");
   assert_eq!(
     load("note", &at.join("good"), &places(&at)).unwrap(),
     filed(Skill { life: String::new(), ..note("x = 1") }, &at)
   );
-  folder(&at.join("bad"), &skill("note", &[("word", "note.py"), ("tui", "tui.ts")]), "x = 1\n");
+  folder(&at.join("bad"), &skill("note", &[("word", "note.py"), ("view", "view.ts")]), "x = 1\n");
   let manifest = at.join("bad").join("SKILL.md").display().to_string();
-  let fields = "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-view, furb-process, \
-     furb-config";
+  let fields =
+    "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-process, furb-config";
   assert_eq!(
     load("note", &at.join("bad"), &places(&at)).unwrap_err().message(),
-    format!("The manifest gives furb-tui, and the fields of furb are {fields}: {manifest}")
+    format!("The manifest gives furb-view, and the fields of furb are {fields}: {manifest}")
   );
   folder(
     &at.join("unsure"),
@@ -267,50 +267,6 @@ fn a_manifest_names_the_view_of_a_skill_for_a_tui_and_no_other_field_of_furb() {
       "The manifest gives furb-default \"maybe\", and it is \"true\" or \"false\": {}",
       at.join("unsure").join("SKILL.md").display()
     )
-  );
-}
-
-#[test]
-fn the_parts_for_a_tui_are_those_of_the_skills_that_the_configs_turn_on_and_that_name_one() {
-  let at = place("parts");
-  let places = Places { config: at.join("user"), home: None };
-  let project = at.join("project");
-  let compaction = Part {
-    name: "compaction".to_owned(),
-    file: ".agents/skills/compaction/tui.ts".to_owned(),
-    text: Some(include_str!("../.agents/skills/compaction/tui.ts").to_owned()),
-  };
-  let mcp = Part {
-    name: "mcp".to_owned(),
-    file: ".agents/skills/mcp/tui.ts".to_owned(),
-    text: Some(include_str!("../.agents/skills/mcp/tui.ts").to_owned()),
-  };
-  let alone = parts(&places, &project).unwrap();
-  assert_eq!(
-    alone,
-    slice::from_ref(&compaction),
-    "the crate carries the part of an official extension that plays by default"
-  );
-  let todo = project.join(".furb").join("skills").join("todo");
-  folder(&todo, &skill("todo", &[("word", "note.py"), ("view", "tui.ts")]), "t = 1");
-  folder(&project.join("plain"), &skill("plain", &[("word", "note.py")]), "p = 1");
-  folder(&project.join("off"), &skill("off", &[("word", "note.py"), ("view", "off.ts")]), "o = 1");
-  config(
-    &project.join(".furb").join("config.json"),
-    r#"{"skills": {"todo": "skills/todo", "plain": "../plain", "off": false, "mcp": true}}"#,
-  );
-  let got = parts(&places, &project).unwrap();
-  let todo =
-    Part { name: "todo".to_owned(), file: todo.join("tui.ts").display().to_string(), text: None };
-  assert_eq!(got, [compaction, mcp, todo]);
-  config(
-    &project.join(".furb").join("config.json"),
-    r#"{"skills": {"compaction": false, "mcp": false}}"#,
-  );
-  assert_eq!(
-    parts(&places, &project).unwrap(),
-    [],
-    "a config turns off the part of an official extension"
   );
 }
 
@@ -1027,11 +983,7 @@ fn the_local_config_of_a_project_comes_after_its_config_and_wins_for_a_name() {
     [at.join("user").join("config.json"), furb.join("config.json"), furb.join("config.local.json")],
     "each reader reads the user, the project, then the local config of the project"
   );
-  folder(
-    &project.join("near"),
-    &skill("near", &[("word", "note.py"), ("view", "tui.ts")]),
-    "n = 1",
-  );
+  folder(&project.join("near"), &skill("near", &[("word", "note.py")]), "n = 1");
   config(&furb.join("config.json"), r#"{"skills": {"near": "../near", "skills": false}}"#);
   let names = |got: Vec<Skill>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(
@@ -1047,8 +999,6 @@ fn the_local_config_of_a_project_comes_after_its_config_and_wins_for_a_name() {
     ["catchup", "memory", "skills", "compaction", "naming", "web"],
     "the local config wins for a name"
   );
-  let shown = parts(&places, &project).unwrap().into_iter().map(|one| one.name).collect::<Vec<_>>();
-  assert_eq!(shown, ["compaction"], "the parts follow the local config too");
 }
 
 #[test]
@@ -1102,7 +1052,7 @@ fn a_fact_enable_gives_the_name_of_its_skill_and_the_program_that_it_names() {
     Some(Enabled { name: "note".to_owned(), program: program.map(str::to_owned), view: None })
   };
   assert_eq!(enabled_by(&said(one.enable())), has(None));
-  assert_eq!(enabled_by(&said(one.played("tui.ts"))), has(Some("tui.ts")));
+  assert_eq!(enabled_by(&said(one.played("note.ts"))), has(Some("note.ts")));
   assert_eq!(enabled_by(&said(one.played(""))), has(Some("")));
   assert_eq!(enabled_by(&said(Fact::says("tell", "chain1", [Object::string("note")]))), None);
 }

@@ -1,4 +1,3 @@
-import { stripVTControlCharacters } from "node:util";
 import { type Engine, levels, leveled as read } from "../index.cjs";
 import { unmarked } from "./life/marks.js";
 
@@ -13,7 +12,6 @@ export const leveled = (actor: string, models: readonly string[] = []): [model: 
   return [model, effort];
 };
 
-export type Turn = ReturnType<Engine["turns"]>[number];
 /** One actor of the roster, as the World offers it: its name, its efforts and its window. A record of a build before
  * the doctrine was read holds the doctrine after the window. */
 export type Actor = [name: string, efforts: string[], window: number, doctrine?: string];
@@ -45,40 +43,6 @@ export interface Paragraph {
   lines: string[];
   text: string;
 }
-/** The paragraphs of the python of a user turn, in order. A blank line that a header follows is where one paragraph
- * ends, since a word its caller wrote may hold a blank line of its own. A quote holds no header: its text may hold a
- * blank line and a line that starts with `#`, as a heading of markdown does. The close mark of a quote is the first
- * line after its open mark that ends with it, as the engine reads one. */
-export function paragraphs(python: string): Paragraph[] {
-  if (!python) return [];
-  const texts: string[] = [];
-  let lines: string[] = [],
-    closing = "";
-  for (const line of python.split("\n")) {
-    if (!closing && lines.at(-1) === "" && /^#\S/.test(line)) {
-      texts.push(lines.slice(0, -1).join("\n"));
-      lines = [];
-    }
-    lines.push(line);
-    if (closing) {
-      if (line.endsWith(closing)) closing = "";
-    } else {
-      const name = /^<s:(\w+)>$/.exec(line)?.[1];
-      if (name) closing = `</s:${name}>`;
-    }
-  }
-  texts.push(lines.join("\n"));
-  return texts.map((text) => {
-    const [header = "", ...lines] = text.split("\n");
-    const space = header.indexOf(" ");
-    return {
-      name: header.slice(1, space < 0 ? undefined : space),
-      words: space < 0 ? "" : header.slice(space + 1),
-      lines,
-      text,
-    };
-  });
-}
 /** Whether a paragraph is the open of the act it is of: an act tells its binding as the last line of its open,
  * and no other paragraph ends with it. */
 export function opens(paragraph: Paragraph): boolean {
@@ -103,32 +67,9 @@ export function plain(lines: readonly string[]): string {
   }
   return text.join("\n");
 }
-/** The string that the lines of a paragraph bind to a name: the text of its quote, whose name may take more
- * underscores, or the string of its statement as python writes it; and nothing when they bind none. */
-export function bound(lines: readonly string[], name: string): string | undefined {
-  const text = lines.join("\n");
-  const quote = new RegExp(`^<s:(${name}_*)>\\n([\\s\\S]*?)</s:\\1>$`, "m").exec(text);
-  if (quote) return quote[2];
-  const statement = new RegExp(`^${name} = (['"].*['"])$`, "m").exec(text)?.[1];
-  return statement === undefined ? undefined : literal(statement);
-}
-/** A string as python writes it, read back: the text between its quotes, with each escape as the character it
- * stands for. */
-function literal(python: string): string {
-  const escapes: Record<string, string> = { n: "\n", r: "\r", t: "\t" };
-  return python
-    .slice(1, -1)
-    .replace(/\\(x[0-9a-f]{2}|u[0-9a-f]{4}|U[0-9a-f]{8}|.)/g, (_, one: string) =>
-      one.length > 1 ? String.fromCodePoint(Number.parseInt(one.slice(1), 16)) : (escapes[one] ?? one),
-    );
-}
 /** Whether a name is the name of a question of that kind: the kind and a number, as every act is named. */
 export function isQuestion(kind: string, id: string): boolean {
   return id.startsWith(kind) && /^\d+$/.test(id.slice(kind.length));
-}
-/** The kind of a question, from its name, which is its kind and a number. */
-export function questionKind(id: string): string | undefined {
-  return id.match(/^(\w+?)\d+$/)?.[1];
 }
 /** The usage of an answer: the tokens that it read, the tokens that it wrote, the tokens read from and written to the
  * cache, and its dollars. A float that the life marked, as 0.0, is the number it stands for, and a part that no record
@@ -143,9 +84,4 @@ export function usageOf(usage: readonly unknown[]): [number, number, number, num
 export function display(value: unknown): string {
   if (typeof value === "string") return value;
   return JSON.stringify(unmarked(value), null, 2) ?? "None";
-}
-export function safeText(value: string): string {
-  // Text from files and processes must not become terminal control sequences.
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: Remove terminal control bytes from displayed text.
-  return stripVTControlCharacters(value).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
 }

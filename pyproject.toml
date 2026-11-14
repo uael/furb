@@ -79,8 +79,6 @@ builtins = []
 [tool.ruff.per-file-target-version]
 # The verifier images use Python versions older than this repository.
 "script/pytest_ids.py" = "py38"
-# The scripts of the skill converge-tui run on the python3 of the machine.
-".agents/skills/converge-tui/*.py" = "py39"
 
 [tool.ruff.lint]
 select = [
@@ -147,8 +145,6 @@ skip-magic-trailing-comma = true
 # The words of the project, and no test of theirs: a test drives the engine through a double, which the checker
 # cannot follow.
 include = ["src", "test", "script", "bind/python", ".agents/skills", ".furb/skills/*/*.py"]
-# converge-tui is a skill of the repository for Claude Code alone, whose scripts run on Python 3.9.
-exclude = [".agents/skills/converge-tui"]
 
 # The suite of an extension imports the harness of the engine as conftest, as pytest does from its pythonpath, and
 # its own helpers from skills.conftest. The package furb_monty is read from its source and the stub of its

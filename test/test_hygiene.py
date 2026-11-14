@@ -281,7 +281,6 @@ ROOT = TESTS.parent
 PUBLIC = [
   *ROOT.glob("*.md"),
   *ROOT.glob("docs/**/*.md"),
-  *ROOT.glob("tui/*.md"),
   ROOT / "tests" / "replay" / "README.md",
   *SKILLS.glob("*/*.md"),
   *PROJECT.glob("*/*.md"),
@@ -333,8 +332,8 @@ def test_no_skill_nor_doc_names_a_prompt_or_a_rung_of_a_life() -> None:
   assert found == []
 
 
-def test_the_fixture_of_the_tui_holds_no_attribution_of_a_person() -> None:
+def test_the_record_of_the_conductor_holds_no_attribution_of_a_person() -> None:
   """A recorded life that the repository ships keeps no word that attributes a rule to a person."""
   said = re.compile(SAID.pattern + r"|the user,? (on [0-9]|said|asked|wrote|wants|ruled|told|decided)|\bOwner:", re.I)
-  text = (ROOT / "tui" / "fixtures" / "conductor.jsonl").read_text(encoding="utf-8")
+  text = (ROOT / "tests" / "conductor.jsonl").read_text(encoding="utf-8")
   assert [m.group(0) for m in said.finditer(text)] == []

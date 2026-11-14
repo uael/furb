@@ -21,16 +21,6 @@ class Skill(TypedDict):
   life: str
   root: bool
 
-class Part(TypedDict):
-  """The part of an extension that a TUI loads: the name of the extension, the path of its module of TypeScript, which
-  the manifest names under tui, beside the word, and the text of that module when the crate carries it. The crate
-  carries the part of an official extension, so a TUI loads it from the text where no checkout of furb stands, as in
-  an installed package, and the path is then its place in the repository of furb."""
-
-  name: str
-  file: str
-  text: str | None
-
 class ModelInfo(TypedDict):
   """A model of the catalog: its name, its efforts, its window in tokens, whether it takes an image, and its price
   in dollars for a million tokens read, written, read from the cache and written to it."""
@@ -316,10 +306,6 @@ def enabled(root: Iterable[Iterable[object]]) -> list[Skill]:
 def played(given: list[Skill]) -> NativeEar:
   """The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
   unless the record enables it, and plays each as a rung on each chain."""
-
-def parts(project: str) -> list[Part]:
-  """The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
-  one, as the configs of the user and of the project say it now, which a TUI loads beside the life."""
 
 def skills(config: str) -> NativeEar:
   """The ear of the skills extension, which finds skills in the folders of a chain and in the config directory."""

@@ -119,7 +119,7 @@ def test_a_selection_of_tests_runs_with_no_coverage_and_the_whole_suite_keeps_it
   assert got[:6] == ["uv", "run", "--no-sync", "pytest", "-q", "--no-cov"]
   assert "test/outside/test_title_script.py" in got[6:]
   assert reach.command("pytest", ["src/furb/engine.py"]) == ["uv", "run", "--no-sync", "pytest", "-q"]
-  assert reach.command("pytest", ["tui/src/app.ts"]) is None
+  assert reach.command("pytest", ["bind/typescript/src/session.ts"]) is None
 
 
 def test_a_contract_test_an_official_skill_test_and_a_project_contract_reach_the_hygiene_laws() -> None:

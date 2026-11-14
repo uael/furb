@@ -16,7 +16,6 @@ const crate = [
   ".agents/skills/*/SKILL.md",
   ".agents/skills/*/*.py",
   ".agents/skills/*/*.pyi",
-  ".agents/skills/*/tui.ts",
   ".agents/skills/*/*/SKILL.md",
 ];
 /** What tsc reads, beside the types that the native build wrote. */

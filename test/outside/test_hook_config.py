@@ -31,8 +31,8 @@ def test_a_commit_runs_no_hook_that_takes_minutes_and_the_stage_manual_runs_ever
     ("test/test_peek.py", True),
     (".furb/skills/lane/lane.py", True),
     ("pyproject.toml", True),
-    ("tui/package.json", False),
-    ("tui/src/session.ts", False),
+    ("bind/typescript/package.json", False),
+    ("bind/typescript/src/session.ts", False),
     ("docs/models.md", False),
   ],
 )

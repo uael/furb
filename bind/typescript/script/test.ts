@@ -5,7 +5,7 @@
 // files with the longest limit of time first, and of the largest first among equal limits. As many runs go at once as
 // the machine has cores, or as FURB_TEST_JOBS names when it names fewer: twice as many made each test take more than twice its time on the four cores of a runner of
 // Windows, and the whole suite no less time. A word given filters the files by their path, or by the name of their
-// package and their file, as tui/host, and a flag goes to each run. A test that passes shows its line, a run that fails
+// package and their file, as typescript/engine, and a flag goes to each run. A test that passes shows its line, a run that fails
 // shows all that it wrote, and one failed run fails them all. The last line counts the tests that passed and failed,
 // and a filter that matches no file fails. FURB_TEST_OUTPUT=1 shows all that each run wrote, so a console.log in a test
 // shows too. Each program that a test runs compiles first, all at once, so that no compile takes the machine from a
@@ -15,7 +15,6 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Glob } from "bun";
-import { ownDaemon } from "../../../tui/script/daemon.ts";
 import { endedByMemory } from "./children.ts";
 import { environment } from "./environment.ts";
 import { LIMIT, longestFirst } from "./order.ts";
@@ -77,8 +76,6 @@ const compiling = Promise.all(
     return { file: join(programs, file), text: out + err, passed: code === 0 };
   }),
 );
-// Each life of a test lives in the daemon of the cache of the tests, which the run owns.
-const ended = await ownDaemon(env);
 const listing = await mkdtemp(join(tmpdir(), "furb-tests-"));
 const listed = await deal(files, cores, async (file) => {
   const report = join(listing, `${files.indexOf(file)}.xml`);
@@ -141,5 +138,4 @@ if (failed.length > 0) console.log(`\n${failed.length} of ${runs.length} runs fa
 if (failed.length > 0 && behind.length > 0) console.log(`\n${warning(behind)}`);
 for (const name of ended_by_memory) console.log(endedByMemory(name));
 console.log(`${passes} pass, ${fails} fail`);
-await ended();
 process.exit(failed.length > 0 ? 1 : 0);

@@ -233,8 +233,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   on. That fact reloads the extension: each chain that has the extension plays the definitions of the new word, its
   imports, functions, classes, types and names in capitals, and each name of state that it assigns, as
   `name = globals().setdefault("name", value)`, so a new name takes its value, each name that the chain holds keeps its
-  value, and the life word does not run again. An extension whose word is blank, as one that holds only a part for
-  the TUI, plays no word: no turn of its file in a setup, and no rung on a chain.
+  value, and the life word does not run again. An extension whose word is blank plays no word: no turn of its file in
+  a setup, and no rung on a chain.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel, the schema of the record, the release, and the texts of the engine and of the Kernel, which the store says
   as it hears the root of a new record at its birth. After a checkpoint, only the fact made of the segment after it

@@ -22,7 +22,6 @@ include = [
   "/.agents/skills/skills/skills.py*",
   "/.agents/skills/compaction/SKILL.md",
   "/.agents/skills/compaction/compaction.py*",
-  "/.agents/skills/compaction/tui.ts",
   "/.agents/skills/naming/SKILL.md",
   "/.agents/skills/naming/naming.py*",
   "/.agents/skills/ouroboros/SKILL.md",
@@ -31,7 +30,6 @@ include = [
   "/.agents/skills/web/web.py*",
   "/.agents/skills/mcp/SKILL.md",
   "/.agents/skills/mcp/mcp.py*",
-  "/.agents/skills/mcp/tui.ts",
   "/DOCTRINE.md",
   "/docs/examples/rust/*.rs",
   "/LICENSE",
@@ -167,10 +165,6 @@ futures = "0.3"
 unsync = "0.2"
 # The zones in which the usage limit of the claude command line names the moment it ends.
 jiff = "0.2"
-# The walker of ripgrep, which reads .gitignore, and the matcher of helix, which matches the files that the picker of
-# a window offers on threads of its own as the walk gives them.
-ignore = "0.4"
-nucleo = "0.5"
 # A page of the web, which the extension web reads, as Markdown.
 htmd = "0.5"
 pyo3 = { version = "0.29.2", features = ["generate-import-lib", "indexmap", "multiple-pymethods"], optional = true }

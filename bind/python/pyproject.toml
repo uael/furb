@@ -55,6 +55,5 @@ cache-keys = [
   { file = "../../.agents/skills/*/*.py" },
   { file = "../../.agents/skills/*/*.pyi" },
   { file = "../../.agents/skills/*/SKILL.md" },
-  { file = "../../.agents/skills/*/tui.ts" },
   { file = "../../.agents/skills/*/*/SKILL.md" },
 ]

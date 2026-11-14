@@ -61,8 +61,6 @@ jobs:
     # one commit in under 40 seconds.
     # A job that a push to main skips saves no cache of rust, and the cache that it saved before stays valid: its key
     # holds each manifest and the lock of cargo, and a change of them runs every job.
-    # A render of the gallery changes only files that no gate reads, so it runs this job and the job of the gates, as
-    # script/scope.py holds.
     name: the scope
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -72,7 +70,6 @@ jobs:
       crate_os: ${{ steps.scope.outputs.crate_os }}
       build_os: ${{ steps.scope.outputs.build_os }}
       code: ${{ steps.scope.outputs.code }}
-      hooks: ${{ steps.scope.outputs.hooks }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -103,7 +100,6 @@ jobs:
     # The rust of the toolchain formats the crates, and no cache serves a gate that compiles nothing.
     name: the hooks
     needs: scope
-    if: needs.scope.outputs.hooks == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -143,66 +139,14 @@ jobs:
       typescript: ${{ contains(fromJSON(needs.scope.outputs.ts_os), matrix.os) }}
       head: ${{ inputs.head }}
 
-  bench:
-    # The budget of the speed of the TUI holds on Linux, on a machine that runs no other work while it measures: the
-    # first frame of a life of 160000 facts, the frames of the renderer at 60 each second while it scrolls and streams,
-    # and the cost of a new fact against that in a life of a tenth of the size, each against a measure of the same
-    # machine, since one runner of ubuntu-latest is half as fast as another. It builds in the release profile, a target
-    # of its own that the build of Linux does not hold, beside that build, so neither job waits for the other.
-    name: the speed of the TUI on ubuntu-latest
-    needs: scope
-    if: needs.scope.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.head }}
-          persist-credentials: false
-      # The job keeps a cache of its own, since it builds in the release profile, which the cache of the build on Linux
-      # does not hold.
-      - uses: ./.github/actions/setup
-        with:
-          python: none
-          hashed: bind/typescript/build.ts
-      - run: |
-          echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: "1.4.2"
-      - run: bun install --frozen-lockfile
-      # The bench measures the speed that a user gets, so it builds the crate in the release profile, and refuses a
-      # build in the dev profile, whose crates of the workspace run with no optimization.
-      - run: bun run build --release
-      # The measures of the run stay as an artifact, so an audit reads the exact numbers of each run and not the rounded
-      # lines of its log, and a run that goes over a budget keeps them too.
-      - env:
-          FURB_BENCH_JSON: ${{ runner.temp }}/measures/bench.jsonl
-        run: |
-          mkdir -p "$RUNNER_TEMP/measures"
-          bun run bench 2>&1 | tee "$RUNNER_TEMP/measures/bench.log"
-      - uses: ./.github/actions/clear
-      - if: always()
-        run: |
-          mkdir -p "$RUNNER_TEMP/measures"
-          printf '{"fixture_bytes":%s,"fixture_lines":%s}\n' "$(wc -c < tui/fixtures/conductor.jsonl)" \
-            "$(wc -l < tui/fixtures/conductor.jsonl)" > "$RUNNER_TEMP/measures/fixture.json"
-      - if: always()
-        uses: ./.github/actions/measures
-        with:
-          name: bench
-
   gates:
     # The one check that reports on each pull request and stands for all the gates, so that a ruleset of main requires
     # this check alone. A job that its if skips reports under its raw name, as the suite does for each system, which no
-    # ruleset can require, and a render of the gallery runs the scope alone. This job runs always. It fails when a job
+    # ruleset can require. This job runs always. It fails when a job
     # that it needs failed or was cancelled, and it passes when each of them succeeded or was skipped, so a build that
     # failed fails it though the jobs after that build report skipped.
     name: the gates
-    needs: [scope, hooks, system, bench]
+    needs: [scope, hooks, system]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -1,2 +1,0 @@
-[test]
-preload = ["../bind/typescript/script/preload.ts"]

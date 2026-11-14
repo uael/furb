@@ -25,10 +25,8 @@ def test_the_hook_of_biome_runs_the_lint_of_the_gates_whole_and_reads_each_path_
   # One file under each path that the lint names, as a change of it would give to the hook.
   for path in (
     "bind/typescript/src/index.ts",
-    "tui/test/app.test.ts",
-    "tui/scenarios/owed-message.test.ts",
+    "bind/typescript/test/engine.test.ts",
     "docs/examples/typescript/first.ts",
-    ".agents/skills/compaction/tui.ts",
     "package.json",
     "tsconfig.json",
     "biome.json",

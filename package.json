@@ -3,33 +3,21 @@
   "private": true,
   "workspaces": [
     "bind/typescript",
-    "tui",
     "docs/examples"
   ],
   "scripts": {
     "build": "bun run bind/typescript/build.ts",
-    "tui": "bun run tui/src/cli.ts",
-    "demo": "bun run tui/src/cli.ts --demo",
-    "screenshots": "bun run tui/script/screenshots.ts",
-    "animation": "bun run tui/script/animation.ts",
-    "docs": "bun run tui/script/docs.ts",
     "check": "tsc --noEmit",
     "test": "bun run bind/typescript/script/test.ts",
-    "bench": "bun run tui/script/bench.ts",
-    "memory": "bun run tui/script/memory.ts",
     "protocol": "bun run bind/typescript/script/protocol.ts",
-    "format": "biome format --write bind/typescript tui docs/examples .agents/skills/*/tui.ts package.json tsconfig.json biome.json",
-    "lint": "biome check bind/typescript tui docs/examples .agents/skills/*/tui.ts package.json tsconfig.json biome.json --error-on-warnings"
+    "format": "biome format --write bind/typescript docs/examples package.json tsconfig.json biome.json",
+    "lint": "biome check bind/typescript docs/examples package.json tsconfig.json biome.json --error-on-warnings"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",
     "@napi-rs/cli": "^3.10.5",
-    "@resvg/resvg-js": "^2.6.2",
     "@types/bun": "latest",
-    "@types/upng-js": "2.1.5",
-    "gifenc": "1.0.3",
     "json-schema-to-typescript": "16.0.0",
-    "typescript": "~5.9.3",
-    "upng-js": "2.1.0"
+    "typescript": "~5.9.3"
   }
 }

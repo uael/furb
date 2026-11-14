@@ -19,7 +19,7 @@ on:
         type: boolean
         default: false
       typescript:
-        description: Whether the bindings and the TUI run on the system.
+        description: Whether the bindings of TypeScript run on the system.
         type: boolean
         default: false
       head:
@@ -112,7 +112,6 @@ jobs:
           fi
           mkdir -p "$copy/bind/typescript"
           cp bind/typescript/furb.*.node bind/typescript/index.cjs bind/typescript/index.d.cts "$copy/bind/typescript/"
-          cp bind/typescript/furb* "$copy/bind/typescript/" 2> /dev/null || true
           cp -R bind/typescript/dist "$copy/bind/typescript/dist"
           du -sh "$copy"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -124,7 +123,7 @@ jobs:
       - if: failure()
         run: >-
           echo "::error title=No test ran on ${{ inputs.os }}::The build on ${{ inputs.os }} failed, so the suite, the
-          crate and the bindings and the TUI on ${{ inputs.os }} report skipped and gave no test result: a skipped job
+          crate and the bindings on ${{ inputs.os }} report skipped and gave no test result: a skipped job
           there is no pass."
 
   suite:
@@ -235,7 +234,7 @@ jobs:
           exit $failed
 
   typescript:
-    name: the bindings and the TUI on ${{ inputs.os }}
+    name: the bindings on ${{ inputs.os }}
     needs: build
     if: inputs.typescript
     runs-on: ${{ inputs.os }}
@@ -254,20 +253,17 @@ jobs:
         with:
           python: none
           rust: none
-      # The engine, its loader, its types, the built package and the program furb, as the build of the system made them.
+      # The engine, its loader, its types and the built package, as the build of the system made them.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: build-${{ inputs.os }}
           path: ${{ runner.temp }}/build
-      - run: |
-          cp -R "$RUNNER_TEMP/build/bind/typescript/." bind/typescript/
-          chmod +x bind/typescript/furb* 2> /dev/null || true
+      - run: cp -R "$RUNNER_TEMP/build/bind/typescript/." bind/typescript/
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
-      - run: bun run docs
-      - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
+      - run: git diff --exit-code -- bind/typescript/index.d.cts
       - run: bun run check
       - run: bun run lint
       - run: bun run test

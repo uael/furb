@@ -23,8 +23,6 @@ async def test_compaction_is_the_doctrine_of_the_skill(tmp_path: Path) -> None:
     "fitted()",
     "condense()",
     "clear()",
-    "/compact",
-    "/clear",
     "SHARE",
     "FILTERS",
   ]

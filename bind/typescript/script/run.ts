@@ -1,21 +1,16 @@
-// A run of the tests, which the runner of the suite and the loop that repeats one test share: a process of `bun test`
-// in a yard of its own, and the test files that a filter names.
+// A run of the tests: a process of `bun test` in a yard of its own, and the test files that a filter names.
 import { mkdtemp, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Glob } from "bun";
 import { endOf } from "./children.ts";
 
-/** The test files, from the root of the clone, whose path or whose package and file (as tui/host) hold one of the words
- * given, or all of them when no word is given. */
+/** The test files, from the root of the clone, whose path or whose package and file (as typescript/engine) hold one of
+ * the words given, or all of them when no word is given. */
 export function testFiles(filters: string[]): string[] {
-  return ["bind/typescript/test", "tui/test", "tui/scenarios"]
-    .flatMap((root) =>
-      [...new Glob("**/*.test.ts").scanSync(root)].map((file) => ({
-        path: `./${root}/${file}`,
-        named: `${root.replace(/\/test$/, "")}/${file}`,
-      })),
-    )
+  const root = "bind/typescript/test";
+  return [...new Glob("**/*.test.ts").scanSync(root)]
+    .map((file) => ({ path: `./${root}/${file}`, named: `typescript/${file}` }))
     .filter(
       ({ path, named }) =>
         filters.length === 0 || filters.some((one) => path.includes(one) || named.includes(one)),

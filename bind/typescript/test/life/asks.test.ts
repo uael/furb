@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type Ask, aimed, beside, gist, takesNothing, wants } from "../../src/life/asks.ts";
+import { type Ask, aimed, beside, gist, wants } from "../../src/life/asks.ts";
 
 /** An ask as the crate folds it, with the label of its chain: a question of a text, or a notice. */
 const ask = (id: string, chain: string, began: number, notice = false): Ask => ({
@@ -61,11 +61,4 @@ test("the gist of a message is its first line that holds words, with the next on
     "chain30 asks the operator: A question on the item answers.",
   );
   expect(gist("Choose one:")).toBe("Choose one:");
-});
-
-test("a union that holds None takes a line of no word, and no other shape does", () => {
-  for (const shape of ["int | None", "str | None", "list[str] | None"])
-    expect(takesNothing(shape)).toBe(true);
-  for (const shape of ["int", "None", "str", "list[str]", "int | str", "Literal['a']", "set | None"])
-    expect(takesNothing(shape)).toBe(false);
 });

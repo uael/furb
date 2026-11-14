@@ -18,18 +18,14 @@ export {
   type SessionOptions,
   type Stream,
 } from "./session.js";
-export type { Actor, Entry, Fact, Paragraph, Standing, Turn } from "./types.js";
+export type { Actor, Entry, Fact, Paragraph, Standing } from "./types.js";
 export {
-  bound,
   display,
   efforts,
   isQuestion,
   leveled,
   opens,
-  paragraphs,
   plain,
-  questionKind,
-  safeText,
   standingOf,
   unmarked,
   usageOf,

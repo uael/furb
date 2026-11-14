@@ -1526,7 +1526,6 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
     wrap_pyfunction!(super::official, module)?,
     wrap_pyfunction!(super::enabled, module)?,
     wrap_pyfunction!(super::played, module)?,
-    wrap_pyfunction!(super::parts, module)?,
     wrap_pyfunction!(super::skills, module)?,
     wrap_pyfunction!(super::config_directory, module)?,
     wrap_pyfunction!(super::shell, module)?,

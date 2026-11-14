@@ -46,7 +46,7 @@ use serde::Serialize;
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   life::Opening,
-  skill::{self, Part, Skill},
+  skill::{self, Skill},
   view::{
     Act as ViewAct, Fold, Held, Pause, SHOWN, Shown, quotes as quotes_of, restate,
     writing as writing_of,
@@ -498,14 +498,6 @@ pub fn played(given: Vec<Skill>) -> NativeEar {
   NativeEar::of(skill::played(given, skill::Places::here()))
 }
 
-/// The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
-/// one, as the configs of the user and of the project say it now, which a TUI loads beside the life.
-#[cfg_attr(feature = "python", pyfunction)]
-#[cfg_attr(feature = "typescript", napi)]
-pub fn parts(project: String) -> Result<Vec<Part>, Fault> {
-  skill::parts(&skill::Places::here(), path::Path::new(&project))
-}
-
 /// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
@@ -752,49 +744,6 @@ pub fn image_path(directory: String, uri: String) -> Result<ImagePath, Fault> {
   let found =
     images::path(directory.as_ref(), &uri).map_err(|no| Fault::refused(no.to_string()))?;
   Ok(ImagePath { path: found.path.display().to_string(), digest: found.digest })
-}
-
-/// The files under a folder that the picker of a window offers, by their path from it with `/`
-/// between its parts, in order: each dot file too, but `.git` and each file that `.gitignore`
-/// hides.
-#[cfg_attr(feature = "typescript", napi)]
-pub fn walked_files(root: String) -> Vec<String> {
-  world::picker::walked(path::Path::new(&root))
-}
-
-/// The picker of the files of a window, which walks its folder once as it opens, in the
-/// background: each key gives it the query and reads the first rows that stand then, so no key
-/// waits for the walk or the match.
-#[cfg_attr(feature = "typescript", napi)]
-pub struct FilePicker(world::picker::Picker);
-
-#[cfg_attr(feature = "typescript", napi)]
-impl FilePicker {
-  /// A picker of the files of a directory, whose walk starts now.
-  #[cfg_attr(feature = "typescript", napi(constructor))]
-  pub fn new(directory: String) -> Self {
-    Self(world::picker::Picker::new(path::Path::new(&directory)))
-  }
-
-  /// The picker opened again on a directory, for a new `@`: the walks of the last open stop now,
-  /// and a walk of the directory starts.
-  #[cfg_attr(feature = "typescript", napi)]
-  pub fn open(&mut self, directory: String) {
-    self.0 = world::picker::Picker::new(path::Path::new(&directory));
-  }
-
-  /// Takes the query that the operator typed after `@`, and gives the first rows that stand now.
-  #[cfg_attr(feature = "typescript", napi)]
-  pub fn find(&mut self, query: String, most: u32) -> world::picker::Rows {
-    self.0.find(&query);
-    self.0.rows(most)
-  }
-
-  /// The first rows of the last query as they stand now, which a window reads again while they run.
-  #[cfg_attr(feature = "typescript", napi)]
-  pub fn rows(&mut self, most: u32) -> world::picker::Rows {
-    self.0.rows(most)
-  }
 }
 
 /// How a message names an image: `![name](uri)`.

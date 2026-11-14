@@ -5,8 +5,7 @@ alone, and a runner of macOS waits in a queue for minutes, so a change runs thos
 behave in another way there. The paths come one on each line from the standard input, and the answer is the lines
 `key=value` that a step of GitHub takes into its outputs. A pull request and a push to main give their paths, and a
 run by hand given a base gives the paths between that base and its head. With `--all`, which a run by hand with no base
-and the run of each night take, every job runs. A change to the files of the gallery alone runs no hook, which the
-output hooks says.
+and the run of each night take, every job runs.
 """
 
 import json
@@ -25,9 +24,9 @@ INERT = re.compile(
 )
 # A path that only the suite of python reads.
 PYTHON = re.compile(r"(test/.*|bind/python/.*|pyproject\.toml|uv\.lock|docs/examples/python/.*)")
-# A path that only the bindings of TypeScript and the TUI read.
+# A path that only the bindings of TypeScript read.
 TYPESCRIPT = re.compile(
-  r"((tui|bind/typescript)/.*|package\.json|bun\.lock|biome\.json|tsconfig.*\.json|docs/examples/typescript/.*)"
+  r"(bind/typescript/.*|package\.json|bun\.lock|biome\.json|tsconfig.*\.json|docs/examples/typescript/.*)"
 )
 # A path that only the window reads. No other package depends on the window, so its change runs the tests of the crate
 # on each system, where it draws with a native library of that system, and the other jobs on Linux alone.
@@ -44,16 +43,10 @@ LOGIC = re.compile(r"src/furb/(engine\.pyi?|record\.py|kernel\.py)|tests/corpus/
 RUST = re.compile(
   r"((src|cli|tests|extensions|\.cargo)/.*|Cargo\.(toml|lock)|build\.rs|rust-toolchain\.toml|docs/examples/rust/.*)"
 )
-# A render of the gallery changes only these files, which no gate reads, so it runs no gate. The job of the gates alone
-# reports on it.
-GALLERY = re.compile(r"docs/(screenshots/.*|furb[.]gif)")
 
 
 def scope(paths: list[str]) -> dict[str, object]:
-  """The systems of the suite, of the bindings and of the tests of the crate, and the systems that build for them.
-
-  The hooks run unless the change is a render of the gallery alone.
-  """
+  """The systems of the suite, of the bindings and of the tests of the crate, and the systems that build for them."""
   kinds = dict.fromkeys(("python", "typescript", "window", "rust", "other", "project", "logic"), False)
   for path in paths:
     if INERT.fullmatch(path):
@@ -72,7 +65,6 @@ def scope(paths: list[str]) -> dict[str, object]:
       kinds["rust"] = True
     else:
       kinds["other"] = True
-  gallery = bool(paths) and all(GALLERY.fullmatch(path) for path in paths)
   every = kinds["rust"] or kinds["other"]
   systems = {
     "suite_os": EVERY if every or kinds["python"] else LINUX,
@@ -81,7 +73,7 @@ def scope(paths: list[str]) -> dict[str, object]:
   }
   # Each system that a job of the suite, of the bindings or of the crate runs on builds once, for each of them.
   built = EVERY if EVERY in systems.values() else LINUX
-  return {**systems, "build_os": built, "code": any(kinds.values()), "hooks": not gallery}
+  return {**systems, "build_os": built, "code": any(kinds.values())}
 
 
 def lines(answer: dict[str, object]) -> str:
