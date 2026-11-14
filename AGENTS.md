@@ -57,7 +57,8 @@ API of its own:
   body, and a life that keeps its record drops an image that does not agree. A life of the command line or of the
   host that keeps its record ends with its image, and writes no checkpoint there. The next life of the same build
   on the same ears opens from it: it runs no boot, reads no entry and says no stand, and each ear takes each act that
-  the ear before it held in flight as an act that an earlier life took. A life that went on from the image and wrote
+  the ear before it held in flight as an act that an earlier life took: it takes a reply, a wait or a prompt again,
+  and closes a command as interrupted, which no view shows as a failure. A life that went on from the image and wrote
   no later one, as a life that crashed, kept entries after it: the next life opens from the image and says them again,
   as `Engine::feed` says, so a crash costs its tail alone. Each other open goes by the record: from its last
   checkpoint, or from its first entry when it holds none.

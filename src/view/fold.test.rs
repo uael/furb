@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 use super::Fold;
-use crate::view::{Maker, Pause};
+use crate::view::{Maker, Pause, State};
 use crate::world::catalog::leveled;
 
 /// A paused prompt, a rung born under its pause, and a later wake, with what the engine of the live
@@ -43,6 +43,25 @@ fn a_record_folds_each_pause_and_wake_and_each_act_born_under_a_pause_as_its_liv
     ["prompt1", "rung1"],
     "the pause holds the prompt and the rung born under it"
   );
+}
+
+#[test]
+fn a_chain_whose_last_command_the_end_of_its_life_cut_rests_and_one_whose_command_failed_fails() {
+  let state = |why: &str| {
+    let mut fold = Fold::default();
+    let facts = [
+      json!(["chain", "chain1", "operator", "", "root", ""]),
+      json!(["bash", "bash1", "operator", "chain1", "sleep 60", "", 120.0, null]),
+      json!(["started", "bash1", "bash"]),
+      json!(["done", "bash1", "bash", {"is": "Refused", "args": [why]}]),
+    ];
+    let moved = facts.iter().map(|fact| fold.recorded(fact)).last().unwrap_or_default();
+    let of = |id: &str| moved.iter().find(|act| act.id == id).map(|act| act.state);
+    (of("bash1"), of("chain1"))
+  };
+  let cut = "bash1 was interrupted: the life that ran it ended before it did";
+  assert_eq!(state(cut), (Some(State::Done), Some(State::Idle)));
+  assert_eq!(state("bash1 cannot start"), (Some(State::Failed), Some(State::Failed)));
 }
 
 #[test]

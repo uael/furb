@@ -2,7 +2,10 @@
 
 use std::fmt;
 
-use crate::{engine::OPERATOR, world::catalog::leveled};
+use crate::{
+  engine::OPERATOR,
+  world::{catalog::leveled, interruption},
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -299,11 +302,15 @@ impl Act {
   }
 
   /// Whether the act failed: a rung whose run raised, or an act done with a fault that is no
-  /// cancel.
+  /// cancel. An act that the end of the life that ran it cut, as a command, did not fail: its ear
+  /// closed it with the refusal that says so, and the operator has nothing to act on.
   pub fn failed(&self) -> bool {
     match &self.run {
       Some(run) => matches!(run, RunState::Failed(_)),
-      None => self.value().and_then(fault).is_some_and(|(is, _)| is != "CancelledError"),
+      None => self.value().and_then(fault).is_some_and(|(is, args)| {
+        let cut = matches!(args, [Value::String(why)] if *why == interruption(&self.id));
+        is != "CancelledError" && !cut
+      }),
     }
   }
 
