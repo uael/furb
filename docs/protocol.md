@@ -217,9 +217,12 @@ it is not given. The daemon answers requests in any order.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
   in the log of the life and the `event`: `fact`, `act`, `text`, `queued`, `notice`, `changed`, `reborn` or `ended`. After
   `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.
-- The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
-  checkpoint, as the log after a rebirth holds them. So a window of a life that a later open, a handover or an end
-  brought back from its checkpoint hears the life whole, and hears no fact twice.
+- The log of a life starts at the birth of the life in the daemon. An open reads nothing of what the record told
+  before its last checkpoint: the life tells each chain, each prompt and each command that its checkpoint keeps, as
+  they stand at the tip. The first attach of a window asks for that past. Once the life stands, the daemon reads it
+  from the record, and the life tells each act of it as an event `act`, with `began` at 0 and, when the act ended,
+  `ended` at 0, then a `changed` for each chain of them. An act of the past stands before each act that the life
+  told, and before each moment of the life. The life tells no fact of the past.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
 - While a life opens, at its first open and at each rebirth, the daemon pushes to each window of the life a frame
@@ -234,7 +237,6 @@ it is not given. The daemon answers requests in any order.
 
     | Stage | The work | `done` of `of` |
     | --- | --- | --- |
-    | `recall` | The daemon reads what the record told before its last checkpoint, for the log of the life. | Facts told, of those facts. Both are 0 until the daemon read them. |
     | `find` | The record is read from its last checkpoint, for the build of its last life. | Bytes passed, of the bytes of the record. |
     | `cross` | A record that another build of furb wrote is replayed on the engine of that build, and gets a checkpoint. | Both are 0: the stage counts nothing. |
     | `read` | The record is read again from its last checkpoint under its lease, when it changed after `find`. | Bytes passed, of the bytes of the record. |

@@ -990,6 +990,9 @@ impl Lives {
       let life = life.to_owned();
       self.views.attach(Skill { life, name, outbox: outbox.clone(), told });
     } else {
+      // A window draws each thread of the life, so its attach asks for the past of the life.
+      let asked = handle.clone();
+      tokio::spawn(async move { asked.past().await });
       holders.attach(Window { peer, outbox: outbox.clone(), told });
       holders.present(life);
     }

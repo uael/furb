@@ -635,7 +635,7 @@ fn told_whole(read: &[Frame]) {
   let mut stages: Vec<Stage> = frames.iter().map(|one| one.0).collect();
   stages.dedup();
   // The record did not change after the stage find, so no stage reads it again.
-  let all = [Stage::Recall, Stage::Find, Stage::Seed, Stage::Boot, Stage::Log];
+  let all = [Stage::Find, Stage::Seed, Stage::Boot, Stage::Log];
   assert_eq!(stages, all, "each stage comes once, in order: {frames:?}");
   let back = |pair: &[(Stage, u64, u64)]| {
     pair[0].0 == pair[1].0 && (pair[1].1 < pair[0].1 || pair[1].2 < pair[0].2)
@@ -738,7 +738,8 @@ async fn a_life_that_ended_opens_again_from_its_checkpoint() {
 }
 
 #[tokio::test]
-async fn a_window_of_a_life_born_from_its_checkpoint_hears_each_fact_of_the_life_once() {
+async fn a_window_of_a_life_born_from_its_checkpoint_hears_its_birth_then_each_act_of_its_past_once()
+ {
   let at = place();
   let (local, _daemon) = started(&at, SHORT).await;
   let mut window = Window::dialed(&local).await;
@@ -759,34 +760,26 @@ async fn a_window_of_a_life_born_from_its_checkpoint_hears_each_fact_of_the_life
   let mut later = Window::dialed(&local).await;
   opened(&mut later, &at, "a.jsonl").await;
   later.attach(&life).await;
+  // The rung of the first birth, as the past tells it: its word, at the place 0.
+  let past = |frame: &Frame| {
+    matches!(frame, Frame::Event { event: Event::Act(act), .. }
+      if act.word.as_deref() == Some("x = 41 + 1") && act.began == 0)
+  };
+  let Frame::Event { event: Event::Act(act), .. } = later.until(past).await else { unreachable!() };
+  assert_eq!(
+    (act.id.as_str(), &act.phase, act.ended),
+    (first.as_str(), &Phase::Done(json!(null)), Some(0))
+  );
   later.ran(&life, "y = 1").await;
-  let facts_of = |window: &Window| -> Vec<Value> {
-    let facts = window.pushed.iter().filter_map(|frame| match frame {
-      // The extensions teach when they load, which a birth may do after the rung that the test
-      // runs, so the test counts none of their facts.
-      Frame::Event { event: Event::Fact(fact), .. }
-        if fact[0] != "keep" && fact[2] != "extensions" =>
-      {
-        Some(fact.clone())
-      }
-      _ => None,
-    });
-    facts.collect()
-  };
-  let (once, twice, facts) = (facts_of(&window), facts_of(&between), facts_of(&later));
-  let about = |kind: &str| facts.iter().filter(|one| one[0] == kind && one[1] == first).count();
-  let mine: Vec<&Value> = facts.iter().filter(|one| one[1] == first).collect();
-  assert_eq!((about("rung"), about("done")), (1, 1), "{mine:?}");
-  // The second and the third births do alike, so each adds as many occurrences of each fact of
-  // the first: a fact that a checkpoint restates told again would add more, and a fact that
-  // repeats an earlier one, dropped, fewer.
-  let times = |facts: &[Value], one: &Value| facts.iter().filter(|other| *other == one).count();
-  let added = |later: &[Value], earlier: &[Value], one: &Value| {
-    i64::try_from(times(later, one)).unwrap() - i64::try_from(times(earlier, one)).unwrap()
-  };
-  let unlike = |one: &&Value| added(&facts, &twice, one) != added(&twice, &once, one);
-  let again: Vec<&Value> = once.iter().filter(unlike).collect();
-  assert!(again.is_empty(), "the births add these facts unlike: {again:?}");
+  assert_eq!(later.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  time::sleep(PAST).await;
+  assert!(!later.lives(&life).await);
+  // The attach asks for the past one time: the life tells its acts once, and no fact of them.
+  let again = later.pushed.iter().filter(|frame| past(frame)).count();
+  let facts = later.pushed.iter().filter(|frame| {
+    matches!(frame, Frame::Event { event: Event::Fact(fact), .. } if fact[4] == "x = 41 + 1")
+  });
+  assert_eq!((again, facts.count()), (0, 0));
 }
 
 #[tokio::test]

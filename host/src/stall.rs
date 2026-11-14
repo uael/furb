@@ -87,11 +87,12 @@ impl Quiet {
     Self { bound, last, acts, told: Told::No, ours, chains }
   }
 
-  /// One event of the life. After a rebirth, the new open tells again each act that lives.
+  /// One event of the life. After a rebirth, the new open tells again each act that lives. An act
+  /// at the place 0 is of the past of the life: no engine runs it, so it is no act that stays open.
   pub(crate) fn heard(&mut self, event: &Event) {
     match event {
       Event::Fact(fact) => self.fact(fact),
-      Event::Act(act) => self.act(act),
+      Event::Act(act) if act.began > 0 => self.act(act),
       Event::Text { chain, .. } => self.wrote(chain),
       Event::Reborn(_) => {
         self.acts.clear();

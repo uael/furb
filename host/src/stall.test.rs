@@ -23,7 +23,8 @@ fn act(kind: &str, id: &str, chain: &str, words: &[Value]) -> Act {
     pause: None,
     run: None,
     word: None,
-    began: 0,
+    // A life tells each of its acts at a place of its log, from 1 on.
+    began: 1,
     ended: None,
     spend: None,
     state: State::Idle,
