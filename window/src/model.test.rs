@@ -140,6 +140,14 @@ fn the_keys_step_through_the_cards_and_to_each_thread_that_needs_the_operator() 
   assert!(model.open);
   model.clicked(head + 2);
   assert_eq!(selected(&model).as_deref(), Some("d"));
+  // A step past the last card above the folded resolved threads shows them, and goes to the first,
+  // as a click on their head does.
+  model.open = false;
+  model.step(-1);
+  assert_eq!(selected(&model).as_deref(), Some("b"));
+  model.step(1);
+  assert!(model.open);
+  assert_eq!(selected(&model).as_deref(), Some("d"));
 }
 
 #[test]

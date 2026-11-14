@@ -295,8 +295,17 @@ impl Model {
   }
 
   /// The card that stands a count of cards after the selected one, selected. The resolved threads
-  /// take part only while they show.
+  /// take part while they show, and a step down from the last card above them shows them.
   pub(crate) fn step(&mut self, by: isize) {
+    // A step past the last card above the folded resolved threads shows them, as a click on their
+    // head does, so the keys reach each row that the pointer reaches.
+    let above = self.settled.iter().filter(|one| one.0 != Part::Resolved).count();
+    let at =
+      self.selected.as_ref().and_then(|key| self.settled.iter().position(|one| one.1 == *key));
+    let last = at.map_or(above == 0, |at| at + 1 == above);
+    if by > 0 && !self.open && last && self.settled.len() > above {
+      self.open = true;
+    }
     let shown = |(part, ..): &&(Part, Key, Card)| self.open || *part != Part::Resolved;
     let keys: Vec<&Key> = self.settled.iter().filter(shown).map(|one| &one.1).collect();
     let at = self.selected.as_ref().and_then(|key| keys.iter().position(|one| *one == key));
