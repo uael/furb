@@ -214,7 +214,7 @@ impl Model {
     let card = &self.settled[at].2;
     let on = |style: Style| ground.map_or(style, |ground| style.bg(ground));
     let title = run(card.thread.title.clone(), on(t.style(Role::Muted)));
-    let left = vec![run("✓ ", on(Style::new().fg(t.done))), title];
+    let left = vec![run("✓ ", on(t.style(Role::Muted))), title];
     let age = self.age(card.since).unwrap_or_else(|| "now".to_owned());
     let line = spread(left, vec![run(age, on(t.style(Role::Muted)))], CARD, on(Style::new()));
     self.edged(at, ground, line)

@@ -9,8 +9,14 @@ use opentui::{
 };
 
 /// The background when the terminal says none, or says a light one: the window has no light set
-/// of colors yet, so it draws its own dark background there.
-const BASE: Color = Color::hex(0x0e_0f11);
+/// of colors yet, so it draws its own dark background there. It is the darkest grey of the scale
+/// of OpenCode v2.
+const BASE: Color = Color::hex(0x0a_0a0a);
+
+/// The color that each surface is mixed toward, and how many parts of 100 of it each step of the
+/// scale takes: a panel, a raised band, a lifted thing and a border.
+const WHITE: Color = Color::hex(0xff_ffff);
+const STEPS: [u16; 4] = [3, 7, 13, 26];
 
 /// The column where the head of a screen starts.
 pub const HEAD: u16 = 1;
@@ -19,51 +25,58 @@ pub const HEAD: u16 = 1;
 /// blank after it.
 pub const TEXT: u16 = 2;
 
-/// The colors of the window. Each has one job.
+/// The colors of the window: a scale of greys from the background of the terminal, and few
+/// accents. Each has one job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tokens {
   /// The background, which is the one of the terminal when the terminal says it.
   pub base: Color,
-  /// A message of the operator, the input, a block of code.
+  /// The list beside the thread.
+  pub panel: Color,
+  /// A message of the operator, the input, a block of code, a thing under the pointer.
   pub raised: Color,
-  /// The selected card, and a thing under the pointer.
+  /// The selected card.
   pub lifted: Color,
+  /// A line between two parts.
+  pub border: Color,
   /// Prose and code. It is never pure white.
   pub text: Color,
-  /// The second line of a card, a thought, a hint, a placeholder.
+  /// The second line of a card, a thought, a hint, a placeholder, a mark of what is done.
   pub muted: Color,
-  /// Work that runs, a new thread, a link, the dot of what is not read.
+  /// Work that runs, a link, the dot of what is not read.
   pub accent: Color,
   /// A thread that waits for the operator, the form of a question, a pause that furb made, an
   /// open past its bound.
   pub attention: Color,
   /// A failure, and the cross of a line that failed.
   pub danger: Color,
-  /// The mark of what is done.
-  pub done: Color,
-  /// The bar of a thread and the badge of a project.
-  pub hues: [Color; 5],
+  /// The bar of a thread and the badge of a project: purple, blue and orange.
+  pub hues: [Color; 3],
 }
 
 impl Tokens {
-  /// The tokens on the background of a terminal. A surface is that background mixed toward the
-  /// text, so the window shows no band of another black. The background stays the default color
-  /// of the terminal, so a terminal that draws its own background, as an image, keeps it.
+  /// The tokens on the background of a terminal. A surface is that background mixed toward white
+  /// by the steps of the scale, so the window shows no band of another black. The background
+  /// stays the default color of the terminal, so a terminal that draws its own background, as an
+  /// image, keeps it.
   pub fn on(terminal: Option<Color>) -> Self {
     let dark = terminal.filter(|told| ThemeMode::from_background(*told) == ThemeMode::Dark);
     let base = dark.map_or(BASE, |told| Color::default_with(told.r, told.g, told.b));
-    let text = Color::hex(0xe3_e3e6);
+    let [panel, raised, lifted, border] = STEPS.map(|share| mixed(base, WHITE, share));
+    let (purple, blue, orange) =
+      (Color::hex(0xa3_83e2), Color::hex(0x76_99fe), Color::hex(0xec_b081));
     Self {
       base,
-      raised: mixed(base, text, 6),
-      lifted: mixed(base, text, 11),
-      text,
-      muted: Color::hex(0x8f_9199),
-      accent: Color::hex(0x6a_a5f8),
-      attention: Color::hex(0xe5_b84b),
-      danger: Color::hex(0xf0_686a),
-      done: Color::hex(0x7f_bf8e),
-      hues: [0xb2_94f7, 0x4c_c9b8, 0xf0_8bb4, 0xb5_d66a, 0xd8_b98a].map(Color::hex),
+      panel,
+      raised,
+      lifted,
+      border,
+      text: Color::hex(0xe4_e4e4),
+      muted: Color::hex(0x94_9494),
+      accent: blue,
+      attention: Color::hex(0xf5_a742),
+      danger: Color::hex(0xef_6c6c),
+      hues: [purple, blue, orange],
     }
   }
 
@@ -85,7 +98,7 @@ impl Tokens {
       foreground: self.text,
       muted: self.muted,
       accent: self.accent,
-      border: self.muted,
+      border: self.border,
       focus: self.accent,
       selection_bg: self.lifted,
       selection_fg: self.text,
@@ -95,8 +108,8 @@ impl Tokens {
       input_focused_bg: self.raised,
       cursor: self.text,
       track: self.raised,
-      thumb: self.muted,
-      success: self.done,
+      thumb: self.border,
+      success: self.muted,
       warning: self.attention,
       error: self.danger,
     }

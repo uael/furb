@@ -13,8 +13,8 @@ use opentui::{
   App,
   input::KeyEventKind,
   prelude::{
-    BorderStyle, Container, Edge, KeyCode, KeyEvent, Modifiers, MouseButton, MouseEvent,
-    MouseEventKind, Sides, Span, Text, TimerId, View, Widget, WrapMode,
+    Container, Edge, KeyCode, KeyEvent, Modifiers, MouseButton, MouseEvent, MouseEventKind, Span,
+    Text, TimerId, View, Widget, WrapMode,
   },
 };
 
@@ -120,13 +120,11 @@ fn drawn(app: &App, model: Model) -> Screen<Model> {
   let tokens = model.tokens;
   let column = || Text::new(app, "").wrap(WrapMode::None);
   let (home, list) = (column(), column());
-  let line = View::new(app)
-    .border(BorderStyle::Single)
-    .border_sides(Sides::LEFT)
-    .border_color(tokens.lifted);
+  // The list stands on a panel, so a change of ground parts it from the home, with no line.
+  let side = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Right, 0);
   let side =
-    line.absolute().position(Edge::Top, 0).position(Edge::Right, 0).position(Edge::Bottom, 0);
-  let side = side.width(SIDE).bg(tokens.base).child(&list);
+    side.position(Edge::Bottom, 0).width(SIDE).bg(tokens.panel).padding_edge(Edge::Left, 1);
+  let side = side.child(&list);
   app.root().child(&home).child(&side);
 
   let mut screen = Screen::new(model);
