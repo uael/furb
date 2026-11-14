@@ -156,10 +156,11 @@ fn the_first_run_says_what_the_window_is_for() {
   let app = app();
   let mut daemon = Daemon::bound(&app);
   daemon.project("furb-try");
-  daemon.served();
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
-  // Nothing says that no thread stands before the machine said so.
-  assert!(!app.text().contains("No thread yet"));
+  // Nothing says that no thread stands before the machine said so. The daemon answers only once
+  // it is served, since a daemon that is served answers on its own threads before any frame.
+  assert!(!app.text().contains("No thread yet"), "{}", app.text());
+  daemon.served();
   shows(&app, "No thread yet in this project.");
   screen("first-run", &app);
 }
