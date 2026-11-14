@@ -85,10 +85,27 @@ impl Held {
   /// An act of the life heard as a host tells it, which the life gives up or shares with it: the
   /// fold of a record tells some hundred thousand of them, each with its words and its value, so it
   /// takes no copy of each. It gives back the act of the same id that it held before.
+  ///
+  /// A name names one act of a life. A birth on a checkpoint tells each act that the checkpoint
+  /// carries again, from its start, with the maker `journal` or the operator in place of the
+  /// maker that the record holds, at the place of the birth: the act keeps who made it, where it
+  /// began and ended, and a done act takes no state that is not done. [`Held::shared`] gives the
+  /// act as it holds it.
   pub fn took(&mut self, act: impl Into<Arc<Act>>) -> Option<Arc<Act>> {
-    let act = act.into();
-    let live = lives(&act);
+    let mut act = act.into();
     let (at, before) = if let Some(&at) = self.at.get(&act.id) {
+      let was = &self.acts[at];
+      if was.done() && !act.done() {
+        return None;
+      }
+      let ended = was.ended.or(act.ended);
+      if (&act.by, &act.maker, act.began, act.ended) != (&was.by, &was.maker, was.began, ended) {
+        let one = Arc::make_mut(&mut act);
+        one.by.clone_from(&was.by);
+        one.maker.clone_from(&was.maker);
+        one.began = was.began;
+        one.ended = ended;
+      }
       (at, Some(mem::replace(&mut self.acts[at], act)))
     } else {
       let at = self.acts.len();
@@ -104,7 +121,7 @@ impl Held {
       self.acts.push(act);
       (at, None)
     };
-    if live {
+    if lives(&self.acts[at]) {
       self.live.insert(at);
     } else {
       self.live.remove(&at);

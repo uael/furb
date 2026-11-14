@@ -2390,6 +2390,42 @@ async fn a_thread_gives_its_end_by_page_and_tells_each_change_to_the_peer_that_r
 }
 
 #[tokio::test]
+async fn the_cards_of_a_record_stay_the_same_through_each_birth_on_a_checkpoint_live_and_at_rest() {
+  let at = place();
+  let (_, sessions) = project(&at);
+  let (local, _daemon) = started(&at, Duration::ZERO).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let life = held(&mut window, &sessions, "one.jsonl").await;
+  let prompt = messaged(&mut window, &life, "ground the branch").await;
+  card(&mut window, |card| card.thread.standing == Standing::Resolved).await;
+  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  let rests = card(&mut window, |card| !card.held).await;
+  let same = |card: &Card| Card { since: 0, held: false, viewers: Vec::new(), ..card.clone() };
+  // A checkpoint at the tip of the record, then a birth on it, which says each act of the
+  // checkpoint again: the thread that he started stays his.
+  checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
+  held(&mut window, &sessions, "one.jsonl").await;
+  window.ran(&life, "x = 1").await;
+  // The cards that the life holds once it is born, which the index that its end writes keeps, and
+  // a fold of the record with no index.
+  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  let ended = card(&mut window, |card| !card.held && card.thread.prompt == prompt).await;
+  assert_eq!(same(&ended), same(&rests));
+  let index = format!("{life}.threads.json");
+  let mut kept: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
+  let prompts: Vec<_> =
+    kept["threads"].as_array().unwrap().iter().map(|one| &one["prompt"]).collect();
+  assert_eq!(prompts, [&json!(prompt)]);
+  kept["tip"]["bytes"] = json!(1);
+  fs::write(&index, kept.to_string()).unwrap();
+  let mut later = Window::dialed(&local).await;
+  cards(&mut later).await;
+  let folded = card(&mut later, |card| card.thread.prompt == prompt).await;
+  assert_eq!(same(&folded), same(&rests));
+}
+
+#[tokio::test]
 async fn the_cards_of_a_record_at_rest_come_from_its_index_and_never_from_a_fold_in_the_list() {
   let at = place();
   let (_, sessions) = project(&at);

@@ -494,7 +494,7 @@ impl Life {
 
   /// One event put in the log, and sent to each reader, then the follow-ups of a chain when the
   /// event changed them.
-  fn put(&mut self, event: Event) {
+  fn put(&mut self, mut event: Event) {
     if let Event::Fact(fact) = &event {
       self.kept.said += 1;
       self.kept.held.noted(fact, self.kept.said);
@@ -515,12 +515,17 @@ impl Life {
       Event::Act(act) => {
         self.kept.streams.heard(act, cards::now());
         let before = self.kept.held.took(Arc::clone(act)).map(|one| Event::Act(one).into());
+        // Each reader hears the act as the life holds it, which keeps who made it through a birth.
+        let held = self.kept.held.shared(&act.id).map(Arc::clone);
         let place = self.kept.spent.acts.get(&act.id).and_then(|at| usize::try_from(*at).ok());
         if let (Some(before), Some(slot)) = (before, place.and_then(|at| self.kept.log.get_mut(at)))
         {
           *slot = Some(Slot::Told(before));
         }
         self.stale = true;
+        if let Some(held) = held {
+          event = Event::Act(held);
+        }
       }
       Event::Text { rung, text, thinking, .. } => {
         self.kept.streams.wrote(rung, [text, thinking], cards::now());
