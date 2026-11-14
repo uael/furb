@@ -174,18 +174,22 @@ and `cli/pyproject.toml` say.
 
 `furb-window` is the program of the package `furb-window` in `window/`: the new window, in Rust on the Rust package
 of [OpenTUI](https://github.com/anomalyco/opentui), which takes the place of the TUI screen by screen. Today it holds
-its base and one screen that proves it. `cargo run -p furb-window` starts it on the daemon of this machine, which it
-starts when none listens, and `FURB_TUI=target/debug/furb-window furb` starts it through the command line. Ctrl+C
-leaves it.
+the list of the cards of the machine, one card for each thread, beside a home that says what waits for the operator.
+It opens no session yet. `cargo run -p furb-window` starts it on the daemon of this machine, which it starts when
+none listens, and `FURB_TUI=target/debug/furb-window furb` starts it through the command line. Alt+Down and Alt+Up,
+or Ctrl+X then J or K, step through the cards, Alt+A or Ctrl+X then A goes to the next thread that waits for the
+operator, Ctrl+X then L shows or hides the list, and Ctrl+C leaves the window.
 
 | File | What it holds |
 | --- | --- |
 | `window/Cargo.toml`, `window/build.rs` | The commit of OpenTUI that the window stands on, and its native library, which the build makes with Zig from that commit into `target/opentui`, once for each commit. `.cargo/config.toml` turns off the build script of `opentui-sys`, which only links a library that stands already. |
 | `window/src/machine.rs`, `window/src/link.rs` | The client of the daemon, on the protocol and the transport of `furb-host`: a machine, how the window reaches its daemon and starts it, and the task that holds the connection. |
-| `window/src/screen.rs` | The rule from what the daemon told to the widgets: a part of a screen draws only when the value that it shows changes. |
-| `window/src/tokens.rs`, `window/src/spinner.rs` | The tokens of the design, which each screen reads, and the loader. |
-| `window/src/proof.rs` | The screen that proves the base. The first screen of the design takes its place. |
-| `window/tests/suite/`, `window/tests/screens/` | The tests, which drive a headless app of OpenTUI on a real daemon, and each capture of a frame as text. `FURB_DRAW=1 cargo test -p furb-window` draws each capture again. |
+| `window/src/screen.rs` | The rule from what the window knows to the widgets: a part of a screen draws only when the value that it shows changes. |
+| `window/src/tokens.rs` | The tokens of the design, which each screen reads: each color, each role of a text, and each loader. |
+| `window/src/model.rs`, `window/src/kept.rs` | What the window knows: the cards that each machine told, where the hand of the operator is, and the order of the list as it last settled. A card shows its state at once and changes its place only while the hand is away. The window keeps the cards in a file of the cache of furb, `window/cards.json`, for its next first frame. |
+| `window/src/list.rs`, `window/src/home.rs`, `window/src/line.rs` | The rows of the list of cards and of the home, each a function of the model, and how a row fills its columns. |
+| `window/src/hand.rs` | The widgets, and what each key, each move of the pointer, each timer and each frame of a machine changes in the model. |
+| `window/tests/suite/`, `window/tests/screens/` | The tests, which drive a headless app of OpenTUI on a real daemon whose model answers from a script, and each capture of a frame as text. `FURB_DRAW=1 cargo test -p furb-window` draws each capture again, and `FURB_CELLS=<folder>` writes the cells of each capture there as JSON, with their colors. |
 
 On Linux and on macOS the program holds the library. On Windows it loads `opentui.dll`: `cargo run` and `cargo test`
 find it in `target/opentui`, and a program that you start by hand needs a copy of it beside itself.

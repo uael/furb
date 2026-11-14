@@ -1496,12 +1496,14 @@ dependencies = [
  "furb",
  "furb-host",
  "futures",
+ "jiff",
  "opentui",
- "rustix",
+ "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
+ "unicode-width",
  "windows-sys 0.61.2",
 ]
 

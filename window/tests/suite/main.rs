@@ -5,6 +5,6 @@
 #[path = "../../../tests/common/yard.rs"]
 mod yard;
 
+mod cards;
 mod daemon;
-mod proof;
 mod screens;

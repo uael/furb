@@ -1,0 +1,30 @@
+ furb
+
+  3 threads need you.                                        alt+a goes to one
+
+  While no window was open
+  ◌ which key sends the queue · photowroom                   works since 22:10
+  ‖ Ground the branch on the carrier                           paused at 22:10
+
+  studio is offline: the daemon closed the connection
+
+  ctrl+o    go to a project, a session or a machine
+  ctrl+p    commands
+  ctrl+x ?  each key
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+┃ ▌Ask for a change, a review or an answer
+┃ + new session in furb-try
+  /home/ada/src/furb-try                                     ctrl+x l the list

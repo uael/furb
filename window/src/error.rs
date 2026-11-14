@@ -9,6 +9,8 @@ use tokio_util::codec::LinesCodecError;
 pub enum Error {
   #[error("the window takes no word yet, and it was given `{0}`")]
   Word(String),
+  #[error("the window has no folder: {0}")]
+  Folder(io::Error),
   #[error("this machine has no cache of furb, so no daemon has a place on it")]
   NoCache,
   #[error("no program furb stands beside the window or on PATH, so nothing serves the daemon")]

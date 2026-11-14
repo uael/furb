@@ -61,7 +61,7 @@ impl Machine {
       .ok_or(Error::NoFurb)?;
     let mut served = Command::new(furb);
     served.arg("host");
-    Ok(Self { name: name(), folder, served })
+    Ok(Self { name: furb_host::machine(), folder, served })
   }
 
   /// The stream of the daemon, which the window serves first when none listens. A daemon that
@@ -119,16 +119,4 @@ impl Machine {
     let log = fs::read_to_string(self.folder.join(LOG)).unwrap_or_default();
     Error::Ended { status, said: log.trim().lines().last().unwrap_or_default().to_owned() }
   }
-}
-
-/// The name of this machine, without its domain.
-fn name() -> String {
-  #[cfg(unix)]
-  let full = {
-    use rustix::system;
-    system::uname().nodename().to_string_lossy().into_owned()
-  };
-  #[cfg(not(unix))]
-  let full = env::var("COMPUTERNAME").unwrap_or_default();
-  full.split('.').next().unwrap_or_default().to_owned()
 }

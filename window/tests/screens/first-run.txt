@@ -1,0 +1,30 @@
+ furb                                                        │ furb-try ▾             this machine
+                                                             │
+  No thread yet.                                             │  No thread yet in this project.
+                                                             │
+  Write below to start one. It runs in a new session of the  │  Other projects and machines:
+  project furb-try, on this machine.                         │  ctrl+o
+                                                             │
+  ctrl+o    go to a project, a session or a machine          │
+  ctrl+p    commands                                         │
+  ctrl+x ?  each key                                         │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+                                                             │
+┃ ▌Ask for a change, a review or an answer                   │
+┃ + new session in furb-try                                  │
+  /home/ada/src/furb-try                    ctrl+p commands  │

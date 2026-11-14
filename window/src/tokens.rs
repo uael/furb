@@ -142,6 +142,14 @@ impl Loader {
     }
   }
 
+  /// The frame of the mark after a time of work. The marks of the window read one time, so two
+  /// marks of one kind show the same frame.
+  pub fn frame(self, after: Duration) -> &'static str {
+    let frames = self.frames();
+    let steps = after.as_millis() / self.step().as_millis();
+    frames[usize::try_from(steps).unwrap_or_default() % frames.len()]
+  }
+
   /// How long one frame stays.
   pub const fn step(self) -> Duration {
     match self {

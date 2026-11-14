@@ -1,42 +1,84 @@
 //! The window of furb: what a person looks at, drawn in the terminal with OpenTUI.
 //!
-//! The window is a thin view of the daemon of a machine. It dials the daemon as `docs/protocol.md`
-//! says, with the types of `furb-host`, and it starts the daemon when none listens. A [`Screen`]
-//! keeps what the daemon told, and each part of it shows a function of that and draws only when
-//! its value changes. The window keeps no state that the daemon or the fold of `furb::view` gives.
+//! The window is a thin view of the daemon of each machine. It dials a daemon as `docs/protocol.md`
+//! says, with the types of `furb-host`, and it starts the daemon of this machine when none listens.
+//! Its model keeps what the daemons told and where the hand of the operator is. Each part of the
+//! [`Screen`] shows a function of the model and draws only when its value changes. The window
+//! keeps no state that a daemon or the fold of `furb::view` gives, and no rule of a card.
 //!
 //! [`run`] is the program `furb-window`. [`open`] draws the window on an app that stands already,
 //! as the headless app of a test. [`tokens`] holds each color, each loader and each role of a text
 //! of the design, which each screen reads.
 
 mod error;
+mod hand;
+mod home;
+mod kept;
+mod line;
 mod link;
+mod list;
 mod machine;
-mod proof;
+mod model;
 mod screen;
-mod spinner;
 pub mod tokens;
 
-use opentui::{App, AppOptions};
+use std::{
+  env,
+  path::PathBuf,
+  time::{SystemTime, UNIX_EPOCH},
+};
+
+use furb::world;
+use jiff::tz::TimeZone;
+use opentui::{
+  App, AppOptions,
+  host::HostOptions,
+  native::{MouseTracking, TerminalOptions},
+};
 
 pub use error::Error;
 pub use machine::Machine;
 use screen::Screen;
-use tokens::Tokens;
+
+/// What a window stands on, beside its machines.
+#[derive(Debug, Clone)]
+pub struct Options {
+  /// The folder of the window, whose project a new session starts in.
+  pub folder: PathBuf,
+  /// The file where the window keeps the cards that it saw.
+  pub kept: PathBuf,
+  /// The zone of each hour that the window writes.
+  pub zone: TimeZone,
+  /// The second of the clock, from the epoch of unix.
+  pub clock: fn() -> u64,
+}
+
+impl Options {
+  /// The window of the program: in the folder of its process, on the cache of furb, in the zone
+  /// and on the clock of this machine.
+  pub fn here() -> Result<Self, Error> {
+    let folder = env::current_dir().map_err(Error::Folder)?;
+    let kept = world::cache().ok_or(Error::NoCache)?.join("window").join("cards.json");
+    let clock = || SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs());
+    Ok(Self { folder, kept, zone: TimeZone::system(), clock })
+  }
+}
 
 /// The window on the terminal of the program, on the daemon of this machine, until the operator
-/// leaves it. The app asks the terminal for its colors, so the window stands on its background.
+/// leaves it. The app asks the terminal for its colors, so the window stands on its background,
+/// and for each move of the pointer, so what takes a click rises under it.
 pub fn run() -> Result<(), Error> {
-  let machine = Machine::here()?;
-  let app = App::new(AppOptions { palette_size: 16, ..AppOptions::default() })?;
-  open(&app, machine);
+  let (machine, options) = (Machine::here()?, Options::here()?);
+  let terminal =
+    TerminalOptions { mouse: MouseTracking::Motion, ..HostOptions::default().terminal };
+  let host = HostOptions { terminal, ..HostOptions::default() };
+  let app = App::new(AppOptions { palette_size: 16, host, ..AppOptions::default() })?;
+  open(&app, vec![machine], options);
   Ok(app.run()?)
 }
 
-/// The window drawn on an app, on the daemon of a machine, which it dials at once.
-pub fn open(app: &App, machine: Machine) {
-  let tokens = Tokens::on(app.palette().and_then(|palette| palette.background));
-  app.set_theme(tokens.theme());
-  let screen = proof::drawn(app, &tokens, &machine.name);
-  link::dialed(app, machine, screen);
+/// The window drawn on an app, on the daemon of each machine, which it dials at once. The first
+/// machine is the one of the window.
+pub fn open(app: &App, machines: Vec<Machine>, options: Options) {
+  hand::opened(app, machines, options);
 }
