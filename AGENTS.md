@@ -41,8 +41,8 @@ API of its own:
   fact, and `Held` keeps the acts that a host told, from which it draws the desk, the threads and the moments.
 - `src/checkpoint.rs` holds the checkpoint of a life: a fact at the tip of its record with each chain that lives, its
   turns, its module and its open prompts, from which a later life of any build goes on: the fact, its store and the
-  boot, while `gathered` and `seed` of the checkpointer write and read its data. A life ends with one through
-  `Engine::checkpoint`, which its store keeps as it keeps each fact, as the TUI does at a handover, and
+  boot, while `gathered` and `seed` of the checkpointer write and read its data. A life writes one through
+  `Engine::checkpoint`, which its store keeps as it keeps each fact, as a life of the host does at a rebirth, and
   `furb checkpoint` writes one on a record that no life holds. A life boots on the last checkpoint of its record,
   whatever engine wrote it, and replays the entries after it word by word. When those entries hold the texts of another
   engine, a life that inspects the record replays them on that engine and writes a checkpoint after them, so the life
@@ -51,11 +51,14 @@ API of its own:
   read only, and nothing forks it into a new life.
 - `src/image.rs` holds the image of a life, `<record>.image` beside its record: the session that monty dumps between
   two runs, and the half of the host, which `src/engine/image.rs` gives, with what each ear gives a fresh ear of its
-  make, as `Ear::image` and `Ear::imaged` say. It is a cache: its key names the tip of the record, the dump version of
-  monty, the texts of the build and the digest of its body, and a life that keeps its record drops an image that does
-  not agree. A life of the command line that keeps its record ends with its image, and the next life of the same build
+  make, as `Ear::image` and `Ear::imaged` say, and the part of the host of the life, which that host gives and takes
+  back before the life loads the image. It is a cache: its key names the tip of the record, the dump version of
+  monty, the texts of the build, whether the scratch directory of the record holds a file, and the digest of its
+  body, and a life that keeps its record drops an image that does not agree. A life of the command line or of the
+  host that keeps its record ends with its image, and writes no checkpoint there. The next life of the same build
   on the same ears opens from it: it runs no boot, reads no entry and says no stand, and each ear takes each act that
-  the ear before it held in flight as an act that an earlier life took. Each other open goes by the record.
+  the ear before it held in flight as an act that an earlier life took. Each other open goes by the record: from its
+  last checkpoint, or from its first entry when it holds none.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
   engine and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
@@ -95,10 +98,13 @@ API of its own:
 - `host/` is `furb-host`, the third package of the workspace of the crate, on the public API of `furb` alone. Its
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
   holds: it says a command to the life and reads the events of the life in order, from any place of its log. The
-  thread writes the checkpoint of a life that keeps its record at its end, and opens the life again from it for the
-  same handles when it said a tail of facts, or when the daemon asks it as its heap passes its share, and its log
+  thread writes the checkpoint of a life that keeps its record, and opens the life again from it for the
+  same handles, when it said a tail of facts, or when the daemon asks it as its heap passes its share, and its log
   lets go of each fact that the record holds, as
-  `host/src/rebirth.rs` says. A fault that stops the sandbox ends the life, and its record keeps each fact up to the
+  `host/src/rebirth.rs` says. At its end the thread writes the image of the life, with what the life keeps of the
+  events that it told, so the next life of the record stands where this one stood: it reads no fact of the record,
+  and its first screen is the last screen of the life before. A life with no image tells the past of its record
+  first, then opens by the record. A fault that stops the sandbox ends the life, and its record keeps each fact up to the
   fault. The
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
   that tells each fact as events, each act with the meaning that `furb::view` folds, which the verbs of the desk,

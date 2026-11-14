@@ -1,7 +1,7 @@
 //! The daemon of a machine, which holds each life by the path of its record (#983, section 8).
 //!
 //! A life lives while a holder holds it, each window that attached it and each pin, and for the
-//! grace after its last holder left: then it writes its checkpoint and ends. Work that runs holds
+//! grace after its last holder left: then it writes its image and ends. Work that runs holds
 //! nothing. The daemon listens before it opens a life, and each life opens on a thread of its own,
 //! so the daemon answers each verb while a life opens, and a fault of one life ends that life
 //! alone. Presence, who is attached now, is a verb and a frame of the daemon, never a fact of a
@@ -99,7 +99,7 @@ pub struct Settings {
   /// The opening of each life, whose record and folder the daemon sets. Its log takes the reports
   /// of the daemon, as a peer that the transport refused, and stderr takes them when it has none.
   pub opening: Opening,
-  /// How long a life with no holder lives before it writes its checkpoint and ends.
+  /// How long a life with no holder lives before it writes its image and ends.
   pub grace: Duration,
   /// How long a life that holds an open act says no fact before the daemon tells each of its
   /// windows and its root chain that it stalled.
@@ -1060,7 +1060,7 @@ impl Lives {
     idle.min()
   }
 
-  /// Each life whose grace passed, told to write its checkpoint and end.
+  /// Each life whose grace passed, told to write its image and end.
   fn expire(&mut self) {
     let now = Instant::now();
     for held in self.held.values_mut() {
@@ -1069,7 +1069,7 @@ impl Lives {
       {
         held.stage = Stage::Ending(Vec::new());
         let handle = held.handle.clone();
-        tokio::spawn(async move { end(&handle).await });
+        tokio::spawn(async move { end(&handle, Command::End).await });
       }
     }
   }
@@ -1132,13 +1132,14 @@ async fn until(due: Option<Instant>) {
   }
 }
 
-/// A life told to write its checkpoint and end, once its commands before ran, and the reply once
-/// it ended. A life whose record does not hold each fact that it said yet, as on a full disk, keeps
+/// A life told to end, with its image, or with its checkpoint for a handover, once its commands
+/// before ran, and the reply once it ended. A life whose record does not hold each fact that it
+/// said yet, as on a full disk, keeps
 /// the end and ends once the record holds them, so the daemon tells it once. A fault of that
 /// checkpoint is the fault of the event `Ended` of the life, which its windows and its watch hear,
 /// so the reply tells only the moment of the end.
-async fn end(life: &LifeHandle) {
-  life.send(Command::End).await.ok();
+async fn end(life: &LifeHandle, how: Command) {
+  life.send(how).await.ok();
 }
 
 /// The watch of one birth of a life, which no word of the life runs: its handle, its record, its
@@ -1286,7 +1287,7 @@ async fn gave(
     let waits = records.join(", ");
     report(log.as_ref(), &format_args!("the handover waits for each life to end: {waits}"));
   }
-  future::join_all(lives.iter().map(|(_, life)| end(life))).await;
+  future::join_all(lives.iter().map(|(_, life)| end(life, Command::Hand))).await;
   if let Err(Leaving { reply, .. }) = leave.send(leaving) {
     reply.send(Err(ProtocolError::Stopped)).ok();
   }

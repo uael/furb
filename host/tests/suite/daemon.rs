@@ -7,7 +7,7 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
-use crate::yard;
+use crate::{life::checkpointed, yard};
 
 use std::net::TcpListener;
 use yard::Yard;
@@ -648,6 +648,50 @@ fn told_whole(read: &[Frame]) {
   assert!(after.is_empty(), "no frame of the open comes after the first event: {after:?}");
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn a_window_of_a_life_that_opens_from_its_image_hears_its_stages_then_its_events() {
+  use furb::life::Stage;
+  let at = place();
+  let (local, _daemon) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  window.ran(&life, "x = 41 + 1").await;
+  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  let ended = async {
+    while window.lives(&life).await {
+      time::sleep(Duration::from_millis(20)).await;
+    }
+  };
+  timeout(PATIENCE, ended).await.expect("the life ends with its image after its grace");
+  window.pushed.clear();
+  let open = Verb::Open {
+    life: life.clone(),
+    cwd: Some(at.display().to_string()),
+    actor: None,
+    roster: None,
+    skills: None,
+    config: None,
+    claude: None,
+    answers: false,
+    attach: Some(0),
+  };
+  assert_eq!(window.ask(open).await, Ok(Answer::Done));
+  let mut read = Vec::new();
+  read_until(&mut window, &mut read, |frame| matches!(frame, Frame::Event { .. })).await;
+  let mut stages: Vec<Stage> = read
+    .iter()
+    .filter_map(|one| match one {
+      Frame::Opening { stage, .. } => Some(*stage),
+      _ => None,
+    })
+    .collect();
+  stages.dedup();
+  // The life reads no entry of its record, so it tells no recall, no read and no boot.
+  assert_eq!(stages, [Stage::Find, Stage::Seed, Stage::Log], "{read:?}");
+}
+
 /// A claude command line of a test that says nothing until a file is there, and that file. The
 /// catalog waits for a command line that it never saw, so the open of a life on it stands at the
 /// catalog, after the scan of its record, until the test makes the file.
@@ -677,7 +721,9 @@ async fn each_window_of_a_life_that_opens_hears_how_far_the_open_stands_then_its
       time::sleep(Duration::from_millis(20)).await;
     }
   };
-  timeout(PATIENCE, ended).await.expect("the life ends with its checkpoint after its grace");
+  timeout(PATIENCE, ended).await.expect("the life ends after its grace");
+  // A checkpoint at the tip of the record makes the open go by the record, through each stage.
+  checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
   first.pushed.clear();
   let (claude, go) = waiting(&at);
   let open = Verb::Open {
@@ -1755,7 +1801,10 @@ async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_checkpoint_l
   let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   time::sleep(PAST).await;
-  assert!(!window.lives(&life).await, "the life ended after its grace, on its checkpoint");
+  assert!(!window.lives(&life).await, "the life ended after its grace");
+  // The life ended with its image, which holds the word that waits. A checkpoint at the tip of
+  // the record makes the next life open by the record, on that checkpoint.
+  checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
   opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
   let stalls: Vec<Frame> = window.during(QUIET * 3).await.into_iter().filter(stall).collect();

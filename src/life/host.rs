@@ -135,8 +135,10 @@ impl Open {
       opening.directory = here.display().to_string();
     }
     let asked = Rc::new(RefCell::new(VecDeque::new()));
-    let (engine, record) =
-      opening.open([("console", console(Rc::clone(&asked)))], Progress::default()).await?;
+    let ears = [("console", console(Rc::clone(&asked)))];
+    // The life finds the acts that its program made in the entries of its record, so it stands
+    // on no image.
+    let (engine, record) = opening.open(ears, Progress::default(), &mut |_| false).await?;
     let made = record
       .iter()
       .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))

@@ -10,7 +10,10 @@
 //! record takes them, since the drop of its engine would lose them.
 //!
 //! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
-//! each fact up to the fault, and a later open replays them.
+//! each fact up to the fault, and a later open replays them. A life that ends with no fault writes
+//! its image and no checkpoint, as [`ended`] says: the image is of the end of a life alone, so a
+//! rebirth, at the tail or at the ask of the daemon, goes by a checkpoint, and the open after it
+//! drops the image that the record passed.
 //!
 //! Each life of a daemon runs on a thread of one process, so the heap that bounds them is the heap
 //! of the daemon. When it passes [`SHARE`] of its [`Heap`], the daemon asks the life that said the
@@ -22,14 +25,15 @@ use std::{
   alloc::{GlobalAlloc, Layout, System},
   collections::{HashMap, HashSet},
   mem,
+  path::Path,
   sync::atomic::{AtomicUsize, Ordering},
 };
 
 use furb::{
-  Engine, Fault,
+  Engine, Fault, image,
   view::{Kind, Phase},
 };
-
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::event::Event;
@@ -207,9 +211,11 @@ impl Asks {
 /// and that a checkpoint does not keep, the rungs that say a life word of the last standing, whose
 /// acts the seed makes again, and those life words. The rungs go with the birth: the next birth
 /// makes its own.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub(crate) struct Watch {
   facts: u64,
+  /// The ask of the daemon, which is of its heap now and of no later life.
+  #[serde(skip)]
   asked: bool,
   held: HashSet<String>,
   seeds: HashSet<String>,
@@ -274,10 +280,23 @@ impl Watch {
   }
 }
 
-/// The engine of a life dropped, with its checkpoint when the life keeps its record, and the fault
-/// of that checkpoint when it fails.
-pub(crate) fn ended(engine: Engine, keeps: bool) -> Option<Fault> {
-  keeps.then(|| engine.checkpoint()).and_then(Result::err)
+/// The engine of a life dropped at the end of the life. A life that keeps its record ends with its
+/// image, which holds what the host keeps of the life, so the next life of the record opens from
+/// it and reads no fact of its past. A life that writes no image ends with its checkpoint, from
+/// which the next life opens by the record: one that holds a function of a host, and one that the
+/// host gives nothing to keep, as at a handover to a build that reads no image of this one. It
+/// gives the fault of the end, when one came.
+pub(crate) fn ended(
+  mut engine: Engine,
+  record: Option<&Path>,
+  kept: Option<&impl Serialize>,
+) -> Option<Fault> {
+  let record = record?;
+  match kept.map(|kept| image::keep(&mut engine, record, kept)) {
+    Some(Ok(true)) => None,
+    Some(Ok(false)) | None => engine.checkpoint().err(),
+    Some(Err(no)) => Some(engine.checkpoint().err().unwrap_or(no)),
+  }
 }
 
 #[cfg(test)]

@@ -10,6 +10,7 @@ use std::mem;
 use std::path::Path;
 
 use furb::{Engine, Fault, Object, verbs, wire::outward, world};
+use serde::{Deserialize, Serialize};
 
 /// How many facts the record of a life may lack before the life pauses its work, which bounds the
 /// memory that holds them: twice the facts after which a life is born again, so a life that only
@@ -20,7 +21,7 @@ pub(crate) const UNKEPT: usize = 20_000;
 const WHY: &str = "the record of this life does not hold its facts yet";
 
 /// Whether the life holds its work for its record, and each chain that it paused for it.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub(crate) struct Backlog {
   holding: bool,
   paused: Vec<String>,

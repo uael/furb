@@ -17,8 +17,9 @@
 //! reader skips each field that it does not know, so a build opens a checkpoint of each minor of
 //! its schema, and refuses only one of another major.
 //!
-//! A life ends with its checkpoint, which the ear of its store keeps, since a life born from a
-//! checkpoint makes acts of its own at its birth; [`keep`] writes one on a record that no life
+//! A life that ends with no image, as `src/image.rs` says, ends with its checkpoint, which the ear
+//! of its store keeps, since a life born from a checkpoint makes acts of its own at its birth;
+//! [`keep`] writes one on a record that no life
 //! holds. A later life boots on the last checkpoint of its record, whatever engine wrote it, as
 //! [`booted`] says, so it replays the checkpoint and the entries after it alone, word by word,
 //! whatever build of the major made them: a resume returns to the exact state at the tip. A tail

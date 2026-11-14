@@ -326,7 +326,7 @@ mod unix {
       .filter(|(_, line)| line.starts_with("[[\"checkpoint\""))
       .map(|(at, _)| at)
       .collect();
-    assert_eq!(checkpoints.len(), 2, "the checkpoint of the rebirth, then the one of the end");
+    assert_eq!(checkpoints.len(), 1, "the checkpoint of the rebirth: the life ends with its image");
     assert!(draws.last() < checkpoints.first(), "the checkpoint of the rebirth follows each fact");
     let again = Life::spawn(opening(&at)).expect("the life has a thread");
     let n = again.send(Command::Inspect { name: "n".to_owned(), on: None }).await;

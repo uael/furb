@@ -38,7 +38,7 @@ pub struct Threads {
 }
 
 /// Each act of a life, as the last event of it told it, in the order the acts were first told.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Held {
   acts: Vec<Act>,
   at: HashMap<String, usize>,

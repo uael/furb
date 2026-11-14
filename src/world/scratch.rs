@@ -144,10 +144,17 @@ impl Scratch {
     Ok(&self.0.at)
   }
 
+  /// Whether the directory holds a file that a life made, which a life that opens on its record
+  /// makes again when the directory is missing.
+  pub(crate) fn holds(&self) -> bool {
+    let files = fs::read_dir(&self.0.at).map(Iterator::flatten);
+    files.is_ok_and(|mut each| each.any(|one| one.file_name() != WHOLE))
+  }
+
   /// The mark of the directory locked for as long as the life lives, once the mark stands, and its
   /// time set to now, so a reap counts each life as a use. A mark that a reap locks or removes now,
   /// or that cannot be locked, is not held: the next make holds the mark that it makes again.
-  fn hold(&self) {
+  pub(crate) fn hold(&self) {
     if self.0.lock.get().is_some() {
       return;
     }

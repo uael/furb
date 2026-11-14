@@ -4,10 +4,13 @@
 //! crate reads a fact as the tuple it is and nothing more: what a kind means is the engine's, and a host that
 //! hears facts reads the ones it knows by position, as the contract declares them.
 
+use serde::{Deserialize, Serialize};
+
 use crate::value::{Object, ObjectRef, entry};
 
 /// One fact of a life, as the tuple the engine said.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Fact(pub Object);
 
 impl Fact {

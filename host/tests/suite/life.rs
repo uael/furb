@@ -22,12 +22,13 @@ use std::{
 };
 
 use furb::{
-  Object,
-  life::{Answer, Opening},
+  Ear, Object,
+  ear::{ear, hear},
+  life::{Answer, Opening, Progress},
   view,
   view::{Act, Kind, Phase, RunState, State},
   world::{
-    Scratch,
+    CONSOLE, Scratch,
     config::{Change, Layer},
   },
 };
@@ -37,16 +38,16 @@ use serde_json::json;
 use tokio::time;
 
 /// The events of a life, each under its place in the log.
-type Logged = (Seq, Arc<Event>);
+pub(crate) type Logged = (Seq, Arc<Event>);
 
 /// A directory of one test, empty.
-fn place(name: &str) -> yard::Yard {
+pub(crate) fn place(name: &str) -> yard::Yard {
   yard::Yard::new(format!("furb-host-{name}-{}", process::id()))
 }
 
 /// A life with no record and no skill, whose model answers each request with the next word of a
 /// script, and with close(None) once the script runs out.
-fn scripted(at: &Path, words: &[&str]) -> Opening {
+pub(crate) fn scripted(at: &Path, words: &[&str]) -> Opening {
   let words: Vec<String> = words.iter().map(|one| (*one).to_owned()).collect();
   let next = AtomicUsize::new(0);
   let answer = Answer(Arc::new(move |_, _| {
@@ -73,7 +74,7 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
 
 /// The events of a stream, up to the first that the test waits for. A bound of time fails a test
 /// that hangs.
-async fn until(
+pub(crate) async fn until(
   events: &mut (impl Stream<Item = Logged> + Unpin),
   wanted: impl Fn(&Event) -> bool,
 ) -> Vec<Logged> {
@@ -94,7 +95,7 @@ async fn until(
 }
 
 /// Whether an event is the act of a name, done.
-fn done(id: &str) -> impl Fn(&Event) -> bool {
+pub(crate) fn done(id: &str) -> impl Fn(&Event) -> bool {
   move |event| matches!(event, Event::Act(act) if act.id == id && matches!(act.phase, Phase::Done(_)))
 }
 
@@ -104,7 +105,7 @@ fn stands(id: String, state: State) -> impl Fn(&Event) -> bool {
 }
 
 /// The act that a command made.
-async fn made(life: &LifeHandle, command: Command) -> String {
+pub(crate) async fn made(life: &LifeHandle, command: Command) -> String {
   match life.send(command).await {
     Ok(Reply::Act(id)) => id,
     other => panic!("the command made no act: {other:?}"),
@@ -112,7 +113,7 @@ async fn made(life: &LifeHandle, command: Command) -> String {
 }
 
 /// A rung of a word on the root.
-fn rung(word: &str) -> Command {
+pub(crate) fn rung(word: &str) -> Command {
   Command::Rung { word: word.to_owned(), on: None }
 }
 
@@ -610,13 +611,13 @@ async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
 }
 
 /// A life that keeps its record at a place, with no skill, whose model closes each request.
-fn kept(at: &Path) -> Opening {
+pub(crate) fn kept(at: &Path) -> Opening {
   Opening { record: Some(at.join("record.jsonl").display().to_string()), ..scripted(at, &[]) }
 }
 
 /// The facts of a log, in order, but each that says the record kept an entry, which the log of a
 /// record holds as its place and no reader of a later life hears.
-fn facts_of(log: &[Logged]) -> Vec<serde_json::Value> {
+pub(crate) fn facts_of(log: &[Logged]) -> Vec<serde_json::Value> {
   let facts = log.iter().filter_map(|one| match &*one.1 {
     Event::Fact(fact) if fact[0] != "keep" => Some(fact.clone()),
     _ => None,
@@ -624,9 +625,29 @@ fn facts_of(log: &[Logged]) -> Vec<serde_json::Value> {
   facts.collect()
 }
 
+/// The checkpoint of the life of a record whose life ended with its image, written at its tip by
+/// a life that opens from that image, on ears with the names of the ears of a host that hear and
+/// say nothing: it says no fact, so the record takes the checkpoint alone, as at a rebirth. The
+/// image then names the tip before it, so the next life opens by the record, on this checkpoint.
+pub(crate) async fn checkpointed(opening: Opening) {
+  let idle = || -> Box<dyn Ear> {
+    ear(|mut co| async move {
+      loop {
+        hear(&mut co).await;
+      }
+    })
+  };
+  let ears = [(CONSOLE, idle()), ("events", idle()), ("changes", idle())];
+  let opened = opening.open(ears, Progress::default(), &mut |_| true).await;
+  let Ok((engine, _)) = opened else { panic!("no life opens on the image of the record") };
+  if let Err(no) = engine.checkpoint() {
+    panic!("the life writes no checkpoint: {no}");
+  }
+}
+
 /// The facts of one birth of a life on a record: a word on its root, then each command, then its
-/// end, which keeps its checkpoint.
-async fn birth(at: &Path, word: &str, commands: Vec<Command>) -> Vec<serde_json::Value> {
+/// end, and the checkpoint of the record, on which the next birth opens.
+pub(crate) async fn birth(at: &Path, word: &str, commands: Vec<Command>) -> Vec<serde_json::Value> {
   let Ok(life) = Life::spawn(kept(at)) else { panic!("the life has no thread") };
   let mut events = Box::pin(life.events(0));
   let id = made(&life, rung(word)).await;
@@ -637,6 +658,7 @@ async fn birth(at: &Path, word: &str, commands: Vec<Command>) -> Vec<serde_json:
   }
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
   log.extend(until(&mut events, |event| matches!(event, Event::Ended(_))).await);
+  checkpointed(kept(at)).await;
   facts_of(&log)
 }
 

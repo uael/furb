@@ -1873,7 +1873,8 @@ fn an_open_tells_each_stage_in_order_and_ends_with_each_entry_of_its_boot_counte
   let progress =
     Progress(Arc::new(move |stage, done, of| heard.lock().unwrap().push((stage, done, of))));
   let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
-  let later = reactor.block_on(opening(&at, true).open::<String>([], progress)).unwrap();
+  let later =
+    reactor.block_on(opening(&at, true).open::<String>([], progress, &mut |_| true)).unwrap();
   let told = told.lock().unwrap().clone();
   assert_eq!(told.first(), Some(&(Stage::Find, 0, bytes)), "the open tells its first stage first");
   let mut stages: Vec<Stage> = told.iter().map(|one| one.0).collect();

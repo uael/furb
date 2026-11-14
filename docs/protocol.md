@@ -286,8 +286,8 @@ once it listens. A second daemon refuses to start there.
   change; a fault of the disk is told as a notice when the journal begins to lose changes, and again when it takes changes again, and the end of the life says what the journal lost.
 - A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
-  otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
-  that ends waits for its end, then opens it again from its checkpoint.
+  otherwise, writes its image and ends, and `list` gives it as not `open` from then on. An `open` of a life
+  that ends waits for its end, then opens it again from its image.
 - The daemon of a machine ends once it holds no peer and no life for its grace, so it does not outlive the windows
   that started it; a window that dials later starts a new one. A daemon waits for its first peer before this bound
   runs, and a daemon with a door on the tailnet does not end by it.

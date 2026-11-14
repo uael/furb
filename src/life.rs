@@ -285,15 +285,22 @@ impl Opening {
     let logs = self.record.as_ref().filter(|_| keeps);
     let logs = logs.map(|path| world::logging(path, &last.entries, last.from));
     let record = checkpoint::booted(last.entries);
-    let mut ears = self.eared(prepared, &record, checkpoint::stood(&record))?;
+    let mut ears = self.eared(prepared, Some(&record), checkpoint::stood(&record))?;
     ears.extend(store.map(|store| ("store".to_owned(), store)));
     ears.extend(logs.map(|log| ("log".to_owned(), log)));
     Ok((record, ears))
   }
 
   /// The ears of the crate but the store and the log, as [`Opening::parts`] gives them, for a life
-  /// that boots on a record, which holds the standing of its root or not.
-  fn eared(&self, prepared: Prepared, record: &[Object], stood: bool) -> Result<Ears, Fault> {
+  /// that boots on a record, which holds the standing of its root or not, or for a life that opens
+  /// from its image and reads no record: its scratch directory then stands as the life before left
+  /// it, which the key of the image holds.
+  fn eared(
+    &self,
+    prepared: Prepared,
+    record: Option<&[Object]>,
+    stood: bool,
+  ) -> Result<Ears, Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
     let Prepared { places, played, refused, provider, .. } = prepared;
@@ -312,7 +319,7 @@ impl Opening {
           .transpose()?
           .flatten();
         let scratch = kept.unwrap_or_else(Scratch::own);
-        scratch.remade(record, &told);
+        record.map_or_else(|| scratch.hold(), |record| scratch.remade(record, &told));
         scratch.reap(&places.config, Path::new(&self.directory));
         Ok(scratch)
       })
@@ -513,7 +520,8 @@ impl Opening {
   ) -> Result<(Engine, Vec<Object>), Fault> {
     let untold = Progress::default();
     let host = host.into_iter().map(|(name, ear)| (name.into(), ear)).collect();
-    let (host, prepared) = match self.imaged(host, self.prepared(&untold, true)?, &untold)? {
+    let prepared = self.prepared(&untold, true)?;
+    let (host, prepared) = match self.imaged(host, prepared, &mut |_| true)? {
       Ok(engine) => return Ok((engine, Vec::new())),
       Err(back) => back,
     };
@@ -526,14 +534,22 @@ impl Opening {
   /// of that runtime, so the thread of the life waits on no command and no server. A panic of that wait goes on in the
   /// task that awaits. The host is told how far the open stands, stage by stage, from the blocking
   /// thread and then from the thread that awaits.
+  ///
+  /// Before the life loads its image, `stands` is given the part of the host that the image holds,
+  /// as the host of the life before gave it to [`image::keep`], on the thread that awaits: it
+  /// says whether the host stands on it, and the life opens by its record when it does not.
   pub async fn open<N: Into<String>>(
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
     told: Progress,
+    stands: &mut dyn FnMut(&[u8]) -> bool,
   ) -> Result<(Engine, Vec<Object>), Fault> {
     let host = host.into_iter().map(|(name, ear)| (name.into(), ear)).collect();
     let (opening, prepared) = self.waited(&told, true).await?;
-    let (host, prepared) = match opening.imaged(host, prepared, &told)? {
+    if prepared.image.is_some() {
+      (told.0)(Stage::Seed, 0, 0);
+    }
+    let (host, prepared) = match opening.imaged(host, prepared, stands)? {
       Ok(engine) => return Ok((engine, Vec::new())),
       Err(back) => back,
     };
@@ -596,24 +612,25 @@ impl Opening {
   /// The session steps the ears that the life before had, by their names, so the life needs each
   /// of them and no other: a life that inspects hears a silent ear in the place of each that it
   /// lacks, as it does for each ear that does work. The ears of the host come back when the image
-  /// does not load: its ears are not those of this life, the record does not end where it says, or
-  /// monty does not load its session. A life that keeps then drops the image, and the life opens
+  /// does not load: its ears are not those of this life, the record does not end where it says,
+  /// monty does not load its session, or the host does not stand on its part, which it is asked
+  /// last, so a host that takes its part opens from the image. A life that keeps then drops the
+  /// image, and the life opens
   /// by its record, on what it waits for again with no image. The ears come back too when no
   /// image agrees with the record, with what the life waited for, on which it opens by its record.
   fn imaged(
     &self,
     host: Ears,
     mut prepared: Prepared,
-    told: &Progress,
+    stands: &mut dyn FnMut(&[u8]) -> bool,
   ) -> Result<Result<Engine, (Ears, Option<Prepared>)>, Fault> {
     let Some(image) = prepared.image.take() else { return Ok(Err((host, Some(prepared)))) };
-    (told.0)(Stage::Seed, 0, 0);
     let keeps = self.keeps != Some(false) && self.works();
     let path = self.record.as_deref().map(Path::new).filter(|_| keeps);
     let store = path.map(|path| world::stored_on(path, image.bytes)).transpose()?;
     // The record of a life that keeps ends where the image says, or the image is stale.
     let ends = store.as_ref().is_none_or(Option::is_some);
-    let mut ears = self.eared(prepared, &[], true)?;
+    let mut ears = self.eared(prepared, None, true)?;
     if let (Some(store), Some(path)) = (store.flatten(), path) {
       ears.extend([("store".to_owned(), store), ("log".to_owned(), world::logging_on(path))]);
     }
@@ -623,7 +640,7 @@ impl Opening {
     let known = host.iter().chain(&ears).all(|one| image.half.names().any(|name| name == one.0));
     let loads = known && ends && (lacked.is_empty() || !self.works());
     let sand = loads.then(|| image.half.sand(image.session()).ok()).flatten();
-    let Some(sand) = sand else {
+    let Some(sand) = sand.filter(|_| stands(image.host())) else {
       path.map(image::drop_of);
       return Ok(Err((host, None)));
     };
@@ -650,7 +667,7 @@ impl Opening {
     let record = checkpoint::booted(world::last(Path::new(path), &mut |_| {})?.entries);
     let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     let prepared = inspects.prepared(&Progress::default(), false)?;
-    let ears = inspects.eared(prepared, &record, checkpoint::stood(&record))?;
+    let ears = inspects.eared(prepared, Some(&record), checkpoint::stood(&record))?;
     let mut engine = Engine::boot(record, ears)?;
     if let Some(no) = engine.raised() {
       return Err(no.clone());
@@ -670,7 +687,7 @@ impl Opening {
     for at in checkpoint::all(&record) {
       let before = checkpoint::booted(record[..at].to_vec());
       let prepared = inspects.prepared(&Progress::default(), false)?;
-      let ears = inspects.eared(prepared, &before, checkpoint::stood(&before))?;
+      let ears = inspects.eared(prepared, Some(&before), checkpoint::stood(&before))?;
       let mut engine = Engine::boot(before, ears)?;
       if let Some(no) = engine.raised() {
         return Err(no.clone());

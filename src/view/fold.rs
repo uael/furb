@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::{fact::named, skill};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
@@ -28,7 +29,7 @@ pub fn followed(kind: &str) -> bool {
 /// What the fold holds of a chain, each act by the place it began: its live acts of work, its last
 /// act of work, its last prompt, and the live prompts that its words made on other chains. These
 /// are all the acts that the state of the chain reads.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 struct Chain {
   open: BTreeMap<u64, String>,
   last: Option<String>,
@@ -38,6 +39,7 @@ struct Chain {
 
 /// A reply that is not done: the chain that it stands on, the actor that answers it, and the rung
 /// that waits for the word that it writes.
+#[derive(Serialize, Deserialize)]
 struct Reply {
   chain: String,
   actor: String,
@@ -49,7 +51,7 @@ struct Reply {
 /// The acts of a life, folded from its facts in the order of its log. It reads from each fact what
 /// the fact says alone, and takes from the engine what the engine alone can say: which acts a pause
 /// or a wake covers.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Fold {
   acts: HashMap<String, Act>,
   /// How many facts the fold heard, which is the place in time of the fact that it hears.

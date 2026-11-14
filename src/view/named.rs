@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::operator;
@@ -25,7 +26,7 @@ const WORD: (&str, &str) = ("act(\"rename_session\", \"\", lambda id: (yield \"d
 /// The name that a session has, from the acts of its root as they come: the name that the operator
 /// said and the name that the extension naming gave, each the last of its kind by the place that
 /// its act began.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Named {
   said: Option<(u64, String)>,
   given: Option<(u64, String)>,

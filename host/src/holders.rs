@@ -1,5 +1,5 @@
 //! The holders of a life (D2 of #983): each window that attached it and each pin. A life with no
-//! holder lives for the grace of the daemon, then writes its checkpoint and ends. Work that runs
+//! holder lives for the grace of the daemon, then writes its image and ends. Work that runs
 //! in the life holds nothing.
 
 use std::{collections::BTreeSet, time::Duration};

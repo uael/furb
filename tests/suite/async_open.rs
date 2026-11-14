@@ -73,7 +73,8 @@ async fn a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits
   let at = yard::Yard::new(format!("furb-async-open-{}", process::id()));
   LocalSet::new()
     .run_until(async {
-      let (mut engine, _) = opening(&at).open::<String>([], Progress::default()).await.unwrap();
+      let (mut engine, _) =
+        opening(&at).open::<String>([], Progress::default(), &mut |_| true).await.unwrap();
       let on = || Some("chain1".to_owned());
       let with = verbs::Bash { on: on(), ..Default::default() };
       let exit: Exit = engine.bash("echo hi", with).unwrap().await.unwrap();

@@ -4,7 +4,9 @@
 //! waits for the next command, and keeps the log of the events of the life. A command that a
 //! handle says while the life opens waits, and the life answers it once it stands. The thread
 //! opens the life again from its checkpoint at each rebirth, as [`crate::rebirth`] says, for the
-//! same handles and the same log. Once the life ends, the thread holds its log for the readers
+//! same handles and the same log. A life that keeps its record ends with its image, which holds
+//! what the life keeps of the events that it told, and the next life of the record opens from it.
+//! Once the life ends, the thread holds its log for the readers
 //! until each handle of the life is gone.
 
 #![expect(
@@ -27,7 +29,7 @@ use std::{
 };
 
 use furb::{
-  Engine, Fact, Fault, Object, Text, checkpoint,
+  Engine, Fact, Fault, Object, Text, checkpoint, image,
   life::{Log, Opening, Progress, Stage, Stream},
   verbs,
   view::{Act, Desk, Fold, Held, Named, Phase, Rung, SHOWN, Shown, ThreadNode, Threads},
@@ -38,6 +40,7 @@ use furb::{
   },
 };
 use futures::stream::{self, Stream as Streams};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::{
   runtime,
@@ -171,6 +174,9 @@ pub enum Command {
   /// each fact that it said yet, as on a full disk, keeps the end, tells why in a notice, and ends
   /// once the record holds them: the reply comes then.
   End,
+  /// The end of the life at a handover, as [`Command::End`] says, with its checkpoint and no
+  /// image: the daemon of the new build reads no image of a build of other texts.
+  Hand,
   /// A command of the engine said by a speaker other than the life itself, a skill as
   /// `skill/<name>` or a window as `operator/<login>`: each act and each fact that the command
   /// says is of that speaker, so a fact seen names the person who read.
@@ -251,44 +257,54 @@ enum Message {
   Rebirth(bool),
 }
 
-/// The log of a life on its thread: each event that it told, less those that a later event replaced
-/// (see `Spent`), the readers that hear each next one, what the ears and the provider told that
-/// is not in the log yet, how many facts it told and the place of each by its digest, the place in
-/// the log of each fact that the engine of this birth heard, and what the actor watches to know
-/// when the life is born again.
+/// A life on its thread: what it keeps of the events that it told, the readers that hear each next
+/// one, and what the ears and the provider told that is not in the log yet.
 pub struct Life {
-  log: Vec<Option<Arc<Event>>>,
-  spent: Spent,
+  kept: Kept,
   readers: broadcast::Sender<Logged>,
   heard: UnboundedReceiver<Event>,
-  said: Seq,
-  facts: HashMap<u64, Seq>,
-  births: Vec<Seq>,
-  watch: Watch,
   configs: Layers,
   /// The home of the names of the roster that each birth of the life reads at a stand.
   roster: world::Roster,
-  queue: Queue,
-  held: Held,
-  backlog: Backlog,
-  /// The name of the session, folded from each fact of the life, and where the handle reads it.
-  named: Named,
+  /// Where the handle reads the name of the session.
   name: Arc<Mutex<Option<String>>>,
-  /// The record that the life keeps, and the facts that the log let go since the record holds
-  /// them, as [`Life::let_go`] says.
+  /// The record that the life keeps.
   record: Option<String>,
-  gone: Gone,
   /// The facts that the life said since it last opened, by which the daemon weighs it.
   weight: Arc<Scale>,
   /// How far the open of the life stands, which each window reads while the thread opens.
   opens: Told,
 }
 
+/// What a life keeps of the events that it told, which is the part of the host in the image of the
+/// life, so a later life of the record stands where this one stood and reads no fact of its past:
+/// the log, which is each event that it told, less those that a later event replaced (see
+/// `Spent`), how many facts it told and the place of each by its digest, the place in the log of
+/// each fact that the engine of this birth heard, what the actor watches to know when the life is
+/// born again, the queue of the follow-ups, the acts with their meaning, the work that the life
+/// holds for its record, the name of the session, folded from each fact of the life, and the
+/// facts that the log let go since the record holds them, as [`Life::let_go`] says. A change of
+/// this shape raises the shape of the image, in `furb::image`.
+#[derive(Default, Serialize, Deserialize)]
+struct Kept {
+  log: Vec<Option<Arc<Event>>>,
+  spent: Spent,
+  said: Seq,
+  facts: HashMap<u64, Seq>,
+  births: Vec<Seq>,
+  watch: Watch,
+  queue: Queue,
+  held: Held,
+  backlog: Backlog,
+  named: Named,
+  gone: Gone,
+}
+
 /// The facts that the log of a life let go: each one before the last checkpoint of the life, which
 /// the record holds, so a log holds the facts of one birth and not those of a whole life. The log
 /// keeps the place and the digest of each, and a reader behind them reads them again from the
 /// record, as [`Retell`] says.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 struct Gone {
   /// The place in the log of each fact let go, in order, with its digest.
   places: Vec<(Seq, Digest)>,
@@ -314,7 +330,7 @@ pub(crate) struct Scale {
 /// wrote for it. A life that holds an act for each fact, and a part
 /// for each few words that a model streams, would else hold every state of each act and every part
 /// of each reply for its whole life.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 struct Spent {
   /// The place of the last event of each act.
   acts: HashMap<String, Seq>,
@@ -387,35 +403,40 @@ impl Life {
   /// event changed them.
   fn put(&mut self, event: Event) {
     if let Event::Fact(fact) = &event {
-      self.said += 1;
-      self.held.noted(fact, self.said);
-      self.facts.entry(digest(fact)).or_insert(self.said);
-      if self.named.hear(fact, false)
-        && let Ok(mut name) = self.name.lock()
-      {
-        *name = self.named.name().map(str::to_owned);
+      self.kept.said += 1;
+      self.kept.held.noted(fact, self.kept.said);
+      self.kept.facts.entry(digest(fact)).or_insert(self.kept.said);
+      if self.kept.named.hear(fact, false) {
+        self.named();
       }
     }
-    self.watch.heard(&event);
+    self.kept.watch.heard(&event);
     // A life that keeps no record is never born again, so the daemon never weighs it.
     if self.record.is_some() {
-      self.weight.facts.store(self.watch.facts(), Ordering::Relaxed);
+      self.weight.facts.store(self.kept.watch.facts(), Ordering::Relaxed);
     }
-    let queued = self.queue.heard(&event);
+    let queued = self.kept.queue.heard(&event);
     if let Event::Act(act) = &event {
-      self.held.heard(act);
+      self.kept.held.heard(act);
     }
-    let seq = self.log.len() as Seq;
-    for at in self.spent.heard(seq, &event) {
-      if let Some(slot) = usize::try_from(at).ok().and_then(|at| self.log.get_mut(at)) {
+    let seq = self.kept.log.len() as Seq;
+    for at in self.kept.spent.heard(seq, &event) {
+      if let Some(slot) = usize::try_from(at).ok().and_then(|at| self.kept.log.get_mut(at)) {
         *slot = None;
       }
     }
     let event = Arc::new(event);
-    self.log.push(Some(Arc::clone(&event)));
+    self.kept.log.push(Some(Arc::clone(&event)));
     self.readers.send((seq, event)).ok();
     if let Some(queued) = queued {
       self.put(queued);
+    }
+  }
+
+  /// The name of the session, as the facts of the life fold it, told to each handle.
+  fn named(&self) {
+    if let Ok(mut name) = self.name.lock() {
+      *name = self.kept.named.name().map(str::to_owned);
     }
   }
 
@@ -429,7 +450,7 @@ impl Life {
         Event::Changed(_) => {}
         Event::Fact(fact) => {
           self.put(Event::Fact(fact));
-          self.births.push(self.said);
+          self.kept.births.push(self.kept.said);
         }
         Event::Act(act) => {
           let act = self.placed(act);
@@ -451,21 +472,32 @@ impl Life {
     while let Ok(event) = self.heard.try_recv() {
       told.push(event);
     }
-    self.births.clear();
-    let start = self.log.len();
+    self.kept.births.clear();
+    let start = self.kept.log.len();
     let (mut opening, of) = (true, told.len() as u64);
     (progress.0)(Stage::Log, 0, of);
     for (at, event) in (1..).zip(told) {
       match &event {
         Event::Fact(fact) if self.restates(&mut opening, fact) => {
-          let place = self.facts.get(&digest(fact)).copied().unwrap_or(self.said);
-          self.births.push(place);
+          let place = self.kept.facts.get(&digest(fact)).copied().unwrap_or(self.kept.said);
+          self.kept.births.push(place);
         }
         _ => self.told(Some(event)),
       }
       (progress.0)(Stage::Log, at, of);
     }
-    self.gone.opened.push(start..self.log.len());
+    self.kept.gone.opened.push(start..self.kept.log.len());
+  }
+
+  /// The life stands where the life of its image stood, on what that life kept: no open told a
+  /// fact, so the log takes none, and each reader reads the log of the life before. The fresh ears
+  /// of the life take again the acts that the ears before held, and tell what they say as each
+  /// later event.
+  fn imaged(&mut self, kept: Kept, progress: &Progress) {
+    self.kept = kept;
+    self.named();
+    self.weight.facts.store(self.kept.watch.facts(), Ordering::Relaxed);
+    (progress.0)(Stage::Log, 0, 0);
   }
 
   /// An act that the engine of this birth told, at its place in the log. The fold of the engine
@@ -480,7 +512,7 @@ impl Life {
   /// The place in the log of a fact that the engine of this birth heard, by its count in the fold.
   fn place(&self, clock: Seq) -> Seq {
     let at = clock.checked_sub(1).and_then(|one| usize::try_from(one).ok());
-    at.and_then(|one| self.births.get(one)).copied().unwrap_or(clock)
+    at.and_then(|one| self.kept.births.get(one)).copied().unwrap_or(clock)
   }
 
   /// Whether a fact of an opening restates a fact that the log told, which ends the opening when it
@@ -490,7 +522,7 @@ impl Life {
     let word = |at: usize| fact.get(at).and_then(Value::as_str);
     *opening &=
       !checkpoint::opened(word(0).unwrap_or_default(), word(2).unwrap_or_default(), word(3));
-    *opening && self.facts.contains_key(&digest(fact))
+    *opening && self.kept.facts.contains_key(&digest(fact))
   }
 
   /// The facts of a record before its last checkpoint, told first, in order, each with the acts
@@ -543,17 +575,17 @@ impl Life {
   /// passed. The log keeps an empty place for each, which [`Life::since`] fills from the record.
   /// A fact that kept a checkpoint stays, since the record holds that entry as its number alone.
   fn let_go(&mut self) {
-    let opened = mem::take(&mut self.gone.opened);
+    let opened = mem::take(&mut self.kept.gone.opened);
     let kept = |at: usize| opened.iter().any(|one| one.contains(&at));
-    for (at, slot) in self.log.iter_mut().enumerate().skip(self.gone.scanned) {
+    for (at, slot) in self.kept.log.iter_mut().enumerate().skip(self.kept.gone.scanned) {
       let fact = match slot.as_deref() {
         Some(Event::Fact(fact)) if !kept(at) && !kept_checkpoint(fact) => fact,
         _ => continue,
       };
-      self.gone.places.push((at as Seq, Digest::of(fact)));
+      self.kept.gone.places.push((at as Seq, Digest::of(fact)));
       *slot = None;
     }
-    self.gone.scanned = self.log.len();
+    self.kept.gone.scanned = self.kept.log.len();
   }
 
   /// A rebirth: each event told so far, then, past a checkpoint that the record keeps, each fact
@@ -564,7 +596,7 @@ impl Life {
       self.let_go();
     }
     self.put(Event::Reborn(fault));
-    self.watch.reborn();
+    self.kept.watch.reborn();
     self.weight.facts.store(0, Ordering::Relaxed);
     self.weight.births.fetch_add(1, Ordering::Relaxed);
   }
@@ -573,14 +605,14 @@ impl Life {
   /// go, which the reader reads from the record.
   fn since(&self, from: Seq) -> Since {
     let start = usize::try_from(from).unwrap_or(usize::MAX);
-    let since = self.log.iter().enumerate().skip(start);
+    let since = self.kept.log.iter().enumerate().skip(start);
     let logged = since.filter_map(|(at, one)| Some((at as Seq, Arc::clone(one.as_ref()?))));
-    let first = self.gone.places.partition_point(|(at, _)| *at < from);
+    let first = self.kept.gone.places.partition_point(|(at, _)| *at < from);
     let retell = self
       .record
       .clone()
-      .filter(|_| first < self.gone.places.len())
-      .map(|record| Retell { record, wanted: self.gone.places[first..].to_vec() });
+      .filter(|_| first < self.kept.gone.places.len())
+      .map(|record| Retell { record, wanted: self.kept.gone.places[first..].to_vec() });
     Since { logged: logged.collect(), retell }
   }
 }
@@ -590,7 +622,7 @@ impl Life {
 /// fact of its digest, with that speaker. The file of the
 /// record holds that entry as its number alone, so a reader makes the fact again from the fact
 /// that the entry holds.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 enum Digest {
   Fact(u64),
   Keep(u64, String),
@@ -761,23 +793,13 @@ async fn run(
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from))
     .claude(opening.claude.as_ref().map(PathBuf::from));
   let mut life = Life {
-    log: Vec::new(),
-    spent: Spent::default(),
+    kept: Kept::default(),
     readers,
     heard,
-    said: 0,
-    facts: HashMap::new(),
-    births: Vec::new(),
-    watch: Watch::default(),
     configs,
     roster: opening.roster.get_or_insert_default().clone(),
-    queue: Queue::default(),
-    held: Held::default(),
-    backlog: Backlog::default(),
-    named: Named::default(),
     name,
     record: opening.record.clone().filter(|_| opening.keeps()),
-    gone: Gone::default(),
     weight,
     opens,
   };
@@ -830,6 +852,11 @@ struct End {
 
 /// The life opened, driven, and opened again from its checkpoint at each rebirth, until it ends,
 /// each birth on the one journal of its changes, and how it ended.
+///
+/// A life whose image names the tip of its record opens from it: the host stands on what the life
+/// of the image kept, and reads no fact of the record. Each other life tells the past of its
+/// record first, as [`Life::recalled`] says, and opens by the record. The image is of the first
+/// open alone: a rebirth writes a checkpoint, and opens by it.
 async fn lives(
   opening: Opening,
   life: &mut Life,
@@ -840,16 +867,35 @@ async fn lives(
   let record = opening.record.clone().filter(|_| opening.keeps());
   let progress = life.opens.progress();
   life.opens.born();
-  if let Some(one) = record.as_deref() {
+  let mut images = record.as_deref().is_some_and(|one| image::agrees(Path::new(one)));
+  if let Some(one) = record.as_deref().filter(|_| !images) {
     life.recalled(one, &progress);
   }
   loop {
     let ears = ears(told.clone(), journal);
-    let engine = match opening.clone().open(ears, progress.clone()).await {
+    let mut kept = None::<Kept>;
+    // A life that told its past stands on it, and on no image that came after.
+    let mut stands = |part: &[u8]| {
+      kept = serde_json::from_slice(part).ok().filter(|_| images);
+      kept.is_some()
+    };
+    let engine = match opening.clone().open(ears, progress.clone(), &mut stands).await {
       Ok((engine, _)) => engine,
       Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new() },
     };
-    life.opened(&progress);
+    match (kept, mem::take(&mut images), record.as_deref()) {
+      (Some(kept), ..) => life.imaged(kept, &progress),
+      // The image named the tip of the record and did not load, as one whose body is torn, so
+      // the life opened by its record before it told its past: it opens again, after its past.
+      (None, true, Some(one)) => {
+        drop(engine);
+        while life.heard.try_recv().is_ok() {}
+        life.opens.born();
+        life.recalled(one, &progress);
+        continue;
+      }
+      (None, ..) => life.opened(&progress),
+    }
     match driven(engine, life, received, record.as_deref()).await {
       Drove::Ended(fault, asked) => return End { fault: fault.map(|one| one.to_string()), asked },
       Drove::Reborn(fault) => {
@@ -878,7 +924,7 @@ enum Woke {
 
 /// The engine driven while it hears each command, until a client ends it, each handle is gone, a
 /// fault stops it, or the life is due to be born again. A life that keeps a record ends with its
-/// checkpoint.
+/// image, as [`rebirth::ended`] says.
 ///
 /// While the record holds no place for facts that the life said, as on a full disk, the engine
 /// holds them in memory, and a drop of the engine loses them: the life keeps each end that it is
@@ -891,11 +937,11 @@ async fn driven(
   received: &mut UnboundedReceiver<Message>,
   record: Option<&str>,
 ) -> Drove {
-  let (mut gone, mut asked) = (false, Vec::new());
+  let (mut gone, mut hands, mut asked) = (false, false, Vec::new());
   loop {
     let ends = gone || !asked.is_empty();
-    let waits =
-      (ends || life.backlog.holds() || record.is_some() && life.watch.due()) && engine.unkept() > 0;
+    let waits = (ends || life.kept.backlog.holds() || record.is_some() && life.kept.watch.due())
+      && engine.unkept() > 0;
     let woke = tokio::select! {
       biased;
       Some(event) = life.heard.recv() => Woke::Told(event),
@@ -910,20 +956,20 @@ async fn driven(
         return Drove::Ended(Some(fault), asked);
       }
       Woke::Said(None) if engine.unkept() > 0 => gone = true,
-      Woke::Said(None) => return Drove::Ended(rebirth::ended(engine, record.is_some()), asked),
+      Woke::Said(None) => return Drove::Ended(ended(engine, life, hands), asked),
       Woke::Said(Some(Message::Since(from, reply))) => {
         life.told(None);
         reply.send(life.since(from)).ok();
       }
-      Woke::Said(Some(Message::Command(Command::End, reply))) if engine.unkept() > 0 => {
+      Woke::Said(Some(Message::Command(end @ (Command::End | Command::Hand), reply))) => {
+        hands |= end == Command::Hand;
+        asked.push(reply);
+        if engine.unkept() == 0 {
+          return Drove::Ended(ended(engine, life, hands), asked);
+        }
         life.put(Event::Notice(backlog::unkept(engine.unkept())));
-        asked.push(reply);
       }
-      Woke::Said(Some(Message::Command(Command::End, reply))) => {
-        asked.push(reply);
-        return Drove::Ended(rebirth::ended(engine, record.is_some()), asked);
-      }
-      Woke::Said(Some(Message::Rebirth(asked))) => life.watch.ask(asked),
+      Woke::Said(Some(Message::Rebirth(asked))) => life.kept.watch.ask(asked),
       Woke::Said(Some(Message::Command(command, reply))) => {
         let replied = commanded(&mut engine, life, command);
         reply.send(replied.await).ok();
@@ -940,9 +986,9 @@ async fn driven(
       return Drove::Ended(Some(fault), asked);
     }
     if (gone || !asked.is_empty()) && engine.unkept() == 0 {
-      return Drove::Ended(rebirth::ended(engine, record.is_some()), asked);
+      return Drove::Ended(ended(engine, life, hands), asked);
     }
-    if record.is_some() && life.watch.due() && engine.unkept() == 0 {
+    if record.is_some() && life.kept.watch.due() && engine.unkept() == 0 {
       return match engine.checkpoint() {
         Ok(()) => Drove::Reborn(None),
         Err(fault) => Drove::Ended(Some(fault), asked),
@@ -951,10 +997,18 @@ async fn driven(
   }
 }
 
+/// The engine of a life dropped at the end of the life, as [`rebirth::ended`] says, with what the
+/// life keeps once the log took each event that the ears told, or with no image at a handover.
+fn ended(engine: Engine, life: &mut Life, hands: bool) -> Option<Fault> {
+  life.told(None);
+  let record = life.record.as_deref().map(Path::new);
+  rebirth::ended(engine, record, (!hands).then_some(&life.kept))
+}
+
 /// The work of a life paused or woken as its record lacks facts or holds each again, as
 /// [`backlog`] says, with the notice of each change.
 fn weighed(engine: &mut Engine, life: &mut Life, record: Option<&str>) {
-  match record.map(|one| life.backlog.weighed(engine, one)) {
+  match record.map(|one| life.kept.backlog.weighed(engine, one)) {
     Some(Ok(Some(notice))) => life.put(Event::Notice(notice)),
     Some(Err(no)) => life.put(Event::Notice(format!("The life cannot hold its work: {no}"))),
     Some(Ok(None)) | None => {}
@@ -983,36 +1037,43 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
     Command::By { speaker, command } => spoken(engine, &speaker, *command),
     Command::Queue { entry, shape, message, on } => {
       let chain = chain(on);
-      if !life.queue.holds(&entry) {
+      if !life.kept.queue.holds(&entry) {
         let words = ["add", &entry, &shape, &message].map(Object::string);
         engine.say(QUEUE, &chain, words.into())?;
       }
       Ok(Reply::Done)
     }
     Command::Unqueue { entry } => {
-      let follow = life.queue.takes(&entry);
+      let follow = life.kept.queue.takes(&entry);
       let follow =
         follow.ok_or_else(|| LifeError::Refused(format!("No follow-up {entry} waits.")))?;
       engine.say(QUEUE, &follow.chain, ["drop", &entry].map(Object::string).into())?;
       Ok(Reply::Done)
     }
     Command::Queued { on } => {
-      let waiting = life.queue.waiting(&chain(on));
+      let waiting = life.kept.queue.waiting(&chain(on));
       let waiting = waiting.iter().map(serde_json::to_value).collect::<Result<_, _>>();
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
-    Command::Desk { notices } => Ok(Reply::Desk(life.held.desk(&notices))),
+    Command::Desk { notices } => Ok(Reply::Desk(life.kept.held.desk(&notices))),
     Command::Threads { on, at, read, site } => {
       let site = site.as_deref().unwrap_or("operator");
-      Ok(Reply::Threads(life.held.threads_as(site, &chain(on), at, read.unwrap_or_default())))
+      Ok(Reply::Threads(life.kept.held.threads_as(site, &chain(on), at, read.unwrap_or_default())))
     }
-    Command::Rail { hidden, at } => Ok(Reply::Rail(life.held.rail(&hidden, at))),
+    Command::Rail { hidden, at } => Ok(Reply::Rail(life.kept.held.rail(&hidden, at))),
     Command::Ladder { on, at, opened, owed, taken, shown } => {
       let shown = shown.unwrap_or(SHOWN);
-      Ok(Reply::Ladder(life.held.ladder(&chain(on), at, &opened, &owed, taken.as_deref(), shown)))
+      Ok(Reply::Ladder(life.kept.held.ladder(
+        &chain(on),
+        at,
+        &opened,
+        &owed,
+        taken.as_deref(),
+        shown,
+      )))
     }
-    Command::AsOf { at } => Ok(Reply::Acts(life.held.as_of(at))),
-    Command::Moments { on } => Ok(Reply::Moments(life.held.moments(on.as_deref()))),
+    Command::AsOf { at } => Ok(Reply::Acts(life.kept.held.as_of(at))),
+    Command::Moments { on } => Ok(Reply::Moments(life.kept.held.moments(on.as_deref()))),
     Command::Settings => {
       let settings = life.configs.get()?.into_iter().map(|one| json!(one));
       Ok(Reply::Values(settings.collect()))
@@ -1032,7 +1093,7 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
 /// Each follow-up that is due sent as a prompt on its chain, or why its send failed, which holds
 /// the queue of its chain and stands in the record.
 fn drained(engine: &mut Engine, life: &mut Life) {
-  for follow in life.queue.due() {
+  for follow in life.kept.queue.due() {
     let made = sent(engine, &follow).map_err(|no| no.to_string());
     if let Err(why) = &made {
       let words = ["failed", &follow.entry, why].map(Object::string);
@@ -1043,7 +1104,7 @@ fn drained(engine: &mut Engine, life: &mut Life) {
         )));
       }
     }
-    life.queue.sent(&follow.entry, made);
+    life.kept.queue.sent(&follow.entry, made);
   }
 }
 
@@ -1108,7 +1169,7 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
       let with = verbs::Chain { label, source, on: on(chain), ..verbs::Chain::default() };
       id(engine.chain(with)?.id())
     }
-    Command::End => Reply::Done,
+    Command::End | Command::Hand => Reply::Done,
     query => queried(engine, query, &root)?,
   })
 }

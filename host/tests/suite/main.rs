@@ -11,6 +11,7 @@ static COUNTED: furb_host::Counted = furb_host::Counted;
 mod apart;
 mod daemon;
 mod heap;
+mod image;
 mod life;
 mod memory;
 mod net;

@@ -373,7 +373,7 @@ async fn run(opening: Opening, word: String) -> Result<(), CliError> {
 /// The checkpoint of the life of a record, made in a life that only inspects it and kept at its tip.
 async fn checkpoint(opening: Opening, record: &Path) -> Result<(), CliError> {
   let inspects = Opening { inspecting: Some(true), ..opening };
-  let (mut engine, _) = inspects.open::<String>([], Progress::default()).await?;
+  let (mut engine, _) = inspects.open::<String>([], Progress::default(), &mut |_| true).await?;
   let written = checkpoint::written(&mut engine)?;
   drop(engine);
   Ok(checkpoint::keep(record, written)?)

@@ -10,6 +10,7 @@ use furb::{
   wire::outward,
   world::{Asked, CONSOLE},
 };
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -40,38 +41,65 @@ fn console() -> Box<dyn Ear> {
   })
 }
 
+/// What the ear of the events keeps of the facts that it heard, which the image of a life holds:
+/// the fold of the acts, the last pause or wake of each act or chain, in order, and each name that
+/// a fact told.
+#[derive(Default, Serialize, Deserialize)]
+struct Heard {
+  fold: Fold,
+  controls: Vec<Fact>,
+  seen: HashSet<String>,
+}
+
 /// The ear that hears each fact, and tells it, each act that it changes with its meaning, and the
 /// chain that it changes. An act that an ear of the engine took is said to no other ear, so its
 /// first fact tells it first, as the log of a life shows it.
 fn events(told: UnboundedSender<Event>) -> Box<dyn Ear> {
   ear(move |mut co| async move {
-    let mut fold = Fold::default();
-    let mut controls: Vec<Fact> = Vec::new();
-    let mut seen: HashSet<String> = HashSet::new();
+    let kept = co.keeps(Heard::default())?;
     loop {
       let a = hear(&mut co).await;
-      let mut facts = Vec::new();
-      if seen.insert(a.about().to_owned()) && !a.question() && !a.about().is_empty() {
-        let made = co.call("get", vec![Object::string(a.about())], vec![]).await?;
-        facts.extend(Fact::owned(made));
-      }
-      facts.push(a);
-      for one in &facts {
-        let (covered, born) = covered(&mut co, &fold, &mut controls, one).await?;
-        let fact = json_of(one);
-        let acts = fold.hear(&fact, &covered, born);
-        let chain = fold.chain_of(one.about()).map(|chain| Event::Changed(chain.to_owned()));
-        let events = [Event::Fact(fact)]
-          .into_iter()
-          .chain(acts.into_iter().map(|act| Event::Act(Box::new(act))));
-        for event in events.chain(chain) {
-          if told.send(event).is_err() {
-            return Ok(());
-          }
-        }
+      // The ear holds what it keeps while it steps, and gives it back before it waits again,
+      // where the image of the life reads it, between two runs.
+      let mut heard = kept.take();
+      let goes = stepped(&mut co, &mut heard, a, &told).await;
+      kept.replace(heard);
+      if !goes? {
+        return Ok(());
       }
     }
   })
+}
+
+/// One fact told, after the act that it is about when no fact told that act yet, and whether the
+/// life still hears the ear.
+async fn stepped<W: 'static>(
+  co: &mut Co<W>,
+  heard: &mut Heard,
+  a: Fact,
+  told: &UnboundedSender<Event>,
+) -> Result<bool, Fault> {
+  let Heard { fold, controls, seen } = heard;
+  let mut facts = Vec::new();
+  if seen.insert(a.about().to_owned()) && !a.question() && !a.about().is_empty() {
+    let made = co.call("get", vec![Object::string(a.about())], vec![]).await?;
+    facts.extend(Fact::owned(made));
+  }
+  facts.push(a);
+  for one in &facts {
+    let (covered, born) = covered(co, fold, controls, one).await?;
+    let fact = json_of(one);
+    let acts = fold.hear(&fact, &covered, born);
+    let chain = fold.chain_of(one.about()).map(|chain| Event::Changed(chain.to_owned()));
+    let events =
+      [Event::Fact(fact)].into_iter().chain(acts.into_iter().map(|act| Event::Act(Box::new(act))));
+    for event in events.chain(chain) {
+      if told.send(event).is_err() {
+        return Ok(false);
+      }
+    }
+  }
+  Ok(true)
 }
 
 /// A fact as JSON reads it. The fact of a module tells no words, since a module is no plain value.

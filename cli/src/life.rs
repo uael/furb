@@ -38,7 +38,8 @@ impl Life {
   /// life whose record drifted is refused, since it would keep nothing more.
   pub(crate) async fn lived(opening: Opening) -> Result<Self, CliError> {
     let record = opening.record.as_ref().filter(|_| opening.keeps()).map(PathBuf::from);
-    let (engine, _) = opening.open([("console", console::terminal())], Progress::default()).await?;
+    let ears = [("console", console::terminal())];
+    let (engine, _) = opening.open(ears, Progress::default(), &mut |_| true).await?;
     let root = engine.root().to_owned();
     Ok(Self { engine, root, record })
   }
@@ -48,7 +49,7 @@ impl Life {
   /// next command then opens by the record, so the operator is told and the command goes on.
   pub(crate) fn ended(&mut self) {
     if let Some(record) = &self.record
-      && let Err(no) = image::keep(&mut self.engine, record)
+      && let Err(no) = image::keep(&mut self.engine, record, &())
     {
       eprintln!("furb: {no}");
     }
