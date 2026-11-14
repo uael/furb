@@ -82,8 +82,8 @@ reads it.
   A project changes `SHARE`, `FILTERS` or `BRIEF` in an extension of its own. In the TUI, a rule
   with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
 - **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
-  on the root alone. At the first prompt that the operator makes in the life, even one made before the word plays, it asks the actor that `automatic()` of the
-  engine gives for a name of a few words, on a chain of its own labelled `naming`. With no such actor, or with no
+  on the root alone. At the first prompt that the operator makes in the life, even one made before the word plays, it asks the actor that its `automatic()`
+  gives for a name of a few words, on a chain of its own labelled `naming`. With no such actor, or with no
   name from it, the name is the first line of the message. The act is done with the name, and the record keeps the
   prompt and its answer, so a later life gives the same name and asks no model. `rename_session(name)` says the
   name that the operator chose, as an act of the root, and it wins over the name of `name_session()`. Each client

@@ -9,6 +9,12 @@ NAME_LONGEST: Final[int]
 NAME_BRIEF: Final[str]
 """NAME_BRIEF is what the model that names the session reads before the first message of the operator."""
 
+def automatic(n: int = 0) -> str:
+  """automatic gives the actor of automatic work: the name at place n of the list of automatic work, which holds the models of the roster of the standing that have a place in that list, which the entry of each model gives as its fifth field, in the order of their places, then each cheap model of the roster, each name once.
+  The operator is no such model.
+  Past the end of the list it gives an empty str, so a use whose model refuses it asks automatic(1), then the next, until the list ends.
+  """
+
 def name_of(text: str) -> str:
   """name_of(text) gives the name that a text holds: its first line that holds more than quotes, marks and periods, with none of them around it, cut to NAME_LONGEST characters, else an empty str."""
 

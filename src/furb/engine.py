@@ -103,21 +103,6 @@ def standing():
   return answer("stand", ROOT, [])
 
 
-def automatic(n=0):
-  models = (standing()[:1] or [[]])[0]
-  return (
-    [
-      *dict.fromkeys(
-        one[0]
-        for one in sorted((p for p in models if isinstance(p[4:5] and p[4], int)), key=lambda p: p[4])
-        + [c for c in models if c[3:4] == ["cheap"]]
-        if one[0] != OPERATOR
-      )
-    ][n:]
-    or [""]
-  )[0]
-
-
 def operated(where):
   return where.split("/")[0] == OPERATOR
 

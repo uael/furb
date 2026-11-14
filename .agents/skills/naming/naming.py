@@ -1,8 +1,8 @@
 from furb.engine import (
+  OPERATOR,
   Act,
   Refused,
   act,
-  automatic,
   cancel,
   chain,
   controlled,
@@ -12,6 +12,7 @@ from furb.engine import (
   prompt,
   question,
   scope,
+  standing,
   transcript,
 )
 
@@ -27,6 +28,17 @@ close("Fix the login form").
 
 The first message:
 """
+
+
+def automatic(n: int = 0) -> str:
+  models = (standing()[:1] or [[]])[0]
+  listed = dict.fromkeys(
+    str(one[0])
+    for one in sorted((p for p in models if isinstance(p[4:5] and p[4], int)), key=lambda p: p[4])
+    + [c for c in models if c[3:4] == ["cheap"]]
+    if one[0] != OPERATOR
+  )
+  return ([*listed][n:] or [""])[0]
 
 
 def name_of(text: str) -> str:
