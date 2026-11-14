@@ -27,17 +27,8 @@ use crate::{
   opens::{Ask, Hold, Life, Step},
   pick::Picker,
   thread::Opened,
-  tokens::Tokens,
+  tokens::{BESIDE, LIST, SIDE, Tokens},
 };
-
-/// The width of the list of cards.
-pub(crate) const LIST: u16 = 38;
-
-/// The columns of the list and of the line at its left.
-pub(crate) const SIDE: u16 = LIST + 1;
-
-/// The least width of the window that shows the list beside the thread.
-const BESIDE: u16 = 100;
 
 /// The rows at the top of the list that never scroll.
 const PINNED: usize = 2;

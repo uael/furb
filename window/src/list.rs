@@ -5,13 +5,13 @@ use std::path::PathBuf;
 
 use furb::view::{Part, Standing};
 use furb_host::protocol::Card;
-use opentui::style::{Color, Style};
+use opentui::style::{Color, Span, Style};
 
 use crate::{
   keys::Does,
   line::{Line, run, spread},
-  model::{Key, LIST, Link, Model},
-  tokens::{Loader, Role},
+  model::{Key, Link, Model},
+  tokens::{LIST, Loader, Role},
 };
 
 /// The columns of a card between its two edges.

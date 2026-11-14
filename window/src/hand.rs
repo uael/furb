@@ -29,10 +29,10 @@ use crate::{
   keys::{self, Does},
   line::Line,
   link::{self, Asker, Heard},
-  model::{Link, Model, SIDE, Told},
+  model::{Link, Model, Told},
   pick::Pick,
   question::Keyed,
-  tokens::{Role, Tokens},
+  tokens::{Role, SIDE, Tokens},
 };
 
 /// How long the hand stays away from the list before a card changes its place.
