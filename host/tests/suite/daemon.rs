@@ -933,9 +933,27 @@ async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemo
     time::sleep(SHORT).await;
   }
   assert_eq!(fs::read(&life).unwrap(), held, "a life that drifts keeps nothing in its record");
-  // A life that did not open folded no act of the tail of its record, so the index stays.
+  // A life that did not open writes no index. The record changed, so the daemon makes the index
+  // of the record at rest again from a fold of the record once the life ended: it names the tip
+  // of the record and holds the threads that the life before told, and no fold of a part of it.
   later.ended(&life).await;
-  assert_eq!(fs::read(&index).unwrap(), indexed, "a life that did not open writes no index");
+  let start = Instant::now();
+  let read = || -> Option<Value> { serde_json::from_slice(&fs::read(&index).ok()?).ok() };
+  while !read().is_some_and(|one| one["tip"]["bytes"] == Value::from(held.len())) {
+    assert!(start.elapsed() < PATIENCE, "the daemon makes no index of the record at rest");
+    time::sleep(SHORT).await;
+  }
+  let threads = |one: &Value| -> (Value, Vec<Value>) {
+    let all = one["threads"].as_array().cloned().unwrap_or_default();
+    (one["name"].clone(), all.into_iter().map(|thread| thread["thread"].clone()).collect())
+  };
+  let before = serde_json::from_slice(&indexed).unwrap();
+  assert!(!threads(&before).1.is_empty(), "the life before told a thread");
+  assert_eq!(
+    threads(&read().unwrap()),
+    threads(&before),
+    "a life that did not open writes no index"
+  );
   let other = opened(&mut later, &at, "b.jsonl").await;
   later.attach(&other).await;
   later.ran(&other, "y = 1").await;
