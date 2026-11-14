@@ -133,3 +133,25 @@ fn the_window_writes_the_rows_that_show_whatever_the_count_of_the_cards() {
   model.scrolled(-10_000);
   assert_eq!(model.shown().nth(2), Some(Row::Head(Part::Resting)));
 }
+
+/// The folder that a window in a folder shows, for a home.
+fn shown(folder: &str, home: &str) -> String {
+  let options = Options {
+    folder: PathBuf::from(folder),
+    home: Some(PathBuf::from(home)),
+    kept: PathBuf::new(),
+    zone: TimeZone::UTC,
+    clock: || 0,
+    system: System::MacOs,
+  };
+  Model::new(Vec::new(), (100, 30), Tokens::on(None), &options).folder_shown()
+}
+
+#[test]
+fn a_folder_of_the_home_shows_as_a_path_of_the_home_with_a_slash_on_each_system() {
+  assert_eq!(shown("/home/ada/src/furb", "/home/ada"), "~/src/furb");
+  assert_eq!(shown(r"C:\Users\ada\src\furb", r"C:\Users\ada"), "~/src/furb");
+  assert_eq!(shown(r"C:\Users\ada", r"C:\Users\ada"), "~");
+  assert_eq!(shown(r"C:\Users\adam\furb", r"C:\Users\ada"), r"C:\Users\adam\furb");
+  assert_eq!(shown("/srv/furb", "/home/ada"), "/srv/furb");
+}
