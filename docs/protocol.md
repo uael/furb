@@ -237,13 +237,13 @@ it is not given. The daemon answers requests in any order.
     | `recall` | The daemon reads what the record told before its last checkpoint, for the log of the life. | Facts told, of those facts. Both are 0 until the daemon read them. |
     | `find` | The record is read from its last checkpoint, for the build of its last life. | Bytes passed, of the bytes of the record. |
     | `cross` | A record that another build of furb wrote is replayed on the engine of that build, and gets a checkpoint. | Both are 0: the stage counts nothing. |
-    | `read` | The record is read from its last checkpoint under its lease. | Bytes passed, of the bytes of the record. |
+    | `read` | The record is read again from its last checkpoint under its lease, when it changed after `find`. | Bytes passed, of the bytes of the record. |
     | `seed` | The sandbox loads the engine and makes the entries of the checkpoint. | Both are 0: the stage counts nothing. |
     | `boot` | The life replays the entries that it boots on. | Entries that the replay passed, of those entries. |
     | `log` | The daemon puts what the open told in the log of the life, which its windows read. | Events put, of those events. |
 
   - The numbers of a stage never go back, `done` never passes `of`, and a stage never comes again in one open. A
-    record in a database tells no bytes, so its `find` and its `read` stay at 0 of the bytes of the record. The
+    record in a database tells no bytes, so its `find` stays at 0 of the bytes of the record. The
     replay passes at once the entries that it says to no ear, so `done` of `boot` can go forward by many entries.
   - The first frame comes when the open starts. Then the window hears a frame at once for each stage that the open
     reaches, with the last numbers of each stage before it, and at most four frames each second for a stage that goes

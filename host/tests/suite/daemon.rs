@@ -634,7 +634,8 @@ fn told_whole(read: &[Frame]) {
   let frames = opening(&read[..event]);
   let mut stages: Vec<Stage> = frames.iter().map(|one| one.0).collect();
   stages.dedup();
-  let all = [Stage::Recall, Stage::Find, Stage::Read, Stage::Seed, Stage::Boot, Stage::Log];
+  // The record did not change after the stage find, so no stage reads it again.
+  let all = [Stage::Recall, Stage::Find, Stage::Seed, Stage::Boot, Stage::Log];
   assert_eq!(stages, all, "each stage comes once, in order: {frames:?}");
   let back = |pair: &[(Stage, u64, u64)]| {
     pair[0].0 == pair[1].0 && (pair[1].1 < pair[0].1 || pair[1].2 < pair[0].2)

@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-  Lease, Store, entry_of,
+  Last, Lease, Store, entry_of,
   error::{At, StoreError},
   leased, now,
 };
@@ -68,11 +68,21 @@ impl Lines {
 }
 
 impl Lines {
-  /// The last entries of the record and the byte where they start, as [`last`] gives them.
-  pub(super) fn last(&mut self, reached: &mut dyn FnMut(u64)) -> Result<(u64, Vec<Object>), Fault> {
-    let (from, entries, tail) = last(&self.path, reached)?;
-    self.ends(tail);
-    Ok((from, entries))
+  /// The last entries of the record, as [`last`] gives them. A record only grows, and a store
+  /// cuts a torn line only as it writes after it, so a file that still ends where a read with no
+  /// lease ended holds what that read gave: the store takes those entries and reads no line.
+  pub(super) fn last(
+    &mut self,
+    read: Option<Last>,
+    reached: &mut dyn FnMut(u64),
+  ) -> Result<Last, Fault> {
+    let size = self.file.metadata().map_err(StoreError::io(&self.path))?.len();
+    let held = match read {
+      Some(read) if read.end == size => read,
+      _ => last(&self.path, reached)?,
+    };
+    self.ends(held.tail);
+    Ok(held)
   }
 
   /// How the last line of the record ends, which the first keep mends.
@@ -141,22 +151,24 @@ pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Stor
 }
 
 /// The entries of the file of lines at a path that a life opens on: those from its last checkpoint
-/// on, or each entry of a record that holds none, with the byte where they start and how the last
-/// line ends. The read finds that checkpoint from the end of the file, so it passes and parses no
-/// line before it. The bytes of the file that the read passed are told after each line.
-pub(super) fn last(
-  path: &Path,
-  reached: &mut dyn FnMut(u64),
-) -> Result<(u64, Vec<Object>, Tail), StoreError> {
+/// on, or each entry of a record that holds none, with the byte where they start, the byte where
+/// the last of them ends and how the last line ends. The read finds that checkpoint from the end
+/// of the file, so it passes and parses no line before it. The bytes of the file that the read
+/// passed are told after each line.
+pub(super) fn last(path: &Path, reached: &mut dyn FnMut(u64)) -> Result<Last, StoreError> {
   let (head, mut before) = (format!("[[\"{CHECKPOINT}\","), u64::MAX);
   loop {
     let from = start(path, head.as_bytes(), before)?.unwrap_or(0);
-    let mut entries = Vec::new();
-    let tail = read(path, from, &mut |one| entries.push(one), reached)?;
+    let (mut entries, mut end) = (Vec::new(), from);
+    let mut passed = |at| {
+      end = at;
+      reached(at);
+    };
+    let tail = read(path, from, &mut |one| entries.push(one), &mut passed)?;
     // A last line that a stop tore as the store wrote a checkpoint is no entry, so the record
     // ends at the checkpoint before it.
     if from == 0 || !entries.is_empty() {
-      return Ok((from, entries, tail));
+      return Ok(Last { entries, from, end, tail });
     }
     before = from;
   }
@@ -307,9 +319,10 @@ fn stamped(mut entry: Value, at: u64) -> String {
 }
 
 /// How the last line of a record ends, which a store mends at its first keep.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub(super) enum Tail {
   /// Each line ends, or the record holds none.
+  #[default]
   Ended,
   /// The last line was torn as it was written, after the length that the record held whole: nothing after it was
   /// kept, so it goes.

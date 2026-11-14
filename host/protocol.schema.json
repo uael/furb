@@ -4207,7 +4207,7 @@
         {
           "type": "string",
           "const": "read",
-          "description": "The record is read from its last checkpoint under its lease: the bytes passed, of the bytes\nof the record."
+          "description": "The record is read again from its last checkpoint under its lease, when it changed after\nthe stage find: the bytes passed, of the bytes of the record."
         },
         {
           "type": "string",

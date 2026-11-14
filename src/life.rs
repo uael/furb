@@ -44,6 +44,8 @@ struct Prepared {
   /// The line that tells why each extension that the configs turn on does not play.
   refused: Vec<String>,
   provider: world::Provider,
+  /// The last entries of the record, which the boot takes, so an open reads them one time.
+  last: Option<world::Last>,
 }
 
 /// A function of the host that answers each request in place of the models: it is given the request and a function
@@ -86,8 +88,8 @@ pub enum Stage {
   /// A record whose last life ran another engine is carried across to this build, by a life that
   /// inspects it and writes its checkpoint. It counts nothing.
   Cross,
-  /// The record is read from its last checkpoint under its lease: the bytes passed, of the bytes
-  /// of the record.
+  /// The record is read again from its last checkpoint under its lease, when it changed after
+  /// the stage find: the bytes passed, of the bytes of the record.
   Read,
   /// The sandbox loads the engine, takes the data of the checkpoint, and the checkpointer makes the
   /// entries of it. It counts nothing.
@@ -258,17 +260,18 @@ impl Opening {
 
   /// The record and the ears of the crate, as [`Opening::parts`] gives them, on what the life
   /// waited for.
-  fn parted(self, prepared: Prepared, told: &Progress) -> Result<(Vec<Object>, Ears), Fault> {
+  fn parted(self, mut prepared: Prepared, told: &Progress) -> Result<(Vec<Object>, Ears), Fault> {
     let keeps = self.keeps != Some(false) && self.works();
-    let (last, store) = match (&self.record, keeps) {
-      (Some(path), true) => {
+    let (last, store) = match (&self.record, prepared.last.take(), keeps) {
+      (Some(path), read, true) => {
         let (path, bytes) = (Path::new(path), size(path));
-        (told.0)(Stage::Read, 0, bytes);
-        let (last, store) = world::stored(path, &mut |at| (told.0)(Stage::Read, at, bytes))?;
+        let mut reads = |at| (told.0)(Stage::Read, at, bytes);
+        let (last, store) = world::stored(path, read, &mut reads)?;
         (last, Some(store))
       }
-      (Some(path), false) => (world::last(Path::new(path), &mut |_| {})?, None),
-      (None, _) => (world::Last { entries: Vec::new(), from: 0 }, None),
+      (Some(_), Some(read), false) => (read, None),
+      (Some(path), None, false) => (world::last(Path::new(path), &mut |_| {})?, None),
+      (None, ..) => (world::Last::default(), None),
     };
     // The log takes where the last entries start, so a life after a checkpoint writes on after the
     // log of the lives before it.
@@ -286,7 +289,7 @@ impl Opening {
   fn eared(&self, prepared: Prepared, record: &[Object]) -> Result<Ears, Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let Prepared { places, played, refused, provider } = prepared;
+    let Prepared { places, played, refused, provider, .. } = prepared;
     let log = self.log.as_ref().map(|log| log.0.clone());
     let told = |line: &str| match &log {
       Some(log) => log(line),
@@ -415,7 +418,7 @@ impl Opening {
       Some(one) => self.provider(advertised, actor, roster)?.system(one.into()),
       None => self.provider(advertised, actor, roster)?,
     };
-    Ok(Prepared { places, played, refused, provider })
+    Ok(Prepared { places, played, refused, provider, last })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it

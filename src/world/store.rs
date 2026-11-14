@@ -41,6 +41,7 @@ use crate::{
 use crate::checkpoint;
 use crate::fact;
 pub use lines::Lines;
+use lines::Tail;
 pub(crate) use lines::spoken;
 pub use schema::{CHECKPOINT_SCHEMA, RECORD_SCHEMA, Schema, SchemaError};
 pub use sqlite::Sqlite;
@@ -101,28 +102,37 @@ pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Faul
 /// of a record that holds none. A file of lines is read from that checkpoint, which the read finds
 /// from the end of the file, so an open passes and parses no line before it. A database gives each
 /// of its entries.
+#[derive(Default)]
 pub(crate) struct Last {
   pub entries: Vec<Object>,
   /// The byte of the file of lines where the first of them starts, and 0 for a database.
   pub from: u64,
+  /// The byte of the file of lines where the read ended, and how the last line ends there.
+  end: u64,
+  tail: Tail,
 }
 
-/// The last entries of the record at a path, read under its lease, and the ear that [`store`]
-/// gives, with the bytes of a file of lines that the read passed told after each line. A database
-/// tells none.
+/// The last entries of the record at a path, under its lease, and the ear that [`store`] gives. A
+/// file of lines that still ends where a read with no lease ended holds what that read gave, so
+/// the store takes those entries and reads no line. Else it reads them, with the bytes that the
+/// read passed told after each line. A database reads each time and tells none.
 pub(crate) fn stored(
   path: &Path,
+  read: Option<Last>,
   reached: &mut dyn FnMut(u64),
 ) -> Result<(Last, Box<dyn Ear>), Fault> {
-  let (from, (entries, ear)) = match Format::of(path) {
-    Format::Sqlite => (0, keeping(Sqlite::open(path)?)?),
+  match Format::of(path) {
+    Format::Sqlite => {
+      let (entries, ear) = keeping(Sqlite::open(path)?)?;
+      Ok((Last { entries, ..Last::default() }, ear))
+    }
     Format::Lines => {
       let mut store = Lines::open(path)?;
-      let (from, entries) = store.last(reached)?;
-      (from, kept_by(store, entries))
+      let Last { entries, from, end, tail } = store.last(read, reached)?;
+      let (entries, ear) = kept_by(store, entries);
+      Ok((Last { entries, from, end, tail }, ear))
     }
-  };
-  Ok((Last { entries, from }, ear))
+  }
 }
 
 /// The last entries of the record at a path, read with no lease and changed in nothing, as a later
@@ -130,14 +140,11 @@ pub(crate) fn stored(
 /// line.
 pub(crate) fn last(path: &Path, reached: &mut dyn FnMut(u64)) -> Result<Last, Fault> {
   let format = Format::of(path);
-  let (from, entries) = match format {
-    Format::Sqlite => (0, format.kept(path)?),
-    Format::Lines => {
-      let (from, entries, _) = lines::last(path, reached)?;
-      (from, entries)
-    }
+  let last = match format {
+    Format::Sqlite => Last { entries: format.kept(path)?, ..Last::default() },
+    Format::Lines => lines::last(path, reached)?,
   };
-  Ok(Last { entries: entries.into_iter().map(streamed).collect(), from })
+  Ok(Last { entries: last.entries.into_iter().map(streamed).collect(), ..last })
 }
 
 /// What the store kept at a path, read with no lease and changed in nothing on the disk, as a later life would open

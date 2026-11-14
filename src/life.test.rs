@@ -1878,14 +1878,14 @@ fn an_open_tells_each_stage_in_order_and_ends_with_each_entry_of_its_boot_counte
   assert_eq!(told.first(), Some(&(Stage::Find, 0, bytes)), "the open tells its first stage first");
   let mut stages: Vec<Stage> = told.iter().map(|one| one.0).collect();
   stages.dedup();
-  assert_eq!(stages, [Stage::Find, Stage::Read, Stage::Seed, Stage::Boot]);
+  // The boot takes the entries that the stage find read, so no stage reads the record again.
+  assert_eq!(stages, [Stage::Find, Stage::Seed, Stage::Boot]);
   let back = |pair: &[(Stage, u64, u64)]| {
     pair[0].0 == pair[1].0 && (pair[1].1 < pair[0].1 || pair[1].2 < pair[0].2)
   };
   assert!(!told.windows(2).any(back), "no number of a stage goes back: {told:?}");
   let last = |stage| told.iter().rev().find(|one| one.0 == stage).map(|one| (one.1, one.2));
   assert_eq!(last(Stage::Find), Some((bytes, bytes)), "the scan passed each byte of the record");
-  assert_eq!(last(Stage::Read), Some((bytes, bytes)), "the read passed each byte of the record");
   assert_eq!(last(Stage::Seed), Some((0, 0)), "the seed counts nothing");
   let (done, of) = last(Stage::Boot).unwrap();
   assert!(of > 0 && done == of, "the boot ends with each entry counted: {done} of {of}");
