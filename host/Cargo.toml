@@ -60,6 +60,10 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_WindowsProgramming",
 ] }
 
+[build-dependencies]
+# The digest of the files that give their shape to what the host keeps in the image of a life.
+sha2 = "0.10"
+
 [dev-dependencies]
 furb = { path = "..", version = "0.4.2", features = ["test-support"] }
 tokio = { version = "1", features = ["rt", "macros", "time"] }

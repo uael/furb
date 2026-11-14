@@ -14,6 +14,7 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
+  borrow::Cow,
   collections::{BTreeMap, HashMap, VecDeque},
   future::poll_fn,
   hash::{DefaultHasher, Hash, Hasher},
@@ -181,7 +182,8 @@ pub enum Command {
   /// once the record holds them: the reply comes then.
   End,
   /// The end of the life at a handover, as [`Command::End`] says, with its checkpoint and no
-  /// image: the daemon of the new build reads no image of a build of other texts.
+  /// image: the next life opens by the record on the daemon of the new build, so it goes on with
+  /// the engine and the Kernel of that build, which an image would keep from it.
   Hand,
   /// A command of the engine said by a speaker other than the life itself, a skill as
   /// `skill/<name>` or a window as `operator/<login>`: each act and each fact that the command
@@ -298,8 +300,8 @@ pub struct Life {
 /// each fact that the engine of this birth heard, what the actor watches to know when the life is
 /// born again, the queue of the follow-ups, the acts with their meaning, the work that the life
 /// holds for its record, the name of the session, folded from each fact of the life, and the
-/// facts that the log let go since the record holds them, as [`Life::let_go`] says. A change of
-/// this shape raises the shape of the image, in `furb::image`.
+/// facts that the log let go since the record holds them, as [`Life::let_go`] says. The image holds
+/// it as a [`Part`].
 #[derive(Default, Serialize, Deserialize)]
 struct Kept {
   log: Vec<Option<Arc<Event>>>,
@@ -314,6 +316,18 @@ struct Kept {
   named: Named,
   gone: Gone,
 }
+
+/// The part of the host in the image of a life: what the life keeps, under the digest of the files
+/// that give it its shape, which `build.rs` computes. A host of another build of them takes no
+/// such part, so the life opens by its record.
+#[derive(Serialize, Deserialize)]
+struct Part<K> {
+  build: Cow<'static, str>,
+  kept: K,
+}
+
+/// The digest of the files that give their shape to what a host of this build keeps.
+const BUILD: &str = env!("FURB_KEPT");
 
 /// The facts that the log of a life let go: each one before the last checkpoint of the life, which
 /// the record holds, so a log holds the facts of one birth and not those of a whole life. The log
@@ -939,7 +953,8 @@ async fn lives(
     let mut kept = None::<Kept>;
     // A life that told its past stands on it, and on no image that came after.
     let mut stands = |part: &[u8]| {
-      kept = serde_json::from_slice(part).ok().filter(|_| images);
+      let read = serde_json::from_slice::<Part<Kept>>(part).ok();
+      kept = read.filter(|one| images && one.build == BUILD).map(|one| one.kept);
       kept.is_some()
     };
     let engine = match opening.clone().open(ears, progress.clone(), &mut stands).await {
@@ -1069,7 +1084,8 @@ async fn driven(
 fn ended(engine: Engine, life: &mut Life, hands: bool) -> Option<Fault> {
   life.told(None);
   let record = life.record.as_deref().map(Path::new);
-  rebirth::ended(engine, record, (!hands).then_some(&life.kept))
+  let part = Part { build: BUILD.into(), kept: &life.kept };
+  rebirth::ended(engine, record, (!hands).then_some(&part))
 }
 
 /// The work of a life paused or woken as its record lacks facts or holds each again, as

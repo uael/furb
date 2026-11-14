@@ -16,6 +16,7 @@ use std::{
 };
 
 use futures::{channel::mpsc::unbounded, executor, future::select};
+use sha2::{Digest, Sha256};
 use tokio::runtime;
 
 use super::{Answer, Opening, Progress, Stage};
@@ -23,7 +24,7 @@ use crate::{
   Act, Ear, Engine, Fact, Object, Text, checkpoint,
   checkpoint::CHECKPOINT,
   ear::{ear, hear, say},
-  sand,
+  image, sand,
   sand::BOUND,
   skill::enabled,
   testing,
@@ -643,7 +644,6 @@ fn a_record_of_another_engine_that_holds_no_texts_replays_and_goes_on() {
 
 #[test]
 fn a_record_of_another_engine_crosses_to_this_build_by_a_checkpoint_and_goes_on_with_its_kernel() {
-  use sha2::{Digest, Sha256};
   let at = yard("texts");
   let source = format!("{}\ncrossed = True\n", crate::ENGINE);
   let mut hash = Sha256::new();
@@ -681,6 +681,77 @@ fn a_record_of_another_engine_crosses_to_this_build_by_a_checkpoint_and_goes_on_
     refused.contains("another engine"),
     "texts of another engine refuse the record: {refused}"
   );
+}
+
+/// An image holds the engine that its life runs, so the life goes on with that engine on a build
+/// that holds another one. A life that keeps nothing goes on with the engine that its record
+/// holds, as a life on a build of that engine does, and its image stands in for an image that such
+/// a build wrote.
+#[test]
+fn a_life_that_opens_from_its_image_goes_on_with_the_engine_that_the_image_holds() {
+  let at = yard("image-texts");
+  let open = || Opening { skills: Some(false), ..opening(&at, false) }.boot::<String>([]).unwrap();
+  let mut later = imaged_elsewhere(&at, open);
+  assert_eq!(
+    closed(&mut later, "close([x, globals().get('elsewhere')])").as_ref().py_repr(),
+    "[1, True]",
+    "the life goes on with the engine that its image holds, not with the engine of this build"
+  );
+}
+
+/// The model of a life that opens from its image reads the engine that the image holds, which the
+/// command line takes as the file of its system prompt.
+#[cfg(unix)]
+#[test]
+fn the_model_of_a_life_that_opens_from_its_image_reads_the_engine_that_the_image_holds() {
+  use std::os::unix::fs::PermissionsExt;
+  let at = yard("image-system");
+  let bin = at.join("claude");
+  let fake = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/world/provider/claude/fake-claude.sh");
+  fs::write(&bin, fs::read(fake).unwrap()).unwrap();
+  fs::set_permissions(&bin, PermissionsExt::from_mode(0o755)).unwrap();
+  fs::write(at.join("models"), "nova 100 low\n").unwrap();
+  let open = || {
+    let roster = Some(vec!["claude-cli:nova".to_owned()].into());
+    let claude = Some(bin.display().to_string());
+    Opening { claude, roster, skills: Some(false), ..opening(&at, false) }
+      .boot::<String>([])
+      .unwrap()
+  };
+  let mut later = imaged_elsewhere(&at, open);
+  assert_eq!(closed(&mut later, "close(await prompt(str, 'Say.'))").py_repr(), "'reply 1'");
+  let args = fs::read_dir(&at)
+    .unwrap()
+    .filter_map(|one| one.ok().map(|one| one.path()))
+    .find(|one| one.file_name().is_some_and(|name| name.to_string_lossy().starts_with("args.")))
+    .map(|one| fs::read_to_string(one).unwrap())
+    .expect("the command line ran");
+  let args: Vec<&str> = args.split('\0').collect();
+  let file = args.iter().position(|one| *one == "--system-prompt-file").map(|at| args[at + 1]);
+  let system = fs::read_to_string(file.expect("a file of the system prompt")).unwrap();
+  assert!(system.contains("elsewhere"), "the model reads the engine of the life: {system:.200}");
+}
+
+/// The life that opens from the image of a record of an engine that this build does not hold, its
+/// engine with one more line, `elsewhere = True`: a first life opens by the record and writes its
+/// image, and the life given opens from that image.
+fn imaged_elsewhere(at: &Path, open: impl Fn() -> (Engine, Vec<Object>)) -> Engine {
+  let source = format!("{}\nelsewhere = True\n", crate::ENGINE);
+  let mut hash = Sha256::new();
+  let held = [source.as_str(), crate::KERNEL, crate::CHECKPOINTER];
+  for one in held {
+    hash.update(one.as_bytes());
+    hash.update([0]);
+  }
+  let named = format!("{:x}", hash.finalize());
+  let (record, _) = made_elsewhere(at, &made_with(&named, &held));
+  let (mut first, replayed) = open();
+  assert!(!replayed.is_empty(), "a record with no image opens by its entries");
+  assert!(image::keep(&mut first, &record, &()).unwrap(), "the life writes its image");
+  drop(first);
+  let (later, replayed) = open();
+  assert!(replayed.is_empty(), "a life that opens from its image reads no entry");
+  later
 }
 
 #[test]
@@ -1010,7 +1081,6 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
 
 #[test]
 fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
-  use sha2::{Digest, Sha256};
   for (record, first) in [("ranks.jsonl", "bash2"), ("speaker.jsonl", "reply4")] {
     let at = yard(&format!("unadapted-{first}"));
     laid(&replays().join(record), &at.join("record.jsonl"));

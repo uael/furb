@@ -274,7 +274,7 @@ fn a_life_goes_on_from_its_image_and_its_record_replays_with_no_drift() {
   assert_eq!(turns(), imaged, "the turns of the image are the turns of the record");
   assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "42\n");
   let held = fs::read(&image).expect("the image of the life that opened by the record");
-  assert!(held.starts_with(b"{\"shape\":"), "a life that keeps drops an image that does not agree");
+  assert!(held.starts_with(b"{\"build\":"), "a life that keeps drops an image that does not agree");
   assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "43\n");
 }
 
@@ -309,6 +309,35 @@ fn a_life_opens_from_an_image_that_its_record_passed_and_says_the_entries_after_
   assert_eq!(printed(checkpoint, ""), "");
   assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "43\n");
   assert_eq!(stands(&record()), before + 1, "a life that opens by its record says its birth");
+}
+
+/// The key of an image names what its session depends on in the build that wrote it, by a digest
+/// that the build computes, and the dump version of monty. A build of another digest takes no such
+/// image, and neither does a monty that does not read the dump: the life opens by its record.
+#[test]
+fn a_life_opens_by_its_record_when_the_build_or_the_dump_of_its_image_is_another() {
+  let yard = Yard::new("image-build");
+  assert_eq!(printed(yard.kept(&["run", "k = 41"]), ""), "None\n");
+  let image = PathBuf::from(format!("{}.image", yard.record().display()));
+  let stands = || {
+    let record = fs::read_to_string(yard.record()).expect("the record");
+    record.lines().filter(|line| line.starts_with("[[\"stand\"")).count()
+  };
+  for (field, other) in [("build", json!("another")), ("dump", json!(0))] {
+    // The key is the first line of the file, and the body starts after it.
+    let held = fs::read(&image).expect("the image");
+    let end = held.iter().position(|byte| *byte == b'\n').expect("the line of the key");
+    let mut key: Value = serde_json::from_slice(&held[..end]).expect("the key");
+    key[field] = other;
+    let rekeyed = [serde_json::to_vec(&key).expect("the key"), held[end..].to_vec()].concat();
+    fs::write(&image, rekeyed).expect("the image under another key");
+    let before = stands();
+    assert_eq!(printed(yard.kept(&["run", "k += 1"]), ""), "None\n");
+    assert_eq!(stands(), before + 1, "an image of another {field} is not read");
+  }
+  let before = stands();
+  assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "43\n");
+  assert_eq!(stands(), before, "the image that the life of this build wrote is read");
 }
 
 #[test]

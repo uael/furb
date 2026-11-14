@@ -17,6 +17,7 @@ use furb::{
 use furb_host::{Command, Event, Life, LifeHandle, Reply};
 use futures::StreamExt;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::life::{Logged, birth, done, facts_of, kept, made, place, rung, until};
 
@@ -89,9 +90,14 @@ async fn act_of(life: &LifeHandle, name: &str) -> String {
 
 /// The facts of a record of a kind about an act.
 fn recorded(at: &Path, kind: &str, about: &str) -> Vec<Value> {
+  recorded_all(at, kind).into_iter().filter(|fact| fact[1] == about).collect()
+}
+
+/// The facts of a record of a kind.
+fn recorded_all(at: &Path, kind: &str) -> Vec<Value> {
   let record = fs::read_to_string(at.join("record.jsonl")).expect("the record");
   let facts = record.lines().filter_map(|line| serde_json::from_str::<Value>(line).ok());
-  facts.map(|entry| entry[0].clone()).filter(|fact| fact[0] == kind && fact[1] == about).collect()
+  facts.map(|entry| entry[0].clone()).filter(|fact| fact[0] == kind).collect()
 }
 
 #[tokio::test]
@@ -222,18 +228,51 @@ async fn a_life_on_an_image_that_its_record_passed_takes_again_the_acts_that_no_
 
 #[tokio::test]
 async fn a_life_whose_image_does_not_load_opens_by_its_record_after_its_past() {
-  let at = place("image-torn");
+  // The key of the image still names the tip of the record, and its body is not the one it names.
+  opens_by_its_record_after_its_past("image-torn", |image| {
+    *image.last_mut().expect("a byte") ^= 1;
+  })
+  .await;
+}
+
+#[tokio::test]
+async fn a_life_whose_image_holds_the_part_of_a_host_of_another_build_opens_by_its_record() {
+  // The key and the body agree, and the part of the host names the files of another build.
+  opens_by_its_record_after_its_past("image-host", |image| {
+    let end = image.iter().position(|byte| *byte == b'\n').expect("the line of the key");
+    let mut key: Value = serde_json::from_slice(&image[..end]).expect("the key");
+    let at = |field: &str| usize::try_from(key[field].as_u64().expect(field)).expect(field);
+    let host = end + 1 + at("session") + at("half");
+    let named = b"{\"build\":\"";
+    assert!(image[host..].starts_with(named), "the part of the host names its build first");
+    let digest = host + named.len();
+    image[digest..digest + 64].fill(b'0');
+    key["body"] = json!(format!("{:x}", Sha256::digest(&image[end + 1..])));
+    let line = serde_json::to_vec(&key).expect("the key");
+    image[..line.len()].copy_from_slice(&line);
+    image[line.len()..end].fill(b' ');
+  })
+  .await;
+}
+
+/// A life whose image the change makes one that does not load opens by its record: it stands as
+/// the life before it stood, tells its past, then its birth, which its record keeps, and ends with
+/// an image that agrees.
+async fn opens_by_its_record_after_its_past(name: &str, change: impl FnOnce(&mut Vec<u8>)) {
+  let at = place(name);
   let image = at.join("record.jsonl.image");
   birth(&at, "x = 1", Vec::new()).await;
   let life = Life::spawn(kept(&at)).expect("the second life");
   let stood = views(&life).await;
   ended(life).await;
-  // The key of the image still names the tip of the record, and its body is not the one it names.
-  let mut torn = fs::read(&image).expect("the image");
-  *torn.last_mut().expect("a byte") ^= 1;
-  fs::write(&image, torn).expect("the torn image");
+  let mut changed = fs::read(&image).expect("the image");
+  change(&mut changed);
+  fs::write(&image, changed).expect("the image that does not load");
+  let births = || recorded_all(&at, "stand").len();
+  let before = births();
   let life = Life::spawn(kept(&at)).expect("the third life");
   assert_eq!(views(&life).await[..3], stood[..3], "the life stands on its record");
+  assert!(births() > before, "the life opens by its record, and no image");
   // The life told its past, then its birth: the rung of the first life is done in its log.
   let log = log_of(&life).await;
   let past = log.iter().position(|one| matches!(*one.1, Event::Reborn(None)));
@@ -245,5 +284,5 @@ async fn a_life_whose_image_does_not_load_opens_by_its_record_after_its_past() {
   assert_eq!(rung, Some(true), "the life tells its past before its birth");
   ended(life).await;
   let held = fs::read(&image).expect("the image of the life that opened by the record");
-  assert!(held.starts_with(b"{\"shape\":"), "the life ends with an image that agrees");
+  assert!(held.starts_with(b"{\"build\":"), "the life ends with an image that agrees");
 }

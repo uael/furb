@@ -27,11 +27,13 @@ API of its own:
   the World of the one that has one, `skills.rs`. `docs/skills.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
-  A host adds only its own ears, as the console of its operator. When the last segment of its record holds the texts of
-  another engine, a life that inspects the record, on that engine, first writes a checkpoint after its last entry. The
-  life then opens from its last checkpoint and goes on with the engine and the Kernel of this build, so it opens at the
-  exact state of its tip whatever build of the major runs it, as `src/checkpoint.rs` says. Its models read the engine of
-  this build. `script/engines.py` gives a copy of a record of a build before the
+  A host adds only its own ears, as the console of its operator. A life that opens from its image goes on with the
+  engine and the Kernel that the image holds, whatever build of the major opens it, as `src/image.rs` says. When the
+  last segment of the record of a life that opens by its record holds the texts of another engine, a life that inspects
+  the record, on that engine, first writes a checkpoint after its last entry. The life then opens from its last
+  checkpoint and goes on with the engine and the Kernel of this build, so it opens at the exact state of its tip
+  whatever build of the major runs it, as `src/checkpoint.rs` says. The models of a life read the engine that the life
+  runs. `script/engines.py` gives a copy of a record of a build before the
   texts of its engine from git. `tests/replay` holds the records that each build must replay on their own engines with
   no drift. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as `opened` and as `Engine.open`.
@@ -53,13 +55,15 @@ API of its own:
   two runs, and the half of the host, which `src/engine/image.rs` gives, with what each ear gives a fresh ear of its
   make, as `Ear::image` and `Ear::imaged` say, and the part of the host of the life, which that host gives and takes
   back before the life loads the image. It is a cache: its key names the tip of the record, the dump version of
-  monty, the texts of the build, whether the scratch directory of the record holds a file, and the digest of its
-  body, and a life that keeps its record drops the image once it stands on the record by the record, so a read and
-  an open that fails leave it. A life of the command line or of the
-  host that keeps its record ends with its image, and writes no checkpoint there. The next life of the same build
-  on the same ears opens from it: it runs no boot, reads no entry and says no stand, and each ear takes each act that
-  the ear before it held in flight as an act that an earlier life took: it takes a reply, a wait or a prompt again,
-  and closes a command as interrupted, which no view shows as a failure. A life that went on from the image and wrote
+  monty, a digest that the build computes of what an image depends on in the build beside the texts of its life,
+  whether the scratch directory of the record holds a file, and the digest of its body, and the part of the host
+  names the digest of the files that give it its shape. A life that keeps its record drops the image once it stands on
+  the record by the record, so a read and an open that fails leave it. A life of the command line or of the host that
+  keeps its record ends with its image, and writes no checkpoint there. The next life of a build of the same digests
+  on the same ears opens from it, with the engine and the Kernel that the image holds: it runs no boot, reads no entry
+  and says no stand, and each ear takes each act that the ear before it held in flight as an act that an earlier life
+  took: it takes a reply, a wait or a prompt again, and closes a command as interrupted, which no view shows as a
+  failure. A life that went on from the image and wrote
   no later one, as a life that crashed, kept entries after it: the next life opens from the image and says them again,
   as `Engine::feed` says, so a crash costs its tail alone. Each other open goes by the record: from its last
   checkpoint, or from its first entry when it holds none.

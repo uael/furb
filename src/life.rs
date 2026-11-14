@@ -380,9 +380,7 @@ impl Opening {
       }
       _ => Ok(None),
     };
-    // A record of another major of its schema is refused before any build writes on it, and the
-    // models of a life on a record that holds another engine read that engine.
-    let mut system = None;
+    // A record of another major of its schema is refused before any build writes on it.
     let image = self.image(images).inspect(|_| (told.0)(Stage::Find, bytes, bytes));
     let mut last = if image.is_some() { None } else { read(told)? };
     if let (Some(held), Some(path)) = (&last, self.record.as_deref()) {
@@ -396,13 +394,18 @@ impl Opening {
         last = read(&Progress::default())?;
       }
     }
-    if let Some(last) = &last {
-      let (source, ..) = world::texts(checkpoint::segment(&last.entries))?;
-      if source != crate::ENGINE {
-        let unread = || Fault::refused("this build cannot minify the engine that the record holds");
-        system = Some(minify::minified(&source).ok_or_else(unread)?);
-      }
-    }
+    // The models of a life read the engine that the life runs: the one that its image holds, or
+    // the one that the last segment of its record holds.
+    let source = match (&image, &last) {
+      (Some(image), _) => Some(image.half.source.clone()),
+      (None, Some(last)) => Some(world::texts(checkpoint::segment(&last.entries))?.0),
+      (None, None) => None,
+    };
+    let unread = || Fault::refused("this build cannot minify the engine that the life runs");
+    let system = source
+      .filter(|one| one != crate::ENGINE)
+      .map(|one| minify::minified(&one).ok_or_else(unread))
+      .transpose()?;
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
     let (played, refused) = match self.skills != Some(false) && works {

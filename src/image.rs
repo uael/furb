@@ -1,18 +1,29 @@
 //! The image of a life beside its record, `<record>.image`: the state that the replay of the record
-//! gives at its tip, kept so that a later life of the same build opens with no replay. It is a
-//! cache: it is derived from the record and checked against it, and a reader takes no image that
-//! does not agree, so the open then goes by the record, and a life that keeps the record drops the
-//! image once it stands so. The record holds no fact of it.
+//! gives at its tip, kept so that a later life opens with no replay. It is a cache: it is derived
+//! from the record and checked against it, and a reader takes no image that does not agree, so the
+//! open then goes by the record, and a life that keeps the record drops the image once it stands
+//! so. The record holds no fact of it.
+//!
+//! A session holds the engine, the Kernel and the checkpointer that its life runs, so a life that
+//! opens from its image goes on with them, whatever texts the build holds: its models read the
+//! engine of the life, which the half of the host holds, and a change of the engine reaches a life
+//! only when the life is handed off to a new one, by a checkpoint. So an image loads on each build
+//! whose sandbox runs it, and its key names what an image depends on in a build beside those
+//! texts, by one digest that the build computes, [`BUILD`]: the python that the build puts in a
+//! session beside them, the Rust that makes, holds or reads the half of the host and that the
+//! session calls, the view, whose acts a host keeps in its part, and the typed surface of the
+//! contract, by which a host calls the engine of the life and reads what an ear answers.
+//! `build.rs` names each file of it. A host names the shape of its own part in that part.
 //!
 //! The file holds its key, one line of JSON that spaces may end, then its body. The key names the
-//! tip of the record that the life stood at, the shape of the body, the dump version of monty, the
-//! digest of the texts of the build, since a session runs the engine and the Kernel that it holds,
-//! whether the scratch directory of the record holds a file, since a life that opens from its image
-//! makes no file of it again, and the digest of the body as the file holds it, since monty checks
-//! no byte of a dump. A body is the session that monty dumps, then the half of the host, as JSON,
-//! then the part of the host of the life: what that host keeps of the life beside its engine, as
-//! the log of its events, which the crate carries and does not read. The key names where each part
-//! ends. The file lands whole, as each write of the World, so no reader meets a part of an image.
+//! tip of the record that the life stood at, that digest, the dump version of monty, which stands
+//! while monty reads it, whether the scratch directory of the record holds a file, since a life
+//! that opens from its image makes no file of it again, and the digest of the body as the file
+//! holds it, since monty checks no byte of a dump. A body is the session that monty dumps, then
+//! the half of the host, as JSON, then the part of the host of the life: what that host keeps of
+//! the life beside its engine, as the log of its events, which the crate carries and does not
+//! read. The key names where each part ends. The file lands whole, as each write of the World, so
+//! no reader meets a part of an image.
 //!
 //! A record only grows, so an image agrees with a record that holds entries after the tip that it
 //! names: a life that went on from the image and wrote no later one, as a life that crashed, kept
@@ -38,9 +49,9 @@ use crate::{
   world::{self, Format, Scratch, beside, disk},
 };
 
-/// The shape of the body, which each change of [`Half`], of what an ear gives or of what a host
-/// keeps raises: a build reads no image of another shape.
-pub(crate) const SHAPE: u32 = 1;
+/// What an image depends on in this build beside the texts of its life, as the build digests it:
+/// a build reads no image of another digest.
+const BUILD: &str = env!("FURB_IMAGED");
 
 /// How many of the last bytes of a record its tip names by their digest.
 const TAIL: u64 = 4096;
@@ -48,9 +59,8 @@ const TAIL: u64 = 4096;
 /// What an image names, by which a reader checks it before it trusts a byte of its body.
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 struct Key {
-  shape: u32,
+  build: String,
   dump: u16,
-  texts: String,
   /// The tip of the record that the life stood at: its bytes, and the digest of the last of them.
   bytes: u64,
   tail: String,
@@ -81,9 +91,8 @@ impl Key {
     file.seek(SeekFrom::Start(bytes - last.len() as u64))?;
     file.read_exact(&mut last)?;
     Ok(Self {
-      shape: SHAPE,
+      build: BUILD.to_owned(),
       dump: monty::DUMP_VERSION,
-      texts: world::engine(),
       bytes,
       tail: format!("{:x}", Sha256::digest(&last)),
       scratch: Scratch::of(record).ok().flatten().is_some_and(|one| one.holds()),
@@ -92,11 +101,15 @@ impl Key {
   }
 
   /// Whether this key is the one that this build writes for the body that it names, at the bytes
-  /// of the record that it names: the record holds them as the life of the image left them. A
-  /// record only grows, so the bytes after them are entries that a later life kept, and a life of
-  /// the image goes on from it only while none of them is a birth of its own.
+  /// of the record that it names, but for a dump of an earlier version that monty still reads: the
+  /// record holds those bytes as the life of the image left them. A record only grows, so the bytes
+  /// after them are entries that a later life kept, and a life of the image goes on from it only
+  /// while none of them is a birth of its own.
   fn stands(&self, record: &Path) -> bool {
-    Self::of(record, Some(self.bytes), self.parts.clone()).is_ok_and(|now| now == *self)
+    let read = (monty::MIN_SUPPORTED_DUMP_VERSION..=monty::DUMP_VERSION).contains(&self.dump);
+    let ours = Self::of(record, Some(self.bytes), self.parts.clone());
+    read
+      && ours.is_ok_and(|now| Self { dump: self.dump, ..now } == *self)
       && world::goes_after(record, self.bytes)
   }
 }

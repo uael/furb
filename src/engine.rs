@@ -494,6 +494,9 @@ pub struct Engine {
   /// a checkpoint of the life keeps taken: the journal does not make again an act that an ear of
   /// the outside made, so the transcripts of the life do not hold each of those names.
   taken: Object,
+  /// The text of the engine that the life runs, as its session holds it, which its models read. It
+  /// is the engine of the build only for a life that was born on it.
+  source: String,
 }
 
 impl Engine {
@@ -569,17 +572,18 @@ impl Engine {
 
   /// An engine on a sandbox and the side of its host, before any run: the record says what work it
   /// left and what loops.
-  fn new(sand: Sand, outside: Outside, record: &[Object], root: String) -> Self {
+  fn new(sand: Sand, outside: Outside, record: &[Object], source: String) -> Self {
     Self {
       sand,
       outside,
       watchers: HashMap::new(),
-      root,
+      root: String::new(),
       raised: None,
       stopped: None,
       holding: left(record),
       parked: looping(record),
       taken: checkpoint::taken(record),
+      source,
     }
   }
 
@@ -620,7 +624,7 @@ impl Engine {
     let (record, born) = seeded(&mut sand, &mut outside, record)?;
     outside.settled = settled(&record);
     outside.hosted.replay = Some(Replay::of(&record, replayed));
-    let mut engine = Self::new(sand, outside, &record, String::new());
+    let mut engine = Self::new(sand, outside, &record, source);
     let names_parked = Object::list(engine.parked.iter().map(|(id, _)| Object::string(id)));
     let parks = !engine.parked.is_empty();
     let (root, raised) = engine.run(|sand, outside| {

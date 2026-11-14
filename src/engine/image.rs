@@ -22,10 +22,12 @@ use crate::{
 
 /// The half of the host in the image of a life: what [`Outside`] and [`Engine`] hold of the
 /// session, the part of each ear by its name, and the standing of the life, which the provider
-/// of a later life stands on before the session loads. A change of this shape changes
-/// [`crate::image::SHAPE`].
+/// of a later life stands on before the session loads, with the text of the engine that the life
+/// runs, which that provider gives its models. The build digests this file into the key of an
+/// image, as `src/image.rs` says, so a build reads no half of another shape.
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Half {
+  pub(crate) source: String,
   opened: Opened,
   /// How many ids the host gave, as text, since JSON holds no number that wide.
   given: String,
@@ -57,6 +59,7 @@ impl Engine {
     let stood = self.verb("standing", vec![], vec![])?;
     let (hosted, crossing) = (&self.outside.hosted, &self.outside.crossing);
     let half = Half {
+      source: self.source.clone(),
       opened: self.outside.opened.clone(),
       given: self.outside.given.to_string(),
       standing: hosted.standing.iter().map(|(id, (name, at))| (*id, name.clone(), *at)).collect(),
@@ -117,6 +120,7 @@ impl Engine {
       holding: half.holding,
       parked: half.parked,
       taken: half.taken,
+      source: half.source,
     };
     engine.run(|sand, outside| outside.bound(sand))?;
     Ok(engine)
