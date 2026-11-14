@@ -209,8 +209,10 @@ impl Peer {
       on: None,
     };
     let Answer::Act(prompt) = self.ask(verb) else { panic!("no prompt") };
-    let stands = if message.contains(WORKS) {
+    let stands = if message.contains(WORKS) || message.contains(THINKS) {
       "thinks"
+    } else if message.contains(LONG) {
+      "runs"
     } else if message.contains(ASKS) {
       "asks"
     } else {
@@ -261,18 +263,62 @@ pub(crate) fn aged(life: &str, at: u64, before: u64) {
 pub(crate) const WORKS: &str = "(the model works on it)";
 pub(crate) const ASKS: &str = "(the model asks)";
 
+/// The words of a message of a test that make the model think and write a word that it never
+/// ends, write a long word that waits, answer with prose, or write a word that fails once.
+pub(crate) const THINKS: &str = "(the model thinks)";
+pub(crate) const LONG: &str = "(the model writes a long word)";
+pub(crate) const ANSWERS: &str = "(the model answers)";
+pub(crate) const FAILS: &str = "(the model fails)";
+
+/// The long word of a model of a test, which waits ten minutes on its chain at its end: a wait
+/// needs an act, and a chain is over only at its end.
+const WORD: &str = "birth = 'async def boot(): return await seed()'
+word = birth.split('async def')[1]
+cost = len(word)
+plan = 'read the boot, then the seed, then the turns of each chain, then say where the time of a resume goes'
+stages = ['read', 'boot', 'seed', 'turns']
+for stage in stages:
+  cost = cost + len(stage)
+total = cost * 2
+await wait(600, chain)";
+
+/// The prose of a model of a test, which closes its thread.
+const PROSE: &str = "found = 2
+close('The open takes **329 s**. Two stages hold most of it: 181 s to send each entry to the ears of the host, and 104 s in the boot.\\n\\n- `seed` reads each chain once\\n- the image skips the boot\\n\\nSee [the trace](https://github.com/uael/furb/issues/988).')";
+
 /// The opening of each life of the daemon of a test: the config of the test, no skill, and a model
 /// that answers from the message that it reads, with no command line of this machine. It closes
 /// the prompt of a message, asks the operator, or never answers.
 fn scripted(at: &Path) -> Opening {
-  let answer = Answered(Arc::new(|request, _| {
+  let answer = Answered(Arc::new(|request, told| {
     let request = request.to_string();
     Box::pin(async move {
       if request.contains(WORKS) {
         future::pending::<()>().await;
       }
+      if request.contains(THINKS) {
+        told(
+          "",
+          "I read the stages from the frames and sum them, so the open shows where its time goes. ",
+        );
+        told("", "Then the seed");
+        told("cost = tokens(word)\nproof = await bash('pytest -q test/outside", "");
+        future::pending::<()>().await;
+      }
       let asks = "await prompt(str, 'Which key sends the queue?', to=OPERATOR)\nclose(None)";
-      let word = if request.contains(ASKS) { asks } else { "close(None)" };
+      let fails =
+        "x = 1\nraise ValueError('a maximum of 4 blocks with cache_control may be provided')";
+      let word = if request.contains(ASKS) {
+        asks
+      } else if request.contains(LONG) {
+        WORD
+      } else if request.contains(ANSWERS) {
+        PROSE
+      } else if request.contains(FAILS) && !request.contains("ValueError") {
+        fails
+      } else {
+        "close(None)"
+      };
       let turn = ["assistant", word].map(Object::string).into_iter();
       Ok(Object::tuple(turn.chain([Object::none(), Object::none()])))
     })

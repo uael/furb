@@ -20,28 +20,28 @@ use crate::{
 /// The second of the clock of each window of a test: 09:12 of the first day of 2026. Each life of
 /// a test stands since a later second, so it shows no age, and a record of a test is as old as its
 /// test makes it.
-const CLOCK: u64 = 1_767_258_720;
+pub(crate) const CLOCK: u64 = 1_767_258_720;
 const HOUR: u64 = 3600;
 
 /// A window of 100 columns and 30 rows, as the design draws each screen.
-fn app() -> TestApp {
+pub(crate) fn app() -> TestApp {
   TestApp::new(100, 30)
 }
 
-fn options(kept: &Path) -> Options {
+pub(crate) fn options(kept: &Path) -> Options {
   let folder = PathBuf::from("/home/ada/src/furb-try");
   Options { folder, kept: kept.to_owned(), zone: TimeZone::UTC, clock: || CLOCK }
 }
 
 /// The frame of a window once it shows a text.
-fn shows(app: &TestApp, text: &str) -> String {
+pub(crate) fn shows(app: &TestApp, text: &str) -> String {
   let shown = app.wait_until(PATIENCE, || app.text().contains(text));
   assert!(shown, "the window never showed {text:?}:\n{}", app.text());
   app.text()
 }
 
 /// The row of a window that shows a text.
-fn row(app: &TestApp, text: &str) -> u16 {
+pub(crate) fn row(app: &TestApp, text: &str) -> u16 {
   let at =
     app.text().lines().position(|line| line.contains(text)).expect("the window shows the text");
   u16::try_from(at).unwrap()

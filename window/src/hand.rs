@@ -18,11 +18,13 @@ use opentui::{
   },
 };
 
+use furb_host::protocol::Verb;
+
 use crate::{
   Machine, Options, Screen, kept,
   line::Line,
-  link::{self, Heard},
-  model::{LIST, Model, SIDE, Told},
+  link::{self, Asker, Heard},
+  model::{Model, SIDE, Told},
   tokens::Tokens,
 };
 
@@ -45,6 +47,10 @@ const MOVES: Duration = Duration::from_millis(40);
 /// How often the window reads the clock for the age of each card.
 const AGES: Duration = Duration::from_secs(20);
 
+/// How many loaders move at once at most: the line that runs, the agents of the dock, and the
+/// row of hints.
+const LOADERS: usize = 8;
+
 /// How many rows one step of the wheel moves the list.
 const WHEEL: isize = 3;
 
@@ -64,6 +70,8 @@ struct Window {
   keeps: bool,
   /// The timer of the loaders, while a mark moves.
   moves: Option<TimerId>,
+  /// What asks each machine a verb, in the order of the machines.
+  askers: Vec<Asker>,
 }
 
 type Shared = Rc<RefCell<Window>>;
@@ -93,6 +101,7 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
     settles: false,
     keeps: false,
     moves: None,
+    askers: Vec::new(),
   };
   let window = Rc::new(RefCell::new(window));
 
@@ -110,7 +119,8 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   app.set_interval(AGES, move |cx| tick(cx.app(), &on));
   for (at, machine) in machines.into_iter().enumerate() {
     let on = Rc::clone(&window);
-    link::dialed(app, machine, move |app, heard| hear(app, &on, at, heard));
+    let asker = link::dialed(app, machine, move |app, heard| hear(app, &on, at, heard));
+    window.borrow_mut().askers.push(asker);
   }
 }
 
@@ -135,8 +145,33 @@ fn drawn(app: &App, model: Model) -> Screen<Model> {
     });
     rows.collect::<Vec<_>>()
   };
-  screen.part(Model::home, move |lines| {
+  let left = |model: &Model| model.left().map_or_else(|| model.home(), |left| left.rows);
+  screen.part(left, move |lines| {
     home.set_text(written(lines));
+  });
+  // A loader is a cell of its own, so its step draws no other cell.
+  let cells: Vec<Text> =
+    (0..LOADERS).map(|_| Text::new(app, "").absolute().visible(false)).collect();
+  for cell in &cells {
+    app.root().child(cell);
+  }
+  let frames = |model: &Model| {
+    let spots = model.left().map(|left| left.loaders).unwrap_or_default();
+    spots.into_iter().map(|spot| (spot, spot.loader.frame(model.moved))).collect::<Vec<_>>()
+  };
+  screen.part(frames, move |shown| {
+    for (at, cell) in cells.iter().enumerate() {
+      match shown.get(at) {
+        Some((spot, frame)) => {
+          let cell = cell.position(Edge::Top, spot.y).position(Edge::Left, spot.x);
+          cell.set_text(vec![Span::styled(*frame, spot.style)]);
+          cell.visible(true);
+        }
+        None => {
+          cell.visible(false);
+        }
+      }
+    }
   });
   screen.part(Model::list, move |lines| {
     list.set_text(written(lines));
@@ -217,7 +252,18 @@ fn keep(app: &App, window: &Shared) {
   });
 }
 
-/// A key of the list: a chord with alt, or a letter after the leader.
+/// A page that the open thread asks of its machine, said, with the id of its request kept until
+/// its answer comes.
+fn ask(window: &Shared, verb: Option<Verb>) {
+  let Some(verb @ Verb::Thread { before, .. }) = verb else { return };
+  let mut held = window.borrow_mut();
+  let Window { askers, screen, .. } = &mut *held;
+  let Some(opened) = screen.model.thread.as_mut() else { return };
+  let Some(asker) = askers.get_mut(opened.key.0) else { return };
+  opened.asked.insert(asker.ask(verb), before);
+}
+
+/// A key of the window: a chord with alt, a letter after the leader, or a key of the feed.
 fn key(app: &App, window: &Shared, key: &KeyEvent) {
   if key.kind == KeyEventKind::Release {
     return;
@@ -235,26 +281,54 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) {
     (KeyCode::Char('a'), true, _) | (KeyCode::Char('a'), _, true) => Model::needed,
     (KeyCode::Char('l'), _, true) => Model::toggle,
     (KeyCode::Escape, ..) => Model::close,
+    (KeyCode::Enter, ..) => {
+      let verb = tell(app, window, Model::open_thread);
+      return ask(window, verb);
+    }
+    (KeyCode::PageUp | KeyCode::PageDown, ..) => {
+      // A page keeps two rows of the screen before it in view.
+      let up = key.code == KeyCode::PageUp;
+      let verb = tell(app, window, |model| {
+        let page = isize::try_from(model.feed_room()).unwrap_or_default() - 2;
+        model.scroll_feed(if up { -page } else { page })
+      });
+      return ask(window, verb);
+    }
+    (KeyCode::End, ..) => Model::jump,
     _ => return,
   };
   window.borrow_mut().touched = Some(app.now());
   tell(app, window, change);
 }
 
-/// The pointer: it is on the list or away from it, it clicks a row, and its wheel moves the rows.
+/// The pointer: it is on the list or on the thread, it clicks a row, and its wheel moves the rows
+/// under it. A click on a card opens its thread.
 fn mouse(app: &App, window: &Shared, event: MouseEvent) {
-  let on = tell(app, window, |model| {
-    let y = usize::from(event.y);
-    let on = model.listed() && event.x >= model.size.0.saturating_sub(LIST);
-    model.pointed = on.then_some(y);
-    match event.kind {
-      MouseEventKind::Down(MouseButton::Left) if on => model.clicked(y),
-      MouseEventKind::ScrollUp if on => model.scrolled(-WHEEL),
-      MouseEventKind::ScrollDown if on => model.scrolled(WHEEL),
-      _ => {}
-    }
-    on
+  let (on, verb) = tell(app, window, |model| {
+    let (x, y) = (usize::from(event.x), usize::from(event.y));
+    model.pointer = Some((event.x, event.y));
+    let on = model.on_list(event.x);
+    let verb = match (event.kind, on) {
+      (MouseEventKind::Down(MouseButton::Left), true) => model.clicked(y),
+      (MouseEventKind::Down(MouseButton::Left), false) => {
+        model.clicked_feed(x, y);
+        None
+      }
+      (MouseEventKind::ScrollUp, true) => {
+        model.scrolled(-WHEEL);
+        None
+      }
+      (MouseEventKind::ScrollDown, true) => {
+        model.scrolled(WHEEL);
+        None
+      }
+      (MouseEventKind::ScrollUp, false) => model.scroll_feed(-WHEEL),
+      (MouseEventKind::ScrollDown, false) => model.scroll_feed(WHEEL),
+      _ => None,
+    };
+    (on, verb)
   });
+  ask(window, verb);
   if on {
     window.borrow_mut().touched = Some(app.now());
   }

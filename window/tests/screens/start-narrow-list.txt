@@ -19,12 +19,12 @@
 
                                            Resting 2
 
-                                           ▐where does the time go         11h▌
-                                           ▐FU furb                       opus▌
+                                            where does the time go         11h
+                                            FU furb                       opus
 
                                             Ground the branch o…  ‖ Paused 11h
                                             FU furb                       opus
 
-┃ ▌Ask for a change, a review or an answ…  Resolved 1 ▾
+┃ ▌Ask for a change, a review or an an…    Resolved 1 ▾
 ┃ + new session in furb-try
   /home/ada/src/furb-…  ctrl+p commands     ✓ which fold reads the whole…   2d

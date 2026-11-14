@@ -10,7 +10,7 @@ use opentui::{
 
 /// The background when the terminal says none, or says a light one: the window has no light set
 /// of colors yet, so it draws its own dark background there. It is the darkest grey of the scale
-/// of OpenCode v2.
+/// of `OpenCode` v2.
 const BASE: Color = Color::hex(0x0a_0a0a);
 
 /// The color that each surface is mixed toward, and how many parts of 100 of it each step of the
@@ -41,6 +41,8 @@ pub struct Tokens {
   pub border: Color,
   /// Prose and code. It is never pure white.
   pub text: Color,
+  /// The text of a thing that takes a click while the pointer is on it, which changes nothing else.
+  pub hover: Color,
   /// The second line of a card, a thought, a hint, a placeholder, a mark of what is done.
   pub muted: Color,
   /// Work that runs, a link, the dot of what is not read.
@@ -72,6 +74,7 @@ impl Tokens {
       lifted,
       border,
       text: Color::hex(0xe4_e4e4),
+      hover: WHITE,
       muted: Color::hex(0x94_9494),
       accent: blue,
       attention: Color::hex(0xf5_a742),
@@ -126,6 +129,20 @@ fn mixed(from: Color, to: Color, share: u16) -> Color {
   Color::rgb(channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b))
 }
 
+/// The colors of python inside a block of code, by the name of a capture of its grammar, from the
+/// syntax of `OpenCode` v2. A name that this list does not hold takes the text.
+pub(crate) const SYNTAX: [(&str, u32); 9] = [
+  ("comment", 0x80_8080),
+  ("keyword", 0x9d_7cd8),
+  ("function", 0xfa_b283),
+  ("constructor", 0xe5_c07b),
+  ("type", 0xe5_c07b),
+  ("string", 0x7f_d88f),
+  ("number", 0xf5_a742),
+  ("constant", 0xf5_a742),
+  ("escape", 0x56_b6c2),
+];
+
 /// The role of a text, which gives its look.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
@@ -144,6 +161,8 @@ pub enum Loader {
   Model,
   /// A command that runs.
   Command,
+  /// An agent that works for a line, an arrow that stays.
+  Agent,
 }
 
 impl Loader {
@@ -152,6 +171,7 @@ impl Loader {
     match self {
       Self::Model => &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
       Self::Command => &["◐", "◓", "◑", "◒"],
+      Self::Agent => &["↳"],
     }
   }
 
@@ -167,7 +187,7 @@ impl Loader {
   pub const fn step(self) -> Duration {
     match self {
       Self::Model => Duration::from_millis(80),
-      Self::Command => Duration::from_millis(120),
+      Self::Command | Self::Agent => Duration::from_millis(120),
     }
   }
 }

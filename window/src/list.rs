@@ -65,7 +65,8 @@ impl Model {
 
   /// The runs of each row of the list that shows.
   pub(crate) fn list(&self) -> Vec<Line> {
-    let pointed = self.pointed.and_then(|y| self.row(y));
+    let on = self.pointer.filter(|(x, _)| self.on_list(*x));
+    let pointed = on.and_then(|(_, y)| self.row(usize::from(y)));
     self.shown().map(|row| self.line(row, pointed)).collect()
   }
 
@@ -94,11 +95,11 @@ impl Model {
     self.selected.as_ref() == Some(&self.settled[at].1)
   }
 
-  /// The ground of a card: the selected card is lifted, and the card under the pointer rises by
-  /// one step.
-  fn ground(&self, at: usize, pointed: Option<usize>) -> Option<Color> {
-    let risen = (pointed == Some(at)).then_some(self.tokens.raised);
-    if self.chosen(at) { Some(self.tokens.lifted) } else { risen }
+  /// The ground of a card: the selected card is lifted, and the text of the card under the
+  /// pointer goes bright, with no other change.
+  fn ground(&self, at: usize, pointed: Option<usize>) -> Ground {
+    let bg = self.chosen(at).then_some(self.tokens.lifted);
+    Ground { bg, hover: (pointed == Some(at)).then_some(self.tokens.hover) }
   }
 
   /// The first row of the list: what it shows, and how the machines stand.
@@ -135,7 +136,7 @@ impl Model {
       Part::Resolved if self.open => ("Resolved", " ▾"),
       Part::Resolved => ("Resolved", " ▸"),
     };
-    let on = |style: Style| if pointed { style.bg(t.raised) } else { style };
+    let on = |style: Style| if pointed { style.fg(t.hover) } else { style };
     let count = self.settled.iter().filter(|one| one.0 == part).count();
     let head = vec![
       run(name, on(t.style(Role::Prose))),
@@ -164,7 +165,7 @@ impl Model {
   fn edged(&self, at: usize, ground: Option<Color>, line: Line) -> Line {
     let t = &self.tokens;
     let key = &self.settled[at].1;
-    let hue = t.hues[hash(&format!("{}{}", key.1, key.2)) % t.hues.len()];
+    let hue = self.hue(key);
     let half = |mark: &str| {
       ground.map_or(run(" ", Style::new()), |ground| run(mark, Style::new().fg(ground)))
     };
@@ -177,11 +178,11 @@ impl Model {
   }
 
   /// The two lines of a card: its title and its state, then where it is and who works on it.
-  fn card(&self, at: usize, ground: Option<Color>) -> [Line; 2] {
+  fn card(&self, at: usize, ground: Ground) -> [Line; 2] {
     let t = &self.tokens;
     let (_, key, card) = &self.settled[at];
     let told = &self.machines[key.0];
-    let on = |style: Style| ground.map_or(style, |ground| style.bg(ground));
+    let on = |style: Style| ground.on(style);
     let title = vec![run(card.thread.title.clone(), on(t.style(Role::Title)))];
     let first = spread(title, self.state(key, card, ground), CARD, on(Style::new()));
 
@@ -205,26 +206,26 @@ impl Model {
       [initials.join(" "), marks].into_iter().filter(|one| !one.is_empty()).collect::<Vec<_>>();
     let right = vec![run(right.join("  "), on(t.style(Role::Muted)))];
     let second = spread(left, right, CARD, on(Style::new()));
-    [self.edged(at, ground, first), self.edged(at, ground, second)]
+    [self.edged(at, ground.bg, first), self.edged(at, ground.bg, second)]
   }
 
   /// The one line of a resolved thread.
-  fn resolved(&self, at: usize, ground: Option<Color>) -> Line {
+  fn resolved(&self, at: usize, ground: Ground) -> Line {
     let t = &self.tokens;
     let card = &self.settled[at].2;
-    let on = |style: Style| ground.map_or(style, |ground| style.bg(ground));
+    let on = |style: Style| ground.on(style);
     let title = run(card.thread.title.clone(), on(t.style(Role::Muted)));
     let left = vec![run("✓ ", on(t.style(Role::Muted))), title];
     let age = self.age(card.since).unwrap_or_else(|| "now".to_owned());
     let line = spread(left, vec![run(age, on(t.style(Role::Muted)))], CARD, on(Style::new()));
-    self.edged(at, ground, line)
+    self.edged(at, ground.bg, line)
   }
 
   /// The state of a card: a word with its mark, and its time. A card that its machine did not
   /// confirm says the hour at which the window last heard of it.
-  fn state(&self, key: &Key, card: &Card, ground: Option<Color>) -> Line {
+  fn state(&self, key: &Key, card: &Card, ground: Ground) -> Line {
     let t = &self.tokens;
-    let on = |style: Style| ground.map_or(style, |ground| style.bg(ground));
+    let on = |style: Style| ground.on(style);
     let (muted, colored) = (on(t.style(Role::Muted)), |color| on(Style::new().fg(color)));
     if !self.confirmed(key) {
       return vec![run(format!("as of {}", self.hour(self.machines[key.0].heard)), muted)];
@@ -258,6 +259,20 @@ impl Model {
   }
 }
 
+/// The look of a card: its ground, and the color of its text under the pointer.
+#[derive(Clone, Copy)]
+struct Ground {
+  bg: Option<Color>,
+  hover: Option<Color>,
+}
+
+impl Ground {
+  fn on(self, style: Style) -> Style {
+    let style = self.bg.map_or(style, |bg| style.bg(bg));
+    self.hover.map_or(style, |hover| style.fg(hover))
+  }
+}
+
 /// Whether a life holds the record of a card and no view holds that life.
 pub(crate) fn unheld(card: &Card) -> bool {
   card.held && card.viewers.is_empty()
@@ -287,7 +302,7 @@ fn badge(project: &str) -> String {
 }
 
 /// A number from a text, the same in each build, which picks a hue.
-fn hash(text: &str) -> usize {
+pub(crate) fn hash(text: &str) -> usize {
   text
     .bytes()
     .fold(0x811c_9dc5_u32, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193))

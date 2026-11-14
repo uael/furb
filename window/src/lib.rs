@@ -10,7 +10,9 @@
 //! as the headless app of a test. [`tokens`] holds each color, each loader and each role of a text
 //! of the design, which each screen reads.
 
+mod code;
 mod error;
+mod feed;
 mod hand;
 mod home;
 mod kept;
@@ -19,7 +21,9 @@ mod link;
 mod list;
 mod machine;
 mod model;
+mod prose;
 mod screen;
+mod thread;
 pub mod tokens;
 
 use std::{

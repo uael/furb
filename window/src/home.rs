@@ -4,7 +4,7 @@
 use std::env;
 
 use furb::view::Standing;
-use opentui::style::Style;
+use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
@@ -19,7 +19,7 @@ impl Model {
   pub(crate) fn home(&self) -> Vec<Line> {
     let mut rows = self.says();
     rows.resize(usize::from(self.size.1).saturating_sub(3), Vec::new());
-    rows.extend(self.input());
+    rows.extend(self.hinted());
     rows
   }
 
@@ -89,28 +89,49 @@ impl Model {
     rows
   }
 
-  /// The input of a new session, which sends nothing yet, over the row of hints.
-  fn input(&self) -> [Line; 3] {
+  /// The input of a new session, which sends nothing yet, the row under it, and the row of hints.
+  fn hinted(&self) -> [Line; 3] {
     let t = &self.tokens;
-    let (raised, muted) = (Style::new().bg(t.raised), t.style(Role::Muted));
-    let input = |text: Line| {
-      let mut line = vec![run("┃", Style::new().fg(t.accent).bg(t.raised)), run(" ", raised)];
-      line.extend(spread(text, Vec::new(), self.wide().saturating_sub(2), raised));
-      line
-    };
-    let ask = run("Ask for a change, a review or an answer", muted.bg(t.raised));
-    let cursor = run("▌", t.style(Role::Prose).bg(t.raised));
-    let target = run(format!("+ new session in {}", self.project()), muted.bg(t.raised));
-    let under =
-      |home| self.folder.strip_prefix(home).ok().map(|rest| format!("~/{}", rest.display()));
-    let folder =
-      env::home_dir().and_then(under).unwrap_or_else(|| self.folder.display().to_string());
+    let target = format!("+ new session in {}", self.project());
+    let [ask, under] = self.input(
+      t.accent,
+      "Ask for a change, a review or an answer",
+      (vec![run(target, t.style(Role::Muted))], Vec::new()),
+    );
     let hint = if self.listed() { "ctrl+p commands" } else { "ctrl+x l the list" };
     let hints = match &self.fault {
       Some(fault) => self.said(fault, Style::new().fg(t.danger), hint),
-      None => self.said(&folder, muted, hint),
+      None => self.said(&self.folder_shown(), t.style(Role::Muted), hint),
     };
-    [input(vec![cursor, ask]), input(vec![target]), hints]
+    [ask, under, hints]
+  }
+
+  /// The input, which sends nothing yet: a row with a bar in a color and what it asks, then a row
+  /// that says where it goes, at its left and at its right.
+  pub(crate) fn input(&self, bar: Color, ask: &str, (left, right): (Line, Line)) -> [Line; 2] {
+    let t = &self.tokens;
+    let raised = Style::new().bg(t.raised);
+    let on = |line: Line| line.into_iter().map(|one| run(one.content, one.style.bg(t.raised)));
+    let input = |text: Line, right: Line| {
+      let mut line = vec![run("┃", Style::new().fg(bar).bg(t.raised)), run(" ", raised)];
+      line.extend(spread(
+        on(text).collect(),
+        on(right).collect(),
+        self.wide().saturating_sub(4),
+        raised,
+      ));
+      line.push(run("  ", raised));
+      line
+    };
+    let cursor = run("▌", t.style(Role::Prose));
+    [input(vec![cursor, run(ask, t.style(Role::Muted))], Vec::new()), input(left, right)]
+  }
+
+  /// The folder of the window, with the home folder of the user as `~`.
+  pub(crate) fn folder_shown(&self) -> String {
+    let under =
+      |home| self.folder.strip_prefix(home).ok().map(|rest| format!("~/{}", rest.display()));
+    env::home_dir().and_then(under).unwrap_or_else(|| self.folder.display().to_string())
   }
 
   /// Each session that works with no view, since when, and each thread that the operator paused,

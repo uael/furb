@@ -1,0 +1,30 @@
+ furb · why is the seed slow on a big record    [ Resolve ]    All projects ▾         this machine
+┃
+┃ why is the seed slow on a big record                         Working 1
+┃ (the model thinks)                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                              ▌why is the seed slow o…  ⠋ Working▌
+                                                               ▌FU furb                       opus▌
+  opus/high                                                    ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+       1  cost = tokens(word)
+       ⠋  proof = await bash('pytest -q test/outside
+       …
+  I read the stages from the frames and sum them, so…   0 s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+┃ ▌Reply to this thread
+┃ ↳ why is the seed slow on a big record               opus
+  ⠋ Working · esc esc stop                ctrl+n new thread

@@ -9,11 +9,11 @@
 use std::{path::PathBuf, time::Duration};
 
 use furb::view::Part;
-use furb_host::protocol::{Answer, Card, Frame};
+use furb_host::protocol::{Answer, Card, Frame, Verb};
 use jiff::{Timestamp, tz::TimeZone};
 use serde::{Deserialize, Serialize};
 
-use crate::{Options, link::Heard, list::Row, tokens::Tokens};
+use crate::{Options, code::Colors, link::Heard, list::Row, thread::Opened, tokens::Tokens};
 
 /// The width of the list of cards.
 pub(crate) const LIST: u16 = 38;
@@ -69,8 +69,8 @@ pub(crate) struct Model {
   pub(crate) toggled: bool,
   /// Whether a machine made the window wait long enough to say so.
   pub(crate) slow: bool,
-  /// The row of the window that the pointer is on, while it is on the list.
-  pub(crate) pointed: Option<usize>,
+  /// The cell that the pointer is on, its column and its row.
+  pub(crate) pointer: Option<(u16, u16)>,
   /// How many rows of the list stand above the first row that shows.
   pub(crate) scroll: usize,
   /// The second of the clock of the machine.
@@ -84,6 +84,10 @@ pub(crate) struct Model {
   pub(crate) tokens: Tokens,
   /// Why the window could not keep its cards.
   pub(crate) fault: Option<String>,
+  /// The thread that the operator opened.
+  pub(crate) thread: Option<Opened>,
+  /// The colors of each text of python that the window drew.
+  pub(crate) colors: Colors,
 }
 
 impl Model {
@@ -101,7 +105,7 @@ impl Model {
       open: false,
       toggled: false,
       slow: false,
-      pointed: None,
+      pointer: None,
       scroll: 0,
       now: 0,
       moved: Duration::ZERO,
@@ -110,12 +114,24 @@ impl Model {
       zone: options.zone.clone(),
       tokens,
       fault: None,
+      thread: None,
+      colors: Colors::new(),
     }
   }
 
   /// One frame of the daemon of a machine, or the end of its connection: whether what the machine
   /// told changed. The first cause of a loss stays.
   pub(crate) fn hear(&mut self, at: usize, heard: Heard) -> bool {
+    match heard {
+      Ok(Frame::Reply { id, answer: Answer::Page(page) }) => {
+        return self.answered(at, id, Ok(page));
+      }
+      Ok(Frame::Refused { id: Some(id), why, .. }) if self.waits(at, id) => {
+        return self.answered(at, id, Err(why));
+      }
+      Ok(Frame::Thread { life, thread, page }) => return self.changed(at, (&life, &thread), page),
+      _ => {}
+    }
     let (now, told) = (self.now, &mut self.machines[at]);
     if matches!(told.link, Link::Lost(_)) {
       return false;
@@ -193,19 +209,21 @@ impl Model {
     }
   }
 
-  /// A click on a row of the window, in the list: a card is selected, and the head of the resolved
-  /// threads shows or folds their rows.
-  pub(crate) fn clicked(&mut self, y: usize) {
+  /// A click on a row of the window, in the list: a card is selected and its thread opens, and the
+  /// head of the resolved threads shows or folds their rows. The page that the thread asks.
+  pub(crate) fn clicked(&mut self, y: usize) -> Option<Verb> {
     match self.row(y) {
       Some(Row::Card(at, _) | Row::Resolved(at)) => {
         self.selected = self.settled.get(at).map(|one| one.1.clone());
+        self.open_thread()
       }
       Some(Row::Head(Part::Resolved)) => {
         self.open = !self.open;
         // The resolved threads end the list, so the list moves to its end to show them.
         self.scrolled(isize::MAX);
+        None
       }
-      _ => {}
+      _ => None,
     }
   }
 
@@ -238,6 +256,11 @@ impl Model {
   /// Whether the list shows.
   pub(crate) fn listed(&self) -> bool {
     (self.size.0 >= BESIDE) != self.toggled
+  }
+
+  /// Whether a column of the window stands on the list.
+  pub(crate) fn on_list(&self, x: u16) -> bool {
+    self.listed() && x >= self.size.0.saturating_sub(LIST)
   }
 
   /// How many columns the home has: those that the list leaves it while the list shows.

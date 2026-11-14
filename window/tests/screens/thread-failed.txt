@@ -1,0 +1,30 @@
+ furb · why is the window stuck after a switc…  [ Resolve ]    All projects ▾         this machine
+┃
+┃ why is the window stuck after a switch of model              Needs you 1
+┃ (the model fails)                                            ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                              ▌why is the window stuck af…  ● now▌
+                                                               ▌FU furb                       opus▌
+  opus/high                                                    ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+       1  x = 1
+       ✗  raise ValueError('a maximum of 4 blocks with…+32
+          ValueError: a maximum of 4 blocks with
+          cache_control may be provided
+       3  close(None)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+┃ ▌Reply to this thread
+┃ ↳ why is the window stuck after a switch of model    opus
+  /home/ada/src/furb-try                  ctrl+n new thread

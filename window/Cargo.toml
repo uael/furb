@@ -42,6 +42,11 @@ thiserror = "2"
 jiff = "0.2"
 # How many columns a text takes.
 unicode-width = "0.2"
+# The colors of the code of a thread, from the grammar of python, on each whole statement.
+tree-sitter-highlight = "0.25"
+tree-sitter-python = "0.25"
+# The prose of a model, which is markdown.
+pulldown-cmark = { version = "0.13", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 # The flags of a process that outlives the console of the window.

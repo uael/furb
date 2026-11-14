@@ -1,0 +1,30 @@
+ furb · where does the time of a resume go      [ Resolve ]    All projects ▾         this machine
+┃
+┃ where does the time of a resume go                           Working 1
+┃ (the model writes a long word)                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                              ▌where does the time of…  ◐ Working▌
+                                                               ▌FU furb                       opus▌
+  opus/high                                                    ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+       …  4 lines
+       5  stages = ['read', 'boot', 'seed', 'turns']
+       6  for stage in stages:
+       7    cost = cost + len(stage)
+       8  total = cost * 2
+       ◐  await wait(600, chain)
+       …
+
+
+
+
+
+
+
+
+
+
+
+
+
+┃ ▌Reply to this thread
+┃ ↳ where does the time of a resume go                 opus
+  ⠋ Working · esc esc stop                ctrl+n new thread
