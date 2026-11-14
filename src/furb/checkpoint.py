@@ -34,7 +34,7 @@ def journal(names, record=()):
   saved, again = {e[1]: e for (e,) in record if question(e)}, {}
   asked, strays, back = {}, {}, []
 
-  def ear(outside, known, taken, held, holds, log, left, top, a=(), last=None):
+  def ear(outside, known, taken, held, holds, log, top, a=(), last=None):
     say, act, get, drive, counted, offers, carried, transcript = (
       names[x] for x in ("say", "act", "get", "drive", "numbered", "offers", "lives", "transcript")
     )
@@ -161,7 +161,7 @@ def journal(names, record=()):
     try:
       while True:
         while owed() and (
-          not (log or left)
+          not log
           or (due[-1][0] == "joined" and not question(due[-2]) and due.pop() and due)
           or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken and due[-1][2] in outside)
         ):
@@ -204,7 +204,7 @@ def journal(names, record=()):
           for x in transcript(born, "carried")[-1:]:
             x[5:] and bind(a[3], a[1], x[4], x[5])
     finally:
-      for pile in log, left, due, first, saved, back:
+      for pile in log, due, first, saved, back:
         pile.clear()
 
   return ear

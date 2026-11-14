@@ -712,7 +712,7 @@ async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_
 
 
 async def test_boot_gives_the_journal_the_tables_of_the_life() -> None:
-  """boot gives the journal the tables of the life, the ears of the outside by name, its acts by name, the names of the acts that an ear took, its facts by chain and by view, the function that holds a fact on a chain, its log, what is left to hear of the fact that goes round and the highest number of each kind, and the journal gives the ear that boot brings to life last, under the name journal."""
+  """boot gives the journal the tables of the life, the ears of the outside by name, its acts by name, the names of the acts that an ear took, its facts by chain and by view, the function that holds a fact on a chain, its log, which holds each fact until each ear that waits for it heard it, and the highest number of each kind, and the journal gives the ear that boot brings to life last, under the name journal."""
   tables: list = []
   heard: list[tuple] = []
 
@@ -721,11 +721,11 @@ async def test_boot_gives_the_journal_the_tables_of_the_life() -> None:
     return keeping(heard)
 
   root = engine.boot(journal, **kernel(), world=Sand().hears())
-  outside, known, taken, held, holds, log, left, top = tables
+  outside, known, taken, held, holds, log, top = tables
   assert [*outside] == [*kernel(), "world"] and outside["world"] is engine.listening()["world"]
   assert known[root] == engine.get(root) and known["stand1"] == engine.get("stand1") and {root, "stand1"} <= taken
   assert held[root, ""] == engine.transcript(root) and held[root, "stand"] == engine.transcript(root, "stand")
-  assert (log, left, dict(top)) == ([], [], {"chain": 1, "stand": 1})
+  assert (log, dict(top)) == ([], {"chain": 1, "stand": 1})
   holds(root, [("note", root, "mine")])
   assert engine.transcript(root, "note") == engine.transcript(root, "mine") == [("note", root, "mine")]
   assert [*engine.listening()][-2:] == ["journal", root] and engine.get(root) in heard
