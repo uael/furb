@@ -295,18 +295,22 @@ impl Opening {
   /// host with a runtime waits for it on a blocking thread.
   fn prepared(&self) -> Result<Prepared, Fault> {
     let works = self.works();
-    if self.keeps() {
-      self.crossed()?;
-    }
+    let read = || match self.record.as_deref() {
+      Some(path) if Path::new(path).exists() => world::marks(path).map(Some),
+      _ => Ok(None),
+    };
     // A record of another major of its schema is refused before any build reads it whole or writes
     // on it, and the models of a life on a record that holds another engine read that engine.
     let mut system = None;
-    let marks = match self.record.as_deref() {
-      Some(path) if Path::new(path).exists() => Some(world::marks(path)?),
-      _ => None,
-    };
+    let mut marks = read()?;
+    if let Some(held) = &marks {
+      world::readable(&held.heads)?;
+      // A crossing writes a checkpoint, so the marks of before it are those of another record.
+      if self.keeps() && self.crossed(held)? {
+        marks = read()?;
+      }
+    }
     if let Some(marks) = &marks {
-      world::readable(&marks.heads)?;
       let (source, ..) = world::texts(checkpoint::segment(&marks.heads))?;
       if source != crate::ENGINE {
         let unread = || Fault::refused("this build cannot minify the engine that the record holds");
@@ -467,18 +471,14 @@ impl Opening {
   /// record, born on the engine that its fact made holds, writes its checkpoint after its last
   /// entry, as a life that ends writes one, and the life opens from that checkpoint on the engine
   /// of this build. A record of this build, or of a build whose fact made holds no texts, stays as
-  /// it is.
-  fn crossed(&self) -> Result<(), Fault> {
-    let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) else {
-      return Ok(());
-    };
-    let marks = world::marks(path)?;
-    world::readable(&marks.heads)?;
+  /// it is. It reads the marks of the record, and says whether it wrote that checkpoint.
+  fn crossed(&self, marks: &world::Marks) -> Result<bool, Fault> {
     let segment = checkpoint::segment(&marks.heads);
     let (source, ..) = world::texts(segment)?;
-    if source == crate::ENGINE || segment.is_empty() {
-      return Ok(());
-    }
+    let crosses = source != crate::ENGINE && !segment.is_empty();
+    let Some(path) = self.record.as_deref().filter(|_| crosses) else {
+      return Ok(false);
+    };
     let record = checkpoint::booted(world::kept(path)?);
     let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     let prepared = inspects.prepared()?;
@@ -487,7 +487,8 @@ impl Opening {
     if let Some(no) = engine.raised() {
       return Err(no.clone());
     }
-    checkpoint::keep(Path::new(path), checkpoint::written(&mut engine)?)
+    checkpoint::keep(Path::new(path), checkpoint::written(&mut engine)?)?;
+    Ok(true)
   }
 
   /// Proves each checkpoint of the record: a life that inspects the entries before it, born on them
