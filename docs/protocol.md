@@ -131,6 +131,7 @@ it is not given. The daemon answers requests in any order.
 | `cancel_sign_in` | `life` | write |
 | `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
+| `resolve` | `life`, `thread` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
 | `unqueue` | `life`, `entry` | write |
 | `queued` | `life`, `on` | read |
@@ -200,6 +201,10 @@ it is not given. The daemon answers requests in any order.
   case. A `wrote` or an `answered` after its end is refused with `unasked`.
 - An `open` with `attach` attaches its peer in the same step, from that place in the log, as `attach` does. The life
   then has a holder before its grace can pass, even a grace of none.
+- `resolve` resolves a `thread` of the operator, as its model does when it closes its prompt: it closes each act that
+  keeps the thread open, its prompt and each message on it that is not done, the last first, with `None` for a shape
+  `None` and with the text `resolved` for a shape that takes a text. A close cancels the work under each act. An act of
+  another shape refuses the resolve, since only its model gives that value. A message on the thread opens it again.
 - `queue` puts a follow-up of the operator in the queue of a chain, under an `entry` that the window chooses, and a
   second `queue` of the same entry, from any window, changes nothing. The life sends the first follow-up of a chain as
   a prompt of its `shape` and its `message` once the chain rests: no pause holds it, it asks the operator nothing, no

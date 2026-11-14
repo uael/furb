@@ -2341,6 +2341,55 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
   assert_eq!(cards(&mut late).await, vec![read]);
 }
 
+/// The opening of the lives of a test whose model asks the operator at each prompt, so a thread
+/// waits for him, and closes its prompt once he answers.
+fn asking(at: &Path) -> Opening {
+  let answer = Answered(Arc::new(|_, _| {
+    let word = "await prompt(str, 'Which key sends the queue?', to=OPERATOR)\nclose(None)";
+    let turn = ["assistant", word].map(Object::string).into_iter();
+    Box::pin(async move { Ok(Object::tuple(turn.chain([Object::none(), Object::none()]))) })
+  }));
+  Opening { answer: Some(answer), ..opening(at) }
+}
+
+#[tokio::test]
+async fn a_resolve_closes_each_act_that_keeps_a_thread_open_and_a_message_opens_it_again() {
+  let at = place();
+  let (_, sessions) = project(&at);
+  let (local, _daemon) = started_with(&at, GRACE, asking(&at)).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let life = held(&mut window, &sessions, "one.jsonl").await;
+  let prompt = messaged(&mut window, &life, "ground the branch").await;
+  let stands = |prompt: &str, standing: Standing| {
+    let prompt = prompt.to_owned();
+    move |card: &Card| card.thread.prompt == prompt && card.thread.standing == standing
+  };
+  let asks = Standing::Asks { of: None };
+  card(&mut window, stands(&prompt, asks.clone())).await;
+  let resolve = Verb::Resolve { life: life.clone(), thread: prompt.clone() };
+  assert_eq!(window.ask(resolve.clone()).await, Ok(Answer::Done));
+  card(&mut window, stands(&prompt, Standing::Resolved)).await;
+  // A message opens the thread again as a question, and a resolve closes that message with a text.
+  let (shape, message) = ("str".to_owned(), "and say what moved".to_owned());
+  let on = Some(prompt.clone());
+  let said = Verb::Prompt { life: life.clone(), shape, message, to: None, on };
+  let Ok(Answer::Act(again)) = window.ask(said).await else { panic!("no message") };
+  card(&mut window, stands(&prompt, asks)).await;
+  assert_eq!(window.ask(resolve).await, Ok(Answer::Done));
+  card(&mut window, stands(&prompt, Standing::Resolved)).await;
+  let peek = Verb::Peek { life: life.clone(), act: again };
+  assert_eq!(window.ask(peek).await, Ok(Answer::Value(json!("resolved"))));
+  // A thread whose prompt takes no text waits for its model.
+  let (shape, message) = ("int".to_owned(), "count the regressions".to_owned());
+  let said = Verb::Prompt { life: life.clone(), shape, message, to: None, on: None };
+  let Ok(Answer::Act(count)) = window.ask(said).await else { panic!("no prompt") };
+  card(&mut window, stands(&count, Standing::Asks { of: None })).await;
+  let refused = window.ask(Verb::Resolve { life, thread: count.clone() }).await;
+  let why = format!("{count} takes a value of the shape int, so only its model resolves it.");
+  assert_eq!(refused, Err(ProtocolError::Refused { why }));
+}
+
 /// The lines of the block of each exchange of a page, as their numbers and their texts.
 fn numbered(page: &view::Page) -> Vec<(usize, Vec<(usize, String)>)> {
   let lines =

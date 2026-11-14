@@ -477,8 +477,14 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
   }
 }
 
-/// What a key does, which a click on its text does too.
+/// What a key does, which a click on its text does too. Any other key leaves the confirm of a
+/// resolve.
 fn act(app: &App, window: &Shared, does: Does) {
+  if does != Does::Resolve
+    && let Some(opened) = window.borrow_mut().screen.model.thread.as_mut()
+  {
+    opened.confirm = false;
+  }
   let change: fn(&mut Model) = match does {
     Does::Next => |model| model.step(1),
     Does::Previous => |model| model.step(-1),
@@ -496,6 +502,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Python => |model| model.draft.python = !model.draft.python,
     Does::Close => return escaped(app, window),
     Does::Stop => return stopped(app, window),
+    Does::Resolve => return resolved(app, window),
     Does::Send => return sent(app, window),
     Does::Empty => {
       window.borrow().area.set_text("");
@@ -575,6 +582,19 @@ fn stopped(app: &App, window: &Shared) {
   let Window { askers, screen, .. } = &mut *held;
   match asker(askers, &screen.model, at) {
     Some(asker) => drop(screen.model.asked.insert((at, asker.ask(verb)), Asked::Stop)),
+    None => screen.model.fault = screen.model.away(at),
+  }
+  drop(held);
+  tell(app, window, |_| ());
+}
+
+/// The open thread resolved, once its confirm is given: the resolve asked of its machine.
+fn resolved(app: &App, window: &Shared) {
+  let Some((at, verb)) = tell(app, window, Model::resolve) else { return colored(window) };
+  let mut held = window.borrow_mut();
+  let Window { askers, screen, .. } = &mut *held;
+  match asker(askers, &screen.model, at) {
+    Some(asker) => drop(screen.model.asked.insert((at, asker.ask(verb)), Asked::Resolve)),
     None => screen.model.fault = screen.model.away(at),
   }
   drop(held);

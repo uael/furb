@@ -128,6 +128,7 @@ fn acts() -> Vec<Verb> {
       },
     },
     Verb::Seen { life: life(), about: "chain1".to_owned() },
+    Verb::Resolve { life: life(), thread: id() },
     Verb::Queue {
       life: life(),
       entry: "q1".to_owned(),
@@ -381,6 +382,7 @@ fn each_verb_that_writes_needs_the_role_to_write() {
     "stand",
     "config",
     "seen",
+    "resolve",
     "queue",
     "unqueue",
     "answered",
@@ -451,6 +453,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "30a7854bf1d7f3c8b1ebd382e6f51253450d0b3f09253fb724ab25d665a0de68",
   "7ee1043d9b32ce2ed7063360435d8e0376f0e7a18dcc567106de2520d7c29d3d",
   "b74eeedc5d00c8b06c07b4554af3b54da957dc551f4682be6e3994e14aef5927",
+  "006798970b52d20bec8adb5ac17a32c361bde014c3b9ed93a374d24ac447cdd6",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

@@ -25,6 +25,10 @@ pub const HEAD: u16 = 1;
 /// blank after it.
 pub const TEXT: u16 = 2;
 
+/// The columns between two things of one line, as the parts of the launcher, and the mark and the
+/// button of the head of a thread.
+pub(crate) const APART: usize = 3;
+
 /// The columns that a key takes in a table of keys, before what it does: the keys of the home and
 /// of the list of each key.
 pub(crate) const KEYS: usize = 12;

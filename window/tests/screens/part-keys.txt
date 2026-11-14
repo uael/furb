@@ -3,7 +3,7 @@
   Nothing needs you.
 
   ⌃O          go to   Each key                                               ⎋
-  ⌃P          comman  ▌Search a key                                     1 / 22
+  ⌃P          comman  ▌Search a key                                     1 / 23
   ⌃X ?        each k
                       Go
                       ▌⌃O          go to a project or a session
@@ -20,9 +20,9 @@
                        ⇞           a page up
                        ⇟           a page down
                        ⎋ ⎋         stop the work of the thread
+                       ⌃X R        resolve the thread, or reply to open it…
 
                       ↑↓ move · ⏎ run · ⎋ close
-
 
 
 ┃ Ask for a change, a review or an answer

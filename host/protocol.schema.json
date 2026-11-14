@@ -924,6 +924,27 @@
         },
         {
           "type": "object",
+          "description": "The resolve of a thread of the operator: a close of each act that keeps it open, the last\nfirst, with the text `resolved` or with None, as its shape takes. A message on the thread\nopens it again.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "resolve"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "thread"
+          ]
+        },
+        {
+          "type": "object",
           "description": "A follow-up that the operator queued on a chain, under an entry that the window chose. The\nlife sends it as a prompt of its shape and its message once the chain rests, and a second\nqueue of the same entry, from any window, changes nothing.",
           "properties": {
             "life": {
@@ -4983,5 +5004,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 19
+  "x-protocol": 20
 }

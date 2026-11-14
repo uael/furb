@@ -1,4 +1,4 @@
- furb · where does the list stand               [ Resolve ]    All projects ▾         this machine
+ furb · where does the list stand   ✓ Resolved   [ Reopen ]    All projects ▾         this machine
 ┃
 ┃ where does the list stand                                    Resolved 1 ▸
 ┃ (the model asks a choice)
@@ -25,6 +25,6 @@
 
 
 
-┃ Reply to this thread
+┃ A reply opens this thread again
   This computer   furb ▾               opus/high   ○ Python
   ~/src/furb-try                              ⌃N new thread

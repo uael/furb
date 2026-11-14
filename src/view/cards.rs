@@ -11,7 +11,7 @@ use super::{
   act::{Act, Kind, Maker, operator},
   held::Held,
   state::State,
-  threads::{Rows, ThreadNode, unseen},
+  threads::{Lookup, Rows, ThreadNode, unseen},
 };
 use crate::engine::OPERATOR;
 
@@ -91,14 +91,17 @@ impl Card {
     matches!(self.standing, Standing::Thinks | Standing::Runs | Standing::Delegates)
   }
 
+  /// Whether the thread ended: it is resolved, stopped or failed, and a message of the operator
+  /// opens it again.
+  pub fn ended(&self) -> bool {
+    matches!(self.standing, Standing::Resolved | Standing::Stopped | Standing::Failed)
+  }
+
   /// The shape of a message of the operator on the thread: none while its prompt is open, so its
   /// model reads the message at its next step, and a text once the thread ended, which opens the
   /// thread again as a question.
   pub fn reply(&self) -> &'static str {
-    match self.standing {
-      Standing::Resolved | Standing::Stopped | Standing::Failed => "str",
-      _ => "None",
-    }
+    if self.ended() { "str" } else { "None" }
   }
 
   /// The card of a thread whose record no life holds: nothing works there, so a thread that worked
@@ -178,6 +181,22 @@ impl Held {
       };
       nodes.into_iter().map(card).collect()
     })
+  }
+}
+
+impl Held {
+  /// The acts that keep a thread of the operator open, each with its shape, in the order that they
+  /// began: its prompt and each message on it that is not done. A close of each, the last first,
+  /// resolves the thread, since a close of a prompt cancels each prompt under it.
+  pub fn open_in(&self, thread: &str) -> Vec<(String, String)> {
+    let nodes = self.rail(&[], None);
+    let Some(node) = nodes.into_iter().find(|node| node.thread.prompt == thread) else {
+      return Vec::new();
+    };
+    let ids = [&node.thread.prompt].into_iter().chain(&node.thread.messages);
+    let open = ids.filter_map(|id| (&self).act(id)).filter(|act| !act.done());
+    let shape = |act: &Act| act.words.first().and_then(Value::as_str).unwrap_or("None").to_owned();
+    open.map(|act| (act.id.clone(), shape(act))).collect()
   }
 }
 

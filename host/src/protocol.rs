@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 19;
+pub const PROTOCOL: u32 = 20;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -283,6 +283,13 @@ pub enum Verb {
   Seen {
     life: String,
     about: String,
+  },
+  /// The resolve of a thread of the operator: a close of each act that keeps it open, the last
+  /// first, with the text `resolved` or with None, as its shape takes. A message on the thread
+  /// opens it again.
+  Resolve {
+    life: String,
+    thread: String,
   },
   /// A follow-up that the operator queued on a chain, under an entry that the window chose. The
   /// life sends it as a prompt of its shape and its message once the chain rests, and a second

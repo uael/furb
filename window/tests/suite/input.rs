@@ -15,7 +15,7 @@ use opentui::{style::Color, testing::TestApp};
 
 use crate::{
   cards::{app, options, shows},
-  daemon::{ANSWERS, Daemon, PATIENCE, WORKS},
+  daemon::{ANSWERS, ASKS, Daemon, PATIENCE, WORKS},
   screens::screen,
   thread::{at, lights},
 };
@@ -153,6 +153,60 @@ fn two_escapes_stop_the_work_of_the_thread_and_one_does_not() {
   app.press("escape");
   app.press("escape");
   let frame = shows(&app, "Stopped");
+  assert!(!frame.contains("Working · ⎋ ⎋ stop"), "{frame}");
+}
+
+#[test]
+fn a_thread_that_ended_turns_the_input_to_it_and_a_reply_opens_it_and_the_button_resolves_it() {
+  let (app, daemon, sessions) = started();
+  sent(&app, &format!("how long does an open take {ANSWERS}"));
+  shows(&app, "Two stages hold most");
+  // The model resolved the thread: its head says so, its button and the input say that a reply
+  // opens it again.
+  let frame = shows(&app, "✓ Resolved   [ Reopen ]");
+  assert!(frame.contains("┃ A reply opens this thread again"), "{frame}");
+  screen("input-resolved", &app);
+  // The key of the button turns the input to the thread and sends nothing.
+  app.press("ctrl+n");
+  shows(&app, "┃ Ask in a new thread");
+  app.press("ctrl+x");
+  app.press("r");
+  shows(&app, "┃ A reply opens this thread again");
+  assert_eq!(told(&daemon, &sessions).len(), 1);
+  // A reply opens it again, and its model asks him.
+  sent(&app, &format!("and which key sends the queue {ASKS}"));
+  shows(&app, "Which key sends the queue?");
+  let frame = shows(&app, "[ Resolve ]");
+  assert!(!frame.contains("✓ Resolved"), "{frame}");
+  // The button resolves it: its close ends the question, and the head says that it is resolved.
+  let (x, y) = at(&app, "[ Resolve ]", 0);
+  lights(&app, x + 2, y);
+  app.click(x + 2, y);
+  shows(&app, "✓ Resolved   [ Reopen ]");
+  shows(&app, "◆ Which key sends the…     refused");
+  assert_eq!(told(&daemon, &sessions).len(), 2);
+}
+
+#[test]
+fn a_resolve_of_a_thread_that_works_waits_for_its_confirm() {
+  let (app, _daemon, _sessions) = started();
+  sent(&app, &format!("where does the time go {WORKS}"));
+  shows(&app, "Working · ⎋ ⎋ stop");
+  paged(&app);
+  app.press("ctrl+x");
+  app.press("r");
+  shows(&app, "[ Stop and resolve ]");
+  screen("input-resolve-confirm", &app);
+  // Another key leaves the confirm, and the thread still works.
+  app.press("escape");
+  let frame = shows(&app, "[ Resolve ]");
+  assert!(frame.contains("Working · ⎋ ⎋ stop") && !frame.contains("Stop and resolve"), "{frame}");
+  let (x, y) = at(&app, "[ Resolve ]", 0);
+  app.click(x, y);
+  shows(&app, "[ Stop and resolve ]");
+  let (x, y) = at(&app, "[ Stop and resolve ]", 0);
+  app.click(x, y);
+  let frame = shows(&app, "✓ Resolved   [ Reopen ]");
   assert!(!frame.contains("Working · ⎋ ⎋ stop"), "{frame}");
 }
 

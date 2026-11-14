@@ -76,6 +76,10 @@ const BEHIND: usize = 256;
 /// The least time between two tells of the cards of a life.
 const CARDS: Duration = Duration::from_millis(250);
 
+/// The value with which the operator closes a prompt of his that takes a text when he resolves its
+/// thread.
+const RESOLVED: &str = "resolved";
+
 /// What a client says to a life. A command that names no chain says it on the root.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
@@ -145,6 +149,9 @@ pub enum Command {
   Roster(Vec<String>),
   /// The fact that the operator read a chain or a thread up to now.
   Seen { about: String },
+  /// The resolve of a thread of the operator: a close of each act that keeps it open, the last
+  /// first, with the text `resolved` or with None, as its shape takes.
+  Resolve { thread: String },
   /// A follow-up that the operator queued on a chain, under an entry that a second queue finds,
   /// which the life sends as a prompt of its shape and its message once the chain rests.
   Queue { entry: String, shape: String, message: String, on: Option<String> },
@@ -210,6 +217,7 @@ impl Command {
       | Self::Read { .. }
       | Self::Write { .. }
       | Self::Seen { .. }
+      | Self::Resolve { .. }
       | Self::Stand => Self::By { speaker, command: Box::new(self) },
       // A read of the threads tells the window of the speaker what it has not seen.
       Self::Threads { on, at, read, .. } => Self::Threads { on, at, read, site: Some(speaker) },
@@ -1256,7 +1264,8 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
   let root = engine.root().to_owned();
   let chain = |on: Option<String>| on.unwrap_or_else(|| root.clone());
   match command {
-    Command::By { speaker, command } => spoken(engine, &speaker, *command),
+    Command::By { speaker, command } => spoken(engine, life, &speaker, *command).await,
+    Command::Resolve { thread } => resolved(engine, life, &thread),
     Command::Queue { entry, shape, message, on } => {
       let chain = chain(on);
       if !life.kept.queue.holds(&entry) {
@@ -1298,6 +1307,34 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
     }
     other => answered_by(engine, other),
   }
+}
+
+/// What a command comes to, said by a speaker: the life speaks as that speaker for the command
+/// alone, then as before, whatever the command came to.
+async fn spoken(
+  engine: &mut Engine,
+  life: &Life,
+  speaker: &str,
+  command: Command,
+) -> Result<Reply, LifeError> {
+  let before = engine.site(Some(speaker))?;
+  let reply = Box::pin(commanded(engine, life, command)).await;
+  engine.site(Some(&before))?;
+  reply
+}
+
+/// The resolve of a thread of the operator: a close of each act that keeps it open, the last
+/// first, with the value that its shape takes from the text `resolved`. An act whose shape takes
+/// no text refuses it.
+fn resolved(engine: &mut Engine, life: &Life, thread: &str) -> Result<Reply, LifeError> {
+  for (act, shape) in life.kept.held.open_in(thread).into_iter().rev() {
+    let Ok(value) = answered(&shape, RESOLVED) else {
+      let why = format!("{act} takes a value of the shape {shape}, so only its model resolves it.");
+      return Err(LifeError::Refused(why));
+    };
+    engine.close(value, verbs::Close { id: Some(act) })?;
+  }
+  Ok(Reply::Done)
 }
 
 /// What a query of the meaning of the acts that the life told comes to, on its chain or on the
@@ -1347,15 +1384,6 @@ fn drained(engine: &mut Engine, life: &mut Life) {
     }
     life.kept.queue.sent(&follow.entry, made);
   }
-}
-
-/// What a command of the engine comes to, said by a speaker: the life speaks as that speaker for
-/// the command alone, then as before, whatever the command came to.
-fn spoken(engine: &mut Engine, speaker: &str, command: Command) -> Result<Reply, LifeError> {
-  let before = engine.site(Some(speaker))?;
-  let reply = answered_by(engine, command);
-  engine.site(Some(&before))?;
-  reply
 }
 
 /// What a command comes to on the engine.

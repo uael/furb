@@ -255,7 +255,7 @@ impl Model {
   pub(crate) fn away(&self, at: usize) -> Option<String> {
     let told = self.machines.get(at)?;
     matches!(told.link, Link::Lost(_)).then(|| {
-      format!("{} is away, so nothing went: your message stays here until it answers.", told.name)
+      format!("{} is away, so nothing went. The window dials it until it answers.", told.name)
     })
   }
 
@@ -266,7 +266,9 @@ impl Model {
       (Asked::Open, Ok(Frame::Refused { why, .. })) => self.restore = self.unopened(at, id, why),
       (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
       (Asked::Answer, Ok(Frame::Refused { why, .. })) => self.unanswered(why),
-      (Asked::Seen | Asked::List, Ok(Frame::Refused { why, .. })) => self.fault = Some(why),
+      (Asked::Seen | Asked::List | Asked::Resolve, Ok(Frame::Refused { why, .. })) => {
+        self.fault = Some(why);
+      }
       (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {
         self.machines[at].lives = lives;
       }

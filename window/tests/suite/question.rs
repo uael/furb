@@ -86,7 +86,7 @@ fn a_choice_is_answered_by_its_key_and_the_word_that_asked_goes_on() {
   app.advance(AWAY);
   shows(&app, "Resolved 1");
   assert!(formless(&app), "{}", app.text());
-  assert!(app.text().contains("┃ Reply to this thread"), "{}", app.text());
+  assert!(app.text().contains("┃ A reply opens this thread again"), "{}", app.text());
   screen("question-answered", &app);
 }
 
@@ -231,7 +231,7 @@ fn a_question_of_another_thread_marks_its_card_and_shows_no_form() {
     frame.contains("Needs you") && frame.contains("which key sends the queue  ◆ Input"),
     "{frame}"
   );
-  assert!(formless(&app) && frame.contains("┃ Reply to this thread"), "{frame}");
+  assert!(formless(&app) && frame.contains("┃ A reply opens this thread again"), "{frame}");
   screen("question-elsewhere", &app);
   // The count takes a click, which goes to the thread that asks.
   let (x, y) = at(&app, "1 other thread asks", 0);
@@ -246,5 +246,5 @@ fn a_notice_is_a_line_of_its_thread_with_no_form() {
   app.advance(AWAY);
   let came = app.wait_until(PATIENCE, || app.text().contains("Resolved 1"));
   assert!(came && formless(&app), "{}", app.text());
-  assert!(app.text().contains("┃ Reply to this thread"), "{}", app.text());
+  assert!(app.text().contains("┃ A reply opens this thread again"), "{}", app.text());
 }

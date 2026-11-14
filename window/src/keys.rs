@@ -29,6 +29,7 @@ pub(crate) enum Does {
   List,
   Close,
   Stop,
+  Resolve,
   Send,
   Empty,
   Leave,
@@ -123,6 +124,7 @@ const THREAD: &[Bound] = &[
     true,
     &[&[plain(KeyCode::Escape), plain(KeyCode::Escape)]],
   ),
+  bound(Does::Resolve, "resolve the thread, or reply to open it again", true, &[&led('r')]),
 ];
 
 /// The keys of the input.

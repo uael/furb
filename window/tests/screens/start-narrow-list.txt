@@ -1,4 +1,4 @@
- furb · Debug stuck TUI…    [ Resolve ]    All projects ▾       studio offline
+ furb · Debug…    ✗ Failed   [ Reopen ]    All projects ▾       studio offline
 ┃
 ┃ Debug stuck TUI after merge               TUI scope for the new…     ◆ Input
 ┃ (the model works on it)                   FU furb                       opus
@@ -25,6 +25,6 @@
                                             Ground the branch…    ‖ Paused 11h
                                             FU furb                       opus
 
-┃ Reply to this thread                     Resolved 1 ▾
+┃ A reply opens this thread again          Resolved 1 ▾
   This computer   furb ▾       ○ Python
   ~/src/furb-try    ◆ 1   ⌃N new thread     ✓ which fold reads the whole…   2d

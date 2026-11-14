@@ -1,4 +1,4 @@
- furb · how long does an open take              [ Resolve ]    All projects ▾         this machine
+ furb · how long does an open take  ✓ Resolved   [ Reopen ]    All projects ▾         this machine
 ┃
 ┃ how long does an open take                                   Needs you 1
 ┃ (the model answers)
@@ -25,6 +25,6 @@
 
 
 
-┃ Reply to this thread
+┃ A reply opens this thread again
   This computer   furb ▾               opus/high   ○ Python
   ~/src/furb-try      ◆ 1 other thread asks   ⌃N new thread

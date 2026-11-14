@@ -64,12 +64,14 @@ pub(crate) struct Draft {
 }
 
 /// What a request of the window asked of a daemon: the open of a life, a message, a stop, the
-/// answer to a question, what the operator saw, or the records of the machine.
+/// resolve of a thread, the answer to a question, what the operator saw, or the records of the
+/// machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Asked {
   Open,
   Say,
   Stop,
+  Resolve,
   Answer,
   Seen,
   List,
@@ -213,6 +215,26 @@ impl Model {
     Some((at, Verb::Cancel { life, act, why: None }))
   }
 
+  /// The resolve of the open thread, once the daemon made it, with its machine. A thread that works
+  /// asks a confirm first, since a resolve stops its work. A thread that ended takes no resolve: a
+  /// reply opens it again, so the input turns to it, as a message, at the end of its feed.
+  pub(crate) fn resolve(&mut self) -> Option<(usize, Verb)> {
+    let opened = self.thread.as_ref().filter(|one| !one.key.2.is_empty())?;
+    let card = self.told_card(&opened.key).map(|one| (one.thread.ended(), one.thread.works()));
+    let (ended, works) = card.unwrap_or_default();
+    let opened = self.thread.as_mut()?;
+    if ended {
+      (self.aim, self.draft.python, opened.top) = (None, false, None);
+      return None;
+    }
+    if works && !mem::replace(&mut opened.confirm, true) {
+      return None;
+    }
+    opened.confirm = false;
+    let (at, life, thread) = opened.key.clone();
+    Some((at, Verb::Resolve { life, thread }))
+  }
+
   /// The answer to the first message of the queue, with the act that it made: a new thread opens
   /// in the window under its prompt, and each message that waits for it goes to it.
   pub(crate) fn replied(&mut self, answer: Answer) {
@@ -287,6 +309,8 @@ impl Model {
   /// operator writes.
   pub(crate) fn area(&self) -> Area {
     let opens = self.thread.as_ref().is_some_and(|one| self.opens(one));
+    let ended = self.thread.as_ref().and_then(|one| self.told_card(&one.key));
+    let ended = ended.is_some_and(|card| card.thread.ended());
     let top = usize::from(self.size.1).saturating_sub(self.input_rows());
     let (x, row, height, placeholder) = match (self.form(), self.form_rows(self.grown()).1) {
       (Some(_), None) => (2, 0, 1, String::new()),
@@ -300,6 +324,7 @@ impl Model {
         let says = match self.target() {
           _ if self.draft.python => "A word of Python to run",
           Target::Thread(_) if opens => "Write while it opens. Your message goes when it is open.",
+          Target::Thread(_) if ended => "A reply opens this thread again",
           Target::Thread(_) => "Reply to this thread",
           Target::Session(..) => "Ask in a new thread",
           Target::New(_) => "Ask for a change, a review or an answer",

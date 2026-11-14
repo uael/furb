@@ -1,4 +1,4 @@
- furb · Debug stuck TUI after merge                                [ Resolve ]
+ furb · Debug stuck TUI after merge                      ✗ Failed   [ Reopen ]
 ┃
 ┃ Debug stuck TUI after merge
 ┃ (the model works on it)
@@ -25,6 +25,6 @@
 
 
 
-┃ Reply to this thread
+┃ A reply opens this thread again
   This computer   furb ▾                                  opus/high   ○ Python
   ~/src/furb-try                         ◆ 1 other thread asks   ⌃N new thread

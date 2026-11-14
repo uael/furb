@@ -17,7 +17,7 @@ use crate::{
   prose,
   question::closed,
   thread::{Click, Fold, Item, Opened, Row, width},
-  tokens::{Loader, Role},
+  tokens::{APART, Loader, Role},
 };
 
 /// How many rows a block shows while it is folded.
@@ -91,8 +91,11 @@ impl Feed<'_> {
   }
 
   /// The head of the thread, which never scrolls: its project, its session or its title, and the
-  /// button that resolves it, once the daemon made the thread and gave its page.
+  /// button that resolves it, once the daemon made the thread and gave its page. A thread that
+  /// ended shows how, and its button turns the input to it, since a reply opens it again. A resolve
+  /// of a thread that works waits for a confirm on the button, which says that it stops the work.
   pub(crate) fn head(&self) -> Row {
+    let t = &self.model.tokens;
     let card = self.model.told_card(&self.opened.key);
     let project = card.map(project).unwrap_or_default();
     let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
@@ -102,10 +105,28 @@ impl Feed<'_> {
       run(title, self.style(Role::Title)),
     ];
     let made = !self.opened.key.2.is_empty() && !self.model.leaves();
-    let button = if made { vec![run("[ Resolve ]", self.style(Role::Prose))] } else { Vec::new() };
-    let line = spread(left, button.clone(), self.wide.saturating_sub(2), Style::new());
+    let (prose, muted) = (self.style(Role::Prose), self.style(Role::Muted));
+    let (mark, button) = match card.map(|card| &card.thread) {
+      _ if !made => (None, None),
+      Some(thread) if thread.ended() => {
+        let mark = match thread.standing {
+          Standing::Resolved => run("✓ Resolved", muted),
+          Standing::Failed => run("✗ Failed", Style::new().fg(t.danger)),
+          _ => run("Stopped", muted),
+        };
+        (Some(mark), Some(run("[ Reopen ]", prose)))
+      }
+      Some(thread) if thread.works() && self.opened.confirm => {
+        (None, Some(run("[ Stop and resolve ]", Style::new().fg(t.attention))))
+      }
+      _ => (None, Some(run("[ Resolve ]", prose))),
+    };
+    let apart = |mark| [mark, run(" ".repeat(APART), Style::new())];
+    let right: Line = mark.into_iter().flat_map(apart).chain(button.clone()).collect();
+    let line = spread(left, right, self.wide.saturating_sub(2), Style::new());
     let end = width(&line);
-    Row { hot: vec![(end - width(&button)..end, None)], ..Row::of(line) }
+    let hot = button.map(|one| (end - one.content.width()..end, Some(Click::Key(Does::Resolve))));
+    Row { hot: hot.into_iter().collect(), ..Row::of(line) }
   }
 
   /// The last row of the feed while the operator reads away from its end.
