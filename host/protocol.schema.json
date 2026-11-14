@@ -4192,7 +4192,7 @@
         {
           "type": "string",
           "const": "recall",
-          "description": "A host tells its readers what the record told before its last checkpoint: the facts told, of\nthose facts, which are known once the host read them. The crate never tells this stage."
+          "description": "A host tells its readers what the record told before its last checkpoint: the entries that\nthe record had kept when the life said the fact told last, of its entries as far as that\ncheckpoint. The crate never tells this stage."
         },
         {
           "type": "string",

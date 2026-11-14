@@ -82,8 +82,9 @@ pub struct Log(pub Arc<dyn Fn(&str) + Send + Sync>);
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
-  /// A host tells its readers what the record told before its last checkpoint: the facts told, of
-  /// those facts, which are known once the host read them. The crate never tells this stage.
+  /// A host tells its readers what the record told before its last checkpoint: the entries that
+  /// the record had kept when the life said the fact told last, of its entries as far as that
+  /// checkpoint. The crate never tells this stage.
   Recall,
   /// The record is read from its last checkpoint, which the read finds from the end of the record,
   /// for the build of its last life: the bytes passed, of the bytes of the record. It is the first

@@ -544,31 +544,34 @@ impl Life {
     let marks: Vec<usize> = checkpoints.into_iter().map(|at| at + 1).collect();
     let Some(&last) = marks.last() else { return };
     let Ok(retold) = world::retold(record) else { return };
-    let mut facts = Vec::new();
-    let mut take = |kept, one: Object| {
-      let fact = Fact::of(one.as_ref()).filter(|a| a.kind() != checkpoint::CHECKPOINT);
-      facts.extend(fact.map(|a| (kept, a)));
-    };
-    if retold.before_kept(last, &mut take).is_err() {
-      return;
-    }
     let (mut passed, mut opening) = (0, false);
     let mut fold = Fold::default();
-    for (at, (kept, a)) in (1..).zip(&facts) {
-      (told.0)(Stage::Recall, at, facts.len() as u64);
-      while marks.get(passed).is_some_and(|mark| kept >= mark) {
+    // Each fact is folded as the read gives it and let go at once, since the record holds it: the
+    // life holds the acts of its past, and no list of its facts.
+    let mut take = |kept: usize, one: Object| {
+      let Some(a) = Fact::of(one.as_ref()).filter(|a| a.kind() != checkpoint::CHECKPOINT) else {
+        return;
+      };
+      (told.0)(Stage::Recall, kept as u64, last as u64);
+      while marks.get(passed).is_some_and(|mark| kept >= *mark) {
         (passed, opening) = (passed + 1, true);
       }
-      let fact = json_of(a);
+      let fact = json_of(&a);
       if !self.restates(&mut opening, &fact) {
         let acts = fold.hear(&fact, &[], None);
         self.put(Event::Fact(fact));
         for act in acts {
           self.put(Event::Act(Box::new(act)));
         }
+        self.let_go();
       }
+    };
+    // A read that fails after it told a fact leaves the facts before it told, and the life is
+    // born after them, as after a past that the read gave whole.
+    if retold.before_kept(last, &mut take).is_ok() || self.kept.said > 0 {
+      (told.0)(Stage::Recall, last as u64, last as u64);
+      self.reborn(None);
     }
-    self.reborn(None);
   }
 
   /// Each fact of the log let go, since the record holds it: those that a checkpoint of the record
