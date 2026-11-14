@@ -98,7 +98,7 @@ ignore = ["S101"]
 "src/furb/engine.pyi" = ["N818", "A002", "E501"]
 "src/furb/checkpoint.pyi" = ["E501"]
 # The checkpoint holds the code that the engine held, in its form, and its contract holds its types.
-"src/furb/checkpoint.py" = ["ANN"]
+"src/furb/checkpoint.py" = ["ANN", "PLR0913", "PLR0917", "PLR0912", "PLR0915", "SIM105"]
 ".agents/skills/*/*.pyi" = ["E501"]
 # An example of the framework starts itself again as a process of its own, to show a life that resumes after its
 # process ends.

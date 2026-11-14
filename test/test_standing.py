@@ -2,7 +2,7 @@
 
 from collections.abc import Generator
 
-from conftest import STANDS, Sand, born, kernel, paragraphs, relived, settle
+from conftest import STANDS, Sand, born, journaled, kernel, paragraphs, relived, settle
 from furb import engine
 
 
@@ -17,7 +17,7 @@ async def test_standing_gives_what_the_chains_stand_on() -> None:
         seen.append(engine.standing())
         yield "done", a[1], STANDS
 
-  engine.boot((), **kernel(), world=world())
+  engine.boot(journaled(), **kernel(), world=world())
   assert seen == [[]] and engine.standing() == STANDS == engine.peek("stand1")
   later = [[STANDS[0][0]], "/z", "operator"]
   seen.clear()

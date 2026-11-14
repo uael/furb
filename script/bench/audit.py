@@ -26,6 +26,7 @@ import tempfile
 from pathlib import Path
 
 from furb import engine, python
+from furb.checkpoint import journal
 from furb.kernel import kernel
 from furb.world import entries
 from furb_monty import _monty
@@ -98,7 +99,7 @@ async def replayed(record: Path, directory: Path) -> tuple[dict[str, str], dict[
   ears = dict(pairs)
   try:
     held = entries(stored)
-    engine.boot(held, kernel=kernel(vars(python)), **ears)
+    engine.boot(journal(vars(python), held), kernel=kernel(vars(python)), **ears)
     await asyncio.sleep(0)
     return made(held)
   finally:

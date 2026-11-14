@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from furb import engine, python
+from furb.checkpoint import journal
 from furb.kernel import kernel
 from furb.record import recorded
 from furb.world import Live, answered, kept
@@ -61,7 +62,9 @@ def lived(
   """
   world = Live(str(cwd.absolute()), actor)
   held = world.opened(record, keeps=keeps, skills=skills)
-  root = engine.boot(recorded(vars(python), held), world=world.hears(), kernel=kernel(vars(python)), **world.ears)
+  root = engine.boot(
+    journal(vars(python), recorded(vars(python), held)), world=world.hears(), kernel=kernel(vars(python)), **world.ears
+  )
   return world, root, held
 
 

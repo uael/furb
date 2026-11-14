@@ -18,6 +18,7 @@ from conftest import (
   dones,
   fresh,
   heads,
+  journaled,
   keeping,
   kept,
   life,
@@ -462,7 +463,7 @@ async def test_a_rung_that_retells_is_done_with_nothing() -> None:
   assert theirs == {**told, step: "NoneType", hurt: "ValueError", stopped: "NoneType"}
   other = sown()
   mine: list[tuple] = []
-  over = engine.boot(kernel=kept(Py().kernel()), probe=watched(mine), world=other.hears())
+  over = engine.boot(journaled(), kernel=kept(Py().kernel()), probe=watched(mine), world=other.hears())
   other.script[over] = ["k = 1\nclose(21)", "close(None)"]
   assert await engine.prompt(int, "count", on=over) == 21
   await settle()

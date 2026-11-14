@@ -19,6 +19,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 from furb import engine, python
+from furb.checkpoint import journal
 from furb.kernel import kernel
 from furb.world import entries
 from furb_monty import _monty
@@ -57,7 +58,7 @@ async def replayed(record: Path, directory: Path) -> dict[str, list]:
   seen: dict[str, list] = {"tip": [], "kept": [], "put": []}
   try:
     engine.boot(
-      held,
+      journal(vars(python), held),
       spy=spy(
         last,
         seen,

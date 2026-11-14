@@ -23,11 +23,11 @@ the ears of the crate, which the host boots after its own ears. `Engine.open(ear
 once.
 
 ```python
-from furb_monty import _monty, engine
+from furb_monty import _monty, checkpoint, engine
 
 record, ears = _monty.opened(directory=".", record="life.jsonl", actor="anthropic:claude-opus-5-5")
 # `world` is an ear of the host that answers the rest, a prompt to the operator among it.
-root = engine.boot(record, world=world, **dict(ears))
+root = engine.boot(checkpoint.journal({}, record), world=world, **dict(ears))
 ```
 
 The ears of the crate are the provider of the models, the extensions, the ear of each official extension, the files, the

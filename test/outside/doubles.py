@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import conftest
-from conftest import World
+from conftest import World, journaled
 from furb import engine
 from furb.world import Answer, Live
 
@@ -93,7 +93,7 @@ def speaking(text: str) -> Iterator[None]:
 
 def booted(said: World, record: Sequence[tuple] = (), **ears: World) -> str:
   """A life on a World and these ears, with the Kernel of this interpreter, and the id of its root."""
-  return engine.boot(record, world=said, **ears, kernel=conftest.Py().kernel())
+  return engine.boot(journaled(record), world=said, **ears, kernel=conftest.Py().kernel())
 
 
 def life(live: Live, record: Path | None = None) -> str:

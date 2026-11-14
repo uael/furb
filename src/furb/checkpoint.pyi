@@ -1,6 +1,18 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
-from furb.engine import Entry
+from furb.engine import Ear, Entry
+
+def journal(names: dict[str, object], record: Iterable[Entry] = ()) -> Callable[..., Ear]:
+  """journal gives what boot takes as its journal, from the names of an engine and a record, so a life that boots on it says that record again and keeps what it says after it, as boot says.
+  A journal that is given no record says nothing again, so its life is a new life, which names each act by its number alone.
+  """
+
+def fed(names: dict[str, object], entries: Iterable[Entry]) -> None:
+  """fed gives the journal of the life the entries that follow its tip, which the journal says again at once as it says a record again, so a life that stood at a place of a record and is fed the entries after that place stands where a life that boots on the whole record stands.
+  The outside is asked nothing that a fed entry answers, and the journal keeps no fed entry again.
+  A fed answer of an act that the life holds and that is not over lands at its place, so a word that awaits that act goes on.
+  fed on a life that no journal of the checkpointer keeps is refused, since nothing takes a tail there.
+  """
 
 def seed(names: dict[str, object], data: object) -> list[Entry]:
   """seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine opens a checkpoint that an earlier engine of its major wrote.

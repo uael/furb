@@ -29,6 +29,7 @@ from pathlib import Path
 import tiktoken
 
 from furb import engine, python
+from furb.checkpoint import journal
 from furb.engine import OPERATOR, Refused
 from furb.kernel import kernel
 from furb.world import Live
@@ -51,7 +52,7 @@ async def engined(record: Path, cut: str) -> None:
   fresh.unlink(missing_ok=True)
   world = Live(str(record.parent), None)
   held = world.opened(fresh, keeps=True, skills=False)
-  engine.boot(held, world=world.hears(), kernel=kernel(vars(python)), **world.ears)
+  engine.boot(journal(vars(python), held), world=world.hears(), kernel=kernel(vars(python)), **world.ears)
   await asyncio.sleep(0.5)
   world.end()
   made = next(json.loads(one)[0] for one in fresh.read_text(encoding="utf-8").splitlines() if '"made"' in one)
@@ -138,7 +139,9 @@ async def measured(record: Path, chain: str, *, dry: bool) -> dict[str, object]:
   """What the bench prints of one chain of a record."""
   world = Live(str(record.parent), None)
   held = world.opened(record, keeps=False, skills=False)
-  engine.boot(held, bench=bench(), world=world.hears(), kernel=kernel(vars(python)), **world.ears)
+  engine.boot(
+    journal(vars(python), held), bench=bench(), world=world.hears(), kernel=kernel(vars(python)), **world.ears
+  )
   replies = [one for one in acts(chain, "reply") if engine.scope(one) == chain]
   out: dict[str, object] = {"chain": chain, "label": engine.get(chain)[4]}
   out |= {"share before": share(replies[-1]), "tokens before": tokens(chain)}

@@ -236,6 +236,8 @@ class Engine:
   def checkpointed(self, name: str, args: Iterable[object] | None = None) -> object:
     """A function of the checkpointer of the engine, seed or gathered, said by its name with these words, and what it
     gave."""
+  def feed(self, tail: Iterable[object]) -> None:
+    """The entries that follow the tip of the life, which its journal says again at once."""
   def checkpoint(self) -> None:
     """The life ends with its checkpoint at the tip of its record, from which a later life on the record opens."""
 

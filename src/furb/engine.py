@@ -857,10 +857,10 @@ def controlled(ear, lasting=False):
   return lived
 
 
-def boot(record=(), **outside):
-  global say, act, drive, get, peek, transcript, reading, listening
+def boot(journal, **outside):
+  global say, act, drive, get, peek, transcript, reading, listening, numbered, offers
   get_running_loop()
-  made, known, done, held, cuts, log, alive, born, busy, left, heed = (
+  made, known, done, held, cuts, log, alive, born, busy, left, heed, taken, top = (
     Counter(),
     {},
     {},
@@ -872,113 +872,18 @@ def boot(record=(), **outside):
     set(),
     [],
     {},
+    set(),
+    Counter(),
   )
-  first, owned, taken = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
-  due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
-  ranks = {id(e): n for n, (e,) in enumerate(record)}
-  saved, again = {e[1]: e for (e,) in record if question(e)}, {}
-  top, asked, strays, back = Counter(), {}, {}, []
-  for quest in saved.values():
-    top[quest[0]] = max(top[quest[0]], int(quest[1][len(quest[0]) :]))
-    asked.setdefault(quest[:3:2], []).append((quest[1], quest[3:]))
 
-  def drift(name, fact=None):
-    ours, name = fact or get(name), strays.get(name) or name
-    return Drift(
-      f"{name} drifts: the life made {ours or 'no act'!s:.300}, the record holds {(fact and first[fact[1]]) or saved[name]!r:.300}"
-    )
-
-  def matched(sort, maker, *said):
-    ahead = asked.get((sort, maker), [])
-    at = next((n for n, x in enumerate(ahead) if x[1] == said), None)
-    if at is None:
-      top[sort] += 1
-      strays[name := sort + str(top[sort])] = ahead[0][0] if ahead else None
-      return name
-    return ahead.pop(at)[0]
-
-  def owed():
-    while due and question(x := due[-1]) and x[1] in known:
-      due.pop()
-    return due
-
-  def upto(entry):
-    while owed() and not question(x := due[-1]) and ranks[id(x)] < ranks.get(id(entry), 0):
-      recount(due.pop())
-
-  def repeat(kind, about, by, *words):
-    with site.set(by):
-      a = say(kind, about, *words)
-    again[id(a)] = a
-    held.setdefault((scope(about), "journal"), []).append(a)
-
-  def recount(entry):
-    match entry:
-      case (kind, name, by, on, *words) if question((kind, name)):
-        if (
-          by in saved
-          or (name not in first and by[-1:].isdigit())
-          or (on and not get(on))
-          or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on, *words))]))
-        ):
-          return
-        if by not in outside and (not callable(verb := (module(on) or globals()).get(kind)) or by[-1:].isdigit()):
-          raise drift(name)
-        with site.set(by):
-          try:
-            act(kind, on, None, *words) if by in outside else verb(*words, on=on)
-          except Refused:
-            pass
-      case (_, about, *_) if scope(about):
-        repeat(*entry)
-      case (_, about, by, *_) if by in outside and about in saved and get(saved[about][3]) and not get(about):
-        raise drift(about)
-
-  def journal(a=(), last=None):
-    try:
-      while True:
-        while owed() and (
-          not (log or left)
-          or (due[-1][0] == "joined" and not question(due[-2]) and due.pop() and due)
-          or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken and due[-1][2] in outside)
-        ):
-          recount(due.pop())
-        while back and not owed():
-          yield back.pop(0)
-        b = a
-        match a := (yield):
-          case (kind, about, by, *_) if (
-            (q := get(about)) and by != "journal" and (by or repr(first.get(about)) != repr(a))
-          ):
-            if not by and a != q and ((owed() and strays.get(about, 1)) or about in first):
-              raise drift(about, about in first and a)
-            if by not in known and by not in owned:
-              glue = (
-                b is last is not None
-                and kind not in ("started", "done")
-                and ("keep", "", (("joined", "", "journal", kind, about),))
-              )
-              if about not in saved:
-                a is q and glue and back.append(glue)
-                back.append(("keep", "", (saved.setdefault(about, q),)))
-              if a is not q:
-                glue and back.append(glue)
-                back.append(("keep", "", (a,)))
-              last = a
-            elif a is q and about not in saved:
-              back.append(("keep", "", (saved.setdefault(about, q),)))
-            if kind == "wake" and not owed():
-              for name in [x for x in taken if taken[x] and covers(a, x) and not over(x)]:
-                del taken[name]
-                offers(known[name])
-    finally:
-      for pile in log, left, due, first, saved, back:
-        pile.clear()
+  def numbered(kind, *words):
+    top[kind] += 1
+    return kind + str(top[kind])
 
   def say(kind, about, *words):
     a = (kind, about, site.get(), *words)
     if about in known and kind in ("started", "done"):
-      taken.setdefault(about, False)
+      taken.add(about)
       kind == "done" and done.setdefault(about, words[0])
     holds(on := scope(about), words[0] if kind == "prefix" else [a])
     if kind == "cut" and on:
@@ -998,10 +903,9 @@ def boot(record=(), **outside):
       raise Refused(f"no verb {kind} on {on}, so a later life cannot make the act again")
     key = kind, by, made[speaker, kind]
     if key not in born:
-      born[key] = matched(kind, by, on, *words)
+      born[key] = numbered(kind, by, on, *words)
     a = (kind, name := born[key], by, on, *words)
     if known.setdefault(name, a) is a:
-      upto(saved.get(name))
       holds(scope(on), [a])
       log.append((a, heard := set(outside) - busy))
       busy.add(id(a))
@@ -1011,15 +915,7 @@ def boot(record=(), **outside):
         if ear:
           heard.add(name)
           drive(ear(name), name)
-        if saved.get(name, a) == a:
-          if name not in taken and (f := first.get(name)):
-            taken[name] = f[0] == "started"
-            upto(f)
-            repeat(*f)
-            while taken[name] and owed() and due[-1][0] == "joined" and due.pop() and due:
-              recount(due.pop())
-          if kind in ("run", "chain") or not owed() or strays.get(name, name) is None:
-            offers(a)
+        offers(a)
         if name not in taken and not busy & set(outside) & set(dict(ears(a))):
           with site.set(""):
             say("done", name, Refused("nothing takes " + kind))
@@ -1061,9 +957,7 @@ def boot(record=(), **outside):
       with site.set(name):
         busy.add(name)
         try:
-          heed[name] = w = lives(
-            g, (*a[:2], "journal", *a[3:]) if again.get(id(a), 0) is a and a[2] and name not in known else a
-          )
+          heed[name] = w = lives(g, a)
           w is False and alive.pop(name)
         except (Exception, CancelledError) as fault:
           if name == "journal" or isinstance(fault, Drift):
@@ -1083,7 +977,6 @@ def boot(record=(), **outside):
   def drive(g, name):
     if name in alive:
       raise Refused(name + " hears")
-    acting() and owned.add(name)
     alive[name] = g
     hear(name, g, None)
     dispatch()
@@ -1104,7 +997,11 @@ def boot(record=(), **outside):
     kept, at = cuts.get(on := scope(on or site.get()), ([], 0))
     return [*kept, *held.get((on, ""), [])[at:]]
 
-  for who, listener in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("journal", journal())]:
+  for who, listener in [
+    (OPERATOR, idle(OPERATOR)),
+    *outside.items(),
+    ("journal", journal(outside, known, taken, held, holds, log, left, top)),
+  ]:
     drive(listener, who)
   root = Act(ROOT) if known else chain("root")
   stand(ROOT)

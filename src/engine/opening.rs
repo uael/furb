@@ -33,6 +33,11 @@ use crate::value::Object;
 /// given those entries, which it takes once, before the entries of the record that the host hands
 /// in.
 ///
+/// Boot is given the journal that the checkpointer makes on those entries, which says them again
+/// and keeps what the life says after them, and the journal is given each entry that a host feeds
+/// a life that stands, in the same form. The engine of a build whose checkpointer holds no journal
+/// takes the entries itself.
+///
 /// It gives boot, in the place of a value of a record that no later life makes again as it was,
 /// what stands for it by the rule of `furb.record`, which each build reads the same: a callable,
 /// which went out by a number of the process that made it, stands as a value equal to each
@@ -122,7 +127,16 @@ def __seed(data):
 def __boot(entries, **ears):
   record = __record["recorded"](__engine, __seeded + entries)
   __seeded.clear()
+  # The checkpointer of a build before the journal left the engine holds no journal: the boot of that engine takes the
+  # record and says it again itself.
+  if __checkpointer_source and "journal" in __checkpointer:
+    return __engine["boot"](__checkpointer["journal"](__engine, record), **ears)
   return __engine["boot"](record, **ears)
+
+def __fed(entries):
+  if not (__checkpointer_source and "fed" in __checkpointer):
+    raise __engine["Refused"]("the engine of this record says its record again itself, and takes no tail")
+  __checkpointer["fed"](__engine, __record["recorded"](__engine, entries))
 
 def __gate():
   # A record of an earlier build holds gate acts. Its engine makes each again in a replay, reads who answered it by
@@ -183,6 +197,7 @@ def __lasting(name, ear):
   "unmade": lambda: __record["Recorded"](),
   "seed": __seed,
   "boot": __boot,
+  "fed": __fed,
 }"#;
 
 /// What the opening gave, by name: the callables of the sandbox that the host calls it by, each
@@ -233,6 +248,9 @@ pub(crate) struct Opened {
   /// each text in the words of an act that a word made, that holds the address of an object, in
   /// the place of a value equal to each text that differs from it in its addresses alone.
   pub(super) boot: Object,
+  /// The entries that follow the tip of the life, given to its journal as boot gives it a record,
+  /// which says them again at once.
+  pub(super) fed: Object,
 }
 
 impl Default for Opened {
@@ -266,6 +284,7 @@ impl Opened {
       unmade: at("unmade")?,
       seed: at("seed")?,
       boot: at("boot")?,
+      fed: at("fed")?,
     })
   }
 }

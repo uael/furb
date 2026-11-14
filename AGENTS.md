@@ -60,9 +60,12 @@ API of its own:
   refuses each later entry with that fault, and gives it to a host as `stopped`.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The checkpointer is `src/furb/checkpoint.py`, which they load the same way, and whose contract
-  is `src/furb/checkpoint.pyi`: its `gathered` gives the data of a checkpoint and its `seed` the entries that a later
-  life boots on, each on the names of its engine, and the fact made holds its text beside the texts of the engine and
-  of the Kernel. A fact made of a build before it holds no such text, and the engine of that build gathers and seeds.
+  is `src/furb/checkpoint.pyi`: its `journal` gives the journal that boot takes, which keeps the record of a life and
+  says a record again, its `fed` gives that journal the entries that follow the tip of a life that stands, its
+  `gathered` gives the data of a checkpoint and its `seed` the entries that a later life boots on, each on the names
+  of its engine, and the fact made holds its text beside the texts of the engine and
+  of the Kernel. A fact made of a build before it holds no such text, and the engine of that build gathers and seeds, and the engine
+  of a build whose checkpointer holds no journal takes the record and says it again itself.
   `src/furb/record.py` holds what stands, in the record that boot is given, for a value that no later life makes again
   as it was, and they load it the same way. No gate reads a word before it runs. A record of an earlier build holds
   gate acts, which its own engine makes again in a replay and its record answers, and the opening of the sandbox,

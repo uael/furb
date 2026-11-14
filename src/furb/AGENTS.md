@@ -40,13 +40,14 @@ meanings. The entry of such a name here gives only its form in the engine.
 - World: the ears of the outside that serve the machine, one or many, which reach the disk, the machine, the actors,
   the operator and the record; they answer what is theirs to answer, take what takes time, a command, a wait, a
   prompt to the operator and a reply, and say each done when it ends, and they keep what the journal says to keep.
-- checkpointer: the module of the outside, `checkpoint.py`, that gathers the data of a checkpoint and seeds a later
-  life from it, on the names of the engine; the sandbox loads it as it loads the Kernel, and the fact made holds its
-  text.
+- checkpointer: the module of the outside, `checkpoint.py`, that makes the journal of a life, gathers the data of a
+  checkpoint and seeds a later life from it, on the names of the engine; the sandbox loads it as it loads the Kernel,
+  and the fact made holds its text.
 - Kernel: the ear of the outside that runs rungs: it takes a run, makes a wants as the run while the word waits for
   an act that is not done, and says the run done with what the word gave.
-- boot: the life, given the record and the generators of the outside, which binds say, act, drive, get, peek and
-  transcript, and gives the root.
+- boot: the life, given the journal and the generators of the outside, which binds say, act, drive, get, peek,
+  transcript, numbered and offers, and gives the root. It brings the journal to life last, so the journal says its
+  record again before boot makes the root that the record does not hold and stands the life.
 - bus: what boot binds for every verb to speak through: say for a fact, act for an act, and drive for a generator;
   it keeps what each ear waits for, and gives each fact to the ears that wait for it.
 - fact: a tuple of its kind, the act it is about, who said it, and its words.
@@ -194,7 +195,16 @@ meanings. The entry of such a name here gives only its form in the engine.
 - paused: the state of an act while a pause over it stands with no wake after it.
 - grant: an act that puts a ceiling on a chain: dollars, a share of the window, or both.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
-- journal: the ear of the life that hears everything and says a keep for each entry of the record.
+- journal: the ear of the life that hears everything, says a keep for each entry of the record, and says again the
+  record that it is given. `journal` of the checkpointer makes it, and boot gives it the tables of the life. The bus
+  holds four things for it and no more: it brings the journal to life last, it puts no act to the journal while the
+  act is made, so the journal hears each act at its place in the log, it gives the journal nothing to hear each time
+  nothing is left to hear, so the journal says the next entry that it owes, and it lets what the journal raises out.
+  At its first run the journal binds again four names of its engine, each over the one that stood: `numbered`, to give
+  an act the name that the record holds, `offers`, to answer an act from the record before the outside hears it,
+  `drive`, to know each generator that an act brought to life, and `lives`, to give each ear that is no act a fact said
+  again under the name journal. `fed` of the checkpointer gives it the entries that follow the tip of a life that
+  stands, as the entries after an image of the life, which it says again by the same code.
 - record: the entries the journal keeps, in the order they were said.
 - scratch directory: the directory of the machine that the World keeps for a record, which every chain of the record
   shares, which a path of scratch:// names and a command reads as TMPDIR; the opening of a life takes it, and makes
@@ -267,8 +277,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - engine.pyi is the specification of engine.py: it says what the engine is, what is always true of it and what its
   surface is, and never how it is made; it names the ears and the facts as python reads them, and holds every law, so
   engine.py holds no sentence and no comment.
-- engine.py depends only on the python interpreter and on the ears of the outside that boot is given, the World and
-  the Kernel among them, which are held by no verb and bound to no name of the engine.
+- engine.py depends only on the python interpreter, on the journal and on the ears of the outside that boot is given,
+  the World and the Kernel among them, which are held by no verb and bound to no name of the engine.
 - A fact is a tuple, its kind first, deconstructed only by match, and nothing of the engine is a class but a text, an
   exit, the name of an act, and the two exceptions.
 - The verbs and Text carry their signatures, typed, since a model reads them, but a parameter whose default says its

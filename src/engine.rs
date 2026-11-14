@@ -672,6 +672,25 @@ impl Engine {
     Ok(engine)
   }
 
+  /// Gives the journal of the life the entries that follow its tip, as the record of a life that
+  /// went on from this state holds them, and the journal says them again at once, as boot says a
+  /// record again: each word runs again with no bound of a turn, each act takes the answer that
+  /// the entries hold, and no ear of the World is asked for one. The engine of a build whose
+  /// checkpointer holds no journal refuses it.
+  pub fn feed(&mut self, tail: &[Object]) -> Result<(), Fault> {
+    self.outside.settled = settled(tail);
+    let fed = self.unbounded(|engine| {
+      engine.run(|sand, outside| {
+        outside.crossing.recorded = true;
+        let entries = recorded(sand, outside, tail);
+        outside.crossing.recorded = false;
+        sand.call(outside, &outside.opened.fed.clone(), vec![entries?], vec![]).map(drop)
+      })
+    });
+    self.outside.settled.clear();
+    fed
+  }
+
   /// What `body` gives, run as the engine's own work, with no bound of the turn but for each word
   /// that it steps.
   pub(crate) fn unbounded<T>(&mut self, body: impl FnOnce(&mut Self) -> T) -> T {

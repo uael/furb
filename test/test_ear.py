@@ -17,6 +17,7 @@ from conftest import (
   born,
   dones,
   fresh,
+  journaled,
   life,
   machine,
   paragraphs,
@@ -155,7 +156,7 @@ async def test_an_ear_is_any_generator_of_that_shape() -> None:
   """An ear is any generator of that shape, so the World and the Kernel are ears, and boot takes an ear of the outside under any name it is to hear by."""
   sand = sown()
   kept: list[tuple] = []
-  root = engine.boot((), world=sand.hears(), kernel=Py().kernel(), note=note(kept))
+  root = engine.boot(journaled(), world=sand.hears(), kernel=Py().kernel(), note=note(kept))
   sand.script[root] = ["close(1)"]
   assert await engine.prompt(int, "work", on=root) == 1
   assert engine.read("note://one", on=root) == Text("note://one", "kept")

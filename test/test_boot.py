@@ -17,7 +17,9 @@ from conftest import (
   fresh,
   heads,
   ids,
+  journaled,
   keeping,
+  kernel,
   life,
   lived,
   opened,
@@ -164,7 +166,7 @@ async def test_a_later_life_makes_a_door_again_from_the_word_of_the_rung_that_de
 
 
 async def test_the_record_that_boot_is_given_enters_nothing_in_the_record() -> None:
-  """The record that boot is given enters nothing in the record, since the record is what boot is given."""
+  """The record that the journal is given enters nothing in the record, since the record is what the journal is given."""
   sand, _, root = await lived()
   later = sown()
   await relived(later, list(sand.record))
@@ -244,7 +246,7 @@ async def test_a_later_life_on_a_kept_record_makes_the_root_again_and_enters_no_
 
 
 async def test_the_engine_appends_after_the_last_entry_of_the_record_boot_was_given() -> None:
-  """The engine appends after the last entry of the record boot was given."""
+  """The journal appends after the last entry of the record that it was given."""
   sand, _, _ = await lived()
   old = list(sand.record)
   later = sown(record=list(old))
@@ -377,7 +379,7 @@ async def test_a_later_life_reads_the_same_text_from_a_door() -> None:
 
 
 async def test_it_is_given_what_the_world_kept_of_the_life_before_it() -> None:
-  """It is given what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own."""
+  """It is given the journal, which holds what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own."""
   sand, log, _ = await lived()
   assert [a[2] for a in said(log, "done") if a[1] == "reply1"] == [WORLD]
   assert {WORLD, "kernel"} <= set(engine.listening())
@@ -422,7 +424,7 @@ async def test_the_record_a_life_was_opened_from_from_which_the_journal_answers(
 
 
 async def test_the_journal_an_ear_of_the_engine_which_hears_everything() -> None:
-  """The journal: an ear of the engine, which hears everything and keeps every act that the life makes, as it is made, and every fact that no act of the life said, the act it is about before it, and nothing else that a generator an act brought to life said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life."""
+  """The journal: the ear of the outside that the checkpointer makes and that boot is given, which hears everything and keeps every act that the life makes, as it is made, and every fact that no act of the life said, the act it is about before it, and nothing else that a generator an act brought to life said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life."""
   sand, log, _ = await lived()
   assert {e[0][0] for e in sand.record} == {
     "chain",
@@ -709,14 +711,35 @@ async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_
   assert len(first) == was and len(said(second, "bash")) == 1
 
 
+async def test_boot_gives_the_journal_the_tables_of_the_life() -> None:
+  """boot gives the journal the tables of the life, the ears of the outside by name, its acts by name, the names of the acts that an ear took, its facts by chain and by view, the function that holds a fact on a chain, its log, what is left to hear of the fact that goes round and the highest number of each kind, and the journal gives the ear that boot brings to life last, under the name journal."""
+  tables: list = []
+  heard: list[tuple] = []
+
+  def journal(*given: object) -> Generator[tuple | None, tuple]:
+    tables.extend(given)
+    return keeping(heard)
+
+  root = engine.boot(journal, **kernel(), world=Sand().hears())
+  outside, known, taken, held, holds, log, left, top = tables
+  assert [*outside] == [*kernel(), "world"] and outside["world"] is engine.listening()["world"]
+  assert known[root] == engine.get(root) and known["stand1"] == engine.get("stand1") and {root, "stand1"} <= taken
+  assert held[root, ""] == engine.transcript(root) and held[root, "stand"] == engine.transcript(root, "stand")
+  assert (log, left, dict(top)) == ([], [], {"chain": 1, "stand": 1})
+  holds(root, [("note", root, "mine")])
+  assert engine.transcript(root, "note") == engine.transcript(root, "mine") == [("note", root, "mine")]
+  assert [*engine.listening()][-2:] == ["journal", root] and engine.get(root) in heard
+  assert engine.bash("echo one", on=root) == "bash1" and top["bash"] == 1
+
+
 async def test_the_names_operator_and_journal_are_the_lifes_own() -> None:
   """The names operator and journal are the life's own, and boot refuses a generator of the outside under either name."""
   heard: list[tuple] = []
   with pytest.raises(Refused, match=r"^operator hears$"):
-    engine.boot(probe=keeping(heard), operator=pair())
+    engine.boot(journaled(), probe=keeping(heard), operator=pair())
   assert heard == []
-  with pytest.raises(Refused, match=r"^journal hears$"):
-    engine.boot(journal=keeping([]))
+  with pytest.raises(TypeError, match=r"journal"):
+    engine.boot(journaled(), journal=keeping([]))  # ty: ignore[parameter-already-assigned, invalid-argument-type]
   sand, _, root = await lived()
   log, over = await relived(Sand(), list(sand.record))
   assert over == root and said(log, "out") == [a for a in log if a[0] == "out" and a[2] == "journal"] != []
@@ -732,7 +755,7 @@ def test_a_life_settles_an_await_of_its_acts_from_outside_a_run_in_the_loop_it_i
     yield
 
   with pytest.raises(RuntimeError, match="loop"):
-    engine.boot(probe=telling())
+    engine.boot(journaled(), probe=telling())
   assert woke == []
 
 

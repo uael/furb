@@ -23,6 +23,7 @@ from conftest import (
   fresh,
   heads,
   ids,
+  journaled,
   lasting,
   life,
   named,
@@ -146,7 +147,7 @@ async def test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_complet
   sand, _, root = born()
   await engine.rung("k = 1", on=root)
   await settle()
-  one = engine.boot(list(sand.record), kernel=Py().kernel(), world=Sand().hears())
+  one = engine.boot(journaled(list(sand.record)), kernel=Py().kernel(), world=Sand().hears())
   await settle(300)
   assert one == root and engine.peek(one) is None
 

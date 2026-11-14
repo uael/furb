@@ -20,6 +20,8 @@ from furb_monty import _monty
 
 engine: ModuleType = importlib.import_module("furb_monty.engine")
 """engine is the engine of the crate, whose names the door gives at its import."""
+checkpoint: ModuleType = importlib.import_module("furb_monty.checkpoint")
+"""checkpoint is the checkpointer of the engine of the crate, whose journal a life boots on."""
 OPERATOR = "operator"
 """OPERATOR is the actor of a prompt that the operator answers, and the site of every act of the program."""
 ENDED = "The life ended."
@@ -197,7 +199,7 @@ class Life(Chain):
     self.loop = asyncio.get_running_loop()
     self.made = [one for (one,) in record if one[2] == OPERATOR and one[0] in MADE and question(one[0], one[1])]
     self.made = [one for one in self.made if one[1] != "chain1"]
-    root = engine.boot(record, console=self.console(), **ears)
+    root = engine.boot(checkpoint.journal({}, record), console=self.console(), **ears)
     super().__init__(self, str(root))
     for chain in dict.fromkeys(engine.scope(id) for id, _ in engine.pending()):
       engine.wake(chain)

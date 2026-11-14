@@ -28,7 +28,7 @@ import furb.kernel
 import furb.record
 import furb_monty.checkpoint
 import furb_monty.engine
-from furb import engine
+from furb import checkpoint, engine
 from furb.engine import OPERATOR, Act, Exit, Refused, Text, site
 from furb.world import Live, entries
 from furb_monty import _monty
@@ -73,6 +73,8 @@ CHECKPOINTERS = {furb.python: furb.checkpoint, furb_monty.engine: furb_monty.che
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
 MONTY_SKIPS = {
+  "test_fed_on_a_life_that_no_journal_of_the_checkpointer_keeps_is_refused",
+  "test_boot_gives_the_journal_the_tables_of_the_life",
   "test_each_scan_of_all_its_facts_that_the_ear_of_a_chain_makes_at_a_fact_reads_its_reading",
   "test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_took_and_the_rung_of_a_run_that_awaited",
   "test_a_name_of_a_function_or_of_a_class_whose_own_name_is_another_raises_refused",
@@ -488,6 +490,12 @@ def given(record: Sequence[tuple]) -> Sequence[tuple]:
   return furb.record.recorded(ENGINE, list(record)) if engine is furb.python else record
 
 
+def journaled(record: Sequence[tuple] = ()) -> Callable[..., Kernel]:
+  """The journal a life of the suite is given: the journal of the checkpointer of its engine, on a record as a host
+  gives it. The door of monty gives what its boot takes in the place of that journal, which its sandbox makes."""
+  return checkpoint.journal(ENGINE, given(record))
+
+
 def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list[tuple], str]:
   """A life: the engine opened from a record, with the Kernel it takes, a World in memory, a generator that keeps
   every fact said in it, and the ears it is given after them; it gives what was said and the id of the root.
@@ -496,14 +504,14 @@ def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list
   ended = {fact[1] for (fact,) in record if fact[0] == "done"}
   left = {fact[1] for (fact,) in record if fact[0] == "started" and fact[1] not in ended}
   world.cut = {fact[1]: tuple(fact) for (fact,) in record if fact[0] == "bash" and fact[1] in left}
-  return log, engine.boot(given(record), **kernel(), probe=watched(log), world=world.hears(), **ears)
+  return log, engine.boot(journaled(record), **kernel(), probe=watched(log), world=world.hears(), **ears)
 
 
 def machine(directory: Path, record: Path | None = None) -> tuple[Live, str]:
   """A life on the World of this machine, in a directory, on a record that it keeps when it is given one, which asks
   no model and offers the operator alone: the World, which a test ends, and the root."""
   live = Live(str(directory), roster=[])
-  return live, engine.boot(live.opened(record, skills=False), world=live.hears(), **live.ears, **kernel())
+  return live, engine.boot(journaled(live.opened(record, skills=False)), world=live.hears(), **live.ears, **kernel())
 
 
 async def scratched(on: str) -> Path:

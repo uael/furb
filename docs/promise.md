@@ -117,6 +117,8 @@ form must change, and so these breaks stand for the next major, 1.0.0.
 - `src/furb/engine.pyi chain: the type of filter changes from Filter | None to Filter | list[str] | None`: a filter may be the ids that it kept; a callable filter stays valid.
 - `src/furb/engine.pyi gate: the def goes`: no gate reads a word before it runs; a statement that is not python, or that names what nothing binds, raises where it runs.
 - `src/furb/engine.pyi Gate: the alias goes`: as gate.
+- `src/furb/engine.pyi boot: the parameter record goes`: the journal says a record again, and it stands outside the engine; a host gives boot `journal(names, record)` of the checkpointer.
+- `src/furb/engine.pyi boot: the parameter journal is more and has no default`: as the parameter record.
 - `.agents/skills/compaction/compaction.pyi carry: the def goes`: compaction keeps a chain by supersede.
 - `.agents/skills/compaction/compaction.pyi inherit: the def goes`: as carry.
 - `.agents/skills/compaction/compaction.pyi imported: the def goes`: as carry.

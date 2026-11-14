@@ -9,10 +9,11 @@ import re
 import pytest
 
 import furb
+import furb.checkpoint
 import furb.kernel
 import furb.record
 import furb_monty.engine
-from conftest import Sand, born, kernel, plain, relived, swapped
+from conftest import Sand, born, journaled, kernel, plain, relived, swapped
 from furb import engine
 from furb.engine import OPERATOR, WINDOW, Drift, Refused
 from outside.doubles import booted, worlds
@@ -26,7 +27,7 @@ async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last(wh
   that calls it reads that value when it runs."""
   swapped(which)
   try:
-    root = engine.boot((), world=worlds(STANDS), **kernel())
+    root = engine.boot(journaled(), world=worlds(STANDS), **kernel())
     assert await engine.rung("def read(path: str) -> int:\n  return len(path)", on=root) is None
     assert await engine.rung("close(read('ab'))", on=root) == 2
   finally:
@@ -39,7 +40,7 @@ async def test_a_word_compares_sets_as_python_does_on_both_engines(which: object
   as python compares them."""
   swapped(which)
   try:
-    root = engine.boot((), world=worlds(STANDS), **kernel())
+    root = engine.boot(journaled(), world=worlds(STANDS), **kernel())
     word = (
       "a, b, c = {1}, {1, 2}, frozenset({1, 2})\n"
       "close([a < b, b < c, a <= b, b <= c, b > a, c > b, b >= a, c >= b, a == b, b == c, a != b,"
@@ -107,7 +108,7 @@ async def test_a_record_whose_acts_hold_a_callable_or_an_address_replays_on_the_
   record: list = [(tuple(map(addressed, e)),) for (e,) in plain(sand.record)]
   assert any(" at 0x1" in str(e) for e in record)
   with pytest.raises(Drift, match=r"^bash1 drifts"):
-    engine.boot(record, **kernel(), world=Sand().hears())
+    engine.boot(furb.checkpoint.journal(vars(furb.python), record), **kernel(), world=Sand().hears())
   log, again = await relived(Sand(), record)
   assert again == root and [a[4][:6] for a in log if a[0] == "bash"] == ["echo <"]
   held = furb.record.Recorded("<f at 0x1>")

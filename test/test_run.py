@@ -9,6 +9,7 @@ from conftest import (
   chained,
   counted,
   fresh,
+  journaled,
   kept,
   plain,
   prompted,
@@ -60,7 +61,7 @@ async def test_a_run_names_the_rung_that_the_word_retells() -> None:
   """A run names the rung that the word retells, so a Kernel may answer a retold run from what it kept of that one instead of running the word again."""
   sand = sown()
   log: list[tuple] = []
-  root = engine.boot(kernel=kept(Py().kernel()), probe=watched(log), world=sand.hears())
+  root = engine.boot(journaled(), kernel=kept(Py().kernel()), probe=watched(log), world=sand.hears())
   await engine.rung("t = read('a.txt')", on=root)
   twin = await chained("twin", root, 300)
   mine = [a for a in said(log, "run") if a[3] == twin]

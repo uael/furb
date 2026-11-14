@@ -850,6 +850,12 @@ impl PyEngine {
     self.call(|engine| engine.checkpointed(name, args)).map(Value)
   }
 
+  /// The entries that follow the tip of the life, which its journal says again at once.
+  fn feed(&self, tail: Vec<Value>) -> Result<(), Fault> {
+    let tail: Vec<Object> = tail.into_iter().map(|one| one.0).collect();
+    self.call(|engine| engine.feed(&tail))
+  }
+
   /// One callable the engine made, called back by the number it went out under, with these words.
   #[pyo3(signature = (n, args = None, kwargs = None))]
   #[expect(

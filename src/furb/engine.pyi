@@ -1,5 +1,5 @@
 from asyncio import Future
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator
 from contextvars import ContextVar
 from dataclasses import dataclass
 from string.templatelib import Template
@@ -1120,7 +1120,7 @@ def controlled(ear: Callable[[str], Ear], lasting: bool = False) -> Callable[[st
   A lasting ear lives past the done of its act until it returns, as the ear of a command does to hear that done, whoever said it, and to tell its exit, and a cancel or a close over its act ends the act all the same.
   """
 
-def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
+def boot(journal: Callable[..., Ear], **outside: Ear) -> Act[Never]:
   """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek, transcript and reading, which read the tables.
   A verb from a rung takes the chain of the rung when the call leaves on unsaid.
   The kind of an act is the verb that made the act, or the kind an ear made it with.
@@ -1131,14 +1131,14 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   The root has no parent.
   A question goes to the living acts of the engine before it goes to the World, since the engine settles what it knows before the outside reads it, and asks the outside for nothing that the engine can answer itself.
   A later life makes a door again from the word of the rung that defined it.
-  The record that boot is given enters nothing in the record, since the record is what boot is given.
+  The record that the journal is given enters nothing in the record, since the record is what the journal is given.
   An act takes its name when the act opens, and the name says what made the act.
   The engine derives the transcripts, the turns, the globals and the working directories from the record.
   A fact that the journal says again carries the speaker that the record holds, so each view of a later life gives the facts and the names that the first life gave, and the journal and each ear of the outside hear it under the name journal, since none of them makes it again, but a refusal of the life, which it says again under no site.
   What the module holds is not in the record.
   The root is the first act of the record.
   A later life on a kept record makes the root again and enters no second root.
-  The engine appends after the last entry of the record boot was given.
+  The journal appends after the last entry of the record that it was given.
   What the word of a rung made or computed, a later life makes again by running the word.
   The engine makes a chain from the record and in no other way, by running its rungs again.
   The rungs of a chain run in record order.
@@ -1149,11 +1149,12 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   In a later life the rungs of every chain run again from the record that the World kept.
   The engine serves the doors of the file itself, and asks the World for nothing.
   A later life reads the same text from a door.
-  It is given what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own.
+  It is given the journal, which holds what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own.
+  boot gives the journal the tables of the life, the ears of the outside by name, its acts by name, the names of the acts that an ear took, its facts by chain and by view, the function that holds a fact on a chain, its log, what is left to hear of the fact that goes round and the highest number of each kind, and the journal gives the ear that boot brings to life last, under the name journal.
   It opens the root, the first act of any record, which every life opens under the one name, and which a record that holds it already gives back, and that root is what it gives back.
   What the record holds of an act made again keeps that act from the outside: a done that is its first answer the journal says at once, and an act that the outside started the journal says started at once and holds, since it cannot run it, so no ear of the outside hears that act, and a chain with a source which asks again what its origin asked is answered from the record too.
   The record a life was opened from, from which the journal answers what it holds of an act, so that an act the World did once is done no more.
-  The journal: an ear of the engine, which hears everything and keeps every act that the life makes, as it is made, and every fact that no act of the life said, the act it is about before it, and nothing else that a generator an act brought to life said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life.
+  The journal: the ear of the outside that the checkpointer makes and that boot is given, which hears everything and keeps every act that the life makes, as it is made, and every fact that no act of the life said, the act it is about before it, and nothing else that a generator an act brought to life said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life.
   A read the operator makes is kept like any other act of the operator, since what it reads may change, and a later life makes it again at its place.
   What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given.
   Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed.
@@ -1177,6 +1178,12 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   What the record shows started and not done when boot returns is pending: the journal holds it from the outside until a wake that this life says.
   An act whose maker is the journal, as the seed of a checkpoint gives one, stands known in the transcript of its chain with no verb and runs nothing, and the journal says its later facts at their place.
   """
+
+def numbered(kind: str, *words: object) -> str:
+  """numbered gives a new act its name, which is its kind and the number after the highest number of that kind in the life, as act asks it with the kind, the maker, the chain and the words of the act, and the journal binds it again to give an act the name that its record holds."""
+
+def offers(a: Question) -> None:
+  """offers puts an act to each ear of the outside in the order that boot was given them, until one takes it, and a chain to each of them, as act does with each act that it makes, and the journal binds it again to answer an act from its record first."""
 
 def listening() -> dict[str, Ear]:
   """listening gives the ear of each act and of each outside that still hears, by its name, in the order that boot drove them.
