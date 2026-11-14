@@ -76,6 +76,10 @@ impl Rig {
   /// window finds its project under the home and writes it `~/demo`.
   fn made(walk: &Walk, bin: &Path, root: &Path) -> Result<Self, Error> {
     let made = |source| Error::Write { path: root.to_owned(), source };
+    // A capture that was killed leaves its root.
+    if root.exists() {
+      fs::remove_dir_all(root).map_err(made)?;
+    }
     fs::create_dir_all(root).map_err(made)?;
     let root = &fs::canonicalize(root).map_err(made)?;
     let rig = Self { root: root.clone(), bin: bin.to_owned() };
