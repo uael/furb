@@ -22,3 +22,9 @@ fn an_image_is_ten_pixels_wide_a_cell_and_the_same_each_time() {
   assert_eq!((head.width, head.height), (20, u32::try_from(rows().0).unwrap()));
   assert_eq!(png(&frame("ab")).unwrap().0, image);
 }
+
+#[test]
+fn a_loader_that_the_face_lacks_is_drawn_as_its_shape() {
+  let (_, missing) = png(&frame("⠦◐◓◑◒")).unwrap();
+  assert_eq!(missing, Vec::<char>::new());
+}
