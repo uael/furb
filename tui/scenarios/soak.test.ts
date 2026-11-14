@@ -92,8 +92,8 @@ test(
             180,
           );
           expect(await jobs(window)).toEqual(Array(WORKERS).fill(sum));
-          // The kills come at random, so a run seldom ends a life at rest; this end writes the checkpoint that the next
-          // life is born on, which each run then proves.
+          // The kills come at random, so a run seldom ends a life at rest; this end writes the image that the next
+          // life opens from, which each run then proves.
           await window.close(true);
           await yard.ended();
           window = await Window.open(yard);
@@ -121,9 +121,9 @@ test(
           const before = await turns(window);
           await window.close(true);
           await yard.ended();
-          // The end wrote a checkpoint, which a next life goes on from with turns of its own: the replay reads the record
-          // with no checkpoint.
-          await yard.uncheckpoint();
+          // The end wrote an image, which a next life opens from with no replay: the replay reads the record with no
+          // image and no checkpoint.
+          await yard.alone();
           const replayed = await Window.open(yard);
           try {
             expect(await turns(replayed)).toBe(before);

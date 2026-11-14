@@ -136,10 +136,12 @@ export class Yard {
   async ended(record = this.record): Promise<void> {
     await daemon().ended(record, (GRACE + 30) * 1000);
   }
-  /** The record as it stood before the end of its life wrote its checkpoint, which a life that opens on it goes on
-   * from with turns of its own: with the checkpoint cut, the next life replays each word from the first entry. It
-   * gives how many lines of checkpoint it cut. */
-  async uncheckpoint(record = this.record): Promise<number> {
+  /** The record alone, with nothing that makes its open fast: the image that the end of its life wrote beside it,
+   * which a life opens from with no replay, and each checkpoint at its tip, which a life goes on from with turns of
+   * its own. The next life then replays each word from the first entry. It gives how many of them it removed. */
+  async alone(record = this.record): Promise<number> {
+    const image = existsSync(`${record}.image`);
+    await rm(`${record}.image`, { force: true });
     const lines = readFileSync(record, "utf8").split("\n").filter(Boolean);
     let kept = lines.length;
     while (kept > 0 && (JSON.parse(lines[kept - 1] ?? "[]") as unknown[][])[0]?.[0] === "checkpoint") kept--;
@@ -150,7 +152,7 @@ export class Yard {
         .map((line) => `${line}\n`)
         .join(""),
     );
-    return lines.length - kept;
+    return lines.length - kept + Number(image);
   }
   /** End the daemon that a scenario left, then remove the yard. */
   async remove(): Promise<void> {

@@ -1,5 +1,5 @@
 // A life goes on after its window quits and after its host dies: a window that opens it again reads the same
-// transcript, the same values and the same module, from its checkpoint and from its first entry with no checkpoint.
+// transcript, the same values and the same module, from its image and from its first entry with no image.
 import { expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { isDone } from "furb/life";
@@ -108,9 +108,9 @@ test("a life that quits opens again, and after its end replays from its first en
       await attached.close(true);
     }
     await yard.ended();
-    // The daemon ends a life with a checkpoint, which a next life goes on from with turns of its own: cut, the
-    // record holds no checkpoint, so the next life replays each word from the first entry.
-    expect(await yard.uncheckpoint()).toBeGreaterThan(0);
+    // The daemon ends a life with its image, which a next life opens from with no replay: with the image gone, and
+    // no checkpoint in the record, the next life replays each word from the first entry.
+    expect(await yard.alone()).toBeGreaterThan(0);
     const kinds = readFileSync(yard.record, "utf8")
       .split("\n")
       .filter(Boolean)
