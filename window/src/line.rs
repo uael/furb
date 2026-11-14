@@ -1,6 +1,6 @@
 //! A row of text as its runs, and how a row fills its columns.
 
-use opentui::style::{Span, Style};
+use opentui::style::{Color, Span, Style};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// A row of text, as its runs.
@@ -11,7 +11,8 @@ pub(crate) fn run(text: impl Into<String>, style: Style) -> Span<'static> {
   Span::styled(text.into(), style)
 }
 
-/// A text cut to a count of columns, with a mark that says so.
+/// A text cut to a count of columns, with a mark that says so. The cut falls between two words
+/// when a word stands before the one that it would split.
 pub(crate) fn cut(text: &str, room: usize) -> String {
   if text.width() <= room {
     return text.to_owned();
@@ -24,7 +25,13 @@ pub(crate) fn cut(text: &str, room: usize) -> String {
     }
     kept.push(one);
   }
-  kept.trim_end().to_owned() + "…"
+  let split = !text[kept.len()..].starts_with(' ');
+  let kept = match kept.rfind(' ') {
+    Some(at) if split => &kept[..at],
+    _ => kept.as_str(),
+  };
+  // A separator that the cut leaves at the end goes with the word after it.
+  kept.trim_end_matches([' ', '·']).to_owned() + "…"
 }
 
 /// A row of a count of columns: the runs of its left, of which the last gives way, then the runs
@@ -43,6 +50,17 @@ pub(crate) fn spread(mut left: Line, right: Line, room: usize, fill: Style) -> L
   left.push(run(" ".repeat(room.saturating_sub(used)), fill));
   left.extend(right);
   left
+}
+
+/// A line in a box of a count of columns on a ground: one column of the ground on each side, and
+/// each run on the ground.
+pub(crate) fn boxed(line: Line, room: usize, ground: Color) -> Line {
+  let fill = Style::new().bg(ground);
+  let inside = line.into_iter().map(|one| run(one.content, one.style.bg(ground))).collect();
+  let mut boxed = vec![run(" ", fill)];
+  boxed.extend(spread(inside, Vec::new(), room.saturating_sub(2), fill));
+  boxed.push(run(" ", fill));
+  boxed
 }
 
 /// A text as lines of a count of columns at most, broken between words.

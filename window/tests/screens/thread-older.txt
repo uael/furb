@@ -3,22 +3,22 @@
 ┃ ground the branch, message by message                        Needs you 1
 ┃                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                                                                ▌ground the branch, message…  ● now▌
-  opus/high                                                    ▌FU furb                       opus▌
-       1  close(None)                                          ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+       opus/high                                               ▌FU furb                       opus▌
+    1  close(None)                                             ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
 
 ┃
 ┃ and the step 1
 ┃
 
-  opus/high
-       2  close(None)
+       opus/high
+    2  close(None)
 
 ┃
 ┃ and the step 2
 ┃
 
-  opus/high
-       3  close(None)
+       opus/high
+    3  close(None)
 
 ┃
 ┃ and the step 3

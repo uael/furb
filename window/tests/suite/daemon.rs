@@ -284,7 +284,7 @@ await wait(600, chain)";
 
 /// The prose of a model of a test, which closes its thread.
 const PROSE: &str = "found = 2
-close('The open takes **329 s**. Two stages hold most of it: 181 s to send each entry to the ears of the host, and 104 s in the boot.\\n\\n- `seed` reads each chain once\\n- the image skips the boot\\n\\nSee [the trace](https://github.com/uael/furb/issues/988).')";
+close('The open takes **329 s**. Two stages hold most of it: 181 s to send each entry to the ears of the host, and 104 s in the boot.\\n\\n- `seed` reads each chain once\\n- the image skips the boot\\n\\n```python\\nopen = boot + seed\\n```\\n\\nSee [the trace](https://github.com/uael/furb/issues/988).')";
 
 /// The opening of each life of the daemon of a test: the config of the test, no skill, and a model
 /// that answers from the message that it reads, with no command line of this machine. It closes

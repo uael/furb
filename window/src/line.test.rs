@@ -7,9 +7,11 @@ fn text(line: &Line) -> String {
 }
 
 #[test]
-fn a_text_past_its_room_is_cut_with_a_mark_and_a_wide_letter_counts_two_columns() {
-  let cuts = [cut("the list", 8), cut("the list of cards", 8), cut("会議の記録です", 8)];
-  assert_eq!(cuts, ["the list", "the lis…", "会議の…"].map(str::to_owned));
+fn a_text_past_its_room_is_cut_between_words_with_a_mark_and_a_wide_letter_counts_two_columns() {
+  let cuts = [cut("the list", 8), cut("the list of cards", 8), cut("the list of", 9)];
+  let alone = [cut("listofcards", 8), cut("会議の記録です", 8)];
+  assert_eq!(cuts, ["the list", "the…", "the list…"].map(str::to_owned));
+  assert_eq!(alone, ["listofc…", "会議の…"].map(str::to_owned));
 }
 
 #[test]

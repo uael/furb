@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
   code::Colors,
-  line::{Line, run},
+  line::{self, Line, run},
   tokens::{Role, Tokens},
 };
 
@@ -38,7 +38,7 @@ pub(crate) fn lines(text: &str, room: usize, tokens: &Tokens, colors: &Colors) -
 
 /// The lines made so far, the words of the line that comes, the styles that stand and the link that
 /// stands, the count of each list that stands, none for a list with no numbers, and the block of
-/// code that comes, with whether it is python.
+/// code that comes, with its language.
 struct Prose<'a> {
   room: usize,
   tokens: &'a Tokens,
@@ -48,7 +48,7 @@ struct Prose<'a> {
   styles: Vec<Style>,
   link: Option<String>,
   lists: Vec<Option<usize>>,
-  code: Option<(String, bool)>,
+  code: Option<(String, String)>,
 }
 
 impl Prose<'_> {
@@ -76,11 +76,11 @@ impl Prose<'_> {
     match tag {
       Tag::CodeBlock(kind) => {
         self.flush();
-        let python = match &kind {
-          CodeBlockKind::Fenced(lang) => ["", "python", "py"].contains(&&**lang),
-          CodeBlockKind::Indented => false,
+        let language = match kind {
+          CodeBlockKind::Fenced(language) => language.into_string(),
+          CodeBlockKind::Indented => "text".to_owned(),
         };
-        self.code = Some((String::new(), python));
+        self.code = Some((String::new(), language));
       }
       Tag::Item => {
         self.flush();
@@ -110,8 +110,8 @@ impl Prose<'_> {
   fn end(&mut self, tag: TagEnd) {
     match tag {
       TagEnd::CodeBlock => {
-        if let Some((text, python)) = self.code.take() {
-          self.block(text.trim_end_matches('\n'), python);
+        if let Some((text, language)) = self.code.take() {
+          self.block(text.trim_end_matches('\n'), &language);
         }
       }
       TagEnd::List(_) => {
@@ -189,20 +189,25 @@ impl Prose<'_> {
     }
   }
 
-  /// A block of code on the raised ground, as wide as the prose.
-  fn block(&mut self, text: &str, python: bool) {
-    let ground = Style::new().bg(self.tokens.raised);
-    let plain = self.tokens.style(Role::Prose).bg(self.tokens.raised);
-    let lines = if python {
-      self.colors.lines(text, plain).to_vec()
+  /// A block of code as each block of code of the window: on the raised ground, as wide as the
+  /// prose, its language as its head, and each line with its number close to the left of the box.
+  fn block(&mut self, text: &str, language: &str) {
+    let ground = self.tokens.raised;
+    let (plain, muted) = (self.tokens.style(Role::Prose), self.tokens.style(Role::Muted));
+    let lines = if ["", "python", "py"].contains(&language) {
+      self.colors.lines(text, plain.bg(ground)).to_vec()
     } else {
       text.split('\n').map(|one| vec![run(one, plain)]).collect()
     };
-    for mut line in lines {
-      line.insert(0, run(" ", ground));
-      let used: usize = line.iter().map(|one| one.content.width()).sum();
-      line.push(run(" ".repeat(self.room.saturating_sub(used)), ground));
-      self.out.push(line);
+    let gutter = lines.len().to_string().len();
+    let head =
+      (!language.is_empty()).then(|| vec![run(format!("{:gutter$}  {language}", ""), muted)]);
+    let numbered = lines.into_iter().zip(1..).map(|(mut line, number)| {
+      line.insert(0, run(format!("{number:>gutter$}  "), muted));
+      line
+    });
+    for line in head.into_iter().chain(numbered) {
+      self.out.push(line::boxed(line, self.room, ground));
     }
     self.gap();
   }

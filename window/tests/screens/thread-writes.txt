@@ -2,13 +2,13 @@
 ┃
 ┃ why is the seed slow on a big record                         Working 1
 ┃ (the model thinks)                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                              ▌why is the seed slow o…  ⠋ Working▌
+┃                                                              ▌why is the seed slow…    ⠋ Working▌
                                                                ▌FU furb                       opus▌
-  opus/high                                                    ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-       1  cost = tokens(word)
-       ⠋  proof = await bash('pytest -q test/outside
-       …
-  I read the stages from the frames and sum them, so…   0 s
+       opus/high                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    1  cost = tokens(word)
+    ⠋  proof = await bash('pytest -q test/outside
+    …
+  I read the stages from the frames and sum them, so the…
 
 
 

@@ -1,20 +1,20 @@
  furb                                                          All projects ▾       studio offline
 
-  3 threads need you.                        ⌥A goes to one     TUI scope for the new wi…  ◆ Input
+  3 threads need you.                        ⌥A goes to one     TUI scope for the new…     ◆ Input
                                                                 FU furb                       opus
   While no window was open                                     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-  ◌ which key sends the queue · photowr…  works since 22:10    ▌Debug stuck TUI after m…  ✗ Failed▌
+  ◌ which key sends the queue…            works since 22:10    ▌Debug stuck TUI after…    ✗ Failed▌
   ‖ Ground the branch on the carrier        paused at 22:10    ▌FU furb                       opus▌
                                                                ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-  studio is offline: the daemon closed the connection           remove the gate from the en…  ● 5h
+  studio is offline: the daemon closed the connection           remove the gate from the…     ● 5h
                                                                 FU furb                       opus
   ⌃O        go to a project, a session or a machine
   ⌃P        commands                                           Working 2
   ⌃X ?      each key
-                                                                run the bench of rep…  as of 09:12
+                                                                run the bench of…      as of 09:12
                                                                 FC furb-cloud@studio        opus ◌
 
-                                                                which key sends th…  ⠋ Working 11h
+                                                                which key sends…     ⠋ Working 11h
                                                                 PH photowroom               opus ◌
 
                                                                Resting 2
@@ -22,7 +22,7 @@
                                                                 where does the time go         11h
                                                                 FU furb                       opus
 
-                                                                Ground the branch o…  ‖ Paused 11h
+                                                                Ground the branch…    ‖ Paused 11h
                                                                 FU furb                       opus
 
 ┃ ▌Ask for a change, a review or an answer                     Resolved 1 ▾

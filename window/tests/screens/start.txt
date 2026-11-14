@@ -2,21 +2,21 @@
 
   3 threads need you.                        ⌥A goes to one    Needs you 3
 
-  While no window was open                                      TUI scope for the new wi…  ◆ Input
-  ◌ which key sends the queue · photowr…  works since 22:10     FU furb                       opus
+  While no window was open                                      TUI scope for the new…     ◆ Input
+  ◌ which key sends the queue…            works since 22:10     FU furb                       opus
   ‖ Ground the branch on the carrier        paused at 22:10
-                                                                Debug stuck TUI after m…  ✗ Failed
+                                                                Debug stuck TUI after…    ✗ Failed
   studio is offline: the daemon closed the connection           FU furb                       opus
 
-  ⌃O        go to a project, a session or a machine             remove the gate from the en…  ● 5h
+  ⌃O        go to a project, a session or a machine             remove the gate from the…     ● 5h
   ⌃P        commands                                            FU furb                       opus
   ⌃X ?      each key
                                                                Working 2
 
-                                                                run the bench of rep…  as of 09:12
+                                                                run the bench of…      as of 09:12
                                                                 FC furb-cloud@studio        opus ◌
 
-                                                                which key sends th…  ⠋ Working 11h
+                                                                which key sends…     ⠋ Working 11h
                                                                 PH photowroom               opus ◌
 
                                                                Resting 2
@@ -24,7 +24,7 @@
                                                                 where does the time go         11h
                                                                 FU furb                       opus
 
-                                                                Ground the branch o…  ‖ Paused 11h
+                                                                Ground the branch…    ‖ Paused 11h
 ┃ ▌Ask for a change, a review or an answer                      FU furb                       opus
 ┃ + new session in furb-try
   /home/ada/src/furb-try                        ⌃P commands    Resolved 1 ▸

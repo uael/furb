@@ -13,7 +13,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::{
   keys::Does,
-  line::{Line, run, spread, wrapped},
+  line::{self, Line, run, spread, wrapped},
   list::project,
   model::Model,
   prose,
@@ -23,9 +23,6 @@ use crate::{
 
 /// How many rows a block shows while it is folded.
 const ROLLS: usize = 7;
-
-/// The columns of the number of a line, whose mark stands in the place of its number.
-const NUMBER: usize = 5;
 
 /// The columns of the left padding of a block, and of its ground before its text.
 const PAD: usize = 3;
@@ -140,14 +137,11 @@ impl Feed<'_> {
       .collect()
   }
 
-  /// A line inside the box of a block, on a ground, from the column of the box to its right
+  /// A line inside the box of a block, on a ground, from the column of the text to its right
   /// padding.
   fn boxed(&self, line: Line, ground: Color) -> Line {
-    let fill = Style::new().bg(ground);
-    let mut boxed = vec![run("  ", Style::new()), run(" ", fill)];
-    let inside = line.into_iter().map(|one| run(one.content.into_owned(), one.style.bg(ground)));
-    boxed.extend(spread(inside.collect(), Vec::new(), self.inner(), fill));
-    boxed.push(run(" ", fill));
+    let mut boxed = vec![run("  ", Style::new())];
+    boxed.extend(line::boxed(line, self.wide.saturating_sub(4), ground));
     boxed
   }
 
@@ -156,14 +150,20 @@ impl Feed<'_> {
     self.wide.saturating_sub(2 * PAD)
   }
 
-  /// The block of an answer: the model as its head, then the window of seven rows that rolls, or
-  /// each line once the operator opened it, then the thought.
+  /// The block of an answer, as a block of code of the markdown: the model as its head, then the
+  /// window of seven rows that rolls, or each line once the operator opened it, each with its
+  /// number in the thread, close to the left of the box. The thought stands under it.
   fn block(&self, message: &str, block: &Block) -> Vec<Row> {
     let t = &self.model.tokens;
     let muted = self.style(Role::Muted);
-    let mut rows = vec![says(&maker(&block.maker), muted)];
+    let numbers = block.lines.iter().map(|one| one.number).max().unwrap_or_default();
+    // Two columns at least, so the code moves no cell as the block grows past its ninth line.
+    let gutter = numbers.to_string().len().max(2);
+    let head = vec![run(format!("{:gutter$}  {}", "", maker(&block.maker)), muted)];
+    let mut rows = vec![Row::of(self.boxed(head, t.raised))];
     let code = self.style(Role::Prose).bg(t.raised);
-    let text = block.lines.iter().map(|one| one.text.as_str()).collect::<Vec<_>>().join("\n");
+    let text =
+      home(&block.lines.iter().map(|one| one.text.as_str()).collect::<Vec<_>>().join("\n"));
     let colored = self.model.colors.lines(&text, code);
     let all = block.lines.len();
     let fold = Fold::Block(message.to_owned());
@@ -173,14 +173,14 @@ impl Feed<'_> {
     if rolls {
       let (mark, count) = if open { ("▴", all) } else { ("…", first) };
       let noun = if count == 1 { "line" } else { "lines" };
-      let line = vec![run(format!("{mark:>NUMBER$}  {count} {noun}"), muted)];
+      let line = vec![run(format!("{mark:>gutter$}  {count} {noun}"), muted)];
       rows.push(Row::clicked(self.boxed(line, t.raised), Click::Fold(fold)));
     }
     for (line, colors) in block.lines.iter().zip(colored.iter()).skip(first) {
-      rows.extend(self.code(line, colors.clone()));
+      rows.extend(self.code(line, colors.clone(), gutter));
     }
     if block.more {
-      rows.push(Row::of(self.boxed(vec![run(format!("{:>NUMBER$}", "…"), muted)], t.raised)));
+      rows.push(Row::of(self.boxed(vec![run(format!("{:>gutter$}", "…"), muted)], t.raised)));
     }
     if let Some(thought) = &block.thought {
       rows.extend(self.thought(message, thought));
@@ -189,10 +189,10 @@ impl Feed<'_> {
     rows
   }
 
-  /// One line of a block: its number, or the mark of how it stands in its place, and its code,
-  /// cut to the box. The line that runs is lit, with its loader and its time after one second.
-  /// The error of a line that failed stands under it.
-  fn code(&self, line: &Code, colors: Line) -> Vec<Row> {
+  /// One line of a block: its number in a gutter of a count of columns, or the mark of how it
+  /// stands in its place, and its code, cut to the box. The line that runs is lit, with its loader
+  /// and its time after one second. The error of a line that failed stands under it.
+  fn code(&self, line: &Code, colors: Line, gutter: usize) -> Vec<Row> {
     let t = &self.model.tokens;
     let since = match line.mark {
       Mark::Runs { since: Some(since), .. } if self.model.now > since => {
@@ -210,18 +210,18 @@ impl Feed<'_> {
     let timer =
       since.map(|since| vec![run(timer(since), self.style(Role::Muted))]).unwrap_or_default();
     let room =
-      self.inner().saturating_sub(NUMBER + 2 + width(&timer) + 2 * usize::from(!timer.is_empty()));
-    let mut text = vec![run(format!("{number:>NUMBER$}  "), Style::new().fg(color))];
+      self.inner().saturating_sub(gutter + 2 + width(&timer) + 2 * usize::from(!timer.is_empty()));
+    let mut text = vec![run(format!("{number:>gutter$}  "), Style::new().fg(color))];
     text.extend(clipped(colors, room, self.style(Role::Muted)));
     let shown = self.boxed(spread(text, timer, self.inner(), Style::new()), ground);
     let mut rows =
-      vec![Row { loader: loader.map(|one| (PAD + NUMBER - 1, one)), ..Row::of(shown) }];
+      vec![Row { loader: loader.map(|one| (PAD + gutter - 1, one)), ..Row::of(shown) }];
     if let Mark::Failed { why } = &line.mark {
       let error = Style::new().fg(t.danger);
-      let lines = wrapped(why, self.inner().saturating_sub(NUMBER + 2));
+      let lines = wrapped(why, self.inner().saturating_sub(gutter + 2));
       let errors = lines
         .iter()
-        .map(|one| self.boxed(vec![run(format!("{:NUMBER$}  {one}", ""), error)], t.raised));
+        .map(|one| self.boxed(vec![run(format!("{:gutter$}  {one}", ""), error)], t.raised));
       rows.extend(errors.map(Row::of));
     }
     rows
@@ -244,7 +244,9 @@ impl Feed<'_> {
       None => vec![run(format!("  {}", tail(&thought.text, room)), style)],
       Some(took) => {
         let first = vec![run("  ", style), run(thought.first(), style)];
-        spread(first, vec![run(timer(took), self.style(Role::Muted))], room + 2, Style::new())
+        // A time shows from one second on, as the time of a line that runs.
+        let took = (took > 0).then(|| run(timer(took), self.style(Role::Muted)));
+        spread(first, took.into_iter().collect(), room + 2, Style::new())
       }
     };
     vec![Row::clicked(line, Click::Fold(fold))]

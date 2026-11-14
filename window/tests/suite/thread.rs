@@ -93,10 +93,10 @@ fn a_thread_that_works_rolls_its_block_in_seven_rows_and_only_its_loaders_move()
   // the row of what comes.
   let block: Vec<&str> =
     frame.lines().skip_while(|line| !line.contains("…  4 lines")).take(7).collect();
-  let numbers: Vec<String> = block
-    .iter()
-    .map(|line| line.chars().skip(3).take(5).collect::<String>().trim().to_owned())
-    .collect();
+  let first = |line: &&str| {
+    line.chars().skip(3).collect::<String>().split_whitespace().next().map(str::to_owned)
+  };
+  let numbers: Vec<String> = block.iter().filter_map(first).collect();
   assert_eq!(numbers[..5], ["…", "5", "6", "7", "8"], "{frame}");
   assert!(block[5].contains("await wait(600, chain)") && block[6].trim() == "…", "{frame}");
   screen("thread-works", &app);
