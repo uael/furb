@@ -638,8 +638,10 @@ pub(crate) async fn checkpointed(opening: Opening) {
     })
   };
   let ears = [(CONSOLE, idle()), ("events", idle()), ("changes", idle())];
-  let opened = opening.open(ears, Progress::default(), &mut |_| true).await;
-  let Ok((engine, _)) = opened else { panic!("no life opens on the image of the record") };
+  let engine = match opening.open(ears, Progress::default(), &mut |_| true).await {
+    Ok((engine, _)) => engine,
+    Err(no) => panic!("no life opens on the image of the record: {no}"),
+  };
   if let Err(no) = engine.checkpoint() {
     panic!("the life writes no checkpoint: {no}");
   }

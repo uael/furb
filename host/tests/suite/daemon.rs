@@ -407,6 +407,18 @@ impl Window {
   async fn lives(&mut self, life: &str) -> bool {
     self.listed().await.iter().any(|one| one.life == life && one.open)
   }
+
+  /// Waits until the daemon holds a record no more: its life ended, with its image, and gave the
+  /// lease of the record back. A life that ends is not open already, and still holds its record,
+  /// so a life outside the daemon opens on the record only after this.
+  async fn ended(&mut self, life: &str) {
+    let gone = async {
+      while self.listed().await.iter().any(|one| one.life == life && one.held) {
+        time::sleep(Duration::from_millis(20)).await;
+      }
+    };
+    timeout(PATIENCE, gone).await.expect("the life ends after its grace");
+  }
 }
 
 /// Whether a frame is the act of a name, done.
@@ -659,12 +671,7 @@ async fn a_window_of_a_life_that_opens_from_its_image_hears_its_stages_then_its_
   window.attach(&life).await;
   window.ran(&life, "x = 41 + 1").await;
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-  let ended = async {
-    while window.lives(&life).await {
-      time::sleep(Duration::from_millis(20)).await;
-    }
-  };
-  timeout(PATIENCE, ended).await.expect("the life ends with its image after its grace");
+  window.ended(&life).await;
   window.pushed.clear();
   let open = Verb::Open {
     life: life.clone(),
@@ -716,12 +723,7 @@ async fn each_window_of_a_life_that_opens_hears_how_far_the_open_stands_then_its
   first.attach(&life).await;
   first.ran(&life, "x = 41 + 1").await;
   assert_eq!(first.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-  let ended = async {
-    while first.lives(&life).await {
-      time::sleep(Duration::from_millis(20)).await;
-    }
-  };
-  timeout(PATIENCE, ended).await.expect("the life ends after its grace");
+  first.ended(&life).await;
   // A checkpoint at the tip of the record makes the open go by the record, through each stage.
   checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
   first.pushed.clear();
@@ -1800,8 +1802,7 @@ async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_checkpoint_l
   let verb = Verb::Run { life: life.clone(), word: waits, on: None };
   let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-  time::sleep(PAST).await;
-  assert!(!window.lives(&life).await, "the life ended after its grace");
+  window.ended(&life).await;
   // The life ended with its image, which holds the word that waits. A checkpoint at the tip of
   // the record makes the next life open by the record, on that checkpoint.
   checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
