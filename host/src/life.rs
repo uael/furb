@@ -1156,6 +1156,34 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
       let waiting = waiting.iter().map(serde_json::to_value).collect::<Result<_, _>>();
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
+    command @ (Command::Desk { .. }
+    | Command::Threads { .. }
+    | Command::Rail { .. }
+    | Command::Ladder { .. }
+    | Command::AsOf { .. }
+    | Command::Moments { .. }
+    | Command::Thread { .. }) => viewed(life, &root, command),
+    Command::Settings => {
+      let settings = life.configs.get()?.into_iter().map(|one| json!(one));
+      Ok(Reply::Values(settings.collect()))
+    }
+    Command::Configure(change) => {
+      life.configs.set(change).await?;
+      answered_by(engine, Command::Stand)
+    }
+    Command::Roster(names) => {
+      life.roster.set(Some(names));
+      answered_by(engine, Command::Stand)
+    }
+    other => answered_by(engine, other),
+  }
+}
+
+/// What a query of the meaning of the acts that the life told comes to, on its chain or on the
+/// root.
+fn viewed(life: &Life, root: &str, command: Command) -> Result<Reply, LifeError> {
+  let chain = |on: Option<String>| on.unwrap_or_else(|| root.to_owned());
+  match command {
     Command::Desk { notices } => Ok(Reply::Desk(life.kept.held.desk(&notices))),
     Command::Threads { on, at, read, site } => {
       let site = site.as_deref().unwrap_or("operator");
@@ -1178,15 +1206,7 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
     Command::Thread { thread, reach } => {
       Ok(Reply::Page(life.kept.held.page(&life.streams, &thread, reach)))
     }
-    Command::Configure(change) => {
-      life.configs.set(change).await?;
-      answered_by(engine, Command::Stand)
-    }
-    Command::Roster(names) => {
-      life.roster.set(Some(names));
-      answered_by(engine, Command::Stand)
-    }
-    other => answered_by(engine, other),
+    other => Err(LifeError::Refused(format!("{other:?} is no view"))),
   }
 }
 
