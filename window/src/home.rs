@@ -71,7 +71,8 @@ impl Model {
     }
     for told in &self.machines {
       if let Link::Lost(why) = &told.link {
-        rows.extend(wrapped(&format!("{} is offline: {why}", told.name), muted));
+        let says = format!("{} is offline: {why}. The window dials it again.", told.name);
+        rows.extend(wrapped(&says, muted));
       }
     }
     let keys = [

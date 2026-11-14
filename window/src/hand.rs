@@ -29,7 +29,7 @@ use crate::{
   keys::{self, Does},
   line::Line,
   link::{self, Asker, Heard},
-  model::{Model, SIDE, Told},
+  model::{Link, Model, SIDE, Told},
   question::Keyed,
   tokens::{Role, Tokens},
 };
@@ -325,26 +325,34 @@ fn pump(window: &Shared) {
   let Window { askers, screen, .. } = &mut *held;
   let model = &mut screen.model;
   for (life, verb) in model.opens_due() {
-    let id = askers.get_mut(life.0).map(|asker| asker.ask(verb));
+    let id = asker(askers, model, life.0).map(|asker| asker.ask(verb));
     model.asked_open(&life, id);
     model.asked.extend(id.map(|id| ((life.0, id), Asked::Open)));
   }
   if let Some(verb) = model.page_due()
+    && let Some(at) = model.thread.as_ref().map(|one| one.key.0)
+    && let Some(asker) = asker(askers, model, at)
     && let Some(opened) = model.thread.as_mut()
-    && let Some(asker) = askers.get_mut(opened.key.0)
   {
     opened.asked.insert(asker.ask(verb), None);
+    opened.again = false;
   }
   if let Some((at, verb)) = model.due()
-    && let Some(asker) = askers.get_mut(at)
+    && let Some(asker) = asker(askers, model, at)
   {
     model.asked.insert((at, asker.ask(verb)), Asked::Say);
   }
   if let Some((at, verb)) = model.seen_due()
-    && let Some(asker) = askers.get_mut(at)
+    && let Some(asker) = asker(askers, model, at)
   {
     model.asked.insert((at, asker.ask(verb)), Asked::Seen);
   }
+}
+
+/// What asks a machine a verb, while it lists its cards: a machine that the window dials again
+/// takes no verb, which would go nowhere.
+fn asker<'a>(askers: &'a mut [Asker], model: &Model, at: usize) -> Option<&'a mut Asker> {
+  askers.get_mut(at).filter(|_| model.machines[at].link == Link::Listed)
 }
 
 /// A page of older exchanges that the open thread asks of its machine, said, with the id of its
@@ -353,8 +361,9 @@ fn older(window: &Shared, verb: Option<Verb>) {
   let Some(verb @ Verb::Thread { before, .. }) = verb else { return };
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
+  let Some(at) = screen.model.thread.as_ref().map(|one| one.key.0) else { return };
+  let Some(asker) = asker(askers, &screen.model, at) else { return };
   let Some(opened) = screen.model.thread.as_mut() else { return };
-  let Some(asker) = askers.get_mut(opened.key.0) else { return };
   opened.asked.insert(asker.ask(verb), before);
 }
 
@@ -438,8 +447,9 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
     Keyed::Says(at, verb) => {
       let mut held = window.borrow_mut();
       let Window { askers, screen, .. } = &mut *held;
-      if let Some(asker) = askers.get_mut(at) {
-        screen.model.asked.insert((at, asker.ask(verb)), Asked::Answer);
+      match asker(askers, &screen.model, at) {
+        Some(asker) => drop(screen.model.asked.insert((at, asker.ask(verb)), Asked::Answer)),
+        None => screen.model.unanswered(screen.model.away(at).unwrap_or_default()),
       }
       drop(held);
       tell(app, window, |_| ());
@@ -498,14 +508,11 @@ fn act(app: &App, window: &Shared, does: Does) {
 /// The text of the input sent to its target, and the input empty.
 fn sent(app: &App, window: &Shared) {
   let text = window.borrow().area.text();
-  if text.trim().is_empty() {
+  if text.trim().is_empty() || !tell(app, window, |model| model.send(text)) {
     return;
   }
   window.borrow().area.set_text("");
-  tell(app, window, |model| {
-    model.draft.text.clear();
-    model.send(text);
-  });
+  tell(app, window, |model| model.draft.text.clear());
 }
 
 /// An escape: it goes back from a thread that opens or that failed to open, closes the list that
@@ -536,8 +543,9 @@ fn stopped(app: &App, window: &Shared) {
   let Some((at, verb)) = stop else { return };
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
-  if let Some(asker) = askers.get_mut(at) {
-    screen.model.asked.insert((at, asker.ask(verb)), Asked::Stop);
+  match asker(askers, &screen.model, at) {
+    Some(asker) => drop(screen.model.asked.insert((at, asker.ask(verb)), Asked::Stop)),
+    None => screen.model.fault = screen.model.away(at),
   }
   drop(held);
   tell(app, window, |_| ());

@@ -20,10 +20,11 @@ use furb::{
   life::{Answer as Answered, Opening},
 };
 use furb_host::{
-  STALL, Settings,
+  GRACE, STALL, Settings,
   protocol::{Answer, Card, Frame, Hello, Kind, PROTOCOL, Request, Verb},
   run,
   transport::{Dialer, Listener, Local},
+  upgrade,
 };
 use furb_window::Machine;
 use futures::{SinkExt, StreamExt};
@@ -81,6 +82,17 @@ impl Daemon {
     self.listener = Some(listener);
   }
 
+  /// The daemon of the test ended with the app whose runtime served it, and a new one on the
+  /// records that the first one held, on the runtime of another app, in the same folder, where a
+  /// window that lost the first one dials it again. The end of the first one took its socket.
+  #[cfg(unix)]
+  pub(crate) fn back(&mut self, app: &TestApp) {
+    self.runtime = app.runtime();
+    let listener =
+      self.runtime.block_on(self.local.listen()).expect("the daemon before took its socket");
+    self.listener = Some(listener);
+  }
+
   /// The opens of each life that a window asks held at the catalog of its models, after the read of
   /// its record, until the test makes the file that this gives: their claude command line waits
   /// for it, and the catalog waits for a command line that it never saw. A peer of the test opens
@@ -125,16 +137,55 @@ impl Daemon {
   /// The daemon served, on the runtime of the app. A life with no holder ends at once.
   pub(crate) fn served(&mut self) {
     let listener = self.listener.take().expect("a daemon is served once");
-    let settings = Settings {
+    let (local, settings) = (self.local.clone(), self.settings());
+    drop(self.runtime.spawn(async move { run(&local, listener, settings).await }));
+  }
+
+  /// A daemon of a new build in the place of the daemon that runs, on the runtime of another app,
+  /// as `furb host upgrade` puts it: the daemon that runs gives its lives and closes each window.
+  pub(crate) fn upgraded(&mut self, app: &TestApp) {
+    self.runtime = app.runtime();
+    let (local, settings) = (self.local.clone(), self.settings());
+    // The grace of the machine, so the daemon that took the lives waits for the window that dials
+    // it again, as a daemon of `furb host upgrade` does.
+    let settings = Settings { grace: GRACE, ..settings };
+    drop(self.runtime.spawn(async move { upgrade(&local, settings).await }));
+  }
+
+  /// Whether a window holds a life of the daemon that listens now: no while no daemon answers, or
+  /// while the one that answers stops.
+  pub(crate) fn watched(&self) -> bool {
+    let asked = async {
+      let mut lines = Framed::new(self.local.dial().await.ok()?, LinesCodec::new());
+      let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None };
+      for (id, verb) in [(0, Verb::Hello(hello)), (1, Verb::List { config: None })] {
+        lines.send(serde_json::to_string(&Request { id, verb }).ok()?).await.ok()?;
+        loop {
+          match serde_json::from_str(&lines.next().await?.ok()?).ok()? {
+            Frame::Reply { id: 1, answer: Answer::Lives(records) } => {
+              return Some(records.iter().any(|one| one.watched));
+            }
+            Frame::Reply { id: got, .. } if got == id => break,
+            Frame::Refused { .. } => return None,
+            _ => {}
+          }
+        }
+      }
+      None
+    };
+    self.runtime.block_on(async { timeout(PATIENCE, asked).await }).ok().flatten() == Some(true)
+  }
+
+  /// The settings of each daemon of the test.
+  fn settings(&self) -> Settings {
+    Settings {
       opening: scripted(&self.yard, &self.claude),
       grace: Duration::ZERO,
       stall: STALL,
       tailnet: None,
       door: None,
       host: None,
-    };
-    let local = self.local.clone();
-    drop(self.runtime.spawn(async move { run(&local, listener, settings).await }));
+    }
   }
 
   /// A file of the folder of the test.
@@ -142,10 +193,12 @@ impl Daemon {
     self.yard.join(name)
   }
 
-  /// The machine of the daemon under a name, as a window dials it. Its daemon listens, so the
-  /// window never runs the command that serves it.
+  /// The machine of the daemon under a name, as a window dials it. The command that serves it is
+  /// no program, so a window that dials it while no daemon listens starts nothing, and dials it
+  /// again.
   pub(crate) fn machine(&self, name: &str) -> Machine {
-    Machine { name: name.to_owned(), folder: self.host.clone(), served: Command::new("furb") }
+    let served = Command::new(self.yard.join("no-furb"));
+    Machine { name: name.to_owned(), folder: self.host.clone(), served }
   }
 
   /// A peer of the daemon, which hears each change of its cards.

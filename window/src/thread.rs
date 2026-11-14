@@ -62,6 +62,9 @@ pub(crate) struct Opened {
   /// The time of the card of the thread when the window last said that the operator saw its end,
   /// so the window says it once each time the thread ends.
   pub(crate) seen: Option<u64>,
+  /// Whether the window asks the page of the end again, since the connection to its machine ended
+  /// and the new one tells no change of the thread until the window reads its end there.
+  pub(crate) again: bool,
 }
 
 /// A row of the feed as a place that holds when rows come above it: a count of rows from the
@@ -377,7 +380,8 @@ impl Model {
   /// the daemon answered the open of its life. The daemon holds it until that life stands.
   pub(crate) fn page_due(&self) -> Option<Verb> {
     let opened = self.thread.as_ref()?;
-    let held = opened.above.is_some() || !opened.asked.is_empty() || opened.fault.is_some();
+    let held =
+      opened.above.is_some() && !opened.again || !opened.asked.is_empty() || opened.fault.is_some();
     let stands = self.stands(opened.key.0, &opened.key.1);
     (!opened.key.2.is_empty() && !held && stands).then(|| opened.page(None))
   }

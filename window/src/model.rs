@@ -24,7 +24,7 @@ use crate::{
   keys::{self, Does, System},
   link::Heard,
   list::Row,
-  opens::{Hold, Life, Step},
+  opens::{Ask, Hold, Life, Step},
   thread::Opened,
   tokens::Tokens,
 };
@@ -186,11 +186,14 @@ impl Model {
       _ => {}
     }
     let (now, told) = (self.now, &mut self.machines[at]);
-    if matches!(told.link, Link::Lost(_)) {
+    let welcome = matches!(heard, Ok(Frame::Reply { answer: Answer::Welcome { .. }, .. }));
+    if matches!(told.link, Link::Lost(_)) && !welcome {
       return false;
     }
     match heard {
-      Ok(Frame::Reply { answer: Answer::Welcome { peer, .. }, .. }) => told.login = peer.login,
+      Ok(Frame::Reply { answer: Answer::Welcome { peer, .. }, .. }) => {
+        (told.login, told.link) = (peer.login, Link::Dialing);
+      }
       Ok(Frame::Reply { answer: Answer::Cards(cards), .. }) => {
         (told.cards, told.heard, told.link) = (cards, now, Link::Listed);
       }
@@ -204,8 +207,8 @@ impl Model {
         told.cards.extend(changed);
         told.heard = now;
       }
-      Ok(Frame::Refused { why, .. }) => told.link = Link::Lost(why),
-      Err(fault) => told.link = Link::Lost(fault.to_string()),
+      Ok(Frame::Refused { why, .. }) => return self.lost(at, why),
+      Err(fault) => return self.lost(at, fault.to_string()),
       // A frame that the list does not show.
       Ok(_) => return false,
     }
@@ -216,6 +219,40 @@ impl Model {
       }
     }
     true
+  }
+
+  /// The connection to a machine ended, and why, while the window dials it again: each request
+  /// that waits for its answer there goes nowhere. Each message on its way there comes back to the
+  /// input with each message after it, since the window cannot know whether the daemon took it,
+  /// and each life of the machine opens again, with the page of the open thread, once it answers.
+  fn lost(&mut self, at: usize, why: String) -> bool {
+    let name = self.machines[at].name.clone();
+    self.machines[at].link = Link::Lost(why);
+    let gone: Vec<Asked> = self.asked.extract_if(|key, _| key.0 == at).map(|one| one.1).collect();
+    if gone.contains(&Asked::Answer) {
+      self.unanswered(format!("{name} went away before it took the answer. Send it again."));
+    }
+    if self.outgoing.iter().any(|one| one.at == at) {
+      let why =
+        format!("{name} went away before it took your message. If the thread shows it, it went.");
+      self.restore = self.refused(Asked::Say, why);
+    }
+    for (_, hold) in self.holds.iter_mut().filter(|one| one.0.0 == at) {
+      hold.ask = Ask::Due;
+    }
+    if let Some(opened) = self.thread.as_mut().filter(|one| one.key.0 == at) {
+      opened.asked.clear();
+      (opened.again, opened.seen) = (true, None);
+    }
+    true
+  }
+
+  /// Why the window asks nothing of a machine now: it lost its connection, which it dials again.
+  pub(crate) fn away(&self, at: usize) -> Option<String> {
+    let told = self.machines.get(at)?;
+    matches!(told.link, Link::Lost(_)).then(|| {
+      format!("{} is away, so nothing went: your message stays here until it answers.", told.name)
+    })
   }
 
   /// The answer of a daemon to a request of the input, with its id and what it asked.

@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use furb::view::{self, Part, Standing};
-use furb_host::protocol::{Answer, Card, Frame};
+use furb_host::protocol::{Answer, Card, Frame, Kind, PROTOCOL, Peer, Role};
 use jiff::tz::TimeZone;
 
 use super::{Link, Model, Told};
-use crate::{Options, System, list::Row, tokens::Tokens};
+use crate::{Options, System, input::Asked, list::Row, opens::Ask, tokens::Tokens};
 
 fn card(life: &str, title: &str, standing: Standing, since: u64) -> Card {
   let thread = view::Card {
@@ -70,6 +70,35 @@ fn a_machine_that_is_lost_keeps_its_cards_and_hears_no_more() {
   assert_eq!(model.machines[0].link, Link::Lost("the daemon closed the connection".to_owned()));
   assert!(!model.hear(0, Ok(Frame::Reply { id: 1, answer: Answer::Cards(Vec::new()) })));
   assert_eq!(model.machines[0].cards.len(), 1);
+}
+
+#[test]
+fn a_loss_gives_each_message_on_its_way_back_to_the_input_and_a_new_hello_hears_the_machine_again()
+{
+  let mut model = model(vec![card("a", "one", Standing::Rests, 5)], 30);
+  model.selected = model.settled.first().map(|one| one.1.clone());
+  model.open_thread();
+  model.holds.values_mut().for_each(|hold| hold.ask = Ask::Answered);
+  assert!(model.send("and the seed?".to_owned()));
+  let (at, _) = model.due().unwrap();
+  model.asked.insert((at, 7), Asked::Say);
+  assert!(model.hear(0, Err(crate::Error::Closed)));
+  assert_eq!(model.restore.as_deref(), Some("and the seed?"));
+  let why = "mac went away before it took your message. If the thread shows it, it went.";
+  assert_eq!((model.fault.as_deref(), model.asked.len()), (Some(why), 0));
+  assert!(model.holds.values().all(|hold| hold.ask == Ask::Due));
+  // Nothing goes while the machine is away: the text stays in the input.
+  model.draft.text = "and the seed?".to_owned();
+  assert!(!model.send("and the seed?".to_owned()));
+  assert!(model.outgoing.is_empty());
+  // A new connection says its hello, then its cards.
+  let peer = Peer { login: "ada".to_owned(), role: Role::Write, kind: Kind::Window, name: None };
+  let (machine, build) = ("mac".to_owned(), String::new());
+  let welcome = Answer::Welcome { protocol: PROTOCOL, peer, machine, build, view: 0 };
+  assert!(model.hear(0, Ok(Frame::Reply { id: 8, answer: welcome })));
+  assert_eq!(model.machines[0].link, Link::Dialing);
+  assert!(model.hear(0, Ok(Frame::Reply { id: 9, answer: Answer::Cards(Vec::new()) })));
+  assert_eq!(model.machines[0].link, Link::Listed);
 }
 
 #[test]

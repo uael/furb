@@ -2,6 +2,7 @@
 //!
 //! The window is a thin view of the daemon of each machine. It dials a daemon as `docs/protocol.md`
 //! says, with the types of `furb-host`, and it starts the daemon of this machine when none listens.
+//! When a connection ends, it dials that machine again until it answers.
 //! Its model keeps what the daemons told and where the hand of the operator is. Each part of the
 //! [`Screen`] shows a function of the model and draws only when its value changes. The window
 //! keeps no state that a daemon or the fold of `furb::view` gives, and no rule of a card.

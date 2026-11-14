@@ -67,7 +67,7 @@ impl Machine {
   /// The stream of the daemon, which the window serves first when none listens. A daemon that
   /// another window started at the same moment takes the place and this one ends, so the window
   /// dials once more after the end of its own.
-  pub async fn reach(mut self) -> Result<Stream, Error> {
+  pub async fn reach(&mut self) -> Result<Stream, Error> {
     let local = Local::new(&self.folder);
     match local.dial().await {
       Err(TransportError::Dial { .. }) => {}

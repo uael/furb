@@ -124,6 +124,72 @@ fn a_session_whose_daemon_ended_opens_in_a_window_of_a_new_daemon_and_shows_the_
   screen("open-stood", &second);
 }
 
+#[test]
+fn a_window_dials_its_machine_again_after_a_handover_and_its_thread_comes_back_where_he_read() {
+  let title = "remove the gate from the engine";
+  let (app, host, upgraded) = (app(), app(), app());
+  let mut daemon = Daemon::bound(&host);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let record = sessions.join("gate.jsonl");
+  let mut peer = daemon.peer();
+  peer.rested(&record, &message(title), None);
+  open(&app, vec![daemon.machine("mac")], homed(&daemon));
+  clicked(&app, title);
+  shows(&app, "Two stages hold most");
+  app.advance(AWAY);
+  shows(&app, "Resolved 1");
+  let before = left(&app);
+  // A daemon of a new build takes the place of the one that runs, which closes each window: the
+  // window dials the machine again, and the life of its thread opens there again.
+  daemon.upgraded(&upgraded);
+  assert!(app.wait_until(PATIENCE, || daemon.watched()), "{}", app.text());
+  shows(&app, "this machine");
+  assert_eq!(left(&app), before);
+}
+
+/// While the machine is away, the input keeps his words, and they go once he sends them after it
+/// answers again. The end of the runtime that serves a daemon closes its peers on unix; the test
+/// of a handover proves the return of the window on each system.
+#[cfg(unix)]
+#[test]
+fn while_the_machine_is_away_the_input_keeps_his_words_until_it_answers() {
+  let title = "remove the gate from the engine";
+  let (app, host, again) = (app(), app(), app());
+  let mut daemon = Daemon::bound(&host);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let record = sessions.join("gate.jsonl");
+  let mut peer = daemon.peer();
+  peer.rested(&record, &message(title), None);
+  open(&app, vec![daemon.machine("mac")], homed(&daemon));
+  clicked(&app, title);
+  shows(&app, "Two stages hold most");
+  // The daemon ends with the app whose runtime serves it, and its lives with it.
+  drop((peer, host));
+  shows(&app, "mac offline");
+  app.paste("and the seed?");
+  app.press("enter");
+  let frame = shows(&app, "mac is away, so nothing went");
+  assert!(frame.contains("┃ and the seed?") && frame.contains("Two stages hold most"), "{frame}");
+  let free = || File::open(lease(&record)).is_ok_and(|lease| lease.try_lock().is_ok());
+  assert!(app.wait_until(PATIENCE, free), "the life of the first daemon keeps its record");
+  daemon.back(&again);
+  daemon.served();
+  shows(&app, "this machine");
+  app.press("enter");
+  let mut peer = daemon.peer();
+  let life = record.display().to_string();
+  let said = || {
+    let Answer::Cards(cards) = peer.ask(Verb::Cards) else { return false };
+    let Some(card) = cards.into_iter().find(|card| card.life == life) else { return false };
+    let page =
+      Verb::Thread { life: life.clone(), thread: card.thread.prompt, before: None, limit: 5 };
+    matches!(peer.ask(page), Answer::Page(page) if page.exchanges.iter().any(|one| one.text == "and the seed?"))
+  };
+  assert!(app.wait_until(PATIENCE, said), "{}", app.text());
+}
+
 /// The file whose lock is the lease of a record.
 fn lease(record: &Path) -> PathBuf {
   record.with_extension("jsonl.lock")

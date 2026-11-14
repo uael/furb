@@ -124,15 +124,19 @@ impl Model {
 
   /// The text of the input sent to its target: it waits in the queue, and the thread that it goes
   /// to shows it at once. A new thread or a new session opens in the window, so the next message
-  /// goes to it.
-  pub(crate) fn send(&mut self, text: String) {
-    self.fault = None;
+  /// goes to it. A machine that the window dials again takes nothing, and the text stays in the
+  /// input. Whether the text went.
+  pub(crate) fn send(&mut self, text: String) -> bool {
     let python = self.draft.python;
     let (at, life, thread) = match self.target() {
       Target::Thread(key) => (key.0, key.1, Some(key.2)),
       Target::Session(at, life) => (at, life, None),
       Target::New(at) => (at, self.record(), None),
     };
+    self.fault = self.away(at);
+    if self.fault.is_some() {
+      return false;
+    }
     self.hold(at, &life, self.cwd(at, &life));
     let made = thread.is_none() && !python;
     if made {
@@ -144,6 +148,7 @@ impl Model {
       opened.pending.push(Pending { act: None, text: text.clone() });
     }
     self.outgoing.push_back(Outgoing { at, life, thread, text, python });
+    true
   }
 
   /// The folder that the life of a record opens in when no life holds the record: the folder of

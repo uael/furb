@@ -6,12 +6,12 @@
   ◌ which key sends the queue…            works since 22:10     FU furb                       opus
   ‖ Ground the branch on the carrier        paused at 22:10
                                                                 Debug stuck TUI after…    ✗ Failed
-  studio is offline: the daemon closed the connection           FU furb                       opus
-
-  ⌃O        go to a project, a session or a machine            Working 2
-  ⌃P        commands
-  ⌃X ?      each key                                            run the bench of…      as of 09:12
-                                                                FC furb-cloud@studio        opus ◌
+  studio is offline: the daemon closed the connection. The      FU furb                       opus
+  window dials it again.
+                                                               Working 2
+  ⌃O        go to a project, a session or a machine
+  ⌃P        commands                                            run the bench of…      as of 09:12
+  ⌃X ?      each key                                            FC furb-cloud@studio        opus ◌
 
                                                                 which key sends…     ⠋ Working 11h
                                                                 PH photowroom               opus ◌
