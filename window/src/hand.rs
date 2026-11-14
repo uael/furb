@@ -405,8 +405,9 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
     return true;
   }
   let does = keys::pressed(key, led);
+  // A letter after the leader is a key of the window, and no letter of a text.
   let typed =
-    key.text().is_some() && (key.modifiers.is_empty() || key.modifiers == Modifiers::SHIFT);
+    !led && key.text().is_some() && (key.modifiers.is_empty() || key.modifiers == Modifiers::SHIFT);
   if answered(app, window, does, typed) {
     return true;
   }

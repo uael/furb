@@ -248,3 +248,17 @@ fn a_notice_is_a_line_of_its_thread_with_no_form() {
   assert!(came && formless(&app), "{}", app.text());
   assert!(app.text().contains("┃ A reply opens this thread again"), "{}", app.text());
 }
+
+#[test]
+fn a_letter_after_the_leader_is_a_key_of_the_window_and_no_letter_of_the_answer() {
+  // The form just showed, so it takes no letter yet, and a choice takes no letter that it lacks.
+  let (app, ..) = opened(&format!("where does the list stand\n{CHOOSES}"), ASKER);
+  app.press("ctrl+x");
+  app.press("?");
+  shows(&app, "Search a key");
+  app.press("escape");
+  app.advance(HOLD);
+  app.press("ctrl+x");
+  app.press("?");
+  shows(&app, "Search a key");
+}
