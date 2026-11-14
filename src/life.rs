@@ -611,10 +611,10 @@ impl Opening {
   /// of the crate, each of which stands where the ear of the life before stood. No boot runs, and
   /// no entry before the image is read. A life that went on from the image and wrote no later one,
   /// as one that crashed, kept entries after it: the journal of the life says them again, as a boot
-  /// says a record again, so the open costs that tail alone. Each act that an ear of the life of
-  /// the image held in flight, and that no such entry ended, is put to its fresh ear as an act that
-  /// an earlier life took, at the first time the life is driven, which this does once. A life that
-  /// works then stands the root once, as a boot does, so each way to open reaches the same state.
+  /// says a record again, so the open costs that tail alone. A life that works then stands the root
+  /// once, as a boot does, and puts each act that an ear of the life of the image held in flight,
+  /// and that no such entry ended, to its fresh ear at a wake, as an act that an earlier life took,
+  /// as [`Engine::resume`] does after a boot, so each way to open reaches the same state.
   ///
   /// The session steps the ears that the life before had, by their names, so the life needs each
   /// of them and no other: a life that inspects hears a silent ear in the place of each that it
@@ -669,6 +669,7 @@ impl Opening {
     // does. A life that inspects keeps no fact, so it stands at the tip of the record as it is.
     if self.works() {
       engine.verb("stand", vec![Object::string(ROOT)], vec![])?;
+      engine.flight()?;
     }
     engine.pump(Waker::noop())?;
     Ok(Ok(engine))

@@ -80,8 +80,13 @@ async fn stepped<W: 'static>(
   told: &UnboundedSender<Event>,
 ) -> Result<bool, Fault> {
   let Heard { fold, controls, seen } = heard;
+  let fresh = seen.insert(a.about().to_owned());
+  // A wake puts an act that an earlier life took to the outside again: its question is no new fact.
+  if a.question() && !fresh {
+    return Ok(true);
+  }
   let mut facts = Vec::new();
-  if seen.insert(a.about().to_owned()) && !a.question() && !a.about().is_empty() {
+  if fresh && !a.question() && !a.about().is_empty() {
     let made = co.call("get", vec![Object::string(a.about())], vec![]).await?;
     facts.extend(Fact::owned(made));
   }

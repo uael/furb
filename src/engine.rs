@@ -810,6 +810,12 @@ impl Engine {
       }
     }
     self.holding.clone_from(&holding);
+    self.above(holding)
+  }
+
+  /// Each act of a list that waits and that no pause holds, and each act above it that made it, directly or not,
+  /// when that act is a prompt, a rung, a command or a wait that is not done and that no pause holds, in order.
+  fn above(&mut self, holding: Vec<String>) -> Result<Vec<(String, String)>, Fault> {
     let mut pending = Vec::new();
     for id in holding {
       if self.parked.iter().any(|(one, _)| *one == id) || !self.whether(WAITS, &id)? {
@@ -859,8 +865,25 @@ impl Engine {
   /// they are.
   pub fn resume(&mut self) -> Result<(), Fault> {
     let pending = self.pending()?;
+    self.woken(&pending)
+  }
+
+  /// The acts that the ears of the life of an image held in flight, put to their fresh ears as
+  /// [`Engine::resume`] puts the work of an earlier life: the journal holds each act that an ear of
+  /// the outside took and that is not done, and a wake of each that no other act of them made puts
+  /// it to the outside again, so a life opens by its image as it opens by its record.
+  pub(crate) fn flight(&mut self) -> Result<(), Fault> {
+    let held = self.checkpointed("held", vec![])?;
+    let ids = held.as_ref().items().unwrap_or_default();
+    let ids = ids.iter().filter_map(|one| one.as_str().map(str::to_owned)).collect();
+    let pending = self.above(ids)?;
+    self.woken(&pending)
+  }
+
+  /// A wake of each act of a pending list that no other act of it made.
+  fn woken(&mut self, pending: &[(String, String)]) -> Result<(), Fault> {
     let mut tops = Vec::new();
-    for (id, _) in &pending {
+    for (id, _) in pending {
       let by = self.get(id)?.map(|act| act.by().to_owned()).unwrap_or_default();
       if !pending.iter().any(|(one, _)| *one == by) {
         tops.push(id.clone());

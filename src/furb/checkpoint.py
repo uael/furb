@@ -150,7 +150,13 @@ def journal(names, record=()):
         heard = (*heard[:2], "journal", *heard[3:])
       return carried(g, heard)
 
-    LIFE.update(lives=lives, carried=carried, more=more, numbered=numbered)
+    def flying():
+      for x in [*taken]:
+        if not over(x) and any(f[1] == x and f[2] in outside for f in held.get((scope(x), "started"), ())):
+          pending[x] = ()
+      return [*pending]
+
+    LIFE.update(lives=lives, carried=carried, more=more, numbered=numbered, flying=flying)
     names.update(numbered=numbered, offers=offered, drive=driven, lives=lives)
     try:
       while True:
@@ -196,7 +202,7 @@ def journal(names, record=()):
           while not transcript(born, "carried") and get(born)[5]:
             born = get(born)[5]
           for x in transcript(born, "carried")[-1:]:
-            bind(a[3], a[1], x[4], x[5])
+            x[5:] and bind(a[3], a[1], x[4], x[5])
     finally:
       for pile in log, left, due, first, saved, back:
         pile.clear()
@@ -232,6 +238,12 @@ def fed(names, entries):
     raise names["Refused"](why)
   LIFE["more"](entries)
   names["drive"](poke(), "tail")
+
+
+def held(names):
+  if names["numbered"] is not LIFE.get("numbered"):
+    raise names["Refused"]("no journal of the checkpointer keeps this life, so it holds no act")
+  return LIFE["flying"]()
 
 
 def seed(names, data):
@@ -402,7 +414,7 @@ def gathered(names, define, floor):
         "paused": paused(c),
         "turns": [x for x in saved if x[0] not in ("started", "done") or x[1] in held],
         "definitions": [
-          *[d for x in transcript(c, "carried")[-1:] for d in x[5]],
+          *filter(None, [define(d) for x in transcript(c, "carried")[-1:] for d in (x[5:] or [()])[0]]),
           *filter(None, [define(w) for r, w in program(c).items() if get(r) and get(r)[2] != "extensions"]),
         ],
         "values": values[c],

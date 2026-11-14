@@ -14,6 +14,12 @@ def fed(names: dict[str, object], entries: Iterable[Entry]) -> None:
   fed on a life that no journal of the checkpointer keeps is refused, since nothing takes a tail there.
   """
 
+def held(names: dict[str, object]) -> list[str]:
+  """held makes the journal of the life hold each act that an ear of the outside took and that is not done, as it holds each act that a record shows started and not done, and gives the name of each act that it holds, so a life that opens from an image puts each act that the ears of the life before held in flight to its fresh ear at a wake, as a life that opens by its record does.
+  A wake of an act that the journal holds puts it to the ears of the outside again, as an act that an earlier life took.
+  held on a life that no journal of the checkpointer keeps is refused, since nothing holds an act there.
+  """
+
 def seed(names: dict[str, object], data: object) -> list[Entry]:
   """seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine opens a checkpoint that an earlier engine of its major wrote.
   Each chain of the data is made again under its name, on its parent and with its label, as the operator makes it, and each name of a kind up to the highest that the data takes, which no entry carries, stays taken.
@@ -42,7 +48,7 @@ def seed(names: dict[str, object], data: object) -> list[Entry]:
 def gathered(names: dict[str, object], define: Callable[[str], str], floor: dict[str, int]) -> dict:
   """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts.
   taken gives the highest number of each kind that an act of a chain took, and at least the number that floor gives, since a later life makes no act again that an ear of the outside made.
-  chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, the definitions of its last fact carried, then what define gives of each word that ran on it, as one string for each word that defines a name, in order, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose rung stands in the lineage of an act whose ear still hears on it at the tip, an open act or a done act with a lasting ear, as lives.
+  chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word of the definitions of its last fact carried, then of each word that ran on it, as one string for each word that defines a name, in order, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose rung stands in the lineage of an act whose ear still hears on it at the tip, an open act or a done act with a lasting ear, as lives.
   The definitions of a chain take only the words whose rung is an act, so no text that the chain heard, as a note in prose of a tell, and the word of a checkpoint parses, so a later life binds each value again.
   chains holds each chain whose ear still hears, after a number that no chain of the life holds too.
   The turns of a chain keep no reply that is not done, so a later life holds no reply that no ear of it takes.

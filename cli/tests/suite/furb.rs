@@ -229,9 +229,9 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
     .collect();
   let stands = kinds.iter().filter(|kind| *kind == "\"stand\"").count();
   assert_eq!(
-    stands, 2,
-    "the first life keeps its stand and the stand that its setup tells, and the second opens \
-     from the image of the first, with no birth: {kinds:?}"
+    stands, 3,
+    "the first life keeps its stand and the stand that its setup tells, and the second, which \
+     opens from the image of the first, stands its root once, as each later life does: {kinds:?}"
   );
   let before = fs::read(yard.record()).expect("the record");
   assert_eq!(
@@ -261,10 +261,23 @@ fn a_life_goes_on_from_its_image_and_its_record_replays_with_no_drift() {
   assert_eq!(printed(yard.kept(&["run", "k = 41"]), ""), "None\n");
   let image = PathBuf::from(format!("{}.image", yard.record().display()));
   assert!(image.is_file(), "a life that keeps its record ends with its image");
-  let lines = || fs::read_to_string(yard.record()).expect("the record").lines().count();
-  let born = lines();
+  // A twin of the life opens by its record: each way to open writes the same entries.
+  let twin = Yard::new("imaged-twin");
+  assert_eq!(printed(twin.kept(&["run", "k = 41"]), ""), "None\n");
+  fs::remove_file(PathBuf::from(format!("{}.image", twin.record().display()))).expect("its image");
+  let heads = |yard: &Yard, from: usize| -> Vec<String> {
+    let record = fs::read_to_string(yard.record()).expect("the record");
+    let entries = record.lines().skip(from).map(|line| serde_json::from_str::<Value>(line));
+    entries
+      .map(|entry| entry.map_or_else(|no| no.to_string(), |one| format!("{}", one[0][1])))
+      .collect()
+  };
+  let born = heads(&yard, 0).len();
   assert_eq!(printed(yard.kept(&["run", "k += 1"]), ""), "None\n");
-  assert_eq!(lines(), born + 2, "a life that opens from its image says its rung and no birth");
+  assert_eq!(printed(twin.kept(&["run", "k += 1"]), ""), "None\n");
+  let added = heads(&yard, born);
+  assert!(added.len() > 2, "a life that opens from its image stands its root and runs its rung");
+  assert_eq!(added, heads(&twin, born), "a life opens from its image as it opens by its record");
   let turns = || {
     let mut turns = yard.furb(&["turns", "--record"]);
     turns.arg(yard.record());
@@ -295,7 +308,7 @@ fn a_life_opens_from_an_image_that_its_record_passed_and_says_the_entries_after_
   let stands = |record: &str| record.lines().filter(|line| line.starts_with("[[\"stand\"")).count();
   let before = stands(&record());
   assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "42\n");
-  assert_eq!(stands(&record()), before, "a life that opens from an image says no birth");
+  assert_eq!(stands(&record()), before + 1, "a life that opens from an image stands its root once");
   assert_ne!(fs::read(&image).expect("the image of the third life"), first);
   // The log holds the line of keep of each entry one time, in order: the lines that the second
   // life wrote after the image went before the third life said their facts again.
@@ -309,7 +322,7 @@ fn a_life_opens_from_an_image_that_its_record_passed_and_says_the_entries_after_
   checkpoint.arg(yard.record());
   assert_eq!(printed(checkpoint, ""), "");
   assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "43\n");
-  assert_eq!(stands(&record()), before + 1, "a life that opens by its record says its birth");
+  assert_eq!(stands(&record()), before + 2, "a life that opens by its record stands its root once");
 }
 
 /// The key of an image names what its session depends on in the build that wrote it, by a digest
@@ -334,11 +347,11 @@ fn a_life_opens_by_its_record_when_the_build_or_the_dump_of_its_image_is_another
     fs::write(&image, rekeyed).expect("the image under another key");
     let before = stands();
     assert_eq!(printed(yard.kept(&["run", "k += 1"]), ""), "None\n");
-    assert_eq!(stands(), before + 1, "an image of another {field} is not read");
+    assert_eq!(stands(), before + 1, "a life on an image of another {field} stands its root once");
   }
   let before = stands();
   assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "43\n");
-  assert_eq!(stands(), before, "the image that the life of this build wrote is read");
+  assert_eq!(stands(), before + 1, "the life that opens from its image stands its root once");
 }
 
 #[test]

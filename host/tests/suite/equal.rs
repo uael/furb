@@ -1,7 +1,7 @@
 //! One life read three ways once it ended: by a whole replay of its record, by its image, and by a
 //! birth on a checkpoint at its tip. Each way reaches the state that the replay reaches, so a model
 //! and the owner read the same turns, the same module, the same acts, the same threads and the same
-//! pages.
+//! pages, at the open and after it.
 
 #![expect(
   clippy::disallowed_methods,
@@ -178,13 +178,24 @@ async fn a_life_by_its_record_by_its_image_and_by_a_checkpoint_reads_the_same() 
     let life = Life::spawn(opening(&at)).expect("the life has a thread");
     let mut events = Box::pin(life.events(0));
     until(&mut events, |event| matches!(event, Event::Act(_))).await;
-    let seen = read(&life, &chains, &threads).await;
+    let opened = read(&life, &chains, &threads).await;
+    // A word after the open: each way goes on from the same state, so its acts take the same
+    // moments. A birth on a checkpoint does not go on as the replay does yet: the ear of the
+    // extensions teaches again, and a chain tells again what it heard before the checkpoint.
+    let after = made(&life, rung("z = 3")).await;
+    until(&mut events, done(&after)).await;
+    let went = if way == "checkpoint" { None } else { Some(read(&life, &chains, &threads).await) };
     ended(life).await;
     // The whole replay of the record is the one truth, and each other way is read against it.
     match &truth {
-      None => truth = Some(seen),
-      Some(truth) => {
-        found.extend(differ(truth, &seen).into_iter().map(|one| format!("{way}: {one}")));
+      None => truth = Some((opened, went)),
+      Some((at_open, after_open)) => {
+        let mut differs = differ(at_open, &opened);
+        if let (Some(truth), Some(went)) = (after_open, &went) {
+          differs
+            .extend(differ(truth, went).into_iter().map(|one| format!("after the open: {one}")));
+        }
+        found.extend(differs.into_iter().map(|one| format!("{way}: {one}")));
       }
     }
   }
