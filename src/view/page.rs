@@ -341,8 +341,15 @@ impl<'a> Reader<'a> {
           Some(act) => Mark::Runs { work: Work::Command, since: began(&act.id) },
           None => Mark::Runs { work: Work::Command, since: began(&rung.id) },
         };
+        // Each line that asks the operator a question that waits says so, the last one or not.
+        let places = placed(word, &made);
+        let asks = made.iter().zip(places).filter(|(act, _)| act.asks_operator() && !act.done());
+        let asking: Vec<usize> = asks.filter_map(|(_, place)| place.and_then(at_line)).collect();
         if let Some(at) = source.and_then(at_line).or(lines.len().checked_sub(1)) {
           lines[at].mark = mark;
+        }
+        for at in asking {
+          lines[at].mark = Mark::Asks;
         }
       }
       _ => {}

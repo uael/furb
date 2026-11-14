@@ -211,3 +211,23 @@ fn a_question_holds_its_shape_and_once_closed_who_closed_it_and_what_it_came_to(
     ]
   );
 }
+
+#[test]
+fn each_line_that_asks_a_question_that_waits_carries_the_mark_of_a_question() {
+  let mut streams = Streamed::default();
+  let word =
+    "one = prompt(bool, 'A?', to=OPERATOR)\ntwo = prompt(str, 'B?', to=OPERATOR)\nclose(await one)";
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "ask twice", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
+    json!(["prompt", "prompt2", "rung1", "chain1", "bool", "A?", "operator"]),
+    json!(["prompt", "prompt3", "rung1", "chain1", "str", "B?", "operator"]),
+  ];
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let marks: Vec<&Mark> = block.lines.iter().map(|line| &line.mark).collect();
+  assert_eq!(marks, [&Mark::Asks, &Mark::Asks, &Mark::Ran]);
+}
