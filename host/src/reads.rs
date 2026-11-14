@@ -10,11 +10,15 @@
 use std::time::Duration;
 
 use furb::view::{Page, Reach};
-use tokio::{sync::broadcast::error::RecvError, task::AbortHandle, time::sleep};
+use tokio::{
+  sync::broadcast::{Receiver, error::RecvError},
+  task::AbortHandle,
+  time::sleep,
+};
 
 use crate::{
   event::Event,
-  life::{Command, LifeHandle, Reply},
+  life::{Command, LifeHandle, Logged, Reply},
   protocol::Frame,
   serve::Outbox,
 };
@@ -26,6 +30,8 @@ const MOMENT: Duration = Duration::from_millis(100);
 /// The thread that a peer reads, which the task tells.
 pub(crate) struct Read {
   pub(crate) handle: LifeHandle,
+  /// Each event of the life from before the page that the peer was given.
+  pub(crate) heard: Receiver<Logged>,
   pub(crate) outbox: Outbox,
   pub(crate) life: String,
   pub(crate) thread: String,
@@ -56,10 +62,9 @@ impl Readers {
 impl Read {
   /// The read of a thread, from the page that the peer was given, told until the peer or the life
   /// is gone.
-  pub(crate) async fn told(self, mut told: Page) {
-    let mut heard = self.handle.told();
+  pub(crate) async fn told(mut self, mut told: Page) {
     loop {
-      match heard.recv().await {
+      match self.heard.recv().await {
         Ok((_, event)) if matches!(*event, Event::Ended(_)) => return,
         Ok((_, event)) if !matches!(*event, Event::Act(_) | Event::Text { .. }) => continue,
         Ok(_) | Err(RecvError::Lagged(_)) => {}

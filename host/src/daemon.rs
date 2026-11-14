@@ -494,9 +494,11 @@ impl Host for Daemon {
         if let Command::Configure(change) = &command {
           signed(change, config.as_deref().map(Path::new), outbox).await?;
         }
+        // The read hears each event from before the page, so no change falls between the two.
+        let heard = handle.told();
         let reply = handle.send(command).await?;
         if let (Some((thread, limit)), Reply::Page(page)) = (reads, &reply) {
-          let read = Read { handle, outbox: outbox.clone(), life: named, thread, limit };
+          let read = Read { handle, heard, outbox: outbox.clone(), life: named, thread, limit };
           let task = tokio::spawn(read.told(page.clone())).abort_handle();
           if let Err(SendError(Asked::Reads { task, .. })) =
             self.asks.send(Asked::Reads { outbox: outbox.clone(), task })

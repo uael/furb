@@ -256,7 +256,7 @@ pub enum Reply {
 }
 
 /// One event under its place in the log.
-type Logged = (Seq, Arc<Event>);
+pub(crate) type Logged = (Seq, Arc<Event>);
 
 /// Where the thread of a life replies to a command.
 type Replier = oneshot::Sender<Result<Reply, LifeError>>;
