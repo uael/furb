@@ -12,7 +12,8 @@ pub(crate) fn run(text: impl Into<String>, style: Style) -> Span<'static> {
 }
 
 /// A text cut to a count of columns, with a mark that says so. The cut falls between two words
-/// when a word stands before the one that it would split.
+/// when a word stands before the one that it would split: the blank that pads the start of a text
+/// stands before no word.
 pub(crate) fn cut(text: &str, room: usize) -> String {
   if text.width() <= room {
     return text.to_owned();
@@ -26,8 +27,9 @@ pub(crate) fn cut(text: &str, room: usize) -> String {
     kept.push(one);
   }
   let split = !text[kept.len()..].starts_with(' ');
-  let kept = match kept.rfind(' ') {
-    Some(at) if split => &kept[..at],
+  let pad = kept.len() - kept.trim_start().len();
+  let kept = match kept[pad..].rfind(' ') {
+    Some(at) if split => &kept[..pad + at],
     _ => kept.as_str(),
   };
   // A separator that the cut leaves at the end goes with the word after it.
