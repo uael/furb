@@ -408,16 +408,21 @@ impl Window {
     self.listed().await.iter().any(|one| one.life == life && one.open)
   }
 
+  /// A thread of the operator on the root of a life, which its model closes: the card of the life,
+  /// which the window hears from now on.
+  async fn threaded(&mut self, life: &str) {
+    cards(self).await;
+    messaged(self, life, "say done").await;
+    let of = |card: &Card| card.life == life && card.thread.standing == Standing::Resolved;
+    card(self, of).await;
+  }
+
   /// Waits until the daemon holds a record no more: its life ended, with its image, and gave the
   /// lease of the record back. A life that ends is not open already, and still holds its record,
-  /// so a life outside the daemon opens on the record only after this.
+  /// so a life outside the daemon opens on the record only after this. The daemon tells it as a
+  /// card of the life that it holds no more, which a window hears once it asked the cards.
   async fn ended(&mut self, life: &str) {
-    let gone = async {
-      while self.listed().await.iter().any(|one| one.life == life && one.held) {
-        time::sleep(Duration::from_millis(20)).await;
-      }
-    };
-    timeout(PATIENCE, gone).await.expect("the life ends after its grace");
+    card(self, |card| card.life == life && !card.held).await;
   }
 }
 
@@ -675,6 +680,7 @@ async fn a_window_of_a_life_that_opens_from_its_image_hears_its_stages_then_its_
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
+  window.threaded(&life).await;
   window.ran(&life, "x = 41 + 1").await;
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   window.ended(&life).await;
@@ -727,6 +733,7 @@ async fn each_window_of_a_life_that_opens_hears_how_far_the_open_stands_then_its
   let mut first = Window::dialed(&local).await;
   let life = opened(&mut first, &at, "a.jsonl").await;
   first.attach(&life).await;
+  first.threaded(&life).await;
   first.ran(&life, "x = 41 + 1").await;
   assert_eq!(first.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   first.ended(&life).await;
@@ -892,6 +899,7 @@ async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemo
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
+  window.threaded(&life).await;
   window.ran(&life, "x = 1").await;
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   time::sleep(PAST).await;
@@ -901,6 +909,7 @@ async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemo
   let index = format!("{life}.threads.json");
   let indexed = fs::read(&index).unwrap();
   let mut later = Window::dialed(&local).await;
+  cards(&mut later).await;
   let drift = |why: &str| why.starts_with("Drift: ") && why.contains(" drifts: ");
   let verb = Verb::Open {
     life: life.clone(),
@@ -1810,6 +1819,7 @@ async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_checkpoint_l
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
+  window.threaded(&life).await;
   let waits = "await wait(3600, __name__)".to_owned();
   let verb = Verb::Run { life: life.clone(), word: waits, on: None };
   let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
