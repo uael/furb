@@ -1016,11 +1016,14 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
   if end.stood {
     life.indexed();
   }
-  life.put(Event::Ended(fault));
+  life.put(Event::Ended(fault.clone()));
+  // A verb that waited for an open that failed hears why, and not only that the life ended.
   while let Some(message) = received.recv().await {
     match message {
       Message::Read(read) => read.answered(None, &mut life).await,
-      Message::Command(_, reply) => drop(reply.send(Err(LifeError::Ended))),
+      Message::Command(_, reply) => {
+        drop(reply.send(Err(fault.clone().map_or(LifeError::Ended, LifeError::Refused))));
+      }
       Message::Rebirth(_) => {}
     }
   }

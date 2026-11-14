@@ -782,6 +782,51 @@ async fn each_window_of_a_life_that_opens_hears_how_far_the_open_stands_then_its
   told_whole(&late);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn a_verb_that_waited_for_an_open_that_failed_hears_why() {
+  use furb::life::Stage;
+  let at = place();
+  let (local, _daemon) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  window.threaded(&life).await;
+  window.ran(&life, "x = 1").await;
+  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  window.ended(&life).await;
+  checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
+  // Another holder owns the lease of the record, and the open stands at the catalog until the
+  // verb waits for it.
+  let lease = File::create(format!("{life}.lock")).unwrap();
+  lease.try_lock().unwrap();
+  let (claude, go) = waiting(&at);
+  let open = Verb::Open {
+    life: life.clone(),
+    cwd: Some(at.display().to_string()),
+    actor: None,
+    roster: None,
+    skills: None,
+    config: None,
+    claude: Some(claude),
+    answers: false,
+    attach: Some(0),
+  };
+  assert_eq!(window.ask(open).await, Ok(Answer::Done));
+  let found = |frame: &Frame| matches!(frame, Frame::Opening { stage: Stage::Find, done, of, .. } if done == of);
+  read_until(&mut window, &mut Vec::new(), found).await;
+  let inspect = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
+  let asked = Request { id: window.next, verb: inspect };
+  window.lines.send(serde_json::to_string(&asked).unwrap()).await.unwrap();
+  File::create(&go).unwrap();
+  let refused =
+    |frame: &Frame| matches!(frame, Frame::Refused { id: Some(id), .. } if *id == asked.id);
+  let mut read = Vec::new();
+  read_until(&mut window, &mut read, refused).await;
+  let Some(Frame::Refused { why, .. }) = read.pop() else { unreachable!("the wait ends on it") };
+  assert_eq!(why, format!("Refused: Another process owns {life}."));
+}
+
 #[tokio::test]
 async fn a_life_that_ended_opens_again_from_its_checkpoint() {
   let at = place();

@@ -291,9 +291,12 @@ async fn a_life_that_does_not_open_ends_with_its_fault() {
   let life = Life::spawn(opening).unwrap();
   let mut events = Box::pin(life.events(0));
   let got = until(&mut events, |event| matches!(event, Event::Ended(_))).await;
-  assert!(matches!(&*got.last().unwrap().1, Event::Ended(Some(why)) if !why.is_empty()));
+  let Event::Ended(Some(fault)) = &*got.last().unwrap().1 else { panic!("the end has a fault") };
+  assert!(!fault.is_empty());
   assert!(events.next().await.is_none());
-  assert!(matches!(life.send(Command::Standing).await, Err(LifeError::Ended)));
+  // A command that reaches the life after its end hears the fault that ended it.
+  let refused = life.send(Command::Standing).await;
+  assert!(matches!(&refused, Err(LifeError::Refused(why)) if why == fault), "{refused:?}");
 }
 #[tokio::test]
 async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_work() {
