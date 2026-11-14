@@ -1489,6 +1489,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "furb-window"
+version = "0.4.2"
+dependencies = [
+ "furb",
+ "furb-host",
+ "futures",
+ "opentui",
+ "rustix",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3271,6 +3287,22 @@ dependencies = [
  "rand 0.9.5",
  "thiserror 2.0.20",
 ]
+
+[[package]]
+name = "opentui"
+version = "0.8.3"
+source = "git+https://github.com/anomalyco/opentui?rev=4d578d86fea1ea2626eadf7229fa9e8ccc207f72#4d578d86fea1ea2626eadf7229fa9e8ccc207f72"
+dependencies = [
+ "libc",
+ "opentui-sys",
+ "tokio",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "opentui-sys"
+version = "0.8.3"
+source = "git+https://github.com/anomalyco/opentui?rev=4d578d86fea1ea2626eadf7229fa9e8ccc207f72#4d578d86fea1ea2626eadf7229fa9e8ccc207f72"
 
 [[package]]
 name = "ordered-float"

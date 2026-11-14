@@ -13,3 +13,5 @@ disallowed-methods = [
   { path = "std::process::Child::try_wait", reason = "await tokio::process::Child::wait under a timeout" },
 ]
 absolute-paths-max-segments = 2
+# The names of products that a doc comment writes as they are, beside the names that clippy knows.
+doc-valid-idents = ["..", "OpenTUI", "FFmpeg", "MinGW"]

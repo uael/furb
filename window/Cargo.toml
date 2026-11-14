@@ -1,0 +1,56 @@
+[package]
+name = "furb-window"
+version.workspace = true
+edition = "2024"
+rust-version = "1.95"
+description = "The window of furb: a thin view of the daemon of a machine, drawn in the terminal with OpenTUI."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+# No registry takes a crate that stands on git, as this one stands on OpenTUI.
+publish = false
+
+# The program holds no test of its own, and the library no example in its docs, so cargo builds no test program for
+# either.
+[[bin]]
+name = "furb-window"
+path = "src/main.rs"
+test = false
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# The cache of furb, where the daemon of the machine listens, and the program furb on PATH.
+furb = { path = ".." }
+# The protocol of the daemon and the transport of the machine.
+furb-host = { path = "../host" }
+# The terminal: the widgets, the event loop and the headless app of the tests. One commit, since the crates are not
+# published, and the native library is the one that build.rs makes from the same commit. Its tasks run on tokio.
+opentui = { git = "https://github.com/anomalyco/opentui", rev = "4d578d86fea1ea2626eadf7229fa9e8ccc207f72", features = ["tokio"] }
+# The connection to the daemon, on the runtime of the tasks of the app, and the process of the daemon that it starts.
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "process", "fs"] }
+# The frames of the protocol, one line of JSON each.
+tokio-util = { version = "0.7", features = ["codec"] }
+futures = "0.3"
+serde_json = "1"
+thiserror = "2"
+
+[target.'cfg(unix)'.dependencies]
+# The name of the machine, read safely.
+rustix = { version = "1", features = ["system"] }
+
+[target.'cfg(windows)'.dependencies]
+# The flags of a process that outlives the console of the window.
+windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }
+
+[build-dependencies]
+# The answer of `cargo metadata`, which says where cargo keeps the commit of OpenTUI.
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+# The list of the projects of the daemon of a test.
+serde_json = "1"

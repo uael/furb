@@ -40,8 +40,9 @@ include = [
 
 [workspace]
 # The command line is a program of its own on this crate, so the library takes none of its dependencies. The host
-# holds each life of a machine, on the public API of the crate alone.
-members = ["cli", "host"]
+# holds each life of a machine, on the public API of the crate alone. The window draws the daemon of the host, and
+# no other package depends on it, so only a build of the window needs Zig.
+members = ["cli", "host", "window"]
 
 # The one version of furb: each crate takes it, and maturin gives it to the wheel of each crate.
 [workspace.package]
