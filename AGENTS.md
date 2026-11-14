@@ -133,7 +133,7 @@ API of its own:
   `window/Cargo.toml` pins OpenTUI at one commit, and `window/build.rs` makes its native library with Zig into
   `target/opentui`, once for each commit. So the first cargo command over the workspace in a tree needs `zig` on PATH
   at the version that the commit asks, 0.17.1, and takes about two minutes more. A tree whose `target/opentui` holds
-  the library runs no Zig, as a tree of `script/worktree.sh` does, and `uv sync` needs none. Its tests drive a headless app on a real daemon. `window/tests/screens` holds each
+  the library runs no Zig, as a tree of `script/worktree.sh` does, and `uv sync` and `bun run build` need none. Its tests drive a headless app on a real daemon. `window/tests/screens` holds each
   capture of a frame as text, and `FURB_DRAW=1 cargo test -p furb-window` draws each capture again.
   [`CONTRIBUTING.md`](CONTRIBUTING.md#the-window) lists its files.
 

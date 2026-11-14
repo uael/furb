@@ -33,9 +33,10 @@ env:
 jobs:
   build:
     # Each system builds once, and each job after it runs what it built and compiles nothing: the program furb and the
-    # engine of TypeScript, from one invocation of cargo over the workspace, the tests of the crate and of the window,
-    # the wheel of furb-monty and the clippy of the crate. A second selection of cargo resolves other features of the dependencies,
-    # so the tests of the crate build again only the crates that their dev-dependencies change. The copy of the build
+    # engine of TypeScript, from one invocation of cargo over the workspace less the window, the tests of the crate and
+    # of the window, the wheel of furb-monty and the clippy of the crate. A second selection of cargo resolves other
+    # features of the dependencies, so the tests build again only the crates that their dev-dependencies or the window
+    # change. The copy of the build
     # goes to the jobs after it as an artifact of a day: the programs and the tests, never the target, which is ten
     # times as large. A build that fails ends each job after it on its system, which reports skipped and gives no test
     # result there, as the last step of this job says, and no job of another system.

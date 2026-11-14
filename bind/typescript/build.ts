@@ -39,9 +39,12 @@ const command = [
   ...(release ? ["--release"] : []),
   // The engine and the program furb come from one invocation of cargo over the workspace, which the build of the
   // gates and the tests of the crate select too: a second invocation for the program alone resolved other features of
-  // the dependencies and built most crates again, 11 minutes on Windows.
+  // the dependencies and built most crates again, 11 minutes on Windows. The window stays out: no part of this
+  // package reads it, and its build needs Zig or the native library of OpenTUI, which only a build of the window has.
   "--",
   "--workspace",
+  "--exclude",
+  "furb-window",
 ];
 const child = Bun.spawn(command, { cwd: root, stdout: "inherit", stderr: "inherit" });
 if (await child.exited) process.exit(1);
