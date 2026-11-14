@@ -2870,7 +2870,7 @@
         "held",
         "open"
       ],
-      "description": "A record of the machine: the main checkout of the workspace whose sessions hold it, when the\nlist names one, whether a life of the daemon holds it now, whether that life lives and does not\nend, whether a window holds that life, and the name of its session while a life holds it: the\none that the operator said last on the root, which wins, else the one that the skill naming\ngave. An empty name takes the default name again."
+      "description": "A record of the machine: the main checkout of the workspace whose sessions hold it, when the\nlist names one, else the checkout whose `.furb/sessions` holds a record that a life holds,\nwhether a life of the daemon holds it now, whether that life lives and does not\nend, whether a window holds that life, and the name of its session while a life holds it: the\none that the operator said last on the root, which wins, else the one that the skill naming\ngave. An empty name takes the default name again."
     },
     "Card": {
       "type": "object",
@@ -2942,7 +2942,7 @@
         "title",
         "standing"
       ],
-      "description": "A card of the machine: one thread that an operator started, in the record of its session. It\nholds the name of the session when it has one, the main checkout of the project whose sessions\nhold the record, when the list of the machine names one, whether a life holds the record now,\nthe login of each person whose window holds that life, and the second of the epoch since which\nthe thread stands as it does. A record that has no index of its threads yet gives one card with\nno prompt, under the name of its file."
+      "description": "A card of the machine: one thread that an operator started, in the record of its session. It\nholds the name of the session when it has one, the main checkout of the project whose sessions\nhold the record, when the list of the machine names one, else the checkout whose\n`.furb/sessions` holds a record that a life holds, whether a life holds the record now,\nthe login of each person whose window holds that life, and the second of the epoch since which\nthe thread stands as it does. A record that has no index of its threads yet gives one card with\nno prompt, under the name of its file."
     },
     "Standing": {
       "oneOf": [

@@ -36,6 +36,15 @@ pub(crate) fn recorded(config: &Path) -> Vec<Sessions> {
   found
 }
 
+/// The checkout whose `.furb/sessions` holds a record, where a window makes the record of a new
+/// session of a project that the list does not name.
+pub(crate) fn checkout(record: &Path) -> Option<String> {
+  let sessions = record.parent()?;
+  let furb = sessions.parent()?;
+  let made = sessions.file_name()? == "sessions" && furb.file_name()? == ".furb";
+  made.then(|| furb.parent().map(|one| one.display().to_string())).flatten()
+}
+
 /// Whether a file is the record of a session: a `.jsonl`, and no journal of its changes.
 fn record(path: &Path) -> bool {
   let kind = |path: &Path, wanted: &str| path.extension().is_some_and(|one| one == wanted);

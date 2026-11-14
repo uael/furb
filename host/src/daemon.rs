@@ -1134,6 +1134,7 @@ impl Lives {
       let at = Path::new(life).parent();
       let workspace = found.iter().find(|one| Some(one.folder.as_path()) == at);
       let workspace = workspace.map(|one| one.workspace.clone());
+      let workspace = workspace.or_else(|| records::checkout(Path::new(life)));
       listed.push(Listed { life: life.clone(), workspace, held: true, open, watched, name });
     }
     listed.sort_by(|one, other| one.life.cmp(&other.life));

@@ -588,7 +588,8 @@ pub struct Handed {
 }
 
 /// A record of the machine: the main checkout of the workspace whose sessions hold it, when the
-/// list names one, whether a life of the daemon holds it now, whether that life lives and does not
+/// list names one, else the checkout whose `.furb/sessions` holds a record that a life holds,
+/// whether a life of the daemon holds it now, whether that life lives and does not
 /// end, whether a window holds that life, and the name of its session while a life holds it: the
 /// one that the operator said last on the root, which wins, else the one that the skill naming
 /// gave. An empty name takes the default name again.
@@ -607,7 +608,8 @@ pub struct Listed {
 
 /// A card of the machine: one thread that an operator started, in the record of its session. It
 /// holds the name of the session when it has one, the main checkout of the project whose sessions
-/// hold the record, when the list of the machine names one, whether a life holds the record now,
+/// hold the record, when the list of the machine names one, else the checkout whose
+/// `.furb/sessions` holds a record that a life holds, whether a life holds the record now,
 /// the login of each person whose window holds that life, and the second of the epoch since which
 /// the thread stands as it does. A record that has no index of its threads yet gives one card with
 /// no prompt, under the name of its file.

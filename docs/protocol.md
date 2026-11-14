@@ -176,7 +176,8 @@ it is not given. The daemon answers requests in any order.
 - `list` gives each record of the machine as `lives`: each record of the sessions of each workspace that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
   `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each
-  record that a life of the daemon holds. `held` says whether a life holds the record now, and `open` whether that
+  record that a life of the daemon holds, whose `workspace` is the checkout whose `.furb/sessions` holds it when the
+  list names no workspace for it. `held` says whether a life holds the record now, and `open` whether that
   life lives and does not end, and `watched` whether a window of any connection holds the life, which a pin
   does not make, so a window finds the sessions that no window holds from the one list. A window lists its sessions from it, so a window on another machine lists them the
   same way.
@@ -231,7 +232,8 @@ it is not given. The daemon answers requests in any order.
   life, with all that answers it. The answer holds the cards of each record that `list` gives with no `config`. A
   card holds:
   - `life`, the record of its session, `session`, the name of the session when it has one, and `project`, the main
-    checkout of the project whose sessions hold the record, when the list of the machine names one;
+    checkout of the project whose sessions hold the record, when the list of the machine names one, else for a
+    record that a life of the daemon holds, the checkout whose `.furb/sessions` holds it;
   - `prompt`, the name of the prompt of the thread, and `title`, the first line of its message;
   - `standing`, how the thread stands, as `{"is": ...}`: `asks` with `of`, the login of the one member that its
     question waits for, or null when it waits for each operator; `failed`; `paused` with `by`, who said the pause;
