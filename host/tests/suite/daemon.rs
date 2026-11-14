@@ -31,7 +31,7 @@ use std::{
 
 use furb::{
   Object,
-  life::{Answer as Answered, Log, Opening, Stage},
+  life::{Answer as Answered, Log, Opening},
   view::Phase,
 };
 use furb_host::{
@@ -602,6 +602,7 @@ async fn a_life_that_its_open_attaches_has_a_holder_before_a_grace_of_none_passe
 }
 
 /// The frames of a window in the order that it read them, up to the first that the test waits for.
+#[cfg(unix)]
 async fn read_until(window: &mut Window, read: &mut Vec<Frame>, wanted: impl Fn(&Frame) -> bool) {
   loop {
     let frame = match window.pushed.pop_front() {
@@ -619,7 +620,9 @@ async fn read_until(window: &mut Window, read: &mut Vec<Frame>, wanted: impl Fn(
 /// Holds what a window read of an open and of the life after it: each stage once and in order,
 /// numbers that never go back, a last frame that is whole, and no frame of the open after the
 /// first event of the life.
+#[cfg(unix)]
 fn told_whole(read: &[Frame]) {
+  use furb::life::Stage;
   let event = read.iter().position(|one| matches!(one, Frame::Event { .. })).unwrap_or(read.len());
   let opening = |some: &[Frame]| -> Vec<(Stage, u64, u64)> {
     let frames = some.iter().filter_map(|one| match one {
@@ -660,6 +663,7 @@ fn waiting(at: &Path) -> (String, PathBuf) {
 #[cfg(unix)]
 #[tokio::test]
 async fn each_window_of_a_life_that_opens_hears_how_far_the_open_stands_then_its_events() {
+  use furb::life::Stage;
   let at = place();
   let (local, _daemon) = started(&at, SHORT).await;
   let mut first = Window::dialed(&local).await;
