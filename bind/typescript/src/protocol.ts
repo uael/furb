@@ -17,6 +17,9 @@ export type Request1 =
       verb: "list";
     }
   | {
+      verb: "cards";
+    }
+  | {
       life: string;
       cwd?: string | null;
       actor?: string | null;
@@ -484,6 +487,12 @@ export type Frame =
     }
   | {
       life: string;
+      changed: Card[];
+      gone: string[];
+      frame: "cards";
+    }
+  | {
+      life: string;
       stage: Stage;
       done: number;
       of: number;
@@ -549,11 +558,18 @@ export type Answer =
       data: {
         protocol: number;
         peer: Peer;
+        machine: string;
+        build: string;
+        view: number;
       };
     }
   | {
       answer: "lives";
       data: Listed[];
+    }
+  | {
+      answer: "cards";
+      data: Card[];
     }
   | {
       answer: "act";
@@ -606,6 +622,41 @@ export type Answer =
   | {
       answer: "moments";
       data: number[];
+    };
+/**
+ * How the thread of a card stands. It asks one member by his login, or each operator. A pause
+ * names who said it. A thread whose model closed its prompt is resolved, and one that a cancel
+ * ended is stopped.
+ */
+export type Standing =
+  | {
+      of?: string | null;
+      is: "asks";
+    }
+  | {
+      is: "failed";
+    }
+  | {
+      by: string;
+      is: "paused";
+    }
+  | {
+      is: "thinks";
+    }
+  | {
+      is: "runs";
+    }
+  | {
+      is: "delegates";
+    }
+  | {
+      is: "stopped";
+    }
+  | {
+      is: "rests";
+    }
+  | {
+      is: "resolved";
     };
 /**
  * The state of work: it asks the operator, it ended while the operator looked away, it failed, a
@@ -932,6 +983,28 @@ export interface Listed {
   name?: string | null;
 }
 /**
+ * A card of the machine: one thread that an operator started, in the record of its session. It
+ * holds the name of the session when it has one, the main checkout of the project whose sessions
+ * hold the record, when the list of the machine names one, whether a life holds the record now,
+ * the login of each person whose window holds that life, and the second of the epoch since which
+ * the thread stands as it does. A record that has no index of its threads yet gives one card with
+ * no prompt, under the name of its file.
+ */
+export interface Card {
+  life: string;
+  session?: string | null;
+  project?: string | null;
+  held: boolean;
+  viewers: string[];
+  since: number;
+  prompt: string;
+  title: string;
+  standing: Standing;
+  model?: string | null;
+  agents?: number;
+  readers?: string[];
+}
+/**
  * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
  */
 export interface Handed {
@@ -1174,4 +1247,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 15;
+export const PROTOCOL = 16;

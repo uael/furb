@@ -3,7 +3,7 @@
 
 use furb::{
   life::Stage,
-  view::{Act, Desk, Rung, Shown, ThreadNode, Threads},
+  view::{self, Act, Desk, Rung, Shown, ThreadNode, Threads},
 };
 use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 15;
+pub const PROTOCOL: u32 = 16;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -86,6 +86,10 @@ pub enum Verb {
     #[serde(default)]
     config: Option<String>,
   },
+  /// The cards of the machine: each thread that an operator started in each record that `list`
+  /// gives with no config. The peer then hears a frame `cards` at each change of them, until it
+  /// leaves.
+  Cards,
   /// The life of a record opened, in a folder or in the folder of its record. A life that this
   /// open makes stands on the actor, the roster and the skills that the peer names, reads the
   /// settings of the user in the folder `config` and runs the claude command line `claude` when
@@ -391,6 +395,7 @@ impl Verb {
       self,
       Self::Hello(_)
         | Self::List { .. }
+        | Self::Cards
         | Self::Attach { .. }
         | Self::Detach { .. }
         | Self::Presence { .. }
@@ -460,6 +465,9 @@ pub enum Frame {
   Event { life: String, seq: Seq, event: Event },
   /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
   Presence { life: String, peers: Vec<Peer> },
+  /// A change of the cards of one record, pushed to each peer that asked the cards: each card that
+  /// is new or that changed, and the prompt of each card that the record holds no more.
+  Cards { life: String, changed: Vec<Card>, gone: Vec<String> },
   /// How far the open of a life stands, pushed to each of its windows while the life opens, at its
   /// first open and at each rebirth: the stage, its work done and its work known, each in the unit
   /// of the stage, and both 0 for a stage that counts nothing. The stages of one open come in
@@ -504,12 +512,19 @@ impl Frame {
 #[serde(tag = "answer", content = "data", rename_all = "snake_case")]
 pub enum Answer {
   Done,
-  /// The answer to a hello: the protocol of the daemon, and the peer as the daemon knows it.
+  /// The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name
+  /// of the machine of the daemon, its build, and the id of the view of the peer, which names this
+  /// connection among those of its login and stands in no record.
   Welcome {
     protocol: u32,
     peer: Peer,
+    machine: String,
+    build: String,
+    view: u64,
   },
   Lives(Vec<Listed>),
+  /// The cards of the machine.
+  Cards(Vec<Card>),
   /// The name of the act that the verb made.
   Act(String),
   Value(Value),
@@ -570,6 +585,34 @@ pub struct Listed {
   pub watched: bool,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub name: Option<String>,
+}
+
+/// A card of the machine: one thread that an operator started, in the record of its session. It
+/// holds the name of the session when it has one, the main checkout of the project whose sessions
+/// hold the record, when the list of the machine names one, whether a life holds the record now,
+/// the login of each person whose window holds that life, and the second of the epoch since which
+/// the thread stands as it does. A record that has no index of its threads yet gives one card with
+/// no prompt, under the name of its file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Card {
+  pub life: String,
+  pub session: Option<String>,
+  pub project: Option<String>,
+  pub held: bool,
+  pub viewers: Vec<String>,
+  pub since: u64,
+  #[serde(flatten)]
+  pub thread: view::Card,
+}
+
+impl Card {
+  /// Where a member finds the card in a list: its part, its rank in that part, and its time. What
+  /// needs him waits the longest first, and each other part shows the newest first.
+  pub fn place(&self, login: &str) -> (view::Part, u8, i64) {
+    let (part, rank) = self.thread.part(login);
+    let since = i64::try_from(self.since).unwrap_or(i64::MAX);
+    (part, rank, if part == view::Part::NeedsYou { since } else { -since })
+  }
 }
 
 /// A view that a window mounts in a slot of a life, which the process of a skill serves.

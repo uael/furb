@@ -68,6 +68,19 @@
         },
         {
           "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "cards"
+            }
+          },
+          "required": [
+            "verb"
+          ],
+          "description": "The cards of the machine: each thread that an operator started in each record that `list`\ngives with no config. The peer then hears a frame `cards` at each change of them, until it\nleaves."
+        },
+        {
+          "type": "object",
           "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the skills that the peer names, reads the\nsettings of the user in the folder `config` and runs the claude command line `claude` when\nthe peer names them, as the window of the peer reads them, and the peer answers each request\nof its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass.",
           "properties": {
             "life": {
@@ -2106,6 +2119,37 @@
             "life": {
               "type": "string"
             },
+            "changed": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Card"
+              }
+            },
+            "gone": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "frame": {
+              "type": "string",
+              "const": "cards"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "changed",
+            "gone"
+          ],
+          "description": "A change of the cards of one record, pushed to each peer that asked the cards: each card that\nis new or that changed, and the prompt of each card that the record holds no more."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "stage": {
               "$ref": "#/definitions/Stage"
             },
@@ -2383,11 +2427,25 @@
                 },
                 "peer": {
                   "$ref": "#/definitions/Peer"
+                },
+                "machine": {
+                  "type": "string"
+                },
+                "build": {
+                  "type": "string"
+                },
+                "view": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
                 }
               },
               "required": [
                 "protocol",
-                "peer"
+                "peer",
+                "machine",
+                "build",
+                "view"
               ]
             }
           },
@@ -2395,7 +2453,7 @@
             "answer",
             "data"
           ],
-          "description": "The answer to a hello: the protocol of the daemon, and the peer as the daemon knows it."
+          "description": "The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name\nof the machine of the daemon, its build, and the id of the view of the peer, which names this\nconnection among those of its login and stands in no record."
         },
         {
           "type": "object",
@@ -2415,6 +2473,26 @@
             "answer",
             "data"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "cards"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Card"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The cards of the machine."
         },
         {
           "type": "object",
@@ -2715,6 +2793,201 @@
         "open"
       ],
       "description": "A record of the machine: the main checkout of the workspace whose sessions hold it, when the\nlist names one, whether a life of the daemon holds it now, whether that life lives and does not\nend, whether a window holds that life, and the name of its session while a life holds it: the\none that the operator said last on the root, which wins, else the one that the skill naming\ngave. An empty name takes the default name again."
+    },
+    "Card": {
+      "type": "object",
+      "properties": {
+        "life": {
+          "type": "string"
+        },
+        "session": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "held": {
+          "type": "boolean"
+        },
+        "viewers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "since": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "standing": {
+          "$ref": "#/definitions/Standing"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agents": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        },
+        "readers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "life",
+        "held",
+        "viewers",
+        "since",
+        "prompt",
+        "title",
+        "standing"
+      ],
+      "description": "A card of the machine: one thread that an operator started, in the record of its session. It\nholds the name of the session when it has one, the main checkout of the project whose sessions\nhold the record, when the list of the machine names one, whether a life holds the record now,\nthe login of each person whose window holds that life, and the second of the epoch since which\nthe thread stands as it does. A record that has no index of its threads yet gives one card with\nno prompt, under the name of its file."
+    },
+    "Standing": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "of": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "is": {
+              "type": "string",
+              "const": "asks"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "by": {
+              "type": "string"
+            },
+            "is": {
+              "type": "string",
+              "const": "paused"
+            }
+          },
+          "required": [
+            "is",
+            "by"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "thinks"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "runs"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "delegates"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "stopped"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "rests"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "resolved"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        }
+      ],
+      "description": "How the thread of a card stands. It asks one member by his login, or each operator. A pause\nnames who said it. A thread whose model closed its prompt is resolved, and one that a cancel\nended is stopped."
     },
     "Handed": {
       "type": "object",
@@ -4248,5 +4521,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 15
+  "x-protocol": 16
 }

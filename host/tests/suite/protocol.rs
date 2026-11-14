@@ -305,15 +305,23 @@ async fn hello_asking(client: &mut Client<DuplexStream>, role: Role) -> Frame {
   client.ask(0, Verb::Hello(hello)).await
 }
 
-fn welcomed(role: Role) -> Frame {
-  let peer = Peer { login: "uael".to_owned(), role, kind: Kind::Window, name: None };
-  Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer } }
+/// The peer of a window as a welcome names it.
+fn welcomed(role: Role) -> Peer {
+  Peer { login: "uael".to_owned(), role, kind: Kind::Window, name: None }
+}
+
+/// The peer that the welcome of a daemon of this protocol names.
+fn peer(frame: Frame) -> Peer {
+  match frame {
+    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => peer,
+    other => panic!("no welcome: {other:?}"),
+  }
 }
 
 #[tokio::test]
 async fn a_reader_is_refused_each_verb_that_writes() {
   let mut client = served(Role::Read);
-  assert_eq!(client.hello(PROTOCOL).await, welcomed(Role::Read));
+  assert_eq!(peer(client.hello(PROTOCOL).await), welcomed(Role::Read));
   for (id, verb) in (1..).zip(verbs()) {
     let needs = verb.needs();
     match client.ask(id, verb.clone()).await {
@@ -329,7 +337,7 @@ async fn a_reader_is_refused_each_verb_that_writes() {
 #[tokio::test]
 async fn a_peer_that_asked_read_is_refused_each_verb_that_writes_on_a_transport_to_write() {
   let mut client = served(Role::Write);
-  assert_eq!(hello_asking(&mut client, Role::Read).await, welcomed(Role::Read));
+  assert_eq!(peer(hello_asking(&mut client, Role::Read).await), welcomed(Role::Read));
   let verb = verbs().into_iter().find(|verb| verb.needs() == Role::Write).unwrap();
   match client.ask(1, verb).await {
     Frame::Refused { id, error, .. } => {
@@ -345,7 +353,7 @@ async fn a_peer_that_asked_read_is_refused_each_verb_that_writes_on_a_transport_
 #[tokio::test]
 async fn a_peer_never_has_more_than_the_role_that_its_transport_proved() {
   let mut client = served(Role::Read);
-  assert_eq!(hello_asking(&mut client, Role::Write).await, welcomed(Role::Read));
+  assert_eq!(peer(hello_asking(&mut client, Role::Write).await), welcomed(Role::Read));
 }
 
 #[test]
@@ -413,7 +421,7 @@ async fn a_skill_that_gives_no_name_is_refused_at_its_hello() {
 #[tokio::test]
 async fn a_frame_past_the_bound_closes_the_peer() {
   let mut client = served(Role::Write);
-  assert_eq!(client.hello(PROTOCOL).await, welcomed(Role::Write));
+  assert_eq!(peer(client.hello(PROTOCOL).await), welcomed(Role::Write));
   client.say(&"x".repeat(BOUND + 1)).await;
   let large = ProtocolError::Large { bound: BOUND };
   assert_eq!(client.heard().await, Some(Frame::refused(None, large)));
@@ -439,6 +447,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "61fea00841a87095db3f78b57c2870504c8bd89d0a9701b6b39391c9a20e8f73",
   "74ff2fe32edc31516b2111ce32773e5c96cd686dcecf2cfbd7913bc402051da9",
   "2799c36fb8e8a61cc3a3bde7817ccdeab3937e2e93959c61f0975cca4d195a41",
+  "35b67fc67cff393f0d4d6f877666046e8be15b8cb87c14cc511eb5ea02b6aaa6",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

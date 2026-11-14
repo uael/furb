@@ -11,8 +11,10 @@ use crate::Error;
 #[test]
 fn the_told_holds_the_welcome_then_the_count_of_the_records_and_keeps_the_first_loss() {
   let peer = Peer { login: "ada".to_owned(), role: Role::Write, kind: Kind::Window, name: None };
+  let (machine, build) = ("studio".to_owned(), "0.0.0".to_owned());
+  let welcome = Answer::Welcome { protocol: 7, peer, machine, build, view: 1 };
   let mut told = Told::default();
-  told.hear(Ok(Frame::Reply { id: 0, answer: Answer::Welcome { protocol: 7, peer } }));
+  told.hear(Ok(Frame::Reply { id: 0, answer: welcome }));
   assert_eq!(told, Told::Welcomed { protocol: 7, records: None });
   told.hear(Ok(Frame::Reply { id: 1, answer: Answer::Lives(Vec::new()) }));
   assert_eq!(told, Told::Welcomed { protocol: 7, records: Some(0) });

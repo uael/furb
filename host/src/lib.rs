@@ -21,6 +21,7 @@
 pub mod access;
 mod answers;
 mod backlog;
+mod cards;
 mod changes;
 mod daemon;
 mod ears;
@@ -46,5 +47,5 @@ pub use event::{Event, Seq};
 pub use life::{Command, Life, LifeHandle, Reply};
 pub use queue::FollowUp;
 pub use rebirth::{Counted, Heap, SHARE};
-pub use serve::{Gone, Granted, Host, Outbox, fixed, serve};
+pub use serve::{BUILD, Gone, Granted, Host, Outbox, fixed, machine, serve};
 pub use stall::{HUNG, STALL};

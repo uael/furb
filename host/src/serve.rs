@@ -6,14 +6,17 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
+  env,
   future::Future,
   sync::{
     Arc,
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicU64, AtomicUsize, Ordering},
   },
 };
 
 use futures::{SinkExt, StreamExt, stream::FuturesUnordered};
+#[cfg(unix)]
+use rustix::system::uname;
 use serde_json::Value;
 use tokio::{
   io::{self, AsyncRead, AsyncWrite},
@@ -143,8 +146,7 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
       let asked = hello.role;
       let role = asked.map_or(who.role, |asked| asked.min(who.role));
       let peer = Peer { login: who.login, role, kind: hello.kind, name: hello.name };
-      let answer = Answer::Welcome { protocol: PROTOCOL, peer: peer.clone() };
-      send(&mut out, &Frame::Reply { id, answer }).await?;
+      send(&mut out, &Frame::Reply { id, answer: welcome(&peer) }).await?;
       (peer, asked)
     }
     Some(Ok(Request { id, verb: Verb::Hello(hello) })) => {
@@ -185,6 +187,29 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
       Some(frame) = answers.next() => send(&mut out, &frame).await?,
     }
   }
+}
+
+/// The count of the peers that the daemon welcomed, which gives each of them the id of its view.
+static VIEWS: AtomicU64 = AtomicU64::new(1);
+
+/// The welcome of a peer: who it is to the daemon, the machine and its build, and the id of its
+/// view.
+fn welcome(peer: &Peer) -> Answer {
+  let view = VIEWS.fetch_add(1, Ordering::Relaxed);
+  let (machine, build) = (machine(), BUILD.to_owned());
+  Answer::Welcome { protocol: PROTOCOL, peer: peer.clone(), machine, build, view }
+}
+
+/// The build of the daemon: the version of furb that serves it.
+pub const BUILD: &str = env!("CARGO_PKG_VERSION");
+
+/// The name of the machine of the daemon, without its domain.
+pub fn machine() -> String {
+  #[cfg(unix)]
+  let full = uname().nodename().to_string_lossy().into_owned();
+  #[cfg(not(unix))]
+  let full = env::var("COMPUTERNAME").unwrap_or_default();
+  full.split('.').next().unwrap_or_default().to_owned()
 }
 
 /// The next request of a peer, none at its end, or the refusal of its frame, under the id that the

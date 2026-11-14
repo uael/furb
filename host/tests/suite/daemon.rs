@@ -32,13 +32,13 @@ use std::{
 use furb::{
   Object,
   life::{Answer as Answered, Log, Opening},
-  view::Phase,
+  view::{self, Phase, Standing},
 };
 use furb_host::{
   DaemonError, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
   access::{Access, Ports},
   protocol::{
-    Answer, Axis, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node,
+    Answer, Axis, Card, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node,
     PROTOCOL, Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
   },
   run,
@@ -436,6 +436,12 @@ fn present(count: usize) -> impl Fn(&Frame) -> bool {
 
 /// A life opened on a new record in a folder.
 async fn opened(window: &mut Window, at: &Path, name: &str) -> String {
+  open(window, at, name, None).await
+}
+
+/// A life opened on a new record in a folder, which the open attaches to the window from a place
+/// of its log when the test names one.
+async fn open(window: &mut Window, at: &Path, name: &str, attach: Option<u64>) -> String {
   let life = at.join(name).display().to_string();
   let cwd = Some(at.display().to_string());
   let verb = Verb::Open {
@@ -447,7 +453,7 @@ async fn opened(window: &mut Window, at: &Path, name: &str) -> String {
     config: None,
     claude: None,
     answers: false,
-    attach: None,
+    attach,
   };
   assert_eq!(window.ask(verb).await, Ok(Answer::Done));
   life
@@ -890,7 +896,10 @@ async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemo
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   time::sleep(PAST).await;
   assert!(!window.lives(&life).await);
+  window.ended(&life).await;
   let held = drifted(&life);
+  let index = format!("{life}.threads.json");
+  let indexed = fs::read(&index).unwrap();
   let mut later = Window::dialed(&local).await;
   let drift = |why: &str| why.starts_with("Drift: ") && why.contains(" drifts: ");
   let verb = Verb::Open {
@@ -915,6 +924,9 @@ async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemo
     time::sleep(SHORT).await;
   }
   assert_eq!(fs::read(&life).unwrap(), held, "a life that drifts keeps nothing in its record");
+  // A life that did not open folded no act of the tail of its record, so the index stays.
+  later.ended(&life).await;
+  assert_eq!(fs::read(&index).unwrap(), indexed, "a life that did not open writes no index");
   let other = opened(&mut later, &at, "b.jsonl").await;
   later.attach(&other).await;
   later.ran(&other, "y = 1").await;
@@ -2139,4 +2151,152 @@ async fn a_sign_in_of_codex_that_the_operator_cancels_is_pushed_and_refuses_its_
   let answer =
     window.until(|frame| matches!(frame, Frame::Refused { id: Some(got), .. } if *got == id));
   assert!(matches!(answer.await, Frame::Refused { error: ProtocolError::Refused { .. }, .. }));
+}
+
+/// The welcome of a daemon to a new window: the name of its machine, its build, and the view.
+async fn welcome(local: &Local) -> (String, String, u64) {
+  let mut lines = Framed::new(local.dial().await.unwrap(), LinesCodec::new());
+  let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None };
+  let request = Request { id: 0, verb: Verb::Hello(hello) };
+  lines.send(serde_json::to_string(&request).unwrap()).await.unwrap();
+  let line = timeout(PATIENCE, lines.next()).await.unwrap().unwrap().unwrap();
+  match serde_json::from_str(&line).unwrap() {
+    Frame::Reply { answer: Answer::Welcome { machine, build, view, .. }, .. } => {
+      (machine, build, view)
+    }
+    other => panic!("no welcome: {other:?}"),
+  }
+}
+
+#[tokio::test]
+async fn the_welcome_names_the_machine_its_build_and_a_view_of_each_peer() {
+  let at = place();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let (first, second) = (welcome(&local).await, welcome(&local).await);
+  let named = (furb_host::machine(), furb_host::BUILD.to_owned());
+  assert_eq!((first.0, first.1), named);
+  assert_eq!((second.0, second.1), named);
+  assert_ne!(first.2, second.2);
+}
+
+/// One project in a folder, which the list of the daemon names, and the folder of its sessions.
+fn project(at: &Path) -> (String, PathBuf) {
+  let main = at.join("main");
+  let sessions = main.join(".furb").join("sessions");
+  fs::create_dir_all(&sessions).unwrap();
+  let list = json!({ "workspaces": [{ "directory": main.display().to_string() }] });
+  fs::create_dir_all(at.join("config")).unwrap();
+  fs::write(at.join("config").join("workspaces.json"), list.to_string()).unwrap();
+  (main.display().to_string(), sessions)
+}
+
+/// A life opened on a new record of a folder and attached by its open: a life with no holder
+/// ends at once under a grace of none, so an attach after the open can meet a life that ended.
+async fn held(window: &mut Window, at: &Path, name: &str) -> String {
+  open(window, at, name, Some(0)).await
+}
+
+/// The cards of the machine, which the window hears from then on.
+async fn cards(window: &mut Window) -> Vec<Card> {
+  match window.ask(Verb::Cards).await {
+    Ok(Answer::Cards(cards)) => cards,
+    other => panic!("no cards: {other:?}"),
+  }
+}
+
+/// The first card that a frame of the cards tells and that the test waits for.
+async fn card(window: &mut Window, wanted: impl Fn(&Card) -> bool) -> Card {
+  let told =
+    |frame: &Frame| matches!(frame, Frame::Cards { changed, .. } if changed.iter().any(&wanted));
+  match window.until(told).await {
+    Frame::Cards { changed, .. } => changed.into_iter().find(wanted).unwrap(),
+    other => panic!("no cards: {other:?}"),
+  }
+}
+
+/// A message of the operator sent to the root of a life: its prompt.
+async fn messaged(window: &mut Window, life: &str, message: &str) -> String {
+  let (shape, message) = ("None".to_owned(), message.to_owned());
+  let verb = Verb::Prompt { life: life.to_owned(), shape, message, to: None, on: None };
+  match window.ask(verb).await {
+    Ok(Answer::Act(prompt)) => prompt,
+    other => panic!("no prompt: {other:?}"),
+  }
+}
+
+#[tokio::test]
+async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
+  let at = place();
+  let (main, sessions) = project(&at);
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  assert_eq!(cards(&mut window).await, Vec::new());
+  let life = held(&mut window, &sessions, "one.jsonl").await;
+  let prompt = messaged(&mut window, &life, "ground the branch\nand say what moved").await;
+  let resolved = |card: &Card| card.thread.standing == Standing::Resolved;
+  let told = card(&mut window, resolved).await;
+  let login = told.viewers.first().cloned().expect("the window holds the life");
+  let thread = view::Card {
+    prompt: prompt.clone(),
+    title: "ground the branch".to_owned(),
+    standing: Standing::Resolved,
+    model: Some("claude-cli:opus".to_owned()),
+    agents: 0,
+    readers: Vec::new(),
+  };
+  let wanted = Card {
+    life: life.clone(),
+    session: None,
+    project: Some(main),
+    held: true,
+    viewers: vec![login.clone()],
+    since: told.since,
+    thread,
+  };
+  assert_eq!(told, wanted);
+  assert!(told.thread.needs(&login), "a thread that ended and that he did not read needs him");
+  // What he read is told as a change of the card, and a later peer gets the card as it stands.
+  let seen = Verb::Seen { life: life.clone(), about: prompt };
+  assert_eq!(window.ask(seen).await, Ok(Answer::Done));
+  let read = card(&mut window, |card| card.thread.read_by(&login)).await;
+  assert_eq!(read.thread.part(&login), (view::Part::Resolved, 0));
+  let mut late = Window::dialed(&local).await;
+  assert_eq!(cards(&mut late).await, vec![read]);
+}
+
+#[tokio::test]
+async fn the_cards_of_a_record_at_rest_come_from_its_index_and_never_from_a_fold_in_the_list() {
+  let at = place();
+  let (_, sessions) = project(&at);
+  let (local, _daemon) = started(&at, Duration::ZERO).await;
+  let mut window = Window::dialed(&local).await;
+  assert_eq!(cards(&mut window).await, Vec::new());
+  let life = held(&mut window, &sessions, "one.jsonl").await;
+  messaged(&mut window, &life, "ground the branch").await;
+  let resolved = |card: &Card| card.thread.standing == Standing::Resolved;
+  let lived = card(&mut window, resolved).await;
+  // The life ends at the detach, writes its index, and its card stays with no life.
+  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  let rests = card(&mut window, |card| !card.held).await;
+  assert_eq!(rests, Card { held: false, viewers: Vec::new(), ..lived });
+  // A list of a record at rest reads its index: nothing retold the record, which would leave the
+  // file of what it tells beside it.
+  let (index, retold) = (format!("{life}.threads.json"), format!("{life}.told"));
+  let mut second = Window::dialed(&local).await;
+  assert_eq!(cards(&mut second).await, vec![rests.clone()]);
+  assert!(!Path::new(&retold).exists(), "the list read the past of a record");
+  // An index that does not name the tip of its record is dropped: the list gives the record as
+  // one card at once, and the cards come once the daemon made the index from the record.
+  let mut kept: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
+  kept["tip"]["bytes"] = json!(1);
+  fs::write(&index, kept.to_string()).unwrap();
+  let mut third = Window::dialed(&local).await;
+  let nameless = cards(&mut third).await;
+  let titles: Vec<_> =
+    nameless.iter().map(|one| (&*one.thread.prompt, &*one.thread.title)).collect();
+  assert_eq!(titles, [("", "one")]);
+  let folded = card(&mut third, |card| !card.thread.prompt.is_empty()).await;
+  assert_eq!(Card { since: 0, ..folded }, Card { since: 0, ..rests });
+  let again: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
+  assert_ne!(again["tip"], kept["tip"]);
 }

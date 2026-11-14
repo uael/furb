@@ -26,6 +26,7 @@ use std::{
   },
   task::Poll,
   thread,
+  time::Duration,
 };
 
 use furb::{
@@ -50,10 +51,12 @@ use tokio::{
     oneshot, watch,
   },
   task::{LocalSet, spawn_blocking},
+  time::{Instant, sleep_until},
 };
 
 use crate::{
   backlog::{self, Backlog},
+  cards::{self, Session, Times},
   changes::{Journal, journal},
   ears::{ears, json_of},
   error::LifeError,
@@ -66,6 +69,9 @@ use crate::{
 /// How many events a reader may stand behind the life before it reads them again from the log of
 /// the life.
 const BEHIND: usize = 256;
+
+/// The least time between two tells of the cards of a life.
+const CARDS: Duration = Duration::from_millis(250);
 
 /// What a client says to a life. A command that names no chain says it on the root.
 #[derive(Debug, Clone, PartialEq)]
@@ -274,6 +280,15 @@ pub struct Life {
   weight: Arc<Scale>,
   /// How far the open of the life stands, which each window reads while the thread opens.
   opens: Told,
+  /// The cards of the life as the daemon reads them, and what makes them: see [`Life::carded`].
+  cards: watch::Sender<Option<Arc<Session>>>,
+  times: Times,
+  /// Whether an event changed what the cards read since the life last told them, and when it may
+  /// tell them next.
+  stale: bool,
+  due: Instant,
+  /// The time of each card that the life tells first: when its record last changed.
+  first: Option<u64>,
 }
 
 /// What a life keeps of the events that it told, which is the part of the host in the image of the
@@ -376,6 +391,7 @@ pub struct LifeHandle {
   name: Arc<Mutex<Option<String>>>,
   weight: Arc<Scale>,
   opens: watch::Receiver<Opens>,
+  cards: watch::Receiver<Option<Arc<Session>>>,
 }
 
 impl Life {
@@ -392,11 +408,13 @@ impl Life {
     let weight = Arc::new(Scale::default());
     let weighed = Arc::clone(&weight);
     let (opened, opens) = Told::new();
+    let (carded, cards) = watch::channel(None);
+    let told = Tells { readers: told, name: named, weight: weighed, opens: opened, cards: carded };
     thread::Builder::new()
       .name("furb-life".to_owned())
-      .spawn(move || lived(opening, received, told, named, weighed, opened))
+      .spawn(move || lived(opening, received, told))
       .map_err(LifeError::Thread)?;
-    Ok(LifeHandle { inbox, readers, name, weight, opens })
+    Ok(LifeHandle { inbox, readers, name, weight, opens, cards })
   }
 
   /// One event put in the log, and sent to each reader, then the follow-ups of a chain when the
@@ -405,9 +423,11 @@ impl Life {
     if let Event::Fact(fact) = &event {
       self.kept.said += 1;
       self.kept.held.noted(fact, self.kept.said);
+      self.stale |= fact[0] == "seen";
       self.kept.facts.entry(digest(fact)).or_insert(self.kept.said);
       if self.kept.named.hear(fact, false) {
         self.named();
+        self.stale = true;
       }
     }
     self.kept.watch.heard(&event);
@@ -418,6 +438,7 @@ impl Life {
     let queued = self.kept.queue.heard(&event);
     if let Event::Act(act) = &event {
       self.kept.held.heard(act);
+      self.stale = true;
     }
     let seq = self.kept.log.len() as Seq;
     for at in self.kept.spent.heard(seq, &event) {
@@ -437,6 +458,38 @@ impl Life {
   fn named(&self) {
     if let Ok(mut name) = self.name.lock() {
       *name = self.kept.named.name().map(str::to_owned);
+    }
+  }
+
+  /// The cards of the life told to the daemon, when an event changed what they read and they are
+  /// not the cards told before. A card is a fold of each act of the life, so the life tells its
+  /// cards once in [`CARDS`] at most, whatever the count of its events.
+  fn carded(&mut self) {
+    if !mem::take(&mut self.stale) {
+      return;
+    }
+    let at = self.first.take().unwrap_or_else(cards::now);
+    let name = self.kept.named.name().map(str::to_owned);
+    let session = Session { name, threads: self.times.timed(self.kept.held.cards(), at) };
+    self.cards.send_if_modified(|told| {
+      let changed = told.as_deref() != Some(&session);
+      if changed {
+        *told = Some(Arc::new(session));
+      }
+      changed
+    });
+    self.due = Instant::now() + CARDS;
+  }
+
+  /// The index of the threads of the record written from the cards of the life, at its end.
+  fn indexed(&mut self) {
+    self.stale = true;
+    self.carded();
+    let told = self.cards.borrow().clone();
+    if let (Some(record), Some(session)) = (&self.record, told)
+      && let Err(no) = cards::keep(Path::new(record), &session)
+    {
+      self.put(Event::Notice(format!("The index of the threads of {record} is not written: {no}")));
     }
   }
 
@@ -496,6 +549,7 @@ impl Life {
   fn imaged(&mut self, kept: Kept, progress: &Progress) {
     self.kept = kept;
     self.named();
+    self.stale = true;
     self.weight.facts.store(self.kept.watch.facts(), Ordering::Relaxed);
     (progress.0)(Stage::Log, 0, 0);
   }
@@ -764,34 +818,30 @@ fn digest(fact: &Value) -> u64 {
   clippy::disallowed_methods,
   reason = "the thread of each life blocks on its own current_thread runtime by design (#983 section 2)"
 )]
-fn lived(
-  opening: Opening,
-  received: UnboundedReceiver<Message>,
-  readers: broadcast::Sender<Logged>,
-  name: Arc<Mutex<Option<String>>>,
-  weight: Arc<Scale>,
-  opens: Told,
-) {
+fn lived(opening: Opening, received: UnboundedReceiver<Message>, tells: Tells) {
   match runtime::Builder::new_current_thread().enable_all().build() {
-    Ok(runtime) => {
-      LocalSet::new().block_on(&runtime, run(opening, received, readers, name, weight, opens));
-    }
+    Ok(runtime) => LocalSet::new().block_on(&runtime, run(opening, received, tells)),
     Err(no) => {
       let ended = Event::Ended(Some(format!("the life has no runtime: {no}")));
-      readers.send((0, Arc::new(ended))).ok();
+      tells.readers.send((0, Arc::new(ended))).ok();
     }
   }
 }
 
-/// The life: opened, then driven until it ends, and its log held for the readers after its end.
-async fn run(
-  mut opening: Opening,
-  mut received: UnboundedReceiver<Message>,
+/// Where the thread of a life tells what each handle of the life reads: its events, the name of
+/// its session, its weight, how far its open stands, and its cards.
+struct Tells {
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
   weight: Arc<Scale>,
   opens: Told,
-) {
+  cards: watch::Sender<Option<Arc<Session>>>,
+}
+
+/// The life: opened, then driven until it ends, and its log held for the readers after its end.
+async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tells: Tells) {
+  let Tells { readers, name, weight, opens, cards } = tells;
+  let record = opening.record.clone().filter(|_| opening.keeps());
   let (told, heard) = mpsc::unbounded_channel();
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from))
     .claude(opening.claude.as_ref().map(PathBuf::from));
@@ -802,9 +852,14 @@ async fn run(
     configs,
     roster: opening.roster.get_or_insert_default().clone(),
     name,
-    record: opening.record.clone().filter(|_| opening.keeps()),
+    first: record.as_deref().map(|one| cards::changed(Path::new(one))),
+    times: Times::kept(record.as_deref()),
+    record,
     weight,
     opens,
+    cards,
+    stale: false,
+    due: Instant::now(),
   };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
@@ -816,15 +871,17 @@ async fn run(
   opening.log = Some(Log(Arc::new(move |line| {
     reports.send(Event::Notice(line.to_owned())).ok();
   })));
-  let record = opening.record.clone().filter(|_| opening.keeps());
   let folder = PathBuf::from(&opening.directory);
-  let journal = record.map(|one| Journal::spawn(folder, journal(&one), told.clone()));
+  let journal = life.record.clone().map(|one| Journal::spawn(folder, journal(&one), told.clone()));
   let end = lives(opening, &mut life, &mut received, &told, journal.as_ref()).await;
   let fault = flushed(end.fault, journal.as_ref()).await;
   for asked in end.asked {
     asked.send(fault.clone().map_or(Ok(Reply::Done), |one| Err(LifeError::Refused(one)))).ok();
   }
   life.told(None);
+  if end.stood {
+    life.indexed();
+  }
   life.put(Event::Ended(fault));
   while let Some(message) = received.recv().await {
     match message {
@@ -846,11 +903,13 @@ async fn flushed(fault: Option<String>, journal: Option<&Journal>) -> Option<Str
   }
 }
 
-/// How a life ended: the fault that ended it, when one did, and each client that ended it, which
-/// hears the reply once the life is over.
+/// How a life ended: the fault that ended it, when one did, each client that ended it, which
+/// hears the reply once the life is over, and whether the life stood. A life that never opened
+/// holds no act of the tail of its record, so it writes no index of its threads.
 struct End {
   fault: Option<String>,
   asked: Vec<Replier>,
+  stood: bool,
 }
 
 /// The life opened, driven, and opened again from its checkpoint at each rebirth, until it ends,
@@ -871,6 +930,7 @@ async fn lives(
   let progress = life.opens.progress();
   life.opens.born();
   let mut images = record.as_deref().is_some_and(|one| image::agrees(Path::new(one)));
+  let mut stood = false;
   if let Some(one) = record.as_deref().filter(|_| !images) {
     life.recalled(one, &progress);
   }
@@ -884,7 +944,7 @@ async fn lives(
     };
     let engine = match opening.clone().open(ears, progress.clone(), &mut stands).await {
       Ok((engine, _)) => engine,
-      Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new() },
+      Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new(), stood },
     };
     match (kept, mem::take(&mut images), record.as_deref()) {
       (Some(kept), ..) => life.imaged(kept, &progress),
@@ -899,8 +959,11 @@ async fn lives(
       }
       (None, ..) => life.opened(&progress),
     }
+    stood = true;
     match driven(engine, life, received, record.as_deref()).await {
-      Drove::Ended(fault, asked) => return End { fault: fault.map(|one| one.to_string()), asked },
+      Drove::Ended(fault, asked) => {
+        return End { fault: fault.map(|one| one.to_string()), asked, stood };
+      }
       Drove::Reborn(fault) => {
         life.opens.born();
         life.reborn(fault.map(|one| one.to_string()));
@@ -921,7 +984,8 @@ enum Woke {
   Told(Event),
   Stopped(Fault),
   Said(Option<Message>),
-  /// The record holds each fact that the life waited for it to hold.
+  /// The record holds each fact that the life waited for it to hold, or the life told its cards,
+  /// which were due.
   Kept,
 }
 
@@ -948,6 +1012,7 @@ async fn driven(
     let woke = tokio::select! {
       biased;
       Some(event) = life.heard.recv() => Woke::Told(event),
+      () = sleep_until(life.due), if life.stale => { life.carded(); Woke::Kept }
       woke = pumped(&mut engine, waits) => woke,
       message = received.recv(), if !gone => Woke::Said(message),
     };
@@ -992,10 +1057,9 @@ async fn driven(
       return Drove::Ended(ended(engine, life, hands), asked);
     }
     if record.is_some() && life.kept.watch.due() && engine.unkept() == 0 {
-      return match engine.checkpoint() {
-        Ok(()) => Drove::Reborn(None),
-        Err(fault) => Drove::Ended(Some(fault), asked),
-      };
+      let reborn = engine.checkpoint();
+      return reborn
+        .map_or_else(|fault| Drove::Ended(Some(fault), asked), |()| Drove::Reborn(None));
     }
   }
 }
@@ -1252,6 +1316,15 @@ impl LifeHandle {
   /// The name of the session of the life, as its facts fold it: the one that the operator said last
   /// on the root, which wins, else the one that the skill naming gave, and nothing while it
   /// holds neither.
+  pub(crate) fn cards(&self) -> watch::Receiver<Option<Arc<Session>>> {
+    self.cards.clone()
+  }
+
+  /// The cards that the life told last, and none before it told any.
+  pub(crate) fn session(&self) -> Option<Arc<Session>> {
+    self.cards.borrow().clone()
+  }
+
   pub fn name(&self) -> Option<String> {
     self.name.lock().ok().and_then(|name| name.clone())
   }

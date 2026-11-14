@@ -521,7 +521,7 @@ pub fn concerns<S: BuildHasher>(
 /// Whether a thread that he started is over with work past the place up to which he saw it: the
 /// last place of its prompt, its messages and its questions, against the later of what he saw of
 /// the thread and of its chain.
-fn unseen<S: BuildHasher>(
+pub(super) fn unseen<S: BuildHasher>(
   thread: &ChainThread,
   rows: &Rows<'_>,
   seen: &HashMap<String, u64, S>,

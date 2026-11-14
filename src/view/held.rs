@@ -14,6 +14,8 @@ use std::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::engine::OPERATOR;
+
 use super::{
   act::{Act, Kind},
   desk::{Desk, desk},
@@ -153,12 +155,25 @@ impl Held {
   /// each, now or as they stood just after a moment. `read` is the place up to which the window
   /// read the chain, from which its runs of notes count the notes not yet read.
   pub fn threads(&self, chain: &str, at: Option<u64>, read: u64) -> Threads {
-    self.threads_as("operator", chain, at, read)
+    self.threads_as(OPERATOR, chain, at, read)
+  }
+
+  /// The acts now, in the order they began.
+  pub(super) fn now(&self) -> Cow<'_, [Act]> {
+    self.then(None)
+  }
+
+  /// Each site that said what it saw, and the operator with no login, who saw what the journal
+  /// says again.
+  pub(super) fn sites(&self) -> impl Iterator<Item = &str> {
+    let said =
+      self.seen.keys().map(String::as_str).filter(|site| !matches!(*site, "journal" | OPERATOR));
+    [OPERATOR].into_iter().chain(said)
   }
 
   /// What one site saw: its own seen and those of the journal, the later for each act, so a seen
   /// of another site clears nothing of its marks.
-  fn seen_by(&self, site: &str) -> HashMap<String, u64> {
+  pub(super) fn seen_by(&self, site: &str) -> HashMap<String, u64> {
     let mut seen = self.seen.get("journal").cloned().unwrap_or_default();
     for (id, at) in self.seen.get(site).into_iter().flatten() {
       let place = seen.entry(id.clone()).or_default();

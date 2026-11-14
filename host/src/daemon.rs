@@ -26,7 +26,7 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
-  collections::HashMap,
+  collections::{HashMap, HashSet},
   fmt::Display,
   mem,
   net::{IpAddr, SocketAddr},
@@ -39,7 +39,7 @@ use std::{
 use furb::{
   engine::OPERATOR,
   life::{Answer as Answered, Log, Opening},
-  view::WATCH,
+  view::{self, WATCH},
   wire::parsed,
   world::{
     Members, Roster,
@@ -52,7 +52,7 @@ use serde_json::Value;
 use tokio::{
   net::{TcpListener, TcpStream},
   sync::{mpsc, oneshot, watch},
-  task::JoinSet,
+  task::{JoinSet, spawn_blocking},
   time::{Instant, Interval, MissedTickBehavior, interval, sleep_until},
 };
 use tokio_util::codec::{Framed, LinesCodec};
@@ -60,6 +60,7 @@ use tokio_util::codec::{Framed, LinesCodec};
 use crate::{
   access::{Access, Ports},
   answers::Answerer,
+  cards::{self, Told},
   error::{DaemonError, ProtocolError, TransportError},
   event::{Event, Seq},
   holders::{Holders, Window},
@@ -67,7 +68,7 @@ use crate::{
   opens::Heard,
   processes::{self, Played},
   protocol::{
-    Answer, BOUND, Config, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer,
+    Answer, BOUND, Card, Config, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer,
     Request, Verb,
   },
   rebirth::{Asks, Heap},
@@ -396,6 +397,8 @@ enum Asked {
   Left { life: String, outbox: Outbox },
   /// A life whose thread told its end, in one of its births.
   Ended { life: String, born: u64 },
+  /// A life that told its cards, or a record whose index of the threads the daemon made.
+  Carded { life: String },
   /// A life that stalled, in one of its births: each open act, and the notice.
   Stalled { life: String, born: u64, acts: Vec<Open>, notice: String },
 }
@@ -421,7 +424,13 @@ impl Daemon {
     let changes = settings.tailnet.as_ref().map(|one| one.identity.changes());
     let mut weigh = interval(WEIGH);
     weigh.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let (index, records) = mpsc::unbounded_channel();
+    let log = settings.opening.log.clone();
+    tokio::spawn(indexed(records, asks.downgrade(), log));
     let mut lives = Lives {
+      told: Told::default(),
+      indexing: HashSet::new(),
+      index,
       changes,
       weigh,
       rebirths: Asks::default(),
@@ -611,6 +620,34 @@ struct Lives {
   /// since the heap passed its share.
   weigh: Interval,
   rebirths: Asks,
+  /// The cards that the daemon told to the peers that asked them.
+  told: Told,
+  /// Each record that the daemon sent to the task that makes the index of its threads, so no
+  /// record goes there twice: a record whose index cannot be made is not asked again.
+  indexing: HashSet<String>,
+  index: mpsc::UnboundedSender<String>,
+}
+
+/// The index of the threads of each record that the daemon asks, made one at a time on a thread
+/// that may block, so the fold of a large record holds back no verb and no second fold, then the
+/// daemon told, which tells the cards of the record again.
+async fn indexed(
+  mut records: mpsc::UnboundedReceiver<String>,
+  asks: mpsc::WeakUnboundedSender<Asked>,
+  log: Option<Log>,
+) {
+  while let Some(life) = records.recv().await {
+    let record = PathBuf::from(&life);
+    match spawn_blocking(move || cards::folded(&record)).await {
+      Ok(Ok(())) => {}
+      Ok(Err(no)) => {
+        report(log.as_ref(), &format_args!("{life} has no index of its threads: {no}"));
+      }
+      Err(no) => report(log.as_ref(), &format_args!("{life} has no index of its threads: {no}")),
+    }
+    let Some(asks) = asks.upgrade() else { return };
+    asks.send(Asked::Carded { life }).ok();
+  }
 }
 
 /// The next change of the access list, or never when there is no list.
@@ -780,8 +817,10 @@ impl Lives {
           && holders.detach(&outbox)
         {
           holders.present(&life);
+          self.carded(&life);
         }
       }
+      Asked::Carded { life } => self.carded(&life),
       Asked::Ended { life, born } => self.ended(&life, born),
       Asked::Stalled { life, born, acts, notice } => {
         if let Some(Held { born: now, stage: Stage::Living(holders), .. }) = self.held.get(&life)
@@ -803,6 +842,7 @@ impl Lives {
         return self.open(life, birth, reply);
       }
       Verb::List { config } => Ok(Answer::Lives(self.listed(config))),
+      Verb::Cards => Ok(Answer::Cards(self.cards(outbox))),
       Verb::Attach { life, from } => self.attach(&life, from, peer, outbox),
       Verb::Detach { life } => self.detach(&life, outbox),
       Verb::Pin { life, holder } => living(&mut self.held, &life).map(|(_, holders)| {
@@ -862,7 +902,7 @@ impl Lives {
     let opened = match self.held.get_mut(&life).map(|held| &mut held.stage) {
       Some(Stage::Living(_)) => self.answers(&life, birth.answerer.as_ref()),
       Some(Stage::Ending(waiting)) => return waiting.push((birth, reply)),
-      None => self.opened(life.clone(), birth),
+      None => self.opened(&life, birth),
     };
     reply.send(opened.and_then(|()| self.held_by(&life, holder))).ok();
   }
@@ -901,13 +941,13 @@ impl Lives {
   }
 
   /// A life born on a thread of its own, with no holder yet, and watched for its end.
-  fn opened(&mut self, life: String, birth: Birth) -> Result<(), ProtocolError> {
+  fn opened(&mut self, life: &str, birth: Birth) -> Result<(), ProtocolError> {
     let Birth { cwd, actor, roster, skills, config, claude, answerer, holder: _ } = birth;
     let base = &self.settings.opening;
     let config = config.or_else(|| base.config.clone());
     let answer = answerer.as_ref().map(|one| Answered(one.hosted()));
     let opening = Opening {
-      record: Some(life.clone()),
+      record: Some(life.to_owned()),
       directory: cwd.clone(),
       actor: actor.or_else(|| base.actor.clone()),
       // Each life takes a home of its own, so a change of its roster changes no other life.
@@ -924,7 +964,7 @@ impl Lives {
     self.born += 1;
     let watch = Watch {
       life: handle.clone(),
-      record: life.clone(),
+      record: life.to_owned(),
       born: self.born,
       stall: self.settings.stall,
       log: self.settings.opening.log.clone(),
@@ -933,7 +973,7 @@ impl Lives {
     if let Some(host) = &self.settings.host {
       let played = Played {
         handle: handle.clone(),
-        life: life.clone(),
+        life: life.to_owned(),
         cwd: PathBuf::from(&cwd),
         host: host.clone(),
         inside: Inside(self.asks.clone()),
@@ -942,8 +982,21 @@ impl Lives {
       };
       tokio::spawn(played.run());
     }
+    let (mut told, asks, record) = (handle.cards(), self.asks.clone(), life.to_owned());
+    tokio::spawn(async move {
+      while told.changed().await.is_ok()
+        && let Some(asks) = asks.upgrade()
+      {
+        asks.send(Asked::Carded { life: record.clone() }).ok();
+      }
+    });
     let stage = Stage::Living(Holders::new(self.settings.grace));
-    self.held.insert(life, Held { handle, cwd, config, born: self.born, stage, answerer });
+    self
+      .held
+      .insert(life.to_owned(), Held { handle, cwd, config, born: self.born, stage, answerer });
+    // The life changes its record, so the index that the daemon made of it is asked again later.
+    self.indexing.remove(life);
+    self.carded(life);
     Ok(())
   }
 
@@ -959,7 +1012,7 @@ impl Lives {
   /// The lives that a daemon before this one gave, opened again, each with its pins.
   fn adopt(&mut self, handed: Vec<Handed>) {
     for Handed { life, cwd, pins } in handed {
-      if let Err(no) = self.opened(life.clone(), Birth { cwd, ..Birth::default() }) {
+      if let Err(no) = self.opened(&life, Birth { cwd, ..Birth::default() }) {
         report(self.settings.opening.log.as_ref(), &format_args!("{life} did not open: {no}"));
       } else if let Ok((_, holders)) = living(&mut self.held, &life) {
         for pin in pins {
@@ -992,6 +1045,7 @@ impl Lives {
     } else {
       holders.attach(Window { peer, outbox: outbox.clone(), told });
       holders.present(life);
+      self.carded(life);
     }
     Ok(Answer::Done)
   }
@@ -1002,6 +1056,7 @@ impl Lives {
     let was = holders.detach(outbox);
     if was {
       holders.present(life);
+      self.carded(life);
     }
     let skill = self.views.left(life, outbox);
     (was || skill)
@@ -1051,6 +1106,74 @@ impl Lives {
     listed
   }
 
+  /// The cards of the machine for a peer that asks them, which hears each change from now on:
+  /// the cards of each record of the list of the daemon. A peer that heard them before hears what
+  /// changed since.
+  fn cards(&mut self, peer: &Outbox) -> Vec<Card> {
+    self.told.watched();
+    let mut all = Vec::new();
+    for Listed { life, workspace, .. } in self.listed(None) {
+      let cards = self.cards_of(&life, workspace.as_ref());
+      all.extend(cards.iter().cloned());
+      self.told.tell(&life, workspace, cards);
+    }
+    self.told.watch(peer.clone());
+    all
+  }
+
+  /// The cards of one record told again to each peer that hears the cards, when they changed.
+  fn carded(&mut self, life: &str) {
+    if !self.told.watched() {
+      return;
+    }
+    let project = match self.told.project(life) {
+      Some(project) => project.clone(),
+      None => {
+        self.listed(None).into_iter().find(|one| one.life == life).and_then(|one| one.workspace)
+      }
+    };
+    let cards = self.cards_of(life, project.as_ref());
+    self.told.tell(life, project, cards);
+  }
+
+  /// The cards of one record of a project now: those that its life told, when one lives and
+  /// told some, else those of the index beside it. A record with no index that agrees with it
+  /// gives one card under the name of its file, and goes once to the task that makes its index,
+  /// unless a life holds it, which tells its cards itself. So no list waits for the fold of a
+  /// record.
+  fn cards_of(&mut self, life: &str, project: Option<&String>) -> Vec<Card> {
+    let record = Path::new(life);
+    let (session, viewers) = match self.held.get(life) {
+      Some(Held { handle, stage: Stage::Living(holders), .. }) => {
+        (handle.session(), holders.presence().into_iter().map(|peer| peer.login).collect())
+      }
+      _ => (None, Vec::new()),
+    };
+    let held = self.held.contains_key(life);
+    let card = |session: Option<String>, since, thread| Card {
+      life: life.to_owned(),
+      session,
+      project: project.cloned(),
+      held,
+      viewers: viewers.clone(),
+      since,
+      thread,
+    };
+    if let Some(session) = session.or_else(|| cards::kept(record).map(Arc::new)) {
+      let stands = |thread: view::Card| if held { thread } else { thread.at_rest() };
+      let threads = session.threads.iter().cloned();
+      return threads
+        .map(|one| card(session.name.clone(), one.since, stands(one.thread)))
+        .collect();
+    }
+    if !held && record.is_file() && self.indexing.insert(life.to_owned()) {
+      // The task ends with the daemon, and then no peer hears a card.
+      self.index.send(life.to_owned()).ok();
+    }
+    let name = record.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+    vec![card(None, cards::changed(record), cards::unfolded(name))]
+  }
+
   /// When the first life with no holder ends.
   fn due(&self) -> Option<Instant> {
     let idle = self.held.values().filter_map(|held| match &held.stage {
@@ -1081,9 +1204,11 @@ impl Lives {
       return;
     }
     self.views.ended(life);
-    let Some(Held { stage: Stage::Ending(waiting), .. }) = self.held.remove(life) else { return };
+    let gone = self.held.remove(life);
+    self.carded(life);
+    let Some(Held { stage: Stage::Ending(waiting), .. }) = gone else { return };
     let Some((first, _)) = waiting.first() else { return };
-    let opened = self.opened(life.to_owned(), first.clone());
+    let opened = self.opened(life, first.clone());
     for (birth, one) in waiting {
       one.send(opened.clone().and_then(|()| self.held_by(life, birth.holder))).ok();
     }

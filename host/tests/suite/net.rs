@@ -135,9 +135,17 @@ fn loopback() -> SocketAddr {
   "127.0.0.1:0".parse().unwrap()
 }
 
-fn welcomed(login: &str, role: Role) -> Frame {
-  let peer = Peer { login: login.to_owned(), role, kind: Kind::Window, name: None };
-  Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer } }
+/// The peer of a window as a welcome names it.
+fn welcomed(login: &str, role: Role) -> Peer {
+  Peer { login: login.to_owned(), role, kind: Kind::Window, name: None }
+}
+
+/// The peer that the welcome of a daemon of this protocol names.
+fn peer(frame: Frame) -> Peer {
+  match frame {
+    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => peer,
+    other => panic!("no welcome: {other:?}"),
+  }
 }
 
 /// The path that asks the login of a peer at an address.
@@ -170,7 +178,7 @@ async fn a_peer_of_tcp_is_the_login_that_tailscale_gives_for_its_address() {
   let stream = Tcp::new(addr).dial().await.unwrap();
   let from = stream.local_addr().unwrap();
   let mut client = Client { lines: BufReader::new(stream) };
-  assert_eq!(client.hello().await, Some(welcomed("alice@github", Role::Write)));
+  assert_eq!(client.hello().await.map(peer), Some(welcomed("alice@github", Role::Write)));
   assert_eq!(heard.recv().await, Some(whois(from)));
   let answer = Answer::Value(serde_json::to_value(Verb::List { config: None }).unwrap());
   assert_eq!(
@@ -184,7 +192,7 @@ async fn a_peer_of_websocket_says_each_frame_as_a_message() {
   let (api, _) = tailscale("alice@github").await;
   let addr = door(Tailscale::new(api, access("alice@github", Role::Write)), true).await;
   let mut client = Client { lines: BufReader::new(WebSocket::new(addr).dial().await.unwrap()) };
-  assert_eq!(client.hello().await, Some(welcomed("alice@github", Role::Write)));
+  assert_eq!(client.hello().await.map(peer), Some(welcomed("alice@github", Role::Write)));
   let verb = Verb::Pin { life: "/a.jsonl".to_owned(), holder: "job".to_owned() };
   let answer = Answer::Value(serde_json::to_value(&verb).unwrap());
   assert_eq!(client.ask(1, verb).await, Some(Frame::Reply { id: 1, answer }));
@@ -213,7 +221,7 @@ async fn a_reader_of_the_tailnet_is_refused_each_write() {
   let (api, _) = tailscale("bob@github").await;
   let addr = door(Tailscale::new(api, access("bob@github", Role::Read)), false).await;
   let mut client = Client { lines: BufReader::new(Tcp::new(addr).dial().await.unwrap()) };
-  assert_eq!(client.hello().await, Some(welcomed("bob@github", Role::Read)));
+  assert_eq!(client.hello().await.map(peer), Some(welcomed("bob@github", Role::Read)));
   let verb = Verb::Run { life: "/a.jsonl".to_owned(), word: "1".to_owned(), on: None };
   let error = ProtocolError::Role { needs: Role::Write, has: Role::Read };
   assert_eq!(client.ask(1, verb).await, Some(Frame::refused(Some(1), error)));
@@ -293,12 +301,12 @@ async fn the_daemon_serves_the_tailnet_by_tcp_and_by_websocket() {
   let mut tcp = dialed(ports).await;
   let ws = WebSocket::new(at(ports.websocket)).dial().await.unwrap();
   let mut ws = Client { lines: BufReader::new(ws) };
-  assert_eq!(tcp.hello().await, Some(welcomed("alice@github", Role::Read)));
+  assert_eq!(tcp.hello().await.map(peer), Some(welcomed("alice@github", Role::Read)));
   assert_eq!(
     tcp.ask(1, Verb::List { config: None }).await,
     Some(Frame::Reply { id: 1, answer: Answer::Lives(vec![]) })
   );
-  assert_eq!(ws.hello().await, Some(welcomed("alice@github", Role::Read)));
+  assert_eq!(ws.hello().await.map(peer), Some(welcomed("alice@github", Role::Read)));
   assert_eq!(
     ws.ask(1, Verb::List { config: None }).await,
     Some(Frame::Reply { id: 1, answer: Answer::Lives(vec![]) })
@@ -317,7 +325,7 @@ async fn a_peer_of_the_tailnet_holds_the_new_role_of_its_login_at_once() {
   let identity = Tailscale::new(api, access("alice@github", Role::Write));
   let (ports, _held) = tailed(identity.clone()).await;
   let mut client = dialed(ports).await;
-  assert_eq!(client.hello().await, Some(welcomed("alice@github", Role::Write)));
+  assert_eq!(client.hello().await.map(peer), Some(welcomed("alice@github", Role::Write)));
   let closed = ProtocolError::Closed { life: "/a.jsonl".to_owned() };
   assert_eq!(
     client.ask(1, written()).await,
@@ -343,7 +351,7 @@ async fn a_peer_of_the_tailnet_whose_login_the_list_drops_is_refused_and_closed_
   let identity = Tailscale::new(api, access("alice@github", Role::Write));
   let (ports, _held) = tailed(identity.clone()).await;
   let mut client = dialed(ports).await;
-  assert_eq!(client.hello().await, Some(welcomed("alice@github", Role::Write)));
+  assert_eq!(client.hello().await.map(peer), Some(welcomed("alice@github", Role::Write)));
   identity.replace(access("bob@github", Role::Write));
   let wait = Duration::from_secs(10);
   let why = "the access list no longer names alice@github".to_owned();
@@ -466,7 +474,7 @@ async fn the_door_of_the_windows_lets_in_only_the_peer_that_gives_its_token() {
   for no in [base.to_owned(), forged(&url)] {
     assert!(refused(&no).await, "{no}");
   }
-  assert_eq!(welcome(&url).await, welcomed(&me(), Role::Write));
+  assert_eq!(peer(welcome(&url).await), welcomed(&me(), Role::Write));
 }
 
 #[tokio::test]
@@ -475,7 +483,7 @@ async fn a_new_daemon_opens_its_door_with_a_new_token_in_the_place_of_the_old() 
   let file = yard.join("door").join("window.json");
   let first = daemon(&yard, &file).await;
   let old = said(&file, None).await;
-  assert_eq!(welcome(&old).await, welcomed(&me(), Role::Write));
+  assert_eq!(peer(welcome(&old).await), welcomed(&me(), Role::Write));
   first.abort();
   assert!(first.await.unwrap_err().is_cancelled());
   let _second = daemon(&yard, &file).await;
@@ -484,5 +492,5 @@ async fn a_new_daemon_opens_its_door_with_a_new_token_in_the_place_of_the_old() 
   let (base, _) = new.split_once("?token=").unwrap();
   let (_, token) = old.split_once("?token=").unwrap();
   assert!(refused(&format!("{base}?token={token}")).await);
-  assert_eq!(welcome(&new).await, welcomed(&me(), Role::Write));
+  assert_eq!(peer(welcome(&new).await), welcomed(&me(), Role::Write));
 }

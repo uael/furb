@@ -81,10 +81,13 @@ The first frame of a peer is its hello:
 - `role` is optional. The daemon gives the peer the lesser of the role that it asks and the role that its transport
   proved, so a peer that asks `read` is a reader on any transport, and a peer never has more than its transport
   proved. With no `role`, the peer has the role that its transport proved.
-- The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name.
+- The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name. The
+  answer also names the `machine` of the daemon, without its domain, the `build` of the daemon, which is its version
+  of furb, and the `view` of the peer: an id that names this connection among the connections of its login. The id
+  stands in no record.
 
   ```json
-  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}}}
+  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}, "machine": "studio", "build": "0.4.2", "view": 7}}
   ```
 
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A first frame
@@ -105,6 +108,7 @@ it is not given. The daemon answers requests in any order.
 | Verb | Fields | Role |
 | --- | --- | --- |
 | `list` | `config` | read |
+| `cards` | | read |
 | `open` | `life`, `cwd`, `actor`, `roster`, `skills`, `config`, `claude`, `answers`, `attach` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
@@ -220,6 +224,37 @@ it is not given. The daemon answers requests in any order.
 - The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
   checkpoint, as the log after a rebirth holds them. So a window of a life that a later open, a handover or an end
   brought back from its checkpoint hears the life whole, and hears no fact twice.
+- `cards` gives the cards of the machine as `cards`, and the peer then hears a frame `cards` at each change of them,
+  until it leaves. A card is one thread that an operator started: a prompt of his at the top of the threads of its
+  life, with all that answers it. The answer holds the cards of each record that `list` gives with no `config`. A
+  card holds:
+  - `life`, the record of its session, `session`, the name of the session when it has one, and `project`, the main
+    checkout of the project whose sessions hold the record, when the list of the machine names one;
+  - `prompt`, the name of the prompt of the thread, and `title`, the first line of its message;
+  - `standing`, how the thread stands, as `{"is": ...}`: `asks` with `of`, the login of the one member that its
+    question waits for, or null when it waits for each operator; `failed`; `paused` with `by`, who said the pause;
+    `thinks`, `runs` or `delegates` while it works; `stopped` after a cancel; `rests` while it is open and nothing
+    works; and `resolved` once its model closed its prompt;
+  - `since`, the second of the epoch since which the thread stands so. A thread that works keeps the time of the
+    start of its work while its model and its commands take turns;
+  - `model`, the model that wrote its last word, and `agents`, how many threads work under it;
+  - `readers`, the site of each operator who read the thread to its end: `operator` for each of them, or
+    `operator/<login>` for one member;
+  - `held`, whether a life holds the record now, and `viewers`, the login of each person whose window holds that
+    life. A card that is `held` with no viewer works with no view.
+
+  A frame `cards` names one `life`, each card of it that is new or that `changed`, and the `prompt` of each card
+  that is `gone`. A life tells its cards once in 250 ms at most, whatever the count of its events.
+
+  The cards of a record at rest come from the index of its threads, the file `<record>.threads.json` beside it,
+  which the life writes at its end. The index is a cache: it names the tip of the record that it was made from,
+  which is the length of the record and the sha256 of its last 4096 bytes, and the daemon drops an index whose tip
+  is not the tip of the record. So the list reads the index and the end of each record, and never the past of a
+  record. A record with no index that agrees with it gives one card with an empty `prompt`, under the name of its
+  file. The daemon then makes its index from a fold of the record with no life, one record at a time and off the
+  path of each verb, and pushes the cards in a frame `cards` once the index stands. A record tells no time, so each
+  card of such an index stands since the record last changed. Nothing works in a record at rest, so a thread that
+  worked when its life ended rests there.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
 - While a life opens, at its first open and at each rebirth, the daemon pushes to each window of the life a frame
