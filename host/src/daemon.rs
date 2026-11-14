@@ -64,6 +64,7 @@ use crate::{
   event::{Event, Seq},
   holders::{Holders, Window},
   life::{Command, Life, LifeHandle, Reply},
+  opens::Heard,
   processes::{self, Played},
   protocol::{
     Answer, BOUND, Config, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer,
@@ -982,8 +983,9 @@ impl Lives {
       Kind::Window | Kind::Daemon => None,
     };
     let (handle, holders) = living(&mut self.held, life)?;
-    let teller = told(life.to_owned(), handle.events(from), outbox.clone(), self.asks.clone());
-    let told = tokio::spawn(teller).abort_handle();
+    let opens = skill.is_none().then(|| handle.opens());
+    let teller = Teller { life: life.to_owned(), opens, outbox: outbox.clone() };
+    let told = tokio::spawn(teller.told(handle.events(from), self.asks.clone())).abort_handle();
     if let Some(name) = skill {
       let life = life.to_owned();
       self.views.attach(Skill { life, name, outbox: outbox.clone(), told });
@@ -1212,32 +1214,62 @@ async fn woken(
   }
 }
 
-/// The events of a life pushed to the peer of a window, no more than [`WAITING`] of them ahead of
-/// what the peer read, until the life ends or the peer is gone, which the daemon hears.
-async fn told(
+/// What the daemon pushes of a life to a peer that attached it: its events, and, to a window, how
+/// far its open stands.
+struct Teller {
   life: String,
-  events: impl Stream<Item = (Seq, Arc<Event>)>,
+  opens: Option<Heard>,
   outbox: Outbox,
-  asks: mpsc::WeakUnboundedSender<Asked>,
-) {
-  let mut events = pin!(events);
-  loop {
-    tokio::select! {
-      () = outbox.closed() => break,
-      next = events.next() => match next {
-        Some((seq, event)) => {
-          outbox.room(WAITING).await;
-          let frame = Frame::Event { life: life.clone(), seq, event: Event::clone(&event) };
-          if outbox.send(frame).is_err() {
-            break;
-          }
-        }
-        None => return,
-      },
+}
+
+impl Teller {
+  /// The events of the life pushed to the peer, no more than [`WAITING`] of them ahead of what the
+  /// peer read, until the life ends or the peer is gone, which the daemon hears. The frames of an
+  /// open go when [`Heard`] says that they are due, and the last of them before the next event, so
+  /// the frame that ends an open comes before the first event that the open told.
+  async fn told(
+    self,
+    events: impl Stream<Item = (Seq, Arc<Event>)>,
+    asks: mpsc::WeakUnboundedSender<Asked>,
+  ) {
+    let Self { life, mut opens, outbox } = self;
+    let mut events = pin!(events);
+    loop {
+      let event = tokio::select! {
+        biased;
+        () = outbox.closed() => break,
+        () = due(opens.as_mut()) => None,
+        next = events.next() => match next {
+          Some(event) => Some(event),
+          None => return,
+        },
+      };
+      if event.is_some() {
+        outbox.room(WAITING).await;
+      }
+      let paced = event.is_none();
+      let due = |opens: &&mut Heard| paced || opens.ended();
+      let opening = opens.iter_mut().filter(due).flat_map(|opens| opens.frames(&life));
+      let event = event.map(|(seq, event)| Frame::Event {
+        life: life.clone(),
+        seq,
+        event: Event::clone(&event),
+      });
+      if opening.chain(event).any(|frame| outbox.send(frame).is_err()) {
+        break;
+      }
+    }
+    if let Some(asks) = asks.upgrade() {
+      asks.send(Asked::Left { life, outbox }).ok();
     }
   }
-  if let Some(asks) = asks.upgrade() {
-    asks.send(Asked::Left { life, outbox }).ok();
+}
+
+/// Once a window has a frame of an open to hear, and never for a peer that hears none.
+async fn due(opens: Option<&mut Heard>) {
+  match opens {
+    Some(opens) => opens.due().await,
+    None => future::pending().await,
   }
 }
 

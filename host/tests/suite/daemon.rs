@@ -31,7 +31,7 @@ use std::{
 
 use furb::{
   Object,
-  life::{Answer as Answered, Log, Opening},
+  life::{Answer as Answered, Log, Opening, Stage},
   view::Phase,
 };
 use furb_host::{
@@ -599,6 +599,120 @@ async fn a_life_that_its_open_attaches_has_a_holder_before_a_grace_of_none_passe
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   time::sleep(PAST).await;
   assert!(!window.lives(&life).await);
+}
+
+/// The frames of a window in the order that it read them, up to the first that the test waits for.
+async fn read_until(window: &mut Window, read: &mut Vec<Frame>, wanted: impl Fn(&Frame) -> bool) {
+  loop {
+    let frame = match window.pushed.pop_front() {
+      Some(frame) => frame,
+      None => window.read().await.expect("the daemon pushes the frame"),
+    };
+    let found = wanted(&frame);
+    read.push(frame);
+    if found {
+      return;
+    }
+  }
+}
+
+/// Holds what a window read of an open and of the life after it: each stage once and in order,
+/// numbers that never go back, a last frame that is whole, and no frame of the open after the
+/// first event of the life.
+fn told_whole(read: &[Frame]) {
+  let event = read.iter().position(|one| matches!(one, Frame::Event { .. })).unwrap_or(read.len());
+  let opening = |some: &[Frame]| -> Vec<(Stage, u64, u64)> {
+    let frames = some.iter().filter_map(|one| match one {
+      Frame::Opening { stage, done, of, .. } => Some((*stage, *done, *of)),
+      _ => None,
+    });
+    frames.collect()
+  };
+  let frames = opening(&read[..event]);
+  let mut stages: Vec<Stage> = frames.iter().map(|one| one.0).collect();
+  stages.dedup();
+  let all = [Stage::Recall, Stage::Find, Stage::Read, Stage::Seed, Stage::Boot, Stage::Log];
+  assert_eq!(stages, all, "each stage comes once, in order: {frames:?}");
+  let back = |pair: &[(Stage, u64, u64)]| {
+    pair[0].0 == pair[1].0 && (pair[1].1 < pair[0].1 || pair[1].2 < pair[0].2)
+  };
+  assert!(!frames.windows(2).any(back), "no number of a stage goes back: {frames:?}");
+  assert!(frames.iter().all(|one| one.1 <= one.2), "no work done passes the work known");
+  let (stage, done, of) = *frames.last().unwrap();
+  assert!(stage == Stage::Log && of > 0 && done == of, "the last frame is whole: {frames:?}");
+  let after = opening(&read[event..]);
+  assert!(after.is_empty(), "no frame of the open comes after the first event: {after:?}");
+}
+
+/// A claude command line of a test that says nothing until a file is there, and that file. The
+/// catalog waits for a command line that it never saw, so the open of a life on it stands at the
+/// catalog, after the scan of its record, until the test makes the file.
+#[cfg(unix)]
+fn waiting(at: &Path) -> (String, PathBuf) {
+  use std::os::unix::fs::PermissionsExt;
+  let (program, go) = (at.join("claude"), at.join("go"));
+  let waits = format!("#!/bin/sh\nuntil [ -e '{}' ]; do sleep 0.02; done\n", go.display());
+  fs::write(&program, waits).unwrap();
+  fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+  (program.display().to_string(), go)
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn each_window_of_a_life_that_opens_hears_how_far_the_open_stands_then_its_events() {
+  let at = place();
+  let (local, _daemon) = started(&at, SHORT).await;
+  let mut first = Window::dialed(&local).await;
+  let life = opened(&mut first, &at, "a.jsonl").await;
+  first.attach(&life).await;
+  first.ran(&life, "x = 41 + 1").await;
+  assert_eq!(first.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  let ended = async {
+    while first.lives(&life).await {
+      time::sleep(Duration::from_millis(20)).await;
+    }
+  };
+  timeout(PATIENCE, ended).await.expect("the life ends with its checkpoint after its grace");
+  first.pushed.clear();
+  let (claude, go) = waiting(&at);
+  let open = Verb::Open {
+    life: life.clone(),
+    cwd: Some(at.display().to_string()),
+    actor: None,
+    roster: None,
+    skills: None,
+    config: None,
+    claude: Some(claude),
+    answers: false,
+    attach: Some(0),
+  };
+  assert_eq!(first.ask(open).await, Ok(Answer::Done));
+  let found = |frame: &Frame| matches!(frame, Frame::Opening { stage: Stage::Find, done, of, .. } if done == of);
+  let event = |frame: &Frame| matches!(frame, Frame::Event { .. });
+  let (mut early, mut late) = (Vec::new(), Vec::new());
+  read_until(&mut first, &mut early, found).await;
+  let mut second = Window::dialed(&local).await;
+  second.attach(&life).await;
+  read_until(&mut second, &mut late, found).await;
+  // A verb that a window says while the life opens waits for the life.
+  let inspect = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
+  let asked = Request { id: first.next, verb: inspect.clone() };
+  first.lines.send(serde_json::to_string(&asked).unwrap()).await.unwrap();
+  assert!(
+    !early.iter().chain(&late).any(event),
+    "the open stands at the catalog, and no window heard an event of the life"
+  );
+  File::create(&go).unwrap();
+  let value = json!(42);
+  let answer = Answer::Inspected { kind: "int".to_owned(), repr: "42".to_owned(), value };
+  let replied = |frame: &Frame| *frame == Frame::Reply { id: asked.id, answer: answer.clone() };
+  read_until(&mut first, &mut early, replied).await;
+  read_until(&mut first, &mut early, event).await;
+  read_until(&mut second, &mut late, event).await;
+  assert_eq!(second.ask(inspect).await, Ok(answer.clone()));
+  late.extend(second.pushed.drain(..));
+  told_whole(&early);
+  told_whole(&late);
 }
 
 #[tokio::test]

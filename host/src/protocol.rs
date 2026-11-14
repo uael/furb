@@ -1,7 +1,10 @@
 //! The one protocol of the host: what a peer says to the daemon, and what the daemon says to a
 //! peer, each frame one line of JSON.
 
-use furb::view::{Act, Desk, Rung, Shown, ThreadNode, Threads};
+use furb::{
+  life::Stage,
+  view::{Act, Desk, Rung, Shown, ThreadNode, Threads},
+};
 use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
 use serde::{Deserialize, Serialize};
@@ -13,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 14;
+pub const PROTOCOL: u32 = 15;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -457,6 +460,15 @@ pub enum Frame {
   Event { life: String, seq: Seq, event: Event },
   /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
   Presence { life: String, peers: Vec<Peer> },
+  /// How far the open of a life stands, pushed to each of its windows while the life opens, at its
+  /// first open and at each rebirth: the stage, its work done and its work known, each in the unit
+  /// of the stage, and both 0 for a stage that counts nothing. The stages of one open come in
+  /// their order, the numbers of a stage never go back, and `done` never passes `of`. A window
+  /// hears a frame at once for each stage that the open reaches, and at most four each second for
+  /// a stage that goes on. The frame of `log` with `done` equal to `of` ends the open, and comes
+  /// before the first event that the open tells. It is no event of the log and no fact of the
+  /// record.
+  Opening { life: String, stage: Stage, done: u64, of: u64 },
   /// A life that holds open acts and said no fact for the bound of the daemon, pushed once to each
   /// of its windows by the watch of the daemon, which no word of the life runs: each open act, and
   /// the notice that a window shows as it stands.

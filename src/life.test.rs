@@ -1849,6 +1849,7 @@ fn an_open_tells_each_stage_in_order_and_ends_with_each_entry_of_its_boot_counte
   let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
   let later = reactor.block_on(opening(&at, true).open::<String>([], progress)).unwrap();
   let told = told.lock().unwrap().clone();
+  assert_eq!(told.first(), Some(&(Stage::Find, 0, bytes)), "the open tells its first stage first");
   let mut stages: Vec<Stage> = told.iter().map(|one| one.0).collect();
   stages.dedup();
   assert_eq!(stages, [Stage::Find, Stage::Read, Stage::Seed, Stage::Boot]);

@@ -79,7 +79,8 @@ pub enum Stage {
   /// those facts, which are known once the host read them. The crate never tells this stage.
   Recall,
   /// The record is scanned for its checkpoints and for the build of its last life: the bytes
-  /// passed, of the bytes of the record.
+  /// passed, of the bytes of the record. It is the first stage that the crate tells, at once, and
+  /// the life then reads its settings and the catalog of its models in it.
   Find,
   /// A record whose last life ran another engine is carried across to this build, by a life that
   /// inspects it and writes its checkpoint. It counts nothing.
@@ -90,8 +91,11 @@ pub enum Stage {
   /// entries of it. It counts nothing.
   Seed,
   /// The life boots: the entries that its journal passed, of the entries that it boots on. It is
-  /// the last stage, and an open that succeeds ends with each entry counted.
+  /// the last stage that the crate tells, and a boot that succeeds ends with each entry counted.
   Boot,
+  /// A host puts what the open told in the log that its readers read: the events put, of those
+  /// events. The crate never tells this stage.
+  Log,
 }
 
 /// A function of the host that is told how far the open of a life stands, as [`Opening::open`]
@@ -344,10 +348,12 @@ impl Opening {
   /// host with a runtime waits for it on a blocking thread.
   fn prepared(&self, told: &Progress) -> Result<Prepared, Fault> {
     let works = self.works();
+    // The first stage is told at once, also for a record that is not there yet, so a host never
+    // waits for the first one behind the catalog.
+    let bytes = self.record.as_deref().map_or(0, size);
+    (told.0)(Stage::Find, 0, bytes);
     let read = |told: &Progress| match self.record.as_deref() {
       Some(path) if Path::new(path).exists() => {
-        let bytes = size(path);
-        (told.0)(Stage::Find, 0, bytes);
         world::marks(path, &mut |at| (told.0)(Stage::Find, at, bytes)).map(Some)
       }
       _ => Ok(None),

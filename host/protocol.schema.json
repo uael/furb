@@ -2106,6 +2106,39 @@
             "life": {
               "type": "string"
             },
+            "stage": {
+              "$ref": "#/definitions/Stage"
+            },
+            "done": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "of": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "frame": {
+              "type": "string",
+              "const": "opening"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "stage",
+            "done",
+            "of"
+          ],
+          "description": "How far the open of a life stands, pushed to each of its windows while the life opens, at its\nfirst open and at each rebirth: the stage, its work done and its work known, each in the unit\nof the stage, and both 0 for a stage that counts nothing. The stages of one open come in\ntheir order, the numbers of a stage never go back, and `done` never passes `of`. A window\nhears a frame at once for each stage that the open reaches, and at most four each second for\na stage that goes on. The frame of `log` with `done` equal to `of` ends the open, and comes\nbefore the first event that the open tells. It is no event of the log and no fact of the\nrecord."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "acts": {
               "type": "array",
               "items": {
@@ -4154,6 +4187,46 @@
       ],
       "description": "One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape\nthat its prompt wants, its message, and why its send failed, when it did. A follow-up that\nfailed holds the queue of its chain until the operator takes it out."
     },
+    "Stage": {
+      "oneOf": [
+        {
+          "type": "string",
+          "const": "recall",
+          "description": "A host tells its readers what the record told before its last checkpoint: the facts told, of\nthose facts, which are known once the host read them. The crate never tells this stage."
+        },
+        {
+          "type": "string",
+          "const": "find",
+          "description": "The record is scanned for its checkpoints and for the build of its last life: the bytes\npassed, of the bytes of the record. It is the first stage that the crate tells, at once, and\nthe life then reads its settings and the catalog of its models in it."
+        },
+        {
+          "type": "string",
+          "const": "cross",
+          "description": "A record whose last life ran another engine is carried across to this build, by a life that\ninspects it and writes its checkpoint. It counts nothing."
+        },
+        {
+          "type": "string",
+          "const": "read",
+          "description": "The record is read under its lease: the bytes read, of the bytes of the record."
+        },
+        {
+          "type": "string",
+          "const": "seed",
+          "description": "The sandbox loads the engine, takes the data of the checkpoint, and the checkpointer makes the\nentries of it. It counts nothing."
+        },
+        {
+          "type": "string",
+          "const": "boot",
+          "description": "The life boots: the entries that its journal passed, of the entries that it boots on. It is\nthe last stage that the crate tells, and a boot that succeeds ends with each entry counted."
+        },
+        {
+          "type": "string",
+          "const": "log",
+          "description": "A host puts what the open told in the log that its readers read: the events put, of those\nevents. The crate never tells this stage."
+        }
+      ],
+      "description": "A stage of the open of a life, in the order that an open passes them. An open skips a stage that\nit has no work for, and a stage never comes again in one open. Each stage counts its work in a\nunit of its own, and a stage that counts nothing tells 0 of 0."
+    },
     "Open": {
       "type": "object",
       "properties": {
@@ -4175,5 +4248,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 14
+  "x-protocol": 15
 }

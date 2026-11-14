@@ -222,6 +222,38 @@ it is not given. The daemon answers requests in any order.
   brought back from its checkpoint hears the life whole, and hears no fact twice.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
+- While a life opens, at its first open and at each rebirth, the daemon pushes to each window of the life a frame
+  `opening` with the `life`, the `stage` of the open, and two numbers: `done`, the work done of that stage, and `of`,
+  the work known of it. A window draws a progress bar from them.
+
+  ```json
+  {"frame": "opening", "life": "/work/a.jsonl", "stage": "boot", "done": 1730, "of": 2649}
+  ```
+
+  - The stages are a closed list, and they come in this order. An open skips a stage that it has no work for.
+
+    | Stage | The work | `done` of `of` |
+    | --- | --- | --- |
+    | `recall` | The daemon reads what the record told before its last checkpoint, for the log of the life. | Facts told, of those facts. Both are 0 until the daemon read them. |
+    | `find` | The record is scanned for its checkpoints. | Bytes passed, of the bytes of the record. |
+    | `cross` | A record that another build of furb wrote is replayed on the engine of that build, and gets a checkpoint. | Both are 0: the stage counts nothing. |
+    | `read` | The record is read under its lease. | Bytes read, of the bytes of the record. |
+    | `seed` | The sandbox loads the engine and makes the entries of the checkpoint. | Both are 0: the stage counts nothing. |
+    | `boot` | The life replays the entries that it boots on. | Entries that the replay passed, of those entries. |
+    | `log` | The daemon puts what the open told in the log of the life, which its windows read. | Events put, of those events. |
+
+  - The numbers of a stage never go back, `done` never passes `of`, and a stage never comes again in one open. A
+    record in a database tells no bytes, so its `find` and its `read` stay at 0 of the bytes of the record. The
+    replay passes at once the entries that it says to no ear, so `done` of `boot` can go forward by many entries.
+  - The first frame comes when the open starts. Then the window hears a frame at once for each stage that the open
+    reaches, with the last numbers of each stage before it, and at most four frames each second for a stage that goes
+    on. A window that attaches while the life opens hears one frame for each stage that the open reached.
+  - The frame of `log` with `done` equal to `of` ends the open. It comes before the first event that the open tells,
+    so a window ends its bar there. An open that fails sends no such frame, and the life ends with the event `ended`.
+    A window that attaches to a life that stands hears no frame `opening` until the next rebirth of the life.
+  - The frame is no event of the log of the life and no fact of the record.
+- A verb of a life that a peer says while the life opens waits for the life, which answers it once it stands, in the
+  order that it heard each verb. The daemon answers each other verb at once.
 - The daemon watches each life that it holds, from outside the life: no word and no ear of the life runs the watch.
   When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact and no model
   writes for the bound of a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes

@@ -28,6 +28,6 @@ test("the package gives the types of the protocol and its version", () => {
     ],
   };
   const mount: Mount = { viewer: "v1", life: "life.jsonl", slot: { slot: "dock", on: "chain1" }, skill: "k" };
-  expect(PROTOCOL).toBe(14);
+  expect(PROTOCOL).toBe(15);
   expect(JSON.parse(JSON.stringify({ mount, tree }))).toEqual({ mount, tree });
 });

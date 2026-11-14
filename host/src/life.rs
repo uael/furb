@@ -1,9 +1,11 @@
 //! A life as the host holds it: a thread of its own, with a runtime of tokio and a set of local
-//! tasks, since the engine is not `Send`. The thread owns the engine. It awaits the open, then one
-//! local task pumps the engine while it waits for the next command, and keeps the log of the events
-//! of the life. The thread opens the life again from its checkpoint at each rebirth, as
-//! [`crate::rebirth`] says, for the same handles and the same log. Once the life ends, the thread
-//! holds its log for the readers until each handle of the life is gone.
+//! tasks, since the engine is not `Send`. The thread owns the engine. It awaits the open, and
+//! tells how far it stands as [`crate::opens`] says, then one local task pumps the engine while it
+//! waits for the next command, and keeps the log of the events of the life. A command that a
+//! handle says while the life opens waits, and the life answers it once it stands. The thread
+//! opens the life again from its checkpoint at each rebirth, as [`crate::rebirth`] says, for the
+//! same handles and the same log. Once the life ends, the thread holds its log for the readers
+//! until each handle of the life is gone.
 
 #![expect(
   clippy::too_many_arguments,
@@ -15,7 +17,7 @@ use std::{
   hash::{DefaultHasher, Hash, Hasher},
   mem,
   ops::Range,
-  path::PathBuf,
+  path::{Path, PathBuf},
   sync::{
     Arc, Mutex,
     atomic::{AtomicU64, Ordering},
@@ -26,7 +28,7 @@ use std::{
 
 use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
-  life::{Log, Opening, Progress, Stream},
+  life::{Log, Opening, Progress, Stage, Stream},
   verbs,
   view::{Act, Desk, Fold, Held, Named, Phase, Rung, SHOWN, Shown, ThreadNode, Threads},
   wire::{outward, parsed},
@@ -42,7 +44,7 @@ use tokio::{
   sync::{
     broadcast::{self, error::RecvError},
     mpsc::{self, UnboundedReceiver, UnboundedSender},
-    oneshot,
+    oneshot, watch,
   },
   task::{LocalSet, spawn_blocking},
 };
@@ -53,6 +55,7 @@ use crate::{
   ears::{ears, json_of},
   error::LifeError,
   event::{Event, Seq},
+  opens::{Heard, Opens, Told},
   queue::{FollowUp, QUEUE, Queue},
   rebirth::{self, Watch},
 };
@@ -277,6 +280,8 @@ pub struct Life {
   gone: Gone,
   /// The facts that the life said since it last opened, by which the daemon weighs it.
   weight: Arc<Scale>,
+  /// How far the open of the life stands, which each window reads while the thread opens.
+  opens: Told,
 }
 
 /// The facts that the log of a life let go: each one before the last checkpoint of the life, which
@@ -354,6 +359,7 @@ pub struct LifeHandle {
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
   weight: Arc<Scale>,
+  opens: watch::Receiver<Opens>,
 }
 
 impl Life {
@@ -369,11 +375,12 @@ impl Life {
     let named = Arc::clone(&name);
     let weight = Arc::new(Scale::default());
     let weighed = Arc::clone(&weight);
+    let (opened, opens) = Told::new();
     thread::Builder::new()
       .name("furb-life".to_owned())
-      .spawn(move || lived(opening, received, told, named, weighed))
+      .spawn(move || lived(opening, received, told, named, weighed, opened))
       .map_err(LifeError::Thread)?;
-    Ok(LifeHandle { inbox, readers, name, weight })
+    Ok(LifeHandle { inbox, readers, name, weight, opens })
   }
 
   /// One event put in the log, and sent to each reader, then the follow-ups of a chain when the
@@ -439,15 +446,16 @@ impl Life {
   /// What an open told, less each fact of its opening that restates one that the log told before
   /// it: an open on a checkpoint says again what the checkpoint restates, which each reader
   /// already heard, then goes on with facts of its own, which the log tells whole.
-  fn opened(&mut self) {
+  fn opened(&mut self, progress: &Progress) {
     let mut told = Vec::new();
     while let Ok(event) = self.heard.try_recv() {
       told.push(event);
     }
     self.births.clear();
     let start = self.log.len();
-    let mut opening = true;
-    for event in told {
+    let (mut opening, of) = (true, told.len() as u64);
+    (progress.0)(Stage::Log, 0, of);
+    for (at, event) in (1..).zip(told) {
       match &event {
         Event::Fact(fact) if self.restates(&mut opening, fact) => {
           let place = self.facts.get(&digest(fact)).copied().unwrap_or(self.said);
@@ -455,6 +463,7 @@ impl Life {
         }
         _ => self.told(Some(event)),
       }
+      (progress.0)(Stage::Log, at, of);
     }
     self.gone.opened.push(start..self.log.len());
   }
@@ -492,21 +501,29 @@ impl Life {
   /// restates, which its log told no reader twice, and this one tells none twice either; each other
   /// fact is told, though it equals one before it, as a second pause of a chain. A record that the
   /// store cannot read tells nothing here, and its open says why.
-  fn recalled(&mut self, record: &str) {
+  fn recalled(&mut self, record: &str, told: &Progress) {
+    if !Path::new(record).exists() {
+      return;
+    }
+    (told.0)(Stage::Recall, 0, 0);
     // One pass over the heads of the lines gives the place of each checkpoint, and a record with
     // none tells nothing here.
     let Ok(world::Marks { checkpoints, .. }) = world::marks(record, &mut |_| {}) else { return };
     let marks: Vec<usize> = checkpoints.into_iter().map(|at| at + 1).collect();
     let Some(&last) = marks.last() else { return };
-    let Ok(told) = world::retold(record) else { return };
+    let Ok(retold) = world::retold(record) else { return };
     let mut facts = Vec::new();
-    let mut take = |kept, one: Object| facts.extend(Fact::of(one.as_ref()).map(|a| (kept, a)));
-    if told.before_kept(last, &mut take).is_err() {
+    let mut take = |kept, one: Object| {
+      let fact = Fact::of(one.as_ref()).filter(|a| a.kind() != checkpoint::CHECKPOINT);
+      facts.extend(fact.map(|a| (kept, a)));
+    };
+    if retold.before_kept(last, &mut take).is_err() {
       return;
     }
     let (mut passed, mut opening) = (0, false);
     let mut fold = Fold::default();
-    for (kept, a) in facts.iter().filter(|one| one.1.kind() != checkpoint::CHECKPOINT) {
+    for (at, (kept, a)) in (1..).zip(&facts) {
+      (told.0)(Stage::Recall, at, facts.len() as u64);
       while marks.get(passed).is_some_and(|mark| kept >= mark) {
         (passed, opening) = (passed + 1, true);
       }
@@ -718,10 +735,11 @@ fn lived(
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
   weight: Arc<Scale>,
+  opens: Told,
 ) {
   match runtime::Builder::new_current_thread().enable_all().build() {
     Ok(runtime) => {
-      LocalSet::new().block_on(&runtime, run(opening, received, readers, name, weight));
+      LocalSet::new().block_on(&runtime, run(opening, received, readers, name, weight, opens));
     }
     Err(no) => {
       let ended = Event::Ended(Some(format!("the life has no runtime: {no}")));
@@ -737,6 +755,7 @@ async fn run(
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
   weight: Arc<Scale>,
+  opens: Told,
 ) {
   let (told, heard) = mpsc::unbounded_channel();
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from))
@@ -760,6 +779,7 @@ async fn run(
     record: opening.record.clone().filter(|_| opening.keeps()),
     gone: Gone::default(),
     weight,
+    opens,
   };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
@@ -818,19 +838,24 @@ async fn lives(
   journal: Option<&Journal>,
 ) -> End {
   let record = opening.record.clone().filter(|_| opening.keeps());
+  let progress = life.opens.progress();
+  life.opens.born();
   if let Some(one) = record.as_deref() {
-    life.recalled(one);
+    life.recalled(one, &progress);
   }
   loop {
-    let engine = match opening.clone().open(ears(told.clone(), journal), Progress::default()).await
-    {
+    let ears = ears(told.clone(), journal);
+    let engine = match opening.clone().open(ears, progress.clone()).await {
       Ok((engine, _)) => engine,
       Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new() },
     };
-    life.opened();
+    life.opened(&progress);
     match driven(engine, life, received, record.as_deref()).await {
       Drove::Ended(fault, asked) => return End { fault: fault.map(|one| one.to_string()), asked },
-      Drove::Reborn(fault) => life.reborn(fault.map(|one| one.to_string())),
+      Drove::Reborn(fault) => {
+        life.opens.born();
+        life.reborn(fault.map(|one| one.to_string()));
+      }
     }
   }
 }
@@ -1176,6 +1201,12 @@ impl LifeHandle {
   /// that it asked was born again.
   pub(crate) fn births(&self) -> u64 {
     self.weight.births.load(Ordering::Relaxed)
+  }
+
+  /// How far the open of the life stands, as one window hears it: each stage of the open that
+  /// runs now, and of each later rebirth.
+  pub(crate) fn opens(&self) -> Heard {
+    Heard::new(self.opens.clone())
   }
 
   /// The ask of the daemon that the life be born again, as its heap passed its share, or the ask
