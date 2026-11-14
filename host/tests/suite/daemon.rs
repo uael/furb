@@ -889,6 +889,27 @@ fn drifted(life: &str) -> Vec<u8> {
   fs::read(life).unwrap()
 }
 
+/// The name and the threads that an index of a record holds.
+fn threads(index: &Value) -> (Value, Vec<Value>) {
+  let all = index["threads"].as_array().cloned().unwrap_or_default();
+  (index["name"].clone(), all.into_iter().map(|thread| thread["thread"].clone()).collect())
+}
+
+/// The name and the threads of the index of a record at a path, once it names a tip of that many
+/// bytes, as the daemon writes it from a fold of the record.
+async fn folded(index: &str, bytes: usize) -> (Value, Vec<Value>) {
+  let start = Instant::now();
+  loop {
+    let read: Option<Value> =
+      fs::read(index).ok().and_then(|one| serde_json::from_slice(&one).ok());
+    if let Some(read) = read.filter(|one| one["tip"]["bytes"] == bytes) {
+      return threads(&read);
+    }
+    assert!(start.elapsed() < PATIENCE, "the daemon makes no index of the record at rest");
+    time::sleep(SHORT).await;
+  }
+}
+
 #[tokio::test]
 async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemon() {
   let at = place();
@@ -937,23 +958,9 @@ async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemo
   // of the record at rest again from a fold of the record once the life ended: it names the tip
   // of the record and holds the threads that the life before told, and no fold of a part of it.
   later.ended(&life).await;
-  let start = Instant::now();
-  let read = || -> Option<Value> { serde_json::from_slice(&fs::read(&index).ok()?).ok() };
-  while !read().is_some_and(|one| one["tip"]["bytes"] == Value::from(held.len())) {
-    assert!(start.elapsed() < PATIENCE, "the daemon makes no index of the record at rest");
-    time::sleep(SHORT).await;
-  }
-  let threads = |one: &Value| -> (Value, Vec<Value>) {
-    let all = one["threads"].as_array().cloned().unwrap_or_default();
-    (one["name"].clone(), all.into_iter().map(|thread| thread["thread"].clone()).collect())
-  };
-  let before = serde_json::from_slice(&indexed).unwrap();
-  assert!(!threads(&before).1.is_empty(), "the life before told a thread");
-  assert_eq!(
-    threads(&read().unwrap()),
-    threads(&before),
-    "a life that did not open writes no index"
-  );
+  let before = threads(&serde_json::from_slice(&indexed).unwrap());
+  assert!(!before.1.is_empty(), "the life before told a thread");
+  assert_eq!(folded(&index, held.len()).await, before, "a life that did not open writes no index");
   let other = opened(&mut later, &at, "b.jsonl").await;
   later.attach(&other).await;
   later.ran(&other, "y = 1").await;
