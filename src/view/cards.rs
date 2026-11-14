@@ -102,12 +102,13 @@ impl Card {
   }
 
   /// The card of a thread whose record no life holds: nothing works there, so a thread that worked
-  /// rests.
+  /// rests, and no agent of it works.
   #[must_use]
   pub fn at_rest(mut self) -> Self {
     if self.works() {
       self.standing = Standing::Rests;
     }
+    self.agents = 0;
     self
   }
 

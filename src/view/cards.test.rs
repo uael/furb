@@ -49,6 +49,9 @@ fn a_thread_that_worked_rests_once_no_life_holds_its_record() {
   let wanted =
     [Standing::Rests, Standing::Rests, Standing::Rests, Standing::Failed, Standing::Resolved];
   assert_eq!(rests, wanted);
+  // No agent works there either.
+  let delegates = Card { agents: 3, ..card(Standing::Delegates, &[]) };
+  assert_eq!(delegates.at_rest().agents, 0);
 }
 
 #[test]

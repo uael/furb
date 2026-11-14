@@ -255,7 +255,7 @@ it is not given. The daemon answers requests in any order.
   file. The daemon then makes its index from a fold of the record with no life, one record at a time and off the
   path of each verb, and pushes the cards in a frame `cards` once the index stands. A record tells no time, so each
   card of such an index stands since the record last changed. Nothing works in a record at rest, so a thread that
-  worked when its life ended rests there.
+  worked when its life ended rests there, and counts no agent that works.
 - `thread` gives a page of one thread of a life as `page`: the exchanges of the thread before the one at the place
   `before`, or before its end when `before` is null, at most `limit` of them, the oldest first. The thread is named
   by its prompt. Nobody reads the past of a record for it: the life holds each act, and a page reads only the acts
