@@ -155,7 +155,7 @@ and `cli/pyproject.toml` say.
 | `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `checkpoint`, `catalog` and `skills`. |
 | `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
-| `cli/src/tui.rs` | How furb finds the TUI and hands the terminal to it. |
+| `cli/src/window.rs` | How furb finds the window and hands the terminal to it. |
 | `cli/tests/suite/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |
 
 ### The TUI
@@ -177,8 +177,8 @@ of [OpenTUI](https://github.com/anomalyco/opentui), which takes the place of the
 the list of the cards of the machine, one card for each thread, beside a home that says what waits for the operator.
 Its input sends a message to the open thread, to a new thread of a session, or to a new session in the project of
 its folder, as the line of the launcher under it says. `cargo run -p furb-window` starts it on the daemon of this
-machine, which it starts when none listens, and `FURB_TUI=target/debug/furb-window furb` starts it through the
-command line. Alt+Down and Alt+Up, or Ctrl+X then J or K, open the next and the previous card, Alt+A or Ctrl+X then
+machine, which it starts when none listens, and `furb` with no command starts it too.
+Alt+Down and Alt+Up, or Ctrl+X then J or K, open the next and the previous card, Alt+A or Ctrl+X then
 A opens the next thread that waits for the operator, and Ctrl+X then L shows or hides the list. Enter sends,
 Shift+Enter breaks the line, Ctrl+N turns the input to a new thread and back, Ctrl+X then O picks the session, Ctrl+X
 then Y turns the input to a word of Python, Esc twice stops the work of the open thread, Ctrl+C empties the input,

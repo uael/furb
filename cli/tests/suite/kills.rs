@@ -126,7 +126,7 @@ impl Yard {
   fn furb(&self, words: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
     command.args(words).current_dir(self.root.join("work")).kill_on_drop(true);
-    command.env("FURB_CLAUDE_BIN", self.fake("claude")).env_remove("FURB_TUI");
+    command.env("FURB_CLAUDE_BIN", self.fake("claude")).env_remove("FURB_WINDOW");
     for name in ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "MAX_THINKING_TOKENS"] {
       command.env_remove(name);
     }

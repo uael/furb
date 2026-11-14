@@ -1,6 +1,6 @@
-//! furb, the command line: the TUI, and one command of the operator on one life.
+//! furb, the command line: the window, and one command of the operator on one life.
 //!
-//! With no command, furb hands the terminal to the TUI. `prompt`, `turns`, `run` and
+//! With no command, furb hands the terminal to the window. `prompt`, `turns`, `run` and
 //! `skills` each open one life and print what it came to, and `facts` prints a record as
 //! it is. Every life runs on the engine of the crate, on the ears of the World that the
 //! crate writes, the extensions among them, and on the provider of the model of its default
@@ -11,7 +11,7 @@ mod console;
 mod error;
 mod host;
 mod life;
-mod tui;
+mod window;
 
 /// The allocator of the process, which counts its heap: the daemon of `furb host` reads it to bear
 /// its lives under the bound of `host.json`.
@@ -42,18 +42,14 @@ use crate::{error::CliError, life::Life};
 
 /// What the command line takes, whose help says the description of the package.
 #[derive(Parser)]
-#[command(name = "furb", version, about, args_conflicts_with_subcommands = true)]
+#[command(
+  name = "furb",
+  version,
+  about,
+  after_help = "With no command, furb opens the window, which takes no word: its input opens a session in \
+                the project of its folder."
+)]
 struct Furb {
-  /// Open the TUI on its demo session, which asks no model.
-  #[arg(long)]
-  demo: bool,
-  #[command(flatten)]
-  place: Place,
-  #[command(flatten)]
-  stand: Stand,
-  /// More words for the TUI, after --, such as --effort high.
-  #[arg(last = true, value_name = "TUI WORDS")]
-  more: Vec<String>,
   #[command(subcommand)]
   command: Option<Command>,
 }
@@ -246,7 +242,7 @@ fn commanded(furb: Furb) -> Result<(), CliError> {
   done
 }
 
-/// The command that the operator gave, or the TUI when he gave none.
+/// The command that the operator gave, or the window when he gave none.
 async fn command(furb: Furb) -> Result<(), CliError> {
   match furb.command {
     Some(Command::Prompt { message, to, shape, place, mut stand }) => {
@@ -271,9 +267,7 @@ async fn command(furb: Furb) -> Result<(), CliError> {
     Some(Command::Checkpoint { record, cwd }) => {
       checkpoint(Place { record: Some(record.clone()), cwd }.opening(false), &record).await
     }
-    None => {
-      tui::launch(furb.demo, &furb.place, &furb.stand, &furb.more).await.map(|never| match never {})
-    }
+    None => window::launch().map(|never| match never {}),
   }
 }
 

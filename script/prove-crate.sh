@@ -59,7 +59,7 @@ cp "$root/src/world/provider/claude/fake-claude.sh" "$work/yard/fake/claude"
 chmod +x "$work/yard/fake/claude"
 printf '%s' '"close(\"Login is twice as fast.\")"' > "$work/yard/fake/word.1"
 printf '%s' '"close(\"The notes read well.\")"' > "$work/yard/fake/word.2"
-said=$(cd "$work/yard/work" && env -u FURB_LOCAL_URL -u FURB_LOCAL_KEY -u FURB_TUI \
+said=$(cd "$work/yard/work" && env -u FURB_LOCAL_URL -u FURB_LOCAL_KEY -u FURB_WINDOW \
   FURB_CLAUDE_BIN="$work/yard/fake/claude" FURB_CONFIG_DIR="$work/yard/config" XDG_CACHE_HOME="$work/yard/cache" \
   "$CARGO_TARGET_DIR/debug/demo" </dev/null)
 want=$(printf 'The notes read well.\nreviewer under root')

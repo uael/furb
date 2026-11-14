@@ -1,4 +1,4 @@
-//! furb, driven as a process, as an operator or a client drives it: the commands and the TUI it
+//! furb, driven as a process, as an operator or a client drives it: the commands and the window it
 //! hands the terminal to.
 //!
 //! Every life runs on the real engine and on the real ears of the crate, and a claude command line
@@ -97,12 +97,12 @@ impl Yard {
   }
 
   /// furb with these words, in the yard, on the fake claude and on the config directory and the
-  /// cache of the yard, and with no TUI, no local server and no most of thought that the machine
+  /// cache of the yard, and with no window, no local server and no most of thought that the machine
   /// names.
   fn furb(&self, words: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
     command.args(words).current_dir(&self.at);
-    command.env("FURB_CLAUDE_BIN", self.fake.join("claude")).env_remove("FURB_TUI");
+    command.env("FURB_CLAUDE_BIN", self.fake.join("claude")).env_remove("FURB_WINDOW");
     let names = ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_LOCAL_WINDOW", "FURB_LOCAL_TOKENS"];
     for name in names.into_iter().chain(["MAX_THINKING_TOKENS"]) {
       command.env_remove(name);
@@ -663,30 +663,15 @@ fn a_prompt_said_again_after_a_kill_cut_its_work_is_woken_once_and_its_model_rea
 }
 
 #[test]
-fn furb_hands_the_terminal_to_the_tui_with_the_words_it_takes() {
-  let yard = Yard::new("tui");
-  let tui = yard.at.join("tui");
-  program(&tui, "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 3\n");
-  let mut command = yard.furb(&[
-    "--demo",
-    "--record",
-    "r.jsonl",
-    "--cwd",
-    "there",
-    "--model",
-    "sonnet/high",
-    "--roster",
-    "n",
-    "--",
-    "more",
-  ]);
-  command.env("FURB_TUI", &tui);
+fn furb_hands_the_terminal_to_the_window_with_no_word() {
+  let yard = Yard::new("window");
+  let window = yard.at.join("window");
+  program(&window, "#!/bin/sh\nprintf '%s\\n' \"$#\"\nexit 3\n");
+  let mut command = yard.furb(&[]);
+  command.env("FURB_WINDOW", &window);
   let output = ran(command, "");
-  assert_eq!(output.status.code(), Some(3), "furb ends with the code of the TUI");
-  let words = String::from_utf8_lossy(&output.stdout);
-  let expected = "--demo\n--record\nr.jsonl\n--cwd\nthere\n--model\nclaude-cli:sonnet\n--effort\nhigh\n\
-                  --roster\nn\nmore\n";
-  assert_eq!(words, expected);
+  assert_eq!(output.status.code(), Some(3), "furb ends with the code of the window");
+  assert_eq!(String::from_utf8_lossy(&output.stdout), "0\n", "the window takes no word");
 }
 
 #[test]

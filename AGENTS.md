@@ -99,8 +99,8 @@ API of its own:
   `src/furb/awaits.py` holds the await of an act from outside a run: the package binds its `Act` in the engine, so the
   engine says only the await of a word, which the Kernel steps.
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
-  command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout it
-  was built from. A program that wants a life dials the daemon, as `docs/protocol.md` says. `prompt`,
+  command it hands the terminal to the window, `furb-window`, which it finds in `FURB_WINDOW`, beside itself, on PATH,
+  or in the target of the checkout it was built from. A program that wants a life dials the daemon, as `docs/protocol.md` says. `prompt`,
   `turns`, `run` and `skills` each open one life on a record, `facts` prints each fact of a record with no life,
   `checkpoint` writes the checkpoint of a life, `catalog` shows where the models came from, and `host` serves the
   daemon of the machine of `furb-host`. The package `furb`
@@ -136,7 +136,7 @@ API of its own:
   what waits for the operator: the verb `cards` of the daemon gives each card, with its state, its part and its
   order, and the window draws them and keeps them in a file for its next first frame. Its input sends a message to
   the open thread, to a new thread of a session, or to a new session in the project of its folder, as the line of
-  the launcher under it says. `cargo run -p furb-window` starts it, and so does `FURB_TUI=<the program furb-window> furb`.
+  the launcher under it says. `cargo run -p furb-window` starts it, and so does `furb` with no command.
   `window/Cargo.toml` pins OpenTUI at one commit, and `window/build.rs` makes its native library with Zig into
   `target/opentui`, once for each commit. So the first cargo command over the workspace in a tree needs `zig` on PATH
   at the version that the commit asks, 0.17.1, and takes about two minutes more. A tree whose `target/opentui` holds

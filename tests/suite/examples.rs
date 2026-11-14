@@ -68,7 +68,7 @@ impl Yard {
       here.parent().and_then(|deps| deps.parent()).expect("the target").join("examples").join(name);
     let mut command = Command::new(example);
     command.current_dir(&self.at).env("FURB_CLAUDE_BIN", self.fake.join("claude"));
-    for name in ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_TUI"] {
+    for name in ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_WINDOW"] {
       command.env_remove(name);
     }
     let root = self.fake.parent().expect("the root of the yard");

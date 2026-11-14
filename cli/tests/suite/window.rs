@@ -31,7 +31,7 @@ async fn a_window_starts_the_daemon_of_its_machine_when_none_listens_and_no_daem
   let folder = yard.join("furb").join("host");
   // The daemon reads no file of this machine, and ends with its last window.
   let mut served = Command::new(env!("CARGO_BIN_EXE_furb"));
-  served.args(["host", "--grace", "0"]).env_remove("FURB_TUI");
+  served.args(["host", "--grace", "0"]).env_remove("FURB_WINDOW");
   served.env("XDG_CACHE_HOME", &*yard).env("FURB_CONFIG_DIR", yard.join("config"));
   let machine = Machine { name: "test-machine".to_owned(), folder: folder.clone(), served };
 
@@ -60,7 +60,7 @@ async fn a_daemon_that_ends_before_it_listens_tells_the_window_the_last_line_tha
   let folder = yard.join("furb").join("host");
   // The command line refuses a grace that is no number, says why, and ends.
   let mut served = Command::new(env!("CARGO_BIN_EXE_furb"));
-  served.args(["host", "--grace", "never"]).env_remove("FURB_TUI");
+  served.args(["host", "--grace", "never"]).env_remove("FURB_WINDOW");
   let machine = Machine { name: "test-machine".to_owned(), folder, served };
   let ended = timeout(PATIENCE, machine.reach()).await.expect("the daemon ends in time");
   let Err(Error::Ended { status, said }) = ended else { panic!("the daemon listened") };

@@ -59,22 +59,20 @@ pub(crate) enum CliError {
   /// `host.json` turns on the tailnet on a machine with no Tailscale.
   #[error("{} turns on the tailnet, and no Tailscale runs on this machine", .0.display())]
   NoTailscale(PathBuf),
-  /// No TUI is found.
+  /// No window is found.
   #[error(
-    "no TUI is found: set FURB_TUI to the program of the furb TUI, put furb-tui on PATH, or run \
-     furb from a checkout of furb after `bun install && bun run build`"
+    "no window is found: set FURB_WINDOW to the program furb-window, put furb-window beside furb or \
+     on PATH, or run furb from a checkout of furb after `cargo build -p furb-window`"
   )]
-  NoTui,
-  /// The TUI of a checkout runs on bun, and no bun is on PATH.
+  NoWindow,
+  /// The window of a checkout is not built.
   #[error(
-    "the TUI of {} runs on bun 1.4.2 or later, and no bun is on PATH: see https://bun.sh",
+    "the window of {} is not built: run `cargo build -p furb-window` there, which needs Zig 0.17.1 \
+     on PATH or the library of OpenTUI that an earlier build left in target/opentui",
     .0.display()
   )]
-  NoBun(PathBuf),
-  /// The TUI of a checkout is not built.
-  #[error("the TUI of {} is not built: run `bun install && bun run build` there", .0.display())]
   Unbuilt(PathBuf),
-  /// The program of the TUI did not start.
+  /// The program of the window did not start.
   #[error("{} did not start: {source}", program.display())]
   Started { program: PathBuf, source: io::Error },
 }
