@@ -2,6 +2,8 @@
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
+use std::sync::Arc;
+
 use furb::view::{Act, Kind, Maker, Phase, State};
 use serde_json::{Value, json};
 
@@ -9,7 +11,7 @@ use super::{Asks, PATIENCE, TAIL, Watch};
 use crate::event::Event;
 
 fn act(kind: &str, id: &str, by: &str, words: &[Value], phase: Phase) -> Event {
-  Event::Act(Box::new(Act {
+  Event::Act(Arc::new(Act {
     kind: Kind::from(kind),
     id: id.to_owned(),
     by: by.to_owned(),

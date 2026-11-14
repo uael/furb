@@ -1,7 +1,7 @@
 //! The ears that the host gives each life, before the ears of the crate: one list, so each life of
 //! a machine opens the same way, and the record of one host opens in another.
 
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use furb::{
   Ear, Fact, Fault, Object,
@@ -92,7 +92,7 @@ async fn stepped<W: 'static>(
     let acts = fold.hear(&fact, &covered, born);
     let chain = fold.chain_of(one.about()).map(|chain| Event::Changed(chain.to_owned()));
     let events =
-      [Event::Fact(fact)].into_iter().chain(acts.into_iter().map(|act| Event::Act(Box::new(act))));
+      [Event::Fact(fact)].into_iter().chain(acts.into_iter().map(|act| Event::Act(Arc::new(act))));
     for event in events.chain(chain) {
       if told.send(event).is_err() {
         return Ok(false);

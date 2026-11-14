@@ -339,7 +339,7 @@ pub struct Life {
 /// thread reads. The image holds it as a [`Part`].
 #[derive(Default, Serialize, Deserialize)]
 struct Kept {
-  log: Vec<Option<Arc<Event>>>,
+  log: Vec<Option<Slot>>,
   spent: Spent,
   said: Seq,
   facts: HashMap<u64, Seq>,
@@ -351,6 +351,28 @@ struct Kept {
   named: Named,
   gone: Gone,
   streams: Streamed,
+}
+
+/// A place of the log that holds an event. The place of the last event of an act names the act that
+/// `Held` holds, which is that event, so the life and its image hold each act once. When a later
+/// event of the act comes, the place takes the act as `Held` held it, as an event told.
+#[derive(Serialize, Deserialize)]
+enum Slot {
+  Told(Arc<Event>),
+  Held(String),
+}
+
+impl Slot {
+  /// The fact that the place holds.
+  fn fact(&self) -> Option<&Value> {
+    match self {
+      Self::Told(event) => match &**event {
+        Event::Fact(fact) => Some(fact),
+        _ => None,
+      },
+      Self::Held(_) => None,
+    }
+  }
 }
 
 /// The part of the host in the image of a life: what the life keeps, under the digest of the files
@@ -492,7 +514,12 @@ impl Life {
     match &event {
       Event::Act(act) => {
         self.kept.streams.heard(act, cards::now());
-        self.kept.held.heard(act);
+        let before = self.kept.held.took(Arc::clone(act)).map(|one| Event::Act(one).into());
+        let place = self.kept.spent.acts.get(&act.id).and_then(|at| usize::try_from(*at).ok());
+        if let (Some(before), Some(slot)) = (before, place.and_then(|at| self.kept.log.get_mut(at)))
+        {
+          *slot = Some(Slot::Told(before));
+        }
         self.stale = true;
       }
       Event::Text { rung, text, thinking, .. } => {
@@ -507,7 +534,10 @@ impl Life {
       }
     }
     let event = Arc::new(event);
-    self.kept.log.push(Some(Arc::clone(&event)));
+    self.kept.log.push(Some(match &*event {
+      Event::Act(act) => Slot::Held(act.id.clone()),
+      _ => Slot::Told(Arc::clone(&event)),
+    }));
     self.readers.send((seq, event)).ok();
     if let Some(queued) = queued {
       self.put(queued);
@@ -598,9 +628,8 @@ impl Life {
     let told = start..self.kept.log.len();
     if self.record.is_some() {
       for (at, slot) in self.kept.log.iter_mut().enumerate().skip(start) {
-        let fact = match slot.as_deref() {
-          Some(Event::Fact(fact)) if fact[0] != "keep" => fact,
-          _ => continue,
+        let Some(fact) = slot.as_ref().and_then(Slot::fact).filter(|fact| fact[0] != "keep") else {
+          continue;
         };
         self.kept.gone.logged.push((at as Seq, Digest::of(fact)));
         *slot = None;
@@ -624,9 +653,10 @@ impl Life {
   /// An act that the engine of this birth told, at its place in the log. The fold of the engine
   /// counts the facts that it heard, and the log holds each fact of the life once, from its first
   /// birth on, so a reader reads the place of each act in one time for the whole life.
-  fn placed(&self, mut act: Box<Act>) -> Box<Act> {
-    act.began = self.place(act.began);
-    act.ended = act.ended.map(|ended| self.place(ended));
+  fn placed(&self, mut act: Arc<Act>) -> Arc<Act> {
+    let placed = Arc::make_mut(&mut act);
+    placed.began = self.place(placed.began);
+    placed.ended = placed.ended.map(|ended| self.place(ended));
     act
   }
 
@@ -682,7 +712,7 @@ impl Life {
         let acts = fold.hear(&fact, &[], None);
         self.put(Event::Fact(fact));
         for act in acts {
-          self.put(Event::Act(Box::new(act)));
+          self.put(Event::Act(Arc::new(act)));
         }
         self.let_go();
       }
@@ -703,10 +733,8 @@ impl Life {
     let opened = mem::take(&mut self.kept.gone.opened);
     let kept = |at: usize| opened.iter().any(|one| one.contains(&at));
     for (at, slot) in self.kept.log.iter_mut().enumerate().skip(self.kept.gone.scanned) {
-      let fact = match slot.as_deref() {
-        Some(Event::Fact(fact)) if !kept(at) && !kept_checkpoint(fact) => fact,
-        _ => continue,
-      };
+      let fact = slot.as_ref().and_then(Slot::fact);
+      let Some(fact) = fact.filter(|fact| !kept(at) && !kept_checkpoint(fact)) else { continue };
       self.kept.gone.places.push((at as Seq, Digest::of(fact)));
       *slot = None;
     }
@@ -731,7 +759,13 @@ impl Life {
   fn since(&self, from: Seq) -> Since {
     let start = usize::try_from(from).unwrap_or(usize::MAX);
     let since = self.kept.log.iter().enumerate().skip(start);
-    let logged = since.filter_map(|(at, one)| Some((at as Seq, Arc::clone(one.as_ref()?))));
+    let logged = since.filter_map(|(at, one)| {
+      let event = match one.as_ref()? {
+        Slot::Told(event) => Arc::clone(event),
+        Slot::Held(id) => Event::Act(Arc::clone(self.kept.held.shared(id)?)).into(),
+      };
+      Some((at as Seq, event))
+    });
     let wanted =
       |places: &[(Seq, Digest)]| places[places.partition_point(|(at, _)| *at < from)..].to_vec();
     let retells = self.record.as_deref().map_or_else(Vec::new, |path| {

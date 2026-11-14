@@ -243,13 +243,56 @@ async fn a_life_whose_image_does_not_load_opens_by_its_record_after_its_past() {
 }
 
 #[tokio::test]
+async fn a_life_ends_with_an_image_that_holds_each_state_of_an_act_once() {
+  let at = place("image-once");
+  let life = Life::spawn(answering(&at, Some("close('ok')"))).expect("the life");
+  let mut events = Box::pin(life.events(0));
+  let prompt =
+    Command::Prompt { shape: "str".to_owned(), message: "Say ok.".to_owned(), to: None, on: None };
+  let id = made(&life, prompt).await;
+  until(&mut events, done(&id)).await;
+  ended(life).await;
+  let image = fs::read(at.join("record.jsonl.image")).expect("the image");
+  let (_, host) = host_part(&image);
+  let kept: Value = serde_json::from_slice(&image[host..]).expect("the part of the host");
+  let mut states = Vec::new();
+  states_of(&kept, &id, &mut states);
+  let mut each = states.clone();
+  each.sort();
+  each.dedup();
+  assert!(states.iter().any(|one| one.contains("\"ok\"")), "the image holds the act done");
+  assert_eq!(states.len(), each.len(), "the log and the acts of the image share each state");
+}
+
+/// The key of an image, and the place of the part of the host in it.
+fn host_part(image: &[u8]) -> (Value, usize) {
+  let end = image.iter().position(|byte| *byte == b'\n').expect("the line of the key");
+  let key: Value = serde_json::from_slice(&image[..end]).expect("the key");
+  let at = |field: &str| usize::try_from(key[field].as_u64().expect(field)).expect(field);
+  let host = end + 1 + at("session") + at("half");
+  (key, host)
+}
+
+/// Each object of a value that is a state of the act of an id, as JSON writes it.
+fn states_of(value: &Value, id: &str, states: &mut Vec<String>) {
+  match value {
+    Value::Object(object) => {
+      if object.get("id") == Some(&json!(id)) && object.contains_key("kind") {
+        states.push(value.to_string());
+      }
+      object.values().for_each(|one| states_of(one, id, states));
+    }
+    Value::Array(list) => list.iter().for_each(|one| states_of(one, id, states)),
+    _ => {}
+  }
+}
+
+#[tokio::test]
 async fn a_life_whose_image_holds_the_part_of_a_host_of_another_build_opens_by_its_record() {
   // The key and the body agree, and the part of the host names the files of another build.
   opens_by_its_record_after_its_past("image-host", |image| {
+    let (mut key, host) = host_part(image);
     let end = image.iter().position(|byte| *byte == b'\n').expect("the line of the key");
-    let mut key: Value = serde_json::from_slice(&image[..end]).expect("the key");
-    let at = |field: &str| usize::try_from(key[field].as_u64().expect(field)).expect(field);
-    let host = end + 1 + at("session") + at("half");
     let named = b"{\"build\":\"";
     assert!(image[host..].starts_with(named), "the part of the host names its build first");
     let digest = host + named.len();

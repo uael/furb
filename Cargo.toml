@@ -127,7 +127,7 @@ num-bigint = "0.4"
 # The record: one fact per line, as JSON, whose numbers are read before anything rounds them. The catalog of models
 # is JSON too, read into the shapes it holds.
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order", "raw_value"] }
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
 thiserror = "2"
 url = "2"
 indexmap = { version = "2", features = ["serde"] }

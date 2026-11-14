@@ -10,7 +10,10 @@
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+  collections::{BTreeSet, HashMap, HashSet},
+  sync::Arc,
+};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -51,7 +54,7 @@ pub enum Rung {
 /// its place by its id, the places of the acts of each maker and of each chain, and the places of
 /// the acts that live, an act that is not done or a rung whose word still runs.
 pub(super) struct Index<'a> {
-  pub acts: &'a [Act],
+  pub acts: &'a [Arc<Act>],
   pub at: &'a HashMap<String, usize>,
   pub made: &'a HashMap<String, Vec<usize>>,
   pub on: &'a HashMap<String, Vec<usize>>,
@@ -60,7 +63,7 @@ pub(super) struct Index<'a> {
 
 impl<'a> Index<'a> {
   fn get(&self, id: &str) -> Option<&'a Act> {
-    self.at.get(id).map(|place| &self.acts[*place])
+    self.at.get(id).map(|place| &*self.acts[*place])
   }
 
   /// The acts of a list of places, in order, but the questions on the way to what an act does,
@@ -70,7 +73,7 @@ impl<'a> Index<'a> {
     places
       .into_iter()
       .flatten()
-      .map(move |place| &acts[*place])
+      .map(move |place| &*acts[*place])
       .filter(|act| followed(act.kind.as_str()))
   }
 }
@@ -232,7 +235,7 @@ pub(super) fn folded(
   // A step stays shown when a prompt or a rung under it asks the operator or works: each such act
   // marks each step from it up to the top, in the level of the step above it.
   let mut alive: HashMap<&str, Vec<&str>> = HashMap::new();
-  let live = index.live.iter().map(|place| &index.acts[*place]);
+  let live = index.live.iter().map(|place| &*index.acts[*place]);
   let asked = owed.iter().filter_map(|id| index.get(id));
   for act in live.chain(asked) {
     let working = matches!(act.state, State::Asks | State::Thinks | State::Runs | State::Idle);

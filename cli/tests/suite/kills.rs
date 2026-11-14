@@ -355,8 +355,8 @@ impl Window {
       _ => false,
     };
     let Event::Act(act) = self.until(ended).await else { unreachable!() };
-    let Phase::Done(value) = act.phase else { unreachable!() };
-    value
+    let Phase::Done(value) = &act.phase else { unreachable!() };
+    value.clone()
   }
 
   /// That no act waits for a wake, since the open put each act that the kill cut to the outside.

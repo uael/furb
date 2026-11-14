@@ -6,7 +6,11 @@
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
-use std::collections::{BTreeSet, HashMap};
+use std::{
+  collections::{BTreeSet, HashMap},
+  mem,
+  sync::Arc,
+};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -36,10 +40,11 @@ pub struct Threads {
   pub state: State,
 }
 
-/// Each act of a life, as the last event of it told it, in the order the acts were first told.
+/// Each act of a life, as the last event of it told it, in the order the acts were first told. An
+/// act is shared, so a host that keeps the event of an act beside it holds the act once.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Held {
-  acts: Vec<Act>,
+  acts: Vec<Arc<Act>>,
   at: HashMap<String, usize>,
   /// The places of the acts of each maker, and of each chain, in the order they were first told.
   made: HashMap<String, Vec<usize>>,
@@ -57,7 +62,7 @@ pub struct Held {
 
 impl<'a> Lookup<'a> for &'a Held {
   fn act(&self, id: &str) -> Option<&'a Act> {
-    self.at.get(id).map(|at| &self.acts[*at])
+    self.at.get(id).map(|at| &*self.acts[*at])
   }
 }
 
@@ -77,14 +82,14 @@ impl Held {
     self.took(act.clone());
   }
 
-  /// An act of the life heard as a host tells it, which the life gives up to it: the fold of a
-  /// record tells some hundred thousand of them, each with its words and its value, so it takes no
-  /// copy of each.
-  pub fn took(&mut self, act: Act) {
+  /// An act of the life heard as a host tells it, which the life gives up or shares with it: the
+  /// fold of a record tells some hundred thousand of them, each with its words and its value, so it
+  /// takes no copy of each. It gives back the act of the same id that it held before.
+  pub fn took(&mut self, act: impl Into<Arc<Act>>) -> Option<Arc<Act>> {
+    let act = act.into();
     let live = lives(&act);
-    let at = if let Some(&at) = self.at.get(&act.id) {
-      self.acts[at] = act;
-      at
+    let (at, before) = if let Some(&at) = self.at.get(&act.id) {
+      (at, Some(mem::replace(&mut self.acts[at], act)))
     } else {
       let at = self.acts.len();
       // A read of now takes the acts in place as the order they began, which a host and a record
@@ -97,13 +102,19 @@ impl Held {
       self.made.entry(act.by.clone()).or_default().push(at);
       self.on.entry(act.chain.clone()).or_default().push(at);
       self.acts.push(act);
-      at
+      (at, None)
     };
     if live {
       self.live.insert(at);
     } else {
       self.live.remove(&at);
     }
+    before
+  }
+
+  /// The act of an id as the last event of it told it.
+  pub fn shared(&self, id: &str) -> Option<&Arc<Act>> {
+    self.at.get(id).map(|at| &self.acts[*at])
   }
 
   /// The ladder of a chain, now or as it stood just after a moment, with the folds that the window
@@ -138,9 +149,9 @@ impl Held {
   pub(super) fn then<T>(&self, at: Option<u64>, read: impl FnOnce(&[&Act]) -> T) -> T {
     let past;
     let mut acts: Vec<&Act> = match at {
-      None => self.acts.iter().collect(),
+      None => self.acts.iter().map(|act| &**act).collect(),
       Some(at) => {
-        past = as_of(&self.acts, at);
+        past = as_of(self.acts.iter().map(|act| &**act), at);
         past.iter().collect()
       }
     };
@@ -165,12 +176,12 @@ impl Held {
 
   /// The acts that an act or a person made, in the order they were first told.
   pub(super) fn made_by<'a>(&'a self, id: &str) -> impl Iterator<Item = &'a Act> + use<'a> {
-    self.made.get(id).into_iter().flatten().map(|at| &self.acts[*at])
+    self.made.get(id).into_iter().flatten().map(|at| &*self.acts[*at])
   }
 
   /// The acts of a chain, in the order they were first told.
   pub(super) fn on_chain<'a>(&'a self, chain: &str) -> impl Iterator<Item = &'a Act> + use<'a> {
-    self.on.get(chain).into_iter().flatten().map(|at| &self.acts[*at])
+    self.on.get(chain).into_iter().flatten().map(|at| &*self.acts[*at])
   }
 
   /// Each site that said what it saw, and the operator with no login, who saw what the journal
@@ -241,13 +252,15 @@ impl Held {
 
   /// The acts as they stood just after a moment, in the order they began.
   pub fn as_of(&self, at: u64) -> Vec<Act> {
-    let mut acts = as_of(&self.acts, at);
+    let mut acts = as_of(self.acts.iter().map(|act| &**act), at);
     acts.sort_by_key(|act| act.began);
     acts
   }
 
   /// Each moment at which an act began or ended, of the life or of the acts of one chain.
   pub fn moments(&self, on: Option<&str>) -> Vec<u64> {
-    moments_of(self.acts.iter().filter(|act| on.is_none_or(|chain| act.chain == chain)))
+    moments_of(
+      self.acts.iter().map(|act| &**act).filter(|act| on.is_none_or(|chain| act.chain == chain)),
+    )
   }
 }

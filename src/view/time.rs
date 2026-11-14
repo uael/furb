@@ -11,9 +11,9 @@ use super::{
 /// The acts of a life as they stood just after a moment: each act that began by then, and an act
 /// that ended after it as one that runs, with no value and no pause, each in the state that this
 /// gives.
-pub fn as_of(acts: &[Act], at: u64) -> Vec<Act> {
+pub fn as_of<'a>(acts: impl IntoIterator<Item = &'a Act>, at: u64) -> Vec<Act> {
   let mut then: Vec<Act> = acts
-    .iter()
+    .into_iter()
     .filter(|act| act.began <= at)
     .map(|act| match act.ended {
       Some(ended) if ended > at => Act {

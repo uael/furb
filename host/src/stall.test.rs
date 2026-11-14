@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use furb::view::{Act, Kind, Maker, Pause, Phase, State};
 use serde_json::{Value, json};
@@ -31,7 +31,7 @@ fn act(kind: &str, id: &str, chain: &str, words: &[Value]) -> Act {
 }
 
 fn heard(quiet: &mut Quiet, act: Act) {
-  quiet.heard(&Event::Act(Box::new(act)));
+  quiet.heard(&Event::Act(Arc::new(act)));
 }
 
 fn finished(mut one: Act) -> Act {

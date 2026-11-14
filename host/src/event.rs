@@ -1,6 +1,8 @@
 //! The events of a life: one scheme of deltas, which each client of the host reads in the same
 //! order.
 
+use std::sync::Arc;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -21,7 +23,7 @@ pub enum Event {
   Fact(Value),
   /// An act with its meaning as it stands after a fact about it, which takes the place of each
   /// earlier event of the same act.
-  Act(Box<Act>),
+  Act(Arc<Act>),
   /// What a model added to its text and to its thought, as it writes the reply of a rung on a
   /// chain. It is no fact, and the turn of the reply holds all of it.
   Text { rung: String, chain: String, text: String, thinking: String },
