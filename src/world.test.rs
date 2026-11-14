@@ -35,6 +35,17 @@ fn a_path_resolves_against_its_directory_with_every_dot_read_and_an_absolute_pat
 }
 
 #[test]
+fn a_store_says_the_file_that_it_could_not_use_before_the_text_of_the_system() {
+  let at = place("unusable");
+  fs::write(at.join("sessions"), "").unwrap();
+  let path = at.join("sessions").join("record.jsonl");
+  let refused = store(&path).err().unwrap().to_string();
+  // The rest is the text of the system, which differs on each system.
+  let said = format!("Refused: Could not use {}: ", path.with_extension("jsonl.lock").display());
+  assert!(refused.starts_with(&said), "{refused}");
+}
+
+#[test]
 fn one_store_at_a_time_holds_a_record_and_a_read_with_no_lease_reads_it_all_the_same() {
   let at = place("lease");
   let path = at.join("record.jsonl");

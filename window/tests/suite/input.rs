@@ -171,8 +171,8 @@ fn a_refused_message_comes_back_to_the_input_with_why() {
   // The folder of the window holds a file where the sessions of its project would stand, so no
   // life can make its record there.
   let folder = daemon.file("broken");
-  fs::create_dir_all(&folder).unwrap();
-  fs::write(folder.join(".furb"), "").unwrap();
+  fs::create_dir_all(folder.join(".furb")).unwrap();
+  fs::write(folder.join(".furb").join("sessions"), "").unwrap();
   let home = folder.parent().map(PathBuf::from);
   let options = Options { folder, home, ..options(&daemon.file("cards.json")) };
   open(&app, vec![daemon.machine("mac")], options);

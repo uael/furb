@@ -27,4 +27,4 @@
 ┃
 ┃ draft after
   This computer   broken · new session ▾           ○ Python
-  Refused: Could not read…                      ⌃P commands
+  Refused: Could not use…                       ⌃P commands
