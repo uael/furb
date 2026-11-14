@@ -7,7 +7,7 @@
 )]
 use std::{
   cell::RefCell,
-  collections::HashMap,
+  collections::{HashMap, HashSet, VecDeque},
   sync::atomic::{AtomicI64, Ordering},
   task::{Context, Poll, Waker},
   time::Duration,
@@ -21,7 +21,7 @@ use crate::{
   fact::Fact,
   sand,
   sand::{Answer, Sand},
-  value::{Fault, Given, Object, marked},
+  value::{Fault, Given, Object, entry, marked},
 };
 use std::mem;
 
@@ -31,6 +31,9 @@ pub(super) const CALL: &str = "call:";
 /// The prefix of the name an ear of the host is heard under when a verb is given it: `ear:` and its
 /// number.
 pub(super) const EAR: &str = "ear:";
+
+/// Who says a fact of the record again, as an ear of the outside hears it.
+const JOURNAL: &str = "journal";
 
 /// A function of the host, as the sandbox may call it back, with the life lent to it while it runs.
 type Callable = Box<dyn FnMut(Vec<Object>, Life) -> (Result<Object, Fault>, Life)>;
@@ -154,6 +157,71 @@ pub(super) struct Hosted {
   /// The fact that an ear of the host heard last, as [`Outside::told`] keeps it: the value that
   /// the sandbox sent, and the fact that it went out as.
   pub(super) told: Option<(Object, Fact)>,
+  /// The count of the replay, while the life boots.
+  pub(super) replay: Option<Replay>,
+}
+
+/// The count of a replay: of the entries that a life boots on, how many the journal passed so far.
+/// The journal takes the entries in the order of the record, so an entry that it says or makes
+/// again stands after each entry that it passed, and its place is the count. An ear of the host
+/// hears a fact that the journal says again as said by the journal, and a question that the life
+/// makes again under the name that the record holds. The first `started` or `done` of an act is
+/// said again as the act is made, before the journal reaches its place, so it counts nothing.
+/// The count stands still while no ear of the host hears the facts, and the end of a boot that
+/// raised nothing counts each entry.
+pub(super) struct Replay {
+  /// The places in the record of the entries of each kind about each name, in order, each with
+  /// whether the journal says or makes it again at its place.
+  places: HashMap<(String, String), VecDeque<(u64, bool)>>,
+  done: u64,
+  of: u64,
+  told: Box<dyn Fn(u64, u64)>,
+}
+
+impl Replay {
+  /// The count of the replay of a record, as boot takes it, which tells that it passed no entry.
+  pub(super) fn of(record: &[Object], told: Box<dyn Fn(u64, u64)>) -> Self {
+    let mut places: HashMap<_, VecDeque<_>> = HashMap::new();
+    let mut answered = HashSet::new();
+    let facts = record.iter().map(|one| entry(&one.as_ref(), 0).and_then(Fact::of));
+    for (place, fact) in (0..).zip(facts) {
+      let Some(fact) = fact else { continue };
+      let first =
+        matches!(fact.kind(), "started" | "done") && answered.insert(fact.about().to_owned());
+      let key = (fact.kind().to_owned(), fact.about().to_owned());
+      places.entry(key).or_default().push_back((place, !first));
+    }
+    let of = record.len() as u64;
+    told(0, of);
+    Self { places, done: 0, of, told }
+  }
+
+  /// A fact that went out to an ear of the host.
+  fn heard(&mut self, fact: &Fact) {
+    if !fact.question() && fact.by() != JOURNAL {
+      return;
+    }
+    let key = (fact.kind().to_owned(), fact.about().to_owned());
+    let place = self.places.get_mut(&key).and_then(VecDeque::pop_front);
+    if let Some((place, true)) = place
+      && place >= self.done
+    {
+      self.done = place + 1;
+      (self.told)(self.done, self.of);
+    }
+  }
+}
+
+impl Hosted {
+  /// The end of the replay, which lets go of its count: the journal of a boot that raised nothing
+  /// took each entry.
+  pub(super) fn replayed(&mut self, whole: bool) {
+    if let Some(replay) = self.replay.take()
+      && whole
+    {
+      (replay.told)(replay.of, replay.of);
+    }
+  }
 }
 
 impl Default for Hosted {
@@ -164,6 +232,7 @@ impl Default for Hosted {
       standing: HashMap::new(),
       waits: HashMap::new(),
       told: None,
+      replay: None,
     }
   }
 }
@@ -340,6 +409,9 @@ impl Outside {
       return Ok(Some(fact.clone()));
     }
     let fact = Fact::owned(self.outward(sand, &a)?);
+    if let (Some(fact), Some(replay)) = (&fact, &mut self.hosted.replay) {
+      replay.heard(fact);
+    }
     self.hosted.told = fact.clone().map(|fact| (a, fact));
     Ok(fact)
   }

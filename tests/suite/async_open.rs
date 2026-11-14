@@ -13,7 +13,11 @@ use std::{
   process::{self, Command},
 };
 
-use furb::{Exit, life::Opening, verbs};
+use furb::{
+  Exit,
+  life::{Opening, Progress},
+  verbs,
+};
 use tokio::task::LocalSet;
 
 /// The names of the threads of this process, which Linux gives in its proc file system.
@@ -69,7 +73,7 @@ async fn a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits
   let at = yard::Yard::new(format!("furb-async-open-{}", process::id()));
   LocalSet::new()
     .run_until(async {
-      let (mut engine, _) = opening(&at).open::<String>([]).await.unwrap();
+      let (mut engine, _) = opening(&at).open::<String>([], Progress::default()).await.unwrap();
       let on = || Some("chain1".to_owned());
       let with = verbs::Bash { on: on(), ..Default::default() };
       let exit: Exit = engine.bash("echo hi", with).unwrap().await.unwrap();

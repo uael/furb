@@ -26,7 +26,7 @@ use std::{
 
 use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
-  life::{Log, Opening, Stream},
+  life::{Log, Opening, Progress, Stream},
   verbs,
   view::{Act, Desk, Fold, Held, Named, Phase, Rung, SHOWN, Shown, ThreadNode, Threads},
   wire::{outward, parsed},
@@ -495,7 +495,7 @@ impl Life {
   fn recalled(&mut self, record: &str) {
     // One pass over the heads of the lines gives the place of each checkpoint, and a record with
     // none tells nothing here.
-    let Ok(world::Marks { checkpoints, .. }) = world::marks(record) else { return };
+    let Ok(world::Marks { checkpoints, .. }) = world::marks(record, &mut |_| {}) else { return };
     let marks: Vec<usize> = checkpoints.into_iter().map(|at| at + 1).collect();
     let Some(&last) = marks.last() else { return };
     let Ok(told) = world::retold(record) else { return };
@@ -822,7 +822,8 @@ async fn lives(
     life.recalled(one);
   }
   loop {
-    let engine = match opening.clone().open(ears(told.clone(), journal)).await {
+    let engine = match opening.clone().open(ears(told.clone(), journal), Progress::default()).await
+    {
       Ok((engine, _)) => engine,
       Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new() },
     };

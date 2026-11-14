@@ -11,7 +11,7 @@ use furb::{
   Act, Engine, Fact, Fault, Object,
   engine::OPERATOR,
   fact,
-  life::Opening,
+  life::{Opening, Progress},
   skill::{self, Skill},
   verbs,
   wire::outward,
@@ -36,7 +36,8 @@ impl Life {
   /// The journal says the whole record again before boot returns, so the life stands whole on its record here, and a
   /// life whose record drifted is refused, since it would keep nothing more.
   pub(crate) async fn lived(opening: Opening) -> Result<Self, CliError> {
-    let (engine, held) = opening.open([("console", console::terminal())]).await?;
+    let (engine, held) =
+      opening.open([("console", console::terminal())], Progress::default()).await?;
     let root = engine.root().to_owned();
     let held: Vec<Fact> =
       held.iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?)).collect();

@@ -92,8 +92,23 @@ fn room(path: &Path) -> Option<(&Path, u64)> {
 /// The record at a path, read under its lease, and the ear that keeps on it what the journal says to keep: a
 /// database of SQLite when the name of the path ends in `.sqlite`, `.sqlite3` or `.db`, and else a file of lines.
 pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
-  let path = path.as_ref();
-  keeping(Format::of(path).open(path)?)
+  stored(path.as_ref(), &mut |_| {})
+}
+
+/// The record and the ear that [`store`] gives, with the bytes of a file of lines that the read
+/// passed told after each line. A database tells none.
+pub(crate) fn stored(
+  path: &Path,
+  reached: &mut dyn FnMut(u64),
+) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
+  match Format::of(path) {
+    Format::Sqlite => keeping(Sqlite::open(path)?),
+    Format::Lines => {
+      let mut store = Lines::open(path)?;
+      let entries = store.read(reached)?;
+      Ok(kept_by(store, entries))
+    }
+  }
 }
 
 /// What the store kept at a path, read with no lease and changed in nothing on the disk, as a later life would open
@@ -140,14 +155,15 @@ impl Marks {
 
 /// The marks of the record at a path, read with no lease and changed in nothing. A file of lines is
 /// read from the head of each line in one pass, and parses only the lines of a fact made, of a
-/// checkpoint and of the done of a stand.
-pub fn marks(path: impl AsRef<Path>) -> Result<Marks, Fault> {
+/// checkpoint and of the done of a stand, and the bytes of the file that the pass read are told
+/// after each line. A database tells none.
+pub fn marks(path: impl AsRef<Path>, reached: &mut dyn FnMut(u64)) -> Result<Marks, Fault> {
   let path = path.as_ref();
   let format = Format::of(path);
   let mut marks = Marks::default();
   if format == Format::Lines {
     let heads = [Head::Kind(MADE), Head::Kind(checkpoint::CHECKPOINT), Head::Done("stand")];
-    lines::heads(path, &heads, &mut |place, entry| marks.hear(place, entry))?;
+    lines::heads(path, &heads, &mut |place, entry| marks.hear(place, entry), reached)?;
   } else {
     for (place, entry) in format.kept(path)?.into_iter().enumerate() {
       marks.hear(place, entry);
@@ -369,9 +385,15 @@ enum Told {
 /// twice, and the life goes on. The ear tells the operator once when the record stops growing, with
 /// the fault, and once when it grows again. A message that did not go is said again at the next
 /// pass.
-pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
-  let mut store = Held { store, waiting: VecDeque::new(), fault: None };
-  let entries: Vec<Object> = store.store.entries()?.into_iter().map(streamed).collect();
+pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
+  let entries = store.entries()?;
+  Ok(kept_by(store, entries))
+}
+
+/// The record and the ear of [`keeping`], for a store whose entries were read.
+fn kept_by(store: impl Store + 'static, entries: Vec<Object>) -> (Vec<Object>, Box<dyn Ear>) {
+  let store = Held { store, waiting: VecDeque::new(), fault: None };
+  let entries: Vec<Object> = entries.into_iter().map(streamed).collect();
   let store = Rc::new(RefCell::new(store));
   let held = Rc::clone(&store);
   // A record whose last checkpoint has no fact made after it is new to the build that goes on from it.
@@ -432,7 +454,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
       }
     }
   });
-  Ok((entries, With::ear(kept, store)))
+  (entries, With::ear(kept, store))
 }
 
 /// The message that the record stopped growing, with the fault of the store.

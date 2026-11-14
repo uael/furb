@@ -47,7 +47,7 @@ use monty_types::{ExcType, MontyUuid, NamedValues};
 
 use self::{
   crossing::Crossing,
-  hosted::{At, Handed, Hosted},
+  hosted::{At, Handed, Hosted, Replay},
   opening::OPENING,
 };
 pub use self::{
@@ -591,6 +591,17 @@ impl Engine {
     record: impl IntoIterator<Item = Object>,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<Self, Fault> {
+    Self::booting(record, ears, Box::new(|_, _| {}))
+  }
+
+  /// An engine, as [`Engine::boot`] opens it, with the replay told: how many of the entries that
+  /// the life boots on the journal passed, and how many it boots on, from the moment that the seed
+  /// gave them, and each of them once boot ended with no fault.
+  pub(crate) fn booting<N: Into<String>>(
+    record: impl IntoIterator<Item = Object>,
+    ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
+    replayed: Box<dyn Fn(u64, u64)>,
+  ) -> Result<Self, Fault> {
     let (given, names) = Handed::of(ears)?;
     let record: Vec<Object> = record.into_iter().collect();
     // A record replays on the engine that the fact made of its last segment holds.
@@ -606,6 +617,7 @@ impl Engine {
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
     let (record, born) = seeded(&mut sand, &mut outside, record)?;
     outside.settled = settled(&record);
+    outside.hosted.replay = Some(Replay::of(&record, replayed));
     let mut engine = Self::new(sand, outside, &record, String::new());
     let names_parked = Object::list(engine.parked.iter().map(|(id, _)| Object::string(id)));
     let parks = !engine.parked.is_empty();
@@ -654,6 +666,7 @@ impl Engine {
     // The replay ends with boot: a run of the record that goes on after it is live, and the bound
     // holds it.
     engine.outside.settled.clear();
+    engine.outside.hosted.replayed(raised.is_none());
     engine.root = root;
     engine.raised = raised;
     Ok(engine)

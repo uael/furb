@@ -130,7 +130,7 @@ macro_rules! conformance {
       #[test]
       fn the_standing_of_a_record_is_the_list_that_its_last_done_of_a_stand_gave() {
         let path = at("standing");
-        assert!(marks(&path).unwrap().standing.is_none());
+        assert!(marks(&path, &mut |_| {}).unwrap().standing.is_none());
         let mut one = open(&path).unwrap();
         one.entries().unwrap();
         let first = "[['first'], 1]";
@@ -144,7 +144,7 @@ macro_rules! conformance {
           (r#"[["stand","stand11","operator","chain1"]]"#, last),
         ] {
           one.keep(parsed(entry).unwrap().as_ref()).unwrap();
-          let held = marks(&path).unwrap().standing.map(|got| got.as_ref().py_repr());
+          let held = marks(&path, &mut |_| {}).unwrap().standing.map(|got| got.as_ref().py_repr());
           assert_eq!(held.as_deref(), Some(want), "{entry}");
         }
       }

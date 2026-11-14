@@ -65,15 +65,23 @@ impl Lines {
   }
 }
 
-impl Store for Lines {
-  fn entries(&mut self) -> Result<Vec<Object>, Fault> {
+impl Lines {
+  /// Each entry of the record, as [`Store::entries`] gives them, with the bytes of the file that
+  /// the read passed told after each line.
+  pub(super) fn read(&mut self, reached: &mut dyn FnMut(u64)) -> Result<Vec<Object>, Fault> {
     let mut entries = Vec::new();
-    match read(&self.path, &mut |one| entries.push(one))? {
+    match read(&self.path, &mut |one| entries.push(one), reached)? {
       Tail::Torn(whole) => (self.whole, self.torn) = (Some(whole), true),
       Tail::Unended => self.unended = true,
       Tail::Ended => {}
     }
     Ok(entries)
+  }
+}
+
+impl Store for Lines {
+  fn entries(&mut self) -> Result<Vec<Object>, Fault> {
+    self.read(&mut |_| {})
   }
 
   fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
@@ -120,17 +128,19 @@ impl Store for Lines {
 
 /// Each entry of the file of lines at a path, in order, read with no lease and changed in nothing, one line at a time.
 pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), StoreError> {
-  read(path, take).map(drop)
+  read(path, take, &mut |_| {}).map(drop)
 }
 
 /// The entries of the file of lines at a path whose line starts with one of some heads, each with
 /// its place among the entries of the record, counted from 0, in order and read one line at a
 /// time, so a reader holds no more of a large record than one line. A line with another head is
-/// not parsed, a line that does not parse is passed over, and a blank line is no entry.
+/// not parsed, a line that does not parse is passed over, and a blank line is no entry. The bytes
+/// of the file that the read passed are told after each line.
 pub(super) fn heads(
   path: &Path,
   heads: &[Head<'_>],
   take: &mut dyn FnMut(usize, Object),
+  reached: &mut dyn FnMut(u64),
 ) -> Result<(), StoreError> {
   let file = match File::open(path) {
     Ok(file) => file,
@@ -139,12 +149,15 @@ pub(super) fn heads(
   };
   let starts = Head::starts(heads.iter().copied());
   let mut lines = BufReader::with_capacity(1 << 20, file);
-  let (mut line, mut place) = (Vec::new(), 0);
+  let (mut line, mut place, mut at) = (Vec::new(), 0, 0);
   loop {
     line.clear();
-    if lines.read_until(b'\n', &mut line).map_err(StoreError::io(path))? == 0 {
+    let read = lines.read_until(b'\n', &mut line).map_err(StoreError::io(path))?;
+    if read == 0 {
       return Ok(());
     }
+    at += read as u64;
+    reached(at);
     let text = line.strip_suffix(b"\n").unwrap_or(&line);
     if text.iter().all(u8::is_ascii_whitespace) {
       continue;
@@ -209,8 +222,13 @@ enum Tail {
 
 /// Each entry of a record, in order, each the fact it kept in a list of one, as boot takes them, read one line at a
 /// time and changed in nothing, and how its last line ends. The time that a line holds after its fact stays out of
-/// the entry, and a line with no time, as an older store kept it, reads the same.
-fn read(path: &Path, take: &mut dyn FnMut(Object)) -> Result<Tail, StoreError> {
+/// the entry, and a line with no time, as an older store kept it, reads the same. The bytes of the
+/// file that the read passed are told after each line.
+fn read(
+  path: &Path,
+  take: &mut dyn FnMut(Object),
+  reached: &mut dyn FnMut(u64),
+) -> Result<Tail, StoreError> {
   let file = match File::open(path) {
     Ok(file) => file,
     Err(no) if no.kind() == ErrorKind::NotFound => return Ok(Tail::Ended),
@@ -246,6 +264,7 @@ fn read(path: &Path, take: &mut dyn FnMut(Object)) -> Result<Tail, StoreError> {
       return Err(invalid(start));
     }
     take(entry_of(held[0]).ok_or_else(|| invalid(start))?);
+    reached(next as u64);
     if !ended {
       return Ok(Tail::Unended);
     }

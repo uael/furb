@@ -19,7 +19,7 @@ use std::{
 
 use futures::future::{FutureExt, LocalBoxFuture};
 
-use super::Opening;
+use super::{Opening, Progress};
 use crate::{
   Act, Engine, Fact, Fault, Object,
   ear::{ear, hear, say},
@@ -135,7 +135,8 @@ impl Open {
       opening.directory = here.display().to_string();
     }
     let asked = Rc::new(RefCell::new(VecDeque::new()));
-    let (engine, record) = opening.open([("console", console(Rc::clone(&asked)))]).await?;
+    let (engine, record) =
+      opening.open([("console", console(Rc::clone(&asked)))], Progress::default()).await?;
     let made = record
       .iter()
       .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))

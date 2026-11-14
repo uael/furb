@@ -15,12 +15,14 @@
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 
 use std::{
-  panic,
+  fs, panic,
   path::{Path, PathBuf},
   sync::Arc,
   time::Duration,
 };
 
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use tokio::task;
 
 use crate::{
@@ -64,6 +66,47 @@ pub struct Retrying(pub Retries);
 /// of the record that the scratch directory leaves out. The host shows it in its log.
 #[derive(Clone)]
 pub struct Log(pub Arc<dyn Fn(&str) + Send + Sync>);
+
+/// A stage of the open of a life, in the order that an open passes them. An open skips a stage that
+/// it has no work for, and a stage never comes again in one open. Each stage counts its work in a
+/// unit of its own, and a stage that counts nothing tells 0 of 0.
+#[derive(
+  Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum Stage {
+  /// A host tells its readers what the record told before its last checkpoint: the facts told, of
+  /// those facts, which are known once the host read them. The crate never tells this stage.
+  Recall,
+  /// The record is scanned for its checkpoints and for the build of its last life: the bytes
+  /// passed, of the bytes of the record.
+  Find,
+  /// A record whose last life ran another engine is carried across to this build, by a life that
+  /// inspects it and writes its checkpoint. It counts nothing.
+  Cross,
+  /// The record is read under its lease: the bytes read, of the bytes of the record.
+  Read,
+  /// The sandbox loads the engine, takes the data of the checkpoint, and the checkpointer makes the
+  /// entries of it. It counts nothing.
+  Seed,
+  /// The life boots: the entries that its journal passed, of the entries that it boots on. It is
+  /// the last stage, and an open that succeeds ends with each entry counted.
+  Boot,
+}
+
+/// A function of the host that is told how far the open of a life stands, as [`Opening::open`]
+/// passes each [`Stage`]: the stage, the work done and the work known. It is told at the start of
+/// each stage and then once for each line of the record or each entry, from the thread that does
+/// the work, so it must be cheap.
+#[derive(Clone)]
+pub struct Progress(pub Arc<dyn Fn(Stage, u64, u64) + Send + Sync>);
+
+impl Default for Progress {
+  /// A function that tells no one.
+  fn default() -> Self {
+    Self(Arc::new(|_, _, _| {}))
+  }
+}
 
 /// What a life is opened on, which every host gives the same: the directory it stands on, the record it opens on and
 /// whether it keeps what it says there, whether it does work or only inspects its record, whether it enables the
@@ -188,8 +231,9 @@ impl Opening {
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
   /// and the files of the record are made again in one that is missing.
   pub fn parts(self) -> Result<(Vec<Object>, Ears), Fault> {
-    let prepared = self.prepared()?;
-    self.parted(prepared)
+    let untold = Progress::default();
+    let prepared = self.prepared(&untold)?;
+    self.parted(prepared, &untold)
   }
 
   /// Whether the life keeps what it says to its record, under the lease of the store.
@@ -208,10 +252,15 @@ impl Opening {
 
   /// The record and the ears of the crate, as [`Opening::parts`] gives them, on what the life
   /// waited for.
-  fn parted(self, prepared: Prepared) -> Result<(Vec<Object>, Ears), Fault> {
+  fn parted(self, prepared: Prepared, told: &Progress) -> Result<(Vec<Object>, Ears), Fault> {
     let keeps = self.keeps != Some(false) && self.works();
     let (record, store) = match (&self.record, keeps) {
-      (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
+      (Some(path), true) => {
+        let (path, bytes) = (Path::new(path), size(path));
+        (told.0)(Stage::Read, 0, bytes);
+        let (held, store) = world::stored(path, &mut |at| (told.0)(Stage::Read, at, bytes))?;
+        (held, Some(store))
+      }
       (Some(path), false) => (world::kept(path)?, None),
       (None, _) => (Vec::new(), None),
     };
@@ -293,21 +342,25 @@ impl Opening {
   /// What the life waits for before it boots: the extensions that the configs turn on, and the
   /// provider of the models, whose catalog asks the servers and the command lines of the models. A
   /// host with a runtime waits for it on a blocking thread.
-  fn prepared(&self) -> Result<Prepared, Fault> {
+  fn prepared(&self, told: &Progress) -> Result<Prepared, Fault> {
     let works = self.works();
-    let read = || match self.record.as_deref() {
-      Some(path) if Path::new(path).exists() => world::marks(path).map(Some),
+    let read = |told: &Progress| match self.record.as_deref() {
+      Some(path) if Path::new(path).exists() => {
+        let bytes = size(path);
+        (told.0)(Stage::Find, 0, bytes);
+        world::marks(path, &mut |at| (told.0)(Stage::Find, at, bytes)).map(Some)
+      }
       _ => Ok(None),
     };
     // A record of another major of its schema is refused before any build reads it whole or writes
     // on it, and the models of a life on a record that holds another engine read that engine.
     let mut system = None;
-    let mut marks = read()?;
+    let mut marks = read(told)?;
     if let Some(held) = &marks {
       world::readable(&held.heads)?;
       // A crossing writes a checkpoint, so the marks of before it are those of another record.
-      if self.keeps() && self.crossed(held)? {
-        marks = read()?;
+      if self.keeps() && self.crossed(held, told)? {
+        marks = read(&Progress::default())?;
       }
     }
     if let Some(marks) = &marks {
@@ -416,20 +469,24 @@ impl Opening {
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<(Engine, Vec<Object>), Fault> {
-    let prepared = self.prepared()?;
-    self.booted(host, prepared)
+    let untold = Progress::default();
+    let prepared = self.prepared(&untold)?;
+    self.booted(host, prepared, &untold)
   }
 
   /// The life, booted as [`Opening::boot`] boots it, on the runtime of tokio of the thread that awaits it: each ear of
   /// the crate registers its IO on that runtime, and what the life waits for before it boots runs on a blocking thread
   /// of that runtime, so the thread of the life waits on no command and no server. A panic of that wait goes on in the
-  /// task that awaits.
+  /// task that awaits. The host is told how far the open stands, stage by stage, from the blocking
+  /// thread and then from the thread that awaits.
   pub async fn open<N: Into<String>>(
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
+    told: Progress,
   ) -> Result<(Engine, Vec<Object>), Fault> {
+    let waits = told.clone();
     let waited = task::spawn_blocking(move || {
-      let prepared = self.prepared();
+      let prepared = self.prepared(&waits);
       (self, prepared)
     });
     let (opening, prepared) = match waited.await {
@@ -439,7 +496,7 @@ impl Opening {
         Err(no) => return Err(Fault::refused(format!("the life did not open: {no}"))),
       },
     };
-    opening.booted(host, prepared?)
+    opening.booted(host, prepared?, &told)
   }
 
   /// The life booted on the ears of the host, on what it waited for, and then on the ears of the crate.
@@ -447,14 +504,18 @@ impl Opening {
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
     prepared: Prepared,
+    told: &Progress,
   ) -> Result<(Engine, Vec<Object>), Fault> {
     let works = self.works();
     if self.whole == Some(true) {
       self.reborn()?;
     }
-    let (record, ears) = self.parted(prepared)?;
+    let (record, ears) = self.parted(prepared, told)?;
     let host = host.into_iter().map(|(name, ear)| (name.into(), ear));
-    let mut engine = Engine::boot(record.clone(), host.chain(ears))?;
+    (told.0)(Stage::Seed, 0, 0);
+    let boots = told.clone();
+    let replayed = Box::new(move |done, of| (boots.0)(Stage::Boot, done, of));
+    let mut engine = Engine::booting(record.clone(), host.chain(ears), replayed)?;
     if let Some(no) = engine.raised() {
       return Err(no.clone());
     }
@@ -472,16 +533,17 @@ impl Opening {
   /// entry, as a life that ends writes one, and the life opens from that checkpoint on the engine
   /// of this build. A record of this build, or of a build whose fact made holds no texts, stays as
   /// it is. It reads the marks of the record, and says whether it wrote that checkpoint.
-  fn crossed(&self, marks: &world::Marks) -> Result<bool, Fault> {
+  fn crossed(&self, marks: &world::Marks, told: &Progress) -> Result<bool, Fault> {
     let segment = checkpoint::segment(&marks.heads);
     let (source, ..) = world::texts(segment)?;
     let crosses = source != crate::ENGINE && !segment.is_empty();
     let Some(path) = self.record.as_deref().filter(|_| crosses) else {
       return Ok(false);
     };
+    (told.0)(Stage::Cross, 0, 0);
     let record = checkpoint::booted(world::kept(path)?);
     let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
-    let prepared = inspects.prepared()?;
+    let prepared = inspects.prepared(&Progress::default())?;
     let ears = inspects.eared(prepared, &record)?;
     let mut engine = Engine::boot(record, ears)?;
     if let Some(no) = engine.raised() {
@@ -501,7 +563,7 @@ impl Opening {
     let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     for at in checkpoint::all(&record) {
       let before = checkpoint::booted(record[..at].to_vec());
-      let prepared = inspects.prepared()?;
+      let prepared = inspects.prepared(&Progress::default())?;
       let ears = inspects.eared(prepared, &before)?;
       let mut engine = Engine::boot(before, ears)?;
       if let Some(no) = engine.raised() {
@@ -511,6 +573,11 @@ impl Opening {
     }
     Ok(())
   }
+}
+
+/// The bytes of the record at a path, and 0 for a record that is not there yet.
+fn size(path: impl AsRef<Path>) -> u64 {
+  fs::metadata(path).map_or(0, |held| held.len())
 }
 
 /// The default actor of a standing, and the name of each model of its roster but the operator.

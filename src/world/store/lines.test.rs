@@ -55,7 +55,8 @@ fn the_heads_of_a_record_are_its_entries_of_some_kinds_in_order_and_no_other_lin
   .unwrap();
   let mut read = Vec::new();
   let wanted = [Head::Kind("made"), Head::Kind("checkpoint")];
-  heads(&at, &wanted, &mut |place, one| read.push((place, one.as_ref().py_repr()))).unwrap();
+  heads(&at, &wanted, &mut |place, one| read.push((place, one.as_ref().py_repr())), &mut |_| {})
+    .unwrap();
   assert_eq!(
     read,
     [
@@ -84,8 +85,13 @@ fn the_place_of_a_head_counts_each_entry_before_it_and_no_blank_line_or_other_he
   )
   .unwrap();
   let mut read = Vec::new();
-  heads(&at, &[Head::Done("stand")], &mut |place, one| read.push((place, one.as_ref().py_repr())))
-    .unwrap();
+  heads(
+    &at,
+    &[Head::Done("stand")],
+    &mut |place, one| read.push((place, one.as_ref().py_repr())),
+    &mut |_| {},
+  )
+  .unwrap();
   let places: Vec<usize> = read.iter().map(|one| one.0).collect();
   assert_eq!(
     places,
@@ -94,7 +100,7 @@ fn the_place_of_a_head_counts_each_entry_before_it_and_no_blank_line_or_other_he
   );
   assert_eq!(read[2].1, "[['done', 'stand4', 'operator', ['wanted-4']]]");
   let mut none = 0;
-  heads(&place("gone"), &[Head::Done("stand")], &mut |_, _| none += 1).unwrap();
+  heads(&place("gone"), &[Head::Done("stand")], &mut |_, _| none += 1, &mut |_| {}).unwrap();
   assert_eq!(none, 0, "a record that stands not holds none");
 }
 

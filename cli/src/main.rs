@@ -28,7 +28,12 @@ use std::{
 };
 
 use clap::{Args, Parser, Subcommand};
-use furb::{checkpoint, life::Opening, value::entry, verbs, world};
+use furb::{
+  checkpoint,
+  life::{Opening, Progress},
+  value::entry,
+  verbs, world,
+};
 use furb_host::GRACE;
 use tokio::runtime;
 use tokio::task;
@@ -365,7 +370,8 @@ async fn run(opening: Opening, word: String) -> Result<(), CliError> {
 
 /// The checkpoint of the life of a record, made in a life that only inspects it and kept at its tip.
 async fn checkpoint(opening: Opening, record: &Path) -> Result<(), CliError> {
-  let (mut engine, _) = Opening { inspecting: Some(true), ..opening }.open::<String>([]).await?;
+  let inspects = Opening { inspecting: Some(true), ..opening };
+  let (mut engine, _) = inspects.open::<String>([], Progress::default()).await?;
   let written = checkpoint::written(&mut engine)?;
   drop(engine);
   Ok(checkpoint::keep(record, written)?)

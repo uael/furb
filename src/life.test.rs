@@ -16,8 +16,9 @@ use std::{
 };
 
 use futures::{channel::mpsc::unbounded, executor, future::select};
+use tokio::runtime;
 
-use super::{Answer, Opening};
+use super::{Answer, Opening, Progress, Stage};
 use crate::{
   Act, Ear, Engine, Fact, Object, Text, checkpoint,
   checkpoint::CHECKPOINT,
@@ -1829,4 +1830,39 @@ fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of
   // The catalog gives opus the class dear, so only the config of this directory makes it cheap.
   assert!(standing.starts_with("[[['claude-cli:opus', ["), "{standing}");
   assert!(standing.contains("1000000, 'cheap']"), "{standing}");
+}
+
+#[test]
+fn an_open_tells_each_stage_in_order_and_ends_with_each_entry_of_its_boot_counted() {
+  let at = yard("stages");
+  let mut first = opening(&at, true).boot::<String>([]).unwrap().0;
+  closed(&mut first, "x = 1\nclose(x)");
+  first.checkpoint().unwrap();
+  let mut tail = opening(&at, true).boot::<String>([]).unwrap().0;
+  closed(&mut tail, "y = x + 1\nclose(y)");
+  drop(tail);
+  let bytes = fs::metadata(at.join("record.jsonl")).unwrap().len();
+  let told = Arc::new(Mutex::new(Vec::new()));
+  let heard = Arc::clone(&told);
+  let progress =
+    Progress(Arc::new(move |stage, done, of| heard.lock().unwrap().push((stage, done, of))));
+  let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
+  let later = reactor.block_on(opening(&at, true).open::<String>([], progress)).unwrap();
+  let told = told.lock().unwrap().clone();
+  let mut stages: Vec<Stage> = told.iter().map(|one| one.0).collect();
+  stages.dedup();
+  assert_eq!(stages, [Stage::Find, Stage::Read, Stage::Seed, Stage::Boot]);
+  let back = |pair: &[(Stage, u64, u64)]| {
+    pair[0].0 == pair[1].0 && (pair[1].1 < pair[0].1 || pair[1].2 < pair[0].2)
+  };
+  assert!(!told.windows(2).any(back), "no number of a stage goes back: {told:?}");
+  let last = |stage| told.iter().rev().find(|one| one.0 == stage).map(|one| (one.1, one.2));
+  assert_eq!(last(Stage::Find), Some((bytes, bytes)), "the scan passed each byte of the record");
+  assert_eq!(last(Stage::Read), Some((bytes, bytes)), "the read passed each byte of the record");
+  assert_eq!(last(Stage::Seed), Some((0, 0)), "the seed counts nothing");
+  let (done, of) = last(Stage::Boot).unwrap();
+  assert!(of > 0 && done == of, "the boot ends with each entry counted: {done} of {of}");
+  let within = |one: &&(Stage, u64, u64)| one.0 == Stage::Boot && 0 < one.1 && one.1 < of;
+  assert!(told.iter().any(|one| within(&one)), "the replay counts entries as it passes them");
+  drop(later);
 }
