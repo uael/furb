@@ -141,16 +141,19 @@ fn the_key_of_a_new_thread_turns_the_input_and_its_bar_and_a_reply_reaches_a_thr
 }
 
 #[test]
-fn two_escapes_stop_the_work_of_the_thread_and_one_does_not() {
+fn two_escapes_stop_the_work_of_the_thread_and_one_says_that_it_armed_the_stop() {
   let (app, _daemon, _sessions) = started();
   sent(&app, &format!("where does the time go {WORKS}"));
   shows(&app, "Working · ⎋ ⎋ stop");
   app.press("escape");
-  app.advance(Duration::from_millis(2001));
+  shows(&app, "⎋ again stops the work");
+  // Another key forgets the first escape, so the next one arms the stop again.
+  app.press("ctrl+n");
+  app.press("ctrl+n");
   app.press("escape");
   app.advance(Duration::from_millis(300));
-  assert!(app.text().contains("Working · ⎋ ⎋ stop"), "{}", app.text());
-  app.press("escape");
+  let frame = shows(&app, "⎋ again stops the work");
+  assert!(!frame.contains("Stopped"), "{frame}");
   app.press("escape");
   let frame = shows(&app, "Stopped");
   assert!(!frame.contains("Working · ⎋ ⎋ stop"), "{frame}");

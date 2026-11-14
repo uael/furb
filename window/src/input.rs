@@ -78,11 +78,12 @@ pub(crate) enum Asked {
 }
 
 /// What a first press of a key named, which a second press of that key does: the resolve of the
-/// open thread while it works, which stops its work, the take back of his last message that still
-/// runs, or the leave of the window. Any other key leaves it.
+/// open thread while it works, which stops its work, the stop of that work, the take back of his
+/// last message that still runs, or the leave of the window. Any other key leaves it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Armed {
   Resolve(Key),
+  Stop,
   Back(Back),
   Leave,
 }
@@ -255,18 +256,26 @@ impl Model {
   }
 
   /// A key that he pressed: what a first press of another key named goes, and so does what the key
-  /// before did not do.
-  pub(crate) fn pressed(&mut self, does: Does) {
+  /// before did not do. Whether it forgot a first press.
+  pub(crate) fn pressed(&mut self, does: Does) -> bool {
     let again = matches!(
       (&self.armed, does),
       (Some(Armed::Resolve(_)), Does::Resolve)
+        | (Some(Armed::Stop), Does::Close)
         | (Some(Armed::Back(_)), Does::Empty)
         | (Some(Armed::Leave), Does::Leave)
     );
-    if !again {
-      self.armed = None;
-    }
     self.notice = None;
+    !again && self.armed.take().is_some()
+  }
+
+  /// A first escape that nothing else takes, while the open thread works: the next escape stops its
+  /// work.
+  pub(crate) fn arm_stop(&mut self) {
+    let card = self.thread.as_ref().and_then(|one| self.told_card(&one.key));
+    if card.is_some_and(|card| card.thread.works()) {
+      self.armed = Some(Armed::Stop);
+    }
   }
 
   /// A press of the key that empties the input, on an empty input: the first names his last
@@ -350,6 +359,7 @@ impl Model {
         let first = text.lines().next().unwrap_or_default();
         Some(format!("{} again takes back “{first}”", self.key(Does::Empty)))
       }
+      Armed::Stop => Some(format!("{} again stops the work", self.key(Does::Close))),
       Armed::Leave => Some(format!("{} again leaves the window", self.key(Does::Leave))),
       Armed::Resolve(_) => None,
     }

@@ -135,7 +135,7 @@ impl Feed<'_> {
   /// The last row of the feed while the operator reads away from its end.
   pub(crate) fn jump(&self) -> Row {
     let jump = vec![run("  Jump to latest ↓", Style::new().fg(self.model.tokens.accent))];
-    let end = vec![run("end", self.style(Role::Muted))];
+    let end = vec![run(self.model.key(Does::Jump), self.style(Role::Muted))];
     let line = spread(jump, end, self.wide.saturating_sub(2), Style::new());
     Row::clicked(line, Click::Key(Does::Jump))
   }

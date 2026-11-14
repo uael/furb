@@ -24,7 +24,7 @@
 ┃ and the step 3
 ┃
 
-  Jump to latest ↓                                      end
+  Jump to latest ↓                                        ↘
 ┃ A reply opens this thread again
   This computer   furb ▾               opus/high   ○ Python
   ~/src/furb-try                              ⌃N new thread

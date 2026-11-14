@@ -71,9 +71,6 @@ struct Window {
   touched: Option<Instant>,
   /// When the leader key was pressed, until the key that follows it.
   led: Option<Instant>,
-  /// When the first escape was pressed, which a second one within the bound of the leader makes
-  /// the stop of the work of the open thread.
-  armed: Option<Instant>,
   /// The editor of the text of the input, which has the focus.
   area: Textarea,
   /// Whether a timer waits to settle the list.
@@ -111,7 +108,6 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
     born: app.now(),
     touched: None,
     led: None,
-    armed: None,
     area: area.clone(),
     settles: false,
     keeps: false,
@@ -487,7 +483,7 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
 /// What a key does, which a click on its text does too. Any other key leaves what a first press of
 /// a key named, and what the key before did not do.
 fn act(app: &App, window: &Shared, does: Does) {
-  window.borrow_mut().screen.model.pressed(does);
+  let forgot = window.borrow_mut().screen.model.pressed(does);
   let change: fn(&mut Model) = match does {
     Does::Next => |model| model.step(1),
     Does::Previous => |model| model.step(-1),
@@ -503,7 +499,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Commands => |model| model.pick(Pick::Commands),
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.draft.python = !model.draft.python,
-    Does::Close => return escaped(app, window),
+    Does::Close => return escaped(app, window, forgot),
     Does::Stop => return controlled(app, window, |model| Some((model.stop()?, Asked::Control))),
     Does::Resolve => {
       return controlled(app, window, |model| Some((model.resolve()?, Asked::Control)));
@@ -567,15 +563,17 @@ fn sent(app: &App, window: &Shared) {
   tell(app, window, |model| model.draft.text.clear());
 }
 
-/// An escape: it goes back from a thread that opens or that failed to open, closes the list that
-/// stands over the home, or arms the stop of the work of the open thread, which a second escape
-/// within the bound makes.
-fn escaped(app: &App, window: &Shared) {
+/// An escape: it forgets what a first press of another key named, goes back from a thread that
+/// opens or that failed to open, closes the list that stands over the home, or arms the stop of the
+/// work of the open thread, which the next escape makes.
+fn escaped(app: &App, window: &Shared, forgot: bool) {
+  if forgot {
+    return tell(app, window, |_| ());
+  }
   if tell(app, window, Model::back) {
     return;
   }
-  let armed = window.borrow_mut().armed.take();
-  if armed.is_some_and(|at| app.now().saturating_duration_since(at) <= LEADER) {
+  if window.borrow().screen.model.armed == Some(Armed::Stop) {
     return act(app, window, Does::Stop);
   }
   let closes = {
@@ -585,7 +583,7 @@ fn escaped(app: &App, window: &Shared) {
   if closes {
     tell(app, window, Model::close);
   } else {
-    window.borrow_mut().armed = Some(app.now());
+    tell(app, window, Model::arm_stop);
   }
 }
 
