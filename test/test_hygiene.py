@@ -2,6 +2,8 @@
 
 import ast
 import re
+import shutil
+import subprocess
 from collections import Counter
 from pathlib import Path
 
@@ -302,9 +304,13 @@ ACT = re.compile(r"\b(prompt|rung)[0-9]{2,}\b")
 
 
 def lines_of(paths: list[Path]) -> list[tuple[str, int, str]]:
+  # A file that git ignores, as the local instructions of a clone, is no text of furb, so git names the files to read.
+  git = subprocess.run(  # noqa: S603
+    [shutil.which("git") or "git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True, text=True
+  )
   return [
     (str(path.relative_to(ROOT)), n, line)
-    for path in sorted(set(paths))
+    for path in sorted(set(paths) & {ROOT / one for one in git.stdout.split("\0")})
     if path.is_file()
     for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
   ]
