@@ -16,7 +16,7 @@ mod scenario;
 use std::{
   env, fs,
   path::{Path, PathBuf},
-  process::{self, ExitCode},
+  process::ExitCode,
   sync::Arc,
   time::{Duration, Instant},
 };
@@ -144,16 +144,18 @@ async fn captured(
   };
   let setup = Arc::new(Setup { bin, out });
   let walks = scenarios.iter().filter_map(|scenario| Some((scenario.name, scenario.walk()?)));
-  let mut jobs_left =
-    walks.flat_map(|(name, walk)| scenario::SIZES.map(|size| (name, walk, size))).enumerate();
+  let mut jobs_left = walks.flat_map(|(name, walk)| scenario::SIZES.map(|size| (name, walk, size)));
   let mut runs = JoinSet::new();
   let started = Instant::now();
   let mut failed = 0;
   loop {
     while runs.len() < jobs.max(1) {
-      let Some((n, (name, walk, size))) = jobs_left.next() else { break };
+      let Some((name, walk, size)) = jobs_left.next() else { break };
       let setup = Arc::clone(&setup);
-      let root = PathBuf::from(format!("/tmp/ff{}-{n}", process::id()));
+      // The path of a session hues its thread, so a job takes the same root at each run, and two
+      // captures of one scenario at one size do not run at once.
+      let number = name.split('-').next().unwrap_or(name);
+      let root = PathBuf::from(format!("/tmp/ff{number}-{}", size.name()));
       runs.spawn(async move {
         let done = walked(&Job { name, walk, size, root }, &setup).await;
         match &done {
