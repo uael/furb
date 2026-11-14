@@ -1,0 +1,30 @@
+ furb
+
+  Nothing needs you.
+
+  ⌃O          go to   Each key                                               ⎋
+  ⌃P          comman  ▌Search a key                                     1 / 22
+  ⌃X ?        each k
+                      Go
+                      ▌⌃O          go to a project or a session
+                       ⌃P          commands
+                       ⌃X ?        each key
+                       ⌥A or ⌃X A  the next thread that needs you
+                       ⌥↓ or ⌃X J  the next card
+                       ⌥↑ or ⌃X K  the card before
+                       ⌃X L        show or hide the list
+
+                      The thread
+                       ⌃N          a new thread, and back to the thread
+                       ↘           jump to the latest
+                       ⇞           a page up
+                       ⇟           a page down
+                       ⎋ ⎋         stop the work of the thread
+
+                      ↑↓ move · ⏎ run · ⎋ close
+
+
+
+┃ Ask for a change, a review or an answer
+  This computer   furb-try · new session ▾                                                ○ Python
+  ~/src/furb-try                                                                     ⌃X L the list

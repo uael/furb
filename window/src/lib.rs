@@ -25,6 +25,7 @@ mod list;
 mod machine;
 mod model;
 mod opens;
+mod pick;
 mod prose;
 mod question;
 mod screen;

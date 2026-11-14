@@ -56,6 +56,7 @@ fn failed(system: System) -> Vec<String> {
     heard: 0,
     cards: vec![card],
     link: Link::Listed,
+    ..Told::default()
   };
   let options = Options {
     folder: PathBuf::from("/home/ada/furb"),

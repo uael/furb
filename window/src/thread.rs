@@ -117,13 +117,13 @@ impl Row {
   }
 
   /// What a click on a column of the row does.
-  fn click(&self, x: usize) -> Option<Click> {
+  pub(crate) fn click(&self, x: usize) -> Option<Click> {
     self.hot.iter().find(|hot| hot.0.contains(&x)).and_then(|hot| hot.1.clone())
   }
 
   /// The row with its text bright where the pointer is on a thing that takes a click: its hot
   /// columns, or a link.
-  fn lit(mut self, x: usize, hover: Color) -> Self {
+  pub(crate) fn lit(mut self, x: usize, hover: Color) -> Self {
     let hot = self.hot.iter().map(|hot| hot.0.clone()).find(|hot| hot.contains(&x));
     let mut start = 0;
     for one in &mut self.line {
@@ -445,8 +445,8 @@ impl Model {
     }
   }
 
-  /// A click on a cell of the left side: a block or a thought opens or folds, or a session of the
-  /// picker is picked. The key that the click does the thing of.
+  /// A click on a cell of the left side: a block or a thought opens or folds, or a row of a list
+  /// part is taken. The key that the click does the thing of.
   pub(crate) fn clicked_left(&mut self, x: usize, y: usize) -> Option<Does> {
     let click = self.left_rows().into_iter().nth(y).and_then(|row| row.click(x));
     match click? {
@@ -457,10 +457,7 @@ impl Model {
         }
         None
       }
-      Click::Pick(at) => {
-        self.picked(at);
-        None
-      }
+      Click::Pick(at) => self.took(at),
       Click::Key(does) => Some(does),
       Click::Answer(at) => self.choose(at),
     }
@@ -486,7 +483,7 @@ impl Model {
   }
 
   /// Each row of the left side: the home, or the head of the open thread, the feed in its room and
-  /// the dock; then the input, with the picker of the sessions over the rows above it.
+  /// the dock; then the input.
   fn left_rows(&self) -> Vec<Row> {
     let mut rows = match self.feed() {
       None => self.home(),
@@ -508,9 +505,6 @@ impl Model {
       }
     };
     rows.resize(usize::from(self.size.1).saturating_sub(self.input_rows()), Row::default());
-    let picker = self.picker_rows();
-    let (count, from) = (picker.len(), rows.len().saturating_sub(picker.len()));
-    rows.splice(from.., picker.into_iter().skip(count.saturating_sub(rows.len())));
     rows.extend(self.input());
     rows
   }

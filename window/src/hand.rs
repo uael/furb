@@ -30,6 +30,7 @@ use crate::{
   line::Line,
   link::{self, Asker, Heard},
   model::{Link, Model, SIDE, Told},
+  pick::Pick,
   question::Keyed,
   tokens::{Role, Tokens},
 };
@@ -172,13 +173,6 @@ fn drawn(app: &App, model: Model, area: &Textarea) -> Screen<Model> {
   app.focus(area);
 
   let mut screen = Screen::new(model);
-  let written = |lines: &Vec<Line>| {
-    let rows = lines.iter().enumerate().flat_map(|(n, line)| {
-      let ended = (n > 0).then(|| Span::raw("\n"));
-      ended.into_iter().chain(line.iter().cloned())
-    });
-    rows.collect::<Vec<_>>()
-  };
   screen.part(
     |model: &Model| model.left().rows,
     move |lines| {
@@ -216,7 +210,35 @@ fn drawn(app: &App, model: Model, area: &Textarea) -> Screen<Model> {
   screen.part(Model::listed, move |listed| {
     side.visible(*listed);
   });
+  veiled(app, &mut screen, &tokens);
   screen
+}
+
+/// The list part over each other widget, on a veil that dims the whole window, while one is open.
+fn veiled(app: &App, screen: &mut Screen<Model>, tokens: &Tokens) {
+  let veil = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Left, 0);
+  let veil = veil.position(Edge::Right, 0).position(Edge::Bottom, 0).bg(tokens.veil);
+  let rows = Text::new(app, "").wrap(WrapMode::None);
+  let part = View::new(app).absolute().bg(tokens.raised).child(&rows);
+  app.root().child(&veil.z_index(1).visible(false)).child(&part.z_index(2).visible(false));
+  screen.part(Model::drawn_over, move |over| {
+    veil.visible(over.is_some());
+    part.visible(over.is_some());
+    if let Some((x, y, width, lines)) = over {
+      let height = u16::try_from(lines.len()).unwrap_or_default();
+      part.position(Edge::Left, *x).position(Edge::Top, *y).width(*width).height(height);
+      rows.set_text(written(lines));
+    }
+  });
+}
+
+/// The lines of a text widget, one row each.
+fn written(lines: &[Line]) -> Vec<Span<'static>> {
+  let rows = lines.iter().enumerate().flat_map(|(n, line)| {
+    let ended = (n > 0).then(|| Span::raw("\n"));
+    ended.into_iter().chain(line.iter().cloned())
+  });
+  rows.collect()
 }
 
 /// The editor of the input on its box. A hidden editor loses the focus, which it takes back when it
@@ -400,33 +422,30 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   }
 }
 
-/// A key while the picker of the sessions is open: it filters the list, moves in it, picks an
-/// entry or closes it. Whether the picker took the key.
+/// A key while a list part is open: it filters the part, moves its chosen row, takes it or closes
+/// it. Whether the part took the key.
 fn picking(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   let text = key.text().filter(|_| key.modifiers.is_empty() || key.modifiers == Modifiers::SHIFT);
-  tell(app, window, |model| {
-    let count = model.sessions().len();
-    let Some(picker) = model.picker.as_mut() else { return false };
+  let taken = tell(app, window, |model| {
+    let at = model.picker.as_ref().map(|one| one.at)?;
     match (key.code, text) {
       (KeyCode::Escape, _) => model.picker = None,
-      (KeyCode::Enter, _) => {
-        let at = picker.at;
-        model.picked(at);
-      }
-      (KeyCode::Up, _) => picker.at = picker.at.saturating_sub(1),
-      (KeyCode::Down, _) => picker.at = (picker.at + 1).min(count.saturating_sub(1)),
-      (KeyCode::Backspace, _) => {
-        picker.filter.pop();
-        picker.at = 0;
-      }
-      (_, Some(one)) => {
-        picker.filter.push(one);
-        picker.at = 0;
-      }
-      _ => return false,
+      (KeyCode::Enter, _) => return Some(model.took(at)),
+      (KeyCode::Up, _) => model.chose(-1),
+      (KeyCode::Down, _) => model.chose(1),
+      (KeyCode::Backspace, _) => model.filtered(|filter| {
+        filter.pop();
+      }),
+      (_, Some(one)) => model.filtered(|filter| filter.push(one)),
+      _ => return None,
     }
-    true
-  })
+    Some(None)
+  });
+  let Some(does) = taken else { return false };
+  if let Some(does) = does {
+    act(app, window, does);
+  }
+  true
 }
 
 /// A key or a click while a form of a question shows: whether the form took it. An answer goes to
@@ -467,7 +486,13 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::List => Model::toggle,
     Does::Jump => Model::jump,
     Does::NewThread => Model::turn,
-    Does::Sessions => Model::pick_session,
+    Does::Sessions => |model| model.pick(Pick::Sessions),
+    Does::GoTo => {
+      listed(window);
+      |model| model.pick(Pick::GoTo)
+    }
+    Does::Commands => |model| model.pick(Pick::Commands),
+    Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.draft.python = !model.draft.python,
     Does::Close => return escaped(app, window),
     Does::Stop => return stopped(app, window),
@@ -485,15 +510,8 @@ fn act(app: &App, window: &Shared, does: Does) {
       });
       return older(window, verb);
     }
-    // The keys that the window names and that no screen of it does yet, and the keys of a form,
-    // which a form took when one shows.
-    Does::GoTo
-    | Does::Commands
-    | Does::Keys
-    | Does::Up
-    | Does::Down
-    | Does::Tick
-    | Does::NextQuestion => return,
+    // The keys of a form and of a list part, which a form or a part took when one shows.
+    Does::Up | Does::Down | Does::Tick | Does::NextQuestion => return,
   };
   if matches!(does, Does::Next | Does::Previous | Does::Needed) {
     window.borrow_mut().touched = Some(app.now());
@@ -503,6 +521,18 @@ fn act(app: &App, window: &Shared, does: Does) {
     model.open_thread();
   });
   colored(window);
+}
+
+/// The records of each machine that lists its cards asked, for Go to.
+fn listed(window: &Shared) {
+  let mut held = window.borrow_mut();
+  let Window { askers, screen, .. } = &mut *held;
+  for at in 0..askers.len() {
+    if let Some(asker) = asker(askers, &screen.model, at) {
+      let id = asker.ask(Verb::List { config: None });
+      screen.model.asked.insert((at, id), Asked::List);
+    }
+  }
 }
 
 /// The text of the input sent to its target, and the input empty.
@@ -577,6 +607,17 @@ fn colored(window: &Shared) {
 /// rows under it. A click on a card opens its thread, and a click on a thing of the left side does
 /// what its key does.
 fn mouse(app: &App, window: &Shared, event: MouseEvent) {
+  if window.borrow().screen.model.picker.is_some() {
+    let does = tell(app, window, |model| {
+      model.pointer = Some((event.x, event.y));
+      let click = matches!(event.kind, MouseEventKind::Down(MouseButton::Left));
+      click.then(|| model.clicked_over(event.x, event.y)).flatten()
+    });
+    if let Some(does) = does {
+      act(app, window, does);
+    }
+    return;
+  }
   let (on, does, verb) = tell(app, window, |model| {
     let (x, y) = (usize::from(event.x), usize::from(event.y));
     model.pointer = Some((event.x, event.y));

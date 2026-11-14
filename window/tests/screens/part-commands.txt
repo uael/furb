@@ -1,0 +1,30 @@
+ furb                                                          All projects ▾         this machine
+
+  Nothing needs you.                                           Working 1
+
+  ⌃O          go to   Commands                                               ⎋   replay  ⠋ Working
+  ⌃P          comman  ▌Search a command                                 1 / 12                opus
+  ⌃X ?        each k
+                      Go
+                      ▌Go to a project or a session                        ⌃O
+                       Each key                                          ⌃X ?                  now
+                       The next thread that needs you                      ⌥A
+                       The next card                                       ⌥↓
+                       The card before                                     ⌥↑
+                       Show or hide the list                             ⌃X L
+
+                      The thread
+                       A new thread, and back to the thread                ⌃N
+                       Jump to the latest                                   ↘
+                       Stop the work of the thread                        ⎋ ⎋
+
+                      The input
+                       Leave, on an empty input                            ⌃D
+                       The session that the input sends to               ⌃X O
+                       A word of Python, and back to a message           ⌃X Y
+
+                      ↑↓ move · ⏎ run · ⎋ close
+
+┃ Ask for a change, a review or an answer
+  This computer   furb-try · new session ▾         ○ Python
+  ~/src/furb-try                                ⌃P commands

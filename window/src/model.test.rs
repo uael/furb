@@ -29,8 +29,13 @@ fn card(life: &str, title: &str, standing: Standing, since: u64) -> Card {
 
 /// A model of a window of 100 columns on one machine that told its cards.
 fn model(cards: Vec<Card>, rows: u16) -> Model {
-  let told =
-    Told { name: "mac".to_owned(), login: "ada".to_owned(), heard: 0, cards, link: Link::Listed };
+  let told = Told {
+    name: "mac".to_owned(),
+    login: "ada".to_owned(),
+    cards,
+    link: Link::Listed,
+    ..Told::default()
+  };
   let folder = PathBuf::from("/home/ada/furb");
   let options = Options {
     folder,

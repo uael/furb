@@ -25,6 +25,16 @@ pub const HEAD: u16 = 1;
 /// blank after it.
 pub const TEXT: u16 = 2;
 
+/// The columns that a key takes in a table of keys, before what it does: the keys of the home and
+/// of the list of each key.
+pub(crate) const KEYS: usize = 12;
+
+/// The columns of a list part over the window, as Go to, the commands and each key.
+pub(crate) const PART: u16 = 60;
+
+/// The rows of the dimmed window that stand above a list part, and under it at least.
+pub(crate) const OVER: u16 = 3;
+
 /// The colors of the window: a scale of greys from the background of the terminal, and few
 /// accents. Each has one job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +62,8 @@ pub struct Tokens {
   pub attention: Color,
   /// A failure, and the cross of a line that failed.
   pub danger: Color,
+  /// The veil over the window while a list part stands over it, which dims each cell under it.
+  pub veil: Color,
   /// The bar of a thread and the badge of a project: purple, blue and orange.
   pub hues: [Color; 3],
 }
@@ -79,6 +91,7 @@ impl Tokens {
       accent: blue,
       attention: Color::hex(0xf5_a742),
       danger: Color::hex(0xef_6c6c),
+      veil: Color::rgba(base.r, base.g, base.b, 160),
       hues: [purple, blue, orange],
     }
   }

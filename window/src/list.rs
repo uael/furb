@@ -41,7 +41,7 @@ impl Model {
   pub(crate) fn rows(&self) -> Vec<Row> {
     let mut rows = vec![Row::Scope, Row::Blank];
     if self.settled.is_empty() && self.known() {
-      let (first, more) = ("No thread yet in this project.", "Other projects and machines:");
+      let (first, more) = ("No thread yet in this project.", "Other projects and sessions:");
       rows.extend([Row::Says(first, Role::Prose), Row::Blank, Row::Says(more, Role::Muted)]);
       rows.push(Row::Key(Does::GoTo));
     }

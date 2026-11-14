@@ -231,8 +231,8 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   let x = x + 16;
   lights(&app, x, y);
   app.click(x, y);
-  let frame = shows(&app, "Filter the sessions");
-  assert!(frame.contains("+ new session"), "{frame}");
+  let frame = shows(&app, "Search a session");
+  assert!(frame.contains("+ new session") && frame.contains("2 / 2"), "{frame}");
   screen("input-picker", &app);
   app.type_text("new");
   let frame = shows(&app, "▌new");
@@ -243,9 +243,9 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   // The key opens it too, and an escape closes it with no choice.
   app.press("ctrl+x");
   app.press("o");
-  shows(&app, "Filter the sessions");
+  shows(&app, "Search a session");
   app.press("escape");
-  let closed = app.wait_until(PATIENCE, || !app.text().contains("Filter the sessions"));
+  let closed = app.wait_until(PATIENCE, || !app.text().contains("Search a session"));
   assert!(closed, "{}", app.text());
   assert!(app.text().contains("furb-try · new session ▾"), "{}", app.text());
 }

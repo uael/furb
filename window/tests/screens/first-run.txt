@@ -2,12 +2,12 @@
 
   No thread yet.                                                No thread yet in this project.
 
-  Write below to start one. It runs in a new session of the     Other projects and machines:
+  Write below to start one. It runs in a new session of the     Other projects and sessions:
   project furb-try, on this machine.                            ⌃O
 
-  ⌃O        go to a project, a session or a machine
-  ⌃P        commands
-  ⌃X ?      each key
+  ⌃O          go to a project or a session
+  ⌃P          commands
+  ⌃X ?        each key
 
 
 

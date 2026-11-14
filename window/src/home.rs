@@ -6,12 +6,12 @@ use opentui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-  keys::Does,
+  keys::{self, Does},
   line::{self, Line, run, spread},
   list::project,
   model::{Link, Model},
   thread::Row,
-  tokens::Role,
+  tokens::{KEYS, Role},
 };
 
 impl Model {
@@ -75,16 +75,12 @@ impl Model {
         rows.extend(wrapped(&says, muted));
       }
     }
-    let keys = [
-      (Does::GoTo, "go to a project, a session or a machine"),
-      (Does::Commands, "commands"),
-      (Does::Keys, "each key"),
-    ];
-    let key = |(key, does): (Does, &str)| {
-      let line = vec![run(format!("  {:<10}", self.key(key)), prose), run(does, muted)];
+    let key = |does: Does| {
+      let line =
+        vec![run(format!("  {:<KEYS$}", self.key(does)), prose), run(keys::says(does), muted)];
       spread(line, Vec::new(), room + 2, Style::new())
     };
-    rows.extend(keys.map(key));
+    rows.extend([Does::GoTo, Does::Commands, Does::Keys].map(key));
     rows
   }
 

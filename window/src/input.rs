@@ -13,12 +13,12 @@ use std::mem;
 use furb::view::Maker;
 use furb_host::protocol::{Answer, Verb};
 use jiff::Timestamp;
-use opentui::style::{Color, Span, Style};
+use opentui::style::{Span, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
   keys::Does,
-  line::{Line, boxed, run, spread},
+  line::{Line, run, spread},
   list::project,
   model::{Key, Model},
   opens::{Ask, Hold, Life},
@@ -64,7 +64,7 @@ pub(crate) struct Draft {
 }
 
 /// What a request of the window asked of a daemon: the open of a life, a message, a stop, the
-/// answer to a question, or what the operator saw.
+/// answer to a question, what the operator saw, or the records of the machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Asked {
   Open,
@@ -72,6 +72,7 @@ pub(crate) enum Asked {
   Stop,
   Answer,
   Seen,
+  List,
 }
 
 /// A message of the operator that the thread shows before the daemon tells it: its text, and the
@@ -80,14 +81,6 @@ pub(crate) enum Asked {
 pub(crate) struct Pending {
   pub(crate) act: Option<String>,
   pub(crate) text: String,
-}
-
-/// The list of the sessions that the input can send to, while it is open: the text that filters
-/// it, and the place of the chosen entry among those that pass the filter.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct Picker {
-  pub(crate) filter: String,
-  pub(crate) at: usize,
 }
 
 /// The box of the text of the input, which the editor of the window covers: its column, its row,
@@ -481,83 +474,5 @@ impl Model {
     }
     hot.push((end - width(&key)..end, Some(Click::Key(does))));
     Row { hot, loader, ..Row::of(line) }
-  }
-
-  /// The sessions that the picker offers, which pass its filter: a new session on this machine,
-  /// then each session of the cards once, by its machine and its record, with its name and its
-  /// project.
-  pub(crate) fn sessions(&self) -> Vec<(Target, String, String)> {
-    let mut all = vec![(Target::New(0), "+ new session".to_owned(), self.project())];
-    for (_, key, card) in &self.settled {
-      if all.iter().any(|one| one.0 == Target::Session(key.0, key.1.clone())) {
-        continue;
-      }
-      let named = card.session.clone().filter(|name| !name.is_empty());
-      let name = named.unwrap_or_else(|| card.thread.title.clone());
-      all.push((Target::Session(key.0, key.1.clone()), name, project(card)));
-    }
-    let filter = self.picker.as_ref().map(|one| one.filter.to_lowercase()).unwrap_or_default();
-    let passes = |one: &(Target, String, String)| {
-      format!("{} {}", one.1, one.2).to_lowercase().contains(&filter)
-    };
-    all.into_iter().filter(passes).collect()
-  }
-
-  /// The picker of the sessions opened, or closed when it is open.
-  pub(crate) fn pick_session(&mut self) {
-    let now = match self.target() {
-      Target::Thread(key) => Target::Session(key.0, key.1),
-      other => other,
-    };
-    let at = self.sessions().iter().position(|one| one.0 == now).unwrap_or_default();
-    self.picker = match self.picker {
-      Some(_) => None,
-      None => Some(Picker { filter: String::new(), at }),
-    };
-  }
-
-  /// The entry of the picker at a place chosen: the input sends to its session from now on, and the
-  /// picker closes.
-  pub(crate) fn picked(&mut self, at: usize) {
-    let Some((target, ..)) = self.sessions().into_iter().nth(at) else { return };
-    self.picker = None;
-    let open = self.thread.as_ref().map(|one| (one.key.0, one.key.1.clone()));
-    self.aim = match target {
-      Target::Session(at, life) if open == Some((at, life.clone())) => None,
-      Target::New(_) if self.thread.is_none() => None,
-      other => Some(other),
-    };
-  }
-
-  /// The rows of the picker, which stand just above the input: its filter, then each session that
-  /// passes it, the chosen one lifted.
-  pub(crate) fn picker_rows(&self) -> Vec<Row> {
-    let Some(picker) = &self.picker else { return Vec::new() };
-    let t = &self.tokens;
-    let room = self.wide().saturating_sub(4);
-    let framed = |line: Line, ground: Color| {
-      let mut row = vec![run("  ", Style::new())];
-      row.extend(boxed(line, room, ground));
-      row
-    };
-    let filter = if picker.filter.is_empty() {
-      run("Filter the sessions", t.style(Role::Muted))
-    } else {
-      run(picker.filter.clone(), t.style(Role::Prose))
-    };
-    let mut rows = vec![Row::of(framed(vec![run("▌", t.style(Role::Prose)), filter], t.raised))];
-    for (at, (_, name, project)) in self.sessions().into_iter().enumerate() {
-      let ground = if at == picker.at { t.lifted } else { t.raised };
-      let line = spread(
-        vec![run(name, t.style(Role::Prose))],
-        vec![run(project, t.style(Role::Muted))],
-        room.saturating_sub(2),
-        Style::new(),
-      );
-      let hot = vec![(2..2 + room, Some(Click::Pick(at)))];
-      rows.push(Row { hot, ..Row::of(framed(line, ground)) });
-    }
-    rows.push(Row::default());
-    rows
   }
 }

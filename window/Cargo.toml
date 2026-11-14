@@ -47,6 +47,8 @@ tree-sitter-highlight = "0.25"
 tree-sitter-python = "0.25"
 # The prose of a model, which is markdown.
 pulldown-cmark = { version = "0.13", default-features = false }
+# The match of the letters that filter a list part, as Helix and the pickers of the terminal match.
+nucleo-matcher = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 # The flags of a process that outlives the console of the window.

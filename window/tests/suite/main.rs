@@ -9,6 +9,7 @@ mod cards;
 mod daemon;
 mod input;
 mod open;
+mod part;
 mod question;
 mod screens;
 mod thread;

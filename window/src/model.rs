@@ -13,18 +13,19 @@ use std::{
 };
 
 use furb::view::Part;
-use furb_host::protocol::{Answer, Card, Frame};
+use furb_host::protocol::{Answer, Card, Frame, Listed};
 use jiff::{Timestamp, tz::TimeZone};
 use serde::{Deserialize, Serialize};
 
 use crate::{
   Options,
   code::Colors,
-  input::{Asked, Draft, Outgoing, Picker, Target},
+  input::{Asked, Draft, Outgoing, Target},
   keys::{self, Does, System},
   link::Heard,
   list::Row,
   opens::{Ask, Hold, Life, Step},
+  pick::Picker,
   thread::Opened,
   tokens::Tokens,
 };
@@ -65,6 +66,9 @@ pub(crate) struct Told {
   pub(crate) cards: Vec<Card>,
   #[serde(skip)]
   pub(crate) link: Link,
+  /// The records of the machine, as it last listed them for Go to.
+  #[serde(skip)]
+  pub(crate) lives: Vec<Listed>,
 }
 
 /// A card among those of each machine: its machine, its record and its prompt.
@@ -116,7 +120,7 @@ pub(crate) struct Model {
   pub(crate) asked: HashMap<(usize, u64), Asked>,
   /// The text that comes back to the input after a refusal, until the editor takes it.
   pub(crate) restore: Option<String>,
-  /// The picker of the sessions, while it is open.
+  /// The list part, while it is open.
   pub(crate) picker: Option<Picker>,
   /// Each life that the window holds, and how far its open stands.
   pub(crate) holds: HashMap<Life, Hold>,
@@ -262,7 +266,10 @@ impl Model {
       (Asked::Open, Ok(Frame::Refused { why, .. })) => self.restore = self.unopened(at, id, why),
       (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
       (Asked::Answer, Ok(Frame::Refused { why, .. })) => self.unanswered(why),
-      (Asked::Seen, Ok(Frame::Refused { why, .. })) => self.fault = Some(why),
+      (Asked::Seen | Asked::List, Ok(Frame::Refused { why, .. })) => self.fault = Some(why),
+      (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {
+        self.machines[at].lives = lives;
+      }
       (Asked::Answer, _) => {}
       (_, Ok(Frame::Refused { why, .. })) => self.restore = self.refused(asked, why),
       _ => {}

@@ -1,0 +1,30 @@
+ furb                                                          All projects ▾         this machine
+
+  Nothing needs you.                                           Working 1
+
+  ⌃O          go to   Go to                                                  ⎋   replay  ⠋ Working
+  ⌃P          comman  ▌Search a thread, a session, a project             1 / 2                opus
+  ⌃X ?        each k
+                      Sessions that work
+                      ▌run the bench of replay                           furb
+                                                                                               now
+                      Projects
+                       furb                                        3 sessions
+
+                      ↑↓ move · ⏎ open · ⎋ close
+
+
+
+
+
+
+
+
+
+
+
+
+
+┃ Ask for a change, a review or an answer
+  This computer   furb-try · new session ▾         ○ Python
+  ~/src/furb-try                                ⌃P commands

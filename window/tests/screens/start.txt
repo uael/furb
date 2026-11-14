@@ -9,9 +9,9 @@
   studio is offline: the daemon closed the connection. The      FU furb                       opus
   window dials it again.
                                                                Working 2
-  ⌃O        go to a project, a session or a machine
-  ⌃P        commands                                            run the bench of…      as of 09:12
-  ⌃X ?      each key                                            FC furb-cloud@studio        opus ◌
+  ⌃O          go to a project or a session
+  ⌃P          commands                                          run the bench of…      as of 09:12
+  ⌃X ?        each key                                          FC furb-cloud@studio        opus ◌
 
                                                                 which key sends…     ⠋ Working 11h
                                                                 PH photowroom               opus ◌

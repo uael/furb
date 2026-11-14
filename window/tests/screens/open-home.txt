@@ -2,9 +2,9 @@
 
   Nothing needs you.                                           Resting 2
 
-  ⌃O        go to a project, a session or a machine             where does the time of…  ⠴ Opening
-  ⌃P        commands                                            FU furb                       opus
-  ⌃X ?      each key
+  ⌃O          go to a project or a session                      where does the time of…  ⠴ Opening
+  ⌃P          commands                                          FU furb                       opus
+  ⌃X ?        each key
                                                                 remove the gate from…    ⠴ Opening
                                                                 FU furb                       opus
 
