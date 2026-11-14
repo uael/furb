@@ -377,37 +377,40 @@ impl<'a> Reader<'a> {
       .map(|(at, text)| Line { number: before + at + 1, text, mark: Mark::Ran })
       .collect();
     let at_line = |source: usize| lines.iter().rposition(|line| line.number <= before + source + 1);
-    match &rung.run {
-      Some(RunState::Failed(why)) => {
-        let source = line_of(why).map_or(word.split('\n').count(), |at| at.saturating_sub(1));
-        if let Some(at) = at_line(source).or(lines.len().checked_sub(1)) {
-          lines[at].mark = Mark::Failed { why: why.clone() };
-        }
+    let Some(run @ (RunState::Failed(_) | RunState::Running)) = &rung.run else { return lines };
+    let made: Vec<&Act> = self.held.made_by(&rung.id).filter(|act| waits(act)).collect();
+    let places = placed(word, &made);
+    if let RunState::Failed(why) = run {
+      // A reason that names no line came from an act that the word awaited, as a refused
+      // question: the line that made that act raised it.
+      let raised = made.iter().rposition(|act| act.failed());
+      let source = line_of(why)
+        .map(|at| at.saturating_sub(1))
+        .or_else(|| raised.and_then(|at| places[at]))
+        .unwrap_or_else(|| word.split('\n').count());
+      if let Some(at) = at_line(source).or(lines.len().checked_sub(1)) {
+        lines[at].mark = Mark::Failed { why: why.clone() };
       }
-      Some(RunState::Running) => {
-        let made: Vec<&Act> = self.held.made_by(&rung.id).filter(|act| waits(act)).collect();
-        let open = made.iter().rposition(|act| !act.done());
-        let source = open.and_then(|at| placed(word, &made).get(at).copied().flatten());
-        let mark = match open.map(|at| made[at]) {
-          Some(act) if act.asks_operator() => Mark::Asks,
-          Some(act) if act.kind == Kind::Prompt => {
-            Mark::Runs { work: Work::Agent, since: began(&act.id) }
-          }
-          Some(act) => Mark::Runs { work: Work::Command, since: began(&act.id) },
-          None => Mark::Runs { work: Work::Command, since: began(&rung.id) },
-        };
-        // Each line that asks the operator a question that waits says so, the last one or not.
-        let places = placed(word, &made);
-        let asks = made.iter().zip(places).filter(|(act, _)| act.asks_operator() && !act.done());
-        let asking: Vec<usize> = asks.filter_map(|(_, place)| place.and_then(at_line)).collect();
-        if let Some(at) = source.and_then(at_line).or(lines.len().checked_sub(1)) {
-          lines[at].mark = mark;
+    } else {
+      let open = made.iter().rposition(|act| !act.done());
+      let source = open.and_then(|at| places[at]);
+      let mark = match open.map(|at| made[at]) {
+        Some(act) if act.asks_operator() => Mark::Asks,
+        Some(act) if act.kind == Kind::Prompt => {
+          Mark::Runs { work: Work::Agent, since: began(&act.id) }
         }
-        for at in asking {
-          lines[at].mark = Mark::Asks;
-        }
+        Some(act) => Mark::Runs { work: Work::Command, since: began(&act.id) },
+        None => Mark::Runs { work: Work::Command, since: began(&rung.id) },
+      };
+      // Each line that asks the operator a question that waits says so, the last one or not.
+      let asks = made.iter().zip(places).filter(|(act, _)| act.asks_operator() && !act.done());
+      let asking: Vec<usize> = asks.filter_map(|(_, place)| place.and_then(at_line)).collect();
+      if let Some(at) = source.and_then(at_line).or(lines.len().checked_sub(1)) {
+        lines[at].mark = mark;
       }
-      _ => {}
+      for at in asking {
+        lines[at].mark = Mark::Asks;
+      }
     }
     lines
   }

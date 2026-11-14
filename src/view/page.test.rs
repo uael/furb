@@ -130,6 +130,37 @@ fn a_line_that_failed_carries_its_reason() {
 }
 
 #[test]
+fn a_fault_whose_reason_names_no_line_marks_the_line_of_the_act_that_failed() {
+  let mut streams = Streamed::default();
+  let word = "side = await prompt(Literal['right', 'left'], 'Where?', to=OPERATOR)\nclose(side)";
+  let refusal: Value = serde_json::from_str(&declined("the top")).unwrap();
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "where does the list stand", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
+    json!([
+      "prompt",
+      "prompt2",
+      "rung1",
+      "chain1",
+      "Literal['right', 'left']",
+      "Where?",
+      "operator"
+    ]),
+    json!(["close", "prompt2", "operator/ada", refusal]),
+    json!(["done", "prompt2", "chain1", refusal]),
+    json!(["done", "run1", "chain1", refusal]),
+    json!(["done", "rung1", "chain1", refusal]),
+  ];
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  assert!(matches!(block.lines[0].mark, Mark::Failed { .. }), "{block:?}");
+  assert_eq!(block.lines[1].mark, Mark::Ran);
+}
+
+#[test]
 fn the_agents_of_a_thread_stand_as_cards() {
   let mut streams = Streamed::default();
   let mut facts = thread();
