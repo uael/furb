@@ -1814,18 +1814,20 @@ fn bounded_at(bound: Duration) {
   testing::bound_all(bound);
 }
 
-/// The bound of the replay and the bound of the checkpoint that the test proves: three quarters of
-/// `replay`, the least time that a replay of the record as a whole took in this run, and of
-/// `gather`, the least time that the gather of a checkpoint of the life took in it.
+/// The bound of the replay and the bound of the checkpoint that the test proves: half of `replay`,
+/// the least time that a replay of the record as a whole took in this run, and of `gather`, the
+/// least time that the gather of a checkpoint of the life took in it.
 ///
 /// Each bound is a share of the work that must outlast it, as this machine ran that work, so the
-/// work outlasts it on each machine. A step of a word in a replay holds more than the word: it
-/// holds the work of each ear that the word wakes, and each run of the collector of cycles, whose
-/// time grows with the heap of the life. The word of this life takes 300 steps, so each step stays
-/// well under three quarters of the replay as a whole. The gather is one stretch of the work of
-/// the engine, and its bound holds only while the life writes its checkpoint, when no word steps.
+/// work outlasts it on each machine. One run of the same replay takes up to two thirds more than
+/// another on a quiet machine, so the share leaves a single run that margin. A step of a word in a
+/// replay holds more than the word: it holds the work of each ear that the word wakes, and each run
+/// of the collector of cycles, whose time grows with the heap of the life. The word of this life
+/// takes 300 steps, so each step stays well under half of the replay as a whole. The gather is one
+/// stretch of the work of the engine, and its bound holds only while the life writes its
+/// checkpoint, when no word steps.
 fn bounds(replay: Duration, gather: Duration) -> (Duration, Duration) {
-  (replay * 3 / 4, gather * 3 / 4)
+  (replay / 2, gather / 2)
 }
 
 /// The least time that a piece of work took of three: a pause of the machine only makes the work
