@@ -369,3 +369,31 @@ async fn a_life_with_the_default_skills_is_born_again_at_its_tail() {
   assert_eq!(named(&life, "n").await, Ok("1".to_owned()), "the life goes on past its tail");
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
 }
+
+#[tokio::test]
+async fn a_reader_of_the_log_that_holds_no_past_hears_each_act_and_no_fact_that_the_log_let_go() {
+  let at = place("held");
+  let life = Life::spawn(opening(&at)).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  ran(&life, &format!("for i in range({ASKED}):\n  chance()")).await;
+  until(&mut events, reborn(false)).await;
+  // A reader from the tip hears the next word first, and no event before it.
+  let mut tipped = Box::pin(life.tipped().await.expect("the life gives its tip"));
+  let rung = ran(&life, "y = 2").await;
+  let first = until(&mut tipped, |_| true).await;
+  let seen: Vec<Logged> = until(&mut events, ran_out(&rung)).await;
+  assert!(seen.iter().any(|one| one.0 == first[0].0), "the reader from the tip starts at the tip");
+  assert!(first[0].0 > seen[0].0, "the reader from the tip hears no event before it");
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+  until(&mut events, |event| matches!(event, Event::Ended(None))).await;
+  let all: Vec<Logged> = life.events(0).collect().await;
+  let held: Vec<Logged> = life.held(0).collect().await;
+  let chance = |of: &[Logged]| {
+    of.iter().filter(|one| matches!(&*one.1, Event::Fact(fact) if fact[0] == "chance")).count()
+  };
+  assert_eq!((chance(&all), chance(&held)), (ASKED, 0), "the held log tells no fact of the past");
+  let acts = |of: &[Logged]| -> Vec<Logged> {
+    of.iter().filter(|one| !matches!(&*one.1, Event::Fact(_))).cloned().collect()
+  };
+  assert_eq!(acts(&held), acts(&all), "and each other event at its place");
+}

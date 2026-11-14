@@ -112,6 +112,9 @@ pub(crate) fn places(opening: &Opening) -> Places {
 impl Played {
   /// The process of each skill that the life plays, from the tip of its open until its end.
   pub(crate) async fn run(self) {
+    // The events from the tip, which stands before the transcript: a fact enable that the life
+    // says between them starts its process a second time, and none is lost.
+    let Some(events) = self.handle.tipped().await else { return };
     let enables = Command::Transcript { on: None, of: Some(ENABLE.to_owned()) };
     let Ok(Reply::Values(tip)) = self.handle.send(enables).await else { return };
     let mut running: HashMap<String, Running> = HashMap::new();
@@ -125,16 +128,14 @@ impl Played {
     for one in named {
       self.start(one, &mut running).await;
     }
-    // The log says again each fact enable of the tip before the facts said after it.
-    let mut replayed = tip.len();
-    let mut events = pin!(self.handle.events(0));
+    let mut events = pin!(events);
     while let Some((_, event)) = events.next().await {
       match &*event {
-        Event::Fact(fact) => match enabled(fact) {
-          Some(_) if replayed > 0 => replayed -= 1,
-          Some(one) => self.start(one, &mut running).await,
-          None => {}
-        },
+        Event::Fact(fact) => {
+          if let Some(one) = enabled(fact) {
+            self.start(one, &mut running).await;
+          }
+        }
         Event::Ended(_) => break,
         _ => {}
       }

@@ -1317,7 +1317,8 @@ impl Watch {
   /// for a stall of the life, so the actor of that chain wakes.
   /// A life whose thread hangs takes the message late or never, and the watch goes on.
   async fn watched(self, asks: mpsc::WeakUnboundedSender<Asked>) {
-    let mut events = pin!(self.life.events(0));
+    // The watch holds the acts that live, which the log keeps, and reads no fact of the past.
+    let mut events = pin!(self.life.held(0));
     let mut quiet = Quiet::new(self.stall);
     let mut end = None;
     loop {

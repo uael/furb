@@ -715,7 +715,7 @@ impl Life {
       let log = Retell { from: Source::Log(format!("{path}.log")), wanted: wanted(&gone.logged) };
       [record, log].into_iter().filter(|one| !one.wanted.is_empty()).collect()
     });
-    Since { logged: logged.collect(), retells }
+    Since { logged: logged.collect(), retells, tip: self.kept.log.len() as Seq }
   }
 }
 
@@ -748,6 +748,7 @@ impl Digest {
 struct Since {
   logged: Vec<Logged>,
   retells: Vec<Retell>,
+  tip: Seq,
 }
 
 /// What holds the facts that the log let go: the record, or the file of the log of the record,
@@ -1499,17 +1500,38 @@ impl LifeHandle {
   /// life, which holds no event that a later one replaced: of each act its last event, and no part
   /// that a model wrote for a rung that has its word. Such a reader may find a gap in the places.
   pub fn events(&self, from: Seq) -> impl Streams<Item = Logged> + Send + 'static {
-    let reader = Reader {
+    stream::unfold(self.reader(self.readers.subscribe(), from, true), Reader::next)
+  }
+
+  /// The events that the log of the life holds from a place, as [`LifeHandle::events`] gives
+  /// them, with no fact that the log let go: a reader that needs the acts that live and no fact of
+  /// the past reads nothing of the record.
+  pub fn held(&self, from: Seq) -> impl Streams<Item = Logged> + Send + 'static {
+    stream::unfold(self.reader(self.readers.subscribe(), from, false), Reader::next)
+  }
+
+  /// The events of the life from its tip at the call on, as [`LifeHandle::events`] gives them,
+  /// or none once the thread of the life is gone.
+  pub async fn tipped(&self) -> Option<impl Streams<Item = Logged> + Send + 'static> {
+    let receiver = self.readers.subscribe();
+    let tip = self.since(Seq::MAX).await?.tip;
+    Some(stream::unfold(self.reader(receiver, tip, true), Reader::next))
+  }
+
+  /// A reader of the events of the life from a place, which reads again from the record or the
+  /// file of its log the facts that the log let go when it `retells`.
+  fn reader(&self, receiver: broadcast::Receiver<Logged>, from: Seq, retells: bool) -> Reader {
+    Reader {
       life: self.clone(),
-      receiver: self.readers.subscribe(),
+      receiver,
       next: from,
       read: VecDeque::new(),
       retold: None,
       ahead: None,
       behind: true,
       over: false,
-    };
-    stream::unfold(reader, Reader::next)
+      retells,
+    }
   }
 
   /// The events of the log of the life from a place, or none once the thread of the life is gone.
@@ -1522,14 +1544,15 @@ impl LifeHandle {
 
 /// A reader of the events of a life: the place of the next event that it gives, the events that it
 /// read from the log and did not give yet, the facts among them that the log let go as the record
-/// gives them again, with the next of them, whether it stands behind the life, and whether it gave
-/// the end.
+/// gives them again, with the next of them, whether it stands behind the life, whether it gave
+/// the end, and whether it reads those facts again.
 struct Reader {
   life: LifeHandle,
   receiver: broadcast::Receiver<Logged>,
   next: Seq,
   read: VecDeque<Logged>,
   retold: Option<mpsc::Receiver<Logged>>,
+  retells: bool,
   ahead: Option<Logged>,
   behind: bool,
   over: bool,
@@ -1566,9 +1589,9 @@ impl Reader {
         }
       } else if self.behind {
         self.behind = false;
-        let Since { logged, retells } = self.life.since(self.next).await?;
+        let Since { logged, retells, .. } = self.life.since(self.next).await?;
         self.read = logged.into();
-        self.retold = retold(retells);
+        self.retold = if self.retells { retold(retells) } else { None };
         self.ahead = None;
       } else {
         match self.receiver.recv().await {

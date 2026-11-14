@@ -55,7 +55,8 @@ impl Kit {
       return;
     }
     let mut shown: HashMap<String, Shown> = HashMap::new();
-    let mut events = pin!(self.handle.events(0));
+    let Some(events) = self.handle.tipped().await else { return };
+    let mut events = pin!(events);
     let mut end = pin!(end);
     loop {
       let mut told = Vec::new();
