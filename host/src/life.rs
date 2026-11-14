@@ -16,10 +16,11 @@
 use std::{
   borrow::Cow,
   collections::{BTreeMap, HashMap, VecDeque},
+  fs::File,
   future::poll_fn,
   hash::{DefaultHasher, Hash, Hasher},
-  iter,
-  mem,
+  io::{BufRead, BufReader},
+  iter, mem,
   ops::Range,
   path::{Path, PathBuf},
   sync::{
@@ -341,17 +342,20 @@ struct Part<K> {
 const BUILD: &str = env!("FURB_KEPT");
 
 /// The facts that the log of a life let go: each one before the last checkpoint of the life, which
-/// the record holds, so a log holds the facts of one birth and not those of a whole life. The log
-/// keeps the place and the digest of each, and a reader behind them reads them again from the
-/// record, as [`Retell`] says.
+/// the record holds, and each fact that an open told but a fact of keep, which the file of the log
+/// of the record holds, so a log holds the facts of one birth and not those of a whole life, and
+/// no fact that an open says again. The log keeps the place and the digest of each, and a reader
+/// behind them reads them again from the record or from that file, as [`Retell`] says.
 #[derive(Default, Serialize, Deserialize)]
 struct Gone {
-  /// The place in the log of each fact let go, in order, with its digest.
+  /// The place in the log of each fact let go that the record holds, in order, with its digest.
   places: Vec<(Seq, Digest)>,
+  /// The place in the log of each fact let go that an open told, in order, with its digest.
+  logged: Vec<(Seq, Digest)>,
   /// The length of the log when it last let go, from which the next let go reads.
   scanned: usize,
-  /// The places of the log of what each open told, which the log keeps: the facts of the opening
-  /// of a birth that the journal says again, which the file of the record does not hold.
+  /// The places of the log of what each open told, whose facts of keep the log keeps: the journal
+  /// says them again at the opening of a birth, and the file of the record does not hold them.
   opened: Vec<Range<usize>>,
 }
 
@@ -567,7 +571,18 @@ impl Life {
       }
       (progress.0)(Stage::Log, at, of);
     }
-    self.kept.gone.opened.push(start..self.kept.log.len());
+    let told = start..self.kept.log.len();
+    if self.record.is_some() {
+      for (at, slot) in self.kept.log.iter_mut().enumerate().skip(start) {
+        let fact = match slot.as_deref() {
+          Some(Event::Fact(fact)) if fact[0] != "keep" => fact,
+          _ => continue,
+        };
+        self.kept.gone.logged.push((at as Seq, Digest::of(fact)));
+        *slot = None;
+      }
+    }
+    self.kept.gone.opened.push(told);
   }
 
   /// The life stands where the life of its image stood, on what that life kept: no open told a
@@ -692,13 +707,15 @@ impl Life {
     let start = usize::try_from(from).unwrap_or(usize::MAX);
     let since = self.kept.log.iter().enumerate().skip(start);
     let logged = since.filter_map(|(at, one)| Some((at as Seq, Arc::clone(one.as_ref()?))));
-    let first = self.kept.gone.places.partition_point(|(at, _)| *at < from);
-    let retell = self
-      .record
-      .clone()
-      .filter(|_| first < self.kept.gone.places.len())
-      .map(|record| Retell { record, wanted: self.kept.gone.places[first..].to_vec() });
-    Since { logged: logged.collect(), retell }
+    let wanted =
+      |places: &[(Seq, Digest)]| places[places.partition_point(|(at, _)| *at < from)..].to_vec();
+    let retells = self.record.as_deref().map_or_else(Vec::new, |path| {
+      let gone = &self.kept.gone;
+      let record = Retell { from: Source::Record(path.to_owned()), wanted: wanted(&gone.places) };
+      let log = Retell { from: Source::Log(format!("{path}.log")), wanted: wanted(&gone.logged) };
+      [record, log].into_iter().filter(|one| !one.wanted.is_empty()).collect()
+    });
+    Since { logged: logged.collect(), retells }
   }
 }
 
@@ -727,21 +744,28 @@ impl Digest {
   }
 }
 
-/// The events of the log from a place, and the read of the facts among them that the log let go.
+/// The events of the log from a place, and the reads of the facts among them that the log let go.
 struct Since {
   logged: Vec<Logged>,
-  retell: Option<Retell>,
+  retells: Vec<Retell>,
 }
 
-/// The read of the facts that the log let go from a place on: the record, whose facts hold them,
-/// and the place and digest of each. The record holds the facts in the order that the engine said
-/// them, which is not always the order in which the life told them, so a fact of the record takes
-/// the first place of its digest that no fact took yet, and the read
-/// gives each in the order of the places, as soon as each place before it is taken. A place is a
-/// gap only when the read of the record ends with no fact for it, as when the record does not
-/// read: a reader never loses a fact that the record holds.
+/// What holds the facts that the log let go: the record, or the file of the log of the record,
+/// which holds each fact that the life said, as `json_of` writes it, so each of its lines has the
+/// digest of its fact.
+enum Source {
+  Record(String),
+  Log(String),
+}
+
+/// The read of the facts that the log let go from a place on: their source, and the place and
+/// digest of each. A source holds the facts in the order that the engine said them, which is not
+/// always the order in which the life told them, so a fact of the source takes the first place of
+/// its digest that no fact took yet, and the read gives each in the order of the places, as soon as
+/// each place before it is taken. A place is a gap only when the read of the source ends with no
+/// fact for it, as when the source does not read: a reader never loses a fact that it holds.
 struct Retell {
-  record: String,
+  from: Source,
   wanted: Vec<(Seq, Digest)>,
 }
 
@@ -749,16 +773,46 @@ struct Retell {
 /// the speaker of the entry that a `keep` fact says.
 type Places = HashMap<(bool, u64), VecDeque<(Seq, Option<String>)>>;
 
+/// The facts of each read, given to a reader in the order of their places, one ahead of what the
+/// reader read: a fact that is read again is a copy, and the facts that an open told are large.
+/// Each read gives its own facts in order.
+fn retold(retells: Vec<Retell>) -> Option<mpsc::Receiver<Logged>> {
+  let mut reads: Vec<mpsc::Receiver<Logged>> = retells.into_iter().map(Retell::spawned).collect();
+  if reads.len() < 2 {
+    return reads.pop();
+  }
+  let (sender, receiver) = mpsc::channel(1);
+  tokio::spawn(async move {
+    let mut heads: Vec<Option<Logged>> = vec![None; reads.len()];
+    loop {
+      for (read, head) in reads.iter_mut().zip(&mut heads) {
+        if head.is_none() {
+          *head = read.recv().await;
+        }
+      }
+      let first = heads
+        .iter_mut()
+        .filter(|one| one.is_some())
+        .min_by_key(|one| one.as_ref().map(|one| one.0));
+      let Some(one) = first.and_then(Option::take) else { return };
+      if sender.send(one).await.is_err() {
+        return;
+      }
+    }
+  });
+  Some(receiver)
+}
+
 impl Retell {
   /// The facts, read on a thread that may block, sent in the order of their places to a reader,
-  /// no more than [`BEHIND`] of them in the channel ahead of what the reader read.
+  /// one of them in the channel ahead of what the reader read.
   fn spawned(self) -> mpsc::Receiver<Logged> {
-    let (sender, receiver) = mpsc::channel(BEHIND);
+    let (sender, receiver) = mpsc::channel(1);
     spawn_blocking(move || self.told(&sender));
     receiver
   }
 
-  /// Each fact read and sent, until the record ends or the reader is gone.
+  /// Each fact read and sent, until the source ends, each place is filled, or the reader is gone.
   fn told(self, sender: &mpsc::Sender<Logged>) {
     let mut places: Places = HashMap::new();
     for (at, one) in &self.wanted {
@@ -772,51 +826,39 @@ impl Retell {
     // The facts that wait for a place before them. The journal tells the keep of each fact of a
     // run at the end of that run, so the keeps of a whole run wait here while the read passes the
     // run. No bound cuts the wait, since a place that is given up before the read reaches its
-    // fact is a fact lost. At its worst, when the record lacks the fact of the first place, each
+    // fact is a fact lost. At its worst, when the source lacks the fact of the first place, each
     // fact that is retold waits here until the read ends: the facts that the log let go, and no
     // more, since a fact with no place is not held.
     let mut ready: BTreeMap<Seq, Value> = BTreeMap::new();
     let give = |at: Seq, fact: Value| {
       sender.blocking_send((at, Arc::new(Event::Fact(fact)))).ok();
     };
-    let send = |ready: &mut BTreeMap<Seq, Value>, order: &mut VecDeque<Seq>| {
+    let first = order.front().copied();
+    // A fact of the source by its digest, which the read makes only for a place that takes it,
+    // and whether the read goes on.
+    let mut take = |one: u64, fact: &dyn Fn() -> Value| {
+      if let Some((at, by)) = places.get_mut(&(true, one)).and_then(VecDeque::pop_front) {
+        ready.insert(at, json!(["keep", "", by, [fact()]]));
+      }
+      if let Some((at, _)) = places.get_mut(&(false, one)).and_then(VecDeque::pop_front) {
+        ready.insert(at, fact());
+      }
       while let Some(&at) = order.front() {
-        let Some(fact) = ready.remove(&at) else { return };
+        let Some(fact) = ready.remove(&at) else { break };
         give(at, fact);
         order.pop_front();
       }
+      !order.is_empty() && !sender.is_closed()
     };
-    // The whole record: a fact that the life said as it wrote its checkpoint, before its rebirth,
-    // may stand after that checkpoint in the record.
-    let read = |take: &mut dyn FnMut(usize, Object)| -> Option<()> {
-      world::retold_live(&self.record).ok()?.each(&mut |one| take(0, one)).ok()
+    let (read, name) = match &self.from {
+      Source::Record(record) => (read_record(record, &mut take), record),
+      Source::Log(log) => (read_log(log, &mut take), log),
     };
-    let first = order.front().copied();
-    let read = read(&mut |_, one: Object| {
-      // Once each place is filled, the rest of the record is read and left.
-      if order.is_empty() {
-        return;
-      }
-      let Some(fact) = Fact::of(one.as_ref()).map(|a| json_of(&a)).filter(|_| !sender.is_closed())
-      else {
-        return;
-      };
-      let one = digest(&fact);
-      if let Some((at, by)) = places.get_mut(&(true, one)).and_then(VecDeque::pop_front) {
-        ready.insert(at, json!(["keep", "", by, [fact]]));
-      }
-      if let Some((at, _)) = places.get_mut(&(false, one)).and_then(VecDeque::pop_front) {
-        ready.insert(at, fact);
-      }
-      send(&mut ready, &mut order);
-    });
     if read.is_none()
       && let Some(at) = first
     {
-      let why = format!(
-        "The record {} does not read, so the facts that the log let go are gaps here.",
-        self.record
-      );
+      let why =
+        format!("The file {name} does not read, so the facts that the log let go are gaps here.");
       sender.blocking_send((at, Arc::new(Event::Notice(why)))).ok();
     }
     // The read ended: each place that has no fact is a gap, and each fact that waited behind one
@@ -825,6 +867,34 @@ impl Retell {
       give(at, fact);
     }
   }
+}
+
+/// A fact by its digest, and whether the read goes on.
+type Take<'a> = dyn FnMut(u64, &dyn Fn() -> Value) -> bool + 'a;
+
+/// Each fact of the whole record: a fact that the life said as it wrote its checkpoint, before its
+/// rebirth, may stand after that checkpoint in the record. Once each place is filled, the rest of
+/// the record is read and left.
+fn read_record(record: &str, take: &mut Take<'_>) -> Option<()> {
+  let mut goes = true;
+  let each = &mut |one: Object| {
+    if let Some(fact) = Fact::of(one.as_ref()).map(|a| json_of(&a)).filter(|_| goes) {
+      goes = take(digest(&fact), &|| fact.clone());
+    }
+  };
+  world::retold_live(record).ok()?.each(&mut |one| each(one)).ok()
+}
+
+/// Each line of the file of the log, until each place is filled: a line is a fact as JSON writes
+/// it, so its digest is the digest of its text, and only a line that a place takes is parsed.
+fn read_log(log: &str, take: &mut Take<'_>) -> Option<()> {
+  for line in BufReader::new(File::open(log).ok()?).lines() {
+    let line = line.ok()?;
+    if !take(digested(&line), &|| serde_json::from_str(&line).unwrap_or_default()) {
+      break;
+    }
+  }
+  Some(())
 }
 
 /// Whether a fact tells that the record kept a checkpoint.
@@ -836,8 +906,13 @@ fn kept_checkpoint(fact: &Value) -> bool {
 
 /// The digest of a fact, by which the log knows a fact that it told.
 fn digest(fact: &Value) -> u64 {
+  digested(&fact.to_string())
+}
+
+/// The digest of a fact as JSON writes it.
+fn digested(text: &str) -> u64 {
   let mut hasher = DefaultHasher::new();
-  fact.to_string().hash(&mut hasher);
+  text.hash(&mut hasher);
   hasher.finish()
 }
 
@@ -1491,9 +1566,9 @@ impl Reader {
         }
       } else if self.behind {
         self.behind = false;
-        let Since { logged, retell } = self.life.since(self.next).await?;
+        let Since { logged, retells } = self.life.since(self.next).await?;
         self.read = logged.into();
-        self.retold = retell.map(Retell::spawned);
+        self.retold = retold(retells);
         self.ahead = None;
       } else {
         match self.receiver.recv().await {
