@@ -2353,6 +2353,34 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
   assert_eq!(cards(&mut late).await, vec![read]);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn a_record_that_a_link_names_has_one_key_in_the_daemon() {
+  use std::os::unix::fs::symlink;
+  let at = place();
+  let (main, sessions) = project(&at);
+  // The list names the project through a link, and the window names the record by its real path.
+  let link = at.join("link");
+  symlink(&main, &link).unwrap();
+  let list = json!({ "workspaces": [{ "directory": link.display().to_string() }] });
+  fs::write(at.join("config").join("workspaces.json"), list.to_string()).unwrap();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let life = held(&mut window, &sessions, "one.jsonl").await;
+  messaged(&mut window, &life, "ground the branch").await;
+  card(&mut window, |card| card.thread.standing == Standing::Resolved).await;
+  let lives: Vec<String> = window.listed().await.into_iter().map(|one| one.life).collect();
+  assert_eq!(lives, vec![life.clone()]);
+  // A verb that names the record through the link reaches the same life.
+  let through = link.join(".furb").join("sessions").join("one.jsonl").display().to_string();
+  assert_eq!(
+    window.ask(Verb::Seen { life: through, about: "chain1".to_owned() }).await,
+    Ok(Answer::Done)
+  );
+  assert_eq!(seen_by(&mut window, &life, "chain1").await.len(), 1);
+}
+
 /// The opening of the lives of a test whose model asks the operator at each prompt, so a thread
 /// waits for him, and closes its prompt once he answers.
 fn asking(at: &Path) -> Opening {

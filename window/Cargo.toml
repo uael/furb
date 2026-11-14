@@ -49,6 +49,8 @@ tree-sitter-python = "0.25"
 pulldown-cmark = { version = "0.13", default-features = false }
 # The match of the letters that filter a list part, as Helix and the pickers of the terminal match.
 nucleo-matcher = "0.3"
+# The home folder with no link in it, as the folder of a process reads, with no prefix of Windows.
+dunce = "1"
 
 [target.'cfg(windows)'.dependencies]
 # The flags of a process that outlives the console of the window.

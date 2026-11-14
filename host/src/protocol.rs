@@ -406,6 +406,68 @@ pub enum Verb {
 }
 
 impl Verb {
+  /// The record of the life that the verb names, which the daemon reads as its one key. Each verb
+  /// is named here, so a new verb says whether it names a record.
+  pub(crate) fn life_mut(&mut self) -> Option<&mut String> {
+    match self {
+      Self::Open { life, .. }
+      | Self::Attach { life, .. }
+      | Self::Detach { life }
+      | Self::Pin { life, .. }
+      | Self::Unpin { life, .. }
+      | Self::Presence { life }
+      | Self::Get { life, .. }
+      | Self::Peek { life, .. }
+      | Self::Transcript { life, .. }
+      | Self::Turns { life, .. }
+      | Self::Program { life, .. }
+      | Self::Standing { life }
+      | Self::Filled { life, .. }
+      | Self::Cwd { life, .. }
+      | Self::Inspect { life, .. }
+      | Self::Pending { life }
+      | Self::Prompt { life, .. }
+      | Self::Answer { life, .. }
+      | Self::Pause { life, .. }
+      | Self::Wake { life, .. }
+      | Self::Cancel { life, .. }
+      | Self::Chain { life, .. }
+      | Self::Run { life, .. }
+      | Self::Close { life, .. }
+      | Self::Grant { life, .. }
+      | Self::Bash { life, .. }
+      | Self::Read { life, .. }
+      | Self::Write { life, .. }
+      | Self::Names { life, .. }
+      | Self::Stand { life, .. }
+      | Self::Config { life, .. }
+      | Self::CancelSignIn { life }
+      | Self::Seen { life, .. }
+      | Self::Resolve { life, .. }
+      | Self::Queue { life, .. }
+      | Self::Unqueue { life, .. }
+      | Self::Queued { life, .. }
+      | Self::Desk { life, .. }
+      | Self::Threads { life, .. }
+      | Self::Rail { life, .. }
+      | Self::Ladder { life, .. }
+      | Self::AsOf { life, .. }
+      | Self::Thread { life, .. }
+      | Self::Moments { life, .. }
+      | Self::Answered { life, .. }
+      | Self::Wrote { life, .. }
+      | Self::ViewMount(Mount { life, .. }) => Some(life),
+      Self::Hello(_)
+      | Self::List { .. }
+      | Self::Cards
+      | Self::Handover
+      | Self::ViewTree(_)
+      | Self::ViewEvent(_)
+      | Self::ViewEffect(_)
+      | Self::ViewDispose(_) => None,
+    }
+  }
+
   /// The least role that says the verb. A verb that this list does not name needs the role to
   /// write.
   pub fn needs(&self) -> Role {

@@ -97,8 +97,9 @@ The first frame of a peer is its hello:
 ## Requests and answers
 
 A request is an object with an `id`, which the answer gives back, and a `verb`, with the fields of that verb. A verb
-that names an act names it as `act`. A life is named by the path of its record, and `on` names a chain, the root when
-it is not given. The daemon answers requests in any order.
+that names an act names it as `act`. A life is named by the path of its record, which the daemon reads with no link in
+it, so each path of one record names one life and its cards, and `on` names a chain, the root when it is not given. The
+daemon answers requests in any order.
 
 | Verb | Fields | Role |
 | --- | --- | --- |

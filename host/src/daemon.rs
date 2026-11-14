@@ -463,9 +463,12 @@ impl Host for Daemon {
   async fn answer(
     &self,
     peer: &Peer,
-    verb: Verb,
+    mut verb: Verb,
     outbox: &Outbox,
   ) -> Result<Answer, ProtocolError> {
+    if let Some(life) = verb.life_mut() {
+      *life = records::key(life);
+    }
     match routed(verb) {
       Routed::Life(life, command) => {
         let command = match (peer.kind, &peer.name) {

@@ -76,7 +76,9 @@ impl Options {
     let kept = world::cache().ok_or(Error::NoCache)?.join("window").join("cards.json");
     let clock = || SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs());
     let (zone, system) = (TimeZone::system(), System::here());
-    Ok(Self { folder, home: env::home_dir(), kept, zone, clock, system })
+    // The folder of a process holds no link, so the home that a path of it shows as `~` holds none.
+    let home = env::home_dir().map(|home| dunce::canonicalize(&home).unwrap_or(home));
+    Ok(Self { folder, home, kept, zone, clock, system })
   }
 }
 

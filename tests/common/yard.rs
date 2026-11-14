@@ -34,7 +34,7 @@ impl Yard {
   /// The folder of this name in the temporary directory, which the test or the code that it tests
   /// makes.
   pub(crate) fn unmade(name: impl AsRef<Path>) -> Self {
-    let base = env::temp_dir().join(name);
+    let base = temp().join(name);
     drop(fs::remove_dir_all(&base));
     Self { at: base.clone(), base }
   }
@@ -44,6 +44,14 @@ impl Yard {
     self.at = self.at.join(path);
     self
   }
+}
+
+/// The temporary directory with no link in it, as a process that starts there reads its folder and
+/// as the daemon names a record: on macOS it stands under `/var`, a link to `/private/var`. Windows
+/// keeps it as it is, since its resolved path takes a prefix that no folder of a process has.
+fn temp() -> PathBuf {
+  let temp = env::temp_dir();
+  if cfg!(unix) { fs::canonicalize(&temp).unwrap_or(temp) } else { temp }
 }
 
 impl Deref for Yard {

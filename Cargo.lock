@@ -1542,6 +1542,7 @@ dependencies = [
 name = "furb-window"
 version = "0.4.2"
 dependencies = [
+ "dunce",
  "furb",
  "furb-host",
  "futures",

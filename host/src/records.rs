@@ -26,7 +26,9 @@ pub(crate) fn recorded(config: &Path) -> Vec<Sessions> {
   let mut found = Vec::new();
   for main in saved.filter_map(|one| one["directory"].as_str()) {
     for checkout in checkouts(Path::new(main)) {
+      // The folder with no link in it, so each record has the one key that a life of it has.
       let folder = checkout.join(".furb").join("sessions");
+      let folder = dunce::canonicalize(&folder).unwrap_or(folder);
       let entries = fs::read_dir(&folder).into_iter().flatten().flatten();
       let records = entries.map(|entry| entry.path()).filter(|path| record(path));
       let records = records.map(|path| path.display().to_string()).collect();
@@ -34,6 +36,21 @@ pub(crate) fn recorded(config: &Path) -> Vec<Sessions> {
     }
   }
   found
+}
+
+/// The one name of a record: its path with no link in it, as the system resolves it, so that each
+/// path of one record, as `/var` and `/private/var` on macOS, gives one key. A record that the disk
+/// does not hold yet takes the resolved path of its folder. A relative path, or one whose folder is
+/// not there, stays as it is given.
+pub(crate) fn key(life: &str) -> String {
+  let path = Path::new(life);
+  let real = || {
+    let whole = dunce::canonicalize(path);
+    let folder = || Some(dunce::canonicalize(path.parent()?).ok()?.join(path.file_name()?));
+    whole.ok().or_else(folder)
+  };
+  let real = if path.is_absolute() { real() } else { None };
+  real.map_or_else(|| life.to_owned(), |one| one.display().to_string())
 }
 
 /// The checkout whose `.furb/sessions` holds a record, where a window makes the record of a new
