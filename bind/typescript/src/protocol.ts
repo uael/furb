@@ -259,6 +259,13 @@ export type Request1 =
     }
   | {
       life: string;
+      thread: string;
+      before?: number | null;
+      limit: number;
+      verb: "thread";
+    }
+  | {
+      life: string;
       /**
        * The chain whose acts give the moments; none gives those of the whole life.
        */
@@ -493,6 +500,12 @@ export type Frame =
     }
   | {
       life: string;
+      thread: string;
+      page: Page;
+      frame: "thread";
+    }
+  | {
+      life: string;
       stage: Stage;
       done: number;
       of: number;
@@ -622,6 +635,10 @@ export type Answer =
   | {
       answer: "moments";
       data: number[];
+    }
+  | {
+      answer: "page";
+      data: Page;
     };
 /**
  * How the thread of a card stands. It asks one member by his login, or each operator. A pause
@@ -779,6 +796,32 @@ export type RunState =
       run: "cancelled";
       reason: string;
     };
+/**
+ * How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
+ * second of the epoch since which it does when the host saw it begin; it asks the operator; or it
+ * failed, with the reason that a person reads.
+ */
+export type Mark =
+  | {
+      is: "ran";
+    }
+  | {
+      work: Work;
+      since?: number | null;
+      is: "runs";
+    }
+  | {
+      is: "asks";
+    }
+  | {
+      why: string;
+      is: "failed";
+    };
+/**
+ * What a line that runs waits for: its model that writes it, a command or a wait, or an agent.
+ */
+export type Work = "writes" | "command" | "agent";
+export type Saying = "answer" | "notice" | "question";
 /**
  * Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text.
  */
@@ -1220,6 +1263,77 @@ export interface Spend {
   account?: string | null;
 }
 /**
+ * Some exchanges of a thread, the oldest first, with how many exchanges stand before them, and the
+ * agents of the whole thread.
+ */
+export interface Page {
+  exchanges: Exchange[];
+  above: number;
+  agents: Card2[];
+}
+/**
+ * One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
+ * the thread, the act of the message, who said it and its text, the block of code that answers it
+ * once a model answers, and what the answer says to the operator, in order.
+ */
+export interface Exchange {
+  at: number;
+  message: string;
+  by: Maker;
+  text: string;
+  block?: Block | null;
+  said: Said[];
+}
+/**
+ * The code of one answer: the model that wrote its last word, each line of its words, whether more
+ * comes since the answer works, and the thought of its model.
+ */
+export interface Block {
+  maker: Maker;
+  lines: Line[];
+  more: boolean;
+  thought?: Thought | null;
+}
+/**
+ * One line of a block: its number in the thread, its text, in which each quote stands as the
+ * binding that it makes and a string of many lines as one line with its escapes, and its mark.
+ */
+export interface Line {
+  number: number;
+  text: string;
+  mark: Mark;
+}
+/**
+ * What a model thought before it wrote, and in how many seconds, which is none while it thinks.
+ */
+export interface Thought {
+  text: string;
+  took?: number | null;
+}
+/**
+ * What an answer says to the operator: the value of the close of its message, a notice, or a
+ * question, with its act and its text.
+ */
+export interface Said {
+  act: string;
+  kind: Saying;
+  text: string;
+}
+/**
+ * One thread that the operator started, as a card of a list shows it: its prompt, its title, how
+ * it stands, the model that wrote its last word, how many agents work under it, and the site of
+ * each operator who read it to its end, `operator` for each of them and `operator/<login>` for
+ * one member. A question of an agent under it is a question of the card.
+ */
+export interface Card2 {
+  prompt: string;
+  title: string;
+  standing: Standing;
+  model?: string | null;
+  agents?: number;
+  readers?: string[];
+}
+/**
  * One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
  * that its prompt wants, its message, and why its send failed, when it did. A follow-up that
  * failed holds the queue of its chain until the operator takes it out.
@@ -1247,4 +1361,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 16;
+export const PROTOCOL = 17;

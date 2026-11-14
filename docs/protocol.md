@@ -143,6 +143,7 @@ it is not given. The daemon answers requests in any order.
 | `threads` | `life`, `on`, `at`, `read` | read |
 | `as_of` | `life`, `at` | read |
 | `moments` | `life` | read |
+| `thread` | `life`, `thread`, `before`, `limit` | read |
 | `answered` | `life`, `ask`, `turn`, `why` | write |
 | `wrote` | `life`, `ask`, `text`, `thinking` | write |
 | `handover` | | write |
@@ -255,6 +256,31 @@ it is not given. The daemon answers requests in any order.
   path of each verb, and pushes the cards in a frame `cards` once the index stands. A record tells no time, so each
   card of such an index stands since the record last changed. Nothing works in a record at rest, so a thread that
   worked when its life ended rests there.
+- `thread` gives a page of one thread of a life as `page`: the exchanges of the thread before the one at the place
+  `before`, or before its end when `before` is null, at most `limit` of them, the oldest first. The thread is named
+  by its prompt. Nobody reads the past of a record for it: the life holds each act, and a page reads only the acts
+  of its thread, by the list of the acts that each act made. A page holds:
+  - `above`, how many exchanges of the thread stand before the first of the page, so a window asks the older page
+    with `before` set to that place when the reader scrolls to it;
+  - `exchanges`, each a message of the thread with all that answers it: `at`, its place in the thread, 0 for the
+    prompt; `message`, its act; `by`, who said it; `text`; `block`, the code that answers it once a model answers;
+    and `said`, what the answer says to the operator, in order: each `notice` and `question` of its words, and the
+    `answer`, the text that closed the message;
+  - a `block` holds `maker`, the model that wrote its last word, `more`, whether more comes since the answer works,
+    `thought`, the `text` that its model thought before it wrote and the seconds that it `took`, null while it
+    thinks, and `lines`. A line has its `number` in the thread, which goes on from block to block, its `text`, in
+    which a quote stands as the binding that it makes and a string of many lines as one line with its escapes, and
+    its `mark`: `ran`; `runs` with the `work` that it waits for, `writes` while its model writes it, `command` or
+    `agent`, and `since`, the second of the epoch at which the daemon saw that work begin; `asks`; or `failed` with
+    `why`;
+  - `agents`, each thread that a word of the thread started on another chain, as a card without its life.
+
+  The page of the end also makes the peer hear a frame `thread` with the `life`, the `thread` and a `page` at each
+  change of that thread, until it reads the end of another thread or leaves: a peer reads one thread at a time. The
+  page of a frame holds each exchange of the end that is new or that changed, by its `at`, with `above` and
+  `agents` as they stand. The daemon asks the life a page at most once in 100 ms, after an act of the life or a part
+  that a model wrote. What a model thought, and when each work began, are no facts of the record: the life holds
+  them while it lives, so a life that opens again shows no thought of the words before it.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
 - While a life opens, at its first open and at each rebirth, the daemon pushes to each window of the life a frame

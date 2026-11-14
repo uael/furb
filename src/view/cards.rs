@@ -58,6 +58,24 @@ pub enum Part {
   Resolved,
 }
 
+impl Standing {
+  /// How a thread stands from its state, whether it is over, and who said the pause that holds
+  /// it. A question asks each operator.
+  pub(super) fn of(state: State, over: bool, paused_by: String) -> Self {
+    match state {
+      State::Asks => Self::Asks { of: None },
+      State::Failed => Self::Failed,
+      State::Paused => Self::Paused { by: paused_by },
+      State::Thinks => Self::Thinks,
+      State::Runs => Self::Runs,
+      State::Delegates => Self::Delegates,
+      State::Cancelled => Self::Stopped,
+      State::Done | State::Unread | State::Idle if over => Self::Resolved,
+      State::Done | State::Unread | State::Idle => Self::Rests,
+    }
+  }
+}
+
 impl Card {
   /// Whether a member read the thread to its end.
   pub fn read_by(&self, login: &str) -> bool {
@@ -155,17 +173,11 @@ fn standing(node: &ThreadNode, rows: &Rows<'_>) -> Standing {
     || [&thread.prompt].into_iter().chain(&thread.messages).filter_map(|id| rows.get(id.as_str()));
   match node.state {
     State::Asks => Standing::Asks { of: asked(node, rows) },
-    State::Failed => Standing::Failed,
     State::Paused => {
       let by = acts().find_map(|act| act.pause.as_ref()).map(|pause| pause.by.clone());
-      Standing::Paused { by: by.unwrap_or_default() }
+      Standing::of(State::Paused, thread.over, by.unwrap_or_default())
     }
-    State::Thinks => Standing::Thinks,
-    State::Runs => Standing::Runs,
-    State::Delegates => Standing::Delegates,
-    State::Cancelled => Standing::Stopped,
-    State::Done | State::Unread | State::Idle if thread.over => Standing::Resolved,
-    State::Done | State::Unread | State::Idle => Standing::Rests,
+    state => Standing::of(state, thread.over, String::new()),
   }
 }
 

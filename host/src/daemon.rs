@@ -39,7 +39,7 @@ use std::{
 use furb::{
   engine::OPERATOR,
   life::{Answer as Answered, Log, Opening},
-  view::{self, WATCH},
+  view::{self, Reach, WATCH},
   wire::parsed,
   world::{
     Members, Roster,
@@ -51,8 +51,11 @@ use futures::{SinkExt, Stream, StreamExt, future};
 use serde_json::Value;
 use tokio::{
   net::{TcpListener, TcpStream},
-  sync::{mpsc, oneshot, watch},
-  task::{JoinSet, spawn_blocking},
+  sync::{
+    mpsc::{self, error::SendError},
+    oneshot, watch,
+  },
+  task::{AbortHandle, JoinSet, spawn_blocking},
   time::{Instant, Interval, MissedTickBehavior, interval, sleep_until},
 };
 use tokio_util::codec::{Framed, LinesCodec};
@@ -71,6 +74,7 @@ use crate::{
     Answer, BOUND, Card, Config, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer,
     Request, Verb,
   },
+  reads::{Read, Readers},
   rebirth::{Asks, Heap},
   records,
   serve::{Host, Outbox, fixed, serve},
@@ -391,6 +395,8 @@ impl Inside {
 enum Asked {
   /// A verb of the daemon, from a peer.
   Verb { peer: Peer, verb: Box<Verb>, outbox: Outbox, reply: Replied },
+  /// The task that tells a peer the thread that it reads, in the place of its read before.
+  Reads { outbox: Outbox, task: AbortHandle },
   /// The handle of a life, for a verb of that life.
   Life { life: String, reply: oneshot::Sender<Result<(LifeHandle, Option<String>), ProtocolError>> },
   /// A window whose peer is gone.
@@ -441,6 +447,7 @@ impl Daemon {
       born: 0,
       leave,
       views: Views::default(),
+      readers: Readers::default(),
       empty,
     };
     lives.members.set(lives.logins());
@@ -476,11 +483,29 @@ impl Host for Daemon {
           (Kind::Window, _) => command.by(format!("{OPERATOR}/{}", peer.login)),
           _ => command,
         };
+        let reads = match &command {
+          Command::Thread { thread, reach: Reach { before: None, limit } } => {
+            Some((thread.clone(), *limit))
+          }
+          _ => None,
+        };
+        let named = life.clone();
         let (handle, config) = self.asked(|reply| Asked::Life { life, reply }).await??;
         if let Command::Configure(change) = &command {
           signed(change, config.as_deref().map(Path::new), outbox).await?;
         }
-        Ok(handle.send(command).await?.into())
+        let reply = handle.send(command).await?;
+        if let (Some((thread, limit)), Reply::Page(page)) = (reads, &reply) {
+          let read = Read { handle, outbox: outbox.clone(), life: named, thread, limit };
+          let task = tokio::spawn(read.told(page.clone())).abort_handle();
+          if let Err(SendError(Asked::Reads { task, .. })) =
+            self.asks.send(Asked::Reads { outbox: outbox.clone(), task })
+          {
+            // A daemon that stops keeps no task that tells a peer.
+            task.abort();
+          }
+        }
+        Ok(reply.into())
       }
       Routed::Daemon(verb) => {
         let (peer, outbox, verb) = (peer.clone(), outbox.clone(), Box::new(verb));
@@ -541,6 +566,9 @@ fn routed(verb: Verb) -> Routed {
       (life, Command::Ladder { on, at, opened, owed, taken, shown })
     }
     Verb::AsOf { life, at } => (life, Command::AsOf { at }),
+    Verb::Thread { life, thread, before, limit } => {
+      (life, Command::Thread { thread, reach: Reach { before, limit } })
+    }
     Verb::Moments { life, on } => (life, Command::Moments { on }),
     other => return Routed::Daemon(other),
   };
@@ -571,6 +599,7 @@ impl From<Reply> for Answer {
       Reply::Ladder(rungs) => Self::Ladder(rungs),
       Reply::Acts(acts) => Self::Acts(acts),
       Reply::Moments(moments) => Self::Moments(moments),
+      Reply::Page(page) => Self::Page(page),
     }
   }
 }
@@ -614,6 +643,8 @@ struct Lives {
   born: u64,
   leave: oneshot::Sender<Leaving>,
   views: Views,
+  /// The task of each peer that reads a thread.
+  readers: Readers,
   /// Whether the daemon holds no life, which the listener reads to end the daemon.
   empty: watch::Sender<bool>,
   /// The clock at which the daemon reads its heap, and each life that it asked to be born again
@@ -807,6 +838,7 @@ impl Lives {
   fn heard(&mut self, asked: Asked) {
     match asked {
       Asked::Verb { peer, verb, outbox, reply } => self.verb(peer, *verb, &outbox, reply),
+      Asked::Reads { outbox, task } => self.readers.read(outbox, task),
       Asked::Life { life, reply } => {
         let found = self.held.get(&life).map(|held| (held.handle.clone(), held.config.clone()));
         reply.send(found.ok_or(ProtocolError::Closed { life })).ok();

@@ -21,6 +21,18 @@ use std::{iter, mem};
 /// The acts of a life by their names.
 pub type Rows<'a> = HashMap<&'a str, &'a Act>;
 
+/// What finds an act of a life by its name: the acts of a life by their names, or the acts that
+/// a host holds, which a page of one thread reads with no map of the whole life.
+pub trait Lookup<'a> {
+  fn act(&self, id: &str) -> Option<&'a Act>;
+}
+
+impl<'a> Lookup<'a> for Rows<'a> {
+  fn act(&self, id: &str) -> Option<&'a Act> {
+    self.get(id).copied()
+  }
+}
+
 /// How deep a walk up the threads or the makers goes at most.
 const DEEP: usize = 64;
 
@@ -86,10 +98,10 @@ pub struct Attention {
 
 /// The first prompt of the thread that a prompt stands in: the prompt itself, or the prompt that
 /// its thread starts at.
-pub fn root_of<'a>(prompt: &'a Act, rows: &Rows<'a>) -> &'a str {
+pub fn root_of<'a>(prompt: &'a Act, rows: &impl Lookup<'a>) -> &'a str {
   let mut at = prompt;
   for _ in 0..DEEP {
-    match at.thread().and_then(|up| rows.get(up)) {
+    match at.thread().and_then(|up| rows.act(up)) {
       Some(up) => at = up,
       None => break,
     }
@@ -101,13 +113,13 @@ pub fn root_of<'a>(prompt: &'a Act, rows: &Rows<'a>) -> &'a str {
 /// walking up the maker of each act whatever its kind, a rung, a conduct, a chain or any other, so
 /// that a worker that a round made stands in the thread whose word started the round. An act whose
 /// makers end before a prompt, as one that the operator made, stands in none.
-pub fn thread_of<'a>(act: &Act, rows: &Rows<'a>) -> Option<&'a str> {
-  let mut maker = rows.get(act.by.as_str())?;
+pub fn thread_of<'a>(act: &Act, rows: &impl Lookup<'a>) -> Option<&'a str> {
+  let mut maker = rows.act(act.by.as_str())?;
   for _ in 0..DEEP {
     if maker.kind == Kind::Prompt {
       return Some(root_of(maker, rows));
     }
-    maker = rows.get(maker.by.as_str())?;
+    maker = rows.act(maker.by.as_str())?;
   }
   None
 }
@@ -153,16 +165,24 @@ enum Verdict<'a> {
   Aside(Aside),
 }
 
+/// The thread that a prompt of a chain is a message of, as the threads of the chain read it.
+pub(super) fn message_of<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> Option<&'a str> {
+  match verdict(act, rows) {
+    Verdict::Message(thread) if !act.asks_operator() => Some(thread),
+    _ => None,
+  }
+}
+
 /// What a prompt to a model is: a message of a thread when it stands on one, the acknowledgment of
 /// an act that a chain made, which belongs to the thread of that act, a notice, a word of the
 /// operator, a wake or a question of another chain, and else a thread of its own, as each prompt
 /// that the operator made himself. What the watch of the daemon tells of a stall, and what the act
 /// that names the session asks, are notices: no one of the operator made them.
-fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
+fn verdict<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> Verdict<'a> {
   if act.thread().is_some() {
     return Verdict::Message(root_of(act, rows));
   }
-  let maker = rows.get(act.by.as_str()).copied();
+  let maker = rows.act(act.by.as_str());
   let none = act.words.first().is_some_and(|shape| shape == "None");
   match maker {
     Some(maker) if none && maker.kind == Kind::Chain => acknowledged(act, rows),
@@ -190,14 +210,14 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
 
 /// What the acknowledgment of an act that a chain made is: a message of the thread of that act, or
 /// an aside when the act stands in no thread.
-fn acknowledged<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
+fn acknowledged<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> Verdict<'a> {
   let message = act.words.get(1).and_then(|one| one.as_str()).unwrap_or_default();
   let about = message.split_once(' ').map(|(about, _)| about).filter(|about| {
     about.len() > 1
       && about.ends_with(|one: char| one.is_ascii_digit())
       && about.chars().all(|one| one.is_ascii_alphanumeric() || one == '_')
   });
-  let Some(subject) = about.and_then(|about| rows.get(about)) else {
+  let Some(subject) = about.and_then(|about| rows.act(about)) else {
     return Verdict::Aside(Aside::Notice);
   };
   if subject.kind == Kind::Prompt {
@@ -211,13 +231,13 @@ fn acknowledged<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
 }
 
 /// Whether a chain stands under another, or is it, walking up the makers of the chains.
-fn within<'a>(chain: &'a str, of: &str, rows: &Rows<'a>) -> bool {
+fn within<'a>(chain: &'a str, of: &str, rows: &impl Lookup<'a>) -> bool {
   let mut at = chain;
   for _ in 0..DEEP {
     if at == of {
       return true;
     }
-    match rows.get(at).and_then(|one| rows.get(one.by.as_str())) {
+    match rows.act(at).and_then(|one| rows.act(one.by.as_str())) {
       Some(maker) if maker.chain != at => at = &maker.chain,
       _ => return false,
     }

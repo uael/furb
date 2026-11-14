@@ -3,7 +3,7 @@
 
 use furb::{
   life::Stage,
-  view::{self, Act, Desk, Rung, Shown, ThreadNode, Threads},
+  view::{self, Act, Desk, Page, Rung, Shown, ThreadNode, Threads},
 };
 use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 16;
+pub const PROTOCOL: u32 = 17;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -349,6 +349,17 @@ pub enum Verb {
     life: String,
     at: u64,
   },
+  /// A page of a thread of a life, its prompt: the exchanges before the one at `before`, or
+  /// before the end, at most `limit` of them, the newest page first. The page of the end also
+  /// makes the peer hear a frame `thread` at each change of that thread, until it reads the end
+  /// of another thread or leaves: a peer reads one thread at a time.
+  Thread {
+    life: String,
+    thread: String,
+    #[serde(default)]
+    before: Option<usize>,
+    limit: usize,
+  },
   /// Each moment of a life at which an act began or ended, in order.
   Moments {
     life: String,
@@ -415,6 +426,7 @@ impl Verb {
         | Self::Rail { .. }
         | Self::Ladder { .. }
         | Self::AsOf { .. }
+        | Self::Thread { .. }
         | Self::Moments { .. }
         | Self::Names { .. }
         | Self::Config { config: Config::Get, .. }
@@ -468,6 +480,10 @@ pub enum Frame {
   /// A change of the cards of one record, pushed to each peer that asked the cards: each card that
   /// is new or that changed, and the prompt of each card that the record holds no more.
   Cards { life: String, changed: Vec<Card>, gone: Vec<String> },
+  /// A change of the thread that the peer reads: each exchange that is new or that changed, how
+  /// many exchanges stand before the first of the page of the end now, and the agents of the
+  /// thread.
+  Thread { life: String, thread: String, page: Page },
   /// How far the open of a life stands, pushed to each of its windows while the life opens, at its
   /// first open and at each rebirth: the stage, its work done and its work known, each in the unit
   /// of the stage, and both 0 for a stage that counts nothing. The stages of one open come in
@@ -550,6 +566,8 @@ pub enum Answer {
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.
   Moments(Vec<u64>),
+  /// A page of a thread.
+  Page(Page),
 }
 
 /// An act that stays open in a life that stalled: its name, its kind, and the chain that it stands

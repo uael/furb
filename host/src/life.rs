@@ -34,7 +34,10 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint, image,
   life::{Log, Opening, Progress, Stage, Stream},
   verbs,
-  view::{Act, Desk, Fold, Held, Named, Phase, Rung, SHOWN, Shown, ThreadNode, Threads},
+  view::{
+    Act, Desk, Fold, Held, Named, Page, Phase, Reach, Rung, SHOWN, Shown, Streamed, ThreadNode,
+    Threads,
+  },
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -174,6 +177,8 @@ pub enum Command {
   },
   /// The acts as they stood just after a moment, each with its meaning then.
   AsOf { at: u64 },
+  /// A page of a thread, as [`furb::view::Held::page`] gives it.
+  Thread { thread: String, reach: Reach },
   /// Each moment at which an act began or ended, in order, of the life or of the acts of one
   /// chain.
   Moments { on: Option<String> },
@@ -246,6 +251,8 @@ pub enum Reply {
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.
   Moments(Vec<u64>),
+  /// A page of a thread.
+  Page(Page),
 }
 
 /// One event under its place in the log.
@@ -291,6 +298,9 @@ pub struct Life {
   due: Instant,
   /// The time of each card that the life tells first: when its record last changed.
   first: Option<u64>,
+  /// What the models wrote and thought, and when each act that lives began, which no fact holds
+  /// and a page of a thread reads.
+  streams: Streamed,
 }
 
 /// What a life keeps of the events that it told, which is the part of the host in the image of the
@@ -450,9 +460,16 @@ impl Life {
       self.weight.facts.store(self.kept.watch.facts(), Ordering::Relaxed);
     }
     let queued = self.kept.queue.heard(&event);
-    if let Event::Act(act) = &event {
-      self.kept.held.heard(act);
-      self.stale = true;
+    match &event {
+      Event::Act(act) => {
+        self.streams.heard(act, cards::now());
+        self.kept.held.heard(act);
+        self.stale = true;
+      }
+      Event::Text { rung, text, thinking, .. } => {
+        self.streams.wrote(rung, [text, thinking], cards::now());
+      }
+      _ => {}
     }
     let seq = self.kept.log.len() as Seq;
     for at in self.kept.spent.heard(seq, &event) {
@@ -874,6 +891,7 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
     cards,
     stale: false,
     due: Instant::now(),
+    streams: Streamed::default(),
   };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
@@ -1157,9 +1175,8 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
     }
     Command::AsOf { at } => Ok(Reply::Acts(life.kept.held.as_of(at))),
     Command::Moments { on } => Ok(Reply::Moments(life.kept.held.moments(on.as_deref()))),
-    Command::Settings => {
-      let settings = life.configs.get()?.into_iter().map(|one| json!(one));
-      Ok(Reply::Values(settings.collect()))
+    Command::Thread { thread, reach } => {
+      Ok(Reply::Page(life.kept.held.page(&life.streams, &thread, reach)))
     }
     Command::Configure(change) => {
       life.configs.set(change).await?;
@@ -1366,6 +1383,12 @@ impl LifeHandle {
   /// taken back.
   pub(crate) fn reborn(&self, asked: bool) {
     self.inbox.send(Message::Rebirth(asked)).ok();
+  }
+
+  /// Each event that the life tells from now on, with its place in the log, which a reader that
+  /// stands too far behind misses.
+  pub(crate) fn told(&self) -> broadcast::Receiver<Logged> {
+    self.readers.subscribe()
   }
 
   /// The reply of the life to a command, once the life ran it, in the order that the life heard

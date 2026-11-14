@@ -22,7 +22,7 @@ use super::{
   ladder::{Index, Rung, Shown, folded, lives},
   state::State,
   threads::{
-    Attention, ChainAside, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
+    Attention, ChainAside, Lookup, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
     chain_threads, chain_tree, nest_threads, order_threads,
   },
   time::{as_of, moments_of},
@@ -56,6 +56,12 @@ pub struct Held {
   /// that said it: `operator` alone, or `operator/<login>` for the window of a member. A seen that
   /// a later life says again as the journal names no site, so it stands for each of them.
   seen: HashMap<String, HashMap<String, u64>>,
+}
+
+impl<'a> Lookup<'a> for &'a Held {
+  fn act(&self, id: &str) -> Option<&'a Act> {
+    self.at.get(id).map(|at| &self.acts[*at])
+  }
 }
 
 impl Held {
@@ -156,6 +162,16 @@ impl Held {
   /// read the chain, from which its runs of notes count the notes not yet read.
   pub fn threads(&self, chain: &str, at: Option<u64>, read: u64) -> Threads {
     self.threads_as(OPERATOR, chain, at, read)
+  }
+
+  /// The acts that an act or a person made, in the order they were first told.
+  pub(super) fn made_by<'a>(&'a self, id: &str) -> impl Iterator<Item = &'a Act> + use<'a> {
+    self.made.get(id).into_iter().flatten().map(|at| &self.acts[*at])
+  }
+
+  /// The acts of a chain, in the order they were first told.
+  pub(super) fn on_chain<'a>(&'a self, chain: &str) -> impl Iterator<Item = &'a Act> + use<'a> {
+    self.on.get(chain).into_iter().flatten().map(|at| &self.acts[*at])
   }
 
   /// The acts now, in the order they began.

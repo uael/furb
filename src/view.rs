@@ -10,6 +10,7 @@ mod fold;
 mod held;
 mod ladder;
 mod named;
+mod page;
 mod quote;
 mod state;
 mod threads;
@@ -24,6 +25,7 @@ pub use ladder::{Rung, SHOWN, Shown};
 #[cfg(any(test, feature = "test-support"))]
 pub use named::word;
 pub use named::{NAME, Named, said};
+pub use page::{Block, Exchange, Line, Mark, Page, Reach, Said, Saying, Streamed, Thought, Work};
 pub use quote::{Quote, Writing, quotes, writing};
 pub use state::{State, chain_state, restate, working};
 pub use threads::{

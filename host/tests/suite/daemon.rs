@@ -2264,6 +2264,47 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
   assert_eq!(cards(&mut late).await, vec![read]);
 }
 
+/// The lines of the block of each exchange of a page, as their numbers and their texts.
+fn numbered(page: &view::Page) -> Vec<(usize, Vec<(usize, String)>)> {
+  let lines =
+    |block: &view::Block| block.lines.iter().map(|one| (one.number, one.text.clone())).collect();
+  page
+    .exchanges
+    .iter()
+    .map(|one| (one.at, one.block.as_ref().map(lines).unwrap_or_default()))
+    .collect()
+}
+
+#[tokio::test]
+async fn a_thread_gives_its_end_by_page_and_tells_each_change_to_the_peer_that_reads_it() {
+  let at = place();
+  let (_, sessions) = project(&at);
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let life = held(&mut window, &sessions, "one.jsonl").await;
+  let prompt = messaged(&mut window, &life, "ground the branch").await;
+  card(&mut window, |card| card.thread.standing == Standing::Resolved).await;
+  let read =
+    |before, limit| Verb::Thread { life: life.clone(), thread: prompt.clone(), before, limit };
+  let Ok(Answer::Page(page)) = window.ask(read(None, 10)).await else { panic!("no page") };
+  assert_eq!((page.above, page.exchanges[0].text.as_str()), (0, "ground the branch"));
+  assert_eq!(numbered(&page), [(0, vec![(1, "close(None)".to_owned())])]);
+  // A message on the thread is told to the peer that reads its end, with its block numbered on.
+  let (shape, message) = ("None".to_owned(), "and say what moved".to_owned());
+  let on = Some(prompt.clone());
+  let said = Verb::Prompt { life: life.clone(), shape, message, to: None, on };
+  assert!(matches!(window.ask(said).await, Ok(Answer::Act(_))));
+  let answered = |frame: &Frame| matches!(frame, Frame::Thread { page, .. } if numbered(page).contains(&(1, vec![(2, "close(None)".to_owned())])));
+  let Frame::Thread { thread, .. } = window.until(answered).await else { unreachable!() };
+  assert_eq!(thread, prompt);
+  // A page of one exchange at the end leaves the first above it, and an older page gives it.
+  let Ok(Answer::Page(tip)) = window.ask(read(None, 1)).await else { panic!("no page") };
+  assert_eq!((tip.above, numbered(&tip)), (1, vec![(1, vec![(2, "close(None)".to_owned())])]));
+  let Ok(Answer::Page(older)) = window.ask(read(Some(1), 1)).await else { panic!("no page") };
+  assert_eq!((older.above, numbered(&older)), (0, vec![(0, vec![(1, "close(None)".to_owned())])]));
+}
+
 #[tokio::test]
 async fn the_cards_of_a_record_at_rest_come_from_its_index_and_never_from_a_fold_in_the_list() {
   let at = place();

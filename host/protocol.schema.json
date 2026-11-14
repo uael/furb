@@ -1188,6 +1188,42 @@
         },
         {
           "type": "object",
+          "description": "A page of a thread of a life, its prompt: the exchanges before the one at `before`, or\nbefore the end, at most `limit` of them, the newest page first. The page of the end also\nmakes the peer hear a frame `thread` at each change of that thread, until it reads the end\nof another thread or leaves: a peer reads one thread at a time.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "before": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0,
+              "default": null
+            },
+            "limit": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "thread"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "thread",
+            "limit"
+          ]
+        },
+        {
+          "type": "object",
           "description": "Each moment of a life at which an act began or ended, in order.",
           "properties": {
             "life": {
@@ -2150,6 +2186,31 @@
             "life": {
               "type": "string"
             },
+            "thread": {
+              "type": "string"
+            },
+            "page": {
+              "$ref": "#/definitions/Page"
+            },
+            "frame": {
+              "type": "string",
+              "const": "thread"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "thread",
+            "page"
+          ],
+          "description": "A change of the thread that the peer reads: each exchange that is new or that changed, how\nmany exchanges stand before the first of the page of the end now, and the agents of the\nthread."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "stage": {
               "$ref": "#/definitions/Stage"
             },
@@ -2727,6 +2788,23 @@
             "data"
           ],
           "description": "Each moment at which an act began or ended."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "page"
+            },
+            "data": {
+              "$ref": "#/definitions/Page"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "A page of a thread."
         }
       ],
       "description": "What a verb comes to."
@@ -3871,6 +3949,297 @@
       ],
       "description": "What the answers of models cost: their dollars, how many they are, and the actor of the last."
     },
+    "Page": {
+      "type": "object",
+      "properties": {
+        "exchanges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Exchange"
+          }
+        },
+        "above": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Card2"
+          }
+        }
+      },
+      "required": [
+        "exchanges",
+        "above",
+        "agents"
+      ],
+      "description": "Some exchanges of a thread, the oldest first, with how many exchanges stand before them, and the\nagents of the whole thread."
+    },
+    "Exchange": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "by": {
+          "$ref": "#/definitions/Maker"
+        },
+        "text": {
+          "type": "string"
+        },
+        "block": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Block"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "said": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Said"
+          }
+        }
+      },
+      "required": [
+        "at",
+        "message",
+        "by",
+        "text",
+        "said"
+      ],
+      "description": "One message of a thread with all that answers it: its place in the thread, 0 for the prompt of\nthe thread, the act of the message, who said it and its text, the block of code that answers it\nonce a model answers, and what the answer says to the operator, in order."
+    },
+    "Block": {
+      "type": "object",
+      "properties": {
+        "maker": {
+          "$ref": "#/definitions/Maker"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Line"
+          }
+        },
+        "more": {
+          "type": "boolean"
+        },
+        "thought": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Thought"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "maker",
+        "lines",
+        "more"
+      ],
+      "description": "The code of one answer: the model that wrote its last word, each line of its words, whether more\ncomes since the answer works, and the thought of its model."
+    },
+    "Line": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        },
+        "mark": {
+          "$ref": "#/definitions/Mark"
+        }
+      },
+      "required": [
+        "number",
+        "text",
+        "mark"
+      ],
+      "description": "One line of a block: its number in the thread, its text, in which each quote stands as the\nbinding that it makes and a string of many lines as one line with its escapes, and its mark."
+    },
+    "Mark": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "ran"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "work": {
+              "$ref": "#/definitions/Work"
+            },
+            "since": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "is": {
+              "type": "string",
+              "const": "runs"
+            }
+          },
+          "required": [
+            "is",
+            "work"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "asks"
+            }
+          },
+          "required": [
+            "is"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "why": {
+              "type": "string"
+            },
+            "is": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "is",
+            "why"
+          ]
+        }
+      ],
+      "description": "How a line stands: it ran, or will not run; it runs, with the work that it waits for and the\nsecond of the epoch since which it does when the host saw it begin; it asks the operator; or it\nfailed, with the reason that a person reads."
+    },
+    "Work": {
+      "type": "string",
+      "enum": [
+        "writes",
+        "command",
+        "agent"
+      ],
+      "description": "What a line that runs waits for: its model that writes it, a command or a wait, or an agent."
+    },
+    "Thought": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "took": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "description": "What a model thought before it wrote, and in how many seconds, which is none while it thinks."
+    },
+    "Said": {
+      "type": "object",
+      "properties": {
+        "act": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/Saying"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "act",
+        "kind",
+        "text"
+      ],
+      "description": "What an answer says to the operator: the value of the close of its message, a notice, or a\nquestion, with its act and its text."
+    },
+    "Saying": {
+      "type": "string",
+      "enum": [
+        "answer",
+        "notice",
+        "question"
+      ]
+    },
+    "Card2": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "standing": {
+          "$ref": "#/definitions/Standing"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agents": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        },
+        "readers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "prompt",
+        "title",
+        "standing"
+      ],
+      "description": "One thread that the operator started, as a card of a list shows it: its prompt, its title, how\nit stands, the model that wrote its last word, how many agents work under it, and the site of\neach operator who read it to its end, `operator` for each of them and `operator/<login>` for\none member. A question of an agent under it is a question of the card."
+    },
     "ProtocolError": {
       "oneOf": [
         {
@@ -4521,5 +4890,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 16
+  "x-protocol": 17
 }
