@@ -3698,6 +3698,17 @@
           ],
           "description": "What the models cost: the answers that wrote the word of a rung, or each answer on a chain."
         },
+        "closer": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Maker"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Who closed the act, as a window names who made an act, once a close of it was said."
+        },
         "state": {
           "description": "The state of the act, or of the work of a chain for a chain.",
           "allOf": [
@@ -4194,12 +4205,99 @@
       "description": "What an answer says to the operator: the value of the close of its message, a notice, or a\nquestion, with its act and its text."
     },
     "Saying": {
-      "type": "string",
-      "enum": [
-        "answer",
-        "notice",
-        "question"
-      ]
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "answer",
+            "notice"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "object",
+              "properties": {
+                "shape": {
+                  "type": "string"
+                },
+                "answered": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/Answered"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "shape"
+              ]
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and\n`hint` of the view read, and what answered it once it is closed: it is open until then."
+    },
+    "Answered": {
+      "type": "object",
+      "properties": {
+        "by": {
+          "$ref": "#/definitions/Maker"
+        },
+        "reply": {
+          "$ref": "#/definitions/Reply"
+        }
+      },
+      "required": [
+        "by",
+        "reply"
+      ],
+      "description": "What closed a question: who closed it, and what it came to."
+    },
+    "Reply": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "value"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "is",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "refused"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "is",
+            "text"
+          ]
+        }
+      ],
+      "description": "What a question came to: a value, as a person reads it, or a refusal with its reason."
     },
     "Card2": {
       "type": "object",
@@ -4885,5 +4983,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 18
+  "x-protocol": 19
 }

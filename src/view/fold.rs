@@ -223,6 +223,7 @@ impl Fold {
       began: self.clock,
       ended: None,
       spend: None,
+      closer: None,
       state: State::Idle,
     };
     let taken = if act.kind == Kind::Chain { self.carried(rest) } else { Vec::new() };
@@ -330,6 +331,13 @@ impl Fold {
         }
       }
       "done" => self.done(about, fact.get(3).cloned().unwrap_or_default()),
+      // The done that a close makes tells the act with its closer, so the close moves nothing.
+      "close" => {
+        let closer = self.acts.get(about).map(|act| self.maker(&act.kind, by, &[]));
+        if let Some((act, closer)) = self.acts.get_mut(about).zip(closer) {
+          act.closer = Some(closer);
+        }
+      }
       "ready" => {
         let word = fact.get(3).and_then(Value::as_str);
         if let Some((act, word)) =

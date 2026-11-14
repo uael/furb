@@ -184,6 +184,9 @@ pub struct Act {
   pub ended: Option<u64>,
   /// What the models cost: the answers that wrote the word of a rung, or each answer on a chain.
   pub spend: Option<Spend>,
+  /// Who closed the act, as a window names who made an act, once a close of it was said.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub closer: Option<Maker>,
   /// The state of the act, or of the work of a chain for a chain.
   pub state: State,
 }

@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
-use super::{Block, Mark, Reach, Said, Saying, Streamed, Thought, Work};
-use crate::view::{Fold, Held, Maker, Standing};
+use super::{Answered, Block, Mark, Reach, Reply, Said, Saying, Streamed, Thought, Work};
+use crate::view::{Fold, Held, Maker, Standing, declined};
 
 /// The acts of a list of facts as a host holds them, with what the host heard at the second 100.
 fn held(facts: impl IntoIterator<Item = Value>, streams: &mut Streamed) -> Held {
@@ -151,4 +151,63 @@ fn a_quote_stands_as_its_binding_and_a_string_of_many_lines_as_one_line() {
   let shown = super::shown(word);
   let lines: Vec<(usize, &str)> = shown.iter().map(|(at, text)| (*at, text.as_str())).collect();
   assert_eq!(lines, [(0, "plan = 'read it\\n'"), (3, "x = \"\"\"a\\nb\"\"\""), (5, "y = 1")]);
+}
+
+#[test]
+fn a_question_holds_its_shape_and_once_closed_who_closed_it_and_what_it_came_to() {
+  let word = "side = await prompt(Literal['right', 'left'], 'Where?', to=OPERATOR)\nok = await prompt(bool, 'Sure?', to=OPERATOR)";
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "where does the list stand", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
+    json!([
+      "prompt",
+      "prompt2",
+      "rung1",
+      "chain1",
+      "Literal['right', 'left']",
+      "Where?",
+      "operator"
+    ]),
+    json!(["prompt", "prompt3", "rung1", "chain1", "bool", "Sure?", "operator"]),
+    json!(["prompt", "prompt4", "rung1", "chain1", "int", "How many?", "operator"]),
+    json!(["close", "prompt2", "operator/ada", "left"]),
+    json!(["done", "prompt2", "chain1", "left"]),
+    json!(["close", "prompt3", "rung1", true]),
+    json!(["done", "prompt3", "chain1", true]),
+  ];
+  let mut refused = facts.clone();
+  let refusal: Value = serde_json::from_str(&declined("the top")).unwrap();
+  refused.extend([
+    json!(["close", "prompt4", "operator/ada", refusal]),
+    json!(["done", "prompt4", "chain1", refusal]),
+  ]);
+  let question = |shape: &str, answered| Saying::Question { shape: shape.to_owned(), answered };
+  let kinds = |facts: Vec<Value>| {
+    let mut streams = Streamed::default();
+    let page =
+      held(facts, &mut streams).page(&streams, "prompt1", Reach { before: None, limit: 10 });
+    page.exchanges[0].said.iter().map(|one| one.kind.clone()).collect::<Vec<_>>()
+  };
+  let opus = Maker::Model { model: "claude-cli:opus".to_owned(), effort: None };
+  let left = Answered { by: Maker::Operator, reply: Reply::Value("left".to_owned()) };
+  let yes = Answered { by: opus, reply: Reply::Value("yes".to_owned()) };
+  assert_eq!(
+    kinds(facts),
+    [
+      question("Literal['right', 'left']", Some(left.clone())),
+      question("bool", Some(yes.clone())),
+      question("int", None)
+    ]
+  );
+  let the_top = Answered { by: Maker::Operator, reply: Reply::Refused("the top".to_owned()) };
+  assert_eq!(
+    kinds(refused),
+    [
+      question("Literal['right', 'left']", Some(left)),
+      question("bool", Some(yes)),
+      question("int", Some(the_top))
+    ]
+  );
 }

@@ -29,6 +29,7 @@ fn act(kind: &str, id: &str, by: &str, words: &[Value], phase: Phase) -> Event {
     began: 0,
     ended: None,
     spend: None,
+    closer: None,
     state: State::Idle,
   }))
 }

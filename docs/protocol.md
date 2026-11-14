@@ -268,7 +268,10 @@ it is not given. The daemon answers requests in any order.
   - `exchanges`, each a message of the thread with all that answers it: `at`, its place in the thread, 0 for the
     prompt; `message`, its act; `by`, who said it; `text`; `block`, the code that answers it once a model answers;
     and `said`, what the answer says to the operator, in order: each `notice` and `question` of its words, and the
-    `answer`, the text that closed the message;
+    `answer`, the text that closed the message. A `question` holds the `shape` of its answer and, once it is closed,
+    `answered`: `by`, who closed it, and `reply`, its `value` as a person reads it or the reason that `refused` it.
+    A question that is not closed waits for the operator: `answer` closes it with a line of its shape, and `close`
+    with a refusal, `{"is": "Refused", "args": ["why"]}`, closes it with words that its model reads;
   - a `block` holds `maker`, the model that wrote its last word, `more`, whether more comes since the answer works,
     `thought`, the `text` that its model thought before it wrote and the seconds that it `took`, null while it
     thinks, and `lines`. A line has its `number` in the thread, which goes on from block to block, its `text`, in

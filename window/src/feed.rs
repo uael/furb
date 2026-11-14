@@ -282,7 +282,7 @@ impl Feed<'_> {
       .into_iter()
       .enumerate()
       .map(|(at, mut line)| {
-        if said.kind == Saying::Question && at == 0 {
+        if matches!(said.kind, Saying::Question { .. }) && at == 0 {
           line.insert(0, run("◆ ", Style::new().fg(t.attention)));
         }
         line.insert(0, run("  ", Style::new()));

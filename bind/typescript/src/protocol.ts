@@ -821,7 +821,30 @@ export type Mark =
  * What a line that runs waits for: its model that writes it, a command or a wait, or an agent.
  */
 export type Work = "writes" | "command" | "agent";
-export type Saying = "answer" | "notice" | "question";
+/**
+ * What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and
+ * `hint` of the view read, and what answered it once it is closed: it is open until then.
+ */
+export type Saying =
+  | ("answer" | "notice")
+  | {
+      question: {
+        shape: string;
+        answered?: Answered | null;
+      };
+    };
+/**
+ * What a question came to: a value, as a person reads it, or a refusal with its reason.
+ */
+export type Reply =
+  | {
+      is: "value";
+      text: string;
+    }
+  | {
+      is: "refused";
+      text: string;
+    };
 /**
  * Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text.
  */
@@ -1241,6 +1264,10 @@ export interface Act {
    */
   spend?: Spend | null;
   /**
+   * Who closed the act, as a window names who made an act, once a close of it was said.
+   */
+  closer?: Maker | null;
+  /**
    * The state of the act, or of the work of a chain for a chain.
    */
   state: State;
@@ -1322,6 +1349,13 @@ export interface Said {
   text: string;
 }
 /**
+ * What closed a question: who closed it, and what it came to.
+ */
+export interface Answered {
+  by: Maker;
+  reply: Reply;
+}
+/**
  * One thread that the operator started, as a card of a list shows it: its prompt, its title, how
  * it stands, the model that wrote its last word, how many agents work under it, and the site of
  * each operator who read it to its end, `operator` for each of them and `operator/<login>` for
@@ -1363,4 +1397,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 18;
+export const PROTOCOL = 19;

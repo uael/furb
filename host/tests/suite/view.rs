@@ -42,6 +42,7 @@ fn act(id: &str, kind: &str, on: &str, by: &str, began: u64, ended: Option<u64>)
     began,
     ended,
     spend: None,
+    closer: None,
     state: State::Idle,
   };
   made.state = State::of(&made);

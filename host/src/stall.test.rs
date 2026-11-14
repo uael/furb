@@ -26,6 +26,7 @@ fn act(kind: &str, id: &str, chain: &str, words: &[Value]) -> Act {
     began: 0,
     ended: None,
     spend: None,
+    closer: None,
     state: State::Idle,
   }
 }

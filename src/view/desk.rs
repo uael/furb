@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  value::Object,
+  value::{Fault, Object},
   wire::outward,
   world::{Shape, named},
 };
@@ -78,6 +78,16 @@ pub fn desk<'a>(acts: impl IntoIterator<Item = &'a Act>, notices: &[&str]) -> De
   asks.sort_by_key(|ask| (ask.began, ask.notice));
   let questions = asks.iter().filter(|ask| !ask.notice).count();
   Desk { notices: asks.len() - questions, questions, asks }
+}
+
+/// The reason of the refusal of a question that the operator refused with no words.
+pub const REFUSED: &str = "The operator refused the question.";
+
+/// The close of a question that the operator refused with words, as the record writes a value: the
+/// await of the word that asked raises a refusal with those words, so its model reads them. The
+/// words of the operator that take none of the values of a choice close it so too.
+pub fn declined(words: &str) -> String {
+  outward(Fault::refused(words).object().as_ref()).to_string()
 }
 
 /// A value of a Literal as JSON.

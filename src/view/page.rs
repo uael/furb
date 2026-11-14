@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-  act::{Act, Kind, Maker, RunState},
+  act::{Act, Kind, Maker, RunState, fault},
   cards::{Card, Standing},
   fold::followed,
   held::Held,
@@ -106,12 +106,49 @@ pub struct Said {
   pub text: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and
+/// `hint` of the view read, and what answered it once it is closed: it is open until then.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Saying {
   Answer,
   Notice,
-  Question,
+  Question { shape: String, answered: Option<Answered> },
+}
+
+/// What closed a question: who closed it, and what it came to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Answered {
+  pub by: Maker,
+  pub reply: Reply,
+}
+
+/// What a question came to: a value, as a person reads it, or a refusal with its reason.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "is", content = "text", rename_all = "snake_case")]
+pub enum Reply {
+  Value(String),
+  Refused(String),
+}
+
+impl Answered {
+  /// What closed a question to the operator, once it is done: a text as its text, a truth as the
+  /// choice that answers it, None as nothing, a fault as its first argument, else its value as
+  /// JSON.
+  fn of(asked: &Act) -> Option<Self> {
+    let reply = match asked.value()? {
+      Value::String(text) => Reply::Value(text.clone()),
+      Value::Bool(yes) => Reply::Value(if *yes { "yes" } else { "no" }.to_owned()),
+      Value::Null => Reply::Value("nothing".to_owned()),
+      value => match fault(value) {
+        Some((is, args)) => {
+          Reply::Refused(args.first().and_then(Value::as_str).unwrap_or(is).to_owned())
+        }
+        None => Reply::Value(value.to_string()),
+      },
+    };
+    Some(Self { by: asked.closer.clone().unwrap_or_default(), reply })
+  }
 }
 
 /// What a host heard of a life beside its facts, which a page reads: what each model wrote and
@@ -231,10 +268,11 @@ impl<'a> Reader<'a> {
       lines.extend(self.lines(rung, *number));
       *number += count(rung, self.streams);
       for asked in self.held.made_by(&rung.id).filter(|act| act.asks_operator()) {
-        let kind = if asked.words.first().is_some_and(|shape| shape == "None") {
+        let shape = text(asked.words.first());
+        let kind = if shape == "None" {
           Saying::Notice
         } else {
-          Saying::Question
+          Saying::Question { shape, answered: Answered::of(asked) }
         };
         said.push(Said { act: asked.id.clone(), kind, text: text(asked.words.get(1)) });
       }
