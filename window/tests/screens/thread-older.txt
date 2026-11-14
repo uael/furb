@@ -27,4 +27,4 @@
   Jump to latest ↓                                      end
 ┃ ▌Reply to this thread
 ┃ ↳ ground the branch, message by message              opus
-  /home/ada/src/furb-try                  ctrl+n new thread
+  /home/ada/src/furb-try                      ⌃N new thread

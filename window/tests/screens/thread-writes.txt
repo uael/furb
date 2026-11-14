@@ -27,4 +27,4 @@
 
 ┃ ▌Reply to this thread
 ┃ ↳ why is the seed slow on a big record               opus
-  ⠋ Working · esc esc stop                ctrl+n new thread
+  ⠋ Working · ⎋ ⎋ stop                        ⌃N new thread

@@ -27,4 +27,4 @@
 
 ┃ ▌Reply to this thread
 ┃ ↳ why is the window stuck after a switch of model    opus
-  /home/ada/src/furb-try                  ctrl+n new thread
+  /home/ada/src/furb-try                      ⌃N new thread

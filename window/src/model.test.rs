@@ -5,7 +5,7 @@ use furb_host::protocol::{Answer, Card, Frame};
 use jiff::tz::TimeZone;
 
 use super::{Link, Model, Told};
-use crate::{Options, list::Row, tokens::Tokens};
+use crate::{Options, System, list::Row, tokens::Tokens};
 
 fn card(life: &str, title: &str, standing: Standing, since: u64) -> Card {
   let thread = view::Card {
@@ -32,7 +32,13 @@ fn model(cards: Vec<Card>, rows: u16) -> Model {
   let told =
     Told { name: "mac".to_owned(), login: "ada".to_owned(), heard: 0, cards, link: Link::Listed };
   let folder = PathBuf::from("/home/ada/furb");
-  let options = Options { folder, kept: PathBuf::new(), zone: TimeZone::UTC, clock: || 0 };
+  let options = Options {
+    folder,
+    kept: PathBuf::new(),
+    zone: TimeZone::UTC,
+    clock: || 0,
+    system: System::MacOs,
+  };
   let mut model = Model::new(vec![told], (100, rows), Tokens::on(None), &options);
   model.settle();
   model

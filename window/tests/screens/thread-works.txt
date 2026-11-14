@@ -27,4 +27,4 @@
 
 ┃ ▌Reply to this thread
 ┃ ↳ where does the time of a resume go                 opus
-  ⠋ Working · esc esc stop                ctrl+n new thread
+  ⠋ Working · ⎋ ⎋ stop                        ⌃N new thread

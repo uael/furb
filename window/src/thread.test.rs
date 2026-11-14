@@ -6,7 +6,7 @@ use jiff::tz::TimeZone;
 
 use super::{Anchor, Item, Items, Opened, Row};
 use crate::{
-  Options,
+  Options, System,
   model::{Link, Model, Told},
   tokens::Tokens,
 };
@@ -65,6 +65,7 @@ fn opened(end: Page) -> Model {
     kept: PathBuf::new(),
     zone: TimeZone::UTC,
     clock: || 0,
+    system: System::MacOs,
   };
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);
   model.settle();

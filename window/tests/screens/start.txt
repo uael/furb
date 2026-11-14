@@ -1,6 +1,6 @@
  furb                                                          All projects ▾       studio offline
 
-  3 threads need you.                     alt+a goes to one    Needs you 3
+  3 threads need you.                        ⌥A goes to one    Needs you 3
 
   While no window was open                                      TUI scope for the new wi…  ◆ Input
   ◌ which key sends the queue · photowr…  works since 22:10     FU furb                       opus
@@ -8,9 +8,9 @@
                                                                 Debug stuck TUI after m…  ✗ Failed
   studio is offline: the daemon closed the connection           FU furb                       opus
 
-  ctrl+o    go to a project, a session or a machine             remove the gate from the en…  ● 5h
-  ctrl+p    commands                                            FU furb                       opus
-  ctrl+x ?  each key
+  ⌃O        go to a project, a session or a machine             remove the gate from the en…  ● 5h
+  ⌃P        commands                                            FU furb                       opus
+  ⌃X ?      each key
                                                                Working 2
 
                                                                 run the bench of rep…  as of 09:12
@@ -27,4 +27,4 @@
                                                                 Ground the branch o…  ‖ Paused 11h
 ┃ ▌Ask for a change, a review or an answer                      FU furb                       opus
 ┃ + new session in furb-try
-  /home/ada/src/furb-try                    ctrl+p commands    Resolved 1 ▸
+  /home/ada/src/furb-try                        ⌃P commands    Resolved 1 ▸

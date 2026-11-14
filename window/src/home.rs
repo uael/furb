@@ -8,6 +8,7 @@ use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
+  keys::Does,
   line::{self, Line, run, spread},
   list::{project, unheld},
   model::{Link, Model},
@@ -50,14 +51,15 @@ impl Model {
     let mut rows = vec![vec![run(" furb", t.style(Role::Title))], Vec::new()];
     if !self.settled.is_empty() {
       let needs = self.settled.iter().filter(|one| self.needs(&one.1, &one.2)).count();
+      let needed = self.key(Does::Needed);
       let (says, key) = match needs {
-        0 => ("Nothing needs you.".to_owned(), ""),
-        1 => ("1 thread needs you.".to_owned(), "alt+a goes to it"),
-        count => (format!("{count} threads need you."), "alt+a goes to one"),
+        0 => ("Nothing needs you.".to_owned(), String::new()),
+        1 => ("1 thread needs you.".to_owned(), format!("{needed} goes to it")),
+        count => (format!("{count} threads need you."), format!("{needed} goes to one")),
       };
       // The key shows where the row holds the two whole.
-      let key = if says.width() + 2 + key.width() <= room { key } else { "" };
-      rows.push(self.said(&says, prose, key));
+      let key = if says.width() + 2 + key.width() <= room { key } else { String::new() };
+      rows.push(self.said(&says, prose, &key));
       rows.push(Vec::new());
       let alone = self.alone();
       if !alone.is_empty() {
@@ -77,12 +79,12 @@ impl Model {
       }
     }
     let keys = [
-      ("ctrl+o", "go to a project, a session or a machine"),
-      ("ctrl+p", "commands"),
-      ("ctrl+x ?", "each key"),
+      (Does::GoTo, "go to a project, a session or a machine"),
+      (Does::Commands, "commands"),
+      (Does::Keys, "each key"),
     ];
-    let key = |(key, does): (&str, &str)| {
-      let line = vec![run(format!("  {key:<10}"), prose), run(does, muted)];
+    let key = |(key, does): (Does, &str)| {
+      let line = vec![run(format!("  {:<10}", self.key(key)), prose), run(does, muted)];
       spread(line, Vec::new(), room + 2, Style::new())
     };
     rows.extend(keys.map(key));
@@ -98,10 +100,14 @@ impl Model {
       "Ask for a change, a review or an answer",
       (vec![run(target, t.style(Role::Muted))], Vec::new()),
     );
-    let hint = if self.listed() { "ctrl+p commands" } else { "ctrl+x l the list" };
+    let hint = if self.listed() {
+      format!("{} commands", self.key(Does::Commands))
+    } else {
+      format!("{} the list", self.key(Does::List))
+    };
     let hints = match &self.fault {
-      Some(fault) => self.said(fault, Style::new().fg(t.danger), hint),
-      None => self.said(&self.folder_shown(), t.style(Role::Muted), hint),
+      Some(fault) => self.said(fault, Style::new().fg(t.danger), &hint),
+      None => self.said(&self.folder_shown(), t.style(Role::Muted), &hint),
     };
     [ask, under, hints]
   }

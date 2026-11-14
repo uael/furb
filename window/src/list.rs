@@ -8,6 +8,7 @@ use furb_host::protocol::Card;
 use opentui::style::{Color, Style};
 
 use crate::{
+  keys::Does,
   line::{Line, run, spread},
   model::{Key, LIST, Link, Model},
   tokens::{Loader, Role},
@@ -24,6 +25,8 @@ pub(crate) enum Row {
   Blank,
   /// A text of the list with no card.
   Says(&'static str, Role),
+  /// The key that does a thing, as a hint.
+  Key(Does),
   Head(Part),
   /// The row between two cards: the card above it, and the card under it.
   Gap(Option<usize>, Option<usize>),
@@ -40,7 +43,7 @@ impl Model {
     if self.settled.is_empty() && self.known() {
       let (first, more) = ("No thread yet in this project.", "Other projects and machines:");
       rows.extend([Row::Says(first, Role::Prose), Row::Blank, Row::Says(more, Role::Muted)]);
-      rows.push(Row::Says("ctrl+o", Role::Muted));
+      rows.push(Row::Key(Does::GoTo));
     }
     for part in [Part::NeedsYou, Part::Working, Part::Resting, Part::Resolved] {
       let mut cards = (0..self.settled.len()).filter(|at| self.settled[*at].0 == part).peekable();
@@ -80,6 +83,7 @@ impl Model {
       Row::Scope => self.scope(),
       Row::Blank => Vec::new(),
       Row::Says(text, role) => vec![run(format!("  {text}"), t.style(role))],
+      Row::Key(does) => vec![run(format!("  {}", self.key(does)), t.style(Role::Muted))],
       Row::Head(part) => self.head(part, pointed == Some(row)),
       Row::Gap(above, under) => self.gap(above, under),
       Row::Card(card, second) => {

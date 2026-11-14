@@ -16,6 +16,7 @@ mod feed;
 mod hand;
 mod home;
 mod kept;
+mod keys;
 mod line;
 mod link;
 mod list;
@@ -41,6 +42,7 @@ use opentui::{
 };
 
 pub use error::Error;
+pub use keys::System;
 pub use machine::Machine;
 use screen::Screen;
 
@@ -55,6 +57,8 @@ pub struct Options {
   pub zone: TimeZone,
   /// The second of the clock, from the epoch of unix.
   pub clock: fn() -> u64,
+  /// The system of the client, which says how a text of the window writes a key.
+  pub system: System,
 }
 
 impl Options {
@@ -64,7 +68,7 @@ impl Options {
     let folder = env::current_dir().map_err(Error::Folder)?;
     let kept = world::cache().ok_or(Error::NoCache)?.join("window").join("cards.json");
     let clock = || SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs());
-    Ok(Self { folder, kept, zone: TimeZone::system(), clock })
+    Ok(Self { folder, kept, zone: TimeZone::system(), clock, system: System::here() })
   }
 }
 

@@ -13,7 +13,15 @@ use furb_host::protocol::{Answer, Card, Frame, Verb};
 use jiff::{Timestamp, tz::TimeZone};
 use serde::{Deserialize, Serialize};
 
-use crate::{Options, code::Colors, link::Heard, list::Row, thread::Opened, tokens::Tokens};
+use crate::{
+  Options,
+  code::Colors,
+  keys::{self, Does, System},
+  link::Heard,
+  list::Row,
+  thread::Opened,
+  tokens::Tokens,
+};
 
 /// The width of the list of cards.
 pub(crate) const LIST: u16 = 38;
@@ -81,6 +89,8 @@ pub(crate) struct Model {
   /// The folder of the window, whose project a new session starts in.
   pub(crate) folder: PathBuf,
   pub(crate) zone: TimeZone,
+  /// The system of the client, which says how a text writes a key.
+  pub(crate) system: System,
   pub(crate) tokens: Tokens,
   /// Why the window could not keep its cards.
   pub(crate) fault: Option<String>,
@@ -112,6 +122,7 @@ impl Model {
       size,
       folder: options.folder.clone(),
       zone: options.zone.clone(),
+      system: options.system,
       tokens,
       fault: None,
       thread: None,
@@ -256,6 +267,11 @@ impl Model {
   /// Whether the list shows.
   pub(crate) fn listed(&self) -> bool {
     (self.size.0 >= BESIDE) != self.toggled
+  }
+
+  /// The key that does a thing, as the system of the client writes it.
+  pub(crate) fn key(&self, does: Does) -> String {
+    keys::drawn(does, self.system)
   }
 
   /// Whether a column of the window stands on the list.

@@ -13,8 +13,8 @@ use opentui::{
   App,
   input::KeyEventKind,
   prelude::{
-    Container, Edge, KeyCode, KeyEvent, Modifiers, MouseButton, MouseEvent, MouseEventKind, Span,
-    Text, TimerId, View, Widget, WrapMode,
+    Container, Edge, KeyEvent, MouseButton, MouseEvent, MouseEventKind, Span, Text, TimerId, View,
+    Widget, WrapMode,
   },
 };
 
@@ -22,6 +22,7 @@ use furb_host::protocol::Verb;
 
 use crate::{
   Machine, Options, Screen, kept,
+  keys::{self, Does},
   line::Line,
   link::{self, Asker, Heard},
   model::{Model, SIDE, Told},
@@ -263,39 +264,38 @@ fn ask(window: &Shared, verb: Option<Verb>) {
   opened.asked.insert(asker.ask(verb), before);
 }
 
-/// A key of the window: a chord with alt, a letter after the leader, or a key of the feed.
+/// A key of the window, from the one table of the keys.
 fn key(app: &App, window: &Shared, key: &KeyEvent) {
   if key.kind == KeyEventKind::Release {
     return;
   }
   let led = window.borrow_mut().led.take();
   let led = led.is_some_and(|at| app.now().saturating_duration_since(at) <= LEADER);
-  let alt = key.modifiers.contains(Modifiers::ALT);
-  let change: fn(&mut Model) = match (key.code, alt, led) {
-    (KeyCode::Char('x'), ..) if key.modifiers.contains(Modifiers::CTRL) => {
-      window.borrow_mut().led = Some(app.now());
-      return;
-    }
-    (KeyCode::Down, true, _) | (KeyCode::Char('j'), _, true) => |model| model.step(1),
-    (KeyCode::Up, true, _) | (KeyCode::Char('k'), _, true) => |model| model.step(-1),
-    (KeyCode::Char('a'), true, _) | (KeyCode::Char('a'), _, true) => Model::needed,
-    (KeyCode::Char('l'), _, true) => Model::toggle,
-    (KeyCode::Escape, ..) => Model::close,
-    (KeyCode::Enter, ..) => {
+  if keys::leads(key) {
+    window.borrow_mut().led = Some(app.now());
+    return;
+  }
+  let change: fn(&mut Model) = match keys::pressed(key, led) {
+    Some(Does::Next) => |model| model.step(1),
+    Some(Does::Previous) => |model| model.step(-1),
+    Some(Does::Needed) => Model::needed,
+    Some(Does::List) => Model::toggle,
+    Some(Does::Close) => Model::close,
+    Some(Does::Jump) => Model::jump,
+    Some(Does::Open) => {
       let verb = tell(app, window, Model::open_thread);
       return ask(window, verb);
     }
-    (KeyCode::PageUp | KeyCode::PageDown, ..) => {
+    Some(page @ (Does::PageUp | Does::PageDown)) => {
       // A page keeps two rows of the screen before it in view.
-      let up = key.code == KeyCode::PageUp;
       let verb = tell(app, window, |model| {
-        let page = isize::try_from(model.feed_room()).unwrap_or_default() - 2;
-        model.scroll_feed(if up { -page } else { page })
+        let rows = isize::try_from(model.feed_room()).unwrap_or_default() - 2;
+        model.scroll_feed(if page == Does::PageUp { -rows } else { rows })
       });
       return ask(window, verb);
     }
-    (KeyCode::End, ..) => Model::jump,
-    _ => return,
+    // The keys that the window names and that no screen of it does yet.
+    Some(Does::Stop | Does::GoTo | Does::Commands | Does::Keys | Does::NewThread) | None => return,
   };
   window.borrow_mut().touched = Some(app.now());
   tell(app, window, change);

@@ -8,7 +8,7 @@ use std::{
 };
 
 use furb_host::protocol::Verb;
-use furb_window::{Options, open};
+use furb_window::{Options, System, open};
 use jiff::tz::TimeZone;
 use opentui::testing::TestApp;
 
@@ -28,9 +28,17 @@ pub(crate) fn app() -> TestApp {
   TestApp::new(100, 30)
 }
 
+/// The options of a window of a test. The system of the client is macOS, so a capture shows the
+/// same keys on each runner.
 pub(crate) fn options(kept: &Path) -> Options {
   let folder = PathBuf::from("/home/ada/src/furb-try");
-  Options { folder, kept: kept.to_owned(), zone: TimeZone::UTC, clock: || CLOCK }
+  Options {
+    folder,
+    kept: kept.to_owned(),
+    zone: TimeZone::UTC,
+    clock: || CLOCK,
+    system: System::MacOs,
+  }
 }
 
 /// The frame of a window once it shows a text.

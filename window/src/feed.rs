@@ -12,6 +12,7 @@ use opentui::style::{Color, Style};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::{
+  keys::Does,
   line::{Line, run, spread, wrapped},
   list::project,
   model::Model,
@@ -327,13 +328,14 @@ impl Feed<'_> {
         .map(|age| format!(" {age}"))
         .unwrap_or_default();
       let working = run(format!("    Working{age}"), Style::new().fg(self.model.tokens.accent));
-      (vec![working, run(" · esc esc stop", muted)], Some((2, Loader::Model)))
+      let stop = format!(" · {} stop", self.model.key(Does::Stop));
+      (vec![working, run(stop, muted)], Some((2, Loader::Model)))
     } else {
       (vec![run(format!("  {}", self.model.folder_shown()), muted)], None)
     };
     let hints = spread(
       state,
-      vec![run("ctrl+n new thread", muted)],
+      vec![run(format!("{} new thread", self.model.key(Does::NewThread)), muted)],
       self.wide.saturating_sub(2),
       Style::new(),
     );
