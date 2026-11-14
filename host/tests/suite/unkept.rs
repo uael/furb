@@ -188,9 +188,12 @@ mod unix {
     unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) };
     let full = size(&at);
     limited(full);
-    let word = format!("for i in range({}):\n  chance()", 5 * DRAWS);
-    let made = life.send(Command::Rung { word, on: None }).await;
-    assert!(matches!(made, Ok(Reply::Act(_))), "the word did not run: {made:?}");
+    // Five words of the draws, so no step of a word nears the bound of a turn on a slow machine.
+    for _ in 0..5 {
+      let word = format!("for i in range({DRAWS}):\n  chance()");
+      let made = life.send(Command::Rung { word, on: None }).await;
+      assert!(matches!(made, Ok(Reply::Act(_))), "the word did not run: {made:?}");
+    }
     let paused = until(&mut events, notice("pauses its work")).await;
     let Event::Notice(told) = &*paused.last().expect("the pause is told").1 else { unreachable!() };
     assert!(told.contains(&at.display().to_string()), "the notice names the folder: {told}");
