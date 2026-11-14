@@ -252,7 +252,7 @@ impl Peer {
       "thinks"
     } else if message.contains(LONG) {
       "runs"
-    } else if message.contains(ASKS) {
+    } else if message.contains(ASKS) || QUESTIONS.iter().any(|one| message.contains(one.0)) {
       "asks"
     } else {
       "resolved"
@@ -302,6 +302,38 @@ pub(crate) fn aged(life: &str, at: u64, before: u64) {
 pub(crate) const WORKS: &str = "(the model works on it)";
 pub(crate) const ASKS: &str = "(the model asks)";
 
+/// The words of a message of a test that make the model ask the operator, each with the word that
+/// asks him: a choice of a Literal, a truth, a whole number, two questions at once, values to
+/// tick, and a notice, which asks nothing. Each word closes its thread with what it was told.
+pub(crate) const CHOOSES: &str = "(the model asks a choice)";
+pub(crate) const CONFIRMS: &str = "(the model asks yes or no)";
+pub(crate) const COUNTS: &str = "(the model asks a number)";
+pub(crate) const TWICE: &str = "(the model asks twice)";
+pub(crate) const TICKS: &str = "(the model asks ticks)";
+pub(crate) const TELLS: &str = "(the model tells)";
+const QUESTIONS: [(&str, &str); 5] = [
+  (
+    CHOOSES,
+    "side = await prompt(Literal['right', 'left'], 'Where does the list of cards stand?', to=OPERATOR)\nclose(side)",
+  ),
+  (CONFIRMS, "sure = await prompt(bool, 'Is the bar orange?', to=OPERATOR)\nclose(str(sure))"),
+  (
+    COUNTS,
+    "rows = await prompt(int, 'How many rows does the form take?', to=OPERATOR)\nclose(str(rows))",
+  ),
+  (
+    TWICE,
+    "one = prompt(bool, 'Does the head count the questions?', to=OPERATOR)\ntwo = prompt(str, 'What does the head say?', to=OPERATOR)\nclose(f'{await one} {await two}')",
+  ),
+  (
+    TICKS,
+    "keys = await prompt(list[Literal['up', 'down', 'tab']], 'Which keys does the form take?', to=OPERATOR)\nclose(' '.join(keys))",
+  ),
+];
+
+/// What the model of a test says once it read the refusal of a question.
+pub(crate) const READ: &str = "The model read the refusal.";
+
 /// The words of a message of a test that make the model think and write a word that it never
 /// ends, write a long word that waits, answer with prose, or write a word that fails once.
 pub(crate) const THINKS: &str = "(the model thinks)";
@@ -347,7 +379,16 @@ fn scripted(at: &Path, claude: &Path) -> Opening {
       let asks = "await prompt(str, 'Which key sends the queue?', to=OPERATOR)\nclose(None)";
       let fails =
         "x = 1\nraise ValueError('a maximum of 4 blocks with cache_control may be provided')";
-      let word = if request.contains(ASKS) {
+      let question = QUESTIONS.iter().find(|one| request.contains(one.0)).map(|one| one.1);
+      let read = format!("close({READ:?})");
+      let told = "await prompt(None, 'The bench ran.', to=OPERATOR)\nclose(None)";
+      let word = if request.contains("refused the question") {
+        &read
+      } else if let Some(question) = question {
+        question
+      } else if request.contains(TELLS) {
+        told
+      } else if request.contains(ASKS) {
         asks
       } else if request.contains(LONG) {
         WORD

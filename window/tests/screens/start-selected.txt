@@ -27,4 +27,4 @@
 
 ┃ Reply to this thread                                         Resolved 1 ▾
   This computer   furb ▾               opus/high   ○ Python
-  ~/src/furb-try                              ⌃N new thread     ✓ which fold reads the whole…   2d
+  ~/src/furb-try      ◆ 1 other thread asks   ⌃N new thread     ✓ which fold reads the whole…   2d

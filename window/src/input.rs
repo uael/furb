@@ -63,12 +63,14 @@ pub(crate) struct Draft {
   pub(crate) python: bool,
 }
 
-/// What a request of the window asked of a daemon: the open of a life, a message, or a stop.
+/// What a request of the window asked of a daemon: the open of a life, a message, a stop, or the
+/// answer to a question.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Asked {
   Open,
   Say,
   Stop,
+  Answer,
 }
 
 /// A message of the operator that the thread shows before the daemon tells it: its text, and the
@@ -88,14 +90,16 @@ pub(crate) struct Picker {
 }
 
 /// The box of the text of the input, which the editor of the window covers: its column, its row,
-/// its columns and its rows, and the text that it shows while it is empty.
+/// its columns and its rows, the text that it shows while it is empty, and whether it shows: a
+/// form shows it only on the row of the words of the operator, or for a line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Area {
   pub(crate) x: u16,
   pub(crate) y: u16,
   pub(crate) width: u16,
   pub(crate) height: u16,
-  pub(crate) placeholder: &'static str,
+  pub(crate) placeholder: String,
+  pub(crate) shown: bool,
 }
 
 impl Model {
@@ -269,7 +273,7 @@ impl Model {
   }
 
   /// How many rows the text of the input takes, as the editor wraps it at its columns.
-  fn grown(&self) -> usize {
+  pub(crate) fn grown(&self) -> usize {
     let room = self.wide().saturating_sub(4).max(1);
     let rows = self.draft.text.split('\n').map(|line| line.width().div_ceil(room).max(1)).sum();
     usize::clamp(rows, 1, GROWS)
@@ -277,31 +281,49 @@ impl Model {
 
   /// How many rows the input, the launcher and the hints take at the bottom of the left side.
   pub(crate) fn input_rows(&self) -> usize {
-    self.grown() + 2
+    self.input().len()
   }
 
-  /// The box of the text of the input.
+  /// The box of the text of the input: over its bands, or over the row of a form where the
+  /// operator writes.
   pub(crate) fn area(&self) -> Area {
     let opens = self.thread.as_ref().is_some_and(|one| self.opens(one));
-    let placeholder = match self.target() {
-      _ if self.draft.python => "A word of Python to run",
-      Target::Thread(_) if opens => "Write while it opens. Your message goes when it is open.",
-      Target::Thread(_) => "Reply to this thread",
-      Target::Session(..) => "Ask in a new thread",
-      Target::New(_) => "Ask for a change, a review or an answer",
+    let top = usize::from(self.size.1).saturating_sub(self.input_rows());
+    let (x, row, height, placeholder) = match (self.form(), self.form_rows(self.grown()).1) {
+      (Some(_), None) => (2, 0, 1, String::new()),
+      (Some((_, question)), Some(at)) if question.offers_line() => {
+        let hint = question.hint();
+        let says = if hint.is_empty() { "Your answer".to_owned() } else { hint };
+        (2, at, self.grown(), format!("Write {says}"))
+      }
+      (Some(_), Some(at)) => (4, at, 1, "type another answer".to_owned()),
+      (None, _) => {
+        let says = match self.target() {
+          _ if self.draft.python => "A word of Python to run",
+          Target::Thread(_) if opens => "Write while it opens. Your message goes when it is open.",
+          Target::Thread(_) => "Reply to this thread",
+          Target::Session(..) => "Ask in a new thread",
+          Target::New(_) => "Ask for a change, a review or an answer",
+        };
+        let waits = usize::from(self.waiting_row().is_some());
+        (2, waits, self.grown(), says.to_owned())
+      }
     };
-    let y = usize::from(self.size.1).saturating_sub(self.input_rows());
+    let shown = self.form().is_none() || self.form_rows(self.grown()).1.is_some();
+    let number = |one: usize| u16::try_from(one).unwrap_or_default();
     Area {
-      x: 2,
-      y: u16::try_from(y).unwrap_or_default(),
-      width: u16::try_from(self.wide().saturating_sub(4)).unwrap_or_default(),
-      height: u16::try_from(self.grown()).unwrap_or_default(),
+      x: number(x),
+      y: number(top + row),
+      width: number(self.wide().saturating_sub(x + 2)),
+      height: number(height),
       placeholder,
+      shown,
     }
   }
 
-  /// The rows of the input: a band for each row of its text, which the editor covers, with a bar
-  /// in the color of its target, then the launcher and the hints.
+  /// The rows of the input: the form of a question of the open thread, or a band for each row of
+  /// its text, which the editor covers, with a bar in the color of its target, under the row that
+  /// says that a question waits; then the launcher and the hints.
   pub(crate) fn input(&self) -> Vec<Row> {
     let t = &self.tokens;
     let bar = match self.target() {
@@ -313,7 +335,10 @@ impl Model {
       let fill = run(" ".repeat(self.wide().saturating_sub(1)), raised);
       Row::of(vec![run("┃", raised.fg(bar)), fill])
     };
-    let mut rows: Vec<Row> = (0..self.grown()).map(band).collect();
+    let mut rows = match self.form() {
+      Some(_) => self.form_rows(self.grown()).0,
+      None => self.waiting_row().into_iter().chain((0..self.grown()).map(band)).collect(),
+    };
     rows.push(self.launcher());
     rows.push(self.hints());
     rows
@@ -404,9 +429,10 @@ impl Model {
     ours.find_map(|card| card.thread.model.as_deref()).map(short)
   }
 
-  /// The row of hints: why the daemon refused the last message, else the state of the open thread
-  /// while it works, with the key that stops it, else the folder of the window; and at its right
-  /// the key that turns the input.
+  /// The row of hints: why the daemon refused the last message, else the keys of a form, else the
+  /// state of the open thread while it works, with the key that stops it, else the folder of the
+  /// window; and at its right how many other threads ask the operator, and the key that turns the
+  /// input, or that refuses the question of a form.
   fn hints(&self) -> Row {
     let t = &self.tokens;
     let muted = t.style(Role::Muted);
@@ -417,6 +443,7 @@ impl Model {
     let shown = self.thread.as_ref().and_then(|one| one.fault.as_ref());
     let (left, loader) = match self.fault.as_ref().filter(|one| Some(*one) != shown) {
       Some(fault) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], None),
+      None if self.form().is_some() => (self.form_hints().unwrap_or_default(), None),
       None if works => {
         let age = card.and_then(|card| self.age(card.since)).map(|age| format!(" {age}"));
         let working = format!("    Working{}", age.unwrap_or_default());
@@ -429,16 +456,24 @@ impl Model {
       None => (vec![run(format!("  {}", self.folder_shown()), muted)], None),
     };
     let (does, says) = match (&self.aim, &self.thread) {
+      _ if self.form().is_some() => (Does::Empty, "refuse"),
       (None, Some(_)) if self.leaves() => (Does::Close, "back"),
       (None, Some(_)) => (Does::NewThread, "new thread"),
       (Some(_), Some(_)) => (Does::NewThread, "back to the thread"),
       (_, None) if self.listed() => (Does::Commands, "commands"),
       (_, None) => (Does::List, "the list"),
     };
-    let right = vec![run(format!("{} {says}", self.key(does)), muted)];
+    let key = vec![run(format!("{} {says}", self.key(does)), muted)];
+    let room = self.wide().saturating_sub(2).saturating_sub(width(&left) + width(&key) + 2);
+    let others = self.others_ask(room);
+    let right: Line = others.iter().chain(&key).cloned().collect();
     let line = spread(left, right.clone(), self.wide().saturating_sub(2), Style::new());
     let end = width(&line);
-    hot.push((end - width(&right)..end, Some(Click::Key(does))));
+    let start = end - width(&right);
+    if !others.is_empty() {
+      hot.push((start..start + width(&others) - 3, Some(Click::Key(Does::Needed))));
+    }
+    hot.push((end - width(&key)..end, Some(Click::Key(does))));
     Row { hot, loader, ..Row::of(line) }
   }
 

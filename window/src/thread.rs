@@ -25,6 +25,7 @@ use crate::{
   line::Line,
   list::hash,
   model::{Key, Model},
+  question::Form,
   tokens::Loader,
 };
 
@@ -55,6 +56,8 @@ pub(crate) struct Opened {
   pub(crate) pending: Vec<Pending>,
   /// When the window opened the thread, on the clock of its loaders.
   pub(crate) since: Duration,
+  /// The form of the question of the thread that the input answers.
+  pub(crate) form: Option<Form>,
 }
 
 /// A row of the feed as a place that holds when rows come above it: a count of rows from the
@@ -72,13 +75,15 @@ pub(crate) enum Fold {
   Thought(String),
 }
 
-/// What a click on a row does: it opens or folds a part of the feed, it does what a key does, or
-/// it picks an entry of the picker of the sessions.
+/// What a click on a row does: it opens or folds a part of the feed, it does what a key does, it
+/// picks an entry of the picker of the sessions, or it answers a question with a value of its
+/// form.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Click {
   Fold(Fold),
   Key(Does),
   Pick(usize),
+  Answer(usize),
 }
 
 /// The columns of a row that go bright under the pointer, and what a click there does.
@@ -442,6 +447,7 @@ impl Model {
         None
       }
       Click::Key(does) => Some(does),
+      Click::Answer(at) => self.choose(at),
     }
   }
 

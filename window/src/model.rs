@@ -166,14 +166,7 @@ impl Model {
     if let Ok(Frame::Reply { id, .. } | Frame::Refused { id: Some(id), .. }) = &heard
       && let Some(asked) = self.asked.remove(&(at, *id))
     {
-      let id = *id;
-      match (asked, heard) {
-        (Asked::Open, Ok(Frame::Reply { .. })) => self.answered_open(at, id),
-        (Asked::Open, Ok(Frame::Refused { why, .. })) => self.restore = self.unopened(at, id, why),
-        (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
-        (_, Ok(Frame::Refused { why, .. })) => self.restore = self.refused(asked, why),
-        _ => {}
-      }
+      self.answered_input(at, (*id, asked), heard);
       return true;
     }
     match heard {
@@ -223,6 +216,19 @@ impl Model {
       }
     }
     true
+  }
+
+  /// The answer of a daemon to a request of the input, with its id and what it asked.
+  fn answered_input(&mut self, at: usize, (id, asked): (u64, Asked), heard: Heard) {
+    match (asked, heard) {
+      (Asked::Open, Ok(Frame::Reply { .. })) => self.answered_open(at, id),
+      (Asked::Open, Ok(Frame::Refused { why, .. })) => self.restore = self.unopened(at, id, why),
+      (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
+      (Asked::Answer, Ok(Frame::Refused { why, .. })) => self.unanswered(why),
+      (Asked::Answer, _) => {}
+      (_, Ok(Frame::Refused { why, .. })) => self.restore = self.refused(asked, why),
+      _ => {}
+    }
   }
 
   /// The list settled: each card of each machine at its place.

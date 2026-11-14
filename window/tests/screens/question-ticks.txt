@@ -1,0 +1,30 @@
+ furb · which keys does the form take           [ Resolve ]    All projects ▾         this machine
+┃
+┃ which keys does the form take                                Needs you 1
+┃ (the model asks ticks)                                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                              ▌which keys does the form…  ◆ Input▌
+                                                               ▌FU furb                       opus▌
+       opus/high                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    ◆  keys = await prompt(list[Literal['up', 'down',…+56
+    2  close(' '.join(keys))
+    …
+
+  ◆ Which keys does the form take?
+
+
+
+
+
+
+
+
+
+┃ ◆ opus/high asks
+┃ Which keys does the form take?
+┃
+┃   [x] up
+┃   [ ] down
+┃ › [x] tab
+┃   type another answer
+  This computer   furb ▾               opus/high   ○ Python
+  ↑↓ choose · Space tick · ⏎ answer               ⌃C refuse

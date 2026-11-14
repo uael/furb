@@ -1,0 +1,30 @@
+ furb · how long does an open take              [ Resolve ]    All projects ▾         this machine
+
+  The open takes 329 s. Two stages hold most of it: 181 s      Needs you 1
+  to send each entry to the ears of the host, and 104 s in     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  the boot.                                                    ▌how long does an open…     ◆ Input▌
+                                                               ▌FU furb                       opus▌
+  • seed reads each chain once                                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+  • the image skips the boot
+
+      python
+   1  open = boot + seed
+
+  See the trace.
+
+┃
+┃ and the side
+┃ (the model asks a choice)
+┃
+
+       opus/high
+    ◆  side = await prompt(Literal['right', 'left'], '…+50
+    4  close(side)
+    …
+
+  ◆ Where does the list of cards stand?
+
+  ◆ A question waits. It shows when the input is empty.
+┃ the bar is too wide
+  This computer   furb ▾               opus/high   ○ Python
+  ~/src/furb-try                              ⌃N new thread

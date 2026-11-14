@@ -30,6 +30,7 @@ use crate::{
   line::Line,
   link::{self, Asker, Heard},
   model::{Model, SIDE, Told},
+  question::Keyed,
   tokens::{Role, Tokens},
 };
 
@@ -184,11 +185,7 @@ fn drawn(app: &App, model: Model, area: &Textarea) -> Screen<Model> {
       home.set_text(written(lines));
     },
   );
-  let area = area.clone();
-  screen.part(Model::area, move |shown| {
-    let area = area.position(Edge::Top, shown.y).position(Edge::Left, shown.x);
-    area.width(shown.width).height(shown.height).placeholder(shown.placeholder);
-  });
+  placed(app, &mut screen, area);
   // A loader is a cell of its own, so its step draws no other cell.
   let cells: Vec<Text> =
     (0..LOADERS).map(|_| Text::new(app, "").absolute().visible(false)).collect();
@@ -222,11 +219,29 @@ fn drawn(app: &App, model: Model, area: &Textarea) -> Screen<Model> {
   screen
 }
 
+/// The editor of the input on its box. A hidden editor loses the focus, which it takes back when it
+/// shows again.
+fn placed(app: &App, screen: &mut Screen<Model>, area: &Textarea) {
+  let (area, focus) = (area.clone(), app.clone());
+  screen.part(Model::area, move |shown| {
+    let area = area.position(Edge::Top, shown.y).position(Edge::Left, shown.x);
+    let area = area.width(shown.width).height(shown.height).placeholder(&shown.placeholder);
+    if area.visible(shown.shown).is_visible() {
+      focus.focus(&area);
+    }
+  });
+}
+
 /// A change of the model at this moment of the two clocks, which each part then shows. The loaders
 /// move on one timer, which runs only while a mark moves.
 fn tell<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> T {
   let given = told(app, window, change);
   pump(window);
+  let back = window.borrow_mut().screen.model.restore.take();
+  if let Some(text) = back {
+    window.borrow().area.set_text(text);
+    colored(window);
+  }
   given
 }
 
@@ -236,7 +251,9 @@ fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
   let (now, moved) = ((held.clock)(), app.now().saturating_duration_since(held.born));
   let given = held.screen.tell(|model| {
     (model.now, model.moved) = (now, moved);
-    change(model)
+    let given = change(model);
+    model.questioned();
+    given
   });
   match (held.screen.model.moves(), held.moves) {
     (true, None) => {
@@ -261,11 +278,6 @@ fn tick(app: &App, window: &Shared) {
 /// away.
 fn hear(app: &App, window: &Shared, at: usize, heard: Heard) {
   let changed = tell(app, window, |model| model.hear(at, heard));
-  let back = window.borrow_mut().screen.model.restore.take();
-  if let Some(text) = back {
-    window.borrow().area.set_text(text);
-    colored(window);
-  }
   if changed {
     rest(app, window);
     keep(app, window);
@@ -356,7 +368,15 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   if window.borrow().screen.model.picker.is_some() && picking(app, window, key) {
     return true;
   }
-  match keys::pressed(key, led) {
+  let does = keys::pressed(key, led);
+  let typed =
+    key.text().is_some() && (key.modifiers.is_empty() || key.modifiers == Modifiers::SHIFT);
+  if answered(app, window, does, typed) {
+    return true;
+  }
+  match does {
+    // The keys of a form, which the editor hears when no form takes them.
+    Some(Does::Up | Does::Down | Does::Tick | Does::NextQuestion) => false,
     Some(Does::Leave) if !window.borrow().area.text().is_empty() => false,
     Some(does) => {
       act(app, window, does);
@@ -395,6 +415,34 @@ fn picking(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   })
 }
 
+/// A key or a click while a form of a question shows: whether the form took it. An answer goes to
+/// its machine, and waits there for its answer.
+fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool {
+  // A key with no form tells the model nothing, so it draws no part again.
+  if window.borrow().screen.model.form().is_none() {
+    return false;
+  }
+  match tell(app, window, |model| model.keyed(does, typed)) {
+    Keyed::Passed => false,
+    Keyed::Taken => true,
+    Keyed::Empties => {
+      window.borrow().area.set_text("");
+      tell(app, window, |model| model.draft.text.clear());
+      true
+    }
+    Keyed::Says(at, verb) => {
+      let mut held = window.borrow_mut();
+      let Window { askers, screen, .. } = &mut *held;
+      if let Some(asker) = askers.get_mut(at) {
+        screen.model.asked.insert((at, asker.ask(verb)), Asked::Answer);
+      }
+      drop(held);
+      tell(app, window, |_| ());
+      true
+    }
+  }
+}
+
 /// What a key does, which a click on its text does too.
 fn act(app: &App, window: &Shared, does: Does) {
   let change: fn(&mut Model) = match does {
@@ -422,8 +470,15 @@ fn act(app: &App, window: &Shared, does: Does) {
       });
       return older(window, verb);
     }
-    // The keys that the window names and that no screen of it does yet.
-    Does::GoTo | Does::Commands | Does::Keys => return,
+    // The keys that the window names and that no screen of it does yet, and the keys of a form,
+    // which a form took when one shows.
+    Does::GoTo
+    | Does::Commands
+    | Does::Keys
+    | Does::Up
+    | Does::Down
+    | Does::Tick
+    | Does::NextQuestion => return,
   };
   if matches!(does, Does::Next | Does::Previous | Does::Needed) {
     window.borrow_mut().touched = Some(app.now());
@@ -537,7 +592,9 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
   if on {
     window.borrow_mut().touched = Some(app.now());
   }
-  if let Some(does) = does {
+  if let Some(does) = does
+    && !answered(app, window, Some(does), false)
+  {
     act(app, window, does);
   }
 }

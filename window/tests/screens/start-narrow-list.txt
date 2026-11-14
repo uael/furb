@@ -27,4 +27,4 @@
 
 ┃ Reply to this thread                     Resolved 1 ▾
   This computer   furb ▾       ○ Python
-  ~/src/furb-try          ⌃N new thread     ✓ which fold reads the whole…   2d
+  ~/src/furb-try    ◆ 1   ⌃N new thread     ✓ which fold reads the whole…   2d

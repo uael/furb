@@ -15,6 +15,7 @@ use crate::{
   list::project,
   model::Model,
   prose,
+  question::closed,
   thread::{Click, Fold, Item, Opened, Row, width},
   tokens::{Loader, Role},
 };
@@ -270,9 +271,25 @@ impl Feed<'_> {
     vec![Row::clicked(line, Click::Fold(fold))]
   }
 
-  /// What an answer said, as markdown from the column of the text: a question opens with its mark.
+  /// What an answer said, as markdown from the column of the text. A question is one line with its
+  /// mark: its first line while it waits, since its form shows it whole, then what closed it.
   fn said(&self, said: &Said) -> Vec<Row> {
     let t = &self.model.tokens;
+    if let Saying::Question { answered, .. } = &said.kind {
+      let first = said.text.lines().find(|line| !line.trim().is_empty()).unwrap_or_default();
+      let (mark, text) = match answered {
+        None => (Style::new().fg(t.attention), self.style(Role::Prose)),
+        Some(_) => (self.style(Role::Muted), self.style(Role::Muted)),
+      };
+      let left = vec![run("  ◆ ", mark), run(self.model.homed(first), text)];
+      let login = &self.model.machines[self.opened.key.0].login;
+      let right =
+        answered.iter().map(|one| run(closed(one, login), self.style(Role::Muted))).collect();
+      return vec![
+        Row::of(spread(left, right, self.wide.saturating_sub(2), Style::new())),
+        Row::default(),
+      ];
+    }
     let lines = prose::lines(
       &self.model.homed(&said.text),
       self.wide.saturating_sub(4),
@@ -281,11 +298,7 @@ impl Feed<'_> {
     );
     let mut rows: Vec<Row> = lines
       .into_iter()
-      .enumerate()
-      .map(|(at, mut line)| {
-        if matches!(said.kind, Saying::Question { .. }) && at == 0 {
-          line.insert(0, run("◆ ", Style::new().fg(t.attention)));
-        }
+      .map(|mut line| {
         line.insert(0, run("  ", Style::new()));
         Row::of(line)
       })
@@ -387,7 +400,7 @@ pub(crate) fn timer(seconds: u64) -> String {
 }
 
 /// The model of a block as its head shows it: its name with no provider, and its effort.
-fn maker(maker: &Maker) -> String {
+pub(crate) fn maker(maker: &Maker) -> String {
   match maker {
     Maker::Model { model, effort } => {
       let name = model.rsplit(':').next().unwrap_or(model);

@@ -27,4 +27,4 @@
 
 ┃ Reply to this thread
   This computer   furb ▾                                  opus/high   ○ Python
-  ~/src/furb-try                                                 ⌃N new thread
+  ~/src/furb-try                         ◆ 1 other thread asks   ⌃N new thread

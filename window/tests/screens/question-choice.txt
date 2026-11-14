@@ -1,0 +1,30 @@
+ furb · where does the list stand               [ Resolve ]    All projects ▾         this machine
+┃
+┃ where does the list stand                                    Needs you 1
+┃ (the model asks a choice)                                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                              ▌where does the list stand  ◆ Input▌
+                                                               ▌FU furb                       opus▌
+       opus/high                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    ◆  side = await prompt(Literal['right', 'left'], '…+50
+    2  close(side)
+    …
+
+  ◆ Where does the list of cards stand?
+
+
+
+
+
+
+
+
+
+
+┃ ◆ opus/high asks
+┃ Where does the list of cards stand?
+┃
+┃ › right
+┃   left
+┃   type another answer
+  This computer   furb ▾               opus/high   ○ Python
+  ↑↓ choose · ⏎ answer                            ⌃C refuse

@@ -41,6 +41,10 @@ pub(crate) enum Does {
   GoTo,
   Commands,
   Keys,
+  Up,
+  Down,
+  Tick,
+  NextQuestion,
 }
 
 /// One stroke of a key: whether it holds control and alt, and its key.
@@ -93,6 +97,11 @@ const TABLE: &[(Does, &[&[Stroke]])] = &[
   (Does::GoTo, &[&[ctrl('o')]]),
   (Does::Commands, &[&[ctrl('p')]]),
   (Does::Keys, &[&led('?')]),
+  // The keys of the form of a question, which the editor of the input hears when no form shows.
+  (Does::Up, &[&[plain(KeyCode::Up)]]),
+  (Does::Down, &[&[plain(KeyCode::Down)]]),
+  (Does::Tick, &[&[plain(KeyCode::Char(' '))]]),
+  (Does::NextQuestion, &[&[plain(KeyCode::Tab)]]),
 ];
 
 impl Stroke {
@@ -106,6 +115,7 @@ impl Stroke {
   fn drawn(self, system: System) -> String {
     let mac = system == System::MacOs;
     let name = match (self.code, mac) {
+      (KeyCode::Char(' '), _) => "Space".to_owned(),
       (KeyCode::Char(letter), _) => letter.to_uppercase().to_string(),
       (KeyCode::Up, _) => "↑".to_owned(),
       (KeyCode::Down, _) => "↓".to_owned(),
@@ -114,11 +124,13 @@ impl Stroke {
       (KeyCode::PageUp, true) => "⇞".to_owned(),
       (KeyCode::PageDown, true) => "⇟".to_owned(),
       (KeyCode::End, true) => "↘".to_owned(),
+      (KeyCode::Tab, true) => "⇥".to_owned(),
       (KeyCode::Escape, false) => "Esc".to_owned(),
       (KeyCode::Enter, false) => "Enter".to_owned(),
       (KeyCode::PageUp, false) => "PgUp".to_owned(),
       (KeyCode::PageDown, false) => "PgDn".to_owned(),
       (KeyCode::End, false) => "End".to_owned(),
+      (KeyCode::Tab, false) => "Tab".to_owned(),
       (code, _) => format!("{code:?}"),
     };
     let held = [(self.ctrl, "⌃", "Ctrl+"), (self.alt, "⌥", "Alt+")];
