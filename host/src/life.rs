@@ -571,12 +571,14 @@ impl Life {
     self.due = Instant::now() + CARDS;
   }
 
-  /// The index of the threads of the record written from the cards of the life, at its end.
+  /// The index of the threads of the record written from the cards of the life, at its end, unless
+  /// the index of the record says them already.
   fn indexed(&mut self) {
     self.stale = true;
     self.carded();
     let told = self.cards.borrow().clone();
     if let (Some(record), Some(session)) = (&self.record, told)
+      && cards::kept(Path::new(record)).as_ref() != Some(&*session)
       && let Err(no) = cards::keep(Path::new(record), &session)
     {
       self.put(Event::Notice(format!("The index of the threads of {record} is not written: {no}")));
@@ -1235,6 +1237,9 @@ async fn driven(
 /// life keeps once the log took each event that the ears told.
 fn ended(engine: Engine, life: &mut Life) -> Option<Fault> {
   life.told(None);
+  // The index stands before the image: a daemon that ends between them leaves a record whose
+  // next daemon reads its cards from the index, where none would fold the whole record for them.
+  life.indexed();
   let record = life.record.as_deref().map(Path::new);
   let part = Part { build: BUILD.into(), kept: &life.kept };
   rebirth::ended(engine, record, &part)

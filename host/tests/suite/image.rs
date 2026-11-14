@@ -264,6 +264,24 @@ async fn a_life_ends_with_an_image_that_holds_each_state_of_an_act_once() {
   assert_eq!(states.len(), each.len(), "the log and the acts of the image share each state");
 }
 
+#[tokio::test]
+async fn a_life_writes_the_index_of_its_threads_before_its_image() {
+  let at = place("image-index");
+  let life = Life::spawn(answering(&at, Some("close('ok')"))).expect("the life");
+  let mut events = Box::pin(life.events(0));
+  let prompt =
+    Command::Prompt { shape: "str".to_owned(), message: "Say ok.".to_owned(), to: None, on: None };
+  let id = made(&life, prompt).await;
+  until(&mut events, done(&id)).await;
+  ended(life).await;
+  let written = |name: &str| {
+    let file = fs::metadata(at.join(name)).expect(name);
+    file.modified().expect("the time of a write")
+  };
+  let (index, image) = (written("record.jsonl.threads.json"), written("record.jsonl.image"));
+  assert!(index < image, "a daemon that ends after the image leaves the index of its threads");
+}
+
 /// The key of an image, and the place of the part of the host in it.
 fn host_part(image: &[u8]) -> (Value, usize) {
   let end = image.iter().position(|byte| *byte == b'\n').expect("the line of the key");

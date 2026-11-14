@@ -251,9 +251,9 @@ it is not given. The daemon answers requests in any order.
   that is `gone`. A life tells its cards once in 250 ms at most, whatever the count of its events.
 
   The cards of a record at rest come from the index of its threads, the file `<record>.threads.json` beside it,
-  which the life writes at its end. The index is a cache: it names the tip of the record that it was made from,
-  which is the length of the record and the sha256 of its last 4096 bytes, and the daemon drops an index whose tip
-  is not the tip of the record. So the list reads the index and the end of each record, and never the past of a
+  which the life writes at its end, before its image. The index is a cache: it names the tip of the record that it
+  was made from, which is the length of the record and the sha256 of its last 4096 bytes, and the daemon drops an
+  index whose tip is not the tip of the record. So the list reads the index and the end of each record, and never the past of a
   record. A record with no index that agrees with it gives one card with an empty `prompt`, under the name of its
   file. The daemon then makes its index from a fold of the record with no life, one record at a time and off the
   path of each verb, and pushes the cards in a frame `cards` once the index stands. A record tells no time, so each
