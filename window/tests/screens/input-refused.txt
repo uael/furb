@@ -2,7 +2,7 @@
 
   Nothing needs you.                                           Resting 1
 
-  ⌃O          go to a project or a session                      2026-01-01T09-12-00-0000       now
+  ⌃O          go to a project or a session                      2026-01-01T09-12-00-0000      now
   ⌃P          commands                                          BR broken
   ⌃X ?        each key
 

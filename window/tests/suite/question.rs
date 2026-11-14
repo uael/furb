@@ -40,7 +40,7 @@ fn opened(message: &str, shown: &str) -> (TestApp, Daemon, Peer, String, String)
   let prompt = peer.said(&life, message);
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
   let title = message.lines().next().unwrap();
-  app.click(80, row(&app, &title[..title.len().min(20)]));
+  app.click(80, row(&app, &title[..title.len().min(19)]));
   shows(&app, shown);
   (app, daemon, peer, life, prompt)
 }
@@ -221,14 +221,14 @@ fn a_question_of_another_thread_marks_its_card_and_shows_no_form() {
   let asks = peer.opened(&sessions.join("asks.jsonl"), true);
   peer.said(&asks, &format!("which key sends the queue\n{ASKS}"));
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
-  app.click(80, row(&app, "how long does an ope"));
+  app.click(80, row(&app, "how long does an op"));
   shows(&app, "Two stages hold most");
   // He reads the end of the open thread, so it rests with the resolved ones.
   app.advance(AWAY);
   shows(&app, "Resolved 1");
   let frame = shows(&app, "◆ 1 other thread asks");
   assert!(
-    frame.contains("Needs you") && frame.contains("which key sends the queue  ◆ Input"),
+    frame.contains("Needs you") && frame.contains("which key sends the…      ◆ Input"),
     "{frame}"
   );
   assert!(formless(&app) && frame.contains("┃ A reply opens this thread again"), "{frame}");

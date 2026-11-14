@@ -27,7 +27,7 @@ fn opened(message: &str, shown: &str) -> (TestApp, Daemon, Peer) {
   peer.said(&life, message);
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
   let title = message.lines().next().unwrap();
-  app.click(80, row(&app, &title[..20]));
+  app.click(80, row(&app, &title[..19]));
   shows(&app, shown);
   (app, daemon, peer)
 }
@@ -174,7 +174,7 @@ fn an_older_page_keeps_the_rows_that_the_operator_reads() {
     assert!(matches!(peer.ask(verb), Answer::Act(_)));
   }
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
-  app.click(80, row(&app, "ground the branch, m"));
+  app.click(80, row(&app, "ground the branch,"));
   // The model answers the messages in their order: once the last has its answer, each has, so no
   // answer lands while the operator scrolls.
   shows(&app, "24  close(None)");
