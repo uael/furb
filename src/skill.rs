@@ -887,6 +887,17 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
               tell(&mut co, refused);
             }
             refused.clear();
+            // A life born on a checkpoint holds the teach and the enables of its root in the turns
+            // that the checkpoint carries, which no journal says again: the ear reads them there, as
+            // a whole replay of the record hears them, and teaches nothing again.
+            if !*taught && teach.is_none() {
+              let (taught_root, enables) =
+                (rooted(&mut co, TEACH).await?, rooted(&mut co, ENABLE).await?);
+              if let Some(was) = reborn(&taught_root, &enables, chains) {
+                *enabled = was;
+                *taught = true;
+              }
+            }
             let new: Vec<Skill> =
               given.iter().filter(|one| !enabled.contains(one)).cloned().collect();
             if !*taught
@@ -1027,13 +1038,41 @@ fn tell(co: &mut Co, refused: &[String]) {
   }
 }
 
+/// The extensions that a root taught before, at its first teach, with the extensions that each
+/// chain has, or none when the root holds no teach. The teach and each enable after it give each
+/// chain every extension but those of the root alone, and the root has too each extension of the
+/// root alone that a later enable gave.
+fn reborn(
+  teach: &[Fact],
+  enables: &[Fact],
+  chains: &mut [(String, Vec<String>)],
+) -> Option<Vec<Skill>> {
+  let burst = teach.first()?.word(2).and_then(|one| one.as_int()).unwrap_or(0);
+  let all = enabled(enables);
+  let every: Vec<String> = all.iter().filter(|one| !one.root).map(|one| one.name.clone()).collect();
+  let later =
+    enables.iter().skip(usize::try_from(burst).unwrap_or(usize::MAX)).filter_map(Skill::of);
+  let root: Vec<String> = later.filter(|one| one.root).map(|one| one.name).collect();
+  for (chain, had) in chains.iter_mut() {
+    had.clone_from(&every);
+    if chain == ROOT {
+      had.extend(root.iter().filter(|one| !had.contains(one)).cloned().collect::<Vec<_>>());
+    }
+  }
+  Some(all)
+}
+
+/// The facts of a kind that the transcript of the root holds.
+pub(crate) async fn rooted(co: &mut Co, kind: &str) -> Result<Vec<Fact>, Fault> {
+  let of = [ROOT, kind].map(Object::string).to_vec();
+  let got = co.call("transcript", of, vec![]).await?;
+  Ok((0..).map_while(|at| entry(&got.as_ref(), at)).filter_map(Fact::of).collect())
+}
+
 /// Whether a fact of the root holds this note already: a life that opens again on its record
 /// replays that fact, so an open never makes the note again.
 async fn told(co: &mut Co, note: &str) -> Result<bool, Fault> {
-  let of = [ROOT, "tell"].map(Object::string).to_vec();
-  let got = co.call("transcript", of, vec![]).await?;
-  let facts = got.as_ref();
-  Ok((0..).map_while(|at| entry(&facts, at)).filter_map(|one| Fact::of(one)).any(|one| {
+  Ok(rooted(co, "tell").await?.iter().any(|one| {
     one
       .word(0)
       .and_then(|notes| entry(&notes, 0))
@@ -1075,8 +1114,7 @@ async fn doctrine(co: &mut Co) -> Result<Option<(String, String)>, Fault> {
 /// root then holds the
 /// fact setup, which the engine says as it crafts the setup, before this ear hears the stand.
 async fn bare(co: &mut Co) -> Result<bool, Fault> {
-  let of = [ROOT, "setup"].map(Object::string).to_vec();
-  Ok(entry(&co.call("transcript", of, vec![]).await?.as_ref(), 0).is_some())
+  Ok(!rooted(co, "setup").await?.is_empty())
 }
 
 /// A word played on a chain as a rung, unless it is empty.

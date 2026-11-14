@@ -18,9 +18,9 @@ use crate::{
   fact::Fact,
   skill::{
     CONFIG, DEFAULT, ENABLE, INTERFACE, MANIFEST, PROCESS, Places, Skill, WORD, copy, enabled,
-    frontmatter, imports_furb, load, manifested, manifests, shipped, turned_on, word,
+    frontmatter, imports_furb, load, manifested, manifests, rooted, shipped, turned_on, word,
   },
-  value::{Fault, Object, Text, entry},
+  value::{Fault, Text, entry},
   world::{
     config::{self, Layers},
     files::{self, read},
@@ -160,7 +160,7 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
       let project = project(&mut co).await?.unwrap_or_else(|| here.clone());
       let places = Places { config: config.clone(), home: env::home_dir() };
       let found = found(&here, &project, &places);
-      let runs = enables(&mut co).await?;
+      let runs = enabled(&rooted(&mut co, ENABLE).await?);
       let seen = Seen { chain: a.on().to_owned(), found, runs, places, project };
       let answer = match a.kind() {
         "read" if configured => configs(&seen, &asked),
@@ -341,15 +341,6 @@ async fn project(co: &mut Co) -> Result<Option<PathBuf>, Fault> {
   let got = co.call("standing", vec![], vec![]).await?;
   let named = entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(str::to_owned));
   Ok(named.and_then(|one| files::placed(Path::new(""), &one).ok()))
-}
-
-/// The extensions that the life runs, as the enable facts of the root say them.
-async fn enables(co: &mut Co) -> Result<Vec<Skill>, Fault> {
-  let of = [ROOT, ENABLE].map(Object::string).to_vec();
-  let got = co.call("transcript", of, vec![]).await?;
-  let facts: Vec<Fact> =
-    (0..).map_while(|at| entry(&got.as_ref(), at)).filter_map(Fact::of).collect();
-  Ok(enabled(&facts))
 }
 
 /// The word of a skill with code: the word that the life last enabled for it, or else the word of

@@ -814,6 +814,20 @@ fn imaged_elsewhere(at: &Path, open: impl Fn() -> (Engine, Vec<Object>)) -> Engi
   later
 }
 
+/// A life born on a checkpoint holds the teach and the enables of its root in the turns that the
+/// checkpoint carries, which no journal says again, so the ear of the extensions teaches nothing
+/// again at its first stand, and enables nothing again.
+#[test]
+fn a_life_born_on_a_checkpoint_teaches_and_enables_nothing_again() {
+  let at = yard("taught");
+  let open = || opening(&at, true).boot::<String>([]).unwrap().0;
+  let mut first = open();
+  let said = "close([len(transcript('chain1', 'teach')), len(transcript('chain1', 'enable'))])";
+  let was = closed(&mut first, said).as_ref().py_repr();
+  first.checkpoint().unwrap();
+  assert_eq!(closed(&mut open(), said).as_ref().py_repr(), was);
+}
+
 #[test]
 fn a_record_whose_fact_made_holds_no_checkpointer_seeds_and_gathers_with_the_engine_that_it_holds()
 {

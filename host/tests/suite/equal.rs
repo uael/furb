@@ -144,8 +144,9 @@ async fn read_by(
   until(&mut events, |event| matches!(event, Event::Act(_))).await;
   let opened = read(&life, chains, threads).await;
   // A word after the open: each way goes on from the same state, so its acts take the same
-  // moments. A birth on a checkpoint does not go on as the replay does yet: the ear of the
-  // extensions teaches again, and a chain tells again what it heard before the checkpoint.
+  // moments. A birth on a checkpoint does not go on as the replay does yet: a chain tells again
+  // each act that the birth made again, and not what it heard before the checkpoint and did not
+  // tell.
   let after = made(&life, rung("z = 3")).await;
   until(&mut events, done(&after)).await;
   let went = if way == "checkpoint" { None } else { Some(read(&life, chains, threads).await) };

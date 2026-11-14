@@ -188,7 +188,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   A standing that gives no extensions, as that of a World that names no doctrine, as the World of the suite, seeds no
   setup: the root tells its open at its first stand, the extensions play as rungs of the ear, and its chains run no
   cd, so the World resolves their paths against the directory of the standing. A later life replays the setup from
-  the standing that the record holds.
+  the standing that the record holds. A life born on a checkpoint holds the fact teach and the enables in the turns of
+  its root, where the ear of the extensions reads them, so it teaches and enables nothing again.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with
