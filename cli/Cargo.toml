@@ -38,6 +38,8 @@ serde_json = { version = "1", features = ["raw_value"] }
 # processes hold.
 tokio = { version = "1", features = ["process", "net", "time", "io-util", "macros", "rt-multi-thread"] }
 tokio-util = { version = "0.7", features = ["codec"] }
+# The window, which starts the daemon of its machine as the program of this package serves it.
+furb-window = { path = "../window" }
 
 [target.'cfg(unix)'.dev-dependencies]
 # The numbers of the signals that end the daemon.
