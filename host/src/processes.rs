@@ -113,7 +113,7 @@ impl Played {
   /// The process of each skill that the life plays, from the tip of its open until its end.
   pub(crate) async fn run(self) {
     let enables = Command::Transcript { on: None, of: Some(ENABLE.to_owned()) };
-    let (Ok(Reply::Values(tip)), from) = self.handle.placed(enables).await else { return };
+    let Ok(Reply::Values(tip)) = self.handle.send(enables).await else { return };
     let mut running: HashMap<String, Running> = HashMap::new();
     let mut named: Vec<Enabled> = Vec::new();
     for one in tip.iter().filter_map(enabled) {
@@ -125,16 +125,16 @@ impl Played {
     for one in named {
       self.start(one, &mut running).await;
     }
-    // The log of a life born on a checkpoint tells no fact enable that the checkpoint carries, so
-    // the tip gives each of them, and the log each one said after it.
-    let mut events = pin!(self.handle.events(from));
+    // The log says again each fact enable of the tip before the facts said after it.
+    let mut replayed = tip.len();
+    let mut events = pin!(self.handle.events(0));
     while let Some((_, event)) = events.next().await {
       match &*event {
-        Event::Fact(fact) => {
-          if let Some(one) = enabled(fact) {
-            self.start(one, &mut running).await;
-          }
-        }
+        Event::Fact(fact) => match enabled(fact) {
+          Some(_) if replayed > 0 => replayed -= 1,
+          Some(one) => self.start(one, &mut running).await,
+          None => {}
+        },
         Event::Ended(_) => break,
         _ => {}
       }

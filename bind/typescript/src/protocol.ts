@@ -868,7 +868,7 @@ export type Event =
  * it has no work for, and a stage never comes again in one open. Each stage counts its work in a
  * unit of its own, and a stage that counts nothing tells 0 of 0.
  */
-export type Stage = "find" | "cross" | "read" | "seed" | "boot" | "log";
+export type Stage = "recall" | "find" | "cross" | "read" | "seed" | "boot" | "log";
 
 /**
  * Both ways of the protocol, which its schema holds.
@@ -1174,4 +1174,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 16;
+export const PROTOCOL = 15;

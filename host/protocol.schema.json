@@ -4191,8 +4191,13 @@
       "oneOf": [
         {
           "type": "string",
+          "const": "recall",
+          "description": "A host tells its readers what the record told before its last checkpoint: the facts told, of\nthose facts, which are known once the host read them. The crate never tells this stage."
+        },
+        {
+          "type": "string",
           "const": "find",
-          "description": "The record is read from its last checkpoint, which the read finds from the end of the record,\nfor the build of its last life: the bytes passed, of the bytes of the record. It is the first\nstage of an open, told at once, and the life then reads its settings and the catalog of its\nmodels in it."
+          "description": "The record is read from its last checkpoint, which the read finds from the end of the record,\nfor the build of its last life: the bytes passed, of the bytes of the record. It is the first\nstage that the crate tells, at once, and the life then reads its settings and the catalog of\nits models in it."
         },
         {
           "type": "string",
@@ -4243,5 +4248,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 16
+  "x-protocol": 15
 }

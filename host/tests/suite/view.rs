@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use std::iter;
 
 use furb::view::{
-  Act, Answer, Attention, ChainThread, Concern, Held, Kind, Maker, NoteRun, Origin, Pause, Phase,
-  Rows, RunState, Spend, State, ThreadNode, Tick, as_of, attention, chain_notes, chain_threads,
-  choices, concerns, desk, hint, moments_of, nest_threads, open, operator, order_threads, restate,
+  Act, Answer, Attention, ChainThread, Concern, Kind, Maker, NoteRun, Origin, Pause, Phase, Rows,
+  RunState, Spend, State, ThreadNode, Tick, as_of, attention, chain_notes, chain_threads, choices,
+  concerns, desk, hint, moments_of, nest_threads, open, operator, order_threads, restate,
   takes_nothing, ticks, wants, working,
 };
 use serde_json::{Value, json};
@@ -621,28 +621,6 @@ fn the_acts_as_they_stood_at_a_moment_hold_what_began_by_then_and_an_act_that_en
   assert_eq!(owed(&then), ["prompt1"]);
   assert_eq!(then[0].state, State::Asks);
   assert_eq!(owed(&as_of(&acts, 9)), Vec::<String>::new());
-}
-
-#[test]
-fn the_past_stands_before_the_acts_held_at_the_place_0_and_an_act_held_stays_as_it_is_held() {
-  let (mut held, mut past) = (Held::default(), Held::default());
-  held.took(act("chain1", "chain", "", "operator", 1, None));
-  held.took(act("prompt1", "prompt", "chain1", "journal", 2, Some(3)));
-  past.took(act("chain1", "chain", "", "operator", 1, None));
-  past.took(act("prompt1", "prompt", "chain1", "operator", 2, None));
-  past.took(act("rung1", "rung", "chain1", "operator", 3, Some(9)));
-  past.took(act("rung2", "rung", "chain1", "operator", 5, None));
-  let new = held.preceded(past);
-  let rung = |id: &str, ended: Option<u64>| Act {
-    began: 0,
-    ended: ended.map(|_| 0),
-    ..act(id, "rung", "chain1", "operator", 3, ended)
-  };
-  assert_eq!(new, [rung("rung1", Some(9)), rung("rung2", None)]);
-  let now = held.as_of(u64::MAX);
-  assert_eq!(ids(&now), ["chain1", "prompt1", "rung1", "rung2"]);
-  assert_eq!((now[1].by.as_str(), now[1].began, now[1].ended), ("journal", 2, Some(3)));
-  assert_eq!(held.moments(None), [1, 2, 3], "the past adds no moment");
 }
 
 #[test]

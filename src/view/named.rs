@@ -78,14 +78,6 @@ impl Named {
     }
   }
 
-  /// The names that the life held before the first fact of this fold, as a fold of those facts
-  /// gives them: each stands for its kind until this fold hears one, at any place.
-  pub fn after(&mut self, past: Self) {
-    let before = |name: Option<(u64, String)>| name.map(|(_, name)| (0, name));
-    self.said = self.said.take().or(before(past.said));
-    self.given = self.given.take().or(before(past.given));
-  }
-
   /// A name of a kind, which takes the place of the one before it unless that one began later.
   fn take(&mut self, said: bool, began: u64, value: &str) -> bool {
     if !said && value.is_empty() {

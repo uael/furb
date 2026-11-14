@@ -9,7 +9,6 @@
 use std::{
   borrow::Cow,
   collections::{BTreeSet, HashMap},
-  mem,
 };
 
 use schemars::JsonSchema;
@@ -102,27 +101,6 @@ impl Held {
     }
   }
 
-  /// The acts of the life from before the first act held put before each act held, in the order
-  /// that the past told them, and each of them that is not held, for a window that heard the acts
-  /// held alone. An act held stays as it is held, at the place where the past first told it. Each
-  /// other act of the past stands at the place 0, before each moment of the acts held.
-  pub fn preceded(&mut self, past: Self) -> Vec<Act> {
-    let held = mem::take(&mut self.acts);
-    *self = Self { seen: mem::take(&mut self.seen), ..Self::default() };
-    for act in past.acts {
-      self.took(Act { began: 0, ended: act.ended.map(|_| 0), ..act });
-    }
-    let mut new = vec![true; self.acts.len()];
-    for act in held {
-      if let Some(&at) = self.at.get(&act.id) {
-        new[at] = false;
-      }
-      self.took(act);
-    }
-    let new = self.acts.iter().zip(new).filter(|(_, new)| *new);
-    new.map(|(act, _)| act.clone()).collect()
-  }
-
   /// The ladder of a chain, now or as it stood just after a moment, with the folds that the window
   /// opened, the prompts that the operator owes, and the only acts at its top when `taken` names
   /// them.
@@ -160,12 +138,8 @@ impl Held {
       acts.sort_by_key(|act| act.began);
       return Cow::Owned(acts);
     };
-    // The acts stand in the order they began, where the past of the life comes first, each act of
-    // it where the past first told it. Only acts that a window told out of order need the sort.
     let mut acts = as_of(&self.acts, at);
-    if self.unordered {
-      acts.sort_by_key(|act| act.began);
-    }
+    acts.sort_by_key(|act| act.began);
     Cow::Owned(acts)
   }
 
