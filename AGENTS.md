@@ -106,6 +106,18 @@ API of its own:
   a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
+- `window/` is `furb-window`, the fourth package of the workspace of the crate: the new window, in Rust on the Rust
+  package of OpenTUI, which takes the place of the TUI screen by screen. Today it holds its base: the client of the
+  daemon on the protocol and the transport of `furb-host`, the rule by which a part of a screen draws only when the
+  value that it shows of what the daemon told changes, the tokens of the design, the loader, and one screen that proves
+  them. `cargo run -p furb-window` starts it, and so does `FURB_TUI=<the program furb-window> furb`.
+  `window/Cargo.toml` pins OpenTUI at one commit, and `window/build.rs` makes its native library with Zig into
+  `target/opentui`, once for each commit. So the first cargo command over the workspace in a tree needs `zig` on PATH
+  at the version that the commit asks, 0.17.1, and takes about two minutes more. A tree whose `target/opentui` holds
+  the library runs no Zig, as a tree of `script/worktree.sh` does, and `uv sync` needs none. Its tests drive a headless app on a real daemon. `window/tests/screens` holds each
+  capture of a frame as text, and `FURB_DRAW=1 cargo test -p furb-window` draws each capture again.
+  [`CONTRIBUTING.md`](CONTRIBUTING.md#the-window) lists its files.
+
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
 of this interpreter, and the engine of monty holds its own. The suite of each extension, `.agents/skills/<name>/test/`, runs
 on both engines too, and its conftest, `.agents/skills/conftest.py`, hands it the hooks of the harness and the helpers that

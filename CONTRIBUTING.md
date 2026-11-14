@@ -19,6 +19,7 @@ large change, open an issue first, so we can agree on its shape before you do th
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
 | Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. |
 | [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings and the TUI. |
+| [Zig](https://ziglang.org/download/) 0.17.1, as `zig` on PATH | The native library of OpenTUI, which the build of the window makes once, in about two minutes, and keeps in `target/opentui`. Each cargo command over the workspace builds the window, and `uv sync` does not. The build refuses another version of Zig. |
 | [Git for Windows](https://gitforwindows.org), on Windows | Its sh runs the commands of a life, as /bin/sh does on Linux and on macOS. |
 | The credential of a provider of the network, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`, as [`docs/models.md`](docs/models.md) says. The demo and the suite need no model. |
 
@@ -167,6 +168,26 @@ and `cli/pyproject.toml` say.
 | `tui/src/theme.ts` | The palettes, the marks, and the spacing. One mark says one thing everywhere. |
 | `tui/src/keys.ts`, `tui/src/commands.ts` | The keys and the slash commands, which the keymap, the footer, the help and the docs read. |
 | `tui/script/` | The gallery, the animation, and the rasterizer that turns a frame into a PNG. |
+
+### The window
+
+`furb-window` is the program of the package `furb-window` in `window/`: the new window, in Rust on the Rust package
+of [OpenTUI](https://github.com/anomalyco/opentui), which takes the place of the TUI screen by screen. Today it holds
+its base and one screen that proves it. `cargo run -p furb-window` starts it on the daemon of this machine, which it
+starts when none listens, and `FURB_TUI=target/debug/furb-window furb` starts it through the command line. Ctrl+C
+leaves it.
+
+| File | What it holds |
+| --- | --- |
+| `window/Cargo.toml`, `window/build.rs` | The commit of OpenTUI that the window stands on, and its native library, which the build makes with Zig from that commit into `target/opentui`, once for each commit. `.cargo/config.toml` turns off the build script of `opentui-sys`, which only links a library that stands already. |
+| `window/src/machine.rs`, `window/src/link.rs` | The client of the daemon, on the protocol and the transport of `furb-host`: a machine, how the window reaches its daemon and starts it, and the task that holds the connection. |
+| `window/src/screen.rs` | The rule from what the daemon told to the widgets: a part of a screen draws only when the value that it shows changes. |
+| `window/src/tokens.rs`, `window/src/spinner.rs` | The tokens of the design, which each screen reads, and the loader. |
+| `window/src/proof.rs` | The screen that proves the base. The first screen of the design takes its place. |
+| `window/tests/suite/`, `window/tests/screens/` | The tests, which drive a headless app of OpenTUI on a real daemon, and each capture of a frame as text. `FURB_DRAW=1 cargo test -p furb-window` draws each capture again. |
+
+On Linux and on macOS the program holds the library. On Windows it loads `opentui.dll`: `cargo run` and `cargo test`
+find it in `target/opentui`, and a program that you start by hand needs a copy of it beside itself.
 
 A screen must read clearly at first sight. After a change that a screen shows, run `bun run screenshots` and read each
 capture. Do not commit the captures: at most once an hour, on a new head of `w/converge`,
