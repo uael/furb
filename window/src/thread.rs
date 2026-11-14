@@ -541,8 +541,13 @@ impl Model {
 
   /// The hue of a thread, from its id.
   pub(crate) fn hue(&self, key: &Key) -> Color {
-    self.tokens.hues[hash(&format!("{}{}", key.1, key.2)) % self.tokens.hues.len()]
+    self.tokens.hues[hued(key) % self.tokens.hues.len()]
   }
+}
+
+/// The number of a thread that picks its hue, from its record and its prompt.
+pub(crate) fn hued(key: &Key) -> usize {
+  hash(&format!("{}{}", key.1, key.2))
 }
 
 /// The look of the run of a line that stands at a column.

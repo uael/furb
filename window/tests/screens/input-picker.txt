@@ -5,8 +5,8 @@
                       Send to                                                ⎋  ime go…  ⠋ Working▌
        opus/high      ▌Search a session                                  2 / 2                opus▌
     …                                                                           ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-                       + new session                                 furb-try
-                      ▌where does the time go (the model works on it)furb-try
+                       FT + new session                              furb-try
+                      ▌FT where does the time go (the model works on it)furb-try
 
                       ↑↓ move · ⏎ send there · ⎋ close
 

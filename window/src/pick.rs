@@ -4,6 +4,7 @@
 //! closes it and gives the focus back to the input. The pointer does the same: a click takes a row,
 //! and a click beside the part closes it.
 
+use furb::view::Part;
 use furb_host::protocol::Card;
 use nucleo_matcher::{
   Config, Matcher,
@@ -15,9 +16,9 @@ use crate::{
   input::Target,
   keys::{self, Bound, Does},
   line::{Line, run, spread},
-  list::{hash, project},
-  model::{Key, Link, Model},
-  thread::{Click, Row},
+  list::project,
+  model::{Key, Model},
+  thread::{Click, Row, hued},
   tokens::{KEYS, OVER, PART, Role},
 };
 
@@ -60,12 +61,13 @@ pub(crate) enum Choice {
   None,
 }
 
-/// A row of a list part: the part of the list that it stands in, its text, what follows its text
-/// in the column after it, what its right says, the hue of its bar while it is chosen, and what it
-/// takes.
+/// A row of a list part: the part of the list that it stands in, the project that it stands in,
+/// whose badge leads it as it leads a card, its text, what follows its text in the column after it,
+/// what its right says, the hue of its bar while it is chosen, and what it takes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Entry {
   pub(crate) part: &'static str,
+  pub(crate) project: Option<String>,
   pub(crate) left: String,
   pub(crate) says: String,
   pub(crate) right: String,
@@ -160,30 +162,39 @@ impl Model {
     ranked.into_iter().filter_map(|(one, _)| all[one.0].take()).collect()
   }
 
-  /// The places of Go to: each thread that needs the operator, each session that works, then each
-  /// project; and while he searches, each session of each machine, a session that holds no thread
-  /// of his too.
+  /// The places of Go to: each thread that needs the operator, each thread that works, then each
+  /// project; and while he searches, each other thread, and each session of each machine, a session
+  /// that holds no thread of his too. A thread row opens its thread, and a session row turns the
+  /// input to a new thread of it, as in the list of the sessions.
   fn places(&self, searches: bool) -> Vec<Entry> {
-    let needs = self.settled.iter().filter(|one| self.needs(&one.1, &one.2));
-    let mut all: Vec<Entry> = needs
-      .map(|(_, key, card)| Entry {
-        part: "Needs you",
-        left: card.thread.title.clone(),
-        right: place(card),
-        hue: Some(hash(&key.2)),
-        choice: Choice::Thread(key.clone()),
-        ..Entry::default()
-      })
-      .collect();
-    let sessions = self.known_sessions();
-    let part = if searches { "Sessions" } else { "Sessions that work" };
-    all.extend(sessions.iter().filter(|one| one.works || searches).map(|one| Entry {
+    let thread = |part: &'static str, (_, key, card): &(Part, Key, Card)| Entry {
       part,
-      left: one.name.clone(),
-      right: one.project.clone(),
-      choice: Choice::Session(Target::Session(one.at, one.life.clone())),
+      project: Some(project(card)),
+      left: card.thread.title.clone(),
+      right: place(card),
+      hue: Some(hued(key)),
+      choice: Choice::Thread(key.clone()),
       ..Entry::default()
-    }));
+    };
+    let needs = |one: &&(Part, Key, Card)| self.needs(&one.1, &one.2);
+    let works =
+      |one: &&(Part, Key, Card)| !needs(one) && one.2.thread.works() && self.confirmed(&one.1);
+    let mut all: Vec<Entry> =
+      self.settled.iter().filter(needs).map(|one| thread("Needs you", one)).collect();
+    all.extend(self.settled.iter().filter(works).map(|one| thread("Working", one)));
+    let sessions = self.known_sessions();
+    if searches {
+      let rest = |one: &&(Part, Key, Card)| !needs(one) && !works(one);
+      all.extend(self.settled.iter().filter(rest).map(|one| thread("Threads", one)));
+      all.extend(sessions.iter().map(|one| Entry {
+        part: "Sessions",
+        project: Some(one.project.clone()),
+        left: one.name.clone(),
+        right: one.project.clone(),
+        choice: Choice::Session(Target::Session(one.at, one.life.clone())),
+        ..Entry::default()
+      }));
+    }
     let mut projects: Vec<(&str, usize)> = Vec::new();
     for one in sessions.iter().filter(|one| !one.project.is_empty()) {
       if let Some(project) = projects.iter_mut().find(|project| project.0 == one.project) {
@@ -194,6 +205,7 @@ impl Model {
     }
     all.extend(projects.into_iter().map(|(name, count)| Entry {
       part: "Projects",
+      project: Some(name.to_owned()),
       left: name.to_owned(),
       right: format!("{count} session{}", if count == 1 { "" } else { "s" }),
       choice: Choice::Project(name.to_owned()),
@@ -208,14 +220,11 @@ impl Model {
     let mut sessions: Vec<Session> = Vec::new();
     for (at, told) in self.machines.iter().enumerate() {
       for card in &told.cards {
-        let works = card.thread.works() && told.link == Link::Listed;
-        if let Some(one) = sessions.iter_mut().find(|one| one.at == at && one.life == card.life) {
-          one.works |= works;
-        } else {
+        if !sessions.iter().any(|one| one.at == at && one.life == card.life) {
           let named = card.session.clone().filter(|name| !name.is_empty());
           let name = named.unwrap_or_else(|| card.thread.title.clone());
           let life = card.life.clone();
-          sessions.push(Session { at, life, name, project: project(card), works });
+          sessions.push(Session { at, life, name, project: project(card) });
         }
       }
       for listed in &told.lives {
@@ -224,7 +233,7 @@ impl Model {
           let name = name.unwrap_or_else(|| stem(&listed.life));
           let project = listed.workspace.as_deref().map_or("", |one| tail(one)).to_owned();
           let life = listed.life.clone();
-          sessions.push(Session { at, life, name, project, works: false });
+          sessions.push(Session { at, life, name, project });
         }
       }
     }
@@ -266,7 +275,14 @@ impl Model {
   fn sessions(&self) -> Vec<Entry> {
     let new = Choice::Session(Target::New(0));
     let left = "+ new session".to_owned();
-    let mut all = vec![Entry { left, right: self.project(), choice: new, ..Entry::default() }];
+    let here = self.project();
+    let mut all = vec![Entry {
+      project: Some(here.clone()),
+      left,
+      right: here,
+      choice: new,
+      ..Entry::default()
+    }];
     for (_, key, card) in &self.settled {
       let choice = Choice::Session(Target::Session(key.0, key.1.clone()));
       if all.iter().any(|one| one.choice == choice) {
@@ -276,6 +292,7 @@ impl Model {
       let left = named.unwrap_or_else(|| card.thread.title.clone());
       all.push(Entry {
         part: "",
+        project: Some(project(card)),
         left,
         right: project(card),
         hue: None,
@@ -310,16 +327,6 @@ impl Model {
     self.picker = None;
     match entry.choice {
       Choice::Thread(key) => self.went(key),
-      Choice::Session(target) if of == Pick::Sessions => self.aimed(target),
-      Choice::Session(Target::Session(at, life)) => {
-        let thread =
-          |one: &&(_, Key, Card)| one.1.0 == at && one.1.1 == life && !one.1.2.is_empty();
-        let last = self.settled.iter().rev().find(thread);
-        match last.map(|one| one.1.clone()) {
-          Some(key) => self.went(key),
-          None => self.aimed(Target::Session(at, life)),
-        }
-      }
       Choice::Session(target) => self.aimed(target),
       Choice::Project(name) => {
         self.picker = Some(Picker { of, filter: name, at: 0 });
@@ -417,6 +424,9 @@ impl Model {
     let room = usize::from(PART.min(self.size.0.saturating_sub(4))).saturating_sub(4);
     let mut all: Vec<(Option<usize>, Line)> = Vec::new();
     let mut part = "";
+    // A part whose rows stand in projects keeps the slot of the badge in each row, so each text
+    // starts in one column.
+    let badged = entries.iter().any(|one| one.project.is_some());
     for (at, entry) in entries.iter().enumerate() {
       if picker.filter.is_empty() && entry.part != part && !entry.part.is_empty() {
         if !all.is_empty() {
@@ -430,8 +440,17 @@ impl Model {
       let hue = entry.hue.map_or(t.accent, |hue| t.hues[hue % t.hues.len()]);
       let bar =
         if chosen { run("▌", ground(Style::new().fg(hue))) } else { run(" ", Style::new()) };
-      let left =
-        vec![bar, run(entry.left.clone(), ground(prose)), run(entry.says.clone(), ground(muted))];
+      let badge = match &entry.project {
+        Some(project) => {
+          let badge = self.badge(project);
+          vec![run(badge.content, ground(badge.style)), run(" ", ground(Style::new()))]
+        }
+        None if badged => vec![run("   ", ground(Style::new()))],
+        None => Vec::new(),
+      };
+      let mut left = vec![bar];
+      left.extend(badge);
+      left.extend([run(entry.left.clone(), ground(prose)), run(entry.says.clone(), ground(muted))]);
       let right = vec![run(entry.right.clone(), ground(muted)), run(" ", ground(Style::new()))];
       all.push((Some(at), spread(left, right, room, ground(Style::new()))));
     }
@@ -476,14 +495,12 @@ impl Model {
   }
 }
 
-/// A session of a machine: the machine, the record, its name, its project, and whether a thread of
-/// it works.
+/// A session of a machine: the machine, the record, its name and its project.
 struct Session {
   at: usize,
   life: String,
   name: String,
   project: String,
-  works: bool,
 }
 
 /// The text that a matcher reads of an entry, with its place.

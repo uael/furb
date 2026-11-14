@@ -5,11 +5,11 @@
   ⌃O          go to   Go to                                                  ⎋   replay  ⠋ Working
   ⌃P          comman  ▌Search a thread, a session, a project             1 / 2                opus
   ⌃X ?        each k
-                      Sessions that work
-                      ▌run the bench of replay                           furb
+                      Working
+                      ▌FU run the bench of replay                        furb
 
                       Projects
-                       furb                                        3 sessions
+                       FU furb                                     3 sessions
 
                       ↑↓ move · ⏎ open · ⎋ close
 

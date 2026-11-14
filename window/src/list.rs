@@ -196,8 +196,8 @@ impl Model {
       card.session.as_ref().filter(|name| **name != card.thread.title && !name.is_empty());
     let session = named.map(|name| format!(" · {name}")).unwrap_or_default();
     let place = format!("{project}{machine}{session}");
-    let hue = t.hues[hash(&project) % t.hues.len()];
-    let badge = run(badge(&project), on(Style::new().fg(hue).bold()));
+    let badge = self.badge(&project);
+    let badge = run(badge.content, on(badge.style));
     let left = vec![badge, run(" ", on(Style::new())), run(place, on(t.style(Role::Muted)))];
     let others = card.viewers.iter().filter(|login| **login != told.login);
     let initials: Vec<String> =
@@ -270,6 +270,13 @@ impl Model {
 }
 
 impl Model {
+  /// The badge of a project, as each row that stands in it draws it: its two letters, bold in the
+  /// hue of the project.
+  pub(crate) fn badge(&self, project: &str) -> Span<'static> {
+    let hue = self.tokens.hues[hash(project) % self.tokens.hues.len()];
+    run(badge(project), Style::new().fg(hue).bold())
+  }
+
   /// Whether a life holds the record of a card and no view holds that life. The window is a view of
   /// each life that it holds, before its machine says so.
   pub(crate) fn unheld(&self, at: usize, card: &Card) -> bool {

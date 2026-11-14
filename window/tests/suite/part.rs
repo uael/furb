@@ -41,11 +41,11 @@ fn gone(app: &TestApp, text: &str) -> bool {
 }
 
 #[test]
-fn go_to_lists_what_works_and_the_projects_and_finds_a_session_with_no_thread_of_his() {
+fn go_to_lists_the_threads_that_work_and_the_projects_and_finds_a_session_with_no_thread_of_his() {
   let (app, _daemon, _peer) = machine();
   app.press("ctrl+o");
   let frame = shows(&app, "Search a thread, a session, a project");
-  assert!(frame.contains("Sessions that work") && frame.contains("Projects"), "{frame}");
+  assert!(frame.contains("Working") && frame.contains("Projects"), "{frame}");
   assert!(!frame.contains("setup-only"), "a session shows only once he searches: {frame}");
   // The project counts the session with no thread once the machine listed its records.
   shows(&app, "3 sessions");
