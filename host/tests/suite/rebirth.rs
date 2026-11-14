@@ -309,6 +309,51 @@ async fn a_life_that_rests_past_its_tail_writes_its_image_and_no_checkpoint_and_
   assert!(matches!(again.send(Command::End).await, Ok(Reply::Done)));
 }
 
+#[tokio::test]
+async fn a_life_past_its_tail_writes_its_image_while_an_act_is_in_flight() {
+  let at = place("rest-held");
+  let image = at.join("record.jsonl.image");
+  let life = Life::spawn(opening(&at)).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  ran(&life, "b = bash('sleep 600')").await;
+  let busy = ran(&life, &format!("for i in range({ASKED}):\n  chance()")).await;
+  until(&mut events, ran_out(&busy)).await;
+  let start = time::Instant::now();
+  while !image.is_file() {
+    assert!(start.elapsed() < Duration::from_secs(120), "the command in flight held the image");
+    time::sleep(Duration::from_millis(50)).await;
+  }
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+}
+
+#[tokio::test]
+async fn a_life_that_opens_by_its_record_past_a_tail_writes_its_image() {
+  let at = place("bare");
+  let image = at.join("record.jsonl.image");
+  let life = Life::spawn(opening(&at)).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  // A recall tells each entry of the record once, so the run asks twice the questions of a tail.
+  let busy = ran(&life, &format!("for i in range({}):\n  chance()", 2 * ASKED)).await;
+  until(&mut events, ran_out(&busy)).await;
+  life.reborn(true);
+  until(&mut events, reborn(false)).await;
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+  while events.next().await.is_some() {}
+  // With no image, the next open reads the past of the record before its checkpoint, and boots on
+  // that checkpoint.
+  fs::remove_file(&image).expect("the image of the life");
+  let again = Life::spawn(opening(&at)).expect("the life has a thread");
+  let start = time::Instant::now();
+  while !image.is_file() {
+    assert!(
+      start.elapsed() < Duration::from_secs(120),
+      "the life that read its record wrote no image"
+    );
+    time::sleep(Duration::from_millis(50)).await;
+  }
+  assert!(matches!(again.send(Command::End).await, Ok(Reply::Done)));
+}
+
 /// A word that binds an act whose ear lives until a cancel ends it, which no checkpoint keeps.
 const LASTING: &str = "def lasting(on=''):
   def ear(id):

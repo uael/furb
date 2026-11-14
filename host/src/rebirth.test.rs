@@ -52,18 +52,25 @@ fn aged(watch: &mut Watch) {
 }
 
 #[test]
-fn a_life_past_its_tail_writes_its_image_at_its_rest_and_is_not_born_again() {
+fn a_life_writes_its_image_once_a_tail_of_its_facts_stands_in_none_and_is_not_born_again() {
   let mut watch = Watch::default();
-  aged(&mut watch);
-  assert_eq!((watch.rests(), watch.due()), (true, false), "a count of facts asks no rebirth");
-  watch.heard(&act("lasting", "other1", "rung3", &[], Phase::Started));
-  assert!(!watch.rests(), "an act that a checkpoint does not keep holds the image");
-  watch.heard(&act("lasting", "other1", "rung3", &[], Phase::Done(Value::Null)));
-  assert!(watch.rests(), "the image is due once that act ends");
+  assert!(!watch.images(TAIL - 1), "a life on no image writes none before its log told a tail");
+  assert!(watch.images(TAIL), "and writes one once its log told a tail");
   watch.imaged();
-  assert!(!watch.rests(), "the next image waits for the next tail");
+  watch.heard(&act("lasting", "other1", "rung3", &[], Phase::Started));
   aged(&mut watch);
-  assert!(watch.rests(), "and comes past it");
+  let (images, due) = (watch.images(0), watch.due());
+  assert_eq!(
+    (images, due),
+    (true, false),
+    "no act in flight holds it, and no count asks a rebirth"
+  );
+  watch.imaged();
+  assert!(!watch.images(u64::MAX), "the next image waits for the next tail of its own facts");
+  aged(&mut watch);
+  assert!(watch.images(0), "and comes past it");
+  watch.reborn();
+  assert!(watch.images(TAIL), "a rebirth stands on no image");
 }
 
 #[test]

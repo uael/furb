@@ -1,8 +1,9 @@
 //! `furb host` ended by a signal at each moment of the work of a life, then started again: the
 //! kill matrix of #591, which proves D8 of #983 on the daemon. After each kill, the life opens
 //! on its record with no drift and with its module as it stood, no model answers a turn twice,
-//! no command runs twice, a reply that was asked is answered with no wake, no process of the
-//! life outlives the daemon, and the open replays at most `TAIL` facts after the last checkpoint.
+//! no command runs twice, a reply that was asked is answered with no wake, and no process of the
+//! life outlives the daemon. A life that wrote its image at a rest opens from it after a kill, and
+//! feeds only the facts that its record took after it.
 //!
 //! A scripted claude stands in for the models. Each process of it, and each command that holds
 //! the life at a moment, holds the write end of the FIFO `lifeline`, so the test knows that no
@@ -27,7 +28,7 @@ use std::{
   time::Duration,
 };
 
-use furb::view::Phase;
+use furb::{life::Stage, view::Phase};
 use furb_host::{
   Event,
   protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
@@ -39,16 +40,12 @@ use tokio::{
   io::{AsyncBufReadExt, BufReader},
   process::{Child, Command},
   sync::mpsc,
-  time::timeout,
+  time::{sleep, timeout},
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
 /// How long a test waits for a frame, a line or the end of a process before it fails.
 const PATIENCE: Duration = Duration::from_secs(60);
-
-/// The most facts that an open replays after the last checkpoint of its record, which is the
-/// tail at which a life of the host writes its checkpoint and is born again.
-const TAIL: usize = 10_000;
 
 /// The fake claude of the tests of the crate.
 const FAKE: &str = include_str!("../../../src/world/provider/claude/fake-claude.sh");
@@ -61,6 +58,9 @@ const KEEP: &str = "kept = 41";
 
 /// The word that proves the module of the root as it stood before the kill.
 const KEPT: &str = "assert kept == 41";
+
+/// A word that says more facts than the tail past which a life writes its image at its next rest.
+const PAST: &str = "for i in range(2600):\n  chance()";
 
 /// A folder of one test, short enough for the path of a socket: the work of the life, the fake
 /// claude and its FIFO, the config of the user and the cache of furb, where the daemon listens.
@@ -359,6 +359,18 @@ impl Window {
     value.clone()
   }
 
+  /// That the open that the window heard went on from the image of the life: it seeded, and it
+  /// read no fact before the image and booted on none.
+  fn imaged(&self) {
+    let stage = |frame: &Frame| match frame {
+      Frame::Opening { stage, .. } => Some(*stage),
+      _ => None,
+    };
+    let stages: Vec<Stage> = self.pushed.iter().filter_map(stage).collect();
+    let read = stages.iter().any(|one| matches!(one, Stage::Recall | Stage::Boot));
+    assert!(stages.contains(&Stage::Seed) && !read, "the open read its record: {stages:?}");
+  }
+
   /// That no act waits for a wake, since the open put each act that the kill cut to the outside.
   async fn unheld(&mut self) {
     let pending = self.ask(Verb::Pending { life: self.life.clone() }).await;
@@ -366,16 +378,13 @@ impl Window {
   }
 }
 
-/// The life of the yard after a kill, opened by a new daemon: its module as it stood, no turn and
-/// no command twice, and at most `TAIL` facts after the last checkpoint. The daemon and the
-/// window stay for the test to go on.
+/// The life of the yard after a kill, opened by a new daemon: its module as it stood, and no turn
+/// and no command twice. The daemon and the window stay for the test to go on.
 async fn reopened(yard: &Yard) -> (Daemon, Window) {
   let daemon = Daemon::started(yard).await;
   let mut window = Window::attached(yard).await;
   window.ran(KEPT).await;
   let facts = yard.facts();
-  let since = facts.iter().rev().take_while(|fact| fact[0][0] != "checkpoint").count();
-  assert!(since <= TAIL, "the open replays {since} facts after the last checkpoint");
   let reply = |fact: &&Value| fact[0][1].as_str().is_some_and(|id| id.starts_with("reply"));
   let ended: Vec<&Value> = facts.iter().filter(reply).filter(|fact| fact[0][0] == "done").collect();
   let replies = ended.iter().filter(|fact| fact[0][3]["is"] == "tuple").count();
@@ -559,6 +568,32 @@ async fn a_daemon_killed_during_a_command_of_a_model_runs_neither_twice() {
     assert_eq!(yard.lines("out.txt"), ["bash"]);
     assert_eq!(yard.answered(), 2);
   }
+}
+
+#[tokio::test]
+async fn a_daemon_killed_after_the_image_of_a_life_opens_it_from_that_image_and_its_tail() {
+  let (yard, mut lifeline, daemon, mut window) = begun().await;
+  window.ran(PAST).await;
+  let image = yard.root.join("work/record.jsonl.image");
+  let waited = timeout(PATIENCE, async {
+    while !image.is_file() {
+      sleep(Duration::from_millis(50)).await;
+    }
+  });
+  assert!(waited.await.is_ok(), "the life wrote no image at its rest");
+  window.ran("rest = 2").await;
+  daemon.killed(libc::SIGKILL).await;
+  let (daemon, mut window) = reopened(&yard).await;
+  window.imaged();
+  window.ran("assert rest == 2").await;
+  window.run(&format!("work = 3\n{}", held(&lifeline, "held"))).await;
+  lifeline.heard("up").await;
+  daemon.killed(libc::SIGKILL).await;
+  lifeline.ended().await;
+  let (_daemon, mut window) = reopened(&yard).await;
+  window.imaged();
+  window.ran("assert rest == 2 and work == 3").await;
+  assert_eq!(yard.lines("out.txt"), ["held"]);
 }
 
 /// A handover asked of the daemon by `furb host upgrade`, until the daemon that ran gave its

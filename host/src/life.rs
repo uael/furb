@@ -1179,12 +1179,14 @@ async fn driven(
   record: Option<&str>,
 ) -> Drove {
   let (mut gone, mut asked) = (false, Vec::new());
+  // A life that opened on no image may owe one before anything wakes it.
+  owed_image(&mut engine, life, record);
   loop {
     let ends = gone || !asked.is_empty();
     let watch = &life.kept.watch;
+    let owed = watch.due() || watch.images(life.kept.said);
     let waits =
-      (ends || life.kept.backlog.holds() || record.is_some() && (watch.due() || watch.rests()))
-        && engine.unkept() > 0;
+      (ends || life.kept.backlog.holds() || record.is_some() && owed) && engine.unkept() > 0;
     let woke = tokio::select! {
       biased;
       Some(event) = life.heard.recv() => Woke::Told(event),
@@ -1228,7 +1230,7 @@ async fn driven(
     if (gone || !asked.is_empty()) && engine.unkept() == 0 {
       return Drove::Ended(ended(engine, life), asked);
     }
-    rested(&mut engine, life, record);
+    owed_image(&mut engine, life, record);
     if record.is_some() && life.kept.watch.due() && engine.unkept() == 0 {
       let reborn = engine.checkpoint();
       return reborn
@@ -1244,18 +1246,20 @@ fn ended(engine: Engine, life: &mut Life) -> Option<Fault> {
   // The index stands before the image: a daemon that ends between them leaves a record whose
   // next daemon reads its cards from the index, where none would fold the whole record for them.
   life.indexed();
+  // The next life opens from this image, so it stands on one.
+  life.kept.watch.imaged();
   let record = life.record.as_deref().map(Path::new);
   let part = Part { build: BUILD.into(), kept: &life.kept };
   rebirth::ended(engine, record, &part)
 }
 
-/// The image of a life that keeps its record and rests past its tail, as [`rebirth::TAIL`] says,
-/// written beside its record. The life goes on, with no checkpoint: a later open goes on from the
-/// image and feeds what the record took after it. A life that cannot write an image tries again
-/// past its next tail.
-fn rested(engine: &mut Engine, life: &mut Life, record: Option<&str>) {
-  let rests = life.kept.watch.rests() && engine.unkept() == 0;
-  let Some(record) = record.filter(|_| rests) else { return };
+/// The image of a life that keeps its record and passed its tail, as [`rebirth::TAIL`] says,
+/// written beside its record once the record holds each fact. The life goes on, with no
+/// checkpoint: a later open goes on from the image and feeds what the record took after it. A life
+/// that cannot write an image tries again past its next tail.
+fn owed_image(engine: &mut Engine, life: &mut Life, record: Option<&str>) {
+  let owed = life.kept.watch.images(life.kept.said) && engine.unkept() == 0;
+  let Some(record) = record.filter(|_| owed) else { return };
   life.told(None);
   life.kept.watch.imaged();
   let part = Part { build: BUILD.into(), kept: &life.kept };
