@@ -27,4 +27,4 @@
 ┃
 ┃ draft after
   This computer   broken · new session ▾           ○ Python
-  the life ended                                ⌃P commands
+  Refused: Could not read…                      ⌃P commands

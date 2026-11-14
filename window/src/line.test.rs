@@ -31,3 +31,11 @@ fn a_text_breaks_between_words_into_lines_of_its_room() {
     ["Write below", "to start", "one."].map(str::to_owned)
   );
 }
+
+#[test]
+fn a_word_wider_than_a_line_breaks_where_the_line_ends() {
+  assert_eq!(
+    wrapped("Another process owns /home/ada/furb.jsonl.", 12),
+    ["Another", "process owns", "/home/ada/fu", "rb.jsonl."].map(str::to_owned)
+  );
+}

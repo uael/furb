@@ -204,7 +204,8 @@ impl Model {
       others.map(|login| login.chars().take(2).collect::<String>().to_lowercase()).collect();
     let model = card.thread.model.as_deref().and_then(|model| model.rsplit(':').next());
     let agents = (card.thread.agents > 0).then(|| format!("↳{}", card.thread.agents));
-    let marks = [model.map(str::to_owned), agents, unheld(card).then(|| "◌".to_owned())];
+    let alone = self.unheld(key.0, card).then(|| "◌".to_owned());
+    let marks = [model.map(str::to_owned), agents, alone];
     let marks = marks.into_iter().flatten().collect::<Vec<_>>().join(" ");
     let right =
       [initials.join(" "), marks].into_iter().filter(|one| !one.is_empty()).collect::<Vec<_>>();
@@ -233,6 +234,11 @@ impl Model {
     let (muted, colored) = (on(t.style(Role::Muted)), |color| on(Style::new().fg(color)));
     if !self.confirmed(key) {
       return vec![run(format!("as of {}", self.hour(self.machines[key.0].heard)), muted)];
+    }
+    if let Some(hold) = self.shown_open(key.0, &card.life) {
+      let share = hold.share().map(|share| format!(" {share}%")).unwrap_or_default();
+      let opens = format!("{} Opening{share}", Loader::Model.frame(self.moved));
+      return vec![run(opens, colored(t.accent))];
     }
     let (needs, age) = (self.needs(key, card), self.age(card.since));
     let aged =
@@ -263,6 +269,15 @@ impl Model {
   }
 }
 
+impl Model {
+  /// Whether a life holds the record of a card and no view holds that life. The window is a view of
+  /// each life that it holds, before its machine says so.
+  pub(crate) fn unheld(&self, at: usize, card: &Card) -> bool {
+    let held = self.holds.contains_key(&(at, card.life.clone()));
+    card.held && card.viewers.is_empty() && !held
+  }
+}
+
 /// The look of a card: its ground, and the color of its text under the pointer.
 #[derive(Clone, Copy)]
 struct Ground {
@@ -275,11 +290,6 @@ impl Ground {
     let style = self.bg.map_or(style, |bg| style.bg(bg));
     self.hover.map_or(style, |hover| style.fg(hover))
   }
-}
-
-/// Whether a life holds the record of a card and no view holds that life.
-pub(crate) fn unheld(card: &Card) -> bool {
-  card.held && card.viewers.is_empty()
 }
 
 /// The name of the project of a card: the last part of its main checkout, or of the folder of its

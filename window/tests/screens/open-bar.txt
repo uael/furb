@@ -1,0 +1,30 @@
+ furb · remove the gate from the engine         [ Resolve ]    All projects ▾         this machine
+  Opening · reads the record                          1.0 s
+                                                               Needs you 1
+┃                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃ remove the gate from the engine                              ▌remove the gate from…    ⠹ Opening▌
+┃                                                              ▌FU furb                       opus▌
+                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+┃ Write while it opens. Your message goes when it is open.
+  This computer   furb ▾                    opus   ○ Python
+  ~/furb                                             ⎋ back

@@ -24,6 +24,7 @@ use crate::{
   keys::{self, Does, System},
   link::Heard,
   list::Row,
+  opens::{Hold, Life, Step},
   thread::Opened,
   tokens::Tokens,
 };
@@ -117,6 +118,8 @@ pub(crate) struct Model {
   pub(crate) restore: Option<String>,
   /// The picker of the sessions, while it is open.
   pub(crate) picker: Option<Picker>,
+  /// Each life that the window holds, and how far its open stands.
+  pub(crate) holds: HashMap<Life, Hold>,
 }
 
 impl Model {
@@ -153,6 +156,7 @@ impl Model {
       asked: HashMap::new(),
       restore: None,
       picker: None,
+      holds: HashMap::new(),
     }
   }
 
@@ -162,9 +166,12 @@ impl Model {
     if let Ok(Frame::Reply { id, .. } | Frame::Refused { id: Some(id), .. }) = &heard
       && let Some(asked) = self.asked.remove(&(at, *id))
     {
-      match heard {
-        Ok(Frame::Reply { answer, .. }) => self.replied(asked, answer),
-        Ok(Frame::Refused { why, .. }) => self.restore = self.refused(asked, why),
+      let id = *id;
+      match (asked, heard) {
+        (Asked::Open, Ok(Frame::Reply { .. })) => self.answered_open(at, id),
+        (Asked::Open, Ok(Frame::Refused { why, .. })) => self.restore = self.unopened(at, id, why),
+        (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
+        (_, Ok(Frame::Refused { why, .. })) => self.restore = self.refused(asked, why),
         _ => {}
       }
       return true;
@@ -177,6 +184,12 @@ impl Model {
         return self.answered(at, id, Err(why));
       }
       Ok(Frame::Thread { life, thread, page }) => return self.changed(at, (&life, &thread), page),
+      Ok(Frame::Opening { life, stage, done, of }) => {
+        return self.opening(at, life, Step { stage, done, of, at: self.moved });
+      }
+      Ok(Frame::Cards { ref life, ref changed, .. }) if changed.iter().any(|card| !card.held) => {
+        self.ended(at, life);
+      }
       _ => {}
     }
     let (now, told) = (self.now, &mut self.machines[at]);
@@ -326,10 +339,11 @@ impl Model {
     self.machines.iter().all(|one| one.link != Link::Dialing)
   }
 
-  /// Whether a mark of the list moves.
+  /// Whether a mark of the window moves, or an open runs, whose time counts.
   pub(crate) fn moves(&self) -> bool {
     let works = |one: &(Part, Key, Card)| one.2.thread.works() && self.confirmed(&one.1);
-    self.slow && !self.known() || self.settled.iter().any(works)
+    let opens = self.holds.values().any(Hold::runs);
+    self.slow && !self.known() || opens || self.settled.iter().any(works)
   }
 
   pub(crate) fn needs(&self, key: &Key, card: &Card) -> bool {

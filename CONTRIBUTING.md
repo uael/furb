@@ -162,9 +162,11 @@ and `cli/pyproject.toml` say.
 
 `furb-window` is the program of the package `furb-window` in `window/`: the window of furb, in Rust on the Rust
 package of [OpenTUI](https://github.com/anomalyco/opentui), which grows screen by screen. Today it holds the list of
-the cards of the machine, one card for each thread, beside a home that says what waits for the operator. Its input
-sends a message to the open thread, to a new thread of a session, or to a new session in the project of its folder,
-as the line of the launcher under it says. It does not yet choose a model, show the chains of a life or reach another
+the cards of the machine, one card for each thread, beside a home that says what waits for the operator. A card opens
+its thread at once, and opens its session when it rests: the head of the thread names each stage of the open and
+counts its seconds, while the operator reads, writes and goes elsewhere. Its input sends a message to the open
+thread, to a new thread of a session, or to a new session in the project of its folder, as the line of the launcher
+under it says. It does not yet choose a model, show the chains of a life or reach another
 machine. `cargo build -p furb-cli -p furb-window` builds furb and the window side by side, and `target/debug/furb`
 with no command starts the window. The window reaches the daemon of this machine, and starts it with the `furb`
 beside itself, else the one on PATH, when none listens. The packages of PyPI and npm do not carry the window yet.
@@ -172,8 +174,8 @@ beside itself, else the one on PATH, when none listens. The packages of PyPI and
 Alt+Down and Alt+Up, or Ctrl+X then J or K, open the next and the previous card, Alt+A or Ctrl+X then A opens the
 next thread that waits for the operator, and Ctrl+X then L shows or hides the list. Enter sends, Shift+Enter breaks
 the line, Ctrl+N turns the input to a new thread and back, Ctrl+X then O picks the session, Ctrl+X then Y turns the
-input to a word of Python, Esc twice stops the work of the open thread, Ctrl+C empties the input, and Ctrl+D on an
-empty input leaves the window.
+input to a word of Python, Esc goes back from a thread whose session opens or failed to open, Esc twice stops the
+work of the open thread, Ctrl+C empties the input, and Ctrl+D on an empty input leaves the window.
 
 ![The list of the threads of the machine beside an open thread](docs/window-cards.png)
 
@@ -185,6 +187,7 @@ empty input leaves the window.
 | `window/src/tokens.rs` | The tokens of the design, which each screen reads: each color, each role of a text, and each loader. |
 | `window/src/model.rs`, `window/src/kept.rs` | What the window knows: the cards that each machine told, where the hand of the operator is, and the order of the list as it last settled. A card shows its state at once and changes its place only while the hand is away. The window keeps the cards in a file of the cache of furb, `window/cards.json`, for its next first frame. |
 | `window/src/list.rs`, `window/src/home.rs`, `window/src/line.rs` | The rows of the list of cards and of the home, each a function of the model, and how a row fills its columns. |
+| `window/src/opens.rs` | The lives that the window holds: it opens the life of each thread that it reads and of each session that it writes in, and shows how far each open stands, from one table of the stages of an open. |
 | `window/src/input.rs` | The input: its target, the queue of the messages that it sends one after the other, the line of the launcher under it, and the picker of the sessions. |
 | `window/src/hand.rs` | The widgets, and what each key, each move of the pointer, each timer and each frame of a machine changes in the model. |
 | `window/tests/suite/`, `window/tests/screens/` | The tests, which drive a headless app of OpenTUI on a real daemon whose model answers from a script, and each capture of a frame as text. `FURB_DRAW=1 cargo test -p furb-window` draws each capture again, and `FURB_CELLS=<folder>` writes the cells of each capture there as JSON, with their colors. |

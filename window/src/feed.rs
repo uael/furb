@@ -66,10 +66,19 @@ impl Feed<'_> {
     let muted = self.style(Role::Muted);
     let mut rows: Vec<Row> = match (&self.opened.fault, self.opened.above) {
       (Some(why), _) => {
-        let lines = wrapped(why, self.wide.saturating_sub(4));
-        lines.iter().map(|line| says(line, Style::new().fg(self.model.tokens.danger))).collect()
+        let lines = wrapped(&self.model.homed(why), self.wide.saturating_sub(4));
+        let danger = Style::new().fg(self.model.tokens.danger);
+        let mut rows: Vec<Row> = lines.iter().map(|line| says(line, danger)).collect();
+        let back =
+          format!("The record stays as it was. {} goes back.", self.model.key(Does::Close));
+        rows.extend([Row::default(), says(&back, muted)]);
+        rows
       }
-      (None, None) => vec![says("Loading the thread…", muted)],
+      // Until its page comes, the thread shows what its card holds: the first line of its message.
+      (None, None) => {
+        let card = self.model.told_card(&self.opened.key);
+        return card.map(|card| self.message(&card.thread.title)).unwrap_or_default();
+      }
       (None, Some(0)) => return Vec::new(),
       (None, Some(above)) => {
         let noun = if above == 1 { "message" } else { "messages" };
@@ -368,7 +377,7 @@ fn tail(text: &str, room: usize) -> String {
 }
 
 /// A count of seconds as a person reads it.
-fn timer(seconds: u64) -> String {
+pub(crate) fn timer(seconds: u64) -> String {
   match seconds {
     ..60 => format!("{seconds} s"),
     60..3600 => format!("{}m {:02}s", seconds / 60, seconds % 60),

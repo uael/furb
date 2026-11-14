@@ -41,12 +41,16 @@ pub(crate) const PATIENCE: Duration = Duration::from_secs(60);
 /// it, so it ends with that app.
 pub(crate) struct Daemon {
   yard: Yard,
+  /// The folder where the daemon listens, and its transport.
+  host: PathBuf,
   local: Local,
   /// The transport that listens, until the daemon is served on it.
   listener: Option<Listener>,
   runtime: Handle,
   /// The main checkout of each project of the machine.
   projects: Vec<PathBuf>,
+  /// The claude command line of each life that a window opens: none, or one that holds the open.
+  claude: PathBuf,
 }
 
 impl Daemon {
@@ -57,10 +61,39 @@ impl Daemon {
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     // A short name, since the path of a socket has a bound.
     let yard = Yard::new(format!("fw{}-{n}", process::id()));
-    let local = Local::new(yard.join("host"));
+    let host = yard.join("host");
+    let local = Local::new(&host);
     let runtime = app.runtime();
     let listener = runtime.block_on(local.listen()).expect("the folder of the test is free");
-    Self { yard, local, listener: Some(listener), runtime, projects: Vec::new() }
+    let claude = yard.join("no-claude");
+    Self { yard, host, local, listener: Some(listener), runtime, projects: Vec::new(), claude }
+  }
+
+  /// The daemon of the test ended with the app whose runtime served it, and a new one on the
+  /// records that the first one held, on the runtime of another app. It listens in a folder of its
+  /// own, since the end of the first one can take its socket with it at any moment.
+  pub(crate) fn again(&mut self, app: &TestApp) {
+    self.host = self.yard.join("host-again");
+    self.local = Local::new(&self.host);
+    self.runtime = app.runtime();
+    let listener =
+      self.runtime.block_on(self.local.listen()).expect("the folder of the test is free");
+    self.listener = Some(listener);
+  }
+
+  /// The opens of each life that a window asks held at the catalog of its models, after the read of
+  /// its record, until the test makes the file that this gives: their claude command line waits
+  /// for it, and the catalog waits for a command line that it never saw. A peer of the test opens
+  /// each life on no command line, so it never waits.
+  #[cfg(unix)]
+  pub(crate) fn holding(&mut self) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let (program, go) = (self.yard.join("claude"), self.yard.join("go"));
+    let waits = format!("#!/bin/sh\nuntil [ -e '{}' ]; do sleep 0.02; done\n", go.display());
+    fs::write(&program, waits).unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    self.claude = program;
+    go
   }
 
   /// A daemon that took the dial of a window, read its hello and its ask of the cards, and is gone
@@ -93,7 +126,7 @@ impl Daemon {
   pub(crate) fn served(&mut self) {
     let listener = self.listener.take().expect("a daemon is served once");
     let settings = Settings {
-      opening: scripted(&self.yard),
+      opening: scripted(&self.yard, &self.claude),
       grace: Duration::ZERO,
       stall: STALL,
       tailnet: None,
@@ -113,7 +146,7 @@ impl Daemon {
   /// The machine of the daemon under a name, as a window dials it. Its daemon listens, so the
   /// window never runs the command that serves it.
   pub(crate) fn machine(&self, name: &str) -> Machine {
-    Machine { name: name.to_owned(), folder: self.yard.join("host"), served: Command::new("furb") }
+    Machine { name: name.to_owned(), folder: self.host.clone(), served: Command::new("furb") }
   }
 
   /// A peer of the daemon, which hears each change of its cards.
@@ -123,6 +156,7 @@ impl Daemon {
       lines: Framed::new(dialed, LinesCodec::new()),
       next: 0,
       runtime: self.runtime.clone(),
+      claude: self.yard.join("no-claude").display().to_string(),
     };
     let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None };
     assert!(matches!(peer.ask(Verb::Hello(hello)), Answer::Welcome { .. }));
@@ -131,11 +165,13 @@ impl Daemon {
   }
 }
 
-/// A peer of a daemon of a test: its stream, and the id of its next request.
+/// A peer of a daemon of a test: its stream, the id of its next request, and the claude command
+/// line of each life that it opens.
 pub(crate) struct Peer {
   lines: Framed<<Local as Dialer>::Stream, LinesCodec>,
   next: u64,
   runtime: Handle,
+  claude: String,
 }
 
 impl Peer {
@@ -188,7 +224,7 @@ impl Peer {
       roster: None,
       skills: None,
       config: None,
-      claude: None,
+      claude: Some(self.claude.clone()),
       answers: false,
       attach: Some(0),
     };
@@ -289,10 +325,10 @@ await wait(600, chain)";
 const PROSE: &str = "found = 2
 close('The open takes **329 s**. Two stages hold most of it: 181 s to send each entry to the ears of the host, and 104 s in the boot.\\n\\n- `seed` reads each chain once\\n- the image skips the boot\\n\\n```python\\nopen = boot + seed\\n```\\n\\nSee [the trace](https://github.com/uael/furb/issues/988).')";
 
-/// The opening of each life of the daemon of a test: the config of the test, no skill, and a model
-/// that answers from the message that it reads, with no command line of this machine. It closes
+/// The opening of each life of the daemon of a test: the config of the test, no skill, a claude
+/// command line of the test, and a model that answers from the message that it reads. It closes
 /// the prompt of a message, asks the operator, or never answers.
-fn scripted(at: &Path) -> Opening {
+fn scripted(at: &Path, claude: &Path) -> Opening {
   let answer = Answered(Arc::new(|request, told| {
     let request = request.to_string();
     Box::pin(async move {
@@ -329,7 +365,7 @@ fn scripted(at: &Path) -> Opening {
   Opening {
     config: Some(at.join("config").display().to_string()),
     roster: Some(vec!["claude-cli:opus".to_owned()].into()),
-    claude: Some(at.join("no-claude").display().to_string()),
+    claude: Some(claude.display().to_string()),
     skills: Some(false),
     answer: Some(answer),
     ..Opening::default()

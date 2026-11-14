@@ -63,7 +63,8 @@ pub(crate) fn boxed(line: Line, room: usize, ground: Color) -> Line {
   boxed
 }
 
-/// A text as lines of a count of columns at most, broken between words.
+/// A text as lines of a count of columns at most, broken between words. A word wider than a line,
+/// as a path, breaks where the line ends.
 pub(crate) fn wrapped(text: &str, room: usize) -> Vec<String> {
   let mut lines: Vec<String> = Vec::new();
   for word in text.split(' ') {
@@ -71,8 +72,26 @@ pub(crate) fn wrapped(text: &str, room: usize) -> Vec<String> {
       Some(last) if last.width() + 1 + word.width() <= room => *last = format!("{last} {word}"),
       _ => lines.push(word.to_owned()),
     }
+    if let Some(last) = lines.pop_if(|last| last.width() > room) {
+      lines.extend(broken(&last, room));
+    }
   }
   lines
+}
+
+/// A word as parts of a count of columns at most, each of one character at least.
+fn broken(word: &str, room: usize) -> Vec<String> {
+  let mut parts = vec![String::new()];
+  for one in word.chars() {
+    let wide = one.width().unwrap_or_default();
+    if parts.last().is_some_and(|last| !last.is_empty() && last.width() + wide > room) {
+      parts.push(String::new());
+    }
+    if let Some(last) = parts.last_mut() {
+      last.push(one);
+    }
+  }
+  parts
 }
 
 #[cfg(test)]

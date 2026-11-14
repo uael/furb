@@ -11,6 +11,7 @@ use std::{
   collections::{BTreeMap, HashMap, HashSet},
   mem,
   ops::Range,
+  time::Duration,
 };
 
 use furb::view::{Card as Agent, Exchange, Page};
@@ -52,6 +53,8 @@ pub(crate) struct Opened {
   pub(crate) fault: Option<String>,
   /// The messages of the operator that the thread does not show yet, in their order.
   pub(crate) pending: Vec<Pending>,
+  /// When the window opened the thread, on the clock of its loaders.
+  pub(crate) since: Duration,
 }
 
 /// A row of the feed as a place that holds when rows come above it: a count of rows from the
@@ -328,21 +331,46 @@ impl Opened {
 }
 
 impl Model {
-  /// The thread of the selected card opened, and the input turned to it.
+  /// The thread of the selected card opened, and the input turned to it. The window holds its
+  /// life, which opens when no life holds its record.
   pub(crate) fn open_thread(&mut self) {
     let Some(key) = self.selected.clone() else { return };
     if key.2.is_empty() || self.thread.as_ref().is_some_and(|one| one.key == key) {
       return;
     }
-    self.thread = Some(Opened { key, ..Opened::default() });
+    self.hold(key.0, &key.1, self.cwd(key.0, &key.1));
+    self.thread = Some(Opened { key, since: self.moved, ..Opened::default() });
     self.aim = None;
   }
 
-  /// The page of the end of the open thread, when the window holds none of it and asked none.
+  /// The thread closed while it opens or after its open failed, and the list in its place. The
+  /// open goes on.
+  pub(crate) fn back(&mut self) -> bool {
+    let leaves = self.leaves();
+    if leaves {
+      (self.thread, self.selected, self.aim) = (None, None, None);
+    }
+    leaves
+  }
+
+  /// Whether an escape goes back from the open thread: it opens, or its page did not come.
+  pub(crate) fn leaves(&self) -> bool {
+    self.thread.as_ref().is_some_and(|one| one.fault.is_some() || self.opens(one))
+  }
+
+  /// Whether the life of an open thread opens and its page did not come.
+  pub(crate) fn opens(&self, opened: &Opened) -> bool {
+    let hold = self.holds.get(&(opened.key.0, opened.key.1.clone()));
+    opened.above.is_none() && hold.is_some_and(|hold| !hold.stood)
+  }
+
+  /// The page of the end of the open thread, when the window holds none of it and asked none, once
+  /// the daemon answered the open of its life. The daemon holds it until that life stands.
   pub(crate) fn page_due(&self) -> Option<Verb> {
     let opened = self.thread.as_ref()?;
     let held = opened.above.is_some() || !opened.asked.is_empty() || opened.fault.is_some();
-    (!opened.key.2.is_empty() && !held).then(|| opened.page(None))
+    let stands = self.stands(opened.key.0, &opened.key.1);
+    (!opened.key.2.is_empty() && !held && stands).then(|| opened.page(None))
   }
 
   /// The open thread on a machine, while it waits for the page of a request.
@@ -445,8 +473,10 @@ impl Model {
         let room = self.feed_room();
         let shown = feed.opened.items().shown(feed.opened.top, room, |item| feed.rows(item));
         let mut rows = vec![feed.head()];
+        rows.extend(self.open_rows());
+        let above = rows.len();
         rows.extend(shown.rows);
-        rows.resize(1 + room, Row::default());
+        rows.resize(above + room, Row::default());
         if !shown.end
           && let Some(last) = rows.last_mut()
         {
@@ -464,10 +494,12 @@ impl Model {
     rows
   }
 
-  /// How many rows the feed takes: the window less the head, the dock and the input.
+  /// How many rows the feed takes: the window less the head, the rows of an open, the dock and the
+  /// input.
   pub(crate) fn feed_room(&self) -> usize {
     let docked = self.feed().map_or(0, |feed| feed.dock().len());
-    usize::from(self.size.1).saturating_sub(1 + docked + self.input_rows())
+    let taken = 1 + self.open_rows().len() + docked + self.input_rows();
+    usize::from(self.size.1).saturating_sub(taken)
   }
 
   /// The card of a key, as its machine last told it.

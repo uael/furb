@@ -305,22 +305,28 @@ fn keep(app: &App, window: &Shared) {
   });
 }
 
-/// Each request that is due asked of its machine: the page of the end of the open thread, and the
-/// next request of the queue of the input, each with its id kept until its answer comes.
+/// Each request that is due asked of its machine: the open of each life that the window holds,
+/// the page of the end of the open thread, and the next message of the queue of the input, each
+/// with its id kept until its answer comes.
 fn pump(window: &Shared) {
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
   let model = &mut screen.model;
+  for (life, verb) in model.opens_due() {
+    let id = askers.get_mut(life.0).map(|asker| asker.ask(verb));
+    model.asked_open(&life, id);
+    model.asked.extend(id.map(|id| ((life.0, id), Asked::Open)));
+  }
   if let Some(verb) = model.page_due()
     && let Some(opened) = model.thread.as_mut()
     && let Some(asker) = askers.get_mut(opened.key.0)
   {
     opened.asked.insert(asker.ask(verb), None);
   }
-  if let Some((at, verb, asked)) = model.due()
+  if let Some((at, verb)) = model.due()
     && let Some(asker) = askers.get_mut(at)
   {
-    model.asked.insert((at, asker.ask(verb)), asked);
+    model.asked.insert((at, asker.ask(verb)), Asked::Say);
   }
 }
 
@@ -442,9 +448,13 @@ fn sent(app: &App, window: &Shared) {
   });
 }
 
-/// An escape: it closes the list that stands over the home, or arms the stop of the work of the
-/// open thread, which a second escape within the bound makes.
+/// An escape: it goes back from a thread that opens or that failed to open, closes the list that
+/// stands over the home, or arms the stop of the work of the open thread, which a second escape
+/// within the bound makes.
 fn escaped(app: &App, window: &Shared) {
+  if tell(app, window, Model::back) {
+    return;
+  }
   let armed = window.borrow_mut().armed.take();
   if armed.is_some_and(|at| app.now().saturating_duration_since(at) <= LEADER) {
     return stopped(app, window);

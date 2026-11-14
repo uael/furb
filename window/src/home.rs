@@ -8,7 +8,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::{
   keys::Does,
   line::{self, Line, run, spread},
-  list::{project, unheld},
+  list::project,
   model::{Link, Model},
   thread::Row,
   tokens::Role,
@@ -110,7 +110,7 @@ impl Model {
     for (_, key, card) in &self.settled {
       let named = card.session.clone().filter(|name| !name.is_empty());
       let name = named.unwrap_or_else(|| card.thread.title.clone());
-      let works = unheld(card) && card.thread.works() && self.confirmed(key);
+      let works = self.unheld(key.0, card) && card.thread.works() && self.confirmed(key);
       if works && !lives.contains(&card.life.as_str()) {
         lives.push(&card.life);
         let machine =

@@ -8,5 +8,6 @@ mod yard;
 mod cards;
 mod daemon;
 mod input;
+mod open;
 mod screens;
 mod thread;

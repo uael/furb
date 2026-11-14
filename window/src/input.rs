@@ -21,6 +21,7 @@ use crate::{
   line::{Line, boxed, run, spread},
   list::project,
   model::{Key, Model},
+  opens::{Ask, Hold, Life},
   thread::{Click, Opened, Row, columns, width},
   tokens::{Loader, Role},
 };
@@ -31,8 +32,7 @@ const GROWS: usize = 6;
 /// The fewest columns of the session in the launcher before the model gives way to it.
 const SESSION: usize = 16;
 
-/// The place in the log of a life from which the window hears its events: past each event, since
-/// the window reads the cards and the pages of the threads, and no event.
+/// The place in the log of a life from which the window hears its events: past each event.
 const NO_EVENT: u64 = u64::MAX;
 
 /// Where the input sends: the open thread, a new thread of a session on a machine, or a new
@@ -45,9 +45,8 @@ pub(crate) enum Target {
 }
 
 /// A message that waits to be sent: its machine, its record, its thread, which is none for a new
-/// thread and empty for the thread that the message before it makes, its text, whether it is a
-/// word of python that runs, and the folder that its life opens in first, when no life holds its
-/// record.
+/// thread and empty for the thread that the message before it makes, its text, and whether it is
+/// a word of python that runs. It goes once the daemon answered the open of its life.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Outgoing {
   pub(crate) at: usize,
@@ -55,7 +54,6 @@ pub(crate) struct Outgoing {
   pub(crate) thread: Option<String>,
   pub(crate) text: String,
   pub(crate) python: bool,
-  pub(crate) opens: Opens,
 }
 
 /// The text of the input, as its editor holds it, and whether it is a word of python that runs.
@@ -65,15 +63,7 @@ pub(crate) struct Draft {
   pub(crate) python: bool,
 }
 
-/// Whether the life of the record of a message lives, or opens first: in a folder, or in the
-/// folder of its record.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Opens {
-  Lives,
-  In(Option<String>),
-}
-
-/// What a request of the input asked of a daemon: the open of a life, a message, or a stop.
+/// What a request of the window asked of a daemon: the open of a life, a message, or a stop.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Asked {
   Open,
@@ -138,7 +128,7 @@ impl Model {
       Target::Session(at, life) => (at, life, None),
       Target::New(at) => (at, self.record(), None),
     };
-    let opens = self.opens(at, &life);
+    self.hold(at, &life, self.cwd(at, &life));
     let made = thread.is_none() && !python;
     if made {
       let key = (at, life.clone(), String::new());
@@ -148,17 +138,16 @@ impl Model {
     if !python && let Some(opened) = self.thread.as_mut() {
       opened.pending.push(Pending { act: None, text: text.clone() });
     }
-    self.outgoing.push_back(Outgoing { at, life, thread, text, python, opens });
+    self.outgoing.push_back(Outgoing { at, life, thread, text, python });
   }
 
-  /// The folder that the life of a record opens in before a message goes to it, when no life holds
-  /// the record: the folder of the window for a new record, else the project of its cards.
-  fn opens(&self, at: usize, life: &str) -> Opens {
+  /// The folder that the life of a record opens in when no life holds the record: the folder of
+  /// the window for a new record, else the project of its cards.
+  pub(crate) fn cwd(&self, at: usize, life: &str) -> Option<String> {
     let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     match cards.iter().find(|card| card.life == life) {
-      None => Opens::In(Some(self.folder.display().to_string())),
-      Some(card) if !card.held => Opens::In(card.project.clone()),
-      Some(_) => Opens::Lives,
+      None => Some(self.folder.display().to_string()),
+      Some(card) => card.project.clone(),
     }
   }
 
@@ -171,28 +160,14 @@ impl Model {
     self.folder.join(".furb").join("sessions").join(name).display().to_string()
   }
 
-  /// The next request of the queue of the input, when no request of it waits for its answer: the
-  /// open of the life of the first message, or that message.
-  pub(crate) fn due(&self) -> Option<(usize, Verb, Asked)> {
-    if self.asked.values().any(|asked| *asked != Asked::Stop) {
+  /// The first message of the queue of the input, once no message waits for its answer and the
+  /// daemon answered the open of its life. The daemon holds it until that life stands.
+  pub(crate) fn due(&self) -> Option<(usize, Verb)> {
+    if self.asked.values().any(|asked| *asked == Asked::Say) {
       return None;
     }
-    let next = self.outgoing.front()?;
+    let next = self.outgoing.front().filter(|next| self.stands(next.at, &next.life))?;
     let life = next.life.clone();
-    if let Opens::In(cwd) = &next.opens {
-      let open = Verb::Open {
-        life,
-        cwd: cwd.clone(),
-        actor: None,
-        roster: None,
-        skills: None,
-        config: None,
-        claude: None,
-        answers: false,
-        attach: Some(NO_EVENT),
-      };
-      return Some((next.at, open, Asked::Open));
-    }
     let message = next.text.clone();
     let verb = match &next.thread {
       _ if next.python => Verb::Run { life, word: message, on: None },
@@ -203,7 +178,29 @@ impl Model {
         Verb::Prompt { life, shape, message, to: None, on: Some(thread.clone()) }
       }
     };
-    Some((next.at, verb, Asked::Say))
+    Some((next.at, verb))
+  }
+
+  /// The open of each life that the window holds and did not ask yet, with its machine: the daemon
+  /// opens it, in its folder when no life holds its record, and attaches the window past each
+  /// event, since the window reads the cards and the pages of the threads, and no event.
+  pub(crate) fn opens_due(&self) -> Vec<(Life, Verb)> {
+    let due = self.holds.iter().filter(|(_, hold)| hold.ask == Ask::Due);
+    let open = |(key, hold): (&Life, &Hold)| {
+      let open = Verb::Open {
+        life: key.1.clone(),
+        cwd: hold.cwd.clone(),
+        actor: None,
+        roster: None,
+        skills: None,
+        config: None,
+        claude: None,
+        answers: false,
+        attach: Some(NO_EVENT),
+      };
+      (key.clone(), open)
+    };
+    due.map(open).collect()
   }
 
   /// The stop of the work of the open thread: the cancel of its prompt.
@@ -213,32 +210,21 @@ impl Model {
     Some((at, Verb::Cancel { life, act, why: None }))
   }
 
-  /// The answer to a request of the input. The life of the first message opened, or the message
-  /// went, with the act that it made: a new thread opens in the window under its prompt, and each
-  /// message that waits for it goes to it.
-  pub(crate) fn replied(&mut self, asked: Asked, answer: Answer) {
-    match (asked, answer) {
-      (Asked::Open, _) => {
-        if let Some(next) = self.outgoing.front_mut() {
-          next.opens = Opens::Lives;
-        }
-      }
-      (Asked::Say, Answer::Act(act)) => {
-        let Some(sent) = self.outgoing.pop_front() else { return };
-        if sent.python {
-          return;
-        }
-        let thread =
-          sent.thread.clone().filter(|one| !one.is_empty()).unwrap_or_else(|| act.clone());
-        for next in self.outgoing.iter_mut().filter(|one| one.life == sent.life) {
-          if next.thread.as_deref() == Some("") {
-            next.thread = Some(thread.clone());
-          }
-        }
-        self.made(&sent, &thread, act);
-      }
-      _ => {}
+  /// The answer to the first message of the queue, with the act that it made: a new thread opens
+  /// in the window under its prompt, and each message that waits for it goes to it.
+  pub(crate) fn replied(&mut self, answer: Answer) {
+    let Answer::Act(act) = answer else { return };
+    let Some(sent) = self.outgoing.pop_front() else { return };
+    if sent.python {
+      return;
     }
+    let thread = sent.thread.clone().filter(|one| !one.is_empty()).unwrap_or_else(|| act.clone());
+    for next in self.outgoing.iter_mut().filter(|one| one.life == sent.life) {
+      if next.thread.as_deref() == Some("") {
+        next.thread = Some(thread.clone());
+      }
+    }
+    self.made(&sent, &thread, act);
   }
 
   /// The thread that a message went to, with the act of the message: the open thread takes the
@@ -296,8 +282,10 @@ impl Model {
 
   /// The box of the text of the input.
   pub(crate) fn area(&self) -> Area {
+    let opens = self.thread.as_ref().is_some_and(|one| self.opens(one));
     let placeholder = match self.target() {
       _ if self.draft.python => "A word of Python to run",
+      Target::Thread(_) if opens => "Write while it opens. Your message goes when it is open.",
       Target::Thread(_) => "Reply to this thread",
       Target::Session(..) => "Ask in a new thread",
       Target::New(_) => "Ask for a change, a review or an answer",
@@ -425,7 +413,9 @@ impl Model {
     let card = self.thread.as_ref().and_then(|one| self.told_card(&one.key));
     let works = card.is_some_and(|card| card.thread.works());
     let mut hot = Vec::new();
-    let (left, loader) = match &self.fault {
+    // The thread says why it has no page, so the row says it once more only for another fault.
+    let shown = self.thread.as_ref().and_then(|one| one.fault.as_ref());
+    let (left, loader) = match self.fault.as_ref().filter(|one| Some(*one) != shown) {
       Some(fault) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], None),
       None if works => {
         let age = card.and_then(|card| self.age(card.since)).map(|age| format!(" {age}"));
@@ -439,6 +429,7 @@ impl Model {
       None => (vec![run(format!("  {}", self.folder_shown()), muted)], None),
     };
     let (does, says) = match (&self.aim, &self.thread) {
+      (None, Some(_)) if self.leaves() => (Does::Close, "back"),
       (None, Some(_)) => (Does::NewThread, "new thread"),
       (Some(_), Some(_)) => (Does::NewThread, "back to the thread"),
       (_, None) if self.listed() => (Does::Commands, "commands"),
