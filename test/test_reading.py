@@ -24,3 +24,13 @@ async def test_reading_gives_a_new_list_at_each_call_and_asks_nothing() -> None:
   facts, kept = len(log), len(sand.record)
   engine.reading(root).clear()
   assert engine.reading(root) and (len(log), len(sand.record)) == (facts, kept)
+
+
+async def test_reading_from_a_place_gives_what_reading_gives_from_that_place() -> None:
+  """reading(on, at) gives what reading(on) gives from the place at, and copies no fact before that place."""
+  _, _, root = born()
+  assert await engine.rung("k = 1", on=root) is None
+  engine.say("cut", root, engine.transcript(root)[:3])
+  assert await engine.rung("k = 2", on=root) is None
+  whole = engine.reading(root)
+  assert [engine.reading(root, at) for at in range(len(whole) + 2)] == [whole[at:] for at in range(len(whole) + 2)]

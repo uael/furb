@@ -279,7 +279,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
-    running, waiting, last, heard, held, due = set(), {}, standing(), [], {}, set()
+    running, waiting, last, bound, held, due = set(), {}, standing(), 0, {}, set()
     barren, wrote, inbox, owed, took, awaited, did = {}, {}, {}, {}, {}, {}, {}
     step = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
@@ -309,9 +309,14 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         barren[of] = 0
         wrote.pop(of, 0)
 
+    def heard(x):
+      return x[0] == "tell" and (x[2] != x[1] or x[3][0].startswith("#" + x[1]))
+
     def bind(whose):
-      w = "\n\n".join(heard)
-      heard.clear()
+      nonlocal bound
+      since = reading(id, bound)
+      bound += (k := since.index(a) + 1)
+      w = "\n\n".join("\n".join(x[3]) for x in since[:k] if heard(x))
       return w and act("run", id, None, n := whose + "_told", unquoted(ladder.setdefault(n, w)), "")
 
     def replay(of="", words=""):
@@ -340,15 +345,19 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       }
       later = {x[1] for x in t[h.index("setup") :] if question(x) and (not get(x[2]) or x[:3:2] == ("rung", ROOT))}
       later |= {x[1] for x in t if x[0] == "run" and not later.isdisjoint(lineage(x[4]))}
-      yield (
-        "prefix",
-        id,
-        [
-          it
-          for n, it in enumerate(t)
-          if (lo <= n < hi and later.isdisjoint(lineage(it[1])))
-          or (source and (not (b := get(it[1])) or (b[2] if b[0] == "reply" else it[1]) in kin))
-        ],
+      bound = len(
+        (
+          yield (
+            "prefix",
+            id,
+            [
+              it
+              for n, it in enumerate(t)
+              if (lo <= n < hi and later.isdisjoint(lineage(it[1])))
+              or (source and (not (b := get(it[1])) or (b[2] if b[0] == "reply" else it[1]) in kin))
+            ],
+          )
+        )[3]
       )
     ladder = {x: w for x, w in program(source or id).items() if over(x) or not get(x)}
     yield "started", id
@@ -469,10 +478,17 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         case ("rung", rid, by, _, "", *_):
           waiting[rid] = ""
           prompted(by) and not over(by) and barren.setdefault(by, 0)
-        case ("tell", about, by, notes) if notes not in (["chain()"], [*r[4:5]]):
-          heard.append("\n".join(notes))
-          if a is note:
-            note = bind(step)
+        case ("tell", *_) if a is note:
+          note = bind(step)
+        case ("cut", *_):
+          bound = len(a[3]) - next(
+            (
+              n
+              for n, x in enumerate(reversed(a[3]))
+              if (x[0] == "run" and "_told" in x[4]) or (x[0] == "tell" and not heard(x))
+            ),
+            0,
+          )
         case ("done", about, *_) if about == note and step in waiting:
           if (p := get(step)[2]) in barren:
             due.discard(p)
@@ -974,9 +990,9 @@ def boot(journal, **outside):
   def transcript(on="", of=""):
     return held.get((scope(on or site.get()), of), [])[:]
 
-  def reading(on=""):
-    kept, at = cuts.get(on := scope(on or site.get()), ([], 0))
-    return [*kept, *held.get((on, ""), [])[at:]]
+  def reading(on="", at=0):
+    kept, cut = cuts.get(on := scope(on or site.get()), ([], 0))
+    return [*kept[at:], *held.get((on, ""), [])[cut + max(0, at - len(kept)) :]]
 
   for who, listener in [
     (OPERATOR, idle(OPERATOR)),

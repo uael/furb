@@ -52,6 +52,7 @@ def gathered(names: dict[str, object], define: Callable[[str], str], floor: dict
   The definitions of a chain take only the words whose rung is an act, so no text that the chain heard, as a note in prose of a tell, and the word of a checkpoint parses, so a later life binds each value again.
   chains holds each chain whose ear still hears, after a number that no chain of the life holds too.
   The turns of a chain keep no reply that is not done, so a later life holds no reply that no ear of it takes.
+  The turns of a chain keep each told rung of the chain, so the chain born on them tells what it heard after its last told rung and did not tell.
   gathered reads the questions of the life alone, so the fact of an act of an earlier life that a carried turn holds raises nothing.
   chains holds each plain value of a chain whatever its size, and seed binds each from the fact carried of its chain, so a later life holds it exactly and no turn tells it.
   The text of a value is the python that makes it again: None, a bool, an int, a float, a str, a Text, an Exit or an exception as python shows it, a list, a tuple, a set or a dict of those as python writes it, and an Act as Act('bash1').

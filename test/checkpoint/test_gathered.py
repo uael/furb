@@ -249,6 +249,15 @@ async def test_the_turns_of_a_chain_keep_no_reply_that_is_not_done_so_a_later_li
   assert open_reply not in replies and replies != []
 
 
+async def test_the_turns_of_a_chain_keep_each_told_rung_of_the_chain() -> None:
+  """The turns of a chain keep each told rung of the chain, so the chain born on them tells what it heard after its last told rung and did not tell."""
+  _, _, root = born()
+  assert await engine.rung("t = read('a.txt')", on=root) is None
+  told = [x for x in engine.reading(root) if x[0] == "run" and str(x[4]).endswith("_told")]
+  (chain,) = checkpoint.gathered(vars(engine), lambda word: word, {})["chains"]
+  assert told and [x for x in chain["turns"] if x[0] == "run"] == told
+
+
 async def test_the_text_of_a_value_is_the_python_that_makes_it_again() -> None:
   """The text of a value is the python that makes it again: None, a bool, an int, a float, a str, a Text, an Exit or an exception as python shows it, a list, a tuple, a set or a dict of those as python writes it, and an Act as Act('bash1')."""
   _, _, root = born()

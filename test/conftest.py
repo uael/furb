@@ -78,6 +78,7 @@ MONTY_SKIPS = {
   "test_held_on_a_life_that_no_journal_of_the_checkpointer_keeps_is_refused",
   "test_boot_gives_the_journal_the_tables_of_the_life",
   "test_each_scan_of_all_its_facts_that_the_ear_of_a_chain_makes_at_a_fact_reads_its_reading",
+  "test_at_each_told_rung_the_chain_reads_only_the_facts_after_its_last_told_rung",
   "test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_took_and_the_rung_of_a_run_that_awaited",
   "test_a_name_of_a_function_or_of_a_class_whose_own_name_is_another_raises_refused",
   "test_an_ear_is_any_generator_of_that_shape",

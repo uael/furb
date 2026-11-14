@@ -1436,8 +1436,8 @@ async def test_a_thread_is_asked_again_exactly_when_a_new_fact_for_it_came_since
   assert len(said(log, "reply")) == 2
 
 
-async def test_the_chain_holds_the_text_of_each_paragraph_told_on_it() -> None:
-  """The chain holds the text of each paragraph told on it but the word of a rung, in order."""
+async def test_the_chain_reads_the_text_of_each_paragraph_told_on_it_since_its_last_told_rung() -> None:
+  """The chain reads the text of each paragraph told on it since its last told rung, in order, from its reading, and holds no copy of it, but a paragraph that an act tells of itself with no header of its name, as the word of a rung."""
   _, log, root, first, second = await told_read()
   told = [a[5] for a in said(log, "run") if a[4] in (f"{first}_told", f"{second}_told")]
   words = ["t = read('a.txt')", "got = read1_text"]
@@ -1848,6 +1848,48 @@ async def test_each_scan_of_all_its_facts_that_the_ear_of_a_chain_makes_at_a_fac
   assert await engine.rung("for i in range(300):\n  chance()", on=root) is None
   assert len(engine.transcript(root)) > 600
   assert await work("x = 1") <= first
+
+
+async def test_at_each_told_rung_the_chain_reads_only_the_facts_after_its_last_told_rung(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  """At each told rung the chain reads only the facts after its last told rung, so the work of a told rung does not grow with the facts before it."""
+  _, _, root = born()
+  read = [0]
+  whole = engine.reading
+
+  def counted(on: str = "", at: int | None = None) -> list:
+    got = whole(on, at or 0)
+    read[0] += len(got) * (at is not None)
+    return got
+
+  async def work(word: str) -> int:
+    with monkeypatch.context() as patched:
+      patched.setattr(engine, "reading", counted)
+      read[0] = 0
+      assert await engine.rung(word, on=root) is None
+      await settle()
+      return read[0]
+
+  first = await work("x = 1")
+  assert await engine.rung("for i in range(300):\n  chance()", on=root) is None
+  assert await engine.rung("x = 2", on=root) is None
+  assert len(engine.reading(root)) > 600
+  assert 0 < await work("x = 1") <= first
+
+
+async def test_after_a_cut_the_chain_reads_what_it_heard_after_the_last_told_rung_that_the_cut_kept() -> None:
+  """After a cut, the chain reads what it heard after the last told rung or the last paragraph that it does not read that the cut kept, and nothing that the cut kept when the cut kept neither, so a chain born on a checkpoint tells what it heard and did not tell, and no act that its birth made again."""
+  heard = "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>"
+  for keeps, tells in [(True, [engine.unquoted(heard)]), (False, [])]:
+    _, log, root = born()
+    assert await engine.rung("t = read('a.txt')", on=root) is None
+    assert [x for x in engine.reading(root) if x[0] == "run" and str(x[4]).endswith("_told")]
+    others = [x for x in engine.reading(root) if x[0] == "tell" and x[2] != x[1]]
+    engine.say("cut", root, engine.reading(root) if keeps else others)
+    later = engine.rung("u = 1", on=root)
+    assert await later is None
+    assert [a[5] for a in said(log, "run") if a[4] == f"{later}_told"] == tells
 
 
 async def lingered(log: list[tuple]) -> None:

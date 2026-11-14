@@ -402,7 +402,12 @@ def gathered(names, define, floor):
       for x in reading(c)
       if x[0] not in ("module", "carried", "made")
       and literal(x, set())
-      and (not question(x) or (x[0] == "reply" and x[1] in ended) or x[1] in borne)
+      and (
+        not question(x)
+        or (x[0] == "reply" and x[1] in ended)
+        or x[1] in borne
+        or (x[0] == "run" and x[4][-5:] == "_told")
+      )
     ]
     held = {*chains, *borne, *(x[1] for x in saved if question(x))}
     out.append(

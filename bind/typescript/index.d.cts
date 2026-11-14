@@ -105,7 +105,7 @@ export declare class Engine {
   /** transcript gives the facts on a chain, each of which the life adds when it is said, so a chain reads at once what it said itself. */
   transcript(options?: { on?: string; of?: string } | null): Array<[string, string, string, ...unknown[]]>
   /** reading gives what the model of a chain reads: the facts that the last cut on the chain kept, then each fact said on the chain after that cut, or the whole transcript of a chain that holds no cut. */
-  reading(options?: { on?: string } | null): Array<[string, string, string, ...unknown[]]>
+  reading(options?: { on?: string; at?: number } | null): Array<[string, string, string, ...unknown[]]>
   /** The way to put a question that is answered now: it makes the act, and gives back what the act came to. */
   ask(kind: string, on: string, words?: unknown[]): unknown
   /** span(lo, hi) is the show of the lines lo through hi, where a line under one is counted back from the end, so that span(1, 20) is the first twenty lines and span(-20, -1) is the last twenty. */

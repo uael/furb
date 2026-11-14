@@ -887,9 +887,9 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
               tell(&mut co, refused);
             }
             refused.clear();
-            // A life born on a checkpoint holds the teach and the enables of its root in the turns
-            // that the checkpoint carries, which no journal says again: the ear reads them there, as
-            // a whole replay of the record hears them, and teaches nothing again.
+            // A life born on a checkpoint holds the teach and the enables of its root in the
+            // turns that the checkpoint carries, which no journal says again: the ear reads them
+            // there, as a whole replay of the record hears them, and teaches nothing again.
             if !*taught && teach.is_none() {
               let (taught_root, enables) =
                 (rooted(&mut co, TEACH).await?, rooted(&mut co, ENABLE).await?);

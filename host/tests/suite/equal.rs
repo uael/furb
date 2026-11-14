@@ -129,7 +129,7 @@ async fn read_by(
   at: &Path,
   chains: &[String],
   threads: &[String],
-) -> (BTreeMap<String, String>, Option<BTreeMap<String, String>>) {
+) -> (BTreeMap<String, String>, BTreeMap<String, String>) {
   let image = at.join("record.jsonl.image");
   match way {
     "replay" => fs::remove_file(&image).expect("the image"),
@@ -144,12 +144,10 @@ async fn read_by(
   until(&mut events, |event| matches!(event, Event::Act(_))).await;
   let opened = read(&life, chains, threads).await;
   // A word after the open: each way goes on from the same state, so its acts take the same
-  // moments. A birth on a checkpoint does not go on as the replay does yet: a chain tells again
-  // each act that the birth made again, and not what it heard before the checkpoint and did not
-  // tell.
+  // moments.
   let after = made(&life, rung("z = 3")).await;
   until(&mut events, done(&after)).await;
-  let went = if way == "checkpoint" { None } else { Some(read(&life, chains, threads).await) };
+  let went = read(&life, chains, threads).await;
   ended(life).await;
   (opened, went)
 }
@@ -204,10 +202,9 @@ async fn a_life_by_its_record_by_its_image_and_by_a_checkpoint_reads_the_same() 
       None => truth = Some((opened, went)),
       Some((at_open, after_open)) => {
         let mut differs = differ(at_open, &opened);
-        if let (Some(truth), Some(went)) = (after_open, &went) {
-          differs
-            .extend(differ(truth, went).into_iter().map(|one| format!("after the open: {one}")));
-        }
+        differs.extend(
+          differ(after_open, &went).into_iter().map(|one| format!("after the open: {one}")),
+        );
         found.extend(differs.into_iter().map(|one| format!("{way}: {one}")));
       }
     }
