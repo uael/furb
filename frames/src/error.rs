@@ -23,6 +23,8 @@ pub(crate) enum Error {
   Tmux { command: String, said: String },
   #[error("the daemon of the capture did not say that it listens")]
   Listen,
+  #[error("the session that says {0:?} could not be made: {1}")]
+  Seed(String, String),
   #[error("the step {step} waited for {until:?}, and the screen shows:\n{screen}")]
   Step { step: String, until: String, screen: String },
   #[error("{} holds no {program}: run `cargo build -p furb-window -p furb-cli` first", folder.display())]

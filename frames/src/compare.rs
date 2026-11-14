@@ -70,7 +70,7 @@ pub(crate) fn compare(
   }
   let window = window(scenario, &winners);
   for (size, name, step) in &window {
-    let path = |extension: &str| out.join(size.name()).join(format!("{name}.{step}.{extension}"));
+    let path = |suffix: &str| out.join(size.name()).join(format!("{name}.{step}.{suffix}"));
     let Ok(frame) = fs::read_to_string(path("txt")) else {
       write!(
         text,

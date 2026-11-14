@@ -213,7 +213,8 @@ async fn walked(job: &Job, setup: &Setup) -> Result<String, Error> {
   let markers = keys.iter().filter(|key| key.marker);
   let mut differ = Vec::new();
   for (key, (step, shown)) in markers.zip(&captured.shown) {
-    if key.frame.text() != *shown {
+    let soon = key.at + Duration::from_millis(500);
+    if key.frame.text() != *shown && !replay::shows(&captured.cast, key.at, soon, shown)? {
       put(&folder.join(format!("{name}.{step}.tmux.txt")), shown.as_bytes())?;
       differ.push(step.as_str());
     }
@@ -224,7 +225,7 @@ async fn walked(job: &Job, setup: &Setup) -> Result<String, Error> {
     format!(", no glyph for {}", String::from_iter(missing))
   };
   let proof = if differ.is_empty() {
-    "each marker as tmux shows it".to_owned()
+    "each marker as tmux shows it, or a frame of it within 0.5 s".to_owned()
   } else {
     format!("the replay differs from tmux at {}", differ.join(" "))
   };

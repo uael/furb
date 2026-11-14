@@ -56,22 +56,11 @@ pub(crate) async fn capture(
   root: &Path,
 ) -> Result<Captured, Error> {
   let rig = Rig::made(walk, bin, root)?;
-  let mut daemon = rig.daemon().await?;
-  let tmux = Tmux {
-    socket: format!(
-      "ff{}",
-      root.file_name().map_or_else(String::new, |name| name.to_string_lossy().into_owned())
-    ),
-  };
-  let walked = rig.walked(&tmux, walk, size).await;
-  let ended = tmux.run(&["kill-server"]).await;
-  daemon.kill().await.map_err(|source| Error::Process { what: "the daemon", source })?;
-  let (shown, markers, start) = walked?;
-  ended?;
-  let cast = rig.cast(size, start, markers)?;
-  fs::remove_dir_all(&rig.root)
-    .map_err(|source| Error::Write { path: rig.root.clone(), source })?;
-  Ok(Captured { cast, shown })
+  let captured = rig.captured(walk, size).await;
+  let removed = fs::remove_dir_all(&rig.root);
+  let captured = captured?;
+  removed.map_err(|source| Error::Write { path: rig.root.clone(), source })?;
+  Ok(captured)
 }
 
 /// The folders of a capture: the home of the operator with the project of the window, the cache
@@ -99,12 +88,67 @@ impl Rig {
       "# demo\n\nThe project of the captures of the window.\n",
     )?;
     write(root.join("config/config.json"), r#"{"skills": {"naming": false}}"#)?;
+    let listed = serde_json::json!({ "workspaces": [{ "directory": rig.project() }] });
+    write(root.join("config/workspaces.json"), &listed.to_string())?;
     write(rig.claude(), CLAUDE)?;
     executable(&rig.claude())?;
+    // The sessions of the walk take the first turns, with the replies of the claude command line.
     for (n, word) in walk.words.iter().enumerate() {
-      write(root.join(format!("fake/word.{}", n + 1)), &serde_json::to_string(word)?)?;
+      write(
+        root.join(format!("fake/word.{}", walk.sessions.len() + n + 1)),
+        &serde_json::to_string(word)?,
+      )?;
     }
     Ok(rig)
+  }
+
+  /// The walk in tmux, on the sessions that it starts on and on a daemon of its own, which it ends
+  /// with tmux, whatever the walk gave.
+  async fn captured(&self, walk: &Walk, size: Size) -> Result<Captured, Error> {
+    for (n, message) in walk.sessions.iter().enumerate() {
+      self.seeded(n, message).await?;
+    }
+    let mut daemon = self.daemon().await?;
+    let name =
+      self.root.file_name().map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    let tmux = Tmux { socket: format!("ff{name}") };
+    let walked = self.walked(&tmux, walk, size).await;
+    let ended = tmux.run(&["kill-server"]).await;
+    daemon.kill().await.map_err(|source| Error::Process { what: "the daemon", source })?;
+    let (shown, markers, start) = walked?;
+    ended?;
+    Ok(Captured { cast: self.cast(size, start, markers)?, shown })
+  }
+
+  /// A session of the project before the window, which says one message and takes the answer of the
+  /// model. Its record is named as the window names one, at a fixed moment, so its card is the same
+  /// at each capture.
+  async fn seeded(&self, n: usize, message: &str) -> Result<(), Error> {
+    let record =
+      self.project().join(format!(".furb/sessions/2026-11-{:02}T09-00-00-0000.jsonl", n + 1));
+    let said = Command::new(self.bin.join("furb"))
+      .arg("prompt")
+      .arg(message)
+      .arg("--record")
+      .arg(&record)
+      .arg("--cwd")
+      .arg(self.project())
+      .env_clear()
+      .envs(self.environment())
+      .current_dir(self.project())
+      .stdout(Stdio::null())
+      .stderr(Stdio::piped())
+      .kill_on_drop(true)
+      .output();
+    let said = timeout(PATIENCE, said)
+      .await
+      .map_err(|_elapsed| Error::Seed(message.to_owned(), "it took too long".to_owned()))?;
+    let said = said.map_err(|source| Error::Process { what: "furb prompt", source })?;
+    if said.status.success() {
+      Ok(())
+    } else {
+      Err(Error::Seed(message.to_owned(), String::from_utf8_lossy(&said.stderr).trim().to_owned()))
+    }
   }
 
   fn project(&self) -> PathBuf {
@@ -174,6 +218,8 @@ impl Rig {
       .run(&["new-session", "-d", "-x", &cols, "-y", &rows, "-s", "w", "-c", &project, &started])
       .await?;
     tmux.run(&["set-option", "-g", "status", "off"]).await?;
+    // A key after Escape is its own key, as a person types it, and no chord of alt.
+    tmux.run(&["set-option", "-g", "escape-time", "0"]).await?;
     let me =
       env::current_exe().map_err(|source| Error::Process { what: "this program", source })?;
     let stamped = format!("'{}' stamp '{}'", me.display(), self.stamps().display());
@@ -184,15 +230,16 @@ impl Rig {
     let mut shown = Vec::new();
     let mut markers = Vec::new();
     for step in walk.steps {
-      let screen = self.stepped(tmux, step).await?;
-      markers.push((SystemTime::now(), step.name.to_owned()));
+      let (at, screen) = self.stepped(tmux, step).await?;
+      markers.push((at, step.name.to_owned()));
       shown.push((step.name.to_owned(), screen));
     }
     Ok((shown, markers, start))
   }
 
-  /// One step: its acts, then the wait for its screen and for the silence of the window.
-  async fn stepped(&self, tmux: &Tmux, step: &Step) -> Result<String, Error> {
+  /// One step: its acts, then the wait for its screen and for the silence of the window. It gives
+  /// the moment of its marker, and the screen that tmux showed just after it.
+  async fn stepped(&self, tmux: &Tmux, step: &Step) -> Result<(SystemTime, String), Error> {
     for act in step.acts {
       tmux.act(act).await?;
     }
@@ -207,7 +254,8 @@ impl Rig {
         (length, quiet) = (now, Instant::now());
       }
     }
-    tmux.screen().await
+    let at = SystemTime::now();
+    Ok((at, tmux.screen().await?))
   }
 
   fn stamps(&self) -> PathBuf {
@@ -313,7 +361,15 @@ impl Tmux {
   async fn act(&self, act: &Act) -> Result<(), Error> {
     match act {
       Act::Type(text) => self.run(&["send-keys", "-t", "w", "-l", text]).await.map(drop),
-      Act::Key(key) => self.run(&["send-keys", "-t", "w", key]).await.map(drop),
+      Act::Key(key) => {
+        self.run(&["send-keys", "-t", "w", key]).await?;
+        // A terminal reads Escape and the key after it in one read as a chord of alt; a person's
+        // next key comes later.
+        if *key == "Escape" {
+          sleep(Duration::from_millis(100)).await;
+        }
+        Ok(())
+      }
       Act::Paste(text) => {
         self.run(&["set-buffer", "-b", "p", text]).await?;
         self.run(&["paste-buffer", "-p", "-d", "-b", "p", "-t", "w"]).await.map(drop)
@@ -348,6 +404,10 @@ fn executable(path: &Path) -> Result<(), Error> {
 
 /// A file runs on Windows by its name alone.
 #[cfg(not(unix))]
+#[expect(
+  clippy::unnecessary_wraps,
+  reason = "the twin of unix, which can fail, gives the same type"
+)]
 fn executable(_path: &Path) -> Result<(), Error> {
   Ok(())
 }

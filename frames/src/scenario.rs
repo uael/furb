@@ -45,9 +45,11 @@ pub(crate) struct Step {
   pub(crate) until: &'static str,
 }
 
-/// A walk of the window: the word of the model at each turn, in order, and the steps.
+/// A walk of the window: the first message of each session that stands before the window, the
+/// word of the model at each turn of the window, in order, and the steps.
 #[derive(Debug)]
 pub(crate) struct Walk {
+  pub(crate) sessions: &'static [&'static str],
   pub(crate) words: &'static [&'static str],
   pub(crate) steps: &'static [Step],
 }
@@ -117,24 +119,125 @@ See [the trace](https://github.com/uael/furb/issues/988).''')";
 /// A word that asks the operator a choice, and closes its thread with the answer.
 const ASKS: &str = "side = await prompt(Literal['right', 'left'], 'Where does the list of cards stand?', to=OPERATOR)\nclose(side)";
 
+/// The words of a long thread: an answer to each message.
+const LONG: [&str; 15] = [
+  "close('Answer 1 of the long thread.')",
+  "close('Answer 2 of the long thread.')",
+  "close('Answer 3 of the long thread.')",
+  "close('Answer 4 of the long thread.')",
+  "close('Answer 5 of the long thread.')",
+  "close('Answer 6 of the long thread.')",
+  "close('Answer 7 of the long thread.')",
+  "close('Answer 8 of the long thread.')",
+  "close('Answer 9 of the long thread.')",
+  "close('Answer 10 of the long thread.')",
+  "close('Answer 11 of the long thread.')",
+  "close('Answer 12 of the long thread.')",
+  "close('Answer 13 of the long thread.')",
+  "close('Answer 14 of the long thread.')",
+  "close('Answer 15 of the long thread.')",
+];
+
 /// The scenarios, in their order.
 pub(crate) const SCENARIOS: &[Scenario] = &[
   Scenario {
     name: "01-first-run",
     has: Has::Walk(Walk {
+      sessions: &[],
       words: &[],
       steps: &[step("a", &[], READY), step("b", &[Act::Key("C-x"), Act::Key("?")], "each key")],
     }),
   },
-  Scenario { name: "02-resume", has: none("4. The list says what needs him, and only that") },
+  Scenario {
+    name: "02-resume",
+    has: Has::Walk(Walk {
+      sessions: &[
+        "Find where the open spends its time.",
+        "Name the stages of a resume.",
+        "Read the record of the slow open.",
+        "Measure the seed of a large record.",
+        "Say why the boot replays twice.",
+        "List the tests of the checkpoint.",
+      ],
+      words: &[],
+      steps: &[
+        step("a", &[Act::Key("C-o")], "6 sessions"),
+        step("b", &[Act::Type("seed")], "Measure the seed"),
+        step("c", &[Act::Key("Enter")], "reply 1"),
+      ],
+    }),
+  },
   Scenario {
     name: "03-sessions-many",
-    has: none("4. The list says what needs him, and only that"),
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &["await bash('sleep 30')\nclose('slept')", ASKS],
+      steps: &[
+        step("x-first", &[Act::Type("Run the bench."), Act::Key("Enter")], "⎋ ⎋ stop"),
+        step(
+          "a",
+          &[Act::Key("C-n"), Act::Type("Place the list of cards."), Act::Key("Enter")],
+          "Where does the list",
+        ),
+        step("c", &[Act::Key("C-x"), Act::Key("j")], "Run the bench."),
+      ],
+    }),
   },
-  Scenario { name: "04-scroll-back", has: none("12. Reading a long thread") },
+  Scenario {
+    name: "04-scroll-back",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &LONG,
+      steps: &[
+        step(
+          "a",
+          &[
+            Act::Type("Message 1 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 2 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 3 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 4 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 5 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 6 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 7 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 8 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 9 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 10 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 11 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 12 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 13 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 14 of the long thread."),
+            Act::Key("Enter"),
+            Act::Type("Message 15 of the long thread."),
+            Act::Key("Enter"),
+          ],
+          "Answer 15 of the long thread.",
+        ),
+        step("b", &[Act::Key("PageUp")], "Message"),
+        step(
+          "c",
+          &[Act::Key("PageUp"), Act::Key("PageUp"), Act::Key("PageUp"), Act::Key("PageUp")],
+          "Message 1 of",
+        ),
+      ],
+    }),
+  },
   Scenario {
     name: "05-prompt-box",
     has: Has::Walk(Walk {
+      sessions: &[],
       words: &[],
       steps: &[
         step("a", &[], READY),
@@ -156,10 +259,26 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
   Scenario { name: "07-prompt-complete", has: none("17. After the first window") },
   Scenario { name: "08-file-picker", has: none("17. After the first window") },
   Scenario { name: "09-image", has: none("10. The input: history, paste, image, mode") },
-  Scenario { name: "10-shell-mode", has: none("10. The input: history, paste, image, mode") },
+  Scenario {
+    name: "10-shell-mode",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[],
+      steps: &[
+        step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
+        step(
+          "a",
+          &[Act::Key("C-x"), Act::Key("y"), Act::Type("answer = 41 + 1")],
+          "answer = 41 + 1",
+        ),
+        step("b", &[Act::Key("Enter")], "A word of Python to run"),
+      ],
+    }),
+  },
   Scenario {
     name: "11-prose-stream",
     has: Has::Walk(Walk {
+      sessions: &[],
       words: &[PROSE],
       steps: &[step(
         "b",
@@ -168,13 +287,59 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       )],
     }),
   },
-  Scenario { name: "12-thinking", has: none("2. The work moves and says how long") },
-  Scenario { name: "13-command", has: none("3. A command shows what it printed") },
+  Scenario {
+    name: "12-thinking",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &["await bash('sleep 2')\nclose('The open spends its time in the seed.')"],
+      steps: &[
+        step(
+          "a",
+          &[Act::Type("Where does the time of the open go? THINK"), Act::Key("Enter")],
+          "sleep 2",
+        ),
+        step("c", &[], "spends its time in the seed"),
+      ],
+    }),
+  },
+  Scenario {
+    name: "13-command",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[
+        "out = await bash('for i in 1 2 3 4 5 6 7 8 9 10; do echo step $i of 10; sleep 1; done')\nclose(out.stdout.content)",
+        "out = await bash('seq 1 300')\nclose(f'It printed {len(out.stdout.lines)} lines.')",
+      ],
+      steps: &[
+        step("a", &[Act::Type("Run the slow script."), Act::Key("Enter")], "⎋ ⎋ stop"),
+        step("b", &[], "step 10 of 10"),
+        step(
+          "c",
+          &[Act::Type("Print three hundred lines."), Act::Key("Enter")],
+          "It printed 300 lines.",
+        ),
+      ],
+    }),
+  },
   Scenario { name: "14-changes", has: none("17. After the first window") },
-  Scenario { name: "15-failure", has: none("5. Failure: the cause, the way out, the retry") },
+  Scenario {
+    name: "15-failure",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[
+        "await bash(\"sh -c 'for i in 1 2 3 4 5; do echo error line $i >&2; done; exit 2'\")\nclose('done')",
+        "close('The command failed with exit 2.')",
+      ],
+      steps: &[
+        step("a", &[Act::Type("Run the check."), Act::Key("Enter")], "failed with exit 2"),
+        step("b", &[Act::Type("Run it again. ERROR"), Act::Key("Enter")], "Run it again."),
+      ],
+    }),
+  },
   Scenario {
     name: "16-ask",
     has: Has::Walk(Walk {
+      sessions: &[],
       words: &[ASKS],
       steps: &[
         step(
@@ -186,7 +351,18 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
     }),
   },
-  Scenario { name: "17-steer", has: none("6. Stop and steer leave a trace") },
+  Scenario {
+    name: "17-steer",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &["await bash('sleep 20')\nclose('slept')", "await bash1\nclose('The bench ran.')"],
+      steps: &[
+        step("a", &[Act::Type("Wait for the bench."), Act::Key("Enter")], "⎋ ⎋ stop"),
+        step("b", &[Act::Type("Stop after the boot."), Act::Key("Enter")], "Stop after the boot."),
+        step("c", &[Act::Key("Escape"), Act::Key("Escape")], "Stop after the boot."),
+      ],
+    }),
+  },
   Scenario { name: "18-parallel", has: none("8. The dock of agents") },
   Scenario { name: "19-context", has: none("7. The context box") },
   Scenario { name: "20-models", has: none("9. The launcher picks the model and its effort") },
@@ -194,15 +370,26 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
   Scenario {
     name: "22-help-keys",
     has: Has::Walk(Walk {
+      sessions: &[],
       words: &[],
       steps: &[
         step("a", &[Act::Key("C-x"), Act::Key("?")], "each key"),
-        step("c", &[Act::Key("Escape"), Act::Key("C-p")], "commands"),
+        step("c", &[Act::Key("Escape"), Act::Key("C-p")], "Search a command"),
       ],
     }),
   },
   Scenario { name: "23-extensions", has: none("17. After the first window") },
-  Scenario { name: "24-remote", has: none("15. Remote") },
+  Scenario {
+    name: "24-remote",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[],
+      steps: &[
+        step("a", &[], "this machine"),
+        step("b", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
+      ],
+    }),
+  },
   Scenario {
     name: "25-narrow",
     has: Has::Sized(
@@ -217,6 +404,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
   Scenario {
     name: "27-mouse",
     has: Has::Walk(Walk {
+      sessions: &[],
       words: &[ASKS],
       steps: &[
         step(
@@ -225,7 +413,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           "Where does the list",
         ),
         step("a", &[Act::Pointer { on: "Resolve", button: 35 }], "Resolve"),
-        step("b", &[Act::Pointer { on: "Resolve", button: 0 }], "Place the list"),
+        step("b", &[Act::Pointer { on: "Resolve", button: 0 }], "Reopen"),
         step("c", &[Act::Pointer { on: "opus/high", button: 64 }], "Place the list"),
       ],
     }),

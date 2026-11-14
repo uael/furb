@@ -59,6 +59,29 @@ pub(crate) fn keys(cast: &Cast, every: Option<Duration>) -> Result<Vec<Key>, Err
   Ok(keys)
 }
 
+/// Whether the screen of a recording shows a text at a moment from a time to a time after it: the
+/// replay holds what tmux showed while the program moved, as a loader moves.
+pub(crate) fn shows(
+  cast: &Cast,
+  from: Duration,
+  until: Duration,
+  text: &str,
+) -> Result<bool, Error> {
+  let mut terminal =
+    Terminal::new(cast.cols, cast.rows).ok().ok_or(Error::Cast("its size is 0"))?;
+  for event in cast.events.iter().take_while(|event| event.at <= until) {
+    match &event.what {
+      What::Output(data) => terminal.feed([data.as_str()]),
+      What::Resize { cols, rows } => terminal.resize(*cols, *rows),
+      What::Marker(_) | What::Other => {}
+    }
+    if event.at >= from && Frame::of(&terminal).text() == text {
+      return Ok(true);
+    }
+  }
+  Ok(false)
+}
+
 /// Each key frame of a recording written in a folder as `<stem>.<name>.txt` and `.json`, and a
 /// frame at a marker as `.png` too. It gives the glyphs that no font of the image holds, each
 /// once, in the order that they came.
@@ -66,7 +89,7 @@ pub(crate) fn write(keys: &[Key], folder: &Path, stem: &str) -> Result<Vec<char>
   fs::create_dir_all(folder).map_err(|source| Error::Write { path: folder.to_owned(), source })?;
   let mut missing: Vec<char> = Vec::new();
   for key in keys {
-    let path = |extension: &str| folder.join(format!("{stem}.{}.{extension}", key.name));
+    let path = |suffix: &str| folder.join(format!("{stem}.{}.{suffix}", key.name));
     put(&path("txt"), key.frame.text().as_bytes())?;
     put(&path("json"), serde_json::to_string(&key.frame)?.as_bytes())?;
     if key.marker {
