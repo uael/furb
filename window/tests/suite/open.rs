@@ -5,20 +5,27 @@
 #![cfg(test)]
 
 use std::{
-  fs::{self, File},
+  fs::File,
   path::{Path, PathBuf},
   time::Duration,
 };
 
 use furb_host::protocol::{Answer, Verb};
 use furb_window::{Options, open};
-use opentui::{style::Color, testing::TestApp};
+use opentui::testing::TestApp;
 
 use crate::{
   cards::{app, options, row, shows},
   daemon::{ANSWERS, Daemon, PATIENCE},
   screens::screen,
-  thread::{at, lights},
+};
+
+// What only the tests of a session at rest use, which run on unix alone.
+#[cfg(unix)]
+use {
+  crate::thread::{at, lights},
+  opentui::style::Color,
+  std::fs,
 };
 
 /// The columns of the left side of the window, at the left of the list.
@@ -60,6 +67,7 @@ fn resting(app: &TestApp, titles: &[&str]) -> (Daemon, PathBuf) {
 }
 
 /// The record of a session at rest of a machine, by its place among the titles of the machine.
+#[cfg(unix)]
 fn record(daemon: &Daemon, at: usize) -> PathBuf {
   daemon.file("furb").join(".furb").join("sessions").join(format!("rest{at}.jsonl"))
 }
