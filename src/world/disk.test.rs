@@ -59,13 +59,13 @@ fn a_write_that_fails_midway_as_on_a_full_disk_leaves_the_old_file_whole_and_no_
   for access in [Access::Shared, Access::Owner] {
     let at = yard("midway");
     fs::write(at.join("a.txt"), "old\n").unwrap();
-    let torn = filled(&at.join("a.txt"), b"new content\n", access, |file, bytes| {
-      file.write_all(&bytes[..4])?;
+    let torn = filled(&at.join("a.txt"), access, |file| {
+      file.write_all(b"new ")?;
       Err(io::Error::other("the disk is full"))
     });
     assert_eq!(torn.unwrap_err().source.to_string(), "the disk is full");
-    let full = |_: &mut fs::File, _: &[u8]| Err(io::Error::other("the disk is full"));
-    assert!(filled(&at.join("b.png"), b"new\n", access, full).is_err(), "a new file fails too");
+    let full = |_: &mut fs::File| Err(io::Error::other("the disk is full"));
+    assert!(filled(&at.join("b.png"), access, full).is_err(), "a new file fails too");
     assert_eq!(fs::read_to_string(at.join("a.txt")).unwrap(), "old\n");
     assert_eq!(names(&at), ["a.txt"], "no part file stays, and no part of a new file");
   }

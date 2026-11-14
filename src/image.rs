@@ -4,16 +4,15 @@
 //! does not agree, so the open then goes by the record, and a life that keeps the record drops the
 //! image once it stands so. The record holds no fact of it.
 //!
-//! The file holds its key, one line of JSON, then its body. The key names the tip of
-//! the record that the life stood at, the shape of the body, the dump version of monty, the digest
-//! of the texts of the build, since a session runs the engine and the Kernel that it holds,
+//! The file holds its key, one line of JSON that spaces may end, then its body. The key names the
+//! tip of the record that the life stood at, the shape of the body, the dump version of monty, the
+//! digest of the texts of the build, since a session runs the engine and the Kernel that it holds,
 //! whether the scratch directory of the record holds a file, since a life that opens from its image
 //! makes no file of it again, and the digest of the body as the file holds it, since monty checks
-//! no byte of a dump. A body is
-//! the session that monty dumps, then the half of the host, as JSON, then the part of the host of
-//! the life: what that host keeps of the life beside its engine, as the log of its events, which
-//! the crate carries and does not read. The key names where each part ends. The file lands whole,
-//! as each write of the World, so no reader meets a part of an image.
+//! no byte of a dump. A body is the session that monty dumps, then the half of the host, as JSON,
+//! then the part of the host of the life: what that host keeps of the life beside its engine, as
+//! the log of its events, which the crate carries and does not read. The key names where each part
+//! ends. The file lands whole, as each write of the World, so no reader meets a part of an image.
 //!
 //! A record only grows, so an image agrees with a record that holds entries after the tip that it
 //! names: a life that went on from the image and wrote no later one, as a life that crashed, kept
@@ -24,7 +23,7 @@
 use std::{
   fmt::Display,
   fs::{self, File},
-  io::{self, BufRead, BufReader, Read, Seek, SeekFrom},
+  io::{self, BufRead, BufReader, BufWriter, IntoInnerError, Read, Seek, SeekFrom, Write},
   ops::Range,
   path::{Path, PathBuf},
 };
@@ -186,19 +185,60 @@ pub fn keep(engine: &mut Engine, record: &Path, host: &impl Serialize) -> Result
   if engine.unkept() > 0 || !matches!(Format::of(record), Format::Lines) {
     return Ok(false);
   }
-  let Some((half, mut file)) = engine.image()? else { return Ok(false) };
+  let Some((half, session)) = engine.image()? else { return Ok(false) };
   let unkept = |no: &dyn Display| Fault::refused(format!("the life keeps no image: {no}"));
-  // The session is the most of the body, so each other part goes in after it, and the key before
-  // it, with no copy of it.
-  let session = file.len();
-  serde_json::to_writer(&mut file, &half).map_err(|no| unkept(&no))?;
-  let half = file.len() - session;
-  serde_json::to_writer(&mut file, host).map_err(|no| unkept(&no))?;
-  let body = format!("{:x}", Sha256::digest(&file));
-  let key = Key::of(record, None, Parts { body, session, half }).map_err(|no| unkept(&no))?;
-  let mut head = serde_json::to_vec(&key).map_err(|no| unkept(&no))?;
-  head.push(b'\n');
-  file.splice(0..0, head);
-  disk::write(&path(record), &file, disk::Access::Owner).map_err(|no| unkept(&no))?;
+  // The key stands before the body and names its digest and its parts, which only the write of
+  // the body gives. So the file takes a line as wide as the widest key first, then each part of
+  // the body in turn, which no second buffer holds, then the key over that line: the spaces that
+  // stay after it are a part of no value.
+  let widest =
+    Parts { body: format!("{:x}", Sha256::digest([])), session: usize::MAX, half: usize::MAX };
+  let mut key = Key::of(record, None, widest).map_err(|no| unkept(&no))?;
+  let filled = disk::filled(&path(record), disk::Access::Owner, |file| {
+    let mut line = vec![b' '; serde_json::to_vec(&key)?.len()];
+    line.push(b'\n');
+    file.write_all(&line)?;
+    let mut body = BufWriter::with_capacity(BUFFER, Summed::new(&mut *file));
+    body.write_all(&session)?;
+    serde_json::to_writer(&mut body, &half)?;
+    body.flush()?;
+    let half = body.get_ref().bytes - session.len();
+    serde_json::to_writer(&mut body, host)?;
+    let summed = body.into_inner().map_err(IntoInnerError::into_error)?;
+    let body = format!("{:x}", summed.digest.finalize());
+    key.parts = Parts { body, session: session.len(), half };
+    file.seek(SeekFrom::Start(0))?;
+    file.write_all(&serde_json::to_vec(&key)?)
+  });
+  filled.map_err(|no| unkept(&no))?;
   Ok(true)
+}
+
+/// How many bytes of a body wait for the file and for the digest at a time.
+const BUFFER: usize = 1 << 20;
+
+/// A writer that passes each byte on, with the count and the digest of the bytes that passed.
+struct Summed<W> {
+  to: W,
+  digest: Sha256,
+  bytes: usize,
+}
+
+impl<W> Summed<W> {
+  fn new(to: W) -> Self {
+    Self { to, digest: Sha256::new(), bytes: 0 }
+  }
+}
+
+impl<W: Write> Write for Summed<W> {
+  fn write(&mut self, part: &[u8]) -> io::Result<usize> {
+    let passed = self.to.write(part)?;
+    self.digest.update(&part[..passed]);
+    self.bytes += passed;
+    Ok(passed)
+  }
+
+  fn flush(&mut self) -> io::Result<()> {
+    self.to.flush()
+  }
 }
