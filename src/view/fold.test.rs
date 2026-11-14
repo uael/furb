@@ -321,3 +321,21 @@ fn a_start_that_the_world_tells_after_the_done_of_an_act_leaves_it_done() {
   }
   assert_eq!(fold.recorded(&json!(["started", "reply1", "provider"])), Vec::new());
 }
+
+#[test]
+fn a_checkpoint_makes_each_act_that_it_carries_by_the_maker_that_it_names() {
+  let mut fold = Fold::default();
+  let data = json!({
+    "chains": [{"id": "chain1", "by": "operator", "on": "", "label": "root", "source": ""}],
+    "acts": [
+      {"kind": "prompt", "id": "prompt1", "by": "operator", "on": "chain1", "words": ["str", "go", ""], "value": "went"},
+      {"kind": "prompt", "id": "prompt2", "by": "rung4", "on": "chain1", "shape": "None", "message": "more", "to": "", "held": ""},
+    ],
+  });
+  let moved = fold.recorded(&json!(["checkpoint", "chain1", "store", data]));
+  let by = |id: &str| moved.iter().find(|act| act.id == id).map(|act| act.by.clone());
+  assert_eq!(
+    (by("chain1"), by("prompt1"), by("prompt2")),
+    (Some("operator".to_owned()), Some("operator".to_owned()), Some("rung4".to_owned()))
+  );
+}

@@ -373,17 +373,18 @@ impl Fold {
   /// What a checkpoint carries: each chain that lives, each act that a value names with its value,
   /// and each open prompt. A record whose past stands in a checkpoint holds no other fact of them,
   /// and a record whose log does not agree with it keeps no end of an act that a model closed. So
-  /// the fold makes each act that it does not hold, with the maker `journal`, as a birth on the
-  /// checkpoint says it again, since the checkpoint names no maker, and ends each act that the
-  /// checkpoint ends.
+  /// the fold makes each act that it does not hold, by the maker that the checkpoint names for it,
+  /// or by `journal`, as a birth on a checkpoint of an earlier build that names none says it again,
+  /// and ends each act that the checkpoint ends.
   fn checkpointed(&mut self, data: &Value) {
     let list = |key: &str| data.get(key).and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
     let text = |one: &Value, key: &str| one.get(key).cloned().unwrap_or_default();
+    let by = |one: &Value| one.get("by").and_then(Value::as_str).unwrap_or(JOURNAL).to_owned();
     for chain in list("chains") {
       let id = chain.get("id").and_then(Value::as_str).unwrap_or_default();
       if !self.acts.contains_key(id) {
         let rest = [text(chain, "on"), text(chain, "label"), text(chain, "source")];
-        self.asked(["chain", id, JOURNAL], &rest, None);
+        self.asked(["chain", id, &by(chain)], &rest, None);
       }
     }
     for act in list("acts") {
@@ -396,7 +397,7 @@ impl Fold {
           None => vec![text(act, "shape"), text(act, "message"), text(act, "to")],
         };
         let rest: Vec<Value> = [text(act, "on")].into_iter().chain(words).collect();
-        self.asked([kind, id, JOURNAL], &rest, None);
+        self.asked([kind, id, &by(act)], &rest, None);
       }
       if let Some(value) = value.filter(|_| self.acts.get(id).is_some_and(|one| !one.done())) {
         self.done(id, value.clone());
@@ -534,7 +535,8 @@ impl Fold {
   }
 }
 
-/// Who makes an act that a checkpoint carries: the name by which a birth on it says each act again.
+/// Who makes an act that a checkpoint of an earlier build carries with no maker: the name by which
+/// a birth on it says each act again.
 const JOURNAL: &str = "journal";
 
 /// The words of an act that a checkpoint carries: a list, or a tuple as the record marks it.
