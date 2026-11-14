@@ -17,6 +17,7 @@
 use std::{
   fs, panic,
   path::{Path, PathBuf},
+  slice,
   sync::Arc,
   task::Waker,
   time::Duration,
@@ -92,9 +93,6 @@ pub enum Stage {
   /// its models in it. A life that opens from its image reads no entry, and tells each byte passed
   /// once the image agrees with the record.
   Find,
-  /// A record whose last life ran another engine is carried across to this build, by a life that
-  /// inspects it and writes its checkpoint. It counts nothing.
-  Cross,
   /// The record is read again from its last checkpoint under its lease, when it changed after
   /// the stage find: the bytes passed, of the bytes of the record.
   Read,
@@ -382,22 +380,17 @@ impl Opening {
     };
     // A record of another major of its schema is refused before any build writes on it.
     let image = self.image(images).inspect(|_| (told.0)(Stage::Find, bytes, bytes));
-    let mut last = if image.is_some() { None } else { read(told)? };
+    let last = if image.is_some() { None } else { read(told)? };
     if let (Some(held), Some(path)) = (&last, self.record.as_deref()) {
       // The build that wrote the checkpoint names the schema of the record before it, and each
       // build after it the schema of what it wrote.
       world::readable(world::made_before(Path::new(path), held.from)?.as_slice())?;
       world::readable(&held.entries)?;
-      // A crossing writes a checkpoint, so the last entries of before it are those of another
-      // record.
-      if self.keeps() && self.crossed(&held.entries, told)? {
-        last = read(&Progress::default())?;
-      }
     }
     // The models of a life read the engine that the life runs: the one that its image holds, or
     // the one that the last segment of its record holds.
     let source = match (&image, &last) {
-      (Some(image), _) => Some(image.half.source.clone()),
+      (Some(image), _) => Some(world::texts(slice::from_ref(&image.half.made))?.0),
       (None, Some(last)) => Some(world::texts(checkpoint::segment(&last.entries))?.0),
       (None, None) => None,
     };
@@ -671,32 +664,6 @@ impl Opening {
     }
     engine.pump(Waker::noop())?;
     Ok(Ok(engine))
-  }
-
-  /// Carries a record whose last life ran another engine of the major across to this build, so a
-  /// life never dies on a fault that this build fixed in the kernel: a life that inspects the
-  /// record, born on the engine that its fact made holds, writes its checkpoint after its last
-  /// entry, as a life that ends writes one, and the life opens from that checkpoint on the engine
-  /// of this build. A record of this build, or of a build whose fact made holds no texts, stays as
-  /// it is. It reads the last entries of the record, and says whether it wrote that checkpoint.
-  fn crossed(&self, last: &[Object], told: &Progress) -> Result<bool, Fault> {
-    let segment = checkpoint::segment(last);
-    let (source, ..) = world::texts(segment)?;
-    let crosses = source != crate::ENGINE && !segment.is_empty();
-    let Some(path) = self.record.as_deref().filter(|_| crosses) else {
-      return Ok(false);
-    };
-    (told.0)(Stage::Cross, 0, 0);
-    let record = checkpoint::booted(world::last(Path::new(path), &mut |_| {})?.entries);
-    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
-    let prepared = inspects.prepared(&Progress::default(), false)?;
-    let ears = inspects.eared(prepared, Some(&record), checkpoint::stood(&record))?;
-    let mut engine = Engine::boot(record, ears)?;
-    if let Some(no) = engine.raised() {
-      return Err(no.clone());
-    }
-    checkpoint::keep(Path::new(path), checkpoint::written(&mut engine)?)?;
-    Ok(true)
   }
 
   /// Proves each checkpoint of the record: a life that inspects the entries before it, born on them

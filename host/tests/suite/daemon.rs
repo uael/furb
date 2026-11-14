@@ -30,9 +30,10 @@ use std::{
 };
 
 use furb::{
-  Object,
+  Object, image,
   life::{Answer as Answered, Log, Opening},
   view::{self, Phase, Standing},
+  world::checkpoints,
 };
 use furb_host::{
   DaemonError, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
@@ -1007,6 +1008,9 @@ async fn a_handover_keeps_each_life_its_pins_and_each_window() {
   let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
   assert!(window.closed().await);
   assert!(matches!(old.await, Ok(Ok(()))));
+  let record = Path::new(&life);
+  assert_eq!(checkpoints(record).unwrap(), Vec::<usize>::new(), "a handover writes no checkpoint");
+  assert!(image::agrees(record), "a handover ends the life with its image");
   listening(&local, &mut new).await;
   let mut window = Window::dialed(&local).await;
   window.attach(&life).await;

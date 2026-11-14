@@ -14,6 +14,7 @@ use std::{
   io::{BufRead, BufReader, Read, Seek, SeekFrom},
   path::Path,
   rc::Rc,
+  slice,
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -360,6 +361,29 @@ pub fn texts(record: &[Object]) -> Result<(String, String, String), Fault> {
   Ok((source, kernel, checkpointer))
 }
 
+/// The entry of the fact made of the texts that a segment of a record runs on, as [`texts`] gives
+/// them: its last fact made when that fact holds the texts of its engine, or the fact made of this
+/// build. A life writes it after its checkpoint, so the life born on that checkpoint runs the same
+/// texts.
+pub fn running(record: &[Object]) -> Object {
+  let made = |entry: &&Object| {
+    entry
+      .as_ref()
+      .items()
+      .and_then(|held| Fact::of(*held.first()?))
+      .is_some_and(|one| one.kind() == MADE)
+  };
+  match record.iter().rev().find(made) {
+    Some(last) if matches!(held(slice::from_ref(last)), Some([Some(_), Some(_), Some(_), _])) => {
+      last.clone()
+    }
+    _ => {
+      let said = [MADE, ROOT, "store"].map(Object::string);
+      Object::list([Object::list(said.into_iter().chain(build()))])
+    }
+  }
+}
+
 /// The digest, the engine, the Kernel and the checkpointer that the last fact made of a segment
 /// names and holds.
 fn held(record: &[Object]) -> Option<[Option<String>; 4]> {
@@ -457,10 +481,15 @@ fn streamed(entry: Object) -> Object {
   Object::list([Object::list(said)])
 }
 
-/// The fact made of this build: its engine, no version, the schema of its record,
-/// its release, and the texts of its engine, of its Kernel and of its checkpointer.
+/// The fact made of this build, as the store says it.
 fn named() -> Fact {
-  let build = [
+  Fact::says(MADE, ROOT, build())
+}
+
+/// The words of the fact made of this build: its engine, no version, the schema of its record, its
+/// release, and the texts of its engine, of its Kernel and of its checkpointer.
+fn build() -> [Object; 7] {
+  [
     Object::string(engine()),
     Object::none(),
     RECORD_SCHEMA.object(),
@@ -468,8 +497,7 @@ fn named() -> Fact {
     Object::string(ENGINE),
     Object::string(KERNEL),
     Object::string(CHECKPOINTER),
-  ];
-  Fact::says(MADE, ROOT, build)
+  ]
 }
 
 /// How long the ear of the record waits before it tries again to write the entries that it could not write.
@@ -494,9 +522,10 @@ enum Told {
 
 /// The record that a store holds, and the ear that keeps in the store what the journal says to keep.
 ///
-/// A new record names the engine and the version of this build: the ear says them as it hears the root at its birth,
-/// so a later life says them again at the same place. A record of a build before the fact made names no engine, and
-/// stays so, since this engine did not make it.
+/// A new record names the engine and the version of this build: the ear says them as it hears the
+/// root at its birth, so a later life says them again at the same place, and so does the first life
+/// after a checkpoint of an earlier build that holds no fact made after it. A record of a build
+/// before the fact made names no engine, and stays so, since this engine did not make it.
 ///
 /// The ear tells the operator once of the bytes of a torn last line that the open passed over.
 /// It tells the operator once when the disk of the record holds less than [`LOW`] free, with

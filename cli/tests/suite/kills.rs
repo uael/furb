@@ -562,7 +562,7 @@ async fn a_daemon_killed_during_a_command_of_a_model_runs_neither_twice() {
 }
 
 /// A handover asked of the daemon by `furb host upgrade`, until the daemon that ran gave its
-/// lives, wrote the checkpoint of each and closed each window: the new daemon then opens them.
+/// lives, ended each and closed each window: the new daemon then opens them.
 async fn handed(yard: &Yard, daemon: Daemon, mut window: Window) -> Daemon {
   let upgrade = Daemon::spawned(yard.furb(&["host", "upgrade"]), false).await;
   window.closed().await;
@@ -575,13 +575,15 @@ async fn a_daemon_killed_during_the_write_of_a_checkpoint_leaves_a_life_that_ope
   for signal in SIGNALS {
     let (yard, lifeline, daemon, window) = begun().await;
     handed(&yard, daemon, window).await.killed(signal).await;
+    lifeline.ended().await;
+    let mut checkpoint = yard.furb(&["checkpoint", "--record", &yard.life()]);
+    assert!(checkpoint.status().await.unwrap().success(), "furb checkpoint writes a checkpoint");
     // A kill during the write of a checkpoint leaves a part of its line at the end of the
     // record, which no clock reaches: the test cuts the last checkpoint so.
     let text = fs::read_to_string(yard.life()).unwrap();
-    let at = text.rfind("[[\"checkpoint\"").expect("the handover wrote a checkpoint");
+    let at = text.rfind("[[\"checkpoint\"").expect("the record holds a checkpoint");
     let end = text[at..].find('\n').map_or(text.len(), |one| at + one);
     fs::write(yard.life(), &text[..at + (end - at) / 2]).unwrap();
-    lifeline.ended().await;
     reopened(&yard).await;
   }
 }

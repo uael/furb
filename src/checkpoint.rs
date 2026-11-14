@@ -18,15 +18,16 @@
 //! its schema, and refuses only one of another major.
 //!
 //! A life that ends with no image, as `src/image.rs` says, ends with its checkpoint, which the ear
-//! of its store keeps, since a life born from a checkpoint makes acts of its own at its birth;
-//! [`keep`] writes one on a record that no life
-//! holds. A later life boots on the last checkpoint of its record, whatever engine wrote it, as
-//! [`booted`] says, so it replays the checkpoint and the entries after it alone, word by word,
-//! whatever build of the major made them: a resume returns to the exact state at the tip. A tail
-//! that a build cannot replay with no drift is a defect, and the record then opens to read only.
-//! Each checkpoint is a birth: the life that writes it ends there, so the facts after it come from
-//! a life born on it. An open from the first entry is born again at each checkpoint in the same
-//! way, as [`reborn`] proves, and reaches the state of the open from the last one.
+//! of its store keeps, since a life born from a checkpoint makes acts of its own at its birth, then
+//! with the fact made of the texts that it runs, so the life born on it runs them too; [`crossed`]
+//! writes one on a record that no life holds, then the fact made of this build, so the life born on
+//! it runs this build. A later life boots on the last checkpoint of its record, whatever engine
+//! wrote it, as [`booted`] says, so it replays the checkpoint and the entries after it alone, word
+//! by word, whatever build of the major made them: a resume returns to the exact state at the tip.
+//! A tail that a build cannot replay with no drift is a defect, and the record then opens to read
+//! only. Each checkpoint is a birth: the life that writes it ends there, so the facts after it come
+//! from a life born on it. An open from the first entry is born again at each checkpoint in the
+//! same way, as [`reborn`] proves, and reaches the state of the open from the last one.
 //!
 //! The checkpoint of the build before the schema holds `entries` in the place of the data: facts
 //! that the journal of any engine replays, and `("reserve", kind, "store", n)`, which stands for
@@ -45,6 +46,7 @@
 use std::{
   collections::{HashMap, HashSet},
   path::Path,
+  slice,
 };
 
 use crate::{
@@ -77,7 +79,8 @@ fn prefix(carried: &Fact) -> Object {
   Object::tuple(words.into_iter().chain([turns]))
 }
 
-/// The entry of the checkpoint of a life at its tip, as the store keeps it.
+/// The entry of the checkpoint of a life at its tip, as the store keeps it. Its engine is the one
+/// that the fact made of the texts that the life runs names.
 pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
   let define = callable(|args: Vec<Object>| {
     let word = args.first().and_then(|one| one.as_ref().as_str().map(str::to_owned));
@@ -88,7 +91,10 @@ pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
   let data = engine.unbounded(|engine| engine.checkpointed("gathered", vec![define, floor]))?;
   let mut fields = vec![
     (Object::string("schema"), CHECKPOINT_SCHEMA.object()),
-    (Object::string("engine"), Object::string(world::engine())),
+    (
+      Object::string("engine"),
+      Object::string(world::made(slice::from_ref(engine.running())).unwrap_or_default()),
+    ),
   ];
   let pairs = data.as_ref().pairs().unwrap_or_default();
   fields.extend(pairs.into_iter().map(|(key, one)| (key.to_owned(), one.to_owned())));
@@ -98,18 +104,30 @@ pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
 }
 
 impl Engine {
-  /// The checkpoint of the life at its tip, as the last entry of its record: the ear of its store
-  /// keeps it after each entry that it kept, as it keeps each fact, and the life ends with it, so a
-  /// later life on the record opens from it. A life that is born from a checkpoint makes acts of
-  /// its own at its birth, so a fact that this life said after the checkpoint would not replay
-  /// there. The life ends too when it keeps no record, which it refuses.
+  /// The checkpoint of the life at its tip, then the fact made of the texts that the life runs, as
+  /// the last entries of its record: the ear of its store keeps them after each entry that it kept,
+  /// as it keeps each fact, and the life ends with them, so a later life on the record opens from
+  /// the checkpoint on the same texts. A life that is born from a checkpoint makes acts of its own
+  /// at its birth, so a fact that this life said after the checkpoint would not replay there. The
+  /// life ends too when it keeps no record, which it refuses.
   pub fn checkpoint(mut self) -> Result<(), Fault> {
     if !self.hears("store") {
       return Err(Fault::refused("a life that keeps no record keeps no checkpoint"));
     }
     let entry = written(&mut self)?;
-    self.word("say('keep', '', __entry)", vec![("__entry", entry)]).map(drop)
+    let made = self.running().clone();
+    let word = "(say('keep', '', __entry), say('keep', '', __made))";
+    self.word(word, vec![("__entry", entry), ("__made", made)]).map(drop)
   }
+}
+
+/// The checkpoint of the life of an engine at the tip of the record at a path, which no life
+/// holds, then the fact made of this build: the life born on that checkpoint runs the engine, the
+/// Kernel and the checkpointer of this build. This is the one place where a record crosses to the
+/// texts of a build.
+pub fn crossed(path: &Path, engine: &mut Engine) -> Result<(), Fault> {
+  keep(path, written(engine)?)?;
+  keep(path, world::running(&[]))
 }
 
 /// Whether the checkpoint at a place of a record is a birth that a life gathers again: the life
@@ -168,7 +186,7 @@ fn fields(one: &Object) -> Option<Vec<(String, serde_json::Value)>> {
 
 /// An entry kept after the last entry of the record at a path, as the store of a life keeps one,
 /// for a record that no life holds.
-pub fn keep(path: &Path, one: Object) -> Result<(), Fault> {
+pub(crate) fn keep(path: &Path, one: Object) -> Result<(), Fault> {
   world::Format::of(path).open(path)?.keep(one.as_ref())
 }
 

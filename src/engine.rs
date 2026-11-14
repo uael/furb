@@ -494,9 +494,10 @@ pub struct Engine {
   /// a checkpoint of the life keeps taken: the journal does not make again an act that an ear of
   /// the outside made, so the transcripts of the life do not hold each of those names.
   taken: Object,
-  /// The text of the engine that the life runs, as its session holds it, which its models read. It
-  /// is the engine of the build only for a life that was born on it.
-  source: String,
+  /// The entry of the fact made of the texts that the life runs, as [`world::running`] gives it,
+  /// which its checkpoint names and writes after it. It is the build only for a life that was born
+  /// on it.
+  made: Object,
 }
 
 impl Engine {
@@ -572,7 +573,7 @@ impl Engine {
 
   /// An engine on a sandbox and the side of its host, before any run: the record says what work it
   /// left and what loops.
-  fn new(sand: Sand, outside: Outside, record: &[Object], source: String) -> Self {
+  fn new(sand: Sand, outside: Outside, record: &[Object], made: Object) -> Self {
     Self {
       sand,
       outside,
@@ -583,7 +584,7 @@ impl Engine {
       holding: left(record),
       parked: looping(record),
       taken: checkpoint::taken(record),
-      source,
+      made,
     }
   }
 
@@ -624,7 +625,8 @@ impl Engine {
     let (record, born) = seeded(&mut sand, &mut outside, record)?;
     outside.settled = settled(&record);
     outside.hosted.replay = Some(Replay::of(&record, replayed));
-    let mut engine = Self::new(sand, outside, &record, source);
+    let made = world::running(checkpoint::segment(&record));
+    let mut engine = Self::new(sand, outside, &record, made);
     let names_parked = Object::list(engine.parked.iter().map(|(id, _)| Object::string(id)));
     let parks = !engine.parked.is_empty();
     let (root, raised) = engine.run(|sand, outside| {
@@ -709,6 +711,11 @@ impl Engine {
   /// The highest number that each kind took in the record that the life opened on.
   pub(crate) fn taken(&self) -> &Object {
     &self.taken
+  }
+
+  /// The entry of the fact made of the texts that the life runs.
+  pub(crate) fn running(&self) -> &Object {
+    &self.made
   }
 
   /// Whether an ear of the host hears under a name.

@@ -282,20 +282,20 @@ impl Watch {
 
 /// The engine of a life dropped at the end of the life. A life that keeps its record ends with its
 /// image, which holds what the host keeps of the life, so the next life of the record opens from
-/// it and reads no fact of its past. A life that writes no image ends with its checkpoint, from
-/// which the next life opens by the record: one that holds a function of a host, and one that the
-/// host gives nothing to keep, as at a handover to a build that reads no image of this one. It
+/// it and reads no fact of its past, and a build that reads no image of this one opens it by the
+/// record, on the texts that the record names. A life that writes no image, as one that holds a
+/// function of a host, ends with its checkpoint, from which the next life opens by the record. It
 /// gives the fault of the end, when one came.
 pub(crate) fn ended(
   mut engine: Engine,
   record: Option<&Path>,
-  kept: Option<&impl Serialize>,
+  kept: &impl Serialize,
 ) -> Option<Fault> {
   let record = record?;
-  match kept.map(|kept| image::keep(&mut engine, record, kept)) {
-    Some(Ok(true)) => None,
-    Some(Ok(false)) | None => engine.checkpoint().err(),
-    Some(Err(no)) => Some(engine.checkpoint().err().unwrap_or(no)),
+  match image::keep(&mut engine, record, kept) {
+    Ok(true) => None,
+    Ok(false) => engine.checkpoint().err(),
+    Err(no) => Some(engine.checkpoint().err().unwrap_or(no)),
   }
 }
 

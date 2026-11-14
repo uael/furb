@@ -238,9 +238,10 @@ meanings. The entry of such a name here gives only its form in the engine.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel, the schema of the record, the release, and the texts of the engine and of the Kernel, which the store says
   as it hears the root of a new record at its birth. After a checkpoint, only the fact made of the segment after it
-  counts, and the store says it again at the root of the first life that goes on from the checkpoint. A life of any
-  build of the major replays that segment word by word on the texts that the fact holds, and goes on with them, and
-  a drift is a defect.
+  counts: the life that writes the checkpoint writes after it the fact made of the texts that it runs, and `furb
+  checkpoint` the fact made of its build, and the store says it at the root of the first life that goes on from a
+  checkpoint of an earlier build that has none after it. A life of any build of the major replays that segment word by
+  word on the texts that the fact holds, and goes on with them, and a drift is a defect.
 - checkpoint: the fact by which a record carries the state of its life to a later life of any build of its major, at
   its tip: plain data with a version of its own shape, `schema`, apart from the version of the record. It holds each
   chain that lives with its label, its source, its turns, the definitions of each word, its plain values and whether

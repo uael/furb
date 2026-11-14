@@ -26,6 +26,7 @@ use std::{
   time::{Duration, Instant},
 };
 
+use furb::world::engine;
 use serde_json::{Value, json};
 
 /// The fake claude of the tests of the crate, which answers the Nth turn with the word of the file
@@ -346,9 +347,11 @@ fn a_checkpoint_at_the_tip_of_a_record_carries_the_module_of_its_root_to_the_nex
   assert_eq!(printed(yard.kept(&["run", "kept = [1, 2]\nclose(len(kept))"]), ""), "2\n");
   printed(yard.furb(&["checkpoint", "--record", yard.record().to_str().unwrap()]), "");
   let record = fs::read_to_string(yard.record()).unwrap();
+  let last: Vec<&str> = record.lines().rev().take(2).collect();
+  assert!(last[1].starts_with("[[\"checkpoint\",\"chain1\",\"store\","), "{record}");
   assert!(
-    record.lines().last().unwrap().starts_with("[[\"checkpoint\",\"chain1\",\"store\","),
-    "{record}"
+    last[0].starts_with(&format!("[[\"made\",\"chain1\",\"store\",\"{}\",", engine())),
+    "the fact made of this build follows the checkpoint, so the next life runs this build: {record}"
   );
   assert_eq!(printed(yard.kept(&["run", "close(kept + [3])"]), ""), "[1, 2, 3]\n");
 }

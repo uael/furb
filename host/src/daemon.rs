@@ -1227,7 +1227,7 @@ impl Lives {
       {
         held.stage = Stage::Ending(Vec::new());
         let handle = held.handle.clone();
-        tokio::spawn(async move { end(&handle, Command::End).await });
+        tokio::spawn(async move { end(&handle).await });
       }
     }
   }
@@ -1249,10 +1249,10 @@ impl Lives {
     }
   }
 
-  /// The handover: each window detached, each life told to write its checkpoint and end, then each
-  /// life that lives, with its pins, given to the peer that asked once the listener stopped. A life
-  /// that ends already ends here and goes to no one: the open that waited for it is refused, and
-  /// the next open opens it from its record.
+  /// The handover: each window detached, each life told to end, then each life that lives, with
+  /// its pins, given to the peer that asked once the listener stopped. A life that ends already
+  /// ends here and goes to no one: the open that waited for it is refused, and the next open opens
+  /// it from its record.
   fn handover(self, asker: Outbox, reply: Replied) {
     let (mut handed, mut lives) = (Vec::new(), Vec::new());
     for (life, held) in self.held {
@@ -1292,14 +1292,13 @@ async fn until(due: Option<Instant>) {
   }
 }
 
-/// A life told to end, with its image, or with its checkpoint for a handover, once its commands
-/// before ran, and the reply once it ended. A life whose record does not hold each fact that it
-/// said yet, as on a full disk, keeps
-/// the end and ends once the record holds them, so the daemon tells it once. A fault of that
-/// checkpoint is the fault of the event `Ended` of the life, which its windows and its watch hear,
-/// so the reply tells only the moment of the end.
-async fn end(life: &LifeHandle, how: Command) {
-  life.send(how).await.ok();
+/// A life told to end, with its image, once its commands before ran, and the reply once it ended.
+/// A life whose record does not hold each fact that it said yet, as on a full disk, keeps the end
+/// and ends once the record holds them, so the daemon tells it once. A fault of that end is the
+/// fault of the event `Ended` of the life, which its windows and its watch hear, so the reply tells
+/// only the moment of the end.
+async fn end(life: &LifeHandle) {
+  life.send(Command::End).await.ok();
 }
 
 /// The watch of one birth of a life, which no word of the life runs: its handle, its record, its
@@ -1435,7 +1434,7 @@ async fn due(opens: Option<&mut Heard>) {
   }
 }
 
-/// The handover once each life wrote its checkpoint and ended, however long that takes, given to
+/// The handover once each life ended, however long that takes, given to
 /// the listener, or refused when the listener is gone. The log says which lives it waits for.
 async fn gave(
   lives: Vec<(String, LifeHandle)>,
@@ -1448,7 +1447,7 @@ async fn gave(
     let waits = records.join(", ");
     report(log.as_ref(), &format_args!("the handover waits for each life to end: {waits}"));
   }
-  future::join_all(lives.iter().map(|(_, life)| end(life, Command::Hand))).await;
+  future::join_all(lives.iter().map(|(_, life)| end(life))).await;
   if let Err(Leaving { reply, .. }) = leave.send(leaving) {
     reply.send(Err(ProtocolError::Stopped)).ok();
   }

@@ -136,8 +136,9 @@ enum Command {
     #[command(flatten)]
     stand: Stand,
   },
-  /// Write at the tip of a record the checkpoint of its life, from which a life of any later build goes on: each chain
-  /// that lives, with its turns, its module and its open prompts. It replays the record and asks no model.
+  /// Write at the tip of a record the checkpoint of its life, from which a life of any later build
+  /// goes on: each chain that lives, with its turns, its module and its open prompts. It replays
+  /// the record and asks no model. The next life on the record runs the engine of this build.
   Checkpoint {
     /// The record to write the checkpoint at.
     #[arg(long)]
@@ -184,8 +185,8 @@ fn grace(given: &str) -> Result<f64, CliError> {
 /// What `furb host` does beside serving.
 #[derive(Subcommand)]
 enum Hosting {
-  /// Serve in the place of the daemon that runs: it writes the checkpoint of each life and gives
-  /// them to this one, and each window connects again.
+  /// Serve in the place of the daemon that runs: it ends each life and gives them to this one, and
+  /// each window connects again.
   Upgrade,
 }
 
@@ -364,13 +365,12 @@ async fn run(opening: Opening, word: String) -> Result<(), CliError> {
   Ok(())
 }
 
-/// The checkpoint of the life of a record, made in a life that only inspects it and kept at its tip.
+/// The checkpoint of the life of a record, made in a life that only inspects it and kept at its
+/// tip, then the fact made of this build, so the next life on the record runs this build.
 async fn checkpoint(opening: Opening, record: &Path) -> Result<(), CliError> {
   let inspects = Opening { inspecting: Some(true), ..opening };
   let (mut engine, _) = inspects.open::<String>([], Progress::default(), &mut |_| true).await?;
-  let written = checkpoint::written(&mut engine)?;
-  drop(engine);
-  Ok(checkpoint::keep(record, written)?)
+  Ok(checkpoint::crossed(record, &mut engine)?)
 }
 
 /// Each skill that a life on the record runs, as its name and its life word, or its name alone

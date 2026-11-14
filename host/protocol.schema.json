@@ -4843,11 +4843,6 @@
         },
         {
           "type": "string",
-          "const": "cross",
-          "description": "A record whose last life ran another engine is carried across to this build, by a life that\ninspects it and writes its checkpoint. It counts nothing."
-        },
-        {
-          "type": "string",
           "const": "read",
           "description": "The record is read again from its last checkpoint under its lease, when it changed after\nthe stage find: the bytes passed, of the bytes of the record."
         },
@@ -4890,5 +4885,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 17
+  "x-protocol": 18
 }

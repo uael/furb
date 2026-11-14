@@ -300,7 +300,6 @@ it is not given. The daemon answers requests in any order.
     | --- | --- | --- |
     | `recall` | The daemon reads what the record told before its last checkpoint, for the log of the life. | Entries of the record that the facts told stand after, of its entries as far as that checkpoint. Both are 0 until the daemon found the checkpoint. |
     | `find` | The record is read from its last checkpoint, for the build of its last life. | Bytes passed, of the bytes of the record. |
-    | `cross` | A record that another build of furb wrote is replayed on the engine of that build, and gets a checkpoint. | Both are 0: the stage counts nothing. |
     | `read` | The record is read again from its last checkpoint under its lease, when it changed after `find`. | Bytes passed, of the bytes of the record. |
     | `seed` | The sandbox loads the engine and makes the entries of the checkpoint. | Both are 0: the stage counts nothing. |
     | `boot` | The life replays the entries that it boots on. | Entries that the replay passed, of those entries. |
@@ -362,10 +361,10 @@ once it listens. A second daemon refuses to start there.
   fact, it wakes each chain that it paused, and a pause of the operator stays. The life drops no fact.
 - `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
 - `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
-  The new daemon says `handover`. The daemon that runs writes the checkpoint of each life, ends it, stops to listen
+  The new daemon says `handover`. The daemon that runs ends each life, which writes its image, stops to listen
   and answers `handed` with each life, its folder and its pins. The new daemon listens and opens each life again with
   its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
-  from its checkpoint. The handover waits for each life to end, however long it takes, and the log of the daemon
+  from its image when the new build reads it, else from its record, on the texts of the engine that its record names. The handover waits for each life to end, however long it takes, and the log of the daemon
   names each life that it waits for: a life given up before its end would still hold its record and the facts that
   its record does not hold yet. A life that ends already ends there and goes to no daemon, and the next `open` opens
   it from its record.

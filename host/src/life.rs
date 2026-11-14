@@ -188,10 +188,6 @@ pub enum Command {
   /// each fact that it said yet, as on a full disk, keeps the end, tells why in a notice, and ends
   /// once the record holds them: the reply comes then.
   End,
-  /// The end of the life at a handover, as [`Command::End`] says, with its checkpoint and no
-  /// image: the next life opens by the record on the daemon of the new build, so it goes on with
-  /// the engine and the Kernel of that build, which an image would keep from it.
-  Hand,
   /// A command of the engine said by a speaker other than the life itself, a skill as
   /// `skill/<name>` or a window as `operator/<login>`: each act and each fact that the command
   /// says is of that speaker, so a fact seen names the person who read.
@@ -702,7 +698,8 @@ impl Life {
 
   /// Each fact of the log let go, since the record holds it: those that a checkpoint of the record
   /// passed. The log keeps an empty place for each, which [`Life::since`] fills from the record.
-  /// A fact that kept a checkpoint stays, since the record holds that entry as its number alone.
+  /// A fact that kept a checkpoint or a fact made stays, since the log of the record holds that
+  /// entry as its number alone.
   fn let_go(&mut self) {
     let opened = mem::take(&mut self.kept.gone.opened);
     let kept = |at: usize| opened.iter().any(|one| one.contains(&at));
@@ -927,11 +924,14 @@ fn read_log(log: &str, take: &mut Take<'_>) -> Option<()> {
   Some(())
 }
 
-/// Whether a fact tells that the record kept a checkpoint.
+/// Whether a fact tells that the record kept a checkpoint, or a fact made, which a life keeps
+/// after its checkpoint and the store at the birth of a record.
 fn kept_checkpoint(fact: &Value) -> bool {
   let entry = fact.get(3).and_then(|one| one.get(0)).and_then(|one| one.get(0));
   fact.get(0).and_then(Value::as_str) == Some("keep")
-    && entry.and_then(Value::as_str) == Some(checkpoint::CHECKPOINT)
+    && entry
+      .and_then(Value::as_str)
+      .is_some_and(|kind| [checkpoint::CHECKPOINT, world::MADE].contains(&kind))
 }
 
 /// The digest of a fact, by which the log knows a fact that it told.
@@ -1140,7 +1140,7 @@ async fn driven(
   received: &mut UnboundedReceiver<Message>,
   record: Option<&str>,
 ) -> Drove {
-  let (mut gone, mut hands, mut asked) = (false, false, Vec::new());
+  let (mut gone, mut asked) = (false, Vec::new());
   loop {
     let ends = gone || !asked.is_empty();
     let waits = (ends || life.kept.backlog.holds() || record.is_some() && life.kept.watch.due())
@@ -1160,13 +1160,12 @@ async fn driven(
         return Drove::Ended(Some(fault), asked);
       }
       Woke::Said(None) if engine.unkept() > 0 => gone = true,
-      Woke::Said(None) => return Drove::Ended(ended(engine, life, hands), asked),
+      Woke::Said(None) => return Drove::Ended(ended(engine, life), asked),
       Woke::Said(Some(Message::Read(read))) => read.answered(Some(&mut engine), life).await,
-      Woke::Said(Some(Message::Command(end @ (Command::End | Command::Hand), reply))) => {
-        hands |= end == Command::Hand;
+      Woke::Said(Some(Message::Command(Command::End, reply))) => {
         asked.push(reply);
         if engine.unkept() == 0 {
-          return Drove::Ended(ended(engine, life, hands), asked);
+          return Drove::Ended(ended(engine, life), asked);
         }
         life.put(Event::Notice(backlog::unkept(engine.unkept())));
       }
@@ -1187,7 +1186,7 @@ async fn driven(
       return Drove::Ended(Some(fault), asked);
     }
     if (gone || !asked.is_empty()) && engine.unkept() == 0 {
-      return Drove::Ended(ended(engine, life, hands), asked);
+      return Drove::Ended(ended(engine, life), asked);
     }
     if record.is_some() && life.kept.watch.due() && engine.unkept() == 0 {
       let reborn = engine.checkpoint();
@@ -1198,12 +1197,12 @@ async fn driven(
 }
 
 /// The engine of a life dropped at the end of the life, as [`rebirth::ended`] says, with what the
-/// life keeps once the log took each event that the ears told, or with no image at a handover.
-fn ended(engine: Engine, life: &mut Life, hands: bool) -> Option<Fault> {
+/// life keeps once the log took each event that the ears told.
+fn ended(engine: Engine, life: &mut Life) -> Option<Fault> {
   life.told(None);
   let record = life.record.as_deref().map(Path::new);
   let part = Part { build: BUILD.into(), kept: &life.kept };
-  rebirth::ended(engine, record, (!hands).then_some(&part))
+  rebirth::ended(engine, record, &part)
 }
 
 /// The work of a life paused or woken as its record lacks facts or holds each again, as
@@ -1389,7 +1388,7 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
       let with = verbs::Chain { label, source, on: on(chain), ..verbs::Chain::default() };
       id(engine.chain(with)?.id())
     }
-    Command::End | Command::Hand => Reply::Done,
+    Command::End => Reply::Done,
     query => queried(engine, query, &root)?,
   })
 }
