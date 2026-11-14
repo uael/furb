@@ -2963,7 +2963,7 @@
         "title",
         "standing"
       ],
-      "description": "A card of the machine: one thread that an operator started, in the record of its session. It\nholds the name of the session when it has one, the main checkout of the project whose sessions\nhold the record, when the list of the machine names one, else the checkout whose\n`.furb/sessions` holds a record that a life holds, whether a life holds the record now,\nthe login of each person whose window holds that life, and the second of the epoch since which\nthe thread stands as it does. A record that has no index of its threads yet gives one card with\nno prompt, under the name of its file."
+      "description": "A card of the machine: one thread that an operator started, in the record of its session. It\nholds the name of the session when it has one, the main checkout of the project whose sessions\nhold the record, when the list of the machine names one, else the checkout whose\n`.furb/sessions` holds a record that a life holds, whether a life holds the record now,\nthe login of each person whose window holds that life, and the second of the epoch since which\nthe thread stands as it does. A record that has no index of its threads yet gives no card until\nthe daemon made its index."
     },
     "Standing": {
       "oneOf": [

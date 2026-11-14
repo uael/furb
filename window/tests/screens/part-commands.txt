@@ -7,7 +7,7 @@
   ⌃X ?        each k
                       Go
                       ▌Go to a project or a session                        ⌃O
-                       Each key                                          ⌃X ?                  now
+                       Each key                                          ⌃X ?
                        The next thread that needs you                      ⌥A
                        The next card                                       ⌥↓
                        The card before                                     ⌥↑

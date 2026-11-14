@@ -28,10 +28,10 @@ fn machine() -> (TestApp, Daemon, Peer) {
   peer.rested(&gate, &format!("remove the gate\n{ANSWERS}"), Some(Hold::Seen));
   peer.opened(&sessions.join("setup-only.jsonl"), true);
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
-  // The list stands once it holds the card of each session, so the frames of the part show it as
-  // it stays.
+  // The list stands once it holds the card of each thread, so the frames of the part show it as
+  // it stays. The session that holds no thread of his has no card.
   shows(&app, "Resolved 1");
-  shows(&app, "Resting 1");
+  shows(&app, "Working 1");
   (app, daemon, peer)
 }
 
@@ -47,6 +47,8 @@ fn go_to_lists_what_works_and_the_projects_and_finds_a_session_with_no_thread_of
   let frame = shows(&app, "Search a thread, a session, a project");
   assert!(frame.contains("Sessions that work") && frame.contains("Projects"), "{frame}");
   assert!(!frame.contains("setup-only"), "a session shows only once he searches: {frame}");
+  // The project counts the session with no thread once the machine listed its records.
+  shows(&app, "3 sessions");
   screen("part-go-to", &app);
   // The arrows move the chosen row, and letters filter the rows as he types.
   app.press("down");

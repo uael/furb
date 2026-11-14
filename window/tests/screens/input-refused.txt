@@ -1,13 +1,13 @@
- furb                                                          All projects ▾         this machine
+ furb                                                          broken ▾               this machine
 
-  Nothing needs you.                                           Resting 1
+  No thread yet.                                                No thread yet in this project.
 
-  ⌃O          go to a project or a session                      2026-01-01T09-12-00-0000       now
-  ⌃P          commands                                          BR broken
+  Write below to start one. It runs in a new session of the     Other projects and sessions:
+  project broken, on this machine.                              ⌃O
+
+  ⌃O          go to a project or a session
+  ⌃P          commands
   ⌃X ?        each key
-
-
-
 
 
 

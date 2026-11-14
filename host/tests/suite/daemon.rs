@@ -406,6 +406,18 @@ impl Window {
     self.listed().await.iter().any(|one| one.life == life && one.open)
   }
 
+  /// Until the list of the daemon holds a life open no more: a life whose record holds no thread
+  /// tells no card at its end.
+  #[cfg(unix)]
+  async fn gone(&mut self, life: &str) {
+    let gone = async {
+      while self.lives(life).await {
+        time::sleep(Duration::from_millis(10)).await;
+      }
+    };
+    timeout(PATIENCE, gone).await.expect("the life ends");
+  }
+
   /// A thread of the operator on the root of a life, which its model closes: the card of the life,
   /// which the window hears from now on.
   async fn threaded(&mut self, life: &str) {
@@ -838,7 +850,7 @@ async fn a_verb_said_after_an_open_failed_hears_why_until_the_next_open() {
   open(&mut window, &at, "a.jsonl", None).await;
   // The daemon holds the life no more before the verb comes, as for a window that said it after
   // the answer to its open.
-  window.ended(&life).await;
+  window.gone(&life).await;
   let inspect = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
   let why = format!("Refused: Another process owns {life}.");
   assert_eq!(window.ask(inspect).await, Err(ProtocolError::Refused { why }));
@@ -2488,17 +2500,14 @@ async fn the_cards_of_a_record_at_rest_come_from_its_index_and_never_from_a_fold
   let mut second = Window::dialed(&local).await;
   assert_eq!(cards(&mut second).await, vec![rests.clone()]);
   assert!(!Path::new(&retold).exists(), "the list read the past of a record");
-  // An index that does not name the tip of its record is dropped: the list gives the record as
-  // one card at once, and the cards come once the daemon made the index from the record.
+  // An index that does not name the tip of its record is dropped: the list gives no card of the
+  // record, which comes once the daemon made the index from the record, so no card comes and goes.
   let mut kept: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
   kept["tip"]["bytes"] = json!(1);
   fs::write(&index, kept.to_string()).unwrap();
   let mut third = Window::dialed(&local).await;
-  let nameless = cards(&mut third).await;
-  let titles: Vec<_> =
-    nameless.iter().map(|one| (&*one.thread.prompt, &*one.thread.title)).collect();
-  assert_eq!(titles, [("", "one")]);
-  let folded = card(&mut third, |card| !card.thread.prompt.is_empty()).await;
+  assert_eq!(cards(&mut third).await, Vec::new());
+  let folded = card(&mut third, |card| card.thread.prompt == rests.thread.prompt).await;
   assert_eq!(Card { since: 0, ..folded }, Card { since: 0, ..rests });
   let again: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
   assert_ne!(again["tip"], kept["tip"]);

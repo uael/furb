@@ -1060,8 +1060,8 @@ export interface Listed {
  * hold the record, when the list of the machine names one, else the checkout whose
  * `.furb/sessions` holds a record that a life holds, whether a life holds the record now,
  * the login of each person whose window holds that life, and the second of the epoch since which
- * the thread stands as it does. A record that has no index of its threads yet gives one card with
- * no prompt, under the name of its file.
+ * the thread stands as it does. A record that has no index of its threads yet gives no card until
+ * the daemon made its index.
  */
 export interface Card {
   life: string;

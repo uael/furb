@@ -265,8 +265,6 @@ fn a_refused_message_comes_back_to_the_input_with_why() {
   // The row of hints says why the daemon refused the open, which no other frame says.
   let frame = shows(&app, "  Refused: ");
   assert!(frame.contains("┃ how long does an open take"), "{frame}");
-  // The card of the record that the refused open left, as its machine tells it.
-  shows(&app, "BR broken");
   screen("input-refused", &app);
   assert!(frame.contains("┃ draft after"), "{frame}");
   assert!(!frame.contains("Reply to this thread"), "{frame}");

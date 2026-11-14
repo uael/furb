@@ -7,7 +7,7 @@
   ⌃X ?        each k
                       Sessions that work
                       ▌run the bench of replay                           furb
-                                                                                               now
+
                       Projects
                        furb                                        3 sessions
 

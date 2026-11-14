@@ -145,18 +145,6 @@ pub(crate) fn folded(record: &Path) -> Result<(), Error> {
   Ok(keep(record, &Session { name, threads })?)
 }
 
-/// The one card of a record whose threads no index tells yet: no prompt, a name, and at rest.
-pub(crate) fn unfolded(name: String) -> view::Card {
-  view::Card {
-    prompt: String::new(),
-    title: name,
-    standing: Standing::Rests,
-    model: None,
-    agents: 0,
-    readers: Vec::new(),
-  }
-}
-
 /// The times of the cards of a life, which the life keeps as its cards change.
 #[derive(Default)]
 pub(crate) struct Times {

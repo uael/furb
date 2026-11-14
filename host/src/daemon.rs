@@ -1135,9 +1135,9 @@ impl Lives {
 
   /// The cards of one record of a project now: those that its life told, when one lives and
   /// told some, else those of the index beside it. A record with no index that agrees with it
-  /// gives one card under the name of its file, and goes once to the task that makes its index,
-  /// unless a life holds it, which tells its cards itself. So no list waits for the fold of a
-  /// record.
+  /// gives no card yet, since the daemon does not know its threads, and goes once to the task that
+  /// makes its index, unless a life holds it, which tells its cards itself: its cards come once its
+  /// index stands. So no list waits for the fold of a record, and no card comes that then goes.
   fn cards_of(&mut self, life: &str, project: Option<&String>) -> Vec<Card> {
     let record = Path::new(life);
     let (session, viewers) = match self.held.get(life) {
@@ -1167,8 +1167,7 @@ impl Lives {
       // The task ends with the daemon, and then no peer hears a card.
       self.index.send(life.to_owned()).ok();
     }
-    let name = record.file_stem().unwrap_or_default().to_string_lossy().into_owned();
-    vec![card(None, cards::changed(record), cards::unfolded(name))]
+    Vec::new()
   }
 
   /// When the first life with no holder ends.
