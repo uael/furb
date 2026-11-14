@@ -635,22 +635,7 @@ class Exit:
 
 class Act[T = object](str):
   def __await__(self) -> Generator[object, Any, T]:
-    if acting():
-      return (yield self)
-    if not get(self):
-      raise Refused(self + " never settles")
-    f = get_running_loop().create_future()
-
-    def pend():
-      while not over(self):
-        yield
-      (f.set_exception if isinstance(got := peek(self), BaseException) else f.set_result)(got)
-
-    drive(g := pend(), self + " waits " + str(id(g)))
-    try:
-      return (yield from f)
-    finally:
-      g.close()
+    return (yield self)
 
 
 class Refused(Exception): ...

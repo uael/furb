@@ -91,7 +91,9 @@ API of its own:
   methods, one for each verb of the contract, which the build makes from the contract.
 - `src/binding/py.rs`, behind the `python` feature, is the door to python. `bind/python` is the package `furb-monty`,
   whose module `furb_monty.engine` gives every name of the contract over one life in the sandbox, and
-  `FURB_ENGINE=monty` makes `from furb import engine` give it.
+  `FURB_ENGINE=monty` makes `from furb import engine` give it. On the engine of this interpreter,
+  `src/furb/awaits.py` holds the await of an act from outside a run: the package binds its `Act` in the engine, so the
+  engine says only the await of a word, which the Kernel steps.
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout it
   was built from. A program that wants a life dials the daemon, as `docs/protocol.md` says. `prompt`,
