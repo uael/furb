@@ -106,9 +106,11 @@ API of its own:
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
   holds: it says a command to the life and reads the events of the life in order, from any place of its log. The
   thread writes the checkpoint of a life that keeps its record, and opens the life again from it for the
-  same handles, when it said a tail of facts, or when the daemon asks it as its heap passes its share, and its log
+  same handles, when the daemon asks it as its heap passes its share, and its log
   lets go of each fact that the record holds, as
-  `host/src/rebirth.rs` says, and of each fact that an open told, which the file of the log of the record holds. At its end the thread writes the image of the life, with what the life keeps of the
+  `host/src/rebirth.rs` says, and of each fact that an open told, which the file of the log of the record holds. A life
+  that rests after a tail of facts writes its image and goes on, so an open after a crash feeds only what follows that
+  image. At its end the thread writes the image of the life, with what the life keeps of the
   events that it told, so the next life of the record stands where this one stood: it reads no fact of the record,
   and its first screen is the last screen of the life before. A life with no image tells the past of its record
   first, then opens by the record. A fault that stops the sandbox ends the life, and its record keeps each fact up to the

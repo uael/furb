@@ -208,7 +208,7 @@ async fn the_heaviest_life_is_born_again_when_the_heap_passes_its_share() {
   for _ in 0..4 {
     peer.ran(&big, grow).await;
   }
-  assert!(!peer.has(&big, reborn), "the big life was born again at its tail before the test");
+  assert!(!peer.has(&big, reborn), "the big life was born again before the test");
   time::sleep(Duration::from_millis(500)).await;
   let before = Counted::live();
   FLOOR.store(before - BOUND, Ordering::Relaxed);

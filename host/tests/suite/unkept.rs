@@ -1,4 +1,4 @@
-//! A life whose record takes no fact for a time, past the tail of facts that a checkpoint bounds:
+//! A life whose record takes no fact for a time, asked to be born again:
 //! it holds its rebirth and keeps its end until the record takes them again. The test fills the
 //! record with the limit of the size of a file of the process, which only a system of Unix gives,
 //! so a child of the suite runs it alone, as `apart` says.
@@ -69,8 +69,7 @@ mod unix {
   /// The events of a life, each under its place in the log.
   type Logged = (Seq, Arc<Event>);
 
-  /// How many times the word of the test draws a number: more than enough facts to pass the tail
-  /// after which a life is born again.
+  /// How many times the word of the test draws a number while the record takes no fact.
   const DRAWS: usize = 2800;
 
   /// A life that keeps its record, with no skill, whose model closes each request with None.
@@ -280,6 +279,7 @@ mod unix {
     let full = size(&at);
     limited(full);
     log.extend(ran(&life, &mut events, &format!("for i in range({DRAWS}):\n  chance()")).await);
+    life.reborn(true);
     log.extend(quiet(&mut events).await);
     let rebirths = log.iter().filter(|one| matches!(*one.1, Event::Reborn(_))).count();
     assert_eq!(rebirths, 0, "no rebirth while the record does not hold each fact");

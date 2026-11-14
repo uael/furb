@@ -1,24 +1,28 @@
 //! The rebirth of a life: its actor writes its checkpoint, drops its engine and opens it again
-//! from that checkpoint on the same thread, for the same readers. A life is born again when it
-//! said [`TAIL`] facts since it opened while it holds no act that a checkpoint does not keep, so an
-//! open after a crash replays a short tail, and the engine lets go of what its words left. A
-//! checkpoint keeps each chain, each rung and each open prompt, and the seed makes again each act
-//! of a life word of the standing, under a rung whose word is that life word; each other act that
-//! lives, as a command, a reply, a word that runs or an act with an ear of its own, holds the
-//! rebirth until it ends, however long that takes, so a rebirth never cuts work. A life whose
-//! record does not hold each fact that it said, as on a full disk, holds its rebirth until the
-//! record takes them, since the drop of its engine would lose them.
+//! from that checkpoint on the same thread, for the same readers, so the engine lets go of what
+//! its words left. A life is born again only when the daemon asks it, as below, while it holds no
+//! act that a checkpoint does not keep. A checkpoint keeps each chain, each rung and each open
+//! prompt, and the seed makes again each act of a life word of the standing, under a rung whose
+//! word is that life word; each other act that lives, as a command, a reply, a word that runs or an
+//! act with an ear of its own, holds the rebirth until it ends, however long that takes, so a
+//! rebirth never cuts work. A life whose record does not hold each fact that it said, as on a full
+//! disk, holds its rebirth until the record takes them, since the drop of its engine would lose
+//! them.
+//!
+//! What bounds an open after a crash is the image at rest: a life that said [`TAIL`] facts since
+//! its open or its last image writes its image again at its first rest, when it holds no such act,
+//! and goes on, with no checkpoint and no rebirth. A later open goes on from that image and feeds
+//! only the entries that the record took after it.
 //!
 //! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
-//! each fact up to the fault, and a later open replays them. A life that ends with no fault writes
-//! its image and no checkpoint, as [`ended`] says: the image is of the end of a life alone, so a
-//! rebirth, at the tail or at the ask of the daemon, goes by a checkpoint, and the open after it
-//! drops the image that this checkpoint passed.
+//! each fact up to the fault, and a later open goes on from the last image, or replays them. A life
+//! that ends with no fault writes its image and no checkpoint, as [`ended`] says. A rebirth goes by
+//! a checkpoint, and the open after it drops each image that this checkpoint passed.
 //!
 //! Each life of a daemon runs on a thread of one process, so the heap that bounds them is the heap
 //! of the daemon. When it passes [`SHARE`] of its [`Heap`], the daemon asks the life that said the
-//! most facts since it opened to be born again, by the same rebirth as at its tail, then the next,
-//! until the heap falls under the share. The daemon reads the heap from [`Counted`], the
+//! most facts since it opened to be born again, then the next, until the heap falls under the
+//! share. The daemon reads the heap from [`Counted`], the
 //! allocator of its process, which counts each byte that it holds.
 
 use std::{
@@ -38,8 +42,10 @@ use serde_json::Value;
 
 use crate::event::Event;
 
-/// How many facts a life says after it opened before it writes its checkpoint and is born again,
-/// at the first moment when it holds no act that a checkpoint does not keep.
+/// How many facts a life says after its open or its last image before it writes its image again,
+/// at its first rest. A later open feeds each fact after the image: 0.3 to 0.5 ms each on this
+/// build, against 2 to 13 s to write the image of a large life, so a tail of this length keeps the
+/// open after a crash a few seconds longer than an open with no tail.
 pub(crate) const TAIL: u64 = 10_000;
 
 /// The share of the bound of the heap of the daemon, in percent, past which the daemon asks a life
@@ -207,13 +213,14 @@ impl Asks {
   }
 }
 
-/// What the actor watches of a life since it opened: the facts that it said, each act that lives
-/// and that a checkpoint does not keep, the rungs that say a life word of the last standing, whose
-/// acts the seed makes again, and those life words. The rungs go with the birth: the next birth
-/// makes its own.
+/// What the actor watches of a life since it opened: the facts that it said, those that it said
+/// up to its last image, each act that lives and that a checkpoint does not keep, the rungs that
+/// say a life word of the last standing, whose acts the seed makes again, and those life words.
+/// The rungs go with the birth: the next birth makes its own.
 #[derive(Default, Serialize, Deserialize)]
 pub(crate) struct Watch {
   facts: u64,
+  imaged: u64,
   /// The ask of the daemon, which is of its heap now and of no later life.
   #[serde(skip)]
   asked: bool,
@@ -253,10 +260,21 @@ impl Watch {
     }
   }
 
-  /// Whether the life is born again now: it said [`TAIL`] facts since it opened, or the daemon
-  /// asked it to, and it holds no act that a checkpoint does not keep.
+  /// Whether the life is born again now: the daemon asked it to, and it holds no act that a
+  /// checkpoint does not keep.
   pub(crate) fn due(&self) -> bool {
-    (self.facts >= TAIL || self.asked) && self.held.is_empty()
+    self.asked && self.held.is_empty()
+  }
+
+  /// Whether the life writes its image again now: it said [`TAIL`] facts since its open or its last
+  /// image, and it rests, with no act that a checkpoint does not keep.
+  pub(crate) fn rests(&self) -> bool {
+    self.facts - self.imaged >= TAIL && self.held.is_empty()
+  }
+
+  /// The life wrote its image, or tried to, after the facts that it said so far.
+  pub(crate) fn imaged(&mut self) {
+    self.imaged = self.facts;
   }
 
   /// The ask of the daemon, whose heap passed its share, that the life be born again, or the ask
@@ -274,6 +292,7 @@ impl Watch {
   /// the new birth says them again.
   pub(crate) fn reborn(&mut self) {
     self.facts = 0;
+    self.imaged = 0;
     self.asked = false;
     self.held.clear();
     self.seeds.clear();

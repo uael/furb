@@ -43,8 +43,7 @@ fn stood() -> Event {
   ]))
 }
 
-/// A watch that heard the facts of a whole tail, so that only an act that a checkpoint does not
-/// keep holds its rebirth.
+/// A watch that heard the facts of a whole tail.
 fn aged(watch: &mut Watch) {
   for n in 0..TAIL {
     watch.heard(&Event::Fact(json!(["say", format!("x{n}"), "", []])));
@@ -52,10 +51,25 @@ fn aged(watch: &mut Watch) {
 }
 
 #[test]
+fn a_life_past_its_tail_writes_its_image_at_its_rest_and_is_not_born_again() {
+  let mut watch = Watch::default();
+  aged(&mut watch);
+  assert_eq!((watch.rests(), watch.due()), (true, false), "a count of facts asks no rebirth");
+  watch.heard(&act("lasting", "other1", "rung3", &[], Phase::Started));
+  assert!(!watch.rests(), "an act that a checkpoint does not keep holds the image");
+  watch.heard(&act("lasting", "other1", "rung3", &[], Phase::Done(Value::Null)));
+  assert!(watch.rests(), "the image is due once that act ends");
+  watch.imaged();
+  assert!(!watch.rests(), "the next image waits for the next tail");
+  aged(&mut watch);
+  assert!(watch.rests(), "and comes past it");
+}
+
+#[test]
 fn the_rungs_of_completed_words_hold_no_rebirth_and_the_rungs_of_life_words_go_with_their_birth() {
   let mut watch = Watch::default();
   watch.heard(&stood());
-  aged(&mut watch);
+  watch.ask(true);
   for n in 0..50 {
     let id = format!("rung{n}");
     watch.heard(&act("rung", &id, "chain1", &[json!(format!("x = {n}"))], Phase::Started));
@@ -78,7 +92,7 @@ fn the_rungs_of_completed_words_hold_no_rebirth_and_the_rungs_of_life_words_go_w
   watch.heard(&act("lasting", "other1", "rung3", &[], Phase::Done(Value::Null)));
   assert!(watch.due(), "the rebirth is due once that act ends");
   watch.reborn();
-  aged(&mut watch);
+  watch.ask(true);
   watch.heard(&act("lasting", "again1", "rung90", &[], Phase::Started));
   assert!(
     !watch.due(),

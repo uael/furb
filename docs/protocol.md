@@ -48,7 +48,7 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   the section on attach says. With no `stall`, the bound is 1200 seconds.
 - `heap` gives the bound of the heap of the daemon in MiB, which the allocator of `furb` counts: half the memory of
   the machine with no `heap`, and no bound with `0`. Each second, past 75 percent of that bound, the daemon asks the
-  life that said the most facts since it opened to write its checkpoint and be born again, as at its tail, then the
+  life that said the most facts since it opened to write its checkpoint and be born again, then the
   next one once that one is born again, until the heap falls under the share. Its log lets go of each fact that the
   record holds, and of each fact that an open told, which the file of the log of the record holds, and a window
   that attaches before them reads them again from the record or from that file.

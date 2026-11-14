@@ -269,13 +269,13 @@ fn windowed(large: bool) {
 /// born again on a checkpoint that carries more, and the acts that the life holds.
 const BIRTH: usize = 18 << 20;
 
-/// The facts that a life says after it opened before it is born again, as the host counts them.
+/// The facts that a life says in each birth of the test before it is asked to be born again.
 const TAIL: usize = 10_000;
 
-/// A life grown past its tail twice: at each rebirth its log lets go of each fact that the record
-/// holds, and a reader that comes later reads each of those facts again, from the record. The heap
-/// that a birth adds is what the next engine and the acts of the birth hold: with the facts kept,
-/// it adds more than [`BIRTH`].
+/// A life grown past a tail of facts and asked to be born again, twice: at each rebirth its log
+/// lets go of each fact that the record holds, and a reader that comes later reads each of those
+/// facts again, from the record. The heap that a birth adds is what the next engine and the acts
+/// of the birth hold: with the facts kept, it adds more than [`BIRTH`].
 async fn a_rebirth_lets_go_of_each_fact_that_the_record_holds() {
   let at = yard::Yard::new(format!("furb-host-memory-tail-{}", process::id()));
   fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
@@ -288,6 +288,7 @@ async fn a_rebirth_lets_go_of_each_fact_that_the_record_holds() {
     let word = if since + 2_500 < TAIL {
       format!("for i in range({DRAWS}):\n  chance()\nfor i in range({READS}):\n  read('big.txt')")
     } else {
+      life.reborn(true);
       "for i in range(50):\n  chance()".to_owned()
     };
     let rung = made(&life, Command::Rung { word, on: None }).await;

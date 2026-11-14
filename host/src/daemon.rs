@@ -118,7 +118,7 @@ pub struct Settings {
   /// the daemon. With none, the daemon starts no process.
   pub host: Option<PathBuf>,
   /// The heap of the daemon, past whose share the life that weighs the most is born again. With
-  /// none, only the tail of a life makes it be born again.
+  /// none, no life is born again.
   pub heap: Option<Heap>,
 }
 
@@ -802,8 +802,8 @@ impl Lives {
   /// The heap of the daemon weighed: past its share, the life that said the most facts since it
   /// opened, of those that the daemon did not ask yet, is asked to be born again, and the next one
   /// once that life is born again, ended, or did not in [`crate::rebirth::PATIENCE`] weighs, while
-  /// the heap stays past the share. A life that holds work is born again once that work ends, as at
-  /// its tail. Once the heap falls under the share, each life asked is spared.
+  /// the heap stays past the share. A life that holds work is born again once that work ends.
+  /// Once the heap falls under the share, each life asked is spared.
   fn weighed(&mut self) {
     let Some(heap) = self.settings.heap else { return };
     let living = |held: &Held| matches!(held.stage, Stage::Living(_));

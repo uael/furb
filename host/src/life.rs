@@ -266,7 +266,7 @@ enum Message {
   Read(Read),
   /// A rebirth that the daemon asks when its heap passes its share, or takes back once the heap
   /// fell under the share: a life that keeps its record writes its checkpoint and is born again at
-  /// the first moment when it holds no act that a checkpoint does not keep, as at its tail.
+  /// the first moment when it holds no act that a checkpoint does not keep.
   Rebirth(bool),
 }
 
@@ -1086,11 +1086,12 @@ struct End {
 /// The life opened, driven, and opened again from its checkpoint at each rebirth, until it ends,
 /// each birth on the one journal of its changes, and how it ended.
 ///
-/// A life whose image names the tip of its record opens from it: the host stands on what the life
-/// of the image kept, and reads no fact of the record. Each other life tells the past of its
-/// record first, as [`Life::recalled`] says, and opens by the record. A life whose image does not
-/// load opens by the record once, and tells its past after that open and before its birth. The
-/// image is of the first open alone: a rebirth writes a checkpoint, and opens by it.
+/// A life whose image agrees with its record opens from it: the host stands on what the life of
+/// the image kept, reads no fact of the record before the image, and hears what the engine says
+/// of each entry after it, as after an image at rest. Each other life tells the past of its record
+/// first, as [`Life::recalled`] says, and opens by the record. A life whose image does not load
+/// opens by the record once, and tells its past after that open and before its birth. A rebirth
+/// writes a checkpoint, and opens by it.
 async fn lives(
   opening: Opening,
   life: &mut Life,
@@ -1180,8 +1181,10 @@ async fn driven(
   let (mut gone, mut asked) = (false, Vec::new());
   loop {
     let ends = gone || !asked.is_empty();
-    let waits = (ends || life.kept.backlog.holds() || record.is_some() && life.kept.watch.due())
-      && engine.unkept() > 0;
+    let watch = &life.kept.watch;
+    let waits =
+      (ends || life.kept.backlog.holds() || record.is_some() && (watch.due() || watch.rests()))
+        && engine.unkept() > 0;
     let woke = tokio::select! {
       biased;
       Some(event) = life.heard.recv() => Woke::Told(event),
@@ -1225,6 +1228,7 @@ async fn driven(
     if (gone || !asked.is_empty()) && engine.unkept() == 0 {
       return Drove::Ended(ended(engine, life), asked);
     }
+    rested(&mut engine, life, record);
     if record.is_some() && life.kept.watch.due() && engine.unkept() == 0 {
       let reborn = engine.checkpoint();
       return reborn
@@ -1243,6 +1247,21 @@ fn ended(engine: Engine, life: &mut Life) -> Option<Fault> {
   let record = life.record.as_deref().map(Path::new);
   let part = Part { build: BUILD.into(), kept: &life.kept };
   rebirth::ended(engine, record, &part)
+}
+
+/// The image of a life that keeps its record and rests past its tail, as [`rebirth::TAIL`] says,
+/// written beside its record. The life goes on, with no checkpoint: a later open goes on from the
+/// image and feeds what the record took after it. A life that cannot write an image tries again
+/// past its next tail.
+fn rested(engine: &mut Engine, life: &mut Life, record: Option<&str>) {
+  let rests = life.kept.watch.rests() && engine.unkept() == 0;
+  let Some(record) = record.filter(|_| rests) else { return };
+  life.told(None);
+  life.kept.watch.imaged();
+  let part = Part { build: BUILD.into(), kept: &life.kept };
+  if let Err(no) = image::keep(engine, Path::new(record), &part) {
+    life.put(Event::Notice(format!("The life wrote no image at its rest: {no}")));
+  }
 }
 
 /// The work of a life paused or woken as its record lacks facts or holds each again, as
@@ -1538,9 +1557,10 @@ impl LifeHandle {
     Heard::new(self.opens.clone())
   }
 
-  /// The ask of the daemon that the life be born again, as its heap passed its share, or the ask
-  /// taken back.
-  pub(crate) fn reborn(&self, asked: bool) {
+  /// The ask that the life be born again, as the daemon asks it when its heap passed its share,
+  /// or the ask taken back. The life is born again at its first moment with no act that a
+  /// checkpoint does not keep.
+  pub fn reborn(&self, asked: bool) {
     self.inbox.send(Message::Rebirth(asked)).ok();
   }
 
