@@ -923,13 +923,13 @@ def boot(journal, **outside):
     for b, heard in log[k:]:
       if b is a:
         return
-      n in heard or n not in dict(ears(b)) or heard.add(n) or hear(n, g, b)
+      n in heard or not ears(b, {n: g}) or heard.add(n) or hear(n, g, b)
 
-  def ears(a):
+  def ears(a, of=alive):
     q = get(a[1]) or a[:1] * 4
     k = {a[0], *q[:4], *map(scope, q[2:4])}
     return sorted(
-      (x for x in alive.items() if k & (heed.get(x[0]) or k) or a[0] in ("pause", "wake", "cancel", "close")),
+      (x for x in of.items() if k & (heed.get(x[0]) or k) or a[0] in ("pause", "wake", "cancel", "close")),
       key=lambda x: (x[0] not in known, x[0] in outside),
     )
 
