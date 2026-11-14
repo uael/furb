@@ -1900,7 +1900,7 @@ fn a_kernel_that_raises_ends_each_run_whose_word_it_lost_so_a_later_message_gets
 fn a_kernel_of_the_major_from_before_it_ended_its_lost_runs_ends_them_through_its_adapter() {
   // The root and the fact made of a record of 0.4.2, whose Kernel has no lost, as a record that a
   // life of that build began.
-  let old = include_str!("../tests/corpus/next/language.jsonl");
+  let old = include_str!("../tests/replay/language.jsonl");
   let head: Vec<&str> = old.lines().take(2).collect();
   assert!(
     head[1].contains("\"made\"") && !head[1].contains("def lost("),

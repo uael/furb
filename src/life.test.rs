@@ -646,14 +646,44 @@ fn a_record_of_another_engine_that_holds_no_texts_replays_and_goes_on() {
 /// with its digest.
 fn elsewhere(line: &str) -> (String, String) {
   let source = format!("{}\n{line}\n", crate::ENGINE);
+  named(&[source.as_str(), crate::KERNEL, crate::CHECKPOINTER])
+}
+
+/// The fact made of an engine, a Kernel and a checkpointer, as a line of the record holds it, with
+/// the digest that names them.
+fn named(held: &[&str; 3]) -> (String, String) {
   let mut hash = Sha256::new();
-  let held = [source.as_str(), crate::KERNEL, crate::CHECKPOINTER];
   for one in held {
     hash.update(one.as_bytes());
     hash.update([0]);
   }
   let named = format!("{:x}", hash.finalize());
-  (made_with(&named, &held), named)
+  (made_with(&named, held), named)
+}
+
+/// A tail after a checkpoint replays on the checkpointer that seeded it, which the fact made of the
+/// tail holds, and never on the checkpointer of this build: here a checkpointer whose seed binds
+/// one more value in the root.
+#[test]
+fn the_tail_after_a_checkpoint_replays_on_the_checkpointer_that_seeded_it() {
+  let at = yard("seeded");
+  let seeds = "__seed = seed\ndef seed(names, data):\n  data['chains'][0]['values']['seeded'] = 'True'\n  \
+               return __seed(names, data)\n";
+  let checkpointer = format!("{}\n{seeds}", crate::CHECKPOINTER);
+  made_elsewhere(&at, &named(&[crate::ENGINE, crate::KERNEL, &checkpointer]).0);
+  let open = || Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  open().checkpoint().unwrap();
+  let read = "x += 1\nclose([x, globals().get('seeded')])";
+  assert_eq!(
+    closed(&mut open(), read).as_ref().py_repr(),
+    "[2, True]",
+    "the seed of the record bore the root"
+  );
+  assert_eq!(
+    closed(&mut open(), read).as_ref().py_repr(),
+    "[3, True]",
+    "the tail replays on the seed that bore it"
+  );
 }
 
 /// A life that opens by a record of another engine goes on with that engine and writes no
@@ -788,8 +818,7 @@ fn imaged_elsewhere(at: &Path, open: impl Fn() -> (Engine, Vec<Object>)) -> Engi
 fn a_record_whose_fact_made_holds_no_checkpointer_seeds_and_gathers_with_the_engine_that_it_holds()
 {
   let at = yard("checkpointer");
-  let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus").join("next");
-  laid(&corpus.join("work.jsonl"), &at.join("record.jsonl"));
+  laid(&replays().join("language.jsonl"), &at.join("record.jsonl"));
   let kept = world::kept(at.join("record.jsonl")).unwrap();
   let made = kept
     .iter()

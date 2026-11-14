@@ -17,6 +17,10 @@ says.
   Each names the engine `d67479fe` of the commit `a4e4f6058`, which last changed the three and replayed them with no
   drift, and holds its texts. The records of `handover` replay nothing after their checkpoint, so they hold no texts.
 
+`language.jsonl` is the record of the language of the corpus of 0.4.2, which `tests/corpus/README.md` says. Its fact
+made holds no checkpointer, so its engine gathers and seeds its own checkpoint, and a later build replays its tail on
+the seed that bore it. Two tests of the crate read it as a record of that build.
+
 The tests of `src/life.test.rs` also make the life `worked`, on a model that answers from a script, and replay it. Its
 root writes, reads, runs a command, waits, reads the clock and chance, and asks a chain of its own. Each official
 extension runs on it.
