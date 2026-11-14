@@ -18,6 +18,7 @@ use std::{
   collections::{BTreeMap, HashMap, VecDeque},
   future::poll_fn,
   hash::{DefaultHasher, Hash, Hasher},
+  iter,
   mem,
   ops::Range,
   path::{Path, PathBuf},
@@ -551,11 +552,7 @@ impl Life {
   /// What an open told, less each fact of its opening that restates one that the log told before
   /// it: an open on a checkpoint says again what the checkpoint restates, which each reader
   /// already heard, then goes on with facts of its own, which the log tells whole.
-  fn opened(&mut self, progress: &Progress) {
-    let mut told = Vec::new();
-    while let Ok(event) = self.heard.try_recv() {
-      told.push(event);
-    }
+  fn opened(&mut self, told: Vec<Event>, progress: &Progress) {
     self.kept.births.clear();
     let start = self.kept.log.len();
     let (mut opening, of) = (true, told.len() as u64);
@@ -949,8 +946,9 @@ struct End {
 ///
 /// A life whose image names the tip of its record opens from it: the host stands on what the life
 /// of the image kept, and reads no fact of the record. Each other life tells the past of its
-/// record first, as [`Life::recalled`] says, and opens by the record. The image is of the first
-/// open alone: a rebirth writes a checkpoint, and opens by it.
+/// record first, as [`Life::recalled`] says, and opens by the record. A life whose image does not
+/// load opens by the record once, and tells its past after that open and before its birth. The
+/// image is of the first open alone: a rebirth writes a checkpoint, and opens by it.
 async fn lives(
   opening: Opening,
   life: &mut Life,
@@ -981,16 +979,16 @@ async fn lives(
     };
     match (kept, mem::take(&mut images), record.as_deref()) {
       (Some(kept), ..) => life.imaged(kept, &progress),
-      // The image named the tip of the record and did not load, as one whose body is torn, so
-      // the life opened by its record before it told its past: it opens again, after its past.
-      (None, true, Some(one)) => {
-        drop(engine);
-        while life.heard.try_recv().is_ok() {}
-        life.opens.born();
-        life.recalled(one, &progress);
-        continue;
+      (None, images, record) => {
+        let birth = iter::from_fn(|| life.heard.try_recv().ok()).collect();
+        // The image named the tip of the record and did not load, as one whose body is torn, so
+        // the life opened by its record before it told its past: it tells its past, then the
+        // birth that its record already keeps.
+        if let (true, Some(one)) = (images, record) {
+          life.recalled(one, &progress);
+        }
+        life.opened(birth, &progress);
       }
-      (None, ..) => life.opened(&progress),
     }
     stood = true;
     match driven(engine, life, received, record.as_deref()).await {

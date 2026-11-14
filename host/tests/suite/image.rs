@@ -256,8 +256,8 @@ async fn a_life_whose_image_holds_the_part_of_a_host_of_another_build_opens_by_i
 }
 
 /// A life whose image the change makes one that does not load opens by its record: it stands as
-/// the life before it stood, tells its past, then its birth, which its record keeps, and ends with
-/// an image that agrees.
+/// the life before it stood, tells its past, then its birth, and adds to its record what an open
+/// by the record adds, once. It ends with an image that agrees.
 async fn opens_by_its_record_after_its_past(name: &str, change: impl FnOnce(&mut Vec<u8>)) {
   let at = place(name);
   let image = at.join("record.jsonl.image");
@@ -265,14 +265,20 @@ async fn opens_by_its_record_after_its_past(name: &str, change: impl FnOnce(&mut
   let life = Life::spawn(kept(&at)).expect("the second life");
   let stood = views(&life).await;
   ended(life).await;
+  let births = || recorded_all(&at, "stand").len();
+  // What an open by the record adds to the record, with no image beside it.
+  fs::remove_file(&image).expect("the image of the second life");
+  let before = births();
+  ended(Life::spawn(kept(&at)).expect("the third life")).await;
+  let by_record = births() - before;
+  assert!(by_record > 0, "an open by the record stands each chain");
   let mut changed = fs::read(&image).expect("the image");
   change(&mut changed);
   fs::write(&image, changed).expect("the image that does not load");
-  let births = || recorded_all(&at, "stand").len();
   let before = births();
-  let life = Life::spawn(kept(&at)).expect("the third life");
+  let life = Life::spawn(kept(&at)).expect("the fourth life");
   assert_eq!(views(&life).await[..3], stood[..3], "the life stands on its record");
-  assert!(births() > before, "the life opens by its record, and no image");
+  assert_eq!(births() - before, by_record, "the life opens by its record once, and no image");
   // The life told its past, then its birth: the rung of the first life is done in its log.
   let log = log_of(&life).await;
   let past = log.iter().position(|one| matches!(*one.1, Event::Reborn(None)));
