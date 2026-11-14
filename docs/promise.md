@@ -14,7 +14,9 @@ Each of these acts holds on each build of the major that made the record, with n
 - Share: a person attaches to a life that a daemon holds, or forks it into a new life.
 
 A record replays on the engine that it holds, under the names that it holds. A record of another record is not
-imported. A drift on the same engine is a defect, never a known limit (R1). Within a major, a later build of the
+imported. From #1290 on, each record holds the texts of its engine, so each later build of the major replays it with
+no drift. A record that a build before #1290 made holds no such texts and may drift on a later build: a life on it is
+refused with the act that drifts, and a reader still reads each fact of it. A drift on the same engine is a defect, never a known limit (R1). Within a major, a later build of the
 engine never makes a record drift. Where a later build fixes a defect of replay at its root, an adapter of the old
 engine holds the record, in the one home of adapters, `src/furb/adapters.py`, keyed by the digest of the engine (R3).
 
