@@ -540,12 +540,12 @@ fn a_read_of_a_life_told_out_of_order_takes_no_copy_of_its_acts() {
     reversed.heard(act);
   }
   let least = |held: &Held| {
-    let runs = (0..7).map(|_| {
+    let times = (0..7).map(|_| {
       let at = Instant::now();
       black_box((held.threads("chain1", None, 0), held.desk(&[]), held.cards()));
       at.elapsed()
     });
-    runs.min().unwrap_or_default()
+    times.min().unwrap_or_default()
   };
   let (ordered, unordered) = (least(&told), least(&reversed));
   assert!(unordered < ordered * 3, "{unordered:?} out of order against {ordered:?} in order");
