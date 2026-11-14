@@ -86,7 +86,7 @@ impl Lines {
   }
 
   /// How the last line of the record ends, which the first keep mends.
-  fn ends(&mut self, tail: Tail) {
+  pub(super) fn ends(&mut self, tail: Tail) {
     match tail {
       Tail::Torn(whole) => (self.whole, self.torn) = (Some(whole), true),
       Tail::Unended => self.unended = true,
@@ -385,6 +385,14 @@ fn read(
     start = next;
   }
   Ok(Tail::Ended)
+}
+
+/// Each entry of a record that starts at a byte of its file or after it, where a line starts, as
+/// [`read`] gives them, and how the last line ends.
+pub(super) fn after(path: &Path, from: u64) -> Result<(Vec<Object>, Tail), StoreError> {
+  let mut entries = Vec::new();
+  let tail = read(path, from, &mut |one| entries.push(one), &mut |_| {})?;
+  Ok((entries, tail))
 }
 
 #[cfg(test)]

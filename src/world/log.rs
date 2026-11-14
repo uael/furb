@@ -36,7 +36,7 @@ use std::{
   collections::HashSet,
   fmt::Display,
   fs::{File, OpenOptions},
-  io::{BufRead, BufReader, BufWriter, Write},
+  io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write},
   ops::RangeInclusive,
   path::{Path, PathBuf},
   rc::Rc,
@@ -120,24 +120,42 @@ pub fn log(record: impl AsRef<Path>, held: &[Object]) -> Box<dyn Ear> {
 /// The log reads the start of each line before that byte and parses none, but the lines of the
 /// acts that a new log owes.
 pub(crate) fn logging(record: impl AsRef<Path>, last: &[Object], from: u64) -> Box<dyn Ear> {
-  heard(Log::open(record.as_ref(), last, from))
+  heard(Log::open(record.as_ref(), last, from), 0)
 }
 
-/// The ear of [`log`] for a life that opens from its image, which reads no entry: the log goes on
-/// after its last line, with what the ear of the life before it knew of it.
-pub(crate) fn logging_on(record: impl AsRef<Path>) -> Box<dyn Ear> {
-  heard(Log::tipped(record.as_ref()))
+/// The ear of [`log`] for a life that opens from its image, which reads no entry before it: the
+/// log goes on after the last line that the ear of the life of the image wrote, with what that
+/// ear knew of it. The record holds `tail` entries after the image, which the life says again.
+pub(crate) fn logging_on(record: impl AsRef<Path>, tail: usize) -> Box<dyn Ear> {
+  heard(Log::tipped(record.as_ref()), tail)
 }
 
-/// The ear that writes a log.
-fn heard(mut log: Log) -> Box<dyn Ear> {
+/// The ear that writes a log, on a record that holds `tail` entries after those that its lines
+/// count.
+fn heard(mut log: Log, tail: usize) -> Box<dyn Ear> {
   let sink = Rc::clone(&log.sink);
   let ear = ear(move |mut co| async move {
     let first = log.tip.take();
     log.tip = co.keeps(first)?;
     // A log that never took its place holds no line of the life before, so no line goes after.
-    if log.fresh.is_none() && !log.tip.borrow().placed {
-      log.sink.borrow_mut().out = None;
+    // A life that went on from the image and wrote no later one left lines after those that the
+    // image counts, and this life says their facts again, so the log is cut back to those lines.
+    if log.fresh.is_none() {
+      let (placed, bytes) = (log.tip.borrow().placed, log.tip.borrow().bytes);
+      let mut sink = log.sink.borrow_mut();
+      let cut = sink.out.as_mut().is_some_and(|out| {
+        let file = out.get_mut();
+        let short = file.metadata().is_ok_and(|held| held.len() <= bytes);
+        (short || file.set_len(bytes).is_ok()) && file.seek(SeekFrom::End(0)).is_ok()
+      });
+      if !(placed && cut) {
+        sink.out = None;
+      }
+    }
+    // The record keeps each entry that the life says again, so no fact of keep comes for it: the
+    // log counts them before their facts, as a log that a life writes again from its record does.
+    for _ in 0..tail {
+      log.kept();
     }
     loop {
       let a = hear(&mut co).await;
@@ -210,13 +228,14 @@ struct Log {
 }
 
 /// What the ear of a log knows of its lines: how many entries the record holds, each name that a
-/// line of the log shows as an act, or that names no act, and whether the log stands at its path,
-/// which it does once the life kept an entry.
+/// line of the log shows as an act, or that names no act, whether the log stands at its path,
+/// which it does once the life kept an entry, and the bytes of the lines that the ear wrote.
 #[derive(Default, Serialize, Deserialize)]
 struct Tip {
   entries: usize,
   seen: HashSet<String>,
   placed: bool,
+  bytes: u64,
 }
 
 /// The lines of the log at a path that come before a checkpoint, with its head, and each name that
@@ -363,9 +382,8 @@ impl Log {
           text.push_str(&keep(n));
           text.push('\n');
         }
-        let mut sink = log.sink.borrow_mut();
-        sink.put(&text);
-        sink.flush();
+        log.put(&text);
+        log.sink.borrow_mut().flush();
       }
       None => log.line(&serde_json::json!({ "entries": entries })),
     }
@@ -376,7 +394,9 @@ impl Log {
   /// which gives the ear what it knows of the lines.
   fn tipped(record: &Path) -> Self {
     let path = beside(record, ".log");
-    let file = OpenOptions::new().append(true).open(&path).ok();
+    // Not an append handle, which cannot cut the file on Windows: the ear cuts the log back to the
+    // lines of the image, then writes after them.
+    let file = OpenOptions::new().write(true).open(&path).ok();
     Self { path, sink: Self::sink(file), fresh: None, tip: Rc::default(), owed: Vec::new() }
   }
 
@@ -450,7 +470,15 @@ impl Log {
   /// One line, written after each line that waits, or waiting with them when the file cannot take
   /// it.
   fn line(&mut self, value: &impl Display) {
-    self.sink.borrow_mut().put(&format!("{value}\n"));
+    self.put(&format!("{value}\n"));
+  }
+
+  /// Lines, each with its end, written after each line that waits, and counted.
+  fn put(&mut self, lines: &str) {
+    if self.live() {
+      self.tip.borrow_mut().bytes += lines.len() as u64;
+      self.sink.borrow_mut().put(lines);
+    }
   }
 }
 

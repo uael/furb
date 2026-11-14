@@ -174,6 +174,53 @@ async fn a_life_that_opens_from_its_image_takes_again_each_act_in_flight() {
 }
 
 #[tokio::test]
+async fn a_life_on_an_image_that_its_record_passed_takes_again_the_acts_that_no_later_entry_ended()
+{
+  let at = place("image-tail");
+  let image = at.join("record.jsonl.image");
+  let life = Life::spawn(answering(&at, None)).expect("the first life");
+  let mut events = Box::pin(life.events(0));
+  let word = "p = prompt(str, 'Which one?', to=OPERATOR)\nw = wait(3600, p)\n\
+              v = prompt(str, 'And then?', to=OPERATOR)";
+  let id = made(&life, rung(word)).await;
+  let mut log = until(&mut events, done(&id)).await;
+  let (w, v, p) = (act_of(&life, "w").await, act_of(&life, "v").await, act_of(&life, "p").await);
+  let started = |log: &[Logged], id: &str| {
+    facts_of(log).iter().filter(|fact| fact[0] == "started" && fact[1] == id).count()
+  };
+  while [&w, &v, &p].iter().any(|id| started(&log, id) == 0) {
+    log.extend(until(&mut events, |event| matches!(event, Event::Fact(_))).await);
+  }
+  ended(life).await;
+  let first = fs::read(&image).expect("the image of the first life");
+  // The second life goes on from the image: the operator answers the first prompt, which ends
+  // the wait, and the second prompt stays in flight.
+  let life = Life::spawn(answering(&at, None)).expect("the second life");
+  let mut events = Box::pin(life.events(0));
+  let answered = life.send(Command::Answer { id: p.clone(), line: "this".to_owned() }).await;
+  assert!(matches!(answered, Ok(Reply::Done)), "{answered:?}");
+  until(&mut events, done(&w)).await;
+  ended(life).await;
+  // The second life leaves no image, as a life that crashed: the image of the first one stands,
+  // and the record holds the entries of the second life after it.
+  fs::write(&image, first).expect("the image of the first life again");
+  let life = Life::spawn(answering(&at, None)).expect("the third life");
+  let mut events = Box::pin(life.events(0));
+  let mut log = Vec::new();
+  // The console of each life took the second prompt one time, and the third life tells the start
+  // of the second life again from the record.
+  while started(&log, &v) < 3 {
+    log.extend(until(&mut events, |event| matches!(event, Event::Fact(_))).await);
+  }
+  let this = life.send(Command::Peek { id: p }).await;
+  assert!(matches!(&this, Ok(Reply::Value(value)) if *value == json!("this")), "{this:?}");
+  ended(life).await;
+  assert_eq!(recorded(&at, "started", &w).len(), 2, "no ear takes an act that the record ended");
+  assert_eq!(recorded(&at, "started", &v).len(), 3, "each life took the act that no entry ended");
+  assert_eq!(recorded(&at, "due", &w).len(), 1, "the wait keeps its one deadline");
+}
+
+#[tokio::test]
 async fn a_life_whose_image_does_not_load_opens_by_its_record_after_its_past() {
   let at = place("image-torn");
   let image = at.join("record.jsonl.image");

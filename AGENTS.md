@@ -57,8 +57,10 @@ API of its own:
   body, and a life that keeps its record drops an image that does not agree. A life of the command line or of the
   host that keeps its record ends with its image, and writes no checkpoint there. The next life of the same build
   on the same ears opens from it: it runs no boot, reads no entry and says no stand, and each ear takes each act that
-  the ear before it held in flight as an act that an earlier life took. Each other open goes by the record: from its
-  last checkpoint, or from its first entry when it holds none.
+  the ear before it held in flight as an act that an earlier life took. A life that went on from the image and wrote
+  no later one, as a life that crashed, kept entries after it: the next life opens from the image and says them again,
+  as `Engine::feed` says, so a crash costs its tail alone. Each other open goes by the record: from its last
+  checkpoint, or from its first entry when it holds none.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
   engine and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again

@@ -13,6 +13,12 @@
 //! the life: what that host keeps of the life beside its engine, as the log of its events, which
 //! the crate carries and does not read. The key names where each part ends. The file lands whole,
 //! as each write of the World, so no reader meets a part of an image.
+//!
+//! A record only grows, so an image agrees with a record that holds entries after the tip that it
+//! names: a life that went on from the image and wrote no later one, as a life that crashed, kept
+//! them. The life that opens from the image says them again, as a boot says a record again, so a
+//! crash costs its tail alone. A checkpoint or a fact that names an engine after the image is a
+//! birth of its own, which no life of the image went on to: the image is then dropped.
 
 use std::{
   fmt::Display,
@@ -45,50 +51,59 @@ struct Key {
   shape: u32,
   dump: u16,
   texts: String,
-  /// The tip of the record: its bytes, and the digest of the last of them.
+  /// The tip of the record that the life stood at: its bytes, and the digest of the last of them.
   bytes: u64,
   tail: String,
-  body: String,
-  /// The bytes of the session in the body, then those of the half of the host after it. The part
-  /// of the host of the life is the rest.
-  session: usize,
-  half: usize,
   /// Whether the scratch directory of the record holds a file. A life that opens from its image
   /// makes no file of it again, so an image agrees only while the directory holds its files.
   scratch: bool,
+  #[serde(flatten)]
+  parts: Parts,
+}
+
+/// What a key names of its body: its digest, the bytes of the session in it, then those of the
+/// half of the host after it. The part of the host of the life is the rest.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct Parts {
+  body: String,
+  session: usize,
+  half: usize,
 }
 
 impl Key {
-  /// The key that this build writes at the tip of a record now, for a body of this digest and of
-  /// these parts.
-  fn of(record: &Path, body: String, session: usize, half: usize) -> io::Result<Self> {
+  /// The key that this build writes for a body of these parts, at the first `bytes` bytes of a
+  /// record, or at its tip now.
+  fn of(record: &Path, bytes: Option<u64>, parts: Parts) -> io::Result<Self> {
     let mut file = File::open(record)?;
-    let bytes = file.metadata()?.len();
-    let mut last = Vec::new();
-    file.seek(SeekFrom::Start(bytes.saturating_sub(TAIL)))?;
-    file.read_to_end(&mut last)?;
+    let held = file.metadata()?.len();
+    let bytes = bytes.unwrap_or(held).min(held);
+    let mut last = vec![0; usize::try_from(bytes.min(TAIL)).unwrap_or_default()];
+    file.seek(SeekFrom::Start(bytes - last.len() as u64))?;
+    file.read_exact(&mut last)?;
     Ok(Self {
       shape: SHAPE,
       dump: monty::DUMP_VERSION,
       texts: world::engine(),
       bytes,
       tail: format!("{:x}", Sha256::digest(&last)),
-      body,
-      session,
-      half,
       scratch: Scratch::of(record).ok().flatten().is_some_and(|one| one.holds()),
+      parts,
     })
   }
 
-  /// Whether this key is the one that this build writes at the tip of a record now, for the body
-  /// that it names.
+  /// Whether this key is the one that this build writes for the body that it names, at the bytes
+  /// of the record that it names: the record holds them as the life of the image left them. A
+  /// record only grows, so the bytes after them are entries that a later life kept, and a life of
+  /// the image goes on from it only while none of them is a birth of its own.
   fn stands(&self, record: &Path) -> bool {
-    Self::of(record, self.body.clone(), self.session, self.half).is_ok_and(|now| now == *self)
+    Self::of(record, Some(self.bytes), self.parts.clone()).is_ok_and(|now| now == *self)
+      && world::goes_after(record, self.bytes)
   }
 }
 
 /// An image that agrees with its record: its half of the host, its session and the part of the
-/// host of the life in the body, and the bytes of the record at the tip that it names.
+/// host of the life in the body, and the bytes of the record at the tip that it names, which each
+/// entry that a later life kept stands after.
 pub(crate) struct Image {
   pub(crate) half: Half,
   pub(crate) bytes: u64,
@@ -114,8 +129,9 @@ fn path(record: &Path) -> PathBuf {
   beside(record, ".image")
 }
 
-/// The image of a record, when one stands beside it that this build reads and that names the tip
-/// of the record as it stands now. A record that is no file of lines has none. A life that keeps
+/// The image of a record, when one stands beside it that this build reads and that names the
+/// record as it stands now, as far as the tip of the life that wrote it. A record that is no file
+/// of lines has none. A life that keeps
 /// the record drops an image that does not agree, and a life that only reads leaves it, since the
 /// life that keeps the record may write the next one meanwhile.
 pub(crate) fn read(record: &Path, keeps: bool) -> Option<Image> {
@@ -136,10 +152,11 @@ pub(crate) fn drop_of(record: &Path) {
   fs::remove_file(path(record)).ok();
 }
 
-/// Whether the image of a record names the tip of the record as it stands now, in a shape that
-/// this build reads, by its key alone: no byte of its body is read. A host asks it before an open,
-/// to know whether the life reads its record. An image that agrees here and does not load, as one
-/// whose body is torn, makes the life open by its record.
+/// Whether the image of a record names the record as it stands now, as far as the tip of the life
+/// that wrote it, in a shape that this build reads, by its key alone: no byte of its body is read.
+/// A host asks it before an open, to know whether the life reads its record. An image that agrees
+/// here and does not load, as one whose body is torn, or one that a checkpoint of the record
+/// passed, makes the life open by its record.
 pub fn agrees(record: &Path) -> bool {
   let mut key = Vec::new();
   let read =
@@ -147,17 +164,17 @@ pub fn agrees(record: &Path) -> bool {
   read.is_ok() && serde_json::from_slice::<Key>(&key).is_ok_and(|key| key.stands(record))
 }
 
-/// The image that the bytes of a file hold, when its key is the key of its body at the tip of the
-/// record now.
+/// The image that the bytes of a file hold, when its key is the key of its body at the bytes of
+/// the record that it names.
 fn agreed(record: &Path, file: Vec<u8>) -> Option<Image> {
   let end = file.iter().position(|byte| *byte == b'\n')?;
   let key: Key = serde_json::from_slice(&file[..end]).ok()?;
   let body = file.get(end + 1..)?;
-  if key.body != format!("{:x}", Sha256::digest(body)) || !key.stands(record) {
+  if key.parts.body != format!("{:x}", Sha256::digest(body)) || !key.stands(record) {
     return None;
   }
-  let session = end + 1..(end + 1).checked_add(key.session)?;
-  let host = session.end.checked_add(key.half)?;
+  let session = end + 1..(end + 1).checked_add(key.parts.session)?;
+  let host = session.end.checked_add(key.parts.half)?;
   let half = serde_json::from_slice(file.get(session.end..host)?).ok()?;
   Some(Image { half, bytes: key.bytes, file, session, host })
 }
@@ -180,7 +197,7 @@ pub fn keep(engine: &mut Engine, record: &Path, host: &impl Serialize) -> Result
   let half = file.len() - session;
   serde_json::to_writer(&mut file, host).map_err(|no| unkept(&no))?;
   let body = format!("{:x}", Sha256::digest(&file));
-  let key = Key::of(record, body, session, half).map_err(|no| unkept(&no))?;
+  let key = Key::of(record, None, Parts { body, session, half }).map_err(|no| unkept(&no))?;
   let mut head = serde_json::to_vec(&key).map_err(|no| unkept(&no))?;
   head.push(b'\n');
   file.splice(0..0, head);

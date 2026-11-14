@@ -293,13 +293,15 @@ type Queue<T> = Rc<RefCell<VecDeque<T>>>;
 
 /// What both sides of an ear of rust hold for the image of its life: each question that the ear
 /// heard and that is not done, the acts among them that it started, which are its acts in flight,
-/// the acts that an earlier life took and that no wake put to it yet, how its body gives what it
-/// keeps, and what an image gave of that until the body takes it.
+/// the acts that an earlier life took and that no wake put to it yet, whether an image gave the
+/// acts in flight and the body does not hold them yet, how its body gives what it keeps, and what
+/// an image gave of that until the body takes it.
 #[derive(Default)]
 struct Imaged {
   asked: HashMap<String, Fact>,
   started: Vec<String>,
   resumed: HashSet<String>,
+  owed: bool,
   gives: Option<Box<dyn Fn() -> Option<Value>>>,
   given: Option<Value>,
 }
@@ -512,6 +514,7 @@ impl Ear for Coroutine {
   /// past the first waits here for the next poll, so a resume never gives it and the work of an ear never speaks
   /// while the ear hears: each thing it says lands in the log alone, as a later life says it again.
   fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+    self.flown();
     self.tell(Event::Driven);
     if let Some(spoken) = self.accord.pop_front() {
       return Poll::Ready(self.given(spoken));
@@ -544,8 +547,9 @@ impl Ear for Coroutine {
     Some(json!({ "flight": flight, "resumed": resumed, "kept": kept }))
   }
 
-  /// The body is not polled yet, so it finds each act in flight as the first facts that it hears,
-  /// each an act that an earlier life took, and its state where it asks for what it keeps.
+  /// The body is not polled yet, so it finds its state where it asks for what it keeps. It holds
+  /// each act in flight as the ear before it did, each an act that an earlier life took, and the
+  /// body is told them the first time the life drives the ear, as [`Coroutine::flown`] says.
   fn imaged(&mut self, mut part: Value) {
     let mut imaged = self.imaged.borrow_mut();
     let names = |part: &Value| -> Vec<String> {
@@ -557,8 +561,10 @@ impl Ear for Coroutine {
     let flight = serde_json::from_value::<Vec<Object>>(flight).unwrap_or_default();
     for fact in flight.into_iter().filter_map(Fact::owned) {
       imaged.resumed.insert(fact.about().to_owned());
-      self.events.borrow_mut().push_back(Event::Heard(fact));
+      imaged.started.push(fact.about().to_owned());
+      imaged.asked.insert(fact.about().to_owned(), fact);
     }
+    imaged.owed = true;
     imaged.given = Some(part["kept"].take()).filter(|kept| !kept.is_null());
   }
 }
@@ -567,6 +573,23 @@ impl Coroutine {
   /// One event, told to the body.
   fn tell(&mut self, event: Event) {
     self.events.borrow_mut().push_back(event);
+  }
+
+  /// Each act that an image gave in flight, told to the body as the question that the ear before
+  /// it heard, the first time the life drives the ear. A life that opens from an image says each
+  /// entry after the image first, and the ear hears them: an act that such an entry ended is done
+  /// by then, so the body is not told it, and the ear takes no act that the record ended.
+  fn flown(&mut self) {
+    let flight: Vec<Fact> = {
+      let mut imaged = self.imaged.borrow_mut();
+      if !mem::take(&mut imaged.owed) {
+        return;
+      }
+      imaged.started.iter().filter_map(|id| imaged.asked.get(id).cloned()).collect()
+    };
+    for fact in flight {
+      self.tell(Event::Heard(fact));
+    }
   }
 
   /// What the body said, given to the life, which says it before it polls the body again.

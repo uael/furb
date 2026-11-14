@@ -56,11 +56,13 @@ pub use provider::{
 pub(crate) use provider::{Mode, search::timed};
 pub use reader::{Retold, retold, retold_live};
 pub use scratch::{SCRATCH, Scratch};
+pub(crate) use store::{
+  After, Format, Last, goes_after, last, made_before, stood_before, stored, stored_after,
+};
 pub use store::{
   CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, checkpoints,
   engine, keeping, kept, made, readable, release, stood, store, texts, unheld,
 };
-pub(crate) use store::{Format, Last, last, made_before, stood_before, stored, stored_on};
 pub use time::time;
 
 use crate::{

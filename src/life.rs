@@ -605,14 +605,18 @@ impl Opening {
   }
 
   /// The life that the image of its record holds, on the ears of the host and then on fresh ears
-  /// of the crate, each of which stands where the ear of the life before stood. No boot runs and
-  /// no entry is read. Each act that an ear of that life held in flight is put to its fresh ear as
-  /// an act that an earlier life took, at the first time the life is driven, which this does once.
+  /// of the crate, each of which stands where the ear of the life before stood. No boot runs, and
+  /// no entry before the image is read. A life that went on from the image and wrote no later one,
+  /// as one that crashed, kept entries after it: the journal of the life says them again, as a boot
+  /// says a record again, so the open costs that tail alone. Each act that an ear of the life of
+  /// the image held in flight, and that no such entry ended, is put to its fresh ear as an act that
+  /// an earlier life took, at the first time the life is driven, which this does once.
   ///
   /// The session steps the ears that the life before had, by their names, so the life needs each
   /// of them and no other: a life that inspects hears a silent ear in the place of each that it
   /// lacks, as it does for each ear that does work. The ears of the host come back when the image
-  /// does not load: its ears are not those of this life, the record does not end where it says,
+  /// does not load: its ears are not those of this life, no life goes on from it on the record,
+  /// as [`world::stored_after`] says,
   /// monty does not load its session, or the host does not stand on its part, which it is asked
   /// last, so a host that takes its part opens from the image. A life that keeps then drops the
   /// image, and the life opens
@@ -626,19 +630,23 @@ impl Opening {
   ) -> Result<Result<Engine, (Ears, Option<Prepared>)>, Fault> {
     let Some(image) = prepared.image.take() else { return Ok(Err((host, Some(prepared)))) };
     let keeps = self.keeps != Some(false) && self.works();
-    let path = self.record.as_deref().map(Path::new).filter(|_| keeps);
-    let store = path.map(|path| world::stored_on(path, image.bytes)).transpose()?;
-    // The record of a life that keeps ends where the image says, or the image is stale.
-    let ends = store.as_ref().is_none_or(Option::is_some);
+    let record = self.record.as_deref().map(Path::new);
+    let path = record.filter(|_| keeps);
+    // The entries that a life kept after the image, which went on from it and wrote no later one,
+    // or the image is stale.
+    let after = record.map(|one| world::stored_after(one, image.bytes, keeps)).transpose()?;
+    let goes = after.as_ref().is_some_and(Option::is_some);
+    let world::After { entries: tail, store } = after.flatten().unwrap_or_default();
     let mut ears = self.eared(prepared, None, true)?;
-    if let (Some(store), Some(path)) = (store.flatten(), path) {
-      ears.extend([("store".to_owned(), store), ("log".to_owned(), world::logging_on(path))]);
+    if let (Some(store), Some(path)) = (store, path) {
+      let log = world::logging_on(path, tail.len());
+      ears.extend([("store".to_owned(), store), ("log".to_owned(), log)]);
     }
     let given = |name: &str| host.iter().chain(&ears).any(|one| one.0 == name);
     let lacked: Vec<String> =
       image.half.names().filter(|name| !given(name)).map(str::to_owned).collect();
     let known = host.iter().chain(&ears).all(|one| image.half.names().any(|name| name == one.0));
-    let loads = known && ends && (lacked.is_empty() || !self.works());
+    let loads = known && goes && (lacked.is_empty() || !self.works());
     let sand = loads.then(|| image.half.sand(image.session()).ok()).flatten();
     let Some(sand) = sand.filter(|_| stands(image.host())) else {
       path.map(image::drop_of);
@@ -646,6 +654,12 @@ impl Opening {
     };
     ears.extend(lacked.into_iter().map(|name| (name, silent())));
     let mut engine = Engine::imaged(image.half, sand, host.into_iter().chain(ears))?;
+    if !tail.is_empty() {
+      engine.feed(&tail)?;
+      if let Some(no) = engine.raised() {
+        return Err(no.clone());
+      }
+    }
     engine.pump(Waker::noop())?;
     Ok(Ok(engine))
   }

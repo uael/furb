@@ -278,6 +278,39 @@ fn a_life_goes_on_from_its_image_and_its_record_replays_with_no_drift() {
   assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "43\n");
 }
 
+/// A life that went on from its image and wrote no later one, as a life that crashed, kept entries
+/// after the image. The next life opens from the image and says those entries again, so a crash
+/// costs its tail alone.
+#[test]
+fn a_life_opens_from_an_image_that_its_record_passed_and_says_the_entries_after_it_again() {
+  let yard = Yard::new("image-tail");
+  assert_eq!(printed(yard.kept(&["run", "k = 41"]), ""), "None\n");
+  let image = PathBuf::from(format!("{}.image", yard.record().display()));
+  let first = fs::read(&image).expect("the image of the first life");
+  assert_eq!(printed(yard.kept(&["run", "k += 1"]), ""), "None\n");
+  // The second life leaves no image, as a life that crashed: the image of the first one stands.
+  fs::write(&image, &first).expect("the image of the first life again");
+  let record = || fs::read_to_string(yard.record()).expect("the record");
+  let stands = |record: &str| record.lines().filter(|line| line.starts_with("[[\"stand\"")).count();
+  let before = stands(&record());
+  assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "42\n");
+  assert_eq!(stands(&record()), before, "a life that opens from an image says no birth");
+  assert_ne!(fs::read(&image).expect("the image of the third life"), first);
+  // The log holds the line of keep of each entry one time, in order: the lines that the second
+  // life wrote after the image went before the third life said their facts again.
+  let log = fs::read_to_string(format!("{}.log", yard.record().display())).expect("the log");
+  let keeps: Vec<&str> = log.lines().filter(|line| line.starts_with("[\"keep\",\"\",")).collect();
+  assert_eq!(keeps.len(), record().lines().count());
+  assert!(keeps.iter().zip(1..).all(|(line, n)| *line == format!("[\"keep\",\"\",{n}]")));
+  // A checkpoint after the image is a birth of its own: the life then opens by its record.
+  fs::write(&image, &first).expect("the image of the first life again");
+  let mut checkpoint = yard.furb(&["checkpoint", "--record"]);
+  checkpoint.arg(yard.record());
+  assert_eq!(printed(checkpoint, ""), "");
+  assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "43\n");
+  assert_eq!(stands(&record()), before + 1, "a life that opens by its record says its birth");
+}
+
 #[test]
 fn a_checkpoint_at_the_tip_of_a_record_carries_the_module_of_its_root_to_the_next_life() {
   let yard = Yard::new("checkpoint");

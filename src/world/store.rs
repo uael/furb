@@ -11,6 +11,7 @@ use std::{
   collections::VecDeque,
   ffi::OsStr,
   fs::{self, File, OpenOptions, TryLockError, create_dir_all},
+  io::{BufRead, BufReader, Read, Seek, SeekFrom},
   path::Path,
   rc::Rc,
   time::{Duration, SystemTime, UNIX_EPOCH},
@@ -135,15 +136,61 @@ pub(crate) fn stored(
   }
 }
 
-/// The ear that [`store`] gives for a life that opens from its image, under the lease of the
-/// record at a path, which reads no entry. The record is a file of lines that ends whole at the
-/// tip that the image names, since the life before kept each entry that it said, and it names its
-/// engine already. Nothing when the record does not end at those bytes, as when another life wrote
-/// after the image was read.
-pub(crate) fn stored_on(path: &Path, bytes: u64) -> Result<Option<Box<dyn Ear>>, Fault> {
-  let store = Lines::open(path)?;
-  let ends = fs::metadata(path).is_ok_and(|held| held.len() == bytes);
-  Ok(ends.then(|| kept_by(store, None).1))
+/// The entries of the record at a path that stand after the first `bytes` bytes of its file of
+/// lines, where the image of a life stands, and, for a life that keeps the record, the ear that
+/// [`store`] gives, under the lease of the record. The life of the image kept each entry before
+/// those bytes, so the record names its engine already, and a life that crashed after it went on
+/// from the image kept each entry after them: the life that opens from the image says them again,
+/// as a boot says a record again. Nothing when no life goes on from the image: the record is
+/// shorter than those bytes, or an entry after them is a checkpoint or names an engine, since each
+/// fact after such an entry comes from a life that was born on it.
+pub(crate) fn stored_after(path: &Path, bytes: u64, keeps: bool) -> Result<Option<After>, Fault> {
+  let mut store = keeps.then(|| Lines::open(path)).transpose()?;
+  if fs::metadata(path).is_ok_and(|held| held.len() < bytes) {
+    return Ok(None);
+  }
+  let (entries, tail) = lines::after(path, bytes)?;
+  let fact = |entry: &Object| entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+  if entries.iter().any(|entry| fact(entry).is_some_and(|one| born(one.kind()))) {
+    return Ok(None);
+  }
+  if let Some(store) = &mut store {
+    store.ends(tail);
+  }
+  Ok(Some(After { entries, store: store.map(|store| kept_by(store, None).1) }))
+}
+
+/// Whether a fact of this kind is a birth that the facts after it come from: a checkpoint, or the
+/// fact that names an engine.
+fn born(kind: &str) -> bool {
+  matches!(kind, checkpoint::CHECKPOINT | MADE)
+}
+
+/// Whether a life of the image that stands at the first `bytes` bytes of the file of lines at a
+/// path can go on from it, as [`stored_after`] says, read from the start of each line after those
+/// bytes alone, with no lease and no parse: a host asks it before an open.
+pub(crate) fn goes_after(path: &Path, bytes: u64) -> bool {
+  let from = |mut file: File| file.seek(SeekFrom::Start(bytes)).map(|_| file);
+  let Ok(file) = File::open(path).and_then(from) else { return false };
+  let (mut lines, mut head) = (BufReader::with_capacity(1 << 16, file), Vec::new());
+  loop {
+    head.clear();
+    match lines.by_ref().take(256).read_until(b'\n', &mut head) {
+      Ok(0) => return true,
+      Ok(_) if spoken(&head).is_some_and(|[kind, ..]| born(kind)) => return false,
+      Ok(_) if head.ends_with(b"\n") => {}
+      Ok(_) if lines.skip_until(b'\n').is_ok() => {}
+      _ => return false,
+    }
+  }
+}
+
+/// What [`stored_after`] gives: the entries after an image, and the ear of the store of a life
+/// that keeps the record.
+#[derive(Default)]
+pub(crate) struct After {
+  pub entries: Vec<Object>,
+  pub store: Option<Box<dyn Ear>>,
 }
 
 /// The last entries of the record at a path, read with no lease and changed in nothing, as a later

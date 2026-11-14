@@ -13,7 +13,7 @@
 //! each fact up to the fault, and a later open replays them. A life that ends with no fault writes
 //! its image and no checkpoint, as [`ended`] says: the image is of the end of a life alone, so a
 //! rebirth, at the tail or at the ask of the daemon, goes by a checkpoint, and the open after it
-//! drops the image that the record passed.
+//! drops the image that this checkpoint passed.
 //!
 //! Each life of a daemon runs on a thread of one process, so the heap that bounds them is the heap
 //! of the daemon. When it passes [`SHARE`] of its [`Heap`], the daemon asks the life that said the
