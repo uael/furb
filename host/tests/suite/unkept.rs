@@ -1,5 +1,5 @@
-//! A life whose record takes no fact for a time, asked to be born again:
-//! it holds its rebirth and keeps its end until the record takes them again. The test fills the
+//! A life whose record takes no fact for a time: it keeps its end, and pauses its work past a
+//! bound, until the record takes them again. The test fills the
 //! record with the limit of the size of a file of the process, which only a system of Unix gives,
 //! so a child of the suite runs it alone, as `apart` says.
 
@@ -20,11 +20,11 @@ use tokio::runtime::Builder;
 #[cfg(unix)]
 #[test]
 #[ignore = "a child of the suite runs it alone"]
-fn rebirth_alone() {
-  if apart::alone("unkept::rebirth_alone") {
+fn end_alone() {
+  if apart::alone("unkept::end_alone") {
     let runtime = Builder::new_current_thread().enable_all().build();
     let runtime = runtime.expect("the test has a runtime");
-    runtime.block_on(unix::a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end());
+    runtime.block_on(unix::a_life_whose_record_takes_no_fact_keeps_its_end());
   }
 }
 
@@ -266,11 +266,11 @@ mod unix {
   }
 
   #[expect(unsafe_code, reason = "no crate of the lock sets a signal to be ignored with no unsafe")]
-  pub(super) async fn a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end() {
+  pub(super) async fn a_life_whose_record_takes_no_fact_keeps_its_end() {
     let at = yard::Yard::new(format!("furb-host-unkept-{}", process::id()));
     let life = Life::spawn(opening(&at)).expect("the life has a thread");
     let mut events = Box::pin(life.events(0));
-    let mut log = ran(&life, &mut events, "n = 1").await;
+    ran(&life, &mut events, "n = 1").await;
 
     // A write past the limit raises the signal SIGXFSZ, which ends the process unless it is
     // ignored: the write then fails, as on a full disk.
@@ -278,22 +278,7 @@ mod unix {
     unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) };
     let full = size(&at);
     limited(full);
-    log.extend(ran(&life, &mut events, &format!("for i in range({DRAWS}):\n  chance()")).await);
-    life.reborn(true);
-    log.extend(quiet(&mut events).await);
-    let rebirths = log.iter().filter(|one| matches!(*one.1, Event::Reborn(_))).count();
-    assert_eq!(rebirths, 0, "no rebirth while the record does not hold each fact");
-    assert_eq!(size(&at), full, "the record took no fact while the limit stood");
-
-    // The life wakes on the write that lands, and is born again then.
-    limited(libc::RLIM_INFINITY);
-    until(&mut events, |event| matches!(event, Event::Reborn(None))).await;
-    // The new birth opens after the event of the rebirth: a word that runs on it waits for it.
-    ran(&life, &mut events, "m = 0").await;
-    quiet(&mut events).await;
-
-    let full = size(&at);
-    limited(full);
+    ran(&life, &mut events, &format!("for i in range({DRAWS}):\n  chance()")).await;
     ran(&life, &mut events, "n = 2").await;
     let mut end = std::pin::pin!(life.send(Command::End));
     let early = timeout(Duration::from_millis(500), &mut end).await;
@@ -313,21 +298,10 @@ mod unix {
     assert!(matches!(&*told.last().expect("the end is told").1, Event::Ended(None)));
 
     let kept = lines(&at);
-    let draws: Vec<usize> = kept
-      .iter()
-      .enumerate()
-      .filter(|(_, line)| line.starts_with("[[\"done\",\"chance"))
-      .map(|(at, _)| at)
-      .collect();
-    assert_eq!(draws.len(), DRAWS, "the record holds each fact that waited");
-    let checkpoints: Vec<usize> = kept
-      .iter()
-      .enumerate()
-      .filter(|(_, line)| line.starts_with("[[\"checkpoint\""))
-      .map(|(at, _)| at)
-      .collect();
-    assert_eq!(checkpoints.len(), 1, "the checkpoint of the rebirth: the life ends with its image");
-    assert!(draws.last() < checkpoints.first(), "the checkpoint of the rebirth follows each fact");
+    let draws = kept.iter().filter(|line| line.starts_with("[[\"done\",\"chance")).count();
+    assert_eq!(draws, DRAWS, "the record holds each fact that waited");
+    let checkpoints = kept.iter().filter(|line| line.starts_with("[[\"checkpoint\"")).count();
+    assert_eq!(checkpoints, 0, "the life ends with its image, and writes no checkpoint");
     let again = Life::spawn(opening(&at)).expect("the life has a thread");
     let n = again.send(Command::Inspect { name: "n".to_owned(), on: None }).await;
     assert!(matches!(n, Ok(Reply::Inspected { ref repr, .. }) if repr == "2"), "{n:?}");

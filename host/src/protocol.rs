@@ -484,14 +484,13 @@ pub enum Frame {
   /// many exchanges stand before the first of the page of the end now, and the agents of the
   /// thread.
   Thread { life: String, thread: String, page: Page },
-  /// How far the open of a life stands, pushed to each of its windows while the life opens, at its
-  /// first open and at each rebirth: the stage, its work done and its work known, each in the unit
-  /// of the stage, and both 0 for a stage that counts nothing. The stages of one open come in
-  /// their order, the numbers of a stage never go back, and `done` never passes `of`. A window
-  /// hears a frame at once for each stage that the open reaches, and at most four each second for
-  /// a stage that goes on. The frame of `log` with `done` equal to `of` ends the open, and comes
-  /// before the first event that the open tells. It is no event of the log and no fact of the
-  /// record.
+  /// How far the open of a life stands, pushed to each of its windows while the life opens: the
+  /// stage, its work done and its work known, each in the unit of the stage, and both 0 for a
+  /// stage that counts nothing. The stages of one open come in their order, the numbers of a stage
+  /// never go back, and `done` never passes `of`. A window hears a frame at once for each stage
+  /// that the open reaches, and at most four each second for a stage that goes on. The frame of
+  /// `log` with `done` equal to `of` ends the open, and comes before the first event that the open
+  /// tells. It is no event of the log and no fact of the record.
   Opening { life: String, stage: Stage, done: u64, of: u64 },
   /// A life that holds open acts and said no fact for the bound of the daemon, pushed once to each
   /// of its windows by the watch of the daemon, which no word of the life runs: each open act, and

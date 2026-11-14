@@ -87,7 +87,7 @@ impl Quiet {
     Self { bound, last, acts, told: Told::No, ours, chains }
   }
 
-  /// One event of the life. After a rebirth, the new open tells again each act that lives.
+  /// One event of the life. After the event of a birth, the open tells again each act that lives.
   pub(crate) fn heard(&mut self, event: &Event) {
     match event {
       Event::Fact(fact) => self.fact(fact),

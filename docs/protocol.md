@@ -46,16 +46,10 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   its role, and the daemon closes the peer of a login that it does not name, before its hello.
 - `stall` gives the seconds after which the daemon tells that a life with an open act and no new fact stalled, as
   the section on attach says. With no `stall`, the bound is 1200 seconds.
-- `heap` gives the bound of the heap of the daemon in MiB, which the allocator of `furb` counts: half the memory of
-  the machine with no `heap`, and no bound with `0`. Each second, past 75 percent of that bound, the daemon asks the
-  life that said the most facts since it opened to write its checkpoint and be born again, then the
-  next one once that one is born again, until the heap falls under the share. Its log lets go of each fact that the
-  record holds, and of each fact that an open told, which the file of the log of the record holds, and a window
-  that attaches before them reads them again from the record or from that file.
 - The daemon reads `host.json` when it starts and at each change of the file, and a file that does not parse keeps
   the list before. A change of `roles` takes effect at once on each connected peer: a login that the file drops gets
   a refusal and loses its connection, and a login whose role changes holds the new role from its next verb. A change
-  of `tailnet`, `stall` or `heap` takes effect at the next start or upgrade.
+  of `tailnet` or `stall` takes effect at the next start or upgrade.
 - The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
   standalone download. It does not find the app of the App Store.
 - Plain TCP listens only on loopback or on the tailnet, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, since no other
@@ -223,9 +217,12 @@ it is not given. The daemon answers requests in any order.
   only it knows what the operator saw. A `threads` with no `read` reads nothing, so each note is unread.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
   in the log of the life and the `event`: `fact`, `act`, `text`, `queued`, `notice`, `changed`, `reborn` or `ended`. After
-  `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.
+  `reborn`, which a life tells once it told the past of its record, the life goes on from its last checkpoint, and its
+  acts come again as they stand.
 - The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
-  checkpoint, as the log after a rebirth holds them. So a window of a life that a later open, a handover or an end
+  checkpoint. The log lets go of each of them once it told it, since the record holds it, and of each fact that an open
+  told, which the file of the log of the record holds, and a window that attaches before them reads them again from the
+  record or from that file. So a window of a life that a later open, a handover or an end
   brought back from its checkpoint hears the life whole, and hears no fact twice.
 - `cards` gives the cards of the machine as `cards`, and the peer then hears a frame `cards` at each change of them,
   until it leaves. A card is one thread that an operator started: a prompt of his at the top of the threads of its
@@ -292,7 +289,7 @@ it is not given. The daemon answers requests in any order.
   them while it lives, so a life that opens again shows no thought of the words before it.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
-- While a life opens, at its first open and at each rebirth, the daemon pushes to each window of the life a frame
+- While a life opens, the daemon pushes to each window of the life a frame
   `opening` with the `life`, the `stage` of the open, and two numbers: `done`, the work done of that stage, and `of`,
   the work known of it. A window draws a progress bar from them.
 
@@ -319,7 +316,7 @@ it is not given. The daemon answers requests in any order.
     on. A window that attaches while the life opens hears one frame for each stage that the open reached.
   - The frame of `log` with `done` equal to `of` ends the open. It comes before the first event that the open tells,
     so a window ends its bar there. An open that fails sends no such frame, and the life ends with the event `ended`.
-    A window that attaches to a life that stands hears no frame `opening` until the next rebirth of the life.
+    A window that attaches to a life that stands hears no frame `opening`.
   - The frame is no event of the log of the life and no fact of the record.
 - A verb of a life that a peer says while the life opens waits for the life, which answers it once it stands, in the
   order that it heard each verb. A life that ends on a fault, as an open that fails, refuses with that fault each

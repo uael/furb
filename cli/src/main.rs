@@ -13,11 +13,6 @@ mod host;
 mod life;
 mod window;
 
-/// The allocator of the process, which counts its heap: the daemon of `furb host` reads it to bear
-/// its lives under the bound of `host.json`.
-#[global_allocator]
-static HEAP: furb_host::Counted = furb_host::Counted;
-
 use std::{
   collections::HashMap,
   fmt::Display,

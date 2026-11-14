@@ -2236,7 +2236,7 @@
             "done",
             "of"
           ],
-          "description": "How far the open of a life stands, pushed to each of its windows while the life opens, at its\nfirst open and at each rebirth: the stage, its work done and its work known, each in the unit\nof the stage, and both 0 for a stage that counts nothing. The stages of one open come in\ntheir order, the numbers of a stage never go back, and `done` never passes `of`. A window\nhears a frame at once for each stage that the open reaches, and at most four each second for\na stage that goes on. The frame of `log` with `done` equal to `of` ends the open, and comes\nbefore the first event that the open tells. It is no event of the log and no fact of the\nrecord."
+          "description": "How far the open of a life stands, pushed to each of its windows while the life opens: the\nstage, its work done and its work known, each in the unit of the stage, and both 0 for a\nstage that counts nothing. The stages of one open come in their order, the numbers of a stage\nnever go back, and `done` never passes `of`. A window hears a frame at once for each stage\nthat the open reaches, and at most four each second for a stage that goes on. The frame of\n`log` with `done` equal to `of` ends the open, and comes before the first event that the open\ntells. It is no event of the log and no fact of the record."
         },
         {
           "type": "object",
@@ -4872,7 +4872,7 @@
             "event",
             "data"
           ],
-          "description": "The life opened again from its checkpoint, on the same thread and for the same readers, with\nthe fault that stopped it when one did. Each event after it is of the new open, which tells\neach chain, its turns and each open prompt again as it stood."
+          "description": "The life told the past of its record and is born on it, with no fault: each event after it\nis of the birth, which tells each chain, its turns and each open prompt again as it stood."
         },
         {
           "type": "object",

@@ -2,10 +2,10 @@
 //! tasks, since the engine is not `Send`. The thread owns the engine. It awaits the open, and
 //! tells how far it stands as [`crate::opens`] says, then one local task pumps the engine while it
 //! waits for the next command, and keeps the log of the events of the life. A command that a
-//! handle says while the life opens waits, and the life answers it once it stands. The thread
-//! opens the life again from its checkpoint at each rebirth, as [`crate::rebirth`] says, for the
-//! same handles and the same log. A life that keeps its record ends with its image, which holds
-//! what the life keeps of the events that it told, and the next life of the record opens from it.
+//! handle says while the life opens waits, and the life answers it once it stands. A life that
+//! keeps its record writes its image as it goes and at its end, as [`crate::rebirth`] says, which
+//! holds what the life keeps of the events that it told, and the next life of the record opens
+//! from it.
 //! Once the life ends, the thread holds its log for the readers
 //! until each handle of the life is gone.
 
@@ -23,10 +23,7 @@ use std::{
   iter, mem,
   ops::Range,
   path::{Path, PathBuf},
-  sync::{
-    Arc, Mutex,
-    atomic::{AtomicU64, Ordering},
-  },
+  sync::{Arc, Mutex},
   task::Poll,
   thread,
   time::Duration,
@@ -264,10 +261,6 @@ enum Message {
   Command(Command, Replier),
   /// What a reader of the log asks.
   Read(Read),
-  /// A rebirth that the daemon asks when its heap passes its share, or takes back once the heap
-  /// fell under the share: a life that keeps its record writes its checkpoint and is born again at
-  /// the first moment when it holds no act that a checkpoint does not keep.
-  Rebirth(bool),
 }
 
 /// What a reader of the log asks of the thread of a life.
@@ -312,8 +305,6 @@ pub struct Life {
   name: Arc<Mutex<Option<String>>>,
   /// The record that the life keeps.
   record: Option<String>,
-  /// The facts that the life said since it last opened, by which the daemon weighs it.
-  weight: Arc<Scale>,
   /// How far the open of the life stands, which each window reads while the thread opens.
   opens: Told,
   /// The cards of the life as the daemon reads them, and what makes them: see [`Life::carded`].
@@ -331,9 +322,9 @@ pub struct Life {
 /// life, so a later life of the record stands where this one stood and reads no fact of its past:
 /// the log, which is each event that it told, less those that a later event replaced (see
 /// `Spent`), how many facts it told and the place of each by its digest, the place in the log of
-/// each fact that the engine of this birth heard, what the actor watches to know when the life is
-/// born again, the queue of the follow-ups, the acts with their meaning, the work that the life
-/// holds for its record, the name of the session, folded from each fact of the life, the facts
+/// each fact that the engine of this birth heard, what the actor watches to know when the life
+/// writes its image, the queue of the follow-ups, the acts with their meaning, the work that the
+/// life holds for its record, the name of the session, folded from each fact of the life, the facts
 /// that the log let go since the record holds them, as [`Life::let_go`] says, and what the models
 /// wrote and thought and when each act that lives began, which no fact holds and a page of a
 /// thread reads. The image holds it as a [`Part`].
@@ -405,14 +396,6 @@ struct Gone {
   opened: Vec<Range<usize>>,
 }
 
-/// The weight of a life, which its thread writes and the daemon reads: the facts that it said since
-/// it last opened, and how many times it was born again.
-#[derive(Default)]
-pub(crate) struct Scale {
-  facts: AtomicU64,
-  births: AtomicU64,
-}
-
 /// The places of the log whose event a later event replaced, which the log drops once the life told
 /// [`BEHIND`] events after the event that replaced them, so a reader that stands no further behind,
 /// and reads the log, still hears each event: an event of an act replaces each earlier event of
@@ -464,7 +447,6 @@ pub struct LifeHandle {
   inbox: UnboundedSender<Message>,
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
-  weight: Arc<Scale>,
   opens: watch::Receiver<Opens>,
   cards: watch::Receiver<Option<Arc<Session>>>,
 }
@@ -480,16 +462,14 @@ impl Life {
     let told = readers.clone();
     let name = Arc::new(Mutex::new(None));
     let named = Arc::clone(&name);
-    let weight = Arc::new(Scale::default());
-    let weighed = Arc::clone(&weight);
     let (opened, opens) = Told::new();
     let (carded, cards) = watch::channel(None);
-    let told = Tells { readers: told, name: named, weight: weighed, opens: opened, cards: carded };
+    let told = Tells { readers: told, name: named, opens: opened, cards: carded };
     thread::Builder::new()
       .name("furb-life".to_owned())
       .spawn(move || lived(opening, received, told))
       .map_err(LifeError::Thread)?;
-    Ok(LifeHandle { inbox, readers, name, weight, opens, cards })
+    Ok(LifeHandle { inbox, readers, name, opens, cards })
   }
 
   /// One event put in the log, and sent to each reader, then the follow-ups of a chain when the
@@ -506,10 +486,6 @@ impl Life {
       }
     }
     self.kept.watch.heard(&event);
-    // A life that keeps no record is never born again, so the daemon never weighs it.
-    if self.record.is_some() {
-      self.weight.facts.store(self.kept.watch.facts(), Ordering::Relaxed);
-    }
     let queued = self.kept.queue.heard(&event);
     match &event {
       Event::Act(act) => {
@@ -653,7 +629,6 @@ impl Life {
     self.kept = kept;
     self.named();
     self.stale = true;
-    self.weight.facts.store(self.kept.watch.facts(), Ordering::Relaxed);
     (progress.0)(Stage::Log, 0, 0);
   }
 
@@ -684,8 +659,8 @@ impl Life {
   }
 
   /// The facts of a record before its last checkpoint, told first, in order, each with the acts
-  /// that it changed, then the rebirth on that checkpoint: the life boots on it and replays none of
-  /// them, so each reader hears the life whole, as after a rebirth, and the watch of a stall holds
+  /// that it changed, then the birth on that checkpoint: the life boots on it and replays none of
+  /// them, so each reader hears the life whole, and the watch of a stall holds
   /// only the acts that the open tells again. No engine reads them, so no pause covers their acts.
   /// Each birth on a checkpoint before the last opened by saying again what that checkpoint
   /// restates, which its log told no reader twice, and this one tells none twice either; each other
@@ -728,7 +703,7 @@ impl Life {
     // born after them, as after a past that the read gave whole.
     if retold.before_kept(last, &mut take).is_ok() || self.kept.said > 0 {
       (told.0)(Stage::Recall, last as u64, last as u64);
-      self.reborn(None);
+      self.reborn();
     }
   }
 
@@ -748,17 +723,13 @@ impl Life {
     self.kept.gone.scanned = self.kept.log.len();
   }
 
-  /// A rebirth: each event told so far, then, past a checkpoint that the record keeps, each fact
-  /// let go, then the rebirth, and the watch of the rebirth let go of the birth before.
-  fn reborn(&mut self, fault: Option<String>) {
+  /// The birth after the past of the record: each event told so far, then each fact let go, since
+  /// the record holds it, then the event of the birth, on no image.
+  fn reborn(&mut self) {
     self.told(None);
-    if fault.is_none() && self.record.is_some() {
-      self.let_go();
-    }
-    self.put(Event::Reborn(fault));
+    self.let_go();
+    self.put(Event::Reborn(None));
     self.kept.watch.reborn();
-    self.weight.facts.store(0, Ordering::Relaxed);
-    self.weight.births.fetch_add(1, Ordering::Relaxed);
   }
 
   /// The events of the log from a place, and the read of the facts among them that the log let
@@ -939,8 +910,8 @@ impl Retell {
 /// A fact by its digest, and whether the read goes on.
 type Take<'a> = dyn FnMut(u64, &dyn Fn() -> Value) -> bool + 'a;
 
-/// Each fact of the whole record: a fact that the life said as it wrote its checkpoint, before its
-/// rebirth, may stand after that checkpoint in the record. Once each place is filled, the rest of
+/// Each fact of the whole record: a fact that a life said as it wrote its checkpoint may stand
+/// after that checkpoint in the record. Once each place is filled, the rest of
 /// the record is read and left.
 fn read_record(record: &str, take: &mut Take<'_>) -> Option<()> {
   let mut goes = true;
@@ -1002,18 +973,17 @@ fn lived(opening: Opening, received: UnboundedReceiver<Message>, tells: Tells) {
 }
 
 /// Where the thread of a life tells what each handle of the life reads: its events, the name of
-/// its session, its weight, how far its open stands, and its cards.
+/// its session, how far its open stands, and its cards.
 struct Tells {
   readers: broadcast::Sender<Logged>,
   name: Arc<Mutex<Option<String>>>,
-  weight: Arc<Scale>,
   opens: Told,
   cards: watch::Sender<Option<Arc<Session>>>,
 }
 
 /// The life: opened, then driven until it ends, and its log held for the readers after its end.
 async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tells: Tells) {
-  let Tells { readers, name, weight, opens, cards } = tells;
+  let Tells { readers, name, opens, cards } = tells;
   let record = opening.record.clone().filter(|_| opening.keeps());
   let (told, heard) = mpsc::unbounded_channel();
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from))
@@ -1028,7 +998,6 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
     first: record.as_deref().map(|one| cards::changed(Path::new(one))),
     times: Times::kept(record.as_deref()),
     record,
-    weight,
     opens,
     cards,
     stale: false,
@@ -1063,7 +1032,6 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
       Message::Command(_, reply) => {
         drop(reply.send(Err(fault.clone().map_or(LifeError::Ended, LifeError::Refused))));
       }
-      Message::Rebirth(_) => {}
     }
   }
 }
@@ -1088,15 +1056,13 @@ struct End {
   stood: bool,
 }
 
-/// The life opened, driven, and opened again from its checkpoint at each rebirth, until it ends,
-/// each birth on the one journal of its changes, and how it ended.
+/// The life opened and driven until it ends, on the one journal of its changes, and how it ended.
 ///
 /// A life whose image agrees with its record opens from it: the host stands on what the life of
 /// the image kept, reads no fact of the record before the image, and hears what the engine says
 /// of each entry after it, as after an image at rest. Each other life tells the past of its record
 /// first, as [`Life::recalled`] says, and opens by the record. A life whose image does not load
-/// opens by the record once, and tells its past after that open and before its birth. A rebirth
-/// writes a checkpoint, and opens by it.
+/// opens by the record once, and tells its past after that open and before its birth.
 async fn lives(
   opening: Opening,
   life: &mut Life,
@@ -1107,55 +1073,37 @@ async fn lives(
   let record = opening.record.clone().filter(|_| opening.keeps());
   let progress = life.opens.progress();
   life.opens.born();
-  let mut images = record.as_deref().is_some_and(|one| image::agrees(Path::new(one)));
-  let mut stood = false;
+  let images = record.as_deref().is_some_and(|one| image::agrees(Path::new(one)));
   if let Some(one) = record.as_deref().filter(|_| !images) {
     life.recalled(one, &progress);
   }
-  loop {
-    let ears = ears(told.clone(), journal);
-    let mut kept = None::<Kept>;
-    // A life that told its past stands on it, and on no image that came after.
-    let mut stands = |part: &[u8]| {
-      let read = serde_json::from_slice::<Part<Kept>>(part).ok();
-      kept = read.filter(|one| images && one.build == BUILD).map(|one| one.kept);
-      kept.is_some()
-    };
-    let engine = match opening.clone().open(ears, progress.clone(), &mut stands).await {
-      Ok((engine, _)) => engine,
-      Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new(), stood },
-    };
-    match (kept, mem::take(&mut images), record.as_deref()) {
-      (Some(kept), ..) => life.imaged(kept, &progress),
-      (None, images, record) => {
-        let birth = iter::from_fn(|| life.heard.try_recv().ok()).collect();
-        // The image named the tip of the record and did not load, as one whose body is torn, so
-        // the life opened by its record before it told its past: it tells its past, then the
-        // birth that its record already keeps.
-        if let (true, Some(one)) = (images, record) {
-          life.recalled(one, &progress);
-        }
-        life.opened(birth, &progress);
+  let ears = ears(told.clone(), journal);
+  let mut kept = None::<Kept>;
+  // A life that told its past stands on it, and on no image that came after.
+  let mut stands = |part: &[u8]| {
+    let read = serde_json::from_slice::<Part<Kept>>(part).ok();
+    kept = read.filter(|one| images && one.build == BUILD).map(|one| one.kept);
+    kept.is_some()
+  };
+  let engine = match opening.open(ears, progress.clone(), &mut stands).await {
+    Ok((engine, _)) => engine,
+    Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new(), stood: false },
+  };
+  match (kept, images, record.as_deref()) {
+    (Some(kept), ..) => life.imaged(kept, &progress),
+    (None, images, record) => {
+      let birth = iter::from_fn(|| life.heard.try_recv().ok()).collect();
+      // The image named the tip of the record and did not load, as one whose body is torn, so
+      // the life opened by its record before it told its past: it tells its past, then the
+      // birth that its record already keeps.
+      if let (true, Some(one)) = (images, record) {
+        life.recalled(one, &progress);
       }
-    }
-    stood = true;
-    match driven(engine, life, received, record.as_deref()).await {
-      Drove::Ended(fault, asked) => {
-        return End { fault: fault.map(|one| one.to_string()), asked, stood };
-      }
-      Drove::Reborn(fault) => {
-        life.opens.born();
-        life.reborn(fault.map(|one| one.to_string()));
-      }
+      life.opened(birth, &progress);
     }
   }
-}
-
-/// How the engine of a life went: the life ended, with each client that ended it, or it is born
-/// again, each with the fault that stopped it, when one did.
-enum Drove {
-  Ended(Option<Fault>, Vec<Replier>),
-  Reborn(Option<Fault>),
+  let (fault, asked) = driven(engine, life, received, record.as_deref()).await;
+  End { fault: fault.map(|one| one.to_string()), asked, stood: true }
 }
 
 /// What woke the thread of a life.
@@ -1168,13 +1116,13 @@ enum Woke {
   Kept,
 }
 
-/// The engine driven while it hears each command, until a client ends it, each handle is gone, a
-/// fault stops it, or the life is due to be born again. A life that keeps a record ends with its
-/// image, as [`rebirth::ended`] says.
+/// The engine driven while it hears each command, until a client ends it, each handle is gone, or
+/// a fault stops it, with that fault and each client that ended it. A life that keeps a record
+/// ends with its image, as [`rebirth::ended`] says.
 ///
 /// While the record holds no place for facts that the life said, as on a full disk, the engine
 /// holds them in memory, and a drop of the engine loses them: the life keeps each end that it is
-/// told, outlives its handles, and holds its rebirth, until the record takes each of them. It wakes
+/// told and outlives its handles until the record takes each of them. It wakes
 /// on the outcome of each write of the record, which the ear of the record tries again on a clock
 /// of its own, since no event tells that a disk has room again.
 async fn driven(
@@ -1182,14 +1130,13 @@ async fn driven(
   life: &mut Life,
   received: &mut UnboundedReceiver<Message>,
   record: Option<&str>,
-) -> Drove {
+) -> (Option<Fault>, Vec<Replier>) {
   let (mut gone, mut asked) = (false, Vec::new());
   // A life that opened on no image may owe one before anything wakes it.
   owed_image(&mut engine, life, record);
   loop {
     let ends = gone || !asked.is_empty();
-    let watch = &life.kept.watch;
-    let owed = watch.due() || watch.images(life.kept.said);
+    let owed = life.kept.watch.images(life.kept.said);
     let waits =
       (ends || life.kept.backlog.holds() || record.is_some() && owed) && engine.unkept() > 0;
     let woke = tokio::select! {
@@ -1204,25 +1151,24 @@ async fn driven(
       Woke::Kept => {}
       Woke::Stopped(fault) => {
         drop(engine);
-        return Drove::Ended(Some(fault), asked);
+        return (Some(fault), asked);
       }
       Woke::Said(None) if engine.unkept() > 0 => gone = true,
-      Woke::Said(None) => return Drove::Ended(ended(engine, life), asked),
+      Woke::Said(None) => return (ended(engine, life), asked),
       Woke::Said(Some(Message::Read(read))) => read.answered(Some(&mut engine), life).await,
       Woke::Said(Some(Message::Command(Command::End, reply))) => {
         asked.push(reply);
         if engine.unkept() == 0 {
-          return Drove::Ended(ended(engine, life), asked);
+          return (ended(engine, life), asked);
         }
         life.put(Event::Notice(backlog::unkept(engine.unkept())));
       }
-      Woke::Said(Some(Message::Rebirth(asked))) => life.kept.watch.ask(asked),
       Woke::Said(Some(Message::Command(command, reply))) => {
         let replied = commanded(&mut engine, life, command);
         reply.send(replied.await).ok();
         if let Some(fault) = engine.stopped().cloned() {
           drop(engine);
-          return Drove::Ended(Some(fault), asked);
+          return (Some(fault), asked);
         }
       }
     }
@@ -1230,17 +1176,12 @@ async fn driven(
     weighed(&mut engine, life, record);
     if let Some(fault) = engine.stopped().cloned() {
       drop(engine);
-      return Drove::Ended(Some(fault), asked);
+      return (Some(fault), asked);
     }
     if (gone || !asked.is_empty()) && engine.unkept() == 0 {
-      return Drove::Ended(ended(engine, life), asked);
+      return (ended(engine, life), asked);
     }
     owed_image(&mut engine, life, record);
-    if record.is_some() && life.kept.watch.due() && engine.unkept() == 0 {
-      let reborn = engine.checkpoint();
-      return reborn
-        .map_or_else(|fault| Drove::Ended(Some(fault), asked), |()| Drove::Reborn(None));
-    }
   }
 }
 
@@ -1549,28 +1490,10 @@ impl LifeHandle {
     self.name.lock().ok().and_then(|name| name.clone())
   }
 
-  /// The facts that the life said since it last opened, by which the daemon weighs it.
-  pub(crate) fn weight(&self) -> u64 {
-    self.weight.facts.load(Ordering::Relaxed)
-  }
-
-  /// How many times the life was born again since it opened, by which the daemon sees that a life
-  /// that it asked was born again.
-  pub(crate) fn births(&self) -> u64 {
-    self.weight.births.load(Ordering::Relaxed)
-  }
-
   /// How far the open of the life stands, as one window hears it: each stage of the open that
-  /// runs now, and of each later rebirth.
+  /// runs now.
   pub(crate) fn opens(&self) -> Heard {
     Heard::new(self.opens.clone())
-  }
-
-  /// The ask that the life be born again, as the daemon asks it when its heap passed its share,
-  /// or the ask taken back. The life is born again at its first moment with no act that a
-  /// checkpoint does not keep.
-  pub fn reborn(&self, asked: bool) {
-    self.inbox.send(Message::Rebirth(asked)).ok();
   }
 
   /// Each event that the life tells from now on, with its place in the log, which a reader that

@@ -269,7 +269,6 @@ async fn tailed(identity: Tailscale) -> (Ports, Yard) {
     tailnet: Some(Tailnet { identity, ports }),
     door: None,
     host: None,
-    heap: None,
   };
   let local = Local::new(held.join("host"));
   let listener = local.listen().await.unwrap();
@@ -392,7 +391,6 @@ async fn daemon(yard: &Yard, file: &Path) -> JoinHandle<()> {
     tailnet: None,
     door: Some(file.to_owned()),
     host: None,
-    heap: None,
   };
   let local = Local::new(yard.join("host"));
   let listener = local.listen().await.unwrap();

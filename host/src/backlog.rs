@@ -13,8 +13,8 @@ use furb::{Engine, Fault, Object, verbs, wire::outward, world};
 use serde::{Deserialize, Serialize};
 
 /// How many facts the record of a life may lack before the life pauses its work, which bounds the
-/// memory that holds them: twice the facts after which a life is born again, so a life that only
-/// waits for its rebirth never meets it.
+/// memory that holds them: twice the facts after which a life writes its image, so a life that
+/// only waits for its image never meets it.
 pub(crate) const UNKEPT: usize = 20_000;
 
 /// Why the life paused a chain.

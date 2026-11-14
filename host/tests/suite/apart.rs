@@ -43,12 +43,10 @@ pub(crate) fn run(names: &[&str]) {
 #[test]
 fn each_runs_alone() {
   run(&[
-    "heap::alone",
     "memory::heap_alone",
     "memory::window_alone",
-    "memory::rebirth_alone",
     #[cfg(unix)]
-    "unkept::rebirth_alone",
+    "unkept::end_alone",
     #[cfg(unix)]
     "unkept::backlog_alone",
   ]);

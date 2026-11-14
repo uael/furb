@@ -56,7 +56,7 @@ use tokio::{
     oneshot, watch,
   },
   task::{AbortHandle, JoinSet, spawn_blocking},
-  time::{Instant, Interval, MissedTickBehavior, interval, sleep_until},
+  time::{Instant, sleep_until},
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
@@ -75,7 +75,6 @@ use crate::{
     Request, Verb,
   },
   reads::{Read, Readers},
-  rebirth::{Asks, Heap},
   records,
   serve::{Host, Outbox, fixed, serve},
   stall::{Quiet, Stall},
@@ -94,9 +93,6 @@ pub const GRACE: Duration = Duration::from_secs(30);
 /// and a reference for each event of the rest of the log, and keeps each such event until the
 /// window has it.
 const WAITING: usize = 256;
-
-/// How often the daemon reads its heap, when it watches one.
-const WEIGH: Duration = Duration::from_secs(1);
 
 /// What the daemon opens each life on.
 #[derive(Clone)]
@@ -117,9 +113,6 @@ pub struct Settings {
   /// The folder of the local transport, where the process of each skill that a life plays dials
   /// the daemon. With none, the daemon starts no process.
   pub host: Option<PathBuf>,
-  /// The heap of the daemon, past whose share the life that weighs the most is born again. With
-  /// none, no life is born again.
-  pub heap: Option<Heap>,
 }
 
 /// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
@@ -428,8 +421,6 @@ impl Daemon {
     let (leave, leaving) = oneshot::channel();
     let (empty, emptied) = watch::channel(handed.is_empty());
     let changes = settings.tailnet.as_ref().map(|one| one.identity.changes());
-    let mut weigh = interval(WEIGH);
-    weigh.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let (index, records) = mpsc::unbounded_channel();
     let log = settings.opening.log.clone();
     tokio::spawn(indexed(records, asks.downgrade(), log));
@@ -439,8 +430,6 @@ impl Daemon {
       index,
       faults: HashMap::new(),
       changes,
-      weigh,
-      rebirths: Asks::default(),
       members: Members::default(),
       settings,
       held: HashMap::new(),
@@ -650,10 +639,6 @@ struct Lives {
   readers: Readers,
   /// Whether the daemon holds no life, which the listener reads to end the daemon.
   empty: watch::Sender<bool>,
-  /// The clock at which the daemon reads its heap, and each life that it asked to be born again
-  /// since the heap passed its share.
-  weigh: Interval,
-  rebirths: Asks,
   /// The cards that the daemon told to the peers that asked them.
   told: Told,
   /// Each record that the daemon sent to the task that makes the index of its threads, so no
@@ -787,10 +772,6 @@ impl Lives {
           self.restand();
           continue;
         }
-        _ = self.weigh.tick(), if self.settings.heap.is_some() => {
-          self.weighed();
-          continue;
-        }
       };
       match asked {
         None => return,
@@ -801,33 +782,6 @@ impl Lives {
       }
       let empty = self.held.is_empty();
       self.empty.send_if_modified(|was| mem::replace(was, empty) != empty);
-    }
-  }
-
-  /// The heap of the daemon weighed: past its share, the life that said the most facts since it
-  /// opened, of those that the daemon did not ask yet, is asked to be born again, and the next one
-  /// once that life is born again, ended, or did not in [`crate::rebirth::PATIENCE`] weighs, while
-  /// the heap stays past the share. A life that holds work is born again once that work ends.
-  /// Once the heap falls under the share, each life asked is spared.
-  fn weighed(&mut self) {
-    let Some(heap) = self.settings.heap else { return };
-    let living = |held: &Held| matches!(held.stage, Stage::Living(_));
-    if !heap.over() {
-      for life in self.rebirths.spared() {
-        if let Some(held) = self.held.get(&life).filter(|one| living(one)) {
-          held.handle.reborn(false);
-        }
-      }
-      return;
-    }
-    let weighed: Vec<(String, u64, u64)> = self
-      .held
-      .iter()
-      .filter(|(_, held)| living(held))
-      .map(|(life, held)| (life.clone(), held.handle.weight(), held.handle.births()))
-      .collect();
-    if let Some(held) = self.rebirths.next(&weighed).and_then(|life| self.held.get(&life)) {
-      held.handle.reborn(true);
     }
   }
 

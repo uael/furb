@@ -41,7 +41,7 @@ API of its own:
 - `src/checkpoint.rs` holds the checkpoint of a life: a fact at the tip of its record with each chain that lives, its
   turns, its module and its open prompts, from which a later life of any build goes on: the fact, its store and the
   boot, while `gathered` and `seed` of the checkpointer write and read its data. A life writes one through
-  `Engine::checkpoint`, which its store keeps as it keeps each fact, as a life of the host does at a rebirth, and
+  `Engine::checkpoint`, which its store keeps as it keeps each fact, and
   `furb checkpoint` writes one on a record that no life holds. Each writes after the checkpoint the fact made of the
   texts of the next life: a life the texts that it runs, and `furb checkpoint` the texts of its build, which is the one
   way a record moves to the engine and the Kernel of a build. A life boots on the last checkpoint of its record,
@@ -105,10 +105,8 @@ API of its own:
 - `host/` is `furb-host`, the third package of the workspace of the crate, on the public API of `furb` alone. Its
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
   holds: it says a command to the life and reads the events of the life in order, from any place of its log. The
-  thread writes the checkpoint of a life that keeps its record, and opens the life again from it for the
-  same handles, when the daemon asks it as its heap passes its share, and its log
-  lets go of each fact that the record holds, as
-  `host/src/rebirth.rs` says, and of each fact that an open told, which the file of the log of the record holds. A life
+  log of a life that opens by its record lets go of each fact of its past once it told it, since the record holds
+  it, and of each fact that an open told, which the file of the log of the record holds. A life
   that told a tail of facts that no image of it holds writes its image and goes on, so an open after a crash feeds
   only what follows that image. At its end the thread writes the image of the life, with what the life keeps of the
   events that it told, so the next life of the record stands where this one stood: it reads no fact of the record,

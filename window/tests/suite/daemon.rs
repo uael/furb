@@ -132,7 +132,6 @@ impl Daemon {
       tailnet: None,
       door: None,
       host: None,
-      heap: None,
     };
     let local = self.local.clone();
     drop(self.runtime.spawn(async move { run(&local, listener, settings).await }));

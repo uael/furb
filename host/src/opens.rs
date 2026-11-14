@@ -1,7 +1,7 @@
 //! How far the open of a life stands. The thread of a life boots its engine and serves its log, so
 //! it tells no event while it opens: it writes each stage that the open passes here, and the task
-//! that pushes the events of the life to a window reads them, on a thread of the daemon. Each open
-//! of a life tells its stages, the first one and each rebirth.
+//! that pushes the events of the life to a window reads them, on a thread of the daemon. The open
+//! of a life tells its stages.
 
 use std::{future, sync::Arc, time::Duration};
 
@@ -81,7 +81,7 @@ impl Told {
 
 /// What one window heard of the opens of a life, and when it may hear the next frame of a stage
 /// that goes on. A window that attaches while the life opens hears each stage that the open
-/// reached, and one that attaches to a life that stands hears none until its next rebirth.
+/// reached, and one that attaches to a life that stands hears none.
 pub(crate) struct Heard {
   opens: watch::Receiver<Opens>,
   sent: Opens,

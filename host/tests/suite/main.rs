@@ -4,13 +4,14 @@
 #[path = "../../../tests/common/yard.rs"]
 mod yard;
 
-/// The allocator that counts each byte that the process holds, which the daemon reads as its heap.
+/// The allocator that counts each byte that the process holds, which the memory bench reads.
 #[global_allocator]
-static COUNTED: furb_host::Counted = furb_host::Counted;
+static COUNTED: counted::Counted = counted::Counted;
+
+mod counted;
 
 mod apart;
 mod daemon;
-mod heap;
 mod image;
 mod life;
 mod memory;

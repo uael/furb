@@ -187,8 +187,7 @@ async fn started_with(
 ) -> (Local, JoinHandle<Result<(), DaemonError>>) {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
-  let settings =
-    Settings { opening, grace, stall: STALL, tailnet: None, door: None, host: None, heap: None };
+  let settings = Settings { opening, grace, stall: STALL, tailnet: None, door: None, host: None };
   let served = local.clone();
   (local, tokio::spawn(async move { run(&served, listener, settings).await }))
 }
@@ -253,7 +252,6 @@ async fn the_seen_of_each_operator_is_said_under_his_login_and_a_reopen_keeps_ea
     tailnet: None,
     door: None,
     host: None,
-    heap: None,
   };
   let logins: Arc<[&str]> = ["alice", "bob", "alice"].into();
   let identity = Logins { local: local.clone(), next: Arc::default(), names: logins };
@@ -296,7 +294,6 @@ async fn started_as(at: &Path, roles: &[Role]) -> Local {
     tailnet: None,
     door: None,
     host: None,
-    heap: None,
   };
   let identity = Grants { local: local.clone(), next: Arc::default(), roles: roles.into() };
   tokio::spawn(async move { run(&identity, listener, settings).await });
@@ -1071,7 +1068,6 @@ async fn a_handover_keeps_each_life_its_pins_and_each_window() {
     tailnet: None,
     door: None,
     host: None,
-    heap: None,
   };
   let next = local.clone();
   let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
@@ -1134,7 +1130,6 @@ async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     tailnet: None,
     door: None,
     host: None,
-    heap: None,
   };
   let served = local.clone();
   let old = tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1154,7 +1149,6 @@ async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     tailnet: None,
     door: None,
     host: None,
-    heap: None,
   };
   let next = local.clone();
   let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
@@ -1234,8 +1228,7 @@ where
   let listener = local.listen().await.unwrap();
   let opening = Opening { skills: None, ..opening(at) };
   let host = Some(at.join("sock"));
-  let settings =
-    Settings { opening, grace: SHORT, stall: STALL, tailnet: None, door: None, host, heap: None };
+  let settings = Settings { opening, grace: SHORT, stall: STALL, tailnet: None, door: None, host };
   let served = identity(local.clone());
   tokio::spawn(async move { run(&served, listener, settings).await });
   let mut window = Window::dialed(&local).await;
@@ -1472,15 +1465,8 @@ async fn the_roster_names_the_access_list_and_a_change_of_it_tells_each_life_to_
   let tailnet = Some(Tailnet { identity: identity.clone(), ports: Ports::default() });
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
-  let settings = Settings {
-    opening: mute(&at),
-    grace: GRACE,
-    stall: STALL,
-    tailnet,
-    door: None,
-    host: None,
-    heap: None,
-  };
+  let settings =
+    Settings { opening: mute(&at), grace: GRACE, stall: STALL, tailnet, door: None, host: None };
   let served = local.clone();
   let _daemon = tokio::spawn(async move { run(&served, listener, settings).await });
   let mut window = Window::dialed(&local).await;
@@ -1772,15 +1758,8 @@ async fn the_process_of_a_skill_lives_from_its_play_to_its_reload_and_to_the_end
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
   let host = Some(at.join("sock"));
-  let settings = Settings {
-    opening: opening(&at),
-    grace: SHORT,
-    stall: STALL,
-    tailnet: None,
-    door: None,
-    host,
-    heap: None,
-  };
+  let settings =
+    Settings { opening: opening(&at), grace: SHORT, stall: STALL, tailnet: None, door: None, host };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
   let mut window = Window::dialed(&local).await;
@@ -1860,7 +1839,6 @@ async fn a_life_that_holds_an_open_act_and_says_no_fact_is_told_once_to_its_wind
     tailnet: None,
     door: None,
     host: None,
-    heap: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1910,7 +1888,6 @@ async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_checkpoint_l
     tailnet: None,
     door: None,
     host: None,
-    heap: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1944,7 +1921,6 @@ async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() 
     tailnet: None,
     door: None,
     host: None,
-    heap: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1978,7 +1954,6 @@ async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_not
     tailnet: None,
     door: None,
     host: None,
-    heap: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
@@ -2025,15 +2000,8 @@ fn probed(skills: &Path) -> PathBuf {
 async fn served(at: &Path, host: Option<PathBuf>) -> Local {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
-  let settings = Settings {
-    opening: opening(at),
-    grace: SHORT,
-    stall: STALL,
-    tailnet: None,
-    door: None,
-    host,
-    heap: None,
-  };
+  let settings =
+    Settings { opening: opening(at), grace: SHORT, stall: STALL, tailnet: None, door: None, host };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
   local
