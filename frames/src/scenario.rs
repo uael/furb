@@ -1,7 +1,7 @@
 //! The scenarios of the captures: the 27 daily paths on which the window and the other programs in
 //! a terminal are judged. Each step of a scenario is one frame. A scenario that the window has is a
-//! walk: the words that its scripted model answers, turn by turn, and its steps. Another stands at a
-//! size on the steps of other scenarios. A scenario that the window has not names its gap.
+//! walk: the words that its scripted model answers, turn by turn, and its steps. Another stands at
+//! a size on the steps of other scenarios. A scenario that the window has not names its gap.
 
 use crate::capture::READY;
 

@@ -282,8 +282,8 @@ fn pieces(line: &[Cell]) -> Vec<Piece> {
 }
 
 /// The parts of the same step at each size whose insets differ. A part is a box of two rows or more
-/// and ten columns or more, and a part at one size is the part of the same ground and the same rank,
-/// from the top, at another. A side counts only where it is a padding at both sizes.
+/// and ten columns or more, and a part at one size is the part of the same ground and the same
+/// rank, from the top, at another. A side counts only where it is a padding at both sizes.
 pub(crate) fn sizes(frames: &[(String, Frame)]) -> Vec<String> {
   let base = base(&Tokens::on(None));
   let mut ranks: Ranks = BTreeMap::new();

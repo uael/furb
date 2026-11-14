@@ -27,7 +27,8 @@ use crate::{
   scenario::{Act, Size, Step, Walk},
 };
 
-/// The claude command line of the tests, which answers the Nth turn with the file `word.N` beside it.
+/// The claude command line of the tests, which answers the Nth turn with the file `word.N`
+/// beside it.
 const CLAUDE: &str = include_str!("../../src/world/provider/claude/fake-claude.sh");
 
 /// The text of the empty input, which a window shows once it is ready for a walk.
