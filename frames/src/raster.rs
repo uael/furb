@@ -53,6 +53,10 @@ pub(crate) fn png(frame: &Frame) -> Result<(Vec<u8>, Vec<char>), png::EncodingEr
         canvas.lines(cell, place);
         continue;
       };
+      if canvas.shape(glyph, cell.fg, place) {
+        canvas.lines(cell, place);
+        continue;
+      }
       let face = face(cell.attributes, glyph);
       if face.is_none() && !missing.contains(&glyph) {
         missing.push(glyph);
@@ -139,6 +143,35 @@ impl Canvas {
         self.blend((x, y), cell.fg, *alpha);
       }
     }
+  }
+
+  /// A glyph of a loader that the face lacks, drawn as its shape: a pattern of braille as its dots,
+  /// and a circle with one half filled. False for each other glyph.
+  fn shape(&mut self, glyph: char, color: Rgb, place: Place) -> bool {
+    let Area { x, y, height, .. } = place.area;
+    if let Some(dots) = u32::from(glyph).checked_sub(0x2800).filter(|dots| *dots < 0x100) {
+      // The bits of a pattern, by the column and the row of their dot.
+      let places = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (0, 3), (1, 3)];
+      let lit = places.into_iter().enumerate().filter(|(bit, _)| dots >> bit & 1 == 1);
+      for (col, row) in lit.map(|(_, at)| at) {
+        let top = y + height * (row + 1) / 5 - 1;
+        self.fill(Area { x: x + 2 + col * 4, y: top, width: 2, height: 2 }, color);
+      }
+      return true;
+    }
+    let Some(half) = "◐◓◑◒".chars().position(|one| one == glyph) else { return false };
+    let (middle, center) = (to_i64(x) * 2 + 9, to_i64(y) * 2 + to_i64(height));
+    for row in y..y + height {
+      for col in x..x + 10 {
+        let (dx, dy) = (to_i64(col) * 2 + 1 - middle, to_i64(row) * 2 + 1 - center);
+        let inside = dx * dx + dy * dy <= 64;
+        let filled = [dx < 0, dy < 0, dx > 0, dy > 0][half];
+        if inside && (filled || dx * dx + dy * dy >= 36) {
+          self.blend((col, row), color, 255);
+        }
+      }
+    }
+    true
   }
 
   /// The box that stands for a glyph that no face holds.
