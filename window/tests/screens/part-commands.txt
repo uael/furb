@@ -2,8 +2,8 @@
 
   Nothing needs you.                                           Working 1
 
-  ⌃O          go to   Commands                                               ⎋   replay  ⠋ Working
-  ⌃P          comman  ▌Search a command                                 1 / 13                opus
+  ⌃O          go to   Commands                                               ⎋  …       ⠋ Working
+  ⌃P          comman  ▌Search a command                                 1 / 13               opus
   ⌃X ?        each k
                       Go
                       ▌Go to a project or a session                        ⌃O

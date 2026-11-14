@@ -14,8 +14,10 @@ use crate::{
   tokens::{LIST, Loader, Role},
 };
 
-/// The columns of a card between its two edges.
-const CARD: usize = LIST as usize - 4;
+/// The columns of a card between its two edges. The edges of a card stand in the columns where the
+/// head of the list starts and ends, so a card has one column of its ground on each side of its
+/// text.
+const CARD: usize = LIST as usize - 5;
 
 /// A row of the list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

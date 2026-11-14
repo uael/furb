@@ -2,7 +2,7 @@
 ┃
 ┃ remove the gate from the engine                              Resolved 1 ▾
 ┃ (the model answers)
-┃                                                             ▐ ✓ remove the gate from the…    now
+┃                                                             ▐ ✓ remove the gate from the…   now
 
        opus/high
     1  found = 2

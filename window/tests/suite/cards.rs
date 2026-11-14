@@ -76,7 +76,7 @@ fn the_first_frame_shows_the_cards_that_the_window_kept_then_each_machine_answer
   peer.said(&life, "remove the gate from the engine");
   let kept = daemon.file("cards.json");
   open(&first, vec![daemon.machine("mac")], options(&kept));
-  shows(&first, "remove the gate from the…    ● now");
+  shows(&first, "remove the gate from the…   ● now");
   // The window writes its cards a moment after it heard them.
   assert!(!kept.exists());
   first.advance(Duration::from_secs(1));
@@ -88,7 +88,7 @@ fn the_first_frame_shows_the_cards_that_the_window_kept_then_each_machine_answer
   let mut later = Daemon::bound(&second);
   open(&second, vec![later.machine("mac")], options(&kept));
   let frame = second.text();
-  assert!(frame.contains("remove the gate from…  as of 09:12"), "{frame}");
+  assert!(frame.contains("remove the gate…      as of 09:12"), "{frame}");
   // The machine then answers for itself: it holds no record, so the card goes.
   later.served();
   let frame = shows(&second, "No thread yet in this project.");
@@ -110,7 +110,7 @@ fn a_card_changes_its_state_at_once_and_its_place_once_the_hand_is_away() {
   // The hand is on the list when the thread stops: the card says so, under the same head.
   app.hover(80, 12);
   peer.ask(Verb::Cancel { life, act: prompt, why: None });
-  let stopped = "which key sends the queue  Stopped";
+  let stopped = "which key sends the…      Stopped";
   let frame = shows(&app, stopped);
   assert!(frame.contains(" Working 1") && !frame.contains(" Resting 1"), "{frame}");
   app.advance(Duration::from_millis(1499));
@@ -137,7 +137,7 @@ fn a_machine_that_does_not_answer_holds_nothing_back_and_the_list_says_so_after_
   // A second machine takes the dial of the window and never answers it.
   let mut far = Daemon::bound(&app);
   open(&app, vec![here.machine("mac"), far.machine("studio")], options(&here.file("cards.json")));
-  let frame = shows(&app, "remove the gate from the…    ● now");
+  let frame = shows(&app, "remove the gate from the…   ● now");
   assert!(frame.contains("2 machines"), "{frame}");
   // A wait under 400 ms shows no loader.
   app.advance(Duration::from_millis(399));
@@ -147,7 +147,7 @@ fn a_machine_that_does_not_answer_holds_nothing_back_and_the_list_says_so_after_
   // The machine is gone: the list says so, and the card of the other machine stands.
   far.lost();
   let frame = shows(&app, "studio offline");
-  assert!(frame.contains("remove the gate from the…    ● now"), "{frame}");
+  assert!(frame.contains("remove the gate from the…   ● now"), "{frame}");
   assert!(frame.contains("studio is offline: the daemon closed the connection"), "{frame}");
 }
 
