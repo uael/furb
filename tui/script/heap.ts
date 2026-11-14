@@ -69,11 +69,13 @@ export async function hold(record: string, folder: string, before = heapNow()): 
   app.render();
   // The life stands, so the daemon holds each of its moments, while the window still hears the life as the daemon sends
   // it, and the session reads the acts of each batch of facts in a read of its own. The feed is whole once the window
-  // heard the fact of the last moment and the session read its acts, with the ladder that the frame asked for, and
-  // once the feed laid out its cards, which takes a few frames. A measure that starts before shows a part of the feed
-  // at the first scroll and more of it at the scroll back.
+  // heard the fact of the last moment and the session read its acts, with the ladder that the frame asked for, once
+  // the window drew the last change of the session, and once the feed laid out its cards, which takes a few frames.
+  // A measure that starts before shows a part of the feed at the first scroll and more of it at the scroll back. The
+  // window draws a change on a timer, which a slow draw sets later, and the scrolls below never yield to it: a draw
+  // still due then shows the acts of an earlier snapshot through every scroll, with their spinners turning.
   const tip = (await session.host.moments()).at(-1) ?? 0;
-  const whole = () => session.host.seq >= tip && !session.loading;
+  const whole = () => session.host.seq >= tip && !session.loading && app.redraw === undefined && !app.due;
   for (let height = -1, still = 0; still < 20 || !whole(); ) {
     still = app.scroll.scrollHeight === height ? still + 1 : 0;
     height = app.scroll.scrollHeight;
