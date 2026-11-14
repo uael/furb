@@ -143,6 +143,17 @@ API of its own:
   capture of a frame as text, and `FURB_DRAW=1 cargo test -p furb-window` draws each capture again. `FURB_CELLS=<folder>`
   writes the cells of each capture there as JSON, with the colors of the frame.
   [`CONTRIBUTING.md`](CONTRIBUTING.md#the-window) lists its files.
+- `frames/` is `furb-frames`, the fifth package of the workspace: the frames of the window, in the one format that a
+  model reads for the window and for any other program in a terminal. `furb-frames capture` runs the real
+  `furb-window` in tmux at 120 by 40, 80 by 24 and 200 by 60, on a daemon whose claude command line answers each turn
+  from the words of the walk, so it asks no model and no network, and walks each scenario of `frames/src/scenario.rs`
+  that the window has. It writes in `target/frames/<cols>x<rows>/` the recording of each walk in the format 3 of
+  asciinema, and the key frames that its replay through the terminal of asciinema gives: at each step a text, the
+  cells as JSON and an image, and every 200 ms where the screen changed, a text and the cells. It then writes the
+  findings of the probes, which hold each frame to the tokens of the window, and the compare of each scenario with
+  the two winner frames of the other programs that `FURB_RIVALS` names, which stay out of the repository.
+  `furb-frames replay <cast>` gives the key frames of any recording, `probe` the findings of a frame and `compare`
+  the compare of a scenario.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
 of this interpreter, and the engine of monty holds its own. The suite of each extension, `.agents/skills/<name>/test/`, runs

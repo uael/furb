@@ -1,0 +1,33 @@
+[package]
+name = "furb-frames"
+version.workspace = true
+edition = "2024"
+rust-version = "1.95"
+description = "The frames of the window of furb: its captures in a real terminal, the replay of a recording, the probes and the compare."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+publish = false
+
+[[bin]]
+name = "furb-frames"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The scale of the window, which the probes hold each frame to.
+furb-window = { path = "../window" }
+# The terminal of asciinema, which replays each recording, of furb or of another program, into its cells.
+avt = "0.20"
+# The glyphs and the image of a frame.
+fontdue = "0.9"
+png = "0.18"
+clap = { version = "4.6", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# How many cells a glyph takes.
+unicode-width = "0.2"
+# The walk of a scenario waits on the terminal, on its own clock.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "fs", "sync"] }

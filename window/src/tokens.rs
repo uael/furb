@@ -148,7 +148,7 @@ fn mixed(from: Color, to: Color, share: u16) -> Color {
 
 /// The colors of python inside a block of code, by the name of a capture of its grammar, from the
 /// syntax of `OpenCode` v2. A name that this list does not hold takes the text.
-pub(crate) const SYNTAX: [(&str, u32); 9] = [
+pub const SYNTAX: [(&str, u32); 9] = [
   ("comment", 0x80_8080),
   ("keyword", 0x9d_7cd8),
   ("function", 0xfa_b283),
