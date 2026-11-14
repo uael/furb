@@ -85,3 +85,26 @@ fn a_thread_that_failed_to_open_names_the_key_that_goes_back_as_the_system_of_th
     assert!(rows[29].trim_end().ends_with(&format!("{key} back")), "{rows:#?}");
   }
 }
+
+#[test]
+fn a_page_refused_while_its_life_opens_ends_the_open_on_its_card_too() {
+  let life = "/home/ada/furb/.furb/sessions/gate.jsonl".to_owned();
+  let options = Options {
+    folder: PathBuf::from("/home/ada/furb"),
+    home: Some(PathBuf::from("/home/ada")),
+    kept: PathBuf::new(),
+    zone: TimeZone::UTC,
+    clock: || 0,
+    system: System::MacOs,
+  };
+  let told = Told { name: "mac".to_owned(), link: Link::Listed, ..Told::default() };
+  let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);
+  model.selected = Some((0, life.clone(), "prompt0".to_owned()));
+  model.open_thread();
+  model.moved = Duration::from_secs(1);
+  assert!(model.shown_open(0, &life).is_some(), "the card says that the life opens");
+  model.thread.as_mut().expect("the thread opens").asked.insert(7, None);
+  let why = "Refused: Another process owns the record.".to_owned();
+  assert!(model.answered(0, 7, Err(why)));
+  assert!(model.shown_open(0, &life).is_none(), "the card says no open once the open failed");
+}

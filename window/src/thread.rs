@@ -25,6 +25,7 @@ use crate::{
   line::Line,
   list::hash,
   model::{Key, Model},
+  opens::Hold,
   question::Form,
   tokens::Loader,
 };
@@ -383,16 +384,23 @@ impl Model {
     self.thread.as_ref().is_some_and(|one| one.key.0 == at && one.asked.contains_key(&id))
   }
 
-  /// The answer to a page that the open thread asked: the page, or why the daemon gave none.
-  /// Whether the open thread changed.
+  /// The answer to a page that the open thread asked: the page, or why the daemon gave none. A
+  /// page refused while the open of its life runs says why the open failed, as the refusal of the
+  /// open says it, so the window holds that life no more. Whether the open thread changed.
   pub(crate) fn answered(&mut self, at: usize, id: u64, page: Result<Page, String>) -> bool {
     let Some(opened) = self.thread.as_mut().filter(|one| one.key.0 == at) else { return false };
     if opened.asked.remove(&id).is_none() {
       return false;
     }
+    let life = (at, opened.key.1.clone());
     match page {
       Ok(page) => opened.took(page),
-      Err(why) => opened.fault = Some(why),
+      Err(why) => {
+        opened.fault = Some(why);
+        if self.holds.get(&life).is_some_and(Hold::runs) {
+          self.holds.remove(&life);
+        }
+      }
     }
     true
   }
