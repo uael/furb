@@ -10,6 +10,7 @@ mod deepswe;
 mod links;
 mod lives;
 mod paths;
+mod promise;
 mod tree;
 mod watch;
 mod width;
@@ -227,6 +228,16 @@ enum Task {
     #[arg(long)]
     fix: bool,
   },
+  /// Run each proof that the page of the promise names, and fail when one is gone or does not pass.
+  ///
+  /// The page lists under its heading of the proofs each test that proves a part of the promise,
+  /// as `file::name`, and a release publishes nothing while one fails. The proofs of python run in
+  /// one pytest, and those of rust in one cargo test for each target that holds them.
+  Promise {
+    /// The page of the promise.
+    #[arg(default_value = "docs/promise.md")]
+    page: PathBuf,
+  },
   /// Make, land and close a worktree of this clone.
   Tree {
     #[command(subcommand)]
@@ -340,6 +351,7 @@ fn run() -> Result<ExitCode, Fault> {
     Task::Paths => paths::check(),
     Task::Tree { verb } => tree::run(&root, verb),
     Task::Links { fix } => links::check(&root, fix),
+    Task::Promise { page } => promise::check(&root, &root.join(page)),
     Task::CommentWidth { base, files } => width::check(&root, base.as_deref(), &files),
     Task::Deepswe { places, verb } => Ok(deepswe::run(&root, places, verb)?),
     Task::Smoke { to } => Ok(lives::smoke(&root, to)?),

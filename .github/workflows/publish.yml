@@ -40,7 +40,7 @@ on:
       - bind/typescript/npm/**
       - script/prove-crate.sh
       - script/prove-npm.sh
-      - script/promise.py
+      - xtask/src/promise.rs
       - docs/promise.md
   pull_request:
     branches: [main]
@@ -59,7 +59,7 @@ on:
       - bind/typescript/npm/**
       - script/prove-crate.sh
       - script/prove-npm.sh
-      - script/promise.py
+      - xtask/src/promise.rs
       - docs/promise.md
   workflow_dispatch:
 
@@ -359,7 +359,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           saved: ${{ github.event_name != 'pull_request' }}
-      - run: uv run python script/promise.py
+      - run: cargo xtask promise
         env:
           UV_NO_SYNC: "1"
 
