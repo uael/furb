@@ -265,12 +265,17 @@ impl Outside {
   /// What the first ear that stands at a yield says of its own accord, in the order the host gave
   /// the ears, which the ids the host gives keep; and nothing when no ear says anything. A poll
   /// calls nothing in the sandbox, so an ear may be polled while no life hears it.
+  /// While an ear holds an entry that the record does not hold yet, only such an ear is polled, as
+  /// `Engine::pump` says.
   pub(super) fn spoken(&mut self) -> Option<(String, Spoken)> {
+    let ears = &self.hosted.handed.ears;
+    let owed = ears.values().any(|ear| ear.unkept() > 0);
+    let polled = |name: &String| !owed || ears.get(name).is_some_and(|ear| ear.unkept() > 0);
     let mut standing: Vec<_> = self
       .hosted
       .standing
       .iter()
-      .filter(|(_, (_, at))| matches!(at, At::Waiting))
+      .filter(|(_, (name, at))| matches!(at, At::Waiting) && polled(name))
       .map(|(id, (name, _))| (*id, name.clone()))
       .collect();
     standing.sort_unstable();

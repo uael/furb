@@ -18,10 +18,10 @@
 //! first done of that act. The ear takes from [`Co::next`] what it heard and what its work came
 //! to, in turn, and an act that an earlier life took and did not end, which a wake puts to it
 //! again, as [`Next::Resumed`], so each ear says what it does with an act whose work may have run.
-//! The life polls the work of every ear each time it is driven, and never while the ear hears,
-//! and it takes one thing that a work says at each poll, so what a work comes to lands in the log
-//! alone, after all that the life was doing, as a later life says it again; and whatever a work
-//! waits for wakes whoever drives.
+//! The life polls the work of every ear each time it is driven, and never while the ear hears, nor
+//! while the record lacks an entry that the life said, and it takes one thing that a work says at
+//! each poll, so what a work comes to lands in the log alone, after all that the life was doing, as
+//! a later life says it again; and whatever a work waits for wakes whoever drives.
 //!
 //! What an ear says or calls of its own accord, from what its work came to, the life says while no ear hears, so
 //! the facts that it makes reach the ears at once, this ear among them. The body of an ear takes nothing more of its

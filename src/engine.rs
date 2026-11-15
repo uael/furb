@@ -567,6 +567,10 @@ impl Engine {
   /// The engine driven: each ear is polled with the waker of whoever drives, and what the ears say of their own accord
   /// is said into it, in one entry, which it makes only when an ear says something. An awaited act drives the engine
   /// so, and a door that awaits in the loop of its own language drives it so too.
+  ///
+  /// While the record lacks an entry, as on a full disk, only the ear that keeps the record is
+  /// polled, so no work of an act starts before the record holds the act, and a later life never
+  /// runs it a second time.
   pub fn pump(&mut self, waker: &Waker) -> Result<(), Fault> {
     if !self.outside.hosted.waker.will_wake(waker) {
       self.outside.hosted.waker.clone_from(waker);

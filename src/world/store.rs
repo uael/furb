@@ -521,7 +521,8 @@ enum Told {
 /// the folder and the space left, before a keep fails. An entry that the store cannot keep, as on a
 /// full disk, waits in memory with each entry after it, and the ear tries again in order at each
 /// keep, at the end of each run and every few seconds, until they land: no entry is lost or kept
-/// twice, and the life goes on. The ear tells the operator once when the record stops growing, with
+/// twice, and the life goes on, while no other ear does work until they land, as `Engine::pump`
+/// says. The ear tells the operator once when the record stops growing, with
 /// the fault, and once when it grows again. A message that did not go is said again at the next
 /// pass.
 pub fn keeping(mut store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {

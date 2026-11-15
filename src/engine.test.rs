@@ -20,7 +20,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use futures::{FutureExt, stream};
+use futures::{FutureExt, future::lazy, stream};
 use rig_core::{
   completion::Usage,
   streaming::StreamFinal,
@@ -819,11 +819,11 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
       engine.wait(&[root.as_str()], verbs::Wait { seconds: Some(0.1), on: on(&root) }).unwrap();
     block_on(wait).unwrap();
   };
-  // The life goes on while the disk is full, and the operator hears it once.
+  // The life goes on while the disk is full, and the operator hears it once. The work of the World
+  // waits for the record, so a model of the test answers as it hears.
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = engine.prompt(Object::string("int"), with.clone()).unwrap();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(1));
-  settle(&mut engine);
   assert!(kept.borrow().is_empty(), "{:?}", kept.borrow());
   assert!(!refused.borrow().is_empty());
   let first = told(&mut engine);
@@ -2177,4 +2177,85 @@ fn a_run_of_the_record_that_goes_on_live_after_the_replay_is_bounded() {
   }
   let read = second.read.borrow();
   assert!(refused(&read), "the word that spins after its wait is refused by the bound: {read:?}");
+}
+
+/// A file of lines on a disk that the test fills: each keep and each sync fails while it is full.
+struct Filled {
+  lines: world::Lines,
+  full: Rc<Cell<bool>>,
+}
+
+impl world::Store for Filled {
+  fn entries(&mut self) -> Result<Vec<Object>, Fault> {
+    self.lines.entries()
+  }
+
+  fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
+    if self.full.get() {
+      return Err(Fault::refused("No space left on device (os error 28): the record"));
+    }
+    self.lines.keep(entry)
+  }
+
+  fn sync(&mut self) -> Result<(), Fault> {
+    if self.full.get() {
+      return Err(Fault::refused("No space left on device (os error 28): the record"));
+    }
+    self.lines.sync()
+  }
+}
+
+/// An ear that takes each wait and ends it by its work, which notes that it began.
+fn waiter(began: Rc<Cell<bool>>) -> Box<dyn Ear> {
+  hearing(&["wait"], move |mut co: Co<String>| async move {
+    loop {
+      match co.next().await {
+        Next::Heard(a) | Next::Resumed(a) if a.kind() == "wait" && a.question() => {
+          say(&mut co, Fact::says("started", a.about(), []));
+          let (about, began) = (a.about().to_owned(), Rc::clone(&began));
+          co.take(&about.clone(), stream::once(lazy(move |_| began.set(true)).map(|()| about)));
+        }
+        Next::Worked(about) => say(&mut co, done(&about, Object::none())),
+        _ => {}
+      }
+    }
+  })
+}
+
+#[test]
+fn the_work_of_an_act_starts_only_once_the_record_holds_the_act() {
+  let at = Yard::new(format!("furb-engine-unkept-{}", process::id()));
+  let record = at.join("record.jsonl");
+  let full = Rc::new(Cell::new(false));
+  let filled = Filled { lines: world::Lines::open(&record).unwrap(), full: Rc::clone(&full) };
+  let (entries, store) = world::keeping(filled).unwrap();
+  let began = Rc::new(Cell::new(false));
+  let ears = [
+    ("provider", provider(at.to_path_buf(), Rc::default(), Rc::default())),
+    ("waiter", waiter(Rc::clone(&began))),
+    ("store", store),
+  ];
+  let mut engine = Engine::boot(entries, ears).unwrap();
+  let root = engine.root().to_owned();
+  full.set(true);
+  let wait = verbs::Wait { seconds: Some(1.0), on: on(&root) };
+  let id = engine.wait(&[root.as_str()], wait).unwrap().id().to_owned();
+  let wake = waker();
+  for _ in 0..3 {
+    engine.pump(&wake).unwrap();
+  }
+  // A later life makes again each act that its record lacks, so a work that began now could run
+  // twice.
+  assert!(!began.get(), "a work began whose act the record does not hold");
+  full.set(false);
+  block_on(Act::<Object>::of(&mut engine, &id)).unwrap();
+  assert!(began.get());
+  let kept: Vec<String> = world::kept(&record)
+    .unwrap()
+    .iter()
+    .map(|one| one.as_ref().py_repr().chars().take(40).collect())
+    .collect();
+  let at = |head: &str| kept.iter().position(|one| one.starts_with(head));
+  let (asked, ended) = (at(&format!("[['wait', '{id}'")), at(&format!("[['done', '{id}'")));
+  assert!(asked.is_some() && asked < ended, "the record holds the act before its end: {kept:#?}");
 }
