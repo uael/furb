@@ -383,8 +383,8 @@ impl Model {
   /// Each command of the table of the keys, with its key, by the group of its key, but Go to,
   /// which lists them.
   fn commands(&self) -> Vec<Entry> {
-    let commands =
-      keys::each(self.system).filter(|one| one.1.command.is_some() && one.1.does != Does::GoTo);
+    let commands = keys::each(self.system, self.supers())
+      .filter(|one| one.1.command.is_some() && one.1.does != Does::GoTo);
     let entry = |(group, key, forms): (&'static str, &Bound, Vec<String>)| Entry {
       part: group.into(),
       left: capital(key.says),
@@ -402,7 +402,8 @@ impl Model {
     // The column of the keys is as wide as the widest of them on this system, where a key in words
     // takes far more columns than its signs, and two columns part it from what the key does.
     let joined = |forms: Vec<String>| forms.join(" or ");
-    let column = keys::each(self.system).map(|(_, _, forms)| joined(forms).width()).max();
+    let column =
+      keys::each(self.system, self.supers()).map(|(_, _, forms)| joined(forms).width()).max();
     let column = column.unwrap_or_default() + 2;
     let entry = |(group, key, forms): (&'static str, &Bound, Vec<String>)| {
       let forms = joined(forms);
@@ -414,7 +415,7 @@ impl Model {
         ..Entry::default()
       }
     };
-    keys::each(self.system).map(entry).collect()
+    keys::each(self.system, self.supers()).map(entry).collect()
   }
 
   /// The sessions that the input can send to: a new session on this machine, then each session

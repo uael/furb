@@ -20,7 +20,7 @@ use crate::{
   cards::{app, options, shows},
   daemon::{ANSWERS, ASKS, Daemon, PATIENCE, WORKS},
   screens::screen,
-  thread::{LEFT, at, clicked},
+  thread::{LEFT, at, clicked, lights},
 };
 
 /// The orange of the accent: the bar of a new thread, and each letter that a search matches.
@@ -772,4 +772,55 @@ fn the_mouse_alone_reaches_and_runs_each_command_of_go_to() {
   shows(&app, "The model of the input");
   clicked(&app, "The model of the input", 0, 0);
   shows(&app, "Search a model");
+}
+
+/// Each command that a slash offers, with what it does and its key, as the panel of the slash
+/// shows the chosen one: the input walks the panel row by row, and an empty key fails.
+fn commands(app: &TestApp) -> Vec<(String, String)> {
+  app.type_text("/");
+  let head = shows(app, "Commands and skills");
+  let count = head.lines().find_map(|line| line.trim().rsplit_once(" / ")).map(|one| one.1);
+  let count: usize = count.and_then(|one| one.trim().parse().ok()).expect("the panel counts");
+  let mut found = Vec::new();
+  for _ in 0..count {
+    let frame = app.text();
+    let chosen = frame.lines().find_map(|line| line.strip_prefix("▌ /")).expect("a row is chosen");
+    let parts: Vec<&str> =
+      chosen.split("  ").map(str::trim).filter(|one| !one.is_empty()).collect();
+    let [name, says, key] = parts[..] else { panic!("/{chosen} names no key") };
+    assert!(key != "skill", "a skill stands among the commands of an empty project: {chosen}");
+    found.push((name.to_owned(), says.trim_end_matches('…').to_owned()));
+    app.press("down");
+  }
+  app.press("escape");
+  app.press("ctrl+c");
+  found
+}
+
+/// Each command that a slash runs has a key and a place that the mouse clicks: Go to opens from the
+/// hint that names its key, and each other command is a row of Go to, which the wheel reaches.
+#[test]
+fn each_command_of_a_slash_has_a_key_and_a_place_that_the_mouse_clicks() {
+  let (app, _daemon, _) = started();
+  for (name, says) in commands(&app) {
+    if name == "go" {
+      shows(&app, &says.to_lowercase());
+      lights(&app, &says.to_lowercase(), 0, 0);
+      continue;
+    }
+    // A second click on one cell soon after the first is a double click, which selects a word.
+    app.advance(Duration::from_secs(1));
+    clicked(&app, "go to anything", 0, 0);
+    shows(&app, "Search a thread, a session");
+    let (x, y) = at(&app, "Search a", 0);
+    for _ in 0..30 {
+      if app.text().contains(&says) {
+        break;
+      }
+      app.scroll(x, y, true);
+    }
+    assert!(app.text().contains(&says), "/{name}: no row of Go to says {says:?}");
+    lights(&app, &says, 0, 0);
+    app.press("escape");
+  }
 }

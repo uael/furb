@@ -62,3 +62,18 @@ fn a_folder_of_the_home_shows_as_a_path_of_the_home_with_a_slash_on_each_system(
   assert_eq!(shown(r"C:\Users\adam\furb", r"C:\Users\ada"), r"C:\Users\adam\furb");
   assert_eq!(shown("/srv/furb", "/home/ada"), "/srv/furb");
 }
+
+/// On macOS a terminal that does not tell the keys that hold super, as the headless one of the
+/// suite, never gives command P, so the key table offers control P alone.
+#[test]
+fn on_macos_the_keys_offer_no_command_p_where_the_terminal_does_not_tell_super() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  daemon.served();
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  shows(&app, "No thread yet");
+  app.press("ctrl+x");
+  app.press("?");
+  let frame = shows(&app, "Search a key");
+  assert!(frame.contains("⌃P or ⌃O") && !frame.contains('⌘'), "{frame}");
+}

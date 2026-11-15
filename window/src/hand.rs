@@ -412,8 +412,10 @@ fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
   let moved =
     if held.still { Duration::ZERO } else { app.now().saturating_duration_since(held.born) };
   let now = (held.clock)();
+  // The terminal tells what it speaks some time after the window opens, so each change reads it.
+  let speaks = app.session().capabilities().map(|one| one.flags).unwrap_or_default();
   let given = held.screen.tell(|model| {
-    (model.client.now, model.client.moved) = (now, moved);
+    (model.client.now, model.client.moved, model.speaks) = (now, moved, speaks);
     let given = change(model);
     model.client.played();
     model.questioned();

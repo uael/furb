@@ -16,6 +16,7 @@ use furb_host::{
   protocol::{Answer, Card, Frame},
 };
 use jiff::{Timestamp, tz::TimeZone};
+use opentui::native::CapabilityFlags;
 
 use crate::{
   Options,
@@ -52,6 +53,9 @@ pub(crate) struct Model {
   pub(crate) zone: TimeZone,
   /// The system of the client, which says how a text writes a key.
   pub(crate) system: System,
+  /// What the terminal told that it speaks, as the keyboard of Kitty, which tells the keys that
+  /// hold super, so a key with command reaches the window.
+  pub(crate) speaks: CapabilityFlags,
   /// The opener of an address in the browser of the client.
   pub(crate) browse: fn(&str) -> io::Result<()>,
   /// How long a form takes no key after it shows: [`HOLD`], which keeps a hand from answering what
@@ -104,6 +108,7 @@ impl Model {
       home: options.home.clone(),
       zone: options.zone.clone(),
       system: options.system,
+      speaks: CapabilityFlags::default(),
       browse: options.browse,
       hold: if options.still { Duration::ZERO } else { HOLD },
       tokens,
@@ -379,6 +384,11 @@ impl Model {
   /// Whether the list shows.
   pub(crate) fn listed(&self) -> bool {
     (self.size.0 >= BESIDE) != self.toggled
+  }
+
+  /// Whether the terminal tells the keys that hold super.
+  pub(crate) fn supers(&self) -> bool {
+    self.speaks.contains(CapabilityFlags::KITTY_KEYBOARD)
   }
 
   /// The key that does a thing, as the system of the client writes it.

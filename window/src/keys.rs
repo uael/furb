@@ -284,13 +284,16 @@ pub(crate) fn says(does: Does) -> &'static str {
 }
 
 /// Each key of the table, in its order, with the name of its group and each of its forms as a
-/// system writes them. Only macOS shows a form with command: elsewhere the desktop most often
-/// takes super for itself, so the window still hears it but does not offer it.
+/// system writes them. A form with command shows only on macOS, and only while the terminal tells
+/// the keys that hold super: elsewhere the desktop most often takes super for itself, and a
+/// terminal that does not tell it never gives the key, so the window still hears it but does not
+/// offer it.
 pub(crate) fn each(
   system: System,
+  supers: bool,
 ) -> impl Iterator<Item = (&'static str, &'static Bound, Vec<String>)> {
-  let offered =
-    move |strokes: &&&[Stroke]| system == System::MacOs || !strokes.iter().any(|one| one.cmd);
+  let reaches = system == System::MacOs && supers;
+  let offered = move |strokes: &&&[Stroke]| reaches || !strokes.iter().any(|one| one.cmd);
   let forms = move |one: &'static Bound| {
     one.forms.iter().filter(offered).map(|strokes| form(strokes, system)).collect()
   };
@@ -312,3 +315,7 @@ pub(crate) fn pressed(key: &KeyEvent, led: bool) -> Option<Does> {
   };
   keys().find(|one| one.forms.iter().any(form)).map(|one| one.does)
 }
+
+#[cfg(test)]
+#[path = "keys.test.rs"]
+mod test;
