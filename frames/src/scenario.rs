@@ -411,6 +411,12 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("x-chains", &[Act::Key("C-x"), Act::Key("t")], "no chain works now"),
         step("x-find", &[Act::Type("ro")], "find ro"),
         step("x-chain", &[Act::Key("Enter")], "Answer 15 of"),
+        // A question aside goes as his word on the thread, which a fork of its chain answers.
+        step(
+          "x-aside",
+          &[Act::Type("/btw Which message came first?"), Act::Key("Enter")],
+          "on=chain('btw'",
+        ),
       ],
     }),
   },

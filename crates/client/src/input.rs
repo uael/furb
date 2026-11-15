@@ -10,8 +10,12 @@
 use std::path::Path;
 
 use jiff::Timestamp;
+use serde_json::Value;
 
 use crate::{Client, Opened, Outgoing, Pending, Target, Thread};
+
+/// The start of a message that asks its question aside, in a fork of the chain of the open thread.
+pub const ASIDE: &str = "/btw ";
 
 /// The text of the input, and whether it is a word of python that runs.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -41,13 +45,13 @@ impl Client {
     };
   }
 
-  /// The text of the input sent to its target: it waits in the queue, the client holds its life,
-  /// and the thread that it goes to shows it at once. A message to no thread starts one, which
-  /// opens, so the next message goes to it, and a new session opens on the actor that the
-  /// operator chose for it. A word of python shows in no thread. A message from a moment of the
-  /// past of the open thread goes as the word of a rewind. While the input fills an input of
-  /// a view, the text goes to that node alone. A machine that the client dials again, or a life
-  /// that a fault ended, takes nothing, and the error says why.
+  /// The text of the input sent to its target: it waits in the queue, the client holds its life, and
+  /// the thread that it goes to shows it at once. A message to no thread starts one, which opens, so
+  /// the next message goes to it, and a new session opens on the actor that the operator chose for
+  /// it. A word of python shows in no thread. A message from a moment of the past of the open thread
+  /// goes as the word of a rewind, and one that starts with `/btw ` as the word of a question aside.
+  /// While the input fills an input of a view, the text goes to that node alone. A machine that the
+  /// client dials again, or a life that a fault ended, takes nothing, and the error says why.
   pub fn send(&mut self, text: String) -> Result<(), String> {
     if self.submit_fill(&text) {
       return Ok(());
@@ -68,7 +72,8 @@ impl Client {
     if let (Some(chosen), Some(hold)) = (chosen, self.holds.get_mut(&(at, life.clone()))) {
       hold.actor = Some(chosen.actor);
     }
-    let rewound = if self.draft.python { None } else { self.rewound(&text) };
+    let rewound =
+      if self.draft.python { None } else { self.aside(&text).or_else(|| self.rewound(&text)) };
     let (text, python) = match rewound {
       Some(Ok(word)) => (word, true),
       Some(Err(why)) => return Err(why),
@@ -89,6 +94,23 @@ impl Client {
     self.outgoing.push_back(Outgoing { at, life, thread, text, python });
     self.walk = None;
     Ok(())
+  }
+
+  /// The word that asks a message that starts with `/btw ` aside, as his word on the open thread:
+  /// a fork of the chain of the thread, with all that it holds, answers the question, so the chain
+  /// of the thread keeps nothing of it, and the answer stands under the line of the word. None for
+  /// any other message, and while the input sends to no thread.
+  fn aside(&self, text: &str) -> Option<Result<String, String>> {
+    let question = text.strip_prefix(ASIDE)?.trim();
+    self.thread.as_ref().filter(|one| self.aim.is_none() && !one.thread.key.2.is_empty())?;
+    let question = Value::String(question.to_owned());
+    Some(Ok(format!("prompt(str, {question}, on=chain('btw', source=__name__))")))
+  }
+
+  /// The input turned to ask its text aside: it starts with `/btw ` once.
+  pub fn aside_draft(&mut self) {
+    let rest = self.draft.text.trim_start().trim_start_matches(ASIDE.trim_end()).trim_start();
+    self.restore = Some(format!("{ASIDE}{rest}"));
   }
 
   /// The folder that the life of a record opens in when no life holds the record: the folder of

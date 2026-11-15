@@ -3,7 +3,7 @@
   Nothing needs you.
   ● 1 session runs.
                       Each key                                               ⎋
-  ⌃P          go to   ▌Search a key                                     1 / 35
+  ⌃P          go to   ▌Search a key                                     1 / 36
   ⌃X ?        each k
                       Go
                       ▌⌃P or ⌃O    go to anything, or run a command

@@ -58,6 +58,7 @@ pub(crate) enum Does {
   Running,
   Rewind,
   Chains,
+  Aside,
 }
 
 /// One stroke of a key: whether it holds control and alt, and its key.
@@ -141,6 +142,7 @@ const THREAD: &[Bound] = &[
   bound(Does::Context, "the context: kinds, cache, folded", Some("context"), &[&led('c')]),
   bound(Does::Rewind, "back in the time of the thread, and to now", Some("rewind"), &[&led('b')]),
   bound(Does::Chains, "the chains of the life on the time", Some("chains"), &[&led('t')]),
+  bound(Does::Aside, "ask aside, in a fork the thread keeps nothing of", Some("btw"), &[&led('q')]),
   bound(
     Does::Agent,
     "the next agent of the thread",

@@ -868,6 +868,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Context => Model::context_step,
     Does::Rewind => |model| model.client.time(),
     Does::Chains => |model| model.client.chains(),
+    Does::Aside => |model| model.client.aside_draft(),
     Does::Running => Model::act_on_open,
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,

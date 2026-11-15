@@ -35,7 +35,7 @@ pub use changes::{Review, Seen};
 pub use complete::{Completed, Completes, Completion, Kind, Offer};
 pub use context::{Content, Parts, Split};
 pub use history::{History, Walk};
-pub use input::Draft;
+pub use input::{ASIDE, Draft};
 pub use machine::{Heard, Key, Link, Listing, Told};
 pub use matched::{Matched, pathed, ranked};
 pub use opens::{Ask, Hold, Life, Step};
@@ -66,8 +66,8 @@ pub struct Client {
   pub aim: Option<Target>,
   /// The text of the input, and whether it is a word of python that runs.
   pub draft: Draft,
-  /// The text that the input takes after a refusal, a take back or a step of the history, until
-  /// the client gives it to the editor of its input.
+  /// The text that the input takes after a refusal, a take back, a step of the history or a command
+  /// that writes in it, until the client gives it to the editor of its input.
   pub restore: Option<String>,
   /// The history of the input, for its target.
   pub history: Option<History>,
