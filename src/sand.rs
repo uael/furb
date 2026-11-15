@@ -100,8 +100,9 @@ pub(crate) struct Sand {
   /// the engine's own work over words that already ran within the bound, so they run unbounded,
   /// while each word that they run again keeps it.
   bounded: bool,
-  /// The bound that the session holds, which a round trip brings to `bounded`.
-  applied: bool,
+  /// The bound of a turn that the session holds, which a round trip brings to the bound that
+  /// holds now: [`turn`] while `bounded`, and none else.
+  applied: Duration,
 }
 
 impl Sand {
@@ -110,12 +111,12 @@ impl Sand {
     let limits = ResourceLimits::default().gc_interval(GC_INTERVAL).max_turn_duration(turn());
     let limits = ResourceTracker::new(limits);
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
-    Self { state: State::Idle(repl), fed: 0, bounded: true, applied: true }
+    Self { state: State::Idle(repl), fed: 0, bounded: true, applied: turn() }
   }
 
   /// A sandbox of nothing, which holds no session, and stands in for one that is lent to code of a host.
   pub(crate) fn none() -> Self {
-    Self { state: State::Lent, fed: 0, bounded: true, applied: true }
+    Self { state: State::Lent, fed: 0, bounded: true, applied: turn() }
   }
 
   /// How many runs the session began.
@@ -141,7 +142,7 @@ impl Sand {
       return Err(Fault::refused("the image holds no session between two runs"));
     };
     repl.tracker_mut().set_max_turn_duration(turn());
-    Ok(Self { state: State::Idle(*repl), fed, bounded: true, applied: true })
+    Ok(Self { state: State::Idle(*repl), fed, bounded: true, applied: turn() })
   }
 
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.
@@ -208,10 +209,8 @@ impl Sand {
 
   /// The bound of the turn that the session must hold from now, when it holds another.
   fn changed(&mut self) -> Option<Duration> {
-    (self.applied != self.bounded).then(|| {
-      self.applied = self.bounded;
-      if self.bounded { turn() } else { Duration::MAX }
-    })
+    let bound = if self.bounded { turn() } else { Duration::MAX };
+    (mem::replace(&mut self.applied, bound) != bound).then_some(bound)
   }
 
   /// A call that the session goes on with, under the bound that holds now, as a fresh turn when it
