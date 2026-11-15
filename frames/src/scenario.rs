@@ -382,9 +382,13 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step(
           "x-back",
           &[Act::Key("Left"), Act::Key("Left"), Act::Key("Left"), Act::Key("Left")],
-          " of ",
+          " 4 moments back",
         ),
-        step("x-click", &[Act::Pointer { on: "━", button: 0 }], " 1 of "),
+        step(
+          "x-click",
+          &[Act::Pointer { on: "━", button: 0 }],
+          "close('Answer 1 of the long thread.')",
+        ),
         step("x-play", &[Act::Key("Space")], "❚❚"),
         step("x-now", &[Act::Key("Escape")], "Answer 15 of the long thread."),
         // A message from a moment goes as a rewind: a chain on the messages until then, whose

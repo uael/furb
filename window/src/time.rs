@@ -1,6 +1,7 @@
 //! The bar of the time of the open thread, under its head while the operator holds it: a play
-//! button, the track of its moments with the one that the thread shows, and where it stands. A
-//! click or a drag on the track takes the thread to the moment under the pointer.
+//! button, the track of its moments with the one that the thread shows, and how many moments it
+//! stands back from now. A click or a drag on the track takes the thread to the moment under the
+//! pointer.
 
 use std::cmp::Ordering;
 
@@ -26,26 +27,33 @@ impl Model {
       return Vec::new();
     };
     let t = &self.tokens;
-    let (accent, muted) = (Style::new().fg(t.accent), self.tokens.style(Role::Muted));
+    let key = &self.client.thread.as_ref().map(|one| one.thread.key.clone()).unwrap_or_default();
+    // The track is the history of this thread, so what it passed takes the hue of the bar of its
+    // messages, and the knob the bright text, as the hand on a scale.
+    let (hue, muted) = (Style::new().fg(self.hue(key)), self.tokens.style(Role::Muted));
     let count = time.moments.len();
-    let at = time.at.unwrap_or(count.saturating_sub(1));
-    let says = match (count, time.at) {
-      (0, _) if time.stale => " reading".to_owned(),
-      (0 | 1, _) => " nothing before now".to_owned(),
-      (_, None) => " now".to_owned(),
-      (_, Some(at)) => format!(" {} of {count}", at + 1),
+    let last = count.saturating_sub(1);
+    let at = time.at.unwrap_or(last);
+    let says = match count {
+      0 if time.stale => " reading".to_owned(),
+      0 | 1 => " nothing before now".to_owned(),
+      _ => back(last - at),
     };
+    // The words take the room of the farthest moment, so the track keeps its columns as the
+    // thread steps through its time.
+    let said = says.width().max(back(last).width());
     let play = if time.played.is_some() { "❚❚" } else { "▶ " };
-    let room = self.wide().saturating_sub(BEFORE + says.width() + 2);
-    let mut line: Line = vec![run("  ", muted), run(play, accent), run(" ", muted)];
+    let room = self.wide().saturating_sub(BEFORE + said + 2);
+    let text = Style::new().fg(t.text);
+    let mut line: Line = vec![run("  ", muted), run(play, text), run(" ", muted)];
     let mut hot: Vec<Hot> = vec![(2..4, Some(Click::Play))];
     // Each column of the track stands for the moment nearest to its share of the track, so a
     // click takes the thread there. The column of the moment that shows holds the mark, and the
     // column of each message a diamond, so the track reads as the history of the thread.
-    let (last, span) = (count.saturating_sub(1), room.max(2) - 1);
+    let span = room.max(2) - 1;
     let place = |column: usize| (column * last + span / 2) / span;
     let column = |at: usize| (at * span + last / 2).checked_div(last).unwrap_or(room);
-    let said: Vec<usize> = time
+    let told: Vec<usize> = time
       .messages
       .keys()
       .map(|moment| column(time.moments.partition_point(|one| one < moment)))
@@ -53,12 +61,10 @@ impl Model {
     let mark = column(at);
     for one in 0..room {
       let past = one < mark;
-      let (sign, style) = match (one.cmp(&mark), said.contains(&one)) {
-        (Ordering::Equal, _) => ("●", accent),
-        (_, true) => {
-          (if past { "◆" } else { "◇" }, Style::new().fg(if past { t.accent } else { t.muted }))
-        }
-        (Ordering::Less, false) => ("━", accent),
+      let (sign, style) = match (one.cmp(&mark), told.contains(&one)) {
+        (Ordering::Equal, _) => ("●", text),
+        (_, true) => (if past { "◆" } else { "◇" }, if past { hue } else { muted }),
+        (Ordering::Less, false) => ("━", hue),
         (Ordering::Greater, false) => ("─", Style::new().fg(t.border)),
       };
       line.push(run(sign, style));
@@ -66,7 +72,7 @@ impl Model {
         hot.push((BEFORE + one..BEFORE + one + 1, Some(Click::Time(place(one)))));
       }
     }
-    line.push(run(says, muted));
+    line.push(run(format!("{says:>said$}"), muted));
     let row = 1 + self.open_rows().len();
     let pointed = self.pointed().filter(|(_, y)| usize::from(*y) == row);
     let under = pointed
@@ -97,5 +103,14 @@ impl Model {
     {
       self.client.reach(at);
     }
+  }
+}
+
+/// Where the thread stands in its time: now, or a count of moments back from now.
+fn back(moments: usize) -> String {
+  match moments {
+    0 => " now".to_owned(),
+    1 => " 1 moment back".to_owned(),
+    count => format!(" {count} moments back"),
   }
 }
