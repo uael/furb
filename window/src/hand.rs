@@ -246,6 +246,19 @@ fn written(lines: &[Line]) -> Vec<Span<'static>> {
 /// The editor of the input on its box. A hidden editor loses the focus, which it takes back when it
 /// shows again.
 fn placed(app: &App, screen: &mut Screen<Model>, area: &Textarea) {
+  let tokens = screen.model.tokens;
+  let ghost = Text::new(app, "").absolute().wrap(WrapMode::None).z_index(1).visible(false);
+  app.root().child(&ghost);
+  screen.part(Model::ghost, move |shown| match shown {
+    Some((x, y, rest)) => {
+      let ghost = ghost.position(Edge::Left, *x).position(Edge::Top, *y);
+      ghost.set_text(vec![Span::styled(rest.clone(), tokens.style(Role::Muted).bg(tokens.raised))]);
+      ghost.visible(true);
+    }
+    None => {
+      ghost.visible(false);
+    }
+  });
   let (area, focus) = (area.clone(), app.clone());
   screen.part(Model::area, move |shown| {
     let area = area.position(Edge::Top, shown.y).position(Edge::Left, shown.x);
@@ -369,10 +382,10 @@ fn pump(window: &Shared) {
   {
     model.asked.insert((at, asker.ask(verb)), Asked::Say);
   }
-  if let Some((at, verb)) = model.history_due()
+  if let Some((at, verb, target)) = model.history_due()
     && let Some(asker) = asker(askers, model, at)
   {
-    model.asked.insert((at, asker.ask(verb)), Asked::History);
+    model.asked.insert((at, asker.ask(verb)), Asked::History(target));
   }
   if let Some((at, verb)) = model.seen_due()
     && let Some(asker) = asker(askers, model, at)
@@ -430,6 +443,8 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   }
   match does {
     Some(Does::Up | Does::Down) if walked(app, window, does == Some(Does::Up)) => true,
+    // The grey rest, which the editor hears as a move when none shows.
+    Some(Does::Take | Does::TakeWord) => took(window, does == Some(Does::TakeWord)),
     // The keys of a form, which the editor hears when no form takes them.
     Some(Does::Up | Does::Down | Does::Tick | Does::NextQuestion) => false,
     Some(Does::Leave) if !window.borrow().area.text().is_empty() => false,
@@ -450,6 +465,24 @@ fn walked(app: &App, window: &Shared, up: bool) -> bool {
   };
   let edge = if up { row == 0 } else { usize::try_from(row).is_ok_and(|row| row + 1 >= rows) };
   edge && tell(app, window, |model| model.walked(up))
+}
+
+/// The grey rest of the input taken whole, or its first word, at the end of the text: whether a
+/// rest showed there. The editor tells the change, as a text that he wrote.
+fn took(window: &Shared, word: bool) -> bool {
+  let held = window.borrow();
+  let area = &held.area;
+  let end = usize::try_from(area.cursor_offset()).is_ok_and(|at| at == area.text().chars().count());
+  let Some(rest) = held.screen.model.suggested().filter(|_| end) else { return false };
+  // A word is the blanks before it and its letters, as the editor moves by words.
+  let start = rest.len() - rest.trim_start().len();
+  let word_end = rest[start..].find(char::is_whitespace).map_or(rest.len(), |at| start + at);
+  let rest = if word { &rest[..word_end] } else { rest };
+  let (rest, area) = (rest.to_owned(), area.clone());
+  // The editor tells the change at once, and the window then hears it.
+  drop(held);
+  area.insert(rest);
+  true
 }
 
 /// A key while a list part is open: it filters the part, moves its chosen row, takes it or closes
@@ -556,8 +589,8 @@ fn act(app: &App, window: &Shared, does: Does) {
       });
       return older(window, verb);
     }
-    // The keys of a form and of a list part, which a form or a part took when one shows.
-    Does::Up | Does::Down | Does::Tick | Does::NextQuestion => return,
+    // The keys of a form, of a list part and of the input, which the key that heard them did.
+    Does::Up | Does::Down | Does::Tick | Does::NextQuestion | Does::Take | Does::TakeWord => return,
   };
   if matches!(does, Does::Next | Does::Previous | Does::Needed) {
     window.borrow_mut().touched = Some(app.now());

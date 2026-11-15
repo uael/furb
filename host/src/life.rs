@@ -35,7 +35,7 @@ use furb::{
   skill::granted,
   verbs,
   view::{
-    self, Act, Desk, Fold, Held, Named, Page, Phase, Reach, Rung, SHOWN, Shown, Streamed,
+    self, Act, Desk, Fold, Held, Named, Page, Phase, Reach, Rung, SHOWN, Sent, Shown, Streamed,
     ThreadNode, Threads,
   },
   wire::{outward, parsed},
@@ -188,6 +188,8 @@ pub enum Command {
   Folded { id: String },
   /// A page of a thread, as [`furb::view::Held::page`] gives it.
   Thread { thread: String, reach: Reach },
+  /// What each operator sent to the life, as the life holds it now.
+  Sent,
   /// Each moment at which an act began or ended, in order, of the life or of the acts of one
   /// chain.
   Moments { on: Option<String> },
@@ -259,6 +261,8 @@ pub enum Reply {
   Moments(Vec<u64>),
   /// A page of a thread.
   Page(Page),
+  /// What each operator sent.
+  Sent(Vec<Sent>),
 }
 
 /// One event under its place in the log.
@@ -1335,7 +1339,8 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
     | Command::AsOf { .. }
     | Command::Folded { .. }
     | Command::Moments { .. }
-    | Command::Thread { .. }) => viewed(life, &root, command),
+    | Command::Thread { .. }
+    | Command::Sent) => viewed(life, &root, command),
     Command::Settings => {
       let settings = life.configs.get()?.into_iter().map(|one| json!(one));
       Ok(Reply::Values(settings.collect()))
@@ -1420,6 +1425,7 @@ fn viewed(life: &Life, root: &str, command: Command) -> Result<Reply, LifeError>
     Command::Thread { thread, reach } => {
       Ok(Reply::Page(life.kept.held.page(&life.kept.streams, &thread, reach)))
     }
+    Command::Sent => Ok(Reply::Sent(life.kept.held.sent())),
     other => Err(LifeError::Refused(format!("{other:?} is no view"))),
   }
 }
