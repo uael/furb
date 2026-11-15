@@ -20,6 +20,7 @@ fn exchange(at: usize) -> Exchange {
     text: format!("step = {number}"),
     mark: Mark::Ran,
     output: None,
+    made: Vec::new(),
   };
   let maker = Maker::Model { model: "claude-cli:opus".to_owned(), effort: None };
   let block =
@@ -164,6 +165,7 @@ fn a_light_passes_over_the_word_of_a_model_that_writes_or_thinks_and_not_once_it
     text: String::new(),
     mark: Mark::Runs { work: Work::Writes, began: None },
     output: None,
+    made: Vec::new(),
   };
   let maker = Maker::Model { model: "claude-cli:opus".to_owned(), effort: None };
   let thought = Thought { text: "the seed".to_owned(), began: 0, took: None };
@@ -195,6 +197,7 @@ fn the_call_of_prompt_that_a_line_awaits_shines_while_its_agent_works() {
     text: "lines = await prompt(str, 'Count the lines', on=chain('count'))".to_owned(),
     mark: Mark::Runs { work: Work::Agent, began: None },
     output: None,
+    made: Vec::new(),
   };
   let maker = Maker::Model { model: "claude-cli:opus".to_owned(), effort: None };
   let block = Block { maker, lines: vec![awaits], more: true, thought: None };

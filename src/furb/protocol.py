@@ -1551,6 +1551,41 @@ class Output(TypedDict):
   took: NotRequired[int | None]
 
 
+class Made1(TypedDict):
+  """
+  What an act that a line made came to: it works, it failed, or it is done with a value, as a
+  literal of python cut to `LITERAL` characters.
+  """
+
+  made: Literal["works"]
+
+
+class Made2(TypedDict):
+  """
+  What an act that a line made came to: it works, it failed, or it is done with a value, as a
+  literal of python cut to `LITERAL` characters.
+  """
+
+  made: Literal["failed"]
+
+
+class Made3(TypedDict):
+  """
+  What an act that a line made came to: it works, it failed, or it is done with a value, as a
+  literal of python cut to `LITERAL` characters.
+  """
+
+  made: Literal["done"]
+  value: str
+
+
+type Made = Made1 | Made2 | Made3
+"""
+What an act that a line made came to: it works, it failed, or it is done with a value, as a
+literal of python cut to `LITERAL` characters.
+"""
+
+
 class Thought(TypedDict):
   """
   What a model thought before it wrote: the millisecond of the epoch at which it began to think,
@@ -2519,14 +2554,16 @@ class Act(TypedDict):
 class Line(TypedDict):
   """
   One line of a block: its number in the thread, its text, in which each quote stands as the
-  binding that it makes and a string of many lines as one line with its escapes, its mark, and
-  what the last command that it awaited wrote.
+  binding that it makes and a string of many lines as one line with its escapes, its mark, what
+  the last command that it awaited wrote, and what each act that it made came to, in the order it
+  made them: one for each pass of a loop, the last of which is the value that it bound.
   """
 
   number: int
   text: str
   mark: Mark
   output: NotRequired[Output | None]
+  made: NotRequired[list[Made]]
 
 
 class Question(TypedDict):
@@ -2944,4 +2981,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 46
+PROTOCOL = 47

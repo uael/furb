@@ -881,6 +881,21 @@ export type Mark =
  */
 export type Work = "writes" | "command" | "agent";
 /**
+ * What an act that a line made came to: it works, it failed, or it is done with a value, as a
+ * literal of python cut to `LITERAL` characters.
+ */
+export type Made =
+  | {
+      made: "works";
+    }
+  | {
+      made: "failed";
+    }
+  | {
+      made: "done";
+      value: string;
+    };
+/**
  * What a said is. A question holds the shape that its answer takes, which `choices`, `ticks` and
  * `hint` of the view read, and what answered it once it is closed: it is open until then.
  */
@@ -1516,14 +1531,16 @@ export interface Block {
 }
 /**
  * One line of a block: its number in the thread, its text, in which each quote stands as the
- * binding that it makes and a string of many lines as one line with its escapes, its mark, and
- * what the last command that it awaited wrote.
+ * binding that it makes and a string of many lines as one line with its escapes, its mark, what
+ * the last command that it awaited wrote, and what each act that it made came to, in the order it
+ * made them: one for each pass of a loop, the last of which is the value that it bound.
  */
 export interface Line {
   number: number;
   text: string;
   mark: Mark;
   output?: Output | null;
+  made?: Made[];
 }
 /**
  * A call of a model that failed for a cause that passes, so its provider asks the model again:
@@ -1632,4 +1649,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 46;
+export const PROTOCOL = 47;

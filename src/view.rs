@@ -18,11 +18,11 @@ pub use desk::{REFUSED, choices, declined, desk, hint, takes_nothing, ticks, wan
 pub use fold::{Fold, followed, timed};
 pub use furb_wire::{
   Act, Agent, Answer, Answered, Aside, Ask, Attention, Block, Card, ChainAside, ChainThread,
-  Concern, Context, Desk, Exchange, Kind, Line, Maker, Mark, NoteRun, Origin, Output, Page, Part,
-  Pause, Phase, Portion, ROLLS, Reach, Read, Reply, Retrying, RunState, Rung, SHOWN, Said, Saying,
-  Sent, Shown, Skill, Spend, Standing, State, Thought, ThreadNode, Threads, Tick, WATCH, Work, age,
-  chain_state, elapsed, grouped, homed, lines, operator, percent, restate, share, since, size,
-  timer, tokens, working, wrote,
+  Concern, Context, Desk, Exchange, Kind, LITERAL, Line, Made, Maker, Mark, NoteRun, Origin,
+  Output, Page, Part, Pause, Phase, Portion, ROLLS, Reach, Read, Reply, Retrying, RunState, Rung,
+  SHOWN, Said, Saying, Sent, Shown, Skill, Spend, Standing, State, Thought, ThreadNode, Threads,
+  Tick, WATCH, Work, age, chain_state, elapsed, grouped, homed, lines, operator, percent, restate,
+  share, since, size, timer, tokens, working, wrote,
 };
 pub use held::Held;
 #[cfg(test)]

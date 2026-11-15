@@ -13,14 +13,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use furb_wire::{
-  act::{Act, Kind, Maker, RunState, fault, operator},
+  act::{Act, Kind, Maker, Phase, RunState, fault, operator},
   card::{Card, Standing},
   page::{
-    Agent, Answered, Block, Context, Exchange, Line, Mark, Output, Page, Reach, Retrying, Said,
-    Saying, Thought, Work, wrote,
+    Agent, Answered, Block, Context, Exchange, LITERAL, Line, Made, Mark, Output, Page, Reach,
+    Retrying, Said, Saying, Thought, Work, wrote,
   },
   state::{State, working},
 };
+
+use crate::value::literal;
 
 use super::{
   fold::followed,
@@ -436,8 +438,9 @@ impl<'a> Reader<'a> {
     let made: Vec<(&Act, Option<usize>)> = acts.iter().copied().zip(placed(word, &acts)).collect();
     let mut lines = self.marked(rung, before, &made);
     for (act, place) in &made {
-      let output = place.and_then(|source| at_line(&lines, before, source)).zip(self.output(act));
-      if let Some((at, output)) = output {
+      let Some(at) = place.and_then(|source| at_line(&lines, before, source)) else { continue };
+      lines[at].made.push(outcome(act));
+      if let Some(output) = self.output(act) {
         lines[at].output = Some(output);
       }
     }
@@ -451,7 +454,13 @@ impl<'a> Reader<'a> {
     let began = |id: &str| self.streams.began.get(id).copied();
     let mut lines: Vec<Line> = shown(word)
       .into_iter()
-      .map(|(at, text)| Line { number: before + at + 1, text, mark: Mark::Ran, output: None })
+      .map(|(at, text)| Line {
+        number: before + at + 1,
+        text,
+        mark: Mark::Ran,
+        output: None,
+        made: Vec::new(),
+      })
       .collect();
     let Some(run @ (RunState::Failed(_) | RunState::Cancelled(_) | RunState::Running)) = &rung.run
     else {
@@ -552,10 +561,17 @@ impl<'a> Reader<'a> {
         text: text.to_owned(),
         mark: Mark::Ran,
         output: None,
+        made: Vec::new(),
       })
       .collect();
     let mark = mark.unwrap_or(Mark::Runs { work: Work::Writes, began });
-    lines.push(Line { number: before + came.count + 1, text: came.tail, mark, output: None });
+    lines.push(Line {
+      number: before + came.count + 1,
+      text: came.tail,
+      mark,
+      output: None,
+      made: Vec::new(),
+    });
     lines
   }
 
@@ -661,6 +677,19 @@ fn shown(word: &str) -> Vec<(usize, String)> {
     at = end + 1;
   }
   out
+}
+
+/// What an act came to, as the line that made it shows it.
+fn outcome(act: &Act) -> Made {
+  match &act.phase {
+    _ if act.failed() => Made::Failed,
+    Phase::Done(value) => {
+      let literal = literal(value);
+      let cut = literal.char_indices().nth(LITERAL - 1).map_or(literal.len(), |(at, _)| at);
+      Made::Done(if cut < literal.len() { format!("{}…", &literal[..cut]) } else { literal })
+    }
+    Phase::Asked | Phase::Started => Made::Works,
+  }
 }
 
 /// The line of a word, numbered from the count of the lines of the thread before it, that shows

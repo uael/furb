@@ -357,7 +357,10 @@ daemon answers requests in any order.
     has its `output`, which is absent on each other line: the `tail`, the last 3 lines that the command wrote, those of
     its stdout then those of its stderr, each as a terminal shows it, with no escape and no control; `more`, how many
     lines came before them; and the seconds that it `took` once it ended, null while it runs and when the daemon
-    opened the life after it began. The tail moves as the command writes;
+    opened the life after it began. The tail moves as the command writes. A line that made acts has `made`, which is
+    absent on each other line: what each act came to, in the order the line made them, one for each pass of a loop:
+    `works`, `failed`, or `done` with its value as a literal of python of at most 80 characters, the last of which is
+    the value that the line bound;
   - `agents`, each thread that a word of the thread started on another chain, in the order the thread made them, as
     a card without its life, with `began`, the millisecond of the epoch at which the daemon saw it begin, `took`, the
     seconds that it took once it ended, `line`, the line of its last word where it stands: the line that runs or

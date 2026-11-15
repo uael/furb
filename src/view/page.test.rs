@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 
 use crate::view::{
-  Answered, Block, Context, Fold, Held, Line, Maker, Mark, Output, Portion, Reach, Read, Reply,
-  Retrying, Said, Saying, Standing, Streamed, Thought, Work, declined,
+  Answered, Block, Context, Fold, Held, Line, Made, Maker, Mark, Output, Portion, Reach, Read,
+  Reply, Retrying, Said, Saying, Standing, Streamed, Thought, Work, declined,
 };
 
 /// The acts of a list of facts as a host holds them, with what the host heard at the second 100.
@@ -453,6 +453,18 @@ fn each_act_that_a_loop_makes_marks_the_line_that_makes_it() {
 }
 
 #[test]
+fn a_line_says_what_each_act_that_it_made_came_to_one_for_each_pass_of_a_loop() {
+  let mut streams = Streamed::default();
+  let done = json!(["done", "bash2", "chain1", {"code": 0, "out": "b"}]);
+  let held = held(looped([done]), &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let made: Vec<&[Made]> = block.lines.iter().map(|line| line.made.as_slice()).collect();
+  let passes = [Made::Done("''".to_owned()), Made::Done("{'code': 0, 'out': 'b'}".to_owned())];
+  assert_eq!(made, [&[][..], &passes[..], &[][..]]);
+}
+
+#[test]
 fn a_reason_that_names_a_line_only_inside_a_word_marks_the_line_of_the_act_that_failed() {
   let mut streams = Streamed::default();
   let fault = json!({"is": "RuntimeError", "args": ["the deadline 3 passed"]});
@@ -652,6 +664,7 @@ fn a_block_rolls_by_rows_and_keeps_its_last_line_with_what_its_command_wrote() {
     text: String::new(),
     mark: Mark::Ran,
     output: (tail > 0).then(|| Output { tail: vec![String::new(); tail], more: 9, took: None }),
+    made: Vec::new(),
   };
   let block = |lines| Block { maker: Maker::Operator, lines, more: false, thought: None };
   let small = block((1..=7).map(|at| line(at, 0)).collect());

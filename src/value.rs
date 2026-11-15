@@ -17,6 +17,7 @@
 )]
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
+use serde_json::Value;
 use std::{error, fmt, fmt::Write as _};
 
 /// The key of the one mark: a map whose `is` names a class of the engine is an instance of it, by its fields.
@@ -41,6 +42,24 @@ impl Given for ObjectRef<'_> {
   )]
   fn seconds(&self) -> Option<f64> {
     self.as_float().or_else(|| self.as_int().map(|n| n as f64))
+  }
+}
+
+/// A value of JSON as python writes it: a text as its repr, `True`, `False` and `None`, and a list
+/// and a dict of such values.
+pub(crate) fn literal(value: &Value) -> String {
+  let all = |items: Vec<String>| items.join(", ");
+  match value {
+    Value::String(text) => repr(text),
+    Value::Bool(true) => "True".to_owned(),
+    Value::Bool(false) => "False".to_owned(),
+    Value::Null => "None".to_owned(),
+    Value::Number(number) => number.to_string(),
+    Value::Array(items) => format!("[{}]", all(items.iter().map(literal).collect())),
+    Value::Object(map) => {
+      let pairs = map.iter().map(|(key, one)| format!("{}: {}", repr(key), literal(one)));
+      format!("{{{}}}", all(pairs.collect()))
+    }
   }
 }
 

@@ -4611,6 +4611,12 @@
               "type": "null"
             }
           ]
+        },
+        "made": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Made"
+          }
         }
       },
       "required": [
@@ -4618,7 +4624,7 @@
         "text",
         "mark"
       ],
-      "description": "One line of a block: its number in the thread, its text, in which each quote stands as the\nbinding that it makes and a string of many lines as one line with its escapes, its mark, and\nwhat the last command that it awaited wrote."
+      "description": "One line of a block: its number in the thread, its text, in which each quote stands as the\nbinding that it makes and a string of many lines as one line with its escapes, its mark, what\nthe last command that it awaited wrote, and what each act that it made came to, in the order it\nmade them: one for each pass of a loop, the last of which is the value that it bound."
     },
     "Mark": {
       "oneOf": [
@@ -4799,6 +4805,51 @@
         "more"
       ],
       "description": "What a command that a line awaited wrote, as it writes it and once it ended: its last lines,\nthose of its stdout then those of its stderr, each as a terminal shows it, how many lines came\nbefore them, and the seconds that it took once it ended, counted from milliseconds, which a\nhost that opened the life after the command began does not know."
+    },
+    "Made": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "made": {
+              "type": "string",
+              "const": "works"
+            }
+          },
+          "required": [
+            "made"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "made": {
+              "type": "string",
+              "const": "failed"
+            }
+          },
+          "required": [
+            "made"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "made": {
+              "type": "string",
+              "const": "done"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "made",
+            "value"
+          ]
+        }
+      ],
+      "description": "What an act that a line made came to: it works, it failed, or it is done with a value, as a\nliteral of python cut to `LITERAL` characters."
     },
     "Thought": {
       "type": "object",
@@ -5742,5 +5793,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 46
+  "x-protocol": 47
 }

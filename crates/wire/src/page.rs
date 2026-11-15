@@ -115,8 +115,9 @@ pub struct Block {
 }
 
 /// One line of a block: its number in the thread, its text, in which each quote stands as the
-/// binding that it makes and a string of many lines as one line with its escapes, its mark, and
-/// what the last command that it awaited wrote.
+/// binding that it makes and a string of many lines as one line with its escapes, its mark, what
+/// the last command that it awaited wrote, and what each act that it made came to, in the order it
+/// made them: one for each pass of a loop, the last of which is the value that it bound.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Line {
   pub number: usize,
@@ -124,7 +125,22 @@ pub struct Line {
   pub mark: Mark,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub output: Option<Output>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub made: Vec<Made>,
 }
+
+/// What an act that a line made came to: it works, it failed, or it is done with a value, as a
+/// literal of python cut to `LITERAL` characters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "made", content = "value", rename_all = "snake_case")]
+pub enum Made {
+  Works,
+  Failed,
+  Done(String),
+}
+
+/// The most characters of the value of an act that a line made, which a block shows beside it.
+pub const LITERAL: usize = 80;
 
 /// What a command that a line awaited wrote, as it writes it and once it ended: its last lines,
 /// those of its stdout then those of its stderr, each as a terminal shows it, how many lines came

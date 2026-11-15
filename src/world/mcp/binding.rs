@@ -20,7 +20,7 @@
 
 use serde_json::{Map, Value};
 
-use crate::value::repr;
+use crate::value::{literal, repr};
 use std::mem;
 use std::slice;
 
@@ -725,16 +725,6 @@ fn unique(mut name: String, taken: &mut Vec<String>) -> String {
   }
   taken.push(name.clone());
   name
-}
-
-/// A value of an enum or a const in a Literal of Python.
-fn literal(value: &Value) -> String {
-  match value {
-    Value::String(text) => repr(text),
-    Value::Bool(true) => "True".to_owned(),
-    Value::Bool(false) => "False".to_owned(),
-    other => other.to_string(),
-  }
 }
 
 /// The first sentence of the first paragraph of a description, on one line, cut to `SENTENCE` characters, which a

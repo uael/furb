@@ -28,8 +28,8 @@ pub use event::{Event, FollowUp, Seq};
 pub use ladder::{Rung, SHOWN, Shown};
 pub use open::Stage;
 pub use page::{
-  Agent, Answered, Block, Context, Exchange, Line, Mark, Output, Page, Portion, ROLLS, Reach,
-  Reply, Retrying, Said, Saying, Thought, Work, wrote,
+  Agent, Answered, Block, Context, Exchange, LITERAL, Line, Made, Mark, Output, Page, Portion,
+  ROLLS, Reach, Reply, Retrying, Said, Saying, Thought, Work, wrote,
 };
 pub use state::{State, chain_state, restate, working};
 pub use threads::{
