@@ -59,6 +59,11 @@ enum Task {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     words: Vec<String>,
   },
+  /// Print each task and each option whose name or help holds each of the words, in any case.
+  Search {
+    #[arg(required = true)]
+    words: Vec<String>,
+  },
 }
 
 /// A suite of the repository, by the language that its tests are written in.
@@ -112,7 +117,7 @@ fn run() -> Result<ExitCode, Fault> {
         .arg(Arg::new("words").num_args(0..).trailing_var_arg(true).allow_hyphen_values(true)),
     )
   });
-  let matches = command.get_matches();
+  let matches = command.clone().get_matches();
   if let Some((name, words)) = matches.subcommand()
     && let Some(script) = scripts.iter().find(|script| script.name == name)
   {
@@ -131,11 +136,39 @@ fn run() -> Result<ExitCode, Fault> {
       }
       Ok(ExitCode::SUCCESS)
     }
+    Task::Search { words } => {
+      search(&command, &words);
+      Ok(ExitCode::SUCCESS)
+    }
     Task::Frames { words } => spawn(
       &root,
       "cargo",
       &[&["run", "--quiet", "-p", "furb-frames", "--"], &strs(&words)[..]].concat(),
     ),
+  }
+}
+
+/// Print each task and each option of a task whose name or help holds each word, as a line of its
+/// usage and its help.
+fn search(command: &Command, words: &[String]) {
+  let words: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
+  let holds = |text: &str| {
+    let text = text.to_lowercase();
+    words.iter().all(|word| text.contains(word.as_str()))
+  };
+  for task in command.get_subcommands() {
+    let about = task.get_about().map(ToString::to_string).unwrap_or_default();
+    if holds(&format!("{} {about}", task.get_name())) {
+      println!("cargo xtask {}: {about}", task.get_name());
+    }
+    for arg in task.get_arguments().filter(|arg| arg.get_id() != "help") {
+      let help = arg.get_help().map(ToString::to_string).unwrap_or_default();
+      let name =
+        arg.get_long().map_or_else(|| arg.get_id().to_string(), |long| format!("--{long}"));
+      if holds(&format!("{name} {help}")) {
+        println!("cargo xtask {} {name}: {help}", task.get_name());
+      }
+    }
   }
 }
 
