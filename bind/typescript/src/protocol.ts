@@ -482,7 +482,7 @@ export type Frame =
     }
   | {
       life: string;
-      profiles: Present[];
+      operators: Present[];
       frame: "presence";
     }
   | {
@@ -641,7 +641,7 @@ export type Answer =
       data: Page;
     };
 /**
- * How the thread of a card stands. It asks one member by his profile, or each operator. A pause
+ * How the thread of a card stands. It asks one member by his login, or each operator. A pause
  * names who said it. A thread whose model closed its prompt is resolved, and one that a cancel
  * ended is stopped.
  */
@@ -741,7 +741,7 @@ export type Rung =
       type: "more";
     };
 /**
- * Who made an act, as a window names it: the operator, a member who answers as him by his profile,
+ * Who made an act, as a window names it: the operator, a member who answers as him by his login,
  * a model with its effort when its actor names one, a skill, or the engine itself.
  */
 export type Maker =
@@ -749,7 +749,7 @@ export type Maker =
       role: "operator";
     }
   | {
-      profile: string;
+      operator: string;
       role: "member";
     }
   | {
@@ -1048,12 +1048,12 @@ export interface Run {
   tone?: Tone & string;
 }
 /**
- * A peer as the daemon knows it after its hello: its profile, which is the login that its
- * transport proved, its role, its kind, and the name of a skill. No window is named apart from its
- * profile: two windows of one profile are one operator.
+ * A peer as the daemon knows it after its hello: its operator, the login that its transport
+ * proved, its role, its kind, and the name of a skill. No window is named apart from its
+ * operator, so two windows of one operator are one operator.
  */
 export interface Peer {
-  profile: string;
+  operator: string;
   role: Role;
   kind: Kind;
   name?: string | null;
@@ -1087,8 +1087,8 @@ export interface Listed {
  * holds the name of the session when it has one, the main checkout of the project whose sessions
  * hold the record, when the list of the machine names one, else the checkout whose
  * `.furb/sessions` holds a record that a life holds, whether a life holds the record now,
- * the profile of each person whose window holds that life, and the second of the epoch since which
- * the thread stands as it does. A record that has no index of its threads yet gives no card until
+ * each operator whose window holds that life, and the second of the epoch since which the thread
+ * stands as it does. A record that has no index of its threads yet gives no card until
  * the daemon made its index.
  */
 export interface Card {
@@ -1111,7 +1111,7 @@ export interface Card {
 }
 /**
  * What an operator sent to a life: a message, or a word of Python, with the site that sent it,
- * `operator` or `operator/<profile>`.
+ * `operator` or `operator/<login>`.
  */
 export interface Sent {
   by: string;
@@ -1127,11 +1127,11 @@ export interface Skill {
   description: string;
 }
 /**
- * A profile that a window of a life holds now: the profile, the greatest role of its windows, and
- * the draft that it writes, when one of its windows writes one.
+ * An operator whose window holds a life now: the operator, the greatest role of his windows,
+ * and the draft that he writes, when one of his windows writes one.
  */
 export interface Present {
-  profile: string;
+  operator: string;
   role: Role;
   writes?: Draft | null;
 }
@@ -1509,4 +1509,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 35;
+export const PROTOCOL = 36;

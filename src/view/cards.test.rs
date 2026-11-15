@@ -34,7 +34,7 @@ fn a_card_stands_in_the_part_that_its_standing_and_its_reader_give() {
     (card(Standing::Rests, &[]), (Part::Resting, 0)),
     // An end that he did not read rests, with its mark.
     (card(Standing::Resolved, &[]), (Part::Resting, 0)),
-    // What another member read is not read, and what the operator with no profile read is.
+    // What another member read is not read, and what the operator with no login read is.
     (card(Standing::Resolved, &["operator/bob"]), (Part::Resting, 0)),
     (card(Standing::Resolved, &["operator/ada"]), (Part::Resolved, 0)),
     (card(Standing::Resolved, &["operator"]), (Part::Resolved, 0)),

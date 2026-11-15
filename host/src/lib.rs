@@ -8,7 +8,7 @@
 //! way, whatever client asked for it.
 //!
 //! [`protocol`] says each frame between a peer and the daemon, [`transport`] how a peer reaches
-//! the daemon and who it is, [`access`] the role of each profile of the network, and [`serve`] the
+//! the daemon and who it is, [`access`] the role of each operator of the network, and [`serve`] the
 //! door of the daemon to one peer, which checks the role of each verb before a [`Host`] answers it.
 //! A [`Door`] is an act of a person as the word that a model writes for it, which a window runs
 //! through the verb `run`, so the transcript shows his act as it shows the act of a model.

@@ -211,23 +211,23 @@ impl Identity for Grants {
   }
 }
 
-/// The identity of a test whose peers that dial in turn are the profiles of a list, each a writer.
+/// The identity of a test whose peers that dial in turn are the operators of a list, each a writer.
 #[derive(Clone)]
-struct Profiles {
+struct Operators {
   local: Local,
   next: Arc<AtomicUsize>,
   names: Arc<[&'static str]>,
 }
 
-impl Identity for Profiles {
+impl Identity for Operators {
   type Stream = Accepted;
 
   async fn identify(&self, stream: &Accepted) -> Result<Who, TransportError> {
     let who = self.local.identify(stream).await?;
     let at = self.next.fetch_add(1, Ordering::SeqCst);
-    let profile =
-      self.names.get(at).unwrap_or_else(|| panic!("no profile for dial {at} of {:?}", self.names));
-    Ok(Who { profile: (*profile).to_owned(), ..who })
+    let operator =
+      self.names.get(at).unwrap_or_else(|| panic!("no operator for dial {at} of {:?}", self.names));
+    Ok(Who { operator: (*operator).to_owned(), ..who })
   }
 }
 
@@ -253,8 +253,8 @@ async fn the_seen_of_each_operator_is_said_under_his_profile_and_a_reopen_keeps_
     door: None,
     host: None,
   };
-  let profiles: Arc<[&str]> = ["alice", "bob", "alice"].into();
-  let identity = Profiles { local: local.clone(), next: Arc::default(), names: profiles };
+  let operators: Arc<[&str]> = ["alice", "bob", "alice"].into();
+  let identity = Operators { local: local.clone(), next: Arc::default(), names: operators };
   tokio::spawn(async move { run(&identity, listener, settings).await });
   let (mut alice, mut bob) = (Window::dialed(&local).await, Window::dialed(&local).await);
   let life = opened(&mut alice, &at, "a.jsonl").await;
@@ -265,7 +265,7 @@ async fn the_seen_of_each_operator_is_said_under_his_profile_and_a_reopen_keeps_
   assert_eq!(
     seen_by(&mut bob, &life, "chain1").await,
     ["operator/alice"],
-    "the seen of alice is said under her profile, and no seen of bob stands"
+    "the seen of alice is said under her operator, and no seen of bob stands"
   );
   assert_eq!(bob.ask(seen("chain1")).await, Ok(Answer::Done));
   assert_eq!(seen_by(&mut alice, &life, "chain1").await, ["operator/alice", "operator/bob"]);
@@ -453,9 +453,9 @@ async fn bashed(window: &mut Window, rung: &str) -> String {
   fact[1].as_str().expect("the name of an act is a text").to_owned()
 }
 
-/// Whether a frame says that windows of a count of profiles are attached.
+/// Whether a frame says that windows of a count of operators are attached.
 fn present(count: usize) -> impl Fn(&Frame) -> bool {
-  move |frame| matches!(frame, Frame::Presence { profiles, .. } if profiles.len() == count)
+  move |frame| matches!(frame, Frame::Presence { operators, .. } if operators.len() == count)
 }
 
 /// A life opened on a new record in a folder.
@@ -508,8 +508,8 @@ async fn two_windows_on_one_life_both_stay_and_hear_it() {
   first.until(done(&rung)).await;
   let rung = first.ran(&life, "y = 2").await;
   second.until(done(&rung)).await;
-  let Ok(Answer::Presence(profiles)) = first.ask(Verb::Presence { life }).await else { panic!() };
-  assert_eq!(profiles.len(), 1, "two windows of one profile are one profile");
+  let Ok(Answer::Presence(operators)) = first.ask(Verb::Presence { life }).await else { panic!() };
+  assert_eq!(operators.len(), 1, "two windows of one operator are one operator");
 }
 
 #[tokio::test]
@@ -621,13 +621,13 @@ async fn the_presence_names_each_profile_once_and_the_draft_that_one_of_its_wind
   assert_eq!(second.ask(writes).await, Ok(Answer::Done));
   let writing = |any: bool| {
     move |frame: &Frame| {
-      matches!(frame, Frame::Presence { profiles, .. }
-        if profiles.iter().any(|one| one.writes.is_some()) == any)
+      matches!(frame, Frame::Presence { operators, .. }
+        if operators.iter().any(|one| one.writes.is_some()) == any)
     }
   };
-  let Frame::Presence { profiles, .. } = first.until(writing(true)).await else { panic!() };
-  let profile = profiles[0].profile.clone();
-  assert_eq!(profiles, [Present { profile, role: Role::Write, writes: draft }]);
+  let Frame::Presence { operators, .. } = first.until(writing(true)).await else { panic!() };
+  let operator = operators[0].operator.clone();
+  assert_eq!(operators, [Present { operator, role: Role::Write, writes: draft }]);
   let cleared = Verb::Writes { life: life.clone(), draft: None };
   assert_eq!(second.ask(cleared).await, Ok(Answer::Done));
   first.until(writing(false)).await;
@@ -1549,12 +1549,12 @@ async fn a_skill_says_each_act_under_its_name_and_a_window_under_its_operator() 
     let Ok(Answer::Value(fact)) = writer.ask(get).await else { panic!("no act {id}") };
     speakers.push(fact[2].clone());
   }
-  let Ok(Answer::Presence(profiles)) = writer.ask(Verb::Presence { life: life.clone() }).await
+  let Ok(Answer::Presence(operators)) = writer.ask(Verb::Presence { life: life.clone() }).await
   else {
     panic!("no presence")
   };
-  let profile = profiles.first().map(|one| one.profile.clone());
-  let member = json!(format!("operator/{}", profile.expect("the window is present")));
+  let operator = operators.first().map(|one| one.operator.clone());
+  let member = json!(format!("operator/{}", operator.expect("the window is present")));
   assert_eq!(speakers, [json!("skill/k"), json!("skill/k"), member]);
   let y = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
   assert!(matches!(skill.ask(y).await, Ok(Answer::Inspected { .. })), "the word of a skill ran");
@@ -1567,21 +1567,21 @@ async fn the_roster_of_a_life_names_the_user_of_the_daemon_as_a_member_of_the_op
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
-  let Ok(Answer::Presence(profiles)) = window.ask(Verb::Presence { life: life.clone() }).await
+  let Ok(Answer::Presence(operators)) = window.ask(Verb::Presence { life: life.clone() }).await
   else {
     panic!("no presence")
   };
-  let profile = profiles.first().map(|one| one.profile.clone());
-  let profile = profile.expect("the window is present");
+  let operator = operators.first().map(|one| one.operator.clone());
+  let operator = operator.expect("the window is present");
   let word = format!(
-    "members = [x[1] for x in standing()[0] if x[0] == OPERATOR][0]\nasks = offered(standing()[0], 'operator/{profile}') is not None"
+    "members = [x[1] for x in standing()[0] if x[0] == OPERATOR][0]\nasks = offered(standing()[0], 'operator/{operator}') is not None"
   );
   window.ran(&life, &word).await;
   let read = |name: &str| Verb::Inspect { life: life.clone(), name: name.to_owned(), on: None };
   let Ok(Answer::Inspected { value: members, .. }) = window.ask(read("members")).await else {
     panic!("no members")
   };
-  assert_eq!(members, json!([profile]), "the operator of the roster lists the user");
+  assert_eq!(members, json!([operator]), "the operator of the roster lists the user");
   let Ok(Answer::Inspected { value: asks, .. }) = window.ask(read("asks")).await else {
     panic!("no asks")
   };
@@ -1619,8 +1619,8 @@ async fn members(window: &mut Window, life: &str, until: &Value) -> Value {
 #[tokio::test]
 async fn the_roster_names_the_access_list_and_a_change_of_it_tells_each_life_to_stand() {
   let at = place();
-  let list = |profiles: &[&str]| -> Access {
-    profiles.iter().map(|one| ((*one).to_owned(), Role::Write)).collect()
+  let list = |operators: &[&str]| -> Access {
+    operators.iter().map(|one| ((*one).to_owned(), Role::Write)).collect()
   };
   let api = LocalApi::Port { port: 1, token: "none".to_owned() };
   let identity = Tailscale::new(api, list(&["ann", "bob"]));
@@ -1634,13 +1634,13 @@ async fn the_roster_names_the_access_list_and_a_change_of_it_tells_each_life_to_
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
-  let Ok(Answer::Presence(profiles)) = window.ask(Verb::Presence { life: life.clone() }).await
+  let Ok(Answer::Presence(operators)) = window.ask(Verb::Presence { life: life.clone() }).await
   else {
     panic!("no presence")
   };
-  let profile = profiles.first().map(|one| one.profile.clone());
-  let profile = profile.expect("the window is present");
-  let before = json!([profile, "ann", "bob"]);
+  let operator = operators.first().map(|one| one.operator.clone());
+  let operator = operator.expect("the window is present");
+  let before = json!([operator, "ann", "bob"]);
   assert_eq!(members(&mut window, &life, &before).await, before, "the list gives the members");
   let stood = stands(&mut window, &life).await;
   identity.replace(list(&["ann", "bob", "cat"]));
@@ -1651,11 +1651,11 @@ async fn the_roster_names_the_access_list_and_a_change_of_it_tells_each_life_to_
     time::sleep(Duration::from_millis(50)).await;
   }
   assert!(stands(&mut window, &life).await > stood, "a change of the list tells the life to stand");
-  let after = json!([profile, "ann", "bob", "cat"]);
+  let after = json!([operator, "ann", "bob", "cat"]);
   assert_eq!(
     members(&mut window, &life, &after).await,
     after,
-    "the life that lives names the third profile after its stand"
+    "the life that lives names the third operator after its stand"
   );
 }
 
@@ -2513,7 +2513,7 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
   let prompt = messaged(&mut window, &life, "ground the branch\nand say what moved").await;
   let resolved = |card: &Card| card.thread.standing == Standing::Resolved;
   let told = card(&mut window, resolved).await;
-  let profile = told.viewers.first().cloned().expect("the window holds the life");
+  let operator = told.viewers.first().cloned().expect("the window holds the life");
   let thread = view::Card {
     prompt: prompt.clone(),
     title: "ground the branch".to_owned(),
@@ -2527,19 +2527,19 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
     session: None,
     project: Some(main),
     held: true,
-    viewers: vec![profile.clone()],
+    viewers: vec![operator.clone()],
     pins: Vec::new(),
     since: told.since,
     thread,
   };
   assert_eq!(told, wanted);
-  assert!(told.thread.unread(&profile), "he did not read the end of the thread");
-  assert_eq!(told.place(&profile).0, view::Part::Resting);
+  assert!(told.thread.unread(&operator), "he did not read the end of the thread");
+  assert_eq!(told.place(&operator).0, view::Part::Resting);
   // What he read is told as a change of the card, and a later peer gets the card as it stands.
   let seen = Verb::Seen { life: life.clone(), about: prompt };
   assert_eq!(window.ask(seen).await, Ok(Answer::Done));
-  let read = card(&mut window, |card| card.thread.read_by(&profile)).await;
-  assert_eq!(read.place(&profile).0, view::Part::Resolved);
+  let read = card(&mut window, |card| card.thread.read_by(&operator)).await;
+  assert_eq!(read.place(&operator).0, view::Part::Resolved);
   let mut late = Window::dialed(&local).await;
   assert_eq!(cards(&mut late).await, vec![read]);
 }
@@ -2569,9 +2569,9 @@ async fn the_history_gives_what_the_window_sent_in_the_project_its_record_first_
   assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
   messaged(&mut window, &two, "ground the branch").await;
   let last = card(&mut window, told(&two, "ground the branch")).await;
-  let profile = format!("operator/{}", last.viewers.first().expect("the window holds the life"));
+  let operator = format!("operator/{}", last.viewers.first().expect("the window holds the life"));
   let sent =
-    |text: &str, python: bool| view::Sent { by: profile.clone(), text: text.to_owned(), python };
+    |text: &str, python: bool| view::Sent { by: operator.clone(), text: text.to_owned(), python };
   let wanted = vec![
     sent("ground the branch", false),
     sent("print('moved')", true),

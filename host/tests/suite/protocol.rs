@@ -293,7 +293,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
 /// A peer served on a stream in memory, under a role.
 fn served(role: Role) -> Client<DuplexStream> {
   let (ours, theirs) = duplex(1 << 16);
-  let who = Who { profile: "uael".to_owned(), role };
+  let who = Who { operator: "uael".to_owned(), role };
   tokio::spawn(async move { serve(&Echo, theirs, who, fixed(role)).await });
   Client { lines: BufReader::new(ours) }
 }
@@ -305,7 +305,7 @@ async fn hello_asking(client: &mut Client<DuplexStream>, role: Role) -> Frame {
 
 /// The peer of a window as a welcome names it.
 fn welcomed(role: Role) -> Peer {
-  Peer { profile: "uael".to_owned(), role, kind: Kind::Window, name: None }
+  Peer { operator: "uael".to_owned(), role, kind: Kind::Window, name: None }
 }
 
 /// The peer that the welcome of a daemon of this protocol names.
@@ -463,6 +463,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "9dfb40bcf853f5a09baf707eaf62dbd84bb296e272d15e14c6dee5d3409f147f",
   "9ae47cfaaabc1ce821ce560227303a7fc4d613e2b4862ad2707e8d39df1eaab1",
   "62b1ed170f89f2c4c615cd82afbd37d02a5451522be0a0477e558667c338927f",
+  "d36fe66224a3f790472dc69dcfaf133072497f9023cdf9c484f9e81f7b95f435",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
@@ -599,7 +600,7 @@ async fn each_verb_makes_a_round_trip_on_the_local_transport() {
   else {
     panic!("no welcome");
   };
-  assert_eq!((peer.role, peer.profile.is_empty()), (Role::Write, false));
+  assert_eq!((peer.role, peer.operator.is_empty()), (Role::Write, false));
   for (id, verb) in (1..).zip(verbs()) {
     let answer = Answer::Value(serde_json::to_value(&verb).unwrap());
     assert_eq!(client.ask(id, verb).await, Frame::Reply { id, answer });

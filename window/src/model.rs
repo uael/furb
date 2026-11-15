@@ -210,7 +210,7 @@ impl Model {
     }
     match heard {
       Ok(Frame::Reply { answer: Answer::Welcome { peer, .. }, .. }) => {
-        (told.login, told.link) = (peer.profile, Link::Dialing);
+        (told.login, told.link) = (peer.operator, Link::Dialing);
       }
       Ok(Frame::Reply { answer: Answer::Cards(cards), .. }) => {
         (told.cards, told.heard, told.link) = (cards, now, Link::Listed);

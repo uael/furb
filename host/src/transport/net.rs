@@ -354,9 +354,9 @@ impl Tailscale {
     });
   }
 
-  /// Each profile that the access list names now.
-  pub fn profiles(&self) -> Vec<String> {
-    self.access.borrow().profiles()
+  /// Each operator that the access list names now.
+  pub fn operators(&self) -> Vec<String> {
+    self.access.borrow().operators()
   }
 
   /// The access list as it changes.
@@ -364,14 +364,14 @@ impl Tailscale {
     self.access.subscribe()
   }
 
-  /// The role that the access list gives a peer, as it changes: the role of its profile stands
-  /// until the list says otherwise, and none once the list drops the profile.
+  /// The role that the access list gives a peer, as it changes: the role of its operator stands
+  /// until the list says otherwise, and none once the list drops the operator.
   pub fn follow(&self, who: &Who) -> Granted {
     let (told, granted) = watch::channel(Some(who.role));
-    let (mut access, profile) = (self.changes(), who.profile.clone());
+    let (mut access, operator) = (self.changes(), who.operator.clone());
     tokio::spawn(async move {
       loop {
-        let role = access.borrow_and_update().role(&profile).ok();
+        let role = access.borrow_and_update().role(&operator).ok();
         told.send_if_modified(|held| mem::replace(held, role) != role);
         tokio::select! {
           () = told.closed() => return,
@@ -391,14 +391,14 @@ impl Tailscale {
 impl Identity for Tailscale {
   type Stream = TcpStream;
 
-  /// The profile of the peer at the address of the stream, the login that Tailscale gives, refused
+  /// The operator of the peer at the address of the stream, the login that Tailscale gives, refused
   /// unless the access list gives it a role.
   async fn identify(&self, stream: &TcpStream) -> Result<Who, TransportError> {
     let addr = stream.peer_addr().map_err(TransportError::Accept)?;
     let addr: String = form_urlencoded::byte_serialize(addr.to_string().as_bytes()).collect();
     let whois: Whois = self.api.asked(&format!("/localapi/v0/whois?addr={addr}")).await?;
     let role = self.access.borrow().role(&whois.profile.login)?;
-    Ok(Who { profile: whois.profile.login, role })
+    Ok(Who { operator: whois.profile.login, role })
   }
 }
 
@@ -477,7 +477,7 @@ impl Ticket {
       }
       no => TransportError::Upgrade(Box::new(no)),
     })?;
-    Ok((Messages::new(socket), Who { profile: self.login.to_string(), role: Role::Write }))
+    Ok((Messages::new(socket), Who { operator: self.login.to_string(), role: Role::Write }))
   }
 }
 

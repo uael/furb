@@ -8,14 +8,14 @@ that schema. A test of each side fails when the schema or the types do not agree
 ## Transports
 
 A transport has two parts: a dialer, which reaches the daemon, and an identity, which says who a peer is. A peer is
-an operator by its profile, which is the login that its transport proved. The record never names a window, and two
-windows of one profile are one operator.
+an operator: the login that its transport proved. The record never names a window, and two windows of one operator
+are one operator.
 
 - On macOS and Linux, the daemon listens on the socket `host.sock` in a folder of mode 0700 that the user owns. The
   daemon refuses a folder that another user owns or can open, and a peer of another user.
 - On Windows, the daemon listens on a named pipe whose access list lets in the user alone, and which takes no peer of
   another machine.
-- The profile of a local peer is the login of the user, and it has the role to write.
+- The operator of a local peer is the login of the user, and it has the role to write.
 - A second daemon cannot listen where a daemon listens. A socket that no daemon answers is stale, and gives its place.
 
 ### The door of the windows
@@ -29,7 +29,7 @@ daemon.
 - The daemon makes the folder of that file on a new cache. On Unix the file is of mode 0600 in a folder of mode 0700; on
   Windows the file and the folder that the daemon makes hold an access list that lets in their owner alone.
 - A peer that gives no token in the query of its upgrade, or another one, gets the HTTP status 403 and no socket.
-- The profile of a peer of the door is the login of the user, and it has the role to write.
+- The operator of a peer of the door is the login of the user, and it has the role to write.
 - A window dials the socket first: `window.json` stays after a daemon that a kill ended, and only a daemon that
   answers on its socket holds the door that the file names.
 
@@ -44,13 +44,13 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
 
 - `tailnet` gives the port of each transport. The daemon listens by TCP, by WebSocket, or both, on the first address
   that Tailscale gives the machine, IPv4 before IPv6. With no `tailnet`, the daemon listens on the machine alone.
-- The profile of a peer is the login that the local API of Tailscale gives for its address. `roles` gives each profile
-  its role, and the daemon closes the peer of a profile that it does not name, before its hello.
+- The operator of a peer is the login that the local API of Tailscale gives for its address. `roles` gives each operator
+  its role, and the daemon closes the peer of an operator that it does not name, before its hello.
 - `stall` gives the seconds after which the daemon tells that a life with an open act and no new fact stalled, as
   the section on attach says. With no `stall`, the bound is 1200 seconds.
 - The daemon reads `host.json` when it starts and at each change of the file, and a file that does not parse keeps
-  the list before. A change of `roles` takes effect at once on each connected peer: a profile that the file drops gets
-  a refusal and loses its connection, and a profile whose role changes holds the new role from its next verb. A change
+  the list before. A change of `roles` takes effect at once on each connected peer: an operator that the file drops gets
+  a refusal and loses its connection, and an operator whose role changes holds the new role from its next verb. A change
   of `tailnet` or `stall` takes effect at the next start or upgrade.
 - The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
   standalone download. It does not find the app of the App Store.
@@ -78,12 +78,12 @@ The first frame of a peer is its hello:
 - `role` is optional. The daemon gives the peer the lesser of the role that it asks and the role that its transport
   proved, so a peer that asks `read` is a reader on any transport, and a peer never has more than its transport
   proved. With no `role`, the peer has the role that its transport proved.
-- The daemon answers with its protocol and the peer as it knows it: its `profile`, its role, its kind and its name.
+- The daemon answers with its protocol and the peer as it knows it: its `operator`, its role, its kind and its name.
   The answer also names the `machine` of the daemon, without its domain, and the `build` of the daemon, which is its
   version of furb.
 
   ```json
-  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"profile": "uael", "role": "write", "kind": "window", "name": null}, "machine": "studio", "build": "0.4.2"}}
+  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"operator": "uael", "role": "write", "kind": "window", "name": null}, "machine": "studio", "build": "0.4.2"}}
   ```
 
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A first frame
@@ -256,7 +256,7 @@ daemon answers requests in any order.
     checkout of the project whose sessions hold the record, when the list of the machine names one, else for a
     record that a life of the daemon holds, the checkout whose `.furb/sessions` holds it;
   - `prompt`, the name of the prompt of the thread, and `title`, the first line of its message;
-  - `standing`, how the thread stands, as `{"is": ...}`: `asks` with `of`, the profile of the one member that its
+  - `standing`, how the thread stands, as `{"is": ...}`: `asks` with `of`, the login of the one operator that its
     question waits for, or null when it waits for each operator; `failed`; `paused` with `by`, who said the pause;
     `thinks`, `runs` or `delegates` while it works; `stopped` after a cancel; `rests` while it is open and nothing
     works; and `resolved` once its model closed its prompt;
@@ -264,8 +264,8 @@ daemon answers requests in any order.
     start of its work while its model and its commands take turns;
   - `model`, the model that wrote its last word, and `agents`, how many threads work under it;
   - `readers`, the site of each operator who read the thread to its end: `operator` for each of them, or
-    `operator/<profile>` for one member;
-  - `held`, whether a life holds the record now, `viewers`, the profile of each person whose window holds that
+    `operator/<login>` for one member;
+  - `held`, whether a life holds the record now, `viewers`, each operator whose window holds that
     life, and `pins`, the holder of each pin of it, as `list` gives them. A card that is `held` with no viewer works
     with no view.
 
@@ -337,12 +337,12 @@ daemon answers requests in any order.
   ended are no facts of the record: the life holds them while it lives, so a life that opens again shows no thought of
   the words before it.
 - After each `attach`, `detach` and `writes`, the daemon pushes to each window of the life a frame `presence` with
-  the `life` and its `profiles`, each profile that a window holds now, once, in the order that its first window
-  attached: its `profile`, the greatest `role` of its windows, and `writes`, the draft that one of its windows
+  the `life` and its `operators`, each operator whose window holds it now, once, in the order that his first window
+  attached: his `operator`, the greatest `role` of his windows, and `writes`, the draft that one of his windows
   writes, in the thread `on`, or for a new thread when `on` is null, or null when none writes. A window says `writes`
   when its draft starts and again with null when it empties, and the daemon drops the draft of a window that leaves.
-  Presence is no fact of the record, and no model is told of a connect or a leave. A model is told of a profile that
-  the access list adds or drops, as the stand that follows appends it to the roster.
+  Presence is no fact of the record, and no model is told of a connect or a leave. A model is told of an operator that
+  the access list adds or drops, as the stand that follows names it in the roster.
 - While a life opens, the daemon pushes to each window of the life a frame
   `opening` with the `life`, the `stage` of the open, and two numbers: `done`, the work done of that stage, and `of`,
   the work known of it. A window draws a progress bar from them.
@@ -439,8 +439,8 @@ once it listens. A second daemon refuses to start there.
   it from its record.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. Each verb of
   a skill that says an act or a fact, as `run`, `prompt` or `close`, speaks in the life under `skill/<name>`, but `seen`, `queue`, `unqueue` and `config` speak as the operator, whoever says them, since they are the operator's own, and
-  the verbs of a window speak under `operator/<profile>`, the member that its transport proved, so a model asks one
-  person with `to="operator/<profile>"`. It holds no
+  the verbs of a window speak under `operator/<login>`, the member that its transport proved, so a model asks one
+  person with `to="operator/<login>"`. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
 - The daemon starts the process that the manifest of a skill names under `furb-process` when a life plays the skill: at

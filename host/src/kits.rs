@@ -45,7 +45,7 @@ impl Kit {
   pub(crate) async fn served(self, end: oneshot::Receiver<()>) {
     let (outbox, mut frames) = Outbox::new();
     let peer = Peer {
-      profile: String::new(),
+      operator: String::new(),
       role: Role::Write,
       kind: Kind::Skill,
       name: Some(self.name.clone()),

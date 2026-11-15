@@ -96,15 +96,15 @@ pub fn operator(name: &str) -> bool {
   name.strip_prefix(OPERATOR).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
 }
 
-/// Who made an act, as a window names it: the operator, a member who answers as him by his profile,
+/// Who made an act, as a window names it: the operator, a member who answers as him by his login,
 /// a model with its effort when its actor names one, a skill, or the engine itself.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "role", rename_all = "snake_case")]
 pub enum Maker {
   Operator,
   Member {
-    #[serde(alias = "login")]
-    profile: String,
+    #[serde(alias = "login", alias = "profile")]
+    operator: String,
   },
   Model {
     model: String,
@@ -118,7 +118,7 @@ pub enum Maker {
 
 impl Maker {
   /// The maker that an actor names, as a chain or a reply names it: the operator, a member when
-  /// the profile after `operator/` is one of these members, else the operator in one of his
+  /// the operator after `operator/` is one of these members, else the operator in one of his
   /// sessions; a model else, read as [`leveled`] reads it, unless the models hold the whole
   /// name. No actor is the engine.
   pub fn of(actor: &str, models: &[String], members: &[String]) -> Self {
@@ -130,8 +130,8 @@ impl Maker {
       "" => Self::Engine,
       _ if operator(actor) => {
         match actor.strip_prefix(OPERATOR).and_then(|rest| rest.strip_prefix('/')) {
-          Some(profile) if members.iter().any(|one| one == profile) => {
-            Self::Member { profile: profile.to_owned() }
+          Some(login) if members.iter().any(|one| one == login) => {
+            Self::Member { operator: login.to_owned() }
           }
           _ => Self::Operator,
         }

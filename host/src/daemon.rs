@@ -16,7 +16,7 @@
 //! does not hold yet, and the new daemon would open a second life on that record.
 //!
 //! When the operator turns it on, the daemon also listens on the address of the machine on the
-//! tailnet, by TCP and by WebSocket, and lets in each peer whose profile the access list names,
+//! tailnet, by TCP and by WebSocket, and lets in each peer whose operator the access list names,
 //! with the role that it gives (#983, D6). A web view reaches no socket of the machine, so the
 //! daemon also opens a door of the windows, a WebSocket on loopback, which lets in the user alone:
 //! the peer that gives the token that the daemon wrote in a file of its folder.
@@ -452,7 +452,7 @@ impl Daemon {
       readers: Readers::default(),
       empty,
     };
-    lives.members.set(lives.profiles());
+    lives.members.set(lives.operators());
     lives.adopt(handed);
     tokio::spawn(lives.kept(heard));
     (Self { asks }, leaving, emptied)
@@ -575,12 +575,12 @@ async fn awaited(handle: &LifeHandle, life: String, act: String) -> Result<Answe
   }
 }
 
-/// The site that a peer speaks as: a skill by its name, a window as the operator under its profile,
-/// and none for any other peer, which speaks as the life itself.
+/// The site that a peer speaks as: a skill by its name, a window as its operator by his login, and
+/// none for any other peer, which speaks as the life itself.
 fn site(peer: &Peer) -> Option<String> {
   match (peer.kind, &peer.name) {
     (Kind::Skill, Some(name)) => Some(processes::speaker(name)),
-    (Kind::Window, _) => Some(format!("{OPERATOR}/{}", peer.profile)),
+    (Kind::Window, _) => Some(format!("{OPERATOR}/{}", peer.operator)),
     _ => None,
   }
 }
@@ -848,7 +848,7 @@ impl Lives {
           continue;
         }
         Some(()) = changed(self.changes.as_mut()) => {
-          self.members.set(self.profiles());
+          self.members.set(self.operators());
           self.restand();
           continue;
         }
@@ -1004,14 +1004,14 @@ impl Lives {
     }
   }
 
-  /// The profiles of the members of each life, whom a model asks as `operator/<profile>`: the user
-  /// of the daemon, then each profile of the access list of the tailnet, each once.
-  fn profiles(&self) -> Vec<String> {
+  /// The operators who are members of each life, whom a model asks as `operator/<login>`: the
+  /// user of the daemon, then each operator of the access list of the tailnet, each once.
+  fn operators(&self) -> Vec<String> {
     let mut all: Vec<String> = own().ok().into_iter().collect();
-    let listed = self.settings.tailnet.iter().flat_map(|one| one.identity.profiles());
-    for profile in listed {
-      if !all.contains(&profile) {
-        all.push(profile);
+    let listed = self.settings.tailnet.iter().flat_map(|one| one.identity.operators());
+    for operator in listed {
+      if !all.contains(&operator) {
+        all.push(operator);
       }
     }
     all
@@ -1304,7 +1304,7 @@ impl Lives {
     let record = Path::new(life);
     let (viewers, pins) = match self.held.get(life) {
       Some(Held { stage: Stage::Living(holders), .. }) => {
-        let viewers = holders.presence().into_iter().map(|one| one.profile).collect();
+        let viewers = holders.presence().into_iter().map(|one| one.operator).collect();
         (viewers, holders.pins())
       }
       _ => (Vec::new(), Vec::new()),

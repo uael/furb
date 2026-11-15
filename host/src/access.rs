@@ -1,6 +1,6 @@
 //! Who may reach the daemon over the network, and with which role (#983, Q5): the file
 //! `host.json` in the config folder of furb, which turns on the daemon on the tailnet and gives
-//! each profile its role. The daemon refuses a profile that the file does not name.
+//! each operator its role. The daemon refuses an operator that the file does not name.
 
 use std::{
   collections::HashMap,
@@ -36,7 +36,7 @@ pub struct Ports {
   pub websocket: Option<u16>,
 }
 
-/// The role of each profile of the network, by the login that Tailscale gives.
+/// The role of each operator of the network, by the login that Tailscale gives.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(transparent)]
 pub struct Access(HashMap<String, Role>);
@@ -56,17 +56,17 @@ impl Config {
 }
 
 impl Access {
-  /// Each profile that the list names, in the order of their names.
-  pub fn profiles(&self) -> Vec<String> {
+  /// Each operator that the list names, in the order of their names.
+  pub fn operators(&self) -> Vec<String> {
     let mut all: Vec<String> = self.0.keys().cloned().collect();
     all.sort_unstable();
     all
   }
 
-  /// The role of a profile, or its refusal when the list does not name it.
-  pub fn role(&self, profile: &str) -> Result<Role, AccessError> {
-    let unlisted = || AccessError::Unlisted { profile: profile.to_owned() };
-    self.0.get(profile).copied().ok_or_else(unlisted)
+  /// The role of an operator, or its refusal when the list does not name it.
+  pub fn role(&self, operator: &str) -> Result<Role, AccessError> {
+    let unlisted = || AccessError::Unlisted { operator: operator.to_owned() };
+    self.0.get(operator).copied().ok_or_else(unlisted)
   }
 }
 

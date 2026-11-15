@@ -56,7 +56,7 @@ pub struct Held {
   /// the order they began.
   unordered: bool,
   /// The place of each act or chain at which each operator last said that he saw it, by the site
-  /// that said it: `operator` alone, or `operator/<profile>` for the window of a member. A seen
+  /// that said it: `operator` alone, or `operator/<login>` for the window of a member. A seen
   /// that a later life says again as the journal names no site, so it stands for each of them.
   seen: HashMap<String, HashMap<String, u64>>,
   /// The place of the last standing that is done, whose roster offers each actor its window.
@@ -222,7 +222,7 @@ impl Held {
     self.on.get(chain).into_iter().flatten().map(|at| &*self.acts[*at])
   }
 
-  /// Each site that said what it saw, and the operator with no profile, who saw what the journal
+  /// Each site that said what it saw, and the operator with no login, who saw what the journal
   /// says again.
   pub(super) fn sites(&self) -> impl Iterator<Item = &str> {
     let said =

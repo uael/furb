@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 35;
+pub const PROTOCOL: u32 = 36;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -54,22 +54,22 @@ pub struct Hello {
   pub role: Option<Role>,
 }
 
-/// A peer as the daemon knows it after its hello: its profile, which is the login that its
-/// transport proved, its role, its kind, and the name of a skill. No window is named apart from its
-/// profile: two windows of one profile are one operator.
+/// A peer as the daemon knows it after its hello: its operator, the login that its transport
+/// proved, its role, its kind, and the name of a skill. No window is named apart from its
+/// operator, so two windows of one operator are one operator.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Peer {
-  pub profile: String,
+  pub operator: String,
   pub role: Role,
   pub kind: Kind,
   pub name: Option<String>,
 }
 
-/// A profile that a window of a life holds now: the profile, the greatest role of its windows, and
-/// the draft that it writes, when one of its windows writes one.
+/// An operator whose window holds a life now: the operator, the greatest role of his windows,
+/// and the draft that he writes, when one of his windows writes one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Present {
-  pub profile: String,
+  pub operator: String,
   pub role: Role,
   pub writes: Option<Draft>,
 }
@@ -169,7 +169,7 @@ pub enum Verb {
     #[serde(default)]
     cancel: bool,
   },
-  /// Each profile that a window of a life holds now.
+  /// Each operator whose window holds a life now.
   Presence {
     life: String,
   },
@@ -564,9 +564,9 @@ pub enum Frame {
   Refused { id: Option<u64>, error: ProtocolError, why: String },
   /// One event of a life that the peer attached, under its place in the log of the life.
   Event { life: String, seq: Seq, event: Event },
-  /// Each profile that a window of a life holds now, pushed to each of its windows after each
+  /// Each operator that a window of a life holds now, pushed to each of its windows after each
   /// attach, detach and draft.
-  Presence { life: String, profiles: Vec<Present> },
+  Presence { life: String, operators: Vec<Present> },
   /// A change of the cards of one record, pushed to each peer that asked the cards: each card that
   /// is new or that changed, and the prompt of each card that the record holds no more.
   Cards { life: String, changed: Vec<Card>, gone: Vec<String> },
@@ -705,8 +705,8 @@ pub struct Listed {
 /// holds the name of the session when it has one, the main checkout of the project whose sessions
 /// hold the record, when the list of the machine names one, else the checkout whose
 /// `.furb/sessions` holds a record that a life holds, whether a life holds the record now,
-/// the profile of each person whose window holds that life, and the second of the epoch since which
-/// the thread stands as it does. A record that has no index of its threads yet gives no card until
+/// each operator whose window holds that life, and the second of the epoch since which the thread
+/// stands as it does. A record that has no index of its threads yet gives no card until
 /// the daemon made its index.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Card {
@@ -725,8 +725,8 @@ pub struct Card {
 impl Card {
   /// Where a member finds the card in a list: its part, its rank in that part, and its time. What
   /// needs him waits the longest first, and each other part shows the newest first.
-  pub fn place(&self, profile: &str) -> (view::Part, u8, i64) {
-    let (part, rank) = self.thread.part(profile);
+  pub fn place(&self, operator: &str) -> (view::Part, u8, i64) {
+    let (part, rank) = self.thread.part(operator);
     let since = i64::try_from(self.since).unwrap_or(i64::MAX);
     (part, rank, if part == view::Part::NeedsYou { since } else { -since })
   }

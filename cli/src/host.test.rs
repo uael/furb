@@ -9,14 +9,14 @@ use tokio::time::timeout;
 
 use super::followed;
 
-/// An access list of the profiles that write.
-fn list(profiles: &[&str]) -> Access {
-  profiles.iter().map(|one| ((*one).to_owned(), Role::Write)).collect()
+/// An access list of the operators that write.
+fn list(operators: &[&str]) -> Access {
+  operators.iter().map(|one| ((*one).to_owned(), Role::Write)).collect()
 }
 
 /// The file of the roles of a list.
-fn written(profiles: &[&str]) -> String {
-  let roles: Vec<String> = profiles.iter().map(|one| format!("\"{one}\": \"write\"")).collect();
+fn written(operators: &[&str]) -> String {
+  let roles: Vec<String> = operators.iter().map(|one| format!("\"{one}\": \"write\"")).collect();
   format!("{{\"roles\": {{{}}}}}", roles.join(", "))
 }
 
@@ -38,17 +38,17 @@ async fn a_change_of_host_json_gives_its_profiles_and_a_file_that_does_not_parse
   let mut changes = identity.changes();
   fs::write(&path, written(&["ann", "bob", "cat"])).unwrap();
   timeout(Duration::from_secs(20), changes.changed()).await.expect("the list changes").unwrap();
-  assert!(changes.borrow().role("cat").is_ok(), "the door gives the new profile its role");
+  assert!(changes.borrow().role("cat").is_ok(), "the door gives the new operator its role");
   assert_eq!(
-    identity.profiles(),
+    identity.operators(),
     ["ann", "bob", "cat"],
-    "a life opened after it names the profile"
+    "a life opened after it names the operator"
   );
   fs::write(&path, "{ not json").unwrap();
   let why = heard.recv_timeout(Duration::from_secs(20)).expect("the daemon says why");
   assert!(why.contains("keeps the access list"), "{why}");
   assert_eq!(
-    identity.profiles(),
+    identity.operators(),
     ["ann", "bob", "cat"],
     "a file that does not parse keeps the list"
   );

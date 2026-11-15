@@ -500,9 +500,9 @@ export interface Opening {
    */
   config?: string
   /**
-   * The home of the profiles of the members who answer as the operator, as the access list of a
+   * The home of the members who answer as the operator, each by his login, as the access list of a
    * host and its local user give them, each of which a prompt can ask with
-   * `to="operator/<profile>"`; none when unsaid. A host that changes it changes the roster at the
+   * `to="operator/<login>"`; none when unsaid. A host that changes it changes the roster at the
    * next stand.
    */
   members?: Array<string>

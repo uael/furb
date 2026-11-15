@@ -90,11 +90,11 @@ fn folder() -> Yard {
 
 /// A fake of the local API of Tailscale on a port of loopback, which gives one login for each
 /// address, and says the path of each request that it heard.
-async fn tailscale(profile: &str) -> (LocalApi, mpsc::UnboundedReceiver<String>) {
+async fn tailscale(operator: &str) -> (LocalApi, mpsc::UnboundedReceiver<String>) {
   let listener = TcpListener::bind(loopback()).await.unwrap();
   let port = listener.local_addr().unwrap().port();
   let (tell, heard) = mpsc::unbounded_channel();
-  let profile = profile.to_owned();
+  let operator = operator.to_owned();
   tokio::spawn(async move {
     loop {
       let (mut stream, _) = listener.accept().await.unwrap();
@@ -111,7 +111,7 @@ async fn tailscale(profile: &str) -> (LocalApi, mpsc::UnboundedReceiver<String>)
       let body = if path.starts_with("/localapi/v0/status") {
         json!({"TailscaleIPs": ["127.0.0.1"]})
       } else {
-        json!({"UserProfile": {"ID": 1, "LoginName": profile}})
+        json!({"UserProfile": {"ID": 1, "LoginName": operator}})
       };
       let body = body.to_string();
       let answer = format!(
@@ -127,8 +127,8 @@ async fn tailscale(profile: &str) -> (LocalApi, mpsc::UnboundedReceiver<String>)
   (LocalApi::Port { port, token: "proof".to_owned() }, heard)
 }
 
-fn access(profile: &str, role: Role) -> Access {
-  [(profile.to_owned(), role)].into_iter().collect()
+fn access(operator: &str, role: Role) -> Access {
+  [(operator.to_owned(), role)].into_iter().collect()
 }
 
 fn loopback() -> SocketAddr {
@@ -136,8 +136,8 @@ fn loopback() -> SocketAddr {
 }
 
 /// The peer of a window as a welcome names it.
-fn welcomed(profile: &str, role: Role) -> Peer {
-  Peer { profile: profile.to_owned(), role, kind: Kind::Window, name: None }
+fn welcomed(operator: &str, role: Role) -> Peer {
+  Peer { operator: operator.to_owned(), role, kind: Kind::Window, name: None }
 }
 
 /// The peer that the welcome of a daemon of this protocol names.
@@ -209,7 +209,7 @@ async fn a_profile_with_no_entry_is_refused() {
   assert!(
     matches!(
       &refused,
-      Err(TransportError::Access(AccessError::Unlisted { profile })) if profile == "mallory@github"
+      Err(TransportError::Access(AccessError::Unlisted { operator })) if operator == "mallory@github"
     ),
     "{refused:?}"
   );

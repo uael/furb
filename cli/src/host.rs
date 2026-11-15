@@ -1,10 +1,10 @@
 //! `furb host`: the daemon of this machine, which holds each life by its record, at one place in
 //! the cache of furb, as `furb-host` serves it. The file `host.json` of the config folder of furb
-//! turns on the daemon on the tailnet, gives each profile of the network its role, and gives the
+//! turns on the daemon on the tailnet, gives each operator of the network its role, and gives the
 //! bound of a stall. The daemon reads the file again at each change of it, and each peer of the
-//! tailnet that is connected follows the list at once: a profile that the file drops is refused
-//! and loses its connection, a profile whose role changes holds the new role from its next verb,
-//! and a profile that the file adds is let in at its next connection. A file that does not parse
+//! tailnet that is connected follows the list at once: an operator that the file drops is refused
+//! and loses its connection, an operator whose role changes holds the new role from its next verb,
+//! and an operator that the file adds is let in at its next connection. A file that does not parse
 //! keeps the list before.
 
 use std::{path::Path, time::Duration};
