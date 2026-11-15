@@ -205,7 +205,7 @@ impl Daemon {
     Self::spawned(yard.furb(&["host"]), true).await
   }
 
-  async fn spawned(mut command: Command, listens: bool) -> Self {
+  pub(crate) async fn spawned(mut command: Command, listens: bool) -> Self {
     let mut child = command.spawn().unwrap();
     if listens {
       let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();

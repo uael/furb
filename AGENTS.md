@@ -106,7 +106,9 @@ API of its own:
   command it hands the terminal to the window, `furb-window`, which it finds in `FURB_WINDOW`, beside itself, on PATH,
   or in the target of the checkout it was built from. A program that wants a life dials the daemon, as `docs/protocol.md` says. `prompt`,
   `turns`, `run` and `skills` each open one life on a record, but `prompt` says its message through the daemon, as a
-  window says it, when the daemon holds the life of the record, `facts` prints each fact of a record with no life,
+  window says it, when the daemon holds the life of the record, and with `--hold <task>` first opens the life in the
+  daemon, pinned by the name of the task, so an agent runs a life with no window and each window lists it with what
+  holds it, which `end` ends; `facts` prints each fact of a record with no life,
   `checkpoint` writes the checkpoint of a life, `catalog` shows where the models came from, and `host` serves the
   daemon of the machine of `furb-host`. The package `furb`
   depends on the wheel of `furb-cli`, so `pip install furb` gives the command `furb`.

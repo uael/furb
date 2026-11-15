@@ -50,6 +50,9 @@ pub(crate) enum CliError {
   /// The machine has no cache of furb, where the daemon lives.
   #[error("this machine has no cache of furb, so the daemon has no place")]
   NoCache,
+
+  #[error("no daemon listens on this machine: start it with furb host")]
+  NoDaemon,
   /// The daemon stopped.
   #[error(transparent)]
   Daemon(#[from] DaemonError),

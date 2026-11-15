@@ -3,7 +3,9 @@
 //! With no command, furb hands the terminal to the window. `prompt`, `turns`, `run` and
 //! `skills` each open one life and print what it came to, and `facts` prints a record as
 //! it is. `prompt` on the record of a life that the daemon of the machine holds says its
-//! message through the daemon, as a window says it, and opens no life. Every life runs on the
+//! message through the daemon, as a window says it, and opens no life; with `--hold`, it first
+//! opens the life in the daemon, pinned by the name of a task, so the life runs on with no window
+//! until `end` ends it. Every life runs on the
 //! engine of the crate, on the ears of the World that the crate writes, the extensions among
 //! them, and on the provider of the model of its default actor and of the models that `--roster`
 //! names, or of every model that the catalog of the crate offers when `--roster` names none.
@@ -98,10 +100,25 @@ enum Command {
     /// that the operator does not answer.
     #[arg(long, default_value = life::SHAPE)]
     shape: String,
+    /// Open the life of the record in the daemon of this machine, held by the name of a task, so it
+    /// runs on with no window after the command, each window lists it with what holds it, and a
+    /// later prompt on the record reaches it while it runs; `furb end` ends it.
+    #[arg(long, value_name = "TASK", requires = "record")]
+    hold: Option<String>,
     #[command(flatten)]
     place: Place,
     #[command(flatten)]
     stand: Stand,
+  },
+  /// End the life of a record that the daemon of this machine holds, as a window ends it: it writes
+  /// its image, each window hears its end, and its next open takes its open work again.
+  End {
+    /// The record of the life.
+    #[arg(long)]
+    record: PathBuf,
+    /// Cancel each open work of the life first, so its next open takes none.
+    #[arg(long)]
+    cancel: bool,
   },
   /// Print the turns of the root of a life made again from its record, which only inspects it.
   Turns {
@@ -247,15 +264,20 @@ fn commanded(furb: Furb) -> Result<(), CliError> {
 /// The command that the operator gave, or the window when he gave none.
 async fn command(furb: Furb) -> Result<(), CliError> {
   match furb.command {
-    Some(Command::Prompt { message, to, shape, place, mut stand }) => {
+    Some(Command::Prompt { message, to, shape, hold, place, mut stand }) => {
       // The actor of the prompt is one the life offers, which a roster that names models must
       // name too.
       if !stand.roster.is_empty() {
         stand.roster.extend(life::actor(&to).await.model);
       }
+      let opening = stand.on(place.opening(true));
+      if let Some(task) = hold {
+        host::held(&opening, stand.roster, &task).await?;
+      }
       let asked = Asked { shape: &shape, message: &message, to: &to };
-      prompt(stand.on(place.opening(true)), asked).await
+      prompt(opening, asked).await
     }
+    Some(Command::End { record, cancel }) => host::ended(&record, cancel).await,
     Some(Command::Turns { record, cwd, stand }) => {
       let place = Place { record: Some(record), cwd };
       turns(stand.on(Opening { inspecting: Some(true), ..place.opening(false) })).await

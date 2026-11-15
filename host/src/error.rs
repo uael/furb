@@ -58,10 +58,10 @@ impl From<config::Error> for LifeError {
 pub enum DaemonError {
   #[error(transparent)]
   Transport(#[from] TransportError),
-  /// The daemon that runs refused the handover.
-  #[error("the daemon that runs refused the handover: {0}")]
+  /// The daemon that runs refused a verb of this peer: the handover, or a verb of the command line.
+  #[error("the daemon that runs refused: {0}")]
   Refused(#[from] ProtocolError),
-  #[error("the daemon that runs closed before it gave its lives")]
+  #[error("the daemon that runs closed before it answered")]
   Unanswered,
   #[error("the daemon that runs answered no frame of the protocol")]
   Unread(#[source] serde_json::Error),

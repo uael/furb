@@ -15,6 +15,7 @@ use std::{
 use futures::{SinkExt, StreamExt};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher, recommended_watcher};
 use serde_json::Value;
+use tokio::time;
 use tokio_util::codec::{Framed, LinesCodec};
 
 use furb::{life::Opening, skill::Places, view::Phase, world};
@@ -71,16 +72,8 @@ pub(crate) async fn said(
   message: String,
   to: &str,
 ) -> Result<Option<Value>, CliError> {
-  let stream = match Local::new(folder()?).dial().await {
-    Ok(stream) => stream,
-    Err(TransportError::Dial { .. }) => return Ok(None),
-    Err(no) => return Err(DaemonError::from(no).into()),
-  };
-  let mut lines = Framed::new(stream, LinesCodec::new_with_max_length(BOUND));
-  let life = path::absolute(record).unwrap_or_else(|_| record.to_owned()).display().to_string();
-  let name = Some("furb prompt".to_owned());
-  let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name, role: None });
-  asked(&mut lines, 0, hello).await?;
+  let Some(mut lines) = dialed("furb prompt").await? else { return Ok(None) };
+  let life = named(record);
   let to = (!to.is_empty()).then(|| to.to_owned());
   let prompt = Verb::Prompt { life: life.clone(), shape: shape.to_owned(), message, to, on: None };
   let id = match asked(&mut lines, 1, prompt).await {
@@ -96,6 +89,81 @@ pub(crate) async fn said(
   let done = acts.into_iter().find(|one| one.id == id).map(|one| one.phase);
   let Some(Phase::Done(value)) = done else { return Err(DaemonError::Unanswered.into()) };
   Ok(Some(value))
+}
+
+/// The life of a record opened in the daemon of this machine and pinned by the name of a task, so
+/// it runs on with no window after the command ends, and each window lists it with what holds it.
+/// An open of a life that the daemon holds already is no fault: the pin then holds it too.
+pub(crate) async fn held(
+  opening: &Opening,
+  roster: Vec<String>,
+  task: &str,
+) -> Result<(), CliError> {
+  let Some(record) = opening.record.as_deref() else { return Ok(()) };
+  let Some(mut lines) = dialed(task).await? else { return Err(CliError::NoDaemon) };
+  let life = named(Path::new(record));
+  let roster = (!roster.is_empty()).then_some(roster);
+  let open = Verb::Open {
+    life: life.clone(),
+    cwd: Some(opening.directory.clone()),
+    actor: opening.actor.clone(),
+    roster,
+    skills: None,
+    config: None,
+    claude: None,
+    answers: false,
+    attach: None,
+  };
+  asked(&mut lines, 1, open).await?;
+  asked(&mut lines, 2, Verb::Pin { life, holder: task.to_owned() }).await?;
+  Ok(())
+}
+
+/// The end of the life of a record that the daemon of this machine holds, as a window ends it:
+/// with `cancel`, each open work of the life is cancelled first. The daemon takes the end at once
+/// and the life writes its image after, so the command returns once the daemon holds the life no
+/// more, and a command after it finds the record free.
+pub(crate) async fn ended(record: &Path, cancel: bool) -> Result<(), CliError> {
+  let Some(mut lines) = dialed("furb end").await? else { return Err(CliError::NoDaemon) };
+  let life = named(record);
+  asked(&mut lines, 1, Verb::End { life: life.clone(), cancel }).await?;
+  // The daemon tells the end of a life only to a window that holds it, so the command asks the
+  // list again until the life leaves it, within the bound of a command.
+  let gone = async {
+    for id in 2.. {
+      let Answer::Lives(listed) = asked(&mut lines, id, Verb::List { config: None }).await? else {
+        return Err(DaemonError::Unanswered);
+      };
+      if !listed.iter().any(|one| one.life == life && one.held) {
+        return Ok(());
+      }
+      time::sleep(Duration::from_millis(50)).await;
+    }
+    Ok(())
+  };
+  time::timeout(Duration::from_secs(60), gone).await.map_err(|_late| DaemonError::Unanswered)??;
+  Ok(())
+}
+
+/// A connection to the daemon of this machine, past its hello, or none when no daemon listens.
+async fn dialed(
+  name: &str,
+) -> Result<Option<Framed<<Local as Dialer>::Stream, LinesCodec>>, CliError> {
+  let stream = match Local::new(folder()?).dial().await {
+    Ok(stream) => stream,
+    Err(TransportError::Dial { .. }) => return Ok(None),
+    Err(no) => return Err(DaemonError::from(no).into()),
+  };
+  let mut lines = Framed::new(stream, LinesCodec::new_with_max_length(BOUND));
+  let name = Some(name.to_owned());
+  let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name, role: None });
+  asked(&mut lines, 0, hello).await?;
+  Ok(Some(lines))
+}
+
+/// The name of the life of a record in the daemon: its absolute path.
+fn named(record: &Path) -> String {
+  path::absolute(record).unwrap_or_else(|_| record.to_owned()).display().to_string()
 }
 
 /// The answer of the daemon to one request of a peer, past each frame that it pushes meanwhile.
