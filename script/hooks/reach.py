@@ -89,6 +89,7 @@ CRATES = {
   "cli/": "furb-cli",
   "window/": "furb-window",
   "frames/": "furb-frames",
+  "xtask/": "xtask",
 }
 
 
@@ -113,7 +114,9 @@ def command(kind: str, files: list[str]) -> list[str] | None:
     return ["uv", "run", "--no-sync", "pytest", "-q", *(["--no-cov", *reached] if reached else [])]
   packages = crates(files)
   chosen = ["--workspace"] if packages is None else [x for one in packages for x in ("-p", one)]
-  return ["cargo", "nextest", "run", *chosen, "--features", "furb/typescript"]
+  # Cargo refuses a feature of furb in a run of no package that depends on furb, as xtask alone.
+  features = [] if packages == ["xtask"] else ["--features", "furb/typescript"]
+  return ["cargo", "nextest", "run", *chosen, *features]
 
 
 def leaks(cache: Path) -> list[str]:

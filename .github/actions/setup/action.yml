@@ -4,11 +4,11 @@ description: The rust of every gate with its cache, and as much of python as the
 inputs:
   python:
     description: >-
-      The environment that uv syncs: `none`, for a gate with no python; `tools`, the tools of the checks with no
-      package of the workspace, so the crate is not built; or `suite`, each package that the suite imports, which
-      builds the crate with its python feature. The suite runs no program furb, so `suite` does not build furb-cli:
-      its build is a second build of most dependencies, since maturin links the module of python with flags of its
-      own on macOS.
+      The environment that uv syncs: `none`, for a gate with no python; `uv`, uv alone and no python, for a gate
+      whose tests run uv; `tools`, the tools of the checks with no package of the workspace, so the crate is not
+      built; or `suite`, each package that the suite imports, which builds the crate with its python feature. The
+      suite runs no program furb, so `suite` does not build furb-cli: its build is a second build of most
+      dependencies, since maturin links the module of python with flags of its own on macOS.
     default: suite
   key:
     description: >-
@@ -125,7 +125,7 @@ runs:
     - if: inputs.rust == 'build'
       run: echo "RUST_CACHE_HIT=${{ steps.rust.outputs.cache-hit }}" >> "$GITHUB_ENV"
       shell: bash
-    - if: inputs.python != 'none'
+    - if: inputs.python != 'none' && inputs.python != 'uv'
       run: uv python install
       shell: bash
     - if: inputs.python == 'tools'

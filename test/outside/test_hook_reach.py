@@ -2,9 +2,11 @@
 
 import importlib.util
 import os
+import re
 import shlex
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -129,3 +131,14 @@ def test_a_contract_test_an_official_skill_test_and_a_project_contract_reach_the
   assert laws in reach.suite([".furb/skills/pr/pr.py"])
   assert laws in reach.suite([".furb/skills/pr/test/test_commit.py"])
   assert laws not in reach.suite(["test/outside/test_scope.py"])
+
+
+def test_a_file_of_each_crate_with_tests_reaches_its_hook_and_its_crate() -> None:
+  members = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["members"]
+  files = re.compile(hooks()["cargo-test"]["files"])
+  # The addon of N-API holds no test of its own: it gives the crate, whose files reach the hook.
+  for member in (one for one in members if one != "bind/typescript"):
+    name = tomllib.loads((ROOT / member / "Cargo.toml").read_text(encoding="utf-8"))["package"]["name"]
+    assert files.search(f"{member}/src/lib.rs"), member
+    assert reach.crates([f"{member}/src/lib.rs"]) == [name], member
+  assert reach.command("cargo", ["xtask/src/main.rs"]) == ["cargo", "nextest", "run", "-p", "xtask"]
