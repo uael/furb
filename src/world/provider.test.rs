@@ -3245,9 +3245,15 @@ fn answer(engine: &mut Engine, said: &str) -> Object {
 }
 
 /// A compaction as the skill compaction makes it: the chain jumps to a chain that keeps each of its
-/// acts, whose first rung tells it the summary, so its next turn begins a new conversation.
+/// acts but those of the last exchange whose message says aside, and whose first rung tells it the
+/// summary. Its turns are then no turns of the conversation before, so its next turn begins a new
+/// one, which furb writes.
 #[cfg(unix)]
-const CUT: &str = r#"jump([], "<s:summary>\nThe chain asked first.</s:summary>\nsummary")"#;
+const CUT: &str = r#"facts = [x for x in transcript(scope(acting())) if question(x)]
+rungs = [at for at, x in enumerate(facts) if x[0] == 'rung']
+start = max(at for at, x in enumerate(facts) if x[0] == 'prompt' and 'aside' in repr(x))
+end = next((at for at in range(start + 1, rungs[-1]) if facts[at][0] == 'prompt'), rungs[-1])
+jump([x[1] for x in facts[start:end]], "<s:summary>\nThe chain asked first.</s:summary>\nsummary")"#;
 
 /// The signed thought that the command line of the tests writes for a line that holds THINK.
 #[cfg(unix)]
@@ -3259,7 +3265,8 @@ fn signed() -> Value {
 #[test]
 fn a_signed_thought_of_a_reply_after_a_compaction_reaches_the_next_conversation_whole() {
   let (mut engine, yard) = on_claude("compacted");
-  assert_eq!(answer(&mut engine, "THINK first").py_repr(), "'reply 1'");
+  answer(&mut engine, "aside");
+  assert_eq!(answer(&mut engine, "THINK first").py_repr(), "'reply 2'");
   closed(&mut engine, CUT).expect("the cut runs");
   answer(&mut engine, "second");
   let entries = resumed(&yard);
@@ -3269,16 +3276,17 @@ fn a_signed_thought_of_a_reply_after_a_compaction_reaches_the_next_conversation_
   let said =
     after.iter().find(|one| one["type"] == "assistant").map(|one| &one["message"]["content"]);
   // The first turn of the model is the reply before the cut; the chain wrote the turns after it.
-  assert_eq!(said, Some(&json!([signed(), {"type": "text", "text": "close(\"reply 1\")"}])));
+  assert_eq!(said, Some(&json!([signed(), {"type": "text", "text": "close(\"reply 2\")"}])));
 }
 
 #[cfg(unix)]
 #[test]
 fn a_signed_thought_written_after_a_compaction_reaches_the_next_turn_whole() {
   let (mut engine, yard) = on_claude("thought-after");
-  answer(&mut engine, "first");
+  answer(&mut engine, "aside");
   closed(&mut engine, CUT).expect("the cut runs");
   answer(&mut engine, "DEEP after the cut");
+  answer(&mut engine, "aside again");
   // A process of the command line keeps its own turns, so a turn reads the thought from the
   // conversation that furb writes only when it begins a new one: a second compaction makes it.
   closed(&mut engine, CUT).expect("the second cut runs");
