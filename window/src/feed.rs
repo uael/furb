@@ -443,9 +443,8 @@ impl Feed<'_> {
   /// rows that rolls, or each line once the operator opened it, each with its number in the
   /// thread, close to the left of the box. The thought stands under it.
   fn block(&self, message: &str, block: &Block) -> Vec<Row> {
-    let numbers = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
     let head = vec![run(block.maker.shown(), self.style(Role::Muted))];
-    let mut head = spread(Vec::new(), head, numbers.inside(self.inner()), Style::new());
+    let mut head = spread(Vec::new(), head, Gutter::inside(self.inner()), Style::new());
     head.insert(0, run(" ".repeat(PAD), Style::new()));
     let mut rows = vec![Row::of(head)];
     rows.extend(self.lines(message, block));
@@ -518,7 +517,7 @@ impl Feed<'_> {
   /// wrote none of it.
   fn code(&self, line: &Code, colors: Line, numbers: Gutter) -> Vec<Row> {
     let t = &self.model.tokens;
-    let (gutter, inner) = (numbers.width, numbers.inside(self.inner()));
+    let (gutter, inner) = (numbers.width, Gutter::inside(self.inner()));
     let mark = self.mark(line);
     let (number, color, loader) = self.number(line, mark);
     let room = inner.saturating_sub(gutter + 2);
@@ -690,7 +689,7 @@ impl Feed<'_> {
   /// and how many lines follow. A write of a file that the life did not know says how many lines it
   /// wrote. A block that rolls keeps a row for each file, so a diff never takes its rows.
   fn writes(&self, line: &Code, numbers: Gutter, (fold, open): (&Fold, bool)) -> Vec<Row> {
-    let (gutter, inner) = (numbers.width, numbers.inside(self.inner()));
+    let (gutter, inner) = (numbers.width, Gutter::inside(self.inner()));
     // A file stands under the line as each other row under a line, after its lead, and its diff
     // under the file, in the column of its path.
     let room = inner.saturating_sub(gutter + 4);
@@ -918,7 +917,7 @@ impl Feed<'_> {
       return titled(Row::clicked(line, open), x, &right, mark);
     };
     let lead = vec![run(format!("{:>width$}  └ ", "", width = numbers.width), muted)];
-    let room = numbers.inside(self.inner());
+    let room = Gutter::inside(self.inner());
     let gave = value
       .filter(|_| rest)
       .and_then(|value| self.model.colors.lines(value, muted).first().cloned());

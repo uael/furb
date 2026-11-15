@@ -16,25 +16,22 @@ use crate::{
 
 /// The numbers of a block of code, by its last number: their columns, two at least, so each block
 /// of the window starts its code in one column and the code of a block that grows moves no cell
-/// past its ninth line, and how many of those columns no digit takes.
+/// past its ninth line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Gutter {
   pub(crate) width: usize,
-  spare: usize,
 }
 
 impl Gutter {
   pub(crate) fn of(last: usize) -> Self {
-    let digits = last.to_string().len();
-    let width = digits.max(2);
-    Self { width, spare: width - digits }
+    Self { width: last.to_string().len().max(2) }
   }
 
-  /// The columns of a line of the block inside a box of a count of columns: the box keeps blank on
-  /// its right as many columns as the numbers leave blank on its left, so the text of the block
-  /// stands as far from each side.
-  pub(crate) fn inside(self, room: usize) -> usize {
-    room.saturating_sub(self.spare)
+  /// The columns of a line of the block inside a box of a count of columns: the box keeps one
+  /// blank column on its right, so what stands at the right of a line ends in the column where
+  /// each label at the right of the feed ends, whatever the count of digits of its numbers.
+  pub(crate) const fn inside(room: usize) -> usize {
+    room.saturating_sub(1)
   }
 }
 

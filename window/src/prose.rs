@@ -279,7 +279,7 @@ impl Prose<'_> {
     let gutter = numbers.width;
     let head =
       (!language.is_empty()).then(|| vec![run(format!("{:gutter$}  {language}", ""), muted)]);
-    let room = numbers.inside(self.room.saturating_sub(2)).saturating_sub(gutter + 2);
+    let room = Gutter::inside(self.room.saturating_sub(2)).saturating_sub(gutter + 2);
     let numbered = lines.into_iter().zip(1..).map(|(line, number)| {
       let mut line = line::clipped(line, room, muted);
       line.insert(0, run(format!("{number:>gutter$}  "), muted));
