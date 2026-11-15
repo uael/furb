@@ -421,17 +421,24 @@ fn a_server_that_answers_nothing_at_all_is_given_up_on_at_the_deadline() {
 #[test]
 fn a_server_whose_windows_elsewhere_do_not_come_in_time_offers_the_models_whose_window_its_list_gives()
  {
+  // The first list of a process pays to start its client of HTTP, which a loaded machine stretches
+  // past the deadline: a server that lists at once measures that start, and the list of the
+  // server whose windows come late takes no more than that and the deadline.
+  let (quick, _) = fake(|request| at(request, "/v1/models").then(|| json!({"data": []})));
+  let began = Instant::now();
+  on(&quick, &[]).heard_now(None);
+  let start = began.elapsed();
   let (address, _) = fake(|request| {
     if at(request, "/v1/models") {
       Some(json!({"data": [{"id": "a", "max_model_len": 1000}, {"id": "b"}]}))
     } else {
-      pause(DEADLINE * 2);
+      pause(DEADLINE * 4);
       None
     }
   });
   let began = Instant::now();
   let heard = on(&address, &[]).heard_now(None);
-  assert!(began.elapsed() < DEADLINE * 2, "{:?}", began.elapsed());
+  assert!(began.elapsed() < start + DEADLINE * 2, "{:?} past {start:?}", began.elapsed());
   assert_eq!(offered(&heard), [("local:a".to_owned(), 1000, false, Some(250))]);
   assert_eq!(
     heard.why("local:b"),

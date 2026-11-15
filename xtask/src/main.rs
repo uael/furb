@@ -47,8 +47,8 @@ enum Task {
     /// The suite to run.
     suite: Option<Suite>,
     /// The words that the runner of the suite takes, after `--`: for rust the arguments of cargo
-    /// test (each crate when none is given), for python those of pytest, for typescript a filter of
-    /// the files.
+    /// nextest run (each crate when none is given), for python those of pytest, for typescript a
+    /// filter of the files.
     #[arg(last = true, requires = "suite")]
     words: Vec<String>,
   },
@@ -69,7 +69,7 @@ enum Task {
 /// A suite of the repository, by the language that its tests are written in.
 #[derive(Clone, Copy, ValueEnum)]
 enum Suite {
-  /// The tests of each crate of the workspace, with cargo test.
+  /// The tests of each crate of the workspace, with cargo-nextest.
   Rust,
   /// The suite of the contract on both engines and the suites of the extensions, with pytest.
   Python,
@@ -197,8 +197,8 @@ impl Suite {
   fn run(self, root: &Path, words: &[String]) -> Result<ExitCode, Fault> {
     let words = strs(words);
     match self {
-      Self::Rust if words.is_empty() => spawn(root, "cargo", &["test", "--workspace"]),
-      Self::Rust => spawn(root, "cargo", &[&["test"], &words[..]].concat()),
+      Self::Rust if words.is_empty() => spawn(root, "cargo", &["nextest", "run", "--workspace"]),
+      Self::Rust => spawn(root, "cargo", &[&["nextest", "run"], &words[..]].concat()),
       Self::Python => spawn(root, "uv", &[&["run", "pytest", "-q"], &words[..]].concat()),
       Self::Typescript => spawn(root, "bun", &[&["run", "test"], &words[..]].concat()),
     }

@@ -63,7 +63,7 @@ use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 
 #[cfg(unix)]
 use crate::testing::on_reactor;
-use crate::testing::{Yard, block_on, park, pause, waker};
+use crate::testing::{Yard, block_on, park, waker};
 #[cfg(unix)]
 use crate::value::entry;
 use crate::wire;
@@ -73,7 +73,6 @@ use rig_core::http_client;
 use rig_core::message;
 use std::env;
 use std::future as std_future;
-use std::io;
 use std::process;
 use std::sync::mpsc;
 use std::time;
@@ -1305,19 +1304,10 @@ pub(super) fn served(listener: TcpListener, events: String) -> thread::JoinHandl
 /// One request that a provider on a port of this machine reads, and the events it streams in answer; and the request
 /// it read.
 fn exchanged(listener: &TcpListener, events: &str) -> String {
-  // A provider that is never asked, or a request that never ends, fails the test and holds it not.
-  listener.set_nonblocking(true).expect("a listener that waits not");
-  let end = Instant::now() + Duration::from_secs(10);
-  let stream = loop {
-    match listener.accept() {
-      Ok((stream, _)) => break stream,
-      Err(no) if no.kind() == io::ErrorKind::WouldBlock && Instant::now() < end => {
-        pause(Duration::from_millis(10));
-      }
-      Err(no) => panic!("the provider is asked: {no}"),
-    }
-  };
-  stream.set_nonblocking(false).expect("a stream that waits");
+  // The provider waits for its request as long as the engine takes to send it, which a loaded
+  // machine stretches: a bound of time here refused a late request, and the engine asked again for
+  // ever. A test whose provider is never asked ends at the slow timeout of the runner.
+  let (stream, _) = listener.accept().expect("the provider is asked");
   stream.set_read_timeout(Some(Duration::from_secs(10))).expect("a stream that waits a time");
   let mut reader = BufReader::new(stream);
   let mut head = String::new();

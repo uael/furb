@@ -19,6 +19,7 @@ large change, open an issue first, so we can agree on its shape before you do th
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
 | Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. |
 | [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings. |
+| [cargo-nextest](https://nexte.st) 0.9.131 or later, as `cargo binstall cargo-nextest` installs it | The runner of the Rust tests, each in a process of its own, as `.config/nextest.toml` sets it. |
 | [Zig](https://ziglang.org/download/) 0.17.1, as `zig` on PATH | The native library of OpenTUI, which the build of the window makes once, in about two minutes, and keeps in `target/opentui`. Each cargo command over the workspace builds the window; `uv sync` and `bun run build` do not. The build refuses another version of Zig. |
 | [Git for Windows](https://gitforwindows.org), on Windows | Its sh runs the commands of a life, as /bin/sh does on Linux and on macOS. |
 | The credential of a provider of the network, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as the window, `furb prompt` or `script/smoke.py`, as [`docs/models.md`](docs/models.md) says. The demo and the suite need no model. |
@@ -242,7 +243,7 @@ runs a test or a type check: the two commands at the top of this table run them 
 | `uv run pytest -q test/test_hygiene.py` | The hygiene laws alone, after a change of the engine, a contract or a suite. |
 | `uv run ruff format src test script .agents/skills` and `uv run ruff check src test script .agents/skills` | The format and the lint of Python: two spaces of indentation, 120 columns. |
 | `uv run ty check --error-on-warning` | The type check. |
-| `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` | The gates of the crate and of the command line. |
+| `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo nextest run --workspace` | The gates of the crate and of the command line. |
 | `bun run check`, `bun run lint` and `bun run test` | The type check, the lint and the tests of the TypeScript side. |
 
 Each pull request runs the gates of `.github/workflows/gates.yml` on Linux, on macOS and on Windows.

@@ -407,9 +407,11 @@ fix what your change broke, and report what was broken before.
   their file.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`, and the words of
   `.furb/skills` too, less their tests.
-- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:
-  the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
-  `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/suite/furb.rs` runs `furb` as
+- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo nextest run
+  --workspace`: the gates of the crate and of the command line. cargo-nextest runs each test in a process of its own,
+  as `.config/nextest.toml` sets it, so a test that leans on what another left in its process fails alone, and one past
+  60 s ends and fails. The tests of a module stand beside it, `src/engine.test.rs` beside `src/engine.rs`, and those of
+  the engine drive the real engine on ears in rust. `cli/tests/suite/furb.rs` runs `furb` as
   a process, on a claude command line that answers from a script.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `git commit` verifies only the form of its files, and ends in about 2 seconds. Its hook, `script/hooks/pre-commit`,
