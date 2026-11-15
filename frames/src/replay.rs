@@ -23,11 +23,55 @@ pub(crate) struct Key {
   pub(crate) marker: bool,
 }
 
+/// A terminal as a person sees it: the writes of a synchronized update, from `CSI ? 2026 h` to
+/// `CSI ? 2026 l`, show at once at its end, so no screen holds half of a frame of the program.
+pub(crate) struct Screen {
+  terminal: Terminal,
+  inside: bool,
+  shown: Frame,
+}
+
+impl Screen {
+  pub(crate) fn new(cast: &Cast) -> Result<Self, Error> {
+    let terminal = Terminal::new(cast.cols, cast.rows).ok().ok_or(Error::Cast("its size is 0"))?;
+    let shown = Frame::of(&terminal);
+    Ok(Self { terminal, inside: false, shown })
+  }
+
+  /// What the program wrote, or the new size of the terminal.
+  pub(crate) fn feed(&mut self, what: &What) {
+    match what {
+      What::Output(data) => {
+        self.terminal.feed([data.as_str()]);
+        self.inside = match (data.rfind(BEGIN), data.rfind(END)) {
+          (Some(begin), Some(end)) => begin > end,
+          (Some(_), None) => true,
+          (None, Some(_)) => false,
+          (None, None) => self.inside,
+        };
+      }
+      What::Resize { cols, rows } => self.terminal.resize(*cols, *rows),
+      What::Input(_) | What::Marker(_) | What::Other => return,
+    }
+    if !self.inside {
+      self.shown = Frame::of(&self.terminal);
+    }
+  }
+
+  /// The frame that the screen shows.
+  pub(crate) fn frame(&self) -> &Frame {
+    &self.shown
+  }
+}
+
+/// The start and the end of a synchronized update.
+const BEGIN: &str = "\x1b[?2026h";
+const END: &str = "\x1b[?2026l";
+
 /// The key frames of a recording. A frame at a marker shows what the program wrote before it. A
 /// label that comes again takes its count, as `a-2`.
 pub(crate) fn keys(cast: &Cast, every: Option<Duration>) -> Result<Vec<Key>, Error> {
-  let mut terminal =
-    Terminal::new(cast.cols, cast.rows).ok().ok_or(Error::Cast("its size is 0"))?;
+  let mut screen = Screen::new(cast)?;
   let mut keys: Vec<Key> = Vec::new();
   let mut tick = every;
   let mut last: Option<Frame> = None;
@@ -37,7 +81,7 @@ pub(crate) fn keys(cast: &Cast, every: Option<Duration>) -> Result<Vec<Key>, Err
       if at > event.at {
         break;
       }
-      let frame = Frame::of(&terminal);
+      let frame = screen.frame().clone();
       if last.as_ref() != Some(&frame) {
         let name = format!("t{:06}", at.as_millis());
         keys.push(Key { name, at, frame: frame.clone(), marker: false });
@@ -45,15 +89,11 @@ pub(crate) fn keys(cast: &Cast, every: Option<Duration>) -> Result<Vec<Key>, Err
       }
       tick = Some(at + step);
     }
-    match &event.what {
-      What::Output(data) => terminal.feed([data.as_str()]),
-      What::Resize { cols, rows } => terminal.resize(*cols, *rows),
-      What::Marker(label) => {
-        let seen = labels.entry(label.as_str()).and_modify(|seen| *seen += 1).or_insert(1);
-        let name = if *seen == 1 { label.clone() } else { format!("{label}-{seen}") };
-        keys.push(Key { name, at: event.at, frame: Frame::of(&terminal), marker: true });
-      }
-      What::Input(_) | What::Other => {}
+    screen.feed(&event.what);
+    if let What::Marker(label) = &event.what {
+      let seen = labels.entry(label.as_str()).and_modify(|seen| *seen += 1).or_insert(1);
+      let name = if *seen == 1 { label.clone() } else { format!("{label}-{seen}") };
+      keys.push(Key { name, at: event.at, frame: screen.frame().clone(), marker: true });
     }
   }
   Ok(keys)
@@ -67,15 +107,10 @@ pub(crate) fn shows(
   until: Duration,
   text: &str,
 ) -> Result<bool, Error> {
-  let mut terminal =
-    Terminal::new(cast.cols, cast.rows).ok().ok_or(Error::Cast("its size is 0"))?;
+  let mut screen = Screen::new(cast)?;
   for event in cast.events.iter().take_while(|event| event.at <= until) {
-    match &event.what {
-      What::Output(data) => terminal.feed([data.as_str()]),
-      What::Resize { cols, rows } => terminal.resize(*cols, *rows),
-      What::Input(_) | What::Marker(_) | What::Other => {}
-    }
-    if event.at >= from && Frame::of(&terminal).text() == text {
+    screen.feed(&event.what);
+    if event.at >= from && screen.frame().text() == text {
       return Ok(true);
     }
   }

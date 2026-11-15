@@ -12,7 +12,6 @@ use std::{
   time::Duration,
 };
 
-use avt::Terminal;
 use gif::{Encoder, Repeat};
 
 use crate::{
@@ -20,7 +19,7 @@ use crate::{
   error::Error,
   frame::{Cell, Frame, Rgb},
   raster::{self, Image},
-  replay::put,
+  replay::{Screen, put},
 };
 
 /// The longest that a cell may show another look before it comes back for the measures to call it
@@ -122,22 +121,20 @@ pub(crate) fn motion(cast: &Cast, span: Span, out: &Path) -> Result<String, Erro
 /// Each screen of a recording in a span, the one that stands at its start first, and each key that
 /// the program read in it with its moment.
 fn shown(cast: &Cast, span: Span) -> Result<(Vec<Shown>, Vec<Key>), Error> {
-  let mut terminal =
-    Terminal::new(cast.cols, cast.rows).ok().ok_or(Error::Cast("its size is 0"))?;
+  let mut screen = Screen::new(cast)?;
   let (mut screens, mut keys): (Vec<Shown>, _) = (Vec::new(), Vec::new());
   for event in cast.events.iter().take_while(|event| event.at <= span.until) {
     if event.at >= span.from && screens.is_empty() {
-      screens.push(Shown::of(span.from, Frame::of(&terminal)));
+      screens.push(Shown::of(span.from, screen.frame().clone()));
     }
     match &event.what {
-      What::Output(data) => terminal.feed([data.as_str()]),
-      What::Resize { cols, rows } => terminal.resize(*cols, *rows),
+      What::Output(_) | What::Resize { .. } => screen.feed(&event.what),
       What::Input(read) if event.at >= span.from => {
         keys.push(Key { at: event.at, read: read.clone() });
       }
       What::Input(_) | What::Marker(_) | What::Other => continue,
     }
-    let frame = Frame::of(&terminal);
+    let frame = screen.frame().clone();
     // The writes of one millisecond make one screen: a program draws a frame in several writes, a
     // person sees the last alone, and a recording of a rival stamps no finer.
     if screens.len() > 1
@@ -150,7 +147,7 @@ fn shown(cast: &Cast, span: Span) -> Result<(Vec<Shown>, Vec<Key>), Error> {
     }
   }
   if screens.is_empty() {
-    screens.push(Shown::of(span.from, Frame::of(&terminal)));
+    screens.push(Shown::of(span.from, screen.frame().clone()));
   }
   Ok((screens, keys))
 }

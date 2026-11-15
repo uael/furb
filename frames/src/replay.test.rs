@@ -39,3 +39,18 @@ fn a_text_that_the_screen_shows_after_a_marker_is_in_its_replay() {
   assert!(shows(&recorded, at(100), at(400), "xy\n").unwrap());
   assert!(!shows(&recorded, at(100), at(200), "xy\n").unwrap());
 }
+
+#[test]
+fn a_synchronized_update_shows_whole_at_its_end() {
+  let out = |text: &str| What::Output(text.to_owned());
+  let mark = || What::Marker("a".to_owned());
+  let events = [
+    (0, out("x")),
+    (10, out("\x1b[?2026h\ry")),
+    (20, mark()),
+    (30, out("z\x1b[?2026l")),
+    (40, mark()),
+  ];
+  let keys = keys(&cast(&events), None).unwrap();
+  assert_eq!(names(&keys), [("a", 20, "x\n".to_owned()), ("a-2", 40, "yz\n".to_owned())]);
+}
