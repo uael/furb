@@ -71,7 +71,7 @@ R2, the exact tip, by the image and by the record, across each crossing (resume 
 - `src/life.test.rs::a_life_that_a_fault_stopped_inside_a_cut_run_opens_at_the_exact_state_of_its_tip`
 - `tests/suite/life.rs::a_record_of_another_engine_crosses_to_this_build_at_its_open`
 - `tests/suite/life.rs::an_image_of_a_build_of_other_texts_does_not_load`
-- `src/life.test.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
+- `tests/suite/life.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
 - `tests/suite/promise.rs::a_life_carried_across_three_crossings_opens_at_its_tip`
 - `host/tests/suite/daemon.rs::a_life_that_ended_opens_again_at_the_tip_of_its_record`
 - `test/checkpoint/test_gathered.py::test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard`
