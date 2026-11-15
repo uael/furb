@@ -399,12 +399,14 @@ struct Part<K> {
   kept: K,
 }
 
-/// The meaning of what the host keeps in the image of a life. A change that reads a part of before
-/// to another meaning with no fault of the parse raises it, as a field of [`Kept`], or of a type of
-/// the view that it holds, that keeps its name and its type and holds another thing, or a fix of
-/// the fold that must reach the past of each life. A new field takes `#[serde(default)]`, a field
-/// that changes its name takes `#[serde(alias)]`, and no type that the part holds denies a field
-/// that it does not know.
+/// The meaning of what the host keeps in the image of a life. The part keeps the view as the build
+/// that wrote it folded the past of the life, so a later build shows the session as it was shown,
+/// and folds only what comes after. A change that reads a part of before to another meaning with
+/// no fault of the parse raises it, as a field of [`Kept`], or of a type of the view that it holds,
+/// that keeps its name and its type and holds another thing, and so does a fix of the fold that
+/// must reach the past of each life: each life then opens once by its record, which folds its past
+/// again. A new field takes `#[serde(default)]`, a field that changes its name takes
+/// `#[serde(alias)]`, and no type that the part holds denies a field that it does not know.
 const VERSION: u32 = 1;
 
 /// The facts that the log of a life let go: each one before the last checkpoint of the life, which
