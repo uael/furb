@@ -11,7 +11,9 @@ use std::{
   ffi::OsStr,
   fs, io,
   path::{Path, PathBuf},
-  process::{Command as Process, ExitCode},
+  process::{Command as Process, ExitCode, Stdio},
+  thread,
+  time::Instant,
 };
 
 use clap::{
@@ -45,7 +47,10 @@ enum Task {
     #[arg(long, conflicts_with = "base")]
     all: bool,
   },
-  /// Run one suite, or each suite in turn when none is named.
+  /// Run one suite, or each suite at once when none is named, each into a log of its own.
+  ///
+  /// The suites share no file, so they run together, and the slowest alone sets the time of the
+  /// run. Each log stands in target/xtask/<suite>.log, and a suite that fails prints its tail.
   Test {
     /// The suite to run.
     suite: Option<Suite>,
@@ -109,6 +114,8 @@ enum Fault {
   NoCache,
   #[error("{} has the name of the task {name}: move it into the task, or rename it", path.display())]
   Clash { name: String, path: PathBuf },
+  #[error("the run of the suite {0} panicked")]
+  Panicked(String),
 }
 
 /// A script of `script/` that runs on its own, as a task.
@@ -156,15 +163,7 @@ fn run() -> Result<ExitCode, Fault> {
   match task {
     Task::Check { base, all } => check(&root, (!all).then_some(base.as_str())),
     Task::Test { suite: Some(suite), words } => suite.run(&root, &words),
-    Task::Test { suite: None, .. } => {
-      for suite in Suite::value_variants() {
-        let code = suite.run(&root, &[])?;
-        if code != ExitCode::SUCCESS {
-          return Ok(code);
-        }
-      }
-      Ok(ExitCode::SUCCESS)
-    }
+    Task::Test { suite: None, .. } => every(&root),
     Task::CleanCaches { scratch, uv } => caches::clean(&root, scratch, uv.as_deref()),
     Task::Search { words } => {
       search(&command, &words);
@@ -224,15 +223,99 @@ fn check(root: &Path, base: Option<&str>) -> Result<ExitCode, Fault> {
 }
 
 impl Suite {
-  fn run(self, root: &Path, words: &[String]) -> Result<ExitCode, Fault> {
-    let words = strs(words);
+  /// The commands of the suite in order. Each runner builds what its tests read, but the tests of
+  /// TypeScript read the package that `bun run build` makes, and fail on a build older than its
+  /// sources.
+  fn steps(self, words: &[String]) -> Vec<(&'static str, Vec<String>)> {
+    let with = |head: &[&str], tail: &[String]| {
+      head.iter().map(|one| (*one).to_owned()).chain(tail.iter().cloned()).collect()
+    };
+    let crates = if words.is_empty() { &["--workspace".to_owned()][..] } else { words };
     match self {
-      Self::Rust if words.is_empty() => spawn(root, "cargo", &["nextest", "run", "--workspace"]),
-      Self::Rust => spawn(root, "cargo", &[&["nextest", "run"], &words[..]].concat()),
-      Self::Python => spawn(root, "uv", &[&["run", "pytest", "-q"], &words[..]].concat()),
-      Self::Typescript => spawn(root, "bun", &[&["run", "test"], &words[..]].concat()),
+      Self::Rust => vec![("cargo", with(&["nextest", "run"], crates))],
+      Self::Python => vec![("uv", with(&["run", "pytest", "-q"], words))],
+      Self::Typescript => {
+        vec![("bun", with(&["run", "build"], &[])), ("bun", with(&["run", "test"], words))]
+      }
     }
   }
+
+  fn run(self, root: &Path, words: &[String]) -> Result<ExitCode, Fault> {
+    for (program, args) in self.steps(words) {
+      let code = spawn(root, program, &args)?;
+      if code != ExitCode::SUCCESS {
+        return Ok(code);
+      }
+    }
+    Ok(ExitCode::SUCCESS)
+  }
+
+  /// The run of the suite into a log, and whether it passed.
+  fn logged(self, root: &Path, log: &Path) -> Result<bool, Fault> {
+    let file =
+      fs::File::create(log).map_err(|source| Fault::Read { path: log.to_owned(), source })?;
+    for (program, args) in self.steps(&[]) {
+      let out = |file: &fs::File| {
+        file
+          .try_clone()
+          .map(Stdio::from)
+          .map_err(|source| Fault::Read { path: log.to_owned(), source })
+      };
+      let status = Process::new(program)
+        .args(&args)
+        .current_dir(root)
+        .stdout(out(&file)?)
+        .stderr(out(&file)?)
+        .status()
+        .map_err(|source| Fault::Spawn { program: program.to_owned(), source })?;
+      if !status.success() {
+        return Ok(false);
+      }
+    }
+    Ok(true)
+  }
+
+  fn name(self) -> String {
+    self.to_possible_value().map(|one| one.get_name().to_owned()).unwrap_or_default()
+  }
+}
+
+/// Each suite at once, each into its log, then one line for each, and the tail of the log of each
+/// that failed.
+fn every(root: &Path) -> Result<ExitCode, Fault> {
+  let logs = root.join("target").join("xtask");
+  fs::create_dir_all(&logs).map_err(|source| Fault::Read { path: logs.clone(), source })?;
+  let began = Instant::now();
+  let ran: Vec<(Suite, Result<bool, Fault>, u64)> = thread::scope(|scope| {
+    let runs: Vec<_> = Suite::value_variants()
+      .iter()
+      .map(|&suite| {
+        let log = logs.join(format!("{}.log", suite.name()));
+        (suite, scope.spawn(move || (suite.logged(root, &log), began.elapsed().as_secs())))
+      })
+      .collect();
+    runs
+      .into_iter()
+      .map(|(suite, run)| match run.join() {
+        Ok((passed, seconds)) => (suite, passed, seconds),
+        Err(_) => (suite, Err(Fault::Panicked(suite.name())), began.elapsed().as_secs()),
+      })
+      .collect()
+  });
+  let mut failed = false;
+  for (suite, passed, seconds) in ran {
+    let log = logs.join(format!("{}.log", suite.name()));
+    if passed? {
+      println!("{}: passed in {seconds} s", suite.name());
+    } else {
+      failed = true;
+      let text = fs::read_to_string(&log).unwrap_or_default();
+      let tail: Vec<&str> = text.lines().rev().take(40).collect();
+      println!("{}: FAILED in {seconds} s, its log is {}:", suite.name(), log.display());
+      tail.iter().rev().for_each(|line| println!("  {line}"));
+    }
+  }
+  Ok(if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS })
 }
 
 impl Script {
