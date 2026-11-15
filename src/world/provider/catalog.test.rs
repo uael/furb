@@ -322,6 +322,7 @@ fn a_model_whose_credential_stands_nowhere_is_refused_when_it_is_asked() {
     chain: "chain1".into(),
     request,
     told,
+    billed: Arc::new(|_| {}),
     thought: None,
   };
   let Err(no) = on_reactor((model.answers)(asked)) else {
@@ -682,6 +683,7 @@ fn asked_of(actor: &str) -> Asked {
       record_telemetry_content: false,
     },
     told: Arc::new(|_, _| {}),
+    billed: Arc::new(|_| {}),
     thought: None,
   }
 }
@@ -846,6 +848,7 @@ fn first_turn(model: &Model) {
     chain: "chain1".into(),
     request,
     told: Arc::new(|_, _| {}),
+    billed: Arc::new(|_| {}),
     thought: None,
   };
   let Ok(Answer::Response(answer)) = on_reactor((model.answers)(asked)) else {

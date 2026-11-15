@@ -100,24 +100,24 @@ pub(super) struct Conversation {
   /// What the command line holds of this conversation, entry by entry, which the first process of
   /// a conversation that replaces this one resumes as far as the two share their turns.
   pub(super) said: Vec<Said>,
-  /// What each request of a turn that came to no result read, the request of the turn that streams
-  /// among them, which the next turn that comes to a result pays.
+  /// What the request of each turn that failed read, which the next turn that comes to a result
+  /// pays. A turn that its reader drops settles nothing, so it leaves none here: its stream told the
+  /// reader what its request read, as [`Reply::billed`] says, and the reader pays it.
   unpaid: Vec<Unpaid>,
 }
 
 /// What a request read as far as its stream said: the model that read it and its usage. The command
-/// line counts no cost for a request of a turn that came to no result, as a turn that the provider
-/// cut at a statement that cannot be python, though the API read its prompt.
-#[derive(Default)]
-struct Unpaid {
-  model: Option<String>,
-  spent: Spent,
+/// line counts no cost for a request of a turn that came to no result, though the API read its
+/// prompt.
+pub(super) struct Unpaid {
+  pub(super) model: Option<String>,
+  pub(super) spent: Spent,
 }
 
 impl Unpaid {
   /// What it cost at the price that the catalog gives its model, with a write of the cache at the
   /// price of the time that the mark of the cache lasts: twice a fresh read for an hour.
-  fn cost(&self) -> f64 {
+  pub(super) fn cost(&self) -> f64 {
     let model = self.model.as_deref().unwrap_or_default();
     // The command line runs the models of Anthropic, which the catalog lists under that provider.
     let Some([fresh, out, cached, cache]) = provider::catalog::priced("anthropic", model) else {
@@ -298,8 +298,7 @@ impl Conversation {
     let mut again = again && !anew;
     let mut vanished = None;
     loop {
-      let mut outcome =
-        Outcome { incoming: &incoming, asked, again, unheard: None, restored: None, replied: None };
+      let mut outcome = Outcome::new(&incoming, asked, again);
       let got = self.flight(delta, &spend, run, &mut outcome).await.map_err(worded);
       let got = got.map(|(response, process)| {
         let reply = Message::Assistant { id: None, content: response.choice.clone() };
@@ -380,6 +379,9 @@ impl Conversation {
   /// so a turn that is dropped before it settles leaves it too.
   fn settle(&mut self, outcome: Outcome<'_>) {
     self.requested = outcome.incoming.to_vec();
+    if outcome.replied.is_none() {
+      self.unpaid.extend(outcome.read);
+    }
     if let Some(resumed) = outcome.restored {
       self.resumed = resumed;
     }
@@ -491,14 +493,6 @@ impl Conversation {
     }
   }
 
-  /// What the request of the turn that streams read as far as its reply says, which the next turn
-  /// that comes to a result pays when this one comes to none.
-  fn owes(&mut self, reply: &Reply) {
-    if let (Some(open), Some(spent)) = (self.unpaid.last_mut(), &reply.spent) {
-      *open = Unpaid { model: reply.model.clone(), spent: spent.clone() };
-    }
-  }
-
   /// The response that the result of a turn ends the reply with, with the process that paid for it,
   /// or the failure that the result says.
   fn concluded(
@@ -516,8 +510,7 @@ impl Conversation {
     }
     let mut response = reply.response(result, &self.name, &self.id, &mut process.paid);
     // The cost that the result says holds the request of this turn, and no request of an earlier
-    // turn that came to no result, which this turn pays.
-    self.unpaid.pop();
+    // turn that failed, which this turn pays.
     let owed: f64 = mem::take(&mut self.unpaid).iter().map(Unpaid::cost).sum();
     let cost = response.raw["cost"].as_f64().unwrap_or_default();
     response.raw["cost"] = json!(cost + owed);
@@ -536,7 +529,6 @@ impl Conversation {
   ) -> Result<(CompletionResponse, Process), CompletionError> {
     let stall = run.stall;
     let mut reply = Reply::new(run.deltas);
-    self.unpaid.push(Unpaid::default());
     let mut odd = String::new();
     // Whether the process wrote a line, as a process that found no program to run writes none.
     let mut spoke = false;
@@ -583,7 +575,7 @@ impl Conversation {
         Event::Result(result) => return self.concluded(&result, reply, process),
         Event::ControlResponse { .. } | Event::Other => {}
       }
-      self.owes(&reply);
+      outcome.read = reply.billed();
     };
     let (no, missing) = exited(code, &mut process.tail, run.program, spoke).await;
     if missing {
@@ -624,6 +616,15 @@ struct Outcome<'a> {
   restored: Option<bool>,
   /// The reply of the turn, as its meaning alone, and the process that wrote it.
   replied: Option<(String, Vec<Value>, Process)>,
+  /// What the request of the turn read as far as its stream said.
+  read: Option<Unpaid>,
+}
+
+impl<'a> Outcome<'a> {
+  /// A flight of these messages that came to nothing yet.
+  fn new(incoming: &'a [String], asked: Option<&'a Message>, again: bool) -> Self {
+    Self { incoming, asked, again, unheard: None, restored: None, replied: None, read: None }
+  }
 }
 
 /// An entry of a conversation as the command line holds it: its role, its blocks, and the messages

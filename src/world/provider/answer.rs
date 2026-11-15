@@ -14,9 +14,10 @@ use jiff::{Timestamp, Zoned};
 use rig_core::{
   completion::{CompletionError, CompletionRequest, CompletionResponse, FinishReason},
   message::{AssistantContent, Message, Reasoning},
-  streaming::{StreamFinal, StreamedAssistantContent, StreamingCompletionResponse},
+  streaming::{StreamFinal, StreamedAssistantContent, StreamingCompletionResponse, UnknownPayload},
 };
-use serde_json::{Map, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value, json};
 use tokio::sync::{mpsc, watch as holding};
 
 use super::{
@@ -46,7 +47,7 @@ pub(super) async fn streamed(
   streams: Streams,
   asked: Asked,
 ) -> Result<CompletionResponse, CompletionError> {
-  let Asked { request, told, thought: budget, .. } = asked;
+  let Asked { request, told, billed, thought: budget, .. } = asked;
   let mut stream = streams(request.clone()).await?;
   // A thought whose parts streamed is told already, and a thought that came whole is told as it
   // comes.
@@ -70,6 +71,11 @@ pub(super) async fn streamed(
       }
       StreamedAssistantContent::Reasoning { reasoning, id } if !thought.contains(&id) => {
         told("", &reasoning.display_text());
+      }
+      StreamedAssistantContent::Unknown(part) => {
+        if let Some(bill) = Bill::heard(&part) {
+          billed(bill);
+        }
       }
       _ => {}
     }
@@ -393,9 +399,7 @@ pub(super) fn turn(
   let failed = |why: String| CompletionError::ResponseError(why);
   let blocks = serde_json::to_value(&choice).map_err(|no| failed(no.to_string()))?;
   let blocks = wire::inward(&blocks).map_err(|fault| failed(fault.message()))?;
-  let count = |n: u64| Object::int(i64::try_from(n).unwrap_or(i64::MAX));
-  let usage =
-    Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)]);
+  let usage = Bill::usage(Some(&Bill { input, output, read, wrote, dollars }));
   let turn =
     Object::tuple([Object::string("assistant"), Object::string(text.trim()), usage, blocks]);
   let account = response.raw.get("account").and_then(Value::as_str).map(str::to_owned);
@@ -416,19 +420,52 @@ pub(super) fn worded(choice: Vec<AssistantContent>, word: &str) -> Vec<Assistant
   worded
 }
 
-/// The turn of a reply that ended at the first statement of its word that cannot be python: the
-/// word as far as that statement, as the turn of a model that wrote nothing more. It counts
-/// nothing, since the usage of a stream comes with its end.
-pub(super) fn cut(word: &str) -> Result<Object, CompletionError> {
+/// The turn of a reply that ended before its stream did, as at the first statement of its word that
+/// cannot be python: the word as far as that statement, as the turn of a model that wrote nothing
+/// more, with the usage of what its request read.
+pub(super) fn cut(word: &str, usage: Object) -> Result<Object, CompletionError> {
   let word = word.trim();
   let failed = |why: String| CompletionError::ResponseError(why);
   let blocks =
     serde_json::to_value([AssistantContent::text(word)]).map_err(|no| failed(no.to_string()))?;
   let blocks = wire::inward(&blocks).map_err(|fault| failed(fault.message()))?;
-  let zero = || Object::int(0);
-  let usage = Object::tuple([zero(), zero(), zero(), zero(), Object::float(0.0)]);
   Ok(Object::tuple([Object::string("assistant"), Object::string(word), usage, blocks]))
 }
+
+/// What a request read and wrote as far as its stream told, and its dollars, in the form of the
+/// usage of a turn: what it read is every token of its input, the cache among them. A provider
+/// tells it as a part of its stream that rig carries as is, so the reader of a stream that it
+/// ends before its end, which no response follows, pays that request.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Serialize, Deserialize)]
+pub(super) struct Bill {
+  pub(super) input: u64,
+  pub(super) output: u64,
+  pub(super) read: u64,
+  pub(super) wrote: u64,
+  pub(super) dollars: f64,
+}
+
+impl Bill {
+  /// The part of a stream that tells this bill.
+  pub(super) fn part(self) -> UnknownPayload {
+    UnknownPayload::new(json!({ BILL: self }))
+  }
+
+  /// The bill that a part of a stream tells, if it tells one.
+  pub(super) fn heard(part: &UnknownPayload) -> Option<Self> {
+    serde_json::from_value(part.value().get(BILL)?.clone()).ok()
+  }
+
+  /// The usage of a turn that says this bill, which is nothing when the stream told none.
+  pub(super) fn usage(bill: Option<&Self>) -> Object {
+    let Self { input, output, read, wrote, dollars } = bill.copied().unwrap_or_default();
+    let count = |n: u64| Object::int(i64::try_from(n).unwrap_or(i64::MAX));
+    Object::tuple([count(input), count(output), count(read), count(wrote), Object::float(dollars)])
+  }
+}
+
+/// The key of the part of a stream that tells a [`Bill`].
+const BILL: &str = "bill";
 
 /// How many characters of the end of a cut turn its refusal shows.
 const END: usize = 400;

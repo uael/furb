@@ -17,7 +17,8 @@ use rig_core::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{CLAUDE, Deltas};
+use super::{CLAUDE, Deltas, conversation::Unpaid};
+use crate::world::provider::answer::Bill;
 
 /// One line of the stdout.
 #[derive(Deserialize)]
@@ -160,7 +161,7 @@ pub(super) enum Whole {
 
 /// What a request read and wrote. A count that the command line leaves out is none, since it says
 /// `{}` of a turn that spent nothing.
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Default, Deserialize, PartialEq)]
 #[serde(default)]
 pub(super) struct Spent {
   #[serde(rename = "input_tokens")]
@@ -245,6 +246,8 @@ pub(super) struct Reply<'a> {
   pub(super) spent: Option<Spent>,
   /// The model that writes the current message, when its start names it.
   pub(super) model: Option<String>,
+  /// The usage that the stream told last, as [`Reply::billed`] says.
+  billed: Option<Spent>,
   deltas: Option<&'a Deltas>,
 }
 
@@ -311,6 +314,22 @@ impl<'a> Reply<'a> {
       }
       None => {}
     }
+  }
+
+  /// What the request of the reply read so far, told to whoever streams the turn each time it
+  /// grows, as a [`Bill`] in the form of the usage of a turn: a reader that drops the turn before
+  /// its result pays that request, since the turn then settles nothing.
+  pub(super) fn billed(&mut self) -> Option<Unpaid> {
+    let spent = self.spent.clone()?;
+    let unpaid = Unpaid { model: self.model.clone(), spent };
+    if self.billed.as_ref() != Some(&unpaid.spent) {
+      let Spent { input, output, cache_read: read, cache_creation: wrote } = unpaid.spent;
+      let input = input + read + wrote;
+      let bill = Bill { input, output, read, wrote, dollars: unpaid.cost() };
+      self.told(RawStreamingChoice::Unknown(bill.part()));
+      self.billed = Some(unpaid.spent.clone());
+    }
+    Some(unpaid)
   }
 
   /// One event of a message as it streams.

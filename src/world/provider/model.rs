@@ -15,8 +15,13 @@ use rig_core::{
 use serde_json::{Map, Value, json};
 
 use super::{
-  Advertised, Hosted, Told, answer::streamed, catalog, images::Images, messages::messages,
-  search::Searches, thinking::Thought,
+  Advertised, Hosted, Told,
+  answer::{Bill, streamed},
+  catalog,
+  images::Images,
+  messages::messages,
+  search::Searches,
+  thinking::Thought,
 };
 use crate::skill;
 use crate::world::files;
@@ -53,7 +58,18 @@ pub(super) struct Asked {
   pub(super) chain: String,
   pub(super) request: CompletionRequest,
   pub(super) told: Told,
+  pub(super) billed: Billed,
   pub(super) thought: Option<(u64, Map<String, Value>)>,
+}
+
+/// What a turn tells of each of its requests as it streams: what that request read and wrote so
+/// far, as [`Bill`] says.
+pub(super) type Billed = Arc<dyn Fn(Bill) + Send + Sync>;
+
+/// Whom a turn tells as it streams: what its model writes, and what each of its requests read.
+pub(super) struct Tells {
+  pub(super) told: Told,
+  pub(super) billed: Billed,
 }
 
 /// What a model answers a turn with: the response of a model of rig, or the turn that a function of
@@ -425,12 +441,12 @@ pub(super) struct Ask<'a> {
 
 /// The model an actor names, and what a reply asks it: the engine as the system prompt, the turns
 /// of the chain, the settings of the effort, the conversation where the model takes one, and whom
-/// it tells what it writes.
+/// it tells what it writes and what it read.
 pub(super) fn requested(
   models: &[Model],
   ask: Ask<'_>,
   images: &mut Images,
-  told: Told,
+  tells: Tells,
 ) -> Result<(Model, Asked), CompletionError> {
   let Ask { system, actor, chain, turns, conversation } = ask;
   let found =
@@ -454,7 +470,8 @@ pub(super) fn requested(
     output_schema: None,
     record_telemetry_content: false,
   };
-  let asked =
-    Asked { actor: actor.to_owned(), chain: chain.to_owned(), request, told, thought: None };
+  let Tells { told, billed } = tells;
+  let (actor, chain) = (actor.to_owned(), chain.to_owned());
+  let asked = Asked { actor, chain, request, told, billed, thought: None };
   Ok((model.clone(), asked))
 }

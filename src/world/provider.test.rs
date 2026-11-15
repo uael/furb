@@ -49,7 +49,7 @@ use jiff::{Zoned, civil};
 
 use super::{
   Hosted, Mode, Model, Provider, Retries, Writes,
-  answer::{unclosed, unfenced, uuid_from},
+  answer::{Bill, unclosed, unfenced, uuid_from},
   catalog::Catalog,
   images,
   local::Server,
@@ -486,11 +486,17 @@ struct Halting {
   parts: Vec<&'static str>,
   dropped: Arc<AtomicBool>,
   breaks: bool,
+  bill: Option<Bill>,
 }
 
 impl Halting {
   fn writes(parts: &[&'static str]) -> Self {
-    Self { parts: parts.to_vec(), dropped: Arc::default(), breaks: false }
+    Self { parts: parts.to_vec(), dropped: Arc::default(), breaks: false, bill: None }
+  }
+
+  /// A model that tells this bill of its request before it writes these parts of its text.
+  fn bills(bill: Bill, parts: &[&'static str]) -> Self {
+    Self { bill: Some(bill), ..Self::writes(parts) }
   }
 
   /// A model that writes these parts of its text, and whose stream then fails, in place of waiting.
@@ -512,9 +518,10 @@ impl CompletionModel for Halting {
     _: CompletionRequest,
   ) -> impl Future<Output = Result<StreamingCompletionResponse, CompletionError>> {
     let flag = Flag(Arc::clone(&self.dropped));
-    let said = stream::iter(
-      self.parts.clone().into_iter().map(|part| Ok(RawStreamingChoice::Message(part.to_owned()))),
-    );
+    let billed = self.bill.map(|bill| Ok(RawStreamingChoice::Unknown(bill.part())));
+    let wrote =
+      self.parts.clone().into_iter().map(|part| Ok(RawStreamingChoice::Message(part.to_owned())));
+    let said = stream::iter(billed.into_iter().chain(wrote));
     if self.breaks {
       let broke = stream::iter([Err(CompletionError::ProviderError("the stream broke".into()))]);
       return std_future::ready(Ok(StreamingCompletionResponse::stream(
@@ -567,6 +574,16 @@ fn a_reply_ends_at_the_first_statement_that_cannot_be_python_and_the_run_of_its_
     "the run of the word as far as the statement raised"
   );
   assert!(!ran(&mut engine, "foo"), "no later statement ran");
+}
+
+#[test]
+fn a_reply_that_ends_before_its_stream_pays_what_its_request_read_as_far_as_its_stream_told() {
+  let bill = Bill { input: 3000, output: 7, read: 0, wrote: 2000, dollars: 0.25 };
+  let model = Halting::bills(bill, &["Here is the code:\n", "foo()\n"]);
+  let (mut engine, _) = life("billed", vec![Model::new("m", 1000, model)]);
+  asked(&mut engine);
+  let turn = "('assistant', 'Here is the code:', (3000, 7, 0, 2000, 0.25), [{'type': 'text', 'text': 'Here is the code:'}])";
+  assert_eq!(replied(&mut engine), turn);
 }
 
 #[test]

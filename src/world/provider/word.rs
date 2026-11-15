@@ -6,7 +6,7 @@ use std::fmt::{self, Write};
 use rig_core::completion::CompletionError;
 
 use super::{
-  answer::cut,
+  answer::{Bill, cut},
   hearer::{Replied, Reply, noted},
   retry::failure,
   watch::{self, Watch},
@@ -14,7 +14,7 @@ use super::{
 use crate::{
   ear::{Co, say},
   fact::Fact,
-  value::Object,
+  value::{Object, entry},
 };
 
 /// A word as python, each quote in it bound as a string by the Kernel, and nothing when the
@@ -52,7 +52,10 @@ pub(super) async fn kept(
   if why.is_empty() {
     return Some(got);
   }
-  let turn = cut(ran).ok()?;
+  // A turn that came pays its request, and a call that failed leaves it to the next turn of the
+  // provider that comes to a result.
+  let usage = got.as_ref().ok().and_then(|turn| entry(&turn.as_ref(), 2)).map(|one| one.to_owned());
+  let turn = cut(ran, usage.unwrap_or_else(|| Bill::usage(None))).ok()?;
   let (what, fields) = match &got {
     Err(no) => (STOPPED, [("why", failure(no)), ("ran", ending(ran))]),
     Ok(_) => (AFTER, [("why", why), ("ran", ending(ran))]),

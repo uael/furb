@@ -20,9 +20,9 @@ use tokio::{
 use super::{
   Advertised, Mode, Provider, Refresh, Retries, Search, Settings, Systems, Told, Unrefreshed,
   Writes,
-  answer::{Answering, answered, cut},
+  answer::{Answering, Bill, answered, cut},
   images::Images,
-  model::{Ask, Model, requested, standing},
+  model::{Ask, Model, Tells, requested, standing},
   retry::{Backoff, Retry, failure, overflows, recoverable},
   search::{Error as Unsearched, free},
   thinking::{Thinking, thinks},
@@ -290,7 +290,7 @@ impl Hearer {
     let id = about.to_owned();
     let backoff = self.backoff;
     co.take(about, answered(Answering { id, asked, backoff, tells, told, hold: holds, again }));
-    Ok(Call { watch: streams.then(Watch::default), hold })
+    Ok(Call { watch: streams.then(Watch::default), hold, bill: None })
   }
 
   /// The system prompt of a chain, as [`Systems`] says: a life that holds no other engine reads
@@ -363,9 +363,17 @@ impl Hearer {
     // that ran, which the chain runs as it ran, and the chain is told why before it. The model
     // wrote no more of it that counts, and its call ends with the reply.
     let ran = watch.ran().map(str::to_owned);
-    let Ok(turn) = cut(ran.as_deref().unwrap_or_else(|| watch.through(line))) else { return };
+    let word = ran.as_deref().unwrap_or_else(|| watch.through(line));
+    let Ok(turn) = cut(word, Bill::usage(reply.call.bill.as_ref())) else { return };
     let note = ran.map(|ran| (AFTER, [("why", unpython(line)), ("ran", ending(&ran))]));
     self.replies.end(co, &id, Ending { turn, note }).await;
+  }
+
+  /// What the request of the call of a reply that still stands read so far.
+  pub(super) fn billed(&mut self, id: &str, bill: Bill) {
+    if let Some(reply) = self.replies.taken.get_mut(id) {
+      reply.call.bill = Some(bill);
+    }
   }
 
   /// A retry of the call of the model of a reply that still stands, told to the host under its
@@ -374,9 +382,12 @@ impl Hearer {
     let Retried { id, retry, limit } = retried;
     let Some(reply) = self.replies.taken.get_mut(&id) else { return };
     // A model asked again writes another word, and a part of this one ran, so the reply ends with
-    // the word that ran, and the model is not asked again.
+    // the word that ran, and the model is not asked again. The call failed, so the provider gives
+    // what its request read to the next turn that comes to a result, and the reply pays nothing of
+    // it.
+    reply.call.bill = None;
     if let Some(ran) = reply.call.watch.as_ref().and_then(Watch::ran).map(str::to_owned)
-      && let Ok(turn) = cut(&ran)
+      && let Ok(turn) = cut(&ran, Bill::usage(None))
     {
       let note = Some((STOPPED, [("why", retry.why.clone()), ("ran", ending(&ran))]));
       return self.replies.end(co, &id, Ending { turn, note }).await;
@@ -483,7 +494,10 @@ impl Hearer {
     }
     let mine = self.replies.taken.iter().find(|(_, reply)| reply.rung == a.about());
     let Some((id, reply)) = mine else { return };
-    let Some(Ok(turn)) = reply.call.watch.as_ref().and_then(Watch::ran).map(cut) else { return };
+    let ran = reply.call.watch.as_ref().and_then(Watch::ran);
+    let Some(Ok(turn)) = ran.map(|ran| cut(ran, Bill::usage(reply.call.bill.as_ref()))) else {
+      return;
+    };
     let id = id.clone();
     self.replies.end(co, &id, Ending { turn, note: None }).await;
   }
@@ -631,6 +645,9 @@ pub(super) struct Call {
   /// Whether a pause holds the reply, which holds the next call of its model: a call that runs
   /// returns, and a call that waits to be made again waits for the wake.
   hold: holding::Sender<bool>,
+  /// What the request of the call read as far as its stream told, which the reply pays when it
+  /// ends before its stream does.
+  bill: Option<Bill>,
 }
 
 /// What a search came to: its text, or why it gives none.
@@ -659,6 +676,8 @@ pub(super) fn reply_gone(why: impl fmt::Display) -> CompletionError {
 /// word, which [`unclosed`](super::answer::unclosed) drops.
 pub(super) enum Replied {
   Wrote(Wrote),
+  /// What the request of the call of a reply read so far: the id of the reply, and its bill.
+  Billed(String, Bill),
   Retried(Retried),
   Came(Came),
   Refreshed {
@@ -726,12 +745,15 @@ pub(super) async fn noted(co: &mut Co<Replied>, rung: &str, what: &str, fields: 
 }
 
 /// What a turn tells as it streams, sent to the work of its reply, which tells the host and reads
-/// the word.
-pub(super) fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
+/// the word, and keeps the bill of its request. A reply that went has no reader for what its model
+/// still tells.
+pub(super) fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Tells {
+  let (them, by) = (tells.clone(), id.to_owned());
+  let billed = Arc::new(move |bill| drop(them.send(Replied::Billed(by.clone(), bill))));
   let (id, tells) = (id.to_owned(), tells.clone());
-  Arc::new(move |text, thinking| {
+  let told: Told = Arc::new(move |text, thinking| {
     let (text, thinking) = (text.to_owned(), thinking.to_owned());
-    // A reply that went has no reader for what its model still writes.
     drop(tells.send(Replied::Wrote(Wrote { id: id.clone(), text, thinking })));
-  })
+  });
+  Tells { told, billed }
 }

@@ -436,6 +436,7 @@ impl Provider {
           Next::Heard(a) | Next::Resumed(a) => hearer.heard(&mut co, &a).await?,
           Next::Worked(Replied::Refreshed { about, got }) => hearer.refreshed(&mut co, about, got),
           Next::Worked(Replied::Wrote(wrote)) => hearer.wrote(&mut co, wrote).await,
+          Next::Worked(Replied::Billed(id, bill)) => hearer.billed(&id, bill),
           Next::Worked(Replied::Retried(retried)) => hearer.retried(&mut co, retried).await,
           Next::Worked(Replied::Came(came)) => hearer.came(&mut co, came).await,
           Next::Worked(Replied::Searched { id, got }) => searched(&mut co, &id, got),

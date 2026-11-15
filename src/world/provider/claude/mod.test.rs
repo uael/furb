@@ -33,6 +33,7 @@ use rig_core::{
 use serde_json::{Value, json};
 
 use super::{
+  super::answer::Bill,
   Account, Claude, Completion, Source, Switch,
   conversation::{cached, lasting},
 };
@@ -762,25 +763,35 @@ fn a_fork_of_a_fork_resumes_the_mark_of_the_cache_of_its_origin_and_marks_no_blo
 }
 
 #[test]
-fn a_turn_pays_what_the_request_of_a_turn_that_came_to_no_result_read_before_it() {
+fn a_turn_that_its_reader_drops_tells_the_reader_what_its_request_read_and_the_next_pays_its_own() {
   let yard = Yard::new("unpaid");
   fs::write(yard.at.join("hold"), "stream").unwrap();
   let model = yard.claude(10_000).completion_model("sonnet");
   let session = json!({"session": "chain"});
-  on_reactor(async {
+  let bills = on_reactor(async {
     let mut stream = model.stream(request("ENGINE ONLY", &[user("HOLD")], session.clone())).await?;
-    // The provider cuts the turn at its first part, as at a statement that cannot be python.
-    let first = stream.next().await;
-    assert!(matches!(first, Some(Ok(_))), "the held turn streams its first part");
-    Ok::<_, CompletionError>(())
+    // The reader drops the turn at its first text, as the provider cuts it at a statement that
+    // cannot be python.
+    let mut bills = Vec::new();
+    while let Some(part) = stream.next().await {
+      match part? {
+        StreamedAssistantContent::Unknown(part) => bills.extend(Bill::heard(&part)),
+        StreamedAssistantContent::Text(_) => break,
+        _ => {}
+      }
+    }
+    Ok::<_, CompletionError>(bills)
   })
   .unwrap();
+  // The held request read 1000 tokens fresh and wrote 2000 to the cache for an hour, at 2 and 4
+  // dollars for a million tokens of claude-sonnet-5-5.
+  let bill = Bill { input: 3000, output: 0, read: 0, wrote: 2000, dollars: 0.01 };
+  assert_eq!(bills, [bill]);
   fs::remove_file(yard.at.join("hold")).unwrap();
+  // The result of the next turn says 0.01, which is all that turn pays.
   let got = asked(&model, &[user("second")], session).unwrap();
-  // The cut request read 1000 tokens fresh and wrote 2000 to the cache for an hour, at 2 and 4
-  // dollars for a million tokens of claude-sonnet-5-5, and the result of the next turn says 0.01.
   let cost = got.raw["cost"].as_f64().unwrap_or_default();
-  assert!((cost - 0.02).abs() < 1e-9, "{cost}");
+  assert!((cost - 0.01).abs() < 1e-9, "{cost}");
 }
 
 #[test]
