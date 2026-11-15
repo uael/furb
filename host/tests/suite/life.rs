@@ -1141,7 +1141,7 @@ async fn a_retry_of_a_model_shows_on_the_line_that_it_writes_and_its_failure_onc
   let replied =
     |event: &Event| matches!(event, Event::Act(act) if act.kind == Kind::Reply && act.done());
   until(&mut events, replied).await;
-  let why = "claude-cli:opus/high answered nothing: ProviderError: the request is malformed";
+  let why = "opus/high answered nothing: the request is malformed";
   let why = why.to_owned();
   let failed = Line {
     number: 1,

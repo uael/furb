@@ -561,7 +561,7 @@ impl<'a> Reader<'a> {
     let reply = self.held.made_by(&rung.id).filter(|act| act.kind == Kind::Reply).last();
     let failed = reply.filter(|one| one.failed()).and_then(|one| {
       let (_, args) = fault(one.value()?)?;
-      Some(Mark::Failed { why: text(args.first()) })
+      Some(Mark::Failed { why: reason(&text(args.first())) })
     });
     let at = self.streams.ended.get(&rung.id).copied();
     let stopped = rung.cancelled().then_some(Mark::Stopped { at });
@@ -655,7 +655,7 @@ impl<'a> Reader<'a> {
 fn readable(why: &str, made: &[(&Act, Option<usize>)]) -> String {
   let why = reason(why);
   let named = made.iter().find_map(|(act, _)| why.strip_prefix(&format!("{} ", act.id)));
-  named.unwrap_or(why).to_owned()
+  named.map_or_else(|| why.clone(), str::to_owned)
 }
 
 /// The text of a word of an act, or nothing.

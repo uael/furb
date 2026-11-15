@@ -200,7 +200,7 @@ fn a_model_asked_again_says_its_attempt_its_wait_and_why_then_its_failure_and_th
   screen("thread-retries", &app);
   // The second attempt fails for a cause that does not pass, so no attempt is left, and the
   // model asked again fails too: the provider pauses the thread, which shows its failure once.
-  let failed = "✗  claude-cli:opus/high answered nothing";
+  let failed = "✗  opus/high answered nothing";
   let frame = app.wait_until(PATIENCE, || {
     let frame = app.text();
     frame.contains(failed) && frame.contains("‖ Paused")

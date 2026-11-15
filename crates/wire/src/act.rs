@@ -127,7 +127,7 @@ impl Maker {
   pub fn shown(&self) -> String {
     match self {
       Self::Model { model, effort } => {
-        let name = model.rsplit(':').next().unwrap_or(model);
+        let name = named(model);
         effort.as_ref().map_or_else(|| name.to_owned(), |effort| format!("{name}/{effort}"))
       }
       Self::Operator | Self::Member { .. } => "operator".to_owned(),
@@ -293,10 +293,23 @@ impl Pause {
   }
 }
 
+/// A model by its name with no provider, as `opus` for `claude-cli:opus`.
+fn named(model: &str) -> &str {
+  model.rsplit(':').next().unwrap_or(model)
+}
+
 /// Why a word failed, as a person reads it: a refusal of furb says its reason alone, with no name
-/// of its class.
-pub fn reason(why: &str) -> &str {
-  why.strip_prefix("Refused: ").unwrap_or(why)
+/// of its class, and a model that answered nothing says it as the head of its block names it, then
+/// the cause with no name of the class of the error of its provider.
+pub fn reason(why: &str) -> String {
+  let why = why.strip_prefix("Refused: ").unwrap_or(why);
+  match why.split_once(" answered nothing: ") {
+    Some((actor, cause)) => {
+      let cause = cause.strip_prefix("ProviderError: ").unwrap_or(cause);
+      format!("{} answered nothing: {cause}", named(actor))
+    }
+    None => why.to_owned(),
+  }
 }
 
 /// The class and the arguments of a value that is a fault, as the engine gives one.
