@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "script" / "private.py"
+SCRIPT = ROOT / "xtask" / "python" / "private.py"
 SPEC = importlib.util.spec_from_file_location("private", SCRIPT)
 assert SPEC and SPEC.loader
 private = importlib.util.module_from_spec(SPEC)

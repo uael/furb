@@ -183,7 +183,7 @@ jobs:
           UV_NO_SYNC: "1"
         run: |
           mkdir -p "$RUNNER_TEMP/measures"
-          uv run python script/tokens.py > "$RUNNER_TEMP/measures/tokens.txt" 2>&1 || echo "exit $?" >> "$RUNNER_TEMP/measures/tokens.txt"
+          uv run python xtask/python/tokens.py > "$RUNNER_TEMP/measures/tokens.txt" 2>&1 || echo "exit $?" >> "$RUNNER_TEMP/measures/tokens.txt"
       - if: always() && runner.os == 'Linux'
         uses: ./.github/actions/measures
         with:

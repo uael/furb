@@ -35,7 +35,7 @@ LANE_CHECKS = {
   "a dash in the prose": r'''git diff BASE...HEAD -- . ':(exclude)tests/corpus' | python3 -c "import sys; sys.exit(any(l[0] == '+' and ('\u2013' in l or '\u2014' in l) for l in sys.stdin if l))"''',
   "the format of the Rust": "cargo fmt --all --check",
   "a comment past 100 columns": "cargo xtask comment-width --base BASE",
-  "the walls of the engine and the doctrine": ".venv/bin/python script/tokens.py",
+  "the walls of the engine and the doctrine": "cargo xtask tokens",
   "the hygiene laws": ".venv/bin/python -m pytest -q test/test_hygiene.py -p no:cacheprovider --no-cov",
 }
 lane_runners: dict[str, tuple[str, str]] = globals().setdefault("lane_runners", {})

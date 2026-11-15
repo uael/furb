@@ -29,7 +29,7 @@ Without a title, it fails on each break.
 With --since REF, a change that stands already at REF is known: a pull request declares its own breaks, and a break that
 its base holds, declared by an earlier pull request, fails no later one until the next release.
 
-Usage: python3 script/contract.py [--base TAG] [--since REF] [--title TITLE] [--wording]
+Usage: cargo xtask contract [--base TAG] [--since REF] [--title TITLE] [--wording]
 """
 
 import argparse
@@ -44,7 +44,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 ENGINE = "src/furb/engine.pyi"
 PAGE = "docs/promise.md"
 SCHEMA = "host/protocol.schema.json"

@@ -103,7 +103,7 @@ The protocol, the nodes of a view and the contract (P2, P5):
 - `host/tests/suite/daemon.rs::a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemon`
 
 `tests/suite/promise.rs::each_proof_that_the_page_of_the_promise_names_stands_in_its_file` fails when a test that this page
-names is gone. `script/contract.py` fails on a break of the contract that this page does not list below.
+names is gone. `cargo xtask contract` fails on a break of the contract that this page does not list below.
 
 What no machine proves yet, so the promise does not hold there until a proof lands:
 
@@ -148,4 +148,4 @@ form must change, and so these breaks stand for the next major, 1.0.0.
 - `.agents/skills/skills/skills.pyi skill: its type of return changes from Text to Act[Text]`: a word awaits the skill.
 
 The sentences of the contract that changed since v0.4.2 stand for 1.0.0 too. After it, a sentence that changes its
-meaning is a major, and `script/contract.py` names each one.
+meaning is a major, and `cargo xtask contract` names each one.

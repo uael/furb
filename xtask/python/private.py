@@ -1,12 +1,12 @@
 """The words and the traces of a person stay private: no record of the repository holds a prompt of the owner, his
 name or account, a session id or a path of his home, so each proof of a replay runs on scripted words.
 
-`uv run python script/private.py` reads each record that git tracks, and the image beside it, and names each line that
+`cargo xtask private` reads each record that git tracks, and the image beside it, and names each line that
 holds a trace: a path of the home of a person, a checkout under ~/src of an account, the handle of the owner (the public
 repositories uael/furb and uael/monty stand), the id of a session or of its scratch folder, and a prompt of the operator
 that is not scripted. It exits 1 when one does. test/outside/test_private_script.py runs it on each build, in CI.
 
-`uv run python script/private.py --scrub <record>...` writes each record again with each trace put to its stand-in, the same
+`cargo xtask private --scrub <record>...` writes each record again with each trace put to its stand-in, the same
 in each place that it stands, so that a replay of it reads the same life. It refuses an image, whose dump a scrub breaks:
 an image is made again from the record that a scrub wrote.
 """
@@ -19,7 +19,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 # The files that hold the record of a life, its log, what its modules held, or its image.
 KINDS = ("*.jsonl", "*.jsonl.zst", "*.modules", "*.log", "*.image")
 # Each trace of a person, with the stand-in that a scrub writes in its place, in the order of the scrub. A stand-in with

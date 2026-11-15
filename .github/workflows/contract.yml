@@ -1,7 +1,7 @@
 name: contract
 
 # The contract is the one promise to a caller of furb: `src/furb/engine.pyi` and the interface of each official kit.
-# script/contract.py reads each one at the last tag and in the pull request, and names each change that breaks a
+# xtask/python/contract.py reads each one at the last tag and in the pull request, and names each change that breaks a
 # caller. A break needs a title with a !, and a sentence that changes needs the label wording or a title with a !. It
 # is a workflow of its own, and not a job of gates.yml, since it runs again at each edit of the title and at each
 # label: a run of gates.yml for those events would cancel the suite of the head, or show each of its jobs as skipped.
@@ -33,7 +33,7 @@ jobs:
           sparse-checkout: |
             src/furb/engine.pyi
             .agents/skills/*/*.pyi
-            script/contract.py
+            xtask/python/contract.py
             docs/promise.md
           sparse-checkout-cone-mode: false
       # The script reads each contract of the last tag through git, so the tags come with the commit that each names.
@@ -55,4 +55,4 @@ jobs:
           git fetch --no-tags --depth=1 origin "$BASE"
           flags=
           case " $LABELS " in *" wording "*) flags=--wording ;; esac
-          python3 -I script/contract.py --since FETCH_HEAD --title "$TITLE" $flags
+          python3 -I xtask/python/contract.py --since FETCH_HEAD --title "$TITLE" $flags

@@ -306,7 +306,7 @@ beside it as its suite.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
 5. `engine.py`, minified with its program kept as it is, costs fewer tokens of `o200k_base`, the tokenizer of OpenAI,
-   than `BUDGET` of `script/tokens.py`, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
+   than `BUDGET` of `xtask/python/tokens.py`, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of
    `o200k_base` in the engine.
@@ -323,8 +323,8 @@ beside it as its suite.
 `cargo xtask` lists each task of a developer, and runs it from any folder of the tree: `check` runs the checks that the
 changed files reach, `test <suite>` runs a suite, and `test` alone runs every suite at once, each into
 `target/xtask/<suite>.log`, in about a minute; `frames` the frames of the window, `search <words>` finds a task or an
-option, and each script of `script/` that runs on its own is a task of its name, whose help is its docstring. The
-commands below are the ones it routes to. Three agents share one machine with its owner, so each task runs at the
+option, and each script of `xtask/python/` and of `script/` that runs on its own is a task of its name, whose help is
+its docstring. The commands below are the ones it routes to. Three agents share one machine with its owner, so each task runs at the
 lowest priority, which each build and each runner of tests that it starts inherits, at the width of the machine; the
 suite of Python (`pytest_configure` of `test/conftest.py`) and the runner of the TypeScript tests lower their own
 priority the same way. A plain `cargo nextest run` keeps the priority of its shell: start it with `nice -n 19`, or run
@@ -403,13 +403,14 @@ fix what your change broke, and report what was broken before.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
   `addopts` in `pyproject.toml` holds `-n auto`, so `-p no:xdist` fails with an unrecognized argument. Run the
   suite in one process with `-n0`, as `uv run pytest -q -n0 <path>`.
-- `uv run python script/tokens.py`: the cost of the minified engine and of `DOCTRINE.md` in tokens of `o200k_base`,
+- `cargo xtask tokens`: the cost of the minified engine and of `DOCTRINE.md` in tokens of `o200k_base`,
   against their walls, from the code of law 5 and in seconds. It builds nothing: it counts the newest minified engine
   that is the program of `engine.py`, from the installed `furb_monty` or a `system.py` in `target`, and when none is, it
   names `cargo check` to make one. `--doctrine` or `--engine` prints that one count alone, and `--stdin` counts a draft
-  of the doctrine from stdin, so `uv run python script/tokens.py --stdin < draft.md` checks it against the wall with no
+  of the doctrine from stdin, so `cargo xtask tokens --stdin < draft.md` checks it against the wall with no
   write. Each exits 1 over its wall.
-- `uv run ruff format src test script .agents/skills` then `uv run ruff check src test script .agents/skills`: format
+- `uv run ruff format src test script xtask/python .agents/skills` then `uv run ruff check src test script xtask/python
+  .agents/skills`: format
   and lint. Two spaces of indentation, 120 columns.
 - `.furb` is outside the formatter, even for a path that you give it: its words keep the form of the engine. Ruff
   lints it for what breaks a word, which is a name that nothing binds, a bug of the family B and an error of the family
@@ -518,13 +519,14 @@ fix what your change broke, and report what was broken before.
 - `cargo xtask links [--fix]`: check that each link in a README that a package carries works on the page of the
   package on PyPI, npm or crates.io, which read no relative link. It lists each package and its README from the
   manifests, and fails on a relative link, which `--fix` writes as absolute, at `main` on GitHub. The hooks run it.
-- `uv run python script/contract.py [--base TAG] [--since REF] [--title TITLE] [--wording]`: compare `src/furb/engine.pyi` and the
+- `cargo xtask contract [--base TAG] [--since REF] [--title TITLE] [--wording]`: compare `src/furb/engine.pyi` and the
   interface of each official kit with the last tag, and name each break, each sentence that changes and each minor. It
   fails on a break, and on a sentence that changes, unless the title holds `!`, and unless `--wording` says that the
   pull request holds the label wording for the sentence. A change that stands already at the ref of `--since`, the base of
-  the pull request, is known and fails nothing. `.github/workflows/contract.yml` runs it on each pull request.
-- `cargo xtask paths`: check that each path of the repository that a file of `script/`, of `xtask/src/` or of
-  `.github/workflows/` names is a file or a folder that git holds, or a file that a build makes and git ignores. It
+  the pull request, is known and fails nothing. `.github/workflows/contract.yml` runs its python,
+  `xtask/python/contract.py`, on each pull request, with no toolchain of Rust.
+- `cargo xtask paths`: check that each path of the repository that a file of `script/`, of `xtask/src/`, of
+  `xtask/python/` or of `.github/workflows/` names is a file or a folder that git holds, or a file that a build makes and git ignores. It
   names the file, the line and the path of each one that stands no more, and it reads git alone. The hooks run it.
 - `cargo xtask unused [--tests]`: list each exported name of the TypeScript side and each public item of the
   crates that no file but a test names, its own file included. It fails on a name, and the hooks run it. A name that a

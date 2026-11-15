@@ -144,7 +144,7 @@ skip-magic-trailing-comma = true
 [tool.ty.src]
 # The words of the project, and no test of theirs: a test drives the engine through a double, which the checker
 # cannot follow.
-include = ["src", "test", "script", "bind/python", ".agents/skills", ".furb/skills/*/*.py"]
+include = ["src", "test", "script", "xtask/python", "bind/python", ".agents/skills", ".furb/skills/*/*.py"]
 
 # The suite of an extension imports the harness of the engine as conftest, as pytest does from its pythonpath, and
 # its own helpers from skills.conftest. The package furb_monty is read from its source and the stub of its

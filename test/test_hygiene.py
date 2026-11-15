@@ -7,7 +7,7 @@ import subprocess
 from collections import Counter
 from pathlib import Path
 
-from script.tokens import BUDGET, DOCTRINE, doctrine_tokens, engine_tokens
+from xtask.python.tokens import BUDGET, DOCTRINE, doctrine_tokens, engine_tokens
 
 from furb import engine
 from furb_monty import _monty

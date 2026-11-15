@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 SPEC = importlib.util.spec_from_file_location(
-  "contract", Path(__file__).resolve().parents[2] / "script" / "contract.py"
+  "contract", Path(__file__).resolve().parents[2] / "xtask" / "python" / "contract.py"
 )
 assert SPEC and SPEC.loader
 contract = importlib.util.module_from_spec(SPEC)

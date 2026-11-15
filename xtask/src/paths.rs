@@ -23,7 +23,7 @@ use crate::{Fault, git};
 
 /// The folders of the tools of a developer, the scripts and the tasks, and of the workflows that
 /// run them. The tests of xtask stay out, since a test names the paths of a yard of its own.
-const WATCHED: [&str; 3] = ["script/", "xtask/src/", ".github/workflows/"];
+const WATCHED: [&str; 4] = ["script/", "xtask/src/", "xtask/python/", ".github/workflows/"];
 /// The names that a script gives to the root of the repository.
 const ROOTS: [&str; 2] = ["root", "ROOT"];
 /// The paths that a tool makes in a folder that is not the repository.

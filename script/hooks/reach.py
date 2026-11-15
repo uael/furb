@@ -40,12 +40,12 @@ HOOK = {"script/hooks/pre-commit": "test/outside/test_hook_script.py"}
 CONTRACT = re.compile(r"(test/(?!outside/)|\.agents/skills/[^/]+/test/|\.furb/skills/[^/]+/test/)")
 TEST = re.compile(r"(test|\.agents/skills/[^/]+/test|\.furb/skills(/[^/]+/test)?)/(.+/)?test_[^/]*\.py$")
 SKILL = re.compile(r"((?:\.furb|\.agents)/skills/[^/]+)/")
-SCRIPT = re.compile(r"script/(?:hooks/)?([^/]+)\.(?:py|sh)$")
+SCRIPT = re.compile(r"(?:script/(?:hooks/)?|xtask/python/)([^/]+)\.(?:py|sh)$")
 
 
 def naming(name: str, stem: str) -> list[str]:
   """Each test file that names a script, by its file or as a module that it imports."""
-  marks = (name, f"import {stem}", f"from {stem} ", f"script.{stem}", f'"{stem}"')
+  marks = (name, f"import {stem}", f"from {stem} ", f"script.{stem}", f"python.{stem}", f'"{stem}"')
   tests = [
     *ROOT.glob("test/**/test_*.py"),
     *ROOT.glob("script/hooks/test_*.py"),

@@ -1296,7 +1296,7 @@ fn each_record_of_the_corpus_opens_by_its_image_to_the_state_of_its_record() {
 /// image, which no build makes again but the one that raises the version of an image. That build
 /// writes both again with `FURB_IMAGE_AGAIN=1`, from `language.jsonl` of the corpus, with `HOME`
 /// and `TMPDIR` set to folders that name no person, since the stand of the life says the home, the
-/// folder and the doctrine, and `script/private.py` fails on a trace of a person in either file.
+/// folder and the doctrine, and `cargo xtask private` fails on a trace of a person in either file.
 #[test]
 fn an_image_that_an_earlier_build_wrote_opens_by_the_image_to_the_state_of_its_record() {
   let frozen = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("image");

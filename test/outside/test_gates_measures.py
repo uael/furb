@@ -20,7 +20,7 @@ def published(job: str) -> list[dict]:
 
 
 def test_the_suite_on_linux_publishes_the_output_of_the_script_of_the_tokens_even_when_a_test_fails() -> None:
-  [run] = [one for one in steps("suite") if "script/tokens.py" in one.get("run", "")]
+  [run] = [one for one in steps("suite") if "xtask/python/tokens.py" in one.get("run", "")]
   [kept] = published("suite")
   assert "Linux" in run["if"] and "always()" in run["if"]
   assert "Linux" in kept["if"] and "always()" in kept["if"] and kept["with"] == {"name": "tokens"}

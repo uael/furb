@@ -1,6 +1,7 @@
 //! The tasks of a developer of furb, which `cargo xtask` runs from any folder of the tree.
 //!
-//! Each script of `script/` that runs on its own is a task too: its name is the name of its file,
+//! Each script of `xtask/python/` and `script/` that runs on its own is a task too: its name is the
+//! name of its file,
 //! and its help is the first sentence of its docstring, so a script says what it does in one place.
 //! The tasks route to the tools that do the work (cargo, pre-commit, uv, bun), and hold no copy of
 //! their commands; a task that no tool does, as `clean-caches`, does its work here.
@@ -47,7 +48,7 @@ use clap::{
 #[command(
   name = "cargo xtask",
   bin_name = "cargo xtask",
-  about = "The tasks of a developer of furb. A script of script/ is a task, whose --help is its own.",
+  about = "The tasks of a developer of furb. A script of xtask/python/ or script/ is a task, whose --help is its own.",
   arg_required_else_help = true
 )]
 struct Xtask {
@@ -210,10 +211,10 @@ enum Task {
   /// Fail on each path of the repository that a tool of a developer or a workflow names and that
   /// git does not hold, with its file and its line.
   ///
-  /// It reads each file of script/, xtask/src/ and .github/workflows/. A path whose first part is a
-  /// folder of the repository stands when git holds it as a file or a folder, or ignores it as what
-  /// a build makes. A path with a variable or a pattern in it is not checked, and a path after
-  /// `$root/` is a path of the repository.
+  /// It reads each file of script/, xtask/src/, xtask/python/ and .github/workflows/. A path whose
+  /// first part is a folder of the repository stands when git holds it as a file or a folder, or
+  /// ignores it as what a build makes. A path with a variable or a pattern in it is not checked,
+  /// and a path after `$root/` is a path of the repository.
   Paths,
   /// Lint the workspace on Linux and Windows, which this machine does not build, so code under a
   /// cfg of those systems shows its warnings before the gates of CI fail on it.
@@ -412,7 +413,7 @@ enum Fault {
   Moved(String),
 }
 
-/// A script of `script/` that runs on its own, as a task.
+/// A script of `xtask/python/` or `script/` that runs on its own, as a task.
 struct Script {
   name: String,
   path: PathBuf,
@@ -686,15 +687,20 @@ impl Script {
   }
 }
 
-/// Each script of `script/` that runs on its own: each shell script, and each python script that
-/// calls its main, since the others are libraries that the scripts import.
+/// Each script of `xtask/python/` and `script/` that runs on its own: each shell script, and each
+/// python script that calls its main, since the others are libraries that the scripts import. The
+/// python of a task whose truth only python reads, as an AST of python, stands in `xtask/python/`.
 fn scripts(root: &Path) -> Result<Vec<Script>, Fault> {
   let mut scripts = Vec::new();
-  let folder = root.join("script");
-  let entries =
-    fs::read_dir(&folder).map_err(|source| Fault::Read { path: folder.clone(), source })?;
-  for entry in entries {
-    let path = entry.map_err(|source| Fault::Read { path: folder.clone(), source })?.path();
+  let mut entries = Vec::new();
+  for folder in [root.join("xtask/python"), root.join("script")] {
+    let read =
+      fs::read_dir(&folder).map_err(|source| Fault::Read { path: folder.clone(), source })?;
+    for entry in read {
+      entries.push(entry.map_err(|source| Fault::Read { path: folder.clone(), source })?.path());
+    }
+  }
+  for path in entries {
     let (Some(stem), Some(suffix)) = (path.file_stem(), path.extension()) else { continue };
     let python = suffix == "py";
     if !python && suffix != "sh" {

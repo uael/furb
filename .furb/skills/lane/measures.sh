@@ -8,7 +8,7 @@ from=$(git merge-base origin/main HEAD)
 echo "head: $(git log --oneline -1 | cut -c1-90)"
 echo "against main, all: $(git diff --shortstat "$from" HEAD)"
 git diff --numstat "$from" HEAD | python3 -I "$kit/kinds.py"
-echo "engine: $(.venv/bin/python script/tokens.py 2>&1 | grep engine | cut -c1-80)"
+echo "engine: $(cargo xtask tokens 2>&1 | grep engine | cut -c1-80)"
 echo "held tests: $(grep -c . "$kit/ts-held.txt")"
 pr=$(gh pr list --repo uael/furb --head "$base" --state open --json number --jq '.[0].number // empty' 2>/dev/null)
 if [ -n "$pr" ]; then
