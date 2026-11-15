@@ -115,10 +115,11 @@ impl Feed<'_> {
         rows.extend([Row::default(), says(&back, muted)]);
         rows
       }
-      // Until its page comes, the thread shows what its card holds: the first line of its message.
+      // Until its page comes, the thread shows what its card holds: the first line of its message,
+      // which a model gave to the thread of an agent.
       (None, None) => {
-        let card = self.model.client.card(&self.opened.thread.key);
-        return card.map(|card| self.message(&card.thread.title, true)).unwrap_or_default();
+        let his = self.opened.from.is_none();
+        return self.model.title().map(|title| self.message(&title, his)).unwrap_or_default();
       }
       (None, Some(0)) => return Vec::new(),
       (None, Some(above)) => {

@@ -577,7 +577,8 @@ impl Model {
   /// that says something, as the daemon titles a card.
   pub(crate) fn title(&self) -> Option<String> {
     let opened = self.client.thread.as_ref()?;
-    let card = self.client.card(&opened.thread.key).map(|card| card.thread.title.clone());
+    let card = self.client.card(&opened.thread.key).map(|card| &card.thread);
+    let card = card.or_else(|| opened.agent()).map(|card| card.title.clone());
     let first = || opened.thread.exchanges.get(&0).map(|one| one.text.clone());
     let pending = || opened.thread.pending.first().map(|one| one.text.clone());
     let title = card.or_else(first).or_else(pending)?;

@@ -7,7 +7,7 @@ use std::{
 };
 
 use furb_wire::{
-  Agent, Context, Exchange, OPERATOR, Page, Standing,
+  Agent, Context, Exchange, OPERATOR, Page, Standing, card,
   protocol::{Card, Verb},
 };
 
@@ -47,6 +47,14 @@ impl Opened {
     let agents = &self.thread.agents;
     let first = agents.iter().position(|agent| !rests(agent)).unwrap_or(agents.len());
     (first, &agents[first..])
+  }
+
+  /// The card of the thread of an agent, as the dock of the thread that it came from holds it,
+  /// which says its title and its state before its own page comes.
+  pub fn agent(&self) -> Option<&card::Card> {
+    let from = self.from.as_deref()?;
+    let agents = from.thread.agents.iter();
+    agents.map(|one| &one.card).find(|one| one.prompt == self.thread.key.2)
   }
 
   /// The thread that the operator opened from the list, whose agent this thread is, or this one.

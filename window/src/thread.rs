@@ -348,11 +348,11 @@ impl Model {
       .or_else(|| self.client.fault_of(opened.thread.key.0, &opened.thread.key.1))
   }
 
-  /// Whether the life of an open thread opens and its page did not come. A life that a fault
-  /// ended opens no more.
+  /// Whether the life of an open thread opens and its page did not come. A life whose open ended,
+  /// or that a fault ended, opens no more.
   pub(crate) fn opens(&self, opened: &Opened) -> bool {
     let hold = self.client.holds.get(&(opened.thread.key.0, opened.thread.key.1.clone()));
-    opened.thread.above.is_none() && hold.is_some_and(|hold| !hold.stood && hold.failed().is_none())
+    opened.thread.above.is_none() && hold.is_some_and(Hold::runs)
   }
 
   /// Whether the window says that the open thread opens: from [`QUIET`] on, as the bar of the open,
