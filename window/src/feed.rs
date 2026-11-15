@@ -27,6 +27,9 @@ use crate::{
 /// The word on the line of a block whose model has not begun to write it.
 const WRITES: &str = "writes";
 
+/// The one verb of furb that makes code and value, whose call shines while it works.
+const PROMPT: &str = "prompt";
+
 /// The word of the thought of a model while it thinks.
 const THINKS: &str = "thinks";
 
@@ -380,10 +383,19 @@ impl Feed<'_> {
     let room = room.saturating_sub(width(&timer) + 2 * usize::from(!timer.is_empty()));
     let mut text = vec![run(format!("{number:>gutter$}  "), Style::new().fg(color))];
     text.extend(clipped(colors, room, self.style(Role::Muted)));
+    // The light passes over the word that says that the model writes, as over each word of work,
+    // and over the call of `prompt` that the line awaits while its agent works: the one call that
+    // makes code and value in furb.
+    let code = PAD + gutter + 2;
+    let writes = (writes && loader.is_some()).then_some((code, Loader::Light(WRITES)));
+    let shines = matches!(mark, Mark::Runs { work: Work::Agent, .. }).then(|| {
+      let shown: String = text[1..].iter().map(|one| one.content.as_ref()).collect();
+      let at = shown.find(&format!("{PROMPT}("))?;
+      Some((code + shown[..at].width(), Loader::Light(PROMPT)))
+    });
     let shown = self.boxed(spread(text, timer, inner, Style::new()), ground);
-    // The light passes over the word that says that the model writes, as over each word of work.
-    let writes = (writes && loader.is_some()).then_some((PAD + gutter + 2, Loader::Light(WRITES)));
-    let loaders = loader.map(|one| (PAD + gutter - 1, one)).into_iter().chain(writes).collect();
+    let loaders = loader.map(|one| (PAD + gutter - 1, one));
+    let loaders = loaders.into_iter().chain(writes).chain(shines.flatten()).collect();
     let mut rows = vec![Row { loaders, ..Row::of(shown) }];
     rows.extend(output.into_iter().flatten());
     let under = under

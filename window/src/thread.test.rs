@@ -187,3 +187,27 @@ fn a_light_passes_over_the_word_of_a_model_that_writes_or_thinks_and_not_once_it
   exchange.block.as_mut().and_then(|one| one.thought.as_mut()).expect("a thought").took = Some(3);
   assert_eq!(lights(&model), [("writes".to_owned(), "writes")]);
 }
+
+#[test]
+fn the_call_of_prompt_that_a_line_awaits_shines_while_its_agent_works() {
+  let awaits = Code {
+    number: 3,
+    text: "lines = await prompt(str, 'Count the lines', on=chain('count'))".to_owned(),
+    mark: Mark::Runs { work: Work::Agent, began: None },
+    output: None,
+  };
+  let maker = Maker::Model { model: "claude-cli:opus".to_owned(), effort: None };
+  let block = Block { maker, lines: vec![awaits], more: true, thought: None };
+  let mut end = page(0..1);
+  end.exchanges[0].block = Some(block);
+  let model = opened(end);
+  let left = model.left();
+  let rows = texts(&model);
+  let shines: Vec<String> = left
+    .loaders
+    .iter()
+    .filter(|spot| spot.loader == Loader::Light("prompt"))
+    .map(|spot| rows[usize::from(spot.y)].chars().skip(usize::from(spot.x)).take(7).collect())
+    .collect();
+  assert_eq!(shines, ["prompt("]);
+}
