@@ -344,5 +344,5 @@ in three places:
   fails in the suite that uses each part.
 
 The width of a line of Rust is 100, as `rustfmt.toml` says. `cargo fmt --all` writes it for code and wraps no
-comment, so wrap each comment that you write to 100 by hand. `script/rustwidth.py`, which the hooks run, fails on
+comment, so wrap each comment that you write to 100 by hand. `cargo xtask comment-width`, which the hooks run, fails on
 a comment line that your change adds past it.

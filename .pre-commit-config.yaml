@@ -66,9 +66,9 @@ repos:
         language: system
         types_or: [rust]
         pass_filenames: false
-      - id: rustwidth
+      - id: comment-width
         name: no comment of rust goes past 100 characters
-        entry: python3 script/rustwidth.py
+        entry: cargo xtask comment-width
         language: system
         # The files that the commit stages, so a long comment that the tree holds in a file of another topic fails no
         # commit of this one.

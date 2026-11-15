@@ -11,6 +11,7 @@ mod lives;
 mod paths;
 mod tree;
 mod watch;
+mod width;
 #[cfg(test)]
 #[path = "../../tests/common/yard.rs"]
 mod yard;
@@ -200,6 +201,20 @@ enum Task {
   /// a build makes. A path with a variable or a pattern in it is not checked, and a path after
   /// `$root/` is a path of the repository.
   Paths,
+  /// Fail on each comment line of Rust that a change adds past 100 characters, which rustfmt does
+  /// not wrap.
+  ///
+  /// It reads the lines that the working tree adds to the base, and given files, as a hook gives
+  /// the staged ones, those files alone. A line inside a string is no comment, a line of code is
+  /// rustfmt's, and a line that the base holds is no debt of the change.
+  CommentWidth {
+    /// The ref that the change starts from; the merge base of the head with origin/main when
+    /// unsaid.
+    #[arg(long)]
+    base: Option<String>,
+    /// The files to read; each Rust file of the tree when none is given.
+    files: Vec<PathBuf>,
+  },
   /// Make, land and close a worktree of this clone.
   Tree {
     #[command(subcommand)]
@@ -312,6 +327,7 @@ fn run() -> Result<ExitCode, Fault> {
     Task::CleanCaches { scratch, uv } => caches::clean(&root, scratch, uv.as_deref()),
     Task::Paths => paths::check(),
     Task::Tree { verb } => tree::run(&root, verb),
+    Task::CommentWidth { base, files } => width::check(&root, base.as_deref(), &files),
     Task::Deepswe { places, verb } => Ok(deepswe::run(&root, places, verb)?),
     Task::Smoke { to } => Ok(lives::smoke(&root, to)?),
     Task::Play { to } => Ok(lives::play(&root, to)?),
