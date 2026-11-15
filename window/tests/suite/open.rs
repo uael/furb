@@ -319,11 +319,17 @@ fn an_open_that_fails_says_why_and_how_to_go_back_and_loses_no_draft() {
   let frame = shows(&app, "The record stays as it was.");
   assert!(frame.contains("Another process owns"), "{frame}");
   assert!(!frame.contains("Opening"), "{frame}");
-  // A message to the thread is refused the same way, and comes back to the input whole.
+  // A message to the thread is refused the same way, and comes back to the input whole. The
+  // thread shows it while its open goes, under the input that is empty and says what a reply
+  // does, so the wait is for the input that holds it.
   app.paste("and the replay");
   app.press("enter");
-  let frame = shows(&app, "┃ and the replay");
-  assert!(frame.contains("Another process owns"), "{frame}");
+  let back = app.wait_until(PATIENCE, || {
+    let frame = app.text();
+    frame.contains("┃ and the replay") && !frame.contains("A reply opens this thread again")
+  });
+  assert!(back, "the message never came back to the input:\n{}", app.text());
+  assert!(app.text().contains("Another process owns"), "{}", app.text());
   // The machine says that no life holds the record: the card rests again.
   shows(&app, "● now");
   screen("open-failed", &app);
