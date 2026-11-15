@@ -88,13 +88,14 @@ pub struct Agent {
 }
 
 /// One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
-/// the thread, the act of the message, the moment that it was said, who said it and its text, whether it is a word of Python
-/// that an operator ran on the thread, whose block holds its code and which has no text, whether
-/// the message still runs, the block of code that answers it once a model answers, and what the
-/// answer says to the operator, in the order it was said. A message that the operator said on a
-/// thread that works is done at once, since its model reads it at its next step, so only one that
-/// asks still runs. A message is the prompt of the thread, what an operator said on it, or a word
-/// that he ran on it, and what answers it is what came after it and before the next message.
+/// the thread, the act of the message, the moment that it was said, who said it and its text,
+/// whether it is a word of Python that an operator ran on the thread, whose block holds its code
+/// and which has no text, whether the message still runs, the block of code that answers it once
+/// a model answers, and what the answer says to the operator, in the order it was said. A message
+/// that the operator said on a thread that works is done at once, since its model reads it at its
+/// next step, so only one that asks still runs. A message is the prompt of the thread, what an
+/// operator said on it, or a word that he ran on it, and what answers it is what came after it and
+/// before the next message.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Exchange {
   pub at: usize,

@@ -1,7 +1,8 @@
 //! The scenarios of the captures: the 27 daily paths on which the window and the other programs in
-//! a terminal are judged, and the walk of the README. Each step of a scenario is one frame. A scenario that the window has is a
-//! walk: the words that its scripted model answers, turn by turn, and its steps. Another stands at
-//! a size on the steps of other scenarios. A scenario that the window has not names its gap.
+//! a terminal are judged, and the walk of the README. Each step of a scenario is one frame. A
+//! scenario that the window has is a walk: the words that its scripted model answers, turn by turn,
+//! and its steps. Another stands at a size on the steps of other scenarios. A scenario that the
+//! window has not names its gap.
 
 use std::time::Duration;
 
@@ -373,9 +374,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Key("PageUp"), Act::Key("PageUp"), Act::Key("PageUp"), Act::Key("PageUp")],
           "Message 1 of",
         ),
-        // The bar of the time, whose track marks each message: the thread steps back moment by moment, a click on the track takes
-        // it to a moment, a play steps it on, which the clocks that stand still hold, and an
-        // escape goes back to now.
+        // The bar of the time, whose track marks each message: the thread steps back moment by
+        // moment, a click on the track takes it to a moment, a play steps it on, which the clocks
+        // that stand still hold, and an escape goes back to now.
         step("x-time", &[Act::Key("End"), Act::Key("C-x"), Act::Key("b")], " now"),
         // The pointer on a diamond of the track shows the message said at that moment.
         step("x-hover", &[Act::Pointer { on: "◆", button: 35 }], "◆"),
