@@ -18,7 +18,8 @@ use tokio::{
 };
 
 use super::{
-  Advertised, Mode, Provider, Refresh, Retries, Search, Settings, Told, Unrefreshed, Writes,
+  Advertised, Mode, Provider, Refresh, Retries, Search, Settings, Systems, Told, Unrefreshed,
+  Writes,
   answer::{Answering, answered, cut},
   images::Images,
   model::{Ask, Model, requested, standing},
@@ -60,6 +61,8 @@ pub(super) struct Hearer {
   mode: Mode,
   /// The system prompt of each request, as [`Provider::system`] sets it.
   system: Arc<str>,
+  /// The system prompt of each chain that read another engine first.
+  systems: Systems,
   native: Search,
   replies: Replies,
   /// What the ear keeps of the stands that it heard, which the image of a life holds.
@@ -104,6 +107,7 @@ impl Hearer {
       members,
       mode,
       system,
+      systems,
     } = provider;
     let actor = actor.unwrap_or_else(|| {
       models
@@ -129,6 +133,7 @@ impl Hearer {
       members,
       mode,
       system,
+      systems,
       native,
       replies: Replies::default(),
       stood,
@@ -266,13 +271,13 @@ impl Hearer {
   async fn asking(&mut self, co: &mut Co<Replied>, asking: Asking<'_>) -> Result<Call, Fault> {
     let Asking { about, chain, actor, again } = asking;
     let turns = co.call("turns", vec![], vec![("on", Object::string(chain))]).await?;
+    let system = self.system_of(co, chain).await?;
     let (tells, told) = mpsc::unbounded_channel();
     let wrote = written(about, &tells);
     let key = format!("{}/{chain}", self.life);
     let asked = {
       let held = self.models.read().unwrap_or_else(PoisonError::into_inner);
-      let asked =
-        Ask { system: &self.system, actor, chain, turns: turns.as_ref(), conversation: &key };
+      let asked = Ask { system: &system, actor, chain, turns: turns.as_ref(), conversation: &key };
       requested(&held, asked, &mut self.images, wrote).map(|one| thinks(one, self.thinking))
     };
     for uri in self.images.lost() {
@@ -286,6 +291,26 @@ impl Hearer {
     let backoff = self.backoff;
     co.take(about, answered(Answering { id, asked, backoff, tells, told, hold: holds, again }));
     Ok(Call { watch: streams.then(Watch::default), hold })
+  }
+
+  /// The system prompt of a chain, as [`Systems`] says: a life that holds no other engine reads
+  /// no source of the chain.
+  async fn system_of(&self, co: &mut Co<Replied>, chain: &str) -> Result<Arc<str>, Fault> {
+    if self.systems.0.is_empty() {
+      return Ok(Arc::clone(&self.system));
+    }
+    let mut lineage = vec![chain.to_owned()];
+    loop {
+      let last = lineage.last().map(|one| Object::string(one.as_str()));
+      let act = co.call("get", last.into_iter().collect(), vec![]).await?;
+      let source = act.as_ref().items().and_then(|words| words.get(5)?.as_str().map(str::to_owned));
+      match source.filter(|one| !one.is_empty()) {
+        Some(source) => lineage.push(source),
+        None => break,
+      }
+    }
+    let read = self.systems.of(lineage.iter().map(String::as_str));
+    Ok(read.map_or_else(|| Arc::clone(&self.system), Arc::from))
   }
 
   /// What the model of a reply that still stands writes, told to the host under the rung it writes

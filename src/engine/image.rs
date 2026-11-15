@@ -18,6 +18,7 @@ use crate::{
   ear::Ear,
   sand::Sand,
   value::{Fault, Object},
+  world::Systems,
 };
 
 /// The half of the host in the image of a life: what [`Outside`] and [`Engine`] hold of the
@@ -42,6 +43,7 @@ pub(crate) struct Half {
   taken: Object,
   ears: Vec<(String, Value)>,
   pub(crate) stood: Object,
+  pub(crate) systems: Systems,
 }
 
 impl Engine {
@@ -73,6 +75,7 @@ impl Engine {
       taken: self.taken.clone(),
       ears,
       stood,
+      systems: self.systems.clone(),
     };
     Ok(Some((half, self.sand.image()?)))
   }
@@ -121,6 +124,7 @@ impl Engine {
       parked: half.parked,
       taken: half.taken,
       made: half.made,
+      systems: half.systems,
     };
     engine.run(|sand, outside| outside.bound(sand))?;
     Ok(engine)

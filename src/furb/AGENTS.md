@@ -240,8 +240,9 @@ meanings. The entry of such a name here gives only its form in the engine.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel, the schema of the record, the release, and the texts of the engine and of the Kernel, which the store says
   as it hears the root of a new record at its birth. After a checkpoint, only the fact made of the segment after it
-  counts: the life that writes the checkpoint writes after it the fact made of the texts that it runs, and `furb
-  checkpoint` the fact made of its build, and the store says it at the root of the first life that goes on from a
+  counts: the life that writes the checkpoint writes after it the fact made of the texts that it runs, and a crossing,
+  of `furb checkpoint` or of the open of a life that ran another engine and keeps its record, the fact made of its
+  build, and the store says it at the root of the first life that goes on from a
   checkpoint of an earlier build that has none after it. A life of any build of the major replays that segment word by
   word on the texts that the fact holds, and goes on with them, and a drift is a defect.
 - checkpoint: the fact by which a record carries the state of its life to a later life of any build of its major, at
@@ -254,7 +255,10 @@ meanings. The entry of such a name here gives only its form in the engine.
   stays taken, an act that a value names stands known with its answer and runs nothing, and each chain with an open
   prompt opens paused while its seed binds it, then wakes unless a pause stood over it at the tip, so an open prompt asks its model again
   at once. A name of the module whose value the record
-  cannot hold is lost, and the chain is told.
+  cannot hold is lost, and the chain is told. Its `systems`, which the crate writes, holds each chain whose model
+  reads as its system prompt an engine that the next life does not run, under that engine, minified; a crossing adds
+  each chain there and ends the turns of each with one tell, `#chainN crossed`, which binds the lines of the minified
+  engine that differ as `chainN_diff`, so a chain only grows.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
   whose origin had the extension, since that chain made the rung of its origin again. In a setup, the life words of
   the extensions run as one turn of the default actor, after the turns of their files.

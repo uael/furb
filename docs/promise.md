@@ -19,6 +19,12 @@ no drift. A record that a build before #1290 made holds no such texts and may dr
 refused with the act that drifts, and a reader still reads each fact of it. A drift on the same engine is a defect, never a known limit (R1). Within a major, a later build of the
 engine never makes a record drift. Where a later build fixes a defect of replay at its root, an adapter of the old
 engine holds the record, in the one home of adapters, `src/furb/adapters.py`, keyed by the digest of the engine (R3).
+A life that keeps its record and ran another engine, Kernel or checkpointer of the major first reaches the exact
+state of its tip on them, by its image or by its record, then crosses: it writes a checkpoint and the fact made of
+the build that opens it, and goes on with that build. Each chain keeps as its system prompt the engine that it read
+first, and its turns end with one paragraph that holds the lines of the engine that differ, so a chain only grows. A
+build of the major from before the field `systems` of the checkpoint still opens such a record exactly, since no
+system prompt takes part in a replay; its chains then read the engine that the life runs.
 
 ## What is frozen within a major
 
@@ -26,8 +32,8 @@ engine holds the record, in the one home of adapters, `src/furb/adapters.py`, ke
 | --- | --- | --- |
 | The contract: the engine and the interface of each official kit | `src/furb/engine.pyi`, `.agents/skills/<name>/<name>.pyi` | frozen at 1.0.0, as now with the breaks that the last section lists |
 | The schema of the record | `RECORD_SCHEMA` in `src/world/store/schema.rs` | 1.1 |
-| The schema of a checkpoint: pure data, which `seed` of `src/furb/checkpoint.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.0 |
-| The protocol of the daemon | `PROTOCOL` in `host/src/protocol.rs`, `host/protocol.schema.json` | 19 |
+| The schema of a checkpoint: pure data, which `seed` of `src/furb/checkpoint.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.1 |
+| The protocol of the daemon | `PROTOCOL` in `host/src/protocol.rs`, `host/protocol.schema.json` | 22 |
 | The nodes of a view, a closed set that only grows (P5) | `host/protocol.schema.json` | with the protocol |
 
 A schema only adds within a major, and each reader skips each kind of fact and each field that it does not know. So a
@@ -59,6 +65,9 @@ R2, the exact tip, with a checkpoint and without one (resume and reopen):
 
 - `src/life.test.rs::a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip`
 - `src/life.test.rs::a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_prompt_of_each_chain`
+- `src/life.test.rs::a_record_of_another_engine_crosses_to_this_build_at_its_open`
+- `src/life.test.rs::an_image_of_another_engine_crosses_to_this_build_at_its_open`
+- `src/life.test.rs::a_crossing_by_the_image_and_by_the_record_reach_the_same_state`
 - `src/life.test.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
 - `tests/suite/promise.rs::a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint`
 - `host/tests/suite/daemon.rs::a_life_that_ended_opens_again_from_its_checkpoint`

@@ -72,7 +72,7 @@ use crate::{
   value,
   value::{Exit, Fault, Given, Object, ObjectRef, Text, entry},
   world,
-  world::Schema,
+  world::{Schema, Systems},
 };
 use std::{fmt, mem};
 
@@ -498,6 +498,8 @@ pub struct Engine {
   /// which its checkpoint names and writes after it. It is the build only for a life that was born
   /// on it.
   made: Object,
+  /// The system prompt of each chain that read first an engine that the life does not run.
+  systems: Systems,
 }
 
 impl Engine {
@@ -574,6 +576,7 @@ impl Engine {
   /// An engine on a sandbox and the side of its host, before any run: the record says what work it
   /// left and what loops.
   fn new(sand: Sand, outside: Outside, record: &[Object], made: Object) -> Self {
+    let systems = checkpoint::systems(record);
     Self {
       sand,
       outside,
@@ -585,6 +588,7 @@ impl Engine {
       parked: looping(record),
       taken: checkpoint::taken(record),
       made,
+      systems,
     }
   }
 
@@ -716,6 +720,25 @@ impl Engine {
   /// The entry of the fact made of the texts that the life runs.
   pub(crate) fn running(&self) -> &Object {
     &self.made
+  }
+
+  /// The system prompt of each chain that read first an engine that the life does not run.
+  pub(crate) fn systems(&self) -> &Systems {
+    &self.systems
+  }
+
+  /// A chain and each source of it in turn, by their names, as the life holds them.
+  pub(crate) fn lineage(&mut self, chain: &str) -> Result<Vec<String>, Fault> {
+    let mut lineage = vec![chain.to_owned()];
+    loop {
+      let last = lineage.last().map(|one| Object::string(one.as_str()));
+      let act = self.verb("get", last.into_iter().collect(), vec![])?;
+      let source = act.as_ref().items().and_then(|words| words.get(5)?.as_str().map(str::to_owned));
+      match source.filter(|one| !one.is_empty()) {
+        Some(source) => lineage.push(source),
+        None => return Ok(lineage),
+      }
+    }
   }
 
   /// Whether an ear of the host hears under a name.

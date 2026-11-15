@@ -26,11 +26,14 @@ API of its own:
   the World of the one that has one, `skills.rs`. `docs/skills.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
-  A host adds only its own ears, as the console of its operator. A life that opens from its image goes on with the
-  engine and the Kernel that the image holds, whatever build of the major opens it, as `src/image.rs` says. A life that
-  opens by its record goes on with the engine and the Kernel that the last segment of its record holds, whatever build
-  of the major opens it, so it opens at the exact state of its tip, as `src/checkpoint.rs` says. The models of a life
-  read the engine that the life runs. `script/engines.py` gives a copy of a record of a build before the
+  A host adds only its own ears, as the console of its operator. A life opens at the exact state of its tip, from its
+  image or by its record, on the engine and the Kernel that the image or the last segment of its record holds, as
+  `src/image.rs` and `src/checkpoint.rs` say. When those are not the ones of this build and the life keeps its record,
+  the open crosses first: a life that inspects reaches the tip on them and writes a checkpoint, which tells each chain
+  the lines of the engine that differ, then the fact made of this build, and the life goes on with this build. A
+  life that keeps nothing goes on with the engine that it opened on. Each chain reads as its system prompt the engine
+  that it read first, and a new chain with no source the engine that the life runs. `script/engines.py` gives a copy
+  of a record of a build before the
   texts of its engine from git. `tests/replay` holds the records that each build must replay on their own engines with
   no drift. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as `opened` and as `Engine.open`.
@@ -43,8 +46,8 @@ API of its own:
   boot, while `gathered` and `seed` of the checkpointer write and read its data. A life writes one through
   `Engine::checkpoint`, which its store keeps as it keeps each fact, and
   `furb checkpoint` writes one on a record that no life holds. Each writes after the checkpoint the fact made of the
-  texts of the next life: a life the texts that it runs, and `furb checkpoint` the texts of its build, which is the one
-  way a record moves to the engine and the Kernel of a build. A life boots on the last checkpoint of its record,
+  texts of the next life: a life the texts that it runs, and a crossing, of `furb checkpoint` or of an open, the texts
+  of its build. A life boots on the last checkpoint of its record,
   whatever engine wrote it, and replays the entries after it word by word, on the texts that they hold, so it opens at
   the exact state of its tip. A tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
   read only, and nothing forks it into a new life.

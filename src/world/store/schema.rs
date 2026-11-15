@@ -35,8 +35,10 @@ pub const RECORD_SCHEMA: Schema = Schema { major: 1, minor: 1 };
 
 /// The schema of the data of the checkpoint that this build writes and reads. The data of the major
 /// 1 also holds `again`, each word that ran on a chain, which `seed` names as cut, so a build reads
-/// it too, as [`Schema::opens_checkpoint`] says.
-pub const CHECKPOINT_SCHEMA: Schema = Schema { major: 2, minor: 0 };
+/// it too, as [`Schema::opens_checkpoint`] says. The minor 1 holds `systems`, the system prompt of
+/// each chain that reads an engine that the next life does not run; a reader of the minor 0 skips
+/// it, and gives each chain the engine that the life runs.
+pub const CHECKPOINT_SCHEMA: Schema = Schema { major: 2, minor: 1 };
 
 /// Why a build does not read what a schema names.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]

@@ -157,6 +157,8 @@ bytes = "1"
 schemars = "1"
 # The digest that names an image of a turn, and the form a request carries it in.
 sha2 = "0.10"
+# The lines of the engine that differ at a crossing, which each chain of the life is told.
+similar = "2"
 base64 = "0.22"
 # The reactor that wakes an ear when what it waits for is ready: a pipe of a command, a timer, a socket of a model,
 # and the listener on 127.0.0.1 that takes back the code of a login to a server of MCP.

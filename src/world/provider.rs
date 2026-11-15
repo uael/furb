@@ -37,6 +37,7 @@ use std::{
 };
 
 use futures::future::BoxFuture;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::task::JoinError;
 
@@ -108,6 +109,47 @@ pub struct Provider {
   mode: Mode,
   /// The system prompt of each request: the engine of the life, minified.
   system: Arc<str>,
+  /// The system prompt of each chain that read another engine first.
+  systems: Systems,
+}
+
+/// The system prompt of each chain whose model read first an engine that the life does not run:
+/// each such engine, minified as the model read it, with the chains that read it. A chain reads
+/// the engine that it read first for as long as it lives, since its transcript only grows at its
+/// end and a crossing tells it the change in a turn of its own: a chain that holds no such engine
+/// reads the one of its source, and a chain with no source the engine that the life runs. The data
+/// of a checkpoint holds it as `systems`, so a later life of any build gives each chain the same.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Systems(pub(crate) Vec<(String, Vec<String>)>);
+
+impl Systems {
+  /// The engine that a chain reads, from the chain and then each source of it in turn, and nothing
+  /// for the engine that the life runs.
+  pub(crate) fn of<'a>(&self, lineage: impl IntoIterator<Item = &'a str>) -> Option<&str> {
+    lineage.into_iter().find_map(|chain| {
+      self
+        .0
+        .iter()
+        .find(|(_, chains)| chains.iter().any(|one| one == chain))
+        .map(|one| one.0.as_str())
+    })
+  }
+
+  /// One more chain that reads an engine.
+  pub(crate) fn hold(&mut self, system: String, chain: String) {
+    match self.0.iter_mut().find(|one| one.0 == system) {
+      Some(one) => one.1.push(chain),
+      None => self.0.push((system, vec![chain])),
+    }
+  }
+
+  /// As the data of a checkpoint holds it: a list of each engine with the list of its chains.
+  pub(crate) fn object(&self) -> Object {
+    let chains = |chains: &[String]| Object::list(chains.iter().map(Object::string));
+    Object::list(
+      self.0.iter().map(|(system, held)| Object::list([Object::string(system), chains(held)])),
+    )
+  }
 }
 
 /// A home of what a life offers, which each clone shares, so a host that changes it changes the
@@ -213,6 +255,7 @@ impl Provider {
       members: Members::default(),
       mode: Mode::Live,
       system: Arc::from(crate::SYSTEM),
+      systems: Systems::default(),
     }
   }
 
@@ -250,6 +293,13 @@ impl Provider {
   #[must_use]
   pub fn system(mut self, system: Arc<str>) -> Self {
     self.system = system;
+    self
+  }
+
+  /// The system prompt of each chain that read another engine first, as [`Systems`] says.
+  #[must_use]
+  pub(crate) fn systems(mut self, systems: Systems) -> Self {
+    self.systems = systems;
     self
   }
 

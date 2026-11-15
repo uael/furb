@@ -20,8 +20,9 @@
 //! A life that ends with no image, as `src/image.rs` says, ends with its checkpoint, which the ear
 //! of its store keeps, since a life born from a checkpoint makes acts of its own at its birth, then
 //! with the fact made of the texts that it runs, so the life born on it runs them too; [`crossed`]
-//! writes one on a record that no life holds, then the fact made of this build, so the life born on
-//! it runs this build. A later life boots on the last checkpoint of its record, whatever engine
+//! writes one on a life that ran another engine, then the fact made of this build, so the life born
+//! on it runs this build: `furb checkpoint` on a record that no life holds, and the open of a life
+//! that keeps its record. A later life boots on the last checkpoint of its record, whatever engine
 //! wrote it, as [`booted`] says, so it replays the checkpoint and the entries after it alone, word
 //! by word, whatever build of the major made them: a resume returns to the exact state at the tip.
 //! A tail that a build cannot replay with no drift is a defect, and the record then opens to read
@@ -49,14 +50,17 @@ use std::{
   slice,
 };
 
+use similar::TextDiff;
+
 use crate::{
   Engine,
   engine::{OPERATOR, ROOT, callable},
   fact::Fact,
+  minify::minified,
   skill::definitions,
   value::{Fault, Object, ObjectRef, entry, field},
   wire,
-  world::{self, CHECKPOINT_SCHEMA, Store},
+  world::{self, CHECKPOINT_SCHEMA, Store, Systems},
 };
 
 /// The kind of the fact of a checkpoint.
@@ -79,9 +83,20 @@ fn prefix(carried: &Fact) -> Object {
   Object::tuple(words.into_iter().chain([turns]))
 }
 
-/// The entry of the checkpoint of a life at its tip, as the store keeps it. Its engine is the one
-/// that the fact made of the texts that the life runs names.
+/// The entry of the checkpoint of a life at its tip, as the store keeps it, before the fact made of
+/// the texts that the life runs, so the life born on it runs them too, as [`written_before`] says.
 pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
+  let next = engine.running().clone();
+  written_before(engine, &next)
+}
+
+/// The entry of the checkpoint of a life at its tip, as the store keeps it, before the fact made of
+/// the texts that the life born on it runs. Its engine is the one that the fact made of the texts
+/// that the life runs names. Its `systems` holds the system prompt of each chain whose model reads
+/// an engine that the next life does not run, as [`Systems`] says. When the next life runs another
+/// engine, the checkpoint crosses: each chain keeps the system prompt that it read, and its turns
+/// end with one paragraph that tells it the change, the lines of the minified engine that differ.
+fn written_before(engine: &mut Engine, next: &Object) -> Result<Object, Fault> {
   let define = callable(|args: Vec<Object>| {
     let word = args.first().and_then(|one| one.as_ref().as_str().map(str::to_owned));
     Ok(Object::string(definitions(&word.unwrap_or_default())))
@@ -89,6 +104,7 @@ pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
   let floor = engine.taken().clone();
   // The gather is the engine's own work over the whole life, so no bound of a turn cuts it.
   let data = engine.unbounded(|engine| engine.checkpointed("gathered", vec![define, floor]))?;
+  let mut next = Next::of(engine.running(), next)?;
   let mut fields = vec![
     (Object::string("schema"), CHECKPOINT_SCHEMA.object()),
     (
@@ -96,11 +112,101 @@ pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
       Object::string(world::made(slice::from_ref(engine.running())).unwrap_or_default()),
     ),
   ];
-  let pairs = data.as_ref().pairs().unwrap_or_default();
-  fields.extend(pairs.into_iter().map(|(key, one)| (key.to_owned(), one.to_owned())));
+  for (key, one) in data.as_ref().pairs().unwrap_or_default() {
+    let one = match key.as_str() {
+      Some("chains") => {
+        let chains = one.items().unwrap_or_default().into_iter();
+        Object::list(chains.map(|chain| next.chain(engine, chain)).collect::<Result<Vec<_>, _>>()?)
+      }
+      _ => one.to_owned(),
+    };
+    fields.push((key.to_owned(), one));
+  }
+  if !next.systems.0.is_empty() {
+    fields.push((Object::string("systems"), next.systems.object()));
+  }
   let fact =
     [CHECKPOINT, ROOT, "store"].map(Object::string).into_iter().chain([Object::dict(fields)]);
   Ok(Object::list([Object::list(fact)]))
+}
+
+/// What a checkpoint says of each chain to the life born on it: the system prompt of the life that
+/// writes it, the one of the next life, the lines that differ when they differ, and the system
+/// prompt of each chain that does not read the one of the next life.
+struct Next {
+  running: String,
+  after: String,
+  diff: Option<String>,
+  systems: Systems,
+}
+
+impl Next {
+  /// From the fact made of the texts that the life runs, and of those that the next life runs.
+  fn of(running: &Object, next: &Object) -> Result<Self, Fault> {
+    let (running, after) = (system(running)?, system(next)?);
+    let diff = (running != after).then(|| {
+      let diff = TextDiff::from_lines(&running, &after);
+      diff
+        .unified_diff()
+        .context_radius(0)
+        .missing_newline_hint(false)
+        .header("engine", "engine")
+        .to_string()
+    });
+    Ok(Self { running, after, diff, systems: Systems::default() })
+  }
+
+  /// A chain of the data as the next life reads it: the engine that its model reads joins
+  /// `systems` when the next life runs another one, and at a crossing its turns end with one
+  /// paragraph that tells it the lines of the minified engine that differ.
+  fn chain(&mut self, engine: &mut Engine, chain: ObjectRef<'_>) -> Result<Object, Fault> {
+    let id = field(&chain, "id").and_then(|one| one.as_str()).unwrap_or_default().to_owned();
+    let lineage = engine.lineage(&id)?;
+    let read = engine.systems().of(lineage.iter().map(String::as_str));
+    let read = read.unwrap_or(&self.running).to_owned();
+    if read != self.after {
+      self.systems.hold(read, id.clone());
+    }
+    let Some(diff) = &self.diff else { return Ok(chain.to_owned()) };
+    let mut name = format!("{id}_diff");
+    while format!("{diff}\n").contains(&format!("</s:{name}>\n")) {
+      name.push('_');
+    }
+    let note =
+      Object::list([Object::string(format!("#{id} crossed\n<s:{name}>\n{diff}</s:{name}>"))]);
+    let tell = Object::tuple(["tell", &id, "store"].map(Object::string).into_iter().chain([note]));
+    let pairs = chain.pairs().unwrap_or_default().into_iter().map(|(key, one)| {
+      let one = match key.as_str() {
+        Some("turns") => {
+          let turns = one.items().unwrap_or_default().into_iter().map(|turn| turn.to_owned());
+          Object::list(turns.chain([tell.clone()]))
+        }
+        _ => one.to_owned(),
+      };
+      (key.to_owned(), one)
+    });
+    Ok(Object::dict(pairs.collect::<Vec<_>>()))
+  }
+}
+
+/// The system prompt of the life of a fact made: the engine that it holds, minified.
+fn system(made: &Object) -> Result<String, Fault> {
+  let (source, ..) = world::texts(slice::from_ref(made))?;
+  minified(&source).ok_or_else(|| Fault::refused("this build cannot minify the engine of a life"))
+}
+
+/// The system prompt of each chain that the last checkpoint of a record holds, as `systems` of its
+/// data says. A checkpoint of a build before that field holds none, and each of its chains reads
+/// the engine that the life runs.
+pub(crate) fn systems(record: &[Object]) -> Systems {
+  let data = last(record).and_then(|at| fact(&record[at])?.word(0).map(|one| one.to_owned()));
+  let held = data.as_ref().and_then(|data| field(&data.as_ref(), "systems")?.items());
+  let read = |one: ObjectRef<'_>| {
+    let [text, chains] = one.items()?[..] else { return None };
+    let chains = chains.items()?.into_iter().filter_map(|one| one.as_str().map(str::to_owned));
+    Some((text.as_str()?.to_owned(), chains.collect()))
+  };
+  Systems(held.unwrap_or_default().into_iter().filter_map(read).collect())
 }
 
 impl Engine {
@@ -114,20 +220,21 @@ impl Engine {
     if !self.hears("store") {
       return Err(Fault::refused("a life that keeps no record keeps no checkpoint"));
     }
-    let entry = written(&mut self)?;
-    let made = self.running().clone();
+    let (entry, made) = (written(&mut self)?, self.running().clone());
     let word = "(say('keep', '', __entry), say('keep', '', __made))";
     self.word(word, vec![("__entry", entry), ("__made", made)]).map(drop)
   }
 }
 
-/// The checkpoint of the life of an engine at the tip of the record at a path, which no life
+/// The checkpoint of the life of an engine at the tip of the record at a path, which no other life
 /// holds, then the fact made of this build: the life born on that checkpoint runs the engine, the
-/// Kernel and the checkpointer of this build. This is the one place where a record crosses to the
-/// texts of a build.
+/// Kernel and the checkpointer of this build, and each chain of it keeps the system prompt that it
+/// read and is told the lines of the engine that differ. This is the one place where a record
+/// crosses to the texts of a build.
 pub fn crossed(path: &Path, engine: &mut Engine) -> Result<(), Fault> {
-  keep(path, written(engine)?)?;
-  keep(path, world::running(&[]))
+  let build = world::running(&[]);
+  keep(path, written_before(engine, &build)?)?;
+  keep(path, build)
 }
 
 /// Whether the checkpoint at a place of a record is a birth that a life gathers again: the life

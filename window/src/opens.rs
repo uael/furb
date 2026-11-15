@@ -77,6 +77,7 @@ fn said(stage: Stage) -> (&'static str, Unit) {
   match stage {
     Stage::Recall => ("reads what the record told", Unit::Entries),
     Stage::Find => ("reads the record", Unit::Bytes),
+    Stage::Cross => ("moves the life to this build", Unit::Nothing),
     Stage::Read => ("reads the record again", Unit::Bytes),
     Stage::Seed => ("loads the engine", Unit::Nothing),
     Stage::Boot => ("replays the record", Unit::Entries),

@@ -30,7 +30,7 @@ use crate::{
   image::{self, Image},
   minify,
   skill::{self, Places},
-  world::{self, Catalog, Mode, Retries, Scratch, Writes, mcp::mcp, skills::skills},
+  world::{self, Catalog, Mode, Retries, Scratch, Systems, Writes, mcp::mcp, skills::skills},
 };
 
 /// The ears of a life, each under the name the engine hears it by, in the order of boot.
@@ -109,6 +109,9 @@ pub enum Stage {
   /// its models in it. A life that opens from its image reads no entry, and tells each byte passed
   /// once the image agrees with the record.
   Find,
+  /// A life that ran another engine of the major is carried across to this build, by a life that
+  /// inspects it and writes its checkpoint. It counts nothing.
+  Cross,
   /// The record is read again from its last checkpoint under its lease, when it changed after
   /// the stage find: the bytes passed, of the bytes of the record.
   Read,
@@ -380,17 +383,17 @@ impl Opening {
     // waits for the first one behind the catalog.
     let bytes = self.record.as_deref().map_or(0, size);
     (told.0)(Stage::Find, 0, bytes);
-    let image = self.image(images).inspect(|_| (told.0)(Stage::Find, bytes, bytes));
-    let last = match image {
-      Some(_) => None,
-      None => self.last(&mut |at| (told.0)(Stage::Find, at, bytes))?,
-    };
+    let (image, last) = self.tip(told, images, bytes)?;
     // The models of a life read the engine that the life runs: the one that its image holds, or
-    // the one that the last segment of its record holds.
-    let source = match (&image, &last) {
-      (Some(image), _) => Some(world::texts(slice::from_ref(&image.half.made))?.0),
-      (None, Some(last)) => Some(world::texts(checkpoint::segment(&last.entries))?.0),
-      (None, None) => None,
+    // the one that the last segment of its record holds; and each chain that read another engine
+    // first reads that one, as the image or the last checkpoint says.
+    let source = (image.is_some() || last.is_some())
+      .then(|| Self::texts(image.as_ref(), last.as_ref()).map(|texts| texts.0))
+      .transpose()?;
+    let systems = match (&image, &last) {
+      (Some(image), _) => image.half.systems.clone(),
+      (None, Some(last)) => checkpoint::systems(&last.entries),
+      (None, None) => Systems::default(),
     };
     let unread = || Fault::refused("this build cannot minify the engine that the life runs");
     let system = source
@@ -425,9 +428,10 @@ impl Opening {
     };
     let (actor, roster) = stood.as_ref().map_or((None, None), |one| offered(one.as_ref()));
     let actor = self.actor.clone().or(actor);
+    let provider = self.provider(advertised, actor, roster)?.systems(systems);
     let provider = match system {
-      Some(one) => self.provider(advertised, actor, roster)?.system(one.into()),
-      None => self.provider(advertised, actor, roster)?,
+      Some(one) => provider.system(one.into()),
+      None => provider,
     };
     Ok(Prepared { waited: Waited { places, played, refused, provider }, last, image })
   }
@@ -453,6 +457,58 @@ impl Opening {
       Some(log) => (log.0)(line),
       None => eprintln!("furb: {line}"),
     }
+  }
+
+  /// The image of the record when one agrees with it, else the last entries of the record, which
+  /// the open reads in the stage find. A life that keeps its record and runs another engine, Kernel
+  /// or checkpointer than this build crosses first, as [`Opening::crossed`] says, and then opens by
+  /// its record.
+  fn tip(
+    &self,
+    told: &Progress,
+    images: bool,
+    bytes: u64,
+  ) -> Result<(Option<Image>, Option<world::Last>), Fault> {
+    let image = self.image(images).inspect(|_| (told.0)(Stage::Find, bytes, bytes));
+    let last = match image {
+      Some(_) => None,
+      None => self.last(&mut |at| (told.0)(Stage::Find, at, bytes))?,
+    };
+    if !self.keeps() || Self::texts(image.as_ref(), last.as_ref())? == Self::texts(None, None)? {
+      return Ok((image, last));
+    }
+    (told.0)(Stage::Cross, 0, 0);
+    self.crossed()?;
+    Ok((None, self.last(&mut |_| {})?))
+  }
+
+  /// The texts of the engine, of the Kernel and of the checkpointer that a life runs: those that
+  /// its image holds, or those that the last segment of its record holds, or this build's own.
+  fn texts(
+    image: Option<&Image>,
+    last: Option<&world::Last>,
+  ) -> Result<(String, String, String), Fault> {
+    match (image, last) {
+      (Some(image), _) => world::texts(slice::from_ref(&image.half.made)),
+      (None, Some(last)) => world::texts(checkpoint::segment(&last.entries)),
+      (None, None) => world::texts(&[]),
+    }
+  }
+
+  /// Carries a life that ran another engine, Kernel or checkpointer of the major across to this
+  /// build, so a life never dies on a fault that this build fixed: a life that inspects the record
+  /// on those texts, by its image when one agrees and else by its record, reaches the state of its
+  /// tip, and writes after its last entry its checkpoint, which tells each chain the change, then
+  /// the fact made of this build, as [`checkpoint::crossed`] says. The image goes, since no life
+  /// goes on from it: the life then opens from that checkpoint, on this build.
+  fn crossed(&self) -> Result<(), Fault> {
+    let Some(path) = self.record.as_deref().map(Path::new) else { return Ok(()) };
+    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
+    let (mut engine, _) = inspects.boot::<String>([])?;
+    checkpoint::crossed(path, &mut engine)?;
+    drop(engine);
+    image::drop_of(path);
+    Ok(())
   }
 
   /// The image of the record, when the open reads images and one agrees with the record: it holds
