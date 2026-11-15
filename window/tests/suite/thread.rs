@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use furb_host::protocol::{Answer, Verb};
+use furb_host::protocol::{Answer, Draft, Frame, Verb};
 use furb_window::{
   open,
   tokens::{AWAY, Loader},
@@ -409,4 +409,30 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
   screen("thread-context-ring", &app);
   clicked(&app, "○ 12%", 0, 0);
   shows(&app, "Engine");
+}
+
+#[test]
+fn another_operator_on_the_session_shows_in_the_head_of_the_thread_and_where_he_writes() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served_as("rex");
+  let mut rex = daemon.peer();
+  let life = rex.opened(&sessions.join("time.jsonl"), true);
+  let prompt = rex.said(&life, "where does the time of a resume go");
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "where does the t"));
+  shows(&app, "◉ rex");
+  let draft = Some(Draft { on: Some(prompt.clone()) });
+  assert_eq!(rex.ask(Verb::Writes { life, draft }), Answer::Done);
+  shows(&app, "◉ rex writes…");
+  // His window tells where he writes, so the window of rex shows it too.
+  app.type_text("and the seed");
+  let writes = |frame: &Frame| match frame {
+    Frame::Presence { operators, .. } => operators.iter().any(|one| {
+      one.operator != "rex" && one.writes.as_ref().and_then(|it| it.on.as_ref()) == Some(&prompt)
+    }),
+    _ => false,
+  };
+  rex.heard(&app, writes);
 }

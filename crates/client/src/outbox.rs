@@ -125,6 +125,8 @@ pub enum Asked {
   Settings,
   /// A change of a setting of a session.
   Setting,
+  /// Where the operator writes, which each other window of the life shows.
+  Writes,
 }
 
 impl Client {
@@ -153,6 +155,7 @@ impl Client {
     due.extend(self.moments_due());
     due.extend(self.tracks_due());
     due.extend(self.settings_due());
+    due.extend(self.writes_due());
     if listing {
       due.extend(self.lists_due());
     }

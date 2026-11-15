@@ -247,7 +247,9 @@ impl Model {
       ) => {
         self.client.listed_for(at, asked, answer);
       }
-      (Asked::Answer, _) => {}
+      // Where he writes is a hint to the other windows: a reader, who writes nothing to the life,
+      // is refused it, and nothing changes.
+      (Asked::Answer | Asked::Writes, _) => {}
       (_, Ok(Frame::Refused { why, .. })) => self.client.restore = Some(self.refused(why)),
       _ => {}
     }

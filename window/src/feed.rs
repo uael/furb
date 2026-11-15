@@ -9,7 +9,8 @@ use furb::view::{
   Standing, Thought, Work, lines, operator, timer,
 };
 use furb_client::{Fold, Opened, Target, rests};
-use opentui::style::{Color, Style};
+use furb_host::protocol::Present;
+use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
@@ -225,12 +226,31 @@ impl Feed<'_> {
       _ => (None, Some((run(" Resolve ", button), Does::Resolve))),
     };
     let apart = |mark| [mark, run(" ".repeat(APART), Style::new())];
-    let right: Line =
-      mark.into_iter().flat_map(apart).chain(button.clone().map(|one| one.0)).collect();
+    let right: Line = self
+      .present()
+      .into_iter()
+      .chain(mark)
+      .flat_map(apart)
+      .chain(button.clone().map(|one| one.0))
+      .collect();
     let line = spread(left, right, self.wide.saturating_sub(2), Style::new());
     let end = width(&line);
     let hot = button.map(|(one, does)| (end - one.content.width()..end, Some(Click::Key(does))));
     Row { hot: hot.into_iter().collect(), ..Row::of(line) }
+  }
+
+  /// Who else is on the session of the thread: the login of each other operator whose window holds
+  /// its life, and the one who writes in this thread first, in the accent.
+  fn present(&self) -> Option<Span<'static>> {
+    let (at, life, thread) = &self.opened.thread.key;
+    let others = self.model.client.others(*at, life);
+    let here = |one: &Present| one.writes.as_ref().is_some_and(|it| it.on.as_ref() == Some(thread));
+    if let Some(one) = others.iter().find(|one| here(one)) {
+      let accent = Style::new().fg(self.model.tokens.accent);
+      return Some(run(format!("◉ {} writes…", one.operator), accent));
+    }
+    let names: Vec<&str> = others.iter().map(|one| one.operator.as_str()).collect();
+    (!names.is_empty()).then(|| run(format!("◉ {}", names.join(", ")), self.style(Role::Muted)))
   }
 
   /// The last row of the feed while the operator reads away from its end.

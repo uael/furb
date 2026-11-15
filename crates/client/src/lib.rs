@@ -15,6 +15,7 @@ mod machine;
 mod matched;
 mod opens;
 mod outbox;
+mod presence;
 mod question;
 mod running;
 mod settings;
@@ -93,6 +94,9 @@ pub struct Client {
   pub filled: Option<Filled>,
   /// The settings of a session, while the operator reads them.
   pub settings: Option<Settings>,
+  /// Where the client last told that the operator writes: the machine, the life, and the thread,
+  /// none for a new thread of it.
+  wrote: Option<(usize, String, Option<String>)>,
   /// What the operator did to sessions that run, with the machine of each, until it goes.
   pub controls: Vec<(usize, Verb)>,
   /// What the last thing that the operator did did not do, and why, until the next one.

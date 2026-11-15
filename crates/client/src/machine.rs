@@ -4,7 +4,7 @@
 use furb_wire::{
   Part, Standing,
   card::Skill,
-  protocol::{Answer, Card, Files, Frame, Listed, Model, Project, Verb},
+  protocol::{Answer, Card, Files, Frame, Listed, Model, Present, Project, Verb},
 };
 use std::collections::HashMap;
 
@@ -64,6 +64,9 @@ pub struct Told {
   /// The skills attached to each life that the client holds, which serve its views, by its record.
   #[serde(skip)]
   pub served: HashMap<String, Vec<String>>,
+  /// Each operator whose window holds a life, by its record, as the machine last pushed it.
+  #[serde(skip)]
+  pub presence: HashMap<String, Vec<Present>>,
 }
 
 /// What a frame changed of what a machine told: its cards or its login, nothing that the list
@@ -125,6 +128,9 @@ impl Client {
         told.cards.retain(stays);
         told.cards.extend(changed);
         told.heard = now;
+      }
+      Ok(Frame::Presence { life, operators }) => {
+        told.presence.insert(life, operators);
       }
       Ok(Frame::Refused { why, .. }) | Err(why) => {
         told.link = Link::Lost(why.clone());
