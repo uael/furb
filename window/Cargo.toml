@@ -25,6 +25,8 @@ workspace = true
 [dependencies]
 # The cache of furb, where the daemon of the machine listens, and the program furb on PATH.
 furb = { path = ".." }
+# What each machine told, and what to ask it next, with no drawing.
+furb-client = { path = "../crates/client" }
 # The protocol of the daemon and the transport of the machine.
 furb-host = { path = "../host" }
 # The terminal: the widgets, the event loop and the headless app of the tests. One commit, since the crates are not

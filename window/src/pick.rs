@@ -180,12 +180,12 @@ impl Model {
     let works =
       |one: &&(Part, Key, Card)| !needs(one) && one.2.thread.works() && self.confirmed(&one.1);
     let mut all: Vec<Entry> =
-      self.settled.iter().filter(needs).map(|one| thread("Needs you", one)).collect();
-    all.extend(self.settled.iter().filter(works).map(|one| thread("Working", one)));
+      self.client.settled.iter().filter(needs).map(|one| thread("Needs you", one)).collect();
+    all.extend(self.client.settled.iter().filter(works).map(|one| thread("Working", one)));
     let sessions = self.known_sessions();
     if searches {
       let rest = |one: &&(Part, Key, Card)| !needs(one) && !works(one);
-      all.extend(self.settled.iter().filter(rest).map(|one| thread("Threads", one)));
+      all.extend(self.client.settled.iter().filter(rest).map(|one| thread("Threads", one)));
       all.extend(sessions.iter().map(|one| Entry {
         part: "Sessions",
         project: Some(one.project.clone()),
@@ -218,7 +218,7 @@ impl Model {
   /// no card, by its name, else its file.
   fn known_sessions(&self) -> Vec<Session> {
     let mut sessions: Vec<Session> = Vec::new();
-    for (at, told) in self.machines.iter().enumerate() {
+    for (at, told) in self.client.machines.iter().enumerate() {
       for card in &told.cards {
         if !sessions.iter().any(|one| one.at == at && one.life == card.life) {
           let named = card.session.clone().filter(|name| !name.is_empty());
@@ -283,7 +283,7 @@ impl Model {
       choice: new,
       ..Entry::default()
     }];
-    for (_, key, card) in &self.settled {
+    for (_, key, card) in &self.client.settled {
       let choice = Choice::Session(Target::Session(key.0, key.1.clone()));
       if all.iter().any(|one| one.choice == choice) {
         continue;

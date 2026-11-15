@@ -44,13 +44,14 @@ impl Model {
   /// Each row of the list, from its top.
   pub(crate) fn rows(&self) -> Vec<Row> {
     let mut rows = vec![Row::Scope, Row::Blank];
-    if self.settled.is_empty() && self.known() {
+    if self.client.settled.is_empty() && self.known() {
       let (first, more) = ("No thread yet in this project.", "Other projects and sessions:");
       rows.extend([Row::Says(first, Role::Prose), Row::Blank, Row::Says(more, Role::Muted)]);
       rows.push(Row::Key(Does::GoTo));
     }
     for part in [Part::NeedsYou, Part::Working, Part::Resting, Part::Resolved] {
-      let mut cards = (0..self.settled.len()).filter(|at| self.settled[*at].0 == part).peekable();
+      let mut cards =
+        (0..self.client.settled.len()).filter(|at| self.client.settled[*at].0 == part).peekable();
       if cards.peek().is_none() {
         continue;
       }
@@ -115,7 +116,7 @@ impl Model {
   }
 
   fn chosen(&self, at: usize) -> bool {
-    self.selected.as_ref() == Some(&self.settled[at].1)
+    self.selected.as_ref() == Some(&self.client.settled[at].1)
   }
 
   /// The ground of a card: the selected card is lifted, and the text of the card under the
@@ -129,17 +130,20 @@ impl Model {
   fn scope(&self) -> Line {
     let t = &self.tokens;
     let project = self.folder.file_name().map(|name| name.to_string_lossy().into_owned());
-    let scope =
-      if self.settled.is_empty() { project.unwrap_or_default() } else { "All projects".to_owned() };
-    let lost = || self.machines.iter().filter(|one| matches!(one.link, Link::Lost(_)));
+    let scope = if self.client.settled.is_empty() {
+      project.unwrap_or_default()
+    } else {
+      "All projects".to_owned()
+    };
+    let lost = || self.client.machines.iter().filter(|one| matches!(one.link, Link::Lost(_)));
     let dials =
-      self.machines.iter().position(|one| one.link == Link::Dialing).filter(|_| self.slow);
-    let machines = match (lost().count(), dials, self.machines.len()) {
+      self.client.machines.iter().position(|one| one.link == Link::Dialing).filter(|_| self.slow);
+    let machines = match (lost().count(), dials, self.client.machines.len()) {
       (1, ..) => format!("{} offline", lost().next().map_or("", |one| &one.name)),
       (2.., ..) => format!("{} machines offline", lost().count()),
       (0, Some(0), _) => format!("{} Dialing", Loader::Model.frame(self.moved)),
       (0, Some(at), _) => {
-        format!("{} Dialing {}", Loader::Model.frame(self.moved), self.machines[at].name)
+        format!("{} Dialing {}", Loader::Model.frame(self.moved), self.client.machines[at].name)
       }
       (0, None, 1) => "this machine".to_owned(),
       (0, None, count) => format!("{count} machines"),
@@ -160,7 +164,7 @@ impl Model {
       Part::Resolved => ("Resolved", " ▸"),
     };
     let on = |style: Style| if pointed { style.fg(t.hover) } else { style };
-    let count = self.settled.iter().filter(|one| one.0 == part).count();
+    let count = self.client.settled.iter().filter(|one| one.0 == part).count();
     let head = vec![
       run(name, on(t.style(Role::Prose))),
       run(format!(" {count}{fold}"), on(t.style(Role::Muted))),
@@ -180,7 +184,7 @@ impl Model {
       _ => return Vec::new(),
     };
     let ground = Style::new().fg(self.tokens.lifted);
-    let hue = self.hue(&self.settled[at].1);
+    let hue = self.hue(&self.client.settled[at].1);
     vec![run(bar, Style::new().fg(hue)), run(fill.repeat(CARD + 2), ground), run(end, ground)]
   }
 
@@ -195,7 +199,7 @@ impl Model {
       return row;
     };
     let edge = || run(" ", Style::new().bg(ground));
-    let mut row = vec![run("▐", Style::new().fg(self.hue(&self.settled[at].1))), edge()];
+    let mut row = vec![run("▐", Style::new().fg(self.hue(&self.client.settled[at].1))), edge()];
     row.extend(line);
     row.extend([edge(), run("▌", Style::new().fg(ground))]);
     row
@@ -204,8 +208,8 @@ impl Model {
   /// The two lines of a card: its title and its state, then where it is and who works on it.
   fn card(&self, at: usize, ground: Ground) -> [Line; 2] {
     let t = &self.tokens;
-    let (_, key, card) = &self.settled[at];
-    let told = &self.machines[key.0];
+    let (_, key, card) = &self.client.settled[at];
+    let told = &self.client.machines[key.0];
     let on = |style: Style| ground.on(style);
     let title = vec![run(card.thread.title.clone(), on(t.style(Role::Title)))];
     let first = spread(title, self.state(key, card, ground), CARD, on(Style::new()));
@@ -237,7 +241,7 @@ impl Model {
   /// The one line of a resolved thread.
   fn resolved(&self, at: usize, ground: Ground) -> Line {
     let t = &self.tokens;
-    let card = &self.settled[at].2;
+    let card = &self.client.settled[at].2;
     let on = |style: Style| ground.on(style);
     let title = run(card.thread.title.clone(), on(t.style(Role::Muted)));
     let left = vec![run("✓ ", on(t.style(Role::Muted))), title];
@@ -280,13 +284,13 @@ impl Model {
       Standing::Runs => working(Loader::Command),
       Standing::Delegates => working(Loader::Agent),
       Standing::Stopped => ("", "Stopped".into(), None, age.clone()),
-      Standing::Resolved if card.thread.unread(&self.machines[key.0].login) => {
+      Standing::Resolved if card.thread.unread(&self.client.machines[key.0].login) => {
         ("●", String::new(), Some(t.accent), since())
       }
       Standing::Rests | Standing::Resolved => ("", String::new(), None, since()),
     };
     if !confirmed {
-      let heard = format!("as of {}", self.hour(self.machines[key.0].heard));
+      let heard = format!("as of {}", self.hour(self.client.machines[key.0].heard));
       return vec![run([word, heard].join(" ").trim_start().to_owned(), muted)];
     }
     let style = color.map_or(muted, colored);

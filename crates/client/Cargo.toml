@@ -1,0 +1,18 @@
+[package]
+name = "furb-client"
+version.workspace = true
+edition = "2024"
+rust-version = "1.95"
+description = "The client of furb with no drawing: what each machine told, which every window maps."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+# Only the window takes it for now, and the window is not published.
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# The protocol of the daemon and the shapes of the meaning of a life.
+furb-wire = { path = "../wire", version = "0.4.2" }
+serde = { version = "1", features = ["derive"] }

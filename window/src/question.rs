@@ -389,7 +389,7 @@ impl Model {
         && matches!(one.2.thread.standing, Standing::Asks { .. })
         && self.needs(&one.1, &one.2)
     };
-    let says = match self.settled.iter().filter(asks).count() {
+    let says = match self.client.settled.iter().filter(asks).count() {
       0 => return Vec::new(),
       1 if room >= 24 => " 1 other thread asks   ".to_owned(),
       count if room >= 26 => format!(" {count} other threads ask   "),

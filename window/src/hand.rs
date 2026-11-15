@@ -355,7 +355,7 @@ fn keep(app: &App, window: &Shared) {
     let written = {
       let mut held = on.borrow_mut();
       held.keeps = false;
-      kept::keep(&held.kept, &held.screen.model.machines)
+      kept::keep(&held.kept, &held.screen.model.client.machines)
     };
     let fault = written.err().map(|fault| format!("The cards are not kept: {fault}"));
     tell(cx.app(), &on, |model| model.fault = fault);
@@ -410,7 +410,7 @@ fn pump(window: &Shared) {
 /// What asks a machine a verb, while it lists its cards: a machine that the window dials again
 /// takes no verb, which would go nowhere.
 fn asker<'a>(askers: &'a mut [Asker], model: &Model, at: usize) -> Option<&'a mut Asker> {
-  askers.get_mut(at).filter(|_| model.machines[at].link == Link::Listed)
+  askers.get_mut(at).filter(|_| model.client.machines[at].link == Link::Listed)
 }
 
 /// A page of older exchanges that the open thread asks of its machine, said, with the id of its

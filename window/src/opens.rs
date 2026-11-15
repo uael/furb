@@ -142,7 +142,7 @@ impl Model {
     if self.holds.contains_key(&key) {
       return;
     }
-    let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
+    let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     let stood = cards.iter().any(|card| card.life == life && card.held);
     let hold = Hold { cwd, ask: Ask::Due, since: self.moved, stood, steps: Vec::new() };
     self.holds.insert(key, hold);

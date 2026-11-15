@@ -135,18 +135,18 @@ fn a_frame_makes_the_rows_of_the_exchanges_that_show_and_of_no_other() {
 fn a_thread_that_ends_twice_in_one_second_is_said_seen_at_each_end_and_reads_at_once() {
   let mut model = opened(page(0..3));
   let standing = |model: &mut Model, standing: Standing| {
-    model.machines[0].cards[0].thread.standing = standing;
+    model.client.machines[0].cards[0].thread.standing = standing;
   };
   for _ in 0..2 {
     standing(&mut model, Standing::Resolved);
     let said = model.seen_due();
     assert!(matches!(said, Some((0, Verb::Seen { .. }))), "{said:?}");
     // The card shows him as a reader before the daemon says so, and says nothing twice.
-    assert!(!model.machines[0].cards[0].thread.unread("ada"));
+    assert!(!model.client.machines[0].cards[0].thread.unread("ada"));
     assert_eq!(model.seen_due(), None);
     // A reply makes the thread work again, and its next end falls in the same second.
     standing(&mut model, Standing::Thinks);
-    model.machines[0].cards[0].thread.readers.clear();
+    model.client.machines[0].cards[0].thread.readers.clear();
     assert_eq!(model.seen_due(), None);
   }
 }

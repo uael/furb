@@ -189,7 +189,7 @@ impl Model {
   /// The folder that the life of a record opens in when no life holds the record: the folder of
   /// the window for a new record, else the project of its cards.
   pub(crate) fn cwd(&self, at: usize, life: &str) -> Option<String> {
-    let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
+    let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     match cards.iter().find(|card| card.life == life) {
       None => Some(self.folder.display().to_string()),
       Some(card) => card.project.clone(),
@@ -207,7 +207,7 @@ impl Model {
     let named = |n: u128| sessions.join(format!("{stamp}-{:04x}.jsonl", n % 0x1_0000));
     let known = |life: &str| {
       self.holds.keys().any(|held| held.1 == life)
-        || self.machines.iter().any(|one| one.cards.iter().any(|card| card.life == life))
+        || self.client.machines.iter().any(|one| one.cards.iter().any(|card| card.life == life))
     };
     let mut n = self.moved.as_nanos();
     while known(&named(n).display().to_string()) {
@@ -229,7 +229,7 @@ impl Model {
       _ if next.python => Verb::Run { life, word: message, on: None },
       None => Verb::Prompt { life, shape: "str".to_owned(), message, to: None, on: None },
       Some(thread) => {
-        let card = self.told_card(&(next.at, life.clone(), thread.clone()));
+        let card = self.client.card(&(next.at, life.clone(), thread.clone()));
         let shape = card.map_or("None", |card| card.thread.reply()).to_owned();
         Verb::Prompt { life, shape, message, to: None, on: Some(thread.clone()) }
       }
@@ -271,7 +271,7 @@ impl Model {
   /// reply opens it again, so the input turns to it, as a message, at the end of its feed.
   pub(crate) fn resolve(&mut self) -> Option<(usize, Verb)> {
     let opened = self.thread.as_ref().filter(|one| !one.key.2.is_empty())?;
-    let card = self.told_card(&opened.key).map(|one| (one.thread.ended(), one.thread.works()));
+    let card = self.client.card(&opened.key).map(|one| (one.thread.ended(), one.thread.works()));
     let (ended, works) = card.unwrap_or_default();
     let opened = self.thread.as_mut()?;
     if ended {
@@ -309,7 +309,7 @@ impl Model {
   /// A first escape that nothing else takes, while the open thread works: the next escape stops its
   /// work.
   pub(crate) fn arm_stop(&mut self) {
-    let card = self.thread.as_ref().and_then(|one| self.told_card(&one.key));
+    let card = self.thread.as_ref().and_then(|one| self.client.card(&one.key));
     if card.is_some_and(|card| card.thread.works()) {
       self.armed = Some(Armed::Stop);
     }
@@ -352,7 +352,7 @@ impl Model {
       return Some(Back::Queued(at, one.text.clone()));
     }
     let opened = self.thread.as_ref()?;
-    let login = &self.machines[opened.key.0].login;
+    let login = &self.client.machines[opened.key.0].login;
     let his = |by: &Maker| match by {
       Maker::Operator => true,
       Maker::Member { operator: one } => one == login,
@@ -497,7 +497,7 @@ impl Model {
     let opens = self.thread.as_ref().is_some_and(|one| self.says_opens(one));
     let reads =
       self.thread.as_ref().is_some_and(|one| self.fault_of(one.key.0, &one.key.1).is_some());
-    let ended = self.thread.as_ref().and_then(|one| self.told_card(&one.key));
+    let ended = self.thread.as_ref().and_then(|one| self.client.card(&one.key));
     let ended = ended.is_some_and(|card| card.thread.ended());
     let top = usize::from(self.size.1).saturating_sub(self.input_rows());
     let (x, row, height, placeholder) = match (self.form(), self.form_rows(self.grown()).1) {
@@ -639,7 +639,7 @@ impl Model {
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
     let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
-    let machine = if at == 0 { "This computer" } else { &self.machines[at].name };
+    let machine = if at == 0 { "This computer" } else { &self.client.machines[at].name };
     let project = self.project();
     let badge = self.badge(&project);
     let mut left: Line = switch.into();
@@ -702,7 +702,7 @@ impl Model {
       Target::Session(at, life) => (at, life, false),
       Target::New(_) => return format!("{} · new session", self.project()),
     };
-    let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
+    let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     let card = cards.iter().find(|card| card.life == life);
     let project = card.map_or_else(|| self.project(), project);
     let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
@@ -716,7 +716,7 @@ impl Model {
   /// that says something, as the daemon titles a card.
   pub(crate) fn title(&self) -> Option<String> {
     let opened = self.thread.as_ref()?;
-    let card = self.told_card(&opened.key).map(|card| card.thread.title.clone());
+    let card = self.client.card(&opened.key).map(|card| card.thread.title.clone());
     let first = || opened.exchanges.get(&0).map(|one| one.text.clone());
     let pending = || opened.pending.first().map(|one| one.text.clone());
     let title = card.or_else(first).or_else(pending)?;
@@ -747,13 +747,13 @@ impl Model {
       // A new session stands on the model of the last session of its project, as it reads its
       // skills.
       Target::New(at) => {
-        let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
+        let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
         let here = self.project();
         let mut ours = cards.iter().rev().filter(|card| project(card) == here);
         return ours.find_map(|card| card.thread.model.as_deref()).map(short);
       }
     };
-    let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
+    let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     let mut ours = cards.iter().rev().filter(|card| card.life == life);
     ours.find_map(|card| card.thread.model.as_deref()).map(short)
   }
@@ -766,7 +766,7 @@ impl Model {
   fn hints(&self) -> Row {
     let t = &self.tokens;
     let muted = t.style(Role::Muted);
-    let card = self.thread.as_ref().and_then(|one| self.told_card(&one.key));
+    let card = self.thread.as_ref().and_then(|one| self.client.card(&one.key));
     let ended =
       self.thread.as_ref().is_some_and(|one| self.fault_of(one.key.0, &one.key.1).is_some());
     let works = card.is_some_and(|card| card.thread.works()) && !ended;
@@ -845,7 +845,7 @@ impl Model {
       Target::Thread(key) => key.0,
       Target::Session(at, _) | Target::New(at) => at,
     };
-    let name = if at == 0 { "This computer" } else { &self.machines[at].name };
+    let name = if at == 0 { "This computer" } else { &self.client.machines[at].name };
     let text = if machine {
       format!("  {name} · {}", self.folder_shown())
     } else {

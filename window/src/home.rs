@@ -46,11 +46,11 @@ impl Model {
       lines.iter().map(|line| self.said(line, style, "")).chain([Vec::new()]).collect::<Vec<_>>()
     };
     let mut rows = vec![vec![run(" furb", t.style(Role::Title))], Vec::new()];
-    if self.settled.is_empty() && !self.known() && !self.slow {
+    if self.client.settled.is_empty() && !self.known() && !self.slow {
       return rows;
     }
-    if !self.settled.is_empty() {
-      let needs = self.settled.iter().filter(|one| self.needs(&one.1, &one.2)).count();
+    if !self.client.settled.is_empty() {
+      let needs = self.client.settled.iter().filter(|one| self.needs(&one.1, &one.2)).count();
       let needed = self.key(Does::Needed);
       let (says, key) = match needs {
         0 => ("Nothing needs you.".to_owned(), String::new()),
@@ -73,7 +73,7 @@ impl Model {
       let how = "Write below to start one. It runs in a new session of the project";
       rows.extend(wrapped(&format!("{how} {project}, on this machine."), prose));
     }
-    for told in &self.machines {
+    for told in &self.client.machines {
       if let Link::Lost(why) = &told.link {
         let says = format!("{} is offline: {why}. The window dials it again.", told.name);
         rows.extend(wrapped(&says, muted));
@@ -108,14 +108,14 @@ impl Model {
   fn alone(&self) -> Vec<(String, String)> {
     let mut rows: Vec<(String, String)> = Vec::new();
     let mut lives: Vec<&str> = Vec::new();
-    for (_, key, card) in &self.settled {
+    for (_, key, card) in &self.client.settled {
       let named = card.session.clone().filter(|name| !name.is_empty());
       let name = named.unwrap_or_else(|| card.thread.title.clone());
       let works = self.unheld(key.0, card) && card.thread.works() && self.confirmed(key);
       if works && !lives.contains(&card.life.as_str()) {
         lives.push(&card.life);
         let machine =
-          if key.0 > 0 { format!("@{}", self.machines[key.0].name) } else { String::new() };
+          if key.0 > 0 { format!("@{}", self.client.machines[key.0].name) } else { String::new() };
         let left = format!("◌ {name} · {}{machine}", project(card));
         rows.push((left, format!("works since {}", self.hour(card.since))));
       }

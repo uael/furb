@@ -116,7 +116,7 @@ impl Feed<'_> {
       }
       // Until its page comes, the thread shows what its card holds: the first line of its message.
       (None, None) => {
-        let card = self.model.told_card(&self.opened.key);
+        let card = self.model.client.card(&self.opened.key);
         return card.map(|card| self.message(&card.thread.title, true)).unwrap_or_default();
       }
       (None, Some(0)) => return Vec::new(),
@@ -139,7 +139,7 @@ impl Feed<'_> {
     let t = &self.model.tokens;
     let root = self.opened.root();
     let untold = self.model.untold();
-    let card = self.model.told_card(&root.key).or(untold.as_ref().map(|one| &one.1));
+    let card = self.model.client.card(&root.key).or(untold.as_ref().map(|one| &one.1));
     let project = card.map(project).unwrap_or_default();
     let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
     let (button, muted) = (self.style(Role::Button), self.style(Role::Muted));
@@ -403,7 +403,7 @@ impl Feed<'_> {
         Some(_) => (self.style(Role::Muted), self.style(Role::Muted)),
       };
       let left = vec![run("  ◆ ", mark), run(self.model.homed(first), text)];
-      let login = &self.model.machines[self.opened.key.0].login;
+      let login = &self.model.client.machines[self.opened.key.0].login;
       let right =
         answered.iter().map(|one| run(closed(one, login), self.style(Role::Muted))).collect();
       return vec![

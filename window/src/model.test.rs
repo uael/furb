@@ -59,7 +59,7 @@ fn model(cards: Vec<Card>, rows: u16) -> Model {
 }
 
 fn titles(model: &Model) -> Vec<(Part, &str)> {
-  model.settled.iter().map(|one| (one.0, one.2.thread.title.as_str())).collect()
+  model.client.settled.iter().map(|one| (one.0, one.2.thread.title.as_str())).collect()
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn a_card_shows_its_new_state_in_its_place_until_the_list_settles() {
   let frame = Frame::Cards { life: "b".to_owned(), changed: vec![asks.clone()], gone: Vec::new() };
   assert!(model.hear(0, Ok(frame)));
   assert_eq!(titles(&model), [(Part::Working, "one"), (Part::Resting, "two")]);
-  assert_eq!(model.settled[1].2, asks);
+  assert_eq!(model.client.settled[1].2, asks);
   model.settle();
   assert_eq!(titles(&model), [(Part::NeedsYou, "two"), (Part::Working, "one")]);
 }
@@ -80,16 +80,19 @@ fn a_card_shows_its_new_state_in_its_place_until_the_list_settles() {
 fn a_machine_that_is_lost_keeps_its_cards_and_hears_no_more() {
   let mut model = model(vec![card("a", "one", Standing::Rests, 5)], 30);
   assert!(model.hear(0, Err(crate::Error::Closed)));
-  assert_eq!(model.machines[0].link, Link::Lost("the daemon closed the connection".to_owned()));
+  assert_eq!(
+    model.client.machines[0].link,
+    Link::Lost("the daemon closed the connection".to_owned())
+  );
   assert!(!model.hear(0, Ok(Frame::Reply { id: 1, answer: Answer::Cards(Vec::new()) })));
-  assert_eq!(model.machines[0].cards.len(), 1);
+  assert_eq!(model.client.machines[0].cards.len(), 1);
 }
 
 #[test]
 fn a_loss_gives_each_message_on_its_way_back_to_the_input_and_a_new_hello_hears_the_machine_again()
 {
   let mut model = model(vec![card("a", "one", Standing::Rests, 5)], 30);
-  model.selected = model.settled.first().map(|one| one.1.clone());
+  model.selected = model.client.settled.first().map(|one| one.1.clone());
   model.open_thread();
   model.holds.values_mut().for_each(|hold| hold.ask = Ask::Answered);
   assert!(model.send("and the seed?".to_owned()));
@@ -109,15 +112,15 @@ fn a_loss_gives_each_message_on_its_way_back_to_the_input_and_a_new_hello_hears_
   let (machine, build) = ("mac".to_owned(), String::new());
   let welcome = Answer::Welcome { protocol: PROTOCOL, peer, machine, build };
   assert!(model.hear(0, Ok(Frame::Reply { id: 8, answer: welcome })));
-  assert_eq!(model.machines[0].link, Link::Dialing);
+  assert_eq!(model.client.machines[0].link, Link::Dialing);
   assert!(model.hear(0, Ok(Frame::Reply { id: 9, answer: Answer::Cards(Vec::new()) })));
-  assert_eq!(model.machines[0].link, Link::Listed);
+  assert_eq!(model.client.machines[0].link, Link::Listed);
 }
 
 #[test]
 fn the_end_of_a_word_is_asked_again_once_its_life_stands_after_a_loss() {
   let mut model = model(vec![card("a", "one", Standing::Rests, 5)], 30);
-  model.selected = model.settled.first().map(|one| one.1.clone());
+  model.selected = model.client.settled.first().map(|one| one.1.clone());
   model.open_thread();
   model.holds.values_mut().for_each(|hold| hold.ask = Ask::Answered);
   let (life, rung) = ("a".to_owned(), "rung3".to_owned());

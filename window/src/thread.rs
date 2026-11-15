@@ -621,26 +621,22 @@ impl Model {
       return None;
     }
     let key = opened.key.clone();
-    let login = self.machines[key.0].login.clone();
+    let login = self.client.machines[key.0].login.clone();
     // A card that the daemon told before it read the last Seen says unread once more.
     let saying = self.asked.iter().any(|(asked, what)| asked.0 == key.0 && *what == Asked::Seen);
-    if saying || !self.told_card(&key)?.thread.unread(&login) {
+    if saying || !self.client.card(&key)?.thread.unread(&login) {
       return None;
     }
     let reader = format!("{OPERATOR}/{login}");
     let told = |card: &Card| card.life == key.1 && card.thread.prompt == key.2;
-    let settled = self.settled.iter_mut().map(|one| &mut one.2);
-    for card in self.machines[key.0].cards.iter_mut().chain(settled).filter(|card| told(card)) {
+    let settled = self.client.settled.iter_mut().map(|one| &mut one.2);
+    for card in
+      self.client.machines[key.0].cards.iter_mut().chain(settled).filter(|card| told(card))
+    {
       card.thread.readers.push(reader.clone());
     }
     let (at, life, about) = key;
     Some((at, Verb::Seen { life, about }))
-  }
-
-  /// The card of a key, as its machine last told it.
-  pub(crate) fn told_card(&self, key: &Key) -> Option<&Card> {
-    let told = |one: &&Card| one.life == key.1 && one.thread.prompt == key.2;
-    self.machines.get(key.0)?.cards.iter().find(told)
   }
 
   /// The card of the thread that the window started, while its machine told none: the daemon
@@ -648,10 +644,10 @@ impl Model {
   /// thread as it knows it from his first message, at work, with its machine.
   pub(crate) fn untold(&self) -> Option<(usize, Card)> {
     let key = self.thread.as_ref().filter(|one| one.started)?.key.clone();
-    if self.told_card(&key).is_some() {
+    if self.client.card(&key).is_some() {
       return None;
     }
-    let told = &self.machines[key.0];
+    let told = &self.client.machines[key.0];
     let session =
       told.cards.iter().find(|card| card.life == key.1).and_then(|card| card.session.clone());
     let thread = view::Card {
@@ -680,7 +676,7 @@ impl Model {
   /// its first message, so the hue stays when the daemon names the prompt of a new thread.
   pub(crate) fn hue(&self, key: &Key) -> Color {
     let open = || self.thread.as_ref().filter(|one| one.key == *key).and_then(|_| self.title());
-    let title = self.told_card(key).map(|card| card.thread.title.clone()).or_else(open);
+    let title = self.client.card(key).map(|card| card.thread.title.clone()).or_else(open);
     self.tokens.hues[hued(&key.1, &title.unwrap_or_default()) % self.tokens.hues.len()]
   }
 }

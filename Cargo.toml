@@ -44,7 +44,7 @@ include = [
 # holds each life of a machine, on the public API of the crate alone. The window draws the daemon of the host, and
 # only the frames of the window depend on it, so only a build of those two needs Zig. `bind/typescript` is the addon of
 # N-API of the npm package, and `xtask` the tasks of a developer, which `cargo xtask` runs.
-members = ["bind/typescript", "cli", "crates/wire", "frames", "host", "window", "xtask"]
+members = ["bind/typescript", "cli", "crates/client", "crates/wire", "frames", "host", "window", "xtask"]
 
 # The one version of furb: each crate takes it, and maturin gives it to the wheel of each crate.
 [workspace.package]

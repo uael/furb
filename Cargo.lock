@@ -1504,6 +1504,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "furb-client"
+version = "0.4.2"
+dependencies = [
+ "furb-wire",
+ "serde",
+]
+
+[[package]]
 name = "furb-frames"
 version = "0.4.2"
 dependencies = [
@@ -1562,6 +1570,7 @@ version = "0.4.2"
 dependencies = [
  "dunce",
  "furb",
+ "furb-client",
  "furb-host",
  "futures",
  "jiff",
