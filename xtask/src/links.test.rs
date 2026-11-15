@@ -9,29 +9,29 @@ use crate::yard::Yard;
 fn a_relative_link_of_a_readme_of_a_package_fails_until_the_fix_writes_it_absolute() {
   let yard = Yard::new(format!("xtask-links-{}", id()));
   let readme = "\
-[guide](docs/guide.md#start) and ![logo](docs/logo.png) and [lost](docs/lost.md)
-`[code](docs/guide.md)`
+[guide](pages/guide.md#start) and ![logo](pages/logo.png) and [lost](pages/lost.md)
+`[code](pages/guide.md)`
 
 ```
-[fence](docs/guide.md)
+[fence](pages/guide.md)
 ```
 
-[ref]: docs
-<img src=\"docs/logo.png\"> [gone](https://github.com/uael/furb/blob/main/docs/gone.md) [web](https://example.com)
+[ref]: pages
+<img src=\"pages/logo.png\"> [gone](https://github.com/uael/furb/blob/main/pages/gone.md) [web](https://example.com)
 ";
-  fs::create_dir_all(yard.join("docs")).unwrap();
+  fs::create_dir_all(yard.join("pages")).unwrap();
   fs::write(yard.join("README.md"), readme).unwrap();
-  let files = ["README.md", "docs/guide.md", "docs/logo.png"].into_iter().collect();
+  let files = ["README.md", "pages/guide.md", "pages/logo.png"].into_iter().collect();
   let blob = "https://github.com/uael/furb/blob/main";
   let raw = "https://raw.githubusercontent.com/uael/furb/main";
   let relative = "is relative, so it breaks on a registry: write";
   let wrong = [
-    format!("README.md:1: docs/guide.md#start {relative} {blob}/docs/guide.md#start"),
-    format!("README.md:1: docs/logo.png {relative} {raw}/docs/logo.png"),
-    "README.md:1: docs/lost.md is relative and points at no file of the repository".to_owned(),
-    format!("README.md:8: docs {relative} https://github.com/uael/furb/tree/main/docs"),
-    format!("README.md:9: docs/logo.png {relative} {raw}/docs/logo.png"),
-    format!("README.md:9: {blob}/docs/gone.md points at no file of the repository"),
+    format!("README.md:1: pages/guide.md#start {relative} {blob}/pages/guide.md#start"),
+    format!("README.md:1: pages/logo.png {relative} {raw}/pages/logo.png"),
+    "README.md:1: pages/lost.md is relative and points at no file of the repository".to_owned(),
+    format!("README.md:8: pages {relative} https://github.com/uael/furb/tree/main/pages"),
+    format!("README.md:9: pages/logo.png {relative} {raw}/pages/logo.png"),
+    format!("README.md:9: {blob}/pages/gone.md points at no file of the repository"),
   ];
   assert_eq!(checked(&yard, "README.md", &files, false).unwrap(), wrong);
   checked(&yard, "README.md", &files, true).unwrap();
@@ -42,7 +42,7 @@ fn a_relative_link_of_a_readme_of_a_package_fails_until_the_fix_writes_it_absolu
   );
   let fixed = fs::read_to_string(yard.join("README.md")).unwrap();
   assert!(
-    fixed.contains("`[code](docs/guide.md)`") && fixed.contains("[fence](docs/guide.md)"),
+    fixed.contains("`[code](pages/guide.md)`") && fixed.contains("[fence](pages/guide.md)"),
     "{fixed}"
   );
 }
