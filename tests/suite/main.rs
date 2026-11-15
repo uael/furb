@@ -30,6 +30,7 @@ use yard::Yard as Base;
 fn answered(_nth: usize) {}
 
 mod async_open;
+mod child;
 mod engine;
 mod examples;
 mod life;

@@ -6,11 +6,10 @@
 #![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
 
 use std::{
-  env, fs,
+  fs,
   io::{BufRead, BufReader, Read, Write},
   net::TcpListener,
-  path::{Path, PathBuf},
-  process::Command,
+  path::Path,
   sync::{Arc, Mutex},
   thread, time,
   time::Duration,
@@ -25,47 +24,12 @@ use furb::{
 use serde_json::{Value, json};
 
 use super::provider::{asked, counted, on, said, taken, until, yard};
-use crate::{drive::block_on, opened, yard::Yard};
-
-/// The variable that names the yard of a test to the child that runs it again.
-const CHILD: &str = "FURB_TEST_YARD";
-
-/// The path of the test that calls it, as the runner of the tests names it.
-macro_rules! here {
-  () => {{
-    fn here() {}
-    let name = std::any::type_name_of_val(&here);
-    let name = name.strip_suffix("::here").expect("a function of a test");
-    name.split_once("::").expect("the crate of the test").1
-  }};
-}
-
-/// The yard of the test when this process is the child that runs it again.
-fn child() -> Option<PathBuf> {
-  env::var_os(CHILD).map(PathBuf::from)
-}
-
-/// The test at this path run again as a child of this process, in the yard, with these variables,
-/// and nothing of the catalog of this machine: no cache, no local server and no most thought. The
-/// child fails the test when it fails.
-fn ran(test: &str, at: &Path, vars: &[(&str, &str)]) {
-  let mut command = Command::new(env::current_exe().expect("the program of the tests"));
-  command.args([test, "--exact", "--nocapture"]).env(CHILD, at);
-  command.env("XDG_CACHE_HOME", at.join("cache"));
-  let names = ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_LOCAL_WINDOW", "FURB_LOCAL_TOKENS"];
-  for name in names.into_iter().chain(["MAX_THINKING_TOKENS"]) {
-    command.env_remove(name);
-  }
-  command.envs(vars.iter().copied());
-  let output = command.output().expect("the child runs");
-  let said = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
-  assert!(
-    output.status.success() && said(&output.stdout).contains("1 passed"),
-    "{}{}",
-    said(&output.stdout),
-    said(&output.stderr)
-  );
-}
+use crate::{
+  child::{child, here, ran},
+  drive::block_on,
+  opened,
+  yard::Yard,
+};
 
 /// The yard of a test, with these providers in the config of its project.
 fn configured(name: &str, providers: &Value) -> Yard {

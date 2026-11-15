@@ -457,10 +457,7 @@ fn a_wait_is_done_when_its_time_is_up_and_it_says_when_it_is_due() {
 fn a_wait_for_an_act_is_done_with_its_name_when_it_ends_first_and_the_time_ear_stops_its_timer() {
   let mut lived = Lived::new("first", &[], true).unwrap();
   let root = lived.root();
-  // The first command of a process asks the login shell of the user for its PATH, which can take
-  // longer than the wait: a command before it pays that, so the command below ends first.
   let with = verbs::Bash { on: on(&root), ..Default::default() };
-  block_on(lived.engine.bash("true", with.clone()).unwrap()).unwrap();
   let command = lived.engine.bash("sleep 0.1", with).unwrap().id().to_owned();
   let act =
     lived.engine.wait(&[&command], verbs::Wait { seconds: Some(0.5), on: on(&root) }).unwrap();

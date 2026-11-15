@@ -64,13 +64,16 @@ use crate::{
 /// and then a line that says the rest is cut, and its exit gives the first bytes, a line that
 /// counts the bytes cut, and the last bytes.
 ///
-/// A command runs with the PATH of the login shell of the user, read once, ahead of the PATH of the
-/// process, so it finds the programs that the profile of the user adds. A command runs with
+/// A command runs with the PATH of the login shell of the user, ahead of the PATH of the process,
+/// so it finds the programs that the profile of the user adds. The process reads it once, from the
+/// first of these ears that it makes, and a command that starts before that read ends runs on the
+/// PATH of the process. A command runs with
 /// `TMPDIR` set to the scratch directory of the life, and `TMP` and `TEMP` too on Windows, which
 /// the ear makes first, so a command finds there the files of `scratch://`. A command ends with
 /// every process it started, which its group holds. A command that a control ended first, which the
 /// engine says done, is ended so and says nothing more.
 pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
+  shell::read_login();
   let mut commands = Commands { scratch, running: HashMap::new(), closed: HashSet::new() };
   hearing(&["bash", "write"], move |mut co: Co<Said>| async move {
     loop {
