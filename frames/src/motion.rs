@@ -33,8 +33,11 @@ const SHEET: usize = 160;
 /// The least columns of a tile, which its time needs.
 const TILE: usize = 16;
 
-/// The most tiles of a sheet: a span that holds more steps shows its first ones, and says so.
+/// The most tiles of a sheet, and the most rows of cells that its tiles take, so a sheet stays an
+/// image that a model reads in one look: a span that holds more steps shows its first ones, and
+/// says so.
 const TILES: usize = 48;
+const DEEP: usize = 120;
 
 /// The look of the time over each tile, and of the ground between tiles.
 const LABEL: Rgb = Rgb::hex(0x9a_9a9a);
@@ -89,12 +92,13 @@ pub(crate) fn motion(cast: &Cast, span: Span, out: &Path) -> Result<String, Erro
   let moving = moving(&screens, span.rows);
   let every = span.every;
   let mut measures = measures(&screens, &keys, span, moving);
+  let (sheet, tiles) = sheet(&screens, span, every, moving);
   let steps = span.until.saturating_sub(span.from).as_millis() / every.as_millis().max(1) + 1;
-  if steps > TILES as u128 {
-    let last = span.from + every * u32::try_from(TILES - 1).unwrap_or(u32::MAX);
+  if steps > tiles as u128 {
+    let last = span.from + every * u32::try_from(tiles - 1).unwrap_or(u32::MAX);
     writeln!(
       measures,
-      "sheet: the first {TILES} of {steps} steps, to {:.3} s: a shorter span shows the rest",
+      "sheet: the first {tiles} of {steps} steps, to {:.3} s: a shorter span or fewer rows show the rest",
       last.as_secs_f64()
     )
     .ok();
@@ -109,7 +113,7 @@ pub(crate) fn motion(cast: &Cast, span: Span, out: &Path) -> Result<String, Erro
     fs::create_dir_all(folder)
       .map_err(|source| Error::Write { path: folder.to_owned(), source })?;
   }
-  put(&path("sheet.png"), &raster::image(&sheet(&screens, span, every, moving)).0.png()?)?;
+  put(&path("sheet.png"), &raster::image(&sheet).0.png()?)?;
   animated(&screens, span, &path("gif"))?;
   put(&path("motion.txt"), measures.as_bytes())?;
   Ok(measures)
@@ -334,8 +338,8 @@ fn flickers(screens: &[Shown]) -> Vec<Flicker> {
 
 /// The sheet: the screen at each step of the span, cut to the cells that move with a margin, each
 /// under its time from the start of the span, side by side in rows of tiles. A time that shows a
-/// new screen says so with a mark.
-fn sheet(screens: &[Shown], span: Span, every: Duration, moving: Option<Moving>) -> Frame {
+/// new screen says so with a mark. It gives the sheet and how many tiles it holds.
+fn sheet(screens: &[Shown], span: Span, every: Duration, moving: Option<Moving>) -> (Frame, usize) {
   let first = &screens[0].frame;
   let (rows, cols) = match moving {
     Some(moving) => {
@@ -347,6 +351,8 @@ fn sheet(screens: &[Shown], span: Span, every: Duration, moving: Option<Moving>)
     None => ((0, first.rows - 1), (0, first.cols - 1)),
   };
   let width = cols.1 - cols.0 + 1;
+  let height = rows.1 - rows.0 + 2;
+  let most = TILES.min((SHEET / (width + 1)).max(1) * (DEEP / (height + 1)).max(1));
   let ground =
     |glyph: &str, fg: Rgb| Cell { glyph: glyph.to_owned(), fg, bg: GROUND, attributes: 0 };
   let mut tiles: Vec<Vec<Vec<Cell>>> = Vec::new();
@@ -362,11 +368,10 @@ fn sheet(screens: &[Shown], span: Span, every: Duration, moving: Option<Moving>)
     tiles.push(tile);
     before = Some(shown);
     at += every;
-    if at > span.until || every.is_zero() || tiles.len() == TILES {
+    if at > span.until || every.is_zero() || tiles.len() == most {
       break;
     }
   }
-  let height = rows.1 - rows.0 + 2;
   // As many tiles across as make the sheet about as wide as it is high, a cell being about twice
   // as high as it is wide, and never wider than a screen of tiles.
   let (wide, deep) = (width + 1, tiles.len() * height * 2);
@@ -388,7 +393,7 @@ fn sheet(screens: &[Shown], span: Span, every: Duration, moving: Option<Moving>)
     }
     sheet.push(vec![ground(" ", LABEL); across * (width + 1)]);
   }
-  Frame::of_cells(&sheet)
+  (Frame::of_cells(&sheet), tiles.len())
 }
 
 /// A row that says a text at its left, as wide as a tile.
