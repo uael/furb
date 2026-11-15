@@ -435,10 +435,12 @@ impl Model {
     offered.into_iter().flatten().map(entry).collect()
   }
 
-  /// The chosen row moved by a count of rows, within the rows that pass the filter.
+  /// The chosen row moved by a count of rows on the screen, within the rows that pass the filter.
+  /// The history rises from the input, so a row up there is an older one.
   pub(crate) fn chose(&mut self, by: isize) {
     let count = self.entries().len();
     if let Some(picker) = self.picker.as_mut() {
+      let by = if picker.of == Pick::History { -by } else { by };
       picker.at = picker.at.saturating_add_signed(by).min(count.saturating_sub(1));
     }
   }
@@ -497,16 +499,20 @@ impl Model {
 
   /// The columns where a list part stands at its middle: those of the home while the list stands
   /// beside it, so the part covers no card, else the whole window. The columns of the part, which
-  /// leave two on each side at least.
+  /// leave two on each side at least, or those of the box of the input for the history, which
+  /// grows from it.
   fn spans(&self) -> (u16, u16) {
     let beside = self.listed() && self.size.0 >= BESIDE;
     let columns = if beside { self.size.0.saturating_sub(SIDE) } else { self.size.0 };
-    (columns, PART.min(columns.saturating_sub(4)))
+    let rises = self.picker.as_ref().is_some_and(|one| one.of == Pick::History);
+    let input = u16::try_from(self.wide().saturating_sub(2)).unwrap_or(PART);
+    (columns, if rises { input } else { PART.min(columns.saturating_sub(4)) })
   }
 
   /// The open list part as the window draws it, at the middle of the columns of the home and under
   /// the rows that stay above it, with as many of its rows as the window holds, the chosen one
-  /// among them.
+  /// among them. The history of the input stands over the input instead, where he typed: its text
+  /// at the foot, as the input, and the newest of what he sent just above it.
   pub(crate) fn over(&self) -> Option<Over> {
     let picker = self.picker.as_ref()?;
     let t = &self.tokens;
@@ -520,6 +526,7 @@ impl Model {
       row
     };
     let entries = self.entries();
+    let rises = picker.of == Pick::History;
     let mut rows = vec![Row::default()];
     let close = vec![run(self.key(Does::Close), muted)];
     let title = vec![run(picker.of.title(), t.style(Role::Title))];
@@ -534,10 +541,16 @@ impl Model {
       many => format!("{} / {many}", picker.at + 1),
     };
     let filter = vec![run("▌", Style::new().fg(t.accent)), filter];
-    rows.push(Row::of(padded(spread(filter, vec![run(count, muted)], room, Style::new()))));
-    rows.push(Row::default());
+    let filter = Row::of(padded(spread(filter, vec![run(count, muted)], room, Style::new())));
+    if !rises {
+      rows.extend([filter.clone(), Row::default()]);
+    }
     let fits = usize::from(self.size.1).saturating_sub(2 * usize::from(OVER) + FRAME).max(1);
-    let shown = self.shown_entries(&entries, picker, fits);
+    let mut shown = self.shown_entries(&entries, picker, fits);
+    if rises {
+      rows.push(Row::default());
+      shown.reverse();
+    }
     for (at, line) in shown {
       let Some(at) = at else {
         rows.push(Row::of(padded(line)));
@@ -547,17 +560,29 @@ impl Model {
       rows.push(Row { hot: vec![clicked], ..Row::of(padded(line)) });
     }
     rows.push(Row::default());
-    let foot = format!(
+    if rises {
+      rows.extend([filter, Row::default()]);
+    }
+    rows.push(Row::of(padded(vec![run(self.foot(picker), muted)])));
+    rows.push(Row::default());
+    if rises {
+      // Its foot stands on the last row of the input, over the row of hints.
+      let y = self.size.1.saturating_sub(1).saturating_sub(u16::try_from(rows.len()).ok()?);
+      return Some(Over { x: self.margin(), y, width, rows });
+    }
+    let x = columns.saturating_sub(width) / 2;
+    Some(Over { x, y: OVER, width, rows })
+  }
+
+  /// The keys that the foot of a list part names: to move, to take the chosen row, to close.
+  fn foot(&self, picker: &Picker) -> String {
+    format!(
       "{} move · {} {} · {} close",
       [Does::Up, Does::Down].map(|one| self.key(one)).join(""),
       self.key(Does::Send),
       picker.of.takes(),
       self.key(Does::Close),
-    );
-    rows.push(Row::of(padded(vec![run(foot, muted)])));
-    rows.push(Row::default());
-    let x = columns.saturating_sub(width) / 2;
-    Some(Over { x, y: OVER, width, rows })
+    )
   }
 
   /// The rows of the entries that the part shows: a head before the first entry of each part of the

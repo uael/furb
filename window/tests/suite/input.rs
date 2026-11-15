@@ -189,7 +189,13 @@ fn ctrl_r_searches_what_he_sent_here_from_what_he_wrote_and_writes_the_text_that
   app.press("ctrl+r");
   let frame = shows(&app, "History");
   assert!(frame.contains("say what moved") && frame.contains("1 / 1"), "{frame}");
-  let (x, y) = at(&app, "moved", 0);
+  // The history rises from the input, so its row of the text stands under the same text in the
+  // feed.
+  let text = app.text();
+  let lines: Vec<&str> = text.lines().collect();
+  let y = lines.iter().rposition(|line| line.contains("moved")).unwrap();
+  let x = lines[y][..lines[y].find("moved").unwrap()].chars().count();
+  let (x, y) = (u16::try_from(x).unwrap(), u16::try_from(y).unwrap());
   let frame = app.render();
   let cell = |x: u16| frame.cells[usize::from(y) * frame.width as usize + usize::from(x)].fg;
   let lit: Vec<bool> = (x..x + 5).map(|x| cell(x) == ORANGE).collect();
