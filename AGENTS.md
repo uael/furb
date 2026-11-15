@@ -324,7 +324,11 @@ beside it as its suite.
 changed files reach, `test <suite>` runs a suite, and `test` alone runs every suite at once, each into
 `target/xtask/<suite>.log`, in about a minute; `frames` the frames of the window, `search <words>` finds a task or an
 option, and each script of `script/` that runs on its own is a task of its name, whose help is its docstring. The
-commands below are the ones it routes to.
+commands below are the ones it routes to. Three agents share one machine with its owner, so each task runs at the
+lowest priority, and gives each build and each runner of tests that it starts a third of the cores in
+`CARGO_BUILD_JOBS`, `NEXTEST_TEST_THREADS`, `PYTEST_XDIST_AUTO_NUM_WORKERS` and `FURB_TEST_JOBS`, unless one of them is
+set or `CI` is. A runner started directly takes the same third: `test-threads` of `.config/nextest.toml`, the hook
+`pytest_xdist_auto_num_workers` of `test/conftest.py` for `-n auto`, and `runners()` of the TypeScript tests.
 
 Run every command from the root of the repository. Before it runs a command, `uv run` syncs the environment. The
 sync builds a package of the workspace again when the environment does not hold it, as in a new checkout, or when a
@@ -502,8 +506,8 @@ fix what your change broke, and report what was broken before.
   check the head of a branch whole each time it moves, at most once in each interval, in a worktree of its own that it
   detaches at that head. It runs the hooks of a commit on the files that changed since the head that it checked before,
   then each suite, then clippy and biome, one part after the other. A part starts only while the load of the machine is
-  under its count of cores, which it reads each minute while it waits, and runs at the lowest priority with a quarter of
-  the cores for each runner and each build, so the check adds about that to the load. A green writes one line in the
+  under its count of cores, which it reads each minute while it waits, and runs at the lowest priority with a third of
+  the cores for each runner and each build, as each task does. A green writes one line in the
   table; a red writes one entry in the inbox, with each test or file that failed, its owner from the file of owners, and
   the commits since the last green, or since the head checked before. It blocks nothing, and it wakes on the write of
   the ref.
@@ -530,7 +534,7 @@ fix what your change broke, and report what was broken before.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `bind/typescript/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
-  seconds, and runs as many at once as the machine has cores, or as `FURB_TEST_JOBS` names when it names fewer. A
+  seconds, and runs a third of the cores at once, each core on CI, or as many as `FURB_TEST_JOBS` names. A
   word after `bun run test` filters the files by their path or by `typescript/file`, as `typescript/engine`, and a filter
   that matches no file fails. Use it, and not a plain
   `bun test <file>`, which keeps `claude` on the PATH and fails where a test names a model, and says so; a bunfig.toml
@@ -581,7 +585,8 @@ publishes nothing while a dependency stands on git, and says why.
   and `furb` and `furb-cli` on them by their version, as patches of crates.io, then add `furb` to a new crate that
   takes every other crate from crates.io with no lock of furb, run the example chains there, and install `furb-cli`.
   It proves that the crates pack and build as crates.io will give them once monty stands there. A crate that breaks
-  the build in a fresh resolve takes a pin with `=` in `Cargo.toml`. It takes about 5 minutes.
+  the build in a fresh resolve takes a pin with `=` in `Cargo.toml`. It takes about 5 minutes. Its folder, one for each
+  tree in the temporary folder by default, keeps its build, so only its first run builds every crate.
 - `sh script/prove-npm.sh <packs>`: install the packs of `@uael/furb` and of `@uael/furb-<system>` for this system, as
   `npm pack` names them, in a new folder, and run the example chains there with node.
 

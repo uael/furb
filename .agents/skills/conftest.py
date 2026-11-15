@@ -26,6 +26,7 @@ from conftest import (  # noqa: F401
   of,
   paragraphs,
   pytest_generate_tests,
+  pytest_xdist_auto_num_workers,
   settle,
   sown,
   tilded,

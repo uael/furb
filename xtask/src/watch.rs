@@ -158,19 +158,9 @@ fn part(tree: &Path, words: &[String], log: &Path) -> Result<bool, Fault> {
   let out = || {
     file.try_clone().map(Stdio::from).map_err(|source| Fault::Read { path: log.to_owned(), source })
   };
-  // nice gives the check the cores that no other work takes; Windows has no nice, and runs it as it
-  // runs any command.
-  let niced = [&["nice".to_owned(), "-n".to_owned(), "19".to_owned()][..], words].concat();
-  let words = if cfg!(unix) { &niced[..] } else { words };
   let Some((program, args)) = words.split_first() else { return Ok(true) };
-  // A quarter of the cores for each runner and each build, so a part adds about that to the load.
-  let jobs =
-    thread::available_parallelism().map_or(1, |cores| (cores.get() / 4).max(1)).to_string();
-  let caps =
-    ["CARGO_BUILD_JOBS", "NEXTEST_TEST_THREADS", "PYTEST_XDIST_AUTO_NUM_WORKERS", "FURB_TEST_JOBS"];
   let status = Process::new(program)
     .args(args)
-    .envs(caps.map(|cap| (cap, jobs.as_str())))
     .current_dir(tree)
     .stdout(out()?)
     .stderr(out()?)

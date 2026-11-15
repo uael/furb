@@ -35,6 +35,6 @@ ra-ap-rustc_lexer = "0.185.0"
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", default-features = false, features = ["resource"] }
 
-# The task tree: the copy on write of a whole folder in one call, clonefile of macOS.
-[target.'cfg(target_vendor = "apple")'.dependencies]
-rustix = { version = "1", features = ["fs"] }
+# The lowest priority of each task, which each program that it starts inherits, and for the task
+# tree, the copy on write of a whole folder in one call, clonefile of macOS.
+rustix = { version = "1", features = ["fs", "process"] }

@@ -4,7 +4,7 @@
 use std::{
   env, fs, io,
   path::{Path, PathBuf},
-  process::{Command as Process, ExitCode, Stdio, id},
+  process::{Command as Process, ExitCode, Stdio},
 };
 
 use fancy_regex::Regex;
@@ -31,7 +31,10 @@ const WORDS: [&str; 2] =
 /// patch of crates.io, and cargo takes every other crate from crates.io and resolves each version
 /// afresh, with no lock of furb, as a user gets them.
 pub(crate) fn crates(root: &Path, work: Option<PathBuf>) -> Result<ExitCode, Fault> {
-  let work = fresh(&work.unwrap_or_else(|| env::temp_dir().join(format!("prove-crate.{}", id()))))?;
+  let work = fresh(&match work {
+    Some(work) => work,
+    None => kept(root)?,
+  })?;
   let manifest = read(&root.join("Cargo.toml"))?;
   let version = workspace_version(&manifest)?;
   let target = work.join("target");
@@ -191,6 +194,15 @@ fn chains(run: &mut Process, claude: &Path, yard: &Path) -> Result<(), Fault> {
   Ok(())
 }
 
+/// The folder of a proof when the caller names none: one for each tree, which stays between the
+/// runs, so only the first build of the proof is cold.
+fn kept(root: &Path) -> Result<PathBuf, Fault> {
+  let tree =
+    fs::canonicalize(root).map_err(|source| Fault::Read { path: root.to_owned(), source })?;
+  let name = tree.file_name().map_or_else(|| "root".into(), |name| name.to_string_lossy());
+  Ok(env::temp_dir().join(format!("prove-crate-{name}")))
+}
+
 /// cargo with its target in the folder of the proof.
 fn cargo(target: &Path) -> Process {
   let mut cargo = Process::new("cargo");
@@ -265,6 +277,7 @@ fn linked(target: &Path, at: &Path) -> io::Result<()> {
 
 /// Windows takes no link with no right of its own, and no proof of the crate runs there.
 #[cfg(not(unix))]
+#[expect(clippy::unnecessary_wraps, reason = "it stands in for the link of unix, which can fail")]
 fn linked(_target: &Path, _at: &Path) -> io::Result<()> {
   Ok(())
 }
