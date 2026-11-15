@@ -88,7 +88,7 @@ class Journal:
       return due
 
     def upto(entry):
-      while owed() and not question(x := due[-1]) and ranks[id(x)] < ranks.get(id(entry), 0):
+      while owed() and not question(x := due[-1]) and ranks[id(x)] < ranks.get(id(entry), len(ranks)):
         recount(due.pop())
 
     def repeat(kind, about, by, *words):
@@ -96,6 +96,12 @@ class Journal:
         said = say(kind, about, *words)
       again[id(said)] = said
       held.setdefault((scope(about), "journal"), []).append(said)
+      return said
+
+    def answered(f):
+      repeat(*f)
+      while f[1] in pending and owed() and due[-1][0] == "joined" and due.pop() and due:
+        recount(due.pop())
 
     def recount(entry):
       match entry:
@@ -121,6 +127,8 @@ class Journal:
           lost = [n for n in lost if n not in module(about)]
           note = f"The life goes on from a checkpoint. It lost {lost or 'no name'}, and it cut {cut or 'no act'}."
           repeat("cut", about, "journal", [*turns, *[("tell", about, "journal", [note])][: bool(lost + cut)]])
+        case (_, about, *_) if first.get(about) is entry:
+          answered(entry)
         case (_, about, *_) if scope(about):
           repeat(*entry)
         case (_, about, by, *_) if by in outside and about in saved and get(saved[about][3]) and not get(about):
@@ -132,10 +140,21 @@ class Journal:
         if name not in taken and (f := first.get(name)):
           if f[0] == "started":
             pending[name] = f
-          upto(f)
-          repeat(*f)
-          while name in pending and owed() and due[-1][0] == "joined" and due.pop() and due:
-            recount(due.pop())
+          # The answer waits at its place in the record, while the ears of the World catch up on the log as they did
+          # when the question was made: the ear that took it and each ear after it do not hear it, and a start that
+          # the taker said later is said at its place, so the question is taken with no fact until then.
+          due.insert(sum(ranks[id(x)] > ranks[id(f)] for x in due), f)
+          if f[2] in outside:
+            for x in log:
+              x[0] is made and x[1].update([*outside][[*outside].index(f[2]) :])
+            offers(made)
+          if name not in taken:
+            upto(f)
+            if owed()[-1] is f or not (name in pending and f[2] in outside):
+              del due[next(n for n, x in enumerate(due) if x is f)]
+              answered(f)
+            else:
+              taken.add(name)
         if kind in ("run", "chain") or not owed() or strays.get(name, name) is None:
           offers(made)
 
@@ -149,9 +168,25 @@ class Journal:
         raise
 
     def lives(g, heard):
-      if heard and again.get(id(heard), 0) is heard and heard[2] and site.get() not in known:
+      n, by = site.get(), heard and again.get(id(heard), 0) is heard and heard[2]
+      if by and n not in known:
         heard = (*heard[:2], "journal", *heard[3:])
-      return carried(g, heard)
+      w, burst = carried(g, heard), []
+      # An ear that hears a fact of another speaker that the journal says again said, in that step, each fact of its
+      # own that the record holds next, each joined to the fact before it, but an answer, which its question takes.
+      # The journal says them in that step and gives each to the ear, as an ear hears what it says, so the ear does in
+      # that step what it did then.
+      if by and by != n and n in outside and owed() and due[-1][2] == n:
+        while not question(x := due[-1]) and first.get(x[1]) is not x:
+          burst.append(repeat(*due.pop()))
+          if not due[1:] or due[-1][0] != "joined" or due[-2][2] != n or question(due[-2]):
+            break
+          due.pop()
+      for said in burst:
+        for x in log:
+          x[0] is said and x[1].add(n)
+        w = w is not False and carried(g, (*said[:2], "journal", *said[3:]))
+      return w
 
     def flying():
       for x in [*taken]:
