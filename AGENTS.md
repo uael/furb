@@ -425,8 +425,10 @@ fix what your change broke, and report what was broken before.
   past 100 characters, which rustfmt does not wrap. The lines that main holds are no debt of a change: wrap them when
   you change their file.
 - `cargo xtask targets`: clippy of the workspace on Linux and on Windows, which a Mac does not build, so code under a
-  `cfg` of those systems fails here and not first in the gates. zig compiles the C of the dependencies; it needs the
-  targets `rustup target add x86_64-unknown-linux-gnu x86_64-pc-windows-gnu`. Its first run in a tree takes about a
+  `cfg` of those systems fails here and not first in the gates. It lints what the clippy of the gates lints, the tests
+  and the window among them, but the addon of N-API on Windows, whose build needs the library of node there. zig
+  compiles the C of the dependencies; it needs the targets `rustup target add x86_64-unknown-linux-gnu
+  x86_64-pc-windows-gnu`. Its first run in a tree takes about a
   minute or more, and a run after a change takes seconds. The watch of a branch runs it at each new head.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`, and the words of
   `.furb/skills` too, less their tests.

@@ -11,6 +11,10 @@
 //! of a tree links one build, a copy of the target carries it, and the gates cache that one folder.
 //! The scratch folder goes once the library stands.
 //!
+//! A lint for another system, as `cargo xtask targets` runs it with `FURB_LINT_ONLY` set, links no
+//! program, so the script builds and links nothing there. Cargo gives a build script no sign of a
+//! check, so the variable says it, as `DOCS_RS` does for a build of docs.rs.
+//!
 //! `.cargo/config.toml` turns the build script of `opentui-sys` off. That script only checks that a
 //! library stands, and cargo runs it before this one or after it, since no edge orders them. So
 //! this script says the link in its place.
@@ -69,8 +73,12 @@ fn main() -> ExitCode {
 fn linked() -> Result<(), Fault> {
   println!("cargo::rerun-if-changed=build.rs");
   println!("cargo::rerun-if-changed=Cargo.toml");
+  println!("cargo::rerun-if-env-changed=FURB_LINT_ONLY");
   let (host, target) = (var("HOST")?, var("TARGET")?);
   if host != target {
+    if env::var_os("FURB_LINT_ONLY").is_some() {
+      return Ok(());
+    }
     return Err(Fault::Cross { host, target });
   }
   let pin = Pin::read(&target)?;

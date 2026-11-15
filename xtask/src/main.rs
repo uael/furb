@@ -218,7 +218,8 @@ enum Task {
   /// and a path after `$root/` is a path of the repository.
   Paths,
   /// Lint the workspace on Linux and Windows, which this machine does not build, so code under a
-  /// cfg of those systems shows its warnings before the gates of CI fail on it.
+  /// cfg of those systems shows its warnings before the gates of CI fail on it. It lints what the
+  /// clippy of the gates lints, but the addon of N-API on Windows.
   ///
   /// zig compiles the C of the dependencies for each system. It needs zig on PATH and the targets
   /// of rust: `rustup target add x86_64-unknown-linux-gnu x86_64-pc-windows-gnu`. A first run in a
