@@ -7,10 +7,9 @@ use std::fs;
 use sha2::{Digest, Sha256};
 
 /// The files that define the part of the host in an image: `Kept` and each type that it holds. The
-/// types of the crate that it holds, as `Held`, are in the digest of the crate, which the key of an
+/// types of the crates that it holds, as `Held` and `Event`, are in the digest that the key of an
 /// image names.
-const KEPT: [&str; 5] =
-  ["src/life.rs", "src/event.rs", "src/queue.rs", "src/backlog.rs", "src/rebirth.rs"];
+const KEPT: [&str; 4] = ["src/life.rs", "src/queue.rs", "src/backlog.rs", "src/rebirth.rs"];
 
 fn main() {
   let mut hash = Sha256::new();

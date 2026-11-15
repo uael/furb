@@ -1,16 +1,13 @@
 //! The one protocol of the host: what a peer says to the daemon, and what the daemon says to a
 //! peer, each frame one line of JSON.
 
-use furb::{
-  life::Stage,
-  view::{self, Act, Desk, Page, Rung, Shown, ThreadNode, Threads},
-};
 use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
+  Act, Desk, Page, Rung, Shown, Stage, ThreadNode, Threads, card,
   error::ProtocolError,
   event::{Event, Seq},
 };
@@ -425,7 +422,7 @@ pub enum Verb {
 impl Verb {
   /// The record of the life that the verb names, which the daemon reads as its one key. Each verb
   /// is named here, so a new verb says whether it names a record.
-  pub(crate) fn life_mut(&mut self) -> Option<&mut String> {
+  pub fn life_mut(&mut self) -> Option<&mut String> {
     match self {
       Self::Open { life, .. }
       | Self::Attach { life, .. }
@@ -551,7 +548,7 @@ pub enum Config {
   Set { key: Vec<String>, value: Option<Value>, layer: Option<Layer> },
 }
 
-pub use furb::world::config::Layer;
+pub use crate::config::Layer;
 
 /// What the daemon says to a peer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -629,9 +626,9 @@ pub enum Answer {
   /// The cards of the machine.
   Cards(Vec<Card>),
   /// What the peer sent, the newest first.
-  History(Vec<view::Sent>),
+  History(Vec<card::Sent>),
   /// The skills of a life, each with what it is for.
-  Skills(Vec<view::Skill>),
+  Skills(Vec<card::Skill>),
   /// The name of the act that the verb made.
   Act(String),
   Value(Value),
@@ -719,16 +716,16 @@ pub struct Card {
   pub pins: Vec<String>,
   pub since: u64,
   #[serde(flatten)]
-  pub thread: view::Card,
+  pub thread: card::Card,
 }
 
 impl Card {
   /// Where a member finds the card in a list: its part, its rank in that part, and its time. What
   /// needs him waits the longest first, and each other part shows the newest first.
-  pub fn place(&self, operator: &str) -> (view::Part, u8, i64) {
+  pub fn place(&self, operator: &str) -> (card::Part, u8, i64) {
     let (part, rank) = self.thread.part(operator);
     let since = i64::try_from(self.since).unwrap_or(i64::MAX);
-    (part, rank, if part == view::Part::NeedsYou { since } else { -since })
+    (part, rank, if part == card::Part::NeedsYou { since } else { -since })
   }
 }
 

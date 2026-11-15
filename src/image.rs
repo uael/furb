@@ -4,17 +4,18 @@
 //! open then goes by the record, and a life that keeps the record drops the image once it stands
 //! so. The record holds no fact of it.
 //!
-//! An image depends on what the build gives its session, by one digest that the build computes,
-//! [`BUILD`]: the python that the build puts in a session beside the engine, the Rust that makes,
-//! holds or reads the half of the host and that the session calls, by the number of each function,
-//! the view, whose acts a host keeps in its part, and the typed surface of the contract, by which a
-//! host calls the engine of the life and reads what an ear answers. `build.rs` names each file of
-//! it. A host names the shape of its own part in that part. The key names the texts of the engine,
-//! of the Kernel and of the checkpointer too, as [`world::engine`] names them, which the session
-//! holds: a build of the same digest opens the image of other texts, as it replays a record of
-//! them, and the life then moves to the texts of the build as a step of its own, which
-//! [`Engine::cross`] writes. Only a life that keeps its record writes an image, since only that
-//! record holds each fact that the life said.
+//! An image depends on what the build gives its session, by two digests: [`BUILD`], which the
+//! build computes: the python that the build puts in a session beside the engine, the Rust that
+//! makes, holds or reads the half of the host and that the session calls, by the number of each
+//! function, the view, whose acts a host keeps in its part, and the typed surface of the
+//! contract, by which a host calls the engine of the life and reads what an ear answers.
+//! `build.rs` names each file of it. The other is [`furb_wire::SHAPES`], the shapes of the acts
+//! and the events that a host keeps. A host names the shape of its own part in that part. The
+//! key names the texts of the engine, of the Kernel and of the checkpointer too, as
+//! [`world::engine`] names them, which the session holds: a build of the same digest opens the
+//! image of other texts, as it replays a record of them, and the life then moves to the texts
+//! of the build as a step of its own, which [`Engine::cross`] writes. Only a life that keeps
+//! its record writes an image, since only that record holds each fact that the life said.
 //!
 //! The file holds its key, one line of JSON that spaces may end, then its body. The key names the
 //! tip of the record that the life stood at, those texts and that digest, the dump version of
@@ -85,7 +86,7 @@ impl Key {
   /// record, or at its tip now.
   fn of(record: &Path, bytes: Option<u64>, parts: Parts) -> io::Result<Self> {
     Ok(Self {
-      build: BUILD.to_owned(),
+      build: format!("{BUILD}.{}", furb_wire::SHAPES),
       engine: world::engine(),
       dump: monty::DUMP_VERSION,
       tip: Tip::of(record, bytes)?,

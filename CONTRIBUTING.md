@@ -98,7 +98,7 @@ contract needs a request of the owner.
 | `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [The provider](#the-provider) gives file by file. |
 | `src/life.rs` | The opening of a life, which every host shares: the record, the ears of the crate, and the extensions. |
 | `src/view.rs`, `src/view/` | The meaning of a life, folded from its facts, which every window shows the same way: the state of each act and chain, the desk, the threads, the spend, and the acts at a moment. The host tells each act with it, and `host/tests/suite/view.rs` proves it. |
-| `crates/wire/` | The crate `furb-wire`: the plain shapes of the meaning of a life, an act with its state, and the words in which a person reads a time, a size and a count. A client links it with no engine and no daemon, and `furb::view` gives each of its names again. |
+| `crates/wire/` | The crate `furb-wire`: the plain shapes of the meaning of a life, an act with its state, the words in which a person reads a time, a size and a count, and the protocol of the daemon with its events. A client links it with no engine and no daemon; `furb::view` and `furb-host` give each of its names again. |
 | `src/furb/world.py` | The World of Python: the ears of the crate, and the operator at its terminal. The scripts open a life on it. |
 
 ### The provider

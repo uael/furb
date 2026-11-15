@@ -7,9 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use furb::view::{Act, Retrying};
-
-use crate::queue::FollowUp;
+use crate::{act::Act, page::Retrying};
 
 /// The place of an event in the log of its life, counted from 0 with no gap.
 pub type Seq = u64;
@@ -44,4 +42,16 @@ pub enum Event {
   /// The end of the life, with the fault that ended it, or none when a client ended it. It is the
   /// last event.
   Ended(Option<String>),
+}
+
+/// One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
+/// that its prompt wants, its message, and why its send failed, when it did. A follow-up that
+/// failed holds the queue of its chain until the operator takes it out.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct FollowUp {
+  pub entry: String,
+  pub chain: String,
+  pub shape: String,
+  pub message: String,
+  pub failed: Option<String>,
 }

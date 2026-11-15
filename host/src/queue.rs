@@ -9,7 +9,6 @@
 )]
 use std::collections::{BTreeMap, HashMap};
 
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -18,22 +17,10 @@ use furb::{
   view::{Act, Kind, State},
 };
 
-use crate::event::Event;
+use furb_wire::{Event, FollowUp};
 
 /// The kind of the facts of the queue, which the operator says on the chain of the follow-up.
 pub(crate) const QUEUE: &str = "queue";
-
-/// One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
-/// that its prompt wants, its message, and why its send failed, when it did. A follow-up that
-/// failed holds the queue of its chain until the operator takes it out.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct FollowUp {
-  pub entry: String,
-  pub chain: String,
-  pub shape: String,
-  pub message: String,
-  pub failed: Option<String>,
-}
 
 /// Where a follow-up stands: it waits, or it went as the act of a prompt, which is unknown between
 /// the fact that begins its send and the prompt that the operator says after it.

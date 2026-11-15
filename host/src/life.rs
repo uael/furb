@@ -45,6 +45,7 @@ use furb::{
     config::{Change, Layers},
   },
 };
+use furb_wire::FollowUp;
 use futures::stream::{self, Stream as Streams};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -67,7 +68,7 @@ use crate::{
   error::LifeError,
   event::{Event, Seq},
   opens::{Heard, Opens, Told},
-  queue::{FollowUp, QUEUE, Queue},
+  queue::{QUEUE, Queue},
   rebirth::{self, Imaging, Watch},
 };
 

@@ -2,13 +2,20 @@
 //! and the words in which a person reads a time, a size and a count. A client links this crate and
 //! no engine and no daemon, so a phone or a web page reads the same meaning as the window.
 
+/// The digest of the shapes of this crate, by which a reader of an image of a life takes no image
+/// of other shapes.
+pub const SHAPES: &str = env!("FURB_WIRE_SHAPES");
+
 pub mod act;
 pub mod card;
 pub mod config;
 pub mod desk;
+pub mod error;
+pub mod event;
 pub mod ladder;
 pub mod open;
 pub mod page;
+pub mod protocol;
 pub mod state;
 pub mod threads;
 pub mod words;
@@ -20,6 +27,8 @@ pub use act::{
 pub use card::{Card, Part, Sent, Skill, Standing};
 pub use config::Layer;
 pub use desk::{Ask, Desk, Tick};
+pub use error::ProtocolError;
+pub use event::{Event, FollowUp, Seq};
 pub use ladder::{Rung, SHOWN, Shown};
 pub use open::Stage;
 pub use page::{
