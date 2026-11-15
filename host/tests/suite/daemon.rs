@@ -2127,12 +2127,12 @@ async fn a_command_that_a_window_feeds_reads_each_line_that_it_writes() {
 /// stays far below it on a loaded machine.
 const QUIET: Duration = Duration::from_millis(1500);
 
-/// A daemon of a test whose watch tells a stall after [`QUIET`].
-async fn watched(at: &Path, opening: Opening) -> Local {
+/// A daemon of a test whose watch tells a stall after the bound given.
+async fn watched(at: &Path, opening: Opening, stall: Duration) -> Local {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
   let settings =
-    Settings { opening, grace: SHORT, first: STARTING, stall: QUIET, tailnet: None, door: None };
+    Settings { opening, grace: SHORT, first: STARTING, stall, tailnet: None, door: None };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
   local
@@ -2173,7 +2173,7 @@ impl Window {
 #[tokio::test]
 async fn a_life_that_holds_an_open_act_and_says_no_fact_is_told_once_to_its_windows_and_root() {
   let at = place();
-  let local = watched(&at, opening(&at)).await;
+  let local = watched(&at, opening(&at), QUIET).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
@@ -2266,7 +2266,7 @@ async fn a_window_that_dials_again_hears_the_end_of_a_word_that_ended_while_it_w
 #[tokio::test]
 async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_crossing_left_open() {
   let at = place();
-  let local = watched(&at, opening(&at)).await;
+  let local = watched(&at, opening(&at), QUIET).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
@@ -2288,7 +2288,7 @@ async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_crossing_lef
 #[tokio::test]
 async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() {
   let at = place();
-  let local = watched(&at, opening(&at)).await;
+  let local = watched(&at, opening(&at), QUIET).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
@@ -2314,7 +2314,7 @@ async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() 
 #[tokio::test]
 async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_notice() {
   let at = place();
-  let local = watched(&at, opening(&at)).await;
+  let local = watched(&at, opening(&at), QUIET).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
@@ -2342,16 +2342,16 @@ async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_not
 #[tokio::test]
 async fn work_that_rests_or_waits_for_the_operator_never_stalls_and_stalls_once_he_answered() {
   let at = place();
-  let local = watched(&at, opening(&at)).await;
+  let local = watched(&at, opening(&at), QUIET).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
   let rests = window.during(QUIET * 2).await;
   assert!(!rests.iter().any(stall), "a life that rests tells no stall");
   // Two rungs and the run of the root await a prompt to the operator, one of the rungs is paused,
-  // and the root then waits on a command. No act runs while he does not answer: a command that
-  // runs then would hold the watch to the clock of the machine, which a loaded machine stops for
-  // longer than the bound.
+  // and the root then waits on a command. No act runs while he does not answer: the first command
+  // of a process waits for the PATH of the login shell of the user with no fact, which a loaded
+  // machine gives in more than the bound.
   let word = "q = prompt(str, \"q\", to=OPERATOR)\n\
               stopped = rung(\"x = 2\", q, on=chain(\"stopped\"))\npause(stopped)\n\
               rung(\"x = 1\", q, on=chain(\"held\"))\nawait q\nawait bash(\"sleep 20\", timeout=60)";
@@ -2383,6 +2383,34 @@ async fn work_that_rests_or_waits_for_the_operator_never_stalls_and_stalls_once_
   window.left(&life).await;
 }
 
+/// The bound of a stall in the test of a command that keeps writing: far above any pause between
+/// two lines of a shell on a loaded machine.
+const SLOW: Duration = Duration::from_secs(4);
+
+#[tokio::test]
+async fn a_command_that_keeps_writing_for_longer_than_the_bound_never_stalls() {
+  let at = place();
+  let local = watched(&at, opening(&at), SLOW).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  let ran = |word: &str| Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
+  let ended = |id: &'static str| move |frame: &Frame| matches!(frame, Frame::Event { event: Event::Fact(fact), .. } if fact[0] == "done" && fact[1] == id);
+  // The first command of a process waits for the PATH of the login shell of the user, which a
+  // loaded machine gives in seconds, with no fact: the command that writes runs after it.
+  let Ok(Answer::Act(_)) = window.ask(ran("await bash(\"true\")")).await else { panic!("no rung") };
+  window.heard_until(ended("bash1")).await;
+  // The command writes a line each tenth of a second for more than the bound.
+  let word = "await bash(\"for i in $(seq 50); do echo $i; sleep 0.1; done\", timeout=60)";
+  let Ok(Answer::Act(_)) = window.ask(ran(word)).await else { panic!("no rung") };
+  let began = Instant::now();
+  let heard = window.heard_until(ended("bash2")).await;
+  assert!(began.elapsed() >= SLOW, "the command wrote for longer than the bound");
+  let stalls: Vec<&Frame> = heard.iter().filter(|frame| stall(frame)).collect();
+  assert!(stalls.is_empty(), "a command that keeps writing never stalls: {stalls:?}");
+  window.left(&life).await;
+}
+
 #[tokio::test]
 async fn a_reply_that_writes_nothing_for_the_bound_stalls_its_chain_and_what_it_writes_is_progress()
 {
@@ -2405,7 +2433,7 @@ async fn a_reply_that_writes_nothing_for_the_bound_stalls_its_chain_and_what_it_
       future::pending().await
     })
   }));
-  let local = watched(&at, Opening { answer: Some(answer), ..opening(&at) }).await;
+  let local = watched(&at, Opening { answer: Some(answer), ..opening(&at) }, QUIET).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
