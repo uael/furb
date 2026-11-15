@@ -125,6 +125,18 @@ fn a_slot_of_repeated_rows_in_no_one_column_is_named() {
 }
 
 #[test]
+fn a_slot_that_follows_the_slot_before_it_with_no_blank_flows_with_it() {
+  // Two lines of code of the same colors: the parenthesis after a string stands where the string
+  // ends, as in prose, and in no column.
+  let muted = 0x94_9494;
+  let line = |text: &'static str, tail: &'static str| -> [(&'static str, u32, u32); 4] {
+    [("f(", muted, BASE), (text, TEXT, BASE), (")", muted, BASE), (tail, TEXT, BASE)]
+  };
+  let shown = frame(&[&line("'slept'", "     "), &line("'the bench'", " ")]);
+  assert_eq!(says(&shown), Vec::<String>::new());
+}
+
+#[test]
 fn a_part_with_another_padding_at_another_size_is_named() {
   let part = |left: &str, right: &str| {
     let text = format!("{left}text{right}");
