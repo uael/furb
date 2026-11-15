@@ -497,6 +497,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("b", &[Act::Type("json_b")], "json_backend.py"),
         step("c", &[Act::Key("Tab")], "backends/json_backend.py"),
         step("d", &[Act::Type("what does it store?"), Act::Key("Enter")], "reply 2"),
+        // The file that he named comes first when a mention names no letter yet.
+        step("x-named", &[Act::Type("and @")], "Files of demo"),
       ],
     }),
   },

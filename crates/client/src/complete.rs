@@ -6,6 +6,8 @@
 //! row that he takes writes its name in the place of the word with a space after it, so his next
 //! word never joins it, and a command leaves the input as it was before its word, and runs.
 
+use std::collections::{HashMap, HashSet};
+
 use furb_wire::{
   card::Skill,
   protocol::{Answer, Files, Verb},
@@ -263,13 +265,30 @@ impl Client {
       Completes::Mention => {
         let looked = self.looked(&completion.word);
         let paths = self.files(&looked.folder).map(|one| &one.paths[..]).unwrap_or_default();
-        pathed(&looked.query, paths.iter().map(String::as_str))
+        let named = self.named();
+        let liked = |at: usize| named.get(&format!("{}{}", looked.named, paths[at])).copied();
+        pathed(&looked.query, paths.iter().map(String::as_str), |at| liked(at).unwrap_or_default())
       }
     };
     if let Some(completion) = self.completion.as_mut() {
       completion.chosen = completion.chosen.min(found.len().saturating_sub(1));
       completion.found = found;
     }
+  }
+
+  /// How often and how lately he named each path in what he sent where the input sends, as the
+  /// pickers of files of other harnesses rank it: the count of the messages that named it, over one
+  /// more than the count of the messages that he sent after the newest of them.
+  fn named(&self) -> HashMap<String, f64> {
+    let mut named: HashMap<String, (u32, u32)> = HashMap::new();
+    for (age, sent) in (0..).zip(self.sent()) {
+      let paths: HashSet<String> = mentions(&sent.text).into_iter().collect();
+      for path in paths {
+        named.entry(path).or_insert((0, age)).0 += 1;
+      }
+    }
+    let share = |(count, age): (u32, u32)| f64::from(count) / (1.0 + f64::from(age));
+    named.into_iter().map(|(path, seen)| (path, share(seen))).collect()
   }
 
   /// The offer at a place of the list that the completion matches.
@@ -339,3 +358,28 @@ impl Client {
     Looked { folder, named: named.to_owned(), query: query[named.len()..].to_owned() }
   }
 }
+
+/// The paths that a text mentions, as a mention writes them: `@path`, or `@"path"` for a path with
+/// a blank. A mark that ends a sentence after a path is no part of it.
+fn mentions(text: &str) -> Vec<String> {
+  let mut found = Vec::new();
+  let mut rest = text;
+  while let Some(at) = rest.find('@') {
+    rest = &rest[at + 1..];
+    let (path, after) = if let Some(quoted) = rest.strip_prefix('"') {
+      quoted.split_once('"').unwrap_or((quoted, ""))
+    } else {
+      let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+      (rest[..end].trim_end_matches([',', '.', ';', ':', ')', '?', '!']), &rest[end..])
+    };
+    if !path.is_empty() {
+      found.push(path.to_owned());
+    }
+    rest = after;
+  }
+  found
+}
+
+#[cfg(test)]
+#[path = "complete.test.rs"]
+mod test;
