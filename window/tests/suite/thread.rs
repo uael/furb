@@ -281,8 +281,8 @@ fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_esc
   shows(&app, " Back ");
   // The head names the agent once its card or its page came, which can follow the button.
   let head = || app.text().lines().next().unwrap().to_owned();
-  let named =
-    app.wait_until(PATIENCE, || head().starts_with("● furb · agent · Run the bench of the replay "));
+  let named = app
+    .wait_until(PATIENCE, || head().starts_with("● furb · agent · Run the bench of the replay "));
   assert!(named, "{}", head());
   shows(&app, "await wait(600, chain)");
   screen("thread-agent", &app);
