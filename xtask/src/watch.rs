@@ -216,7 +216,12 @@ fn named(tree: &Path, name: &str, log: &Path) -> Vec<String> {
         let hook = line.strip_suffix("Failed").map(|hook| hook.trim_end_matches('.').trim());
         failed = hook.map(|hook| (hook.to_owned(), false));
       } else if let Some((hook, named)) = &mut failed {
-        let path = line.trim().trim_start_matches("--> ").split(':').next().unwrap_or_default();
+        // A checker names a file as `path:line`, ty after `--> `, rustfmt after `Diff in ` and from
+        // the root of the file system.
+        let named_file = line.trim().trim_start_matches("--> ").trim_start_matches("Diff in ");
+        let path = named_file.split(':').next().unwrap_or_default();
+        let path =
+          Path::new(path).strip_prefix(tree).map_or(path, |inside| inside.to_str().unwrap_or(path));
         if !path.is_empty() && tree.join(path).is_file() {
           found.push(format!("{path} (hook {hook})"));
           *named = true;
