@@ -8,6 +8,7 @@ use std::borrow::Cow;
 use furb::view::Skill;
 use furb::world::config::{Layer, Property, Setting};
 use serde_json::Value;
+use unicode_width::UnicodeWidthStr;
 
 use crate::{
   model::Model,
@@ -21,6 +22,8 @@ impl Model {
     let Some(read) = settings.read.as_ref() else {
       return vec![Entry { left: "Reading the settings…".to_owned(), ..Entry::default() }];
     };
+    // The layers take the room of the widest, so the values end in one column.
+    let layers = read.iter().map(|one| layer(one).len()).max().unwrap_or_default();
     let row = |(place, one): (usize, &Setting)| {
       let says = one.property.as_ref().map(|one| format!("  {}", one.description));
       // Each kit names its keys, a name in an object of furb stands with furb, and a key that no
@@ -36,7 +39,7 @@ impl Model {
         part,
         left: one.key.join("."),
         says: says.unwrap_or_default(),
-        right: stands(one),
+        right: stands(one, layers),
         choice: Choice::Setting(place),
         ..Entry::default()
       }
@@ -52,6 +55,8 @@ impl Model {
     let Some(read) = settings.played.as_ref() else {
       return vec![Entry { left: "Reading the extensions…".to_owned(), ..Entry::default() }];
     };
+    // Where each comes from takes the room of the widest, so how each plays ends in one column.
+    let froms = read.iter().map(|one| one.from.width()).max().unwrap_or_default();
     let row = |(place, one): (usize, &Skill)| {
       let (part, stands) = match (!one.turned_by.is_null(), one.plays, one.on) {
         (false, ..) => ("Skills", "read on need"),
@@ -65,7 +70,7 @@ impl Model {
         part: Cow::Borrowed(part),
         left: one.name.clone(),
         says: format!("  {}", one.description),
-        right: format!("{stands}  {}", one.from),
+        right: format!("{stands}  {:<froms$}", one.from),
         choice: Choice::Skill(place),
         ..Entry::default()
       }
@@ -87,26 +92,31 @@ impl Model {
     vec![Entry {
       left: one.key.join("."),
       says: format!("  {says}It takes {takes}."),
-      right: stands(one),
+      right: stands(one, 0),
       choice: Choice::Value(place),
       ..Entry::default()
     }]
   }
 }
 
-/// The value that wins for a setting and the layer that gives it, as `32768  default`. An empty
-/// value reads `none`, as the description of a key that takes one says it.
-fn stands(one: &Setting) -> String {
-  let layer = match one.layer {
-    Some(Layer::User) => "user",
-    Some(Layer::Project) => "project",
-    Some(Layer::Local) => "local",
-    None => "default",
-  };
+/// The value that wins for a setting and the layer that gives it in a count of columns at least,
+/// as `32768  default`. An empty value reads `none`, as the description of a key that takes one
+/// says it.
+fn stands(one: &Setting, layers: usize) -> String {
   let value = match &one.value {
     Value::Null => "none".to_owned(),
     Value::String(text) if text.is_empty() => "none".to_owned(),
     value => value.to_string(),
   };
-  format!("{value}  {layer}")
+  format!("{value}  {:<layers$}", layer(one))
+}
+
+/// The layer that gives the value of a setting.
+const fn layer(one: &Setting) -> &'static str {
+  match one.layer {
+    Some(Layer::User) => "user",
+    Some(Layer::Project) => "project",
+    Some(Layer::Local) => "local",
+    None => "default",
+  }
 }
