@@ -9,7 +9,7 @@ use furb::view::{
   Standing, Thought, Work, lines, operator, timer,
 };
 use furb_client::{Fold, Opened, Target, rests};
-use furb_host::protocol::Present;
+use furb_host::protocol::{Card, Present};
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
@@ -214,7 +214,7 @@ impl Feed<'_> {
     let card = self.model.client.card(&root.thread.key).or(untold.as_ref().map(|one| &one.1));
     let project = card.map(project).unwrap_or_default();
     let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
-    let (button, muted) = (self.style(Role::Button), self.style(Role::Muted));
+    let muted = self.style(Role::Muted);
     let title = self.model.title().unwrap_or_default();
     let (branch, branches) = self.branch();
     let (mark, title) = match (&self.opened.from, self.opened.agent(), branch) {
@@ -233,6 +233,33 @@ impl Feed<'_> {
     ];
     let forks = (width(&left)..width(&left) + mark.width() - 3, branches > 0);
     left.extend([run(mark, muted), run(title, self.style(Role::Title))]);
+    let (mark, button) = self.closer(card, branch);
+    let apart = |mark| [mark, run(" ".repeat(APART), Style::new())];
+    let right: Line = self
+      .present()
+      .into_iter()
+      .chain(mark)
+      .flat_map(apart)
+      .chain(button.clone().map(|one| one.0))
+      .collect();
+    let line = spread(left, right, self.wide.saturating_sub(2), Style::new());
+    let end = width(&line);
+    let hot = button.map(|(one, does)| (end - one.content.width()..end, Some(Click::Key(does))));
+    // The mark of the branches of a thread opens its last branch.
+    let last = self.opened.thread.branches().last().map(|one| one.card.prompt.clone());
+    let fork = last.filter(|_| forks.1).map(|prompt| (forks.0, Some(Click::Agent(prompt))));
+    Row { hot: hot.into_iter().chain(fork).collect(), ..Row::of(line) }
+  }
+
+  /// The mark of how the thread of the head ended, and its button: back to a branch or to the
+  /// thread that the operator came from, a reopen, a resolve, or a stop and resolve that confirms.
+  fn closer(
+    &self,
+    card: Option<&Card>,
+    branch: Option<usize>,
+  ) -> (Option<Span<'static>>, Option<(Span<'static>, Does)>) {
+    let t = &self.model.tokens;
+    let (button, muted) = (self.style(Role::Button), self.style(Role::Muted));
     // A life that a fault ended takes no resolve: it only reads.
     let made = !self.opened.thread.key.2.is_empty() && !self.model.leaves() && !self.ended();
     let (mark, button) = match card.map(|card| &card.thread) {
@@ -259,21 +286,10 @@ impl Feed<'_> {
       }
       _ => (None, Some((run(" Resolve ", button), Does::Resolve))),
     };
-    let apart = |mark| [mark, run(" ".repeat(APART), Style::new())];
-    let right: Line = self
-      .present()
-      .into_iter()
-      .chain(mark)
-      .flat_map(apart)
-      .chain(button.clone().map(|one| one.0))
-      .collect();
-    let line = spread(left, right, self.wide.saturating_sub(2), Style::new());
-    let end = width(&line);
-    let hot = button.map(|(one, does)| (end - one.content.width()..end, Some(Click::Key(does))));
-    // The mark of the branches of a thread opens its last branch.
-    let last = self.opened.thread.branches().last().map(|one| one.card.prompt.clone());
-    let fork = last.filter(|_| forks.1).map(|prompt| (forks.0, Some(Click::Agent(prompt))));
-    Row { hot: hot.into_iter().chain(fork).collect(), ..Row::of(line) }
+    // A window that only reads shows no button that writes: a resolve, a reopen or a stop.
+    let reads = self.model.client.only_reads(self.opened.thread.key.0).is_some();
+    let button = button.filter(|(_, does)| !reads || *does != Does::Resolve);
+    (mark, button)
   }
 
   /// The place of the thread among the branches of the thread that it came from, when a rewind

@@ -125,8 +125,8 @@ pub trait Host {
 
 /// One peer served on a stream until it ends: its hello first, then each verb that its role
 /// allows, answered at once and in any order. The role is the one that `granted` gives at the
-/// moment of the verb, so a role that moves holds from the next verb, and an operator that the list
-/// drops is refused and closed at once. A hello of another protocol, a first frame that is no
+/// moment of the verb, so a role that moves holds from the next verb, and the peer hears it as a
+/// frame; an operator that the list drops is refused and closed at once. A hello of another protocol, a first frame that is no
 /// hello, and a frame past the bound close the peer, each with its refusal.
 pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
   host: &H,
@@ -177,7 +177,11 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
           let why = format!("the access list no longer names {}", peer.operator);
           return closed(&mut out, None, ProtocolError::Refused { why }).await;
         };
-        peer.role = asked.map_or(role, |asked| asked.min(role));
+        let role = asked.map_or(role, |asked| asked.min(role));
+        if role != peer.role {
+          peer.role = role;
+          send(&mut out, &Frame::Granted { role }).await?;
+        }
       }
       Some(frame) = pushed.recv() => {
         let sent = send(&mut out, &frame).await;

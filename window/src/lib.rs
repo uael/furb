@@ -102,7 +102,8 @@ impl Options {
     // The home holds no link either, so a path of the folder shows its home as `~`.
     let home = env::home_dir().map(|home| dunce::canonicalize(&home).unwrap_or(home));
     let browse = world::browse;
-    Ok(Self { folder, home, kept, zone, clock, still: still().is_some(), system, browse })
+    let still = still().is_some();
+    Ok(Self { folder, home, kept, zone, clock, still, system, browse })
   }
 }
 
@@ -115,8 +116,8 @@ fn still() -> Option<u64> {
 /// The window on the terminal of the program, on the daemon of this machine, until the operator
 /// leaves it. The app asks the terminal for its colors, so the window stands on its background,
 /// and for each move of the pointer, so what takes a click rises under it.
-pub fn run() -> Result<(), Error> {
-  let (machine, options) = (Machine::here()?, Options::here()?);
+pub fn run(reads: bool) -> Result<(), Error> {
+  let (machine, options) = (Machine { reads, ..Machine::here()? }, Options::here()?);
   let terminal =
     TerminalOptions { mouse: MouseTracking::Motion, ..HostOptions::default().terminal };
   let host = HostOptions { terminal, ..HostOptions::default() };

@@ -18,6 +18,8 @@ workspace = true
 [dependencies]
 # The scale of the window, which the probes hold each frame to.
 furb-window = { path = "../window" }
+# Another window of the operator, which a walk dials to say a message to the daemon of the window.
+furb-host = { path = "../host" }
 # The terminal of asciinema, which replays each recording, of furb or of another program, into its cells.
 avt = "0.20"
 # The glyphs and the image of a frame.

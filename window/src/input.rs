@@ -412,11 +412,11 @@ impl Model {
       (Some(_), Some(at)) => (4, at, 1, "type another answer".to_owned()),
       (None, _) => {
         let says = match self.client.target() {
+          target if self.client.only_reads(target.machine()).is_some() => {
+            "Nothing that you write here goes"
+          }
           _ if self.client.draft.python => "A word of Python to run",
           Target::Thread(_) if reads => "The window sends nothing to this session",
-          Target::Thread(key) if self.client.only_reads(key.0).is_some() => {
-            "Your login only reads this session"
-          }
           Target::Thread(_) if opens => "Your message goes once the session is open",
           Target::Thread(_) if ended => "A reply opens this thread again",
           Target::Thread(_)
@@ -507,6 +507,9 @@ impl Model {
   /// a word of Python, and what the input sends to, which picks another; at its right the model
   /// with its effort, and the key that turns the input to a new thread and back.
   fn launcher(&self) -> Row {
+    if let Some(why) = self.client.only_reads(self.client.target().machine()) {
+      return self.reader(&why);
+    }
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
     let muted = t.style(Role::Muted).bg(t.raised);
@@ -543,6 +546,21 @@ impl Model {
       (at[3].start + 2..at[5].end + 2, Some(Click::Key(Does::Sessions))),
     ];
     hot.extend(clicked(&at, clicks));
+    let Row { line, .. } = self.band(line, None);
+    Row { hot, ..Row::of(line) }
+  }
+
+  /// The row of the controls where the login only reads: no control that writes, what the login
+  /// may do, and the ring of the context, which only reads.
+  fn reader(&self, why: &str) -> Row {
+    let t = &self.tokens;
+    let raised = Style::new().bg(t.raised);
+    let left = vec![run(format!("◌ {why}"), t.style(Role::Muted).bg(t.raised))];
+    let ring =
+      self.ring().map(|ring| (run(ring, t.style(Role::Prose).bg(t.raised)), Some(Click::Context)));
+    let (right, clicks): (Line, Vec<_>) = ring.into_iter().unzip();
+    let line = spread(left, right, self.wide().saturating_sub(6), raised);
+    let hot = clicked(&columns(&line), clicks);
     let Row { line, .. } = self.band(line, None);
     Row { hot, ..Row::of(line) }
   }
@@ -847,12 +865,17 @@ impl Model {
     let Standing::Paused { by, .. } = &card.thread.standing else { return None };
     let key = self.key(Does::Pause);
     let color = if operator(by) { self.tokens.muted } else { self.tokens.attention };
-    let line = vec![
-      run("  ‖ Paused", Style::new().fg(color)),
-      run(format!(" · {key} or a message resumes it"), muted),
-    ];
+    let resumes =
+      if self.only_reads() { String::new() } else { format!(" · {key} or a message resumes it") };
+    let line = vec![run("  ‖ Paused", Style::new().fg(color)), run(resumes, muted)];
     let at = width(&line[..1]) + 3;
     Some(Row { hot: vec![(at..at + key.width(), Some(Click::Key(Does::Pause)))], ..Row::of(line) })
+  }
+
+  /// Whether the open thread stands on a machine where the window only reads.
+  fn only_reads(&self) -> bool {
+    let at = self.client.thread.as_ref().map(|one| one.thread.key.0);
+    at.is_some_and(|at| self.client.only_reads(at).is_some())
   }
 
   /// The hint of the work of the open thread: its time, which counts each second as the time of a
@@ -863,7 +886,9 @@ impl Model {
     let worked = Some(self.second().saturating_sub(card.since)).filter(|one| *one > 0);
     let age = worked.map(|seconds| format!(" {}", timer(seconds)));
     let working = format!("    {WORKS}{}", age.unwrap_or_default());
-    let stop = format!(" · {} stop", self.key(Does::Close));
+    // A window that only reads stops nothing.
+    let stop =
+      if self.only_reads() { String::new() } else { format!(" · {} stop", self.key(Does::Close)) };
     let loader = match &card.thread.standing {
       Standing::Runs => Loader::Command,
       Standing::Delegates => Loader::Agent,

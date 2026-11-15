@@ -42,8 +42,9 @@ pub struct Told {
   pub cards: Vec<Card>,
   #[serde(skip)]
   pub link: Link,
-  /// The role of the login of the operator on the machine, once its daemon welcomed the client:
-  /// a login that only reads sees each session live and says nothing to it.
+  /// The role of the login of the operator on the machine, from the welcome of its daemon and from
+  /// each change of the access list: a login that only reads sees each session live and says
+  /// nothing to it.
   #[serde(skip)]
   pub role: Option<Role>,
   /// The records of the machine, as it last listed them.
@@ -94,10 +95,12 @@ impl Client {
       .then(|| format!("{} is away, so nothing went. furb dials it until it answers.", told.name))
   }
 
-  /// Why nothing goes to a machine where the login of the operator only reads.
+  /// What the window may do on a machine where it only reads, as a person reads it: the first
+  /// machine is this computer.
   pub fn only_reads(&self, at: usize) -> Option<String> {
     let told = self.machines.get(at).filter(|told| told.role == Some(Role::Read))?;
-    Some(format!("{} only reads on {}, so nothing went.", told.login, told.name))
+    let place = if at == 0 { "this computer" } else { told.name.as_str() };
+    Some(format!("This window only reads on {place}"))
   }
 
   /// What one frame of a machine, or the end of its connection, changed of what the machine told,
@@ -150,6 +153,7 @@ impl Client {
       Ok(Frame::Presence { life, operators }) => {
         told.presence.insert(life, operators);
       }
+      Ok(Frame::Granted { role }) => told.role = Some(role),
       Ok(Frame::Refused { why, .. }) | Err(why) => {
         told.link = Link::Lost(why.clone());
         return Listing::Lost(why);

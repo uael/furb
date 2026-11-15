@@ -23,8 +23,8 @@
 
 
 ┃
-┃ Your login only reads this session
+┃ Nothing that you write here goes
 ┃
-┃  Message  Python    → where does… ▾   opus  high   + ⌃N      Context               No answer yet
+┃ ◌ This window only reads on this computer                    Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/src/furb-try                  ⌃P find

@@ -15,8 +15,12 @@ use std::{
   time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use furb_host::{
+  protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
+  transport::{Dialer, Local},
+};
 use tokio::{
-  io::{AsyncBufReadExt, BufReader},
+  io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
   process::{Child, Command},
   task,
   time::{sleep, timeout},
@@ -56,6 +60,9 @@ const USAGE: &str = r#"{"input_tokens":1340,"output_tokens":420,"cache_read_inpu
 
 /// The text of the empty input, which a window shows once it is ready for a walk.
 pub(crate) const READY: &str = "Ask for a change";
+
+/// What the window shows once it is ready, when it only reads.
+const READS: &str = "Nothing that you write here goes";
 
 /// The second at which the clocks of the window stand still, 09:12 of the first day of 2026, so two
 /// captures of one walk are equal: no mark of the window moves, and no time passes in it.
@@ -334,8 +341,9 @@ impl Rig {
     let go = self.root.join("go");
     let env: Vec<String> =
       self.environment().into_iter().map(|(key, value)| format!("{key}={value}")).collect();
+    let read = if walk.reads { " --read" } else { "" };
     let started = format!(
-      "env -i {} sh -c 'until [ -e {} ]; do sleep 0.01; done; exec furb-window'",
+      "env -i {} sh -c 'until [ -e {} ]; do sleep 0.01; done; exec furb-window{read}'",
       env.join(" "),
       go.display()
     );
@@ -353,14 +361,76 @@ impl Rig {
     tmux.run(&["pipe-pane", "-O", "-t", "w", &stamped]).await?;
     let start = SystemTime::now();
     put(&go, b"")?;
-    tmux.shows("ready", READY).await?;
+    tmux.shows("ready", if walk.reads { READS } else { READY }).await?;
     let mut shown = Vec::new();
     let mut marks = Vec::new();
+    // Each other window holds its session until the walk ends.
+    let mut others = Vec::new();
     for step in walk.steps {
+      // The messages of other windows go before the acts of this one in the step.
+      for act in step.acts {
+        if let Act::Said(message) = act {
+          others.push(self.said(message).await?);
+        }
+      }
       let screen = self.stepped(tmux, step, &mut marks).await?;
       shown.push((step.name.to_owned(), screen));
     }
     Ok((shown, marks, start))
+  }
+
+  /// Another window of the operator on the daemon of the walk, which opens a new session of the
+  /// project and says a message in it, as a person who writes in a second window. It gives the
+  /// stream of that window, whose session lives while the stream stands.
+  async fn said(&self, message: &str) -> Result<BufReader<<Local as Dialer>::Stream>, Error> {
+    let failed = |why: String| Error::Said(message.to_owned(), why);
+    let local = Local::new(self.root.join("cache/furb/host"));
+    let stream = local.dial().await.map_err(|why| failed(why.to_string()))?;
+    let mut lines = BufReader::new(stream);
+    let life = self.project().join(".furb/sessions/2026-11-15T09-30-00-0000.jsonl");
+    let life = life.display().to_string();
+    let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None };
+    let open = Verb::Open {
+      life: life.clone(),
+      cwd: Some(self.project().display().to_string()),
+      actor: None,
+      roster: None,
+      skills: None,
+      config: None,
+      claude: None,
+      answers: false,
+      attach: Some(0),
+    };
+    let prompt = Verb::Prompt {
+      life,
+      shape: "None".to_owned(),
+      message: message.to_owned(),
+      to: None,
+      on: None,
+    };
+    for (id, verb) in [(0, Verb::Hello(hello)), (1, open), (2, prompt)] {
+      let request = serde_json::to_string(&Request { id, verb })? + "\n";
+      lines.get_mut().write_all(request.as_bytes()).await.map_err(|why| failed(why.to_string()))?;
+      loop {
+        let mut heard = String::new();
+        let read = timeout(PATIENCE, lines.read_line(&mut heard)).await;
+        let read = read.map_err(|_elapsed| failed("the daemon took too long".to_owned()))?;
+        if read.map_err(|why| failed(why.to_string()))? == 0 {
+          return Err(failed("the daemon closed the window".to_owned()));
+        }
+        match serde_json::from_str(&heard)? {
+          Frame::Reply { id: got, answer } if got == id => {
+            if let Answer::Welcome { .. } | Answer::Done | Answer::Act(_) = answer {
+              break;
+            }
+            return Err(failed(format!("the daemon answered {answer:?}")));
+          }
+          Frame::Refused { id: Some(got), why, .. } if got == id => return Err(failed(why)),
+          _ => {}
+        }
+      }
+    }
+    Ok(lines)
   }
 
   /// One step: its acts, each marked as what the window read at its moment, then the wait for its
@@ -515,6 +585,8 @@ impl Tmux {
         self.run(&["send-keys", "-t", "w", "-l", &both]).await.map(drop)
       }
       Act::Until(text) => self.shows("until", text).await,
+      // Another window says it before the step, and no key of this window.
+      Act::Said(_) => Ok(()),
     }
   }
 

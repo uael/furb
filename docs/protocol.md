@@ -49,15 +49,17 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   that Tailscale gives the machine, IPv4 before IPv6. With no `tailnet`, the daemon listens on the machine alone.
 - The operator of a peer is the login that the local API of Tailscale gives for its address. `roles` gives each operator
   its role, and the daemon closes the peer of an operator that it does not name, before its hello. A window reads the
-  role of its login in the welcome: where it only reads, the window attaches to each life that the daemon holds and
-  shows it live, opens none, and sends no verb that writes. Its input says so and keeps the draft, and a leave asks
-  nothing of a session there.
+  role of its login in the welcome and in each `granted`, and `furb --read` asks the role that reads in its `hello`:
+  where it only reads, the window attaches to each life that the daemon holds and shows it live, opens none, and sends
+  no verb that writes. It shows no control that writes, says so and keeps the draft, and a leave asks nothing of a
+  session there.
 - `stall` gives the seconds after which the daemon tells that a life with an open act and no new fact stalled, as
   the section on attach says. With no `stall`, the bound is 1200 seconds.
 - The daemon reads `host.json` when it starts and at each change of the file, and a file that does not parse keeps
   the list before. A change of `roles` takes effect at once on each connected peer: an operator that the file drops gets
-  a refusal and loses its connection, and an operator whose role changes holds the new role from its next verb. A change
-  of `tailnet` or `stall` takes effect at the next start or upgrade.
+  a refusal and loses its connection, and an operator whose role changes holds the new role from its next verb, and each
+  of its peers hears a frame `granted` with that `role`. A change of `tailnet` or `stall` takes effect at the next
+  start or upgrade.
 - The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
   standalone download. It does not find the app of the App Store.
 - Plain TCP listens only on loopback or on the tailnet, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, since no other

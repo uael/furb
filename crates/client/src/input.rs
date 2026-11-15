@@ -97,8 +97,11 @@ impl Client {
       Target::Session(at, life) => (at, life.clone(), None, self.cwd(at, &life)),
       Target::New(at, folder) => (at, self.record(&folder), None, Some(folder)),
     };
-    if let Some(why) = self.away(at).or_else(|| self.only_reads(at)) {
-      return Err(why);
+    if let Some(away) = self.away(at) {
+      return Err(away);
+    }
+    if self.only_reads(at).is_some() {
+      return Err("Nothing went: this window only reads.".to_owned());
     }
     if let Some(why) = self.fault_of(at, &life) {
       return Err(format!("Nothing went: {why}"));

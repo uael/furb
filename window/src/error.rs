@@ -7,7 +7,7 @@ use tokio_util::codec::LinesCodecError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-  #[error("the window takes no word yet, and it was given `{0}`")]
+  #[error("the window takes no word but `--read`, and it was given `{0}`")]
   Word(String),
   #[error("the window has no folder: {0}")]
   Folder(io::Error),

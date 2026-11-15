@@ -93,6 +93,10 @@ impl Model {
         rows.extend(alone.iter().map(|(left, right)| self.said(left, muted, right)));
         rows.push(Vec::new());
       }
+    } else if let Some(reads) = self.client.only_reads(0) {
+      rows.extend(wrapped(&format!("{reads}."), prose));
+      rows.pop();
+      rows.extend(wrapped("It shows each session live once another window starts one.", muted));
     } else if self.known() {
       rows.extend(wrapped("Write below to start a thread.", prose));
       rows.pop();

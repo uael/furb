@@ -233,7 +233,7 @@ impl Daemon {
   /// again.
   pub(crate) fn machine(&self, name: &str) -> Machine {
     let served = Command::new(self.yard.join("no-furb"));
-    Machine { name: name.to_owned(), folder: self.host.clone(), served }
+    Machine { name: name.to_owned(), folder: self.host.clone(), served, reads: false }
   }
 
   /// A peer of the daemon, which hears each change of its cards.

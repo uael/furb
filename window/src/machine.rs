@@ -39,6 +39,9 @@ pub struct Machine {
   /// The command that serves the daemon of that folder, which the window runs when no daemon
   /// answers there.
   pub served: Command,
+  /// Whether the window only reads on the machine, as `furb --read` asks: it shows each session
+  /// live and says nothing to it.
+  pub reads: bool,
 }
 
 /// The stream of a daemon that the window dialed.
@@ -58,7 +61,7 @@ impl Machine {
       .ok_or(Error::NoFurb)?;
     let mut served = Command::new(furb);
     served.arg("host");
-    Ok(Self { name: furb_host::machine(), folder, served })
+    Ok(Self { name: furb_host::machine(), folder, served, reads: false })
   }
 
   /// The stream of the daemon, which the window serves first when none listens. A daemon that

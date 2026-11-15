@@ -1568,6 +1568,7 @@ dependencies = [
  "avt",
  "clap",
  "fontdue",
+ "furb-host",
  "furb-window",
  "gif",
  "png",

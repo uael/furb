@@ -14,7 +14,7 @@
 use std::{convert::Infallible, pin::pin, time::Duration};
 
 use furb_client::greeting;
-use furb_host::protocol::{BOUND, Frame, Kind, Request};
+use furb_host::protocol::{BOUND, Frame, Kind, Request, Role};
 use futures::{
   SinkExt, StreamExt,
   future::{self, Either},
@@ -91,7 +91,8 @@ async fn held(
   let mut lines = Framed::new(machine.reach().await?, LinesCodec::new_with_max_length(BOUND));
   *wait = FIRST;
   while outgoing.try_recv().is_ok() {}
-  for request in greeting(Kind::Window) {
+  // A window that only reads on the machine asks its daemon for the role that reads.
+  for request in greeting(Kind::Window, machine.reads.then_some(Role::Read)) {
     lines.send(serde_json::to_string(&request)?).await?;
   }
   loop {

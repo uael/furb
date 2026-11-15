@@ -310,16 +310,11 @@ async fn a_peer_of_the_tailnet_holds_the_new_role_of_its_profile_at_once() {
     "a writer reaches the life"
   );
   identity.replace(access("alice@github", Role::Read));
-  let error = || ProtocolError::Role { needs: Role::Write, has: Role::Read };
-  let mut tries = 0..250;
-  loop {
-    let answer = client.ask(2, written()).await;
-    if answer == Some(Frame::refused(Some(2), error())) {
-      break;
-    }
-    assert!(tries.next().is_some(), "the role of the peer never moved: {answer:?}");
-    time::sleep(Duration::from_millis(20)).await;
-  }
+  // The peer hears its new role, which holds from its next verb.
+  let told = time::timeout(Duration::from_secs(10), client.heard()).await;
+  assert_eq!(told.expect("the peer was not told"), Some(Frame::Granted { role: Role::Read }));
+  let error = ProtocolError::Role { needs: Role::Write, has: Role::Read };
+  assert_eq!(client.ask(2, written()).await, Some(Frame::refused(Some(2), error)));
 }
 
 #[tokio::test]

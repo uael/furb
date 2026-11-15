@@ -33,6 +33,8 @@ pub(crate) enum Error {
   Listen,
   #[error("the session that says {0:?} could not be made: {1}")]
   Seed(String, String),
+  #[error("another window could not say {0:?}: {1}")]
+  Said(String, String),
   #[error("the step {step} waited for {until:?}, and the screen shows:\n{screen}")]
   Step { step: String, until: String, screen: String },
   #[error("{} holds no {program}: run `cargo build -p furb-window -p furb-cli` first", folder.display())]

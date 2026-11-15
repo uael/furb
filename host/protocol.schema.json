@@ -2314,6 +2314,23 @@
         {
           "type": "object",
           "properties": {
+            "role": {
+              "$ref": "#/definitions/Role"
+            },
+            "frame": {
+              "type": "string",
+              "const": "granted"
+            }
+          },
+          "required": [
+            "frame",
+            "role"
+          ],
+          "description": "The role that the peer holds now, pushed when a change of the access list moved it, so a\nwindow shows what its login may do for its whole life, not only at its welcome."
+        },
+        {
+          "type": "object",
+          "properties": {
             "life": {
               "type": "string"
             },
@@ -6101,5 +6118,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 59
+  "x-protocol": 60
 }

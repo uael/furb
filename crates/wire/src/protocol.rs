@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 59;
+pub const PROTOCOL: u32 = 60;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -667,6 +667,9 @@ pub enum Frame {
   /// Each operator that a window of a life holds now, pushed to each of its windows after each
   /// attach, detach and draft.
   Presence { life: String, operators: Vec<Present> },
+  /// The role that the peer holds now, pushed when a change of the access list moved it, so a
+  /// window shows what its login may do for its whole life, not only at its welcome.
+  Granted { role: Role },
   /// A change of the cards of one record, pushed to each peer that asked the cards: each card that
   /// is new or that changed, and the prompt of each card that the record holds no more.
   Cards { life: String, changed: Vec<Card>, gone: Vec<String> },

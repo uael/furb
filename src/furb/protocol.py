@@ -958,7 +958,17 @@ What a skill asks of a window.
 """
 
 
-class Frame6(TypedDict):
+class Frame5(TypedDict):
+  """
+  The role that the peer holds now, pushed when a change of the access list moved it, so a
+  window shows what its login may do for its whole life, not only at its welcome.
+  """
+
+  role: Role
+  frame: Literal["granted"]
+
+
+class Frame7(TypedDict):
   """
   How far the daemon stands in the index of the cards of a record that no life holds, pushed to
   each peer that asked the cards while the daemon reads the record: the thousandths of the read
@@ -972,7 +982,7 @@ class Frame6(TypedDict):
   frame: Literal["indexing"]
 
 
-class Frame10(TypedDict):
+class Frame11(TypedDict):
   """
   The state of the sign-in of codex that this peer asked with a config of its provider, pushed
   at each change of the state, so no window asks it again: the word of the state, the browser
@@ -985,7 +995,7 @@ class Frame10(TypedDict):
   frame: Literal["sign_in"]
 
 
-class Frame11(TypedDict):
+class Frame12(TypedDict):
   """
   A request of a model of a life that the peer answers: its number, and the request with the
   actor, the chain, the messages and the settings.
@@ -997,7 +1007,7 @@ class Frame11(TypedDict):
   frame: Literal["ask"]
 
 
-class Frame12(TypedDict):
+class Frame13(TypedDict):
   """
   The skills attached to a life, each by its name, which a window mounts a view of: pushed to
   each window of the life when it attaches, and after each attach and each end of a skill.
@@ -1008,7 +1018,7 @@ class Frame12(TypedDict):
   frame: Literal["served"]
 
 
-class Frame13(TypedDict):
+class Frame14(TypedDict):
   """
   A view that a window mounts in a slot of a life, which the process of a skill serves.
   """
@@ -1020,7 +1030,7 @@ class Frame13(TypedDict):
   frame: Literal["view.mount"]
 
 
-class Frame15(TypedDict):
+class Frame16(TypedDict):
   """
   What a person did to a node of a view, with the value of an input.
   """
@@ -1032,7 +1042,7 @@ class Frame15(TypedDict):
   frame: Literal["view.event"]
 
 
-class Frame16(TypedDict):
+class Frame17(TypedDict):
   """
   What a skill asks of the one window of a view.
   """
@@ -1042,7 +1052,7 @@ class Frame16(TypedDict):
   frame: Literal["view.effect"]
 
 
-class Frame17(TypedDict):
+class Frame18(TypedDict):
   """
   The end of a view in its window.
   """
@@ -2190,7 +2200,7 @@ class Frame4(TypedDict):
   frame: Literal["presence"]
 
 
-class Frame8(TypedDict):
+class Frame9(TypedDict):
   """
   How far the open of a life stands, pushed to each of its windows while the life opens: the
   stage, its work done and its work known, each in the unit of the stage, and both 0 for a
@@ -2208,7 +2218,7 @@ class Frame8(TypedDict):
   frame: Literal["opening"]
 
 
-class Frame9(TypedDict):
+class Frame10(TypedDict):
   """
   A life that holds open acts and said no fact for the bound of the daemon, pushed once to each
   of its windows by the watch of the daemon, which no word of the life runs: each open act, and
@@ -2535,7 +2545,7 @@ class Node2(TypedDict):
   node: Literal["text"]
 
 
-class Frame5(TypedDict):
+class Frame6(TypedDict):
   """
   A change of the cards of one record, pushed to each peer that asked the cards: each card that
   is new or that changed, and the prompt of each card that the record holds no more.
@@ -2878,7 +2888,7 @@ class Page(TypedDict):
   context: NotRequired[Context | None]
 
 
-class Frame7(TypedDict):
+class Frame8(TypedDict):
   """
   A change of the thread that the peer reads: each exchange that is new or that changed, how
   many exchanges stand before the first of the page of the end now, and the agents of the
@@ -3074,7 +3084,7 @@ One node of a view, under an id that an event names.
 """
 
 
-class Frame14(TypedDict):
+class Frame15(TypedDict):
   """
   The tree of a view, which takes the place of each tree of a lower version.
   """
@@ -3104,13 +3114,14 @@ type Frame = (
   | Frame15
   | Frame16
   | Frame17
+  | Frame18
 )
 """
 What the daemon says to a peer.
 """
 
-type Mount = Frame13
-type ViewEvent = Frame15
-type Dispose = Frame17
+type Mount = Frame14
+type ViewEvent = Frame16
+type Dispose = Frame18
 
-PROTOCOL = 59
+PROTOCOL = 60

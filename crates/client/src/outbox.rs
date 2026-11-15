@@ -21,9 +21,10 @@ const NO_EVENT: u64 = u64::MAX;
 pub(crate) const FIRST: u64 = 2;
 
 /// The first requests of each connection to a daemon, under the ids that no other request of a
-/// client takes: the hello of a peer of a kind, and the ask of the cards.
-pub fn greeting(kind: Kind) -> [Request; 2] {
-  let hello = Hello { protocol: PROTOCOL, kind, name: None, role: None };
+/// client takes: the hello of a peer of a kind, with the role that it asks, none for the one of its
+/// login, and the ask of the cards.
+pub fn greeting(kind: Kind, role: Option<Role>) -> [Request; 2] {
+  let hello = Hello { protocol: PROTOCOL, kind, name: None, role };
   [Request { id: 0, verb: Verb::Hello(hello) }, Request { id: 1, verb: Verb::Cards }]
 }
 

@@ -26,14 +26,18 @@ use crate::error::CliError;
 /// The name of the program of the window.
 const PROGRAM: &str = "furb-window";
 
-/// The window, in the place of furb.
-pub(crate) fn launch() -> Result<Infallible, CliError> {
+/// The window, in the place of furb, which only reads when `read` says so.
+pub(crate) fn launch(read: bool) -> Result<Infallible, CliError> {
   let path = env::var_os("PATH").unwrap_or_default();
   // A furb that cannot name its own path looks for the window on PATH and in its checkout alone.
   let furb = env::current_exe().ok();
   let beside = furb.as_deref().and_then(Path::parent);
   let program = found(env::var_os("FURB_WINDOW"), beside, &path, &checkout())?;
-  handed(Command::new(&program)).map_err(|source| CliError::Started { program, source })
+  let mut command = Command::new(&program);
+  if read {
+    command.arg("--read");
+  }
+  handed(command).map_err(|source| CliError::Started { program, source })
 }
 
 /// The checkout this furb was built from: the root of the repository, above the crate of the

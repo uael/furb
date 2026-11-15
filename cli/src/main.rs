@@ -43,12 +43,16 @@ use crate::{
   name = "furb",
   version,
   about,
-  after_help = "With no command, furb opens the window, which takes no word: its input opens a session in \
-                the project of its folder."
+  after_help = "With no command, furb opens the window, which takes no word but --read: its input opens a \
+                session in the project of its folder."
 )]
 struct Furb {
   #[command(subcommand)]
   command: Option<Command>,
+  /// With no command, open the window so that it only reads: it shows each session live and says
+  /// nothing to it.
+  #[arg(long)]
+  read: bool,
 }
 
 /// The record a life keeps and resumes from, and the directory its chains start in.
@@ -296,7 +300,7 @@ async fn command(furb: Furb) -> Result<(), CliError> {
     Some(Command::Host { grace, then }) => {
       host::serve(Duration::from_secs_f64(grace), matches!(then, Some(Hosting::Upgrade))).await
     }
-    None => window::launch().map(|never| match never {}),
+    None => window::launch(furb.read).map(|never| match never {}),
   }
 }
 

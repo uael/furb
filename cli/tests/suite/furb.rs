@@ -678,6 +678,17 @@ fn furb_hands_the_terminal_to_the_window_with_no_word() {
 }
 
 #[test]
+fn furb_with_read_hands_the_terminal_to_a_window_that_only_reads() {
+  let yard = Yard::new("window-read");
+  let window = yard.at.join("window");
+  program(&window, "#!/bin/sh\nprintf '%s\\n' \"$@\"\n");
+  let mut command = yard.furb(&["--read"]);
+  command.env("FURB_WINDOW", &window);
+  let output = ran(command, "");
+  assert_eq!(String::from_utf8_lossy(&output.stdout), "--read\n", "the window takes the word");
+}
+
+#[test]
 fn a_prompt_to_a_model_of_a_local_server_is_answered_by_that_server() {
   let yard = Yard::new("local");
   let (port, asked) = served(COUNT);
