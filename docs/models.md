@@ -60,7 +60,9 @@ cancel while it waits. `Sign in with a code` serves when that browser is not you
 page of OpenAI and the code that you enter there, in the browser of any device. A window on another machine of the
 tailnet offers only the code, since the page of the browser calls back the machine that signs in. When it connects,
 Codex turns on in the config of the user, and the models of Codex show in the same list for each project. Choose a
-model there. No API key, server, model id or context size is needed.
+model there. No API key, server, model id or context size is needed. `FURB_OPENAI_URL` names a host that stands in
+for OpenAI, with the sign-in at its root and the API of Codex under `/backend-api/codex`: the captures of the window
+run one, so a walk signs in with no network. A person has no use for it.
 
 `codex` uses the limits of the ChatGPT subscription. `openai` remains the provider for an OpenAI API key.
 Connecting Codex does not change a running model call.
