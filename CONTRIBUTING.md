@@ -160,7 +160,7 @@ and `cli/pyproject.toml` say.
 | `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
 | `cli/src/window.rs` | How furb finds the window and hands the terminal to it. |
-| `xtask/src/main.rs` | `cargo xtask`, the tasks of a developer: the checks of a change, the suites, the frames, and each script of `script/`. |
+| `xtask/src/main.rs` | `cargo xtask`, the tasks of a developer: the checks of a change, the suites, the frames, the watch of a branch (`watch.rs`), and each script of `script/`. |
 | `cli/tests/suite/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |
 
 ### The window

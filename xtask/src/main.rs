@@ -6,6 +6,7 @@
 //! their commands; a task that no tool does, as `clean-caches`, does its work here.
 
 mod caches;
+mod watch;
 
 use std::{
   ffi::OsStr,
@@ -13,7 +14,7 @@ use std::{
   path::{Path, PathBuf},
   process::{Command as Process, ExitCode, Stdio},
   thread,
-  time::Instant,
+  time::{Duration, Instant},
 };
 
 use clap::{
@@ -82,6 +83,39 @@ enum Task {
     #[arg(long, value_name = "DIR")]
     uv: Option<PathBuf>,
   },
+  /// Check the head of a branch whole when it moved: the hooks of a commit on the files that
+  /// changed, then every suite at once, then clippy and biome.
+  ///
+  /// The check runs in a tree of its own, detached at the head, at a low priority, and blocks
+  /// nothing. A green writes one line in the table; a red writes one entry in the inbox, with the
+  /// tests that failed, the owner of each, and the commits since the last green.
+  Watch {
+    /// The branch whose head is checked.
+    #[arg(long, default_value = "w/integrate")]
+    branch: String,
+    /// The tree of the check, a worktree of this clone with no change of its own.
+    #[arg(long, value_name = "DIR")]
+    tree: PathBuf,
+    /// The fewest minutes between the starts of two checks; the watch wakes when the branch
+    /// moves.
+    #[arg(long, default_value_t = 30)]
+    every: u64,
+    /// The table of the checks, one line each: epoch, head, green or red, seconds, failed tests.
+    #[arg(long, value_name = "FILE")]
+    table: PathBuf,
+    /// The file where a red goes, as one entry.
+    #[arg(long, value_name = "FILE")]
+    inbox: PathBuf,
+    /// A file of lines `<prefix of a test> <owner>`, which names the owner of each red test.
+    #[arg(long, value_name = "FILE")]
+    owners: Option<PathBuf>,
+    /// The file that holds the pid of the watch, which a second watch on it refuses to replace.
+    #[arg(long, value_name = "FILE")]
+    pid: Option<PathBuf>,
+    /// Check the head once when it moved, then end.
+    #[arg(long)]
+    once: bool,
+  },
   /// Print each task and each option whose name or help holds each of the words, in any case.
   Search {
     #[arg(required = true)]
@@ -116,6 +150,12 @@ enum Fault {
   Clash { name: String, path: PathBuf },
   #[error("the run of the suite {0} panicked")]
   Panicked(String),
+  #[error("the watch {pid} runs already, as {} says", file.display())]
+  Running { pid: u32, file: PathBuf },
+  #[error("the watch of the refs failed: {0}")]
+  Watch(#[from] notify::Error),
+  #[error("the watch of the refs ended")]
+  Unwatched,
 }
 
 /// A script of `script/` that runs on its own, as a task.
@@ -164,6 +204,10 @@ fn run() -> Result<ExitCode, Fault> {
     Task::Check { base, all } => check(&root, (!all).then_some(base.as_str())),
     Task::Test { suite: Some(suite), words } => suite.run(&root, &words),
     Task::Test { suite: None, .. } => every(&root),
+    Task::Watch { branch, tree, every, table, inbox, owners, pid, once } => {
+      let every = Duration::from_secs(every * 60);
+      watch::Watch { branch, tree, every, table, inbox, owners, pid, once }.run(&root)
+    }
     Task::CleanCaches { scratch, uv } => caches::clean(&root, scratch, uv.as_deref()),
     Task::Search { words } => {
       search(&command, &words);

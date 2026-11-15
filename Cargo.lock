@@ -6226,6 +6226,7 @@ name = "xtask"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "notify",
  "thiserror 2.0.20",
 ]
 

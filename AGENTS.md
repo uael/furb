@@ -491,6 +491,12 @@ fix what your change broke, and report what was broken before.
 - `cargo xtask clean-caches [--scratch DIR] [--uv DIR]`: remove what earlier runs left in the caches of the machine,
   and nothing else: each scratch directory of a record that holds only its mark file and that no life holds, and, by
   `uv cache prune`, each copy of a wheel and each editable build of uv that no entry uses.
+- `cargo xtask watch --tree DIR --table FILE --inbox FILE [--branch B] [--every MIN] [--owners FILE] [--pid FILE]`:
+  check the head of a branch whole each time it moves, at most once in each interval, in a worktree of its own that it
+  detaches at that head, at a low priority. It runs the hooks of a commit on the files that changed since the head that
+  it checked before, then every suite at once, then clippy and biome. A green writes one line in the table; a red
+  writes one entry in the inbox, with each test or file that failed, its owner from the file of owners, and the commits
+  since the last green. It blocks nothing, and it wakes on the write of the ref, not on a timer.
 - `uv run python script/links.py`: check that each link in a README that a package carries works on the page of the
   package on PyPI, npm or crates.io, which read no relative link. It lists each package and its README from the
   manifests, and fails on a relative link, which `--fix` writes as absolute, at `main` on GitHub. The hooks run it.
