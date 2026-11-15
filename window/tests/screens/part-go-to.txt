@@ -2,16 +2,16 @@
 
   Nothing needs you.                                           Working 1
 
-  ⌃O          go to   Go to                                                  ⎋  …       ⠋ Working
-  ⌃P          comman  ▌Search a thread, a session, a project             1 / 2               opus
-  ⌃X ?        each k
-                      Working
-                      ▌FU run the bench of replay                        furb
+    Go to                                               ⎋       run the bench of…       ⠋ Working
+    ▌Search a thread, a session, a project          1 / 2       FU furb                      opus
 
-                      Projects
-                       FU furb                                     3 sessions
+    Working                                                    Resolved 1 ▸
+    ▌FU run the bench of replay                     furb
 
-                      ↑↓ move · ⏎ open · ⎋ close
+    Projects
+     FU furb                                  3 sessions
+
+    ↑↓ move · ⏎ open · ⎋ close
 
 
 

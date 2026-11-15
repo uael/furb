@@ -19,7 +19,7 @@ use crate::{
   list::project,
   model::{Key, Model},
   thread::{Click, Row, hued},
-  tokens::{KEYS, OVER, PART, Role},
+  tokens::{BESIDE, KEYS, OVER, PART, Role, SIDE},
 };
 
 /// What a list part lists.
@@ -354,13 +354,23 @@ impl Model {
     };
   }
 
-  /// The open list part as the window draws it, at the middle of the window and under the rows
-  /// that stay above it, with as many of its rows as the window holds, the chosen one among them.
+  /// The columns where a list part stands at its middle: those of the home while the list stands
+  /// beside it, so the part covers no card, else the whole window. The columns of the part, which
+  /// leave two on each side at least.
+  fn spans(&self) -> (u16, u16) {
+    let beside = self.listed() && self.size.0 >= BESIDE;
+    let columns = if beside { self.size.0.saturating_sub(SIDE) } else { self.size.0 };
+    (columns, PART.min(columns.saturating_sub(4)))
+  }
+
+  /// The open list part as the window draws it, at the middle of the columns of the home and under
+  /// the rows that stay above it, with as many of its rows as the window holds, the chosen one
+  /// among them.
   pub(crate) fn over(&self) -> Option<Over> {
     let picker = self.picker.as_ref()?;
     let t = &self.tokens;
     let (muted, prose) = (t.style(Role::Muted), t.style(Role::Prose));
-    let width = PART.min(self.size.0.saturating_sub(4));
+    let (columns, width) = self.spans();
     let room = usize::from(width).saturating_sub(4);
     let padded = |line: Line| {
       let mut row = vec![run("  ", Style::new())];
@@ -405,7 +415,7 @@ impl Model {
     );
     rows.push(Row::of(padded(vec![run(foot, muted)])));
     rows.push(Row::default());
-    let x = self.size.0.saturating_sub(width) / 2;
+    let x = columns.saturating_sub(width) / 2;
     Some(Over { x, y: OVER, width, rows })
   }
 
@@ -421,7 +431,7 @@ impl Model {
   ) -> Vec<(Option<usize>, Line)> {
     let t = &self.tokens;
     let (muted, prose) = (t.style(Role::Muted), t.style(Role::Prose));
-    let room = usize::from(PART.min(self.size.0.saturating_sub(4))).saturating_sub(4);
+    let room = usize::from(self.spans().1).saturating_sub(4);
     let mut all: Vec<(Option<usize>, Line)> = Vec::new();
     let mut part = "";
     // A part whose rows stand in projects keeps the slot of the badge in each row, so each text
