@@ -40,7 +40,6 @@ pub(crate) enum Does {
   PageDown,
   Jump,
   GoTo,
-  Commands,
   Keys,
   Up,
   Down,
@@ -110,8 +109,7 @@ const fn bound(
 /// The keys that go from one place of the window to another. A key with `alt` has a twin after the
 /// leader, since `alt` needs a setting of the terminal on macOS.
 const GO: &[Bound] = &[
-  bound(Does::GoTo, "go to a project or a session", Some("go"), &[&[ctrl('o')]]),
-  bound(Does::Commands, "commands", None, &[&[ctrl('p')]]),
+  bound(Does::GoTo, "go to anything, or run a command", Some("go"), &[&[ctrl('p')], &[ctrl('o')]]),
   bound(Does::Keys, "each key", Some("keys"), &[&led('?')]),
   bound(
     Does::Needed,

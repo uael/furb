@@ -1,5 +1,5 @@
-//! The list part over the window: Go to, the commands and each key, on a real daemon whose lives a
-//! peer of the test drives.
+//! The list part over the window: Go to, with the commands, and each key, on a real daemon
+//! whose lives a peer of the test drives.
 
 #![cfg(test)]
 
@@ -48,17 +48,20 @@ fn go_to_lists_the_threads_that_work_and_the_projects_and_finds_a_session_with_n
   let (app, _daemon, _peer) = machine();
   app.press("ctrl+o");
   let frame = shows(&app, "Search a thread, a session, a project");
-  assert!(frame.contains("Working") && frame.contains("Projects"), "{frame}");
-  assert!(!frame.contains("setup-only"), "a session shows only once he searches: {frame}");
+  // The sessions that he used last stand among the places before he searches.
+  let parts = ["Working", "Sessions", "Projects"];
+  assert!(parts.iter().all(|part| frame.contains(part)), "{frame}");
   // The project counts the session with no thread once the machine listed its records.
   shows(&app, "3 sessions");
-  screen("part-go-to", &app);
-  // The arrows move the chosen row, and letters filter the rows as he types.
+  // The arrows move the chosen row, and letters filter the rows as he types. The sessions stand
+  // by the last change of their records, which each life that stands makes when it will, so the
+  // capture is of a search.
   app.press("down");
-  shows(&app, "2 / 3");
+  shows(&app, "2 / ");
   app.type_text("setup");
   let frame = shows(&app, "▌setup");
   assert!(frame.contains("setup-only") && frame.contains("1 / 1"), "{frame}");
+  screen("part-go-to", &app);
   // Enter takes it: a session with no thread of his turns the input to a new thread of it.
   app.press("enter");
   assert!(gone(&app, "Search a thread"), "{}", app.text());
@@ -73,11 +76,14 @@ fn go_to_lists_the_threads_that_work_and_the_projects_and_finds_a_session_with_n
 }
 
 #[test]
-fn the_commands_run_from_their_list_and_each_key_shows_its_forms() {
+fn the_commands_run_from_go_to_and_each_key_shows_its_forms() {
   let (app, _daemon, _peer) = machine();
+  // Go to lists each command after the places, and its search finds one.
   app.press("ctrl+p");
-  let frame = shows(&app, "Search a command");
-  assert!(frame.contains("Show or hide the list") && frame.contains("⌃X L"), "{frame}");
+  shows(&app, "Search a thread");
+  app.type_text("hide the list");
+  let frame = shows(&app, "Show or hide the list");
+  assert!(frame.contains("⌃X L"), "{frame}");
   screen("part-commands", &app);
   // A row takes a click, and its text lights under the pointer.
   clicked(&app, "Show or hide the list", 0, 0);

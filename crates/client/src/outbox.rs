@@ -131,12 +131,17 @@ impl Client {
   }
 
   /// Each ask of a list that is due, with its machine and what it asks: a verb of a view, a
-  /// control of a session, the changes of a folder, and the turns of the box of the context.
-  pub fn asks_due(&mut self) -> Vec<(usize, Verb, Asked)> {
+  /// control of a session, the changes of a folder, the turns of the box of the context, and,
+  /// while the client lists everything that the operator can go to, the files and the skills of
+  /// the target of the input.
+  pub fn asks_due(&mut self, listing: bool) -> Vec<(usize, Verb, Asked)> {
     let mut due = self.views_due();
     due.extend(self.controls_due());
     due.extend(self.changes_due());
     due.extend(self.parts_due());
+    if listing {
+      due.extend(self.lists_due());
+    }
     due
   }
 

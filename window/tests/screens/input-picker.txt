@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → where does… ▾   opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⠋ Working · ⎋ stop                            ⌃P commands
+  ⠋ Working · ⎋ stop                               ⌃P go to

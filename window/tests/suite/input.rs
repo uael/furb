@@ -356,7 +356,7 @@ fn ctrl_c_empties_the_input_then_names_his_last_message_that_runs_and_takes_it_b
   assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions).len() == 3));
   paged(&app);
   app.press("ctrl+c");
-  shows(&app, "⌃C again takes back “three (the model works…");
+  shows(&app, "⌃C again takes back “three (the model works on…");
   screen("input-take-back", &app);
   app.press("ctrl+c");
   // The question of the message stops, and its text comes back to the input.
@@ -605,6 +605,8 @@ fn a_view_of_a_skill_shows_under_its_thread_live_and_takes_a_press_and_an_input(
   );
   assert_eq!(skill.ask(tree(&["buy milk", "walk the dog"], 2)), Answer::Done);
   shows(&app, "• walk the dog");
+  // The model of the thread answers while the view lives, so the capture waits for its end.
+  shows(&app, "✓ Resolved");
   screen("a view of a skill", &app);
 }
 

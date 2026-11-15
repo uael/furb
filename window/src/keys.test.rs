@@ -3,7 +3,7 @@ use super::{Does, System, drawn};
 /// The keys that the window names, as a system writes them.
 fn named(system: System) -> Vec<String> {
   let does = [
-    Does::Commands,
+    Does::GoTo,
     Does::Needed,
     Does::Next,
     Does::Keys,

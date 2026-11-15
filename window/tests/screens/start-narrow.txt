@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → Debug stuck TUI after merge ▾      opus  high   + ⌃N
 ┃
-  This computer · ~/src/furb-try           ◆ 1 other thread asks   ⌃P commands
+  This computer · ~/src/furb-try              ◆ 1 other thread asks   ⌃P go to

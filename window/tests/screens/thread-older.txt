@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → ground the… ▾   opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/src/furb-try                ⌃P commands
+  This computer · ~/src/furb-try                   ⌃P go to

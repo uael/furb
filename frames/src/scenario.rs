@@ -612,7 +612,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       pace: &[],
       steps: &[
         step("a", &[Act::Key("C-x"), Act::Key("?")], "each key"),
-        step("c", &[Act::Key("Escape"), Act::Key("C-p")], "Search a command"),
+        step("c", &[Act::Key("Escape"), Act::Key("C-p")], "Search a thread"),
       ],
     }),
   },

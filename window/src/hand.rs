@@ -512,7 +512,8 @@ fn pump(window: &Shared) {
   {
     model.client.asked.insert((at, id), Asked::Say);
   }
-  for (at, verb, asked) in model.client.asks_due() {
+  let listing = model.picker.as_ref().is_some_and(|one| one.of == Pick::GoTo);
+  for (at, verb, asked) in model.client.asks_due(listing) {
     if let Some(id) = ask(askers, model, at, verb) {
       model.client.asked.insert((at, id), asked);
     }
@@ -800,7 +801,6 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::NewThread => |model| model.client.turn(),
     Does::Sessions => |model| model.pick(Pick::Sessions),
     Does::GoTo => |model| model.pick(Pick::GoTo),
-    Does::Commands => |model| model.pick(Pick::Commands),
     Does::Machines => |model| model.pick(Pick::Machines),
     Does::Projects => |model| model.pick(Pick::Projects),
     Does::History => |model| model.pick(Pick::History),

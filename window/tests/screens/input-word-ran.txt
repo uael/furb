@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → how long does an… ▾   opus   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                                                ⌃P commands
+                                                   ⌃P go to

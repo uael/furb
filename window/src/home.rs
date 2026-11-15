@@ -22,7 +22,7 @@ impl Model {
     let mut rows: Vec<Row> = self.says().into_iter().map(Row::of).collect();
     // A key of the home does on a click what it does on its key.
     if rows.len() > 2 {
-      rows.extend([Does::GoTo, Does::Commands, Does::Keys].map(|does| self.key_row(does)));
+      rows.extend([Does::GoTo, Does::Keys].map(|does| self.key_row(does)));
     }
     // With no thread, what the home says stands just above the input, where the eye goes next.
     if self.client.settled.is_empty() && self.known() {

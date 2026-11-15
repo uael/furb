@@ -3,11 +3,10 @@
   Nothing needs you.
   ● 1 session runs.
                       Each key                                               ⎋
-  ⌃O          go to   ▌Search a key                                     1 / 34
-  ⌃P          comman
-  ⌃X ?        each k  Go
-                      ▌⌃O          go to a project or a session
-                       ⌃P          commands
+  ⌃P          go to   ▌Search a key                                     1 / 33
+  ⌃X ?        each k
+                      Go
+                      ▌⌃P or ⌃O    go to anything, or run a command
                        ⌃X ?        each key
                        ⌥A or ⌃X A  the next thread that needs you
                        ⌥↓ or ⌃X J  the next card
@@ -22,6 +21,7 @@
                        ⎋ ⎋         stop the work of the thread
                        ⌃X R        resolve the thread
                        ⌃X S        pause, kill or keep the session
+                       ⌃X C        the context: kinds, cache, folded
 ┃
 ┃ Ask for a change,   ↑↓ move · ⏎ run · ⎋ close
 ┃

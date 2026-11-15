@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → read the trace of the… ▾   opus  high   + ⌃N   ○ 12%
 ┃
-  This computer · ~/src/furb-try                                   ⌃P commands
+  This computer · ~/src/furb-try                                      ⌃P go to

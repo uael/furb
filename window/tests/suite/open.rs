@@ -285,7 +285,7 @@ fn an_escape_goes_back_while_it_opens_and_the_same_card_joins_the_same_open() {
   app.advance(Duration::from_secs(1));
   shows(&app, "1.0 s");
   app.press("escape");
-  let frame = shows(&app, "go to a project");
+  let frame = shows(&app, "go to anything");
   assert!(frame.contains("Opening"), "the open goes on:\n{frame}");
   // A second open runs beside the first.
   card(&app, time);
@@ -335,7 +335,7 @@ fn an_open_that_fails_says_why_and_how_to_go_back_and_loses_no_draft() {
   screen("open-failed", &app);
   // The way back takes a click, as its key does, and lights under the pointer.
   clicked(&app, "⎋ back", 0, 0);
-  shows(&app, "go to a project");
+  shows(&app, "go to anything");
 }
 
 #[test]

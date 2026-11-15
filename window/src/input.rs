@@ -691,8 +691,8 @@ impl Model {
       _ if self.form().is_some() => (Does::Empty, "refuse"),
       (None, Some(_)) if self.leaves() => (Does::Close, "back"),
       (None, Some(opened)) if !opened.docked().1.is_empty() => (Does::Agent, "agents"),
-      (_, Some(_)) => (Does::Commands, "commands"),
-      (_, None) if self.listed() => (Does::Commands, "commands"),
+      (_, Some(_)) => (Does::GoTo, "go to"),
+      (_, None) if self.listed() => (Does::GoTo, "go to"),
       (_, None) => (Does::List, "the list"),
     };
     let key = vec![run(format!("{} {name}", self.key(does)), muted)];

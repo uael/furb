@@ -2,29 +2,29 @@
 
   Nothing needs you.                                           Working 1
 
-    Commands                                            ⎋       ● run the bench of…     ⠋ Working
-    ▌Search a command                              1 / 22         FU furb                    opus
+    Go to                                               ⎋       ● run the bench of…     ⠋ Working
+    ▌hide the list                                  1 / 1         FU furb                    opus
 
-    Go                                                         Resolved 1 ▸
-    ▌Go to a project or a session                     ⌃O
-     Each key                                       ⌃X ?
-     The next thread that needs you                   ⌥A
-     The next card                                    ⌥↓
-     The card before                                  ⌥↑
-     Show or hide the list                          ⌃X L
+    ▌Show or hide the list                          ⌃X L       Resolved 1 ▸
 
-    The thread
-     A new thread, and back to the thread             ⌃N
-     Jump to the latest                                ↘
-     Stop the work of the thread                     ⎋ ⎋
-     Resolve the thread                             ⌃X R
-     Pause, kill or keep the session                ⌃X S
-     The context: kinds, cache, folded              ⌃X C
-     The next agent of the thread                   ⌃X ↓
+    ↑↓ move · ⏎ open · ⎋ close
 
-┃   ↑↓ move · ⏎ run · ⎋ close
+
+
+
+
+
+
+
+
+
+
+
+
+
 ┃
+┃ Ask for a change, a review or an answer
 ┃
 ┃  Message  Python    This computer ▾   FT ▾   opus  high
 ┃
-  ~/src/furb-try                                ⌃P commands
+  ~/src/furb-try                                   ⌃P go to

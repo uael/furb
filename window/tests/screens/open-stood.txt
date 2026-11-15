@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → remove the… ▾   opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/furb                        ⌃P commands
+  This computer · ~/furb                           ⌃P go to

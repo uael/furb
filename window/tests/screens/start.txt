@@ -10,9 +10,9 @@
   studio is offline: the daemon closed the connection. The
   window dials it again.                                       Working 2
 
-  ⌃O          go to a project or a session                        run the…    Working as of 09:12
-  ⌃P          commands                                            FC furb-cloud@studio     opus ◌
-  ⌃X ?        each key
+  ⌃P          go to anything, or run a command                    run the…    Working as of 09:12
+  ⌃X ?        each key                                            FC furb-cloud@studio     opus ◌
+
                                                                 ● which key sends…  ⠋ Working 11h
                                                                   PH photowroom            opus ◌
 
@@ -27,4 +27,4 @@
 ┃                                                                 Ground the…        ‖ Paused 11h
 ┃  Message  Python    This computer ▾   FT ▾   opus  high         FU furb                    opus
 ┃
-  ~/src/furb-try                                ⌃P commands    Resolved 1 ▸
+  ~/src/furb-try                                   ⌃P go to    Resolved 1 ▸

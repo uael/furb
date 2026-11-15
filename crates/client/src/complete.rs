@@ -147,8 +147,7 @@ impl Client {
       Kind::Skill => (format!("/{} ", offer.name), None),
       Kind::File => {
         let path = format!("{}{}", self.looked(&completion.word).named, offer.name);
-        let path = if path.contains(char::is_whitespace) { format!("\"{path}\"") } else { path };
-        (format!("@{path} "), None)
+        (format!("{} ", Self::mention(&path)), None)
       }
     };
     let before: String = chars[..start].iter().collect();
@@ -160,6 +159,50 @@ impl Client {
     self.draft.text.clone_from(&text);
     self.completion = None;
     Some(Completed { text, caret, command })
+  }
+
+  /// The files of the folder of the target and the skills of its life, which the client did not
+  /// ask yet: a new session has no life to ask its skills of.
+  pub(crate) fn lists_due(&self) -> Vec<(usize, Verb, Asked)> {
+    let at = self.target().machine();
+    let Some(told) = self.machines.get(at) else { return Vec::new() };
+    let asking = |asked: &Asked| self.asked.values().any(|one| one == asked);
+    let mut due = Vec::new();
+    let folder = self.looked("").folder;
+    let files = Asked::Files(folder.clone());
+    if !told.files.contains_key(&folder) && !asking(&files) {
+      due.push((at, Verb::Files { cwd: folder }, files));
+    }
+    let (key, life) = self.lived();
+    let skills = Asked::Skills(key.clone());
+    let lives = !matches!(self.target(), Target::New(..));
+    if lives && !told.skills.contains_key(&key) && !asking(&skills) {
+      due.push((at, Verb::Skills { life }, skills));
+    }
+    due
+  }
+
+  /// The files of the folder of the target and the skills of its life that the client holds.
+  pub fn files_and_skills(&self) -> (&[String], &[Skill]) {
+    let told = self.machines.get(self.target().machine());
+    let files = told.and_then(|one| one.files.get(&self.looked("").folder));
+    let skills = told.and_then(|one| one.skills.get(&self.lived().0));
+    (files.map_or(&[][..], |one| &one.paths), skills.map_or(&[][..], Vec::as_slice))
+  }
+
+  /// The draft with a text added at its end, after a blank, as a row of a list adds a mention of a
+  /// file or a skill.
+  pub fn added(&mut self, text: &str) {
+    let draft = &self.draft.text;
+    let blank = if draft.is_empty() || draft.ends_with(' ') { "" } else { " " };
+    let text = format!("{draft}{blank}{text} ");
+    self.draft.text.clone_from(&text);
+    self.restore = Some(text);
+  }
+
+  /// The mention of a file as the input writes it: in quotes when its path holds a blank.
+  pub fn mention(path: &str) -> String {
+    if path.contains(char::is_whitespace) { format!("@\"{path}\"") } else { format!("@{path}") }
   }
 
   /// The list that the completion needs and the client did not ask for it yet, with its machine:

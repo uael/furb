@@ -3,9 +3,9 @@
   Nothing needs you.                                           Resting 2
   ● 2 sessions run.
                                                                 ● where does the time…  ⠴ Opening
-  ⌃O          go to a project or a session                        FU furb                    opus
-  ⌃P          commands
-  ⌃X ?        each key                                          ● remove the gate…      ⠴ Opening
+  ⌃P          go to anything, or run a command                    FU furb                    opus
+  ⌃X ?        each key
+                                                                ● remove the gate…      ⠴ Opening
                                                                   FU furb                    opus
 
 
@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    This computer ▾   FU furb ▾    opus
 ┃
-  ~/furb                                        ⌃P commands
+  ~/furb                                           ⌃P go to

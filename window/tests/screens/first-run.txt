@@ -2,7 +2,8 @@
 
                                                                 No thread yet in this project.
 
-                                                                ⌃O  other projects and sessions
+                                                                ⌃P  other projects and sessions
+
 
 
 
@@ -18,8 +19,7 @@
   It runs in a new session of furb-try on this computer,
   with opus at high effort.
 
-  ⌃O          go to a project or a session
-  ⌃P          commands
+  ⌃P          go to anything, or run a command
   ⌃X ?        each key
 
 ┃
@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    This computer ▾   FT ▾   opus  high
 ┃
-  ~/src/furb-try                                ⌃P commands
+  ~/src/furb-try                                   ⌃P go to

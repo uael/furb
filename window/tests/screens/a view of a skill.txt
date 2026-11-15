@@ -1,10 +1,10 @@
-● furb-try · keep my list (the model answers)      Resolve     All projects ▾        This computer
+● furb-try · keep my list (the model…         ✓ Resolved       All projects ▾        This computer
 ┃ keep my list (the model answers)
-┃                                                              Working 1
-                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-       opus/high                                              ▐ ● keep my list (the…    ⠋ Working ▌
-    1  found = 2                                              ▐   FT furb-try                     ▌
-    2  close('The open takes **329 s**. Two stages h…+251     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+┃                                                              Resolved 1 ▸
+
+       opus/high                                              ▐ ✓ keep my list (the model…    now ▌
+    1  found = 2
+    2  close('The open takes **329 s**. Two stages h…+251
 
   The open takes 329 s. Two stages hold most of it: 181 s
   to send each entry to the ears of the host, and 104 s in
@@ -23,8 +23,8 @@
   │ • walk the dog
   │ ▏a task ▕   Clear
 ┃
-┃ Reply to this thread
+┃ A reply opens this thread again
 ┃
 ┃  Message  Python    → keep my… ▾      opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/furb-try                    ⌃P commands
+  This computer · ~/furb-try                       ⌃P go to

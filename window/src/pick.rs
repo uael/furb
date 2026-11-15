@@ -1,14 +1,16 @@
-//! The list part: one list over the dimmed window, with a chosen row, which Go to, the commands,
-//! each key and the sessions that the input sends to draw alike. Letters filter it, as the pickers
+//! The list part: one list over the dimmed window, with a chosen row, which Go to, each key and
+//! the sessions that the input sends to draw alike. Letters filter it, as the pickers
 //! of a terminal match them, the up and down arrows move the chosen row, enter takes it, and escape
 //! closes it and gives the focus back to the input. The pointer does the same: a click takes a row,
 //! and a click beside the part closes it.
 
-use furb::view::{Part, Sent};
+use std::cmp::Reverse;
+
+use furb::view::{Part, Sent, Skill};
 use furb_host::protocol::Card;
 use opentui::style::Style;
 
-use furb_client::{Control, Link, Matched, Target, Told, ranked};
+use furb_client::{Client, Control, Link, Matched, Target, Told, ranked};
 use furb_host::protocol::Model as Offered;
 
 use crate::{
@@ -24,11 +26,10 @@ use crate::{
 /// What a list part lists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Pick {
-  /// What needs the operator, the sessions that work and the projects, and each session of each
-  /// machine once he searches.
+  /// Everything that the operator goes to or runs: what needs him, the sessions that work, the
+  /// sessions that he used last, the projects and each command, and once he searches, each thread,
+  /// each session of each machine, and the files and the skills of the target of the input.
   GoTo,
-  /// Each command of the table of the keys.
-  Commands,
   /// Each key of the table of the keys.
   Keys,
   /// The sessions that the input can send to.
@@ -61,8 +62,13 @@ pub(crate) struct Picker {
 pub(crate) enum Choice {
   /// The thread of a card, which opens.
   Thread(Key),
-  /// A session: its last thread opens, or the input sends to a new thread of it.
+  /// A session that the input sends to a new thread of.
   Session(Target),
+  /// A session that the operator returns to, by its machine and its record: its last thread
+  /// opens, else the input sends to a new thread of it.
+  Visit(usize, String),
+  /// A text that the draft adds at its end: the mention of a file, or a skill.
+  Added(String),
   /// A project, whose sessions the list then shows.
   Project(String),
   /// An actor of a model, which the target of the input takes.
@@ -108,6 +114,9 @@ pub(crate) struct Over {
   pub(crate) rows: Vec<Row>,
 }
 
+/// How many sessions that he used last Go to shows before he searches.
+const RECENT: usize = 5;
+
 /// The rows of a list part that are no entry: the blank row above its title, its title, its filter,
 /// the blank row under it, the blank row above its foot, its foot and the blank row under it.
 const FRAME: usize = 7;
@@ -116,7 +125,6 @@ impl Pick {
   fn title(self) -> &'static str {
     match self {
       Self::GoTo => "Go to",
-      Self::Commands => "Commands",
       Self::Keys => "Each key",
       Self::Sessions => "Send to",
       Self::Machines => "Machines",
@@ -130,8 +138,7 @@ impl Pick {
 
   fn placeholder(self) -> &'static str {
     match self {
-      Self::GoTo => "Search a thread, a session, a project",
-      Self::Commands => "Search a command",
+      Self::GoTo => "Search a thread, a session, a project, a file, a skill, a command",
       Self::Keys => "Search a key",
       Self::Sessions => "Search a session",
       Self::Machines => "Search a machine",
@@ -146,7 +153,7 @@ impl Pick {
   fn takes(self) -> &'static str {
     match self {
       Self::GoTo => "open",
-      Self::Commands | Self::Keys => "run",
+      Self::Keys => "run",
       Self::Sessions | Self::Machines | Self::Projects => "send there",
       Self::Models => "take it",
       Self::History => "write it",
@@ -188,7 +195,6 @@ impl Model {
     let Some(picker) = &self.picker else { return Vec::new() };
     let all = match picker.of {
       Pick::GoTo => self.places(!picker.filter.is_empty()),
-      Pick::Commands => self.commands(),
       Pick::Keys => self.each_key(),
       Pick::Sessions => self.sessions(),
       Pick::Machines => self.machines(),
@@ -210,10 +216,12 @@ impl Model {
     ranked(&picker.filter, texts.iter().map(String::as_str)).into_iter().filter_map(taken).collect()
   }
 
-  /// The places of Go to: each thread that needs the operator, each thread that works, then each
-  /// project; and while he searches, each other thread, and each session of each machine, a session
-  /// that holds no thread of his too. A thread row opens its thread, and a session row turns the
-  /// input to a new thread of it, as in the list of the sessions.
+  /// The places of Go to: each thread that needs the operator, each thread that works, each
+  /// session that runs, the sessions that he used last, each project, then each command; and while
+  /// he searches, each other thread, each session of each machine, a session that holds no thread
+  /// of his too, and the files and the skills of the target of the input. A thread row opens its
+  /// thread, a session row its last thread, a file or a skill row adds it to the draft, and a
+  /// command row runs it.
   fn places(&self, searches: bool) -> Vec<Entry> {
     let thread = |part: &'static str, (_, key, card): &(Part, Key, Card)| Entry {
       part,
@@ -232,17 +240,21 @@ impl Model {
     all.extend(self.client.settled.iter().filter(works).map(|one| thread("Working", one)));
     all.extend(self.running_places());
     let sessions = self.known_sessions();
+    let session = |one: &Session| Entry {
+      part: "Sessions",
+      project: Some(one.project.clone()),
+      left: one.name.clone(),
+      right: one.project.clone(),
+      choice: Choice::Visit(one.at, one.life.clone()),
+      ..Entry::default()
+    };
     if searches {
       let rest = |one: &&(Part, Key, Card)| !needs(one) && !works(one);
       all.extend(self.client.settled.iter().filter(rest).map(|one| thread("Threads", one)));
-      all.extend(sessions.iter().map(|one| Entry {
-        part: "Sessions",
-        project: Some(one.project.clone()),
-        left: one.name.clone(),
-        right: one.project.clone(),
-        choice: Choice::Session(Target::Session(one.at, one.life.clone())),
-        ..Entry::default()
-      }));
+      all.extend(sessions.iter().map(session));
+      all.extend(self.lists());
+    } else {
+      all.extend(sessions.iter().take(RECENT).map(session));
     }
     let mut projects: Vec<(&str, usize)> = Vec::new();
     for one in sessions.iter().filter(|one| !one.project.is_empty()) {
@@ -260,7 +272,28 @@ impl Model {
       choice: Choice::Project(name.to_owned()),
       ..Entry::default()
     }));
+    all.extend(self.commands());
     all
+  }
+
+  /// The files and the skills of the target of the input that the client holds: a row adds the
+  /// mention of a file, or a skill, to the draft.
+  fn lists(&self) -> Vec<Entry> {
+    let (files, skills) = self.client.files_and_skills();
+    let file = |path: &String| Entry {
+      part: "Files",
+      left: path.clone(),
+      choice: Choice::Added(Client::mention(path)),
+      ..Entry::default()
+    };
+    let skill = |one: &Skill| Entry {
+      part: "Skills",
+      left: one.name.clone(),
+      says: one.description.clone(),
+      choice: Choice::Added(format!("/{}", one.name)),
+      ..Entry::default()
+    };
+    files.iter().map(file).chain(skills.iter().map(skill)).collect()
   }
 
   /// Each session of each machine once: those of its cards, then each record that it listed with
@@ -268,12 +301,14 @@ impl Model {
   fn known_sessions(&self) -> Vec<Session> {
     let mut sessions: Vec<Session> = Vec::new();
     for (at, told) in self.client.machines.iter().enumerate() {
+      let used = |life: &str| told.lives.iter().find(|one| one.life == life)?.used;
       for card in &told.cards {
         if !sessions.iter().any(|one| one.at == at && one.life == card.life) {
           let named = card.session.clone().filter(|name| !name.is_empty());
           let name = named.unwrap_or_else(|| card.thread.title.clone());
           let life = card.life.clone();
-          sessions.push(Session { at, life, name, project: project(card) });
+          let used = used(&life);
+          sessions.push(Session { at, life, name, project: project(card), used });
         }
       }
       for listed in &told.lives {
@@ -282,16 +317,20 @@ impl Model {
           let name = name.unwrap_or_else(|| stem(&listed.life));
           let project = listed.project.as_deref().map_or("", |one| tail(one)).to_owned();
           let life = listed.life.clone();
-          sessions.push(Session { at, life, name, project });
+          sessions.push(Session { at, life, name, project, used: listed.used });
         }
       }
     }
+    // A session that lasts is a place that he comes back to: the one that he used last first.
+    sessions.sort_by_key(|one| Reverse(one.used));
     sessions
   }
 
-  /// Each command of the table of the keys, with its key, by the group of its key.
+  /// Each command of the table of the keys, with its key, by the group of its key, but Go to,
+  /// which lists them.
   fn commands(&self) -> Vec<Entry> {
-    let commands = keys::each(self.system).filter(|one| one.1.command.is_some());
+    let commands =
+      keys::each(self.system).filter(|one| one.1.command.is_some() && one.1.does != Does::GoTo);
     let entry = |(group, key, forms): (&'static str, &Bound, Vec<String>)| Entry {
       part: group,
       left: capital(key.says),
@@ -462,6 +501,8 @@ impl Model {
     match entry.choice {
       Choice::Thread(key) => self.went(key),
       Choice::Session(target) => self.aimed(target),
+      Choice::Visit(at, life) => self.visited(at, life),
+      Choice::Added(text) => self.client.added(&text),
       Choice::Project(name) => {
         self.picker = Some(Picker { of, filter: name, at: 0 });
       }
@@ -480,6 +521,15 @@ impl Model {
   fn went(&mut self, key: Key) {
     self.client.selected = Some(key);
     self.open_thread();
+  }
+
+  /// A session returned to: its last thread opens, else the input turns to it.
+  fn visited(&mut self, at: usize, life: String) {
+    let last = self.client.settled.iter().find(|one| one.1.0 == at && one.1.1 == life);
+    match last.map(|one| one.1.clone()) {
+      Some(key) => self.went(key),
+      None => self.aimed(Target::Session(at, life)),
+    }
   }
 
   /// The input turned to a target: none for the thread that is open, or for a new session when no
@@ -678,6 +728,7 @@ struct Session {
   life: String,
   name: String,
   project: String,
+  used: Option<u64>,
 }
 
 /// A text with the letters at some places in the bright style, and the rest in the plain one.
