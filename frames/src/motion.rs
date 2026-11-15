@@ -423,9 +423,10 @@ pub(crate) fn still(cast: &Cast, at: Duration, path: &Path) -> Result<(), Error>
 const FRAME: u16 = 2;
 
 /// The GIF of the whole screen over the span, bare at a density of one, or in the frame of a
-/// window at a density: each screen for as long as it showed, at most [`FRAME`] apart. Each frame after the first holds only the rectangle that
-/// changed, and a screen that changes nothing lengthens the frame before it: a light that passes
-/// over one word then costs that word, and not the whole screen.
+/// window at a density: each screen for as long as it showed, to the step of [`FRAME`]. Each frame
+/// after the first holds only the rectangle that changed, and a moment that changes nothing
+/// lengthens the frame before it: a light that passes over one word then costs that word, and not
+/// the whole screen.
 fn animated(
   screens: &[Shown],
   span: Span,
@@ -452,37 +453,33 @@ fn animated(
   // What a player shows after the frames written so far, which starts clear.
   let mut shown = vec![0; width * height * 4];
   let mut held: Option<gif::Frame<'_>> = None;
-  for (at, screen) in screens.iter().enumerate() {
-    let next = screens.get(at + 1).map_or(span.until, |next| next.at);
-    let hundredths = (next.saturating_sub(screen.at).as_millis() + 5) / 10;
-    let mut left = u16::try_from(hundredths).unwrap_or(u16::MAX);
-    // A frame that has not shown for [`FRAME`] yet takes the screens after it, and the next frame
-    // shows what changed in them.
-    if let Some(frame) = held.as_mut().filter(|frame| frame.delay < FRAME) {
-      frame.delay = frame.delay.saturating_add(left);
-      continue;
+  let mut now: Option<(usize, Vec<u8>)> = None;
+  // The GIF samples the span at [`FRAME`]: each frame draws what the screen of its moment changed,
+  // and the pixels that the frame before left wrong, as a screen with more colors than a frame
+  // holds shows in a few frames, until the player shows it exactly.
+  let step = Duration::from_millis(u64::from(FRAME) * 10);
+  let mut at = span.from;
+  while at < span.until {
+    let screen = screens.iter().rposition(|one| one.at <= at).unwrap_or_default();
+    if now.as_ref().is_none_or(|(shown, _)| *shown != screen) {
+      now = Some((screen, pixels(&screens[screen].frame).2));
     }
-    let now = pixels(&screen.frame).2;
-    // A screen with more colors than a frame holds shows in a few frames: each draws again the
-    // pixels that the one before it left wrong, until the player shows the screen exactly.
-    while left > 0 {
-      let Some(rect) = changed(&shown, &now, width) else {
-        if let Some(frame) = held.as_mut() {
-          frame.delay = frame.delay.saturating_add(left);
-        }
-        break;
-      };
-      if let Some(frame) = held.take() {
-        encoder.write_frame(&frame)?;
+    let Some((_, now)) = &now else { break };
+    at += step;
+    let Some(rect) = changed(&shown, now, width) else {
+      if let Some(frame) = held.as_mut() {
+        frame.delay = frame.delay.saturating_add(FRAME);
       }
-      let (mut frame, whole) = framed_part(&shown, &now, width, &rect);
-      (frame.left, frame.top) = (size(rect.left), size(rect.top));
-      frame.delay = if whole { left } else { left.min(FRAME) };
-      frame.dispose = DisposalMethod::Keep;
-      draw(&mut shown, width, &rect, &frame);
-      left -= frame.delay;
-      held = Some(frame);
+      continue;
+    };
+    if let Some(frame) = held.take() {
+      encoder.write_frame(&frame)?;
     }
+    let mut frame = framed_part(&shown, now, width, &rect);
+    (frame.left, frame.top, frame.delay) = (size(rect.left), size(rect.top), FRAME);
+    frame.dispose = DisposalMethod::Keep;
+    draw(&mut shown, width, &rect, &frame);
+    held = Some(frame);
   }
   if let Some(frame) = held {
     encoder.write_frame(&frame)?;
@@ -491,14 +488,9 @@ fn animated(
 }
 
 /// The frame of the pixels of a rectangle that the player shows wrong, each other pixel clear so
-/// the frame keeps it, and whether its colors are exact: a rectangle with more colors than a frame
-/// holds takes the nearest of 256.
-fn framed_part(
-  shown: &[u8],
-  now: &[u8],
-  width: usize,
-  rect: &Changed,
-) -> (gif::Frame<'static>, bool) {
+/// the frame keeps it, in their exact colors, or the nearest of 256 for a rectangle with more
+/// colors than a frame holds.
+fn framed_part(shown: &[u8], now: &[u8], width: usize, rect: &Changed) -> gif::Frame<'static> {
   let Changed { left, top, width: wide, height: high } = *rect;
   let mut part: Vec<u8> = Vec::with_capacity(wide * high * 4);
   for row in top..top + high {
@@ -508,10 +500,8 @@ fn framed_part(
     }
   }
   let size = |pixels: usize| u16::try_from(pixels).unwrap_or(u16::MAX);
-  match exact(size(wide), size(high), &part) {
-    Some(frame) => (frame, true),
-    None => (gif::Frame::from_rgba_speed(size(wide), size(high), &mut part, 1), false),
-  }
+  exact(size(wide), size(high), &part)
+    .unwrap_or_else(|| gif::Frame::from_rgba_speed(size(wide), size(high), &mut part, 1))
 }
 
 /// What a player shows once it drew a frame over what it showed: each pixel of the frame that is
