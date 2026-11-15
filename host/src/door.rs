@@ -3,7 +3,7 @@
 //! his on the chain that it names, so the transcript of that chain shows his act as it shows the
 //! act of a model, and no act of his takes another path.
 
-use furb::skill::granted;
+use furb::{skill::granted, value::repr};
 
 /// An act of a person on a chain, as the word that a model would write for it.
 #[derive(Debug, Clone, PartialEq)]
@@ -30,28 +30,23 @@ impl Door {
   #[must_use]
   pub fn word(&self) -> String {
     match self {
-      Self::Chain { label } => format!("chain({})", quoted(label)),
+      Self::Chain { label } => format!("chain({})", repr(label)),
       Self::Fork { label, source, kept: None } => {
-        format!("chain({}, source={})", quoted(label), quoted(source))
+        format!("chain({}, source={})", repr(label), repr(source))
       }
       Self::Fork { label, source, kept: Some(kept) } => {
-        let kept: Vec<String> = kept.iter().map(|id| quoted(id)).collect();
-        let (label, source) = (quoted(label), quoted(source));
+        let kept: Vec<String> = kept.iter().map(|id| repr(id)).collect();
+        let (label, source) = (repr(label), repr(source));
         format!("chain({label}, source={source}, filter=take({}))", kept.join(", "))
       }
-      Self::Cd { path } => format!("cd({})", quoted(path)),
-      Self::Stand { actor } => format!("actor = {}", quoted(actor)),
+      Self::Cd { path } => format!("cd({})", repr(path)),
+      Self::Stand { actor } => format!("actor = {}", repr(actor)),
       Self::Edit { prompt, program } => {
-        format!("write(Text({}, {}))", quoted(prompt), quoted(program))
+        format!("write(Text({}, {}))", repr(prompt), repr(program))
       }
       Self::Grant { usd, share } => granted(*usd, *share),
     }
   }
-}
-
-/// A text as a string of python: the string of JSON, whose each escape python reads the same.
-fn quoted(text: &str) -> String {
-  serde_json::Value::from(text).to_string()
 }
 
 #[cfg(test)]

@@ -13,13 +13,14 @@
   clippy::assigning_clones,
   reason = "debt: an assignment of a clone, where clone_from serves"
 )]
-#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
 #![expect(
   clippy::single_match_else,
   reason = "debt: a match of one arm and else, where if let serves"
 )]
 
 use serde_json::{Map, Value};
+
+use crate::value::repr;
 use std::mem;
 use std::slice;
 
@@ -150,7 +151,7 @@ impl Function {
       }));
     }
     signature.extend(self.rest.iter().map(|(name, shape)| format!("**{name}: {}", shape.python())));
-    let pair = |one: &&Param| format!("{}: {}", quoted(&one.key), one.name);
+    let pair = |one: &&Param| format!("{}: {}", repr(&one.key), one.name);
     let mut sent: Vec<String> = required.iter().map(pair).collect();
     if !optional.is_empty() {
       let given = optional.iter().map(pair).collect::<Vec<_>>().join(", ");
@@ -164,13 +165,13 @@ impl Function {
       _ => format!("{{{}}}", sent.join(", ")),
     };
     let doc =
-      if self.doc.is_empty() { String::new() } else { format!("    {}\n", quoted(&self.doc)) };
+      if self.doc.is_empty() { String::new() } else { format!("    {}\n", repr(&self.doc)) };
     format!(
       "  async def {}({}) -> McpResult:\n{doc}    return await {CALL}({}, {}, {arguments})\n",
       self.name,
       signature.join(", "),
-      quoted(server),
-      quoted(&self.tool),
+      repr(server),
+      repr(&self.tool),
     )
   }
 }
@@ -411,7 +412,7 @@ impl<'a> Mapper<'a> {
         .iter()
         .map(|(key, part)| {
           let optional = if required.contains(&key.as_str()) { "" } else { "?" };
-          format!("{}{optional}: {}", quoted(key), self.sketch(part, depth - 1))
+          format!("{}{optional}: {}", repr(key), self.sketch(part, depth - 1))
         })
         .collect();
       return format!("{{{}}}", parts.join(", "));
@@ -726,30 +727,10 @@ fn unique(mut name: String, taken: &mut Vec<String>) -> String {
   name
 }
 
-/// A text as a string of Python on one line.
-pub fn quoted(text: &str) -> String {
-  let mut made = String::from('"');
-  for one in text.chars() {
-    match one {
-      '\\' => made.push_str("\\\\"),
-      '"' => made.push_str("\\\""),
-      '\n' => made.push_str("\\n"),
-      '\r' => made.push_str("\\r"),
-      '\t' => made.push_str("\\t"),
-      _ if one.is_control() || matches!(one, '\u{2028}' | '\u{2029}' | '\u{feff}') => {
-        made.push_str(&format!("\\u{:04x}", u32::from(one)));
-      }
-      _ => made.push(one),
-    }
-  }
-  made.push('"');
-  made
-}
-
 /// A value of an enum or a const in a Literal of Python.
 fn literal(value: &Value) -> String {
   match value {
-    Value::String(text) => quoted(text),
+    Value::String(text) => repr(text),
     Value::Bool(true) => "True".to_owned(),
     Value::Bool(false) => "False".to_owned(),
     other => other.to_string(),

@@ -17,7 +17,7 @@
 )]
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
-use std::{error, fmt};
+use std::{error, fmt, fmt::Write as _};
 
 /// The key of the one mark: a map whose `is` names a class of the engine is an instance of it, by its fields.
 pub const IS: &str = "is";
@@ -42,6 +42,36 @@ impl Given for ObjectRef<'_> {
   fn seconds(&self) -> Option<f64> {
     self.as_float().or_else(|| self.as_int().map(|n| n as f64))
   }
+}
+
+/// A text as python writes a string, as its repr: in single marks, or in double marks for a text
+/// that holds a single mark and no double mark, with each character that python does not print as
+/// itself escaped, so the string stays on one line and a word that holds it reads as python.
+pub fn repr(text: &str) -> String {
+  let mark = if text.contains('\'') && !text.contains('"') { '"' } else { '\'' };
+  let mut out = String::with_capacity(text.len() + 2);
+  out.push(mark);
+  for one in text.chars() {
+    match one {
+      '\\' => out.push_str("\\\\"),
+      '\n' => out.push_str("\\n"),
+      '\r' => out.push_str("\\r"),
+      '\t' => out.push_str("\\t"),
+      one if one == mark => {
+        out.push('\\');
+        out.push(one);
+      }
+      one if u32::from(one) < 0x100 && one.is_control() => {
+        write!(out, "\\x{:02x}", u32::from(one)).ok();
+      }
+      one if one.is_control() || matches!(one, '\u{2028}' | '\u{2029}' | '\u{feff}') => {
+        write!(out, "\\u{:04x}", u32::from(one)).ok();
+      }
+      one => out.push(one),
+    }
+  }
+  out.push(mark);
+  out
 }
 
 /// Bytes as the lowercase digits of base sixteen.
@@ -366,6 +396,13 @@ pub(crate) fn paired(pairs: impl IntoIterator<Item = (String, Object)>) -> Objec
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_string_of_python_escapes_as_repr_does() {
+    assert_eq!(repr("it's"), "\"it's\"");
+    assert_eq!(repr("a\tb\\\x01'\""), "'a\\tb\\\\\\x01\\'\"'");
+    assert_eq!(repr("line\u{2028}next\u{85}"), "'line\\u2028next\\x85'");
+  }
 
   /// A list that holds a list, and so on, as many lists deep as asked, around an empty list.
   fn nested(lists: usize) -> Object {

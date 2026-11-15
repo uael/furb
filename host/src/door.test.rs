@@ -20,12 +20,12 @@ fn each_door_is_the_word_that_a_model_writes_for_its_act() {
   assert_eq!(
     words,
     [
-      r#"chain("bench")"#,
-      r#"chain("copy", source="chain1")"#,
-      r#"chain("rewind", source="chain1", filter=take("prompt1", "prompt3"))"#,
+      "chain('bench')",
+      "chain('copy', source='chain1')",
+      "chain('rewind', source='chain1', filter=take('prompt1', 'prompt3'))",
       r#"cd("~/src/it's")"#,
-      r#"actor = "claude-cli:sonnet/high""#,
-      r#"write(Text("prompt2", "x = 1\nclose(\"done\")"))"#,
+      "actor = 'claude-cli:sonnet/high'",
+      r#"write(Text('prompt2', 'x = 1\nclose("done")'))"#,
       "await skill('grant')\nrung('grant(usd=2.0, share=None)')",
     ]
   );

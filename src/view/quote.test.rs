@@ -1,6 +1,6 @@
 //! The quotes of a word, as each window reads them.
 
-use super::{python_string, quotes, writing};
+use super::{quotes, writing};
 
 #[test]
 fn a_text_gives_each_quote_that_closes_with_the_binding_that_it_makes() {
@@ -30,10 +30,4 @@ fn a_quote_that_a_model_still_writes_stands_as_its_binding_and_drops_the_part_of
     (begun.lines.as_str(), begun.tail.as_str()),
     ("a = 1\nfor x in a:", "b = await bash(")
   );
-}
-
-#[test]
-fn a_string_of_python_escapes_as_repr_does() {
-  assert_eq!(python_string("it's"), "\"it's\"");
-  assert_eq!(python_string("a\tb\\\x01'\""), "'a\\tb\\\\\\x01\\'\"'");
 }

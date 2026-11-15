@@ -4,8 +4,9 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 use monty_types::NamedValues;
 use serde_json::{Map, Value, json};
 
-use super::{Function, Shape, binding, quoted, safe, union};
+use super::{Function, Shape, binding, safe, union};
 use crate::sand::{Nobody, Sand};
+use crate::value::repr;
 use std::env;
 
 /// What runs before a binding in the sandbox: a `mcp_call` that gives what a call sends.
@@ -37,13 +38,13 @@ fn python(value: &Value) -> String {
     Value::Bool(true) => "True".to_owned(),
     Value::Bool(false) => "False".to_owned(),
     Value::Number(number) => number.to_string(),
-    Value::String(text) => quoted(text),
+    Value::String(text) => repr(text),
     Value::Array(items) => format!("[{}]", items.iter().map(python).collect::<Vec<_>>().join(", ")),
     Value::Object(fields) => format!(
       "{{{}}}",
       fields
         .iter()
-        .map(|(key, one)| format!("{}: {}", quoted(key), python(one)))
+        .map(|(key, one)| format!("{}: {}", repr(key), python(one)))
         .collect::<Vec<_>>()
         .join(", ")
     ),
@@ -146,7 +147,7 @@ fn a_tool_becomes_an_async_function_of_a_class_named_for_its_server() {
   let made = binding("my-server", &[tool]);
   assert_eq!(
     made.word,
-    "class my_server:\n  async def create_issue(owner: str, *, body: str | None = None, from_: int | None = None) -> McpResult:\n    \"Create a new issue.\"\n    return await mcp_call(\"my-server\", \"create_issue\", {\"owner\": owner, **{k: v for k, v in {\"body\": body, \"from\": from_}.items() if v is not None}})\n"
+    "class my_server:\n  async def create_issue(owner: str, *, body: str | None = None, from_: int | None = None) -> McpResult:\n    'Create a new issue.'\n    return await mcp_call('my-server', 'create_issue', {'owner': owner, **{k: v for k, v in {'body': body, 'from': from_}.items() if v is not None}})\n"
   );
   assert_eq!((made.name.as_str(), made.exact, made.loose.len()), ("my_server", 1, 0));
 }
@@ -163,13 +164,13 @@ fn each_type_of_json_schema_maps_to_its_type_of_python() {
     (json!({ "type": "array" }), "list[Any]"),
     (json!({ "type": "object" }), "dict[str, Any]"),
     (json!({ "type": "object", "additionalProperties": { "type": "integer" } }), "dict[str, int]"),
-    (json!({ "enum": ["a", "b"] }), "Literal[\"a\", \"b\"]"),
-    (json!({ "enum": ["a", null] }), "Literal[\"a\"] | None"),
+    (json!({ "enum": ["a", "b"] }), "Literal['a', 'b']"),
+    (json!({ "enum": ["a", null] }), "Literal['a'] | None"),
     (json!({ "const": 3 }), "Literal[3]"),
     (json!({ "const": true }), "Literal[True]"),
     (json!({ "type": ["string", "null"] }), "str | None"),
     (json!({ "anyOf": [{ "type": "string" }, { "type": "integer" }] }), "str | int"),
-    (json!({ "oneOf": [{ "const": "a" }, { "const": "b" }] }), "Literal[\"a\", \"b\"]"),
+    (json!({ "oneOf": [{ "const": "a" }, { "const": "b" }] }), "Literal['a', 'b']"),
     (json!({ "anyOf": [{ "type": "string" }, { "const": "a" }] }), "str"),
     (json!({ "type": "string", "nullable": true }), "str | None"),
     (json!({ "$ref": "#/$defs/n" }), "int"),
@@ -252,7 +253,7 @@ fn the_docstring_sketches_each_object_whose_properties_python_cannot_type() {
   });
   let made =
     binding("s", &[json!({ "name": "t", "description": "Add items.", "inputSchema": input })]);
-  assert_eq!(made.functions[0].doc, "Add items. Dicts: items is list[{\"id\": str, \"n\"?: int}].");
+  assert_eq!(made.functions[0].doc, "Add items. Dicts: items is list[{'id': str, 'n'?: int}].");
 }
 
 #[test]
@@ -318,9 +319,11 @@ fn a_tool_with_no_arguments_takes_none_and_sends_an_empty_dict() {
     "s",
     &[json!({ "name": "ping", "inputSchema": { "type": "object" } }), json!({ "name": "pong" })],
   );
-  assert!(made.word.contains(
-    "  async def ping() -> McpResult:\n    return await mcp_call(\"s\", \"ping\", {})\n"
-  ));
+  assert!(
+    made
+      .word
+      .contains("  async def ping() -> McpResult:\n    return await mcp_call('s', 'ping', {})\n")
+  );
   assert_eq!(
     sent(&made.word, &["await s.pong()".to_owned()]),
     [json!({ "server": "s", "tool": "pong", "arguments": {} })]

@@ -2,10 +2,10 @@
 //! a line, which bind the name to the text as one string. A window reads each quote of a word that
 //! ran, and of a word that a model still writes, from here.
 
-use std::fmt::Write as _;
-
 use serde::Serialize;
 use std::iter;
+
+use crate::value::repr;
 
 /// A quote of a word: the line where it opens, its name, its text, the line of its close mark, or
 /// the last line of what came of a quote with no close mark yet, whether its close mark came, and
@@ -51,7 +51,7 @@ fn quote_at(source: &[&str], index: usize, open: bool) -> Option<Quote> {
   } else if let Some(size) = (2..close.len()).rev().find(|size| body.ends_with(&close[..*size])) {
     body.truncate(body.len() - size);
   }
-  let binding = format!("{name} = {}", python_string(&body));
+  let binding = format!("{name} = {}", repr(&body));
   Some(Quote { start: index, name: name.to_owned(), body, end, closed: found.is_some(), binding })
 }
 
@@ -118,32 +118,6 @@ pub fn writing(text: &str, thinking: &str) -> Writing {
   let said = if text.is_empty() { thinking } else { text };
   let last = said.trim_end_matches('\n').split('\n').next_back().unwrap_or_default();
   Writing { lines, tail: last.trim().to_owned(), numbers, count }
-}
-
-/// A text as a string of python, as repr writes it: single marks, or double marks for a text that
-/// holds a single mark and no double mark.
-fn python_string(text: &str) -> String {
-  let mark = if text.contains('\'') && !text.contains('"') { '"' } else { '\'' };
-  let mut out = String::with_capacity(text.len() + 2);
-  out.push(mark);
-  for one in text.chars() {
-    match one {
-      '\\' => out.push_str("\\\\"),
-      '\n' => out.push_str("\\n"),
-      '\r' => out.push_str("\\r"),
-      '\t' => out.push_str("\\t"),
-      one if one == mark => {
-        out.push('\\');
-        out.push(one);
-      }
-      one if one < ' ' || one == '\x7f' => {
-        write!(out, "\\x{:02x}", u32::from(one)).ok();
-      }
-      one => out.push(one),
-    }
-  }
-  out.push(mark);
-  out
 }
 
 #[cfg(test)]
