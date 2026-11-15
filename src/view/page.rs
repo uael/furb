@@ -712,11 +712,14 @@ fn line_of(why: &str) -> Option<usize> {
 /// name that no act took, from the line of the act before it on, since a call in the arguments of
 /// another, as the chain of a prompt, makes its act first. An act whose kind no later line calls
 /// takes the line of the act of its kind before it, as a loop makes many acts from one line, and
-/// the first of its kind takes none.
+/// the first of its kind takes none. An act right after one of a comprehension that calls its
+/// kind takes that line too when no act of the word ended between the two, as a comprehension
+/// makes its acts one after the other with no await.
 fn placed(word: &str, made: &[&Act]) -> Vec<Option<usize>> {
+  let lines: Vec<&str> =
+    word.split('\n').map(|line| line.split('#').next().unwrap_or_default()).collect();
   let mut slots: Vec<(usize, &str)> = Vec::new();
-  for (at, line) in word.split('\n').enumerate() {
-    let code = line.split('#').next().unwrap_or_default();
+  for (at, code) in lines.iter().enumerate() {
     for (start, _) in code.match_indices('(') {
       let name = code[..start].rsplit(|one: char| !(one.is_alphanumeric() || one == '_')).next();
       slots.extend(name.filter(|name| !name.is_empty()).map(|name| (at, name)));
@@ -724,22 +727,43 @@ fn placed(word: &str, made: &[&Act]) -> Vec<Option<usize>> {
   }
   let mut taken = vec![false; slots.len()];
   let mut from = 0;
+  let mut before: Option<usize> = None;
+  let mut previous: Option<&Act> = None;
   let mut last: HashMap<&str, usize> = HashMap::new();
   made
     .iter()
     .map(|act| {
       let kind = act.kind.as_str();
-      let free = |at: &usize| !taken[*at] && slots[*at].1 == kind;
-      let Some(found) = (from..slots.len()).find(free) else {
-        return last.get(kind).copied();
+      let calls = |line: usize| slots.contains(&(line, kind));
+      // No act of the word ended since the act before it, so the word awaited nothing between.
+      let since = previous.map_or(act.began, |one: &Act| one.began);
+      let awaited =
+        made.iter().any(|one| one.ended.is_some_and(|end| since < end && end <= act.began));
+      let held = before.filter(|line| !awaited && comprehends(lines[*line]) && calls(*line));
+      let found = (from..slots.len()).find(|at| !taken[*at] && slots[*at].1 == kind);
+      let line = match (held, found) {
+        (Some(line), _) => line,
+        (None, Some(found)) => {
+          taken[found] = true;
+          slots[found].0
+        }
+        (None, None) => {
+          (before, previous) = (last.get(kind).copied(), Some(*act));
+          return before;
+        }
       };
-      let line = slots[found].0;
-      taken[found] = true;
-      from = slots.iter().position(|slot| slot.0 == line).unwrap_or(found);
+      from = slots.iter().position(|slot| slot.0 == line).unwrap_or(from);
       last.insert(kind, line);
+      before = Some(line);
+      previous = Some(*act);
       Some(line)
     })
     .collect()
+}
+
+/// Whether a line of a word holds a comprehension, which makes as many acts as it has items.
+fn comprehends(code: &str) -> bool {
+  !code.trim_start().starts_with("for ") && code.contains(" for ") && code.contains(" in ")
 }
 
 #[cfg(test)]

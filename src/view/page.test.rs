@@ -722,3 +722,30 @@ fn an_act_made_inside_a_call_on_its_line_marks_that_line_and_not_a_later_one() {
     .collect();
   assert_eq!(runs, [3]);
 }
+
+#[test]
+fn each_act_of_a_comprehension_marks_its_line_and_a_later_call_its_own() {
+  let word = "rs = [prompt(str, p, on=chain(p)) for p in ['a', 'b']]\nfound = [await r for r in rs]\nlast = await prompt(str, 'c', on=chain('c'))";
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "review", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
+    json!(["chain", "chain2", "rung1", "", "a", ""]),
+    json!(["prompt", "prompt2", "rung1", "chain2", "str", "a", ""]),
+    json!(["chain", "chain3", "rung1", "", "b", ""]),
+    json!(["prompt", "prompt3", "rung1", "chain3", "str", "b", ""]),
+    json!(["done", "prompt2", "chain2", "x"]),
+    json!(["done", "prompt3", "chain3", "y"]),
+    json!(["chain", "chain4", "rung1", "", "c", ""]),
+    json!(["prompt", "prompt4", "rung1", "chain4", "str", "c", ""]),
+  ];
+  let mut streams = Streamed::default();
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let made: Vec<usize> = block.lines.iter().map(|line| line.made.len()).collect();
+  assert_eq!(made, [4, 0, 2]);
+  let at: Vec<Option<usize>> = page.agents.iter().map(|agent| agent.at).collect();
+  assert_eq!(at, [Some(1), Some(1), Some(3)]);
+}
