@@ -142,6 +142,9 @@ pub(crate) fn named(word: &str) -> Option<&'static Scenario> {
     .find(|scenario| scenario.name == word || scenario.name.split('-').next() == Some(word))
 }
 
+/// A turn of the wheel down over the filter of an open list part.
+const WHEEL_DOWN: Act = Act::Pointer { on: "Search a", button: 65 };
+
 const fn step(name: &'static str, acts: &'static [Act], until: &'static str) -> Step {
   Step { name, acts, until }
 }
@@ -802,6 +805,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       steps: &[
         step("a", &[Act::Key("C-x"), Act::Key("?")], "each key"),
         step("c", &[Act::Key("Escape"), Act::Key("C-p")], "Search a thread"),
+        step("d", &[WHEEL_DOWN; 26], "The model of the input"),
+        step("e", &[Act::Pointer { on: "The model of the input", button: 0 }], "Search a model"),
       ],
     }),
   },

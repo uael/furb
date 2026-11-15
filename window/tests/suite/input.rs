@@ -755,3 +755,20 @@ fn a_click_on_the_list_keeps_the_keys_with_the_input() {
   app.type_text("and the seed?");
   assert_eq!(typed(&app, "and the seed?"), "and the seed?");
 }
+
+/// The mouse alone runs each command: a click opens Go to, the wheel reaches a row that the list
+/// part held out of view, and a click on it runs it.
+#[test]
+fn the_mouse_alone_reaches_and_runs_each_command_of_go_to() {
+  let (app, _daemon, _) = started();
+  clicked(&app, "go to anything", 0, 0);
+  shows(&app, "Search a thread, a session");
+  assert!(!app.text().contains("The model of the input"), "the row is in view before the wheel");
+  let (x, y) = at(&app, "Each key", 0);
+  for _ in 0..30 {
+    app.scroll(x, y, true);
+  }
+  shows(&app, "The model of the input");
+  clicked(&app, "The model of the input", 0, 0);
+  shows(&app, "Search a model");
+}

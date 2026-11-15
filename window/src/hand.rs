@@ -1159,8 +1159,7 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
   if window.borrow().screen.model.picker.is_some() {
     let does = tell(app, window, |model| {
       model.pointer = Some((event.x, event.y));
-      let click = matches!(event.kind, MouseEventKind::Down(MouseButton::Left));
-      click.then(|| model.clicked_over(event.x, event.y)).flatten()
+      model.pointed_over(event)
     });
     if let Some(does) = does {
       act(app, window, does);

@@ -8,7 +8,10 @@ use std::{borrow::Cow, cmp::Reverse, ops::Range};
 
 use furb::view::{Part, Sent, Skill};
 use furb_host::protocol::Card;
-use opentui::style::{Color, Style};
+use opentui::{
+  input::{MouseButton, MouseEvent, MouseEventKind},
+  style::{Color, Style},
+};
 use unicode_width::UnicodeWidthStr;
 
 use furb_client::{Client, Control, Link, Matched, Target, Told, ranked};
@@ -833,9 +836,26 @@ impl Model {
     Some((over.x, over.y, over.width, lines))
   }
 
-  /// A click on a cell of the window while a list part is open: a row of the part takes its entry,
-  /// and a cell beside the part closes it. The key that the taken row names.
-  pub(crate) fn clicked_over(&mut self, x: u16, y: u16) -> Option<Does> {
+  /// The pointer while a list part is open: a click on a row of the part takes its entry, and a
+  /// click beside the part closes it; the wheel moves the chosen row one row at a time, as in fzf,
+  /// so the mouse reaches each row of a list that holds more than the window shows. The key that
+  /// the taken row names.
+  pub(crate) fn pointed_over(&mut self, event: MouseEvent) -> Option<Does> {
+    match event.kind {
+      MouseEventKind::Down(MouseButton::Left) => self.clicked_over(event.x, event.y),
+      MouseEventKind::ScrollUp => {
+        self.chose(-1);
+        None
+      }
+      MouseEventKind::ScrollDown => {
+        self.chose(1);
+        None
+      }
+      _ => None,
+    }
+  }
+
+  fn clicked_over(&mut self, x: u16, y: u16) -> Option<Does> {
     let over = self.over()?;
     let inside = (over.x..over.x + over.width).contains(&x) && y >= over.y;
     let row = inside.then(|| over.rows.get(usize::from(y - over.y))).flatten();
