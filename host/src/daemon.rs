@@ -20,6 +20,9 @@
 //! the role that it gives (#983, D6). A web view reaches no socket of the machine, so the daemon
 //! also opens a door of the windows, a WebSocket on loopback, which lets in the user alone: the
 //! peer that gives the token that the daemon wrote in a file of its folder.
+//!
+//! An ask of the system to stop, as SIGTERM, ends each life with its image before the daemon ends,
+//! as [`crate::stops`] says.
 
 #![expect(
   clippy::too_many_arguments,
@@ -79,6 +82,7 @@ use crate::{
   records,
   serve::{Host, Outbox, fixed, serve},
   stall::{Quiet, Stall},
+  stops::Stops,
   transport::{
     Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, own, upgraded,
   },
@@ -202,8 +206,10 @@ where
   let (daemon, mut leave, mut empty) = Daemon::spawn(settings, handed);
   let mut peers = JoinSet::new();
   let mut quiet = None;
+  let mut stops = heard(log.as_ref());
   let leaving = loop {
     tokio::select! {
+      () = stopped(stops.as_mut()) => return stop(&daemon, stops.as_mut(), log.as_ref()).await,
       accepted = listener.accept() => match accepted {
         Ok(stream) => {
           met = true;
@@ -401,6 +407,8 @@ enum Asked {
   Carded { life: String },
   /// A life that stalled, in one of its births: each open act, and the notice.
   Stalled { life: String, born: u64, acts: Vec<Open>, notice: String },
+  /// An ask of the system to stop: each life ends with its image, then the task replies.
+  Stop(oneshot::Sender<()>),
 }
 
 /// The handover as the listener takes it: the lives to give, the peer that asked them, and its
@@ -457,6 +465,13 @@ impl Daemon {
       return Err(ProtocolError::Stopped);
     }
     replied.await.or(Err(ProtocolError::Stopped))
+  }
+
+  /// Each life ended with its image, as an ask of the system to stop wants, once the task that
+  /// owns the lives ends.
+  async fn stop(&self) {
+    // A task that is gone holds no life, so nothing is left to end.
+    self.asked(Asked::Stop).await.ok();
   }
 }
 
@@ -850,6 +865,7 @@ impl Lives {
         }
       }
       Asked::Carded { life } => self.carded(&life),
+      Asked::Stop(reply) => self.stop(reply),
       Asked::Ended { life, born, fault } => self.ended(&life, born, fault),
       Asked::Stalled { life, born, acts, notice } => {
         if let Some(Held { born: now, stage: Stage::Living(holders), .. }) = self.held.get(&life)
@@ -1268,6 +1284,55 @@ impl Lives {
     }
     let log = self.settings.opening.log.clone();
     tokio::spawn(gave(lives, log, self.leave, Leaving { handed, asker, reply }));
+  }
+}
+
+impl Lives {
+  /// The stop that the system asked: each open that waits is refused, and each life ends with its
+  /// image, then the reply. The daemon ends then, so the task holds no life after it.
+  fn stop(&mut self, reply: oneshot::Sender<()>) {
+    let mut lives = Vec::new();
+    for held in mem::take(&mut self.held).into_values() {
+      if let Stage::Ending(waiting) = held.stage {
+        for (_, one) in waiting {
+          one.send(Err(ProtocolError::Stopped)).ok();
+        }
+      }
+      lives.push(held.handle);
+    }
+    tokio::spawn(async move {
+      future::join_all(lives.iter().map(end)).await;
+      reply.send(()).ok();
+    });
+  }
+}
+
+/// The asks of the system to stop the daemon, or none when the system gives none, which the log
+/// says.
+fn heard(log: Option<&Log>) -> Option<Stops> {
+  let heard = Stops::heard();
+  heard.inspect_err(|no| report(log, &format_args!("no ask of the system stops it: {no}"))).ok()
+}
+
+/// The daemon stopped as the system asked: each life ends with its image, unless a second ask
+/// comes first, which ends the daemon at once.
+async fn stop(
+  daemon: &Daemon,
+  stops: Option<&mut Stops>,
+  log: Option<&Log>,
+) -> Result<(), DaemonError> {
+  tokio::select! {
+    () = daemon.stop() => {}
+    () = stopped(stops) => report(log, &"a second ask stops it at once"),
+  }
+  Ok(())
+}
+
+/// The asks to stop that the daemon heard, or none when it hears none.
+async fn stopped(stops: Option<&mut Stops>) {
+  match stops {
+    Some(stops) => stops.next().await,
+    None => future::pending().await,
   }
 }
 

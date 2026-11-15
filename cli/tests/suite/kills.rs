@@ -28,7 +28,7 @@ use std::{
   time::Duration,
 };
 
-use furb::{life::Stage, view::Phase};
+use furb::{image, life::Stage, view::Phase};
 use furb_host::{
   Event,
   protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
@@ -630,5 +630,23 @@ async fn a_daemon_killed_during_a_handover_leaves_a_life_that_opens_again() {
     handed(&yard, daemon, window).await.killed(signal).await;
     lifeline.ended().await;
     reopened(&yard).await;
+  }
+}
+
+#[tokio::test]
+async fn a_daemon_asked_to_stop_ends_each_life_with_its_image() {
+  for signal in [libc::SIGTERM, libc::SIGINT] {
+    let (yard, mut lifeline, daemon, mut window) = begun().await;
+    // A command that runs holds the life, and its image takes it in flight.
+    window.run(&held(&lifeline, "held")).await;
+    lifeline.heard("up").await;
+    daemon.killed(signal).await;
+    lifeline.ended().await;
+    let record = yard.root.join("work/record.jsonl");
+    assert!(image::agrees(&record), "the daemon ended its life with an image");
+    let (_daemon, mut window) = reopened(&yard).await;
+    window.imaged();
+    window.unheld().await;
+    assert_eq!(yard.lines("out.txt"), ["held"]);
   }
 }

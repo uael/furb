@@ -39,6 +39,7 @@ mod rebirth;
 mod records;
 mod serve;
 mod stall;
+mod stops;
 pub mod transport;
 mod views;
 

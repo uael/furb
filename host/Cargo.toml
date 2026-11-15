@@ -15,7 +15,7 @@ workspace = true
 furb = { path = "..", version = "0.4.2" }
 # The runtime of the thread of each life, the channels between that thread and the handles of the life, and the
 # socket or the pipe of the protocol, and the process of each skill that a life plays.
-tokio = { version = "1", features = ["rt", "sync", "macros", "net", "io-util", "time", "fs", "process"] }
+tokio = { version = "1", features = ["rt", "sync", "macros", "net", "io-util", "time", "fs", "process", "signal"] }
 # The frames of the protocol, one line of JSON each, with a bound on the size of a line.
 tokio-util = { version = "0.7", features = ["codec"] }
 # The stream of the events of a life, and the sink of the frames of a peer.
