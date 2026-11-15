@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-  Last, Lease, Store, entry_of,
+  Last, Lease, Store, Taken, entry_of,
   error::{At, StoreError},
   leased, now,
 };
@@ -103,7 +103,7 @@ impl Lines {
 impl Store for Lines {
   fn entries(&mut self) -> Result<Vec<Object>, Fault> {
     let mut entries = Vec::new();
-    let tail = read(&self.path, 0, &mut |one| entries.push(one), &mut |_| {})?;
+    let tail = read(&self.path, 0, None, &mut |one, _| entries.extend(one.entry()))?;
     self.ends(tail);
     Ok(entries)
   }
@@ -152,7 +152,17 @@ impl Store for Lines {
 
 /// Each entry of the file of lines at a path, in order, read with no lease and changed in nothing, one line at a time.
 pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), StoreError> {
-  read(path, 0, take, &mut |_| {}).map(drop)
+  read(path, 0, None, &mut |one, _| one.entry().into_iter().for_each(&mut *take)).map(drop)
+}
+
+/// Each entry of the file of lines at a path, as [`each`] gives them, but the fact of each line
+/// that starts with a head, which is given as the text of its JSON, with no parse into a value.
+pub(super) fn each_but(
+  path: &Path,
+  head: &[u8],
+  take: &mut dyn FnMut(Taken),
+) -> Result<(), StoreError> {
+  read(path, 0, Some(head), &mut |one, _| take(one)).map(drop)
 }
 
 /// The entries of the file of lines at a path that a life opens on: those from its last checkpoint
@@ -165,11 +175,12 @@ pub(super) fn last(path: &Path, reached: &mut dyn FnMut(u64)) -> Result<Last, St
   loop {
     let from = start(path, head.as_bytes(), before)?.unwrap_or(0);
     let (mut entries, mut end) = (Vec::new(), from);
-    let mut passed = |at| {
+    let mut take = |one: Taken, at| {
+      entries.extend(one.entry());
       end = at;
       reached(at);
     };
-    let tail = read(path, from, &mut |one| entries.push(one), &mut passed)?;
+    let tail = read(path, from, None, &mut take)?;
     // A last line that a stop tore as the store wrote a checkpoint is no entry, so the record
     // ends at the checkpoint before it.
     if from == 0 || !entries.is_empty() {
@@ -358,14 +369,15 @@ pub(super) enum Tail {
 
 /// Each entry of a record, in order, each the fact it kept in a list of one, as boot takes them, read one line at a
 /// time and changed in nothing, and how its last line ends. The time that a line holds after its fact stays out of
-/// the entry, and a line with no time, as an older store kept it, reads the same. The bytes of the
-/// file that the read passed are told after each line. The read starts at a byte, where a line
-/// starts.
+/// the entry, and a line with no time, as an older store kept it, reads the same. Each entry comes
+/// with the bytes of the file that the read passed. The read starts at a byte, where a line
+/// starts. A line that starts with the head of the unparsed, when one is given, gives the text of
+/// its fact.
 fn read(
   path: &Path,
   from: u64,
-  take: &mut dyn FnMut(Object),
-  reached: &mut dyn FnMut(u64),
+  unparsed: Option<&[u8]>,
+  take: &mut dyn FnMut(Taken, u64),
 ) -> Result<Tail, StoreError> {
   let file = match File::open(path) {
     Ok(file) => file,
@@ -402,8 +414,11 @@ fn read(
     if held.is_empty() || held.len() > 2 || !held[1..].iter().all(|one| timed(one)) {
       return Err(invalid(start));
     }
-    take(entry_of(held[0]).ok_or_else(|| invalid(start))?);
-    reached(next as u64);
+    if unparsed.is_some_and(|head| text.as_bytes().starts_with(head)) {
+      take(Taken::Fact(held[0].get().to_owned()), next as u64);
+    } else {
+      take(Taken::Entry(entry_of(held[0]).ok_or_else(|| invalid(start))?), next as u64);
+    }
     if !ended {
       return Ok(Tail::Unended);
     }
@@ -416,7 +431,7 @@ fn read(
 /// [`read`] gives them, and how the last line ends.
 pub(super) fn after(path: &Path, from: u64) -> Result<(Vec<Object>, Tail), StoreError> {
   let mut entries = Vec::new();
-  let tail = read(path, from, &mut |one| entries.push(one), &mut |_| {})?;
+  let tail = read(path, from, None, &mut |one, _| entries.extend(one.entry()))?;
   Ok((entries, tail))
 }
 

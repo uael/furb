@@ -2,10 +2,15 @@
 
 use std::{fs, path::PathBuf};
 
-use super::{retold, retold_live, told};
+use super::{kept, retold, retold_live, told, unmarked};
 use crate::testing::Yard;
-use crate::{value::Object, view, wire::parsed};
-use serde_json::Value;
+use crate::{
+  value::Object,
+  view,
+  wire::{outward, parsed},
+  world::store::Taken,
+};
+use serde_json::{Value, value::RawValue};
 use std::process;
 
 /// The facts of lines of JSON, as a record keeps them.
@@ -398,4 +403,43 @@ fn a_record_whose_log_agrees_names_its_session_by_the_dones_on_its_root_where_th
   fs::write(format!("{}.log", at.display()), text).unwrap();
   let read = retold(&at).unwrap();
   assert_eq!((read.name(), read.given.as_deref()), (Some("Mine"), Some("Given")));
+}
+
+/// A checkpoint is told as the JSON of its text, which must be the JSON of the value that the
+/// record parses it into: each checkpoint of the records of the corpus, and facts that hold each
+/// mark of the record, are told the same both ways.
+#[test]
+fn a_checkpoint_is_told_as_the_same_json_from_its_text_as_from_its_value() {
+  let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus");
+  let mut texts: Vec<String> = [
+    r#"["checkpoint","chain1","store",[1,{"is":"tuple","args":[[2,{"is":"tuple","args":[[]]}]]}]]"#,
+    r#"["checkpoint","chain1","store",{"is":"float","args":["3"]},{"is":"float","args":["inf"]}]"#,
+    r#"["checkpoint","chain1","store",{"is":"float","args":["NaN"]},{"is":"float","args":["-0"]},2.5]"#,
+    r#"["checkpoint","chain1","store",{"is":"int","args":["123456789012345678901234567890"]}]"#,
+    r#"["checkpoint","chain1","store",{"is":"dict","args":[[[{"is":"tuple","args":[[1,2]]},"a"],[3,"b"]]]}]"#,
+    r#"["checkpoint","chain1","store",{"is":"Text","path":"a.txt","content":"x"},{"is":"Refused","args":["no"]}]"#,
+    r#"["checkpoint","chain1","store",{"is":"tuple","args":[1]},{"is":"tuple","args":[[1]],"more":2}]"#,
+    r#"["checkpoint","chain1","store",{"args":[[1]],"other":{"is":"tuple","args":[[{"is":"float","args":["1"]}]]}}]"#,
+  ]
+  .map(str::to_owned)
+  .to_vec();
+  for folder in
+    fs::read_dir(corpus).unwrap().map(|one| one.unwrap().path()).filter(|one| one.is_dir())
+  {
+    for record in fs::read_dir(folder).unwrap().map(|one| one.unwrap().path()) {
+      if record.extension().is_some_and(|named| named == "jsonl") {
+        let text = fs::read_to_string(&record).unwrap();
+        let held = text.lines().filter(|one| one.starts_with(r#"[["checkpoint","#));
+        texts.extend(
+          held.map(|one| serde_json::from_str::<Vec<&RawValue>>(one).unwrap()[0].get().to_owned()),
+        );
+      }
+    }
+  }
+  assert!(texts.len() > 10, "the corpus holds checkpoints");
+  for text in texts {
+    let entry = Taken::Fact(text.clone()).entry().unwrap();
+    let parsed = outward(kept(&entry).unwrap().0.as_ref());
+    assert_eq!(unmarked(serde_json::from_str(&text).unwrap()).unwrap(), parsed, "{text}");
+  }
 }

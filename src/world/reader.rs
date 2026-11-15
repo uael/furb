@@ -24,6 +24,7 @@
 //! A question that the reader says names its maker, as the engine names it, and each other fact
 //! that it says is said by [`READER`].
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -42,7 +43,7 @@ use super::{
   beside,
   log::{KEEP, Line, agrees, agrees_so_far, counted, keep, sealed},
   made,
-  store::{MADE, Schema, each},
+  store::{MADE, Schema, Taken, each_but_checkpoints},
 };
 use crate::wire;
 use std::fs;
@@ -164,26 +165,7 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   if let Some(found) = cached(&cache, &stamp, &log) {
     return Ok(found);
   }
-  let (mut maker, mut entries, mut last) = (None, 0, None);
-  let (mut asked, mut makers, mut ends) = (HashSet::new(), Makers::default(), 0);
-  each(path, &mut |entry| {
-    let one = slice::from_ref(&entry);
-    if maker.is_none() {
-      maker = made(one);
-    }
-    let fact = kept(&entry);
-    ends = sealed(ends, fact.as_ref());
-    if let Some(fact) = fact {
-      makers.hear(&fact);
-      if fact.question() {
-        asked.insert(fact.about().to_owned());
-      }
-    }
-    entries += 1;
-    last = Some(entry);
-  })?;
-  let logged = agrees(path, entries, &asked, ends);
-  let last = last.as_ref().map(digest);
+  let Surveyed { maker, entries, last, makers, logged } = surveyed(path)?;
   // Each retelling writes under names of its own, so two readers that retell one record at once,
   // as two windows of a life whose log let go of its facts, never write over each other.
   let mine = WRITES.fetch_add(1, Ordering::Relaxed);
@@ -224,6 +206,46 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   })
 }
 
+/// What a first pass over a record knows before the reader tells its facts.
+struct Surveyed {
+  /// The engine that made the record, as the record names it.
+  maker: Option<String>,
+  /// The count of the entries of the record, and the sha256 of the last of them.
+  entries: usize,
+  last: Option<String>,
+  /// What the reader needs to know of all the facts before it tells the first of them.
+  makers: Makers,
+  /// Whether the log beside the record agrees with it.
+  logged: bool,
+}
+
+/// The first pass over the record at a path.
+fn surveyed(path: &Path) -> Result<Surveyed, Fault> {
+  let (mut maker, mut entries, mut last) = (None, 0, None);
+  let (mut asked, mut makers, mut ends) = (HashSet::new(), Makers::default(), 0);
+  // A checkpoint is no question and names no chain, so this pass reads only its place.
+  each_but_checkpoints(path, &mut |taken| {
+    entries += 1;
+    let Taken::Entry(entry) = taken else {
+      (ends, last) = (ends + 1, Some(taken));
+      return;
+    };
+    maker = maker.take().or_else(|| made(slice::from_ref(&entry)));
+    let fact = kept(&entry);
+    ends = sealed(ends, fact.as_ref());
+    if let Some(fact) = fact {
+      makers.hear(&fact);
+      if fact.question() {
+        asked.insert(fact.about().to_owned());
+      }
+    }
+    last = Some(Taken::Entry(entry));
+  })?;
+  let logged = agrees(path, entries, &asked, ends);
+  let last = last.and_then(Taken::entry).as_ref().map(digest);
+  Ok(Surveyed { maker, entries, last, makers, logged })
+}
+
 /// What the record at a path tells to a reader of the life that still writes it: a reader of a
 /// life that runs reads the log as far as the last checkpoint that its lines count, which no write
 /// of the life changes, so it waits for nothing and races with nothing.
@@ -245,15 +267,26 @@ pub fn retold_live(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let counted = counted(&log);
   let (mut entries, mut sealed) = (0, 0);
   let (mut asked, mut open) = (HashSet::new(), Vec::new());
-  each(path, &mut |entry| {
+  each_but_checkpoints(path, &mut |taken| {
     entries += 1;
-    let Some(fact) = kept(&entry).filter(|_| entries <= counted) else { return };
-    if fact.question() {
-      open.push(fact.about().to_owned());
+    if entries > counted {
+      return;
     }
-    if fact.kind() == CHECKPOINT {
-      sealed = entries;
-      asked.extend(open.drain(..));
+    match taken {
+      Taken::Fact(_) => {
+        sealed = entries;
+        asked.extend(open.drain(..));
+      }
+      Taken::Entry(entry) => {
+        let Some(fact) = kept(&entry) else { return };
+        if fact.question() {
+          open.push(fact.about().to_owned());
+        }
+        if fact.kind() == CHECKPOINT {
+          sealed = entries;
+          asked.extend(open.drain(..));
+        }
+      }
     }
   })?;
   let logged = sealed > 0 && agrees_so_far(path, sealed, &asked);
@@ -307,26 +340,70 @@ fn retell(
   named: &mut Named,
   file: &mut impl Write,
 ) -> Result<Option<io::Error>, Fault> {
-  let mut broken = None;
-  let mut out = |fact: Object| {
-    let fact = outward(fact.as_ref());
-    named.hear(&fact, true);
+  let sink = RefCell::new((file, named, None));
+  let write = |fact: &serde_json::Value| {
+    let (file, named, broken) = &mut *sink.borrow_mut();
+    named.hear(fact, true);
     if broken.is_none()
       && let Err(no) = writeln!(file, "{fact}")
     {
-      broken = Some(no);
+      *broken = Some(no);
     }
   };
+  let mut out = |fact: Object| write(&outward(fact.as_ref()));
   let mut life = Reader::new(makers.ended(), &mut out);
-  let mut n = 0;
-  each(path, &mut |entry| {
-    if let Some(fact) = kept(&entry) {
-      life.hear(fact);
+  let (mut n, mut unread) = (0, None);
+  each_but_checkpoints(path, &mut |taken| {
+    match taken {
+      Taken::Entry(entry) => kept(&entry).into_iter().for_each(|fact| life.hear(fact)),
+      // A checkpoint is told as it stands, which the reader hears nothing of. Its text goes to
+      // JSON once, in place of a value of the sandbox and its JSON again.
+      Taken::Fact(text) => {
+        life.flush();
+        let fact = serde_json::from_str(&text).map_err(|no| Fault::refused(no.to_string()));
+        match fact.and_then(unmarked) {
+          Ok(fact) => write(&fact),
+          Err(no) => _ = unread.get_or_insert(no),
+        }
+      }
     }
     n += 1;
     life.kept(n);
   })?;
-  Ok(broken)
+  if let Some(no) = unread {
+    return Err(Fault::refused(format!(
+      "{} holds a checkpoint that cannot be read: {no}",
+      path.display()
+    )));
+  }
+  Ok(sink.into_inner().2)
+}
+
+/// The JSON of a value that a record kept, as [`outward`] gives the value that [`plain`] reads
+/// from it: a tuple and a float lose the mark that the record keeps them under, as `plain` reads
+/// it, and each other map that names its type under `is`, as a fault or a text, goes through
+/// `plain` and `outward` as they stand.
+fn unmarked(value: serde_json::Value) -> Result<serde_json::Value, Fault> {
+  use serde_json::Value;
+  Ok(match value {
+    Value::Array(held) => Value::Array(held.into_iter().map(unmarked).collect::<Result<_, _>>()?),
+    Value::Object(mut pairs) if pairs.contains_key(IS) => {
+      let is = pairs.get(IS).and_then(Value::as_str).unwrap_or_default().to_owned();
+      let first =
+        pairs.get_mut("args").and_then(Value::as_array_mut).and_then(|args| args.first_mut());
+      let number = first.as_deref().and_then(Value::as_str).and_then(|one| one.trim().parse().ok());
+      match (is.as_str(), first, number) {
+        ("tuple", Some(held @ Value::Array(_)), _) => unmarked(held.take())?,
+        ("float", _, Some(number)) => outward(Object::float(number).as_ref()),
+        _ => outward(plain(parsed(&Value::Object(pairs).to_string())?.as_ref()).as_ref()),
+      }
+    }
+    Value::Object(pairs) => {
+      let pairs = pairs.into_iter().map(|(key, one)| Ok((key, unmarked(one)?)));
+      Value::Object(pairs.collect::<Result<_, Fault>>()?)
+    }
+    plain => plain,
+  })
 }
 
 /// What the build that writes a file of what a record tells names in it: a reader of another build writes it again.

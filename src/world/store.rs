@@ -240,11 +240,42 @@ pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
   Ok(Format::of(path).kept(path)?.into_iter().map(streamed).collect())
 }
 
-/// Each entry that the store kept at a path, in order, read with no lease and changed in nothing, one at a time, so
-/// a reader holds no more of a large record than it keeps of each entry.
-pub(crate) fn each(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+/// Each entry that the store kept at a path, in order, read with no lease and changed in nothing,
+/// one at a time, so a reader holds no more of a large record than it keeps of each entry. A
+/// checkpoint of a file of lines comes as the text of the JSON of its fact, as the record holds it,
+/// with no parse: a checkpoint holds most of the bytes of a large record, and a reader that only
+/// passes it on makes no value of it. A database gives each entry as a value.
+pub(crate) fn each_but_checkpoints(
+  path: impl AsRef<Path>,
+  take: &mut dyn FnMut(Taken),
+) -> Result<(), Fault> {
   let path = path.as_ref();
-  Ok(Format::of(path).each(path, take)?)
+  match Format::of(path) {
+    Format::Lines => {
+      let head = format!("[[\"{}\",", checkpoint::CHECKPOINT);
+      lines::each_but(path, head.as_bytes(), take)?;
+    }
+    Format::Sqlite => sqlite::each(path, &mut |entry| take(Taken::Entry(entry)))?,
+  }
+  Ok(())
+}
+
+/// An entry of a record as a read gives it: the value of the entry, or the text of the JSON of its
+/// fact, as the record holds it.
+pub(crate) enum Taken {
+  Entry(Object),
+  Fact(String),
+}
+
+impl Taken {
+  /// The value of the entry, which a fact given as its text is parsed into, as a read of the
+  /// record parses it.
+  pub(crate) fn entry(self) -> Option<Object> {
+    match self {
+      Self::Entry(entry) => Some(entry),
+      Self::Fact(text) => serde_json::from_str::<&RawValue>(&text).ok().and_then(entry_of),
+    }
+  }
 }
 
 /// The place of each checkpoint of the record at a path among its entries, counted from 0, in
