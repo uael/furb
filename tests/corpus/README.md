@@ -4,8 +4,9 @@ Each folder here holds records. A build made them on a model that answers from a
 
 - `next` holds the records of the coming release.
 - Each release has its own folder, named by its version, as `1.0.0`.
-- `cut` holds the records of `next` as the stable cut made them (commit `26d11be15`). From the cut on, each record
-  opens on each later build of the major with no drift, and no file of `cut` changes.
+- `record-<major>` holds the records of the point of the promise of that major of the schema of the record, as
+  `next` held them there: `record-2` holds those of the stable cut (commit `26d11be15`). From its point on, each record
+  of the major opens on each later build with no drift, and no file of the folder changes.
 
 The test `make_the_corpus` in `tests/suite/promise.rs` makes the records of `next`. Each record has a checkpoint and a tail:
 
@@ -41,7 +42,7 @@ as an operator does.
 - The corpus only grows. `.github/workflows/release.yml` opens the pull request of a release. It copies `next` into the
   folder of the version of that release.
 - After the tag of that version exists, no file of that folder changes. `script/hooks/corpus.py` refuses such a change,
-  in the hooks and in `corpus.yml`, and each change of a file of `cut` once it stands.
+  in the hooks and in `corpus.yml`, and each change of a file of a folder `record-<major>` once it stands.
 - `docs/promise.md` says what the corpus promises and which test proves each part. The test
   `test_each_record_of_next_opens_on_the_last_release_of_its_major_once_that_release_holds_a_corpus` in
   `test/outside/test_promise_rollback.py` installs the program furb of the last release of the major of the build that
