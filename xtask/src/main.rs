@@ -686,34 +686,31 @@ impl Script {
   }
 }
 
-/// Each script of `script/` and `script/bench/` that runs on its own: each shell script, and each
-/// python script that calls its main, since the others are libraries that the scripts import.
+/// Each script of `script/` that runs on its own: each shell script, and each python script that
+/// calls its main, since the others are libraries that the scripts import.
 fn scripts(root: &Path) -> Result<Vec<Script>, Fault> {
   let mut scripts = Vec::new();
-  for (folder, prefix) in [("script", ""), ("script/bench", "bench-")] {
-    let read = |path: &Path| {
-      fs::read_to_string(path).map_err(|source| Fault::Read { path: path.to_owned(), source })
-    };
-    let entries = fs::read_dir(root.join(folder))
-      .map_err(|source| Fault::Read { path: root.join(folder), source })?;
-    for entry in entries {
-      let path = entry.map_err(|source| Fault::Read { path: root.join(folder), source })?.path();
-      let (Some(stem), Some(suffix)) = (path.file_stem(), path.extension()) else { continue };
-      let python = suffix == "py";
-      if !python && suffix != "sh" {
-        continue;
-      }
-      let source = read(&path)?;
-      if python && !source.contains("__main__") && !source.contains("sys.exit(main())") {
-        continue;
-      }
-      scripts.push(Script {
-        name: format!("{prefix}{}", stem.to_string_lossy().replace('_', "-")),
-        about: about(&source),
-        furb: python && source.lines().any(|line| imports_furb(line.trim_start())),
-        path: path.strip_prefix(root).unwrap_or(&path).to_owned(),
-      });
+  let folder = root.join("script");
+  let entries =
+    fs::read_dir(&folder).map_err(|source| Fault::Read { path: folder.clone(), source })?;
+  for entry in entries {
+    let path = entry.map_err(|source| Fault::Read { path: folder.clone(), source })?.path();
+    let (Some(stem), Some(suffix)) = (path.file_stem(), path.extension()) else { continue };
+    let python = suffix == "py";
+    if !python && suffix != "sh" {
+      continue;
     }
+    let source =
+      fs::read_to_string(&path).map_err(|source| Fault::Read { path: path.clone(), source })?;
+    if python && !source.contains("__main__") && !source.contains("sys.exit(main())") {
+      continue;
+    }
+    scripts.push(Script {
+      name: stem.to_string_lossy().replace('_', "-"),
+      about: about(&source),
+      furb: python && source.lines().any(|line| imports_furb(line.trim_start())),
+      path: path.strip_prefix(root).unwrap_or(&path).to_owned(),
+    });
   }
   scripts.sort_by(|one, other| one.name.cmp(&other.name));
   Ok(scripts)

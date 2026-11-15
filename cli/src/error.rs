@@ -23,6 +23,12 @@ pub(crate) enum CliError {
   /// The update of the catalog ended with no status.
   #[error("the update of the catalog did not end: {0}")]
   Updating(#[source] JoinError),
+  /// A file that the audit reads or writes, the record or its report, cannot be read or written.
+  #[error("{} cannot be read or written: {source}", path.display())]
+  Kept { path: PathBuf, source: io::Error },
+  /// The audit found things that do not agree with the record, which its report names.
+  #[error("the audit found {0} thing(s) that do not agree with the record")]
+  Disagrees(usize),
   /// The record that `facts` reads is no file.
   #[error("No record at {}.", .0.display())]
   NoRecord(PathBuf),

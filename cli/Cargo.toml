@@ -15,6 +15,8 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+# The audit of a record: the sha256 of its bytes, of each answer and of each word.
+sha2 = "0.10"
 # The engine, the ears of the World and the provider of models, at the version of this program.
 furb = { path = "..", version = "0.4.2" }
 # The daemon of the machine, which `furb host` serves.

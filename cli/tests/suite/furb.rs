@@ -28,6 +28,7 @@ use std::{
 
 use furb::world::engine;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 /// The fake claude of the tests of the crate, which answers the Nth turn with the word of the file
 /// word.N beside it.
@@ -189,6 +190,11 @@ fn ran(mut command: Command, input: &str) -> Output {
   stdin.write_all(input.as_bytes()).expect("furb reads its input");
   drop(stdin);
   child.wait_with_output().expect("furb ends")
+}
+
+/// The sha256 of some bytes, as hex, as the maker of a record gives it to its audit.
+fn sha256(bytes: &[u8]) -> String {
+  Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect::<Vec<_>>().concat()
 }
 
 /// What a command printed on stdout, once it ended well.
@@ -802,4 +808,62 @@ fn the_turns_of_a_record_that_a_life_kept_end_with_its_own_last_turn_whatever_mo
   );
   assert_eq!(turns(&["--model", "claude-cli:haiku"]), said, "an inspection stands as its record");
   assert_eq!(fs::read(yard.record()).expect("the record"), before, "an inspection keeps nothing");
+}
+
+#[test]
+fn an_audit_of_a_record_agrees_with_its_hash_and_names_a_hash_that_its_bytes_do_not_have() {
+  let yard = Yard::new("audit");
+  yard.words(&[COUNT]);
+  assert_eq!(printed(yard.kept(&["prompt", "count the lines", "--shape", "int"]), ""), "3\n");
+  let record = yard.record();
+  let held = fs::read(&record).expect("the record");
+  let sha = sha256(&held);
+  let mut audit = yard.furb(&["audit"]);
+  audit.arg(&record).arg(&sha);
+  let report: Value = serde_json::from_str(&printed(audit, "")).expect("a report of JSON");
+  assert_eq!((report["agrees"].clone(), report["wrong"].clone()), (json!(true), json!([])));
+  let answers = report["answers"].as_array().expect("the answers");
+  assert!(
+    !answers.is_empty() && answers.iter().all(|one| one["record"] == one["replay"]),
+    "{answers:?}"
+  );
+  let words = report["words"].as_array().expect("the words");
+  assert!(!words.is_empty() && words.iter().all(|one| one["record"] == one["run"]), "{words:?}");
+  assert_eq!(fs::read(&record).expect("the record"), held, "the audit leaves the record as it was");
+  let mut wrong = yard.furb(&["audit"]);
+  wrong.arg(&record).arg("0".repeat(64));
+  let said = ran(wrong, "");
+  assert_eq!(said.status.code(), Some(1));
+  let report: Value = serde_json::from_slice(&said.stdout).expect("a report of JSON");
+  assert_eq!(
+    report["wrong"],
+    json!([format!("the record hashes as {sha}, not as {}", "0".repeat(64))])
+  );
+}
+
+#[test]
+fn an_audit_proves_each_checkpoint_of_a_record_and_names_an_act_that_a_changed_word_makes_again_otherwise()
+ {
+  let yard = Yard::new("audit-corpus");
+  let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/corpus/next/work.jsonl");
+  let held = fs::read_to_string(&corpus).expect("the record of the corpus");
+  let audit = |text: &str| {
+    let copy = yard.record();
+    fs::write(&copy, text).expect("the copy");
+    let mut audit = yard.furb(&["audit"]);
+    audit.arg(&copy).arg(sha256(text.as_bytes()));
+    serde_json::from_slice::<Value>(&ran(audit, "").stdout).expect("a report of JSON")
+  };
+  let report = audit(&held);
+  assert_eq!((report["agrees"].clone(), report["checkpoints"].clone()), (json!(true), json!(1)));
+  let last = held.lines().rfind(|line| line.contains(r#"["done","reply"#)).expect("an answer");
+  let changed = held.replacen(last, &last.replacen("close(", "close(0 or ", 1), 1);
+  let report = audit(&changed);
+  assert_eq!(report["agrees"], json!(false));
+  assert!(
+    report["wrong"].as_array().is_some_and(|wrong| wrong
+      .iter()
+      .any(|one| { one.as_str().is_some_and(|one| one.starts_with("the life did not make run")) })),
+    "{report}"
+  );
 }

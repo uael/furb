@@ -10,6 +10,7 @@
 //! them, and on the provider of the model of its default actor and of the models that `--roster`
 //! names, or of every model that the catalog of the crate offers when `--roster` names none.
 
+mod audit;
 mod console;
 mod error;
 mod host;
@@ -185,6 +186,19 @@ enum Command {
     #[command(subcommand)]
     then: Option<Hosting>,
   },
+  /// Audit a record that its maker gives with its sha256: check its hash, make its life again in a
+  /// life that only inspects a copy, with no model and no network, and check that each act, each
+  /// answer and each word agrees with the record. It prints its report as JSON and fails when one
+  /// thing does not agree, as docs/audit.md says.
+  Audit {
+    /// The record, a file of lines that the store of furb kept.
+    record: PathBuf,
+    /// The sha256 of the record, as hex, as its maker gives it.
+    sha256: String,
+    /// Where to write the report too.
+    #[arg(long)]
+    report: Option<PathBuf>,
+  },
   /// Print each skill that a life on the record runs: those it enables, then those that the
   /// configs of the user
   /// and of the directory turn on, each with its life word.
@@ -290,6 +304,11 @@ async fn command(furb: Furb) -> Result<(), CliError> {
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word).await,
     Some(Command::Skills { place }) => skills(place.opening(false)).await,
     Some(Command::Catalog { update }) => catalog(update).await,
+    // The life of the audit boots, which blocks the thread while it is born again at each
+    // checkpoint.
+    Some(Command::Audit { record, sha256, report }) => {
+      task::block_in_place(|| audit::audited(&record, &sha256, report.as_deref()))
+    }
     Some(Command::Host { grace, then }) => {
       host::serve(Duration::from_secs_f64(grace), matches!(then, Some(Hosting::Upgrade))).await
     }

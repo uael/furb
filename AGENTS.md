@@ -483,9 +483,10 @@ fix what your change broke, and report what was broken before.
   at random points and opens it again on its record. `baseline <task>` puts the task to the claude command line, the
   baseline of a bench. A later life on the record of a run is `turns <task>`, a life that only inspects its record:
   it asks no model, and its ears that do work are silent.
-- `python script/bench/audit.py <record> <sha256>`: the audit of a record. It checks the sha256 of the record, replays
-  it in a life that only inspects it, with no model and no network, and checks that each word and each answer hashes
-  as the record says. It imports furb alone, so an outsider runs it on `pip install furb`, as `docs/audit.md` says.
+- `furb audit <record> <sha256> [--report <path>]`: the audit of a record. It checks the sha256 of the record, replays
+  it in a life that only inspects it, with no model and no network, and checks that each act, each word and each
+  answer hashes as the record says. It is a command of furb, so an outsider runs it on `pip install furb`, as
+  `docs/audit.md` says.
 - `cargo xtask opens <furb> <out.tsv> [before.tsv] [--list FILE] [--bound SECONDS]`: open a copy of each record of `tests/corpus` and `tests/replay`,
   or of each path of the file that `--list` names, with `furb turns` of the given build, with no model and no
   network, one record at a time, and write one line for each to `out.tsv`. Given the table of a run before, it fails

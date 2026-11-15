@@ -198,7 +198,7 @@ impl Reader<'_> {
 
 /// A value of the sandbox, as the record holds it: a whole float and a tuple keep their marks, so a later life reads
 /// a float and a tuple.
-pub(crate) fn record(value: ObjectRef<'_>) -> Value {
+pub fn record(value: ObjectRef<'_>) -> Value {
   outward_at(value, 0, Form::Record)
 }
 
