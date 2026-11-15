@@ -36,12 +36,14 @@ const command = [
   ...(release ? ["--release"] : []),
   // The engine comes from one invocation of cargo over the workspace, which the build of the gates and the tests of
   // the crate select too: a selection of the crate alone resolves other features of the dependencies, and the tests
-  // then build most crates again, 11 minutes on Windows. The window stays out: no part of this package reads it, and
-  // its build needs Zig or the native library of OpenTUI, which only a build of the window has.
+  // then build most crates again, 11 minutes on Windows. The window and its frames stay out: no part of this package
+  // reads them, and the build of the window needs Zig or the native library of OpenTUI, which only it has.
   "--",
   "--workspace",
   "--exclude",
   "furb-window",
+  "--exclude",
+  "furb-frames",
 ];
 const child = Bun.spawn(command, { cwd: root, stdout: "inherit", stderr: "inherit" });
 if (await child.exited) process.exit(1);
