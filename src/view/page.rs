@@ -98,8 +98,9 @@ pub struct Line {
 
 /// How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
 /// millisecond of the epoch at which the host saw it begin, so a time of a second shows after a
-/// whole second; it asks the operator; its model is asked again after a call that failed; or it
-/// failed, with the reason that a person reads.
+/// whole second; it asks the operator; its model is asked again after a call that failed; it
+/// failed, with the reason that a person reads; or a stop ended it, at the millisecond of the epoch
+/// at which the host saw the stop, which a host that opened the life after it does not know.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "is", rename_all = "snake_case")]
 pub enum Mark {
@@ -108,6 +109,7 @@ pub enum Mark {
   Asks,
   Retries(Retrying),
   Failed { why: String },
+  Stopped { at: Option<u64> },
 }
 
 /// A call of a model that failed for a cause that passes, so its provider asks the model again:
@@ -206,8 +208,8 @@ impl Answered {
 
 /// What a host heard of a life beside its facts, which a page reads: what each model wrote and
 /// thought for a rung and the retry of its call that waits, the millisecond of the epoch at which
-/// each act that lives began, and at which each prompt began and ended, so an agent that ended
-/// says how long it took. The record holds none of it: the turn
+/// each act that lives began, at which each prompt began and ended, so an agent that ended says
+/// how long it took, and at which a stop ended each rung that it ended. The record holds none of it: the turn
 /// of a reply keeps its thought sealed, and a fact tells no time, so a host keeps it in the image
 /// of the life, once [`Held::shown`] let go of each thought that no page shows.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -266,6 +268,9 @@ impl Streamed {
       if self.began.contains_key(&act.id) {
         self.ended.entry(act.id.clone()).or_insert(now);
       }
+    } else if act.kind == Kind::Rung && act.cancelled() {
+      self.began.remove(&act.id);
+      self.ended.entry(act.id.clone()).or_insert(now);
     } else if act.done() && act.run != Some(RunState::Running) {
       self.began.remove(&act.id);
     } else {
@@ -508,7 +513,10 @@ impl<'a> Reader<'a> {
       .map(|(at, text)| Line { number: before + at + 1, text, mark: Mark::Ran })
       .collect();
     let at_line = |source: usize| lines.iter().rposition(|line| line.number <= before + source + 1);
-    let Some(run @ (RunState::Failed(_) | RunState::Running)) = &rung.run else { return lines };
+    let Some(run @ (RunState::Failed(_) | RunState::Cancelled(_) | RunState::Running)) = &rung.run
+    else {
+      return lines;
+    };
     let made: Vec<&Act> = self.held.made_by(&rung.id).filter(|act| waits(act)).collect();
     let places = placed(word, &made);
     if let RunState::Failed(why) = run {
@@ -524,6 +532,12 @@ impl<'a> Reader<'a> {
         .unwrap_or_else(|| word.split('\n').count());
       if let Some(at) = at_line(source).or(lines.len().checked_sub(1)) {
         lines[at].mark = Mark::Failed { why: why.clone() };
+      }
+    } else if let RunState::Cancelled(_) = run {
+      // The stop ended the word on the line of the act that it cut, or else on its last line.
+      let cut = made.iter().rposition(|act| act.cancelled()).and_then(|at| places[at]);
+      if let Some(at) = cut.and_then(at_line).or(lines.len().checked_sub(1)) {
+        lines[at].mark = Mark::Stopped { at: self.streams.ended.get(&rung.id).copied() };
       }
     } else {
       let open = made.iter().rposition(|act| !act.done());
@@ -550,18 +564,23 @@ impl<'a> Reader<'a> {
   }
 
   /// The lines that the model of a rung with no word wrote so far: those that came ran, and the
-  /// line that comes runs, waits for the retry of its call, or failed with the last reply of the
-  /// rung.
+  /// line that comes runs from the moment its model is asked, waits for the retry of its call,
+  /// failed with the last reply of the rung, or a stop ended it.
   fn writing(self, rung: &Act, before: usize) -> Vec<Line> {
-    let replies = self.held.made_by(&rung.id).filter(|act| act.kind == Kind::Reply);
-    let failed = replies.last().filter(|reply| reply.failed()).and_then(|reply| {
-      let (_, args) = fault(reply.value()?)?;
+    let reply = self.held.made_by(&rung.id).filter(|act| act.kind == Kind::Reply).last();
+    let failed = reply.filter(|one| one.failed()).and_then(|one| {
+      let (_, args) = fault(one.value()?)?;
       Some(Mark::Failed { why: text(args.first()) })
     });
+    let at = self.streams.ended.get(&rung.id).copied();
+    let stopped = rung.cancelled().then_some(Mark::Stopped { at });
     let streamed = self.streams.wrote.get(&rung.id);
-    let mark = failed.or_else(|| streamed?.retry.clone().map(Mark::Retries));
-    let (text, began) = streamed.map_or(("", 0), |one| (one.text.as_str(), one.began));
-    if text.is_empty() && mark.is_none() {
+    let mark = failed.or(stopped).or_else(|| streamed?.retry.clone().map(Mark::Retries));
+    // The model of a reply that runs is asked: its line comes from then, before its first part.
+    let asked = reply.filter(|one| !one.done()).and_then(|one| self.streams.began.get(&one.id));
+    let (text, began) =
+      streamed.map_or(("", asked.copied()), |one| (one.text.as_str(), Some(one.began)));
+    if text.is_empty() && mark.is_none() && began.is_none() {
       return Vec::new();
     }
     let came = writing(text, "");
@@ -569,7 +588,7 @@ impl<'a> Reader<'a> {
     let mut lines: Vec<Line> = ran
       .map(|(text, at)| Line { number: before + at, text: text.to_owned(), mark: Mark::Ran })
       .collect();
-    let mark = mark.unwrap_or(Mark::Runs { work: Work::Writes, began: Some(began) });
+    let mark = mark.unwrap_or(Mark::Runs { work: Work::Writes, began });
     lines.push(Line { number: before + came.count + 1, text: came.tail, mark });
     lines
   }

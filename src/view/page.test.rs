@@ -528,3 +528,43 @@ fn a_page_gives_the_context_of_its_chain_at_its_last_answer_with_the_window_of_i
   let read = Read { tokens: 124_000, cached: 98_000, written: 8_400 };
   assert_eq!(page.context, Some(Context { read, window: Some(200_000), dollars: 0.75 }));
 }
+
+#[test]
+fn the_line_that_comes_runs_from_the_ask_of_its_model_and_a_stop_marks_it_stopped() {
+  let mut facts = thread();
+  facts.push(json!(["rung", "rung3", "prompt3", "chain1", "", "", "claude-cli:opus/high"]));
+  facts.push(json!(["reply", "reply1", "rung3", "chain1", "claude-cli:opus/high"]));
+  let runs = Mark::Runs { work: Work::Writes, began: Some(100_000) };
+  assert_eq!(last(&facts), Some((6, String::new(), runs)));
+  let stop = json!({"is": "CancelledError", "args": ["stopped by the operator"]});
+  facts.push(json!(["done", "reply1", "chain1", stop]));
+  facts.push(json!(["done", "rung3", "chain1", stop]));
+  assert_eq!(last(&facts), Some((6, String::new(), Mark::Stopped { at: Some(100_000) })));
+}
+
+#[test]
+fn a_stop_marks_the_line_of_the_command_that_it_cut() {
+  let mut facts = thread();
+  let stop = json!({"is": "CancelledError", "args": ["stopped by the operator"]});
+  for act in ["bash1", "run2", "rung2"] {
+    facts.push(json!(["done", act, "chain1", stop]));
+  }
+  let mut streams = Streamed::default();
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let stopped = Mark::Stopped { at: Some(100_000) };
+  assert_eq!(
+    texts(block),
+    [(3, "a = 2", &Mark::Ran), (4, "b = await bash('ls')", &stopped), (5, "c = 3", &Mark::Ran)]
+  );
+}
+
+/// The last line of the last block of the thread of these facts: its number, its text and its mark.
+fn last(facts: &[Value]) -> Option<(usize, String, Mark)> {
+  let mut streams = Streamed::default();
+  let held = held(facts.to_vec(), &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.clone()?;
+  block.lines.last().map(|one| (one.number, one.text.clone(), one.mark.clone()))
+}

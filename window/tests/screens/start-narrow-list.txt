@@ -5,7 +5,7 @@
 ┃                                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                                           ▐ Debug stuck TUI after…   ✗ Failed ▌
        opus/high                          ▐ FU furb                      opus ▌
-                                          ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    ■                         stopped     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
                                            Working 2
 
                                             run the…      Working as of 09:12

@@ -825,8 +825,9 @@ export type RunState =
 /**
  * How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
  * millisecond of the epoch at which the host saw it begin, so a time of a second shows after a
- * whole second; it asks the operator; its model is asked again after a call that failed; or it
- * failed, with the reason that a person reads.
+ * whole second; it asks the operator; its model is asked again after a call that failed; it
+ * failed, with the reason that a person reads; or a stop ended it, at the millisecond of the epoch
+ * at which the host saw the stop, which a host that opened the life after it does not know.
  */
 export type Mark =
   | {
@@ -846,6 +847,10 @@ export type Mark =
   | {
       why: string;
       is: "failed";
+    }
+  | {
+      at?: number | null;
+      is: "stopped";
     };
 /**
  * What a line that runs waits for: its model that writes it, a command or a wait, or an agent.
@@ -1501,4 +1506,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 30;
+export const PROTOCOL = 31;

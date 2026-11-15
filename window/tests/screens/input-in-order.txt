@@ -4,7 +4,8 @@
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
                                                               ▐ one (the model works…   ⠋ Working ▌
        opus/high                                              ▐ FT furb-try                  opus ▌
-    …                                                         ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    ⠋                                                         ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    …
 
 ┃
 ┃ two (the model works on it)
@@ -13,7 +14,6 @@
 ┃
 ┃ three (the model works on it)
 ┃
-
 
 
 

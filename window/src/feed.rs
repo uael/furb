@@ -247,14 +247,20 @@ impl Feed<'_> {
 
   /// One line of a block: its number in a gutter of a count of columns, or the mark of how it
   /// stands in its place, and its code, cut to the box. The line that runs is lit, with its loader
-  /// and its time after one second, and the line whose model is asked again says the attempt that
-  /// comes and its wait. Why a line failed, or why its model is asked again, stands under it, or
+  /// and its time after one second, a line that a stop ended says when, and the line whose model
+  /// is asked again says the attempt that comes and its wait. Why a line failed, or why its model is asked again, stands under it, or
   /// in its place when its model wrote none of it.
   fn code(&self, line: &Code, colors: Line, numbers: Gutter) -> Vec<Row> {
     let t = &self.model.tokens;
     let (gutter, inner) = (numbers.width, numbers.inside(self.inner()));
-    let since = match line.mark {
-      Mark::Runs { began: Some(began), .. } => self.model.since(began),
+    // What stands at the right of the line: the time of its work, or how long ago a stop ended it,
+    // from one minute on, as the age of a card.
+    let right = match line.mark {
+      Mark::Runs { began: Some(began), .. } => self.model.since(began).map(timer),
+      Mark::Stopped { at } => {
+        let age = at.and_then(|at| self.model.age(at / 1000));
+        Some(age.map_or_else(|| "stopped".to_owned(), |age| format!("stopped {age} ago")))
+      }
       _ => None,
     };
     let (number, color, loader) = match &line.mark {
@@ -262,6 +268,7 @@ impl Feed<'_> {
       Mark::Retries(_) => (" ".to_owned(), t.accent, Some(Loader::Model)),
       Mark::Asks => ("◆".to_owned(), t.attention, None),
       Mark::Failed { .. } => ("✗".to_owned(), t.danger, None),
+      Mark::Stopped { .. } => ("■".to_owned(), t.muted, None),
       Mark::Ran => (line.number.to_string(), t.muted, None),
     };
     let room = inner.saturating_sub(gutter + 2);
@@ -278,8 +285,7 @@ impl Feed<'_> {
       _ => colors,
     };
     let ground = if loader.is_some() { t.lifted } else { t.raised };
-    let timer =
-      since.map(|since| vec![run(timer(since), self.style(Role::Muted))]).unwrap_or_default();
+    let timer = right.map(|right| vec![run(right, self.style(Role::Muted))]).unwrap_or_default();
     let room = room.saturating_sub(width(&timer) + 2 * usize::from(!timer.is_empty()));
     let mut text = vec![run(format!("{number:>gutter$}  "), Style::new().fg(color))];
     text.extend(clipped(colors, room, self.style(Role::Muted)));
@@ -422,7 +428,8 @@ impl Feed<'_> {
     let open = Click::Agent(card.prompt.clone());
     let mut rows =
       vec![Row { loader: mark.map(|one| (x, one)), ..Row::clicked(line, open.clone()) }];
-    if let Some(stands) = agent.line.as_ref().filter(|_| !rest) {
+    // The line that its model has not begun to write says nothing that its state does not say.
+    if let Some(stands) = agent.line.as_ref().filter(|one| !rest && !one.text.is_empty()) {
       let text = vec![run(self.model.homed(&stands.text), muted)];
       let room = self.wide.saturating_sub(8);
       let mut line = vec![run("    ", Style::new())];

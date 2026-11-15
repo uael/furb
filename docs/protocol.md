@@ -312,8 +312,10 @@ daemon answers requests in any order.
     a string of many lines as one line with its escapes, and its `mark`: `ran`; `runs` with the `work` that it waits
     for, `writes` while its model writes it, `command` or `agent`, and `began`, the millisecond of the epoch at which
     the daemon saw that work begin; `asks`; `retries`, the line that its model writes while its provider waits to ask it
-    again, with the `attempt`, the `most`, the `wait`, the `at` and the `why` of the retry; or `failed` with `why`,
-    which the line that its model writes takes when the call of its model failed and no attempt is left;
+    again, with the `attempt`, the `most`, the `wait`, the `at` and the `why` of the retry; `failed` with `why`, which
+    the line that its model writes takes when the call of its model failed and no attempt is left; or `stopped` with
+    `at`, the millisecond of the epoch at which the daemon saw the stop, null when it opened the life after it. The line
+    that a model writes runs from the moment its model is asked, before its first part;
   - `agents`, each thread that a word of the thread started on another chain, in the order the thread made them, as
     a card without its life, with `began`, the millisecond of the epoch at which the daemon saw it begin, `took`, the
     seconds that it took once it ended, and `line`, the line of its last word where it stands: the line that runs or

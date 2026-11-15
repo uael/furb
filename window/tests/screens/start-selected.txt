@@ -5,7 +5,7 @@
 ┃                                                              Working 2
 
        opus/high                                                run the…      Working as of 09:12
-                                                                FC furb-cloud@studio       opus ◌
+    ■                                             stopped       FC furb-cloud@studio       opus ◌
 
                                                                 which key sends…    ⠋ Working 11h
                                                                 PH photowroom              opus ◌
