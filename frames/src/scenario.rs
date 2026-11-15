@@ -3,6 +3,8 @@
 //! walk: the words that its scripted model answers, turn by turn, and its steps. Another stands at
 //! a size on the steps of other scenarios. A scenario that the window has not names its gap.
 
+use std::time::Duration;
+
 use crate::capture::READY;
 
 /// A size of the terminal of a capture.
@@ -18,21 +20,34 @@ impl Size {
   }
 }
 
-/// The walk of the image of the README that moves: the window at work on a fan out of three
-/// prompts over a project, the light over each word of work, until the thread closes with what each
-/// found. `furb-frames hero` walks it.
+/// The walk of the image of the README that moves: the window at work on three prompts at once,
+/// as the README writes them, the light over each word of work, until the thread closes with what
+/// each found, beside the sessions of the project that rest. Each model takes the seconds of a real
+/// one. `furb-frames hero` walks it.
 pub(crate) const HERO: Walk = Walk {
-  sessions: &[],
+  sessions: &[
+    "Add a count to each item.",
+    "Write the report of the totals.",
+    "Find why the JSON backend is slow.",
+    "Name the stages of a release.",
+  ],
   words: &[
-    "tests = prompt(str, 'Run the tests of the storage', on=chain('tests'))\nawait wait(1, tests)\nreview = prompt(str, 'Review the JSON backend for bugs', on=chain('review'))\nawait wait(1, review)\ndocs = prompt(str, 'Check that the README names each backend', on=chain('docs'))\nfound = [await tests, await review, await docs]\nclose(f'Tests: {found[0]}\\nReview: {found[1]}\\nDocs: {found[2]}')",
-    "files = await bash('git ls-files src/inventory/storage')\nclose(f'{len(files.stdout.content.split())} modules of the storage, and no test yet.')",
-    "log = await bash('git log --oneline -- src/inventory/storage')\nsource = read('src/inventory/storage/backends/json_backend.py')\nclose('the JSON backend writes with no lock, so two writers can lose an item.')",
-    "readme = read('README.md')\nclose('the README names no backend yet.')",
+    "tests = prompt(str, 'Find the storage tests', on=chain('tests'))\nreview = prompt(str, 'Review the JSON backend', on=chain('review'))\ndocs = prompt(str, 'Check the README', on=chain('docs'))\nfound = [await tests, await review, await docs]\nclose('\\n'.join([f'- {one}' for one in found]))",
+    "test = read('tests/test_storage.py')\nclose('`test_save` asserts nothing, so it always passes.')",
+    "source = read('src/inventory/storage/backends/json_backend.py')\nclose('`save` opens its file and never closes it.')",
+    "readme = read('README.md')\nclose('The README names no backend.')",
+  ],
+  pace: &[
+    ("Find the storage tests", Duration::from_millis(4000)),
+    ("Review the JSON backend", Duration::from_millis(5500)),
+    ("Check the README", Duration::from_millis(7000)),
+    ("Check the storage before the release.", Duration::from_millis(2000)),
   ],
   steps: &[
     step("o", &[], "Ask for a change"),
     step("a", &[Act::Type("Check the storage before the release."), Act::Key("Enter")], "Working"),
-    step("c", &[], "Docs: the README"),
+    step("b", &[], "Check the README"),
+    step("c", &[], "names no backend"),
   ],
 };
 
@@ -45,6 +60,7 @@ pub(crate) const CARDS: Walk = Walk {
     "close('The boot reads the record once, then each tail.')",
     ASKS,
   ],
+  pace: &[],
   steps: &[
     step("a", &[Act::Type("Run the bench of the replay."), Act::Key("Enter")], "⎋ stop"),
     step(
@@ -104,11 +120,15 @@ pub(crate) struct Step {
 }
 
 /// A walk of the window: the first message of each session that stands before the window, the
-/// word of the model at each turn of the window, in order, and the steps.
+/// word of the model at each turn of the window, in order, the pace of the model, and the steps.
 #[derive(Debug)]
 pub(crate) struct Walk {
   pub(crate) sessions: &'static [&'static str],
   pub(crate) words: &'static [&'static str],
+  /// The time that the model takes to answer a turn that holds a text, as a real model takes
+  /// them; each other turn it answers at once. Turns that start together and wait for different
+  /// times take their words in the order of their times.
+  pub(crate) pace: &'static [(&'static str, Duration)],
   pub(crate) steps: &'static [Step],
 }
 
@@ -206,6 +226,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[],
+      pace: &[],
       steps: &[step("a", &[], READY), step("b", &[Act::Key("C-x"), Act::Key("?")], "each key")],
     }),
   },
@@ -221,6 +242,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         "List the tests of the checkpoint.",
       ],
       words: &[],
+      pace: &[],
       steps: &[
         step("a", &[Act::Key("C-o")], "6 sessions"),
         step("b", &[Act::Type("seed")], "Measure the seed"),
@@ -233,6 +255,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &["await bash('sleep 30')\nclose('slept')", ASKS],
+      pace: &[],
       steps: &[
         step("x-first", &[Act::Type("Run the bench."), Act::Key("Enter")], "⎋ stop"),
         step(
@@ -249,6 +272,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &LONG,
+      pace: &[],
       steps: &[
         step(
           "a",
@@ -314,6 +338,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[],
+      pace: &[],
       steps: &[
         step("a", &[], READY),
         step("b", &[Act::Type("Where does the time of the open go?")], "open go?"),
@@ -335,6 +360,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[],
+      pace: &[],
       steps: &[
         step("x-first", &[Act::Type("Read the boot of the host."), Act::Key("Enter")], "reply 1"),
         step(
@@ -358,6 +384,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[],
+      pace: &[],
       steps: &[
         step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
         step("a", &[Act::Type("/")], "Commands and skills"),
@@ -376,6 +403,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[],
+      pace: &[],
       steps: &[
         step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
         step("a", &[Act::Type("look at @")], "Files of demo"),
@@ -391,6 +419,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[],
+      pace: &[],
       steps: &[
         step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
         step(
@@ -409,6 +438,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[PROSE],
+      pace: &[],
       steps: &[step(
         "b",
         &[Act::Type("Where does the time of the open go?"), Act::Key("Enter")],
@@ -421,6 +451,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &["await bash('sleep 2')\nclose('The open spends its time in the seed.')"],
+      pace: &[],
       steps: &[
         step(
           "a",
@@ -439,6 +470,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         "out = await bash('for i in 1 2 3 4 5 6 7 8 9 10; do echo step $i of 10; sleep 1; done')\nclose(out.stdout.content)",
         "out = await bash('seq 1 300')\nclose(f'It printed {len(out.stdout.lines)} lines.')",
       ],
+      pace: &[],
       steps: &[
         step("a", &[Act::Type("Run the slow script."), Act::Key("Enter")], "⎋ stop"),
         // The last line that the command writes shows while it still runs, so the step waits
@@ -457,6 +489,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[CHANGES],
+      pace: &[],
       steps: &[
         step(
           "a",
@@ -479,6 +512,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         "await bash(\"sh -c 'for i in 1 2 3 4 5; do echo error line $i >&2; done; exit 2'\")",
         "close('The command failed with exit 2.')",
       ],
+      pace: &[],
       steps: &[
         step("a", &[Act::Type("Run the check."), Act::Key("Enter")], "failed with exit 2"),
         // The provider says it is overloaded, so the window says when it asks the model again.
@@ -503,6 +537,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[ASKS],
+      pace: &[],
       steps: &[
         step(
           "b",
@@ -518,6 +553,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &["await bash('sleep 20')\nclose('slept')", "await bash1\nclose('The bench ran.')"],
+      pace: &[],
       steps: &[
         step("a", &[Act::Type("Wait for the bench."), Act::Key("Enter")], "⎋ stop"),
         step("b", &[Act::Type("Stop after the boot."), Act::Key("Enter")], "Stop after the boot."),
@@ -537,6 +573,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         "report = await bash('sleep 30; echo the bench ran')\nclose(report.stdout.content)",
         "close('README.md has 3 lines.')",
       ],
+      pace: &[],
       steps: &[
         step(
           "b",
@@ -553,6 +590,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &["close('The trace holds the open of each chain, stage by stage.')"],
+      pace: &[],
       steps: &[
         step("b", &[Act::Type("Read the trace of the open."), Act::Key("Enter")], "3%"),
         // The share is the head of the box beside the list, or the ring of the launcher while the
@@ -571,6 +609,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[],
+      pace: &[],
       steps: &[
         step("a", &[Act::Key("C-x"), Act::Key("?")], "each key"),
         step("c", &[Act::Key("Escape"), Act::Key("C-p")], "Search a command"),
@@ -583,6 +622,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[],
+      pace: &[],
       steps: &[
         step("a", &[], "This computer"),
         step("b", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
@@ -605,6 +645,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     has: Has::Walk(Walk {
       sessions: &[],
       words: &[ASKS],
+      pace: &[],
       steps: &[
         step(
           "x-thread",

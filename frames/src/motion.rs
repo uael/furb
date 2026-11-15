@@ -12,7 +12,7 @@ use std::{
   time::Duration,
 };
 
-use gif::{Encoder, Repeat};
+use gif::{DisposalMethod, Encoder, Repeat};
 
 use crate::{
   cast::{Cast, What},
@@ -113,7 +113,7 @@ pub(crate) fn motion(cast: &Cast, span: Span, out: &Path) -> Result<String, Erro
       .map_err(|source| Error::Write { path: folder.to_owned(), source })?;
   }
   put(&path("sheet.png"), &raster::image(&sheet).0.png()?)?;
-  animated(&screens, span, &path("gif"), None)?;
+  animated(&screens, span, &path("gif"), false)?;
   put(&path("motion.txt"), measures.as_bytes())?;
   Ok(measures)
 }
@@ -402,14 +402,10 @@ fn label_row(label: &str, width: usize, ground: &impl Fn(&str, Rgb) -> Cell) -> 
 }
 
 /// The window at work over a span, as a README shows it: the GIF of each screen in the frame of a
-/// window on a ground that shows through. The words of a walk come at once, where a model takes
-/// seconds to write each, so the GIF plays [`PACE`] times slower, which stays faster than a model.
+/// window on a ground that shows through, at the speed of the walk.
 pub(crate) fn hero(cast: &Cast, span: Span, path: &Path) -> Result<(), Error> {
-  animated(&shown(cast, span)?.0, span, path, Some(PACE))
+  animated(&shown(cast, span)?.0, span, path, true)
 }
-
-/// How many times slower the GIF of a README plays than its walk ran.
-const PACE: u128 = 3;
 
 /// The screen at a moment of a recording in the frame of a window, as a PNG.
 pub(crate) fn still(cast: &Cast, at: Duration, path: &Path) -> Result<(), Error> {
@@ -418,16 +414,18 @@ pub(crate) fn still(cast: &Cast, at: Duration, path: &Path) -> Result<(), Error>
   put(path, &raster::image(&screens[0].frame).0.framed().png()?)
 }
 
-/// The GIF of the whole screen over the span, bare, or in the frame of a window at a pace: each
-/// screen for as long as it showed, and a screen that showed less than 5 ms left out, since a GIF
-/// counts its delays in hundredths of a second.
-fn animated(screens: &[Shown], span: Span, path: &Path, framed: Option<u128>) -> Result<(), Error> {
+/// The GIF of the whole screen over the span, bare or in the frame of a window: each screen for
+/// as long as it showed, and a screen that showed less than 5 ms left out, since a GIF counts its
+/// delays in hundredths of a second. Each frame after the first holds only the rectangle that
+/// changed, and a screen that changes nothing lengthens the frame before it: a light that passes
+/// over one word then costs that word, and not the whole screen.
+fn animated(screens: &[Shown], span: Span, path: &Path, framed: bool) -> Result<(), Error> {
   let wrote = |source| Error::Write { path: path.to_owned(), source };
   let file = File::create(path).map_err(wrote)?;
   // The pixels of a screen with an alpha after each color.
   let pixels = |frame: &Frame| {
     let image = raster::image(frame).0;
-    if framed.is_some() {
+    if framed {
       let Framed { width, height, pixels } = image.framed();
       return (width, height, pixels);
     }
@@ -439,19 +437,69 @@ fn animated(screens: &[Shown], span: Span, path: &Path, framed: Option<u128>) ->
   let size = |pixels: usize| u16::try_from(pixels).unwrap_or(u16::MAX);
   let mut encoder = Encoder::new(BufWriter::new(file), size(width), size(height), &[])?;
   encoder.set_repeat(Repeat::Infinite)?;
+  let mut before: Option<Vec<u8>> = None;
+  let mut held: Option<gif::Frame<'_>> = None;
   for (at, screen) in screens.iter().enumerate() {
     let next = screens.get(at + 1).map_or(span.until, |next| next.at);
-    let pace = framed.unwrap_or(1);
-    let hundredths = (next.saturating_sub(screen.at).as_millis() * pace + 5) / 10;
+    let hundredths = (next.saturating_sub(screen.at).as_millis() + 5) / 10;
+    let hundredths = u16::try_from(hundredths).unwrap_or(u16::MAX);
     if hundredths == 0 {
       continue;
     }
-    let (width, height, mut pixels) = pixels(&screen.frame);
-    let mut frame = gif::Frame::from_rgba_speed(size(width), size(height), &mut pixels, 10);
-    frame.delay = u16::try_from(hundredths).unwrap_or(u16::MAX);
+    let now = pixels(&screen.frame).2;
+    let whole = Changed { left: 0, top: 0, width, height };
+    let changed = before.as_deref().map_or(Some(whole), |before| changed(before, &now, width));
+    let Some(Changed { left, top, width: wide, height: high }) = changed else {
+      if let Some(frame) = held.as_mut() {
+        frame.delay = frame.delay.saturating_add(hundredths);
+      }
+      continue;
+    };
+    if let Some(frame) = held.take() {
+      encoder.write_frame(&frame)?;
+    }
+    let mut part: Vec<u8> = (top..top + high)
+      .flat_map(|row| {
+        now[(row * width + left) * 4..(row * width + left + wide) * 4].iter().copied()
+      })
+      .collect();
+    let mut frame = gif::Frame::from_rgba_speed(size(wide), size(high), &mut part, 10);
+    (frame.left, frame.top, frame.delay) = (size(left), size(top), hundredths);
+    frame.dispose = DisposalMethod::Keep;
+    held = Some(frame);
+    before = Some(now);
+  }
+  if let Some(frame) = held {
     encoder.write_frame(&frame)?;
   }
   Ok(())
+}
+
+/// The rectangle of pixels in which two images of one size differ.
+struct Changed {
+  left: usize,
+  top: usize,
+  width: usize,
+  height: usize,
+}
+
+/// The smallest rectangle that holds each pixel that differs between two images of four bytes a
+/// pixel, or none when they are the same.
+fn changed(before: &[u8], now: &[u8], width: usize) -> Option<Changed> {
+  let (mut left, mut top, mut right, mut bottom) = (usize::MAX, usize::MAX, 0, 0);
+  for (at, (one, two)) in before.chunks(4).zip(now.chunks(4)).enumerate() {
+    if one != two {
+      let (x, y) = (at % width, at / width);
+      (left, top) = (left.min(x), top.min(y));
+      (right, bottom) = (right.max(x), bottom.max(y));
+    }
+  }
+  (left != usize::MAX).then(|| Changed {
+    left,
+    top,
+    width: right + 1 - left,
+    height: bottom + 1 - top,
+  })
 }
 
 #[cfg(test)]

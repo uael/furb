@@ -6,6 +6,7 @@
 
 use std::{
   env,
+  fmt::Write as _,
   fs::{self, File},
   io::{self, Read, Write},
   path::{Path, PathBuf},
@@ -32,6 +33,23 @@ use crate::{
 /// The claude command line of the tests, which answers the Nth turn with the file `word.N`
 /// beside it.
 const CLAUDE: &str = include_str!("../../src/world/provider/claude/fake-claude.sh");
+
+/// The claude command line of a walk with a pace, which stands before the one of the tests, named
+/// `answers` beside it: a turn whose line holds a text of the file `pace` waits the seconds beside
+/// that text, then reaches `answers`, so the model of the walk takes the time of a real one.
+const PACED: &str = r#"#!/bin/sh
+here=$(dirname "$0")
+for arg in "$@"; do
+  if [ "$arg" = --help ]; then exec "$here/answers" "$@"; fi
+done
+if [ -n "${FURB_CLAUDE_DISCOVER-}" ]; then exec "$here/answers" "$@"; fi
+while IFS= read -r line; do
+  while IFS='	' read -r seconds text; do
+    case $line in *"$text"*) sleep "$seconds"; break ;; esac
+  done < "$here/pace"
+  printf '%s\n' "$line"
+done | "$here/answers" "$@"
+"#;
 
 /// The usage of each request of a capture: 31,840 tokens read, 24,600 of them from the cache.
 const USAGE: &str = r#"{"input_tokens":1340,"output_tokens":420,"cache_read_input_tokens":24600,"cache_creation_input_tokens":5900}"#;
@@ -163,7 +181,19 @@ impl Rig {
     write(root.join("config/config.json"), r#"{"skills": {"naming": false}}"#)?;
     let listed = serde_json::json!({ "workspaces": [{ "directory": rig.project() }] });
     write(root.join("config/workspaces.json"), &listed.to_string())?;
-    write(rig.claude(), CLAUDE)?;
+    if walk.pace.is_empty() {
+      write(rig.claude(), CLAUDE)?;
+    } else {
+      let answers = root.join("fake/answers");
+      write(answers.clone(), CLAUDE)?;
+      executable(&answers)?;
+      write(rig.claude(), PACED)?;
+      let mut pace = String::new();
+      for (text, time) in walk.pace {
+        writeln!(pace, "{:.3}\t{text}", time.as_secs_f64()).ok();
+      }
+      write(root.join("fake/pace"), &pace)?;
+    }
     executable(&rig.claude())?;
     // Each request reads as much as a turn of a real life does, most of it from the cache, and
     // costs what the price of the model makes of it, so the box of the context shows real counts.

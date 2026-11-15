@@ -245,7 +245,7 @@ async fn heroes(out: &Path, programs: &Programs) -> Result<(), Error> {
   let kept = env::temp_dir().join("furb-hero.cast");
   put(&kept, cast.write().as_bytes())?;
   motion::hero(cast, span, &out.join("window.gif"))?;
-  motion::still(cast, point(cast, "c+500")?, &out.join("window.png"))?;
+  motion::still(cast, point(cast, "b")?, &out.join("window.png"))?;
   let cards = capture::capture(&scenario::CARDS, size, programs, Path::new("/tmp/ffcards")).await?;
   motion::still(&cards.cast, point(&cards.cast, "c+500")?, &out.join("window-cards.png"))?;
   println!("{}: window.gif, window.png, window-cards.png", out.display());
