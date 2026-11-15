@@ -11,7 +11,7 @@ use opentui::{native::Capture, style::Color, testing::TestApp};
 
 use crate::{
   cards::{app, options, row, shows},
-  daemon::{ANSWERS, Daemon, FAILS, LONG, PATIENCE, Peer, THINKS},
+  daemon::{ANSWERS, Daemon, FAILS, LONG, PATIENCE, Peer, RETRIES, THINKS},
   screens::screen,
 };
 
@@ -181,6 +181,32 @@ fn a_line_that_failed_shows_its_cross_and_its_error_under_it() {
   let frame = shows(&app, "Resolved 1");
   assert!(frame.contains("✗  raise ValueError("), "{frame}");
   screen("thread-failed", &app);
+}
+
+#[test]
+fn a_model_asked_again_says_its_attempt_its_wait_and_why_then_its_failure() {
+  let message = format!("the bench stalls on a cold build\n{RETRIES}");
+  let (app, _daemon, _peer) = opened(&message, "Attempt 2 of 10");
+  let frame = app.text();
+  // The attempt and its wait on the line that the model writes, and why under it.
+  let lines = ["⠋  Attempt 2 of 10 in 4 s", "   the provider is overloaded"];
+  assert!(lines.iter().all(|line| frame.contains(line)), "{frame}");
+  screen("thread-retries", &app);
+  // The second attempt fails for a cause that does not pass, so no attempt is left, and the
+  // model asked again fails too: the provider pauses the thread, which shows its failure once.
+  let failed = "✗  claude-cli:opus/high answered nothing";
+  let frame = app.wait_until(PATIENCE, || {
+    let frame = app.text();
+    frame.contains(failed) && frame.contains("‖ Paused")
+  });
+  assert!(frame, "{}", app.text());
+  let frame = app.text();
+  assert_eq!(frame.matches("answered nothing").count(), 1, "{frame}");
+  assert!(!frame.contains("Attempt"), "{frame}");
+  // Once the hand left the list, the card stands with what needs him, as a pause of furb does.
+  app.advance(AWAY);
+  shows(&app, "Needs you 1");
+  screen("thread-retry-failed", &app);
 }
 
 #[test]

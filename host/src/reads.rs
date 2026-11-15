@@ -69,7 +69,11 @@ impl Read {
     loop {
       match self.heard.recv().await {
         Ok((_, event)) if matches!(*event, Event::Ended(_)) => return,
-        Ok((_, event)) if !matches!(*event, Event::Act(_) | Event::Text { .. }) => continue,
+        Ok((_, event))
+          if !matches!(*event, Event::Act(_) | Event::Text { .. } | Event::Retried { .. }) =>
+        {
+          continue;
+        }
         Ok(_) | Err(RecvError::Lagged(_)) => {}
         Err(RecvError::Closed) => return,
       }

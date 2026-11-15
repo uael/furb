@@ -31,7 +31,7 @@ use std::{
 
 use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint, image,
-  life::{Log, Opening, Progress, Stage, Stream},
+  life::{Log, Opening, Progress, Retrying, Stage, Stream},
   skill::granted,
   verbs,
   view::{
@@ -439,7 +439,9 @@ impl Spent {
           self.replaced.extend(parts.into_iter().map(|part| (seq, part)));
         }
       }
-      Event::Text { rung, .. } => self.parts.entry(rung.clone()).or_default().push(seq),
+      Event::Text { rung, .. } | Event::Retried { rung, .. } => {
+        self.parts.entry(rung.clone()).or_default().push(seq);
+      }
       _ => {}
     }
     let mut dropped = Vec::new();
@@ -520,6 +522,7 @@ impl Life {
       Event::Text { rung, text, thinking, .. } => {
         self.kept.streams.wrote(rung, [text, thinking], cards::millis());
       }
+      Event::Retried { rung, retry, .. } => self.kept.streams.retried(rung, retry.clone()),
       _ => {}
     }
     let seq = self.kept.log.len() as Seq;
@@ -1028,16 +1031,7 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
     stale: false,
     due: Instant::now(),
   };
-  let writes = told.clone();
-  opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
-    let (rung, chain) = (rung.to_owned(), chain.to_owned());
-    let (text, thinking) = (text.to_owned(), thinking.to_owned());
-    writes.send(Event::Text { rung, chain, text, thinking }).ok();
-  })));
-  let reports = told.clone();
-  opening.log = Some(Log(Arc::new(move |line| {
-    reports.send(Event::Notice(line.to_owned())).ok();
-  })));
+  heard_as_events(&mut opening, &told);
   let folder = PathBuf::from(&opening.directory);
   let journal = life.record.clone().map(|one| Journal::spawn(folder, journal(&one), told.clone()));
   let end = lives(opening, &mut life, &mut received, &told, journal.as_ref()).await;
@@ -1059,6 +1053,30 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
       }
     }
   }
+}
+
+/// The opening tells the life, as events, what its models write, each retry of the call of a
+/// model, and what it reports, in the place of the functions of the host that the opening holds.
+fn heard_as_events(opening: &mut Opening, told: &UnboundedSender<Event>) {
+  let writes = told.clone();
+  opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
+    let (rung, chain) = (rung.to_owned(), chain.to_owned());
+    let (text, thinking) = (text.to_owned(), thinking.to_owned());
+    writes.send(Event::Text { rung, chain, text, thinking }).ok();
+  })));
+  let retries = told.clone();
+  opening.retrying = Some(Retrying(Arc::new(move |rung, chain, retry| {
+    let (rung, chain) = (rung.to_owned(), chain.to_owned());
+    let wait = u64::try_from(retry.wait.as_millis()).unwrap_or(u64::MAX);
+    let at = cards::millis().saturating_add(wait).div_ceil(1000);
+    let (attempt, most, wait, why) = (retry.attempt, retry.most, wait.div_ceil(1000), &retry.why);
+    let retry = view::Retrying { attempt, most, wait, at, why: why.clone() };
+    retries.send(Event::Retried { rung, chain, retry }).ok();
+  })));
+  let reports = told.clone();
+  opening.log = Some(Log(Arc::new(move |line| {
+    reports.send(Event::Notice(line.to_owned())).ok();
+  })));
 }
 
 /// The fault that ended a life, with what its journal lost, once each change of its files is on the

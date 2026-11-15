@@ -808,8 +808,9 @@ export type RunState =
     };
 /**
  * How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
- * second of the epoch since which it does when the host saw it begin; it asks the operator; or it
- * failed, with the reason that a person reads.
+ * second of the epoch since which it does when the host saw it begin; it asks the operator; its
+ * model is asked again after a call that failed; or it failed, with the reason that a person
+ * reads.
  */
 export type Mark =
   | {
@@ -823,6 +824,9 @@ export type Mark =
   | {
       is: "asks";
     }
+  | (Retrying & {
+      is: "retries";
+    })
   | {
       why: string;
       is: "failed";
@@ -965,6 +969,14 @@ export type Event =
         chain: string;
         text: string;
         thinking: string;
+      };
+    }
+  | {
+      event: "retried";
+      data: {
+        rung: string;
+        chain: string;
+        retry: Retrying;
       };
     }
   | {
@@ -1348,6 +1360,19 @@ export interface Line {
   mark: Mark;
 }
 /**
+ * A call of a model that failed for a cause that passes, so its provider asks the model again:
+ * the attempt that comes, the most attempts of the call, the seconds that the provider waits
+ * before that attempt and the second of the epoch at which it comes, and why the attempt before
+ * it failed. What the model wrote before is void.
+ */
+export interface Retrying {
+  attempt: number;
+  most: number;
+  wait: number;
+  at: number;
+  why: string;
+}
+/**
  * What a model thought before it wrote, and in how many seconds, which is none while it thinks.
  */
 export interface Thought {
@@ -1412,4 +1437,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 23;
+export const PROTOCOL = 24;
