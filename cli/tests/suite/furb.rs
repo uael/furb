@@ -618,21 +618,21 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record());
   let said = printed(turns, "");
-  // The root stands first, then reads the setup of its extensions (a93632945).
+  // The root reads its setup first, which holds nothing of its stand, then stands (446827a9a).
   assert!(
-    said.starts_with("[user] chain()\n[assistant] stand()\ncd('"),
-    "the stand of the root comes first: {said}"
+    said.starts_with("[user] chain()\n[assistant] debug(t\"{standing()[4]=}\")\n[user] #rung"),
+    "the turn of the extensions of the root comes first: {said}"
   );
   let order = [
-    "\n[user] #stand",
-    "\n[assistant] debug(t\"{standing()[4]=}\")\n[user] #rung",
     "\n[assistant] read('",
+    "\n[assistant] stand()\ncd('",
+    "\n[user] #stand",
     "\n[user] #chain1\nchain1_label = 'root'\n",
   ];
   let at: Vec<_> = order.iter().map(|one| said.find(one)).collect();
   assert!(
     at.iter().all(Option::is_some) && at.is_sorted(),
-    "then the turn of its extensions, the read of the doctrine and the root itself: {said}"
+    "then the read of the doctrine, the stand and the root itself: {said}"
   );
   assert!(said.contains(" debugged\n"), "the setup of the root is answered: {said}");
   let paragraphs = "\n\n#prompt1\nprompt1_message = 'say a number'\nprompt1: Act[int] = Act('prompt1')\n\n#prompt1 closed by console\nprompt1_value = 7";
