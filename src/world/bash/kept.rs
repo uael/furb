@@ -5,10 +5,13 @@
   clippy::too_many_arguments,
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
-use std::fmt;
+use std::{fmt, mem, time::Duration};
 
 use futures::channel::mpsc::UnboundedSender;
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::{
+  io::{AsyncRead, AsyncReadExt},
+  time::{self, Instant},
+};
 
 use super::Said;
 use std::io;
@@ -117,10 +120,16 @@ pub(super) struct Unread {
   source: io::Error,
 }
 
-/// One stream of a command: each text said as it comes, whole in utf-8, as far as its head holds,
-/// and kept in `all` until the stream ends. The stream is read to its end, whatever it holds, so
-/// the command never blocks on a full pipe. A read that fails is no end of the stream: it is the
-/// fault of the command.
+/// How long a text that a command writes waits before the ear says it, with each text that comes
+/// in that time: the window shows it within a tenth of a second, under which a person reads an
+/// answer as at once, and a command that writes a line at a time says one fact for each tenth of a
+/// second that it writes, and not one for each line.
+const GATHER: Duration = Duration::from_millis(100);
+
+/// One stream of a command: the texts that come within [`GATHER`] of the first said as one, whole
+/// in utf-8, as far as its head holds, and kept in `all` until the stream ends. The stream is read
+/// to its end, whatever it holds, so the command never blocks on a full pipe. A read that fails is
+/// no end of the stream: it is the fault of the command, after the ear said what came before it.
 pub(super) async fn read(
   stream: Option<impl AsyncRead + Unpin>,
   name: Stream,
@@ -130,19 +139,49 @@ pub(super) async fn read(
 ) -> Result<(), Unread> {
   let Some(mut stream) = stream else { return Ok(()) };
   let (mut held, mut chunk) = (Vec::new(), [0u8; 8192]);
+  let (mut gathered, mut due) = (String::new(), None);
+  // Whether the receiver still hears, once it heard what was gathered: the stream that holds the
+  // receiver is going, and this read goes with it.
+  let said = |gathered: &mut String| {
+    let text = mem::take(gathered);
+    text.is_empty()
+      || says.unbounded_send(Said::Out { about: about.to_owned(), text, stream: name }).is_ok()
+  };
   loop {
-    let n = stream.read(&mut chunk).await.map_err(|source| Unread { stream: name, source })?;
+    let reading = stream.read(&mut chunk);
+    // A read that the end of the gathering stops loses no byte, since a read of tokio is cancel
+    // safe.
+    let n = match due {
+      Some(at) => {
+        let Ok(read) = time::timeout_at(at, reading).await else {
+          due = None;
+          if !said(&mut gathered) {
+            return Ok(());
+          }
+          continue;
+        };
+        read
+      }
+      None => reading.await,
+    };
+    let n = match n {
+      Ok(n) => n,
+      Err(source) => {
+        said(&mut gathered);
+        return Err(Unread { stream: name, source });
+      }
+    };
     held.extend_from_slice(&chunk[..n]);
     let text = whole(&mut held, n == 0);
-    let text = if text.is_empty() { text } else { all.push(&text) };
     if !text.is_empty() {
-      // The stream that holds the receiver is going, and this read goes with it.
-      if says.unbounded_send(Said::Out { about: about.to_owned(), text, stream: name }).is_err() {
-        return Ok(());
-      }
+      gathered.push_str(&all.push(&text));
     }
     if n == 0 {
+      said(&mut gathered);
       return Ok(());
+    }
+    if !gathered.is_empty() && due.is_none() {
+      due = Some(Instant::now() + GATHER);
     }
   }
 }

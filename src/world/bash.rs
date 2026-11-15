@@ -60,8 +60,9 @@ use crate::{
 /// wants, and its doors keep what it wrote before. It takes no write.
 ///
 /// A stream keeps at most `HEAD` bytes at its start and `TAIL` bytes at its end: the ear reads the
-/// pipe to its end, says the first bytes as they come and then a line that says the rest is cut,
-/// and its exit gives the first bytes, a line that counts the bytes cut, and the last bytes.
+/// pipe to its end, says the first bytes as they come, each tenth of a second of them as one fact,
+/// and then a line that says the rest is cut, and its exit gives the first bytes, a line that
+/// counts the bytes cut, and the last bytes.
 ///
 /// A command runs with the PATH of the login shell of the user, read once, ahead of the PATH of the
 /// process, so it finds the programs that the profile of the user adds. A command runs with
