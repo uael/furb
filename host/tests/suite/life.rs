@@ -1089,3 +1089,32 @@ async fn a_retry_of_a_model_shows_on_the_line_that_it_writes_and_its_failure_onc
   life.send(Command::End).await.unwrap();
   while events.next().await.is_some() {}
 }
+
+#[tokio::test]
+async fn a_lone_wake_of_a_chain_that_the_provider_paused_asks_its_model_again_and_the_life_goes_on()
+{
+  let at = place("lone-wake");
+  let calls = Arc::new(AtomicUsize::new(0));
+  let counted = Arc::clone(&calls);
+  let answer = Answer(Arc::new(move |_, _| {
+    counted.fetch_add(1, Ordering::SeqCst);
+    Box::pin(async move { Err("the request is malformed".to_owned()) })
+  }));
+  let life = Life::spawn(Opening { answer: Some(answer), ..scripted(&at, &[]) }).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let shape = "None".to_owned();
+  let message = "Ground the branch.".to_owned();
+  made(&life, Command::Prompt { shape, message, to: None, on: None }).await;
+  until(&mut events, stands("chain1".to_owned(), State::Paused)).await;
+  let asked = calls.load(Ordering::SeqCst);
+  // The wake alone, with no message before it, as any client of the daemon can send it.
+  assert!(matches!(life.send(Command::Wake { id: "chain1".to_owned() }).await, Ok(Reply::Done)));
+  let replies =
+    |event: &Event| matches!(event, Event::Act(act) if act.kind == Kind::Reply && !act.done());
+  until(&mut events, replies).await;
+  until(&mut events, stands("chain1".to_owned(), State::Paused)).await;
+  assert!(calls.load(Ordering::SeqCst) > asked, "the wake asks the model again");
+  assert!(matches!(life.send(Command::Standing).await, Ok(Reply::Value(_))), "the life goes on");
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
+}
