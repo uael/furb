@@ -25,7 +25,7 @@ use crate::{
   link::Heard,
   list::Row,
   pick::Picker,
-  tokens::{BESIDE, LIST, SIDE, Tokens},
+  tokens::{BESIDE, LIST, MEASURE, SIDE, Tokens},
 };
 
 /// The rows at the top of the list that never scroll.
@@ -359,9 +359,25 @@ impl Model {
     self.listed() && x >= self.size.0.saturating_sub(LIST)
   }
 
-  /// How many columns the home has: those that the list leaves it while the list shows.
+  /// How many columns the left side draws: those that the list leaves it, at most a measure.
   pub(crate) fn wide(&self) -> usize {
-    usize::from(self.size.0.saturating_sub(if self.listed() { SIDE } else { 0 }))
+    usize::from(self.side().min(MEASURE))
+  }
+
+  /// The column of the window where the left side starts, which centers it in its room.
+  pub(crate) fn margin(&self) -> u16 {
+    self.side().saturating_sub(MEASURE) / 2
+  }
+
+  /// The pointer on the left side, at a column of its rows.
+  pub(crate) fn pointed(&self) -> Option<(u16, u16)> {
+    let (x, y) = self.pointer.filter(|(x, _)| !self.on_list(*x))?;
+    Some((x.checked_sub(self.margin())?, y))
+  }
+
+  /// The columns that the list leaves to the left side while the list shows.
+  fn side(&self) -> u16 {
+    self.size.0.saturating_sub(if self.listed() { SIDE } else { 0 })
   }
 
   /// Whether each machine answered or was lost, so the window knows what stands.

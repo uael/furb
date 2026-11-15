@@ -34,6 +34,10 @@ pub(crate) const SIDE: u16 = LIST + 1;
 /// The least width of the window that shows the list beside the thread.
 pub(crate) const BESIDE: u16 = 100;
 
+/// The most columns that the left side draws: a line of code of 100 columns beside its numbers.
+/// A wider left side centers its column, so a line of prose stays short to read.
+pub(crate) const MEASURE: u16 = 110;
+
 /// The columns between two things of one line, as the parts of the launcher, and the mark and the
 /// button of the head of a thread.
 pub(crate) const APART: usize = 3;

@@ -117,7 +117,7 @@ impl Model {
     let y = u16::try_from(top.saturating_sub(rows.len())).ok()?;
     // The panel is as wide as the rows of the box of the input, which stop two columns short.
     let width = u16::try_from(self.wide().saturating_sub(2)).ok()?;
-    let pointed = self.pointer.and_then(|(x, at)| at.checked_sub(y).map(|row| (x, row)));
+    let pointed = self.pointed().and_then(|(x, at)| at.checked_sub(y).map(|row| (x, row)));
     let lines = rows.into_iter().enumerate().map(|(row, line)| match pointed {
       Some((x, at)) if usize::from(at) == row && row > 0 && usize::from(x) < self.wide() => {
         line.into_iter().map(|one| run(one.content, one.style.fg(self.tokens.hover))).collect()
@@ -130,6 +130,7 @@ impl Model {
   /// The place among the rows that match of the row of the panel at a cell, which a click takes.
   pub(crate) fn completion_at(&self, x: u16, y: u16) -> Option<usize> {
     let (_, top, width, lines) = self.drawn_completion()?;
+    let x = x.checked_sub(self.margin())?;
     let row = usize::from(y.checked_sub(top)?);
     if x >= width || row == 0 || row >= lines.len() {
       return None;

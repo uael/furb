@@ -441,7 +441,8 @@ impl Model {
 
   /// A click on a cell of the left side: a block or a thought opens or folds, or a row of a list
   /// part is taken. The key that the click does the thing of.
-  pub(crate) fn clicked_left(&mut self, x: usize, y: usize) -> Option<Does> {
+  pub(crate) fn clicked_left(&mut self, x: u16, y: usize) -> Option<Does> {
+    let x = usize::from(x.checked_sub(self.margin())?);
     let click = self.left_rows().into_iter().nth(y).and_then(|row| row.click(x));
     match click? {
       Click::Fold(fold) => {
@@ -472,9 +473,8 @@ impl Model {
   /// The rows of the left side and the cell of each loader. The text of a thing under the pointer
   /// that takes a click goes bright, and nothing else changes.
   pub(crate) fn left(&self) -> Left {
-    let pointer = self.pointer.filter(|(x, _)| !self.on_list(*x));
     let mut rows = self.left_rows();
-    if let Some((x, y)) = pointer
+    if let Some((x, y)) = self.pointed()
       && let Some(row) = rows.get_mut(usize::from(y))
     {
       *row = mem::take(row).lit(usize::from(x), self.tokens.hover);

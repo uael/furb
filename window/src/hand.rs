@@ -188,27 +188,36 @@ fn drawn(app: &App, model: Model, area: &Textarea, scroll: &ScrollBox) -> Screen
   let tokens = model.tokens;
   let column = || Text::new(app, "").wrap(WrapMode::None);
   let (home, list) = (column(), column());
+  // Each widget of the left side stands on one stage, so the margin that centers it is one place.
+  let stage = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Bottom, 0);
   // The list stands on a panel, so a change of ground parts it from the home, with no line.
   let side = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Right, 0);
   let side =
     side.position(Edge::Bottom, 0).width(SIDE).bg(tokens.panel).padding_edge(Edge::Left, 1);
   let side = side.child(&list);
-  app.root().child(&home).child(area).child(&side);
+  app.root().child(&stage.child(&home).child(area)).child(&side);
   app.focus(area);
 
   let mut screen = Screen::new(model);
+  let placing = stage.clone();
+  screen.part(
+    |model: &Model| (model.margin(), model.wide()),
+    move |(margin, wide)| {
+      placing.position(Edge::Left, *margin).width(u16::try_from(*wide).unwrap_or(u16::MAX));
+    },
+  );
   screen.part(
     |model: &Model| model.left().rows,
     move |lines| {
       home.set_text(written(lines));
     },
   );
-  placed(app, &mut screen, area);
+  placed(app, &stage, &mut screen, area);
   // A loader is a cell of its own, so its step draws no other cell.
   let cells: Vec<Text> =
     (0..LOADERS).map(|_| Text::new(app, "").absolute().visible(false)).collect();
   for cell in &cells {
-    app.root().child(cell);
+    stage.child(cell);
   }
   let frames = |model: &Model| {
     let spots = model.left().loaders;
@@ -239,7 +248,7 @@ fn drawn(app: &App, model: Model, area: &Textarea, scroll: &ScrollBox) -> Screen
   screen.part(Model::listed, move |listed| {
     side.visible(*listed);
   });
-  completion(app, &mut screen, &tokens);
+  completion(app, &stage, &mut screen, &tokens);
   veiled(app, &mut screen, &tokens);
   reviewed(app, &mut screen, &tokens, scroll);
   screen
@@ -275,10 +284,10 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, scroll: &Scr
 
 /// The panel of the completion of the input, over the feed on the top of the box of the input,
 /// while one shows.
-fn completion(app: &App, screen: &mut Screen<Model>, tokens: &Tokens) {
+fn completion(app: &App, stage: &View, screen: &mut Screen<Model>, tokens: &Tokens) {
   let rows = Text::new(app, "").wrap(WrapMode::None);
   let part = View::new(app).absolute().bg(tokens.raised).child(&rows);
-  app.root().child(&part.z_index(1).visible(false));
+  stage.child(&part.z_index(1).visible(false));
   screen.part(Model::drawn_completion, move |shown| {
     part.visible(shown.is_some());
     if let Some((x, y, width, lines)) = shown {
@@ -318,10 +327,10 @@ fn written(lines: &[Line]) -> Vec<Span<'static>> {
 
 /// The editor of the input on its box. A hidden editor loses the focus, which it takes back when it
 /// shows again.
-fn placed(app: &App, screen: &mut Screen<Model>, area: &Textarea) {
+fn placed(app: &App, stage: &View, screen: &mut Screen<Model>, area: &Textarea) {
   let tokens = screen.model.tokens;
   let ghost = Text::new(app, "").absolute().wrap(WrapMode::None).z_index(1).visible(false);
-  app.root().child(&ghost);
+  stage.child(&ghost);
   screen.part(Model::ghost, move |shown| match shown {
     Some((x, y, rest)) => {
       let ghost = ghost.position(Edge::Left, *x).position(Edge::Top, *y);
@@ -920,12 +929,12 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
     return;
   }
   let (on, does, verb) = tell(app, window, |model| {
-    let (x, y) = (usize::from(event.x), usize::from(event.y));
+    let y = usize::from(event.y);
     model.pointer = Some((event.x, event.y));
     let on = model.on_list(event.x);
     let (does, verb) = match (event.kind, on) {
       (MouseEventKind::Down(MouseButton::Left), true) => (model.clicked(y), None),
-      (MouseEventKind::Down(MouseButton::Left), false) => (model.clicked_left(x, y), None),
+      (MouseEventKind::Down(MouseButton::Left), false) => (model.clicked_left(event.x, y), None),
       (MouseEventKind::ScrollUp, true) => {
         model.scrolled(-WHEEL);
         (None, None)
