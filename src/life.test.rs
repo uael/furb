@@ -1303,31 +1303,65 @@ fn each_record_of_the_corpus_opens_by_its_image_to_the_state_of_its_record() {
   }
 }
 
+/// The value of `FURB_IMAGE_AGAIN` in the run whose `HOME` and `TMPDIR` name no person.
+const NAMELESS: &str = "nameless";
+
+/// The run of this test that writes `tests/image` again, with a new empty `HOME` and a `TMPDIR`
+/// that name no person.
+fn image_again_nameless() {
+  let (home, tmp) = (Path::new("/tmp/furb-home"), Path::new("/tmp/furb-tmp"));
+  drop(fs::remove_dir_all(home));
+  for one in [home, tmp] {
+    fs::create_dir_all(one).unwrap();
+  }
+  let test = module_path!().split_once("::").unwrap().1;
+  let name = format!(
+    "{test}::an_image_that_an_earlier_build_wrote_opens_by_the_image_to_the_state_of_its_record"
+  );
+  let ran = process::Command::new(env::current_exe().unwrap())
+    .args([name.as_str(), "--exact", "--nocapture"])
+    .env("FURB_IMAGE_AGAIN", NAMELESS)
+    .env("HOME", home)
+    .env("TMPDIR", tmp)
+    .status()
+    .unwrap();
+  assert!(ran.success(), "the run that writes tests/image again failed");
+}
+
+/// `tests/image` written again from `language.jsonl` of the corpus, by a life in `at`.
+fn image_again(at: &Path, frozen: &Path) {
+  let record = at.join("record.jsonl");
+  let corpus = corpus().into_iter().find(|one| one.ends_with("next/language.jsonl")).unwrap();
+  fs::copy(corpus, &record).unwrap();
+  // The doctrine of the project wins over the checkout of dev mode, whose path names its owner.
+  let doctrine = at.join(".furb").join("DOCTRINE.md");
+  fs::create_dir_all(doctrine.parent().unwrap()).unwrap();
+  fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("DOCTRINE.md"), doctrine).unwrap();
+  let mut life = opening(at, true).boot::<String>([]).unwrap().0;
+  assert!(image::keep(&mut life, &record, &()).unwrap(), "the life writes its image");
+  drop(life);
+  fs::create_dir_all(frozen).unwrap();
+  for name in ["record.jsonl", "record.jsonl.image"] {
+    fs::copy(at.join(name), frozen.join(name)).unwrap();
+  }
+}
+
 /// An image that an earlier build wrote opens on each later build by the image, to the state of its
 /// record, as monty loads a dump that an earlier monty wrote: `tests/image` holds a record and its
 /// image, which no build makes again but the one that raises the version of an image. That build
-/// writes both again with `FURB_IMAGE_AGAIN=1`, from `language.jsonl` of the corpus, with `HOME`
-/// and `TMPDIR` set to folders that name no person, since the stand of the life says the home, the
-/// folder and the doctrine, and `cargo xtask private` fails on a trace of a person in either file.
+/// writes both again with `FURB_IMAGE_AGAIN=1`, from `language.jsonl` of the corpus. The stand of
+/// the life says the home, the folder and the doctrine, and `cargo xtask private` fails on a trace
+/// of a person in either file, so the test writes them in a run of its own program whose `HOME` and
+/// `TMPDIR` are folders that name no person, whatever the environment of the command that asks.
 #[test]
 fn an_image_that_an_earlier_build_wrote_opens_by_the_image_to_the_state_of_its_record() {
   let frozen = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("image");
   let at = yard("image-of-before");
   let record = at.join("record.jsonl");
-  if env::var_os("FURB_IMAGE_AGAIN").is_some() {
-    let corpus = corpus().into_iter().find(|one| one.ends_with("next/language.jsonl")).unwrap();
-    fs::copy(corpus, &record).unwrap();
-    // The doctrine of the project wins over the checkout of dev mode, whose path names its owner.
-    let doctrine = at.join(".furb").join("DOCTRINE.md");
-    fs::create_dir_all(doctrine.parent().unwrap()).unwrap();
-    fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("DOCTRINE.md"), doctrine).unwrap();
-    let mut life = opening(&at, true).boot::<String>([]).unwrap().0;
-    assert!(image::keep(&mut life, &record, &()).unwrap(), "the life writes its image");
-    drop(life);
-    fs::create_dir_all(&frozen).unwrap();
-    for name in ["record.jsonl", "record.jsonl.image"] {
-      fs::copy(at.join(name), frozen.join(name)).unwrap();
-    }
+  match env::var("FURB_IMAGE_AGAIN").ok().as_deref() {
+    Some(NAMELESS) => image_again(&at, &frozen),
+    Some(_) => image_again_nameless(),
+    None => {}
   }
   for name in ["record.jsonl", "record.jsonl.image"] {
     fs::copy(frozen.join(name), at.join(name)).unwrap();
