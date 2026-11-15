@@ -215,12 +215,14 @@ read each capture that changed.
 window in tmux at three sizes and writes the recording, the key frames, the probes and the compare of each scenario
 in `target/frames`; `target/debug/furb-frames capture 16` does one scenario and prints its compare. The window of a
 capture stands on a still clock, `FURB_STILL_CLOCK`, so no mark moves and no time passes in it, and two captures of
-one commit write the same frame at each step.
+one commit write the same frame at each step. Its daemon asks a host of the capture in place of OpenAI,
+`FURB_OPENAI_URL` (`frames/src/openai.rs`), so a walk signs in to Codex with a code and no network.
 
 | File | What it holds |
 | --- | --- |
 | `frames/src/scenario.rs` | The 27 scenarios on which the window and the other programs are judged: each walk of the window, with the words of its model and its steps, and the gap of each scenario that the window has not. |
 | `frames/src/capture.rs` | The walk of the real window in tmux, on a daemon of its own, recorded with the time of each part and a marker at each step. |
+| `frames/src/openai.rs` | The host that stands in for OpenAI in a capture: the sign-in of Codex with a code, and the models of its account. |
 | `frames/src/cast.rs`, `frames/src/replay.rs`, `frames/src/frame.rs` | A recording of asciinema, its replay into key frames, and a frame as its text and its cells. |
 | `frames/src/raster.rs`, `frames/fonts/` | The image of a frame, drawn with JetBrains Mono under its license. |
 | `frames/src/probe.rs`, `frames/src/compare.rs` | The probes of a frame against the tokens of the window, and the compare with the winners of the other programs. |
