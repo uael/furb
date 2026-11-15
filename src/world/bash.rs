@@ -66,8 +66,8 @@ use crate::{
 ///
 /// A command runs with the PATH of the login shell of the user, ahead of the PATH of the process,
 /// so it finds the programs that the profile of the user adds. The process reads it once, from the
-/// first of these ears that it makes, and a command that starts before that read ends runs on the
-/// PATH of the process. A command runs with
+/// first of these ears that it makes, and a command that starts before that read ends waits for
+/// it. A command runs with
 /// `TMPDIR` set to the scratch directory of the life, and `TMP` and `TEMP` too on Windows, which
 /// the ear makes first, so a command finds there the files of `scratch://`. A command ends with
 /// every process it started, which its group holds. A command that a control ended first, which the

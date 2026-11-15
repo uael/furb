@@ -2349,7 +2349,9 @@ async fn work_that_rests_or_waits_for_the_operator_never_stalls_and_stalls_once_
   let rests = window.during(QUIET * 2).await;
   assert!(!rests.iter().any(stall), "a life that rests tells no stall");
   // Two rungs and the run of the root await a prompt to the operator, one of the rungs is paused,
-  // and the root then waits on a command. No act runs while he does not answer.
+  // and the root then waits on a command. No act runs while he does not answer: the first command
+  // of a process waits for the PATH of the login shell of the user with no fact, which a loaded
+  // machine gives in more than the bound.
   let word = "q = prompt(str, \"q\", to=OPERATOR)\n\
               stopped = rung(\"x = 2\", q, on=chain(\"stopped\"))\npause(stopped)\n\
               rung(\"x = 1\", q, on=chain(\"held\"))\nawait q\nawait bash(\"sleep 20\", timeout=60)";
@@ -2394,11 +2396,15 @@ async fn a_command_that_keeps_writing_for_longer_than_the_bound_never_stalls() {
   window.attach(&life).await;
   let ran = |word: &str| Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
   let ended = |id: &'static str| move |frame: &Frame| matches!(frame, Frame::Event { event: Event::Fact(fact), .. } if fact[0] == "done" && fact[1] == id);
+  // The first command of a process waits for the PATH of the login shell of the user, which a
+  // loaded machine gives in seconds, with no fact: the command that writes runs after it.
+  let Ok(Answer::Act(_)) = window.ask(ran("await bash(\"true\")")).await else { panic!("no rung") };
+  window.heard_until(ended("bash1")).await;
   // The command writes a line each tenth of a second for more than the bound.
   let word = "await bash(\"for i in $(seq 50); do echo $i; sleep 0.1; done\", timeout=60)";
   let Ok(Answer::Act(_)) = window.ask(ran(word)).await else { panic!("no rung") };
   let began = Instant::now();
-  let heard = window.heard_until(ended("bash1")).await;
+  let heard = window.heard_until(ended("bash2")).await;
   assert!(began.elapsed() >= SLOW, "the command wrote for longer than the bound");
   let stalls: Vec<&Frame> = heard.iter().filter(|frame| stall(frame)).collect();
   assert!(stalls.is_empty(), "a command that keeps writing never stalls: {stalls:?}");

@@ -10,7 +10,7 @@ use std::{
   path::{Path, PathBuf},
   process::{Command, Stdio},
   sync::{
-    Once, OnceLock,
+    OnceLock,
     atomic::{AtomicUsize, Ordering},
   },
   time::Duration,
@@ -25,6 +25,7 @@ use crate::{
 };
 use std::process;
 use tokio::process as tokio_process;
+use tokio::sync;
 use tokio::time;
 
 /// The POSIX sh that runs a command: `/bin/sh`, and on Windows, which has none of its own, the sh
@@ -46,27 +47,27 @@ pub fn shell() -> &'static Path {
 /// How long the login shell of the user may take to say its PATH, which a slow profile needs.
 const LOGIN_LIMIT: Duration = Duration::from_secs(5);
 
-/// The PATH that the login shell of the user sets, once its read ended, or none on Windows, with
-/// no `SHELL`, or when that shell fails to give one. A life started from a desktop or a service has
-/// the short PATH of its parent, which lacks the folders that the profile of the user adds, as
-/// `/opt/homebrew/bin`.
-static LOGIN: OnceLock<Option<OsString>> = OnceLock::new();
-
-/// Starts the read of the PATH of the login shell, once for the process, as the first World of the
-/// process makes its commands. No command waits for it: a profile can take seconds, and each later
-/// life of the process, as each life of a daemon, finds it read.
+/// Starts the read of the PATH of the login shell as a World makes its commands, so its first
+/// command waits for less of it. The process reads it once: a later life of the process, as each
+/// life of a daemon, finds it read and waits for nothing.
 pub(super) fn read_login() {
-  static STARTED: Once = Once::new();
-  STARTED.call_once(|| {
-    drop(ear::runtime().spawn(async {
-      let found = match env::var_os("SHELL") {
-        Some(shell) if !cfg!(windows) => asked_path(Path::new(&shell), LOGIN_LIMIT).await,
-        _ => None,
-      };
-      // The read starts once, so nothing else sets the cell.
-      drop(LOGIN.set(found));
-    }));
-  });
+  drop(ear::runtime().spawn(login_path()));
+}
+
+/// The PATH that the login shell of the user sets, read once for the process, or none on Windows,
+/// with no `SHELL`, or when that shell fails to give one. A life started from a desktop or a
+/// service has the short PATH of its parent, which lacks the folders that the profile of the user
+/// adds, as `/opt/homebrew/bin`. A call while the read runs waits for that read.
+async fn login_path() -> Option<&'static OsString> {
+  static FOUND: sync::OnceCell<Option<OsString>> = sync::OnceCell::const_new();
+  let found = async {
+    if cfg!(windows) {
+      None
+    } else {
+      asked_path(Path::new(&env::var_os("SHELL")?), LOGIN_LIMIT).await
+    }
+  };
+  FOUND.get_or_init(|| found).await.as_ref()
 }
 
 /// What the login shell `shell` says its PATH is, between two marks that a profile which writes to
@@ -170,8 +171,7 @@ pub(super) async fn spawned(
   dir: &Path,
 ) -> Result<(Child, Group), Fault> {
   let mut command = tokio_process::Command::from(command);
-  // A command that starts before the read of the login shell ends runs on the PATH of the process.
-  if let Some(Some(login)) = LOGIN.get() {
+  if let Some(login) = login_path().await {
     command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
   }
   child::spawn(&mut command).map_err(|no| {
