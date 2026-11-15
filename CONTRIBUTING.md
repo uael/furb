@@ -37,7 +37,7 @@ cargo build -p furb-cli -p furb-window # furb and its window, side by side in ta
 The first `uv sync` builds the crate, and it takes some minutes. After that, `uv run` builds again only what a change
 touches.
 
-To work on a second branch beside this clone, make its worktree with `script/worktree.sh <path> <branch>`, which
+To work on a second branch beside this clone, make its worktree with `cargo xtask tree new <path> <branch>`, which
 [`AGENTS.md`](AGENTS.md#commands) says. It takes an existing branch too, and its first build is warm.
 
 ## How a word runs

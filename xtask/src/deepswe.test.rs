@@ -1,9 +1,6 @@
 //! The tests of the rig of DeepSWE: the environment that it gives a checkout, and how it watches a
 //! life.
 
-#[path = "../../tests/common/yard.rs"]
-mod yard;
-
 #[cfg(unix)]
 use std::{collections::BTreeMap, env, os::unix::fs::symlink, path::PathBuf};
 use std::{
@@ -12,8 +9,8 @@ use std::{
   time::Instant,
 };
 
+use crate::yard::Yard;
 use serde_json::json;
-use yard::Yard;
 
 use super::{Mark, Numbers, Places, Rig, Watched, compacted, seed::requirements};
 

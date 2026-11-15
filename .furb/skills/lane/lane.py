@@ -111,7 +111,7 @@ def lane_rules(tree: str, branch: str = "", lands: bool = True) -> str:
     stand = f"It is a worktree of furb whose head follows origin/{base}: run `git fetch origin` and `git merge --ff-only origin/{base}` before you change a file."
     push = f"- Push with `git push origin HEAD:{base}`, a fast-forward with no force. When it is refused because another lane pushed first, run `git pull --rebase origin {base}` and push again. When git refuses a push over SSH, AGENTS.md gives the push over HTTPS."
   else:
-    stand = f"It is a worktree of furb on the branch {branch}. When it does not exist yet, make it first, from the checkout where your chain stands, with `sh script/worktree.sh {tree} {branch} origin/{base}`, then run the `uv sync` that it prints."
+    stand = f"It is a worktree of furb on the branch {branch}. When it does not exist yet, make it first, from the checkout where your chain stands, with `cargo xtask tree new {tree} {branch} --base origin/{base}`."
     push = f"- Push to your branch alone, with `git push origin HEAD:refs/heads/{branch}`. " + ("Code lands the branch on " + base + " when the item is accepted." if lands else "A probe is evidence, and nothing lands it.")
   return LANE_RULES.replace("<STAND>", stand).replace("<PUSH>", push).replace("<TREE>", tree).replace("<BASE>", base)
 

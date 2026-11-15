@@ -26,3 +26,7 @@ fastrand = "2"
 # The bound of each step of the rig, which waits on its child with no poll.
 wait-timeout = "0.2"
 thiserror = "2"
+
+# The task tree: the copy on write of a whole folder in one call, clonefile of macOS.
+[target.'cfg(target_vendor = "apple")'.dependencies]
+rustix = { version = "1", features = ["fs"] }

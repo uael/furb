@@ -6300,6 +6300,7 @@ dependencies = [
  "fastrand",
  "flate2",
  "notify",
+ "rustix",
  "serde",
  "serde_json",
  "tar",

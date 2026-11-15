@@ -9,7 +9,11 @@ mod caches;
 mod deepswe;
 mod lives;
 mod paths;
+mod tree;
 mod watch;
+#[cfg(test)]
+#[path = "../../tests/common/yard.rs"]
+mod yard;
 
 use std::{
   ffi::OsStr,
@@ -196,6 +200,11 @@ enum Task {
   /// a build makes. A path with a variable or a pattern in it is not checked, and a path after
   /// `$root/` is a path of the repository.
   Paths,
+  /// Make, land and close a worktree of this clone.
+  Tree {
+    #[command(subcommand)]
+    verb: tree::Verb,
+  },
   /// Print each task and each option whose name or help holds each of the words, in any case.
   Search {
     #[arg(required = true)]
@@ -240,6 +249,14 @@ enum Fault {
   Pattern(#[from] fancy_regex::Error),
   #[error(transparent)]
   Deepswe(#[from] deepswe::Fault),
+  #[error("{} stays: {why}", path.display())]
+  Kept { path: PathBuf, why: tree::Kept },
+  #[error(
+    "the head conflicts with {0}, so the rebase is aborted: rebase the tree there by hand, then land again"
+  )]
+  Conflict(String),
+  #[error("{0} moved 5 times while the head landed: land again")]
+  Moved(String),
 }
 
 /// A script of `script/` that runs on its own, as a task.
@@ -294,6 +311,7 @@ fn run() -> Result<ExitCode, Fault> {
     }
     Task::CleanCaches { scratch, uv } => caches::clean(&root, scratch, uv.as_deref()),
     Task::Paths => paths::check(),
+    Task::Tree { verb } => tree::run(&root, verb),
     Task::Deepswe { places, verb } => Ok(deepswe::run(&root, places, verb)?),
     Task::Smoke { to } => Ok(lives::smoke(&root, to)?),
     Task::Play { to } => Ok(lives::play(&root, to)?),

@@ -148,7 +148,7 @@ API of its own:
   `window/Cargo.toml` pins OpenTUI at one commit, and `window/build.rs` makes its native library with Zig into
   `target/opentui`, once for each commit. So the first cargo command over the workspace in a tree needs `zig` on PATH
   at the version that the commit asks, 0.17.1, and takes about two minutes more. A tree whose `target/opentui` holds
-  the library runs no Zig, as a tree of `script/worktree.sh` does, and `uv sync` and `bun run build` need none. Its tests drive a headless app on a real daemon. `window/tests/screens` holds each
+  the library runs no Zig, as a tree of `cargo xtask tree new` does, and `uv sync` and `bun run build` need none. Its tests drive a headless app on a real daemon. `window/tests/screens` holds each
   capture of a frame as text, and `FURB_DRAW=1 cargo test -p furb-window` draws each capture again. `FURB_CELLS=<folder>`
   writes the cells of each capture there as JSON, with the colors of the frame.
   [`CONTRIBUTING.md`](CONTRIBUTING.md#the-window) lists its files.
@@ -329,8 +329,8 @@ file that its build reads changed, which the `cache-keys` of its `pyproject.toml
 python that the crate carries, and the extensions. So a change of `src/furb/engine.py` reaches the suite at the next
 `uv run`, after a build of a few seconds, and a short command can take minutes. To run with no sync, which builds
 nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
-`script/worktree.sh` makes the `.venv` of a new worktree, so run one test file there as
-`.venv/bin/python -m pytest -q <file> -p no:cacheprovider --no-cov`, which syncs nothing. Where the script could not make
+`cargo xtask tree new` makes the `.venv` of a new worktree, so run one test file there as
+`.venv/bin/python -m pytest -q <file> -p no:cacheprovider --no-cov`, which syncs nothing. Where the task could not make
 it, probe with the `.venv/bin/python` of the main checkout, which imports main and not your change.
 
 Set the timeout of each command, and the bound of each wait, to about twice the time that the step should take, never a
@@ -373,23 +373,22 @@ fix what your change broke, and report what was broken before.
   (`Cargo.toml`), which holds a target to about a third of its bytes and keeps no object file beside each test
   program; a panic still names its file and line. A tree keeps the incremental state of its crates
   (`.cargo/config.toml`), which a job of CI does not keep.
-- `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
-  stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
-  `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
-  to the new commit: the `target` of cargo, the `node_modules` of bun, the build of the TypeScript package and the
-  configs of its tests. Each tree builds in a target of its own: cargo gives a crate of the workspace the same name
-  in each tree, so in a target that trees share, a build of one tree made each other tree build its crates again.
-  `script/own-target.sh <tree>` gives a tree whose `target` is a link a copy on write of the target it names, once,
-  and the hooks `post-checkout`, `post-merge` and `post-rewrite` run it, so a tree of the shared target of before
-  takes its own at its first checkout, merge or rebase of a commit that holds the script.
-  Then it runs
-  `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value
-  stands, so that the hooks of each worktree print only what fails. It copies no `.venv`: it makes the `.venv` of the new tree with
-  `uv sync --locked` on the warm target, so the python of its hooks imports its own tree. That takes about 52 s in a new
-  tree, and next to no time when uv holds the wheel in its cache. If `uv` is missing or the sync fails, the script says
-  so and names the command to run. A first build takes a few minutes when the source holds the
-  dependencies, against about 35 in a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
-  plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
+- `cargo xtask tree new <path> <branch> [--base <ref>]`, `cargo xtask tree land <branch>` and `cargo xtask tree close
+  <path> [--into <ref>] [--own]`: the life of a worktree. `new` checks out a branch that stands on origin or in this
+  clone, and moves a local branch that lags behind origin up to it; a new branch starts from `--base`, `origin/main` by
+  default. It copies on write the build directories of the tree of the clone whose build stands nearest to the new
+  commit: the `target` of cargo, the `node_modules` of bun, the build of the TypeScript package and the configs of its
+  tests, each folder in one call on macOS. Each tree builds in a target of its own: cargo gives a crate of the
+  workspace the same name in each tree, so in a target that trees share, a build of one tree made each other tree
+  build its crates again. A source whose `target` is a link gives a copy of the folder that the link names. Then it
+  runs `bun install --offline` and `bun run build`, and makes the `.venv` of the tree with `uv sync --locked` on the
+  warm target, so the python of its hooks imports its own tree. It sets `core.hooksPath` of the clone to
+  `script/hooks` when no value stands, so that the hooks of each worktree print only what fails. Copy on write needs
+  APFS, Btrfs or XFS; on another file system it makes a plain worktree, which builds from nothing. `land` rebases the
+  head of this tree on a branch of the clone and moves that branch to it by a compare and swap of the ref, so two
+  trees that land at once lose no commit. `close` removes a tree with its build, then its local branch, only when it
+  holds no change and each of its commits stands on `--into` or on a remote, and, unless the caller closes its own
+  tree with `--own`, when no process stands in it and git did nothing in it for two hours. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
 - `sh script/memwatch.sh`: the one guard of memory, a watcher that runs beside the work. No step of the work waits on memory: a hook, a build, a test run and a capture start at once. While the memory is tight (on macOS the pressure level of the kernel is warn or critical, on Linux less than 20% of the memory is available), the watcher ends the largest test process (a test binary of cargo, pytest, bun test) only when the work can be the cause: that process holds `FURB_WATCH_MIN` KB (4 GB), or the work holds `FURB_WATCH_LANE` KB (8 GB). The work is each test process, and each process of the user whose command names a tree of the clone, as `git worktree list` gives the trees, less a daemon of furb, whose memory no end of a test process frees. The watcher prints the pid, the size and the command of the process that it ends, and says so when the work is not the cause. It ends no other process: not a daemon of furb, not a window, not a process of the owner. The desk of the conductor starts it, and `sh script/memwatch.sh --once` looks one time.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
