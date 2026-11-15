@@ -31,6 +31,10 @@ pulldown-cmark = { version = "0.13", default-features = false }
 # The task comment-width: the lexer of rustc, which tells a comment from a string.
 ra-ap-rustc_lexer = "0.185.0"
 
+# The task budget: the CPU time of the waited children of a run.
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", default-features = false, features = ["resource"] }
+
 # The task tree: the copy on write of a whole folder in one call, clonefile of macOS.
 [target.'cfg(target_vendor = "apple")'.dependencies]
 rustix = { version = "1", features = ["fs"] }

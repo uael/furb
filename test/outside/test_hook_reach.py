@@ -71,11 +71,12 @@ def test_each_hook_of_the_tests_starts_at_once_while_the_memory_is_tight(tmp_pat
   # Each hook of the tests builds first, outside the limit of its time, then runs the tests under it.
   assert [line.split()[:3] for line in lines] == [
     ["uv", "sync", "--inexact"],
-    ["uv", "run", "--no-sync"],
+    ["cargo", "xtask", "budget"],
     ["cargo", "nextest", "run"],
-    ["cargo", "nextest", "run"],
+    ["cargo", "xtask", "budget"],
     ["cargo", "clippy", "--workspace"],
   ]
+  assert " pytest -- uv run --no-sync " in lines[1] and " cargo -- cargo nextest run " in lines[3]
   assert lines[2].endswith("--no-run") and not lines[3].endswith("--no-run")
 
 

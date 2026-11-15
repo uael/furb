@@ -175,7 +175,7 @@ def test_a_linker_that_writes_a_test_binary_is_no_test_process(tmp_path: Path) -
 
 def test_a_hook_or_a_shell_that_names_pytest_is_no_test_process(tmp_path: Path) -> None:
   pytest_run = "/w/furb/.venv/bin/python3 /w/furb/.venv/bin/pytest -q test/boot"
-  drivers = ["python3 script/budget.py pytest -- uv run pytest -q", "sh -c uv run pytest -q", "uv run pytest -q"]
+  drivers = ["/w/target/debug/xtask budget pytest -- uv run pytest -q", "sh -c uv run pytest -q", "uv run pytest -q"]
   with fakes(4) as procs:
     rows = [
       (one.pid, (3000 - n) * MB, command, MINE) for n, (one, command) in enumerate(zip(procs, drivers, strict=False))

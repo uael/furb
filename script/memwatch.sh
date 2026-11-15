@@ -23,7 +23,7 @@ after=${FURB_WATCH_AFTER:-30}
 min=${FURB_WATCH_MIN:-4194304}
 cap=${FURB_WATCH_LANE:-8388608}
 # Each process that it ends is a line of this log too, as its time in seconds of the epoch, its pid and its command, so
-# that script/budget.py names a kill as one of the guard only from this evidence. FURB_WATCH_LOG moves it.
+# that `cargo xtask budget` names a kill as one of the guard only from this evidence. FURB_WATCH_LOG moves it.
 log=${FURB_WATCH_LOG:-${TMPDIR:-/tmp}/furb-memwatch.log}
 root=$(cd "$(dirname "$0")/.." && pwd -P)
 # tight: whether the memory is tight, with the reading that says so in strain.

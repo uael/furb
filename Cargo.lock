@@ -6316,6 +6316,7 @@ dependencies = [
  "fancy-regex 0.20.1",
  "fastrand",
  "flate2",
+ "nix",
  "notify",
  "pulldown-cmark",
  "ra-ap-rustc_lexer",

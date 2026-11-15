@@ -2,7 +2,7 @@
 //! and answers prompts whose model writes its reply in many small parts, and the heap of the
 //! process is read at the sizes of `SMALL`, with the events and the bytes that a reader who
 //! attaches at the start of the log reads. The ignored test `bench` is the measure of the bench, at
-//! the sizes of `LARGE`, with the budget of its heap, `memory_heap_mib` of `script/budgets.toml`.
+//! the sizes of `LARGE`, with the budget of its heap, `memory_heap_mib` of `xtask/budgets.toml`.
 //! The test counts each byte that the process allocates, so a child of the suite runs it alone, as
 //! `apart` says.
 
@@ -50,14 +50,14 @@ type Logged = (Seq, Arc<Event>);
 const SMALL: [usize; 2] = [2_000, 6_000];
 
 /// The sizes of the measure of the bench, which the ignored test `bench` runs. The suite reads the
-/// budget of that run as well, so a key that is gone from `script/budgets.toml` fails each run.
+/// budget of that run as well, so a key that is gone from `xtask/budgets.toml` fails each run.
 const LARGE: [usize; 3] = [10_000, 40_000, 160_000];
 
-/// The limits of the benches, whose home is `script/budgets.toml`.
-const LIMITS: &str = include_str!("../../../script/budgets.toml");
+/// The limits of the benches, whose home is `xtask/budgets.toml`.
+const LIMITS: &str = include_str!("../../../xtask/budgets.toml");
 
 /// The most heap that a life of the last large size may hold, in MiB: the budget of the bench,
-/// which the key `memory_heap_mib` of `script/budgets.toml` gives.
+/// which the key `memory_heap_mib` of `xtask/budgets.toml` gives.
 fn budget() -> usize {
   let mut table = "";
   for line in LIMITS.lines().map(str::trim) {
@@ -69,7 +69,7 @@ fn budget() -> usize {
       return value.split('#').next().unwrap_or("").trim().parse().expect("a limit is a number");
     }
   }
-  panic!("the table [bench] of script/budgets.toml gives memory_heap_mib")
+  panic!("the table [bench] of xtask/budgets.toml gives memory_heap_mib")
 }
 
 /// How many events a reader may stand behind the life and still hear each of them, as the life

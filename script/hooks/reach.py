@@ -154,7 +154,7 @@ def main(args: list[str]) -> int:
   build = [*run, "--no-run"] if args[0] == "cargo" else ["uv", "sync", "--inexact"]
   if built := subprocess.run(build, check=False).returncode:  # noqa: S603
     return built
-  run = [sys.executable, str(ROOT / "script" / "budget.py"), args[0], "--", *run]
+  run = ["cargo", "xtask", "budget", args[0], "--", *run]
   if args[0] == "cargo":
     return private(run)
   os.execvp(run[0], run)  # noqa: S606
