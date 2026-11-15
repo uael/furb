@@ -25,6 +25,6 @@
 ┃
 ┃ Ask in a new thread
 ┃
-┃  Message  Python    + new thread in… ▾      opus   ↩ ⌃N      Context               No answer yet
+┃  Message  Python    + furb-try · where… ▾   opus   ↩ ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ⠋ Working · ⎋ stop                              ⌃P find

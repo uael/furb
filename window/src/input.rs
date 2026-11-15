@@ -544,7 +544,13 @@ impl Model {
       .find(|one| fits(one) >= wanted.min(SESSION))
       .unwrap_or_else(|| right(2));
     let fits = room.saturating_sub(width(&right) + 2 + width(&left[..3]) + 2 + 2);
-    let target = left.pop().map(|one| run(cut(&one.content, fits), one.style));
+    // The mark and the accent of a new thread say what the words say, so a target too long for
+    // its room drops its words before the name of its session.
+    let short = |text: &str| match self.client.target() {
+      Target::Session(..) if text.width() > fits => self.session(),
+      _ => text.to_owned(),
+    };
+    let target = left.pop().map(|one| run(cut(&short(&one.content), fits), one.style));
     left.extend(target.into_iter().chain([run(" ▾", raised.fg(color))]));
     let line = spread(left, right, room, raised);
     let at = columns(&line);
