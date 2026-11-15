@@ -178,9 +178,10 @@ fn the_input_shows_in_grey_the_rest_of_what_he_sent_and_the_right_arrow_takes_it
   shows(&app, "Two stages hold most");
   sent(&app, &second);
   assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions).len() == 2));
-  // The feed shows the answer to the second message, whose lines go on from the first, so it
-  // stands still for the capture.
+  // The feed shows the answer to the second message, whose lines go on from the first, and the
+  // card says that the thread rests, so it stands still for the capture.
   shows(&app, "    4  close(");
+  shows(&app, "Resolved 1");
   // The rest of the newest text that starts with what he wrote shows after it, in grey.
   app.paste("fi");
   typed(&app, &first);
