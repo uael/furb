@@ -86,7 +86,7 @@ pub(crate) fn run(root: &Path, verb: Verb) -> Result<ExitCode, Fault> {
   .map(|()| ExitCode::SUCCESS)
 }
 
-pub(crate) fn new(root: &Path, path: &Path, branch: &str, base: Option<&str>) -> Result<(), Fault> {
+fn new(root: &Path, path: &Path, branch: &str, base: Option<&str>) -> Result<(), Fault> {
   let path =
     path::absolute(path).map_err(|source| Fault::Read { path: path.to_owned(), source })?;
   let main = checkout(root)?;
@@ -276,7 +276,7 @@ fn clone(from: &Path, to: &Path) -> io::Result<()> {
   Err(io::Error::other("cp --reflink=always refused"))
 }
 
-pub(crate) fn land(tree: &Path, branch: &str) -> Result<(), Fault> {
+fn land(tree: &Path, branch: &str) -> Result<(), Fault> {
   let changed = git(tree, &["status", "--porcelain", "--untracked-files=no"])?;
   if !changed.trim().is_empty() {
     return Err(Fault::Kept { path: tree.to_owned(), why: Kept::Changed(changed) });
@@ -302,7 +302,7 @@ pub(crate) fn land(tree: &Path, branch: &str) -> Result<(), Fault> {
   Err(Fault::Moved(branch.to_owned()))
 }
 
-pub(crate) fn close(root: &Path, path: &Path, into: &str, own: bool) -> Result<(), Fault> {
+fn close(root: &Path, path: &Path, into: &str, own: bool) -> Result<(), Fault> {
   let path =
     fs::canonicalize(path).map_err(|source| Fault::Read { path: path.to_owned(), source })?;
   let kept = |why| Err(Fault::Kept { path: path.clone(), why });
@@ -387,7 +387,3 @@ fn ran(dir: &Path, program: &str, args: &[&str]) -> bool {
   run.args(args).current_dir(dir).stdout(Stdio::null()).stderr(Stdio::null());
   run.status().is_ok_and(|status| status.success())
 }
-
-#[cfg(test)]
-#[path = "tree.test.rs"]
-mod test;

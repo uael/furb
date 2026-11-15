@@ -1,14 +1,11 @@
 //! The task `pack` as a process, on a workspace of its own.
 
-#[path = "../../tests/common/yard.rs"]
-mod yard;
-
 use std::{
   fs,
   process::{self, Command, Output},
 };
 
-use yard::Yard;
+use crate::yard::Yard;
 
 /// The manifest of a crate that reads a file of its folder at build time, with the include of its
 /// pack.

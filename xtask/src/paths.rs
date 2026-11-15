@@ -37,10 +37,8 @@ struct Stale<'a> {
 }
 
 /// Print each path that git does not hold, as `<file>:<line>: <path> ...`, and fail when one
-/// stands. The tree is the tree of git where the task runs, as for a command of git.
-pub(crate) fn check() -> Result<ExitCode, Fault> {
-  let top = git(Path::new("."), &["rev-parse", "--show-toplevel"])?;
-  let root = Path::new(top.trim());
+/// stands.
+pub(crate) fn check(root: &Path) -> Result<ExitCode, Fault> {
   let files: BTreeSet<String> = git(root, &["ls-files", "-z"])?
     .split('\0')
     .filter(|file| !file.is_empty() && root.join(file).exists())

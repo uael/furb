@@ -3,9 +3,6 @@
 
 #![cfg(unix)]
 
-#[path = "../../tests/common/yard.rs"]
-mod yard;
-
 use std::{
   env, fs,
   os::unix::{fs::PermissionsExt, process::ExitStatusExt},
@@ -14,8 +11,8 @@ use std::{
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::yard::Yard;
 use wait_timeout::ChildExt;
-use yard::Yard;
 
 const MB: u64 = 1024;
 const WORKER: &str = "python -u -c import sys;exec(eval(sys.stdin.readline()))";

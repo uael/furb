@@ -1,15 +1,8 @@
 //! The task `paths` as a process, on a tree of git of its own.
 
-#[path = "../../tests/common/yard.rs"]
-mod yard;
+use std::{fs, path::Path, process};
 
-use std::{
-  env, fs,
-  path::Path,
-  process::{self, Command, Output},
-};
-
-use yard::Yard;
+use crate::{ended, git, xtask, yard::Yard};
 
 /// The files that git holds in each tree of these tests.
 const HELD: [(&str, &str); 5] = [
@@ -32,8 +25,7 @@ fn a_path_that_git_holds_or_ignores_or_that_is_no_whole_path_stands() {
      ls traces/overnight/a.json\nmy-docs/x\ncp demo.rs src/main.rs\n",
     )],
   );
-  let done = checked(&tree);
-  assert_eq!((done.status.code(), said(&done)), (Some(0), String::new()));
+  assert_eq!(checked(&tree), (Some(0), String::new()));
 }
 
 #[test]
@@ -51,9 +43,8 @@ fn a_path_that_a_move_left_in_a_tool_or_a_workflow_is_named_with_its_file_and_it
       ("docs/notes.md", "The old guide was docs/gone.md.\n"),
     ],
   );
-  let done = checked(&tree);
   assert_eq!(
-    (done.status.code(), said(&done)),
+    checked(&tree),
     (
       Some(1),
       ".github/workflows/gates.yml:1: src/scope.py is no file or folder of git\n\
@@ -77,26 +68,13 @@ fn tree(name: &str, more: &[(&str, &str)]) -> Yard {
       panic!("{} was not made: {no}", path.display());
     }
   }
-  for args in [&["init", "-q"][..], &["add", "-A"]] {
-    let done = run(Command::new("git").args(args), &yard);
-    assert!(done.status.success(), "{}", String::from_utf8_lossy(&done.stderr));
-  }
+  git(&yard, &["init", "-q"]);
+  git(&yard, &["add", "-A"]);
   yard
 }
 
-fn checked(tree: &Path) -> Output {
-  run(Command::new(env!("CARGO_BIN_EXE_xtask")).arg("paths"), tree)
-}
-
-/// The command in the tree, with no variable of git from a hook that runs the test, which would
-/// point it at the repository of the hook.
-fn run(command: &mut Command, tree: &Path) -> Output {
-  for (name, _) in env::vars_os().filter(|(name, _)| name.to_string_lossy().starts_with("GIT_")) {
-    command.env_remove(name);
-  }
-  command.current_dir(tree).output().unwrap_or_else(|no| panic!("the command did not start: {no}"))
-}
-
-fn said(done: &Output) -> String {
-  String::from_utf8_lossy(&done.stdout).into_owned()
+/// The code of the task and what it printed.
+fn checked(tree: &Path) -> (Option<i32>, String) {
+  let (code, out, _) = ended(&mut xtask(tree, ["paths"]));
+  (code, out)
 }

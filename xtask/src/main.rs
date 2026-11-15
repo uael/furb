@@ -502,10 +502,10 @@ impl Task {
       Self::Test { suite: None, .. } => every(root),
       Self::Watch { branch, tree, every, table, inbox, owners, pid, once } => {
         let every = Duration::from_secs(every * 60);
-        watch::Watch { branch, tree, every, table, inbox, owners, pid, once }.run(root)
+        watch::Watch { branch, tree, every, table, inbox, owners, pid, once }.run()
       }
       Self::CleanCaches { scratch, uv } => caches::clean(root, scratch, uv.as_deref()),
-      Self::Paths => paths::check(),
+      Self::Paths => paths::check(root),
       Self::Pack => pack::check(),
       Self::Tree { verb } => tree::run(root, verb),
       Self::Links { fix } => links::check(root, fix),
@@ -583,9 +583,11 @@ fn written(file: &str, language: &str) -> bool {
   Path::new(file).extension().is_some_and(|one| one == language)
 }
 
-/// The root of the tree, which holds the workspace of this crate.
+/// The root of the tree of git where the task runs, as for a command of git, so `cargo xtask` runs
+/// from any folder of the tree; outside a tree of git, the folder where it runs.
 fn root() -> PathBuf {
-  PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/.."))
+  git(Path::new("."), &["rev-parse", "--show-toplevel"])
+    .map_or_else(|_| PathBuf::from("."), |top| PathBuf::from(top.trim()))
 }
 
 fn check(root: &Path, base: Option<&str>) -> Result<ExitCode, Fault> {
@@ -722,8 +724,10 @@ fn scripts(root: &Path) -> Result<Vec<Script>, Fault> {
   let mut scripts = Vec::new();
   let mut entries = Vec::new();
   for folder in [root.join("xtask/python"), root.join("script")] {
-    let read =
-      fs::read_dir(&folder).map_err(|source| Fault::Read { path: folder.clone(), source })?;
+    let read = match fs::read_dir(&folder) {
+      Err(no) if no.kind() == io::ErrorKind::NotFound => continue,
+      read => read.map_err(|source| Fault::Read { path: folder.clone(), source })?,
+    };
     for entry in read {
       entries.push(entry.map_err(|source| Fault::Read { path: folder.clone(), source })?.path());
     }

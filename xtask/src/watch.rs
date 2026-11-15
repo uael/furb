@@ -60,12 +60,15 @@ fn parts(before: Option<&str>, head: &str) -> Vec<(&'static str, Vec<String>)> {
 }
 
 impl Watch {
-  pub(crate) fn run(&self, root: &Path) -> Result<ExitCode, Fault> {
+  /// The watch reads the branch and its commits through its tree, a worktree of the clone, so it
+  /// runs from any folder.
+  pub(crate) fn run(&self) -> Result<ExitCode, Fault> {
     if let Some(pid) = &self.pid {
       held(pid)?;
     }
     // A move of the branch writes its ref in this folder, so the watch wakes on the write itself.
-    let common = PathBuf::from(git(root, &["rev-parse", "--git-common-dir"])?.trim());
+    let common = git(&self.tree, &["rev-parse", "--path-format=absolute", "--git-common-dir"])?;
+    let common = PathBuf::from(common.trim());
     let refs = Path::new(&self.branch).parent().map_or_else(
       || common.join("refs").join("heads"),
       |folder| common.join("refs").join("heads").join(folder),
@@ -75,7 +78,7 @@ impl Watch {
     watcher.watch(&refs, RecursiveMode::NonRecursive)?;
     let mut next = Instant::now();
     loop {
-      let head = self.head(root)?;
+      let head = self.head()?;
       if last(&self.table).is_some_and(|checked| checked == head) {
         if self.once {
           return Ok(ExitCode::SUCCESS);
@@ -90,19 +93,19 @@ impl Watch {
         heard(moves.recv_timeout(left))?;
       }
       next = Instant::now() + self.every;
-      self.check(root, &self.head(root)?, &moves)?;
+      self.check(&self.head()?, &moves)?;
       if self.once {
         return Ok(ExitCode::SUCCESS);
       }
     }
   }
 
-  fn head(&self, root: &Path) -> Result<String, Fault> {
-    Ok(git(root, &["rev-parse", "--short=9", &self.branch])?.trim().to_owned())
+  fn head(&self) -> Result<String, Fault> {
+    Ok(git(&self.tree, &["rev-parse", "--short=9", &self.branch])?.trim().to_owned())
   }
 
   /// One check of a head: the tree goes to it, each part runs, and the result is written.
-  fn check(&self, root: &Path, head: &str, moves: &Moves) -> Result<(), Fault> {
+  fn check(&self, head: &str, moves: &Moves) -> Result<(), Fault> {
     let tree = self.tree.as_path();
     if !git(tree, &["status", "--porcelain"])?.trim().is_empty() {
       return self
@@ -134,7 +137,7 @@ impl Watch {
     let since = green(&self.table, head).or(before);
     let range =
       since.map_or_else(|| format!("{head}~20..{head}"), |since| format!("{since}..{head}"));
-    let commits = git(root, &["log", "--oneline", "--no-decorate", &range]).unwrap_or_default();
+    let commits = git(tree, &["log", "--oneline", "--no-decorate", &range]).unwrap_or_default();
     let owners = self.owners.as_deref().map(owners).unwrap_or_default();
     let mut entry = format!("RED of the carrier at {head}, {seconds} s, commits {range}:\n");
     for test in &failed {

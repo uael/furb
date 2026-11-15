@@ -1,15 +1,12 @@
 //! The task `clean-caches` as a process, on folders of its own.
 
-#[path = "../../tests/common/yard.rs"]
-mod yard;
-
 use std::{
   fs,
   path::Path,
   process::{self, Command, Output},
 };
 
-use yard::Yard;
+use crate::yard::Yard;
 
 const MARK: &str = ".furb-scratch";
 
