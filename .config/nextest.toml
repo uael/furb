@@ -8,4 +8,3 @@ slow-timeout = { period = "15s", terminate-after = 4 }
 # A run names each test that failed, at once and again at its end, and goes on to the end of the suite.
 fail-fast = false
 failure-output = "immediate-final"
-
