@@ -453,8 +453,18 @@ impl Feed<'_> {
       rows.push(counted("…", shown.start));
     }
     let (follow, end) = (all - shown.end, shown.end);
-    for (line, colors) in block.lines.iter().zip(colored.iter()).take(end).skip(shown.start) {
-      rows.extend(self.code(line, colors.clone(), numbers));
+    // A stop ends the answer, so each line under the line that it ended never ran: its code reads
+    // muted, as a debugger shows the code that it did not reach.
+    let stopped = block.lines.iter().rposition(|one| matches!(one.mark, Mark::Stopped { .. }));
+    let drawn = block.lines.iter().zip(colored.iter()).enumerate();
+    for (at, (line, colors)) in drawn.take(end).skip(shown.start) {
+      let colors = match stopped {
+        Some(stop) if at > stop => {
+          colors.iter().map(|one| run(one.content.clone(), muted.bg(t.raised))).collect()
+        }
+        _ => colors.clone(),
+      };
+      rows.extend(self.code(line, colors, numbers));
       rows.extend(self.agents(Some((line, numbers))));
     }
     if follow > 0 {
