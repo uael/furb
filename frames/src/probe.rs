@@ -46,8 +46,17 @@ type Piece = (Look, usize, usize);
 /// slots.
 type Rows = Vec<(usize, Vec<(usize, usize)>)>;
 
-/// The insets of a part at each size, by its ground and its rank.
-type Ranks<'a> = BTreeMap<(Rgb, usize), Vec<(&'a str, [usize; 4])>>;
+/// The insets of a part at each size, by its ground, the start of its text and its rank among the
+/// parts of that ground and that start.
+type Ranks<'a> = BTreeMap<(Rgb, String, usize), Vec<(&'a str, [usize; 4], bool)>>;
+
+/// The first row of the feed, under the one row of the head of the window: the scroll of the feed
+/// cuts a part there, so the inset above a part that starts on it says nothing.
+const FEED: usize = 1;
+
+/// How many characters of its text name a part at each size: a narrow size wraps and cuts a text
+/// after its start.
+const NAMES: usize = 24;
 
 /// The findings of a frame: its colors, its boxes and its repeated rows.
 pub(crate) fn probe(frame: &Frame) -> Vec<Finding> {
@@ -330,42 +339,66 @@ fn pieces(line: &[Cell]) -> Vec<Piece> {
 
 /// The parts of the same step at each size whose insets differ. A part is a box of two rows or more
 /// and ten columns or more, and a part at one size is the part of the same ground and the same
-/// rank, from the top, at another. A side counts only where it is a padding at both sizes.
+/// start of its text at another, so a feed that scrolls otherwise at each size compares each part
+/// with itself. A side counts only where it is a padding at both sizes, and the side above only
+/// where the part does not start on the first row of the feed at either size.
 pub(crate) fn sizes(frames: &[(String, Frame)]) -> Vec<String> {
   let base = base(&Tokens::on(None));
   let mut ranks: Ranks = BTreeMap::new();
   for (size, frame) in frames {
-    let parts = boxes(&frame.cells(), base)
+    let cells = frame.cells();
+    let parts = boxes(&cells, base)
       .into_iter()
       .filter(|one| one.bottom > one.top && one.right - one.left >= 9);
-    let mut seen: BTreeMap<Rgb, usize> = BTreeMap::new();
+    let mut seen: BTreeMap<(Rgb, String), usize> = BTreeMap::new();
     for one in parts {
-      let rank = seen.entry(one.ground).and_modify(|rank| *rank += 1).or_insert(0);
+      let named = (one.ground, start(&cells, &one));
+      let rank = *seen.entry(named.clone()).and_modify(|rank| *rank += 1).or_insert(0);
       if let Some(insets) = one.insets {
-        ranks.entry((one.ground, *rank)).or_default().push((size, insets));
+        ranks.entry((named.0, named.1, rank)).or_default().push((size, insets, one.top == FEED));
       }
     }
   }
-  let same = |one: [usize; 4], other: [usize; 4]| {
-    one.iter().zip(other).all(|(a, b)| *a == b || *a > PAD || b > PAD)
+  let same = |(_, one, cut): &(&str, [usize; 4], bool),
+              (_, other, first): &(&str, [usize; 4], bool)| {
+    let above = |side: usize| side == 2 && (*cut || *first);
+    one
+      .iter()
+      .zip(other)
+      .enumerate()
+      .all(|(side, (a, b))| above(side) || a == b || *a > PAD || *b > PAD)
   };
-  let differ = ranks.into_iter().filter(|(_, seen)| seen.iter().any(|one| !same(one.1, seen[0].1)));
+  let differ = ranks.into_iter().filter(|(_, seen)| seen.iter().any(|one| !same(one, &seen[0])));
   differ
-    .map(|((ground, rank), seen)| {
+    .map(|((ground, start, _), seen)| {
       let each: Vec<String> = seen
         .iter()
-        .map(|(size, [left, right, above, below])| {
+        .map(|(size, [left, right, above, below], _)| {
           format!("{size} left {left} right {right} above {above} below {below}")
         })
         .collect();
       format!(
-        "the part {} number {} from the top has other insets at another size: {}",
+        "the part {} that starts `{start}` has other insets at another size: {}",
         String::from(ground),
-        rank + 1,
         each.join(", ")
       )
     })
     .collect()
+}
+
+/// The start of the text of a part: its content, row by row, with one space for each run of
+/// blanks.
+fn start(cells: &[Vec<Cell>], one: &Boxed) -> String {
+  let rows = (one.top..=one.bottom).map(|row| {
+    let line = &cells[row][one.left..=one.right];
+    line
+      .iter()
+      .filter(|cell| !grounds(cell) && !BARS.contains(cell.glyph.as_str()))
+      .map(|cell| cell.glyph.as_str())
+      .collect::<String>()
+  });
+  let text = rows.collect::<Vec<_>>().join(" ");
+  text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(NAMES).collect()
 }
 
 #[cfg(test)]
