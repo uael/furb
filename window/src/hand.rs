@@ -99,7 +99,7 @@ type Shared = Rc<RefCell<Window>>;
 pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   let tokens = Tokens::on(app.palette().and_then(|palette| palette.background));
   app.set_theme(tokens.theme());
-  let mut before = kept::kept(&options.kept);
+  let mut before: Vec<Told> = kept::kept(&options.kept);
   let told = |machine: &Machine| {
     let kept =
       before.iter().position(|one| one.name == machine.name).map(|at| before.swap_remove(at));
@@ -480,6 +480,23 @@ fn keep(app: &App, window: &Shared) {
     let fault = written.err().map(|fault| format!("The cards are not kept: {fault}"));
     tell(cx.app(), &on, |model| model.fault = fault);
   });
+}
+
+/// The draft emptied into the stash, or the last that he emptied taken back, and the stash
+/// written to the file of the window at once, so a draft outlives a window that ends.
+fn stashed(app: &App, window: &Shared, does: Does) {
+  if does == Does::Empty {
+    window.borrow().area.set_text("");
+    tell(app, window, |model| model.client.stash_draft());
+  } else {
+    tell(app, window, |model| model.client.unstash());
+  }
+  let written = {
+    let held = window.borrow();
+    kept::keep(&kept::stash_of(&held.kept), &held.screen.model.client.stash)
+  };
+  let fault = written.err().map(|fault| format!("The emptied drafts are not kept: {fault}"));
+  tell(app, window, |model| model.fault = fault);
 }
 
 /// Each request that is due asked of its machine: the open of each life that the window holds,
@@ -879,10 +896,8 @@ fn act(app: &App, window: &Shared, does: Does) {
       return controlled(app, window, |model| Some((model.resolve()?, Asked::Control)));
     }
     Does::Send => return sent(app, window),
-    Does::Empty if !window.borrow().area.text().is_empty() => {
-      window.borrow().area.set_text("");
-      return tell(app, window, |model| model.client.draft.text.clear());
-    }
+    Does::Empty if !window.borrow().area.text().is_empty() => return stashed(app, window, does),
+    Does::Unstash => return stashed(app, window, does),
     Does::Empty => {
       return controlled(app, window, |model| {
         model.take_back().map(|(asked, text)| (asked, Asked::Back(text)))

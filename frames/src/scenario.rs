@@ -499,6 +499,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("d", &[Act::Type("what does it store?"), Act::Key("Enter")], "reply 2"),
         // The file that he named comes first when a mention names no letter yet.
         step("x-named", &[Act::Type("and @")], "Files of demo"),
+        // A draft that he empties goes into the stash, and the key of the stash takes it back.
+        step("x-empty", &[Act::Key("Escape"), Act::Key("C-c")], "A reply opens this thread"),
+        step("x-unstash", &[Act::Key("C-x"), Act::Key("u")], "and @"),
       ],
     }),
   },

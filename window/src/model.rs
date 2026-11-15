@@ -21,6 +21,7 @@ use crate::{
   Options,
   code::Colors,
   input::{Armed, Word},
+  kept,
   keys::{self, Does, System},
   link::Heard,
   list::Row,
@@ -89,7 +90,11 @@ impl Model {
     options: &Options,
   ) -> Self {
     Self {
-      client: Client::new(machines, options.folder.display().to_string()),
+      client: {
+        let mut client = Client::new(machines, options.folder.display().to_string());
+        client.stash = kept::kept(&kept::stash_of(&options.kept));
+        client
+      },
       open: false,
       toggled: false,
       slow: false,

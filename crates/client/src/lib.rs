@@ -69,6 +69,8 @@ pub struct Client {
   /// The text that the input takes after a refusal, a take back, a step of the history or a command
   /// that writes in it, until the client gives it to the editor of its input.
   pub restore: Option<String>,
+  /// The drafts that the operator emptied, the last last, which the input takes back.
+  pub stash: Vec<String>,
   /// The history of the input, for its target.
   pub history: Option<History>,
   /// The walk through the history of the input, from its first step until he writes or sends.

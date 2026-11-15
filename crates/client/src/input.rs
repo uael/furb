@@ -7,12 +7,15 @@
 //! message shows in the thread at once, and a message that the daemon refuses comes back to the
 //! input with the message after it.
 
-use std::path::Path;
+use std::{mem, path::Path};
 
 use jiff::Timestamp;
 use serde_json::Value;
 
 use crate::{Client, Opened, Outgoing, Pending, Target, Thread};
+
+/// How many emptied drafts the stash keeps, the oldest going first.
+const STASH: usize = 50;
 
 /// The start of a message that asks its question aside, in a fork of the chain of the open thread.
 pub const ASIDE: &str = "/btw ";
@@ -105,6 +108,28 @@ impl Client {
     self.thread.as_ref().filter(|one| self.aim.is_none() && !one.thread.key.2.is_empty())?;
     let question = Value::String(question.to_owned());
     Some(Ok(format!("prompt(str, {question}, on=chain('btw', source=__name__))")))
+  }
+
+  /// The draft emptied into the stash, so no text that he wrote is lost: the last of the stash at
+  /// most once, and the oldest goes past `STASH`.
+  pub fn stash_draft(&mut self) {
+    let text = mem::take(&mut self.draft.text);
+    if !text.trim().is_empty() && self.stash.last() != Some(&text) {
+      self.stash.push(text);
+      let over = self.stash.len().saturating_sub(STASH);
+      self.stash.drain(..over);
+    }
+  }
+
+  /// The last draft that he emptied taken back into the input, and a draft that the input holds
+  /// then goes into the stash in its place.
+  pub fn unstash(&mut self) {
+    let Some(last) = self.stash.pop() else {
+      self.notice = Some("No draft was emptied.".to_owned());
+      return;
+    };
+    self.stash_draft();
+    self.restore = Some(last);
   }
 
   /// The input turned to ask its text aside: it starts with `/btw ` once.
