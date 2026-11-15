@@ -10,13 +10,14 @@
 
 use std::mem;
 
-use furb::view::{Act, Maker, RunState};
+use furb::view::{Act, Maker, RunState, Standing};
 use furb_host::protocol::{Answer, Verb};
 use jiff::Timestamp;
 use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
+  feed::timer,
   keys::Does,
   line::{Line, clipped, cut, run, spread, wrapped},
   list::project,
@@ -737,13 +738,22 @@ impl Model {
         self.word_hints(self.wide().saturating_sub(2).saturating_sub(width(&key) + 2))
       }
       (None, None) if works => {
-        let age = card.and_then(|card| self.age(card.since)).map(|age| format!(" {age}"));
+        // The time of the work of the open thread counts each second, as the time of a line that
+        // runs, where a card says its age in minutes.
+        let worked = card.map(|card| self.now.saturating_sub(card.since)).filter(|one| *one > 0);
+        let age = worked.map(|seconds| format!(" {}", timer(seconds)));
         let working = format!("    Working{}", age.unwrap_or_default());
         let stop = format!(" · {} stop", self.key(Does::Stop));
         let working = vec![run(working, Style::new().fg(t.accent)), run(stop, muted)];
         let at = columns(&working);
         hot.push((at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop))));
-        (working, Some((2, Loader::Model)))
+        // The mark of the row is the mark of the work of the thread: a model, a command or agents.
+        let loader = match card.map(|card| &card.thread.standing) {
+          Some(Standing::Runs) => Loader::Command,
+          Some(Standing::Delegates) => Loader::Agent,
+          _ => Loader::Model,
+        };
+        (working, Some((2, loader)))
       }
       (None, None) => {
         let at = match self.target() {
