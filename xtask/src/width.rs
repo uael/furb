@@ -25,11 +25,7 @@ pub(crate) fn check(root: &Path, base: Option<&str>, files: &[PathBuf]) -> Resul
 
 /// Each line that the tree adds to the base and that holds only a comment past `WIDTH`, as
 /// `file:line: ...`.
-pub(crate) fn failures(
-  root: &Path,
-  base: Option<&str>,
-  files: &[PathBuf],
-) -> Result<Vec<String>, Fault> {
+fn failures(root: &Path, base: Option<&str>, files: &[PathBuf]) -> Result<Vec<String>, Fault> {
   let base = base.map_or_else(|| merged(root), str::to_owned);
   let named: Vec<String> = if files.is_empty() {
     vec!["*.rs".to_owned()]
@@ -94,7 +90,3 @@ fn long(text: &str) -> Vec<usize> {
   }
   found
 }
-
-#[cfg(test)]
-#[path = "width.test.rs"]
-mod test;

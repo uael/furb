@@ -1,8 +1,8 @@
 //! The task `paths` as a process, on a tree of git of its own.
 
-use std::{fs, path::Path, process};
+use std::{path::Path, process};
 
-use crate::{ended, git, xtask, yard::Yard};
+use crate::{ended, held, xtask, yard::Yard};
 
 /// The files that git holds in each tree of these tests.
 const HELD: [(&str, &str); 5] = [
@@ -60,16 +60,7 @@ fn a_path_that_a_move_left_in_a_tool_or_a_workflow_is_named_with_its_file_and_it
 /// A tree of git in a yard, which holds the files of `HELD` and `more`.
 fn tree(name: &str, more: &[(&str, &str)]) -> Yard {
   let yard = Yard::new(format!("xtask-paths-{name}-{}", process::id()));
-  for (file, text) in HELD.iter().chain(more) {
-    let path = yard.join(file);
-    let made =
-      path.parent().map_or(Ok(()), fs::create_dir_all).and_then(|()| fs::write(&path, text));
-    if let Err(no) = made {
-      panic!("{} was not made: {no}", path.display());
-    }
-  }
-  git(&yard, &["init", "-q"]);
-  git(&yard, &["add", "-A"]);
+  held(&yard, &[&HELD[..], more].concat());
   yard
 }
 

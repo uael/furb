@@ -251,7 +251,3 @@ fn normal(path: &str) -> String {
   }
   kept.join("/")
 }
-
-#[cfg(test)]
-#[path = "links.test.rs"]
-mod test;

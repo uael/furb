@@ -113,7 +113,7 @@ pub(crate) fn check(root: &Path, tests: bool) -> Result<ExitCode, Fault> {
 
 /// Each item that no file but a test names, as `path:line: name`, and each item that its own file
 /// names and no other file that is no test, as `(path, name)`.
-pub(crate) fn unused(text: &HashMap<String, String>, readme: &str) -> Result<Found, Fault> {
+fn unused(text: &HashMap<String, String>, readme: &str) -> Result<Found, Fault> {
   let patterns = Patterns::new()?;
   let world = sources(&patterns, text, readme)?;
   let (mut found, mut alone) = (Vec::new(), Vec::new());
@@ -415,7 +415,3 @@ fn camel(name: &str) -> String {
     made
   })
 }
-
-#[cfg(test)]
-#[path = "unused.test.rs"]
-mod test;

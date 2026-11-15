@@ -5,14 +5,18 @@
 mod yard;
 
 mod clean_caches;
+mod links;
 mod memwatch;
 mod pack;
 mod paths;
 mod tree;
+mod unused;
+mod width;
 
 use std::{
   env,
   ffi::OsStr,
+  fs,
   path::Path,
   process::{Command, Output},
 };
@@ -50,4 +54,16 @@ fn git(folder: &Path, args: &[&str]) -> String {
   let (code, out, err) = ended(program("git", folder).args(config).args(args));
   assert_eq!(code, Some(0), "git {args:?} in {}: {err}", folder.display());
   out.trim().to_owned()
+}
+
+/// A repository of git in a folder, which holds these files, added and not committed.
+fn held(folder: &Path, files: &[(&str, &str)]) {
+  for (file, text) in files {
+    let path = folder.join(file);
+    let made =
+      path.parent().map_or(Ok(()), fs::create_dir_all).and_then(|()| fs::write(&path, text));
+    made.unwrap_or_else(|no| panic!("{file} was not made: {no}"));
+  }
+  git(folder, &["init", "-q"]);
+  git(folder, &["add", "-A"]);
 }
