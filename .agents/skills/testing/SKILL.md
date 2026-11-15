@@ -30,7 +30,7 @@ Each gate runs locally. `uv run` builds the crate again after a change of it, as
 | The window, `window/` | `cargo test -p furb-window` and `cargo clippy -p furb-window --all-targets -- -D warnings`; after a change that a screen shows, `FURB_DRAW=1 cargo test -p furb-window` and read each capture in `window/tests/screens` |
 | The contract of a value that crosses a door | The gates of both doors, since each door gives the same host API |
 | The workflow, or a script of `script/` | `git diff --check` and `cargo xtask paths`, then read the run of the workflow on the pull request |
-| The documents alone | Their links and their format, `uv run python script/links.py` for a README of a package, and `git diff --check`; no test of the runtime |
+| The documents alone | Their links and their format, `cargo xtask links` for a README of a package, and `git diff --check`; no test of the runtime |
 
 ## Boundaries of source and state
 

@@ -98,8 +98,8 @@ repos:
         require_serial: true
       - id: links
         name: the links of the READMEs of the packages
-        # No sync: a sync in a new worktree builds the crate, and that outlasts a bash. The script reads git only.
-        entry: uv run --no-sync python script/links.py
+        # It reads git and the files alone.
+        entry: cargo xtask links
         language: system
         files: (^|/)(README\.md|pyproject\.toml|Cargo\.toml|package\.json)$
         pass_filenames: false

@@ -7,6 +7,7 @@
 
 mod caches;
 mod deepswe;
+mod links;
 mod lives;
 mod paths;
 mod tree;
@@ -215,6 +216,17 @@ enum Task {
     /// The files to read; each Rust file of the tree when none is given.
     files: Vec<PathBuf>,
   },
+  /// Fail on each link of a README that a package carries that breaks on the page of its registry.
+  ///
+  /// The registry of a package shows its README and reads no relative link, so each link is
+  /// absolute. It lists each package from its manifest and the README that it carries, and
+  /// fails on a relative link and on an absolute link to a path of this repository that git does
+  /// not hold. A link in code is no link.
+  Links {
+    /// Write each relative link that points at a file of the repository as its absolute link.
+    #[arg(long)]
+    fix: bool,
+  },
   /// Make, land and close a worktree of this clone.
   Tree {
     #[command(subcommand)]
@@ -327,6 +339,7 @@ fn run() -> Result<ExitCode, Fault> {
     Task::CleanCaches { scratch, uv } => caches::clean(&root, scratch, uv.as_deref()),
     Task::Paths => paths::check(),
     Task::Tree { verb } => tree::run(&root, verb),
+    Task::Links { fix } => links::check(&root, fix),
     Task::CommentWidth { base, files } => width::check(&root, base.as_deref(), &files),
     Task::Deepswe { places, verb } => Ok(deepswe::run(&root, places, verb)?),
     Task::Smoke { to } => Ok(lives::smoke(&root, to)?),

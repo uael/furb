@@ -504,7 +504,7 @@ fix what your change broke, and report what was broken before.
   table; a red writes one entry in the inbox, with each test or file that failed, its owner from the file of owners, and
   the commits since the last green, or since the head checked before. It blocks nothing, and it wakes on the write of
   the ref.
-- `uv run python script/links.py`: check that each link in a README that a package carries works on the page of the
+- `cargo xtask links [--fix]`: check that each link in a README that a package carries works on the page of the
   package on PyPI, npm or crates.io, which read no relative link. It lists each package and its README from the
   manifests, and fails on a relative link, which `--fix` writes as absolute, at `main` on GitHub. The hooks run it.
 - `uv run python script/contract.py [--base TAG] [--since REF] [--title TITLE] [--wording]`: compare `src/furb/engine.pyi` and the

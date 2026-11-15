@@ -6317,6 +6317,7 @@ dependencies = [
  "fastrand",
  "flate2",
  "notify",
+ "pulldown-cmark",
  "ra-ap-rustc_lexer",
  "rustix",
  "serde",
