@@ -694,11 +694,35 @@ fn a_block_rolls_by_rows_and_keeps_its_last_line_with_what_its_command_wrote() {
   };
   let block = |lines| Block { maker: Maker::Operator, lines, more: false, thought: None };
   let small = block((1..=7).map(|at| line(at, 0)).collect());
-  assert_eq!((small.rolls(), small.first(false)), (false, 0));
+  assert_eq!((small.rolls(), small.shown(false)), (false, 0..7));
   // Six rows roll beside the row that counts the lines above: the last line and its four rows of
   // output, and one line before it.
   let tall = block((1..=9).map(|at| line(at, if at == 9 { 3 } else { 0 })).collect());
-  assert_eq!((tall.rolls(), tall.first(false), tall.first(true)), (true, 7, 0));
+  assert_eq!((tall.rolls(), tall.shown(false), tall.shown(true)), (true, 7..9, 0..9));
+}
+
+#[test]
+fn a_block_whose_word_came_whole_rolls_to_the_line_that_runs_and_says_the_lines_that_follow() {
+  let runs = Mark::Runs { work: Work::Command, began: None };
+  let line = |number| Line {
+    number,
+    text: String::new(),
+    mark: if number == 9 { runs.clone() } else { Mark::Ran },
+    output: None,
+    made: Vec::new(),
+  };
+  let block = Block {
+    maker: Maker::Operator,
+    lines: (1..=20).map(line).collect(),
+    more: false,
+    thought: None,
+  };
+  // Five lines stand between the row that counts the lines above and the row that counts those
+  // below, the line that runs the last of them.
+  assert_eq!(block.shown(false), 4..9);
+  // Near the top, the lines below fill the rows that the lines above leave.
+  let early = Block { lines: block.lines[4..].to_vec(), ..block.clone() };
+  assert_eq!(early.shown(false), 0..6);
 }
 
 #[test]

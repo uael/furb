@@ -255,9 +255,7 @@ pub(crate) const README: Walk = Walk {
       &[Act::Type("Review the change, and make the tests pass."), Act::Key("Enter")],
       "Working",
     ),
-    // The whole word came at once, so its block rolls to its last lines: he opens it to see
-    // each agent under the line that made them.
-    step("b", &[Act::Pointer { on: "lines", button: 0 }], "Find the bugs in tests/test_report.py"),
+    step("b", &[], "Find the bugs in tests/test_report.py"),
     step("c", &[], "report.py: total sums"),
   ],
 };

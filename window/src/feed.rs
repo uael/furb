@@ -301,8 +301,10 @@ impl Feed<'_> {
     rows
   }
 
-  /// The lines of a block in its box: the window of seven rows that rolls, or each line once the
-  /// operator opened it, then a row that says that more comes.
+  /// The lines of a block in its box: the window of seven rows that rolls around the line where
+  /// its word stands, or each line once the operator opened it. A row above says how many lines
+  /// stand above, and a row below how many follow, each a click that opens the block, or that
+  /// more comes.
   fn lines(&self, message: &str, block: &Block) -> Vec<Row> {
     let t = &self.model.tokens;
     let muted = self.style(Role::Muted);
@@ -317,17 +319,24 @@ impl Feed<'_> {
     let all = block.lines.len();
     let fold = Fold::Block(message.to_owned());
     let open = self.opened.unfolded.contains(&fold);
-    let (first, rolls) = (block.first(open), block.rolls());
-    if rolls {
-      let (mark, count) = if open { ("▴", all) } else { ("…", first) };
+    let shown = block.shown(open);
+    let counted = |mark: &str, count: usize| {
       let line = vec![run(format!("{mark:>gutter$}  {}", lines(count)), muted)];
-      rows.push(Row::clicked(self.boxed(line, t.raised), Click::Fold(fold)));
+      Row::clicked(self.boxed(line, t.raised), Click::Fold(fold.clone()))
+    };
+    if open && block.rolls() {
+      rows.push(counted("▴", all));
+    } else if shown.start > 0 {
+      rows.push(counted("…", shown.start));
     }
-    for (line, colors) in block.lines.iter().zip(colored.iter()).skip(first) {
+    let (follow, end) = (all - shown.end, shown.end);
+    for (line, colors) in block.lines.iter().zip(colored.iter()).take(end).skip(shown.start) {
       rows.extend(self.code(line, colors.clone(), numbers));
       rows.extend(self.agents(Some((line, numbers))));
     }
-    if block.more {
+    if follow > 0 {
+      rows.push(counted("…", follow));
+    } else if block.more {
       rows.push(Row::of(self.boxed(vec![run(format!("{:>gutter$}", "…"), muted)], t.raised)));
     }
     rows

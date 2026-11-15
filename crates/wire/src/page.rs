@@ -2,6 +2,8 @@
 //! and what the answer says to the operator, with the agents of the thread and the context of its
 //! chain.
 
+use std::ops::Range;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -226,25 +228,38 @@ impl Block {
     self.lines.iter().map(Line::rows).sum::<usize>() + usize::from(self.more) > ROLLS
   }
 
-  /// The first line of the block that shows: the first while it is open or while all fits, else
-  /// the first of the last lines that fill the rows that roll, beside one row that says how many
-  /// lines stand above and, while more comes, one row that says so. The last line shows whatever
-  /// rows it takes.
-  pub fn first(&self, open: bool) -> usize {
-    if open || !self.rolls() {
-      return 0;
-    }
+  /// The lines of the block that show: each while it is open or while all fits, else those that
+  /// fill the rows that roll around the line where its word stands, which stands as low as the
+  /// lines above it let it, beside one row that says how many lines stand above and one row that
+  /// says how many follow or that more comes. So the box keeps its height while its word runs. The
+  /// line where the word stands shows whatever rows it takes.
+  pub fn shown(&self, open: bool) -> Range<usize> {
+    let all = self.lines.len();
+    let Some(at) = stands(&self.lines).filter(|_| !open && self.rolls()) else {
+      return 0..all;
+    };
     let taken: Vec<usize> = self.lines.iter().map(Line::rows).collect();
-    let more = usize::from(self.more);
-    let rows = ROLLS - 1 - more;
-    let mut first = taken.len().saturating_sub(1);
-    let mut used = taken.get(first).copied().unwrap_or_default();
-    while first > 0 && used + taken[first - 1] <= rows {
-      first -= 1;
-      used += taken[first];
+    let edges =
+      |first: usize, end: usize| usize::from(first > 0) + usize::from(end < all || self.more);
+    let (mut first, mut end, mut used) = (at, at + 1, taken[at]);
+    loop {
+      if first > 0 && used + taken[first - 1] + edges(first - 1, end) <= ROLLS {
+        first -= 1;
+        used += taken[first];
+      } else if end < all && used + taken[end] + edges(first, end + 1) <= ROLLS {
+        used += taken[end];
+        end += 1;
+      } else {
+        break first..end;
+      }
     }
-    first
   }
+}
+
+/// Where a word stands among its lines: the last line that runs, asks, failed or stopped, else its
+/// last line, none when it has no line.
+pub fn stands(lines: &[Line]) -> Option<usize> {
+  lines.iter().rposition(|line| line.mark != Mark::Ran).or(lines.len().checked_sub(1))
 }
 
 impl Line {

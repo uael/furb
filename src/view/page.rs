@@ -17,7 +17,7 @@ use furb_wire::{
   card::{Card, Standing},
   page::{
     Agent, Answered, Block, Context, Exchange, LITERAL, Line, Made, Mark, Output, Page, Reach,
-    Retrying, Said, Saying, Thought, Work, wrote,
+    Retrying, Said, Saying, Thought, Work, stands, wrote,
   },
   state::{State, working},
 };
@@ -620,14 +620,13 @@ impl<'a> Reader<'a> {
       readers: Vec::new(),
     };
     let lines = rungs.last().map(|last| self.lines(last, 0)).unwrap_or_default();
-    let stands = lines.iter().rposition(|line| line.mark != Mark::Ran);
     let began = self.streams.began.get(&prompt.id);
     let ended = self.streams.ended.get(&prompt.id);
     Agent {
       card,
       began: began.copied(),
       took: began.zip(ended).map(|(began, ended)| ended.saturating_sub(*began) / 1000),
-      line: stands.or(lines.len().checked_sub(1)).map(|at| lines[at].clone()),
+      line: stands(&lines).map(|at| lines[at].clone()),
       at: None,
     }
   }
