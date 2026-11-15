@@ -69,12 +69,14 @@ async fn login_path() -> Option<&'static OsString> {
 /// background, or that another thread forks while the pipe is made, holds it past the shell.
 async fn asked_path(shell: &Path, limit: Duration) -> Option<OsString> {
   static MADE: AtomicUsize = AtomicUsize::new(0);
-  let file = env::temp_dir().join(format!(
-    "furb-login-path-{}-{}",
-    process::id(),
-    MADE.fetch_add(1, Ordering::Relaxed)
-  ));
-  let stdout = fs::OpenOptions::new().write(true).create_new(true).open(&file).ok()?;
+  // A process of an earlier life with the same id may have left its file, so the name moves on
+  // until a new file opens.
+  let (file, stdout) = (0..TRIES).find_map(|_| {
+    let at = MADE.fetch_add(1, Ordering::Relaxed);
+    let file = env::temp_dir().join(format!("furb-login-path-{}-{at}", process::id()));
+    let opened = fs::OpenOptions::new().write(true).create_new(true).open(&file).ok()?;
+    Some((Written(file), opened))
+  })?;
   let ran = async {
     let mut command = tokio_process::Command::new(shell);
     command.args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""]);
@@ -86,11 +88,25 @@ async fn asked_path(shell: &Path, limit: Duration) -> Option<OsString> {
     status
   };
   let status = time::timeout(limit, ran).await.ok().flatten();
-  let said = fs::read(&file);
-  drop(fs::remove_file(&file));
+  let said = fs::read(&file.0);
   let said = String::from_utf8_lossy(&said.ok()?).into_owned();
   let path = said.split_once("<furb-path>")?.1.split_once("</furb-path>")?.0;
   (status?.success() && !path.is_empty()).then(|| OsString::from(path))
+}
+
+/// How many names the read of the login path tries before it gives no path.
+const TRIES: usize = 64;
+
+/// The file that the login shell writes its path to, which goes when it is dropped, also when the
+/// read ends before the shell, as a life that ends in the first seconds of its first command.
+struct Written(PathBuf);
+
+impl Drop for Written {
+  fn drop(&mut self) {
+    // A file that is gone already needs nothing more, and any other failure leaves one empty file
+    // in the temporary folder, whose name no later read takes.
+    drop(fs::remove_file(&self.0));
+  }
 }
 
 /// The folders of `login` in order, then those of `current` that it lacks.

@@ -102,6 +102,23 @@ fn the_path_of_a_login_shell_whose_profile_leaves_a_process_on_its_output_is_rea
 
 #[test]
 #[cfg(unix)]
+fn the_path_of_the_login_shell_is_read_past_a_file_that_an_earlier_process_of_the_same_id_left() {
+  let left: Vec<_> = (0..2)
+    .map(|at| env::temp_dir().join(format!("furb-login-path-{}-{at}", process::id())))
+    .collect();
+  for one in &left {
+    fs::write(one, "").unwrap();
+  }
+  let shell = fake_shell("left", "printf '<furb-path>/c:/d</furb-path>'");
+  let got = asked(&shell);
+  for one in &left {
+    fs::remove_file(one).unwrap();
+  }
+  assert_eq!(got, Some("/c:/d".into()));
+}
+
+#[test]
+#[cfg(unix)]
 fn a_login_shell_that_fails_or_gives_no_path_gives_none() {
   assert_eq!(asked(&fake_shell("fails", "printf '<furb-path>/a</furb-path>'; exit 1")), None);
   assert_eq!(asked(&fake_shell("empty", "printf '<furb-path></furb-path>'")), None);
