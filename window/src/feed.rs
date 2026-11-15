@@ -75,14 +75,15 @@ impl Feed<'_> {
   }
 
   /// Each follow-up that waits on the thread, which its life sends once the chain of the thread
-  /// rests: his message where it will stand, its bar and its text muted, with a chip that says
-  /// that it waits and the cross that takes it back to the input at its right. Once it goes, it
-  /// stands there in its colors.
+  /// rests: his message where it will stand, its bar and its text muted, with a chip in the hue of
+  /// the thread that says that it waits for it, and the cross that takes it back to the input at
+  /// its right. Once it goes, it stands there in its colors.
   fn queued(&self) -> Vec<Row> {
     let t = &self.model.tokens;
     let muted = self.style(Role::Muted).bg(t.raised);
+    let chip = self.style(Role::Button).fg(self.model.hue(&self.opened.thread.key));
     // The cross ends where the time of a line of a block ends, two columns in from the band.
-    let right = vec![run(" queued ", self.style(Role::Button)), run(" ✕", muted), run("  ", muted)];
+    let right = vec![run(" queued ", chip), run(" ✕", muted), run("  ", muted)];
     let chip = |one: &FollowUp| {
       let mut rows = self.band(&one.message, (t.border, muted), right.clone());
       if let Some(row) = rows.get_mut(1) {
