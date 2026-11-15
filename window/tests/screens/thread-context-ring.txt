@@ -1,4 +1,4 @@
-● furb · read the trace of the open                              ✓ Resolved
+● furb · read the trace of the open                               ✓ Resolved
 ┃
 ┃ read the trace of the open
 ┃ (the model reads much)

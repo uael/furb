@@ -70,7 +70,7 @@ impl Model {
       let lines = line::wrapped(text, room);
       lines.iter().map(|line| self.said(line, style, "")).chain([Vec::new()]).collect::<Vec<_>>()
     };
-    let mut rows = vec![vec![run(" furb", t.style(Role::Title))], Vec::new()];
+    let mut rows = vec![vec![run("  furb", t.style(Role::Title))], Vec::new()];
     if self.client.settled.is_empty() && !self.known() && !self.slow {
       return rows;
     }

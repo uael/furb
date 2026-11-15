@@ -236,15 +236,13 @@ impl Feed<'_> {
     let forks = (width(&left)..width(&left) + mark.width() - 3, branches > 0);
     left.extend([run(mark, muted), run(title, self.style(Role::Title))]);
     let (mark, button) = self.closer(card, branch);
-    let apart = |mark| [mark, run(" ".repeat(APART), Style::new())];
-    let right: Line = self
-      .present()
-      .into_iter()
-      .chain(mark)
-      .flat_map(apart)
-      .chain(button.clone().map(|one| one.0))
-      .collect();
-    let line = spread(left, right, self.wide.saturating_sub(2), Style::new());
+    let parts = self.present().into_iter().chain(mark).chain(button.clone().map(|one| one.0));
+    let apart = |(at, one)| [(at > 0).then(|| run(" ".repeat(APART), Style::new())), Some(one)];
+    let right: Line = parts.enumerate().flat_map(apart).flatten().collect();
+    // A button ends at the edge of the boxes, and a mark with no button after it at the column of
+    // the text, as each label at the right of the feed.
+    let reach = self.wide.saturating_sub(if button.is_some() { 2 } else { 4 });
+    let line = spread(left, right, reach, Style::new());
     let end = width(&line);
     let hot = button.map(|(one, does)| (end - one.content.width()..end, Some(Click::Key(does))));
     // The mark of the branches of a thread opens its last branch.
@@ -805,7 +803,7 @@ impl Feed<'_> {
       let right =
         answered.iter().map(|one| run(closed(one, login), self.style(Role::Muted))).collect();
       return vec![
-        Row::of(spread(left, right, self.wide.saturating_sub(2), Style::new())),
+        Row::of(spread(left, right, self.wide.saturating_sub(4), Style::new())),
         Row::default(),
       ];
     }

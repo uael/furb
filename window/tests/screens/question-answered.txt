@@ -1,4 +1,4 @@
-● furb · where does the list stand            ✓ Resolved       All projects ▾        This computer
+● furb · where does the list stand             ✓ Resolved      All projects ▾        This computer
 ┃
 ┃ where does the list stand                                    Resolved 1 ▸
 ┃ (the model asks a choice)
@@ -7,7 +7,7 @@
     1  side = await prompt(Literal['right', 'left'], …+51
     2  close(side)
 
-  ◆ Where does the list of cards stand?          left · you
+  ◆ Where does the list of cards stand?        left · you
 
   left
 

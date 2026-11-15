@@ -1,4 +1,4 @@
-● furb · edit the notes of the day            ✓ Resolved       All projects ▾        This computer
+● furb · edit the notes of the day             ✓ Resolved      All projects ▾        This computer
 ┃
 ┃ edit the notes of the day                                    Resting 1
 ┃ (the model edits a file)                                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖

@@ -1,4 +1,4 @@
- furb                                                          All projects ▾       studio offline
+  furb                                                         All projects ▾       studio offline
 
   2 threads need you.                        ⌥A goes to one    Needs you 2
   ● 3 sessions run, 1 with no window.

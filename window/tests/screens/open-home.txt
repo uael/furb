@@ -1,4 +1,4 @@
- furb                                                          All projects ▾        This computer
+  furb                                                         All projects ▾        This computer
 
   Nothing needs you.                                           Resting 2
   ● 2 sessions run.
