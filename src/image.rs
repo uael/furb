@@ -4,21 +4,21 @@
 //! open then goes by the record, and a life that keeps the record drops the image once it stands
 //! so. The record holds no fact of it.
 //!
-//! An image depends on what the build gives its session, by two digests: [`BUILD`], which the
-//! build computes: the python that the build puts in a session beside the engine, the Rust that
-//! makes, holds or reads the half of the host and that the session calls, by the number of each
-//! function, the view, whose acts a host keeps in its part, and the typed surface of the
-//! contract, by which a host calls the engine of the life and reads what an ear answers.
-//! `build.rs` names each file of it. The other is [`furb_wire::SHAPES`], the shapes of the acts
-//! and the events that a host keeps. A host names the shape of its own part in that part. The
-//! key names the texts of the engine, of the Kernel and of the checkpointer too, as
-//! [`world::engine`] names them, which the session holds: a build of the same digest opens the
-//! image of other texts, as it replays a record of them, and the life then moves to the texts
-//! of the build as a step of its own, which [`Engine::cross`] writes. Only a life that keeps
-//! its record writes an image, since only that record holds each fact that the life said.
+//! An image holds what a build reads by the names of its fields: the session, which monty dumps
+//! under its dump version, and the half of the host, the part of each ear and the part of the
+//! host of the life, as JSON. So a build reads the image of another build as the rule of monty
+//! for its dumps says: a new field with a default, a field that goes and a new variant read an
+//! image of before, a parse that fails is no image, and [`VERSION`] says the rest of the meaning.
+//! A host gives its part a version of its own in that part. The key names the texts that the
+//! session runs: those of the engine, of the Kernel and of the checkpointer, as
+//! [`world::engine`] names them, and the python of the record, [`crate::RECORD`]. A build of
+//! other texts of the engine opens the image, as it replays a record of them, and the life then
+//! moves to the texts of the build as a step of its own, which [`Engine::cross`] writes. Only a
+//! life that keeps its record writes an image, since only that record holds each fact that the
+//! life said.
 //!
 //! The file holds its key, one line of JSON that spaces may end, then its body. The key names the
-//! tip of the record that the life stood at, those texts and that digest, the dump version of
+//! tip of the record that the life stood at, those texts and that version, the dump version of
 //! monty, which stands while monty reads it, whether the scratch directory of the record holds a
 //! file, since a life that opens from its image makes no file of it again, and the digest of the
 //! body as the file holds it, since monty checks no byte of a dump. A body is the session that
@@ -51,14 +51,18 @@ use crate::{
   world::{self, Format, Scratch, Tip, beside, disk},
 };
 
-/// What an image depends on in this build beside the texts of the engine, of the Kernel and of the
-/// checkpointer, as the build digests it: a build reads no image of another digest.
-const BUILD: &str = env!("FURB_IMAGED");
+/// The meaning of what an image holds beside its session and the texts that it runs. A change of
+/// the build that reads an image of before to another meaning with no fault of the parse, as a
+/// field that keeps its name and its type and holds another thing, raises it, and the test of the
+/// image of the corpus then asks for its image again.
+const VERSION: u32 = 1;
 
 /// What an image names, by which a reader checks it before it trusts a byte of its body.
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 struct Key {
-  build: String,
+  version: u32,
+  /// The digest of the python of the record, which the session holds.
+  record: String,
   /// The texts of the engine, of the Kernel and of the checkpointer of the build.
   engine: String,
   dump: u16,
@@ -86,7 +90,8 @@ impl Key {
   /// record, or at its tip now.
   fn of(record: &Path, bytes: Option<u64>, parts: Parts) -> io::Result<Self> {
     Ok(Self {
-      build: format!("{BUILD}.{}", furb_wire::SHAPES),
+      version: VERSION,
+      record: format!("{:x}", Sha256::digest(crate::RECORD)),
       engine: world::engine(),
       dump: monty::DUMP_VERSION,
       tip: Tip::of(record, bytes)?,

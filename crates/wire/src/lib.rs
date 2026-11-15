@@ -2,10 +2,6 @@
 //! and the words in which a person reads a time, a size and a count. A client links this crate and
 //! no engine and no daemon, so a phone or a web page reads the same meaning as the window.
 
-/// The digest of the shapes of this crate, by which a reader of an image of a life takes no image
-/// of other shapes.
-pub const SHAPES: &str = env!("FURB_WIRE_SHAPES");
-
 pub mod act;
 pub mod card;
 pub mod config;

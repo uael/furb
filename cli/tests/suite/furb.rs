@@ -288,7 +288,7 @@ fn a_life_goes_on_from_its_image_and_its_record_replays_with_no_drift() {
   assert_eq!(turns(), imaged, "the turns of the image are the turns of the record");
   assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "42\n");
   let held = fs::read(&image).expect("the image of the life that opened by the record");
-  assert!(held.starts_with(b"{\"build\":"), "a life that keeps drops an image that does not agree");
+  assert!(held.starts_with(b"{\"version\":"), "a life that keeps drops an image that does not agree");
   assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "43\n");
 }
 
@@ -325,11 +325,12 @@ fn a_life_opens_from_an_image_that_its_record_passed_and_says_the_entries_after_
   assert_eq!(stands(&record()), before + 2, "a life that opens by its record stands its root once");
 }
 
-/// The key of an image names what its session depends on in the build that wrote it, by a digest
-/// that the build computes, and the dump version of monty. A build of another digest takes no such
-/// image, and neither does a monty that does not read the dump: the life opens by its record.
+/// The key of an image names the version of the meaning of what it holds, the python of the record
+/// that its session runs, and the dump version of monty. A build of another version or of another
+/// python of the record takes no such image, and neither does a monty that does not read the dump:
+/// the life opens by its record.
 #[test]
-fn a_life_opens_by_its_record_when_the_build_or_the_dump_of_its_image_is_another() {
+fn a_life_opens_by_its_record_when_the_version_or_the_dump_of_its_image_is_another() {
   let yard = Yard::new("image-build");
   assert_eq!(printed(yard.kept(&["run", "k = 41"]), ""), "None\n");
   let image = PathBuf::from(format!("{}.image", yard.record().display()));
@@ -337,7 +338,7 @@ fn a_life_opens_by_its_record_when_the_build_or_the_dump_of_its_image_is_another
     let record = fs::read_to_string(yard.record()).expect("the record");
     record.lines().filter(|line| line.starts_with("[[\"stand\"")).count()
   };
-  for (field, other) in [("build", json!("another")), ("dump", json!(0))] {
+  for (field, other) in [("version", json!(0)), ("record", json!("another")), ("dump", json!(0))] {
     // The key is the first line of the file, and the body starts after it.
     let held = fs::read(&image).expect("the image");
     let end = held.iter().position(|byte| *byte == b'\n').expect("the line of the key");
@@ -350,7 +351,7 @@ fn a_life_opens_by_its_record_when_the_build_or_the_dump_of_its_image_is_another
     assert_eq!(stands(), before + 1, "a life on an image of another {field} stands its root once");
   }
   let before = stands();
-  assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "43\n");
+  assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "44\n");
   assert_eq!(stands(), before + 1, "the life that opens from its image stands its root once");
 }
 

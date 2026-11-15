@@ -59,14 +59,15 @@ API of its own:
   two runs, and the half of the host, which `src/engine/image.rs` gives, with what each ear gives a fresh ear of its
   make, as `Ear::image` and `Ear::imaged` say, and the part of the host of the life, which that host gives and takes
   back before the life loads the image. It is a cache: its key names the tip of the record, the dump version of
-  monty, the texts of the engine, of the Kernel and of the checkpointer of the build, a digest that the build computes
-  of what else an image depends on in the build,
-  whether the scratch directory of the record holds a file, and the digest of its body, and the part of the host
-  names the digest of the files that give it its shape. A life that keeps its record drops the image once it stands on
+  monty, the texts of the engine, of the Kernel and of the checkpointer of the build, the python of the record, the
+  version of the meaning of what it holds, whether the scratch directory of the record holds a file, and the digest of
+  its body, and the part of the host names the version of its own meaning. serde reads the half and the part by the
+  names of their fields, so a build reads the image of another build as monty reads an older dump: a new field takes a
+  default, and a change of meaning raises the version. A life that keeps its record drops the image once it stands on
   the record by the record, so a read and an open that fails leave it. Only a life that keeps its record writes an image,
   since each other life says a fact that its record does not hold. A life of the command line or of the host that
   keeps its record ends with its image, and writes no checkpoint there. The next life of a build of the same texts
-  and digests on the same ears opens from it: it runs no boot, reads no entry
+  and versions on the same ears opens from it: it runs no boot, reads no entry
   and says no stand, and each ear takes each act that the ear before it held in flight as an act that an earlier life
   took: it takes a reply, a wait or a prompt again, and closes a command as interrupted, which no view shows as a
   failure. A life that went on from the image and wrote

@@ -212,8 +212,6 @@ jsonschema = { version = "0.33", default-features = false }
 ruff_python_parser = "0.0.9"
 ruff_python_ast = "0.0.9"
 ruff_text_size = "0.0.9"
-# The digest of what an image of a life depends on in the build, which the key of an image names.
-sha2 = "0.10"
 
 # A build for development keeps no debug information: a panic names its file and line by itself, and a backtrace names
 # each function. On macOS the line tables of a program stay in its object files, beside it in target/*/deps, and cargo

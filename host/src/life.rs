@@ -14,7 +14,6 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
-  borrow::Cow,
   collections::{BTreeMap, HashMap, VecDeque},
   fs::File,
   future::poll_fn,
@@ -390,17 +389,23 @@ impl Slot {
   }
 }
 
-/// The part of the host in the image of a life: what the life keeps, under the digest of the files
-/// that give it its shape, which `build.rs` computes. A host of another build of them takes no
-/// such part, so the life opens by its record.
+/// The part of the host in the image of a life: what the life keeps, under the version of its
+/// meaning. serde reads it by the names of its fields, as the image of the crate reads its half: a
+/// host of a later build reads the part of an earlier one when each field that it lacks takes a
+/// default, and takes no part of another version, so the life opens by its record.
 #[derive(Serialize, Deserialize)]
 struct Part<K> {
-  build: Cow<'static, str>,
+  version: u32,
   kept: K,
 }
 
-/// The digest of the files that give their shape to what a host of this build keeps.
-const BUILD: &str = env!("FURB_KEPT");
+/// The meaning of what the host keeps in the image of a life. A change that reads a part of before
+/// to another meaning with no fault of the parse raises it, as a field of [`Kept`], or of a type of
+/// the view that it holds, that keeps its name and its type and holds another thing, or a fix of
+/// the fold that must reach the past of each life. A new field takes `#[serde(default)]`, a field
+/// that changes its name takes `#[serde(alias)]`, and no type that the part holds denies a field
+/// that it does not know.
+const VERSION: u32 = 1;
 
 /// The facts that the log of a life let go: each one before the last checkpoint of the life, which
 /// the record holds, and each fact that an open told but a fact of keep, which the file of the log
@@ -1181,7 +1186,7 @@ async fn lives(
   // A life that told its past stands on it, and on no image that came after.
   let mut stands = |part: &[u8]| {
     let read = serde_json::from_slice::<Part<Kept>>(part).ok();
-    kept = read.filter(|one| images && one.build == BUILD).map(|one| one.kept);
+    kept = read.filter(|one| images && one.version == VERSION).map(|one| one.kept);
     kept.is_some()
   };
   let again = opening.clone();
@@ -1344,7 +1349,7 @@ async fn ended(engine: Engine, life: &mut Life, mut imaging: Imaging) -> Option<
   // The next life opens from this image, so it stands on one.
   life.kept.watch.imaged();
   let record = life.record.as_deref().map(Path::new);
-  let part = Part { build: BUILD.into(), kept: &life.kept };
+  let part = Part { version: VERSION, kept: &life.kept };
   rebirth::ended(engine, record, &part)
 }
 
@@ -1360,7 +1365,7 @@ fn owed_image(engine: &mut Engine, life: &mut Life, record: Option<&str>, imagin
   life.kept.watch.imaged();
   life.kept.held.shown(&mut life.kept.streams);
   match image::take(engine, Path::new(record)) {
-    Ok(Some(taken)) => imaging.start(taken, Part { build: BUILD.into(), kept: life.kept.clone() }),
+    Ok(Some(taken)) => imaging.start(taken, Part { version: VERSION, kept: life.kept.clone() }),
     Ok(None) => {}
     Err(no) => life.put(unimaged(&no)),
   }

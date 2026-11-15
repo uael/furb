@@ -24,8 +24,9 @@ use crate::{
 /// The half of the host in the image of a life: what [`Outside`] and [`Engine`] hold of the
 /// session, the part of each ear by its name, and the standing of the life, which the provider of a
 /// later life stands on before the session loads, with the fact made of the texts that the life
-/// runs, whose engine that provider gives its models. The build digests this file into the key of
-/// an image, as `src/image.rs` says, so a build reads no half of another shape.
+/// runs, whose engine that provider gives its models. serde reads it by the names of its fields,
+/// so a new field takes a default and a field that changes its meaning raises the version of an
+/// image, as `src/image.rs` says.
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Half {
   pub(crate) made: Object,

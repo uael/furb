@@ -344,15 +344,15 @@ fn states_of(value: &Value, id: &str, states: &mut Vec<String>) {
 }
 
 #[tokio::test]
-async fn a_life_whose_image_holds_the_part_of_a_host_of_another_build_opens_by_its_record() {
-  // The key and the body agree, and the part of the host names the files of another build.
+async fn a_life_whose_image_holds_the_part_of_a_host_of_another_version_opens_by_its_record() {
+  // The key and the body agree, and the part of the host names another version of its meaning.
   opens_by_its_record_after_its_past("image-host", |image| {
     let (mut key, host) = host_part(image);
     let end = image.iter().position(|byte| *byte == b'\n').expect("the line of the key");
-    let named = b"{\"build\":\"";
-    assert!(image[host..].starts_with(named), "the part of the host names its build first");
-    let digest = host + named.len();
-    image[digest..digest + 64].fill(b'0');
+    let named = b"{\"version\":";
+    assert!(image[host..].starts_with(named), "the part of the host names its version first");
+    let version = host + named.len();
+    image[version] = if image[version] == b'0' { b'9' } else { b'0' };
     key["body"] = json!(format!("{:x}", Sha256::digest(&image[end + 1..])));
     let line = serde_json::to_vec(&key).expect("the key");
     image[..line.len()].copy_from_slice(&line);
@@ -396,7 +396,7 @@ async fn opens_by_its_record_after_its_past(name: &str, change: impl FnOnce(&mut
   assert_eq!(rung, Some(true), "the life tells its past before its birth");
   ended(life).await;
   let held = fs::read(&image).expect("the image of the life that opened by the record");
-  assert!(held.starts_with(b"{\"build\":"), "the life ends with an image that agrees");
+  assert!(held.starts_with(b"{\"version\":"), "the life ends with an image that agrees");
 }
 
 #[tokio::test]

@@ -1291,6 +1291,55 @@ fn each_record_of_the_corpus_opens_by_its_image_to_the_state_of_its_record() {
   }
 }
 
+/// An image that an earlier build wrote opens on each later build by the image, to the state of its
+/// record, as monty loads a dump that an earlier monty wrote: `tests/image` holds a record and its
+/// image, which no build makes again but the one that raises the version of an image. That build
+/// writes both again with `FURB_IMAGE_AGAIN=1`, from `language.jsonl` of the corpus.
+#[test]
+fn an_image_that_an_earlier_build_wrote_opens_by_the_image_to_the_state_of_its_record() {
+  let frozen = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("image");
+  let at = yard("image-of-before");
+  let record = at.join("record.jsonl");
+  if env::var_os("FURB_IMAGE_AGAIN").is_some() {
+    let corpus = corpus().into_iter().find(|one| one.ends_with("next/language.jsonl")).unwrap();
+    fs::copy(corpus, &record).unwrap();
+    let mut life = opening(&at, true).boot::<String>([]).unwrap().0;
+    assert!(image::keep(&mut life, &record, &()).unwrap(), "the life writes its image");
+    drop(life);
+    fs::create_dir_all(&frozen).unwrap();
+    for name in ["record.jsonl", "record.jsonl.image"] {
+      fs::copy(at.join(name), frozen.join(name)).unwrap();
+    }
+  }
+  for name in ["record.jsonl", "record.jsonl.image"] {
+    fs::copy(frozen.join(name), at.join(name)).unwrap();
+  }
+  let word = "[[c, turns(on=c), sorted(k for k in module(c) if not k.startswith('__'))] \
+              for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')]]";
+  let read = || {
+    let told = Arc::new(Mutex::new(Vec::new()));
+    let heard = Arc::clone(&told);
+    let progress = Progress(Arc::new(move |stage, _, _| heard.lock().unwrap().push(stage)));
+    let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let opening = Opening { inspecting: Some(true), ..opening(&at, false) };
+    let mut life =
+      reactor.block_on(opening.open::<String>([], progress, &mut |_| true, None)).unwrap().0;
+    let state = life.word(word, vec![]).unwrap().as_ref().py_repr();
+    let booted = told.lock().unwrap().contains(&Stage::Boot);
+    (state, booted)
+  };
+  let (imaged, booted) = read();
+  assert!(
+    !booted,
+    "the image of tests/image opens by the image: a change that reads it to another meaning raises \
+     the version of an image and writes it again with FURB_IMAGE_AGAIN=1"
+  );
+  image::drop_of(&record);
+  let (recorded, booted) = read();
+  assert!(booted, "with no image the life boots on its record");
+  assert_eq!(imaged, recorded, "the image of an earlier build gives the state of its record");
+}
+
 /// Each run of each chain whose word no turn of that chain shows, as a python expression in the names of the engine.
 const UNSHOWN: &str = "[(c, x[1], x[4]) for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')] \
                        for x in transcript(c, 'run') if x[3] == c \
