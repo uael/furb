@@ -18,7 +18,7 @@ use std::{
   env,
   ffi::OsStr,
   fs,
-  path::{Path, PathBuf},
+  path::{Path, PathBuf, absolute},
   process::ExitCode,
   sync::Arc,
   time::{Duration, Instant},
@@ -263,8 +263,10 @@ struct Setup {
 /// The programs of a capture, from their folder, by default the folder of this one, once it holds
 /// both.
 fn programs(bin: Option<PathBuf>, moving: bool) -> Result<Programs, Error> {
+  // The window runs in tmux in the folder of its project, so a folder that the words name stands
+  // as a whole path.
   let bin = bin
-    .map_or_else(|| env::current_exe().map(|me| me.with_file_name("")), Ok)
+    .map_or_else(|| env::current_exe().map(|me| me.with_file_name("")), absolute)
     .map_err(|source| Error::Process { what: "this program", source })?;
   for program in ["furb-window", "furb"] {
     if !bin.join(program).is_file() {

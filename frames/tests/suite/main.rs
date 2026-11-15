@@ -4,6 +4,7 @@
 #[path = "../../../tests/common/yard.rs"]
 mod yard;
 
+mod capture;
 mod compare;
 mod image;
 mod motion;
