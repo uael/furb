@@ -1,8 +1,8 @@
- furb · ground the branch, message by…        ✓ Resolved       All projects ▾         this machine
+ furb · ground the branch, message by…        ✓ Resolved       All projects ▾        This computer
 ┃
 ┃ ground the branch, message by message                        Resolved 1 ▸
 ┃
-
+                                                              ▐ ✓ ground the branch,…         now ▌
        opus/high
     1  close(None)
 
@@ -21,7 +21,7 @@
     3  close(None)
 
 ┃
-  Jump to latest ↓                                        ↘
+  ↓ Jump to latest  ↘
 ┃
 ┃ A reply opens this thread again
 ┃

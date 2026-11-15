@@ -1,4 +1,4 @@
- furb · agent · Run the bench of the replay           Back     All projects ▾         this machine
+ furb · agent · Run the bench of the replay           Back     All projects ▾        This computer
 ┃
 ┃ Run the bench of the replay                                  Working 1
 ┃ (the agent waits)                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖

@@ -1,15 +1,8 @@
- furb-try · how long does an open…    ✓ Resolved    Reopen     All projects ▾         this machine
-┃
-┃ how long does an open take (the model answers)               Resolved 1 ▸
-┃
+ furb-try · how long does an open…    ✓ Resolved    Reopen     All projects ▾        This computer
 
-       opus/high
-    1  found = 2
-    2  close('The open takes **329 s**. Two stages h…+251
-
-  The open takes 329 s. Two stages hold most of it: 181 s
+  The open takes 329 s. Two stages hold most of it: 181 s      Resolved 1 ▸
   to send each entry to the ears of the host, and 104 s in
-  the boot.
+  the boot.                                                   ▐ ✓ how long does an open…      now ▌
 
   • seed reads each chain once
   • the image skips the boot
@@ -19,12 +12,19 @@
 
   See the trace.
 
+┃
+┃   ◐  await wait(1, __name__)
+┃   4  answer = 41 + 1
+┃
 
-
+┃
+┃   ✗  raise ValueError('no')
+┃      ValueError: no
+┃
 
 ┃
 ┃ A word of Python to run
 ┃
-┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
+┃  Message  Python    → how long does an… ▾   opus   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ✗ ValueError: no · raise ValueError('no')     ⌃P commands
+                                                ⌃P commands

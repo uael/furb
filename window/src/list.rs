@@ -27,8 +27,8 @@ pub(crate) enum Row {
   Blank,
   /// A text of the list with no card.
   Says(&'static str, Role),
-  /// The key that does a thing, as a hint.
-  Key(Does),
+  /// The key that does a thing, and what it does, as a hint.
+  Key(Does, &'static str),
   Head(Part),
   /// The row between two cards: the card above it, and the card under it.
   Gap(Option<usize>, Option<usize>),
@@ -45,9 +45,8 @@ impl Model {
   pub(crate) fn rows(&self) -> Vec<Row> {
     let mut rows = vec![Row::Scope, Row::Blank];
     if self.client.settled.is_empty() && self.known() {
-      let (first, more) = ("No thread yet in this project.", "Other projects and sessions:");
-      rows.extend([Row::Says(first, Role::Prose), Row::Blank, Row::Says(more, Role::Muted)]);
-      rows.push(Row::Key(Does::GoTo));
+      rows.extend([Row::Says("No thread yet in this project.", Role::Prose), Row::Blank]);
+      rows.push(Row::Key(Does::GoTo, "other projects and sessions"));
     }
     for part in [Part::NeedsYou, Part::Working, Part::Resting, Part::Resolved] {
       let mut cards =
@@ -56,9 +55,13 @@ impl Model {
         continue;
       }
       rows.push(Row::Head(part));
+      // The open thread keeps its card in view while the resolved threads fold, so the list and
+      // the feed always show the same thread.
       if part == Part::Resolved {
-        rows.extend(self.open.then_some(Row::Blank));
-        rows.extend(cards.filter(|_| self.open).map(Row::Resolved));
+        let open = |at: &usize| self.client.selected.as_ref() == Some(&self.client.settled[*at].1);
+        let shown: Vec<usize> = cards.filter(|at| self.open || open(at)).collect();
+        rows.extend((!shown.is_empty()).then_some(Row::Blank));
+        rows.extend(shown.into_iter().map(Row::Resolved));
         continue;
       }
       let mut above = None;
@@ -88,10 +91,10 @@ impl Model {
       Row::Scope => self.scope(pointed == Some(row)),
       Row::Blank => Vec::new(),
       Row::Says(text, role) => vec![run(format!("  {text}"), t.style(role))],
-      Row::Key(does) => {
-        let style = t.style(Role::Muted);
-        let style = if pointed == Some(row) { style.fg(t.hover) } else { style };
-        vec![run("  ", Style::new()), run(self.key(does), style)]
+      Row::Key(does, says) => {
+        let lit = |style: Style| if pointed == Some(row) { style.fg(t.hover) } else { style };
+        let key = run(self.key(does), lit(t.style(Role::Prose)));
+        vec![run("  ", Style::new()), key, run(format!("  {says}"), lit(t.style(Role::Muted)))]
       }
       Row::Head(part) => self.head(part, pointed == Some(row)),
       Row::Gap(above, under) => self.gap(above, under),
@@ -157,7 +160,7 @@ impl Model {
           self.client.machines[at].name
         )
       }
-      (0, None, 1) => "this machine".to_owned(),
+      (0, None, 1) => "This computer".to_owned(),
       (0, None, count) => format!("{count} machines"),
     };
     let style = if pointed { t.style(Role::Prose).fg(t.hover) } else { t.style(Role::Prose) };

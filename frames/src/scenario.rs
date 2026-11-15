@@ -520,7 +520,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       sessions: &[],
       words: &[],
       steps: &[
-        step("a", &[], "this machine"),
+        step("a", &[], "This computer"),
         step("b", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
       ],
     }),

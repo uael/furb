@@ -1,4 +1,4 @@
- furb · why is the seed slow on a big record       Resolve     All projects ▾         this machine
+ furb · why is the seed slow on a big record       Resolve     All projects ▾        This computer
 ┃
 ┃ why is the seed slow on a big record                         Working 1
 ┃ (the model thinks)                                          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖

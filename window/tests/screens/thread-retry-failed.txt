@@ -1,4 +1,4 @@
- furb · the bench stalls on a cold build           Resolve     All projects ▾         this machine
+ furb · the bench stalls on a cold build           Resolve     All projects ▾        This computer
 ┃
 ┃ the bench stalls on a cold build                             Needs you 1
 ┃ (the model is asked again)                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖

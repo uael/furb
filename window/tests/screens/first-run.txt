@@ -1,9 +1,9 @@
- furb                                                          furb-try ▾             this machine
+ furb                                                          furb-try ▾            This computer
 
                                                                 No thread yet in this project.
 
-                                                                Other projects and sessions:
-                                                                ⌃O
+                                                                ⌃O  other projects and sessions
+
 
 
 

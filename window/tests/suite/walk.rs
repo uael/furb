@@ -144,7 +144,9 @@ fn each_thing_that_lights_on_the_home_takes_a_click() {
 
 #[test]
 fn each_thing_that_lights_on_a_thread_at_rest_takes_a_click() {
-  assert_eq!(walked(thread, &[]), Vec::<String>::new());
+  // The card of the open thread, which stays in view when the resolved threads fold: its click
+  // moves to the end of the thread, which the feed already shows.
+  assert_eq!(walked(thread, &["how long does an open"]), Vec::<String>::new());
 }
 
 #[test]

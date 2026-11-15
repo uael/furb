@@ -1,9 +1,9 @@
- furb                                                          broken ▾               this machine
+ furb                                                          broken ▾              This computer
 
                                                                 No thread yet in this project.
 
-                                                                Other projects and sessions:
-                                                                ⌃O
+                                                                ⌃O  other projects and sessions
+
 
 
 

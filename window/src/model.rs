@@ -292,7 +292,7 @@ impl Model {
   pub(crate) fn clicked(&mut self, y: usize) -> Option<Does> {
     match self.row(y) {
       Some(Row::Scope) => return Some(Does::GoTo),
-      Some(Row::Key(does)) => return Some(does),
+      Some(Row::Key(does, _)) => return Some(does),
       Some(Row::Card(at, _) | Row::Resolved(at)) => {
         self.client.selected = self.client.settled.get(at).map(|one| one.1.clone());
         self.open_thread();

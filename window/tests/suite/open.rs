@@ -144,7 +144,7 @@ fn a_window_dials_its_machine_again_after_a_handover_and_its_thread_comes_back_w
   // window dials the machine again, and the life of its thread opens there again.
   daemon.upgraded(&upgraded);
   assert!(app.wait_until(PATIENCE, || daemon.watched()), "{}", app.text());
-  shows(&app, "this machine");
+  shows(&app, "This computer");
   assert_eq!(left(&app), before);
 }
 
@@ -176,7 +176,7 @@ fn while_the_machine_is_away_the_input_keeps_his_words_until_it_answers() {
   assert!(app.wait_until(PATIENCE, free), "the life of the first daemon keeps its record");
   daemon.back(&again);
   daemon.served();
-  shows(&app, "this machine");
+  shows(&app, "This computer");
   app.press("enter");
   let mut peer = daemon.peer();
   let life = record.display().to_string();

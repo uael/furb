@@ -1,4 +1,4 @@
- furb · remove the gate from the engine                        All projects ▾         this machine
+ furb · remove the gate from the engine                        All projects ▾        This computer
   Refused: Another process owns
   ~/furb/.furb/sessions/rest0.jsonl.                           Resting 1
                                                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖

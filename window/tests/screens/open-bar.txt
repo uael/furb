@@ -1,4 +1,4 @@
- furb · remove the gate from the engine                        All projects ▾         this machine
+ furb · remove the gate from the engine                        All projects ▾        This computer
   Opening · reads the record                          1.0 s
                                                                Resting 1
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖

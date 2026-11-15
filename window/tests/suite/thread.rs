@@ -125,15 +125,19 @@ fn a_thread_that_works_rolls_its_block_in_seven_rows_and_only_its_loaders_move()
   assert!(block[5].contains("await wait(600, chain)") && block[6].trim() == "…", "{frame}");
   screen("thread-works", &app);
 
-  // A step of the loaders draws their cells alone: the line that runs, and the state of the hints.
+  // A step of the loaders draws their cells alone: the line that runs, the state of the hints, and
+  // the letters of its word of work that the light passes.
   let before = app.render();
   app.advance(Loader::Command.step());
   let cells = moved(&before, &app.render());
   let frames: Vec<&str> =
     [Loader::Model, Loader::Command].iter().flat_map(|one| one.frames()).copied().collect();
-  let places: Vec<(usize, usize)> = cells.iter().map(|one| (one.0, one.1)).collect();
-  assert_eq!(places.len(), 2, "{cells:?}");
-  assert!(cells.iter().all(|one| frames.contains(&one.2.as_str())), "{cells:?}");
+  let (marks, letters): (Vec<_>, Vec<_>) =
+    cells.iter().partition(|one| frames.contains(&one.2.as_str()));
+  assert_eq!(marks.len(), 2, "{cells:?}");
+  let last = cells.iter().map(|one| one.1).max();
+  let lit = |one: &&(usize, usize, String)| Some(one.1) == last && "Working".contains(&one.2);
+  assert!(letters.iter().all(lit), "{cells:?}");
 
   // The fold of the block takes a click, so it lights under the pointer, and it opens the block.
   clicked(&app, "4 lines", 0, 0);

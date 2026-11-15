@@ -1,8 +1,8 @@
- furb-try · how long does an open take (the…  ✓ Resolved       All projects ▾         this machine
+ furb-try · how long does an open take (the…  ✓ Resolved       All projects ▾        This computer
 ┃
 ┃ how long does an open take (the model answers)               Resolved 1 ▸
 ┃
-
+                                                              ▐ ✓ how long does an open…      now ▌
        opus/high
     1  found = 2
     2  close('The open takes **329 s**. Two stages h…+251
