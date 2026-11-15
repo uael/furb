@@ -1,5 +1,5 @@
-//! Where furb finds the window, in the order it looks, beside a furb, on a PATH and in a checkout
-//! that a test makes.
+//! The window of the checkout of the build, which furb looks for last: the checkout is fixed when
+//! furb is built, so no process can name another one, and the suite proves the places before it.
 
 use std::{
   ffi::OsString,
@@ -56,29 +56,6 @@ impl Yard {
   fn found(&self, named: Option<&str>) -> Result<PathBuf, CliError> {
     found(named.map(OsString::from), Some(&self.furb), self.bin.as_os_str(), &self.checkout)
   }
-}
-
-#[test]
-fn the_program_that_furb_window_names_comes_first() {
-  let yard = Yard::new("named");
-  Yard::window(&yard.furb);
-  assert_eq!(yard.found(Some("/opt/window")).unwrap(), PathBuf::from("/opt/window"));
-}
-
-#[test]
-fn the_window_beside_furb_comes_before_the_one_on_path() {
-  let yard = Yard::new("beside");
-  let beside = Yard::window(&yard.furb);
-  Yard::window(&yard.bin);
-  assert_eq!(yard.found(Some("")).unwrap(), beside);
-}
-
-#[test]
-fn the_window_on_path_comes_before_the_one_of_the_checkout() {
-  let yard = Yard::new("path");
-  let on = Yard::window(&yard.bin);
-  Yard::window(&yard.checkout.join("target/debug"));
-  assert_eq!(yard.found(None).unwrap(), on);
 }
 
 #[test]

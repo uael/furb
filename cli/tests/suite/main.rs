@@ -11,6 +11,7 @@ mod tailscale;
 #[path = "../../../tests/common/yard.rs"]
 mod yard;
 
+mod found;
 mod furb;
 mod held;
 mod host;
