@@ -31,7 +31,7 @@ LANE_BASE: str = globals().setdefault("LANE_BASE", "main")
 LANE_ITEMS: str = globals().setdefault("LANE_ITEMS", ".furb/lane.json")
 LANE_LOOK = 600.0
 LANE_CHECKS = {
-  "the title": 'python3 script/title.py "$(git log -1 --format=%s)"',
+  "the title": 'cargo xtask title "$(git log -1 --format=%s)"',
   "a dash in the prose": r'''git diff BASE...HEAD -- . ':(exclude)tests/corpus' | python3 -c "import sys; sys.exit(any(l[0] == '+' and ('\u2013' in l or '\u2014' in l) for l in sys.stdin if l))"''',
   "the format of the Rust": "cargo fmt --all --check",
   "a comment past 100 columns": "cargo xtask comment-width --base BASE",
@@ -52,7 +52,7 @@ The rules:
 - The owner defines done: the least code, the simplest and the most readable, that says the most coherent meaning. Add no second home for a truth and no second way to do a thing.
 - Give each command a timeout of twice the time that it should take, and make a long command print its progress.
 - A `git commit` verifies only the form of its files and ends in about 2 seconds, and a `git push` runs no check. So run the one or two tests of your change while you work, as skill("testing") says: the whole of the checks runs on a period, outside your commit. Run the push as its own command. Never commit or push with --no-verify.
-- Commit with a title that `python3 script/title.py "<title>"` accepts, and a body that says why. Quote no word of a person in a commit.
+- Commit with a title that `cargo xtask title "<title>"` accepts, and a body that says why. Quote no word of a person in a commit.
 <PUSH>
 - Read the log of a job of CI with `gh api repos/uael/furb/actions/jobs/<id>/logs`, where <id> ends the URL of the job. `gh workflow run <file> --ref <branch>` starts a workflow by hand on a pushed branch.
 - Change nothing outside your tree but $TMPDIR, where each script of your oracle takes a name that starts with a word of your item, since other items write there too. Never run `furb host upgrade`, and end no process by its name: the daemon of the owner runs his lives.

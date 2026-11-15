@@ -26,8 +26,8 @@ REPO = Path(__file__).resolve().parents[2]
 
 @pytest.fixture
 async def pulling(tmp_path: Path) -> Bench:
-  (tmp_path / "script").mkdir()
-  shutil.copy(REPO / "script" / "title.py", tmp_path / "script")
+  (tmp_path / "xtask" / "python").mkdir(parents=True)
+  shutil.copy(REPO / "xtask" / "python" / "title.py", tmp_path / "xtask" / "python")
   shutil.copy(REPO / "release-please-config.json", tmp_path)
   made = Bench(tmp_path, [REPO / ".furb" / "skills" / "pr" / "pr.py"], [[OPERATOR, [], 200000]], OPERATOR)
   made.sand.files[f"{tmp_path}/.github/pull_request_template.md"] = (REPO / ".github" / "pull_request_template.md").read_text(encoding="utf-8")

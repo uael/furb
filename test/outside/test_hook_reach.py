@@ -92,8 +92,8 @@ def test_a_file_of_the_engine_of_the_crate_or_of_a_manifest_reaches_the_whole_su
 
 
 def test_a_script_reaches_the_tests_that_name_it_and_no_other() -> None:
-  assert "test/outside/test_title_script.py" in reach.suite(["script/title.py"])
-  assert "test/test_boot.py" not in reach.suite(["script/title.py"])
+  assert "test/outside/test_title_script.py" in reach.suite(["xtask/python/title.py"])
+  assert "test/test_boot.py" not in reach.suite(["xtask/python/title.py"])
   assert "test/outside/test_contract_diff.py" in reach.suite(["xtask/python/contract.py"])
 
 
@@ -119,7 +119,7 @@ def test_every_file_of_the_tree_reaches_the_whole_set_as_a_run_with_all_files_gi
 
 
 def test_a_selection_of_tests_runs_with_no_coverage_and_the_whole_suite_keeps_it() -> None:
-  got = reach.command("pytest", ["script/title.py"])
+  got = reach.command("pytest", ["xtask/python/title.py"])
   assert got[:6] == ["uv", "run", "--no-sync", "pytest", "-q", "--no-cov"]
   assert "test/outside/test_title_script.py" in got[6:]
   assert reach.command("pytest", ["src/furb/engine.py"]) == ["uv", "run", "--no-sync", "pytest", "-q"]

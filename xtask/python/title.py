@@ -5,7 +5,7 @@ The rule lives in `.github/pull_request_template.md`, and the types in `changelo
 change if any, then a colon, a space and a sentence that starts with a capital letter, in 70 characters or fewer, as
 `fix(world): Reap the shell of a command that drops before its exit`.
 
-Usage: python3 script/title.py "<title>"
+Usage: cargo xtask title "<title>"
 
 With `--file <path>`, which the hook commit-msg gives, it checks the first line of a message that is no comment, and lets a
 merge pass. It prints nothing when the title is right, so that the hook prints only what fails.
@@ -16,7 +16,7 @@ import re
 import sys
 from pathlib import Path
 
-CONFIG = Path(__file__).resolve().parent.parent / "release-please-config.json"
+CONFIG = Path(__file__).resolve().parents[2] / "release-please-config.json"
 
 
 def types() -> list[str]:

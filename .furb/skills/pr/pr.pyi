@@ -1,7 +1,7 @@
 from furb.engine import Exit
 
 async def prcheck(title: str, why: str, outcome: list[str], breaking: list[str] | None = None, where: str = "") -> int:
-  """prcheck(title, why, outcome) runs script/title.py of the worktree at where on the title, and refuses a title that it refuses, with its words.
+  """prcheck(title, why, outcome) runs xtask/python/title.py of the worktree at where on the title, and refuses a title that it refuses, with its words.
   It counts the words of why and outcome, which hold 300 at most, and gives that count.
   It refuses a sentence of more than 25 words, with its length and its start.
   It refuses a line of why or outcome that ends with no full stop, as a command does.

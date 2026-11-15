@@ -23,7 +23,7 @@ Title: `type(area): What changed`, 70 characters or fewer, as
 - What changed is one sentence in Simplified Technical English that starts with a capital letter.
 - Do not start with a tool name such as [claude], [codex] or [ai].
 - The squash merge keeps the title as the commit on main. The check `the title` fails a title that
-  breaks this rule, and `python3 script/title.py "<title>"` runs it on your machine.
+  breaks this rule, and `cargo xtask title "<title>"` runs it on your machine.
 
 Body: keep Why and Outcome. Delete Breaking changes when nothing breaks. Write up to 300 words.
 The checklist, Breaking changes, a table and a diagram label do not count. Cut by deleting a whole

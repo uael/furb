@@ -443,7 +443,7 @@ fix what your change broke, and report what was broken before.
   commit runs a test, a type check, a format of Rust or a check that reads the whole repository: run the one or two
   tests of your change while you work, as the skill `testing` says, and the two commands below run the rest outside the
   commit, on a period. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of
-  `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. A merge commit,
+  `xtask/python/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. A merge commit,
   which `git merge` makes or `git commit` ends after a conflict, runs the hooks of a commit only on each file whose
   content differs from its version in every parent: a file that it takes whole from one parent passed the hooks of that
   parent, and the gates check the whole tree. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file.
@@ -609,7 +609,7 @@ Prose here uses no em dash and no en dash. A docstring is a document.
 Read `.github/pull_request_template.md` whole and apply it strictly.
 
 It is the one home of the rules of a pull request: its scope, its title, which release-please reads, and its body. The
-check `the title`, in `.github/workflows/titles.yml`, runs `script/title.py` on each title, at each change of the pull
+check `the title`, in `.github/workflows/titles.yml`, runs `xtask/python/title.py`, which `cargo xtask title` runs too, on each title, at each change of the pull
 request and at each edit of its title, and reads the types from their one home, the `changelog-sections` of
 `release-please-config.json`.
 

@@ -1,4 +1,4 @@
-"""prcheck checks a title with script/title.py and a body with the rules of the template, on the real engine."""
+"""prcheck checks a title with xtask/python/title.py and a body with the rules of the template, on the real engine."""
 
 import pytest
 
@@ -7,7 +7,7 @@ from furb.engine import Refused
 
 
 async def test_prcheck_runs_title_py_of_the_worktree_at_where_on_the_title_and_refuses_a_title_that_it_refuses(pulling: Bench) -> None:
-  """prcheck(title, why, outcome) runs script/title.py of the worktree at where on the title, and refuses a title that it refuses, with its words."""
+  """prcheck(title, why, outcome) runs xtask/python/title.py of the worktree at where on the title, and refuses a title that it refuses, with its words."""
   assert await pulling.value('await prcheck("chore(pr): Fill the template", "It was copied.", ["One home."])') == 5
   with pytest.raises(Refused, match="The title is wrong: 'docs: No area'"):
     await pulling.value('await prcheck("docs: No area", "It was copied.", ["One home."])')
