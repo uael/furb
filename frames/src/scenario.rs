@@ -169,8 +169,9 @@ const ASKS: &str = "side = await prompt(Literal['right', 'left'], 'Where does th
 /// The words of a model that changes two places of a file of the project and adds a file.
 const CHANGES: &str = "m = read('src/inventory/models.py')\nwrite(m.replace('self.name = name', 'self.name = name.strip()\\n    self.count = 0'))\nwrite(Text('src/inventory/report.py', 'def total(items):\\n  return sum(one.count for one in items)\\n'))\nclose('Each item has a count, and report.py sums them.')";
 
-/// The words of a long thread: an answer to each message.
-const LONG: [&str; 15] = [
+/// The words of a long thread: an answer to each message, then the answer to the message that
+/// goes from a moment of its past as a rewind.
+const LONG: [&str; 16] = [
   "close('Answer 1 of the long thread.')",
   "close('Answer 2 of the long thread.')",
   "close('Answer 3 of the long thread.')",
@@ -186,6 +187,7 @@ const LONG: [&str; 15] = [
   "close('Answer 13 of the long thread.')",
   "close('Answer 14 of the long thread.')",
   "close('Answer 15 of the long thread.')",
+  "close('Answer of the rewind.')",
 ];
 
 /// The word that the README shows: it reviews each file that changed on an agent of its own, all
@@ -383,6 +385,21 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("x-click", &[Act::Pointer { on: "━", button: 0 }], " 1 of "),
         step("x-play", &[Act::Key("Space")], "❚❚"),
         step("x-now", &[Act::Key("Escape")], "Answer 15 of the long thread."),
+        // A message from a moment goes as a rewind: a chain on the messages until then, whose
+        // agent answers under the line of the word.
+        step(
+          "x-rewind",
+          &[
+            Act::Key("C-x"),
+            Act::Key("b"),
+            Act::Until(" now"),
+            Act::Key("Left"),
+            Act::Type("Go on from here."),
+            Act::Key("Enter"),
+          ],
+          "Answer of the rewind",
+        ),
+        step("x-branch", &[Act::Pointer { on: "└ 'Answer of the rewind", button: 0 }], "agent · "),
       ],
     }),
   },

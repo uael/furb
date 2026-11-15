@@ -5,6 +5,7 @@
 use std::time::Duration;
 
 use furb_wire::protocol::{Answer, Frame, Verb};
+use serde_json::Value;
 
 use crate::{Asked, Client, Key};
 
@@ -108,6 +109,32 @@ impl Client {
   pub fn plays(&self) -> bool {
     let time = self.thread.as_ref().and_then(|one| one.thread.time.as_ref());
     time.is_some_and(|time| time.played.is_some())
+  }
+
+  /// The word that sends a message of the operator from the moment that the open thread shows, as
+  /// a rewind: a new chain stands on the chain of the thread with the messages of the thread until
+  /// that moment and what they made, and the message asks its model there. The bar goes back to
+  /// now, where the thread shows the word on its line and the agent that it made under it. The
+  /// source keeps each act, so the thread as it is now stays a branch. None while the thread shows
+  /// now; a refusal while the window does not hold each message until that moment, since a rewind
+  /// that the window would make then drops the messages that it does not hold.
+  pub(crate) fn rewound(&mut self, text: &str) -> Option<Result<String, String>> {
+    let thread = &mut self.thread.as_mut().filter(|_| self.aim.is_none())?.thread;
+    if !thread.past() {
+      return None;
+    }
+    if thread.above != Some(0) {
+      let why = "Scroll up to the first message of the thread, then send from this moment again.";
+      return Some(Err(why.to_owned()));
+    }
+    let kept: Vec<String> =
+      thread.exchanges.values().map(|one| Value::String(one.message.clone()).to_string()).collect();
+    let (text, kept) = (Value::String(text.to_owned()), kept.join(", "));
+    thread.time = None;
+    thread.moved();
+    Some(Ok(format!(
+      "prompt(str, {text}, on=chain('rewind', source=__name__, filter=take({kept})))"
+    )))
   }
 
   /// The ask of the moments of the open thread, while its bar shows and they changed since its

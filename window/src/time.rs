@@ -65,8 +65,14 @@ impl Model {
 
   /// The keys of the bar of the time while it shows, for the row of hints.
   pub(crate) fn time_hints(&self) -> Option<Line> {
-    self.client.thread.as_ref().and_then(|one| one.thread.time.as_ref())?;
-    let keys = format!("  ←→ a moment · Space play · {} now", self.key(Does::Close));
+    let thread = &self.client.thread.as_ref()?.thread;
+    thread.time.as_ref()?;
+    let send = if thread.past() {
+      format!(" · {} send from here", self.key(Does::Send))
+    } else {
+      String::new()
+    };
+    let keys = format!("  ←→ a moment · Space play{send} · {} now", self.key(Does::Close));
     Some(vec![run(keys, self.tokens.style(Role::Muted))])
   }
 

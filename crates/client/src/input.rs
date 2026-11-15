@@ -44,7 +44,8 @@ impl Client {
   /// The text of the input sent to its target: it waits in the queue, the client holds its life,
   /// and the thread that it goes to shows it at once. A message to no thread starts one, which
   /// opens, so the next message goes to it, and a new session opens on the actor that the
-  /// operator chose for it. A word of python shows in no thread. While the input fills an input of
+  /// operator chose for it. A word of python shows in no thread. A message from a moment of the
+  /// past of the open thread goes as the word of a rewind. While the input fills an input of
   /// a view, the text goes to that node alone. A machine that the client dials again, or a life
   /// that a fault ended, takes nothing, and the error says why.
   pub fn send(&mut self, text: String) -> Result<(), String> {
@@ -67,7 +68,12 @@ impl Client {
     if let (Some(chosen), Some(hold)) = (chosen, self.holds.get_mut(&(at, life.clone()))) {
       hold.actor = Some(chosen.actor);
     }
-    let python = self.draft.python;
+    let rewound = if self.draft.python { None } else { self.rewound(&text) };
+    let (text, python) = match rewound {
+      Some(Ok(word)) => (word, true),
+      Some(Err(why)) => return Err(why),
+      None => (text, self.draft.python),
+    };
     let pending = Pending { act: None, text: text.clone() };
     match (&thread, python, self.thread.as_mut()) {
       (_, true, _) | (Some(_), false, None) => {}
