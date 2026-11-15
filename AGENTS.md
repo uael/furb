@@ -425,7 +425,8 @@ fix what your change broke, and report what was broken before.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
 - `git commit` verifies only the form of its files, and ends in about 2 seconds. Its hook, `script/hooks/pre-commit`,
   which `git config core.hooksPath script/hooks` turns on, runs only the hooks that read the staged files alone and end
-  at once: the checks of the files, the format and the lint of Python, the width of the comments of Rust, the corpus and
+  at once: the checks of the files, the format and the lint of Python, the width of the comments of Rust, the workflows,
+  the corpus and
   the stray files. It names each other hook of the stage `pre-commit` in `SKIP`, and it prints only what fails. So no
   commit runs a test, a type check, a format of Rust or a check that reads the whole repository: run the one or two
   tests of your change while you work, as the skill `testing` says, and the two commands below run the rest outside the
@@ -519,10 +520,10 @@ fix what your change broke, and report what was broken before.
   source reads, that the README of the TypeScript package names, or that a host language calls through the door is
   used. `--tests` lists the helpers that only a test reaches past the public door of their file, which the check does
   not hold yet.
-- `uv run --no-sync python script/workflows.py`: parse each file of `.github/workflows/` with PyYAML, in a second, with no
-  build. It fails on a syntax fault, on a key that a mapping holds twice, on a marker of a conflict, on a job with
-  neither `runs-on` nor `uses`, on a step with neither `run` nor `uses`, and on a `needs` that names no job. Run it
-  after a merge or a rebase that touched a workflow. The hooks run it whatever the files.
+- `actionlint`: check each workflow of `.github/workflows/`, in a second, with no build: its syntax, a key that a
+  mapping holds twice, a marker of a conflict, a job or a step with no body, a `needs` that names no job, the
+  expressions, and the shell of each step through the `shellcheck` of the machine. The hooks run it on each workflow
+  that a commit stages, and `--all-files` on each one.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `bind/typescript/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty

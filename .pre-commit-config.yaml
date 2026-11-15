@@ -25,6 +25,12 @@ repos:
       - id: end-of-file-fixer
       - id: mixed-line-ending
       - id: trailing-whitespace
+  # Each workflow that a change touches: its syntax, a key twice, a job or a step with no body, a need of no job, the
+  # expressions and the shell of its steps, with the shellcheck of the machine, as CI shows them only after minutes.
+  - repo: https://github.com/Mateusz-Grzelinski/actionlint-py
+    rev: v1.7.12.25
+    hooks:
+      - id: actionlint
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.2
@@ -120,13 +126,6 @@ repos:
         language: system
         stages: [manual]
         files: ^(bind/typescript/|docs/examples/)|^(package|tsconfig|biome)\.json$
-        pass_filenames: false
-      - id: workflows
-        name: the workflows parse and keep their shape
-        # It runs whatever the files, since a bad merge of a workflow shows in CI only after minutes.
-        entry: uv run --no-sync python script/workflows.py
-        language: system
-        always_run: true
         pass_filenames: false
       - id: corpus
         name: no file of a folder of the corpus that a tag holds changes

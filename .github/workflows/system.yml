@@ -165,7 +165,7 @@ jobs:
           path: ${{ runner.temp }}/tiktoken
           key: tiktoken-o200k_base
       - run: |
-          for try in 1 2 3; do
+          for _ in 1 2 3; do
             uv run python -c "import socket, tiktoken; socket.setdefaulttimeout(60); tiktoken.get_encoding('o200k_base')" && exit 0
           done
           exit 1

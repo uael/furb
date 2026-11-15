@@ -54,6 +54,7 @@ def test_a_commit_runs_only_the_hooks_that_read_its_files_alone_and_end_at_once(
     "end-of-file-fixer",
     "mixed-line-ending",
     "trailing-whitespace",
+    "actionlint",
     "ruff-format",
     "ruff-check",
     "comment-width",

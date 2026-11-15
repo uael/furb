@@ -22,7 +22,7 @@ if [ "${1:-}" = run ]; then
 fi
 # A commit runs only the hooks that read its files alone and end at once. Each hook named here reads the whole
 # repository or takes more than half a second, so only a run by hand starts it.
-export SKIP="ty,uv-lock,fmt,links,paths,unused,workflows${SKIP:+,$SKIP}"
+export SKIP="ty,uv-lock,fmt,links,paths,unused${SKIP:+,$SKIP}"
 out=$(mktemp "${TMPDIR:-/tmp}/furb-hook.XXXXXX") || exit 1
 trap 'rm -f "$out"' EXIT
 # Run the hooks on each file that stdin names and the index holds, and print only what fails.
