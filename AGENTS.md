@@ -123,8 +123,9 @@ API of its own:
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
   that tells each fact as events, each act with the meaning that `furb::view` folds, which the verbs of the desk,
   the threads and the moments serve from the same fold. `protocol`, which the crate `furb-wire` holds and the host
-  gives again, is the one protocol of the daemon, a `Verb` and a `Frame` of JSON lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine, TCP and WebSocket on the
-  tailnet, behind a `Dialer` and an `Identity`, and the door of the windows, a WebSocket on loopback that lets in the
+  gives again, is the one protocol of the daemon, a `Verb` and a `Frame` of JSON lines with the version `PROTOCOL`,
+  `transport` the socket or the pipe of the machine, TCP and WebSocket on the tailnet, behind a `Dialer` and an
+  `Identity`, and the door of the windows, a WebSocket on loopback that lets in the
   peer that gives the token of `window.json`, `access` the role of each login of the network from `host.json`,
   `serve` the door to one peer, which checks the role of each verb, `stall` the watch of each life, which
   stands outside it and tells its windows and its root when it holds an open act and says no fact, or a rung with a word that no act lives beside, or a reply of a model that writes nothing, while a thread that rests waits on purpose, `opens` how far

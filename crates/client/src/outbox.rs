@@ -5,15 +5,26 @@
 //! message goes after the one before it, and a message that goes to the thread that the message
 //! before it made knows that thread when it goes.
 
-use furb_wire::protocol::Verb;
+use furb_wire::protocol::{Hello, Kind, PROTOCOL, Request, Verb};
 
 use crate::{
-  Client, Key, Life,
+  Client, Key, Life, Link,
   opens::{Ask, Hold},
 };
 
 /// The place in the log of a life from which the client hears its events: past each event.
 const NO_EVENT: u64 = u64::MAX;
+
+/// The id of the first request of a client after the greeting, whose two requests take the ids
+/// before it at each connection.
+pub(crate) const FIRST: u64 = 2;
+
+/// The first requests of each connection to a daemon, under the ids that no other request of a
+/// client takes: the hello of a peer of a kind, and the ask of the cards.
+pub fn greeting(kind: Kind) -> [Request; 2] {
+  let hello = Hello { protocol: PROTOCOL, kind, name: None, role: None };
+  [Request { id: 0, verb: Verb::Hello(hello) }, Request { id: 1, verb: Verb::Cards }]
+}
 
 /// Where the input sends: the open thread, a new thread of a session on a machine, or a new
 /// session on a machine in the project of the folder of the client.
@@ -54,6 +65,18 @@ pub enum Asked {
 }
 
 impl Client {
+  /// A verb asked of a machine, as the request to send, under an id that no other request of the
+  /// client took: none while the machine does not list its cards, since a machine that the client
+  /// dials again takes no verb, which would go nowhere.
+  pub fn request(&mut self, at: usize, verb: Verb) -> Option<Request> {
+    let listed = self.machines.get(at).is_some_and(|told| told.link == Link::Listed);
+    listed.then(|| {
+      let id = self.next;
+      self.next += 1;
+      Request { id, verb }
+    })
+  }
+
   /// The first message of the queue of the input, once no message waits for its answer and the
   /// daemon answered the open of its life. The daemon holds it until that life stands.
   pub fn due(&self) -> Option<(usize, Verb)> {

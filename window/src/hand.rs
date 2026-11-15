@@ -31,7 +31,7 @@ use crate::{
   keys::{self, Does},
   line::Line,
   link::{self, Asker, Heard},
-  model::{Link, Model, Told},
+  model::{Model, Told},
   pick::Pick,
   question::Keyed,
   tokens::{AWAY, Role, SIDE, Tokens},
@@ -373,46 +373,50 @@ fn pump(window: &Shared) {
   let Window { askers, screen, .. } = &mut *held;
   let model = &mut screen.model;
   for (life, verb) in model.client.opens_due() {
-    let id = asker(askers, model, life.0).map(|asker| asker.ask(verb));
+    let id = ask(askers, model, life.0, verb);
     model.client.asked_open(&life, id);
     model.client.asked.extend(id.map(|id| ((life.0, id), Asked::Open)));
   }
   if let Some(verb) = model.page_due()
     && let Some(at) = model.thread.as_ref().map(|one| one.thread.key.0)
-    && let Some(asker) = asker(askers, model, at)
+    && let Some(id) = ask(askers, model, at, verb)
     && let Some(opened) = model.thread.as_mut()
   {
-    opened.thread.asked.insert(asker.ask(verb), None);
+    opened.thread.asked.insert(id, None);
     opened.thread.again = false;
   }
   if let Some((at, verb)) = model.client.due()
-    && let Some(asker) = asker(askers, model, at)
+    && let Some(id) = ask(askers, model, at, verb)
   {
-    model.client.asked.insert((at, asker.ask(verb)), Asked::Say);
+    model.client.asked.insert((at, id), Asked::Say);
   }
   if let Some((at, verb, target)) = model.history_due()
-    && let Some(asker) = asker(askers, model, at)
+    && let Some(id) = ask(askers, model, at, verb)
   {
-    model.client.asked.insert((at, asker.ask(verb)), Asked::History(target));
+    model.client.asked.insert((at, id), Asked::History(target));
   }
   if let Some((at, verb)) = model.seen_due()
-    && let Some(asker) = asker(askers, model, at)
+    && let Some(id) = ask(askers, model, at, verb)
   {
-    model.client.asked.insert((at, asker.ask(verb)), Asked::Seen);
+    model.client.asked.insert((at, id), Asked::Seen);
   }
   if let Some((at, verb)) = model.ended_due()
-    && let Some(asker) = asker(askers, model, at)
+    && let Some(id) = ask(askers, model, at, verb)
     && let Some(word) = model.word.as_mut()
   {
     word.asked = true;
-    model.client.asked.insert((at, asker.ask(verb)), Asked::Ended);
+    model.client.asked.insert((at, id), Asked::Ended);
   }
 }
 
-/// What asks a machine a verb, while it lists its cards: a machine that the window dials again
-/// takes no verb, which would go nowhere.
-fn asker<'a>(askers: &'a mut [Asker], model: &Model, at: usize) -> Option<&'a mut Asker> {
-  askers.get_mut(at).filter(|_| model.client.machines[at].link == Link::Listed)
+/// A verb asked of a machine through its connection, and the id of its request: none while the
+/// machine does not list its cards, as the client core says.
+fn ask(askers: &mut [Asker], model: &mut Model, at: usize, verb: Verb) -> Option<u64> {
+  let asker = askers.get_mut(at)?;
+  let request = model.client.request(at, verb)?;
+  let id = request.id;
+  asker.send(request);
+  Some(id)
 }
 
 /// A page of older exchanges that the open thread asks of its machine, said, with the id of its
@@ -422,9 +426,9 @@ fn older(window: &Shared, verb: Option<Verb>) {
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
   let Some(at) = screen.model.thread.as_ref().map(|one| one.thread.key.0) else { return };
-  let Some(asker) = asker(askers, &screen.model, at) else { return };
+  let Some(id) = ask(askers, &mut screen.model, at, verb) else { return };
   let Some(opened) = screen.model.thread.as_mut() else { return };
-  opened.thread.asked.insert(asker.ask(verb), before);
+  opened.thread.asked.insert(id, before);
 }
 
 /// A key of the window, from the one table of the keys, before the editor of the input hears it:
@@ -537,8 +541,8 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
     Keyed::Says(at, verb) => {
       let mut held = window.borrow_mut();
       let Window { askers, screen, .. } = &mut *held;
-      match asker(askers, &screen.model, at) {
-        Some(asker) => drop(screen.model.client.asked.insert((at, asker.ask(verb)), Asked::Answer)),
+      match ask(askers, &mut screen.model, at, verb) {
+        Some(id) => drop(screen.model.client.asked.insert((at, id), Asked::Answer)),
         None => screen.model.unanswered(screen.model.away(at).unwrap_or_default()),
       }
       drop(held);
@@ -615,8 +619,7 @@ fn listed(window: &Shared) {
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
   for at in 0..askers.len() {
-    if let Some(asker) = asker(askers, &screen.model, at) {
-      let id = asker.ask(Verb::List { config: None });
+    if let Some(id) = ask(askers, &mut screen.model, at, Verb::List { config: None }) {
       screen.model.client.asked.insert((at, id), Asked::List);
     }
   }
@@ -668,8 +671,8 @@ fn controlled(
   let Some(((at, verb), waits)) = tell(app, window, change) else { return colored(window) };
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
-  match asker(askers, &screen.model, at) {
-    Some(asker) => drop(screen.model.client.asked.insert((at, asker.ask(verb)), waits)),
+  match ask(askers, &mut screen.model, at, verb) {
+    Some(id) => drop(screen.model.client.asked.insert((at, id), waits)),
     None => screen.model.fault = screen.model.away(at),
   }
   drop(held);

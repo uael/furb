@@ -11,17 +11,10 @@
 //! cards again. A verb that the window asked of the connection that ended goes nowhere: the window
 //! asks a machine only while it lists its cards.
 
-use std::{
-  convert::Infallible,
-  pin::pin,
-  sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-  },
-  time::Duration,
-};
+use std::{convert::Infallible, pin::pin, time::Duration};
 
-use furb_host::protocol::{BOUND, Frame, Hello, Kind, PROTOCOL, Request, Verb};
+use furb_client::greeting;
+use furb_host::protocol::{BOUND, Frame, Kind, Request};
 use futures::{
   SinkExt, StreamExt,
   future::{self, Either},
@@ -54,13 +47,11 @@ pub(crate) type Heard = Result<Frame, Error>;
 pub(crate) fn dialed(app: &App, machine: Machine, on: impl FnMut(&App, Heard) + 'static) -> Asker {
   let (tell, frames) = mpsc::channel(WAITING);
   let (requests, outgoing) = mpsc::unbounded_channel();
-  let next = Arc::new(AtomicU64::new(0));
-  let ids = Arc::clone(&next);
   // The task ends when the window lets the frames go, and with the runtime of the app.
   drop(app.runtime().spawn(async move {
     let (mut machine, mut outgoing, mut wait) = (machine, outgoing, FIRST);
     loop {
-      let Err(end) = held(&mut machine, &mut outgoing, &tell, (&ids, &mut wait)).await;
+      let Err(end) = held(&mut machine, &mut outgoing, &tell, &mut wait).await;
       // A window that is gone hears no end.
       if tell.send(Err(end)).await.is_err() {
         return;
@@ -70,22 +61,20 @@ pub(crate) fn dialed(app: &App, machine: Machine, on: impl FnMut(&App, Heard) + 
     }
   }));
   hearing(app, frames, on);
-  Asker { requests, next }
+  Asker { requests }
 }
 
-/// What sends the requests of the window to the daemon of a machine, each with the next id.
+/// What sends the requests of the window to the daemon of a machine, each under the id that the
+/// client core gave it.
 pub(crate) struct Asker {
   requests: UnboundedSender<Request>,
-  next: Arc<AtomicU64>,
 }
 
 impl Asker {
-  /// A verb asked of the daemon, and the id of its request, which its answer names.
-  pub(crate) fn ask(&mut self, verb: Verb) -> u64 {
-    let id = self.next.fetch_add(1, Ordering::Relaxed);
+  /// A request sent to the daemon.
+  pub(crate) fn send(&mut self, request: Request) {
     // A task that ended takes no request, and the window heard why it ended.
-    drop(self.requests.send(Request { id, verb }));
-    id
+    drop(self.requests.send(request));
   }
 }
 
@@ -97,15 +86,13 @@ async fn held(
   machine: &mut Machine,
   outgoing: &mut UnboundedReceiver<Request>,
   tell: &Sender<Heard>,
-  (ids, wait): (&AtomicU64, &mut Duration),
+  wait: &mut Duration,
 ) -> Result<Infallible, Error> {
   let mut lines = Framed::new(machine.reach().await?, LinesCodec::new_with_max_length(BOUND));
   *wait = FIRST;
   while outgoing.try_recv().is_ok() {}
-  let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None };
-  for verb in [Verb::Hello(hello), Verb::Cards] {
-    let id = ids.fetch_add(1, Ordering::Relaxed);
-    lines.send(serde_json::to_string(&Request { id, verb })?).await?;
+  for request in greeting(Kind::Window) {
+    lines.send(serde_json::to_string(&request)?).await?;
   }
   loop {
     match future::select(pin!(outgoing.recv()), lines.next()).await {
