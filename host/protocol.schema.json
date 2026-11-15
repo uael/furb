@@ -98,6 +98,23 @@
         },
         {
           "type": "object",
+          "description": "The skills that the root of a life read last, by a read of `skills://`, in the order of their\nnames: those of the record, else those of each other record of its project, the record that\nchanged last first, so a new session offers the skills of the last session of its project.\nA record whose index does not agree with it gives none until the daemon made its index.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "skills"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
           "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the skills that the peer names, reads the\nsettings of the user in the folder `config` and runs the claude command line `claude` when\nthe peer names them, as the window of the peer reads them, and the peer answers each request\nof its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass.",
           "properties": {
             "life": {
@@ -2639,6 +2656,26 @@
           "properties": {
             "answer": {
               "type": "string",
+              "const": "skills"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Skill"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The skills of a life, each with what it is for."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
               "const": "act"
             },
             "data": {
@@ -3165,6 +3202,22 @@
         "text"
       ],
       "description": "What an operator sent to a life: a message, or a word of Python, with the site that sent it,\n`operator` or `operator/<login>`."
+    },
+    "Skill": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "description": "A skill that the root of a life was told of, by the last read of `skills://` there: its name,\nand what it is for."
     },
     "Handed": {
       "type": "object",
@@ -5279,5 +5332,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 27
+  "x-protocol": 28
 }

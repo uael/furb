@@ -563,7 +563,8 @@ impl Life {
     let at = self.first.take().unwrap_or_else(cards::now);
     let name = self.kept.named.name().map(str::to_owned);
     let threads = self.times.timed(self.kept.held.cards(), at);
-    let session = Session { name, threads, sent: self.kept.held.sent() };
+    let (sent, skills) = (self.kept.held.sent(), self.kept.held.skills());
+    let session = Session { name, threads, sent, skills };
     self.cards.send_if_modified(|told| {
       let changed = told.as_deref() != Some(&session);
       if changed {

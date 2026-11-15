@@ -921,6 +921,7 @@ impl Lives {
       }
       Verb::List { config } => Ok(Answer::Lives(self.listed(config))),
       Verb::Cards => Ok(Answer::Cards(self.cards(outbox))),
+      Verb::Skills { life } => Ok(Answer::Skills(self.skills(&life))),
       Verb::Attach { life, from } => self.attach(&life, from, peer, outbox),
       Verb::Detach { life } => self.detach(&life, outbox),
       Verb::Pin { life, holder } => living(&mut self.held, &life).map(|(_, holders)| {
@@ -1264,9 +1265,30 @@ impl Lives {
   }
 
   /// What a site sent in the project of a record, the newest first and each text once: what it
-  /// sent to that record, then to each other record of the project, the record that changed last
-  /// first. What the life of the record holds now comes before what its cards told.
+  /// sent to that record, then to each other record of the project, as [`Self::project`] orders
+  /// them. What the life of the record holds now comes before what its cards told.
   fn history(&self, life: &str, site: &str, held: Vec<Sent>) -> Vec<Sent> {
+    let mut seen = HashSet::new();
+    let mut history: Vec<Sent> = Vec::new();
+    let held = held.into_iter().rev().filter(|one| one.by == site);
+    history.extend(held.filter(|one| seen.insert(one.text.clone())));
+    for record in self.project(life) {
+      let Some(session) = self.session(&record) else { continue };
+      let his = session.sent.iter().rev().filter(|one| one.by == site);
+      history.extend(his.filter(|one| seen.insert(one.text.clone())).cloned());
+    }
+    history
+  }
+
+  /// The skills of the first record of the project of a record, as [`Self::project`] orders them,
+  /// whose life read them, so a new session of a project offers the skills of its last one.
+  fn skills(&self, life: &str) -> Vec<view::Skill> {
+    let read = |record: String| self.session(&record).map(|one| one.skills.clone());
+    self.project(life).into_iter().filter_map(read).find(|one| !one.is_empty()).unwrap_or_default()
+  }
+
+  /// A record, then each other record of its project, the record that changed last first.
+  fn project(&self, life: &str) -> Vec<String> {
     let listed = self.listed(None);
     let project = |one: &str| {
       let listed = listed.iter().find(|listed| listed.life == one);
@@ -1279,16 +1301,7 @@ impl Lives {
       .map(|one| (cards::changed(Path::new(&one.life)), one.life.as_str()))
       .collect();
     others.sort_by_key(|one| Reverse(one.0));
-    let mut seen = HashSet::new();
-    let mut history: Vec<Sent> = Vec::new();
-    let held = held.into_iter().rev().filter(|one| one.by == site);
-    history.extend(held.filter(|one| seen.insert(one.text.clone())));
-    for record in [life].into_iter().chain(others.into_iter().map(|one| one.1)) {
-      let Some(session) = self.session(record) else { continue };
-      let his = session.sent.iter().rev().filter(|one| one.by == site);
-      history.extend(his.filter(|one| seen.insert(one.text.clone())).cloned());
-    }
-    history
+    [life].into_iter().chain(others.into_iter().map(|one| one.1)).map(str::to_owned).collect()
   }
 
   /// When the first life with no holder ends.

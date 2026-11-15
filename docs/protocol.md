@@ -106,6 +106,7 @@ daemon answers requests in any order.
 | `list` | `config` | read |
 | `cards` | | read |
 | `history` | `life` | read |
+| `skills` | `life` | read |
 | `open` | `life`, `cwd`, `actor`, `roster`, `skills`, `config`, `claude`, `answers`, `attach` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
@@ -277,6 +278,11 @@ daemon answers requests in any order.
   message. The record is the one truth of what was sent: a live life gives what it holds, and a record at rest gives
   what the index of its threads keeps, so a record whose index does not agree with it gives nothing until the daemon
   made its index. An index of a build before this list reads as no index.
+- `skills` gives the skills of the record `life` as `skills`, in the order of their names, each with its `name` and its
+  `description`: the skills that the last read of `skills://` on the root of its life told, as the record keeps that
+  read, else those of each other record of its project, the record that changed last first, so a new session offers
+  the skills of the last session of its project. A record whose index does not agree with it gives none until the
+  daemon made its index, and an index of a build before the skills reads as no index.
 - `thread` gives a page of one thread of a life as `page`: the exchanges of the thread before the one at the place
   `before`, or before its end when `before` is null, at most `limit` of them, the oldest first. The thread is named
   by its prompt. Nobody reads the past of a record for it: the life holds each act, and a page reads only the acts

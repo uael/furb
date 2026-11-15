@@ -2460,6 +2460,49 @@ async fn a_history_asked_right_after_a_send_holds_that_send() {
   }
 }
 
+#[tokio::test]
+async fn the_skills_of_a_record_are_those_that_its_root_read_else_those_of_its_project() {
+  let at = place();
+  let (main, sessions) = project(&at);
+  let folder = Path::new(&main).join(".furb").join("skills").join("probe");
+  fs::create_dir_all(&folder).unwrap();
+  let manifest = "---\nname: probe\ndescription: Probes the window\n---\nRead the frames.\n";
+  fs::write(folder.join("SKILL.md"), manifest).unwrap();
+  let (local, _daemon) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let one = held(&mut window, &sessions, "one.jsonl").await;
+  // A life whose root read no index of the skills offers none.
+  assert_eq!(window.ask(Verb::Skills { life: one.clone() }).await, Ok(Answer::Skills(Vec::new())));
+  let read = Verb::Run { life: one.clone(), word: "read('skills://')".to_owned(), on: None };
+  assert!(matches!(window.ask(read).await, Ok(Answer::Act(_))));
+  let probe = view::Skill { name: "probe".to_owned(), description: "Probes the window".to_owned() };
+  let skills = read_skills(&mut window, &one).await;
+  assert!(skills.contains(&probe), "{skills:?}");
+  let mut names: Vec<&str> = skills.iter().map(|one| one.name.as_str()).collect();
+  names.sort_unstable();
+  assert_eq!(names, skills.iter().map(|one| one.name.as_str()).collect::<Vec<_>>());
+  // The first life ends, and a new session of the project offers the skills that its index keeps.
+  assert_eq!(window.ask(Verb::Detach { life: one.clone() }).await, Ok(Answer::Done));
+  time::sleep(PAST).await;
+  assert!(!window.lives(&one).await);
+  let two = held(&mut window, &sessions, "two.jsonl").await;
+  assert_eq!(window.ask(Verb::Skills { life: two }).await, Ok(Answer::Skills(skills)));
+}
+
+/// The skills of a life once its root read them, which its cards tell a moment after the read.
+async fn read_skills(window: &mut Window, life: &str) -> Vec<view::Skill> {
+  let end = Instant::now() + PATIENCE;
+  while Instant::now() < end {
+    match window.ask(Verb::Skills { life: life.to_owned() }).await {
+      Ok(Answer::Skills(skills)) if !skills.is_empty() => return skills,
+      Ok(Answer::Skills(_)) => time::sleep(Duration::from_millis(20)).await,
+      other => panic!("no skills: {other:?}"),
+    }
+  }
+  panic!("the life never told the skills that its root read")
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn a_record_that_a_link_names_has_one_key_in_the_daemon() {

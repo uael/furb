@@ -180,6 +180,15 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
   })
 }
 
+/// The name of each skill of the index that a read of `skills://` gives, with what it is for, as
+/// [`Found::line`] writes it, past the first line, which says how to load a skill.
+pub(crate) fn indexed(index: &str) -> impl Iterator<Item = (&str, &str)> {
+  index.lines().skip(1).filter_map(|line| {
+    let (head, about) = line.split_once(": ")?;
+    Some((head.split_once(" (").map_or(head, |marked| marked.0), about))
+  })
+}
+
 /// The answer of a read of `skills://` and what follows it: the index, the word or the manifest of
 /// a skill, or a file of its folder.
 fn answered(seen: &Seen, asked: &str) -> Result<Text, Fault> {
@@ -436,3 +445,7 @@ fn inside(root: &Path) -> Vec<PathBuf> {
   folders.sort();
   folders
 }
+
+#[cfg(test)]
+#[path = "skills.test.rs"]
+mod test;

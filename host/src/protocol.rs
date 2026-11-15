@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 27;
+pub const PROTOCOL: u32 = 28;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -95,6 +95,13 @@ pub enum Verb {
   /// first. A record whose index does not agree with it gives nothing until the daemon made its
   /// index.
   History {
+    life: String,
+  },
+  /// The skills that the root of a life read last, by a read of `skills://`, in the order of their
+  /// names: those of the record, else those of each other record of its project, the record that
+  /// changed last first, so a new session offers the skills of the last session of its project.
+  /// A record whose index does not agree with it gives none until the daemon made its index.
+  Skills {
     life: String,
   },
   /// The life of a record opened, in a folder or in the folder of its record. A life that this
@@ -470,6 +477,7 @@ impl Verb {
       | Self::Thread { life, .. }
       | Self::Moments { life, .. }
       | Self::History { life }
+      | Self::Skills { life }
       | Self::Answered { life, .. }
       | Self::Wrote { life, .. }
       | Self::ViewMount(Mount { life, .. }) => Some(life),
@@ -493,6 +501,7 @@ impl Verb {
         | Self::List { .. }
         | Self::Cards
         | Self::History { .. }
+        | Self::Skills { .. }
         | Self::Attach { .. }
         | Self::Detach { .. }
         | Self::Presence { .. }
@@ -629,6 +638,8 @@ pub enum Answer {
   Cards(Vec<Card>),
   /// What the peer sent, the newest first.
   History(Vec<view::Sent>),
+  /// The skills of a life, each with what it is for.
+  Skills(Vec<view::Skill>),
   /// The name of the act that the verb made.
   Act(String),
   Value(Value),

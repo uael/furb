@@ -1,4 +1,7 @@
-use super::{Card, Part, Standing};
+use serde_json::json;
+
+use super::{Card, Part, Skill, Standing};
+use crate::view::{Fold, Held};
 
 fn card(standing: Standing, readers: &[&str]) -> Card {
   Card {
@@ -59,4 +62,39 @@ fn a_message_on_an_open_thread_is_a_notice_and_on_an_ended_thread_a_question() {
   let shapes = [Standing::Thinks, Standing::Rests, Standing::Resolved, Standing::Stopped]
     .map(|standing| card(standing, &[]).reply());
   assert_eq!(shapes, ["None", "None", "str", "str"]);
+}
+
+#[test]
+fn the_skills_of_a_life_are_those_that_the_last_read_of_the_index_on_its_root_told() {
+  let index = |names: &[&str]| {
+    let lines = names.iter().map(|name| format!("{name} (code, on): Does {name}"));
+    ["skill(name) loads a skill.".to_owned()]
+      .into_iter()
+      .chain(lines)
+      .collect::<Vec<_>>()
+      .join("\n")
+  };
+  let told = |id: &str, text: String| json!(["done", id, "skills", {"is": "Text", "path": "skills://", "content": text}]);
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["chain", "chain2", "chain1", "chain1", "boot", ""]),
+    json!(["read", "read1", "rung1", "chain1", "skills://"]),
+    told("read1", index(&["memory"])),
+    json!(["read", "read2", "rung2", "chain1", "skills://"]),
+    told("read2", index(&["memory", "web"])),
+    // A read of another chain, which stands in another folder, and a read of one skill.
+    json!(["read", "read3", "rung3", "chain2", "skills://"]),
+    told("read3", index(&["boot"])),
+    json!(["read", "read4", "rung4", "chain1", "skills://web"]),
+    json!(["done", "read4", "skills", {"is": "Text", "path": "skills://web", "content": "def web(): ..."}]),
+  ];
+  let (mut fold, mut held) = (Fold::default(), Held::default());
+  assert_eq!(held.skills(), []);
+  for fact in facts {
+    for act in fold.recorded(&fact) {
+      held.heard(&act);
+    }
+  }
+  let skill = |name: &str| Skill { name: name.to_owned(), description: format!("Does {name}") };
+  assert_eq!(held.skills(), [skill("memory"), skill("web")]);
 }

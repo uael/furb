@@ -25,6 +25,10 @@ export type Request1 =
     }
   | {
       life: string;
+      verb: "skills";
+    }
+  | {
+      life: string;
       cwd?: string | null;
       actor?: string | null;
       roster?: string[] | null;
@@ -603,6 +607,10 @@ export type Answer =
       data: Sent[];
     }
   | {
+      answer: "skills";
+      data: Skill[];
+    }
+  | {
       answer: "act";
       data: string;
     }
@@ -1112,6 +1120,14 @@ export interface Sent {
   python?: boolean;
 }
 /**
+ * A skill that the root of a life was told of, by the last read of `skills://` there: its name,
+ * and what it is for.
+ */
+export interface Skill {
+  name: string;
+  description: string;
+}
+/**
  * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
  */
 export interface Handed {
@@ -1483,4 +1499,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 27;
+export const PROTOCOL = 28;

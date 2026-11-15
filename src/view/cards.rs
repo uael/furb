@@ -8,12 +8,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-  act::{Act, Kind, Maker, operator},
+  act::{Act, Kind, Maker, Phase, operator},
   held::Held,
   state::State,
   threads::{Lookup, Rows, ThreadNode, unseen},
 };
-use crate::engine::OPERATOR;
+use crate::{
+  engine::{OPERATOR, ROOT},
+  world::skills,
+};
 
 /// One thread that the operator started, as a card of a list shows it: its prompt, its title, how
 /// it stands, the model that wrote its last word, how many agents work under it, and the site of
@@ -40,6 +43,14 @@ pub struct Sent {
   pub text: String,
   #[serde(default)]
   pub python: bool,
+}
+
+/// A skill that the root of a life was told of, by the last read of `skills://` there: its name,
+/// and what it is for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Skill {
+  pub name: String,
+  pub description: String,
 }
 
 /// How the thread of a card stands. It asks one member by his login, or each operator. A pause
@@ -210,6 +221,27 @@ impl Held {
         Some(Sent { by: act.by.clone(), text: text.to_owned(), python })
       };
       acts.iter().filter_map(sent).collect()
+    })
+  }
+
+  /// The skills that the last read of `skills://` on the root told, in the order of their names,
+  /// and none before the first.
+  pub fn skills(&self) -> Vec<Skill> {
+    self.then(None, |acts| {
+      let read = |act: &&&Act| {
+        act.kind.as_str() == "read"
+          && act.chain == ROOT
+          && act.words.first().and_then(Value::as_str) == Some("skills://")
+      };
+      let index = acts.iter().rev().filter(read).find_map(|act| match &act.phase {
+        Phase::Done(told) => told.get("content").and_then(Value::as_str),
+        _ => None,
+      });
+      let skill = |(name, description): (&str, &str)| Skill {
+        name: name.to_owned(),
+        description: description.to_owned(),
+      };
+      index.map(|index| skills::indexed(index).map(skill).collect()).unwrap_or_default()
     })
   }
 

@@ -16,7 +16,7 @@ use std::{
 
 use furb::{
   Fact, Fault, Object,
-  view::{self, Fold, Held, Sent, Standing},
+  view::{self, Fold, Held, Sent, Skill, Standing},
   world::{self, Tip},
 };
 use serde::{Deserialize, Serialize};
@@ -27,8 +27,9 @@ use crate::{
   serve::Outbox,
 };
 
-/// The cards of one session, the name of the session, and what each operator sent to it. An index
-/// of a build before the words that he sent holds none of them, so it reads as no index.
+/// The cards of one session, the name of the session, what each operator sent to it, and the skills
+/// that its root read. An index of a build before the words that he sent or before the skills holds
+/// none of them, so it reads as no index.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Session {
   #[serde(default)]
@@ -36,6 +37,7 @@ pub(crate) struct Session {
   #[serde(default)]
   pub(crate) threads: Vec<Timed>,
   pub(crate) sent: Vec<Sent>,
+  pub(crate) skills: Vec<Skill>,
 }
 
 /// A card with the second of the epoch since which its thread stands as it does.
@@ -126,7 +128,7 @@ pub(crate) fn folded(record: &Path) -> Result<(), Error> {
   retold.each(&mut take).map_err(Error::Read)?;
   let name = retold.name().map(str::to_owned);
   let threads = held.cards().into_iter().map(|thread| Timed { since, thread }).collect();
-  Ok(keep(record, &Session { name, threads, sent: held.sent() })?)
+  Ok(keep(record, &Session { name, threads, sent: held.sent(), skills: held.skills() })?)
 }
 
 /// The times of the cards of a life, which the life keeps as its cards change.
