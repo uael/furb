@@ -509,6 +509,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Commands => |model| model.pick(Pick::Commands),
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.draft.python = !model.draft.python,
+    Does::Agent => Model::next_agent,
     Does::Close => return escaped(app, window, forgot),
     Does::Stop => return controlled(app, window, |model| Some((model.stop()?, Asked::Control))),
     Does::Resolve => {

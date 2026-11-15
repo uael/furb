@@ -16,7 +16,7 @@ use std::{
 
 use furb::{
   engine::OPERATOR,
-  view::{Agent, Exchange, Page},
+  view::{Agent, Exchange, Page, Standing},
 };
 use furb_host::protocol::{Card, Verb};
 use opentui::style::{Color, Span, Style};
@@ -337,6 +337,13 @@ impl Opened {
     Verb::Thread { life, thread, before, limit: PAGE }
   }
 
+  /// The agents that the dock shows, from the first that does not rest to the last, and how many
+  /// stand before them.
+  pub(crate) fn docked(&self) -> (usize, &[Agent]) {
+    let first = self.agents.iter().position(|agent| !rests(agent)).unwrap_or(self.agents.len());
+    (first, &self.agents[first..])
+  }
+
   /// The thread that the operator opened from the list, whose agent this thread is, or this one.
   pub(crate) fn root(&self) -> &Self {
     self.from.as_deref().map_or(self, Self::root)
@@ -355,7 +362,7 @@ impl Model {
   /// life, which opens when no life holds its record.
   pub(crate) fn open_thread(&mut self) {
     let Some(key) = self.selected.clone() else { return };
-    if key.2.is_empty() || self.thread.as_ref().is_some_and(|one| one.key == key) {
+    if key.2.is_empty() || self.thread.as_ref().is_some_and(|one| one.root().key == key) {
       return;
     }
     self.hold(key.0, &key.1, self.cwd(key.0, &key.1));
@@ -373,6 +380,26 @@ impl Model {
     self.thread =
       Some(Opened { key, since: self.moved, from: Some(Box::new(from)), ..Opened::default() });
     (self.aim, self.armed) = (None, None);
+  }
+
+  /// The thread of the next agent of the dock opened in place: the first from the thread that
+  /// they came from, the one after it from the thread of an agent, and the first again after the
+  /// last.
+  pub(crate) fn next_agent(&mut self) {
+    let Some(opened) = self.thread.as_ref() else { return };
+    let (from, at) =
+      opened.from.as_deref().map_or((opened, None), |from| (from, Some(&opened.key.2)));
+    let shown = from.docked().1;
+    let after = at.and_then(|at| shown.iter().position(|one| one.card.prompt == *at));
+    let Some(next) = shown.get(after.map_or(0, |at| at + 1)).or(shown.first()) else {
+      self.notice = Some("No agent of this thread works now.".to_owned());
+      return;
+    };
+    let prompt = next.card.prompt.clone();
+    if at.is_some() {
+      self.back();
+    }
+    self.open_agent(prompt);
   }
 
   /// An escape from the open thread: from the thread of an agent, back to the thread that it came
@@ -583,6 +610,11 @@ impl Model {
   pub(crate) fn hue(&self, key: &Key) -> Color {
     self.tokens.hues[hued(key) % self.tokens.hues.len()]
   }
+}
+
+/// Whether an agent rests: it ended and asks nothing more. A failure waits for a person.
+pub(crate) fn rests(agent: &Agent) -> bool {
+  matches!(agent.card.standing, Standing::Resolved | Standing::Rests | Standing::Stopped)
 }
 
 /// The number of a thread that picks its hue, from its record and its prompt.

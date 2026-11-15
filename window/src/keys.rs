@@ -46,6 +46,7 @@ pub(crate) enum Does {
   Down,
   Tick,
   NextQuestion,
+  Agent,
 }
 
 /// One stroke of a key: whether it holds control and alt, and its key.
@@ -125,6 +126,7 @@ const THREAD: &[Bound] = &[
     &[&[plain(KeyCode::Escape), plain(KeyCode::Escape)]],
   ),
   bound(Does::Resolve, "resolve the thread, or reply to open it again", true, &[&led('r')]),
+  bound(Does::Agent, "the next agent of the thread", true, &[&[LEADER, plain(KeyCode::Down)]]),
 ];
 
 /// The keys of the input.

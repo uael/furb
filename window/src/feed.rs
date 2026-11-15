@@ -19,7 +19,7 @@ use crate::{
   model::Model,
   prose,
   question::closed,
-  thread::{Click, Fold, Item, Opened, Row, width},
+  thread::{Click, Fold, Item, Opened, Row, rests, width},
   tokens::{APART, Loader, Role},
 };
 
@@ -373,13 +373,11 @@ impl Feed<'_> {
   /// row with its title, its state, its time and its model, and one more with the line where it
   /// stands while it lives. A click on an agent opens its thread in place.
   pub(crate) fn dock(&self) -> Vec<Row> {
-    let agents = &self.opened.agents;
-    let first = agents.iter().position(|agent| !rests(&agent.card.standing));
-    let (done, shown) = agents.split_at(first.unwrap_or(agents.len()));
+    let (done, shown) = self.opened.docked();
     let mut rows: Vec<Row> = shown.iter().flat_map(|agent| self.agent(agent)).collect();
-    if !done.is_empty() {
-      let noun = if done.len() == 1 { "agent" } else { "agents" };
-      rows.insert(0, says(&format!("↳ {} {noun} done", done.len()), self.style(Role::Muted)));
+    if done > 0 {
+      let noun = if done == 1 { "agent" } else { "agents" };
+      rows.insert(0, says(&format!("↳ {done} {noun} done"), self.style(Role::Muted)));
     }
     if !rows.is_empty() {
       rows.insert(0, Row::default());
@@ -393,7 +391,7 @@ impl Feed<'_> {
   fn agent(&self, agent: &Agent) -> Vec<Row> {
     let t = &self.model.tokens;
     let card = &agent.card;
-    let (muted, rest) = (self.style(Role::Muted), rests(&card.standing));
+    let (muted, rest) = (self.style(Role::Muted), rests(agent));
     // A time shows from one second on, as the time of a line that runs.
     let since =
       agent.began.filter(|began| self.model.now > *began).map(|began| self.model.now - began);
@@ -429,11 +427,6 @@ impl Feed<'_> {
     }
     rows
   }
-}
-
-/// Whether an agent rests: it ended and asks nothing more of anyone.
-fn rests(standing: &Standing) -> bool {
-  matches!(standing, Standing::Resolved | Standing::Rests | Standing::Stopped)
 }
 
 /// A row of prose from the column of the text.

@@ -651,6 +651,7 @@ impl Model {
     let (does, name) = match (&self.aim, &self.thread) {
       _ if self.form().is_some() => (Does::Empty, "refuse"),
       (None, Some(_)) if self.leaves() => (Does::Close, "back"),
+      (None, Some(opened)) if !opened.docked().1.is_empty() => (Does::Agent, "agents"),
       (None, Some(_)) => (Does::NewThread, "new thread"),
       (Some(_), Some(_)) => (Does::NewThread, "back to the thread"),
       (_, None) if self.listed() => (Does::Commands, "commands"),
