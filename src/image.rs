@@ -172,10 +172,22 @@ pub(crate) fn drop_of(record: &Path) {
 /// here and does not load, as one whose body is torn, or one that a checkpoint of the record
 /// passed, makes the life open by its record.
 pub fn agrees(record: &Path) -> bool {
+  key(record).is_some_and(|key| key.stands(record))
+}
+
+/// Whether the image beside a record is the one that this build writes at its tip now, by its key
+/// alone: an image lands whole, so a file whose key names its parts holds their body.
+fn at_tip(record: &Path) -> bool {
+  key(record)
+    .is_some_and(|key| Key::of(record, None, key.parts.clone()).is_ok_and(|now| now == key))
+}
+
+/// The key of the image beside a record, when a file holds one.
+fn key(record: &Path) -> Option<Key> {
   let mut key = Vec::new();
-  let read =
-    File::open(path(record)).and_then(|file| BufReader::new(file).read_until(b'\n', &mut key));
-  read.is_ok() && serde_json::from_slice::<Key>(&key).is_ok_and(|key| key.stands(record))
+  let file = File::open(path(record)).ok()?;
+  BufReader::new(file).read_until(b'\n', &mut key).ok()?;
+  serde_json::from_slice(&key).ok()
 }
 
 /// The image that a file holds, when its key is the key of its body at the bytes of the record that
@@ -205,9 +217,13 @@ fn agreed(record: &Path, file: File) -> io::Result<Option<Image>> {
 
 /// The image of the life of an engine, written beside its record, which stands at its tip: each
 /// entry that the life said is in the record. `host` is what the host of the life keeps of it
-/// beside its engine, which the open of a later life gives back to that host. It says whether it
-/// wrote one, as [`take`] says.
+/// beside its engine, which the open of a later life gives back to that host. It says whether the
+/// record has an image at its tip, as [`take`] says: an image that this build wrote at that tip
+/// stands, and is not written again.
 pub fn keep(engine: &mut Engine, record: &Path, host: &impl Serialize) -> Result<bool, Fault> {
+  if engine.unkept() == 0 && at_tip(record) {
+    return Ok(true);
+  }
   let Some(taken) = take(engine, record)? else { return Ok(false) };
   taken.write(host)?;
   Ok(true)

@@ -2211,6 +2211,31 @@ fn an_open_tells_each_stage_in_order_and_ends_with_each_entry_of_its_boot_counte
   drop(later);
 }
 
+/// A life whose image stands at the tip of its record keeps that image as it is: the end of a life
+/// that said nothing after its last image writes none again.
+#[test]
+fn a_life_whose_image_stands_at_its_tip_writes_none_again() {
+  let at = yard("image-again");
+  let record = at.join("record.jsonl");
+  let mut life = opening(&at, true).boot::<String>([]).unwrap().0;
+  closed(&mut life, "x = 1\nclose(x)");
+  assert!(image::keep(&mut life, &record, &()).unwrap(), "the life writes its image");
+  // A tab in the spaces after the key marks this file and changes no value of it: a new write of
+  // the image pads its key with spaces.
+  let path = at.join("record.jsonl.image");
+  let mut bytes = fs::read(&path).unwrap();
+  let end = bytes.iter().position(|one| *one == b'\n').unwrap();
+  assert_eq!(bytes[end - 1], b' ', "the key stands in spaces");
+  bytes[end - 1] = b'\t';
+  fs::write(&path, &bytes).unwrap();
+  assert!(image::agrees(&record), "the marked image still agrees");
+  assert!(image::keep(&mut life, &record, &()).unwrap(), "the record has its image at its tip");
+  assert!(fs::read(&path).unwrap() == bytes, "the image at the tip is not written again");
+  closed(&mut life, "close(x + 1)");
+  assert!(image::keep(&mut life, &record, &()).unwrap(), "the life writes its new image");
+  assert!(fs::read(&path).unwrap() != bytes, "an image of a later tip is written");
+}
+
 /// An open whose image does not load, as one whose part of the host the host does not take, opens
 /// by its record on what it waited for: it tells no stage again and waits for its catalog once.
 #[test]
