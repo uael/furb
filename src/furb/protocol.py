@@ -21,7 +21,7 @@ class Request2(TypedDict):
 class Request3(TypedDict):
   """
   The projects of the records that `list` gives with the same config, as [`Project::of`] folds
-  them, then the folder of the sessions with no project, `sessions` in that config folder.
+  them, then the folder of the sessions with no project, `sessions` in the data folder of furb.
   """
 
   id: int

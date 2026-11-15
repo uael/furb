@@ -21,10 +21,19 @@ command = [
   'mkdir -p target/claude && echo "CLAUDE_CONFIG_DIR=$(mktemp -d "$PWD/target/claude/run-XXXXXX")" >> "$NEXTEST_ENV"',
 ]
 
+# A daemon of a test with no data folder of its own reads the one of the person, where each session with no project
+# stands: each test run gives its tests a data folder of its own too.
+[scripts.setup.data]
+command = [
+  "sh",
+  "-c",
+  'mkdir -p target/data && echo "XDG_DATA_HOME=$(mktemp -d "$PWD/target/data/run-XXXXXX")" >> "$NEXTEST_ENV"',
+]
+
 [[profile.default.scripts]]
 platform = "cfg(unix)"
 filter = "all()"
-setup = "claude"
+setup = ["claude", "data"]
 
 # The census of flaky tests: a test that fails and then passes on a retry counts as failed, and is named as flaky,
 # so a flake never hides behind a retry. `cargo nextest run --profile census`.

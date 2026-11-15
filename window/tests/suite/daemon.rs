@@ -221,6 +221,7 @@ impl Daemon {
       stall: STALL,
       tailnet: None,
       door: None,
+      data: Some(self.yard.join("data")),
     }
   }
 

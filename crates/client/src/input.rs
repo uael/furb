@@ -59,6 +59,15 @@ impl Outgoing {
   }
 }
 
+/// The name of the folder of a new session with no project until its first message names it,
+/// which no slug takes, so no folder of the machine has it.
+const UNNAMED: &str = "…";
+
+/// The most words of the slug of a folder of a session with no project, and the most letters past
+/// its first word.
+const WORDS: usize = 3;
+const SLUG: usize = 32;
+
 impl Client {
   /// Where the input sends now: where the operator turned it, else the open thread, else a new
   /// session on the first machine, in the folder of the client.
@@ -95,7 +104,10 @@ impl Client {
     let (at, life, thread, cwd) = match self.target() {
       Target::Thread(key) => (key.0, key.1.clone(), Some(key.2), self.cwd(key.0, &key.1)),
       Target::Session(at, life) => (at, life.clone(), None, self.cwd(at, &life)),
-      Target::New(at, folder) => (at, self.record(&folder), None, Some(folder)),
+      Target::New(at, folder) => {
+        let folder = self.slugged(at, folder, &text);
+        (at, self.record(&folder), None, Some(folder))
+      }
     };
     if let Some(away) = self.away(at) {
       return Err(away);
@@ -216,7 +228,8 @@ impl Client {
   /// and the moment of the client, so no two clients share it, and past each record that the
   /// client knows, so no two sessions of one client share it when its clocks stand still.
   pub fn record(&self, folder: &str) -> String {
-    let stamp = self.stamp();
+    let second = Timestamp::from_second(i64::try_from(self.second()).unwrap_or_default());
+    let stamp = second.unwrap_or_default().strftime("%Y-%m-%dT%H-%M-%S");
     let sessions = Path::new(folder).join(".furb").join("sessions");
     let named = |n: u128| sessions.join(format!("{stamp}-{:04x}.jsonl", n % 0x1_0000));
     let known = |life: &str| {
@@ -230,18 +243,39 @@ impl Client {
     named(n).display().to_string()
   }
 
-  /// A new folder of a session with no project on a machine, in the folder of those sessions that
-  /// the machine gave, named as a record is.
+  /// The folder of a new session with no project on a machine, in the folder of those sessions
+  /// that the machine gave, which its first message names.
   pub fn detached(&self, at: usize) -> Option<String> {
     let folder = self.machines.get(at)?.detached()?;
-    let name = format!("{}-{:04x}", self.stamp(), self.moved.as_nanos() % 0x1_0000);
-    Some(Path::new(folder).join(name).display().to_string())
+    Some(Path::new(folder).join(UNNAMED).display().to_string())
   }
 
-  /// The second of the clock of the client as a name of a file.
-  fn stamp(&self) -> String {
-    let second = Timestamp::from_second(i64::try_from(self.second()).unwrap_or_default());
-    second.unwrap_or_default().strftime("%Y-%m-%dT%H-%M-%S").to_string()
+  /// The folder of a new session named by its first message, when it is a session with no project:
+  /// a short slug of the message, with a count after it when a session of the machine has it.
+  fn slugged(&self, at: usize, folder: String, text: &str) -> String {
+    let Some(told) = self.machines.get(at) else { return folder };
+    let Some(root) = told.detached().map(Path::new) else { return folder };
+    if Path::new(&folder) != root.join(UNNAMED) {
+      return folder;
+    }
+    let words = text.split(|one: char| !one.is_alphanumeric()).filter(|one| !one.is_empty());
+    let mut slug = String::new();
+    for word in words.map(str::to_lowercase).take(WORDS) {
+      if !slug.is_empty() && slug.len() + 1 + word.len() > SLUG {
+        break;
+      }
+      slug = if slug.is_empty() { word } else { format!("{slug}-{word}") };
+    }
+    let slug = if slug.is_empty() { "session".to_owned() } else { slug };
+    let lives =
+      told.lives.iter().map(|one| &one.life).chain(told.cards.iter().map(|one| &one.life));
+    let taken: Vec<&Path> = lives.filter_map(|one| Path::new(one).ancestors().nth(3)).collect();
+    let free = |name: &str| !taken.contains(&root.join(name).as_path());
+    // One of as many names as the folders taken, and one more, is free.
+    let name = (1..=taken.len() + 1)
+      .map(|n| if n == 1 { slug.clone() } else { format!("{slug}-{n}") })
+      .find(|one| free(one));
+    root.join(name.unwrap_or(slug)).display().to_string()
   }
 
   /// The second of the clock of the machine of the client.

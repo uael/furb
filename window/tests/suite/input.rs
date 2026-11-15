@@ -979,14 +979,28 @@ fn a_session_with_no_project_runs_in_a_folder_of_its_own_and_its_card_says_so() 
   assert!(frame.contains("Two stages hold most"), "{frame}");
   // The record stands in a folder of its own, in the folder of the sessions with no project, and
   // none in the project of the window.
-  let alone = daemon.file("config").join("sessions");
+  let alone = daemon.file("data").join("sessions");
   let folders: Vec<PathBuf> =
     fs::read_dir(&alone).unwrap().flatten().map(|one| one.path()).collect();
-  let [folder] = &folders[..] else { panic!("{folders:?}") };
+  assert_eq!(folders, [alone.join("plan-the-week")]);
+  let folder = &folders[0];
   assert_eq!(
     told(&daemon, &folder.join(".furb").join("sessions")),
     [format!("plan the week {ANSWERS}")]
   );
   assert!(!sessions.exists());
   screen("input-no-project", &app);
+  // A second session of the same words takes a count after the slug, since the first has it.
+  app.press("ctrl+n");
+  app.press("ctrl+x");
+  app.press("p");
+  app.type_text("no project");
+  app.press("enter");
+  shows(&app, "~/data/sessions/…");
+  sent(&app, &format!("plan the week again {ANSWERS}"));
+  shows(&app, "No project · plan the week again");
+  let mut folders: Vec<PathBuf> =
+    fs::read_dir(&alone).unwrap().flatten().map(|one| one.path()).collect();
+  folders.sort();
+  assert_eq!(folders, [alone.join("plan-the-week"), alone.join("plan-the-week-2")]);
 }

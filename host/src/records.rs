@@ -3,7 +3,7 @@
 //! each worktree of it, as a window lists them, and those of each session with no project.
 
 use std::{
-  fs,
+  env, fs,
   path::{Path, PathBuf},
 };
 
@@ -18,8 +18,8 @@ pub(crate) struct Sessions {
 }
 
 /// Each folder of the sessions of each workspace of the list in a config folder, then of each
-/// session with no project. A list that cannot be read names no workspace.
-pub(crate) fn recorded(config: &Path) -> Vec<Sessions> {
+/// session with no project in a data folder. A list that cannot be read names no workspace.
+pub(crate) fn recorded(config: &Path, data: &Path) -> Vec<Sessions> {
   let text = fs::read_to_string(config.join("workspaces.json")).unwrap_or_default();
   let list = serde_json::from_str::<Value>(&text).unwrap_or_default();
   let saved = list["workspaces"].as_array().into_iter().flatten();
@@ -29,15 +29,23 @@ pub(crate) fn recorded(config: &Path) -> Vec<Sessions> {
       found.push(sessions(&checkout, Some(main.to_owned())));
     }
   }
-  let alone = fs::read_dir(detached(config)).into_iter().flatten().flatten();
+  let alone = fs::read_dir(detached(data)).into_iter().flatten().flatten();
   found.extend(alone.map(|entry| sessions(&entry.path(), None)));
   found
 }
 
-/// The folder of the sessions with no project in a config folder: each stands in a folder of its
+/// The data folder of furb of the user of the machine: `furb` in `XDG_DATA_HOME` when it names
+/// one, else in the data folder of the system, as `~/.local/share` on Linux, `~/Library/Application
+/// Support` on macOS and the local `AppData` on Windows.
+pub(crate) fn data() -> PathBuf {
+  let named = env::var_os("XDG_DATA_HOME").filter(|one| !one.is_empty()).map(PathBuf::from);
+  named.or_else(dirs::data_local_dir).unwrap_or_default().join("furb")
+}
+
+/// The folder of the sessions with no project in a data folder: each stands in a folder of its
 /// own there, which a window names, so a session of work with no code has a folder to run in.
-pub(crate) fn detached(config: &Path) -> PathBuf {
-  PathBuf::from(key(&config.join("sessions").display().to_string()))
+pub(crate) fn detached(data: &Path) -> PathBuf {
+  PathBuf::from(key(&data.join("sessions").display().to_string()))
 }
 
 /// The folder of the sessions of a checkout, of a project or of none.

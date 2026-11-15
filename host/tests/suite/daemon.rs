@@ -190,8 +190,10 @@ async fn started_with(
 ) -> (Local, JoinHandle<Result<(), DaemonError>>) {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
+  // The data folder of the test, so no session with no project of the machine stands in its list.
+  let data = Some(at.join("data"));
   let settings =
-    Settings { opening, grace, first: STARTING, stall: STALL, tailnet: None, door: None };
+    Settings { opening, grace, first: STARTING, stall: STALL, tailnet: None, door: None, data };
   let served = local.clone();
   (local, tokio::spawn(async move { run(&served, listener, settings).await }))
 }
@@ -256,6 +258,7 @@ async fn the_seen_of_each_operator_is_said_under_his_profile_and_a_reopen_keeps_
     stall: STALL,
     tailnet: None,
     door: None,
+    data: None,
   };
   let operators: Arc<[&str]> = ["alice", "bob", "alice"].into();
   let identity = Operators { local: local.clone(), next: Arc::default(), names: operators };
@@ -298,6 +301,7 @@ async fn started_as(at: &Path, roles: &[Role]) -> Local {
     stall: STALL,
     tailnet: None,
     door: None,
+    data: None,
   };
   let identity = Grants { local: local.clone(), next: Arc::default(), roles: roles.into() };
   tokio::spawn(async move { run(&identity, listener, settings).await });
@@ -519,7 +523,8 @@ async fn a_daemon_that_no_peer_dials_ends_once_its_start_passed() {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
   let (opening, grace, first) = (opening(&at), GRACE, SHORT);
-  let settings = Settings { opening, grace, first, stall: STALL, tailnet: None, door: None };
+  let settings =
+    Settings { opening, grace, first, stall: STALL, tailnet: None, door: None, data: None };
   let ended = timeout(PATIENCE, run(&local, listener, settings)).await;
   assert!(matches!(ended, Ok(Ok(()))), "the daemon ends with no peer: {ended:?}");
   assert!(local.dial().await.is_err(), "no daemon listens after its start");
@@ -771,7 +776,7 @@ async fn the_projects_are_those_of_the_list_with_their_sessions_and_their_last_u
   let folder = at.join("main").display().to_string();
   let used = Some(2_000_000);
   let projects = window.ask(Verb::Projects { config: None }).await;
-  let alone = at.join("config").join("sessions").display().to_string();
+  let alone = at.join("data").join("sessions").display().to_string();
   let wanted = vec![
     Project { folder, sessions: 2, used, detached: false },
     Project { folder: alone, sessions: 0, used: None, detached: true },
@@ -784,8 +789,8 @@ async fn a_session_with_no_project_opens_in_a_folder_of_its_own_and_stands_in_no
   let at = place();
   let (local, _daemon) = started(&at, GRACE).await;
   let mut window = Window::dialed(&local).await;
-  let alone = at.join("config").join("sessions");
-  let folder = alone.join("2026-01-01T09-00-00-0000");
+  let alone = at.join("data").join("sessions");
+  let folder = alone.join("plan-the-week");
   let record = folder.join(".furb").join("sessions").join("one.jsonl");
   let life = record.display().to_string();
   let verb = Verb::Open {
@@ -1453,6 +1458,7 @@ async fn a_handover_keeps_each_life_its_pins_and_each_window() {
     stall: STALL,
     tailnet: None,
     door: None,
+    data: None,
   };
   let next = local.clone();
   let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
@@ -1515,6 +1521,7 @@ async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     stall: STALL,
     tailnet: None,
     door: None,
+    data: None,
   };
   let served = local.clone();
   let old = tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1534,6 +1541,7 @@ async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     stall: STALL,
     tailnet: None,
     door: None,
+    data: None,
   };
   let next = local.clone();
   let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
@@ -1612,8 +1620,15 @@ where
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
   let opening = Opening { skills: None, ..opening(at) };
-  let settings =
-    Settings { opening, grace: SHORT, first: STARTING, stall: STALL, tailnet: None, door: None };
+  let settings = Settings {
+    opening,
+    grace: SHORT,
+    first: STARTING,
+    stall: STALL,
+    tailnet: None,
+    door: None,
+    data: None,
+  };
   let served = identity(local.clone());
   tokio::spawn(async move { run(&served, listener, settings).await });
   let mut window = Window::dialed(&local).await;
@@ -1939,6 +1954,7 @@ async fn the_roster_names_the_access_list_and_a_change_of_it_tells_each_life_to_
     stall: STALL,
     tailnet,
     door: None,
+    data: None,
   };
   let served = local.clone();
   let _daemon = tokio::spawn(async move { run(&served, listener, settings).await });
@@ -2176,8 +2192,15 @@ const QUIET: Duration = Duration::from_millis(1500);
 async fn watched(at: &Path, opening: Opening, stall: Duration) -> Local {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
-  let settings =
-    Settings { opening, grace: SHORT, first: STARTING, stall, tailnet: None, door: None };
+  let settings = Settings {
+    opening,
+    grace: SHORT,
+    first: STARTING,
+    stall,
+    tailnet: None,
+    door: None,
+    data: None,
+  };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
   local
@@ -2520,6 +2543,7 @@ async fn served(at: &Path) -> Local {
     stall: STALL,
     tailnet: None,
     door: None,
+    data: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });

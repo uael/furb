@@ -129,6 +129,9 @@ pub struct Settings {
   /// The file where the daemon writes the address and the token of its door of the windows, the
   /// WebSocket on loopback that a web view dials, when it opens one.
   pub door: Option<PathBuf>,
+  /// The data folder of furb, whose `sessions` holds each session with no project: that of the
+  /// user of the machine when none is given.
+  pub data: Option<PathBuf>,
 }
 
 /// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
@@ -1443,12 +1446,15 @@ impl Lives {
     self.views.mount(mount, peer, outbox).map(|()| Answer::Done)
   }
 
+  /// The data folder of furb of the daemon.
+  fn data(&self) -> PathBuf {
+    self.settings.data.clone().unwrap_or_else(records::data)
+  }
+
   /// The projects of the records that [`Self::listed`] gives, then the folder of the sessions with
   /// no project, with the count of those sessions and the second of the last write of one.
   fn projects(&self, config: Option<String>) -> Vec<Project> {
-    let config = config.or_else(|| self.settings.opening.config.clone());
-    let folder =
-      records::detached(&config.clone().map_or_else(|| Places::here().config, PathBuf::from));
+    let folder = records::detached(&self.data());
     let listed = self.listed(config);
     let alone: Vec<&Listed> =
       listed.iter().filter(|one| Path::new(&one.life).starts_with(&folder)).collect();
@@ -1469,7 +1475,7 @@ impl Lives {
   fn listed(&self, config: Option<String>) -> Vec<Listed> {
     let config = config.or_else(|| self.settings.opening.config.clone());
     let folder = config.map_or_else(|| Places::here().config, PathBuf::from);
-    let found = records::recorded(&folder);
+    let found = records::recorded(&folder, &self.data());
     let mut listed: Vec<Listed> = Vec::new();
     for one in &found {
       for life in &one.records {
@@ -1492,7 +1498,7 @@ impl Lives {
       // A record that a life opens stands in the list before the disk holds it, and a session with
       // no project stands in none.
       let at = Path::new(life).parent();
-      let alone = Path::new(life).starts_with(records::detached(&folder));
+      let alone = Path::new(life).starts_with(records::detached(&self.data()));
       let project = match found.iter().find(|one| Some(one.folder.as_path()) == at) {
         Some(one) => one.project.clone(),
         None => records::checkout(Path::new(life)).filter(|_| !alone),

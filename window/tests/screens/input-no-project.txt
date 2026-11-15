@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → plan the… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/config/sessions/2026-01-01T09-12-00-0000      ⌃P find
+  This computer · ~/data/sessions/plan-the-week   ⌃P find

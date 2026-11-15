@@ -124,7 +124,7 @@ pub enum Verb {
     config: Option<String>,
   },
   /// The projects of the records that `list` gives with the same config, as [`Project::of`] folds
-  /// them, then the folder of the sessions with no project, `sessions` in that config folder.
+  /// them, then the folder of the sessions with no project, `sessions` in the data folder of furb.
   Projects {
     #[serde(default)]
     config: Option<String>,

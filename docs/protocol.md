@@ -212,10 +212,11 @@ daemon answers requests in any order.
 - `list` gives each record of the machine as `lives`: each record of the sessions of each project that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
   `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `project`, each
-  record of a session with no project, in the `.furb/sessions` of a folder of its own in `sessions` of the folder
-  `config`, with no `project`, and each record that a life of the daemon holds, whose `project` is the checkout
-  whose `.furb/sessions` holds it when the list names no project for it and it stands in no such folder. `used` is the second of the epoch of the last write of the record, when the disk
-  holds it. `held` says whether a life holds the record now, and `open` whether that
+  record of a session with no project, in the `.furb/sessions` of a folder of its own in `sessions` of the data
+  folder of furb (`furb` in `XDG_DATA_HOME`, else in the data folder of the system), with no `project`, and each
+  record that a life of the daemon holds, whose `project` is the checkout whose `.furb/sessions` holds it when the
+  list names no project for it and it stands in no such folder. `used` is the second of the epoch of the last write
+  of the record, when the disk holds it. `held` says whether a life holds the record now, and `open` whether that
   life lives and does not end, and `watched` whether a window of any connection holds the life, which a pin
   does not make, so a window finds the sessions that no window holds from the one list. `pins` names the holder of
   each pin of the life: a life that a pin holds and no window holds stands in the background, and a life that
@@ -223,9 +224,9 @@ daemon answers requests in any order.
   same way.
 - `projects` gives the projects of the records that `list` gives with the same `config`: each `folder`, the main
   checkout of a project, once, with the count of its records as `sessions` and the latest `used` of them, the one used
-  last first. A record of no project stands in none. Last comes `sessions` of the folder `config`, with `detached`,
-  which holds the sessions with no project and counts them: a window makes the record of a new one in a new folder
-  there, and its life runs in that folder.
+  last first. A record of no project stands in none. Last comes `sessions` of the data folder of furb, with
+  `detached`, which holds the sessions with no project and counts them: a window makes the record of a new one in a
+  new folder there, named by a short slug of its first message, and its life runs in that folder.
 - `models` gives the models that the catalog of the machine offers to a life in the folder `cwd`, with the settings
   of the folder `config` and the claude command line at `claude`, each as `open` takes it, the ones of the daemon
   when the peer names none. It needs no life. The first is the default actor. Each model has its `name`, which
