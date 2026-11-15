@@ -238,14 +238,19 @@ impl Model {
     [self.edged(at, ground.bg, first), self.edged(at, ground.bg, second)]
   }
 
-  /// The one line of a resolved thread.
+  /// The one line of a resolved thread. A thread that no life of its machine opens says that it
+  /// only reads, in place of its mark and its age, before the operator opens it.
   fn resolved(&self, at: usize, ground: Ground) -> Line {
     let t = &self.tokens;
     let card = &self.client.settled[at].2;
     let on = |style: Style| ground.on(style);
     let title = run(card.thread.title.clone(), on(t.style(Role::Muted)));
-    let left = vec![run("✓ ", on(t.style(Role::Muted))), title];
-    let age = self.age(card.since).unwrap_or_else(|| "now".to_owned());
+    let mark = if card.refused.is_some() { "  " } else { "✓ " };
+    let left = vec![run(mark, on(t.style(Role::Muted))), title];
+    let age = match card.refused {
+      Some(_) => "read only".to_owned(),
+      None => self.age(card.since).unwrap_or_else(|| "now".to_owned()),
+    };
     let line = spread(left, vec![run(age, on(t.style(Role::Muted)))], CARD, on(Style::new()));
     self.edged(at, ground.bg, line)
   }

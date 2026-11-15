@@ -27,9 +27,9 @@ use crate::{
   serve::Outbox,
 };
 
-/// The cards of one session, the name of the session, what each operator sent to it, and the skills
-/// that its root read. An index of a build before the words that he sent or before the skills holds
-/// none of them, so it reads as no index.
+/// The cards of one session, the name of the session, what each operator sent to it, the skills
+/// that its root read, and why no life of this build opens its record, whose threads then only
+/// read. An index of a build before any of them holds none of them, so it reads as no index.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Session {
   #[serde(default)]
@@ -38,6 +38,9 @@ pub(crate) struct Session {
   pub(crate) threads: Vec<Timed>,
   pub(crate) sent: Vec<Sent>,
   pub(crate) skills: Vec<Skill>,
+  // A missing field is no index, not a record that opens.
+  #[serde(deserialize_with = "Option::deserialize")]
+  pub(crate) refused: Option<String>,
 }
 
 /// A card with the second of the epoch since which its thread stands as it does.
@@ -128,7 +131,9 @@ pub(crate) fn folded(record: &Path) -> Result<(), Error> {
   retold.each(&mut take).map_err(Error::Read)?;
   let name = retold.name().map(str::to_owned);
   let threads = held.cards().into_iter().map(|thread| Timed { since, thread }).collect();
-  Ok(keep(record, &Session { name, threads, sent: held.sent(), skills: held.skills() })?)
+  let (sent, skills) = (held.sent(), held.skills());
+  let refused = world::unopened(record).map(|no| no.to_string());
+  Ok(keep(record, &Session { name, threads, sent, skills, refused })?)
 }
 
 /// The times of the cards of a life, which the life keeps as its cards change.

@@ -24,6 +24,7 @@ fn card(life: &str, title: &str, standing: Standing, since: u64) -> Card {
     life: life.to_owned(),
     session: None,
     project: None,
+    refused: None,
     held: true,
     viewers: Vec::new(),
     pins: Vec::new(),

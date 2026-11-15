@@ -337,6 +337,8 @@ pub struct Life {
   due: Instant,
   /// The time of each card that the life tells first: when its record last changed.
   first: Option<u64>,
+  /// Why no life of this build opens the record, whose threads then only read.
+  refused: Option<String>,
 }
 
 /// What a life keeps of the events that it told, which is the part of the host in the image of the
@@ -583,7 +585,7 @@ impl Life {
     let name = self.kept.named.name().map(str::to_owned);
     let threads = self.times.timed(self.kept.held.cards(), at);
     let (sent, skills) = (self.kept.held.sent(), self.kept.held.skills());
-    let session = Session { name, threads, sent, skills };
+    let session = Session { name, threads, sent, skills, refused: self.refused.clone() };
     self.cards.send_if_modified(|told| {
       let changed = told.as_deref() != Some(&session);
       if changed {
@@ -1072,6 +1074,7 @@ async fn run(
     roster: opening.roster.get_or_insert_default().clone(),
     name,
     first: record.as_deref().map(|one| cards::changed(Path::new(one))),
+    refused: None,
     times: Times::kept(record.as_deref()),
     record,
     opens,
@@ -1177,6 +1180,7 @@ async fn lives(
   if let Some((one, no)) =
     record.as_deref().and_then(|one| Some((one, world::unopened(Path::new(one))?)))
   {
+    life.refused = Some(no.to_string());
     life.recalled(one, &progress, true);
     return End { fault: Some(no.to_string()), asked: Vec::new(), stood: false };
   }

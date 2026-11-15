@@ -26,6 +26,7 @@ fn failed(system: System) -> Vec<String> {
     life: life.clone(),
     session: None,
     project: None,
+    refused: None,
     held: false,
     viewers: Vec::new(),
     pins: Vec::new(),

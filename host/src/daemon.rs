@@ -1392,10 +1392,11 @@ impl Lives {
       _ => (Vec::new(), Vec::new()),
     };
     let held = self.held.contains_key(life);
-    let card = |session: Option<String>, since, thread| Card {
+    let card = |session: &Session, since, thread| Card {
       life: life.to_owned(),
-      session,
+      session: session.name.clone(),
       project: project.cloned(),
+      refused: session.refused.clone(),
       held,
       viewers: viewers.clone(),
       pins: pins.clone(),
@@ -1405,9 +1406,7 @@ impl Lives {
     if let Some(session) = self.session(life) {
       let stands = |thread: view::Card| if held { thread } else { thread.at_rest() };
       let threads = session.threads.iter().cloned();
-      return threads
-        .map(|one| card(session.name.clone(), one.since, stands(one.thread)))
-        .collect();
+      return threads.map(|one| card(&session, one.since, stands(one.thread))).collect();
     }
     if !held && record.is_file() && self.indexing.insert(life.to_owned()) {
       // The task ends with the daemon, and then no peer hears a card.

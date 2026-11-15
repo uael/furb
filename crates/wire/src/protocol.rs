@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 39;
+pub const PROTOCOL: u32 = 40;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -735,6 +735,9 @@ pub struct Card {
   pub life: String,
   pub session: Option<String>,
   pub project: Option<String>,
+  /// Why no life of the machine opens the record of the card, whose thread then only reads.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub refused: Option<String>,
   pub held: bool,
   pub viewers: Vec<String>,
   /// The holder of each pin of the life, as `list` gives it.
@@ -746,9 +749,11 @@ pub struct Card {
 
 impl Card {
   /// Where a member finds the card in a list: its part, its rank in that part, and its time. What
-  /// needs him waits the longest first, and each other part shows the newest first.
+  /// needs him waits the longest first, and each other part shows the newest first. A thread that
+  /// only reads is resolved, whatever its record says of it.
   pub fn place(&self, operator: &str) -> (card::Part, u8, i64) {
-    let (part, rank) = self.thread.part(operator);
+    let (part, rank) =
+      if self.refused.is_some() { (card::Part::Resolved, 0) } else { self.thread.part(operator) };
     let since = i64::try_from(self.since).unwrap_or(i64::MAX);
     (part, rank, if part == card::Part::NeedsYou { since } else { -since })
   }

@@ -3061,6 +3061,13 @@
             "null"
           ]
         },
+        "refused": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Why no life of the machine opens the record of the card, whose thread then only reads."
+        },
         "held": {
           "type": "boolean"
         },
@@ -5503,5 +5510,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 39
+  "x-protocol": 40
 }

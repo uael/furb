@@ -1137,6 +1137,10 @@ export interface Card {
   life: string;
   session?: string | null;
   project?: string | null;
+  /**
+   * Why no life of the machine opens the record of the card, whose thread then only reads.
+   */
+  refused?: string | null;
   held: boolean;
   viewers: string[];
   /**
@@ -1564,4 +1568,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 39;
+export const PROTOCOL = 40;

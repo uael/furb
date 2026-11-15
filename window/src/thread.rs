@@ -601,6 +601,7 @@ impl Model {
       life,
       session,
       project,
+      refused: None,
       held: true,
       viewers: Vec::new(),
       pins: Vec::new(),

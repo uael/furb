@@ -55,6 +55,7 @@ fn opened(end: Page) -> Model {
     life: "/home/ada/furb/.furb/sessions/long.jsonl".to_owned(),
     session: None,
     project: None,
+    refused: None,
     held: true,
     viewers: Vec::new(),
     pins: Vec::new(),

@@ -33,7 +33,7 @@ use std::{
 use furb::{
   Object, image,
   life::{Answer as Answered, Log, Opening},
-  view::{self, Phase, Standing},
+  view::{self, Part, Phase, Standing},
   world::{SchemaError, checkpoints},
 };
 use furb_host::{
@@ -1226,6 +1226,23 @@ async fn a_record_from_before_the_stable_cut_shows_its_threads_to_its_window_unt
   assert_eq!(refused, Err(ProtocolError::Refused { why: why.clone() }));
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   assert_eq!(window.ask(page()).await, Err(ProtocolError::Refused { why }), "a detach lets it go");
+}
+
+/// The card of a record from before the stable cut says why no life opens it, before a window
+/// opens it, and stands with the resolved threads: its thread only reads.
+#[tokio::test]
+async fn the_card_of_a_record_from_before_the_stable_cut_says_why_it_only_reads() {
+  let at = place();
+  let (_, sessions) = project(&at);
+  let before = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/replay/speaker.jsonl");
+  fs::copy(before, sessions.join("before.jsonl")).unwrap();
+  let (local, _daemon) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let told = card(&mut window, |card| card.life.ends_with("before.jsonl")).await;
+  let why = SchemaError::BeforeCut { of: "record" }.to_string();
+  assert_eq!(told.refused, Some(why));
+  assert_eq!(told.place("anyone").0, Part::Resolved);
 }
 
 #[tokio::test]
@@ -2624,6 +2641,7 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
     life: life.clone(),
     session: None,
     project: Some(main),
+    refused: None,
     held: true,
     viewers: vec![operator.clone()],
     pins: Vec::new(),
@@ -2632,12 +2650,12 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
   };
   assert_eq!(told, wanted);
   assert!(told.thread.unread(&operator), "he did not read the end of the thread");
-  assert_eq!(told.place(&operator).0, view::Part::Resting);
+  assert_eq!(told.place(&operator).0, Part::Resting);
   // What he read is told as a change of the card, and a later peer gets the card as it stands.
   let seen = Verb::Seen { life: life.clone(), about: prompt };
   assert_eq!(window.ask(seen).await, Ok(Answer::Done));
   let read = card(&mut window, |card| card.thread.read_by(&operator)).await;
-  assert_eq!(read.place(&operator).0, view::Part::Resolved);
+  assert_eq!(read.place(&operator).0, Part::Resolved);
   let mut late = Window::dialed(&local).await;
   assert_eq!(cards(&mut late).await, vec![read]);
 }

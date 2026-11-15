@@ -31,6 +31,7 @@ fn asked(shape: &str, system: System) -> Model {
     life: LIFE.to_owned(),
     session: None,
     project: None,
+    refused: None,
     held: true,
     viewers: Vec::new(),
     pins: Vec::new(),
