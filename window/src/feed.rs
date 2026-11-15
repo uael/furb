@@ -21,14 +21,11 @@ use crate::{
   prose,
   question::closed,
   thread::{Click, Item, Items, Row, width},
-  tokens::{APART, Loader, Role, WORKS},
+  tokens::{APART, Loader, PROMPT, Role, WORKS},
 };
 
 /// The word on the line of a block whose model has not begun to write it.
 const WRITES: &str = "writes";
-
-/// The one verb of furb that makes code and value, whose call shines while it works.
-const PROMPT: &str = "prompt";
 
 /// The word of the thought of a model while it thinks.
 const THINKS: &str = "thinks";

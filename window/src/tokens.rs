@@ -238,6 +238,10 @@ pub enum Role {
 /// The word of the state of a thing that works, on a card, in the dock and in the row of hints.
 pub(crate) const WORKS: &str = "Working";
 
+/// The one verb of furb that makes code and value: its call stands bold in code, and shines while
+/// it works.
+pub(crate) const PROMPT: &str = "prompt";
+
 /// A mark that moves while something works: one cell, or the word of work for the light.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Loader {

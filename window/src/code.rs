@@ -11,7 +11,7 @@ use opentui::{
 
 use crate::{
   line::{Line, run},
-  tokens::SYNTAX,
+  tokens::{PROMPT, SYNTAX},
 };
 
 /// The numbers of a block of code, by its last number: their columns, two at least, so each block
@@ -82,7 +82,10 @@ impl Colors {
       highlight(text, "python", &self.theme).unwrap_or_else(|| vec![Span::raw(text.to_owned())]);
     let mut lines: Vec<Line> = vec![Vec::new()];
     for span in spans {
+      // `prompt` is the one call that a model answers, where all else runs as written, so it
+      // stands out of the code at rest as its light does while it runs.
       let style = plain.patch(span.style);
+      let style = if span.content == PROMPT { style.bold() } else { style };
       for (at, part) in span.content.split('\n').enumerate() {
         if at > 0 {
           lines.push(Vec::new());
