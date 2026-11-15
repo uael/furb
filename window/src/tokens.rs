@@ -89,7 +89,8 @@ pub struct Tokens {
   /// diff reads, with no green, which the window shows nowhere.
   pub added: Color,
   /// The mark of a session whose life runs, which a person can pause or end, where a session that
-  /// only rests in its record has none: the orange of work.
+  /// only rests in its record has none. It takes the bright text, not the orange of work, since a
+  /// life runs while its threads rest, and a card that works shows its work beside it.
   pub live: Color,
   /// The ground of a line that a change adds, of its hue, so its code keeps the colors of its
   /// grammar.
@@ -114,7 +115,7 @@ impl Tokens {
     let dark = terminal.filter(|told| ThemeMode::from_background(*told) == ThemeMode::Dark);
     let base = dark.map_or(BASE, |told| Color::default_with(told.r, told.g, told.b));
     let [panel, raised, lifted, border] = STEPS.map(|share| mixed(base, WHITE, share));
-    let orange = Color::hex(0xfa_b283);
+    let (orange, text) = (Color::hex(0xfa_b283), Color::hex(0xe4_e4e4));
     let hues = [0xa3_83e2, 0xe8_89a8, 0x4f_c1c9, 0x93_a2b7].map(Color::hex);
     let (added, danger) = (Color::hex(0x56_b6c2), Color::hex(0xef_6c6c));
     Self {
@@ -123,14 +124,14 @@ impl Tokens {
       raised,
       lifted,
       border,
-      text: Color::hex(0xe4_e4e4),
+      text,
       hover: WHITE,
       muted: Color::hex(0x94_9494),
       accent: orange,
       attention: Color::hex(0x76_99fe),
       danger,
       added,
-      live: orange,
+      live: text,
       added_ground: mixed(base, added, 18),
       removed_ground: mixed(base, danger, 18),
       veil: Color::rgba(base.r, base.g, base.b, 160),
