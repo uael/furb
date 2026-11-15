@@ -232,7 +232,7 @@ fn the_head_names_the_stage_of_an_open_and_counts_its_seconds_then_shows_each_st
   shows(&app, "1.0 s");
   // The record is read whole, and the open waits for the catalog: the card says that it opens,
   // with no share.
-  let whole = |frame: String| frame.lines().any(|line| line.trim_end().ends_with("⠹ Opening"));
+  let whole = |frame: String| frame.lines().any(|line| line.trim_end().ends_with("⠹ Opening ▌"));
   assert!(app.wait_until(PATIENCE, || whole(app.text())), "{}", app.text());
   screen("open-bar", &app);
   app.advance(Duration::from_secs(4));

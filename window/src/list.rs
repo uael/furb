@@ -154,22 +154,23 @@ impl Model {
   }
 
   /// The row between two cards. The selected card takes half of it, above and under, so no card
-  /// changes height: its ground has clipped corners at its right, and its bar in the hue of its
-  /// thread stands as tall as its ground at its left.
+  /// changes height: its ground and its bar in the hue of its thread stand as tall as each other.
   fn gap(&self, above: Option<usize>, under: Option<usize>) -> Line {
     let chosen = |at: Option<usize>| at.filter(|at| self.chosen(*at));
-    let (at, [bar, fill, corner]) = match (chosen(above), chosen(under)) {
+    let (at, [bar, fill, end]) = match (chosen(above), chosen(under)) {
       (Some(at), _) => (at, ["▝", "▀", "▘"]),
       (_, Some(at)) => (at, ["▗", "▄", "▖"]),
       _ => return Vec::new(),
     };
     let ground = Style::new().fg(self.tokens.lifted);
     let hue = self.hue(&self.settled[at].1);
-    vec![run(bar, Style::new().fg(hue)), run(fill.repeat(CARD + 1), ground), run(corner, ground)]
+    vec![run(bar, Style::new().fg(hue)), run(fill.repeat(CARD + 2), ground), run(end, ground)]
   }
 
-  /// A line of a card between its two edges. The selected card stands on a ground, with one column
-  /// of it on each side of its text, and with its bar at its left.
+  /// A line of a card between its two edges. The selected card stands on a ground with its bar at
+  /// its left, in the right half of a column: the ground takes one column on each side of its text
+  /// and the left half of the column after it, so the card stands as far from each side of the
+  /// list, and its text as far from each side of the card.
   fn edged(&self, at: usize, ground: Option<Color>, line: Line) -> Line {
     let Some(ground) = ground else {
       let mut row = vec![run("  ", Style::new())];
@@ -179,7 +180,7 @@ impl Model {
     let edge = || run(" ", Style::new().bg(ground));
     let mut row = vec![run("▐", Style::new().fg(self.hue(&self.settled[at].1))), edge()];
     row.extend(line);
-    row.push(edge());
+    row.extend([edge(), run("▌", Style::new().fg(ground))]);
     row
   }
 

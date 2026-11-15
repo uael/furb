@@ -1,10 +1,10 @@
  furb · the bench stalls on a cold build        [ Resolve ]    All projects ▾         this machine
 ┃
 ┃ the bench stalls on a cold build                             Working 1
-┃ (the model is asked again)                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ the bench stalls on a…  ⠋ Working
-                                                              ▐ FU furb                      opus
-       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+┃ (the model is asked again)                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ the bench stalls on a…  ⠋ Working ▌
+                                                              ▐ FU furb                      opus ▌
+       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     ⠋  Attempt 2 of 10 in 4 s
        the provider is overloaded
     …
