@@ -105,7 +105,7 @@ impl Feed<'_> {
     let card = self.model.told_card(&root.key);
     let project = card.map(project).unwrap_or_default();
     let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
-    let (prose, muted) = (self.style(Role::Prose), self.style(Role::Muted));
+    let (button, muted) = (self.style(Role::Button), self.style(Role::Muted));
     let title = self.model.title().unwrap_or_default();
     // The selected card names the thread that an agent came from, so the head names the agent.
     let (mark, title) = match &self.opened.from {
@@ -116,7 +116,7 @@ impl Feed<'_> {
       vec![run(format!(" {project} · {mark}"), muted), run(title, self.style(Role::Title))];
     let made = !self.opened.key.2.is_empty() && !self.model.leaves();
     let (mark, button) = match card.map(|card| &card.thread) {
-      _ if self.opened.from.is_some() => (None, Some((run("[ Back ]", prose), Does::Close))),
+      _ if self.opened.from.is_some() => (None, Some((run(" Back ", button), Does::Close))),
       _ if !made => (None, None),
       Some(thread) if thread.ended() => {
         let mark = match thread.standing {
@@ -124,14 +124,14 @@ impl Feed<'_> {
           Standing::Failed => run("✗ Failed", Style::new().fg(t.danger)),
           _ => run("Stopped", muted),
         };
-        (Some(mark), Some((run("[ Reopen ]", prose), Does::Resolve)))
+        (Some(mark), Some((run(" Reopen ", button), Does::Resolve)))
       }
       Some(thread)
         if thread.works() && self.model.armed == Some(Armed::Resolve(self.opened.key.clone())) =>
       {
-        (None, Some((run("[ Stop and resolve ]", Style::new().fg(t.attention)), Does::Resolve)))
+        (None, Some((run(" Stop and resolve ", button.fg(t.attention)), Does::Resolve)))
       }
-      _ => (None, Some((run("[ Resolve ]", prose), Does::Resolve))),
+      _ => (None, Some((run(" Resolve ", button), Does::Resolve))),
     };
     let apart = |mark| [mark, run(" ".repeat(APART), Style::new())];
     let right: Line =

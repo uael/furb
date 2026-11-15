@@ -249,7 +249,7 @@ fn a_thread_that_ended_turns_the_input_to_it_and_a_reply_opens_it_and_the_button
   shows(&app, "Two stages hold most");
   // The model resolved the thread: its head says so, its button and the input say that a reply
   // opens it again.
-  let frame = shows(&app, "✓ Resolved   [ Reopen ]");
+  let frame = shows(&app, "✓ Resolved    Reopen ");
   assert!(frame.contains("┃ A reply opens this thread again"), "{frame}");
   screen("input-resolved", &app);
   // The key of the button turns the input to the thread and sends nothing.
@@ -262,11 +262,11 @@ fn a_thread_that_ended_turns_the_input_to_it_and_a_reply_opens_it_and_the_button
   // A reply opens it again, and its model asks him.
   sent(&app, &format!("and which key sends the queue {ASKS}"));
   shows(&app, "Which key sends the queue?");
-  let frame = shows(&app, "[ Resolve ]");
+  let frame = shows(&app, " Resolve ");
   assert!(!frame.contains("✓ Resolved"), "{frame}");
   // The button resolves it: its close ends the question, and the head says that it is resolved.
-  clicked(&app, "[ Resolve ]", 0, 2);
-  shows(&app, "✓ Resolved   [ Reopen ]");
+  clicked(&app, " Resolve ", 0, 2);
+  shows(&app, "✓ Resolved    Reopen ");
   shows(&app, "◆ Which key sends the…     refused");
   assert_eq!(told(&daemon, &sessions).len(), 2);
 }
@@ -279,18 +279,18 @@ fn a_resolve_of_a_thread_that_works_waits_for_its_confirm() {
   paged(&app);
   app.press("ctrl+x");
   app.press("r");
-  shows(&app, "[ Stop and resolve ]");
+  shows(&app, " Stop and resolve ");
   screen("input-resolve-confirm", &app);
   // Another key leaves the confirm, and the thread still works.
   app.press("escape");
-  let frame = shows(&app, "[ Resolve ]");
+  let frame = shows(&app, " Resolve ");
   assert!(frame.contains("Working · ⎋ ⎋ stop") && !frame.contains("Stop and resolve"), "{frame}");
-  let (x, y) = at(&app, "[ Resolve ]", 0);
+  let (x, y) = at(&app, " Resolve ", 0);
   app.click(x, y);
-  shows(&app, "[ Stop and resolve ]");
-  let (x, y) = at(&app, "[ Stop and resolve ]", 0);
+  shows(&app, " Stop and resolve ");
+  let (x, y) = at(&app, " Stop and resolve ", 0);
   app.click(x, y);
-  let frame = shows(&app, "✓ Resolved   [ Reopen ]");
+  let frame = shows(&app, "✓ Resolved    Reopen ");
   assert!(!frame.contains("Working · ⎋ ⎋ stop"), "{frame}");
 }
 

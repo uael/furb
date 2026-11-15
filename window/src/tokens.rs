@@ -82,9 +82,10 @@ pub struct Tokens {
   /// The veil over the window while a list part stands over it, which dims each cell under it.
   pub veil: Color,
   /// The bar of a thread and the badge of a project, each far from the others and from the colors
-  /// of attention and of a failure, so two threads side by side read apart: purple, blue, rose, teal
-  /// and mint.
-  pub hues: [Color; 5],
+  /// of attention and of a failure, so two threads side by side read apart: purple, rose, teal and
+  /// mint. None is the blue of the accent, which is the bar of a new thread, so a turn of the input
+  /// to a new thread always changes the color of its bar.
+  pub hues: [Color; 4],
 }
 
 impl Tokens {
@@ -97,7 +98,7 @@ impl Tokens {
     let base = dark.map_or(BASE, |told| Color::default_with(told.r, told.g, told.b));
     let [panel, raised, lifted, border] = STEPS.map(|share| mixed(base, WHITE, share));
     let blue = Color::hex(0x76_99fe);
-    let hues = [0xa3_83e2, 0x76_99fe, 0xe8_89a8, 0x4f_c1c9, 0x79_d4a2].map(Color::hex);
+    let hues = [0xa3_83e2, 0xe8_89a8, 0x4f_c1c9, 0x79_d4a2].map(Color::hex);
     Self {
       base,
       panel,
@@ -121,6 +122,7 @@ impl Tokens {
       Role::Title => Style::new().fg(self.text).bold(),
       Role::Prose => Style::new().fg(self.text),
       Role::Muted => Style::new().fg(self.muted),
+      Role::Button => Style::new().fg(self.text).bg(self.lifted),
     }
   }
 
@@ -184,6 +186,9 @@ pub enum Role {
   Prose,
   /// What stands behind: a second line, a hint.
   Muted,
+  /// A thing that acts on a click, as a button of a head or the chosen part of a switch: its word
+  /// on the lifted step, with one cell of it on each side.
+  Button,
 }
 
 /// A mark that moves in one cell while something works.

@@ -580,7 +580,7 @@ impl Model {
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
     let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
-    let on = prose.bg(t.lifted);
+    let on = t.style(Role::Button);
     let (message, python) = if self.draft.python { (muted, on) } else { (on, muted) };
     let switch = [run(" Message ", message), run(" Python ", python)];
     let gap = || run(" ".repeat(APART), raised);

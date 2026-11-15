@@ -167,7 +167,7 @@ fn a_thread_at_rest_shows_its_answer_as_prose_and_a_hover_lights_only_the_text()
   shows(&app, "Resolved 1 ▾");
   screen("thread-rests", &app);
   // The card, the button that opens it again, and the link of the answer.
-  for (text, from) in [("how long does an open", LEFT), ("[ Reopen ]", 0), ("the trace", 0)] {
+  for (text, from) in [("how long does an open", LEFT), (" Reopen ", 0), ("the trace", 0)] {
     lights(&app, text, from, 2);
   }
 }
@@ -274,7 +274,7 @@ fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_esc
 
   // A click on an agent opens its thread in place: its head says that it is one.
   clicked(&app, "└ Run the bench", 0, 2);
-  shows(&app, "[ Back ]");
+  shows(&app, " Back ");
   // The head names the agent once its card or its page came, which can follow the button.
   let head = || app.text().lines().next().unwrap().to_owned();
   let named =
@@ -286,7 +286,7 @@ fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_esc
   // An escape opens the thread that it came from again, with its dock, whose key the row of hints
   // names.
   app.press("escape");
-  shows(&app, "[ Resolve ]");
+  shows(&app, " Resolve ");
   shows(&app, "└ Count the lines of README.md");
   shows(&app, "⌃X ↓ agents");
 
@@ -305,7 +305,7 @@ fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_esc
     into(title);
   }
   app.press("escape");
-  shows(&app, "[ Resolve ]");
+  shows(&app, " Resolve ");
 }
 
 /// The rows of the box of the context, from its head to the foot of the window, each cut to the
