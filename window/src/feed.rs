@@ -597,8 +597,13 @@ impl Feed<'_> {
     // The line that its model has not begun to write says nothing that its state does not say.
     let stands = agent.line.as_ref().filter(|one| !rest && !one.text.is_empty());
     let stands = stands.map(|one| vec![run(self.model.homed(&one.text), muted)]);
-    // While its model only thinks, the row peeks at the last line of the thought.
-    let thinks = agent.thought.as_ref().filter(|_| !rest).map(|one| vec![run(one.clone(), muted)]);
+    // While its model only thinks, the row peeks at the last line of the thought, in the form of
+    // the row of a thought under a block.
+    let thinks = agent
+      .thought
+      .as_ref()
+      .filter(|_| !rest)
+      .map(|one| vec![run(format!("{THINKS} · "), muted), run(one.clone(), muted.italic())]);
     let stands = stands.or(thinks);
     let title = if rest { muted } else { self.style(Role::Prose) };
     let title = vec![run(agent.card.title.clone(), title)];
