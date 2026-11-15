@@ -17,9 +17,8 @@ use opentui::style::{Span, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-  feed::clipped,
   keys::Does,
-  line::{Line, run, spread},
+  line::{Line, clipped, run, spread},
   list::project,
   model::{Key, Model},
   opens::{Ask, Hold, Life},

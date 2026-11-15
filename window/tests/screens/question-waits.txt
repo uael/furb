@@ -18,7 +18,7 @@
 ┃
 
        opus/high
-    ◆  side = await prompt(Literal['right', 'left'], '…+50
+    ◆  side = await prompt(Literal['right', 'left'], …+51
     4  close(side)
     …
 

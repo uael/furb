@@ -5,7 +5,7 @@
 
        opus/high
     1  found = 2
-    2  close('The open takes **329 s**. Two stages ho…+250
+    2  close('The open takes **329 s**. Two stages h…+251
 
   The open takes 329 s. Two stages hold most of it: 181 s
   to send each entry to the ears of the host, and 104 s in

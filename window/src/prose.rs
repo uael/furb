@@ -10,7 +10,7 @@ use pulldown_cmark::{Alignment, CodeBlockKind, Event, Options, Parser, Tag, TagE
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-  code::{self, Colors},
+  code::{Colors, Gutter},
   line::{self, Line, run},
   tokens::{APART, Role, Tokens},
 };
@@ -274,10 +274,13 @@ impl Prose<'_> {
     } else {
       text.split('\n').map(|one| vec![run(one, plain)]).collect()
     };
-    let gutter = code::gutter(lines.len());
+    let numbers = Gutter::of(lines.len());
+    let gutter = numbers.width;
     let head =
       (!language.is_empty()).then(|| vec![run(format!("{:gutter$}  {language}", ""), muted)]);
-    let numbered = lines.into_iter().zip(1..).map(|(mut line, number)| {
+    let room = numbers.inside(self.room.saturating_sub(2)).saturating_sub(gutter + 2);
+    let numbered = lines.into_iter().zip(1..).map(|(line, number)| {
+      let mut line = line::clipped(line, room, muted);
       line.insert(0, run(format!("{number:>gutter$}  "), muted));
       line
     });
