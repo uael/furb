@@ -31,6 +31,7 @@ use futures::{SinkExt, StreamExt};
 use opentui::testing::TestApp;
 use serde_json::json;
 use tokio::{
+  io::{self, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
   process::Command,
   runtime::Handle,
   time::{sleep, timeout},
@@ -234,6 +235,23 @@ impl Daemon {
   pub(crate) fn machine(&self, name: &str) -> Machine {
     let served = Command::new(self.yard.join("no-furb"));
     Machine { name: name.to_owned(), folder: self.host.clone(), served, reads: false }
+  }
+
+  /// The machine of the daemon as a window reaches it over a link that lags: the first frame of
+  /// the daemon that holds a text, and each frame after it, come a second late, as a page that
+  /// stands behind what the daemon took.
+  pub(crate) fn lagging(&self, name: &str, held: &'static str) -> Machine {
+    let folder = self.yard.join("lag");
+    let mut listener = self.runtime.block_on(Local::new(&folder).listen()).expect("a free folder");
+    let daemon = self.local.clone();
+    self.runtime.spawn(async move {
+      while let Ok(window) = listener.accept().await {
+        let Ok(served) = daemon.dial().await else { return };
+        tokio::spawn(relayed(window, served, held));
+      }
+    });
+    let served = Command::new(self.yard.join("no-furb"));
+    Machine { name: name.to_owned(), folder, served, reads: false }
   }
 
   /// A peer of the daemon, which hears each change of its cards.
@@ -647,4 +665,26 @@ fn failing(failed: &AtomicU32) -> String {
   let once = failed.fetch_add(1, Ordering::SeqCst) == 0;
   let why = if once { "the provider is overloaded" } else { "the request is malformed" };
   why.to_owned()
+}
+
+/// The frames between a window and its daemon, each way, where the frames of the daemon from the
+/// first that holds a text on come a second late.
+async fn relayed(window: Accepted, served: impl AsyncRead + AsyncWrite + Unpin, held: &str) {
+  let (mut from_window, mut to_window) = io::split(window);
+  let (from_daemon, mut to_daemon) = io::split(served);
+  let up = io::copy(&mut from_window, &mut to_daemon);
+  let down = async {
+    let mut lines = BufReader::new(from_daemon).lines();
+    let mut late = false;
+    while let Ok(Some(line)) = lines.next_line().await {
+      if !late && line.contains(held) {
+        late = true;
+        sleep(Duration::from_secs(1)).await;
+      }
+      if to_window.write_all(format!("{line}\n").as_bytes()).await.is_err() {
+        return;
+      }
+    }
+  };
+  let (_, ()) = tokio::join!(up, down);
 }

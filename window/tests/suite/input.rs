@@ -371,6 +371,28 @@ fn ctrl_c_empties_the_input_then_names_his_last_message_that_runs_and_takes_it_b
 }
 
 #[test]
+fn ctrl_c_takes_back_the_message_that_the_daemon_took_before_its_page_comes() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  daemon.served();
+  let folder = daemon.file("furb-try");
+  fs::create_dir_all(&folder).unwrap();
+  let sessions = folder.join(".furb").join("sessions");
+  let home = folder.parent().map(PathBuf::from);
+  let options = Options { folder, home, ..options(&daemon.file("cards.json")) };
+  open(&app, vec![daemon.lagging("mac", "three (the model")], options);
+  shows(&app, "No thread yet in this project.");
+  for word in ["one", "two", "three"] {
+    sent(&app, &format!("{word} {WORKS}"));
+  }
+  assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions).len() == 3));
+  // The page that shows the third message is a second late, and the first press names it all the
+  // same, since the daemon took it.
+  app.press("ctrl+c");
+  shows(&app, "⌃C again takes back “three (the model works");
+}
+
+#[test]
 fn ctrl_d_leaves_on_an_empty_input_once_it_named_it_and_another_key_forgets_it() {
   let (app, _daemon, _sessions) = started();
   app.press("ctrl+d");
