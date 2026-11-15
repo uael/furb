@@ -457,6 +457,20 @@ class Request38(TypedDict):
 
 class Request40(TypedDict):
   """
+  An image kept in the gallery of the life, beside its record, under the digest of its bytes:
+  a PNG, a JPEG, a GIF or a WebP, in base64. It answers the text by which a message names it
+  under its name, `![name](uri)`, so that the model sees it.
+  """
+
+  id: int
+  life: str
+  name: str
+  data: str
+  verb: Literal["image"]
+
+
+class Request41(TypedDict):
+  """
   A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config
   that asked it. It writes no config.
   """
@@ -466,7 +480,7 @@ class Request40(TypedDict):
   verb: Literal["cancel_sign_in"]
 
 
-class Request41(TypedDict):
+class Request42(TypedDict):
   """
   The fact that the operator read a chain or a thread up to now, which each window and each
   later life reads in the record.
@@ -478,7 +492,7 @@ class Request41(TypedDict):
   verb: Literal["seen"]
 
 
-class Request42(TypedDict):
+class Request43(TypedDict):
   """
   The resolve of a thread of the operator: a close of each act that keeps it open, the last
   first, with the text `resolved` or with None, as its shape takes. A message on the thread
@@ -491,7 +505,7 @@ class Request42(TypedDict):
   verb: Literal["resolve"]
 
 
-class Request43(TypedDict):
+class Request44(TypedDict):
   """
   A follow-up that the operator queued on a chain, under an entry that the window chose. The
   life sends it as a prompt of its shape and its message once the chain rests, and a second
@@ -507,7 +521,7 @@ class Request43(TypedDict):
   verb: Literal["queue"]
 
 
-class Request44(TypedDict):
+class Request45(TypedDict):
   """
   A follow-up taken out of its queue before the life sent it.
   """
@@ -518,7 +532,7 @@ class Request44(TypedDict):
   verb: Literal["unqueue"]
 
 
-class Request45(TypedDict):
+class Request46(TypedDict):
   """
   The follow-ups that wait on a chain, in order.
   """
@@ -529,7 +543,7 @@ class Request45(TypedDict):
   verb: Literal["queued"]
 
 
-class Request46(TypedDict):
+class Request47(TypedDict):
   """
   What waits for the operator in a life, with each notice that the window still shows.
   """
@@ -540,7 +554,7 @@ class Request46(TypedDict):
   verb: Literal["desk"]
 
 
-class Request47(TypedDict):
+class Request48(TypedDict):
   """
   The threads of a chain with their meaning, now or as they stood just after a moment. `read`
   is the place up to which the window read the chain, from which the runs of notes count the
@@ -555,7 +569,7 @@ class Request47(TypedDict):
   verb: Literal["threads"]
 
 
-class Request48(TypedDict):
+class Request49(TypedDict):
   """
   The threads of every chain of a life but those it names, as one tree in the order of the
   list of the threads, now or as they stood just after a moment.
@@ -568,7 +582,7 @@ class Request48(TypedDict):
   verb: Literal["rail"]
 
 
-class Request50(TypedDict):
+class Request51(TypedDict):
   """
   The acts of a life as they stood just after a moment, each with its meaning then.
   """
@@ -579,7 +593,7 @@ class Request50(TypedDict):
   verb: Literal["as_of"]
 
 
-class Request51(TypedDict):
+class Request52(TypedDict):
   """
   A page of a thread of a life, its prompt: the exchanges before the one at `before`, or
   before the end, at most `limit` of them, the newest page first, now or as they stood just
@@ -597,7 +611,7 @@ class Request51(TypedDict):
   verb: Literal["thread"]
 
 
-class Request52(TypedDict):
+class Request53(TypedDict):
   """
   Each moment of a life at which an act began or ended, in order.
   """
@@ -612,7 +626,7 @@ class Request52(TypedDict):
   verb: Literal["moments"]
 
 
-class Request53(TypedDict):
+class Request54(TypedDict):
   """
   Each chain of a life in time, in the order the chains began.
   """
@@ -622,7 +636,7 @@ class Request53(TypedDict):
   verb: Literal["tracks"]
 
 
-class Request53(TypedDict):
+class Request55(TypedDict):
   """
   The turn that the peer gave for a request of a model of a life that it answers, written as
   the record writes a value, or why it gives none.
@@ -636,7 +650,7 @@ class Request53(TypedDict):
   verb: Literal["answered"]
 
 
-class Request54(TypedDict):
+class Request56(TypedDict):
   """
   What the peer added to the text and to the thought of the turn of a request, as it writes.
   """
@@ -649,7 +663,7 @@ class Request54(TypedDict):
   verb: Literal["wrote"]
 
 
-class Request55(TypedDict):
+class Request57(TypedDict):
   """
   The place of the daemon given to the daemon of a new build: each life written to its
   checkpoint and ended, and the lives with their pins in the answer, once the daemon stopped to
@@ -660,7 +674,7 @@ class Request55(TypedDict):
   verb: Literal["handover"]
 
 
-class Request60(TypedDict):
+class Request62(TypedDict):
   """
   The end of a view in its window.
   """
@@ -2038,7 +2052,7 @@ class Request17(TypedDict):
   verb: Literal["writes"]
 
 
-class Request49(TypedDict):
+class Request50(TypedDict):
   """
   The ladder of a chain, now or as it stood just after a moment: the steps that show and the
   folds of the others, with the folds that the window opened, the prompts that the operator
@@ -2056,7 +2070,7 @@ class Request49(TypedDict):
   verb: Literal["ladder"]
 
 
-class Request56(TypedDict):
+class Request58(TypedDict):
   """
   A view that a window mounts in a slot of a life, which the process of a skill serves.
   """
@@ -2069,7 +2083,7 @@ class Request56(TypedDict):
   verb: Literal["view.mount"]
 
 
-class Request58(TypedDict):
+class Request60(TypedDict):
   """
   What a person did to a node of a view, with the value of an input.
   """
@@ -2082,7 +2096,7 @@ class Request58(TypedDict):
   verb: Literal["view.event"]
 
 
-class Request59(TypedDict):
+class Request61(TypedDict):
   """
   What a skill asks of the one window of a view.
   """
@@ -2798,13 +2812,14 @@ class Answer18(TypedDict):
 class Exchange(TypedDict):
   """
   One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
-  the thread, the act of the message, the moment that it was said, who said it and its text, whether it is a word of Python
-  that an operator ran on the thread, whose block holds its code and which has no text, whether
-  the message still runs, the block of code that answers it once a model answers, and what the
-  answer says to the operator, in the order it was said. A message that the operator said on a
-  thread that works is done at once, since its model reads it at its next step, so only one that
-  asks still runs. A message is the prompt of the thread, what an operator said on it, or a word
-  that he ran on it, and what answers it is what came after it and before the next message.
+  the thread, the act of the message, the moment that it was said, who said it and its text,
+  whether it is a word of Python that an operator ran on the thread, whose block holds its code
+  and which has no text, whether the message still runs, the block of code that answers it once
+  a model answers, and what the answer says to the operator, in the order it was said. A message
+  that the operator said on a thread that works is done at once, since its model reads it at its
+  next step, so only one that asks still runs. A message is the prompt of the thread, what an
+  operator said on it, or a word that he ran on it, and what answers it is what came after it and
+  before the next message.
   """
 
   at: int
@@ -2902,7 +2917,7 @@ class Protocol(TypedDict):
   frame: Frame
 
 
-class Request57(TypedDict):
+class Request59(TypedDict):
   """
   The tree of a view, which takes the place of each tree of a lower version.
   """
@@ -2976,6 +2991,8 @@ type Request = (
   | Request58
   | Request59
   | Request60
+  | Request61
+  | Request62
 )
 """
 One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
@@ -3062,4 +3079,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 51
+PROTOCOL = 52

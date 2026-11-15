@@ -9,7 +9,7 @@ use furb_wire::protocol::{Hello, Kind, PROTOCOL, Request, Verb};
 use serde_json::Value;
 
 use crate::{
-  Client, Key, Life, Link,
+  Client, Key, Life, Link, Pasted,
   opens::{Ask, Hold},
 };
 
@@ -75,8 +75,9 @@ impl Chosen {
 }
 
 /// A message that waits to be sent: its machine, its record, its thread, which is none for a new
-/// thread and empty for the thread that the message before it makes, its text, and whether it is
-/// a word of python that runs. It goes once the daemon answered the open of its life.
+/// thread and empty for the thread that the message before it makes, its text, whether it is a
+/// word of python that runs, and the images that its text marks. It goes once the daemon answered
+/// the open of its life, after each of its images.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Outgoing {
   pub at: usize,
@@ -84,6 +85,7 @@ pub struct Outgoing {
   pub thread: Option<String>,
   pub text: String,
   pub python: bool,
+  pub images: Vec<Pasted>,
 }
 
 /// What a request of the client asked of a daemon: the open of a life, a message, a control of a
@@ -158,14 +160,19 @@ impl Client {
   }
 
   /// The first message of the queue of the input, once no message waits for its answer and the
-  /// daemon answered the open of its life. The daemon holds it until that life stands.
+  /// daemon answered the open of its life, each of its images first. The daemon holds it until
+  /// that life stands.
   pub fn due(&self) -> Option<(usize, Verb)> {
     if self.asked.values().any(|asked| *asked == Asked::Say) {
       return None;
     }
     let next = self.outgoing.front().filter(|next| self.stands(next.at, &next.life))?;
     let life = next.life.clone();
-    let message = next.text.clone();
+    if let Some(image) = next.images.iter().find(|one| one.named.is_none()) {
+      let (name, data) = (image.name.clone(), image.data.clone());
+      return Some((next.at, Verb::Image { life, name, data }));
+    }
+    let message = next.said();
     // A message waits for its answer, on a thread as on a new one: it is a question.
     let verb = if next.python {
       // A word on a thread is a turn of the operator on it, which the thread shows.

@@ -128,7 +128,7 @@ impl Client {
   pub fn recall(&mut self, sent: &Sent) {
     self.walk = None;
     self.restore = Some(sent.text.clone());
-    self.draft = Draft { text: sent.text.clone(), python: sent.python };
+    self.draft = Draft { text: sent.text.clone(), python: sent.python, images: Vec::new() };
   }
 
   /// Where the walk stands: the place of the text that the input shows, from one, among the texts
@@ -149,7 +149,8 @@ impl Client {
       (None, _) => (walk.from.clone(), None),
       (Some(place), Some(oldest)) => {
         let one = found[place.min(oldest)];
-        (Draft { text: one.text.clone(), python: one.python }, Some(place.min(oldest)))
+        let draft = Draft { text: one.text.clone(), python: one.python, images: Vec::new() };
+        (draft, Some(place.min(oldest)))
       }
       (Some(_), None) => {
         let says = if walk.from.text.is_empty() {

@@ -9,6 +9,8 @@
 
 use std::{mem, path::Path};
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use furb_wire::protocol::BOUND;
 use jiff::Timestamp;
 use serde_json::Value;
 
@@ -20,11 +22,41 @@ const STASH: usize = 50;
 /// The start of a message that asks its question aside, in a fork of the chain of the open thread.
 pub const ASIDE: &str = "/btw ";
 
-/// The text of the input, and whether it is a word of python that runs.
+/// The sign of an image in the text of the input, before its name.
+pub const PICTURE: &str = "▣ ";
+
+/// The text of the input, whether it is a word of python that runs, and each image that the
+/// operator put in it, which a message takes when its text holds the mark of that image.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Draft {
   pub text: String,
   pub python: bool,
+  pub images: Vec<Pasted>,
+}
+
+/// An image that the operator put in the input: its name, `image-<n>.<extension>`, its bytes in
+/// base64, and the text by which a message names it once the life of its message kept it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pasted {
+  pub name: String,
+  pub data: String,
+  pub named: Option<String>,
+}
+
+impl Pasted {
+  /// The mark of the image in the text of the input, which the window shows as one unit.
+  pub fn mark(&self) -> String {
+    format!("{PICTURE}{}", self.name)
+  }
+}
+
+impl Outgoing {
+  /// The text of a message as it goes: each mark of an image becomes the text by which its life
+  /// names it, so that the model sees it.
+  pub fn said(&self) -> String {
+    let named = self.images.iter().filter_map(|one| Some((one.mark(), one.named.as_ref()?)));
+    named.fold(self.text.clone(), |text, (mark, named)| text.replace(&mark, named))
+  }
 }
 
 impl Client {
@@ -83,6 +115,8 @@ impl Client {
       Some(Err(why)) => return Err(why),
       None => (text, self.draft.python),
     };
+    let images = mem::take(&mut self.draft.images);
+    let images = images.into_iter().filter(|one| !python && text.contains(&one.mark())).collect();
     let pending = Pending { act: None, text: text.clone() };
     match (&thread, python, self.thread.as_mut()) {
       (_, true, _) | (Some(_), false, None) => {}
@@ -95,7 +129,7 @@ impl Client {
       }
       (Some(_), false, Some(open)) => open.thread.pending.push(pending),
     }
-    self.outgoing.push_back(Outgoing { at, life, thread, text, python });
+    self.outgoing.push_back(Outgoing { at, life, thread, text, python, images });
     self.walk = None;
     Ok(())
   }
@@ -131,6 +165,30 @@ impl Client {
     };
     self.stash_draft();
     self.restore = Some(last);
+  }
+
+  /// An image put in the input by its bytes and the extension of its type: the mark that the
+  /// input takes at its caret, or why it does not go. A frame of the protocol holds the image.
+  pub fn paste_image(&mut self, bytes: &[u8], extension: &str) -> Result<String, String> {
+    let data = STANDARD.encode(bytes);
+    // The frame holds the data and the few names of the verb around it.
+    if data.len() + 1024 > BOUND {
+      return Err(format!("An image of at most {} MiB goes to a session.", (BOUND >> 20) * 3 / 4));
+    }
+    let name = format!("image-{}.{extension}", self.draft.images.len() + 1);
+    let pasted = Pasted { name, data, named: None };
+    let mark = pasted.mark();
+    self.draft.images.push(pasted);
+    Ok(mark)
+  }
+
+  /// The text by which the life of the first message of the queue names the first of its images
+  /// that it did not keep yet.
+  pub fn imaged(&mut self, named: String) {
+    let next = self.outgoing.front_mut().into_iter().flat_map(|one| one.images.iter_mut());
+    if let Some(image) = next.into_iter().find(|one| one.named.is_none()) {
+      image.named = Some(named);
+    }
   }
 
   /// The input turned to ask its text aside: it starts with `/btw ` once.
@@ -173,3 +231,7 @@ impl Client {
     self.now / 1000
   }
 }
+
+#[cfg(test)]
+#[path = "input.test.rs"]
+mod test;

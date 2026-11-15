@@ -13,6 +13,8 @@ publish = false
 workspace = true
 
 [dependencies]
+# The bytes of an image that the input sends to its session, in a frame of text.
+base64 = "0.22"
 # The emojis that a colon finds by their short codes.
 emojis = "0.9"
 # The protocol of the daemon and the shapes of the meaning of a life.

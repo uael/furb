@@ -541,6 +541,26 @@ async fn two_windows_on_one_life_both_stay_and_hear_it() {
 }
 
 #[tokio::test]
+async fn an_image_of_a_window_stands_in_the_gallery_of_the_life_and_a_message_names_it() {
+  let at = place();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  let (name, data) = (
+    "image-1.png".to_owned(),
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4takZAATZAjDdIHqMAAAAAElFTkSuQmCC"
+      .to_owned(),
+  );
+  let named = window.ask(Verb::Image { life: life.clone(), name, data }).await;
+  let file = "9e485a66b9b8e7bee8eec3a548388240c61b2d9854bd1a1dc1aa5de904b8ae17.png";
+  assert_eq!(named, Ok(Answer::Value(json!(format!("![image-1.png](furb-image://{file})")))));
+  assert!(at.join("a.jsonl.images").join(file).is_file());
+  let data = "bm8gaW1hZ2U=".to_owned();
+  let refused = window.ask(Verb::Image { life, name: "image-2.png".to_owned(), data }).await;
+  assert!(matches!(refused, Err(ProtocolError::Refused { .. })), "{refused:?}");
+}
+
+#[tokio::test]
 async fn the_detach_of_one_window_leaves_the_other() {
   let at = place();
   let (local, _daemon) = started(&at, SHORT).await;

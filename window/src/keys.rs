@@ -60,6 +60,7 @@ pub(crate) enum Does {
   Chains,
   Aside,
   Unstash,
+  Picture,
   Settings,
 }
 
@@ -158,6 +159,7 @@ const INPUT: &[Bound] = &[
   bound(Does::Send, "send", None, &[&[plain(KeyCode::Enter)]]),
   bound(Does::Empty, "empty the input, then take back the last", None, &[&[ctrl('c')]]),
   bound(Does::Unstash, "the last input that you emptied", Some("unstash"), &[&led('u')]),
+  bound(Does::Picture, "paste the image of the clipboard", Some("paste"), &[&[ctrl('v')]]),
   bound(Does::Leave, "leave, twice on an empty input", Some("quit"), &[&[ctrl('d')]]),
   bound(Does::Sessions, "the session that the input sends to", Some("session"), &[&led('o')]),
   bound(Does::Python, "a word of Python, and back to a message", Some("python"), &[&led('y')]),

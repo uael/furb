@@ -947,6 +947,31 @@
         },
         {
           "type": "object",
+          "description": "An image kept in the gallery of the life, beside its record, under the digest of its bytes:\na PNG, a JPEG, a GIF or a WebP, in base64. It answers the text by which a message names it\nunder its name, `![name](uri)`, so that the model sees it.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "data": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "image"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "name",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
           "description": "A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config\nthat asked it. It writes no config.",
           "properties": {
             "life": {
@@ -4731,7 +4756,7 @@
         "text",
         "said"
       ],
-      "description": "One message of a thread with all that answers it: its place in the thread, 0 for the prompt of\nthe thread, the act of the message, the moment that it was said, who said it and its text, whether it is a word of Python\nthat an operator ran on the thread, whose block holds its code and which has no text, whether\nthe message still runs, the block of code that answers it once a model answers, and what the\nanswer says to the operator, in the order it was said. A message that the operator said on a\nthread that works is done at once, since its model reads it at its next step, so only one that\nasks still runs. A message is the prompt of the thread, what an operator said on it, or a word\nthat he ran on it, and what answers it is what came after it and before the next message."
+      "description": "One message of a thread with all that answers it: its place in the thread, 0 for the prompt of\nthe thread, the act of the message, the moment that it was said, who said it and its text,\nwhether it is a word of Python that an operator ran on the thread, whose block holds its code\nand which has no text, whether the message still runs, the block of code that answers it once\na model answers, and what the answer says to the operator, in the order it was said. A message\nthat the operator said on a thread that works is done at once, since its model reads it at its\nnext step, so only one that asks still runs. A message is the prompt of the thread, what an\noperator said on it, or a word that he ran on it, and what answers it is what came after it and\nbefore the next message."
     },
     "Block": {
       "type": "object",
@@ -5977,5 +6002,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 51
+  "x-protocol": 52
 }

@@ -15,6 +15,7 @@ use furb_wire::{
 };
 
 use super::{fold::followed, named::NAME};
+use crate::world::images;
 use std::{iter, mem};
 
 /// The acts of a life by their names.
@@ -377,9 +378,14 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
     _ => Origin::Ear,
   };
   let message = act.words.get(1).and_then(|one| one.as_str()).unwrap_or_default();
+  let title = message.lines().find(|line| !line.trim().is_empty()).unwrap_or_default();
+  // An image that the title names stands as its name.
+  let title = images::references(title)
+    .into_iter()
+    .fold(title.to_owned(), |title, one| title.replacen(&one.text, &one.name, 1));
   ChainThread {
     prompt: act.id.clone(),
-    title: message.lines().find(|line| !line.trim().is_empty()).unwrap_or_default().to_owned(),
+    title,
     messages: Vec::new(),
     asked: Vec::new(),
     asks: Vec::new(),

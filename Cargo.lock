@@ -1552,6 +1552,7 @@ dependencies = [
 name = "furb-client"
 version = "0.4.2"
 dependencies = [
+ "base64 0.22.1",
  "emojis",
  "furb-wire",
  "jiff",

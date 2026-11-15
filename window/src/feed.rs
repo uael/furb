@@ -19,7 +19,7 @@ use crate::{
   line::{self, Line, capital, clipped, run, spread, wrapped},
   list::project,
   model::Model,
-  prose,
+  picture, prose,
   question::closed,
   thread::{Click, Item, Items, Row, width},
   tokens::{APART, Loader, PROMPT, Role, WORKS},
@@ -240,14 +240,14 @@ impl Feed<'_> {
       line.extend(spread(text, Vec::new(), self.wide.saturating_sub(4), band));
       Row::of(line)
     };
-    let lines = self
-      .model
-      .homed(text)
+    let lines = picture::shown(&self.model.homed(text))
       .lines()
       .flat_map(|line| wrapped(line, self.wide.saturating_sub(6)))
       .collect::<Vec<_>>();
-    let text =
-      lines.into_iter().map(|line| banded(vec![run(line, self.style(Role::Prose).bg(t.raised))]));
+    // An image that the message names stands as its mark, as the input shows it.
+    let (plain, mark) =
+      (self.style(Role::Prose).bg(t.raised), Style::new().fg(t.accent).bg(t.lifted));
+    let text = lines.into_iter().map(|line| banded(picture::marked(&line, plain, mark)));
     [banded(Vec::new())]
       .into_iter()
       .chain(text)

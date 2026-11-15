@@ -129,6 +129,9 @@ const PROJECT: [(&str, &str); 8] = [
   ("tests/test_storage.py", "def test_save():\n  pass\n"),
 ];
 
+/// An image of the project, of one pixel, which the input takes when he pastes its path.
+const SHOT: (&str, &[u8]) = ("shot.png", b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xb5\xa9\x19\x00\x04\xd9\x020\xdd z\x8c\x00\x00\x00\x00IEND\xaeB`\x82");
+
 /// The project made a checkout of git on the branch `main`, whose files stand in its first commit,
 /// so the window names its branch and a change of the model shows as a change of the checkout.
 fn committed(project: &Path) -> Result<(), Error> {
@@ -177,6 +180,7 @@ impl Rig {
     for (path, text) in PROJECT {
       write(rig.project().join(path), text)?;
     }
+    put(&rig.project().join(SHOT.0), SHOT.1)?;
     committed(&rig.project())?;
     write(root.join("config/config.json"), r#"{"skills": {"naming": false}}"#)?;
     let listed = serde_json::json!({ "workspaces": [{ "directory": rig.project() }] });

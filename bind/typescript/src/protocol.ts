@@ -213,6 +213,12 @@ export type Request1 =
     }
   | {
       life: string;
+      name: string;
+      data: string;
+      verb: "image";
+    }
+  | {
+      life: string;
       verb: "cancel_sign_in";
     }
   | {
@@ -1548,13 +1554,14 @@ export interface Page {
 }
 /**
  * One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
- * the thread, the act of the message, the moment that it was said, who said it and its text, whether it is a word of Python
- * that an operator ran on the thread, whose block holds its code and which has no text, whether
- * the message still runs, the block of code that answers it once a model answers, and what the
- * answer says to the operator, in the order it was said. A message that the operator said on a
- * thread that works is done at once, since its model reads it at its next step, so only one that
- * asks still runs. A message is the prompt of the thread, what an operator said on it, or a word
- * that he ran on it, and what answers it is what came after it and before the next message.
+ * the thread, the act of the message, the moment that it was said, who said it and its text,
+ * whether it is a word of Python that an operator ran on the thread, whose block holds its code
+ * and which has no text, whether the message still runs, the block of code that answers it once
+ * a model answers, and what the answer says to the operator, in the order it was said. A message
+ * that the operator said on a thread that works is done at once, since its model reads it at its
+ * next step, so only one that asks still runs. A message is the prompt of the thread, what an
+ * operator said on it, or a word that he ran on it, and what answers it is what came after it and
+ * before the next message.
  */
 export interface Exchange {
   at: number;
@@ -1700,4 +1707,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 51;
+export const PROTOCOL = 52;

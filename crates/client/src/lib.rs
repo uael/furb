@@ -36,7 +36,7 @@ pub use changes::{Review, Seen};
 pub use complete::{Completed, Completes, Completion, Kind, Offer, mentioned};
 pub use context::{Content, Parts, Split};
 pub use history::{History, Walk};
-pub use input::{ASIDE, Draft};
+pub use input::{ASIDE, Draft, PICTURE, Pasted};
 pub use machine::{Heard, Key, Link, Listing, Told};
 pub use matched::{Matched, pathed, ranked};
 pub use opens::{Ask, Hold, Life, Step};

@@ -7,6 +7,7 @@ use std::{mem, ops::Range, path::Path};
 use furb::view::{Act, Maker, RunState, Standing, timer};
 use furb_host::protocol::{Answer, Card, Model as Offered, Verb};
 use opentui::style::{Color, Span, Style};
+use serde_json::Value;
 use unicode_width::UnicodeWidthStr;
 
 use furb_client::{Asked, Chosen, Outgoing, Target};
@@ -197,7 +198,9 @@ impl Model {
   /// A message out of the queue, by its place and its text, and out of the thread that shows it. A
   /// new thread that it alone made goes with it.
   fn unqueued(&mut self, at: usize, text: &str) {
-    self.client.outgoing.remove(at);
+    if let Some(taken) = self.client.outgoing.remove(at) {
+      self.client.draft.images.extend(taken.images);
+    }
     let Some(opened) = self.client.thread.as_mut() else { return };
     if let Some(shown) =
       opened.thread.pending.iter().rposition(|one| one.act.is_none() && one.text == text)
@@ -235,8 +238,12 @@ impl Model {
   }
 
   /// The answer to the first message of the queue, with the act that it made: a new thread opens
-  /// in the window under its prompt, and each message that waits for it goes to it.
+  /// in the window under its prompt, and each message that waits for it goes to it. An answer to
+  /// an image of the message is the text by which the message names it.
   pub(crate) fn replied(&mut self, answer: Answer) {
+    if let Answer::Value(Value::String(named)) = answer {
+      return self.client.imaged(named);
+    }
     let Answer::Act(act) = answer else { return };
     let Some(sent) = self.client.outgoing.pop_front() else { return };
     self.client.ask_history();
@@ -300,8 +307,11 @@ impl Model {
   /// text that the input holds now.
   pub(crate) fn refused(&mut self, why: String) -> String {
     self.fault = Some(why);
-    let back: Vec<String> =
-      mem::take(&mut self.client.outgoing).into_iter().map(|one| one.text).collect();
+    let mut back = Vec::new();
+    for one in mem::take(&mut self.client.outgoing) {
+      self.client.draft.images.extend(one.images);
+      back.push(one.text);
+    }
     if let Some(opened) = self.client.thread.as_mut() {
       opened.thread.pending.retain(|one| one.act.is_some());
       if opened.thread.key.2.is_empty() {

@@ -255,7 +255,7 @@ impl Opening {
   }
 
   /// The directory of the images: the one that the host names, or else the one beside the record that the life keeps.
-  fn gallery(&self) -> Option<PathBuf> {
+  pub fn gallery(&self) -> Option<PathBuf> {
     match (&self.images, &self.record) {
       (Some(images), _) => Some(PathBuf::from(images)),
       (None, Some(record)) if self.keeps() => Some(PathBuf::from(format!("{record}.images"))),

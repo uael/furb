@@ -28,6 +28,7 @@ use std::{
   time::Duration,
 };
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use furb::{
   Engine, Fact, Fault, Object, checkpoint,
   engine::ROOT,
@@ -42,6 +43,7 @@ use furb::{
   world::{
     self, Shape, answered,
     config::{Change, Layers},
+    images,
   },
 };
 use furb_wire::{ChainTrack, FollowUp};
@@ -137,6 +139,10 @@ pub enum Command {
   /// A change of a key of a layer of the configs, which the World keeps only when the catalog
   /// reads it, then a stand of the life on them: the act of the stand.
   Configure(Change),
+  /// An image, in base64, kept in the gallery of the life under the digest of its bytes: the text
+  /// by which a message names it under a name. A life with no gallery, as one that keeps no
+  /// record, refuses it.
+  Image { name: String, data: String },
   /// The names of the models of the roster of the life put in place of the ones it held, then a
   /// stand of the life, which reads the catalog again and offers them: the act of the stand. The
   /// life goes on, and each later birth of it keeps them.
@@ -326,6 +332,8 @@ pub struct Life {
   readers: broadcast::Sender<Logged>,
   heard: UnboundedReceiver<Event>,
   configs: Layers,
+  /// Where the life keeps the images that a message names, which the provider reads.
+  gallery: Option<PathBuf>,
   /// The home of the names of the roster that each birth of the life reads at a stand.
   roster: world::Roster,
   /// Where the handle reads the name of the session.
@@ -1108,6 +1116,7 @@ async fn run(
     readers,
     heard,
     configs,
+    gallery: opening.gallery(),
     roster: opening.roster.get_or_insert_default().clone(),
     name,
     first: record.as_deref().map(|one| cards::changed(Path::new(one))),
@@ -1486,6 +1495,14 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
     Command::Configure(change) => {
       life.configs.set(change).await?;
       answered_by(engine, Command::Stand)
+    }
+    Command::Image { name, data } => {
+      let refused = |why: String| LifeError::Refused(why);
+      let gallery = life.gallery.as_deref();
+      let gallery = gallery.ok_or_else(|| refused("This session keeps no image.".to_owned()))?;
+      let bytes = STANDARD.decode(data).map_err(|no| refused(no.to_string()))?;
+      let (uri, _) = images::keep(gallery, &bytes).map_err(|no| refused(no.to_string()))?;
+      Ok(Reply::Value(Value::String(images::reference(&name, &uri))))
     }
     Command::Roster(names) => {
       life.roster.set(Some(names));

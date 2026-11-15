@@ -4,6 +4,7 @@
 use std::{
   cell::RefCell,
   mem,
+  ops::Range,
   path::PathBuf,
   rc::Rc,
   time::{Duration, Instant},
@@ -14,6 +15,7 @@ use unicode_width::UnicodeWidthStr;
 use opentui::{
   App,
   input::KeyEventKind,
+  native::ClipboardOutcome,
   prelude::{
     Container, Diff, DiffView, Edge, EditorAction, ExtmarkOptions, KeyCode, KeyEvent, Modifiers,
     MouseButton, MouseEvent, MouseEventKind, ScrollBox, Span, Text, Textarea, TimerId, View,
@@ -24,6 +26,7 @@ use opentui::{
 
 use furb_host::protocol::Verb;
 
+use furb::world::images;
 use furb_client::{Asked, mentioned};
 
 use crate::{
@@ -36,6 +39,7 @@ use crate::{
   link::{self, Asker, Heard},
   model::{Acts, Model, Told},
   pick::Pick,
+  picture,
   question::Keyed,
   review::{NEXT, PREVIOUS},
   thread::Spot,
@@ -176,6 +180,14 @@ fn heard_edits(window: &Shared, area: &Textarea) {
       model.client.edited(text, caret);
     });
     colored(&on);
+  });
+  // A paste of the path of an image file puts in that image, as a terminal pastes a file that he
+  // drags on it.
+  let on = Rc::clone(window);
+  area.on_paste(move |cx, text| {
+    if filed(cx.app(), &on, text) {
+      cx.prevent_default();
+    }
   });
   // A move of the caret to another word completes that word.
   let (on, editor) = (Rc::clone(window), area.clone());
@@ -498,6 +510,52 @@ fn stashed(app: &App, window: &Shared, does: Does) {
   };
   let fault = written.err().map(|fault| format!("The emptied drafts are not kept: {fault}"));
   tell(app, window, |model| model.fault = fault);
+}
+
+/// The image of the clipboard put in the input, else its text, as a paste puts it. A clipboard
+/// with neither says so.
+fn clipboard(app: &App, window: &Shared) {
+  let on = Rc::clone(window);
+  let kinds = ["image/png", "image/jpeg", "image/gif", "image/webp", "text/plain"];
+  app.read_clipboard_as(&kinds, move |cx, outcome| match outcome {
+    ClipboardOutcome::Read { mime_type, data } if mime_type.starts_with("image/") => {
+      pictured(cx.app(), &on, &data);
+    }
+    ClipboardOutcome::Read { data, .. } => {
+      let text = String::from_utf8_lossy(&data);
+      if !filed(cx.app(), &on, &text) {
+        let area = on.borrow().area.clone();
+        area.insert(text);
+      }
+    }
+    _ => tell(cx.app(), &on, |model| {
+      model.client.notice = Some("The clipboard holds no image and no text.".to_owned());
+    }),
+  });
+}
+
+/// Whether a text that he pastes is the path of an image file, which then goes in as an image.
+fn filed(app: &App, window: &Shared, text: &str) -> bool {
+  let folder = PathBuf::from(&window.borrow().screen.model.client.folder);
+  let Some(bytes) = picture::file(text, &folder) else { return false };
+  pictured(app, window, &bytes);
+  true
+}
+
+/// An image put in the input at its caret as its mark, or why it does not go.
+fn pictured(app: &App, window: &Shared, bytes: &[u8]) {
+  let put = match images::kind(bytes) {
+    Ok((_, extension)) => tell(app, window, |model| model.client.paste_image(bytes, extension)),
+    Err(why) => Err(why.to_string()),
+  };
+  match put {
+    Ok(mark) => {
+      let area = window.borrow().area.clone();
+      area.insert(format!("{mark} "));
+    }
+    Err(why) => tell(app, window, |model| model.client.notice = Some(why)),
+  }
+  colored(window);
 }
 
 /// Each request that is due asked of its machine: the open of each life that the window holds,
@@ -902,6 +960,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Send => return sent(app, window),
     Does::Empty if !window.borrow().area.text().is_empty() => return stashed(app, window, does),
     Does::Unstash => return stashed(app, window, does),
+    Does::Picture => return clipboard(app, window),
     Does::Empty => {
       return controlled(app, window, |model| {
         model.take_back().map(|(asked, text)| (asked, Asked::Back(text)))
@@ -1045,10 +1104,19 @@ fn colored(window: &Shared) {
     let cells = |bytes: &str| {
       bytes.split('\n').map(UnicodeWidthStr::width).sum::<usize>() + bytes.matches('\n').count()
     };
-    for (span, _) in mentioned(text) {
+    let place = |span: Range<usize>| {
       let start = u32::try_from(cells(&text[..span.start])).unwrap_or_default();
-      let end = start + u32::try_from(cells(&text[span])).unwrap_or_default();
-      area.add_extmark(start..end, mark);
+      start..start + u32::try_from(cells(&text[span])).unwrap_or_default()
+    };
+    for (span, _) in mentioned(text) {
+      area.add_extmark(place(span), mark);
+    }
+    // An image stands as one unit, which a key of the caret goes over and a delete takes whole.
+    for image in &model.client.draft.images {
+      let shown = image.mark();
+      for (at, _) in text.match_indices(&shown) {
+        area.add_extmark(place(at..at + shown.len()), mark.atomic());
+      }
     }
     return;
   }

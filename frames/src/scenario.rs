@@ -509,7 +509,21 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
     }),
   },
-  Scenario { name: "09-image", has: none("10. The input: history, paste, image, mode") },
+  Scenario {
+    name: "09-image",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[],
+      pace: &[],
+      steps: &[
+        // A paste of the path of an image file puts the image in as its mark.
+        step("a", &[Act::Paste("shot.png")], "▣ image-1.png"),
+        // The image goes to the new session before the message that names it, and the model
+        // sees it.
+        step("b", &[Act::Type("what is in it?"), Act::Key("Enter")], "an image, reply 1"),
+      ],
+    }),
+  },
   Scenario {
     name: "10-shell-mode",
     has: Has::Walk(Walk {

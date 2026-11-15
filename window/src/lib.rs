@@ -30,6 +30,7 @@ mod machine;
 mod model;
 mod opens;
 mod pick;
+mod picture;
 mod prose;
 mod question;
 mod review;

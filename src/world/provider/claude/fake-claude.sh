@@ -205,9 +205,12 @@ while IFS= read -r line; do
     word=$(cat "$here/word.$count")
     part "$word"
   else
-    word="\"close(\\\"reply $n\\\")\""
+    # A turn that holds an image says so in its reply, so the model is seen to get it.
+    seen="reply $n"
+    case $line in *'"type":"image"'*) seen="an image, reply $n" ;; esac
+    word="\"close(\\\"$seen\\\")\""
     case $line in *GAP*) ;; *) part '"close("' ;; esac
-    part "\"\\\"reply $n\\\")\""
+    part "\"\\\"$seen\\\")\""
   fi
   say "{\"type\":\"content_block_stop\",\"index\":$at}"
   # As the real command line, the message settles with the usage of its start, which counts one

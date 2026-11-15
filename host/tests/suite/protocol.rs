@@ -124,6 +124,7 @@ fn acts() -> Vec<Verb> {
         layer: Some(Layer::Local),
       },
     },
+    Verb::Image { life: life(), name: "image-1.png".to_owned(), data: "iVBORw0KGgo=".to_owned() },
     Verb::Seen { life: life(), about: "chain1".to_owned() },
     Verb::Resolve { life: life(), thread: id() },
     Verb::Queue {
@@ -376,6 +377,7 @@ fn each_verb_that_writes_needs_the_role_to_write() {
     "close",
     "roster",
     "config",
+    "image",
     "seen",
     "resolve",
     "queue",
@@ -506,6 +508,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "4bee8ef6def645cda7faede10e4f6a2eaf49556496019f1e61c4558bf4e3757e",
   "37466866cc8d5984a376d0e1ca0f5b65e6d721e4f6ae5d1029f7cd21661d4e54",
   "de17187cd96629902fa3cb5f7f49d9566ec7126e96e924f9dbd55ae08fafaf46",
+  "694e7aa039c47a3b0d1afab90f27ceb8e440bced1a7d643bc05b8d3da19d7d88",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

@@ -145,6 +145,7 @@ daemon answers requests in any order.
 | `roster` | `life`, `roster` (names of models) | write |
 | `cancel_sign_in` | `life` | write |
 | `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
+| `image` | `life`, `name`, `data` (the bytes of a PNG, a JPEG, a GIF or a WebP, in base64): the life keeps it beside its record and answers the text `![name](furb-image://…)` by which a message names it | write |
 | `seen` | `life`, `about` | write |
 | `resolve` | `life`, `thread` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |

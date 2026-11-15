@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 51;
+pub const PROTOCOL: u32 = 52;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -345,6 +345,14 @@ pub enum Verb {
     life: String,
     config: Config,
   },
+  /// An image kept in the gallery of the life, beside its record, under the digest of its bytes:
+  /// a PNG, a JPEG, a GIF or a WebP, in base64. It answers the text by which a message names it
+  /// under its name, `![name](uri)`, so that the model sees it.
+  Image {
+    life: String,
+    name: String,
+    data: String,
+  },
   /// A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config
   /// that asked it. It writes no config.
   CancelSignIn {
@@ -521,6 +529,7 @@ impl Verb {
       | Self::Names { life, .. }
       | Self::Roster { life, .. }
       | Self::Config { life, .. }
+      | Self::Image { life, .. }
       | Self::CancelSignIn { life }
       | Self::Seen { life, .. }
       | Self::Resolve { life, .. }

@@ -655,6 +655,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Names { life, on } => (life, Command::Names { on }),
     Verb::Roster { life, roster } => (life, Command::Roster(roster)),
     Verb::Config { life, config } => (life, configured(config)),
+    Verb::Image { life, name, data } => (life, Command::Image { name, data }),
     Verb::Seen { life, about } => (life, Command::Seen { about }),
     Verb::Resolve { life, thread } => (life, Command::Resolve { thread }),
     Verb::Queue { life, entry, shape, message, on } => {
