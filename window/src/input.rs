@@ -412,6 +412,9 @@ impl Model {
         let says = match self.client.target() {
           _ if self.client.draft.python => "A word of Python to run",
           Target::Thread(_) if reads => "The window sends nothing to this session",
+          Target::Thread(key) if self.client.only_reads(key.0).is_some() => {
+            "Your login only reads this session"
+          }
           Target::Thread(_) if opens => "Your message goes once the session is open",
           Target::Thread(_) if ended => "A reply opens this thread again",
           Target::Thread(_)

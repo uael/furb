@@ -4,7 +4,7 @@
 use furb_wire::{
   Event, FollowUp, Part, Standing,
   card::Skill,
-  protocol::{Answer, Card, Files, Frame, Listed, Model, Present, Project, Verb},
+  protocol::{Answer, Card, Files, Frame, Listed, Model, Present, Project, Role, Verb},
 };
 use std::collections::HashMap;
 
@@ -42,6 +42,10 @@ pub struct Told {
   pub cards: Vec<Card>,
   #[serde(skip)]
   pub link: Link,
+  /// The role of the login of the operator on the machine, once its daemon welcomed the client:
+  /// a login that only reads sees each session live and says nothing to it.
+  #[serde(skip)]
+  pub role: Option<Role>,
   /// The records of the machine, as it last listed them.
   #[serde(skip)]
   pub lives: Vec<Listed>,
@@ -90,6 +94,12 @@ impl Client {
       .then(|| format!("{} is away, so nothing went. furb dials it until it answers.", told.name))
   }
 
+  /// Why nothing goes to a machine where the login of the operator only reads.
+  pub fn only_reads(&self, at: usize) -> Option<String> {
+    let told = self.machines.get(at).filter(|told| told.role == Some(Role::Read))?;
+    Some(format!("{} only reads on {}, so nothing went.", told.login, told.name))
+  }
+
   /// What one frame of a machine, or the end of its connection, changed of what the machine told,
   /// at the second `now`. A machine whose connection ended hears nothing until its daemon welcomes
   /// the client again, so the first cause of a loss stays.
@@ -112,7 +122,7 @@ impl Client {
     }
     match heard {
       Ok(Frame::Reply { answer: Answer::Welcome { peer, .. }, .. }) => {
-        (told.login, told.link) = (peer.operator, Link::Dialing);
+        (told.login, told.role, told.link) = (peer.operator, Some(peer.role), Link::Dialing);
       }
       Ok(Frame::Reply { answer: Answer::Cards(cards), .. }) => {
         (told.cards, told.heard, told.link) = (cards, now, Link::Listed);

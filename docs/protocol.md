@@ -48,7 +48,10 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
 - `tailnet` gives the port of each transport. The daemon listens by TCP, by WebSocket, or both, on the first address
   that Tailscale gives the machine, IPv4 before IPv6. With no `tailnet`, the daemon listens on the machine alone.
 - The operator of a peer is the login that the local API of Tailscale gives for its address. `roles` gives each operator
-  its role, and the daemon closes the peer of an operator that it does not name, before its hello.
+  its role, and the daemon closes the peer of an operator that it does not name, before its hello. A window reads the
+  role of its login in the welcome: where it only reads, the window attaches to each life that the daemon holds and
+  shows it live, opens none, and sends no verb that writes. Its input says so and keeps the draft, and a leave asks
+  nothing of a session there.
 - `stall` gives the seconds after which the daemon tells that a life with an open act and no new fact stalled, as
   the section on attach says. With no `stall`, the bound is 1200 seconds.
 - The daemon reads `host.json` when it starts and at each change of the file, and a file that does not parse keeps

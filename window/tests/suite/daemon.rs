@@ -21,7 +21,7 @@ use furb::{
 };
 use furb_host::{
   GRACE, STALL, STARTING, Settings, TransportError,
-  protocol::{Answer, Card, Frame, Hello, Kind, PROTOCOL, Request, Verb},
+  protocol::{Answer, Card, Frame, Hello, Kind, PROTOCOL, Request, Role, Verb},
   run,
   transport::{Accepted, Dialer, Identity, Listener, Local, Who},
   upgrade,
@@ -161,10 +161,10 @@ impl Daemon {
   }
 
   /// The daemon served, where the first peer that dials is another operator of a name, and each
-  /// later one the login of the machine, as the window of the test is.
-  pub(crate) fn served_as(&mut self, first: &'static str) {
+  /// later one the login of the machine with a role, as the window of the test is.
+  pub(crate) fn served_as(&mut self, first: &'static str, later: Role) {
     let listener = self.listener.take().expect("a daemon is served once");
-    let identity = Other { local: self.local.clone(), dialed: Arc::default(), first };
+    let identity = Other { local: self.local.clone(), dialed: Arc::default(), first, later };
     let settings = self.settings();
     drop(self.runtime.spawn(async move { run(&identity, listener, settings).await }));
   }
@@ -263,12 +263,13 @@ impl Daemon {
 }
 
 /// The identity of a daemon whose first peer is another operator of a name, which the transport of
-/// a tailnet proves, and each later peer the login of the machine.
+/// a tailnet proves, and each later peer the login of the machine with a role.
 #[derive(Clone)]
 struct Other {
   local: Local,
   dialed: Arc<AtomicU32>,
   first: &'static str,
+  later: Role,
 }
 
 impl Identity for Other {
@@ -277,7 +278,11 @@ impl Identity for Other {
   async fn identify(&self, stream: &Accepted) -> Result<Who, TransportError> {
     let who = self.local.identify(stream).await?;
     let first = self.dialed.fetch_add(1, Ordering::SeqCst) == 0;
-    Ok(if first { Who { operator: self.first.to_owned(), ..who } } else { who })
+    Ok(if first {
+      Who { operator: self.first.to_owned(), ..who }
+    } else {
+      Who { role: self.later, ..who }
+    })
   }
 }
 

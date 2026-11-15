@@ -5,7 +5,7 @@
 //! message goes after the one before it, and a message that goes to the thread that the message
 //! before it made knows that thread when it goes.
 
-use furb_wire::protocol::{Hello, Kind, PROTOCOL, Request, Verb};
+use furb_wire::protocol::{Hello, Kind, PROTOCOL, Request, Role, Verb};
 use serde_json::Value;
 
 use crate::{
@@ -136,10 +136,12 @@ pub enum Asked {
 impl Client {
   /// A verb asked of a machine, as the request to send, under an id that no other request of the
   /// client took: none while the machine does not list its cards, since a machine that the client
-  /// dials again takes no verb, which would go nowhere.
+  /// dials again takes no verb, which would go nowhere, and none for a verb that writes where the
+  /// login only reads, which the daemon would refuse.
   pub fn request(&mut self, at: usize, verb: Verb) -> Option<Request> {
     let listed = self.machines.get(at).is_some_and(|told| told.link == Link::Listed);
-    listed.then(|| {
+    let refused = verb.needs() == Role::Write && self.only_reads(at).is_some();
+    (listed && !refused).then(|| {
       let id = self.next;
       self.next += 1;
       Request { id, verb }
@@ -203,10 +205,14 @@ impl Client {
 
   /// The open of each life that the client holds and did not ask yet, with its machine: the daemon
   /// opens it, in its folder when no life holds its record, and attaches the client past each
-  /// event, since the client reads the cards and the pages of the threads, and no event.
+  /// event, since the client reads the cards and the pages of the threads, and no event. Where the
+  /// login only reads, the client attaches to the life that the daemon holds, and opens none.
   pub fn opens_due(&self) -> Vec<(Life, Verb)> {
     let due = self.holds.iter().filter(|(_, hold)| hold.ask == Ask::Due);
     let open = |(key, hold): (&Life, &Hold)| {
+      if self.only_reads(key.0).is_some() {
+        return (key.clone(), Verb::Attach { life: key.1.clone(), from: NO_EVENT });
+      }
       let open = Verb::Open {
         life: key.1.clone(),
         cwd: hold.cwd.clone(),

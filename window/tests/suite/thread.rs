@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use furb_host::protocol::{Answer, Draft, Frame, Verb};
+use furb_host::protocol::{Answer, Draft, Frame, Role, Verb};
 use furb_window::{
   open,
   tokens::{AWAY, Loader},
@@ -12,7 +12,7 @@ use opentui::{native::Capture, style::Color, testing::TestApp};
 use crate::{
   cards::{app, options, row, shows},
   daemon::{
-    ANSWERS, DELEGATES, Daemon, FAILS, LONG, OPENS, PATIENCE, Peer, READS, RETRIES, THINKS,
+    ANSWERS, DELEGATES, Daemon, FAILS, LONG, OPENS, PATIENCE, Peer, READS, RETRIES, THINKS, WORKS,
   },
   screens::screen,
 };
@@ -434,7 +434,7 @@ fn another_operator_on_the_session_shows_in_the_head_of_the_thread_and_where_he_
   let app = app();
   let mut daemon = Daemon::bound(&app);
   let sessions = daemon.project("furb");
-  daemon.served_as("rex");
+  daemon.served_as("rex", Role::Write);
   let mut rex = daemon.peer();
   let life = rex.opened(&sessions.join("time.jsonl"), true);
   let prompt = rex.said(&life, "where does the time of a resume go");
@@ -473,6 +473,45 @@ fn the_chains_under_the_bar_of_the_time_stand_as_a_tree_under_the_chain_that_mad
   let labels = labels(&frame);
   // The chain that rests shows no more, and each agent that works stands under the root.
   assert_eq!(labels, [" root", "   bench", "   boot"].map(str::to_owned), "{frame}");
+}
+
+#[test]
+fn a_login_that_only_reads_sees_the_session_live_and_sends_nothing() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served_as("rex", Role::Read);
+  let mut rex = daemon.peer();
+  let life = rex.opened(&sessions.join("time.jsonl"), true);
+  let prompt = rex.said(&life, "where does the time of a resume go");
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "where does the t"));
+  shows(&app, "Your login only reads this session");
+  screen("thread-reads-only", &app);
+  // What rex says later on the thread shows live, and its model works on it.
+  let message = format!("and the seed of a large record {WORKS}");
+  let more = Verb::Prompt {
+    life: life.clone(),
+    shape: "None".to_owned(),
+    message,
+    to: None,
+    on: Some(prompt),
+  };
+  assert!(matches!(rex.ask(more), Answer::Done | Answer::Act(_)));
+  shows(&app, "and the seed of a large record");
+  app.type_text("try the image");
+  app.press("enter");
+  shows(&app, "only reads on mac, so nothing went.");
+  shows(&app, "Working");
+  // Rex leaves, so this window is the last view of the session that works.
+  assert_eq!(rex.ask(Verb::Detach { life: life.clone() }), Answer::Done);
+  // The draft stays for him. A leave asks nothing of a session that the login cannot keep, pause
+  // or stop.
+  shows(&app, "┃ try the image");
+  app.press("ctrl+c");
+  app.press("ctrl+d");
+  app.press("ctrl+d");
+  assert!(app.wait_until(PATIENCE, || app.app().is_quitting()), "{}", app.text());
 }
 
 #[test]

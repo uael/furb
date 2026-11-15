@@ -93,15 +93,16 @@ impl Client {
 
   /// The sessions that this client holds with a thread that lives, which a leave of the client
   /// asks about, while its window is their last view: another window that holds one keeps it as
-  /// it is. The thread that the client started works too while its machine did not tell its card
-  /// yet.
+  /// it is, and a login that only reads does nothing to it. The thread that the client started
+  /// works too while its machine did not tell its card yet.
   pub fn leaving(&self) -> Vec<Running> {
     let last = |at: usize, life: &str| {
       let present = self.machines.get(at).and_then(|told| told.presence.get(life));
       present.is_none_or(|all| all.iter().map(|one| one.windows).sum::<usize>() <= 1)
     };
     let held = |one: &Running| {
-      one.here && !one.live.is_empty() && !one.background && last(one.at, &one.life)
+      let controls = self.only_reads(one.at).is_none();
+      one.here && !one.live.is_empty() && !one.background && controls && last(one.at, &one.life)
     };
     let mut all: Vec<Running> = self.running().into_iter().filter(held).collect();
     let started = self.thread.as_ref().filter(|one| one.thread.started).map(|one| &one.thread.key);
