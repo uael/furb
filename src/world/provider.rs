@@ -54,7 +54,6 @@ use crate::{
 
 use self::answer::{ended, numbers, uuid};
 use self::hearer::{Hearer, Replied, searched};
-use self::messages::banner;
 use self::model::{Class, Streams, streams};
 use self::retry::{LIMIT_POLL, resets};
 use self::thinking::{ENV_THINKING, Thinking, Thought, thinking};

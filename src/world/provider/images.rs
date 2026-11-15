@@ -338,7 +338,7 @@ pub(super) struct Seen {
 /// The parts that a model is handed for a user turn, in the order of its text: the text up to the
 /// end of the text that names an image, the image, and the text after it, so each image stands
 /// where the turn names it, as the APIs of Anthropic and of `OpenAI` take a message. `banner` is
-/// where the open of a chain starts, as [`super::banner`] finds it, which two line breaks stand
+/// where the open of a chain starts, as [`super::messages::banner`] finds it, which two line breaks stand
 /// before: the text from there is a block of its own, so the setup before it ends a block that a
 /// provider can keep in its cache.
 pub(super) fn sequence(

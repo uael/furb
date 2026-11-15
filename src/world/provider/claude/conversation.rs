@@ -94,8 +94,8 @@ pub(super) struct Conversation {
   again: bool,
   pub(super) process: Option<Process>,
   pub(super) used: Instant,
-  /// Whether a block of this conversation holds the mark of the cache that ends the setup of its
-  /// chain, as a fork holds each block of the conversation it forks.
+  /// Whether a block of this conversation holds the mark of the cache that ends the turns before the
+  /// stand of its chain, as a fork holds each block of the conversation it forks.
   pub(super) marked: bool,
   /// What the command line holds of this conversation, entry by entry, which the first process of
   /// a conversation that replaces this one resumes as far as the two share their turns.
@@ -220,10 +220,17 @@ impl Conversation {
       .iter()
       .flat_map(|one| &one.content)
       .any(|block| block.get("cache_control").is_some());
-    // The last message of the user in the past ends the setup that every chain with no source
-    // shares, since the turn after it tells the chain where it stands, so its last block takes the
-    // mark of the cache.
-    let setup = past.iter().rposition(|one| matches!(one, Message::User { .. }));
+    // The message of the user before the turn stand() ends what every chain of every record
+    // shares, since the stand tells the chain where it stands, so its last block takes the mark of
+    // the cache.
+    let stand = past.iter().position(|one| match one {
+      Message::Assistant { content, .. } => content
+        .iter()
+        .any(|block| matches!(block, AssistantContent::Text(text) if stands(&text.text))),
+      _ => false,
+    });
+    let setup =
+      stand.and_then(|at| past[..at].iter().rposition(|one| matches!(one, Message::User { .. })));
     for (at, message) in past.iter().enumerate().skip(covered) {
       let (role, content): (&'static str, Vec<Value>) = match message {
         Message::System { .. } => continue,
@@ -738,19 +745,25 @@ fn pinned(command: &mut process::Command) {
   command.env_remove("CLAUDE_CODE_MESSAGES_PROMPT_CACHE_TTL");
 }
 
-/// The blocks of a message with the block before the first open of a chain in a conversation marked
-/// for the cache, so the setup that every chain with no source shares ends an entry of the cache,
-/// which the first turn of every later chain reads. The mark lives as long as the marks of the
-/// command line, as [`lasting`] says, and a conversation marks one block at most, as the command
-/// line takes four marks in all.
+/// The blocks of a message with the block before the turn `stand()` in a conversation marked for the
+/// cache: the turns before the stand hold no directory, roster or actor, so every chain of every
+/// record on the same engine, doctrine and extensions shares them, and the first turn of each later
+/// chain and each later record reads them. The mark lives as long as the marks of the command line,
+/// as [`lasting`] says, and a conversation marks one block at most, as the command line marks three
+/// of the four that a request takes: its own prompt, the system prompt and the end of the request.
 pub(super) fn cached(blocks: &mut [Value], marked: &mut bool) {
-  let opens = |one: &Value| {
-    one["text"].as_str().is_some_and(|text| provider::banner(&format!("\n\n{text}")) == Some(2))
-  };
-  if let Some(at) = (1..blocks.len()).find(|&at| !*marked && opens(&blocks[at])) {
-    blocks[at - 1]["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});
+  let stand = |one: &Value| one["text"].as_str().is_some_and(stands);
+  if let Some(at) = (2..blocks.len()).find(|&at| !*marked && stand(&blocks[at])) {
+    // The block before it frames the turn as one of the model.
+    blocks[at - 2]["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});
     *marked = true;
   }
+}
+
+/// Whether the text of a turn of the model is the turn `stand()` of a setup, with its cd when it
+/// moved.
+fn stands(text: &str) -> bool {
+  text.strip_prefix("stand()").is_some_and(|rest| rest.is_empty() || rest.starts_with('\n'))
 }
 
 /// One block of a turn of the model as a conversation of the command line holds it: its text, or

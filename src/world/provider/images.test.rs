@@ -194,7 +194,7 @@ fn the_open_of_a_chain_stays_a_block_of_its_own_before_an_image_that_a_prompt_af
   );
   let mut images = Images::new(Some(at.to_path_buf()));
   let seen = images.named(&python, &mut HashSet::new()).expect("the images of the turn");
-  let parts = super::sequence(&python, seen, super::super::banner(&python));
+  let parts = super::sequence(&python, seen, super::super::messages::banner(&python));
   let texts: Vec<Option<&str>> = parts
     .iter()
     .map(|one| match one {

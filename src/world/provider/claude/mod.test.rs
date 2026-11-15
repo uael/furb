@@ -732,14 +732,11 @@ fn a_conversation_that_grows_out_of_another_forks_it() {
 #[test]
 fn a_fork_of_a_fork_resumes_the_mark_of_the_cache_of_its_origin_and_marks_no_block_more() {
   let yard = Yard::new("fork-marks");
-  let model = yard.claude(10_000).completion_model("sonnet");
-  let opened = |n: usize| Message::User {
-    content: vec![
-      UserContent::text(format!("#read{n}")),
-      UserContent::text(format!("#chain{n}\nchain{n}: Act[object]")),
-    ],
-  };
-  let mut messages = vec![opened(1)];
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let opened = |n: usize| user(&format!("#chain{n}\nchain{n}: Act[object]"));
+  let mut messages = vec![user("#read1"), Message::assistant("stand()"), opened(1)];
   for (at, session) in ["origin", "fork", "fork-of-fork"].into_iter().enumerate() {
     if at > 0 {
       messages.push(opened(at + 1));
@@ -747,19 +744,49 @@ fn a_fork_of_a_fork_resumes_the_mark_of_the_cache_of_its_origin_and_marks_no_blo
     let one = asked(&model, &messages, json!({"session": session})).unwrap();
     messages.push(Message::Assistant { id: None, content: one.choice });
   }
-  // A request carries each mark of the lines that the conversations of its lineage heard, since a
-  // fork resumes its parent, and the command line adds the marks of its system prompt and of its
-  // last message: so furb marks one block at most in a lineage.
+  // The origin resumes the turns before its last message from a conversation that furb writes,
+  // whose turn before the stand holds the mark; a fork resumes its parent, and the command line
+  // adds the marks of its system prompts and of the end of the request: so furb marks one block
+  // at most in a lineage.
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let written: usize = fs::read_dir(projects[0].path())
+    .unwrap()
+    .flatten()
+    .map(|one| fs::read_to_string(one.path()).unwrap().matches("cache_control").count())
+    .sum();
   let marks: Vec<usize> =
     yard.heard().iter().map(|line| line.matches("cache_control").count()).collect();
-  let lineage: Vec<usize> = marks
-    .iter()
-    .scan(0, |all, one| {
-      *all += one;
-      Some(*all)
+  assert_eq!((written, marks), (1, vec![0, 0, 0]));
+}
+
+#[test]
+fn a_new_conversation_marks_for_the_cache_the_last_block_of_the_turn_before_its_stand() {
+  let yard = Yard::new("stand-mark");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let read = Message::User {
+    content: vec![UserContent::text("#read1"), UserContent::text("<s:doctrine>...</s:doctrine>")],
+  };
+  let stand = Message::assistant("stand()\ncd('/x')");
+  let messages =
+    [user("chain()"), Message::assistant("read('d')"), read, stand, user("#chain1"), user("go")];
+  asked(&model, &messages, json!({"session": "chain"})).unwrap();
+  let id = after(&yard.args(&yard.pids()[0]), "--resume").expect("the process resumes");
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let file = projects[0].path().join(format!("{id}.jsonl"));
+  let marked: Vec<(usize, usize)> = fs::read_to_string(&file)
+    .unwrap()
+    .lines()
+    .enumerate()
+    .flat_map(|(at, one)| {
+      let entry: Value = serde_json::from_str(one).unwrap();
+      let blocks = entry["message"]["content"].as_array().cloned().unwrap_or_default();
+      let marked = blocks.iter().enumerate().filter(|(_, one)| one.get("cache_control").is_some());
+      marked.map(|(block, _)| (at, block)).collect::<Vec<_>>()
     })
     .collect();
-  assert_eq!(lineage, [1, 1, 1], "the marks of each line: {marks:?}");
+  assert_eq!(marked, [(2, 1)]);
 }
 
 #[test]
@@ -1259,18 +1286,20 @@ fn the_command_line_is_signed_in_when_any_of_its_accounts_is() {
 }
 
 #[test]
-fn the_block_before_the_first_open_of_a_chain_in_a_conversation_is_marked_for_the_cache_once() {
+fn the_block_before_the_turn_stand_in_a_conversation_is_marked_for_the_cache_once() {
   let text = |one: &str| json!({"type": "text", "text": one});
   let mut blocks = vec![
     text("#read1"),
-    text("#chain2\nchain2: Act[object]"),
-    text("#chain3\nchain3: Act[object]"),
+    text("[earlier turn: you]\n"),
+    text("stand()\ncd('/x')"),
+    text("#chain1\nchain1: Act[object]"),
   ];
   let mut marked = false;
   cached(&mut blocks, &mut marked);
   assert_eq!(blocks[0]["cache_control"], json!({"type": "ephemeral", "ttl": lasting()}));
-  assert_eq!((blocks[1].get("cache_control"), marked), (None, true));
-  let mut later = vec![text("#read9"), text("#chain4\nchain4: Act[object]")];
+  let rest: Vec<_> = blocks[1..].iter().filter_map(|one| one.get("cache_control")).collect();
+  assert_eq!((rest.len(), marked), (0, true));
+  let mut later = vec![text("#read9"), text("[earlier turn: you]\n"), text("stand()")];
   cached(&mut later, &mut marked);
   assert_eq!(later[0].get("cache_control"), None, "a conversation marks one block at most");
 }
@@ -1279,7 +1308,11 @@ fn the_block_before_the_first_open_of_a_chain_in_a_conversation_is_marked_for_th
 fn no_request_of_the_command_line_puts_a_mark_of_an_hour_after_one_of_minutes() {
   let yard = Yard::new("ttl");
   let model = yard.claude(10_000).completion_model("sonnet");
-  let blocks = vec![UserContent::text("#read1"), UserContent::text("#chain2\nchain2: Act[object]")];
+  let blocks = vec![
+    UserContent::text("#read1"),
+    UserContent::text("[earlier turn: you]\n"),
+    UserContent::text("stand()"),
+  ];
   let turn = Message::User { content: blocks };
   asked(&model, &[turn], json!({"session": "chain"})).unwrap();
   let line: Value = serde_json::from_str(&yard.heard()[0]).unwrap();
