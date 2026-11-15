@@ -1,4 +1,4 @@
-{"frame":"event","life":"a.jsonl","seq":0,"event":{"event":"fact","data":["run","run1","operator/o","chain1","x = 1"]}}
+{"frame":"event","life":"a.jsonl","seq":0,"event":{"event":"fact","data":["run","run1","operator/member1","chain1","x = 1"]}}
 {"frame":"view.mount","viewer":"w","life":"a.jsonl","slot":{"slot":"footer"},"skill":"k"}
 {"frame":"view.event","viewer":"w","node":"go","kind":"press"}
 {"frame":"view.dispose","viewer":"w"}
