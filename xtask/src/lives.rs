@@ -87,7 +87,7 @@ pub(crate) fn smoke(root: &Path, to: Option<String>) -> Result<ExitCode, Fault> 
   life.word("grant(1.0, 0.5)", &mut mark)?;
   for which in ["first", "second"] {
     let got = answered(
-      life.prompt(&Ask { message: SMOKE, shape: "int", key: "smoke", operator: "" }, &mut mark)?,
+      life.prompt(&Ask { message: SMOKE, shape: "int", key: None, operator: "" }, &mut mark)?,
     )?;
     let answers = Numbers::of(&life.record)?.answers;
     println!("the {which} life gave {got}, and the record holds {answers} answer(s) of a model");
@@ -116,7 +116,7 @@ pub(crate) fn play(root: &Path, to: Option<String>) -> Result<ExitCode, Fault> {
   let message = PLAY.replace("{engine}", &engine.display().to_string());
   let operator = format!("{SAID}\n");
   answered(life.prompt(
-    &Ask { message: &message, shape: "list", key: "play", operator: &operator },
+    &Ask { message: &message, shape: "list", key: None, operator: &operator },
     &mut mark,
   )?)?;
   let answers = Numbers::of(&life.record)?.answers;
@@ -128,7 +128,7 @@ pub(crate) fn play(root: &Path, to: Option<String>) -> Result<ExitCode, Fault> {
     ));
   }
   let more = answered(
-    life.prompt(&Ask { message: AGAIN, shape: "int", key: "again", operator: "" }, &mut mark)?,
+    life.prompt(&Ask { message: AGAIN, shape: "int", key: None, operator: "" }, &mut mark)?,
   )?;
   if more != "7" {
     return Err(Fault::Unproven(format!("the second life counted {more} items, not 7")));
