@@ -1,8 +1,8 @@
 //! The client of furb with no drawing: what each machine told a client, in what order its cards
 //! stand, each life that the client holds with how far its open stands, and what it sends: each
-//! message in one queue, each verb that is due, and the thread that it reads, page by page. It does no input and no output: a client gives
-//! it each frame that a machine sends and sends each verb that is due, so a window, a phone or a
-//! test drives the machines the same way.
+//! message in one queue, each verb that is due, and the thread that it reads, page by page. It does
+//! no input and no output: a client gives it each frame that a machine sends and sends each verb
+//! that is due, so a window, a phone or a test drives the machines the same way.
 
 mod machine;
 mod opens;
