@@ -760,6 +760,32 @@ fn a_stop_marks_the_line_of_the_command_that_it_cut() {
 }
 
 #[test]
+fn a_stop_that_cut_no_act_marks_the_line_where_the_word_stood() {
+  let mut facts = thread();
+  let word = "a = 2\nb = await bash('ls')\nc = 3\nd = 4";
+  facts[10] = json!(["run", "run2", "chain1", "chain1", "rung2", word, ""]);
+  let stop = json!({"is": "CancelledError", "args": ["stopped by the operator"]});
+  facts.push(json!(["done", "bash1", "chain1", {"exit": 0}]));
+  for act in ["run2", "rung2"] {
+    facts.push(json!(["done", act, "chain1", stop]));
+  }
+  let mut streams = Streamed::default();
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let stopped = Mark::Stopped { at: Some(100_000) };
+  assert_eq!(
+    texts(block),
+    [
+      (3, "a = 2", &Mark::Ran),
+      (4, "b = await bash('ls')", &Mark::Ran),
+      (5, "c = 3", &stopped),
+      (6, "d = 4", &Mark::Ran)
+    ]
+  );
+}
+
+#[test]
 fn a_line_carries_the_last_lines_that_its_command_wrote_as_it_runs_and_once_it_ended() {
   let output = |facts: &[Value]| {
     let mut streams = Streamed::default();

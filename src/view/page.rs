@@ -489,6 +489,9 @@ impl<'a> Reader<'a> {
     let line = |lines: &[Line], source: Option<usize>| {
       source.and_then(|source| at_line(lines, before, source)).or(lines.len().checked_sub(1))
     };
+    // With no act open, a word that runs stands on the code after its last act, and on its first
+    // line before any: a line that has not run yet never shows as running, nor as stopped.
+    let next = made.iter().rev().find_map(|(_, place)| place.map(|source| source + 1));
     if let RunState::Failed(why) = run {
       // A reason that names no line came from an act that the word awaited, as a refused
       // question or a command that exited with a code that the word refuses: the line that made
@@ -504,8 +507,11 @@ impl<'a> Reader<'a> {
         lines[at].mark = Mark::Failed { why: readable(why, made) };
       }
     } else if let RunState::Cancelled(_) = run {
-      // The stop ended the word on the line of the act that it cut, or else on its last line.
+      // The stop ended the word on the line of the act that it cut, else where the word stood,
+      // else, while its model still wrote it, on its last line.
       let cut = made.iter().rposition(|(act, _)| act.cancelled()).and_then(|at| made[at].1);
+      let stood = rung.word.as_ref().map(|_| next.unwrap_or_default());
+      let cut = cut.or(stood);
       if let Some(at) = line(&lines, cut) {
         lines[at].mark = Mark::Stopped { at: self.streams.ended.get(&rung.id).copied() };
       }
@@ -525,9 +531,6 @@ impl<'a> Reader<'a> {
         .filter(|(act, _)| act.asks_operator() && !act.done())
         .filter_map(|(_, place)| place.and_then(|source| at_line(&lines, before, source)))
         .collect();
-      // With no act open, the word runs the code after its last act, and its first line before
-      // any: a line that has not run yet never shows as running.
-      let next = made.iter().rev().find_map(|(_, place)| place.map(|source| source + 1));
       let source = open.map_or(Some(next.unwrap_or_default()), |at| made[at].1);
       if let Some(at) = line(&lines, source) {
         lines[at].mark = mark;
