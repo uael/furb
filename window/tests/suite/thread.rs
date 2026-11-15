@@ -280,8 +280,27 @@ fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_esc
   shows(&app, "await wait(600, chain)");
   screen("thread-agent", &app);
 
-  // An escape opens the thread that it came from again, with its dock.
+  // An escape opens the thread that it came from again, with its dock, whose key the row of hints
+  // names.
   app.press("escape");
   shows(&app, "[ Resolve ]");
   shows(&app, "↳ Count the lines of README.md");
+  shows(&app, "⌃X ↓ agents");
+
+  // The key steps through the agents of the dock, from the first, and from the last to the first.
+  let into = |title: &str| {
+    app.press("ctrl+x");
+    app.press("down");
+    shows(&app, &format!(" furb · ↳ {title} "));
+  };
+  for title in [
+    "Run the bench of the replay",
+    "Read the boot of the host",
+    "Count the lines of README.md",
+    "Run the bench of the replay",
+  ] {
+    into(title);
+  }
+  app.press("escape");
+  shows(&app, "[ Resolve ]");
 }
