@@ -141,12 +141,13 @@ class Journal:
           if f[0] == "started":
             pending[name] = f
           # The answer waits at its place in the record, while the ears of the World catch up on the log as they did
-          # when the question was made: the ear that took it and each ear after it do not hear it, and a start that
-          # the taker said later is said at its place, so the question is taken with no fact until then.
+          # when the question was made, up to the question, which no ear of the World hears again, since the record
+          # answers it; a start that the taker said later is said at its place, so the question is taken with no fact
+          # until then.
           due.insert(sum(ranks[id(x)] > ranks[id(f)] for x in due), f)
           if f[2] in outside:
             for x in log:
-              x[0] is made and x[1].update([*outside][[*outside].index(f[2]) :])
+              x[0] is made and x[1].update(outside)
             offers(made)
           if name not in taken:
             upto(f)

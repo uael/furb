@@ -597,13 +597,19 @@ async fn each_write_keeps_its_change_in_the_journal_beside_the_record_once_the_l
   assert_eq!((changes[2].get("made"), &changes[2]["after"]), (None, &json!("text\n")));
   assert!(changes[2]["unread"].as_str().is_some_and(|why| !why.is_empty()), "{lines}");
   drop(events);
-  // A later life on the record makes no change again: it writes no file.
-  let again = Life::spawn(opening()).unwrap();
-  let mut events = Box::pin(again.events(0));
-  let id = made(&again, rung("x = 1")).await;
-  until(&mut events, done(&id)).await;
-  assert_eq!(again.send(Command::End).await.unwrap(), Reply::Done);
-  assert_eq!(fs::read_to_string(&journal).unwrap(), lines);
+  // A later life on the record makes no change again, by its image or by the record that it
+  // replays: it writes no file.
+  for image in [true, false] {
+    if !image {
+      fs::remove_file(format!("{record}.image")).unwrap();
+    }
+    let again = Life::spawn(opening()).unwrap();
+    let mut events = Box::pin(again.events(0));
+    let id = made(&again, rung("x = 1")).await;
+    until(&mut events, done(&id)).await;
+    assert_eq!(again.send(Command::End).await.unwrap(), Reply::Done);
+    assert_eq!(fs::read_to_string(&journal).unwrap(), lines);
+  }
   // The scratch directory of the record, with the file that the life wrote, stands in the cache.
   let scratch = Scratch::of(Path::new(&record)).unwrap().unwrap();
   fs::remove_dir_all(scratch.path()).unwrap();
