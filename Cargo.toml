@@ -228,3 +228,15 @@ debug = false
 opt-level = 3
 debug-assertions = false
 overflow-checks = false
+
+# The crates that open and replay a record are built as a release builds them too, since the owner runs the daemon and
+# the window from a tree: at opt-level 0 an open of a record of 1.95 GB took 132 s, at 2 it takes 86.7 s, as a release
+# does. A change of one line rebuilds them in the same time, and the Rust suite costs 13% less work.
+[profile.dev.package.furb]
+opt-level = 2
+
+[profile.dev.package.furb-host]
+opt-level = 2
+
+[profile.dev.package.furb-wire]
+opt-level = 2
