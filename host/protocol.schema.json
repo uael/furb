@@ -4208,6 +4208,16 @@
         },
         "mark": {
           "$ref": "#/definitions/Mark"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Output"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -4215,7 +4225,7 @@
         "text",
         "mark"
       ],
-      "description": "One line of a block: its number in the thread, its text, in which each quote stands as the\nbinding that it makes and a string of many lines as one line with its escapes, and its mark."
+      "description": "One line of a block: its number in the thread, its text, in which each quote stands as the\nbinding that it makes and a string of many lines as one line with its escapes, its mark, and\nwhat the last command that it awaited wrote."
     },
     "Mark": {
       "oneOf": [
@@ -4367,6 +4377,35 @@
         "why"
       ],
       "description": "A call of a model that failed for a cause that passes, so its provider asks the model again:\nthe attempt that comes, the most attempts of the call, the seconds that the provider waits\nbefore that attempt and the second of the epoch at which it comes, and why the attempt before\nit failed. What the model wrote before is void."
+    },
+    "Output": {
+      "type": "object",
+      "properties": {
+        "tail": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "more": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "took": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "tail",
+        "more"
+      ],
+      "description": "What a command that a line awaited wrote, as it writes it and once it ended: its last lines,\nthose of its stdout then those of its stderr, each as a terminal shows it, how many lines came\nbefore them, and the seconds that it took once it ended, counted from milliseconds, which a\nhost that opened the life after the command began does not know."
     },
     "Thought": {
       "type": "object",
@@ -5302,5 +5341,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 36
+  "x-protocol": 37
 }

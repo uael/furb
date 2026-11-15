@@ -1,6 +1,8 @@
 use serde_json::{Value, json};
 
-use super::{Answered, Block, Context, Mark, Reach, Reply, Said, Saying, Streamed, Thought, Work};
+use super::{
+  Answered, Block, Context, Mark, Output, Reach, Reply, Said, Saying, Streamed, Thought, Work,
+};
 use crate::view::{Fold, Held, Maker, Read, Standing, declined};
 
 /// The acts of a list of facts as a host holds them, with what the host heard at the second 100.
@@ -558,6 +560,34 @@ fn a_stop_marks_the_line_of_the_command_that_it_cut() {
     texts(block),
     [(3, "a = 2", &Mark::Ran), (4, "b = await bash('ls')", &stopped), (5, "c = 3", &Mark::Ran)]
   );
+}
+
+#[test]
+fn a_line_carries_the_last_lines_that_its_command_wrote_as_it_runs_and_once_it_ended() {
+  let output = |facts: &[Value]| {
+    let mut streams = Streamed::default();
+    let held = held(facts.to_vec(), &mut streams);
+    for fact in facts {
+      streams.out(fact);
+    }
+    let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+    let block = page.exchanges[0].block.clone().unwrap();
+    (block.lines[0].output.clone(), block.lines[1].output.clone())
+  };
+  let mut facts = thread();
+  facts.push(json!(["out", "bash1", "bash", "1\n2\n3\n", "stdout"]));
+  facts.push(json!(["out", "bash1", "bash", "4\n\u{1b}[1m5\u{1b}[0m", "stdout"]));
+  facts.push(json!(["out", "bash1", "bash", "50%\r100%\tok\n", "stderr"]));
+  let tail = ["4", "5", "100% ok"].map(str::to_owned).to_vec();
+  let runs = Output { tail: tail.clone(), more: 3, took: None };
+  assert_eq!(output(&facts), (None, Some(runs)));
+  let text = |content: &str| json!({"is": "Text", "path": "bash1/out", "content": content});
+  let exit = json!({
+    "is": "Exit", "code": 0,
+    "stdout": text("1\n2\n3\n4\n\u{1b}[1m5\u{1b}[0m"), "stderr": text("50%\r100%\tok\n"),
+  });
+  facts.push(json!(["done", "bash1", "bash", exit]));
+  assert_eq!(output(&facts), (None, Some(Output { tail, more: 3, took: Some(0) })));
 }
 
 /// The last line of the last block of the thread of these facts: its number, its text and its mark.

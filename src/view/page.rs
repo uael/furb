@@ -3,8 +3,12 @@
 //! agents that the thread made. A page reads the acts of its thread through the lists of the
 //! acts by maker, so it takes the time of the thread and not of the life.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+  collections::{HashMap, HashSet},
+  mem,
+};
 
+use anstream::adapter::strip_str;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -88,12 +92,93 @@ pub struct Block {
 }
 
 /// One line of a block: its number in the thread, its text, in which each quote stands as the
-/// binding that it makes and a string of many lines as one line with its escapes, and its mark.
+/// binding that it makes and a string of many lines as one line with its escapes, its mark, and
+/// what the last command that it awaited wrote.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Line {
   pub number: usize,
   pub text: String,
   pub mark: Mark,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub output: Option<Output>,
+}
+
+/// What a command that a line awaited wrote, as it writes it and once it ended: its last lines,
+/// those of its stdout then those of its stderr, each as a terminal shows it, how many lines came
+/// before them, and the seconds that it took once it ended, counted from milliseconds, which a
+/// host that opened the life after the command began does not know.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Output {
+  pub tail: Vec<String>,
+  pub more: usize,
+  pub took: Option<u64>,
+}
+
+/// How many lines of what a command wrote a tail shows.
+const TAIL: usize = 3;
+
+/// The most bytes of a stream that a tail keeps, so a line that never ends, as a bar of progress,
+/// keeps its end, which is what a terminal shows of a line that writes over itself.
+const KEPT: usize = 4096;
+
+impl Output {
+  /// The output of a command from the ends of its two streams, none when it wrote nothing and its
+  /// time is not known.
+  fn of([stdout, stderr]: &[Kept; 2], took: Option<u64>) -> Option<Self> {
+    let lines: Vec<&str> = stdout.end.lines().chain(stderr.end.lines()).collect();
+    let skip = lines.len().saturating_sub(TAIL);
+    let more = stdout.before + stderr.before + skip;
+    let tail: Vec<String> = lines[skip..].iter().map(|line| shown_line(line)).collect();
+    (!tail.is_empty() || took.is_some()).then_some(Self { tail, more, took })
+  }
+}
+
+/// The end of what one stream of a command wrote: its last lines, at most `KEPT` bytes of them, and
+/// how many lines came before them.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct Kept {
+  end: String,
+  before: usize,
+}
+
+impl Kept {
+  /// The end of a whole text. A newline at its end ends its last line and starts no new one.
+  fn of(text: &str) -> Self {
+    let body = text.strip_suffix('\n').unwrap_or(text);
+    let mut start = body.rmatch_indices('\n').nth(TAIL - 1).map_or(0, |(at, _)| at + 1);
+    if text.len() - start > KEPT {
+      start = text.len() - KEPT;
+      while !text.is_char_boundary(start) {
+        start += 1;
+      }
+    }
+    Self { end: text[start..].to_owned(), before: text[..start].matches('\n').count() }
+  }
+
+  /// The end once the stream wrote a text more.
+  fn push(&mut self, text: &str) {
+    let mut end = mem::take(&mut self.end);
+    end.push_str(text);
+    let kept = Self::of(&end);
+    self.end = kept.end;
+    self.before += kept.before;
+  }
+}
+
+/// Whether a fact says what a command wrote while it runs, which a page shows under its line.
+pub fn wrote(fact: &Value) -> bool {
+  fact.get(0).and_then(Value::as_str) == Some("out")
+}
+
+/// A line that a command wrote as a terminal shows it: what comes after its last return, with no
+/// escape of a terminal and no other control, and a tab as a space.
+fn shown_line(line: &str) -> String {
+  let line = line.rsplit('\r').find(|part| !part.is_empty()).unwrap_or_default();
+  let plain = strip_str(line).to_string();
+  plain
+    .chars()
+    .filter_map(|one| if one == '\t' { Some(' ') } else { (!one.is_control()).then_some(one) })
+    .collect()
 }
 
 /// How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
@@ -209,15 +294,19 @@ impl Answered {
 /// What a host heard of a life beside its facts, which a page reads: what each model wrote and
 /// thought for a rung and the retry of its call that waits, the millisecond of the epoch at which
 /// each act that lives began, at which each prompt began and ended, so an agent that ended says
-/// how long it took, and at which a stop ended each rung that it ended. The record holds none of it: the turn
-/// of a reply keeps its thought sealed, and a fact tells no time, so a host keeps it in the image
-/// of the life, once [`Held::shown`] let go of each thought that no page shows.
+/// how long it took, at which each command began and ended, at which a stop ended each rung that it
+/// ended, and the end of what each command that runs wrote, which its exit gives once it ended. The
+/// record holds none of the rest: the turn of a reply keeps its thought sealed, and a fact tells no
+/// time, so a host keeps it in the image of the life, once [`Held::shown`] let go of each thought
+/// that no page shows.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Streamed {
   wrote: HashMap<String, Wrote>,
   began: HashMap<String, u64>,
   #[serde(default)]
   ended: HashMap<String, u64>,
+  #[serde(default)]
+  outs: HashMap<String, [Kept; 2]>,
 }
 
 /// What a model wrote for a rung: its text until the rung has its word, its thought, the
@@ -254,9 +343,18 @@ impl Streamed {
     self.wrote.insert(rung.to_owned(), Wrote { began, retry: Some(retry), ..Wrote::default() });
   }
 
+  /// A fact that a command wrote a text to one of its streams while it runs.
+  pub fn out(&mut self, fact: &Value) {
+    let word = |at: usize| fact.get(at).and_then(Value::as_str);
+    let (true, Some(about), Some(text)) = (wrote(fact), word(1), word(3)) else { return };
+    let stream = usize::from(word(4) == Some("stderr"));
+    self.outs.entry(about.to_owned()).or_default()[stream].push(text);
+  }
+
   /// An act as it stands now, at a millisecond of the epoch: an act that lives keeps when it began,
-  /// a prompt keeps when it began and ended, a rung that has its word keeps only the thought of its
-  /// model, and the end of a reply ends the retry of its rung.
+  /// a prompt and a command keep when they began and ended, a command that ended lets go of what it
+  /// wrote, which its exit holds, a rung that has its word keeps only the thought of its model, and
+  /// the end of a reply ends the retry of its rung.
   pub fn heard(&mut self, act: &Act, now: u64) {
     if act.kind == Kind::Reply
       && act.done()
@@ -264,7 +362,10 @@ impl Streamed {
     {
       wrote.retry = None;
     }
-    if act.done() && act.kind == Kind::Prompt {
+    if act.done() && act.kind == Kind::Bash {
+      self.outs.remove(&act.id);
+    }
+    if act.done() && matches!(act.kind, Kind::Prompt | Kind::Bash) {
       if self.began.contains_key(&act.id) {
         self.ended.entry(act.id.clone()).or_insert(now);
       }
@@ -504,45 +605,61 @@ impl<'a> Reader<'a> {
   }
 
   /// The lines of the word of a rung, numbered from the count of the lines of the thread before
-  /// it. While its model writes the word, the lines that came ran and the line that comes runs.
+  /// it, each with what the last command that it awaited wrote. While its model writes the word,
+  /// the lines that came ran and the line that comes runs.
   fn lines(self, rung: &Act, before: usize) -> Vec<Line> {
-    let began = |id: &str| self.streams.began.get(id).copied();
     let Some(word) = &rung.word else { return self.writing(rung, before) };
+    let acts: Vec<&Act> = self.held.made_by(&rung.id).filter(|act| waits(act)).collect();
+    let made: Vec<(&Act, Option<usize>)> = acts.iter().copied().zip(placed(word, &acts)).collect();
+    let mut lines = self.marked(rung, before, &made);
+    for (act, place) in &made {
+      let output = place.and_then(|source| at_line(&lines, before, source)).zip(self.output(act));
+      if let Some((at, output)) = output {
+        lines[at].output = Some(output);
+      }
+    }
+    lines
+  }
+
+  /// The lines of the word of a rung, each with the mark of how it stands, from the acts that the
+  /// word made, each with the line of the word that made it.
+  fn marked(self, rung: &Act, before: usize, made: &[(&Act, Option<usize>)]) -> Vec<Line> {
+    let word = rung.word.as_deref().unwrap_or_default();
+    let began = |id: &str| self.streams.began.get(id).copied();
     let mut lines: Vec<Line> = shown(word)
       .into_iter()
-      .map(|(at, text)| Line { number: before + at + 1, text, mark: Mark::Ran })
+      .map(|(at, text)| Line { number: before + at + 1, text, mark: Mark::Ran, output: None })
       .collect();
-    let at_line = |source: usize| lines.iter().rposition(|line| line.number <= before + source + 1);
     let Some(run @ (RunState::Failed(_) | RunState::Cancelled(_) | RunState::Running)) = &rung.run
     else {
       return lines;
     };
-    let made: Vec<&Act> = self.held.made_by(&rung.id).filter(|act| waits(act)).collect();
-    let places = placed(word, &made);
+    let line = |lines: &[Line], source: Option<usize>| {
+      source.and_then(|source| at_line(lines, before, source)).or(lines.len().checked_sub(1))
+    };
     if let RunState::Failed(why) = run {
       // A reason that names no line came from an act that the word awaited, as a refused
       // question or a command that exited with a code that the word refuses: the line that made
       // that act raised it: the act that failed, or else the last act that the word made. The
       // last line of the word is the line where its model stood when it raised, so it would hang
       // on the time of the fault.
-      let raised = made.iter().rposition(|act| act.failed()).or(made.len().checked_sub(1));
+      let raised = made.iter().rposition(|(act, _)| act.failed()).or(made.len().checked_sub(1));
       let source = line_of(why)
         .map(|at| at.saturating_sub(1))
-        .or_else(|| raised.and_then(|at| places[at]))
+        .or_else(|| raised.and_then(|at| made[at].1))
         .unwrap_or_else(|| word.split('\n').count());
-      if let Some(at) = at_line(source).or(lines.len().checked_sub(1)) {
+      if let Some(at) = line(&lines, Some(source)) {
         lines[at].mark = Mark::Failed { why: why.clone() };
       }
     } else if let RunState::Cancelled(_) = run {
       // The stop ended the word on the line of the act that it cut, or else on its last line.
-      let cut = made.iter().rposition(|act| act.cancelled()).and_then(|at| places[at]);
-      if let Some(at) = cut.and_then(at_line).or(lines.len().checked_sub(1)) {
+      let cut = made.iter().rposition(|(act, _)| act.cancelled()).and_then(|at| made[at].1);
+      if let Some(at) = line(&lines, cut) {
         lines[at].mark = Mark::Stopped { at: self.streams.ended.get(&rung.id).copied() };
       }
     } else {
-      let open = made.iter().rposition(|act| !act.done());
-      let source = open.and_then(|at| places[at]);
-      let mark = match open.map(|at| made[at]) {
+      let open = made.iter().rposition(|(act, _)| !act.done());
+      let mark = match open.map(|at| made[at].0) {
         Some(act) if act.asks_operator() => Mark::Asks,
         Some(act) if act.kind == Kind::Prompt => {
           Mark::Runs { work: Work::Agent, began: began(&act.id) }
@@ -551,9 +668,12 @@ impl<'a> Reader<'a> {
         None => Mark::Runs { work: Work::Command, began: began(&rung.id) },
       };
       // Each line that asks the operator a question that waits says so, the last one or not.
-      let asks = made.iter().zip(places).filter(|(act, _)| act.asks_operator() && !act.done());
-      let asking: Vec<usize> = asks.filter_map(|(_, place)| place.and_then(at_line)).collect();
-      if let Some(at) = source.and_then(at_line).or(lines.len().checked_sub(1)) {
+      let asking: Vec<usize> = made
+        .iter()
+        .filter(|(act, _)| act.asks_operator() && !act.done())
+        .filter_map(|(_, place)| place.and_then(|source| at_line(&lines, before, source)))
+        .collect();
+      if let Some(at) = line(&lines, open.and_then(|at| made[at].1)) {
         lines[at].mark = mark;
       }
       for at in asking {
@@ -561,6 +681,24 @@ impl<'a> Reader<'a> {
       }
     }
     lines
+  }
+
+  /// What a command wrote: the end of each of its streams while it runs, from its exit once it
+  /// ended. Nothing for an act that is no command, or that ended with no exit.
+  fn output(self, act: &Act) -> Option<Output> {
+    if act.kind != Kind::Bash {
+      return None;
+    }
+    let took = self.streams.began.get(&act.id).zip(self.streams.ended.get(&act.id));
+    let took = took.map(|(began, ended)| ended.saturating_sub(*began) / 1000);
+    match act.value() {
+      Some(exit) => {
+        let stream = |name: &str| exit.get(name)?.get("content")?.as_str();
+        let (stdout, stderr) = (stream("stdout")?, stream("stderr")?);
+        Output::of(&[Kept::of(stdout), Kept::of(stderr)], took)
+      }
+      None => Output::of(self.streams.outs.get(&act.id)?, None),
+    }
   }
 
   /// The lines that the model of a rung with no word wrote so far: those that came ran, and the
@@ -586,10 +724,15 @@ impl<'a> Reader<'a> {
     let came = writing(text, "");
     let ran = came.lines.split('\n').zip(&came.numbers).filter(|_| !came.lines.is_empty());
     let mut lines: Vec<Line> = ran
-      .map(|(text, at)| Line { number: before + at, text: text.to_owned(), mark: Mark::Ran })
+      .map(|(text, at)| Line {
+        number: before + at,
+        text: text.to_owned(),
+        mark: Mark::Ran,
+        output: None,
+      })
       .collect();
     let mark = mark.unwrap_or(Mark::Runs { work: Work::Writes, began });
-    lines.push(Line { number: before + came.count + 1, text: came.tail, mark });
+    lines.push(Line { number: before + came.count + 1, text: came.tail, mark, output: None });
     lines
   }
 
@@ -685,6 +828,12 @@ fn shown(word: &str) -> Vec<(usize, String)> {
     at = end + 1;
   }
   out
+}
+
+/// The line of a word, numbered from the count of the lines of the thread before it, that shows
+/// a line of its source, counted from 0: a quote and a string of many lines show as one line.
+fn at_line(lines: &[Line], before: usize, source: usize) -> Option<usize> {
+  lines.iter().rposition(|line| line.number <= before + source + 1)
 }
 
 /// The line that the reason of a fault names, counted from 1: the last word `line` with a number

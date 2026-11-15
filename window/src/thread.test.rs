@@ -13,7 +13,12 @@ use crate::{
 
 /// One exchange of a thread: a message, and a block of two lines that ran.
 fn exchange(at: usize) -> Exchange {
-  let line = |number: usize| Code { number, text: format!("step = {number}"), mark: Mark::Ran };
+  let line = |number: usize| Code {
+    number,
+    text: format!("step = {number}"),
+    mark: Mark::Ran,
+    output: None,
+  };
   let maker = Maker::Model { model: "claude-cli:opus".to_owned(), effort: None };
   let block =
     Block { maker, lines: vec![line(2 * at + 1), line(2 * at + 2)], more: false, thought: None };

@@ -155,6 +155,8 @@ google-cloud-auth = "1"
 bytes = "1"
 # The JSON Schema of the meaning of a life in `view`, which the protocol of the host carries.
 schemars = "1"
+# The escapes of a terminal that a command writes, which a page drops from what it shows of it.
+anstream = { version = "1", default-features = false }
 # The digest that names an image of a turn, and the form a request carries it in.
 sha2 = "0.10"
 # The lines of the engine that differ at a crossing, which each chain of the life is told.

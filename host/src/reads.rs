@@ -9,7 +9,7 @@
 
 use std::time::Duration;
 
-use furb::view::{Page, Reach};
+use furb::view::{self, Page, Reach};
 use tokio::{
   sync::broadcast::{
     Receiver,
@@ -69,11 +69,7 @@ impl Read {
     loop {
       match self.heard.recv().await {
         Ok((_, event)) if matches!(*event, Event::Ended(_)) => return,
-        Ok((_, event))
-          if !matches!(*event, Event::Act(_) | Event::Text { .. } | Event::Retried { .. }) =>
-        {
-          continue;
-        }
+        Ok((_, event)) if !moves(&event) => continue,
         Ok(_) | Err(RecvError::Lagged(_)) => {}
         Err(RecvError::Closed) => return,
       }
@@ -113,5 +109,15 @@ impl Read {
         Err(TryRecvError::Closed) => return false,
       }
     }
+  }
+}
+
+/// Whether an event can change a page: an act, what a model writes, a retry of its call, and what
+/// a command writes.
+fn moves(event: &Event) -> bool {
+  match event {
+    Event::Act(_) | Event::Text { .. } | Event::Retried { .. } => true,
+    Event::Fact(fact) => view::wrote(fact),
+    _ => false,
   }
 }

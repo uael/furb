@@ -533,6 +533,7 @@ impl Life {
         self.kept.streams.wrote(rung, [text, thinking], cards::millis());
       }
       Event::Retried { rung, retry, .. } => self.kept.streams.retried(rung, retry.clone()),
+      Event::Fact(fact) => self.kept.streams.out(fact),
       _ => {}
     }
     let seq = self.kept.log.len() as Seq;

@@ -1408,12 +1408,14 @@ export interface Block {
 }
 /**
  * One line of a block: its number in the thread, its text, in which each quote stands as the
- * binding that it makes and a string of many lines as one line with its escapes, and its mark.
+ * binding that it makes and a string of many lines as one line with its escapes, its mark, and
+ * what the last command that it awaited wrote.
  */
 export interface Line {
   number: number;
   text: string;
   mark: Mark;
+  output?: Output | null;
 }
 /**
  * A call of a model that failed for a cause that passes, so its provider asks the model again:
@@ -1427,6 +1429,17 @@ export interface Retrying {
   wait: number;
   at: number;
   why: string;
+}
+/**
+ * What a command that a line awaited wrote, as it writes it and once it ended: its last lines,
+ * those of its stdout then those of its stderr, each as a terminal shows it, how many lines came
+ * before them, and the seconds that it took once it ended, counted from milliseconds, which a
+ * host that opened the life after the command began does not know.
+ */
+export interface Output {
+  tail: string[];
+  more: number;
+  took?: number | null;
 }
 /**
  * What a model thought before it wrote: the millisecond of the epoch at which it began to think,
@@ -1509,4 +1522,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 36;
+export const PROTOCOL = 37;

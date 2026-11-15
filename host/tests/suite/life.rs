@@ -1029,7 +1029,7 @@ async fn a_retry_of_a_model_shows_on_the_line_that_it_writes_and_its_failure_onc
   assert!((before + 4..=now() + 5).contains(&retry.at), "{before} {}", retry.at);
   let why = "the provider is overloaded".to_owned();
   let retries = Retrying { attempt: 2, most: 10, wait: 4, at: retry.at, why };
-  let waits = Line { number: 1, text: String::new(), mark: Mark::Retries(retries) };
+  let waits = Line { number: 1, text: String::new(), mark: Mark::Retries(retries), output: None };
   assert_eq!(page().await, [waits]);
   // The model is asked again once the call fails for good, and that call fails too, so the
   // provider pauses the chain: its thread shows the failure once.
@@ -1039,7 +1039,7 @@ async fn a_retry_of_a_model_shows_on_the_line_that_it_writes_and_its_failure_onc
   until(&mut events, replied).await;
   let why = "claude-cli:opus/high answered nothing: ProviderError: the request is malformed";
   let why = why.to_owned();
-  let failed = Line { number: 1, text: String::new(), mark: Mark::Failed { why } };
+  let failed = Line { number: 1, text: String::new(), mark: Mark::Failed { why }, output: None };
   assert_eq!(page().await, [failed]);
   life.send(Command::End).await.unwrap();
   while events.next().await.is_some() {}

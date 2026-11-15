@@ -4,8 +4,8 @@
 //! thread does not show yet, then the dock of the agents of the thread.
 
 use furb::view::{
-  Agent, Block, Exchange, Line as Code, Maker, Mark, Retrying, Said, Saying, Standing, Thought,
-  Work,
+  Agent, Block, Exchange, Line as Code, Maker, Mark, Output, Retrying, Said, Saying, Standing,
+  Thought, Work,
 };
 use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
@@ -263,8 +263,10 @@ impl Feed<'_> {
     let all = block.lines.len();
     let fold = Fold::Block(message.to_owned());
     let open = self.opened.unfolded.contains(&fold);
-    let rolls = all + usize::from(block.more) > ROLLS;
-    let first = if open || !rolls { 0 } else { all + 1 + usize::from(block.more) - ROLLS };
+    let taken: Vec<usize> = block.lines.iter().map(taken).collect();
+    let rolls = taken.iter().sum::<usize>() + usize::from(block.more) > ROLLS;
+    let first =
+      if open || !rolls { 0 } else { rolled(&taken, ROLLS - 1 - usize::from(block.more)) };
     if rolls {
       let (mark, count) = if open { ("▴", all) } else { ("…", first) };
       let noun = if count == 1 { "line" } else { "lines" };
@@ -288,8 +290,10 @@ impl Feed<'_> {
   /// One line of a block: its number in a gutter of a count of columns, or the mark of how it
   /// stands in its place, and its code, cut to the box. The line that runs is lit, with its loader
   /// and its time after one second, a line that a stop ended says when, and the line whose model
-  /// is asked again says the attempt that comes and its wait. Why a line failed, or why its model is asked again, stands under it, or
-  /// in its place when its model wrote none of it.
+  /// is asked again says the attempt that comes and its wait. What the command of a line wrote
+  /// stands under it, and the time that the command took at its right, from one second on. Why a
+  /// line failed, or why its model is asked again, stands under it, or in its place when its model
+  /// wrote none of it.
   fn code(&self, line: &Code, colors: Line, numbers: Gutter) -> Vec<Row> {
     let t = &self.model.tokens;
     let (gutter, inner) = (numbers.width, numbers.inside(self.inner()));
@@ -306,7 +310,7 @@ impl Feed<'_> {
         let age = at.and_then(|at| self.model.age(at / 1000));
         Some(age.map_or_else(|| "stopped".to_owned(), |age| format!("stopped {age} ago")))
       }
-      _ => None,
+      _ => line.output.as_ref().and_then(|one| one.took).filter(|took| *took > 0).map(timer),
     };
     let (number, color, loader) = match mark {
       Mark::Runs { work, .. } => (" ".to_owned(), t.accent, Some(loader(*work))),
@@ -317,6 +321,7 @@ impl Feed<'_> {
       Mark::Ran => (line.number.to_string(), t.muted, None),
     };
     let room = inner.saturating_sub(gutter + 2);
+    let output = line.output.as_ref().map(|one| self.output(one, gutter, room));
     let (mut under, look) = match mark {
       Mark::Failed { why } => (wrapped(why, room), Style::new().fg(t.danger)),
       Mark::Retries(retry) => (wrapped(&retry.why, room), self.style(Role::Muted)),
@@ -337,11 +342,27 @@ impl Feed<'_> {
     let shown = self.boxed(spread(text, timer, inner, Style::new()), ground);
     let mut rows =
       vec![Row { loader: loader.map(|one| (PAD + gutter - 1, one)), ..Row::of(shown) }];
+    rows.extend(output.into_iter().flatten());
     let under = under
       .iter()
       .map(|one| self.boxed(vec![run(format!("{:gutter$}  {one}", ""), look)], t.raised));
     rows.extend(under.map(Row::of));
     rows
+  }
+
+  /// What the command of a line wrote, under it at the column of the code: how many lines came
+  /// before its last ones, as the block says the lines above it, then those, muted, cut to the box.
+  fn output(&self, output: &Output, gutter: usize, room: usize) -> Vec<Row> {
+    let muted = self.style(Role::Muted);
+    let noun = if output.more == 1 { "line" } else { "lines" };
+    let more = (output.more > 0).then(|| format!("… {} {noun}", output.more));
+    let lines = more.into_iter().chain(output.tail.iter().cloned());
+    let row = |text: String| {
+      let mut shown = vec![run(format!("{:gutter$}  ", ""), muted)];
+      shown.extend(clipped(vec![run(text, muted)], room, muted));
+      Row::of(self.boxed(shown, self.model.tokens.raised))
+    };
+    lines.map(row).collect()
   }
 
   /// What a line whose model is asked again says: the attempt that comes of the most, and the time
@@ -489,6 +510,23 @@ impl Feed<'_> {
 /// A row of prose from the column of the text.
 fn says(text: &str, style: Style) -> Row {
   Row::of(vec![run(format!("  {text}"), style)])
+}
+
+/// How many rows a line of a block takes: its own, and those of what its command wrote.
+fn taken(line: &Code) -> usize {
+  1 + line.output.as_ref().map_or(0, |one| one.tail.len() + usize::from(one.more > 0))
+}
+
+/// The first line of a block that rolls, so its last lines fill a count of rows. The last line
+/// shows whatever rows it takes.
+fn rolled(taken: &[usize], rows: usize) -> usize {
+  let mut first = taken.len().saturating_sub(1);
+  let mut used = taken.get(first).copied().unwrap_or_default();
+  while first > 0 && used + taken[first - 1] <= rows {
+    first -= 1;
+    used += taken[first];
+  }
+  first
 }
 
 /// The last words of a text that fit a count of columns.
