@@ -184,6 +184,8 @@ pub enum Command {
   },
   /// The acts as they stood just after a moment, each with its meaning then.
   AsOf { at: u64 },
+  /// The act of a name as the life folds it now.
+  Folded { id: String },
   /// A page of a thread, as [`furb::view::Held::page`] gives it.
   Thread { thread: String, reach: Reach },
   /// Each moment at which an act began or ended, in order, of the life or of the acts of one
@@ -1312,6 +1314,7 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
     | Command::Rail { .. }
     | Command::Ladder { .. }
     | Command::AsOf { .. }
+    | Command::Folded { .. }
     | Command::Moments { .. }
     | Command::Thread { .. }) => viewed(life, &root, command),
     Command::Settings => {
@@ -1390,6 +1393,10 @@ fn viewed(life: &Life, root: &str, command: Command) -> Result<Reply, LifeError>
       )))
     }
     Command::AsOf { at } => Ok(Reply::Acts(life.kept.held.as_of(at))),
+    Command::Folded { id } => match life.kept.held.shared(&id) {
+      Some(act) => Ok(Reply::Acts(vec![(**act).clone()])),
+      None => Err(LifeError::Refused(format!("No act named {id} stands in this life."))),
+    },
     Command::Moments { on } => Ok(Reply::Moments(life.kept.held.moments(on.as_deref()))),
     Command::Thread { thread, reach } => {
       Ok(Reply::Page(life.kept.held.page(&life.kept.streams, &thread, reach)))

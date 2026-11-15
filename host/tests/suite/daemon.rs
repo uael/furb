@@ -1888,6 +1888,60 @@ async fn a_life_that_holds_an_open_act_and_says_no_fact_is_told_once_to_its_wind
   assert_eq!(messages, 2, "a new fact and a new stall send a new message: {prompts:?}");
 }
 
+/// The rung of a word that a window ran on the root, as the daemon answers it once its life folds
+/// it done.
+async fn finished(window: &mut Window, life: &str, word: &str) -> view::Act {
+  let verb = Verb::Run { life: life.to_owned(), word: word.to_owned(), on: None };
+  let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
+  awaited(window, life, &rung).await
+}
+
+/// An act of a life as the daemon answers the verb `ended` of it.
+async fn awaited(window: &mut Window, life: &str, act: &str) -> view::Act {
+  let verb = Verb::Ended { life: life.to_owned(), act: act.to_owned() };
+  let answer = timeout(PATIENCE, window.ask(verb)).await.expect("the end comes");
+  let Ok(Answer::Acts(mut acts)) = answer else { panic!("no act: {answer:?}") };
+  assert_eq!(acts.len(), 1, "{acts:?}");
+  acts.remove(0)
+}
+
+#[tokio::test]
+async fn the_end_of_a_word_that_ran_comes_as_its_life_folds_it() {
+  let at = place();
+  let (local, _daemon) = started(&at, PATIENCE).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  let ran = finished(&mut window, &life, "x = 41 + 1").await;
+  assert_eq!((ran.word.as_deref(), ran.run), (Some("x = 41 + 1"), Some(view::RunState::Done)));
+  let raised = finished(&mut window, &life, "raise ValueError('no forty-two')").await;
+  let failed = view::RunState::Failed("ValueError: no forty-two".to_owned());
+  assert_eq!(raised.run, Some(failed));
+  let waited = finished(&mut window, &life, "await wait(0.5, __name__)").await;
+  assert_eq!(waited.run, Some(view::RunState::Done), "the end comes when the word ends");
+  let refused = window.ask(Verb::Ended { life, act: "rung999".to_owned() }).await;
+  assert!(matches!(refused, Err(ProtocolError::Refused { .. })), "{refused:?}");
+}
+
+#[tokio::test]
+async fn a_window_that_dials_again_hears_the_end_of_a_word_that_ended_while_it_was_away() {
+  let at = place();
+  let (local, _daemon) = started(&at, PATIENCE).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  let word = "await wait(1, __name__)\nx = 1";
+  let verb = Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
+  let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
+  let asked = Verb::Ended { life: life.clone(), act: rung.clone() };
+  let request = serde_json::to_string(&Request { id: 99, verb: asked }).unwrap();
+  window.lines.send(request).await.unwrap();
+  drop(window);
+  time::sleep(PAST).await;
+  let mut again = Window::dialed(&local).await;
+  let ran = awaited(&mut again, &life, &rung).await;
+  assert!(matches!(ran.phase, Phase::Done(_)), "{ran:?}");
+  assert_eq!((ran.word.as_deref(), ran.run), (Some(word), Some(view::RunState::Done)));
+}
+
 #[tokio::test]
 async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_checkpoint_left_open() {
   let at = place();

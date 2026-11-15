@@ -66,6 +66,11 @@ export type Request1 =
     }
   | {
       life: string;
+      act: string;
+      verb: "ended";
+    }
+  | {
+      life: string;
       on?: string | null;
       of?: string | null;
       verb: "transcript";
@@ -1407,4 +1412,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 22;
+export const PROTOCOL = 23;

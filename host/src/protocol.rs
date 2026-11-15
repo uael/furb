@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 22;
+pub const PROTOCOL: u32 = 23;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -137,6 +137,13 @@ pub enum Verb {
     act: String,
   },
   Peek {
+    life: String,
+    act: String,
+  },
+  /// An act as the life folds it once it is done: at once when it is done, else when its done
+  /// comes. The window that ran a word asks it of the rung of that word, and asks it again after a
+  /// reconnect, since the record keeps the end.
+  Ended {
     life: String,
     act: String,
   },
@@ -418,6 +425,7 @@ impl Verb {
       | Self::Presence { life }
       | Self::Get { life, .. }
       | Self::Peek { life, .. }
+      | Self::Ended { life, .. }
       | Self::Transcript { life, .. }
       | Self::Turns { life, .. }
       | Self::Program { life, .. }
@@ -481,6 +489,7 @@ impl Verb {
         | Self::Presence { .. }
         | Self::Get { .. }
         | Self::Peek { .. }
+        | Self::Ended { .. }
         | Self::Transcript { .. }
         | Self::Turns { .. }
         | Self::Program { .. }
@@ -630,7 +639,7 @@ pub enum Answer {
   Rail(Vec<ThreadNode>),
   /// The ladder of a chain.
   Ladder(Vec<Rung>),
-  /// The acts as they stood at a moment.
+  /// The acts as they stood at a moment, or the one act that `ended` names.
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.
   Moments(Vec<u64>),

@@ -111,6 +111,7 @@ daemon answers requests in any order.
 | `pin`, `unpin` | `life`, `holder` | write |
 | `presence` | `life` | read |
 | `get`, `peek` | `life`, `act` | read |
+| `ended` | `life`, `act` | read |
 | `transcript` | `life`, `on`, `of` | read |
 | `turns`, `program`, `cwd` | `life`, `on` | read |
 | `standing`, `pending` | `life` | read |
@@ -148,6 +149,10 @@ daemon answers requests in any order.
 | `view.event` | see below | write |
 | `view.tree`, `view.effect` | see below | read |
 
+- `ended` gives the act as the life folds it, once it is done, as `acts` with that one act: at once when it is done,
+  else when its done comes. A window that ran a word asks it of the rung that `run` gave, and asks it again after a
+  reconnect, since the record keeps the end. The `run` of the act says how the word ran: `done`, or `failed` with the
+  fault that a person reads. A name that the fold of the life does not hold is refused.
 - `stand` makes the life stand again: it reads the catalog, the configs and the actor again, and the answer is the
   act of the stand. A `roster` names the models that the life offers from that stand on, in place of its roster, as
   the catalog names them, so a window offers a model that the roster lacks with no new life. The record keeps the

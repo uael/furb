@@ -288,6 +288,27 @@
         },
         {
           "type": "object",
+          "description": "An act as the life folds it once it is done: at once when it is done, else when its done\ncomes. The window that ran a word asks it of the rung of that word, and asks it again after a\nreconnect, since the record keeps the end.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "ended"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ]
+        },
+        {
+          "type": "object",
           "required": [
             "verb",
             "life"
@@ -2786,7 +2807,7 @@
             "answer",
             "data"
           ],
-          "description": "The acts as they stood at a moment."
+          "description": "The acts as they stood at a moment, or the one act that `ended` names."
         },
         {
           "type": "object",
@@ -5013,5 +5034,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 22
+  "x-protocol": 23
 }

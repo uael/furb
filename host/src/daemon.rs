@@ -52,6 +52,7 @@ use serde_json::Value;
 use tokio::{
   net::{TcpListener, TcpStream},
   sync::{
+    broadcast::error::RecvError,
     mpsc::{self, error::SendError},
     oneshot, watch,
   },
@@ -469,6 +470,10 @@ impl Host for Daemon {
     if let Some(life) = verb.life_mut() {
       *life = records::key(life);
     }
+    if let Verb::Ended { life, act } = verb {
+      let (handle, _) = self.asked(|reply| Asked::Life { life: life.clone(), reply }).await??;
+      return awaited(&handle, life, act).await;
+    }
     match routed(verb) {
       Routed::Life(life, command) => {
         let command = match (peer.kind, &peer.name) {
@@ -505,6 +510,32 @@ impl Host for Daemon {
       Routed::Daemon(verb) => {
         let (peer, outbox, verb) = (peer.clone(), outbox.clone(), Box::new(verb));
         self.asked(|reply| Asked::Verb { peer, verb, outbox, reply }).await?
+      }
+    }
+  }
+}
+
+/// An act as the life folds it once it is done: at once when it is done, else at the event of it
+/// that the fold gives done. The receiver of the events is made before the first read of the fold,
+/// so no done falls between the two, and a receiver that lags reads the fold again.
+async fn awaited(handle: &LifeHandle, life: String, act: String) -> Result<Answer, ProtocolError> {
+  let mut heard = handle.told();
+  loop {
+    let reply = handle.send(Command::Folded { id: act.clone() }).await?;
+    if let Reply::Acts(folded) = &reply
+      && folded.iter().all(view::Act::done)
+    {
+      return Ok(reply.into());
+    }
+    loop {
+      match heard.recv().await {
+        Ok((_, event)) => match &*event {
+          Event::Act(one) if one.id == act => break,
+          Event::Ended(_) => return Err(ProtocolError::Closed { life }),
+          _ => {}
+        },
+        Err(RecvError::Lagged(_)) => break,
+        Err(RecvError::Closed) => return Err(ProtocolError::Closed { life }),
       }
     }
   }

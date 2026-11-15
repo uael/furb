@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
   Options,
   code::Colors,
-  input::{Armed, Asked, Draft, Outgoing, Target},
+  input::{Armed, Asked, Draft, Outgoing, Target, Word},
   keys::{self, Does, System},
   link::Heard,
   list::Row,
@@ -120,6 +120,8 @@ pub(crate) struct Model {
   pub(crate) picker: Option<Picker>,
   /// Each life that the window holds, and how far its open stands.
   pub(crate) holds: HashMap<Life, Hold>,
+  /// The word of python that the window ran last, until the next one goes or an escape.
+  pub(crate) word: Option<Word>,
 }
 
 impl Model {
@@ -159,6 +161,7 @@ impl Model {
       notice: None,
       picker: None,
       holds: HashMap::new(),
+      word: None,
     }
   }
 
@@ -253,6 +256,10 @@ impl Model {
       opened.asked.clear();
       opened.again = true;
     }
+    // The end of the word comes from the record of its life, so the window asks it again.
+    if let Some(word) = self.word.as_mut().filter(|one| one.at == at) {
+      word.asked = false;
+    }
     true
   }
 
@@ -272,6 +279,8 @@ impl Model {
       (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
       (Asked::Back(text), Ok(Frame::Reply { .. })) => self.restore = Some(self.before_draft(text)),
       (Asked::Answer, Ok(Frame::Refused { why, .. })) => self.unanswered(why),
+      (Asked::Ended, Ok(Frame::Reply { answer: Answer::Acts(acts), .. })) => self.ran(acts),
+      (Asked::Ended, Ok(Frame::Refused { why, .. })) => (self.word, self.fault) = (None, Some(why)),
       (
         Asked::Seen | Asked::List | Asked::Control | Asked::Back(_),
         Ok(Frame::Refused { why, .. }),

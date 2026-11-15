@@ -302,6 +302,30 @@ fn the_python_switch_runs_a_word_of_the_operator() {
 }
 
 #[test]
+fn the_row_of_hints_says_what_a_word_came_to_until_an_escape() {
+  let (app, _daemon, _sessions) = started();
+  sent(&app, &format!("how long does an open take {ANSWERS}"));
+  shows(&app, "Resolved 1");
+  clicked(&app, "○ Python", 0, 0);
+  shows(&app, "● Python");
+  // A word that waits shows a mark that moves while it runs, then a check once it ran.
+  sent(&app, "await wait(1, __name__)\nanswer = 41 + 1");
+  let running = shows(&app, "await wait(1, __name__)\\nanswer = 41 + 1");
+  assert!(!running.contains("✓ await"), "{running}");
+  shows(&app, "✓ await wait(1, __name__)\\nanswer = 41 + 1");
+  screen("input-word-ran", &app);
+  app.press("escape");
+  let gone = app.wait_until(PATIENCE, || !app.text().contains("✓ await"));
+  assert!(gone, "{}", app.text());
+  sent(&app, "raise ValueError('no')");
+  shows(&app, "✗ ValueError: no · raise ValueError('no')");
+  screen("input-word-raised", &app);
+  app.press("escape");
+  let gone = app.wait_until(PATIENCE, || !app.text().contains("✗ ValueError"));
+  assert!(gone, "{}", app.text());
+}
+
+#[test]
 fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends_to() {
   let (app, _daemon, _sessions) = started();
   sent(&app, &format!("where does the time go {WORKS}"));

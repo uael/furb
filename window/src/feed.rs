@@ -376,7 +376,7 @@ fn says(text: &str, style: Style) -> Row {
 
 /// The runs of a line of code cut to a count of columns: a cut line ends with `…+` and the count of
 /// the characters that it hides, in a muted look.
-fn clipped(line: Line, room: usize, muted: Style) -> Line {
+pub(crate) fn clipped(line: Line, room: usize, muted: Style) -> Line {
   if width(&line) <= room {
     return line;
   }

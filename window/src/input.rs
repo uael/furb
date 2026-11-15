@@ -10,13 +10,14 @@
 
 use std::mem;
 
-use furb::view::Maker;
+use furb::view::{Act, Maker, RunState};
 use furb_host::protocol::{Answer, Verb};
 use jiff::Timestamp;
 use opentui::style::{Span, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
+  feed::clipped,
   keys::Does,
   line::{Line, run, spread},
   list::project,
@@ -63,9 +64,22 @@ pub(crate) struct Draft {
   pub(crate) python: bool,
 }
 
+/// A word of python that the window ran on the root of a life, until the next word goes or an
+/// escape forgets it: its machine, its record, its text, its rung, whether the window asked the end
+/// of that rung since it last dialed the machine, and how its run ended.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Word {
+  pub(crate) at: usize,
+  pub(crate) life: String,
+  pub(crate) text: String,
+  pub(crate) rung: String,
+  pub(crate) asked: bool,
+  pub(crate) ran: Option<RunState>,
+}
+
 /// What a request of the window asked of a daemon: the open of a life, a message, a control of a
 /// thread, as a stop or a resolve, the take back of a message with its text, the answer to a
-/// question, what the operator saw, or the records of the machine.
+/// question, what the operator saw, the records of the machine, or the end of the rung of a word.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Asked {
   Open,
@@ -75,6 +89,7 @@ pub(crate) enum Asked {
   Answer,
   Seen,
   List,
+  Ended,
 }
 
 /// What a first press of a key named, which a second press of that key does: the resolve of the
@@ -277,7 +292,12 @@ impl Model {
         | (Some(Armed::Leave), Does::Leave)
     );
     self.notice = None;
-    !again && self.armed.take().is_some()
+    if again {
+      return false;
+    }
+    let armed = self.armed.take().is_some();
+    let forgot = does == Does::Close && self.word.take().is_some();
+    armed || forgot
   }
 
   /// A first escape that nothing else takes, while the open thread works: the next escape stops its
@@ -382,6 +402,8 @@ impl Model {
     let Answer::Act(act) = answer else { return };
     let Some(sent) = self.outgoing.pop_front() else { return };
     if sent.python {
+      let (at, life, text) = (sent.at, sent.life, sent.text);
+      self.word = Some(Word { at, life, text, rung: act, asked: false, ran: None });
       return;
     }
     let thread = sent.thread.clone().filter(|one| !one.is_empty()).unwrap_or_else(|| act.clone());
@@ -391,6 +413,27 @@ impl Model {
       }
     }
     self.made(&sent, &thread, act);
+  }
+
+  /// The end of the rung of the word that the window ran, when the window did not ask it of its
+  /// machine since it last dialed it, once the daemon answered the open of its life.
+  pub(crate) fn ended_due(&self) -> Option<(usize, Verb)> {
+    let word = self.word.as_ref().filter(|one| !one.asked && one.ran.is_none())?;
+    let verb = Verb::Ended { life: word.life.clone(), act: word.rung.clone() };
+    self.stands(word.at, &word.life).then_some((word.at, verb))
+  }
+
+  /// What the rung of the word that the window ran came to, as its life folds it. A rung of another
+  /// birth of the life may hold its name and another word, so the life holds no end of the word.
+  pub(crate) fn ran(&mut self, acts: Vec<Act>) {
+    let Some(word) = self.word.as_mut() else { return };
+    let Some(act) = acts.into_iter().find(|one| one.id == word.rung) else { return };
+    if let Some(run) = act.run.filter(|_| act.word.as_deref() == Some(&word.text)) {
+      word.ran = Some(run);
+    } else {
+      self.fault = Some(format!("The life holds no end of the word that {} ran.", word.rung));
+      self.word = None;
+    }
   }
 
   /// The thread that a message went to, with the act of the message: the open thread takes the
@@ -589,7 +632,8 @@ impl Model {
   }
 
   /// The row of hints: why the daemon refused the last message, else the keys of a form, else the
-  /// state of the open thread while it works, with the key that stops it, else the folder of the
+  /// word of python that the window ran, as it runs and what it came to, else the state of the open
+  /// thread while it works, with the key that stops it, else the folder of the
   /// window; and at its right how many other threads ask the operator, and the key that turns the
   /// input, or that refuses the question of a form.
   fn hints(&self) -> Row {
@@ -602,10 +646,22 @@ impl Model {
     let shown = self.thread.as_ref().and_then(|one| one.fault.as_ref());
     let notice = self.notice.clone().map(|one| (one, t.muted));
     let says = self.armed_says().map(|one| (one, t.attention)).or(notice);
+    let (does, name) = match (&self.aim, &self.thread) {
+      _ if self.form().is_some() => (Does::Empty, "refuse"),
+      (None, Some(_)) if self.leaves() => (Does::Close, "back"),
+      (None, Some(_)) => (Does::NewThread, "new thread"),
+      (Some(_), Some(_)) => (Does::NewThread, "back to the thread"),
+      (_, None) if self.listed() => (Does::Commands, "commands"),
+      (_, None) => (Does::List, "the list"),
+    };
+    let key = vec![run(format!("{} {name}", self.key(does)), muted)];
     let (left, loader) = match (self.fault.as_ref().filter(|one| Some(*one) != shown), says) {
       (Some(fault), _) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], None),
       (None, Some((says, color))) => (vec![run(format!("  {says}"), Style::new().fg(color))], None),
       (None, None) if self.form().is_some() => (self.form_hints().unwrap_or_default(), None),
+      (None, None) if self.word.is_some() => {
+        self.word_hints(self.wide().saturating_sub(2).saturating_sub(width(&key) + 2))
+      }
       (None, None) if works => {
         let age = card.and_then(|card| self.age(card.since)).map(|age| format!(" {age}"));
         let working = format!("    Working{}", age.unwrap_or_default());
@@ -617,15 +673,6 @@ impl Model {
       }
       (None, None) => (vec![run(format!("  {}", self.folder_shown()), muted)], None),
     };
-    let (does, says) = match (&self.aim, &self.thread) {
-      _ if self.form().is_some() => (Does::Empty, "refuse"),
-      (None, Some(_)) if self.leaves() => (Does::Close, "back"),
-      (None, Some(_)) => (Does::NewThread, "new thread"),
-      (Some(_), Some(_)) => (Does::NewThread, "back to the thread"),
-      (_, None) if self.listed() => (Does::Commands, "commands"),
-      (_, None) => (Does::List, "the list"),
-    };
-    let key = vec![run(format!("{} {says}", self.key(does)), muted)];
     let room = self.wide().saturating_sub(2).saturating_sub(width(&left) + width(&key) + 2);
     let others = self.others_ask(room);
     let right: Line = others.iter().chain(&key).cloned().collect();
@@ -637,5 +684,24 @@ impl Model {
     }
     hot.push((end - width(&key)..end, Some(Click::Key(does))));
     Row { hot, loader, ..Row::of(line) }
+  }
+
+  /// The hints of the word that the window ran, in a room of columns: a mark that moves while it
+  /// runs, then a check when it ran, or its fault, and its text on one line, cut with the count of
+  /// the characters that the cut hides.
+  fn word_hints(&self, room: usize) -> (Line, Option<(usize, Loader)>) {
+    let t = &self.tokens;
+    let muted = t.style(Role::Muted);
+    let Some(word) = &self.word else { return (Vec::new(), None) };
+    let text = word.text.trim().replace('\n', "\\n");
+    let (head, loader) = match &word.ran {
+      None => (vec![run("    ", muted)], Some((2, Loader::Command))),
+      Some(RunState::Running | RunState::Done) => (vec![run("  ✓ ", muted)], None),
+      Some(RunState::Cancelled(_)) => (vec![run("  ✗ Cancelled · ", muted)], None),
+      Some(RunState::Failed(why)) => {
+        (vec![run(format!("  ✗ {why}"), Style::new().fg(t.danger)), run(" · ", muted)], None)
+      }
+    };
+    (clipped([head, vec![run(text, muted)]].concat(), room, muted), loader)
   }
 }
