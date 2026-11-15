@@ -96,6 +96,35 @@ fn broken(word: &str, room: usize) -> Vec<String> {
   parts
 }
 
+/// The runs of a line of code cut to a count of columns: a cut line ends with `…+` and the count of
+/// the characters that it hides, in a muted look.
+pub(crate) fn clipped(line: Line, room: usize, muted: Style) -> Line {
+  if line.iter().map(|one| one.content.width()).sum::<usize>() <= room {
+    return line;
+  }
+  let chars: usize = line.iter().map(|one| one.content.chars().count()).sum();
+  // The mark is as wide as the count of all the characters at most, so the cut leaves it room.
+  let mut left = room.saturating_sub(format!("…+{chars}").width());
+  let (mut out, mut kept) = (Vec::new(), 0);
+  for one in line {
+    let fits = |char: &char| {
+      let wide = char.width().unwrap_or_default();
+      let fits = wide <= left;
+      left = if fits { left - wide } else { 0 };
+      fits
+    };
+    let part: String = one.content.chars().take_while(fits).collect();
+    let whole = part.len() == one.content.len();
+    kept += part.chars().count();
+    out.push(run(part, one.style));
+    if !whole {
+      break;
+    }
+  }
+  out.push(run(format!("…+{}", chars - kept), muted));
+  out
+}
+
 #[cfg(test)]
 #[path = "line.test.rs"]
 mod test;

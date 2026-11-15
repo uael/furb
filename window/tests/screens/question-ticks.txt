@@ -5,7 +5,7 @@
 ┃                                                             ▐ which keys does the…      ◆ Input
                                                               ▐ FU furb                      opus
        opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    ◆  keys = await prompt(list[Literal['up', 'down',…+56
+    ◆  keys = await prompt(list[Literal['up', 'down'…+57
     2  close(' '.join(keys))
     …
 

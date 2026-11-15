@@ -5,7 +5,7 @@
 ┃                                                             ▐ how many rows             ◆ Input
                                                               ▐ FU furb                      opus
        opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    ◆  rows = await prompt(int, 'How many rows does th…+27
+    ◆  rows = await prompt(int, 'How many rows does t…+28
     2  close(str(rows))
     …
 

@@ -5,7 +5,7 @@
 ┃                                                             ▐ where does the list…      ◆ Input
                                                               ▐ FU furb                      opus
        opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    ◆  side = await prompt(Literal['right', 'left'], '…+50
+    ◆  side = await prompt(Literal['right', 'left'], …+51
     2  close(side)
     …
 
