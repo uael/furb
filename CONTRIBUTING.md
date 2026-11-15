@@ -133,6 +133,7 @@ no network.
 | `src/binding/py.rs` | The door to Python, which `bind/python` makes into the package `furb-monty`. |
 | `bind/python/furb_monty/engine.py` | Every name of the contract over one life of the engine in the sandbox. |
 | `src/binding/ts.rs` | The door to TypeScript through N-API, which also makes the declarations of `bind/typescript`. |
+| `bind/typescript/Cargo.toml` | The addon of N-API, the one cdylib, which links the crate with its door to TypeScript. |
 | `src/binding/ts/host.rs` | The door on the thread of JavaScript: a value as the engine takes it, and a generator heard as an ear. |
 | `bind/typescript/src/life/` | The model of a life, which every host reads, with no native code. |
 | `src/furb/life.py`, `bind/typescript/src/framework.ts`, `src/life/host.rs` | A life as a program holds it, with the same names in each door. Change the three together. |

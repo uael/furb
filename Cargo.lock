@@ -1457,7 +1457,6 @@ dependencies = [
  "monty",
  "monty-types",
  "napi",
- "napi-build",
  "napi-derive",
  "num-bigint",
  "pyo3",
@@ -1544,6 +1543,15 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "furb-node"
+version = "0.4.2"
+dependencies = [
+ "furb",
+ "napi-build",
+ "napi-derive",
 ]
 
 [[package]]

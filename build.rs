@@ -91,8 +91,12 @@ fn surface(contract: &str) -> String {
 }
 
 fn main() {
+  // napi writes the declarations of the package as the macros of this crate run, so it builds
+  // the crate again when the folder of the declarations or its mark for this crate changes.
   #[cfg(feature = "typescript")]
-  napi_build::setup();
+  for name in ["NAPI_TYPE_DEF_TMP_FOLDER", "NAPI_FORCE_BUILD_FURB"] {
+    println!("cargo::rerun-if-env-changed={name}");
+  }
   println!("cargo::rerun-if-changed=src/furb/engine.pyi");
   println!("cargo::rerun-if-changed=src/furb/engine.py");
   let source =

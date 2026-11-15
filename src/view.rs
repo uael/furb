@@ -24,7 +24,7 @@ pub use desk::{
 pub use fold::{Fold, followed, timed};
 pub use held::{Held, Threads};
 pub use ladder::{Rung, SHOWN, Shown};
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(test)]
 pub use named::word;
 pub use named::{NAME, Named, said};
 pub use page::{
