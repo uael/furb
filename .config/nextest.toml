@@ -11,6 +11,13 @@ slow-timeout = { period = "15s", terminate-after = 4 }
 fail-fast = false
 failure-output = "immediate-final"
 
+# A capture walks a scenario in tmux at three sizes, and bounds each of its own waits, for a screen and for its
+# daemon, by its patience of 30 s, so its own error names the wait that failed. The runner ends it only past the sum
+# of those bounds, which a loaded machine reaches before the bound of each other test.
+[[profile.default.overrides]]
+filter = "package(furb-frames) & test(/^capture::/)"
+slow-timeout = { period = "15s", terminate-after = 12 }
+
 # A life of a test on a fake claude writes the turns that its command line resumes in the config dir of claude, which
 # is the one of the person unless CLAUDE_CONFIG_DIR names another: each test run gives its tests a folder of its own,
 # under the target of the tree, which goes with it.
