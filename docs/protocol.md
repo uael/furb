@@ -499,6 +499,8 @@ once it listens. A second daemon refuses to start there.
 A view is a tree of nodes that the process of a skill with code serves, and a window draws. The types of this section
 are versioned with the protocol, and `@uael/furb/protocol` gives them to TypeScript.
 
+- `served {life, skills}`: the names of the skills attached to a life, which a window mounts views of. The daemon pushes it
+  to each window of the life when it attaches, and after each attach and each end of a skill.
 - `view.mount {viewer, life, slot, skill}`: a window that attached the life mounts a view of the skill of that name, which
   is attached to it, in a slot of the life. The skill hears the frame. A viewer names one view of the daemon, so a viewer
   that is mounted refuses `mounted`, and a skill that is not attached refuses `no_skill`. A slot follows a chain or the

@@ -17,11 +17,11 @@ use furb::{
   engine::OPERATOR,
   view::{self, Page, Standing},
 };
-use furb_host::protocol::{Card, Verb};
+use furb_host::protocol::{Card, Gesture, Verb, ViewEvent};
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Anchor, Fold, Hold, Opened, Thread};
+use furb_client::{Anchor, Filled, Fold, Hold, Opened, Thread};
 
 use crate::{
   keys::Does,
@@ -44,6 +44,17 @@ pub(crate) enum Click {
   Agent(String),
   Context,
   Link(String),
+  /// A press of a button of a view, by its viewer and its node.
+  Press {
+    viewer: String,
+    node: String,
+  },
+  /// The input of the window turned to fill an input of a view, from the value that it holds.
+  Fill {
+    viewer: String,
+    node: String,
+    value: String,
+  },
 }
 
 /// The columns of a row that go bright under the pointer, and what a click there does.
@@ -323,10 +334,15 @@ impl Model {
     self.open_agent(prompt);
   }
 
-  /// An escape from the open thread: from the thread of an agent, back to the thread that it came
+  /// An escape: from the input of a view, back to the target of the input; from the open thread:
+  /// from the thread of an agent, back to the thread that it came
   /// from; from a thread that opens or whose open failed, back to the list, while the open goes on.
   /// Whether it went back.
   pub(crate) fn back(&mut self) -> bool {
+    if self.client.filled.take().is_some() {
+      self.client.restore = Some(String::new());
+      return true;
+    }
     if let Some(from) = self.client.thread.as_mut().and_then(|one| one.from.take()) {
       (self.client.thread, self.client.aim) = (Some(*from), None);
       return true;
@@ -460,6 +476,14 @@ impl Model {
         self.ringed();
         None
       }
+      Click::Press { viewer, node } => {
+        self.client.gesture(ViewEvent { viewer, node, kind: Gesture::Press, value: None });
+        None
+      }
+      Click::Fill { viewer, node, value } => {
+        self.client.fill(Some(Filled { viewer, node }), value);
+        None
+      }
       Click::Link(address) => {
         self.client.notice = Some(match (self.browse)(&address) {
           Ok(()) => format!("Opened {address} in the browser."),
@@ -508,6 +532,7 @@ impl Model {
           *last = feed.jump();
         }
         rows.extend(feed.dock());
+        rows.extend(self.kit_rows());
         rows
       }
     };
@@ -519,7 +544,7 @@ impl Model {
   /// How many rows the feed takes: the window less the head, the rows of an open, the dock and the
   /// input.
   pub(crate) fn feed_room(&self) -> usize {
-    let docked = self.feed().map_or(0, |feed| feed.dock().len());
+    let docked = self.feed().map_or(0, |feed| feed.dock().len() + self.kit_rows().len());
     let taken = 1 + self.open_rows().len() + docked + self.input_rows();
     usize::from(self.size.1).saturating_sub(taken)
   }

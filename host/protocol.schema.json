@@ -2413,6 +2413,30 @@
         },
         {
           "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "skills": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "frame": {
+              "type": "string",
+              "const": "served"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "skills"
+          ],
+          "description": "The skills attached to a life, each by its name, which a window mounts a view of: pushed to\neach window of the life when it attaches, and after each attach and each end of a skill."
+        },
+        {
+          "type": "object",
           "additionalProperties": false,
           "properties": {
             "viewer": {
@@ -5710,5 +5734,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 44
+  "x-protocol": 45
 }

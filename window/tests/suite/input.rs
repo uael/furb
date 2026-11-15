@@ -10,7 +10,9 @@ use std::{
   time::Duration,
 };
 
-use furb_host::protocol::{Answer, Verb};
+use furb_host::protocol::{
+  Answer, Axis, Frame, Gesture, Mount, Node, Run, Shape, Tone, Tree, Verb, ViewEvent,
+};
 use furb_window::{Options, open};
 use opentui::{style::Color, testing::TestApp};
 
@@ -513,6 +515,68 @@ fn the_review_lists_the_changed_files_of_the_project_and_the_diff_of_each_and_th
   let (x, y) = at(&app, "⎇ trunk ±2", 0);
   app.click(x, y);
   shows(&app, "Changes  2 files");
+}
+
+#[test]
+fn a_view_of_a_skill_shows_under_its_thread_live_and_takes_a_press_and_an_input() {
+  let (app, daemon, sessions) = started();
+  sent(&app, &format!("keep my list {ANSWERS}"));
+  paged(&app);
+  let mut record = fs::read_dir(&sessions).unwrap().map(|one| one.unwrap().path());
+  let life = record.find(|one| one.extension().is_some_and(|ext| ext == "jsonl")).unwrap();
+  let life = life.display().to_string();
+  let mut skill = daemon.skill("todo");
+  assert_eq!(skill.ask(Verb::Attach { life, from: u64::MAX }), Answer::Done);
+  let Frame::ViewMount(Mount { viewer, slot, .. }) =
+    skill.heard(&app, |frame| matches!(frame, Frame::ViewMount(_)))
+  else {
+    unreachable!()
+  };
+  let node = |id: &str, shape| Node { id: id.to_owned(), shape };
+  let tree = |items: &[&str], version| {
+    let rows = items.iter().map(|one| {
+      node(one, Shape::Text { runs: vec![Run { text: (*one).to_owned(), tone: Tone::Text }] })
+    });
+    let add = node(
+      "add",
+      Shape::Input { value: String::new(), hint: Some("a task".to_owned()), inert: false },
+    );
+    let clear = node("clear", Shape::Button { label: "Clear".to_owned(), inert: false });
+    let tools = node(
+      "tools",
+      Shape::Box { axis: Axis::Row, gap: 2, border: false, children: vec![add, clear] },
+    );
+    let list = node("list", Shape::List { items: rows.collect() });
+    let shape =
+      Shape::Box { axis: Axis::Column, gap: 0, border: true, children: vec![list, tools] };
+    Verb::ViewTree(Tree {
+      viewer: viewer.clone(),
+      slot: slot.clone(),
+      version,
+      tree: node("todo", shape),
+    })
+  };
+  assert_eq!(skill.ask(tree(&["buy milk"], 1)), Answer::Done);
+  let shown = shows(&app, "• buy milk");
+  assert!(shown.contains("a task"), "{shown}");
+  clicked(&app, "Clear", 0, 0);
+  let pressed = skill.heard(&app, |frame| matches!(frame, Frame::ViewEvent(_)));
+  let Frame::ViewEvent(ViewEvent { node: pressed, kind, .. }) = pressed else { unreachable!() };
+  assert_eq!((pressed.as_str(), kind), ("clear", Gesture::Press));
+  clicked(&app, "a task", 0, 0);
+  shows(&app, "The input fills add of the view todo");
+  sent(&app, "walk the dog");
+  let submitted = skill.heard(&app, |frame| matches!(frame, Frame::ViewEvent(_)));
+  let Frame::ViewEvent(ViewEvent { node: added, kind, value, .. }) = submitted else {
+    unreachable!()
+  };
+  assert_eq!(
+    (added.as_str(), kind, value.as_deref()),
+    ("add", Gesture::Submit, Some("walk the dog"))
+  );
+  assert_eq!(skill.ask(tree(&["buy milk", "walk the dog"], 2)), Answer::Done);
+  shows(&app, "• walk the dog");
+  screen("a view of a skill", &app);
 }
 
 #[test]

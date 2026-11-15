@@ -548,6 +548,11 @@ export type Frame =
       frame: "ask";
     }
   | {
+      life: string;
+      skills: string[];
+      frame: "served";
+    }
+  | {
       viewer: string;
       life: string;
       slot: Slot;
@@ -1625,4 +1630,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 44;
+export const PROTOCOL = 45;

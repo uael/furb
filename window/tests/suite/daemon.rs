@@ -229,6 +229,17 @@ impl Daemon {
 
   /// A peer of the daemon, which hears each change of its cards.
   pub(crate) fn peer(&self) -> Peer {
+    let mut peer = self.dialed(Kind::Window, None);
+    assert!(matches!(peer.ask(Verb::Cards), Answer::Cards(_)));
+    peer
+  }
+
+  /// A peer of the daemon that is the process of a skill of a name, which serves views.
+  pub(crate) fn skill(&self, name: &str) -> Peer {
+    self.dialed(Kind::Skill, Some(name.to_owned()))
+  }
+
+  fn dialed(&self, kind: Kind, name: Option<String>) -> Peer {
     let dialed = self.runtime.block_on(self.local.dial()).expect("the daemon listens");
     let mut peer = Peer {
       lines: Framed::new(dialed, LinesCodec::new()),
@@ -236,9 +247,8 @@ impl Daemon {
       runtime: self.runtime.clone(),
       claude: self.yard.join("no-claude").display().to_string(),
     };
-    let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None };
+    let hello = Hello { protocol: PROTOCOL, kind, name, role: None };
     assert!(matches!(peer.ask(Verb::Hello(hello)), Answer::Welcome { .. }));
-    assert!(matches!(peer.ask(Verb::Cards), Answer::Cards(_)));
     peer
   }
 }
@@ -277,6 +287,21 @@ impl Peer {
         _ => {}
       }
     }
+  }
+
+  /// The first frame that the daemon says from now on and that the test waits for, while the app
+  /// runs its tasks, as a window that must answer a frame of the daemon first.
+  pub(crate) fn heard(&mut self, app: &TestApp, wanted: impl Fn(&Frame) -> bool) -> Frame {
+    let mut got = None;
+    app.wait_until(PATIENCE, || {
+      let next = async { timeout(Duration::from_millis(5), self.lines.next()).await };
+      if let Ok(Some(line)) = self.runtime.block_on(next) {
+        let frame: Frame = serde_json::from_str(&line.unwrap()).unwrap();
+        got = Some(frame).filter(&wanted);
+      }
+      got.is_some()
+    });
+    got.expect("the daemon said the frame")
   }
 
   /// The first card that the daemon tells from now on and that the test waits for.

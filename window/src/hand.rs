@@ -212,7 +212,22 @@ fn drawn(app: &App, model: Model, area: &Textarea, review: (&ScrollBox, &Diff)) 
     },
   );
   placed(app, &stage, &mut screen, area);
-  // A loader is a cell of its own, so its step draws no other cell.
+  loaded(app, &stage, &mut screen);
+  screen.part(Model::list, move |lines| {
+    list.set_text(written(lines));
+  });
+  screen.part(Model::listed, move |listed| {
+    side.visible(*listed);
+  });
+  completion(app, &stage, &mut screen, &tokens);
+  veiled(app, &mut screen, &tokens);
+  reviewed(app, &mut screen, &tokens, (scroll, diff));
+  screen
+}
+
+/// The loaders of the left side on its stage: a loader is a cell of its own, so its step draws no
+/// other cell.
+fn loaded(app: &App, stage: &View, screen: &mut Screen<Model>) {
   let cells: Vec<Text> =
     (0..LOADERS).map(|_| Text::new(app, "").absolute().visible(false)).collect();
   for cell in &cells {
@@ -241,16 +256,6 @@ fn drawn(app: &App, model: Model, area: &Textarea, review: (&ScrollBox, &Diff)) 
       }
     }
   });
-  screen.part(Model::list, move |lines| {
-    list.set_text(written(lines));
-  });
-  screen.part(Model::listed, move |listed| {
-    side.visible(*listed);
-  });
-  completion(app, &stage, &mut screen, &tokens);
-  veiled(app, &mut screen, &tokens);
-  reviewed(app, &mut screen, &tokens, (scroll, diff));
-  screen
 }
 
 /// The stage of each widget of the left side at its margin and its width, so the margin that
@@ -493,7 +498,9 @@ fn pump(window: &Shared) {
   {
     model.client.asked.insert((at, id), Asked::Say);
   }
-  for (at, verb, asked) in model.client.changes_due() {
+  let mut due = model.client.views_due();
+  due.extend(model.client.changes_due());
+  for (at, verb, asked) in due {
     if let Some(id) = ask(askers, model, at, verb) {
       model.client.asked.insert((at, id), asked);
     }

@@ -195,7 +195,8 @@ impl Model {
         | Asked::History(_)
         | Asked::Skills(_)
         | Asked::Files(_)
-        | Asked::Changes(..),
+        | Asked::Changes(..)
+        | Asked::View,
         Ok(Frame::Refused { why, .. }),
       ) => self.fault = Some(why),
       (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {

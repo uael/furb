@@ -1542,6 +1542,8 @@ where
 async fn a_kit_of_a_session_gives_its_view_to_each_window_in_each_life_of_its_record() {
   let at = place();
   let (local, mut window, life) = kitted(&at, |local| local).await;
+  let todo = vec!["todo".to_owned()];
+  window.until(|frame| matches!(frame, Frame::Served { skills, .. } if *skills == todo)).await;
   mounted(&mut window, &viewing(&life, "v1")).await;
   window.until(shows("first")).await;
   window.ran(&life, &said("second")).await;

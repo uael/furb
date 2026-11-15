@@ -55,6 +55,11 @@ impl Views {
     self.skills.push(skill);
   }
 
+  /// The names of the skills attached to a life, in the order that they attached.
+  pub(crate) fn served(&self, life: &str) -> Vec<String> {
+    self.skills.iter().filter(|one| one.life == life).map(|one| one.name.clone()).collect()
+  }
+
   /// A view of a skill mounted by a window, which the skill hears.
   pub(crate) fn mount(
     &mut self,

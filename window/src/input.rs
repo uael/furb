@@ -760,6 +760,12 @@ impl Model {
   /// Where the input runs: the machine and the folder, or the folder alone, and the branch of its
   /// checkout with the count of the files that differ from its last commit.
   fn place(&self, machine: bool) -> Line {
+    let muted = self.tokens.style(Role::Muted);
+    if let Some(filled) = &self.client.filled {
+      let skill = self.client.views.iter().find(|one| one.viewer == filled.viewer);
+      let skill = skill.map(|one| one.skill.as_str()).unwrap_or_default();
+      return vec![run(format!("  The input fills {} of the view {skill}", filled.node), muted)];
+    }
     let at = match self.client.target() {
       Target::Thread(key) => key.0,
       Target::Session(at, _) | Target::New(at, _) => at,
@@ -775,7 +781,6 @@ impl Model {
       let count = (!changes.files.is_empty()).then(|| format!(" ±{}", changes.files.len()));
       Some(format!(" · {BRANCH}{}{}", changes.branch.as_deref()?, count.unwrap_or_default()))
     });
-    let muted = self.tokens.style(Role::Muted);
     let mut line = vec![run(text, muted)];
     line.extend(branch.map(|one| run(one, muted)));
     line

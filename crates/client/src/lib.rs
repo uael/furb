@@ -16,13 +16,17 @@ mod opens;
 mod outbox;
 mod question;
 mod thread;
+mod views;
 
 use std::{
   collections::{HashMap, VecDeque},
   time::Duration,
 };
 
-use furb_wire::{Part, protocol::Card};
+use furb_wire::{
+  Part,
+  protocol::{Card, ViewEvent},
+};
 
 pub use changes::{Review, Seen};
 pub use complete::{Completed, Completes, Completion, Kind, Offer};
@@ -34,6 +38,7 @@ pub use opens::{Ask, Hold, Life, Step};
 pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
 pub use question::{Form, HOLD};
 pub use thread::{Anchor, Fold, Opened, PAGE, Pending, Thread, rests};
+pub use views::{Filled, View};
 
 /// What each machine told, the cards of all of them in the order of the list as it last settled,
 /// each with the part that it had then and with its state as its machine last told it, each life
@@ -68,6 +73,12 @@ pub struct Client {
   pub commands: Vec<Offer>,
   /// The review of the changes of a project, while the operator reads it.
   pub review: Option<Review>,
+  /// The views that the client mounted, in the order that it mounted them.
+  pub views: Vec<View>,
+  /// What the operator did to the nodes of views, with the machine of each, until it goes.
+  pub gestures: Vec<(usize, ViewEvent)>,
+  /// The input node of a view that the input of the client fills, while it fills one.
+  pub filled: Option<Filled>,
   /// What the last thing that the operator did did not do, and why, until the next one.
   pub notice: Option<String>,
   /// The millisecond of the clock of the machine of the client.

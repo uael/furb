@@ -61,6 +61,9 @@ pub struct Told {
   /// The changes of the checkout of git of each folder that the client asked, by that folder.
   #[serde(skip)]
   pub changes: HashMap<String, Seen>,
+  /// The skills attached to each life that the client holds, which serve its views, by its record.
+  #[serde(skip)]
+  pub served: HashMap<String, Vec<String>>,
 }
 
 /// What a frame changed of what a machine told: its cards or its login, nothing that the list
@@ -86,6 +89,9 @@ impl Client {
   pub fn listed(&mut self, at: usize, heard: Heard, now: u64) -> Listing {
     if let Ok(frame) = &heard {
       self.staled(at, frame);
+      if self.viewed(at, frame) {
+        return Listing::Changed;
+      }
     }
     let told = &mut self.machines[at];
     let welcome = matches!(heard, Ok(Frame::Reply { answer: Answer::Welcome { .. }, .. }));

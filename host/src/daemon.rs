@@ -1011,7 +1011,9 @@ impl Lives {
         reply.send(found.ok_or_else(|| fault.unwrap_or(ProtocolError::Closed { life }))).ok();
       }
       Asked::Left { life, outbox } => {
-        self.views.left(&life, &outbox);
+        if self.views.left(&life, &outbox) {
+          self.served(&life);
+        }
         if let Ok((_, holders)) = living(&mut self.held, &life)
           && holders.detach(&outbox)
         {
@@ -1288,11 +1290,13 @@ impl Lives {
     let teller = Teller { life: life.to_owned(), opens, outbox: outbox.clone() };
     let told = tokio::spawn(teller.told(handle.events(from), self.asks.clone())).abort_handle();
     if let Some(name) = skill {
-      let life = life.to_owned();
-      self.views.attach(Skill { life, name, outbox: outbox.clone(), told });
+      self.views.attach(Skill { life: life.to_owned(), name, outbox: outbox.clone(), told });
+      self.served(life);
     } else {
       holders.attach(Window { peer, outbox: outbox.clone(), told, writes: None });
       holders.present(life);
+      let skills = self.views.served(life);
+      outbox.send(Frame::Served { life: life.to_owned(), skills }).ok();
       self.carded(life);
     }
     Ok(Answer::Done)
@@ -1311,9 +1315,20 @@ impl Lives {
       self.carded(life);
     }
     let skill = self.views.left(life, outbox);
+    if skill {
+      self.served(life);
+    }
     (was || skill)
       .then_some(Answer::Done)
       .ok_or(ProtocolError::Unattached { life: life.to_owned() })
+  }
+
+  /// The skills attached to a life told to each of its windows, after a skill attached or left.
+  fn served(&mut self, life: &str) {
+    let skills = self.views.served(life);
+    if let Ok((_, holders)) = living(&mut self.held, life) {
+      holders.tell(&Frame::Served { life: life.to_owned(), skills });
+    }
   }
 
   /// A pin that holds a life, which its cards say.

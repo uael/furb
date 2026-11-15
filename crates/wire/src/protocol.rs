@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 44;
+pub const PROTOCOL: u32 = 45;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -643,6 +643,9 @@ pub enum Frame {
   /// A request of a model of a life that the peer answers: its number, and the request with the
   /// actor, the chain, the messages and the settings.
   Ask { life: String, ask: u64, request: Value },
+  /// The skills attached to a life, each by its name, which a window mounts a view of: pushed to
+  /// each window of the life when it attaches, and after each attach and each end of a skill.
+  Served { life: String, skills: Vec<String> },
   #[serde(rename = "view.mount")]
   ViewMount(Mount),
   #[serde(rename = "view.tree")]

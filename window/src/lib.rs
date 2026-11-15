@@ -22,6 +22,7 @@ mod home;
 mod input;
 mod kept;
 mod keys;
+mod kit;
 mod line;
 mod link;
 mod list;

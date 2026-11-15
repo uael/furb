@@ -108,6 +108,8 @@ pub enum Asked {
   Skills(String),
   Files(String),
   Changes(String, Option<String>),
+  /// A verb of a view: its mount, a gesture on one of its nodes, or its end.
+  View,
 }
 
 impl Client {
