@@ -12,19 +12,19 @@ use std::{
   path::{Path, PathBuf},
   process::Command,
   sync::{Arc, Mutex},
-  thread,
+  thread, time,
   time::Duration,
 };
 
 use furb::{
-  Act, Engine, Fact, Object, SYSTEM,
-  life::{Opening, Stream},
+  Act, Engine, Fact, Object, SYSTEM, Text,
+  life::{Opening, Retrying, Stream},
   verbs,
-  world::{Class, Writes},
+  world::{Class, Retries, Writes},
 };
 use serde_json::{Value, json};
 
-use super::provider::{asked, on, said, taken, until, yard};
+use super::provider::{asked, counted, on, said, taken, until, yard};
 use crate::{drive::block_on, opened, yard::Yard};
 
 /// The variable that names the yard of a test to the child that runs it again.
@@ -122,7 +122,9 @@ fn exchanged(listener: &TcpListener, events: &str) -> String {
   let mut body = vec![0; length];
   reader.read_exact(&mut body).expect("the body of the request");
   let mut stream = reader.into_inner();
+  // An answer that holds its own head goes as it stands, as a refusal of the provider.
   let head_out = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
+  let head_out = if events.starts_with("HTTP/") { "" } else { head_out };
   stream.write_all(format!("{head_out}{events}").as_bytes()).expect("the turn is streamed");
   format!("{head}{}", String::from_utf8_lossy(&body))
 }
@@ -853,13 +855,12 @@ fn a_reply_comes_to_the_turn_of_the_model_with_its_usage_its_dollars_and_its_blo
 fn six(word: bool) -> String {
   let parts = ["a", "b", "c", "d", "e", "f"]
     .map(|one| chunk(&json!({"reasoning_content": one}), &Value::Null));
-  if word { [parts.concat(), worded()].concat() } else { parts.concat() }
+  if word { [parts.concat(), worded("close(3)")].concat() } else { parts.concat() }
 }
 
-/// The word `close(3)` of a turn with no thought, as a local server streams it.
-fn worded() -> String {
-  [chunk(&json!({"role": "assistant", "content": "close(3)"}), &json!("stop")), ended(5, None)]
-    .concat()
+/// The word of a turn with no thought, as chat completions stream it.
+fn worded(word: &str) -> String {
+  [chunk(&json!({"role": "assistant", "content": word}), &json!("stop")), ended(5, None)].concat()
 }
 
 /// The first request that the local server of a test reads, and the thought that the request after
@@ -903,11 +904,12 @@ fn the_most_thought_of_a_turn_is_that_of_the_environment_else_that_of_the_config
   // proves.
   let (first, _) = thought(here!(), [None, None], None, vec![six(true)]);
   assert!(!off(&first), "a most that no one gives cuts no thought of six parts: {first}");
-  let (first, _) = thought(here!(), [Some(json!(0)), None], None, vec![worded()]);
+  let (first, _) = thought(here!(), [Some(json!(0)), None], None, vec![worded("close(3)")]);
   assert!(off(&first), "the config gives it: {first}");
-  let (_, again) = thought(here!(), [Some(json!(0)), None], Some("4"), vec![six(false), worded()]);
+  let (_, again) =
+    thought(here!(), [Some(json!(0)), None], Some("4"), vec![six(false), worded("close(3)")]);
   assert_eq!(again, json!("abcde"), "the environment wins over the config");
-  let (first, _) = thought(here!(), [Some(json!(0)), None], Some("much"), vec![worded()]);
+  let (first, _) = thought(here!(), [Some(json!(0)), None], Some("much"), vec![worded("close(3)")]);
   assert!(off(&first), "a value that is no count is as unsaid: {first}");
 }
 
@@ -919,8 +921,141 @@ fn the_local_config_of_the_project_gives_the_most_thought_over_its_config() {
     return;
   }
   let (_, again) =
-    thought(here!(), [Some(json!(0)), Some(json!(3))], None, vec![six(false), worded()]);
+    thought(here!(), [Some(json!(0)), Some(json!(3))], None, vec![six(false), worded("close(3)")]);
   assert_eq!(again, json!("abcd"), "the local config wins");
-  let (first, _) = thought(here!(), [Some(json!(0)), Some(json!("much"))], None, vec![worded()]);
+  let (first, _) =
+    thought(here!(), [Some(json!(0)), Some(json!("much"))], None, vec![worded("close(3)")]);
   assert!(off(&first), "a local value that is no count is as unsaid: {first}");
+}
+
+/// The config of the project of the yard, with a provider `p` of chat completions at this port,
+/// which offers these models.
+fn provide(at: &Path, port: u16, models: &[&str]) {
+  let models: serde_json::Map<String, Value> =
+    models.iter().map(|one| ((*one).to_owned(), json!({"window": 1000}))).collect();
+  let p = json!({"protocol": "chat", "url": format!("http://127.0.0.1:{port}/v1"), "key": "k",
+    "models": models});
+  fs::create_dir_all(at.join(".furb")).expect("the folder of the project");
+  let config = json!({"providers": {"p": p}}).to_string();
+  fs::write(at.join(".furb/config.json"), config).expect("the config of the project");
+}
+
+/// The life of the child on the provider `p` of the config of its project, whose roster names
+/// these models, the first its actor.
+fn on_p(at: &Path, roster: &[&str]) -> Engine {
+  let opening = Opening {
+    actor: Some(roster[0].to_owned()),
+    roster: Some(roster.iter().map(|one| (*one).to_owned()).collect::<Vec<_>>().into()),
+    ..opened(at)
+  };
+  opening.boot::<String>([]).expect("the life opens").0
+}
+
+/// What a stand of the root came to, once it is done.
+fn stood(engine: &mut Engine) -> Object {
+  let root = engine.root().to_owned();
+  let stand = engine.stand(verbs::Stand { on: Some(root) }).expect("the life stands");
+  let stand = stand.id().to_owned();
+  block_on(Act::<Object>::of(engine, &stand)).unwrap_or_else(|fault| fault.object())
+}
+
+#[test]
+fn a_refresh_that_reads_no_settings_refuses_the_stand_with_its_cause() {
+  let Some(at) = child() else {
+    return ran(here!(), &yard("unrefreshed"), &[]);
+  };
+  let (port, _) = served(Vec::new());
+  provide(&at, port, &["m"]);
+  let mut engine = on_p(&at, &["p:m"]);
+  // A provider of the settings with no address reads as no settings.
+  fs::write(at.join(".furb/config.json"), r#"{"providers": {"p": {"protocol": "chat"}}}"#)
+    .expect("the config of the project");
+  let refused =
+    "{'is': 'Refused', 'args': ['A custom provider p needs a URL and at least one model']}";
+  assert_eq!(stood(&mut engine).py_repr(), refused);
+}
+
+#[test]
+fn a_stand_on_new_settings_asks_a_reply_that_waits_for_a_usage_limit_again_on_the_new_command_line()
+{
+  let Some(at) = child() else {
+    return ran(here!(), &yard("limit-switch"), &[]);
+  };
+  let later =
+    time::SystemTime::now().duration_since(time::UNIX_EPOCH).expect("a time").as_secs() + 86_400;
+  let body = json!({"error": {"type": "usage_limit_reached", "resets_at": later}}).to_string();
+  let refused = format!(
+    "HTTP/1.1 429 Too Many Requests\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\
+     connection: close\r\n\r\n{body}",
+    body.len()
+  );
+  let (old, before) = served(vec![refused]);
+  let (new, after) = served(vec![worded("close(7)")]);
+  provide(&at, old, &["m"]);
+  let told: Arc<Mutex<Vec<String>>> = Arc::default();
+  let kept = Arc::clone(&told);
+  let retries: Retries = Arc::new(move |_, _, retry| {
+    kept.lock().expect("the retries told").push(retry.why.clone());
+  });
+  let opening = Opening { retrying: Some(Retrying(retries)), ..opened(&at) };
+  let opening = Opening {
+    actor: Some("p:m".to_owned()),
+    roster: Some(vec!["p:m".to_owned()].into()),
+    ..opening
+  };
+  let mut engine = opening.boot::<String>([]).expect("the life opens").0;
+  let id = asked(&mut engine);
+  let heard = Arc::clone(&told);
+  assert!(until(&mut engine, move |_| !heard.lock().expect("the retries told").is_empty()));
+  let why = told.lock().expect("the retries told")[0].clone();
+  assert!(why.starts_with("usage limit until "), "{why}");
+  assert_eq!(before.join().expect("the old provider read the request").len(), 1);
+  provide(&at, new, &["m"]);
+  stood(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(7), "the reply asks the new provider");
+  assert_eq!(after.join().expect("the new provider read the request").len(), 1);
+}
+
+#[test]
+fn each_request_of_a_chain_starts_with_the_request_before_it_across_a_stand_an_edit_and_a_fork() {
+  let Some(at) = child() else {
+    return ran(here!(), &yard("prefix"), &[]);
+  };
+  let words = ["x = 1\ndebug(t'{x}')", "close(1)", "close(2)", "close(3)", "close(4)", "close(5)"];
+  let (port, asked_of) = served(words.map(worded).to_vec());
+  provide(&at, port, &["m"]);
+  let mut engine = on_p(&at, &["p:m", "p:n"]);
+  let root = engine.root().to_owned();
+  let first = counted(&mut engine, &root, 1);
+  // The stand reads the settings again, where the roster grows by a second model.
+  provide(&at, port, &["m", "n"]);
+  stood(&mut engine);
+  counted(&mut engine, &root, 2);
+  let door = Text::new(first, "x = 4\ndebug(t'{x}')");
+  engine.write(&door, verbs::Write { on: Some(root.clone()) }).expect("the door is written");
+  counted(&mut engine, &root, 3);
+  let fork =
+    verbs::Chain { label: Some("side".to_owned()), source: on(&root), ..Default::default() };
+  let side = engine.chain(fork).expect("the fork is made").id().to_owned();
+  counted(&mut engine, &side, 4);
+  counted(&mut engine, &root, 5);
+  let requests: Vec<Vec<Value>> = asked_of
+    .join()
+    .expect("the provider read the requests")
+    .iter()
+    .map(|one| body(one)["messages"].as_array().cloned().unwrap_or_default())
+    .collect();
+  assert_eq!(requests.len(), words.len(), "each word answers one request");
+  let holds = |at: usize, word: &str| {
+    requests[at].iter().filter(|one| one.to_string().contains(word)).count()
+  };
+  assert_eq!(holds(2, "stand()"), holds(1, "stand()") + 1, "the stand plays its rung on the root");
+  assert_eq!((holds(2, "x = 4"), holds(3, "x = 4")), (0, 1), "the edit tells its word on the root");
+  // The fork is asked fifth: it reads what the root read before it, then its own turns.
+  for (before, after) in [(0, 1), (1, 2), (2, 3), (3, 5), (3, 4)] {
+    let (was, now) = (&requests[before], &requests[after]);
+    assert!(now.len() > was.len(), "request {after} grows from request {before}");
+    assert_eq!(now[..was.len()], was[..], "request {after} starts with request {before}");
+  }
 }

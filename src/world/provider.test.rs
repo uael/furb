@@ -3,9 +3,8 @@
 //! - the moment that a usage limit of the claude command line ends, which reads the clock and the
 //!   zone of the machine;
 //! - the id of a conversation, which reads the random bytes of the machine;
-//! - the refresh of a stand, which an `Opening` sets on the catalog of the machine;
-//! - a failed sign in and a switched account, which only the claude command line types from its
-//!   words, and whose fake runs on unix alone;
+//! - a failed sign in, a switched account and a refresh that waits, which only the claude command
+//!   line makes, from its words or as it starts, and whose fake runs on unix alone;
 //! - the parts of a reply that the door shows only mixed with the others: the cleaners of a word,
 //!   the end of a thought that the provider cut, and the share of thought at each effort, of which
 //!   a model of a local server takes only some levels;
@@ -32,16 +31,15 @@ use std::{
   path::{Path, PathBuf},
   sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
   },
   time::{Duration, Instant},
 };
 
 use futures::FutureExt;
 use rig_core::{
-  completion::{CompletionError, Usage},
+  completion::CompletionError,
   message::Message,
-  streaming::StreamFinal,
   test_utils::{MockCompletionModel, MockError, MockStreamEvent},
 };
 use serde_json::{Value, json};
@@ -56,7 +54,7 @@ use super::{
   retry::{Backoff, Retry, Transient, passing, resets},
   thinking::{Thinking, budgeted},
 };
-use crate::{Act, Ear, Engine, Object, Text, fact, verbs, world};
+use crate::{Act, Ear, Engine, Object, fact, verbs, world};
 
 #[cfg(unix)]
 use crate::testing::on_reactor;
@@ -64,7 +62,6 @@ use crate::testing::{Yard, block_on, park, waker};
 use std::env;
 use std::process;
 use std::sync::mpsc;
-use std::time;
 use tokio::task;
 
 /// A yard of one test, empty.
@@ -113,13 +110,6 @@ fn scripted(model: &MockCompletionModel) -> Model {
   Model::new("m", 1000, model.clone())
     .effort("low", json!({"thinking": 1024}))
     .effort("high", json!({"thinking": 8192}))
-}
-
-/// A model of rig that streams these turns, each its text and the usage it ends with.
-fn streaming(turns: &[(&str, Usage)]) -> MockCompletionModel {
-  MockCompletionModel::from_stream_turns(turns.iter().map(|(text, usage)| {
-    [MockStreamEvent::text(*text), MockStreamEvent::FinalResponse(StreamFinal::new("mock", *usage))]
-  }))
 }
 
 fn on(root: &str) -> Option<String> {
@@ -554,43 +544,6 @@ fn a_call_that_a_failed_sign_in_refuses_waits_for_a_stand_and_the_chain_is_told_
   assert!(notes[0].2.contains(&format!("#{root} waits on m/high: signed out, sign in again")));
 }
 
-#[test]
-fn a_stand_on_new_settings_asks_a_reply_that_waits_for_a_usage_limit_again_on_the_new_command_line()
-{
-  let later = time::SystemTime::now()
-    .duration_since(time::UNIX_EPOCH)
-    .expect("a time after the epoch")
-    .as_secs()
-    + 86_400;
-  let limit = format!("Claude AI usage limit reached|{later}");
-  let (old, before) = failing(&[&limit, &limit, &limit]);
-  let (new, after) = failing(&[]);
-  let fresh = scripted(&MockCompletionModel::default()).hosted(new);
-  let (retries, told) = retried();
-  let model = spoken(scripted(&MockCompletionModel::default()).hosted(old));
-  let stale = model.clone();
-  let switched = Arc::new(AtomicBool::new(false));
-  let flipped = Arc::clone(&switched);
-  let provider = Provider::new(yard("limit-switch").display().to_string(), vec![model])
-    .retries(retries)
-    .refreshing(Arc::new(move || {
-      let models = if flipped.load(Ordering::SeqCst) { &fresh } else { &stale };
-      let got = Ok((vec![models.clone()], None, Thinking::default()));
-      Box::pin(async move { got })
-    }));
-  let mut engine = lived(provider);
-  let id = asked(&mut engine);
-  let heard = Arc::clone(&told);
-  assert!(until(&mut engine, move |_| !heard.lock().expect("the retries told").is_empty()));
-  switched.store(true, Ordering::SeqCst);
-  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).expect("the life stands");
-  let done = |engine: &mut Engine| {
-    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
-  };
-  assert!(until(&mut engine, done), "the reply asks the new command line");
-  assert_eq!((before.load(Ordering::SeqCst), after.load(Ordering::SeqCst)), (1, 1));
-}
-
 /// A moment in Paris.
 fn paris(month: i8, day: i8, hour: i8, minute: i8) -> Zoned {
   civil::date(2026, month, day)
@@ -811,99 +764,6 @@ fn a_version_is_compared_by_its_numbers() {
   assert!(super::numbers("1.10.0") > super::numbers("1.4.0"));
   assert_eq!(super::numbers("1.4.0"), vec![1, 4, 0]);
   assert_eq!(super::numbers("claude-2.1.119"), vec![2, 1, 119]);
-}
-
-#[test]
-fn a_refresh_that_reads_no_settings_refuses_the_stand_with_its_cause() {
-  let model = scripted(&MockCompletionModel::default());
-  let provider = Provider::new(yard("unrefreshed").display().to_string(), vec![model]).refreshing(
-    Arc::new(|| {
-      let no = super::catalog::Unknown::Name { name: "gone".to_owned() };
-      Box::pin(async move { Err(super::Unrefreshed::Roster(no)) })
-    }),
-  );
-  let mut engine = lived(provider);
-  let root = engine.root().to_owned();
-  let stand = engine.stand(verbs::Stand { on: Some(root) }).expect("the life stands");
-  let stand = stand.id().to_owned();
-  let refused = |engine: &mut Engine| {
-    engine.peek(&stand, verbs::Peek::default()).is_ok_and(|one| {
-      one.py_repr() == "Refused(args=('No model is gone. Name one as provider:id.'))"
-    })
-  };
-  assert!(until(&mut engine, refused), "the stand says why the refresh read nothing");
-}
-
-/// A provider whose roster grows by a second model once the flag is set, as when a stand reads new
-/// settings.
-fn widening(model: &MockCompletionModel, wide: &Arc<AtomicBool>) -> Provider {
-  let (first, wider) =
-    (scripted(model), vec![scripted(model), Model::new("n", 1000, model.clone())]);
-  let flipped = Arc::clone(wide);
-  Provider::new(yard("prefix").display().to_string(), vec![first.clone()]).refreshing(Arc::new(
-    move || {
-      let models = if flipped.load(Ordering::SeqCst) { wider.clone() } else { vec![first.clone()] };
-      Box::pin(async move { Ok((models, None, Thinking::default())) })
-    },
-  ))
-}
-
-/// A prompt on a chain that the model answers with this value, once it is answered.
-fn counted(engine: &mut Engine, on: &str, value: i64) -> String {
-  let with = verbs::Prompt {
-    message: Some("count".to_owned()),
-    on: Some(on.to_owned()),
-    ..Default::default()
-  };
-  let id = engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
-  let got = block_on(Act::<Object>::of(engine, &id)).expect("the prompt is answered");
-  assert_eq!(got.as_ref().as_int(), Some(value));
-  id
-}
-
-/// The messages of each request that a model read, as JSON.
-fn histories(model: &MockCompletionModel) -> Vec<Vec<Value>> {
-  let json = |one: &Message| serde_json::to_value(one).expect("a message is json");
-  model.requests().iter().map(|one| one.chat_history.iter().map(json).collect()).collect()
-}
-
-#[test]
-fn each_request_of_a_chain_starts_with_the_request_before_it_across_a_stand_an_edit_and_a_fork() {
-  let words = ["x = 1\ndebug(t'{x}')", "close(1)", "close(2)", "close(3)", "close(4)", "close(5)"];
-  let model = streaming(&words.map(|one| (one, Usage::new())));
-  let wide = Arc::new(AtomicBool::new(false));
-  let mut engine = lived(widening(&model, &wide));
-  let root = engine.root().to_owned();
-  let first = counted(&mut engine, &root, 1);
-  wide.store(true, Ordering::SeqCst);
-  let stand =
-    engine.stand(verbs::Stand { on: Some(root.clone()) }).expect("the life stands").id().to_owned();
-  block_on(Act::<Object>::of(&mut engine, &stand)).expect("the stand is answered");
-  counted(&mut engine, &root, 2);
-  let door = Text::new(first, "x = 4\ndebug(t'{x}')");
-  engine.write(&door, verbs::Write { on: Some(root.clone()) }).expect("the door is written");
-  counted(&mut engine, &root, 3);
-  let fork = verbs::Chain {
-    label: Some("side".to_owned()),
-    source: Some(root.clone()),
-    ..Default::default()
-  };
-  let side = engine.chain(fork).expect("the fork is made").id().to_owned();
-  counted(&mut engine, &side, 4);
-  counted(&mut engine, &root, 5);
-  let requests = histories(&model);
-  assert_eq!(requests.len(), words.len(), "each word answers one request");
-  let holds = |at: usize, word: &str| {
-    requests[at].iter().filter(|one| one.to_string().contains(word)).count()
-  };
-  assert_eq!(holds(2, "stand()"), holds(1, "stand()") + 1, "the stand plays its rung on the root");
-  assert_eq!((holds(2, "x = 4"), holds(3, "x = 4")), (0, 1), "the edit tells its word on the root");
-  // The fork is asked fifth: it reads what the root read before it, then its own turns.
-  for (before, after) in [(0, 1), (1, 2), (2, 3), (3, 5), (3, 4)] {
-    let (was, now) = (&requests[before], &requests[after]);
-    assert!(now.len() > was.len(), "request {after} grows from request {before}");
-    assert_eq!(now[..was.len()], was[..], "request {after} starts with request {before}");
-  }
 }
 
 #[test]
