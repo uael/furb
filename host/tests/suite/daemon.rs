@@ -1737,6 +1737,31 @@ async fn a_skill_says_each_act_under_its_name_and_a_window_under_its_operator() 
 }
 
 #[tokio::test]
+async fn a_skill_answers_an_act_that_its_word_took_with_a_close() {
+  let at = place();
+  let local = served(&at, None).await;
+  let mut writer = Window::dialed(&local).await;
+  let mut skill = Window::dialed_as(&local, Kind::Skill, Some("k")).await;
+  let life = opened(&mut writer, &at, "a.jsonl").await;
+  writer.attach(&life).await;
+  skill.attach(&life).await;
+  let word = "def taken(id):\n  yield 'started', id\n  yield from idle(id)\nadded = act('k.add', '', controlled(taken), 'milk')";
+  writer.ran(&life, word).await;
+  let asked = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Fact(fact), .. } if fact[0] == "k.add");
+  let Frame::Event { event: Event::Fact(fact), .. } = skill.until(asked).await else {
+    panic!("no act")
+  };
+  assert_eq!(fact[4], json!("milk"), "the skill hears the words of the act");
+  let act = fact[1].as_str().expect("the act has a name").to_owned();
+  let close = Verb::Close { life: life.clone(), act, value: "\"added milk\"".to_owned() };
+  assert_eq!(skill.ask(close).await, Ok(Answer::Done));
+  writer.ran(&life, "got = await added").await;
+  let got = Verb::Inspect { life: life.clone(), name: "got".to_owned(), on: None };
+  let Ok(Answer::Inspected { value, .. }) = writer.ask(got).await else { panic!("no value") };
+  assert_eq!(value, json!("added milk"), "the word awaits the value of the close");
+}
+
+#[tokio::test]
 async fn the_roster_of_a_life_names_the_user_of_the_daemon_as_a_member_of_the_operator() {
   let at = place();
   let (local, _daemon) = started(&at, GRACE).await;
