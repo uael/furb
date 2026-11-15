@@ -3,14 +3,16 @@
 //! inline code on the raised ground, and a block of code as a block of code, with the colors of
 //! python.
 
+use std::mem;
+
 use opentui::style::{Span, Style};
-use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
   code::{self, Colors},
   line::{self, Line, run},
-  tokens::{Role, Tokens},
+  tokens::{APART, Role, Tokens},
 };
 
 /// The lines of a text of markdown in a count of columns, each from the column of the prose.
@@ -25,8 +27,9 @@ pub(crate) fn lines(text: &str, room: usize, tokens: &Tokens, colors: &Colors) -
     link: None,
     lists: Vec::new(),
     code: None,
+    table: None,
   };
-  for event in Parser::new(text) {
+  for event in Parser::new_ext(text, Options::ENABLE_TABLES) {
     prose.event(event);
   }
   prose.flush();
@@ -37,8 +40,9 @@ pub(crate) fn lines(text: &str, room: usize, tokens: &Tokens, colors: &Colors) -
 }
 
 /// The lines made so far, the words of the line that comes, the styles that stand and the link that
-/// stands, the count of each list that stands, none for a list with no numbers, and the block of
-/// code that comes, with its language.
+/// stands, the count of each list that stands, none for a list with no numbers, the block of code
+/// that comes, with its language, and the table that comes, with the side of each column and the
+/// cells of each row, its head first.
 struct Prose<'a> {
   room: usize,
   tokens: &'a Tokens,
@@ -49,6 +53,7 @@ struct Prose<'a> {
   link: Option<String>,
   lists: Vec<Option<usize>>,
   code: Option<(String, String)>,
+  table: Option<(Vec<Alignment>, Vec<Vec<Line>>)>,
 }
 
 impl Prose<'_> {
@@ -97,6 +102,15 @@ impl Prose<'_> {
         self.flush();
         self.lists.push(first.map(|first| usize::try_from(first).unwrap_or_default()));
       }
+      Tag::Table(sides) => {
+        self.flush();
+        self.table = Some((sides, Vec::new()));
+      }
+      Tag::TableHead | Tag::TableRow => {
+        if let Some((_, rows)) = self.table.as_mut() {
+          rows.push(Vec::new());
+        }
+      }
       Tag::Strong | Tag::Heading { .. } => self.styles.push(self.style().bold()),
       Tag::Emphasis => self.styles.push(self.style().italic()),
       Tag::Link { dest_url, .. } => {
@@ -138,6 +152,17 @@ impl Prose<'_> {
         }
       }
       TagEnd::Item => self.flush(),
+      TagEnd::TableCell => {
+        let words = mem::take(&mut self.words);
+        if let Some(row) = self.table.as_mut().and_then(|(_, rows)| rows.last_mut()) {
+          row.push(words);
+        }
+      }
+      TagEnd::Table => {
+        if let Some((sides, rows)) = self.table.take() {
+          self.tabled(&sides, rows);
+        }
+      }
       _ => {}
     }
   }
@@ -189,6 +214,56 @@ impl Prose<'_> {
     }
   }
 
+  /// A table: each column as wide as its widest cell, the widest ones cut while the table is wider
+  /// than the prose, its columns apart as two things of one line, its head bold over a rule, and
+  /// each cell on the side that its column names.
+  fn tabled(&mut self, sides: &[Alignment], mut rows: Vec<Vec<Line>>) {
+    let wide = |cell: &Line| cell.iter().map(|one| one.content.width()).sum::<usize>();
+    let mut widths = vec![0; sides.len()];
+    for row in &rows {
+      for (width, cell) in widths.iter_mut().zip(row) {
+        *width = (*width).max(wide(cell));
+      }
+    }
+    let total =
+      |widths: &[usize]| widths.iter().sum::<usize>() + APART * widths.len().saturating_sub(1);
+    while total(&widths) > self.room
+      && let Some(widest) = widths.iter_mut().filter(|one| **one > 1).max()
+    {
+      *widest -= 1;
+    }
+    let muted = self.tokens.style(Role::Muted);
+    for (at, row) in rows.iter_mut().enumerate() {
+      let mut line: Line = Vec::new();
+      for (column, (width, side)) in widths.iter().zip(sides).enumerate() {
+        let mut cell = row.get(column).cloned().unwrap_or_default();
+        if wide(&cell) > *width {
+          let text: String = cell.iter().map(|one| one.content.as_ref()).collect();
+          let style = cell.first().map_or_else(|| self.style(), |one| one.style);
+          cell = vec![run(line::cut(&text, *width), style)];
+        }
+        if at == 0 {
+          cell = cell.into_iter().map(|one| run(one.content, one.style.bold())).collect();
+        }
+        let room = width - wide(&cell);
+        let before = match side {
+          Alignment::Right => room,
+          Alignment::Center => room / 2,
+          Alignment::Left | Alignment::None => 0,
+        };
+        let apart = if column > 0 { APART } else { 0 };
+        line.push(run(" ".repeat(apart + before), Style::new()));
+        line.extend(cell);
+        line.push(run(" ".repeat(room - before), Style::new()));
+      }
+      self.out.push(line);
+      if at == 0 {
+        self.out.push(vec![run("─".repeat(total(&widths)), muted)]);
+      }
+    }
+    self.gap();
+  }
+
   /// A block of code as each block of code of the window: on the raised ground, as wide as the
   /// prose, its language as its head, and each line with its number close to the left of the box.
   fn block(&mut self, text: &str, language: &str) {
@@ -212,3 +287,7 @@ impl Prose<'_> {
     self.gap();
   }
 }
+
+#[cfg(test)]
+#[path = "prose.test.rs"]
+mod test;
