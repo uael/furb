@@ -84,7 +84,9 @@ async def test_it_asks_the_name_of_the_actor_that_automatic_gives(tmp_path: Path
 async def test_when_that_model_refuses_its_reply_it_asks_the_next_actor_of_automatic_work(tmp_path: Path) -> None:
   """When that model refuses its reply, it asks the next actor of automatic work, automatic(1), then the next, each on a new chain labelled naming, until one answers or the list ends."""
   roster = [*STANDS[0], ["h", ["low"], 200000, "cheap", 0], ["k", ["low"], 200000, "cheap", 1]]
-  sand, root = extended("naming", tmp_path, sand=Refusing(), lives=True, doctrine="Read first.\n", roster=roster)
+  sand, root = extended(
+    "naming", tmp_path, _monty.skills, sand=Refusing(), lives=True, doctrine="Read first.\n", roster=roster
+  )
   sand.script.update({root: ["close(1)"], "chain3": ["close('Fix the login form')"]})
   await engine.prompt(int, "the login form fails", on=root)
   await settle(300)
@@ -95,7 +97,7 @@ async def test_when_that_model_refuses_its_reply_it_asks_the_next_actor_of_autom
   assert names(root) == ["Fix the login form"]
   (tmp_path / "all").mkdir()
   sand, root = extended(
-    "naming", tmp_path / "all", sand=Refusing(), lives=True, doctrine="Read first.\n", roster=roster[:-1]
+    "naming", tmp_path / "all", _monty.skills, sand=Refusing(), lives=True, doctrine="Read first.\n", roster=roster[:-1]
   )
   sand.script[root] = ["close(1)"]
   await engine.prompt(int, "the logout", on=root)
@@ -143,4 +145,18 @@ async def test_a_prompt_made_before_the_act_counts_as_the_first(tmp_path: Path) 
   await settle(300)
   (asked,) = [a for a in engine.transcript("chain2") if a[0] == "prompt" and a[3] == "chain2"]
   assert asked[5] == f"{BRIEF}the login form fails"
+  assert names(root) == ["Fix the login form"]
+
+
+async def test_before_that_actor_it_asks_the_actor_that_the_key_actor_of_the_configs_names(tmp_path: Path) -> None:
+  """Before that actor, it asks the actor that the key actor of the configs of the extension names, when that key names one, as read("settings://naming") gives it."""
+  roster = [*STANDS[0], ["h", ["low"], 200000, "cheap", 0], ["k", ["low"], 200000, "dear"]]
+  (tmp_path / "config").mkdir()
+  (tmp_path / "config" / "config.json").write_text('{"naming": {"actor": "k"}}', encoding="utf-8")
+  sand, root = naming(tmp_path, roster)
+  sand.script.update({root: ["close(1)"], "chain2": ["close('Fix the login form')"]})
+  await engine.prompt(int, "the login form fails", on=root)
+  await settle(300)
+  (asked,) = [a for a in engine.transcript("chain2") if a[0] == "prompt" and a[3] == "chain2"]
+  assert asked[6] == "k"
   assert names(root) == ["Fix the login form"]

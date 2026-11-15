@@ -403,6 +403,21 @@ export class Skill {
     await this.say({ verb: "fact", kind, about, words: words.map((one) => JSON.stringify(one)) });
   }
 
+  /** The value of each key of the kit, as the configs give it, else the default of its file of keys, which a life
+   * that names the capability `config` in its welcome gives. The life says a fact `configured` at each change of a key
+   * through the configs of its window, with the key and the value that wins for it, which a kit hears. */
+  async settings(): Promise<Record<string, unknown>> {
+    if (!this.connection.welcome.capabilities?.includes("config"))
+      throw new Error("This life gives no config to a kit: it is older than the capability config.");
+    const answer = await this.say({ verb: "config", config: { action: "get" } });
+    const values = answer.answer === "values" ? answer.data : [];
+    const keys = values.filter((one) => (one as { skill?: string }).skill === this.name) as {
+      key: string[];
+      value: unknown;
+    }[];
+    return Object.fromEntries(keys.map((one) => [one.key[1], one.value]));
+  }
+
   /** A word run on a chain, the root unless it names one: the name of its rung. */
   async run(word: string, on?: string): Promise<string> {
     return named(await this.say({ verb: "run", word, on }));

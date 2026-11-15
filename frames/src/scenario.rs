@@ -725,6 +725,25 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("a", &[Act::Key("C-x"), Act::Key(",")], "Settings"),
         // Enter flips a boolean in the config of the project, and the list reads it again.
         step("b", &[Act::Type("naming"), Act::Key("Down"), Act::Key("Enter")], "true  project"),
+        // The kit that the change turned on shows its keys under its name, each with what it does.
+        step("c", &[Act::Key("Escape"), Act::Key("C-x"), Act::Key(",")], "naming.actor"),
+        // A key of text takes the value that he writes, in the layer of its scope.
+        step("d", &[Act::Type("actor"), Act::Key("Enter")], "a string"),
+        step("e", &[Act::Type("opus"), Act::Key("Enter")], "\"opus\"  user"),
+        // A value that the property of its key does not take is refused, with what it takes.
+        step(
+          "f",
+          &[
+            Act::Key("Escape"),
+            Act::Key("C-x"),
+            Act::Key(","),
+            Act::Type("thinking"),
+            Act::Key("Enter"),
+            Act::Type("x"),
+            Act::Key("Enter"),
+          ],
+          "takes an integer",
+        ),
       ],
     }),
   },

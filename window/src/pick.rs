@@ -4,7 +4,7 @@
 //! closes it and gives the focus back to the input. The pointer does the same: a click takes a row,
 //! and a click beside the part closes it.
 
-use std::cmp::Reverse;
+use std::{borrow::Cow, cmp::Reverse};
 
 use furb::view::{Part, Sent, Skill};
 use furb_host::protocol::Card;
@@ -48,6 +48,8 @@ pub(crate) enum Pick {
   Leave,
   /// The settings of the session that the input sends to.
   Settings,
+  /// The value of a setting, by its place among the settings, which he writes in the filter.
+  Value(usize),
 }
 
 /// The list part, while it is open: what it lists, the text that filters it, and the place of the
@@ -85,8 +87,10 @@ pub(crate) enum Choice {
   Control(Control),
   /// What a leave does to each session that works, or none to stay.
   Leave(Option<Control>),
-  /// A setting, by its place among the settings, which takes one step.
+  /// A setting, by its place among the settings, which takes one step, or the value that he writes.
   Setting(usize),
+  /// The value that he wrote for a setting, by its place among the settings.
+  Value(usize),
   /// Nothing: a key that only a form or a list hears.
   #[default]
   None,
@@ -98,7 +102,7 @@ pub(crate) enum Choice {
 /// of its bar while it is chosen, and what it takes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Entry {
-  pub(crate) part: &'static str,
+  pub(crate) part: Cow<'static, str>,
   pub(crate) project: Option<String>,
   pub(crate) left: String,
   pub(crate) lit: Vec<usize>,
@@ -137,7 +141,7 @@ impl Pick {
       Self::History => "History",
       Self::Session => "The session",
       Self::Leave => "Sessions still work",
-      Self::Settings => "Settings",
+      Self::Settings | Self::Value(_) => "Settings",
     }
   }
 
@@ -152,6 +156,7 @@ impl Pick {
       Self::History => "Search what you sent here",
       Self::Session | Self::Leave => "Search a choice",
       Self::Settings => "Search a setting",
+      Self::Value(_) => "Write the value",
     }
   }
 
@@ -165,6 +170,7 @@ impl Pick {
       Self::History => "write it",
       Self::Session | Self::Leave => "do it",
       Self::Settings => "change it",
+      Self::Value(_) => "set it",
     }
   }
 }
@@ -217,6 +223,8 @@ impl Model {
       Pick::Session => self.session_choices(),
       Pick::Leave => self.leave_choices(),
       Pick::Settings => self.settings(),
+      // The filter is the value that he writes, so it hides no row.
+      Pick::Value(place) => return self.value(place),
     };
     // The filter matches the text of a row and its right, and lights the letters of its text.
     let texts: Vec<String> = all.iter().map(|one| format!("{} {}", one.left, one.right)).collect();
@@ -238,7 +246,7 @@ impl Model {
   /// command row runs it.
   fn places(&self, searches: bool) -> Vec<Entry> {
     let thread = |part: &'static str, (_, key, card): &(Part, Key, Card)| Entry {
-      part,
+      part: part.into(),
       project: Some(project(card)),
       left: card.thread.title.clone(),
       right: place(card),
@@ -255,7 +263,7 @@ impl Model {
     all.extend(self.running_places());
     let sessions = self.known_sessions();
     let session = |one: &Session| Entry {
-      part: "Sessions",
+      part: "Sessions".into(),
       project: Some(one.project.clone()),
       left: one.name.clone(),
       right: one.project.clone(),
@@ -279,7 +287,7 @@ impl Model {
       }
     }
     all.extend(projects.into_iter().map(|(name, count)| Entry {
-      part: "Projects",
+      part: "Projects".into(),
       project: Some(name.to_owned()),
       left: name.to_owned(),
       right: format!("{count} session{}", if count == 1 { "" } else { "s" }),
@@ -295,13 +303,13 @@ impl Model {
   fn lists(&self) -> Vec<Entry> {
     let (files, skills) = self.client.files_and_skills();
     let file = |path: &String| Entry {
-      part: "Files",
+      part: "Files".into(),
       left: path.clone(),
       choice: Choice::Added(Client::mention(path)),
       ..Entry::default()
     };
     let skill = |one: &Skill| Entry {
-      part: "Skills",
+      part: "Skills".into(),
       left: one.name.clone(),
       says: one.description.clone(),
       choice: Choice::Added(format!("/{}", one.name)),
@@ -346,7 +354,7 @@ impl Model {
     let commands =
       keys::each(self.system).filter(|one| one.1.command.is_some() && one.1.does != Does::GoTo);
     let entry = |(group, key, forms): (&'static str, &Bound, Vec<String>)| Entry {
-      part: group,
+      part: group.into(),
       left: capital(key.says),
       right: forms.first().cloned().unwrap_or_default(),
       hue: None,
@@ -362,7 +370,7 @@ impl Model {
     let entry = |(group, key, forms): (&'static str, &Bound, Vec<String>)| {
       let forms = forms.join(" or ");
       Entry {
-        part: group,
+        part: group.into(),
         left: format!("{forms:<KEYS$}"),
         says: key.says.to_owned(),
         choice: if key.command.is_some() { Choice::Key(key.does) } else { Choice::None },
@@ -393,7 +401,7 @@ impl Model {
       let named = card.session.clone().filter(|name| !name.is_empty());
       let left = named.unwrap_or_else(|| card.thread.title.clone());
       all.push(Entry {
-        part: "",
+        part: "".into(),
         project: Some(project(card)),
         left,
         right: project(card),
@@ -478,7 +486,7 @@ impl Model {
         effort.as_ref().filter(|one| model.efforts.contains(one)).or(model.effort.as_ref());
       let actor = taken.map_or_else(|| model.name.clone(), |one| format!("{}/{one}", model.name));
       Entry {
-        part: provider_named(provider),
+        part: provider_named(provider).into(),
         left: name.to_owned(),
         right: taken.cloned().unwrap_or_default(),
         choice: Choice::Actor(actor),
@@ -526,8 +534,15 @@ impl Model {
       Choice::Control(control) => self.controlled(control),
       Choice::Leave(control) => self.left_with(control),
       Choice::Setting(place) => {
-        self.client.step_setting(place);
-        self.picker = Some(Picker { of, filter, at });
+        self.picker = Some(if self.client.step_setting(place) {
+          Picker { of, filter, at }
+        } else {
+          Picker { of: Pick::Value(place), filter: self.client.setting_text(place), at: 0 }
+        });
+      }
+      Choice::Value(place) => {
+        self.client.write_setting(place, &filter);
+        self.picker = Some(Picker { of: Pick::Settings, filter: String::new(), at: place });
       }
       Choice::None => self.picker = Some(Picker { of, filter: String::new(), at }),
     }
@@ -666,7 +681,7 @@ impl Model {
     let (muted, prose) = (t.style(Role::Muted), t.style(Role::Prose));
     let room = usize::from(self.spans().1).saturating_sub(4);
     let mut all: Vec<(Option<usize>, Line)> = Vec::new();
-    let mut part = "";
+    let mut part: &str = "";
     // A part whose rows stand in projects keeps the slot of the badge in each row, so each text
     // starts in one column.
     let badged = entries.iter().any(|one| one.project.is_some());
@@ -675,8 +690,8 @@ impl Model {
         if !all.is_empty() {
           all.push((None, Vec::new()));
         }
-        all.push((None, vec![run(entry.part, muted)]));
-        part = entry.part;
+        all.push((None, vec![run(entry.part.clone(), muted)]));
+        part = &entry.part;
       }
       let chosen = at == picker.at;
       let ground = |style: Style| if chosen { style.bg(t.lifted) } else { style };

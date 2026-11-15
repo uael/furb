@@ -23,6 +23,7 @@ def name_session(on: str = "") -> Act:
   A prompt that the operator made before the act started counts as the first prompt of the operator.
   The life word of the extension is name_session(), and the extension plays on the root alone, so a life names its session once.
   It asks the name of the actor that automatic() gives, with a prompt of str on a new chain of its own labelled naming, which reads NAME_BRIEF and then the message.
+  Before that actor, it asks the actor that the key actor of the configs of the extension names, when that key names one, as read("settings://naming") gives it.
   When that model refuses its reply, it asks the next actor of automatic work, automatic(1), then the next, each on a new chain labelled naming, until one answers or the list ends.
   With no such actor, or when that prompt gives no name, the name is name_of the message.
   The journal keeps the prompt and its answer, so a later life on the same record gives the same name and asks no model.

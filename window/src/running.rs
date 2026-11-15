@@ -15,7 +15,7 @@ impl Model {
   /// it does and who holds it.
   pub(crate) fn running_places(&self) -> Vec<Entry> {
     let entry = |one: Running| Entry {
-      part: "Running",
+      part: "Running".into(),
       project: one.project.as_deref().map(named),
       right: self.runs(&one),
       left: one.name,
@@ -62,14 +62,14 @@ impl Model {
   /// them running in the background, pause them, kill them, or stay.
   pub(crate) fn leave_choices(&self) -> Vec<Entry> {
     let session = |one: Running| Entry {
-      part: "Still working",
+      part: "Still working".into(),
       project: one.project.as_deref().map(named),
       left: one.name,
       ..Entry::default()
     };
     let mut all: Vec<Entry> = self.client.leaving().into_iter().map(session).collect();
     let row = |left: &str, choice| Entry {
-      part: "Leave and",
+      part: "Leave and".into(),
       left: left.to_owned(),
       choice,
       ..Entry::default()
@@ -81,7 +81,7 @@ impl Model {
     ));
     all.push(row("kill them: their work stops", Choice::Leave(Some(Control::Kill))));
     all.push(Entry {
-      part: "",
+      part: "".into(),
       left: "Stay".to_owned(),
       choice: Choice::Leave(None),
       ..Entry::default()

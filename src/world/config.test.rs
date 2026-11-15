@@ -26,7 +26,7 @@ fn custom(model: &str) -> Value {
 }
 
 fn change(key: &[&str], value: Option<Value>, layer: Layer) -> Change {
-  Change { key: key.iter().map(|one| (*one).to_owned()).collect(), value, layer }
+  Change { key: key.iter().map(|one| (*one).to_owned()).collect(), value, layer: Some(layer) }
 }
 
 fn setting(key: &[&str], value: Value, layer: Layer) -> Setting {
@@ -109,6 +109,8 @@ fn the_keys_of_furb_come_first_with_their_defaults_and_each_object_with_its_name
       ("providers".to_owned(), json!({"b": false}), None),
       ("providers.b".to_owned(), json!(false), Some(Layer::Project)),
       ("skills".to_owned(), json!({}), None),
+      // The keys of each official extension that plays come after those of furb.
+      ("naming.actor".to_owned(), json!(""), None),
       ("other".to_owned(), json!(1), Some(Layer::Project)),
     ]
   );
@@ -137,6 +139,7 @@ fn a_skill_adds_the_keys_of_its_schema_under_its_name() {
     default: json!("notes"),
     description: "Where notes go.".to_owned(),
     values: vec![],
+    scope: Layer::Project,
   };
   assert_eq!(folder.property.as_ref(), Some(&property));
   let mode = got.iter().find(|one| one.key == ["notes", "mode"]).unwrap();
@@ -172,7 +175,11 @@ fn a_skill_that_takes_a_name_of_furb_does_not_load_and_names_no_key() {
   let no = load("providers", &at.join("project/.furb/providers"), &places).unwrap_err();
   assert!(no.message().contains("The name providers is a key of furb in the configs"));
   let got = layers.get().unwrap();
-  assert!(got.iter().all(|one| one.skill.is_none() && one.key != ["providers", "x"]));
+  assert!(
+    got
+      .iter()
+      .all(|one| one.skill.as_deref() != Some("providers") && one.key != ["providers", "x"])
+  );
   fs::remove_dir_all(at).unwrap();
 }
 
@@ -260,7 +267,7 @@ fn a_skill_whose_file_of_keys_is_missing_or_no_schema_names_no_key_and_a_config_
       Some(text) => fs::write(&file, text).unwrap(),
       None => fs::remove_file(&file).unwrap(),
     }
-    assert!(layers.get().unwrap().iter().all(|one| one.skill.is_none()));
+    assert!(layers.get().unwrap().iter().all(|one| one.skill.as_deref() != Some(name)));
     set(&layers, change(&["skills", name], Some(json!(false)), Layer::Project)).unwrap();
     let config = at.join("project/.furb/config.json");
     assert_eq!(text(&config), json!({"skills": {name: false}}));

@@ -262,3 +262,29 @@ async def test_a_kit_speaks_to_its_life_on_the_stdin_and_the_stdout_of_its_proce
   assert (close["verb"], close["act"], close["value"]) == ("close", "k.add1", json.dumps("added milk"))
   kit.stdin.close()
   assert await asyncio.wait_for(kit.wait(), 10) == 0
+
+
+async def test_a_kit_reads_its_own_keys_from_a_life_that_gives_config(life: Life) -> None:
+  settings = [
+    {"key": ["k", "folder"], "value": "journal", "skill": "k"},
+    {"key": ["other", "folder"], "value": "x", "skill": "other"},
+    {"key": ["automatic"], "value": []},
+  ]
+
+  def answers(verb: dict[str, object]) -> dict[str, object]:
+    match verb["verb"]:
+      case "hello":
+        welcome = {"peer": PEER, "capabilities": ["config"]}
+        return {"frame": "reply", "answer": {"answer": "welcome", "data": welcome}}
+      case "config":
+        return {"frame": "reply", "answer": {"answer": "values", "data": settings}}
+    return answered(verb)
+
+  life.answers = answers
+  skill = await life.attach()
+  assert await skill.settings() == {"folder": "journal"}
+  assert life.said[-1] == {"id": 2, "verb": "config", "config": {"action": "get"}, "life": "a.jsonl"}
+  life.answers = answered
+  older = await Life().attach()
+  with pytest.raises(client.Refused, match="older than the capability config"):
+    await older.settings()

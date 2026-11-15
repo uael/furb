@@ -36,8 +36,9 @@ pub struct Setting {
 }
 
 /// A key that a schema names, in the form of a setting of VS Code: the kind of its value, the
-/// value that holds when no config gives one, what it does, and under `enum` the values that it
-/// takes when it takes only some.
+/// value that holds when no config gives one, what it does, under `enum` the values that it takes
+/// when it takes only some, and under `scope` the layer that a change of it writes, the project
+/// unless it names another, as the scope of a setting of VS Code says where it applies.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Property {
   #[serde(rename = "type")]
@@ -48,6 +49,8 @@ pub struct Property {
   pub description: String,
   #[serde(default, rename = "enum", skip_serializing_if = "Vec::is_empty")]
   pub values: Vec<Value>,
+  #[serde(default)]
+  pub scope: Layer,
 }
 
 /// The kind of the value of a key, as JSON Schema names it.

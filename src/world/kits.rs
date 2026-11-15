@@ -7,9 +7,10 @@
 //! act before the tip. It takes that act, says that it started, and speaks to the process on its
 //! stdin and its stdout, one frame of JSON for each line, as LSP, DAP and MCP do: the frames of
 //! the protocol of the daemon that a kit speaks, its hello, its attach, and the verbs peek, close,
-//! fact, run and prompt, which the ear answers under its own name. Its welcome names the folders of
-//! the life, and each verb past the protocol of the first kit, as `fact`, by which a process says
-//! what it learned of its own accord. Once the process attached, the ear
+//! fact, run, prompt and config, which the ear answers under its own name. Its welcome names the
+//! folders of the life, and each verb past the protocol of the first kit, as `fact`, by which a
+//! process says what it learned of its own accord, and `config`, by which it reads the configs and
+//! the keys of its kit. Once the process attached, the ear
 //! tells it each fact that it hears, as an event, the act that it takes among them, and the done
 //! of that act, so a process ends the work of an act that a control ended.
 //!
@@ -31,7 +32,7 @@ use std::{
 use furb_wire::{
   error::ProtocolError,
   event::Event as Told,
-  protocol::{Answer, Folders, Frame, KITS, Kind, PROTOCOL, Peer, Request, Role, Verb},
+  protocol::{Answer, Config, Folders, Frame, KITS, Kind, PROTOCOL, Peer, Request, Role, Verb},
 };
 use futures::{StreamExt, stream};
 use serde_json::{Value, json};
@@ -42,7 +43,7 @@ use tokio::{
   time::{Duration, timeout},
 };
 
-use super::{Group, Shape, interrupted, skills::Kit, spawn};
+use super::{Group, Shape, config::Layers, interrupted, skills::Kit, spawn};
 use crate::{
   ear::{Co, Ear, Next, ear, runtime, say},
   engine::ROOT,
@@ -124,7 +125,7 @@ impl Running {
 
 /// The verbs that a life takes from a kit past those of the protocol [`KITS`], which its welcome
 /// names: a new verb is a capability, never a new version.
-const CAPABILITIES: [&str; 1] = ["fact"];
+const CAPABILITIES: [&str; 2] = ["fact", "config"];
 
 /// The ear of the kits of a life whose record is `life`, whose folder is `here` and whose images
 /// stand in `images`, with the skills of the user in `places`.
@@ -359,11 +360,19 @@ impl Kits {
         let made = co.call("prompt", vec![Shape::object(&shape)], with).await.map_err(fault)?;
         Ok(Answer::Act(made.as_ref().as_str().unwrap_or_default().to_owned()))
       }
+      // A kit reads the configs as a window reads them, each key with its value, its layer and its
+      // property, and writes none: the operator changes them, and the kit hears the fact of each
+      // change.
+      Verb::Config { config: Config::Get, .. } => {
+        let layers = Layers::new(&self.here, Some(self.places.config.clone()));
+        let settings = layers.get().map_err(|no| no.to_string())?;
+        Ok(Answer::Values(settings.into_iter().map(|one| json!(one)).collect()))
+      }
       Verb::ViewTree(_) | Verb::ViewEffect(_) => {
         Err("A kit draws its views through its word, and its process draws none.".to_owned())
       }
       other => Err(format!(
-        "A kit says hello, attach, peek, close, fact, run and prompt, and no {other:?}."
+        "A kit says hello, attach, peek, close, fact, run, prompt and config get, and no {other:?}."
       )),
     }
   }

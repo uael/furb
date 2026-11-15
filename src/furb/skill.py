@@ -239,6 +239,17 @@ class Skill:
     said = [json.dumps(one) for one in words]
     await self.say({"verb": "fact", "kind": kind, "about": about, "words": said})
 
+  async def settings(self) -> dict[str, object]:
+    """The value of each key of the kit, as the configs give it, else the default of its file of keys, which a life
+    that names the capability `config` in its welcome gives. The life says a fact `configured` at each change of a
+    key through the configs of its window, with the key and the value that wins for it, which a kit hears."""
+    if "config" not in self.connection.welcome.get("capabilities", []):
+      why = "This life gives no config to a kit: it is older than the capability config."
+      raise Refused(why)
+    answer = await self.say({"verb": "config", "config": {"action": "get"}})
+    keys = [one for one in answer["data"] if isinstance(one, dict) and one.get("skill") == self.name]
+    return {one["key"][1]: one["value"] for one in keys}
+
   async def run(self, word: str, on: str | None = None) -> str:
     """A word run on a chain, the root unless it names one: the name of its rung."""
     return named(await self.say({"verb": "run", "word": word, "on": on}))

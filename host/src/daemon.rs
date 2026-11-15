@@ -684,9 +684,7 @@ fn routed(verb: Verb) -> Routed {
 fn configured(config: Config) -> Command {
   match config {
     Config::Get => Command::Settings,
-    Config::Set { key, value, layer } => {
-      Command::Configure(Change { key, value, layer: layer.unwrap_or_default() })
-    }
+    Config::Set { key, value, layer } => Command::Configure(Change { key, value, layer }),
   }
 }
 

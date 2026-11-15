@@ -1164,7 +1164,8 @@ fn the_claude_command_line_sees_each_image_that_a_prompt_names_and_each_image_th
   let message = format!("look at {}", images::reference("named.png", &kept.uri));
   let with = verbs::Prompt { message: Some(message), on: on(&root), ..Default::default() };
   let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
-  assert_eq!(block_on(act).map(|got| got.py_repr()).expect("an answer"), "'reply 2'");
+  // The claude of the test says that the turn that it answers holds an image.
+  assert_eq!(block_on(act).map(|got| got.py_repr()).expect("an answer"), "'an image, reply 2'");
   let heard = fake.heard();
   let image = |bytes: &[u8]| format!(r#""data":"{}""#, STANDARD.encode(bytes));
   assert_eq!(heard.len(), 2, "{heard:?}");

@@ -127,6 +127,46 @@ fn a_kit_starts_at_the_first_act_of_its_kinds_and_its_process_answers_each_one()
   assert_eq!(started(&at).len(), 1);
 }
 
+/// A kit whose process closes each act `note_add` with the value of its key `folder`, which it
+/// reads by the verb config.
+const READS: &str = r#"import json, sys
+def say(verb):
+  sys.stdout.write(json.dumps(verb) + "\n")
+  sys.stdout.flush()
+say({"id": 0, "verb": "hello", "protocol": 44, "kind": "skill", "name": "note"})
+say({"id": 1, "verb": "attach", "life": "", "from": 0})
+act = None
+for line in sys.stdin:
+  frame = json.loads(line)
+  fact = frame.get("event", {}).get("data") or [""]
+  if fact[0] == "note_add":
+    act = fact[1]
+    say({"id": 2, "verb": "config", "life": "", "config": {"action": "get"}})
+  if frame.get("id") == 2 and frame.get("frame") == "reply":
+    keys = {tuple(one["key"]): one["value"] for one in frame["answer"]["data"]}
+    say({"id": 3, "verb": "close", "life": "", "act": act, "value": json.dumps(keys["note", "folder"])})
+"#;
+
+#[test]
+fn a_kit_reads_the_value_of_each_of_its_keys_by_the_verb_config() {
+  let at = place("reads");
+  let program = noted(&at, READS);
+  let manifest = fs::read_to_string(at.join("SKILL.md")).unwrap();
+  fs::write(
+    at.join("SKILL.md"),
+    manifest.replace("furb-acts", "furb-config: keys.json\n  furb-acts"),
+  )
+  .unwrap();
+  let keys = r#"{"properties": {"folder": {"type": "string", "default": "notes"}}}"#;
+  fs::write(at.join("keys.json"), keys).unwrap();
+  fs::create_dir_all(at.join(".furb")).unwrap();
+  let config = r#"{"skills": {"note": "kit.py"}, "note": {"folder": "journal"}}"#;
+  fs::write(at.join(".furb/config.json"), config).unwrap();
+  let mut engine = life(&at, &program);
+  let got = closed(&mut engine, "close(await act('note_add', '', None, 'milk'))").unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("journal"));
+}
+
 #[cfg(unix)]
 #[test]
 fn a_new_enable_ends_the_process_of_its_kit_and_the_end_of_the_life_ends_each_process() {

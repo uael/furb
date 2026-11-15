@@ -3,7 +3,7 @@
 //! gives it, from furb or from an extension.
 
 use furb_wire::{
-  config::Setting,
+  config::{Kind, Setting},
   protocol::{Answer, Config, Frame, Verb},
 };
 use std::mem;
@@ -69,20 +69,47 @@ impl Client {
     }
   }
 
-  /// A setting changed by one step, by its place among the settings, in the layer of the project:
-  /// a boolean flips, and a key that takes some values only takes the next one. A key of another
-  /// kind is changed in its config, and the client says so.
-  pub fn step_setting(&mut self, at: usize) {
-    let Some(settings) = self.settings.as_ref() else { return };
-    let Some(setting) = settings.read.as_ref().and_then(|read| read.get(at)) else { return };
-    let Some(value) = next(setting) else {
-      let key = setting.key.join(".");
-      self.notice = Some(format!("Write {key} in the config of the project, .furb/config.json."));
-      return;
-    };
-    let set = Config::Set { key: setting.key.clone(), value: Some(value), layer: None };
+  /// The setting at a place among the settings, once its machine gave them.
+  pub fn setting(&self, at: usize) -> Option<&Setting> {
+    self.settings.as_ref()?.read.as_ref()?.get(at)
+  }
+
+  /// A setting changed by one step, by its place among the settings, in the layer of the scope of
+  /// its key: a boolean flips, and a key that takes some values only takes the next one. Whether
+  /// it stepped: a key of another kind takes a value that he writes.
+  pub fn step_setting(&mut self, at: usize) -> bool {
+    let Some(value) = self.setting(at).and_then(next) else { return false };
+    self.change_setting(at, value);
+    true
+  }
+
+  /// A setting given the value that he wrote, as JSON, or as the text itself for a key of text or
+  /// a text that is no JSON. The machine refuses a value that the property of its key does not
+  /// take, and the client says why.
+  pub fn write_setting(&mut self, at: usize, text: &str) {
+    let Some(setting) = self.setting(at) else { return };
+    let text = text.trim();
+    let string = setting.property.as_ref().is_some_and(|one| one.kind == Kind::String);
+    let value = serde_json::from_str(text).ok().filter(|_| !string);
+    self.change_setting(at, value.unwrap_or_else(|| Value::String(text.to_owned())));
+  }
+
+  /// The text that the value of a setting is written as: a text as it stands, any other value as
+  /// JSON.
+  pub fn setting_text(&self, at: usize) -> String {
+    match self.setting(at).map(|one| &one.value) {
+      Some(Value::String(text)) => text.clone(),
+      Some(value) => value.to_string(),
+      None => String::new(),
+    }
+  }
+
+  /// The change of a setting to a value, which the client asks next, in the layer of the scope of
+  /// its key.
+  fn change_setting(&mut self, at: usize, value: Value) {
+    let Some(key) = self.setting(at).map(|one| one.key.clone()) else { return };
     if let Some(settings) = self.settings.as_mut() {
-      settings.change = Some(set);
+      settings.change = Some(Config::Set { key, value: Some(value), layer: None });
     }
   }
 }

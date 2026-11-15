@@ -152,53 +152,62 @@ const EVERY: &str = "every";
 /// carries after the life word for it.
 const ROOTED: &str = "root";
 
-/// The official extensions, each as its manifest, the file of its word and the file of its
-/// interface, in the order a life runs them.
-const OFFICIAL: [(&str, &str, &str); 9] = [
+/// The official extensions, each as its manifest, the file of its word, the file of its interface
+/// and the file of its keys when its manifest names one, in the order a life runs them.
+const OFFICIAL: [(&str, &str, &str, Option<&str>); 9] = [
   (
     include_str!("../.agents/skills/catchup/SKILL.md"),
     include_str!("../.agents/skills/catchup/catchup.py"),
     include_str!("../.agents/skills/catchup/catchup.pyi"),
+    None,
   ),
   (
     include_str!("../.agents/skills/memory/SKILL.md"),
     include_str!("../.agents/skills/memory/memory.py"),
     include_str!("../.agents/skills/memory/memory.pyi"),
+    None,
   ),
   (
     include_str!("../.agents/skills/skills/SKILL.md"),
     include_str!("../.agents/skills/skills/skills.py"),
     include_str!("../.agents/skills/skills/skills.pyi"),
+    None,
   ),
   (
     include_str!("../.agents/skills/compaction/SKILL.md"),
     include_str!("../.agents/skills/compaction/compaction.py"),
     include_str!("../.agents/skills/compaction/compaction.pyi"),
+    None,
   ),
   (
     include_str!("../.agents/skills/naming/SKILL.md"),
     include_str!("../.agents/skills/naming/naming.py"),
     include_str!("../.agents/skills/naming/naming.pyi"),
+    Some(include_str!("../.agents/skills/naming/keys.json")),
   ),
   (
     include_str!("../.agents/skills/ouroboros/SKILL.md"),
     include_str!("../.agents/skills/ouroboros/ouroboros.py"),
     include_str!("../.agents/skills/ouroboros/ouroboros.pyi"),
+    None,
   ),
   (
     include_str!("../.agents/skills/web/SKILL.md"),
     include_str!("../.agents/skills/web/web.py"),
     include_str!("../.agents/skills/web/web.pyi"),
+    None,
   ),
   (
     include_str!("../.agents/skills/mcp/SKILL.md"),
     include_str!("../.agents/skills/mcp/mcp.py"),
     include_str!("../.agents/skills/mcp/mcp.pyi"),
+    None,
   ),
   (
     include_str!("../.agents/skills/grant/SKILL.md"),
     include_str!("../.agents/skills/grant/grant.py"),
     include_str!("../.agents/skills/grant/grant.pyi"),
+    None,
   ),
 ];
 
@@ -401,7 +410,7 @@ fn officials(places: &Places) -> Vec<Skill> {
   let whole = "an official extension is whole";
   OFFICIAL
     .iter()
-    .map(|(manifest, word, _)| {
+    .map(|(manifest, word, ..)| {
       let mut one = manifested(manifest, |_| Ok(word)).expect(whole);
       one.file = copy(&one.name, &one.file, &one.word, places);
       one
@@ -417,12 +426,13 @@ pub(crate) fn manifests() -> impl Iterator<Item = &'static str> {
 /// Each file that the crate carries of the official extension of a name, by its name in the folder
 /// of that extension: its manifest, its word and its interface.
 pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
-  OFFICIAL.iter().find_map(|(manifest, word, interface)| {
+  OFFICIAL.iter().find_map(|(manifest, word, interface, keys)| {
     let front = frontmatter(manifest);
     (front.field("name") == Some(name)).then(|| {
       let file = front.meta(WORD).unwrap_or_default().to_owned();
       let mut files = vec![(MANIFEST.to_owned(), *manifest), (file, *word)];
       files.extend(front.meta(INTERFACE).map(|one| (one.to_owned(), *interface)));
+      files.extend(front.meta(CONFIG).zip(*keys).map(|(one, keys)| (one.to_owned(), keys)));
       files
     })
   })
@@ -632,14 +642,18 @@ pub(crate) fn turned_on(places: &Places, project: &Path) -> Result<Turned, Fault
 }
 
 /// The name and the text of the file of the keys of each extension that the configs turn on and
-/// whose manifest names one, in the order a life runs them. An official extension names none, a
-/// folder whose manifest cannot be read gives none, since its extension does not play, and a file
-/// of keys that cannot be read gives none, so the configs stay readable and writable, and a config
-/// can turn that extension off.
+/// whose manifest names one, in the order a life runs them. An official extension gives the file
+/// that the crate carries, a folder whose manifest cannot be read gives none, since its extension
+/// does not play, and a file of keys that cannot be read gives none, so the configs stay readable
+/// and writable, and a config can turn that extension off.
 pub(crate) fn contributed(places: &Places, project: &Path) -> Result<Vec<(String, String)>, Fault> {
   let mut out = Vec::new();
   for (name, root) in turned_on(places, project)?.0 {
-    let Some(root) = root else { continue };
+    let Some(root) = root else {
+      let carried = OFFICIAL.iter().find(|one| frontmatter(one.0).field("name") == Some(&name));
+      out.extend(carried.and_then(|one| one.3).map(|keys| (name, keys.to_owned())));
+      continue;
+    };
     let Ok(text) = fs::read_to_string(root.join(MANIFEST)) else { continue };
     let keys = frontmatter(&text).meta(CONFIG).map(|keys| root.join(keys));
     if let Some(Ok(text)) = keys.map(fs::read_to_string) {

@@ -3,7 +3,7 @@
   Nothing needs you.
   ● 1 session runs.
                       Each key                                               ⎋
-  ⌃P          go to   ▌Search a key                                     1 / 39
+  ⌃P          go to   ▌Search a key                                     1 / 40
   ⌃X ?        each k
                       Go
                       ▌⌃P or ⌃O    go to anything, or run a command
@@ -20,8 +20,8 @@
                        ⇟           a page down
                        ⎋ ⎋         stop the work of the thread
                        ⌃X R        resolve the thread
+                       ⌃X Z        pause the thread, or resume it
                        ⌃X S        pause, kill or keep the session
-                       ⌃X C        the context: kinds, cache, folded
 ┃
 ┃ Ask for a change,   ↑↓ move · ⏎ run · ⎋ close
 ┃

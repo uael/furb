@@ -1,4 +1,7 @@
+import json
+
 from furb.engine import (
+  HIDDEN,
   OPERATOR,
   Act,
   Refused,
@@ -11,14 +14,15 @@ from furb.engine import (
   peek,
   prompt,
   question,
+  read,
   scope,
   standing,
   transcript,
 )
 
 naming = """name_session() names the session once, at the first message of the operator. It asks a name of the actor that
-automatic() gives, on a chain of its own labelled naming, and with no such actor, or
-with no name from it, the name is the first line of that message. The act of name_session() is done with the name.
+the key actor of its configs names, else of the actor that automatic() gives, on a chain of its own labelled naming,
+and with no such actor, or with no name from it, the name is the first line of that message. The act of name_session() is done with the name.
 rename_session(name) says the name that the operator chose, and its name wins over the name of name_session().
 A client shows the name of the session that its record holds. The skill plays on the root alone."""
 NAME_LONGEST = 60
@@ -55,9 +59,11 @@ def name_session(on: str = "") -> Act:
       said = yield {id, "prompt"}
       first = said if said[0] == "prompt" and operated(said[2]) else None
     message = str(first[5])
-    given, n = None, 0
-    # Each actor of automatic work in turn, the next when its model refuses the reply of its prompt.
-    while given is None and (actor_of := automatic(n)):
+    chosen = json.loads(read("settings://naming", HIDDEN).content)["actor"]
+    given, n = None, -1 if chosen else 0
+    # The actor of the configs, then each actor of automatic work in turn, the next when its model
+    # refuses the reply of its prompt.
+    while given is None and (actor_of := chosen if n < 0 else automatic(n)):
       side = chain("naming", on=here)
       asked = prompt(str, NAME_BRIEF + message, to=actor_of, on=side)
       refused = False

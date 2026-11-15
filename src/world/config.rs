@@ -63,7 +63,13 @@ pub(crate) fn furb_key(name: &str) -> bool {
 fn own() -> Vec<Named> {
   let one = |name: &str, kind, default, description: &str| Named {
     key: vec![name.to_owned()],
-    property: Property { kind, default, description: description.to_owned(), values: vec![] },
+    property: Property {
+      kind,
+      default,
+      description: description.to_owned(),
+      values: vec![],
+      scope: Layer::Project,
+    },
     skill: None,
   };
   vec![
@@ -95,15 +101,16 @@ fn own() -> Vec<Named> {
   ]
 }
 
-/// A key of a layer set to a value, or taken out when the value is none. A true or a false on a
-/// provider whose value is an object is [`switched`], as each reader of the providers takes it.
+/// A key of a layer set to a value, or taken out when the value is none. A change that names no
+/// layer writes the layer of the scope of its key. A true or a false on a provider whose value is
+/// an object is [`switched`], as each reader of the providers takes it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Change {
   pub key: Vec<String>,
   #[serde(default)]
   pub value: Option<Value>,
   #[serde(default)]
-  pub layer: Layer,
+  pub layer: Option<Layer>,
 }
 
 /// Why the configs were not read, or a change of them was not kept.
@@ -263,14 +270,15 @@ impl Layers {
   /// a stand of a life configures it. A value that the property of its key does not take writes
   /// nothing. A change that the catalog refuses puts the file back as it was, and gives why.
   pub async fn set(&self, change: Change) -> Result<(), Error> {
-    if let Some(value) = &change.value
-      && let Some(one) = self.schema()?.into_iter().find(|one| one.key == change.key)
+    let named = self.schema()?.into_iter().find(|one| one.key == change.key);
+    if let (Some(value), Some(one)) = (&change.value, &named)
       && !one.property.takes(value)
     {
       let (key, wanted) = (change.key.join("."), one.property.wanted());
       return Err(Error::Value { key, wanted, value: value.clone() });
     }
-    let path = self.file(change.layer);
+    let scope = named.map(|one| one.property.scope).unwrap_or_default();
+    let path = self.file(change.layer.unwrap_or(scope));
     let (mut config, before) = read(&path)?;
     changed(&mut config, &path, &change.key, change.value)?;
     let mut text = serde_json::to_vec_pretty(&config)

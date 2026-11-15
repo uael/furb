@@ -98,3 +98,30 @@ test("the done of an act that a kit answers aborts its answer, which closes noth
   expect(double.said.filter((verb) => verb.verb === "close")).toEqual([]);
   skill.close();
 });
+
+test("a kit reads its own keys from a life that gives config, and an older life refuses", async () => {
+  const settings = [
+    { key: ["k", "folder"], value: "journal", skill: "k" },
+    { key: ["other", "folder"], value: "x", skill: "other" },
+    { key: ["automatic"], value: [] },
+  ];
+  const configured = {
+    frame: "reply",
+    answer: { answer: "welcome", data: { peer: {}, capabilities: ["config"] } },
+  };
+  const double = life((verb) =>
+    verb.verb === "hello"
+      ? configured
+      : verb.verb === "config"
+        ? { frame: "reply", answer: { answer: "values", data: settings } }
+        : done,
+  );
+  const skill = await Skill.attach({ env, link: double.link });
+  expect(await skill.settings()).toEqual({ folder: "journal" });
+  expect(double.said.at(-1)).toEqual({ id: 2, verb: "config", config: { action: "get" }, life: "a.jsonl" });
+  const older = await Skill.attach({
+    env,
+    link: life((verb) => (verb.verb === "hello" ? welcome : done)).link,
+  });
+  await expect(older.settings()).rejects.toThrow("older than the capability config");
+});

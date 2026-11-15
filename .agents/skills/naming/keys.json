@@ -1,0 +1,10 @@
+{
+  "properties": {
+    "actor": {
+      "type": "string",
+      "default": "",
+      "description": "The actor that names the session before the actors of automatic work, none when it is empty.",
+      "scope": "user"
+    }
+  }
+}

@@ -325,6 +325,10 @@ impl Read {
   }
 }
 
+/// The kind of the fact that a life says at each change of a key of its configs through the
+/// protocol: the key, and the value that wins for it after the change.
+pub(crate) const CONFIGURED: &str = "configured";
+
 /// A life on its thread: what it keeps of the events that it told, the readers that hear each next
 /// one, and what the ears and the provider told that is not in the log yet.
 pub struct Life {
@@ -1492,24 +1496,37 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
       let settings = life.configs.get()?.into_iter().map(|one| json!(one));
       Ok(Reply::Values(settings.collect()))
     }
-    Command::Configure(change) => {
-      life.configs.set(change).await?;
-      answered_by(engine, Command::Stand)
-    }
-    Command::Image { name, data } => {
-      let refused = |why: String| LifeError::Refused(why);
-      let gallery = life.gallery.as_deref();
-      let gallery = gallery.ok_or_else(|| refused("This session keeps no image.".to_owned()))?;
-      let bytes = STANDARD.decode(data).map_err(|no| refused(no.to_string()))?;
-      let (uri, _) = images::keep(gallery, &bytes).map_err(|no| refused(no.to_string()))?;
-      Ok(Reply::Value(Value::String(images::reference(&name, &uri))))
-    }
+    Command::Configure(change) => configured(engine, life, change).await,
+    Command::Image { name, data } => imaged(life, &name, &data),
     Command::Roster(names) => {
       life.roster.set(Some(names));
       answered_by(engine, Command::Stand)
     }
     other => answered_by(engine, other),
   }
+}
+
+/// A change of the configs of a life kept, then a stand of the life on them: the act of the stand.
+/// The life says the value that now wins for the key, so each kit hears the change of its own
+/// keys, as the fact of a record says it to each later life.
+async fn configured(engine: &mut Engine, life: &Life, change: Change) -> Result<Reply, LifeError> {
+  let key = change.key.clone();
+  life.configs.set(change).await?;
+  let won = life.configs.get()?.into_iter().find(|one| one.key == key);
+  let value = won.map_or(Value::Null, |one| one.value);
+  let [key, value] = [json!(key), value].map(|one| parsed(&one.to_string()));
+  engine.say(CONFIGURED, ROOT, [key?, value?].into())?;
+  answered_by(engine, Command::Stand)
+}
+
+/// An image, in base64, kept in the gallery of a life: the text by which a message names it.
+fn imaged(life: &Life, name: &str, data: &str) -> Result<Reply, LifeError> {
+  let refused = |why: String| LifeError::Refused(why);
+  let gallery = life.gallery.as_deref();
+  let gallery = gallery.ok_or_else(|| refused("This session keeps no image.".to_owned()))?;
+  let bytes = STANDARD.decode(data).map_err(|no| refused(no.to_string()))?;
+  let (uri, _) = images::keep(gallery, &bytes).map_err(|no| refused(no.to_string()))?;
+  Ok(Reply::Value(Value::String(images::reference(name, &uri))))
 }
 
 /// What a command comes to, said by a speaker: the life speaks as that speaker for the command

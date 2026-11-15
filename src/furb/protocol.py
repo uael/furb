@@ -2111,8 +2111,8 @@ class Request61(TypedDict):
 
 class Config2(TypedDict):
   """
-  A key of a layer, the project when none is named, set to a value, or taken out with no
-  value, then a stand of the life on the configs. A change that the catalog refuses puts its
+  A key of a layer, the layer of the scope of the key when none is named, set to a value, or
+  taken out with no value, then a stand of the life on the configs. A change that the catalog refuses puts its
   config back as it was, and the life does not stand.
   """
 

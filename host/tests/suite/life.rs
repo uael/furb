@@ -287,21 +287,30 @@ async fn the_name_of_the_session_is_the_last_that_the_operator_said_on_the_root_
 async fn the_configs_of_a_life_are_read_and_changed_through_its_commands_and_a_change_stands_it() {
   let at = place("configs");
   let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
   let key = |names: &[&str]| names.iter().map(|one| (*one).to_owned()).collect::<Vec<_>>();
   let thinking =
-    Change { key: key(&["max_thinking_tokens"]), value: Some(json!(0)), layer: Layer::Local };
+    Change { key: key(&["max_thinking_tokens"]), value: Some(json!(0)), layer: Some(Layer::Local) };
   let Reply::Act(stand) = life.send(Command::Configure(thinking)).await.unwrap() else {
     panic!("a change gives the act of the stand that follows it")
   };
   assert!(stand.starts_with("stand"), "{stand}");
+  // The life says the key and the value that wins for it, which each kit hears.
+  let said = |event: &Event| matches!(event, Event::Fact(fact) if fact[0] == "configured");
+  let told = until(&mut events, said).await;
+  let Event::Fact(fact) = &*told.last().unwrap().1 else { unreachable!() };
+  assert_eq!((&fact[3], &fact[4]), (&json!(["max_thinking_tokens"]), &json!(0)), "{fact}");
   let Reply::Values(settings) = life.send(Command::Settings).await.unwrap() else {
     panic!("the settings are values")
   };
   let thinking = settings.iter().find(|one| one["key"] == json!(["max_thinking_tokens"])).unwrap();
   assert_eq!((&thinking["value"], &thinking["layer"]), (&json!(0), &json!("local")));
   assert_eq!(thinking["property"]["type"], json!("integer"), "the schema names the key");
-  let wrong =
-    Change { key: key(&["providers", "nothing"]), value: Some(json!(true)), layer: Layer::Project };
+  let wrong = Change {
+    key: key(&["providers", "nothing"]),
+    value: Some(json!(true)),
+    layer: Some(Layer::Project),
+  };
   let refused = life.send(Command::Configure(wrong)).await;
   assert!(
     matches!(&refused, Err(LifeError::Refused(why)) if why.contains("nothing")),

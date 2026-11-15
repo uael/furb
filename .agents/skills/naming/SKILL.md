@@ -5,6 +5,7 @@ metadata:
   furb-word: naming.py
   furb-life: name_session()
   furb-interface: naming.pyi
+  furb-config: keys.json
   furb-default: "true"
   furb-plays: root
 ---
