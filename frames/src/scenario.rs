@@ -482,6 +482,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           "/compaction",
         ),
         step("d", &[Act::Key("C-c"), Act::Type("Where")], "does this run?"),
+        // A colon at the start of a word finds an emoji by its short code, and a tab writes it.
+        step("x-emoji", &[Act::Key("C-c"), Act::Type("Shipped :tada")], "Emoji"),
+        step("x-emoji-take", &[Act::Key("Tab")], "Shipped 🎉"),
       ],
     }),
   },

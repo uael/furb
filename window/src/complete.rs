@@ -52,6 +52,7 @@ impl Model {
     let head = match completion.completes {
       Completes::Slash => "Commands and skills".to_owned(),
       Completes::Mention => format!("Files of {}", self.mentioned_in()),
+      Completes::Emoji => "Emoji".to_owned(),
     };
     let mut rows = vec![self.panel_row(vec![run(head, muted)], vec![run(count, muted)], false)];
     let shown = self.client.completing(ROWS);
@@ -60,7 +61,7 @@ impl Model {
       Completes::Slash => {
         self.client.completing(usize::MAX).iter().map(|one| one.1.name.width()).max()
       }
-      Completes::Mention => None,
+      Completes::Mention | Completes::Emoji => None,
     };
     let commands = commands.unwrap_or_default();
     // The folders of the files that show stand in one column, past the longest name of a file.
@@ -73,37 +74,54 @@ impl Model {
     }
     for (place, offer, letters) in shown {
       let chosen = place == completion.chosen;
-      let ground = |style: Style| if chosen { style.bg(t.lifted) } else { style.bg(t.raised) };
-      let (prose, dim) = (ground(t.style(Role::Prose)), ground(t.style(Role::Muted)));
-      let bright = ground(t.style(Role::Prose).fg(t.accent));
-      let (left, right) = match offer.kind {
-        Kind::File => {
-          // The name of a file leads, so a file deep in folders reads by its name.
-          let split = offer.name.rfind('/').map_or(0, |at| offer.name[..=at].chars().count());
-          let name: String = offer.name.chars().skip(split).collect();
-          let folder: String = offer.name.chars().take(split).collect();
-          let named: Vec<usize> = letters.iter().filter_map(|at| at.checked_sub(split)).collect();
-          let mut left = lit(&name, &named, prose, bright);
-          left.push(run(" ".repeat(files.saturating_sub(name.width()) + 2), dim));
-          left.extend(lit(&folder, &letters, dim, ground(t.style(Role::Muted).fg(t.accent))));
-          (left, Vec::new())
-        }
-        Kind::Command | Kind::Skill => {
-          let mut left = vec![run("/", prose)];
-          left.extend(lit(&offer.name, &letters, prose, bright));
-          // The descriptions stand in one column, past the longest name of the list.
-          let pad = commands.saturating_sub(offer.name.width()) + 2;
-          left.push(run(format!("{}{}", " ".repeat(pad), capital(&offer.says)), dim));
-          let right = match offer.kind {
-            Kind::Skill => "skill".to_owned(),
-            _ => self.command_key(&offer.name),
-          };
-          (left, vec![run(right, dim)])
-        }
-      };
+      let (left, right) = self.offer_row((&offer, &letters), chosen, (commands, files));
       rows.push(self.panel_row(left, right, chosen));
     }
     rows
+  }
+
+  /// The two sides of the row of an offer, on the ground of the row that he chose or not, with the
+  /// widths of the longest command and of the longest name of a file that the list shows.
+  fn offer_row(
+    &self,
+    (offer, letters): (&Offer, &[usize]),
+    chosen: bool,
+    (commands, files): (usize, usize),
+  ) -> (Line, Line) {
+    let t = &self.tokens;
+    let ground = |style: Style| if chosen { style.bg(t.lifted) } else { style.bg(t.raised) };
+    let (prose, dim) = (ground(t.style(Role::Prose)), ground(t.style(Role::Muted)));
+    let bright = ground(t.style(Role::Prose).fg(t.accent));
+    match offer.kind {
+      Kind::File => {
+        // The name of a file leads, so a file deep in folders reads by its name.
+        let split = offer.name.rfind('/').map_or(0, |at| offer.name[..=at].chars().count());
+        let name: String = offer.name.chars().skip(split).collect();
+        let folder: String = offer.name.chars().take(split).collect();
+        let named: Vec<usize> = letters.iter().filter_map(|at| at.checked_sub(split)).collect();
+        let mut left = lit(&name, &named, prose, bright);
+        left.push(run(" ".repeat(files.saturating_sub(name.width()) + 2), dim));
+        left.extend(lit(&folder, letters, dim, ground(t.style(Role::Muted).fg(t.accent))));
+        (left, Vec::new())
+      }
+      Kind::Emoji => {
+        let mut left = vec![run(format!("{}  :", offer.says), prose)];
+        left.extend(lit(&offer.name, letters, prose, bright));
+        (left, Vec::new())
+      }
+      Kind::Command | Kind::Skill => {
+        let mut left = vec![run("/", prose)];
+        left.extend(lit(&offer.name, letters, prose, bright));
+        // The descriptions stand in one column, past the longest name of the list.
+        let pad = commands.saturating_sub(offer.name.width()) + 2;
+        left.push(run(format!("{}{}", " ".repeat(pad), capital(&offer.says)), dim));
+        let right = match offer.kind {
+          Kind::Skill => "skill".to_owned(),
+          _ => self.command_key(&offer.name),
+        };
+        (left, vec![run(right, dim)])
+      }
+    }
   }
 
   /// The panel of the completion as the window draws it: its column, its row, its columns and its
@@ -202,6 +220,7 @@ impl Model {
         "Reading the files…".to_owned()
       }
       Completes::Mention => format!("No file matches {}", completion.word),
+      Completes::Emoji => format!("No emoji matches {}", completion.word),
     }
   }
 }

@@ -20,6 +20,7 @@ use crate::{Asked, Client, Matched, Target, pathed, ranked};
 pub enum Completes {
   Slash,
   Mention,
+  Emoji,
 }
 
 /// What a row of a completion takes.
@@ -28,6 +29,8 @@ pub enum Kind {
   Command,
   Skill,
   File,
+  /// An emoji, by its short code, whose character the row says.
+  Emoji,
 }
 
 /// A row that a completion offers: its name, what it is for, and what it takes.
@@ -88,6 +91,7 @@ impl Client {
       _ if self.draft.python || form => None,
       Some('/') if start == 0 => Some(Completes::Slash),
       Some('@') => Some(Completes::Mention),
+      Some(':') => Some(Completes::Emoji),
       _ => None,
     };
     let Some(completes) = completes else {
@@ -151,6 +155,7 @@ impl Client {
         let path = format!("{}{}", self.looked(&completion.word).named, offer.name);
         (format!("{} ", Self::mention(&path)), None)
       }
+      Kind::Emoji => (format!("{} ", offer.says), None),
     };
     let before: String = chars[..start].iter().collect();
     let after: String = chars[end..].iter().collect();
@@ -222,6 +227,8 @@ impl Client {
         let folder = self.looked(&completion.word).folder;
         (folder.clone(), Verb::Files { cwd: folder.clone() }, Asked::Files(folder))
       }
+      // The emojis stand in the client: it asks no machine for them.
+      Completes::Emoji => return None,
     };
     let completion = self.completion.as_mut()?;
     (completion.asked.as_ref() != Some(&key)).then(|| {
@@ -269,6 +276,10 @@ impl Client {
         let liked = |at: usize| named.get(&format!("{}{}", looked.named, paths[at])).copied();
         pathed(&looked.query, paths.iter().map(String::as_str), |at| liked(at).unwrap_or_default())
       }
+      Completes::Emoji => {
+        let query = completion.word.get(1..).unwrap_or_default();
+        ranked(query, coded().map(|(code, _)| code))
+      }
     };
     if let Some(completion) = self.completion.as_mut() {
       completion.chosen = completion.chosen.min(found.len().saturating_sub(1));
@@ -300,6 +311,10 @@ impl Client {
         let folder = self.looked(&completion.word).folder;
         let path = self.files(&folder)?.paths.get(at)?;
         Some(Offer { name: path.clone(), says: String::new(), kind: Kind::File })
+      }
+      Completes::Emoji => {
+        let (code, emoji) = coded().nth(at)?;
+        Some(Offer { name: code.to_owned(), says: emoji.to_owned(), kind: Kind::Emoji })
       }
     }
   }
@@ -357,6 +372,11 @@ impl Client {
     let folder = if named.starts_with("..") { format!("{here}/{named}") } else { named.to_owned() };
     Looked { folder, named: named.to_owned(), query: query[named.len()..].to_owned() }
   }
+}
+
+/// Each emoji by each of its short codes, as GitHub and Slack name them, in the order of Unicode.
+fn coded() -> impl Iterator<Item = (&'static str, &'static str)> {
+  emojis::iter().flat_map(|one| one.shortcodes().map(move |code| (code, one.as_str())))
 }
 
 /// The paths that a text mentions, as a mention writes them: `@path`, or `@"path"` for a path with

@@ -13,6 +13,7 @@ publish = false
 workspace = true
 
 [dependencies]
+emojis = "0.9"
 # The protocol of the daemon and the shapes of the meaning of a life.
 furb-wire = { path = "../wire", version = "0.4.2" }
 # The second of the name of the record of a new session.
