@@ -71,7 +71,7 @@ use std::time;
 use tokio::time as tokio_time;
 
 /// A yard of one test, empty.
-fn yard(name: &str) -> Yard {
+pub(super) fn yard(name: &str) -> Yard {
   Yard::new(format!("furb-provider-{name}-{}", process::id()))
 }
 
@@ -116,12 +116,12 @@ fn streaming(turns: &[(&str, Usage)]) -> MockCompletionModel {
   }))
 }
 
-fn on(root: &str) -> Option<String> {
+pub(super) fn on(root: &str) -> Option<String> {
   Some(root.to_owned())
 }
 
 /// A prompt on the root that wants an int.
-fn asked(engine: &mut Engine) -> String {
+pub(super) fn asked(engine: &mut Engine) -> String {
   let root = engine.root().to_owned();
   let with =
     verbs::Prompt { message: Some("count".to_owned()), on: on(&root), ..Default::default() };
@@ -132,7 +132,7 @@ fn asked(engine: &mut Engine) -> String {
 /// about, and the representation of its first word. A reply and a rung are named by their order
 /// among those facts, as `reply1` for the first reply that the provider took, since the setup of a
 /// chain crafts replies and rungs of its own before them.
-fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
+pub(super) fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
   let root = engine.root().to_owned();
   let facts = engine
     .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
@@ -163,7 +163,7 @@ fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
 }
 
 /// The id of the first reply that the provider took, and the rung that asked it.
-fn taken(engine: &mut Engine) -> (String, String) {
+pub(super) fn taken(engine: &mut Engine) -> (String, String) {
   let root = engine.root().to_owned();
   let facts = engine
     .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
@@ -194,7 +194,7 @@ fn chat(history: &[Message]) -> &[Message] {
 }
 
 /// The engine driven until a condition of it holds, or ten seconds are up.
-fn until(engine: &mut Engine, holds: impl Fn(&mut Engine) -> bool) -> bool {
+pub(super) fn until(engine: &mut Engine, holds: impl Fn(&mut Engine) -> bool) -> bool {
   within(engine, Duration::from_secs(10), holds)
 }
 
@@ -2070,7 +2070,7 @@ fn a_model_of_rig_reads_the_thought_of_each_earlier_turn_whole_and_one_that_forg
 }
 
 /// A prompt on a chain that the model answers with this value, once it is answered.
-fn counted(engine: &mut Engine, on: &str, value: i64) -> String {
+pub(super) fn counted(engine: &mut Engine, on: &str, value: i64) -> String {
   let with = verbs::Prompt {
     message: Some("count".to_owned()),
     on: Some(on.to_owned()),

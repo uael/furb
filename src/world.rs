@@ -50,8 +50,8 @@ pub use log::{log, logged};
 pub(crate) use log::{logging, logging_on};
 pub use operator::{Asked, CONSOLE, SHAPES, Shape, answered, answers, named};
 pub use provider::{
-  Advertised, BACKOFF, Backoff, Hosted, Members, Model, Provider, Retries, Retry, Roster, Search,
-  Shared, Thinking, Told, Writes,
+  Advertised, BACKOFF, Backoff, Class, Hosted, Members, Model, Provider, Retries, Retry, Roster,
+  Search, Shared, Thinking, Told, Writes,
   catalog::{self, Catalog},
   claude, codex, images,
   search::Searches,

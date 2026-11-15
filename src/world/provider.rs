@@ -54,12 +54,12 @@ use crate::{
 
 use self::answer::{ended, numbers, uuid};
 use self::hearer::{Hearer, Replied, searched};
-use self::model::{Class, Streams, streams};
+use self::model::{Streams, streams};
 use self::retry::{LIMIT_POLL, resets};
 use self::thinking::{ENV_THINKING, Thought, thinking};
 use self::word::RAN;
 pub use self::{
-  model::Model,
+  model::{Class, Model},
   retry::{BACKOFF, Backoff, Retry},
   thinking::Thinking,
 };

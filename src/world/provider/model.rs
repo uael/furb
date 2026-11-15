@@ -259,15 +259,6 @@ impl Model {
     self
   }
 
-  /// What the model costs, in dollars for a million tokens: read, written, read from the cache, and
-  /// written to it.
-  #[cfg(test)]
-  #[must_use]
-  pub(crate) fn price(mut self, input: f64, output: f64, read: f64, wrote: f64) -> Self {
-    self.price = Some([input, output, read, wrote]);
-    self
-  }
-
   /// The model takes the images that a turn names.
   #[must_use]
   pub fn images(mut self) -> Self {
