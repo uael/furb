@@ -186,7 +186,8 @@ work of the open thread, Ctrl+C empties the input, and Ctrl+D on an empty input 
 
 `target/debug/furb-frames hero`, after `cargo build -p furb-cli -p furb-window -p furb-frames`, makes the images of
 the README again, `docs/window.gif`, `docs/window.png` and `docs/window-cards.png`, from two scripted walks of the
-window, so run it when a change shows on them.
+window: the scenario `28-readme`, which shows the word of the README at work, and the cards of a machine. Its models
+take the time of real ones, so the GIF plays at the speed of the window. Run it when a change shows on them.
 
 | File | What it holds |
 | --- | --- |

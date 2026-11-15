@@ -414,9 +414,12 @@ pub(crate) fn still(cast: &Cast, at: Duration, path: &Path) -> Result<(), Error>
   put(path, &raster::image(&screens[0].frame).0.framed().png()?)
 }
 
+/// The least delay of a frame of a GIF, in hundredths of a second: 25 frames a second, as smooth as
+/// a light that passes needs, and few enough that a walk of seconds stays a small file.
+const FRAME: u16 = 4;
+
 /// The GIF of the whole screen over the span, bare or in the frame of a window: each screen for
-/// as long as it showed, and a screen that showed less than 5 ms left out, since a GIF counts its
-/// delays in hundredths of a second. Each frame after the first holds only the rectangle that
+/// as long as it showed, at most [`FRAME`] apart. Each frame after the first holds only the rectangle that
 /// changed, and a screen that changes nothing lengthens the frame before it: a light that passes
 /// over one word then costs that word, and not the whole screen.
 fn animated(screens: &[Shown], span: Span, path: &Path, framed: bool) -> Result<(), Error> {
@@ -443,7 +446,10 @@ fn animated(screens: &[Shown], span: Span, path: &Path, framed: bool) -> Result<
     let next = screens.get(at + 1).map_or(span.until, |next| next.at);
     let hundredths = (next.saturating_sub(screen.at).as_millis() + 5) / 10;
     let hundredths = u16::try_from(hundredths).unwrap_or(u16::MAX);
-    if hundredths == 0 {
+    // A frame that has not shown for a frame of 25 a second yet takes the screens after it, and
+    // the next frame shows what changed in them.
+    if let Some(frame) = held.as_mut().filter(|frame| frame.delay < FRAME) {
+      frame.delay = frame.delay.saturating_add(hundredths);
       continue;
     }
     let now = pixels(&screen.frame).2;
@@ -458,11 +464,17 @@ fn animated(screens: &[Shown], span: Span, path: &Path, framed: bool) -> Result<
     if let Some(frame) = held.take() {
       encoder.write_frame(&frame)?;
     }
-    let mut part: Vec<u8> = (top..top + high)
-      .flat_map(|row| {
-        now[(row * width + left) * 4..(row * width + left + wide) * 4].iter().copied()
-      })
-      .collect();
+    // A pixel that the frame before shows already stands clear, so the frame keeps it, and the
+    // runs of clear pixels between two places that change cost next to nothing.
+    let mut part: Vec<u8> = Vec::with_capacity(wide * high * 4);
+    for row in top..top + high {
+      let span = (row * width + left) * 4..(row * width + left + wide) * 4;
+      let was = before.as_deref().map(|before| &before[span.clone()]);
+      for (at, pixel) in now[span].chunks(4).enumerate() {
+        let kept = was.is_some_and(|was| was[at * 4..at * 4 + 4] == *pixel);
+        part.extend(if kept { [0; 4] } else { [pixel[0], pixel[1], pixel[2], pixel[3]] });
+      }
+    }
     let mut frame = gif::Frame::from_rgba_speed(size(wide), size(high), &mut part, 10);
     (frame.left, frame.top, frame.delay) = (size(left), size(top), hundredths);
     frame.dispose = DisposalMethod::Keep;

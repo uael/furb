@@ -229,15 +229,18 @@ async fn captured(
   if failed == 0 { Ok(()) } else { Err(Error::Failed(failed)) }
 }
 
+/// The size of the images of the README: wide enough that each line of the word of the README
+/// stands whole.
+const HERO: Size = Size { cols: 150, rows: 36 };
+
 /// The images of the README, from their walks: the span of the GIF from the first message until
 /// a moment after the thread closed, and each still at a moment that shows the most.
 async fn heroes(out: &Path, programs: &Programs) -> Result<(), Error> {
-  let size = scenario::SIZES[0];
-  let hero = capture::capture(&scenario::HERO, size, programs, Path::new("/tmp/ffhero")).await?;
+  let hero = capture::capture(&scenario::README, HERO, programs, Path::new("/tmp/ffhero")).await?;
   let cast = &hero.cast;
   let span = motion::Span {
     from: point(cast, "o")?,
-    until: point(cast, "c+1500")?,
+    until: point(cast, "c+2500")?,
     every: Duration::from_millis(50),
     rows: None,
   };
@@ -246,7 +249,7 @@ async fn heroes(out: &Path, programs: &Programs) -> Result<(), Error> {
   put(&kept, cast.write().as_bytes())?;
   motion::hero(cast, span, &out.join("window.gif"))?;
   motion::still(cast, point(cast, "b")?, &out.join("window.png"))?;
-  let cards = capture::capture(&scenario::CARDS, size, programs, Path::new("/tmp/ffcards")).await?;
+  let cards = capture::capture(&scenario::CARDS, HERO, programs, Path::new("/tmp/ffcards")).await?;
   motion::still(&cards.cast, point(&cards.cast, "c+500")?, &out.join("window-cards.png"))?;
   println!("{}: window.gif, window.png, window-cards.png", out.display());
   Ok(())

@@ -1,5 +1,5 @@
 //! The scenarios of the captures: the 27 daily paths on which the window and the other programs in
-//! a terminal are judged. Each step of a scenario is one frame. A scenario that the window has is a
+//! a terminal are judged, and the walk of the README. Each step of a scenario is one frame. A scenario that the window has is a
 //! walk: the words that its scripted model answers, turn by turn, and its steps. Another stands at
 //! a size on the steps of other scenarios. A scenario that the window has not names its gap.
 
@@ -19,37 +19,6 @@ impl Size {
     format!("{}x{}", self.cols, self.rows)
   }
 }
-
-/// The walk of the image of the README that moves: the window at work on three prompts at once,
-/// as the README writes them, the light over each word of work, until the thread closes with what
-/// each found, beside the sessions of the project that rest. Each model takes the seconds of a real
-/// one. `furb-frames hero` walks it.
-pub(crate) const HERO: Walk = Walk {
-  sessions: &[
-    "Add a count to each item.",
-    "Write the report of the totals.",
-    "Find why the JSON backend is slow.",
-    "Name the stages of a release.",
-  ],
-  words: &[
-    "tests = prompt(str, 'Find the storage tests', on=chain('tests'))\nreview = prompt(str, 'Review the JSON backend', on=chain('review'))\ndocs = prompt(str, 'Check the README', on=chain('docs'))\nfound = [await tests, await review, await docs]\nclose('\\n'.join([f'- {one}' for one in found]))",
-    "test = read('tests/test_storage.py')\nclose('`test_save` asserts nothing, so it always passes.')",
-    "source = read('src/inventory/storage/backends/json_backend.py')\nclose('`save` opens its file and never closes it.')",
-    "readme = read('README.md')\nclose('The README names no backend.')",
-  ],
-  pace: &[
-    ("Find the storage tests", Duration::from_millis(4000)),
-    ("Review the JSON backend", Duration::from_millis(5500)),
-    ("Check the README", Duration::from_millis(7000)),
-    ("Check the storage before the release.", Duration::from_millis(2000)),
-  ],
-  steps: &[
-    step("o", &[], "Ask for a change"),
-    step("a", &[Act::Type("Check the storage before the release."), Act::Key("Enter")], "Working"),
-    step("b", &[], "Check the README"),
-    step("c", &[], "names no backend"),
-  ],
-};
 
 /// The walk of the still image of the cards of a machine: a thread that works, one that answered
 /// and that he did not read, one that asks him, and sessions that rest.
@@ -218,6 +187,83 @@ const LONG: [&str; 15] = [
   "close('Answer 14 of the long thread.')",
   "close('Answer 15 of the long thread.')",
 ];
+
+/// The word that the README shows: it reviews each file that changed on an agent of its own, all
+/// at once, then fixes the tests until they pass, and closes with what each agent found.
+const REVIEW: &str = r"changed = (await bash('git diff --name-only main')).stdout.content.split()
+reviews = [prompt(str, f'Find the bugs in {path}.', on=chain(path)) for path in changed]
+found = []
+for review in reviews:
+  found.append(await review)
+fixer = chain('fix')
+tests = await bash('python3 -m unittest -q tests/test_report.py', ok=True)
+while tests.code:
+  await prompt(None, f'Fix this failure:\n{tests.stderr.content}', on=fixer)
+  tests = await bash('python3 -m unittest -q tests/test_report.py', ok=True)
+close('\n\n'.join(found))";
+
+/// The word of the change before the review: a count on each item, a report of the total with a
+/// bug, and the test that finds it, staged so the diff with `main` names the three files.
+const CHANGE: &str = r"m = read('src/inventory/models.py')
+write(m.replace('self.name = name', 'self.name = name\n    self.count = 0'))
+write(Text('src/inventory/report.py', 'def total(items):\n  return sum(one.name for one in items)\n'))
+write(Text('tests/test_report.py', '''import sys
+import unittest
+
+sys.path.insert(0, 'src')
+
+from inventory.models import Item
+from inventory.report import total
+
+
+class Total(unittest.TestCase):
+  def test_sums_the_counts(self):
+    a, b = Item('a'), Item('b')
+    a.count, b.count = 2, 3
+    self.assertEqual(total([a, b]), 5)
+'''))
+await bash('git add src tests')
+close('Each item has a count, and report.py sums them.')";
+
+/// The README: why furb stands out, in one walk. A session holds a change, and one reply of Python
+/// reviews each file of it on an agent of its own under the line that made them, loops until the
+/// tests pass, and closes with what each agent found. Each model takes the time of a real one.
+/// `furb-frames hero` makes the images of the README from it.
+pub(crate) const README: Walk = Walk {
+  sessions: &[],
+  words: &[
+    CHANGE,
+    REVIEW,
+    "source = read('src/inventory/models.py')\nclose('models.py: each item starts with a count of 0.')",
+    "source = read('src/inventory/report.py')\nclose('report.py: `total` sums the names of the items, not their counts.')",
+    "source = read('tests/test_report.py')\nclose('test_report.py: the test is right, and fails on the bug of report.py.')",
+    "report = read('src/inventory/report.py')\nwrite(report.replace('one.name', 'one.count'))\nclose('`total` sums the counts now.')",
+  ],
+  pace: &[
+    ("Find the bugs in src/inventory/models.py.", Duration::from_millis(4000)),
+    ("Find the bugs in src/inventory/report.py.", Duration::from_millis(5500)),
+    ("Find the bugs in tests/test_report.py.", Duration::from_millis(7000)),
+    ("Fix this failure", Duration::from_millis(3000)),
+    ("Review the change, and make the tests pass.", Duration::from_millis(2500)),
+  ],
+  steps: &[
+    step(
+      "x-change",
+      &[Act::Type("Add a count to each item, and a report of the total."), Act::Key("Enter")],
+      "report.py sums them",
+    ),
+    step("o", &[Act::Key("C-n")], ""),
+    step(
+      "a",
+      &[Act::Type("Review the change, and make the tests pass."), Act::Key("Enter")],
+      "Working",
+    ),
+    // The whole word came at once, so its block rolls to its last lines: he opens it to see
+    // each agent under the line that made them.
+    step("b", &[Act::Pointer { on: "lines", button: 0 }], "Find the bugs in tests/test_report.py"),
+    step("c", &[], "report.py: total sums"),
+  ],
+};
 
 /// The scenarios, in their order.
 pub(crate) const SCENARIOS: &[Scenario] = &[
@@ -658,4 +704,5 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
     }),
   },
+  Scenario { name: "28-readme", has: Has::Walk(README) },
 ];

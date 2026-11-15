@@ -6,7 +6,7 @@
 
 [![gates](https://github.com/uael/furb/actions/workflows/gates.yml/badge.svg)](https://github.com/uael/furb/actions/workflows/gates.yml)
 
-<img src="https://raw.githubusercontent.com/uael/furb/main/docs/window.gif" alt="The window of furb: a model writes Python that starts three agents at once, one to run the tests, one to review a file and one to check the docs, then the thread closes with what each found" width="880">
+<img src="https://raw.githubusercontent.com/uael/furb/main/docs/window.gif" alt="The window of furb: one reply of Python starts an agent for each changed file, all at once, under the line that made them, fixes the tests until they pass, and closes with what each agent found" width="880">
 
 </div>
 
@@ -41,22 +41,22 @@ choose what to do with a result. In furb, the model writes the choice. Here is o
 the tests, from start to end with no turn in between:
 
 ```python
-changed = (await bash("git diff --name-only main")).stdout.content.split()
-reviews = [prompt(str, f"Find the bugs in {path}.", on=chain(path)) for path in changed]
+changed = (await bash('git diff --name-only main')).stdout.content.split()
+reviews = [prompt(str, f'Find the bugs in {path}.', on=chain(path)) for path in changed]
 found = []
 for review in reviews:
   found.append(await review)
-fixer = chain("fix")
-tests = await bash("cargo test", ok=True)
+fixer = chain('fix')
+tests = await bash('python3 -m unittest -q tests/test_report.py', ok=True)
 while tests.code:
-  await prompt(None, f"Fix this failure:\n{tests.stdout.content}", on=fixer)
-  tests = await bash("cargo test", ok=True)
-close("\n\n".join(found))
+  await prompt(None, f'Fix this failure:\n{tests.stderr.content}', on=fixer)
+  tests = await bash('python3 -m unittest -q tests/test_report.py', ok=True)
+close('\n\n'.join(found))
 ```
 
 It asks one model for each changed file, all at the same time, on chains of their own. Then it fixes the tests until
 they pass, and gives its report. A chain is a conversation with its own state. A prompt is a call like any other, so
-a model can ask a model as easily as it runs a command.
+a model can ask a model as easily as it runs a command. The window at the top of this page runs this very reply.
 
 **Sessions that last.** A session is a record that only grows. furb replays it exactly, so a crash or a reboot loses
 nothing. A large session opens quickly from an image of its last state. The functions that a model wrote
