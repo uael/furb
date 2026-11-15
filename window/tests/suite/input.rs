@@ -167,6 +167,36 @@ fn the_up_arrow_walks_what_he_sent_in_the_project_from_the_newest_and_from_what_
 }
 
 #[test]
+fn the_input_shows_in_grey_the_rest_of_what_he_sent_and_the_right_arrow_takes_it() {
+  let (app, daemon, sessions) = started();
+  let (first, second) = (format!("fix the build {ANSWERS}"), format!("say what moved {ANSWERS}"));
+  sent(&app, &first);
+  shows(&app, "Two stages hold most");
+  sent(&app, &second);
+  assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions).len() == 2));
+  // The feed shows the answer to the second message, whose lines go on from the first, so it
+  // stands still for the capture.
+  shows(&app, "    4  close(");
+  // The rest of the newest text that starts with what he wrote shows after it, in grey.
+  app.paste("fi");
+  typed(&app, &first);
+  let frame = app.render();
+  let row = (frame.height as usize - 3) * frame.width as usize;
+  let (written, rest) = (&frame.cells[row + 2], &frame.cells[row + 4]);
+  assert_ne!(written.fg, rest.fg, "the rest is grey and what he wrote is not");
+  screen("input-suggested", &app);
+  app.press("right");
+  typed(&app, &first);
+  assert_eq!(app.render().cells[row + 4].fg, written.fg, "the right arrow took the rest");
+  // One word of it with alt and the right arrow.
+  app.press("ctrl+c");
+  app.paste("say");
+  app.press("alt+right");
+  app.paste("!");
+  typed(&app, "say what!");
+}
+
+#[test]
 fn the_key_of_a_new_thread_turns_the_input_and_its_bar_and_a_reply_reaches_a_thread_that_works() {
   let (app, daemon, sessions) = started();
   sent(&app, &format!("where does the time go {WORKS}"));

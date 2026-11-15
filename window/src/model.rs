@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
   Options,
   code::Colors,
-  history::Walk,
+  history::{History, Walk},
   input::{Armed, Asked, Draft, Outgoing, Target, Word},
   keys::{self, Does, System},
   link::Heard,
@@ -123,6 +123,8 @@ pub(crate) struct Model {
   pub(crate) holds: HashMap<Life, Hold>,
   /// The word of python that the window ran last, until the next one goes or an escape.
   pub(crate) word: Option<Word>,
+  /// The history of the input, for its target.
+  pub(crate) history: Option<History>,
   /// The walk through the history of the input, from its first up arrow until he writes or sends.
   pub(crate) walk: Option<Walk>,
 }
@@ -165,6 +167,7 @@ impl Model {
       picker: None,
       holds: HashMap::new(),
       word: None,
+      history: None,
       walk: None,
     }
   }
@@ -286,14 +289,14 @@ impl Model {
       (Asked::Ended, Ok(Frame::Reply { answer: Answer::Acts(acts), .. })) => self.ran(acts),
       (Asked::Ended, Ok(Frame::Refused { why, .. })) => (self.word, self.fault) = (None, Some(why)),
       (
-        Asked::Seen | Asked::List | Asked::Control | Asked::Back(_) | Asked::History,
+        Asked::Seen | Asked::List | Asked::Control | Asked::Back(_) | Asked::History(_),
         Ok(Frame::Refused { why, .. }),
       ) => self.fault = Some(why),
       (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {
         self.machines[at].lives = lives;
       }
-      (Asked::History, Ok(Frame::Reply { answer: Answer::History(sent), .. })) => {
-        self.historied(sent);
+      (Asked::History(target), Ok(Frame::Reply { answer: Answer::History(sent), .. })) => {
+        self.historied(&target, sent);
       }
       (Asked::Answer, _) => {}
       (_, Ok(Frame::Refused { why, .. })) => self.restore = Some(self.refused(why)),

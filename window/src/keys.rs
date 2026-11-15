@@ -47,6 +47,8 @@ pub(crate) enum Does {
   Tick,
   NextQuestion,
   Agent,
+  Take,
+  TakeWord,
 }
 
 /// One stroke of a key: whether it holds control and alt, and its key.
@@ -136,6 +138,18 @@ const INPUT: &[Bound] = &[
   bound(Does::Leave, "leave, twice on an empty input", true, &[&[ctrl('d')]]),
   bound(Does::Sessions, "the session that the input sends to", true, &[&led('o')]),
   bound(Does::Python, "a word of Python, and back to a message", true, &[&led('y')]),
+  bound(
+    Does::Take,
+    "take the grey rest of what you sent",
+    false,
+    &[&[plain(KeyCode::Right)], &[ctrl('f')]],
+  ),
+  bound(
+    Does::TakeWord,
+    "take one word of the grey rest",
+    false,
+    &[&[alt(KeyCode::Right)], &led('w')],
+  ),
 ];
 
 /// The keys of a list and of the form of a question, which the editor of the input hears when
@@ -172,6 +186,7 @@ impl Stroke {
       (KeyCode::Char(letter), _) => letter.to_uppercase().to_string(),
       (KeyCode::Up, _) => "↑".to_owned(),
       (KeyCode::Down, _) => "↓".to_owned(),
+      (KeyCode::Right, _) => "→".to_owned(),
       (KeyCode::Escape, true) => "⎋".to_owned(),
       (KeyCode::Enter, true) => "⏎".to_owned(),
       (KeyCode::PageUp, true) => "⇞".to_owned(),

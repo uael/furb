@@ -2444,6 +2444,22 @@ async fn the_history_gives_what_the_window_sent_in_the_project_its_record_first_
   assert_eq!(window.ask(Verb::History { life: two }).await, Ok(Answer::History(wanted)));
 }
 
+#[tokio::test]
+async fn a_history_asked_right_after_a_send_holds_that_send() {
+  let at = place();
+  let (_, sessions) = project(&at);
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let life = held(&mut window, &sessions, "one.jsonl").await;
+  for text in ["say what moved", "fix the build", "ground the branch"] {
+    messaged(&mut window, &life, text).await;
+    let Ok(Answer::History(sent)) = window.ask(Verb::History { life: life.clone() }).await else {
+      panic!("no history")
+    };
+    assert_eq!(sent.first().map(|one| one.text.as_str()), Some(text));
+  }
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn a_record_that_a_link_names_has_one_key_in_the_daemon() {

@@ -410,6 +410,8 @@ enum Asked {
   Stalled { life: String, born: u64, acts: Vec<Open>, notice: String },
   /// An ask of the system to stop: each life ends with its image, then the task replies.
   Stop(oneshot::Sender<()>),
+  /// What a site sent in the project of a record, with what the life of the record holds now.
+  History { life: String, site: String, held: Vec<Sent>, reply: oneshot::Sender<Vec<Sent>> },
 }
 
 /// The handover as the listener takes it: the lives to give, the peer that asked them, and its
@@ -457,6 +459,20 @@ impl Daemon {
   }
 
   /// What the task that owns the lives answers.
+  /// What the peer sent in the project of a record: what a live life of the record holds now first,
+  /// since its cards tell it later, then the history that the daemon reads from the cards.
+  async fn history(&self, peer: &Peer, life: String) -> Result<Answer, ProtocolError> {
+    let held = match self.asked(|reply| Asked::Life { life: life.clone(), reply }).await? {
+      Ok((handle, _)) => match handle.send(Command::Sent).await {
+        Ok(Reply::Sent(sent)) => sent,
+        _ => Vec::new(),
+      },
+      Err(_) => Vec::new(),
+    };
+    let site = site(peer).unwrap_or_else(|| OPERATOR.to_owned());
+    Ok(Answer::History(self.asked(|reply| Asked::History { life, site, held, reply }).await?))
+  }
+
   async fn asked<T>(
     &self,
     asked: impl FnOnce(oneshot::Sender<T>) -> Asked,
@@ -485,6 +501,9 @@ impl Host for Daemon {
   ) -> Result<Answer, ProtocolError> {
     if let Some(life) = verb.life_mut() {
       *life = records::key(life);
+    }
+    if let Verb::History { life } = &verb {
+      return self.history(peer, life.clone()).await;
     }
     if let Verb::Ended { life, act } = verb {
       let (handle, _) = self.asked(|reply| Asked::Life { life: life.clone(), reply }).await??;
@@ -652,6 +671,7 @@ impl From<Reply> for Answer {
       Reply::Acts(acts) => Self::Acts(acts),
       Reply::Moments(moments) => Self::Moments(moments),
       Reply::Page(page) => Self::Page(page),
+      Reply::Sent(sent) => Self::History(sent),
     }
   }
 }
@@ -876,6 +896,9 @@ impl Lives {
       }
       Asked::Carded { life } => self.carded(&life),
       Asked::Stop(reply) => self.stop(reply),
+      Asked::History { life, site, held, reply } => {
+        reply.send(self.history(&life, &site, held)).ok();
+      }
       Asked::Ended { life, born, fault } => self.ended(&life, born, fault),
       Asked::Stalled { life, born, acts, notice } => {
         if let Some(Held { born: now, stage: Stage::Living(holders), .. }) = self.held.get(&life)
@@ -898,9 +921,6 @@ impl Lives {
       }
       Verb::List { config } => Ok(Answer::Lives(self.listed(config))),
       Verb::Cards => Ok(Answer::Cards(self.cards(outbox))),
-      Verb::History { life } => Ok(Answer::History(
-        self.history(&life, &site(&peer).unwrap_or_else(|| OPERATOR.to_owned())),
-      )),
       Verb::Attach { life, from } => self.attach(&life, from, peer, outbox),
       Verb::Detach { life } => self.detach(&life, outbox),
       Verb::Pin { life, holder } => living(&mut self.held, &life).map(|(_, holders)| {
@@ -1245,8 +1265,8 @@ impl Lives {
 
   /// What a site sent in the project of a record, the newest first and each text once: what it
   /// sent to that record, then to each other record of the project, the record that changed last
-  /// first.
-  fn history(&self, life: &str, site: &str) -> Vec<Sent> {
+  /// first. What the life of the record holds now comes before what its cards told.
+  fn history(&self, life: &str, site: &str, held: Vec<Sent>) -> Vec<Sent> {
     let listed = self.listed(None);
     let project = |one: &str| {
       let listed = listed.iter().find(|listed| listed.life == one);
@@ -1260,7 +1280,9 @@ impl Lives {
       .collect();
     others.sort_by_key(|one| Reverse(one.0));
     let mut seen = HashSet::new();
-    let mut history = Vec::new();
+    let mut history: Vec<Sent> = Vec::new();
+    let held = held.into_iter().rev().filter(|one| one.by == site);
+    history.extend(held.filter(|one| seen.insert(one.text.clone())));
     for record in [life].into_iter().chain(others.into_iter().map(|one| one.1)) {
       let Some(session) = self.session(record) else { continue };
       let his = session.sent.iter().rev().filter(|one| one.by == site);

@@ -90,7 +90,7 @@ pub(crate) enum Asked {
   Seen,
   List,
   Ended,
-  History,
+  History(Target),
 }
 
 /// What a first press of a key named, which a second press of that key does: the resolve of the
@@ -403,6 +403,7 @@ impl Model {
   pub(crate) fn replied(&mut self, answer: Answer) {
     let Answer::Act(act) = answer else { return };
     let Some(sent) = self.outgoing.pop_front() else { return };
+    self.ask_history();
     if sent.python {
       let (at, life, text) = (sent.at, sent.life, sent.text);
       self.word = Some(Word { at, life, text, rung: act, asked: false, ran: None });
