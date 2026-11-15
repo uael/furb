@@ -5,7 +5,7 @@
 
 use std::{
   env, fs, io, iter,
-  path::{Path, PathBuf},
+  path::{MAIN_SEPARATOR, Path, PathBuf},
   process,
   sync::{Arc, Mutex, mpsc as held},
 };
@@ -14,7 +14,7 @@ use serde_json::json;
 use tokio::sync::mpsc;
 use tokio::task;
 
-use super::{Append, Journal, Line, before};
+use super::{Append, Journal, Line, before, homed};
 use crate::{error::JournalError, event::Event};
 
 /// A writer that a test holds: each append waits for a release, then keeps its line.
@@ -129,4 +129,12 @@ fn a_write_keeps_what_its_file_held_made_when_it_stood_not_and_why_it_could_not_
   fs::remove_dir_all(&at).unwrap();
   assert_eq!((&unread["before"], unread.get("made")), (&json!(""), None));
   assert!(unread["unread"].as_str().is_some_and(|why| !why.is_empty()), "{unread}");
+}
+
+#[test]
+fn a_path_that_the_world_writes_under_the_home_is_read_as_a_path_of_the_home() {
+  let home = env::home_dir().expect("the user of the test has a home");
+  let written = format!("~{MAIN_SEPARATOR}a.txt");
+  assert_eq!(homed(&written), home.join("a.txt"));
+  assert_eq!(homed("~"), home);
 }
