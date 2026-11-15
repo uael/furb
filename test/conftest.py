@@ -894,9 +894,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
   """The suite runs at the lowest priority, which each worker inherits, as each task of `cargo xtask` does: three agents
-  share one machine with its owner, whose window stays responsive."""
-  if hasattr(os, "nice"):
-    os.nice(19 - os.nice(0))
+  share one machine with its owner, whose window stays responsive. A run that `nice` started lower stays there."""
+  if hasattr(os, "getpriority") and os.getpriority(os.PRIO_PROCESS, 0) < 19:
+    os.setpriority(os.PRIO_PROCESS, 0, 19)
 
 
 @pytest.fixture(autouse=True, scope="session")

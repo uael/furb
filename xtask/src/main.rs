@@ -39,7 +39,7 @@ use std::{
 };
 
 #[cfg(unix)]
-use rustix::process::setpriority_process;
+use rustix::process::{getpriority_process, setpriority_process};
 
 use clap::{
   Arg, ArgMatches, Command, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum,
@@ -446,10 +446,13 @@ fn main() -> ExitCode {
 
 /// Run the task at the lowest priority, which each program that it starts inherits: three agents
 /// share one machine with its owner, whose window stays responsive while each build and each
-/// runner of tests takes the width of the machine.
+/// runner of tests takes the width of the machine. A task that `nice` started lower, as at 20 on
+/// macOS, stays there: only a privileged process raises its priority again.
 fn lowered() {
   #[cfg(unix)]
-  if let Err(error) = setpriority_process(None, 19) {
+  if getpriority_process(None).is_ok_and(|now| now < 19)
+    && let Err(error) = setpriority_process(None, 19)
+  {
     eprintln!("cargo xtask: the task keeps its priority: {error}");
   }
 }
