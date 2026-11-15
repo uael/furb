@@ -33,8 +33,21 @@ fn rows() -> (usize, usize) {
   (to_pixels(line.ascent - line.descent), to_pixels(line.ascent))
 }
 
+/// The pixels of an image, three bytes each, row by row.
+pub(crate) struct Image {
+  pub(crate) width: usize,
+  pub(crate) height: usize,
+  pub(crate) pixels: Vec<u8>,
+}
+
 /// The image of a frame as a PNG, and each glyph that no face holds, once, in its order.
 pub(crate) fn png(frame: &Frame) -> Result<(Vec<u8>, Vec<char>), png::EncodingError> {
+  let (image, missing) = image(frame);
+  Ok((image.png()?, missing))
+}
+
+/// The image of a frame, and each glyph that no face holds, once, in its order.
+pub(crate) fn image(frame: &Frame) -> (Image, Vec<char>) {
   let (height, base) = rows();
   let mut canvas = Canvas {
     width: frame.cols * WIDTH,
@@ -72,7 +85,8 @@ pub(crate) fn png(frame: &Frame) -> Result<(Vec<u8>, Vec<char>), png::EncodingEr
       canvas.lines(cell, place);
     }
   }
-  Ok((canvas.encoded(frame.rows * height)?, missing))
+  let image = Image { width: canvas.width, height: frame.rows * height, pixels: canvas.pixels };
+  (image, missing)
 }
 
 /// The face of a glyph in a look: bold, italic or regular, or the regular one when the face of the
@@ -229,11 +243,13 @@ impl Canvas {
       self.fill(line(base - 5), cell.fg);
     }
   }
+}
 
-  fn encoded(&self, height: usize) -> Result<Vec<u8>, png::EncodingError> {
+impl Image {
+  pub(crate) fn png(&self) -> Result<Vec<u8>, png::EncodingError> {
     let mut bytes = Vec::new();
     let size = |pixels: usize| u32::try_from(pixels).unwrap_or(u32::MAX);
-    let mut encoder = png::Encoder::new(&mut bytes, size(self.width), size(height));
+    let mut encoder = png::Encoder::new(&mut bytes, size(self.width), size(self.height));
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
     let mut writer = encoder.write_header()?;

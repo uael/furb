@@ -53,7 +53,7 @@ pub(crate) fn keys(cast: &Cast, every: Option<Duration>) -> Result<Vec<Key>, Err
         let name = if *seen == 1 { label.clone() } else { format!("{label}-{seen}") };
         keys.push(Key { name, at: event.at, frame: Frame::of(&terminal), marker: true });
       }
-      What::Other => {}
+      What::Input(_) | What::Other => {}
     }
   }
   Ok(keys)
@@ -73,7 +73,7 @@ pub(crate) fn shows(
     match &event.what {
       What::Output(data) => terminal.feed([data.as_str()]),
       What::Resize { cols, rows } => terminal.resize(*cols, *rows),
-      What::Marker(_) | What::Other => {}
+      What::Input(_) | What::Marker(_) | What::Other => {}
     }
     if event.at >= from && Frame::of(&terminal).text() == text {
       return Ok(true);

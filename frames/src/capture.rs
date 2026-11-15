@@ -57,16 +57,23 @@ pub(crate) struct Captured {
   pub(crate) shown: Vec<(String, String)>,
 }
 
+/// What a capture runs: the folder of the programs `furb-window` and `furb` of the build, and
+/// whether the clocks of the window move as a person sees them, or stand still, so each run of a
+/// walk gives the same frames.
+pub(crate) struct Programs {
+  pub(crate) bin: PathBuf,
+  pub(crate) moving: bool,
+}
+
 /// The walk of a scenario captured at a size, in a folder of its own that it removes at its end.
-/// `bin` holds the programs `furb-window` and `furb` of the build.
 pub(crate) async fn capture(
   walk: &Walk,
   size: Size,
-  bin: &Path,
+  programs: &Programs,
   root: &Path,
 ) -> Result<Captured, Error> {
   let _turn = turn(root).await?;
-  let rig = Rig::made(walk, bin, root)?;
+  let rig = Rig::made(walk, programs, root)?;
   let captured = rig.captured(walk, size).await;
   let removed = fs::remove_dir_all(&rig.root);
   let captured = captured?;
@@ -93,12 +100,13 @@ async fn turn(root: &Path) -> Result<File, Error> {
 struct Rig {
   root: PathBuf,
   bin: PathBuf,
+  moving: bool,
 }
 
 impl Rig {
   /// The rig in a new folder. Its path is the real one, as the window reads its own folder, so the
   /// window finds its project under the home and writes it `~/demo`.
-  fn made(walk: &Walk, bin: &Path, root: &Path) -> Result<Self, Error> {
+  fn made(walk: &Walk, programs: &Programs, root: &Path) -> Result<Self, Error> {
     let made = |source| Error::Write { path: root.to_owned(), source };
     // A capture that was killed leaves its root.
     if root.exists() {
@@ -106,7 +114,7 @@ impl Rig {
     }
     fs::create_dir_all(root).map_err(made)?;
     let root = &fs::canonicalize(root).map_err(made)?;
-    let rig = Self { root: root.clone(), bin: bin.to_owned() };
+    let rig = Self { root: root.clone(), bin: programs.bin.clone(), moving: programs.moving };
     let write = |path: PathBuf, text: &str| -> Result<(), Error> {
       fs::create_dir_all(path.parent().unwrap_or(root))
         .map_err(|source| Error::Write { path: path.clone(), source })?;
@@ -154,9 +162,9 @@ impl Rig {
     let walked = self.walked(&tmux, walk, size).await;
     let ended = tmux.run(&["kill-server"]).await;
     daemon.kill().await.map_err(|source| Error::Process { what: "the daemon", source })?;
-    let (shown, markers, start) = walked?;
+    let (shown, marks, start) = walked?;
     ended?;
-    Ok(Captured { cast: self.cast(size, start, markers)?, shown })
+    Ok(Captured { cast: self.cast(size, start, marks)?, shown })
   }
 
   /// A session of the project before the window, which says one message and takes the answer of the
@@ -203,7 +211,8 @@ impl Rig {
   fn environment(&self) -> Vec<(&'static str, String)> {
     let path = format!("{}:/usr/bin:/bin", self.bin.display());
     let at = |folder: &str| self.root.join(folder).display().to_string();
-    vec![
+    let still = (!self.moving).then(|| ("FURB_STILL_CLOCK", STILL.to_owned()));
+    let mut environment = vec![
       ("HOME", at("home")),
       ("PATH", path),
       ("TERM", "xterm-256color".to_owned()),
@@ -213,8 +222,9 @@ impl Rig {
       ("XDG_CACHE_HOME", at("cache")),
       ("FURB_CONFIG_DIR", at("config")),
       ("FURB_CLAUDE_BIN", self.claude().display().to_string()),
-      ("FURB_STILL_CLOCK", STILL.to_owned()),
-    ]
+    ];
+    environment.extend(still);
+    environment
   }
 
   /// The daemon of the window, which this process starts so it ends it: it listens once it says so.
@@ -237,13 +247,13 @@ impl Rig {
   }
 
   /// The window started in tmux, then each step of the walk. It gives the text of each marker, the
-  /// markers, and the moment the window started.
+  /// markers and what the window read, each at its moment, and the moment the window started.
   async fn walked(
     &self,
     tmux: &Tmux,
     walk: &Walk,
     size: Size,
-  ) -> Result<(Vec<(String, String)>, Vec<(SystemTime, String)>, SystemTime), Error> {
+  ) -> Result<(Vec<(String, String)>, Vec<(SystemTime, What)>, SystemTime), Error> {
     let go = self.root.join("go");
     let env: Vec<String> =
       self.environment().into_iter().map(|(key, value)| format!("{key}={value}")).collect();
@@ -268,19 +278,27 @@ impl Rig {
     put(&go, b"")?;
     tmux.shows("ready", READY).await?;
     let mut shown = Vec::new();
-    let mut markers = Vec::new();
+    let mut marks = Vec::new();
     for step in walk.steps {
-      let (at, screen) = self.stepped(tmux, step).await?;
-      markers.push((at, step.name.to_owned()));
+      let screen = self.stepped(tmux, step, &mut marks).await?;
       shown.push((step.name.to_owned(), screen));
     }
-    Ok((shown, markers, start))
+    Ok((shown, marks, start))
   }
 
-  /// One step: its acts, then the wait for its screen and for the silence of the window. It gives
-  /// the moment of its marker, and the screen that tmux showed just after it.
-  async fn stepped(&self, tmux: &Tmux, step: &Step) -> Result<(SystemTime, String), Error> {
+  /// One step: its acts, each marked as what the window read at its moment, then the wait for its
+  /// screen and for the silence of the window, marked by the name of the step. It gives the screen
+  /// that tmux showed just after its marker.
+  async fn stepped(
+    &self,
+    tmux: &Tmux,
+    step: &Step,
+    marks: &mut Vec<(SystemTime, What)>,
+  ) -> Result<String, Error> {
     for act in step.acts {
+      if let Some(read) = act.read() {
+        marks.push((SystemTime::now(), What::Input(read)));
+      }
       tmux.act(act).await?;
     }
     tmux.shows(step.name, step.until).await?;
@@ -294,8 +312,8 @@ impl Rig {
         (length, quiet) = (now, Instant::now());
       }
     }
-    let at = SystemTime::now();
-    Ok((at, tmux.screen().await?))
+    marks.push((SystemTime::now(), What::Marker(step.name.to_owned())));
+    tmux.screen().await
   }
 
   fn stamps(&self) -> PathBuf {
@@ -306,12 +324,12 @@ impl Rig {
     fs::metadata(self.stamps()).map_or(0, |file| file.len())
   }
 
-  /// The recording: what the window wrote, each part at its time, and the markers.
+  /// The recording: what the window wrote, each part at its time, what it read, and the markers.
   fn cast(
     &self,
     size: Size,
     start: SystemTime,
-    markers: Vec<(SystemTime, String)>,
+    marks: Vec<(SystemTime, What)>,
   ) -> Result<Cast, Error> {
     let path = self.stamps();
     let text =
@@ -324,9 +342,7 @@ impl Rig {
       let at = since(UNIX_EPOCH + Duration::from_micros(micros));
       events.push(Event { at, what: What::Output(serde_json::from_str(data)?) });
     }
-    events.extend(
-      markers.into_iter().map(|(at, label)| Event { at: since(at), what: What::Marker(label) }),
-    );
+    events.extend(marks.into_iter().map(|(at, what)| Event { at: since(at), what }));
     events.sort_by_key(|event| event.at);
     Ok(Cast { cols: size.cols, rows: size.rows, events })
   }

@@ -23,11 +23,12 @@ pub(crate) struct Event {
   pub(crate) what: What,
 }
 
-/// What a recording holds at a moment: what the program wrote, a marker of a step, a new size, or
-/// an event that no frame shows, as a key that the program read.
+/// What a recording holds at a moment: what the program wrote, what it read, as a key, a marker of
+/// a step, a new size, or an event that no frame shows.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum What {
   Output(String),
+  Input(String),
   Marker(String),
   Resize { cols: usize, rows: usize },
   Other,
@@ -71,6 +72,7 @@ impl Cast {
     for event in &self.events {
       let (code, data) = match &event.what {
         What::Output(data) => ("o", data.clone()),
+        What::Input(data) => ("i", data.clone()),
         What::Marker(label) => ("m", label.clone()),
         What::Resize { cols, rows } => ("r", format!("{cols}x{rows}")),
         What::Other => continue,
@@ -89,6 +91,7 @@ impl What {
       || data.as_str().map(str::to_owned).ok_or(Error::Cast("the data of an event is no text"));
     Ok(match code {
       "o" => Self::Output(text()?),
+      "i" => Self::Input(text()?),
       "m" => Self::Marker(text()?),
       "r" => {
         let size = text()?;

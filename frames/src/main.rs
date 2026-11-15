@@ -8,6 +8,7 @@ mod cast;
 mod compare;
 mod error;
 mod frame;
+mod motion;
 mod probe;
 mod raster;
 mod replay;
@@ -25,7 +26,8 @@ use clap::{Parser, Subcommand};
 use tokio::task::JoinSet;
 
 use crate::{
-  cast::Cast,
+  capture::Programs,
+  cast::{Cast, What},
   error::Error,
   replay::put,
   scenario::{SCENARIOS, Scenario, Size, Walk},
@@ -57,6 +59,11 @@ enum Does {
     /// How many captures run at once.
     #[arg(long, default_value_t = 4)]
     jobs: usize,
+    /// The clocks of the window move as a person sees them, so a loader turns and a timer counts:
+    /// a capture to judge a motion. By default they stand still, so each run of a walk gives the
+    /// same frames.
+    #[arg(long)]
+    moving: bool,
   },
   /// Write the key frames of recordings of asciinema (format 3): one at each marker, as text,
   /// cells and image, and one at each step of time where the screen changed, as text and cells.
@@ -68,6 +75,29 @@ enum Does {
     /// The step of time in milliseconds; none writes the markers alone.
     #[arg(long)]
     every: Option<u64>,
+  },
+  /// The motion of a span of a recording: a sheet of its screens at each step of time, cut to the
+  /// cells that move, a GIF of the whole screen, and the measures of the motion (the time from a
+  /// key to the first change, the changes each second, their regularity and each flicker), in
+  /// `<out>/<stem>.<from>-<until>.*`.
+  Motion {
+    cast: PathBuf,
+    /// Where the span starts: a marker by its label, a count of milliseconds, or a marker and a
+    /// count after it, as `a+500`. By default the start of the recording.
+    #[arg(long)]
+    from: Option<String>,
+    /// Where the span ends, in the same words. By default the end of the recording.
+    #[arg(long)]
+    until: Option<String>,
+    /// The step of time of the sheet in milliseconds.
+    #[arg(long, default_value_t = 50)]
+    every: u64,
+    /// The rows that the sheet shows, as `30-34`: by default the cells that move most.
+    #[arg(long)]
+    rows: Option<String>,
+    /// The folder of the motion: by default `motion` beside the recording.
+    #[arg(long)]
+    out: Option<PathBuf>,
   },
   /// The frame of the window in a scenario beside the two winner frames of the other programs, the
   /// scores of each on each aspect and the findings of the probes. The other programs stand in the
@@ -91,7 +121,10 @@ enum Does {
 )]
 async fn main() -> ExitCode {
   let done = match Command::parse().does {
-    Does::Capture { scenarios, out, bin, jobs } => captured(&scenarios, out, bin, jobs).await,
+    Does::Capture { scenarios, out, bin, jobs, moving } => match programs(bin, moving) {
+      Ok(programs) => captured(&scenarios, out, programs, jobs).await,
+      Err(fault) => Err(fault),
+    },
     Does::Replay { casts, out, every } => casts
       .iter()
       .try_for_each(|cast| replayed(cast, out.as_deref(), every.map(Duration::from_millis))),
@@ -101,6 +134,9 @@ async fn main() -> ExitCode {
       }
       None => Err(Error::Scenario(scenario)),
     },
+    Does::Motion { cast, from, until, every, rows, out } => {
+      moved(&cast, &Words { from, until, every, rows }, out.as_deref())
+    }
     Does::Probe { frames } => frames.iter().try_for_each(|path| {
       for found in probe::probe(&frame::Frame::read(path)?) {
         println!("{} row {} col {}: {}", path.display(), found.row, found.col, found.says);
@@ -123,17 +159,9 @@ async fn main() -> ExitCode {
 async fn captured(
   words: &[String],
   out: PathBuf,
-  bin: Option<PathBuf>,
+  programs: Programs,
   jobs: usize,
 ) -> Result<(), Error> {
-  let bin = bin
-    .map_or_else(|| env::current_exe().map(|me| me.with_file_name("")), Ok)
-    .map_err(|source| Error::Process { what: "this program", source })?;
-  for program in ["furb-window", "furb"] {
-    if !bin.join(program).is_file() {
-      return Err(Error::Missing { folder: bin, program });
-    }
-  }
   let scenarios: Vec<&'static Scenario> = if words.is_empty() {
     SCENARIOS.iter().filter(|scenario| scenario.walk().is_some()).collect()
   } else {
@@ -142,7 +170,7 @@ async fn captured(
       .map(|word| scenario::named(word).ok_or_else(|| Error::Scenario(word.clone())))
       .collect::<Result<_, _>>()?
   };
-  let setup = Arc::new(Setup { bin, out });
+  let setup = Arc::new(Setup { programs, out });
   let walks = scenarios.iter().filter_map(|scenario| Some((scenario.name, scenario.walk()?)));
   let mut jobs_left = walks.flat_map(|(name, walk)| scenario::SIZES.map(|size| (name, walk, size)));
   let mut runs = JoinSet::new();
@@ -188,8 +216,22 @@ async fn captured(
 
 /// What each walk stands on: the folder of the programs of the build and the folder of the frames.
 struct Setup {
-  bin: PathBuf,
+  programs: Programs,
   out: PathBuf,
+}
+
+/// The programs of a capture, from their folder, by default the folder of this one, once it holds
+/// both.
+fn programs(bin: Option<PathBuf>, moving: bool) -> Result<Programs, Error> {
+  let bin = bin
+    .map_or_else(|| env::current_exe().map(|me| me.with_file_name("")), Ok)
+    .map_err(|source| Error::Process { what: "this program", source })?;
+  for program in ["furb-window", "furb"] {
+    if !bin.join(program).is_file() {
+      return Err(Error::Missing { folder: bin, program });
+    }
+  }
+  Ok(Programs { bin, moving })
 }
 
 /// One walk of a scenario at one size, in a folder of its own.
@@ -205,7 +247,7 @@ struct Job {
 async fn walked(job: &Job, setup: &Setup) -> Result<String, Error> {
   let Job { name, walk, size, root } = job;
   let started = Instant::now();
-  let captured = capture::capture(walk, *size, &setup.bin, root).await?;
+  let captured = capture::capture(walk, *size, &setup.programs, root).await?;
   let took = started.elapsed();
   let folder = setup.out.join(size.name());
   fs::create_dir_all(&folder).map_err(|source| Error::Write { path: folder.clone(), source })?;
@@ -284,6 +326,53 @@ fn probed(scenario: &Scenario, out: &Path) -> Result<Option<String>, Error> {
   let text = if lines.is_empty() { String::new() } else { lines.join("\n") + "\n" };
   put(&path, text.as_bytes())?;
   Ok(Some(format!("{}: {count} findings in {}", scenario.name, path.display())))
+}
+
+/// The words of the span of a motion, as the command gives them.
+struct Words {
+  from: Option<String>,
+  until: Option<String>,
+  every: u64,
+  rows: Option<String>,
+}
+
+/// The motion of a span of one recording, written in a folder, and its measures printed.
+fn moved(path: &Path, words: &Words, out: Option<&Path>) -> Result<(), Error> {
+  let text =
+    fs::read_to_string(path).map_err(|source| Error::Read { path: path.to_owned(), source })?;
+  let cast = Cast::read(&text)?;
+  let end = cast.events.last().map_or(Duration::ZERO, |event| event.at);
+  let (from, until) = (words.from.as_deref(), words.until.as_deref());
+  let rows = words.rows.as_deref().map(|rows| {
+    let (first, last) = rows.split_once('-').unwrap_or((rows, rows));
+    first.parse().ok().zip(last.parse().ok()).ok_or_else(|| Error::Rows(rows.to_owned()))
+  });
+  let span = motion::Span {
+    from: from.map(|word| point(&cast, word)).transpose()?.unwrap_or_default(),
+    until: until.map(|word| point(&cast, word)).transpose()?.unwrap_or(end),
+    every: Duration::from_millis(words.every),
+    rows: rows.transpose()?,
+  };
+  let folder = out.map_or_else(|| path.with_file_name("motion"), Path::to_owned);
+  let name = path.file_stem().map_or_else(String::new, |stem| stem.to_string_lossy().into_owned());
+  let named = folder.join(format!("{name}.{}-{}", from.unwrap_or("start"), until.unwrap_or("end")));
+  let measures = motion::motion(&cast, span, &named)?;
+  print!("{}: {}\n{measures}", path.display(), named.display());
+  Ok(())
+}
+
+/// A moment of a recording that a word names: a marker by its label, a count of milliseconds, or
+/// both, as `a+500`.
+fn point(cast: &Cast, word: &str) -> Result<Duration, Error> {
+  let (label, after) = word.split_once('+').unwrap_or((word, "0"));
+  let millis = |text: &str| text.parse().ok().map(Duration::from_millis);
+  let after = millis(after).ok_or_else(|| Error::Point(word.to_owned()))?;
+  let marked = cast.events.iter().find_map(|event| match &event.what {
+    What::Marker(name) if name == label => Some(event.at),
+    _ => None,
+  });
+  let at = millis(label).or(marked).ok_or_else(|| Error::Point(word.to_owned()))?;
+  Ok(at + after)
 }
 
 /// The key frames of one recording, written in a folder, with a line that says what it wrote.

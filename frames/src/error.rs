@@ -17,6 +17,12 @@ pub(crate) enum Error {
   Text(#[from] fmt::Error),
   #[error("the image of a frame cannot be made: {0}")]
   Png(#[from] png::EncodingError),
+  #[error("the moving image of a span cannot be made: {0}")]
+  Gif(#[from] gif::EncodingError),
+  #[error("no marker of the recording is named {0:?}, and it is no count of milliseconds")]
+  Point(String),
+  #[error("{0:?} names no rows, as `30-34`")]
+  Rows(String),
   #[error("{0:?} is not a color #rrggbb")]
   Color(String),
   #[error("{what} cannot run: {source}")]

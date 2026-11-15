@@ -8,6 +8,7 @@ fn a_recording_reads_back_as_it_was_written() {
     rows: 2,
     events: vec![
       Event { at: at(10), what: What::Output("a\u{1b}[1mb".to_owned()) },
+      Event { at: at(200), what: What::Input("<Enter>".to_owned()) },
       Event { at: at(250), what: What::Marker("a".to_owned()) },
       Event { at: at(300), what: What::Resize { cols: 4, rows: 2 } },
     ],
@@ -15,7 +16,7 @@ fn a_recording_reads_back_as_it_was_written() {
   let text = cast.write();
   assert_eq!(
     text,
-    "{\"version\":3,\"term\":{\"cols\":3,\"rows\":2}}\n[0.01,\"o\",\"a\\u001b[1mb\"]\n[0.24,\"m\",\"a\"]\n[0.05,\"r\",\"4x2\"]\n"
+    "{\"version\":3,\"term\":{\"cols\":3,\"rows\":2}}\n[0.01,\"o\",\"a\\u001b[1mb\"]\n[0.19,\"i\",\"<Enter>\"]\n[0.05,\"m\",\"a\"]\n[0.05,\"r\",\"4x2\"]\n"
   );
   assert_eq!(Cast::read(&text).unwrap(), cast);
 }
@@ -29,6 +30,6 @@ fn a_recording_of_another_version_is_refused() {
 #[test]
 fn an_event_that_no_frame_shows_is_kept_as_other() {
   let cast =
-    Cast::read("{\"version\":3,\"term\":{\"cols\":3,\"rows\":2}}\n[0.5,\"i\",\"q\"]\n").unwrap();
+    Cast::read("{\"version\":3,\"term\":{\"cols\":3,\"rows\":2}}\n[0.5,\"x\",\"0\"]\n").unwrap();
   assert_eq!(cast.events, vec![Event { at: Duration::from_millis(500), what: What::Other }]);
 }

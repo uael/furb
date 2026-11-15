@@ -39,6 +39,19 @@ pub(crate) enum Act {
   Until(&'static str),
 }
 
+impl Act {
+  /// What the window reads of the act, as a recording keeps a key: the text typed or pasted, a
+  /// key by its name in brackets, the pointer by the text it stands on, and nothing for a wait.
+  pub(crate) fn read(&self) -> Option<String> {
+    match self {
+      Self::Type(text) | Self::Paste(text) => Some((*text).to_owned()),
+      Self::Key(key) => Some(format!("<{key}>")),
+      Self::Pointer { on, button } => Some(format!("<pointer {button} on {on}>")),
+      Self::Until(_) => None,
+    }
+  }
+}
+
 /// A step: its name, which names its frame, what it does, and a text that its screen shows once it
 /// is done.
 #[derive(Debug)]

@@ -125,6 +125,30 @@ impl Frame {
     Self { cols, rows, lines: lines.collect() }
   }
 
+  /// A frame of rows of cells, each row as wide as the first: a wide glyph stands in its first
+  /// cell and leaves the second empty.
+  pub(crate) fn of_cells(cells: &[Vec<Cell>]) -> Self {
+    let row = |cells: &Vec<Cell>| {
+      let mut runs: Vec<Run> = Vec::new();
+      for cell in cells.iter().filter(|cell| !cell.glyph.is_empty()) {
+        match runs.last_mut() {
+          Some(run) if (run.fg, run.bg, run.attributes) == (cell.fg, cell.bg, cell.attributes) => {
+            run.text.push_str(&cell.glyph);
+          }
+          _ => runs.push(Run {
+            text: cell.glyph.clone(),
+            fg: cell.fg,
+            bg: cell.bg,
+            attributes: cell.attributes,
+          }),
+        }
+      }
+      runs
+    };
+    let cols = cells.first().map_or(0, Vec::len);
+    Self { cols, rows: cells.len(), lines: cells.iter().map(row).collect() }
+  }
+
   /// A frame from its JSON in a file.
   pub(crate) fn read(path: &Path) -> Result<Self, Error> {
     let text =
