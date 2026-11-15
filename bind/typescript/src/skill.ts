@@ -1,32 +1,34 @@
 import { EventEmitter } from "node:events";
 import { createConnection, type Socket } from "node:net";
-import { join } from "node:path";
-import type {
-  Answer,
-  Effect,
-  Frame,
-  Kind,
-  Mount,
-  Node,
-  Peer,
-  Role,
-  Slot,
-  Request1 as Verb,
-  ViewEvent,
-} from "./protocol.js";
+import { Duplex, type Readable, type Writable } from "node:stream";
+import type { Answer, Frame, Kind, Peer, Role, Request1 as Verb } from "./protocol.js";
 import { PROTOCOL } from "./protocol.js";
 
-/** The variables of the environment that the daemon gives the process of a skill: the folder where it listens, the
- * record of the life that the process serves, and the name of its skill. */
-export const HOST = "FURB_HOST";
+/** The variables of the environment that a life gives the process of a kit: the record of the life that the process
+ * serves, and the name of its kit. The life speaks to the process on its stdin and its stdout. */
 export const LIFE = "FURB_LIFE";
 export const SKILL = "FURB_SKILL";
 
-/** Where a peer dials the daemon that listens in a folder: its socket, or its named pipe on Windows. */
-export function daemonPlace(folder: string): string {
-  return process.platform === "win32"
-    ? `\\\\.\\pipe\\furb-${folder.replace(/[\\/:]/g, "-")}`
-    : join(folder, "host.sock");
+/** What a connection reads its frames from and writes its verbs to: a socket to the daemon, or the stdin and the
+ * stdout of the process of a kit, which hold no ref of the process. */
+export type Link = Pick<Socket, "write" | "on" | "setEncoding" | "end" | "destroyed"> &
+  Partial<Pick<Socket, "ref" | "unref">>;
+
+/** The link of a stream to read and a stream to write, as the stdin and the stdout of a process: it closes when the
+ * stream to read ends. */
+export function linked(input: Readable, output: Writable): Link {
+  const link = new Duplex({
+    read() {},
+    write(chunk, encoding, done) {
+      output.write(chunk, encoding, done);
+    },
+    final(done) {
+      output.end(done);
+    },
+  });
+  input.on("data", (chunk) => link.push(chunk));
+  input.on("end", () => link.push(null));
+  return link as unknown as Link;
 }
 
 /** A refusal of the daemon, named by its kind, as `closed`, `role` or `no_skill`. Its name is its kind, and
@@ -126,7 +128,7 @@ export class Connection extends EventEmitter {
   /** The peer as the daemon knows it after the hello. */
   peer!: Peer;
   readonly closed: Promise<void>;
-  private socket!: Socket;
+  private socket!: Link;
   private next = 0;
   private readonly waiting = new Map<
     number,
@@ -141,7 +143,7 @@ export class Connection extends EventEmitter {
   private reaching?: Promise<void>;
   private finish!: () => void;
   private constructor(
-    socket: Socket,
+    socket: Link,
     private readonly idle: boolean,
     private readonly route: Route,
     private readonly again: boolean,
@@ -154,9 +156,9 @@ export class Connection extends EventEmitter {
     this.attach(socket);
   }
 
-  private attach(socket: Socket): void {
+  private attach(socket: Link): void {
     this.socket = socket;
-    if (this.idle && this.held === 0) socket.unref();
+    if (this.idle && this.held === 0) socket.unref?.();
     let held = "";
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
@@ -197,12 +199,21 @@ export class Connection extends EventEmitter {
   }
 
   /** The hello on a socket to the place, which makes it the socket of the connection. */
-  private async hello(socket?: Socket): Promise<void> {
+  private async hello(socket?: Link): Promise<void> {
     if (!socket) this.attach(await (this.route.reach?.() ?? dialing(this.route.place)));
     const { kind, name, role } = this.route;
     const welcome = await this.send({ verb: "hello", protocol: PROTOCOL, kind, name, role });
     if (welcome.answer !== "welcome") throw new Error(`The daemon gave ${welcome.answer}, and no welcome.`);
     this.peer = welcome.data.peer;
+  }
+
+  /** A connection over a link that is open already, as the stdin and the stdout of the process of a kit, after its
+   * hello as a peer of a kind, with the name of a kit. */
+  static async over(link: Link, kind: Kind, name?: string): Promise<Connection> {
+    const connection = new Connection(link, false, { place: "", kind, name }, false);
+    await connection.hello(link);
+    connection.ready = true;
+    return connection;
   }
 
   /** A connection to the daemon at a place, as a peer of a kind, with the name of a skill for a skill. */
@@ -254,14 +265,14 @@ export class Connection extends EventEmitter {
    * while a life holds it, and a connection that is not idle keeps it alive always. */
   hold(): void {
     this.held++;
-    this.socket.ref();
+    this.socket.ref?.();
   }
 
   /** A life let go: with the last life that it held, an idle connection keeps the process alive no more and stays open
    * for the next life. */
   release(): void {
     this.held = Math.max(0, this.held - 1);
-    if (this.idle && this.held === 0) this.socket.unref();
+    if (this.idle && this.held === 0) this.socket.unref?.();
   }
 
   close(): void {
@@ -292,75 +303,24 @@ export type Said = Verb extends infer One
     : never
   : never;
 
-/** A view of the skill that a window mounted: its viewer and its slot. `tree` serves its tree, each in the place of
- * the one before, and `effect` asks its one window to do something. What a person does to its nodes goes to each
- * listener of `events`, and `disposed` settles when the window or the daemon ends it. */
-export class View {
-  readonly viewer: string;
-  readonly slot: Slot;
-  readonly disposed: Promise<void>;
-  private version = 0;
-  private readonly listeners = new Set<(event: ViewEvent) => void>();
-  private ended = () => {};
-  constructor(
-    private readonly connection: Connection,
-    mount: Mount,
-  ) {
-    this.viewer = mount.viewer;
-    this.slot = mount.slot;
-    this.disposed = new Promise((resolve) => {
-      this.ended = resolve;
-    });
-  }
-
-  async tree(tree: Node): Promise<void> {
-    this.version += 1;
-    await this.connection.ask({
-      verb: "view.tree",
-      viewer: this.viewer,
-      slot: this.slot,
-      version: this.version,
-      tree,
-    });
-  }
-
-  async effect(effect: Effect): Promise<void> {
-    await this.connection.ask({ verb: "view.effect", viewer: this.viewer, effect });
-  }
-
-  events(listener: (event: ViewEvent) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  /** @internal */
-  heard(event: ViewEvent): void {
-    for (const listener of this.listeners) listener(event);
-  }
-
-  /** @internal */
-  dispose(): void {
-    this.ended();
-  }
-}
-
-/** What the process of a skill asks of its life: the kinds of facts that it hears, each kind when it names none, and
- * where it stands, which the environment that the daemon gave it holds unless a test names it. */
+/** What the process of a kit asks of its life: the kinds of facts that it hears, each kind when it names none, and
+ * where it stands, which the environment that the life gave it holds unless a test names it, and the link to its life,
+ * its stdin and its stdout unless a test names another. */
 export interface SkillOptions {
   kinds?: readonly string[];
-  /** The place in the log of the life that the skill hears from: the start of the log unless it names one. */
+  /** The place in the life that the kit hears from: the start unless it names one. */
   from?: number;
   env?: Record<string, string | undefined>;
+  link?: Link;
 }
 
-/** The process of a skill as a peer of the daemon: it attaches the life that the daemon started it for, under the name
- * of its skill, hears the facts of the kinds that it asked, says verbs to the life, which the life takes under that
- * name, answers the acts that its word takes, and serves a view to each window that mounts one. */
+/** The process of a kit as a peer of its life: it attaches the life under the name of its kit, hears the facts of the
+ * kinds that it asked, answers the acts of its kinds, and says verbs to the life, which the life takes. A kit draws
+ * nothing: its word draws its views. */
 export class Skill {
-  readonly views = new Map<string, View>();
   private readonly facts = new Set<(fact: Fact, seq: number) => void>();
-  private readonly mounts = new Set<(view: View) => void>();
-  private readonly answering = new Map<string, (fact: Fact) => unknown>();
+  private readonly answering = new Map<string, (fact: Fact, signal: AbortSignal) => unknown>();
+  private readonly running = new Map<string, AbortController>();
   private constructor(
     readonly connection: Connection,
     readonly name: string,
@@ -370,20 +330,21 @@ export class Skill {
     connection.pushed((frame) => this.pushed(frame));
   }
 
-  /** The skill of this process attached to its life, from the variables that the daemon gave it. */
+  /** The kit of this process attached to its life, from the variables that the life gave it. */
   static async attach(options: SkillOptions = {}): Promise<Skill> {
     const env = options.env ?? process.env;
-    const [host, life, name] = [HOST, LIFE, SKILL].map((one) => env[one]);
-    if (!host || !life || !name)
-      throw new Error(`A process of a skill needs ${HOST}, ${LIFE} and ${SKILL}, which the daemon gives it.`);
-    const connection = await Connection.dial(daemonPlace(host), "skill", name);
+    const [life, name] = [LIFE, SKILL].map((one) => env[one]);
+    if (life === undefined || !name)
+      throw new Error(`A process of a kit needs ${LIFE} and ${SKILL}, which its life gives it.`);
+    const link = options.link ?? linked(process.stdin, process.stdout);
+    const connection = await Connection.over(link, "skill", name);
     const kinds = options.kinds ? new Set(options.kinds) : undefined;
     const skill = new Skill(connection, name, life, kinds);
     await connection.ask({ verb: "attach", life, from: options.from ?? 0 });
     return skill;
   }
 
-  /** Settles when the connection to the daemon ends, as at the end of the life or of the daemon. */
+  /** Settles when the link to the life ends, as at the end of the life. */
   get closed(): Promise<void> {
     return this.connection.closed;
   }
@@ -394,38 +355,38 @@ export class Skill {
     return () => this.facts.delete(listener);
   }
 
-  /** Each act of a kind that the word of the skill took with a started, and that is not done, answered from now on,
-   * whatever kinds the skill hears: the skill closes it with what `answer` gives for its fact, awaited when it is a
-   * promise, or with a refusal that names what it threw. An act that is done already, as one of the past that an
-   * attach reads, gets no answer. */
-  answers(kind: string, answer: (fact: Fact) => unknown): () => void {
+  /** Each act of a kind that the life gives the kit, and that is not done, answered from now on, whatever kinds the
+   * kit hears: the kit closes it with what `answer` gives for its fact and the signal that the done of the act aborts,
+   * awaited when it is a promise, or with a refusal that names what it threw. An act that is done already gets no
+   * answer, and one whose done comes first gets none either. */
+  answers(kind: string, answer: (fact: Fact, signal: AbortSignal) => unknown): () => void {
     this.answering.set(kind, answer);
     return () => this.answering.delete(kind);
   }
 
-  private async answered(fact: Fact, answer: (fact: Fact) => unknown): Promise<void> {
+  private async answered(fact: Fact, answer: (fact: Fact, signal: AbortSignal) => unknown): Promise<void> {
     const act = fact[1];
-    const open = await this.say({ verb: "peek", act }).then(
-      () => false,
-      (no: unknown) => no instanceof Refused,
-    );
-    if (!open) return;
-    let value: string;
+    const aborted = new AbortController();
+    this.running.set(act, aborted);
     try {
-      value = JSON.stringify(await answer(fact));
-    } catch (no) {
-      value = JSON.stringify({ is: "Refused", args: [no instanceof Error ? no.message : String(no)] });
+      const open = await this.say({ verb: "peek", act }).then(
+        () => false,
+        (no: unknown) => no instanceof Refused,
+      );
+      if (!open) return;
+      let value: string;
+      try {
+        value = JSON.stringify(await answer(fact, aborted.signal));
+      } catch (no) {
+        value = JSON.stringify({ is: "Refused", args: [no instanceof Error ? no.message : String(no)] });
+      }
+      if (!aborted.signal.aborted) await this.say({ verb: "close", act, value });
+    } finally {
+      this.running.delete(act);
     }
-    await this.say({ verb: "close", act, value });
   }
 
-  /** Each view that a window mounts from now on. */
-  served(listener: (view: View) => void): () => void {
-    this.mounts.add(listener);
-    return () => this.mounts.delete(listener);
-  }
-
-  /** The answer of the life to a verb that the skill says, under its name. */
+  /** The answer of the life to a verb that the kit says. */
   say(verb: Said): Promise<Answer> {
     return this.connection.ask({ ...verb, life: this.life } as Verb);
   }
@@ -449,26 +410,18 @@ export class Skill {
   }
 
   private pushed(frame: Frame): void {
-    if (frame.frame === "event" && frame.life === this.life && frame.event.event === "fact") {
-      const fact = frame.event.data as Fact;
-      const answer = this.answering.get(fact[0]);
-      if (answer) void this.answered(fact, answer);
-      if (this.kinds && !this.kinds.has(fact[0])) return;
-      for (const listener of this.facts) listener(fact, frame.seq);
-    } else if (frame.frame === "view.mount" && frame.life === this.life) {
-      const view = new View(this.connection, frame);
-      this.views.set(view.viewer, view);
-      for (const listener of this.mounts) listener(view);
-    } else if (frame.frame === "view.event") this.views.get(frame.viewer)?.heard(frame);
-    else if (frame.frame === "view.dispose") {
-      this.views.get(frame.viewer)?.dispose();
-      this.views.delete(frame.viewer);
-    }
+    if (frame.frame !== "event" || frame.life !== this.life || frame.event.event !== "fact") return;
+    const fact = frame.event.data as Fact;
+    const answer = this.answering.get(fact[0]);
+    if (answer) void this.answered(fact, answer);
+    else if (fact[0] === "done") this.running.get(fact[1])?.abort();
+    if (this.kinds && !this.kinds.has(fact[0])) return;
+    for (const listener of this.facts) listener(fact, frame.seq);
   }
 }
 
-/** The act that a verb made, as the reply of the daemon names it. */
+/** The act that a verb made, as the reply of the life names it. */
 function named(answer: Answer): string {
-  if (answer.answer !== "act") throw new Error(`The daemon gave ${answer.answer}, and no act.`);
+  if (answer.answer !== "act") throw new Error(`The life gave ${answer.answer}, and no act.`);
   return answer.data;
 }

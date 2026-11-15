@@ -494,19 +494,18 @@ once it listens. A second daemon refuses to start there.
   person with `to="operator/<login>"`. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
-- The daemon starts the process that the manifest of a skill names under `furb-process` when a life plays the skill: at
-  the end of the replay for each skill that the record enabled, then at each new fact `enable`. It ends the process
-  when the life ends, and when a new fact `enable` of the skill reloads it, which starts the process again. On Unix the
-  process leads a group of its own, and that end kills the whole group, so no process that it started outlives the
-  life. A process that ends before its life tells the operator once, as a prompt of `None` to `operator` under
-  `skill/<name>`, with its exit and the last 20 lines of its stderr, and starts again at the next fact `enable` of its
-  skill. The variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` of the process give the folder of the local
-  transport, the record of the life and the name of the skill. `@uael/furb/skill` gives its client in TypeScript,
-  `furb.skill` in Python, and `docs/skills.md` says the field.
+- The process of a kit does not dial the daemon: the life that plays the kit starts it at the first act of a kind
+  that the manifest of the kit names under `furb-acts`, and speaks this protocol to it on its stdin and its stdout, one
+  frame for each line. The process says `hello` as a `skill` of a version from 44, `attach`, and then `peek`, `close`,
+  `run` and `prompt`, each with the field `life` that `FURB_LIFE` gives. The life tells it each fact that it hears
+  after its attach as a frame `event`, the act that the process answers among them, and the done of that act. A process
+  draws nothing, so the life refuses `view.tree` and `view.effect` from it. The variables `FURB_LIFE` and `FURB_SKILL`
+  of the process give the record of the life and the name of the kit. `@uael/furb/skill` gives its client in
+  TypeScript, `furb.skill` in Python, and `docs/skills.md` says the fields.
 
 ## Views
 
-A view is a tree of nodes that the process of a skill with code serves, and a window draws. The types of this section
+A view is a tree of nodes that a kit of a session serves from a value of its life, and a window draws. The types of this section
 are versioned with the protocol, and `@uael/furb/protocol` gives them to TypeScript.
 
 - `served {life, skills}`: the names of the skills attached to a life, which a window mounts views of. The daemon pushes it

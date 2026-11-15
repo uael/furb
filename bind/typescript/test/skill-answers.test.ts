@@ -1,79 +1,100 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, rmSync } from "node:fs";
-import { createServer, type Socket } from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { daemonPlace, HOST, LIFE, SKILL, Skill } from "../src/skill.ts";
+import { PassThrough } from "node:stream";
+import { LIFE, linked, SKILL, Skill } from "../src/skill.ts";
+
+/** A double of the life of a kit on two streams: it keeps each verb that the kit writes, answers it with `answer`, and
+ * pushes frames to the kit. */
+function life(answer: (verb: Record<string, unknown> & { id: number }) => object | undefined) {
+  const said: (Record<string, unknown> & { id: number })[] = [];
+  const toKit = new PassThrough();
+  const fromKit = new PassThrough();
+  let rest = "";
+  fromKit.on("data", (chunk) => {
+    rest += String(chunk);
+    const lines = rest.split("\n");
+    rest = lines.pop() ?? "";
+    for (const line of lines.filter(Boolean)) {
+      const verb = JSON.parse(line) as Record<string, unknown> & { id: number };
+      said.push(verb);
+      const frame = answer(verb);
+      if (frame) toKit.write(`${JSON.stringify({ id: verb.id, ...frame })}\n`);
+    }
+  });
+  const link = linked(toKit, fromKit);
+  const push = (frame: object) => toKit.write(`${JSON.stringify(frame)}\n`);
+  const fact = (seq: number, data: unknown[]) =>
+    push({ frame: "event", life: "a.jsonl", seq, event: { event: "fact", data } });
+  return { said, link, fact };
+}
+
+const welcome = { frame: "reply", answer: { answer: "welcome", data: { peer: {} } } };
+const done = { frame: "reply", answer: { answer: "done" } };
+const env = { [LIFE]: "a.jsonl", [SKILL]: "k" };
 
 test("a skill answers each open act of its kind with a close, and skips one that is done", async () => {
-  // A socket path has a short bound, which the temporary folder of macOS passes.
-  const folder = join(process.platform === "win32" ? tmpdir() : "/tmp", `furb-answers-${process.pid}`);
-  const said: Record<string, unknown>[] = [];
-  let peer: Socket | undefined;
-  const server = createServer((socket) => {
-    peer = socket;
-    let rest = "";
-    socket.on("data", (chunk) => {
-      rest += String(chunk);
-      const lines = rest.split("\n");
-      rest = lines.pop() ?? "";
-      for (const line of lines.filter(Boolean)) {
-        const verb = JSON.parse(line) as Record<string, unknown> & { id: number };
-        said.push(verb);
-        const frame =
-          verb.verb === "hello"
-            ? { frame: "reply", id: verb.id, answer: { answer: "welcome", data: { peer: {} } } }
-            : verb.verb === "peek" && verb.act !== "k.add1"
-              ? {
-                  frame: "refused",
-                  id: verb.id,
-                  error: { error: "refused" },
-                  why: `No act named ${verb.act} is done.`,
-                }
-              : { frame: "reply", id: verb.id, answer: { answer: "done" } };
-        socket.write(`${JSON.stringify(frame)}\n`);
-      }
-    });
+  const double = life((verb) =>
+    verb.verb === "hello"
+      ? welcome
+      : verb.verb === "peek" && verb.act !== "k.add1"
+        ? { frame: "refused", error: { error: "refused" }, why: `No act named ${verb.act} is done.` }
+        : done,
+  );
+  const skill = await Skill.attach({ kinds: ["prompt"], env, link: double.link });
+  skill.answers("k.add", async (fact) => `added ${String(fact[4])}`);
+  skill.answers("k.drop", () => {
+    throw new Error("no room");
   });
-  mkdirSync(folder, { recursive: true });
-  const place = daemonPlace(folder);
-  await new Promise<void>((resolve) => server.listen(place, resolve));
-  try {
-    const skill = await Skill.attach({
-      kinds: ["prompt"],
-      env: { [HOST]: folder, [LIFE]: "a.jsonl", [SKILL]: "k" },
-    });
-    skill.answers("k.add", async (fact) => `added ${String(fact[4])}`);
-    skill.answers("k.drop", () => {
-      throw new Error("no room");
-    });
-    skill.answers("k.gone", () => 1)();
-    const acts = [
-      ["k.add", "k.add1"],
-      ["k.add", "k.add2"],
-      ["k.drop", "k.drop1"],
-      ["k.gone", "x"],
-    ];
-    acts.forEach(([kind, act], seq) => {
-      const fact = [kind, act, "rung4", "chain1", "milk"];
-      peer?.write(
-        `${JSON.stringify({ frame: "event", life: "a.jsonl", seq, event: { event: "fact", data: fact } })}\n`,
-      );
-    });
-    const closes = () => said.filter((verb) => verb.verb === "close");
-    for (let tries = 0; closes().length < 2 && tries < 500; tries++) await Bun.sleep(10);
-    const got = closes()
-      .map((verb) => [verb.act, verb.value])
-      .sort();
-    expect(got).toEqual([
-      ["k.add2", JSON.stringify("added milk")],
-      ["k.drop1", JSON.stringify({ is: "Refused", args: ["no room"] })],
-    ]);
-    const peeked = said.filter((verb) => verb.verb === "peek").map((verb) => verb.act);
-    expect(peeked.sort()).toEqual(["k.add1", "k.add2", "k.drop1"]);
-    skill.close();
-  } finally {
-    server.close();
-    rmSync(folder, { recursive: true, force: true });
-  }
+  skill.answers("k.gone", () => 1)();
+  const acts = [
+    ["k.add", "k.add1"],
+    ["k.add", "k.add2"],
+    ["k.drop", "k.drop1"],
+    ["k.gone", "x"],
+  ];
+  acts.forEach(([kind, act], seq) => {
+    double.fact(seq, [kind, act, "rung4", "chain1", "milk"]);
+  });
+  const closes = () => double.said.filter((verb) => verb.verb === "close");
+  for (let tries = 0; closes().length < 2 && tries < 500; tries++) await Bun.sleep(10);
+  const got = closes()
+    .map((verb) => [verb.act, verb.value])
+    .sort();
+  expect(got).toEqual([
+    ["k.add2", JSON.stringify("added milk")],
+    ["k.drop1", JSON.stringify({ is: "Refused", args: ["no room"] })],
+  ]);
+  const peeked = double.said.filter((verb) => verb.verb === "peek").map((verb) => verb.act);
+  expect(peeked.sort()).toEqual(["k.add1", "k.add2", "k.drop1"]);
+  skill.close();
+});
+
+test("the done of an act that a kit answers aborts its answer, which closes nothing", async () => {
+  const double = life((verb) =>
+    verb.verb === "hello"
+      ? welcome
+      : verb.verb === "peek"
+        ? { frame: "refused", error: { error: "refused" }, why: "not done" }
+        : done,
+  );
+  const skill = await Skill.attach({ env, link: double.link });
+  let aborted = false;
+  skill.answers(
+    "k.slow",
+    (_fact, signal) =>
+      new Promise((resolve) => {
+        signal.addEventListener("abort", () => {
+          aborted = true;
+          resolve("late");
+        });
+      }),
+  );
+  double.fact(0, ["k.slow", "k.slow1"]);
+  for (let tries = 0; !double.said.some((verb) => verb.verb === "peek") && tries < 500; tries++)
+    await Bun.sleep(10);
+  double.fact(1, ["done", "k.slow1", "operator", "chain1", null]);
+  for (let tries = 0; !aborted && tries < 500; tries++) await Bun.sleep(10);
+  expect(aborted).toBe(true);
+  await Bun.sleep(20);
+  expect(double.said.filter((verb) => verb.verb === "close")).toEqual([]);
+  skill.close();
 });

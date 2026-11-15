@@ -1,16 +1,12 @@
-"""The client of the process of a skill in Python, `furb.skill`, against a double of the daemon on a real socket.
+"""The client of the process of a kit in Python, `furb.skill`, against a double of its life on two streams.
 
 The double answers each verb and pushes the frames that a test gives it. The lines that the client says are held to
-`host/tests/kits/44.jsonl`, which the suite of furb-host says to each later daemon: a client that says those lines is
-welcome there.
+`host/tests/kits/44.jsonl`, the lines that a kit of the protocol 44 says, which each later life takes.
 """
 
 import asyncio
 import json
-import shutil
-import sys
-import tempfile
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 
 import pytest
@@ -20,32 +16,35 @@ from furb.protocol import PROTOCOL
 
 GOLDEN = Path(__file__).resolve().parents[2] / "host" / "tests" / "kits" / "44.jsonl"
 HEARD = GOLDEN.with_suffix(".heard.jsonl")
-PEER = {"operator": "o", "role": "write", "kind": "skill", "name": "k"}
+PEER = {"operator": "", "role": "write", "kind": "skill", "name": "k"}
+ENV = {client.LIFE: "a.jsonl", client.SKILL: "k"}
 
 
-class Daemon:
-  """A double of the daemon in a folder: it keeps each verb that it hears, answers it with `answers`, and pushes the
-  frames of `push` to the peer."""
+class Life:
+  """A double of the life of a kit: it keeps each verb that the kit writes, answers it with `answers`, and pushes
+  the frames of `push` to the kit, on the stream that the kit reads."""
 
-  def __init__(self, folder: str) -> None:
-    self.folder = folder
+  def __init__(self) -> None:
     self.said: list[dict[str, object]] = []
-    self.writer: asyncio.StreamWriter | None = None
+    self.reader = asyncio.StreamReader()
     self.answers: Callable[[dict[str, object]], dict[str, object] | None] = answered
 
-  async def serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-    self.writer = writer
-    while line := await reader.readline():
+  def write(self, data: bytes) -> None:
+    for line in data.splitlines():
       verb = json.loads(line)
       self.said.append(verb)
       frame = self.answers(verb)
       if frame is not None:
         self.push({"id": verb["id"], **frame})
-    writer.close()
+
+  def close(self) -> None:
+    self.reader.feed_eof()
 
   def push(self, frame: Mapping[str, object]) -> None:
-    assert self.writer is not None, "a peer dialed"
-    self.writer.write(json.dumps(frame).encode() + b"\n")
+    self.reader.feed_data(json.dumps(frame).encode() + b"\n")
+
+  async def attach(self, kinds: Collection[str] | None = None, start: int = 0) -> client.Skill:
+    return await client.Skill.attach(kinds, start, env=ENV, streams=(self.reader, self))
 
 
 def answered(verb: dict[str, object]) -> dict[str, object]:
@@ -59,29 +58,8 @@ def answered(verb: dict[str, object]) -> dict[str, object]:
 
 
 @pytest.fixture
-async def daemon() -> AsyncIterator[Daemon]:
-  # A socket path has a short bound, which the folder of a test passes on macOS.
-  folder = tempfile.mkdtemp(prefix="furb-skill-", dir=None if sys.platform == "win32" else "/tmp")  # noqa: S108
-  double = Daemon(folder)
-  place = client.daemon_place(folder)
-  if sys.platform == "win32":
-    loop = asyncio.get_running_loop()
-    pipes = await loop.start_serving_pipe(
-      lambda: asyncio.StreamReaderProtocol(asyncio.StreamReader(), double.serve), place
-    )
-    servers = [pipe.close for pipe in pipes]
-  else:
-    servers = [(await asyncio.start_unix_server(double.serve, place)).close]
-  try:
-    yield double
-  finally:
-    for close in servers:
-      close()
-    shutil.rmtree(folder)
-
-
-def env(daemon: Daemon) -> dict[str, str]:
-  return {client.HOST: daemon.folder, client.LIFE: "a.jsonl", client.SKILL: "k"}
+async def life() -> Life:
+  return Life()
 
 
 async def until(check: Callable[[], object]) -> None:
@@ -90,62 +68,36 @@ async def until(check: Callable[[], object]) -> None:
       await asyncio.sleep(0.01)
 
 
-async def test_a_skill_says_the_lines_of_a_kit_that_each_later_daemon_takes(daemon: Daemon) -> None:
-  skill = await client.Skill.attach(env=env(daemon))
+async def test_a_skill_says_the_lines_of_a_kit_that_each_later_life_takes(life: Life) -> None:
+  skill = await life.attach()
   assert skill.connection.peer == PEER
   assert await skill.run("x = 1") == "run2"
   await skill.run("y = 2", on="chain2")
   assert await skill.prompt("str", "hi") == "prompt4"
   await skill.prompt("str", "hi", to="claude-cli:opus/high", on="chain2")
-  views: list[client.View] = []
-  skill.served(views.append)
-  daemon.push(
-    {"frame": "view.mount", "viewer": "w", "life": "a.jsonl", "slot": {"slot": "dock", "on": "chain1"}, "skill": "k"}
-  )
-  await until(lambda: views)
   golden = [json.loads(line) for line in GOLDEN.read_text().splitlines()]
-  await views[0].tree(golden[6]["tree"])
-  for line in golden[8:]:
-    await views[0].effect(line["effect"])
-  # The second tree of the golden is served on another slot, which a view of the client keeps from its mount, and the
-  # number of a verb is the order in which a peer says it.
-  said = [{**golden[0], "protocol": PROTOCOL}, *golden[1:7], *golden[8:]]
-  assert daemon.said == [{**line, "id": number} for number, line in enumerate(said)]
+  said = [{**golden[0], "protocol": PROTOCOL}, *golden[1:6]]
+  assert life.said == said
 
 
-async def test_a_skill_hears_the_facts_of_its_kinds_and_the_gestures_and_end_of_each_view(daemon: Daemon) -> None:
-  skill = await client.Skill.attach(kinds=["prompt"], start=3, env=env(daemon))
-  assert daemon.said[1] == {"id": 1, "verb": "attach", "life": "a.jsonl", "from": 3}
+async def test_a_skill_hears_the_facts_of_its_kinds_of_its_life_alone(life: Life) -> None:
+  skill = await life.attach(kinds=["prompt"], start=3)
+  assert life.said[1] == {"id": 1, "verb": "attach", "life": "a.jsonl", "from": 3}
   facts: list[tuple[list[object], int]] = []
   skill.heard(lambda fact, seq: facts.append((fact, seq)))
   ignored = skill.heard(lambda _fact, _seq: pytest.fail("a listener that left hears nothing"))
   ignored()
   for seq, kind in enumerate(["run", "prompt"]):
     fact = [kind, f"{kind}1", "operator/o", "root"]
-    daemon.push({"frame": "event", "life": "a.jsonl", "seq": seq, "event": {"event": "fact", "data": fact}})
-  daemon.push({"frame": "event", "life": "b.jsonl", "seq": 2, "event": {"event": "fact", "data": ["prompt"]}})
-  views: list[client.View] = []
-  skill.served(views.append)()
-  skill.served(views.append)
-  daemon.push({"frame": "view.mount", "viewer": "w", "life": "a.jsonl", "slot": {"slot": "sidebar"}, "skill": "k"})
-  await until(lambda: views)
-  gestures: list[object] = []
-  views[0].events(gestures.append)
-  views[0].events(gestures.append)()
-  pressed = {"frame": "view.event", "viewer": "w", "node": "go", "kind": "press"}
-  daemon.push(pressed)
-  daemon.push({**pressed, "viewer": "x"})
-  daemon.push({"frame": "view.dispose", "viewer": "w"})
-  await asyncio.wait_for(views[0].disposed, 5)
+    life.push({"frame": "event", "life": "a.jsonl", "seq": seq, "event": {"event": "fact", "data": fact}})
+  life.push({"frame": "event", "life": "b.jsonl", "seq": 2, "event": {"event": "fact", "data": ["prompt"]}})
+  await until(lambda: facts)
+  await asyncio.sleep(0.05)
   assert facts == [(["prompt", "prompt1", "operator/o", "root"], 1)]
-  assert gestures == [pressed]
-  assert (views[0].viewer, views[0].slot, skill.views) == ("w", {"slot": "sidebar"}, {})
 
 
-async def test_a_skill_answers_each_open_act_of_its_kind_with_a_close_and_skips_one_that_is_done(
-  daemon: Daemon,
-) -> None:
-  skill = await client.Skill.attach(kinds=["prompt"], env=env(daemon))
+async def test_a_skill_answers_each_open_act_of_its_kind_with_a_close_and_skips_one_that_is_done(life: Life) -> None:
+  skill = await life.attach(kinds=["prompt"])
   done = {"k.add1"}
 
   def answering(verb: dict[str, object]) -> dict[str, object]:
@@ -153,7 +105,7 @@ async def test_a_skill_answers_each_open_act_of_its_kind_with_a_close_and_skips_
       return {"frame": "refused", "error": {"error": "refused"}, "why": f"No act named {verb['act']} is done."}
     return answered(verb)
 
-  daemon.answers = answering
+  life.answers = answering
 
   async def added(fact: list[object]) -> str:
     await asyncio.sleep(0)
@@ -170,12 +122,12 @@ async def test_a_skill_answers_each_open_act_of_its_kind_with_a_close_and_skips_
     [("k.add", "k.add1"), ("k.add", "k.add2"), ("k.drop", "k.drop1"), ("k.count", "k.count1"), ("k.gone", "x")]
   ):
     fact = [kind, act, "rung4", "chain1", "milk"]
-    daemon.push({"frame": "event", "life": "a.jsonl", "seq": seq, "event": {"event": "fact", "data": fact}})
-  await until(lambda: sum(verb["verb"] == "close" for verb in daemon.said) == 3)
-  closes = sorted((str(verb["act"]), str(verb["value"])) for verb in daemon.said if verb["verb"] == "close")
+    life.push({"frame": "event", "life": "a.jsonl", "seq": seq, "event": {"event": "fact", "data": fact}})
+  await until(lambda: sum(verb["verb"] == "close" for verb in life.said) == 3)
+  closes = sorted((str(verb["act"]), str(verb["value"])) for verb in life.said if verb["verb"] == "close")
   refusal = json.dumps({"is": "Refused", "args": ["no room"]})
   assert closes == [("k.add2", json.dumps("added milk")), ("k.count1", "2"), ("k.drop1", refusal)]
-  assert sorted(str(verb["act"]) for verb in daemon.said if verb["verb"] == "peek") == [
+  assert sorted(str(verb["act"]) for verb in life.said if verb["verb"] == "peek") == [
     "k.add1",
     "k.add2",
     "k.count1",
@@ -183,64 +135,66 @@ async def test_a_skill_answers_each_open_act_of_its_kind_with_a_close_and_skips_
   ]
 
 
-async def test_a_skill_reads_each_frame_that_a_kit_of_its_version_reads(daemon: Daemon) -> None:
-  skill = await client.Skill.attach(env=env(daemon))
+async def test_the_done_of_an_act_that_a_kit_answers_cancels_its_answer(life: Life) -> None:
+  skill = await life.attach(kinds=[])
+  life.answers = lambda verb: (
+    {"frame": "refused", "error": {"error": "refused"}, "why": "not done"} if verb["verb"] == "peek" else answered(verb)
+  )
+  started, cancelled = asyncio.Event(), asyncio.Event()
+
+  async def slow(_fact: list[object]) -> str:
+    started.set()
+    try:
+      await asyncio.sleep(60)
+    except asyncio.CancelledError:
+      cancelled.set()
+      raise
+    return "late"
+
+  skill.answers("k.slow", slow)
+  life.push({"frame": "event", "life": "a.jsonl", "seq": 0, "event": {"event": "fact", "data": ["k.slow", "k.slow1"]}})
+  await asyncio.wait_for(started.wait(), 5)
+  done = ["done", "k.slow1", "operator", "chain1", None]
+  life.push({"frame": "event", "life": "a.jsonl", "seq": 1, "event": {"event": "fact", "data": done}})
+  await asyncio.wait_for(cancelled.wait(), 5)
+  assert not [verb for verb in life.said if verb["verb"] == "close"]
+
+
+async def test_a_skill_reads_each_frame_that_a_kit_of_its_version_reads(life: Life) -> None:
+  skill = await life.attach()
   facts: list[list[object]] = []
-  views: list[client.View] = []
-  gestures: list[object] = []
   skill.heard(lambda fact, _seq: facts.append(fact))
-  skill.served(lambda view: (views.append(view), view.events(gestures.append)))
   heard = [json.loads(line) for line in HEARD.read_text().splitlines()]
   for frame in heard:
-    daemon.push(frame)
-  await until(lambda: views and views[0].disposed.done())
+    life.push(frame)
+  await until(lambda: facts)
   assert facts == [heard[0]["event"]["data"]]
-  assert gestures == [heard[2]]
 
 
-async def test_a_refusal_names_its_kind_and_a_close_ends_each_verb_that_waits(daemon: Daemon) -> None:
-  skill = await client.Skill.attach(env=env(daemon))
-  daemon.answers = lambda _verb: {"frame": "refused", "error": {"error": "role"}, "why": "No role."}
+async def test_a_refusal_names_its_kind_and_a_close_ends_each_verb_that_waits(life: Life) -> None:
+  skill = await life.attach()
+  life.answers = lambda _verb: {"frame": "refused", "error": {"error": "role"}, "why": "No role."}
   with pytest.raises(client.Refused, match=r"No role\.") as refused:
     await skill.run("x = 1")
   assert refused.value.kind == "role"
-  daemon.answers = lambda _verb: {"frame": "reply", "answer": {"answer": "done"}}
-  with pytest.raises(client.Refused, match=r"The daemon gave done, and no act\."):
+  life.answers = lambda _verb: {"frame": "reply", "answer": {"answer": "done"}}
+  with pytest.raises(client.Refused, match=r"The life gave done, and no act\."):
     await skill.prompt("str", "hi")
-  daemon.answers = lambda _verb: None
+  life.answers = lambda _verb: None
   waits = asyncio.ensure_future(skill.run("x = 1"))
-  await until(lambda: len(daemon.said) == 5)
-  daemon.push({"frame": "reply", "id": 99, "answer": {"answer": "done"}})
-  assert daemon.writer is not None
-  daemon.writer.close()
-  with pytest.raises(client.Closed, match=r"The daemon closed the connection\."):
+  await until(lambda: len(life.said) == 5)
+  life.push({"frame": "reply", "id": 99, "answer": {"answer": "done"}})
+  life.close()
+  with pytest.raises(client.Closed, match=r"The life closed the connection\."):
     await waits
   await asyncio.wait_for(skill.closed, 5)
   with pytest.raises(client.Closed, match="no stream"):
     await skill.run("x = 1")
 
 
-async def test_a_skill_needs_the_variables_of_the_daemon_and_its_welcome(daemon: Daemon) -> None:
-  with pytest.raises(LookupError, match="FURB_HOST, FURB_LIFE and FURB_SKILL"):
-    await client.Skill.attach(env={client.HOST: daemon.folder})
-  daemon.answers = lambda _verb: {"frame": "reply", "answer": {"answer": "done"}}
-  with pytest.raises(client.Refused, match=r"The daemon gave done, and no welcome\."):
-    await client.Skill.attach(env=env(daemon))
-  daemon.answers = answered
-  skill = await client.Skill.attach(env=env(daemon))
-  skill.close()
-  await asyncio.wait_for(skill.closed, 5)
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="the suite on Windows dials a real pipe")
-async def test_a_pipe_of_windows_gives_the_streams_that_a_socket_gives(
-  daemon: Daemon, monkeypatch: pytest.MonkeyPatch
-) -> None:
-  # The pipe and the socket take the same arguments and give a transport and a protocol, so the socket stands in for
-  # the pipe here, where no pipe of Windows is.
-  loop = asyncio.get_running_loop()
-  monkeypatch.setattr(loop, "create_pipe_connection", loop.create_unix_connection, raising=False)
-  reader, writer = await client.piped(client.daemon_place(daemon.folder))
-  writer.write(b'{"id": 0, "verb": "hello"}\n')
-  assert json.loads(await reader.readline())["answer"]["answer"] == "welcome"
-  writer.close()
+async def test_a_skill_needs_the_variables_of_its_life_and_its_welcome(life: Life) -> None:
+  with pytest.raises(LookupError, match="FURB_LIFE and FURB_SKILL"):
+    await client.Skill.attach(env={client.LIFE: "a.jsonl"}, streams=(life.reader, life))
+  life.answers = lambda _verb: {"frame": "reply", "answer": {"answer": "done"}}
+  with pytest.raises(client.Refused, match=r"The life gave done, and no welcome\."):
+    await life.attach()

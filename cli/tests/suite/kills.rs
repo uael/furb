@@ -498,8 +498,9 @@ async fn a_daemon_killed_leaves_no_process_that_the_command_line_of_a_model_star
   lifeline.ended().await;
 }
 
-/// The manifest of a skill whose process holds the lifeline until it ends.
-const PROBE: &str = "---\nname: probe\ndescription: Holds the lifeline.\nmetadata:\n  furb-word: probe.py\n  furb-process: probe.sh\n---\nA probe.\n";
+/// The manifest of a kit whose process, which starts at its first act `probe_hold`, holds the
+/// lifeline until it ends.
+const PROBE: &str = "---\nname: probe\ndescription: Holds the lifeline.\nmetadata:\n  furb-word: probe.py\n  furb-process: probe.sh\n  furb-acts: probe_hold\n---\nA probe.\n";
 
 #[tokio::test]
 async fn a_daemon_killed_leaves_no_process_that_a_skill_started() {
@@ -514,6 +515,7 @@ async fn a_daemon_killed_leaves_no_process_that_a_skill_started() {
   fs::write(&program, script).unwrap();
   fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
   window.ran("skill('probe')").await;
+  window.ran("act('probe_hold', '', None)").await;
   lifeline.heard("up").await;
   daemon.killed(libc::SIGKILL).await;
   lifeline.ended().await;

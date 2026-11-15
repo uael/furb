@@ -211,7 +211,6 @@ impl Daemon {
       stall: STALL,
       tailnet: None,
       door: None,
-      host: None,
     }
   }
 

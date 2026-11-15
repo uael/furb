@@ -1,16 +1,22 @@
-//! The view of a kit of a session (D20). A kit that lives in the record alone, which
-//! `extend(name, *rungs, session=True, view=value)` of ouroboros makes, names in its fact enable a
-//! value of the module of the root that holds the tree of its view. The daemon serves that view as
-//! the skill of that name serves one: a peer of its own, in the process of the daemon, attaches the
-//! life through the door of the daemon with an outbox of its own, as a peer of a transport does,
-//! and gives each view that a window mounts the tree that the value holds, then the tree again each
-//! time that it changes. The tree is a read of the module, so the view says no fact, and a later
-//! life serves it again from the fact enable.
+//! The view of a kit of a session (D20), and the name under which a kit speaks. A kit that lives
+//! in the record alone, which `extend(name, *rungs, session=True, view=value)` of ouroboros makes,
+//! names in its fact enable a value of the module of the root that holds the tree of its view. The
+//! daemon serves that view as a skill serves one: a peer of its own, in the process of the daemon,
+//! attaches the life through the door of the daemon with an outbox of its own, as a peer of a
+//! transport does, and gives each view that a window mounts the tree that the value holds, then the
+//! tree again each time that it changes. The tree is a read of the module, so the view says no
+//! fact, and a later life serves it again from the fact enable.
 
 use std::{collections::HashMap, pin::pin};
 
-use futures::StreamExt;
-use tokio::sync::oneshot;
+use furb::{
+  Fact,
+  skill::{ENABLE, Enabled, enabled_by},
+  wire::parsed,
+};
+use futures::{StreamExt, future};
+use serde_json::Value;
+use tokio::{sync::oneshot, task::JoinHandle};
 
 use crate::{
   daemon::Inside,
@@ -19,6 +25,64 @@ use crate::{
   protocol::{Frame, Kind, Node, Peer, Role, Slot, Tree, Verb},
   serve::Outbox,
 };
+
+/// The name under which a kit speaks in a life. The slash keeps it apart from the name of each
+/// act, which a replay reads as an act, as the operator speaks under `operator`.
+pub(crate) fn speaker(kit: &str) -> String {
+  format!("skill/{kit}")
+}
+
+/// The view of each kit of a session that a life plays, served from the tip of its open, then at
+/// each new fact enable of such a kit, which serves its view again, until the life ends.
+pub(crate) async fn served(handle: LifeHandle, life: String, inside: Inside) {
+  // The life gives the transcript and the place of its tip at once, so each fact enable stands in
+  // one of them and its view is served once.
+  let enables = Command::Transcript { on: None, of: Some(ENABLE.to_owned()) };
+  let Some((Ok(Reply::Values(tip)), events)) = handle.after(enables).await else { return };
+  let mut running: HashMap<String, (oneshot::Sender<()>, JoinHandle<()>)> = HashMap::new();
+  let mut serve = |one: Enabled| {
+    let Enabled { name, view, .. } = one;
+    if let Some((end, watch)) = running.remove(&name) {
+      end.send(()).ok();
+      watch.abort();
+    }
+    let Some(value) = view else { return };
+    let kit = Kit {
+      life: life.clone(),
+      handle: handle.clone(),
+      name: name.clone(),
+      value,
+      inside: inside.clone(),
+    };
+    let (end, ends) = oneshot::channel();
+    running.insert(name, (end, tokio::spawn(kit.served(ends))));
+  };
+  let mut last: Vec<Enabled> = Vec::new();
+  for one in tip.iter().filter_map(enabled) {
+    last.retain(|two| two.name != one.name);
+    last.push(one);
+  }
+  last.into_iter().for_each(&mut serve);
+  let mut events = pin!(events);
+  while let Some((_, event)) = events.next().await {
+    match &*event {
+      Event::Fact(fact) => enabled(fact).into_iter().for_each(&mut serve),
+      Event::Ended(_) => break,
+      _ => {}
+    }
+  }
+  let ends = running.into_values().map(|(end, watch)| {
+    end.send(()).ok();
+    watch
+  });
+  future::join_all(ends).await;
+}
+
+/// What the crate reads of a fact enable, as JSON gives the fact.
+fn enabled(fact: &Value) -> Option<Enabled> {
+  let made = parsed(&fact.to_string()).ok()?;
+  enabled_by(&Fact::of(made.as_ref())?)
+}
 
 /// A kit of a session whose view the daemon serves: the life, its handle, the name of the kit,
 /// the value of the root that holds its tree, and the door of the daemon.

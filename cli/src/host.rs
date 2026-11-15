@@ -37,7 +37,6 @@ use crate::error::CliError;
 pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliError> {
   let folder = folder()?;
   let door = Some(folder.join(DOOR));
-  let host = Some(folder.clone());
   let path = Places::here().config.join("host.json");
   let config = Config::load(&path)?;
   let stall = config.stall.map_or(STALL, Duration::from_secs);
@@ -49,7 +48,7 @@ pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliErr
       .ok()
   });
   let opening = Opening::default();
-  let settings = Settings { opening, grace, first: STARTING, stall, tailnet, door, host };
+  let settings = Settings { opening, grace, first: STARTING, stall, tailnet, door };
   let local = Local::new(&folder);
   if upgrading {
     return Ok(upgrade(&local, settings).await?);

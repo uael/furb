@@ -189,15 +189,8 @@ async fn started_with(
 ) -> (Local, JoinHandle<Result<(), DaemonError>>) {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
-  let settings = Settings {
-    opening,
-    grace,
-    first: STARTING,
-    stall: STALL,
-    tailnet: None,
-    door: None,
-    host: None,
-  };
+  let settings =
+    Settings { opening, grace, first: STARTING, stall: STALL, tailnet: None, door: None };
   let served = local.clone();
   (local, tokio::spawn(async move { run(&served, listener, settings).await }))
 }
@@ -262,7 +255,6 @@ async fn the_seen_of_each_operator_is_said_under_his_profile_and_a_reopen_keeps_
     stall: STALL,
     tailnet: None,
     door: None,
-    host: None,
   };
   let operators: Arc<[&str]> = ["alice", "bob", "alice"].into();
   let identity = Operators { local: local.clone(), next: Arc::default(), names: operators };
@@ -305,7 +297,6 @@ async fn started_as(at: &Path, roles: &[Role]) -> Local {
     stall: STALL,
     tailnet: None,
     door: None,
-    host: None,
   };
   let identity = Grants { local: local.clone(), next: Arc::default(), roles: roles.into() };
   tokio::spawn(async move { run(&identity, listener, settings).await });
@@ -527,8 +518,7 @@ async fn a_daemon_that_no_peer_dials_ends_once_its_start_passed() {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
   let (opening, grace, first) = (opening(&at), GRACE, SHORT);
-  let settings =
-    Settings { opening, grace, first, stall: STALL, tailnet: None, door: None, host: None };
+  let settings = Settings { opening, grace, first, stall: STALL, tailnet: None, door: None };
   let ended = timeout(PATIENCE, run(&local, listener, settings)).await;
   assert!(matches!(ended, Ok(Ok(()))), "the daemon ends with no peer: {ended:?}");
   assert!(local.dial().await.is_err(), "no daemon listens after its start");
@@ -1396,7 +1386,6 @@ async fn a_handover_keeps_each_life_its_pins_and_each_window() {
     stall: STALL,
     tailnet: None,
     door: None,
-    host: None,
   };
   let next = local.clone();
   let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
@@ -1459,7 +1448,6 @@ async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     stall: STALL,
     tailnet: None,
     door: None,
-    host: None,
   };
   let served = local.clone();
   let old = tokio::spawn(async move { run(&served, listener, settings).await });
@@ -1479,7 +1467,6 @@ async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     stall: STALL,
     tailnet: None,
     door: None,
-    host: None,
   };
   let next = local.clone();
   let mut new = tokio::spawn(async move { upgrade(&next, settings).await });
@@ -1558,16 +1545,8 @@ where
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
   let opening = Opening { skills: None, ..opening(at) };
-  let host = Some(at.join("sock"));
-  let settings = Settings {
-    opening,
-    grace: SHORT,
-    first: STARTING,
-    stall: STALL,
-    tailnet: None,
-    door: None,
-    host,
-  };
+  let settings =
+    Settings { opening, grace: SHORT, first: STARTING, stall: STALL, tailnet: None, door: None };
   let served = identity(local.clone());
   tokio::spawn(async move { run(&served, listener, settings).await });
   let mut window = Window::dialed(&local).await;
@@ -1765,7 +1744,7 @@ async fn a_mount_needs_a_skill_and_a_holder_and_a_view_ends_with_its_peer() {
 #[tokio::test]
 async fn a_skill_says_each_act_under_its_name_and_a_window_under_its_operator() {
   let at = place();
-  let local = served(&at, None).await;
+  let local = served(&at).await;
   let mut writer = Window::dialed(&local).await;
   let mut skill = Window::dialed_as(&local, Kind::Skill, Some("k")).await;
   let life = opened(&mut writer, &at, "a.jsonl").await;
@@ -1797,7 +1776,7 @@ async fn a_skill_says_each_act_under_its_name_and_a_window_under_its_operator() 
 #[tokio::test]
 async fn a_skill_answers_an_act_that_its_word_took_with_a_close() {
   let at = place();
-  let local = served(&at, None).await;
+  let local = served(&at).await;
   let mut writer = Window::dialed(&local).await;
   let mut skill = Window::dialed_as(&local, Kind::Skill, Some("k")).await;
   let life = opened(&mut writer, &at, "a.jsonl").await;
@@ -1893,7 +1872,6 @@ async fn the_roster_names_the_access_list_and_a_change_of_it_tells_each_life_to_
     stall: STALL,
     tailnet,
     door: None,
-    host: None,
   };
   let served = local.clone();
   let _daemon = tokio::spawn(async move { run(&served, listener, settings).await });
@@ -2123,101 +2101,6 @@ async fn a_command_that_a_window_feeds_reads_each_line_that_it_writes() {
   window.left(&life).await;
 }
 
-/// The manifest of a skill of a test whose process says where it stands, then waits for its end.
-#[cfg(unix)]
-const PROBE: &str = "---\nname: probe\ndescription: Says where its process stands.\nmetadata:\n  furb-word: probe.py\n  furb-process: probe.sh\n---\nA probe.\n";
-
-/// The lines of a file once it holds a count of them.
-#[cfg(unix)]
-async fn lines(file: &Path, count: usize) -> Vec<String> {
-  let read = || fs::read_to_string(file).unwrap_or_default().lines().map(str::to_owned).collect();
-  let waited = timeout(PATIENCE, async {
-    loop {
-      let got: Vec<String> = read();
-      if got.len() >= count {
-        return got;
-      }
-      time::sleep(Duration::from_millis(50)).await;
-    }
-  });
-  waited.await.expect("the file gets its lines")
-}
-
-/// Whether the process of a pid ends.
-#[cfg(unix)]
-async fn gone(pid: &str) -> bool {
-  let lives = || {
-    process::Command::new("kill")
-      .args(["-0", pid])
-      .stderr(process::Stdio::null())
-      .status()
-      .is_ok_and(|one| one.success())
-  };
-  let waited = timeout(PATIENCE, async {
-    while lives() {
-      time::sleep(Duration::from_millis(50)).await;
-    }
-  });
-  waited.await.is_ok()
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn the_process_of_a_skill_lives_from_its_play_to_its_reload_and_to_the_end_of_its_life() {
-  use std::os::unix::fs::PermissionsExt;
-  let at = place();
-  let skill = at.join(".furb").join("skills").join("probe");
-  fs::create_dir_all(&skill).unwrap();
-  fs::write(skill.join("SKILL.md"), PROBE).unwrap();
-  fs::write(skill.join("probe.py"), "PROBED = 1\n").unwrap();
-  let program = skill.join("probe.sh");
-  let said =
-    "#!/bin/sh\necho \"$FURB_SKILL $FURB_LIFE $FURB_HOST $$\" >> started\nexec sleep 600\n";
-  fs::write(&program, said).unwrap();
-  fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
-  let local = Local::new(at.join("sock"));
-  let listener = local.listen().await.unwrap();
-  let host = Some(at.join("sock"));
-  let settings = Settings {
-    opening: opening(&at),
-    grace: SHORT,
-    first: STARTING,
-    stall: STALL,
-    tailnet: None,
-    door: None,
-    host,
-  };
-  let served = local.clone();
-  tokio::spawn(async move { run(&served, listener, settings).await });
-  let mut window = Window::dialed(&local).await;
-  let life = opened(&mut window, &at, "a.jsonl").await;
-  window.attach(&life).await;
-  window.ran(&life, "x = 1").await;
-  let started = skill.join("started");
-  assert!(!started.exists(), "a skill that the life does not play starts no process");
-  window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
-  let first = lines(&started, 1).await.remove(0);
-  let first: Vec<&str> = first.split(' ').collect();
-  let sock = at.join("sock").display().to_string();
-  assert_eq!(first[..3], ["probe", life.as_str(), sock.as_str()]);
-  window.ran(&life, r#"write(Text("skills://probe", "PROBED = 2"))"#).await;
-  // The write copies the folder of the skill in the project, whose word the reload plays, so the
-  // process of that copy, which keeps the lines of the file, starts.
-  let started = at.join(".furb").join("skills").join("probe").join("started");
-  let second = lines(&started, 2).await.remove(1);
-  assert!(gone(first[3]).await, "a reload ends the process that ran");
-  let second = second.rsplit(' ').next().unwrap().to_owned();
-  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-  time::sleep(PAST).await;
-  assert!(!window.lives(&life).await);
-  assert!(gone(&second).await, "the end of the life ends its process");
-  opened(&mut window, &at, "a.jsonl").await;
-  let third = lines(&started, 3).await.remove(2);
-  time::sleep(PAST).await;
-  assert_eq!(lines(&started, 3).await.len(), 3, "a replay starts the process once, at its tip");
-  assert!(third.starts_with("probe "));
-}
-
 /// The bound of a stall in a test: a gap between two facts of a word that waits 0.05 s in a loop
 /// stays far below it on a loaded machine.
 const QUIET: Duration = Duration::from_millis(1500);
@@ -2266,7 +2149,6 @@ async fn a_life_that_holds_an_open_act_and_says_no_fact_is_told_once_to_its_wind
     stall: QUIET,
     tailnet: None,
     door: None,
-    host: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
@@ -2371,7 +2253,6 @@ async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_checkpoint_l
     stall: QUIET,
     tailnet: None,
     door: None,
-    host: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
@@ -2405,7 +2286,6 @@ async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() 
     stall: QUIET,
     tailnet: None,
     door: None,
-    host: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
@@ -2443,7 +2323,6 @@ async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_not
     stall: QUIET,
     tailnet: None,
     door: None,
-    host: None,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
@@ -2471,24 +2350,8 @@ async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_not
   window.left(&life).await;
 }
 
-/// The skill probe in a folder of skills, whose process writes the file `started` of its folder,
-/// which this gives.
-#[cfg(unix)]
-fn probed(skills: &Path) -> PathBuf {
-  use std::os::unix::fs::PermissionsExt;
-  let skill = skills.join("probe");
-  fs::create_dir_all(&skill).unwrap();
-  fs::write(skill.join("SKILL.md"), PROBE).unwrap();
-  fs::write(skill.join("probe.py"), "PROBED = 1\n").unwrap();
-  let program = skill.join("probe.sh");
-  fs::write(&program, "#!/bin/sh\necho \"$FURB_SKILL $$\" >> started\nexec sleep 600\n").unwrap();
-  fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
-  skill.join("started")
-}
-
-/// A daemon of a test whose lives end after a short grace, and which starts the processes of
-/// skills when it is given the folder where they dial it.
-async fn served(at: &Path, host: Option<PathBuf>) -> Local {
+/// A daemon of a test whose lives end after a short grace.
+async fn served(at: &Path) -> Local {
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
   let settings = Settings {
@@ -2498,155 +2361,10 @@ async fn served(at: &Path, host: Option<PathBuf>) -> Local {
     stall: STALL,
     tailnet: None,
     door: None,
-    host,
   };
   let served = local.clone();
   tokio::spawn(async move { run(&served, listener, settings).await });
   local
-}
-
-/// A daemon of a test that starts the processes of skills, and a window dialed to it.
-#[cfg(unix)]
-async fn hosting(at: &Path) -> Window {
-  Window::dialed(&served(at, Some(at.join("sock"))).await).await
-}
-
-/// The skill probe of a test in the folder of the skills of a project, whose process is the
-/// script given, and the file `started` of its folder.
-#[cfg(unix)]
-fn scripted(at: &Path, script: &str) -> PathBuf {
-  use std::os::unix::fs::PermissionsExt;
-  let skill = at.join(".furb").join("skills").join("probe");
-  fs::create_dir_all(&skill).unwrap();
-  fs::write(skill.join("SKILL.md"), PROBE).unwrap();
-  fs::write(skill.join("probe.py"), "PROBED = 1\n").unwrap();
-  let program = skill.join("probe.sh");
-  fs::write(&program, script).unwrap();
-  fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
-  skill.join("started")
-}
-
-/// Whether a frame is the fact of a message that the process of the skill probe says to the
-/// operator.
-#[cfg(unix)]
-fn crashed(frame: &Frame) -> bool {
-  matches!(frame, Frame::Event { event: Event::Fact(fact), .. }
-    if fact[0] == "prompt" && fact[2] == "skill/probe" && fact[6] == "operator")
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn the_process_of_a_skill_that_is_a_module_of_python_runs_on_a_python() {
-  let at = place();
-  let skill = at.join(".furb").join("skills").join("probe");
-  fs::create_dir_all(&skill).unwrap();
-  fs::write(skill.join("SKILL.md"), PROBE.replace("probe.sh", "kit.py")).unwrap();
-  fs::write(skill.join("probe.py"), "PROBED = 1\n").unwrap();
-  // The module is no program of its own: it has no line #! and may not run as it stands.
-  let kit = "import os, time\nwith open('started', 'a') as out:\n  out.write(os.environ['FURB_SKILL'] + '\\n')\ntime.sleep(600)\n";
-  fs::write(skill.join("kit.py"), kit).unwrap();
-  let mut window = hosting(&at).await;
-  let life = opened(&mut window, &at, "a.jsonl").await;
-  window.attach(&life).await;
-  window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
-  assert_eq!(lines(&skill.join("started"), 1).await, ["probe"]);
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn the_process_of_a_skill_comes_from_the_folder_that_the_chain_played_it_from() {
-  let at = place();
-  let (one, two) = (at.join("one"), at.join("two"));
-  let first = probed(&one.join(".furb").join("skills"));
-  let second = probed(&two.join(".furb").join("skills"));
-  let mut window = hosting(&at).await;
-  let life = opened(&mut window, &one, "a.jsonl").await;
-  window.attach(&life).await;
-  window.ran(&life, &format!("cd({:?})", two.display().to_string())).await;
-  window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
-  let started = lines(&second, 1).await.remove(0);
-  time::sleep(PAST).await;
-  assert!(!first.exists(), "the skill of the folder of the birth starts no process");
-  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-  time::sleep(PAST).await;
-  assert!(gone(started.rsplit(' ').next().unwrap()).await, "the end of the life ends it");
-  opened(&mut window, &one, "a.jsonl").await;
-  lines(&second, 2).await;
-  time::sleep(PAST).await;
-  assert!(!first.exists(), "a reopen starts the process of the folder that the record names");
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn the_process_of_a_skill_of_the_config_of_an_open_starts() {
-  let at = place();
-  let config = at.join("other");
-  let started = probed(&config.join("skills"));
-  let mut window = hosting(&at).await;
-  let life = at.join("a.jsonl").display().to_string();
-  let verb = Verb::Open {
-    life: life.clone(),
-    cwd: Some(at.display().to_string()),
-    actor: None,
-    roster: None,
-    skills: None,
-    config: Some(config.display().to_string()),
-    claude: None,
-    answers: false,
-    attach: None,
-  };
-  assert_eq!(window.ask(verb).await, Ok(Answer::Done));
-  window.attach(&life).await;
-  window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
-  assert!(lines(&started, 1).await[0].starts_with("probe "));
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn a_process_that_ends_before_its_life_tells_the_operator_once_and_starts_at_the_next_enable()
-{
-  let at = place();
-  let script = "#!/bin/sh\necho $$ >> started\necho first >&2\necho 'broke here' >&2\nexit 3\n";
-  let started = scripted(&at, script);
-  let mut window = hosting(&at).await;
-  let life = opened(&mut window, &at, "a.jsonl").await;
-  window.attach(&life).await;
-  window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
-  let Frame::Event { event: Event::Fact(told), .. } = window.until(crashed).await else {
-    unreachable!()
-  };
-  assert_eq!((&told[3], &told[4]), (&json!("chain1"), &json!("None")));
-  let message = told[5].as_str().unwrap();
-  assert!(message.contains("probe.sh of the skill probe ended with exit status: 3"), "{message}");
-  assert!(message.ends_with("stderr:\nfirst\nbroke here"), "{message}");
-  let heard = window.during(PAST).await;
-  assert!(!heard.iter().any(crashed), "a process that ended is told once");
-  assert_eq!(lines(&started, 1).await.len(), 1, "a process that ended does not start by itself");
-  window.ran(&life, r#"write(Text("skills://probe", "PROBED = 2"))"#).await;
-  let again = at.join(".furb").join("skills").join("probe").join("started");
-  assert_eq!(lines(&again, 2).await.len(), 2, "the next enable starts the process again");
-  window.until(crashed).await;
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn the_end_of_a_life_kills_each_process_that_the_process_of_its_skill_started() {
-  let at = place();
-  let script = "#!/bin/sh\nsleep 600 &\necho \"$$ $!\" >> started\nexec sleep 600\n";
-  let started = scripted(&at, script);
-  let mut window = hosting(&at).await;
-  let life = opened(&mut window, &at, "a.jsonl").await;
-  window.attach(&life).await;
-  window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
-  let pids = lines(&started, 1).await.remove(0);
-  let (process, child) = pids.split_once(' ').unwrap();
-  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-  time::sleep(PAST).await;
-  assert!(!window.lives(&life).await);
-  assert!(gone(process).await, "the end of the life ends the process");
-  assert!(gone(child).await, "the end of the life ends what the process started");
-  let heard = window.during(PAST).await;
-  assert!(!heard.iter().any(crashed), "a process that the life ends is not told");
 }
 
 /// The port of the browser callback of a sign-in, which is one for the machine, held by one test of

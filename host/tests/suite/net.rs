@@ -269,7 +269,6 @@ async fn tailed(identity: Tailscale) -> (Ports, Yard) {
     stall: STALL,
     tailnet: Some(Tailnet { identity, ports }),
     door: Some(held.join("door/window.json")),
-    host: None,
   };
   let local = Local::new(held.join("host"));
   let listener = local.listen().await.unwrap();
@@ -410,7 +409,6 @@ async fn daemon(yard: &Yard, file: &Path) -> JoinHandle<()> {
     stall: STALL,
     tailnet: None,
     door: Some(file.to_owned()),
-    host: None,
   };
   let local = Local::new(yard.join("host"));
   let listener = local.listen().await.unwrap();

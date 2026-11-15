@@ -178,6 +178,7 @@ metadata:
   furb-default: "false"
   furb-plays: every
   furb-process: notes.ts
+  furb-acts: notes_add
   furb-config: config.json
 ---
 What the notes are for.
@@ -202,34 +203,33 @@ What the notes are for.
   extension of the root, and a new chain with no source has none. Give `"root"` to an extension whose names only the
   work of the root needs, as a loop that conducts workers: each other chain then reads none of its words, and a model
   there is free to bind each name that it defines.
-- `furb-process` is the file of the process of the extension, relative to the folder: a module of TypeScript or of
-  JavaScript, which bun runs, a module of Python, which the Python beside the program `furb` runs, else `python3`, or
-  any other program. When a life plays the extension, the daemon of the machine starts
-  it in the folder of the skill, at the end of the replay of the record, and ends it when the life ends or when
-  the life plays a new word of the extension. Its variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` give the folder
-  where the daemon listens, the record of the life and the name of the extension, so it dials the daemon and attaches
-  the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
-  life that plays it does. A life that the daemon does not hold, as a life of a door, starts no process, so each act
-  that the process answers waits there: such a life tells its root once of each extension whose process does not run,
-  with the place where it runs. A process that ends before its life tells the operator once, with its exit and the last
-  lines of its stderr, and starts again at the next play of the extension. A process keeps working on each later
-  daemon, as [the protocol](protocol.md) says of a skill. It can be absent.
+- `furb-process` is the file of the process of the extension, its World part, relative to the folder: a module of
+  Python, which the Python beside the program of the life runs, else `python3`, a module of TypeScript or of
+  JavaScript, which bun runs, or any other program. The life starts it in the folder of the skill at the first act of a
+  kind that `furb-acts` names, never at the open, so a replay starts no process: the record answers each act before
+  its tip. The life speaks to it on its stdin and its stdout, one frame of JSON for each line, and gives it the
+  variables `FURB_LIFE` and `FURB_SKILL`, the record of the life and the name of the extension. Each life does so, the
+  daemon of the machine, a door and the rig alike. The life ends the process with each process that it started when the
+  life ends, and when a new fact `enable` of the extension reloads it, so the next act starts the new process. A
+  process that ends before its life tells the operator once, with its exit and the last lines of its stderr, and each
+  act that it held is refused with the same reason. A process keeps working on each later build, as
+  [the protocol](protocol.md) says of a kit. It can be absent.
+- `furb-acts` names the kinds of the acts that the process answers, separated by spaces, as `notes_add notes_drop`.
+  The life takes each act of these kinds, says that it started, and gives it to the process, which closes it. It can be
+  absent.
 - `furb-config` is the JSON file of the keys that the extension adds to the configs, relative to the folder, as
   [the schema](config.md#the-schema) says. `/config` shows them under the name of the extension, and its word reads
   them as `json.loads(read("settings://<name>", HIDDEN).content)`. It can be absent.
 
-The client `@uael/furb/skill` gives a process of TypeScript what it needs: it attaches the life from those variables,
-hears the facts of the kinds that it asks, says verbs that the life takes under `skill/<name>`, and serves a tree to
-each view that a window mounts.
+The client `@uael/furb/skill` gives a process of TypeScript what it needs: it attaches the life on its stdin and its
+stdout, answers the acts of its kinds, hears the facts of the kinds that it asks, and says verbs that the life takes.
+A process draws nothing: the word of the kit draws its views through the life.
 
 ```typescript
 import { Skill } from "@uael/furb/skill";
 
-const skill = await Skill.attach({ kinds: ["prompt"] });
-skill.heard((fact) => {
-  if (fact[5] === "ping") void skill.run("pong = 1");
-});
-skill.served((view) => void view.tree({ id: "said", node: "text", runs: [{ text: "served" }] }));
+const skill = await Skill.attach({ kinds: [] });
+skill.answers("notes_add", (fact) => `added ${String(fact[4])}`);
 await skill.closed;
 ```
 
@@ -243,38 +243,26 @@ from furb.skill import Skill
 
 
 async def main() -> None:
-  skill = await Skill.attach(kinds=["prompt"])
-  skill.heard(lambda fact, seq: fact[5] == "ping" and asyncio.ensure_future(skill.run("pong = 1")))
-  served = {"id": "said", "node": "text", "runs": [{"text": "served"}]}
-  skill.served(lambda view: asyncio.ensure_future(view.tree(served)))
+  skill = await Skill.attach(kinds=[])
+  skill.answers("notes_add", lambda fact: f"added {fact[4]}")
   await skill.closed
 
 
 asyncio.run(main())
 ```
 
-A kit can also own acts of its own, which its process answers. Its word makes each act with an ear that says started
-and waits, under a kind that starts with the name of the kit, so no other kit answers it:
+The word of the kit makes each act of such a kind as any act of the World, under a kind that starts with the name of
+the kit, so no other kit answers it:
 
 ```python
 def add(item: str) -> Act[str]:
-  def taken(id):
-    yield "started", id
-    yield from idle(id)
-
-  return act("notes.add", "", controlled(taken), item)
-```
-
-Its process answers each act of that kind, whatever kinds it hears:
-
-```python
-skill.answers("notes.add", lambda fact: f"added {fact[4]}")
+  return act("notes_add", "", None, item)
 ```
 
 The process closes the act with what its function gives, awaited when it is awaitable, or with a refusal that names
-what it raised. It first checks that the act is not done, so an act of the past that it reads at its attach gets no
-second answer. A word that awaits `add("milk")` waits until the process answers, and a later life takes the answer
-from the record. `skill.answers(kind, answer)` of TypeScript does the same.
+what it raised. A done of the act that comes first, as a cancel, cancels that function, and the process closes
+nothing. A word that awaits `add("milk")` waits until the process answers, and a later life takes the answer from the
+record. `skill.answers(kind, answer)` of TypeScript does the same, and gives `answer` a signal that the done aborts.
 
 A field of furb that the manifest does not know is refused with its path, so a typo does not pass.
 

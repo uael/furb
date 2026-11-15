@@ -497,13 +497,6 @@ export interface Opening {
    */
   skills?: boolean
   /**
-   * Whether a host runs the process of each extension that the life plays, as the daemon of the
-   * machine does; false when unsaid. A life that works with no such host tells its root once, at
-   * the first play of an extension that names a process, that the process does not run there and
-   * where it runs.
-   */
-  processes?: boolean
-  /**
    * The config directory of the user, which the configs and the official extensions read; the one of this process
    * when unsaid.
    */

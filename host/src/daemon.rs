@@ -43,6 +43,7 @@ use std::{
 use furb::{
   engine::OPERATOR,
   life::{Answer as Answered, Log, Opening},
+  skill::Places,
   value::Fault,
   view::{self, Reach, Sent, WATCH},
   wire::parsed,
@@ -76,9 +77,9 @@ use crate::{
   event::{Event, Seq},
   git,
   holders::{Holders, Window},
+  kits,
   life::{Command, Life, LifeHandle, Reply},
   opens::{self, Heard},
-  processes::{self, Played},
   protocol::{
     Answer, BOUND, Card, Config, Draft, Files, Frame, Handed, Hello, Kind, Listed, Model, Mount,
     Open, PROTOCOL, Peer, Project, Request, Verb,
@@ -127,9 +128,6 @@ pub struct Settings {
   /// The file where the daemon writes the address and the token of its door of the windows, the
   /// WebSocket on loopback that a web view dials, when it opens one.
   pub door: Option<PathBuf>,
-  /// The folder of the local transport, where the process of each skill that a life plays dials
-  /// the daemon. With none, the daemon starts no process.
-  pub host: Option<PathBuf>,
 }
 
 /// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
@@ -618,7 +616,7 @@ async fn awaited(handle: &LifeHandle, life: String, act: String) -> Result<Answe
 /// none for any other peer, which speaks as the life itself.
 fn site(peer: &Peer) -> Option<String> {
   match (peer.kind, &peer.name) {
-    (Kind::Skill, Some(name)) => Some(processes::speaker(name)),
+    (Kind::Skill, Some(name)) => Some(kits::speaker(name)),
     (Kind::Window, _) => Some(format!("{OPERATOR}/{}", peer.operator)),
     _ => None,
   }
@@ -1199,11 +1197,8 @@ impl Lives {
       claude: claude.or_else(|| base.claude.clone()),
       answer: answer.or_else(|| base.answer.clone()),
       members: Some(self.members.clone()),
-      // The daemon runs the process of each extension that the life plays, as `Played` says.
-      processes: Some(true),
       ..base.clone()
     };
-    let places = processes::places(&opening);
     let handle = Life::spawn(opening)?;
     self.faults.remove(life);
     self.born += 1;
@@ -1215,18 +1210,7 @@ impl Lives {
       log: self.settings.opening.log.clone(),
     };
     tokio::spawn(watch.watched(self.asks.clone()));
-    if let Some(host) = &self.settings.host {
-      let played = Played {
-        handle: handle.clone(),
-        life: life.to_owned(),
-        cwd: PathBuf::from(&cwd),
-        host: host.clone(),
-        inside: Inside(self.asks.clone()),
-        places,
-        log: self.settings.opening.log.clone(),
-      };
-      tokio::spawn(played.run());
-    }
+    tokio::spawn(kits::served(handle.clone(), life.to_owned(), Inside(self.asks.clone())));
     let (mut told, asks, record) = (handle.cards(), self.asks.clone(), life.to_owned());
     tokio::spawn(async move {
       while told.changed().await.is_ok()
@@ -1413,7 +1397,7 @@ impl Lives {
   /// name of its session.
   fn listed(&self, config: Option<String>) -> Vec<Listed> {
     let config = config.or_else(|| self.settings.opening.config.clone());
-    let folder = processes::places(&Opening { config, ..Opening::default() }).config;
+    let folder = config.map_or_else(|| Places::here().config, PathBuf::from);
     let found = records::recorded(&folder);
     let mut listed: Vec<Listed> = Vec::new();
     for one in &found {

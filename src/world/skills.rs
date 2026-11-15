@@ -3,7 +3,7 @@
 //! configs, and the official extensions that the crate carries. It answers the act `skill`, which
 //! loads a skill on a chain, and a write of `skills://` and a name, which writes the word of a
 //! skill, and a read of `settings://`, which gives the keys of a skill in the configs, so its word
-//! reads them. [`process`] gives the program of the process of a skill, which a daemon runs.
+//! reads them. [`kit`] gives the World part of a kit, which the ear of the kits runs.
 
 use std::{
   env, fs, io,
@@ -17,8 +17,9 @@ use crate::{
   engine::ROOT,
   fact::Fact,
   skill::{
-    CONFIG, DEFAULT, ENABLE, INTERFACE, MANIFEST, PROCESS, Places, Skill, WORD, copy, enabled,
-    frontmatter, imports_furb, load, manifested, manifests, rooted, shipped, turned_on, word,
+    ACTS, CONFIG, DEFAULT, ENABLE, INTERFACE, MANIFEST, PROCESS, Places, Skill, WORD, copy,
+    enabled, frontmatter, imports_furb, load, manifested, manifests, rooted, shipped, turned_on,
+    word,
   },
   value::{Fault, Text, entry},
   world::{
@@ -378,21 +379,44 @@ fn filed(one: &Found, file: &str, path: &str) -> Result<Text, Fault> {
   }
 }
 
-/// The program of the process of the skill of a name, as a life whose folder is `here` finds the
-/// skill: the file of its folder that its manifest names under `metadata` as `furb-process`. It is
-/// none when the manifest names none, when the file leaves the folder, and when the skill is
-/// official, since the crate carries no process yet.
-/// A fact enable of a build before the program names none, so a life finds the process of such a
-/// fact by the name of its skill, as it finds it now.
-pub fn process(name: &str, here: &Path, places: &Places) -> Option<PathBuf> {
-  let one = found(here, here, places).into_iter().find(|one| one.name == name)?;
-  let Place::Folder(folder) = &one.place else { return None };
-  programmed(folder, &one.manifest)
+/// The World part of a kit: the program of its process, and the kinds of the acts that it answers,
+/// which its manifest names under `metadata` as `furb-process` and `furb-acts`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Kit {
+  pub(crate) program: PathBuf,
+  pub(crate) acts: Vec<String>,
 }
 
-/// The program that a fact enable names, as a path of the machine, or none when it names none.
-pub fn program(named: &str) -> Option<PathBuf> {
-  (!named.is_empty()).then(|| files::placed(Path::new(""), named).ok()).flatten()
+/// The kit of a skill that a fact enable names, as a life whose folder is `here` finds it: the
+/// program that the fact names, with the manifest of the nearest folder above it, else the program
+/// that the manifest of the skill of that name names, in its folder or, for an official skill, in
+/// the copy of the file that the crate carries. A fact enable of a build before the program names
+/// none, so a life finds the process of such a fact by the name of its skill, as it finds it now.
+/// It is none when the manifest names no process, and when the file leaves the folder.
+pub(crate) fn kit(name: &str, program: Option<&str>, here: &Path, places: &Places) -> Option<Kit> {
+  if let Some(program) = program.filter(|one| !one.is_empty()) {
+    let program = files::placed(Path::new(""), program).ok()?;
+    let mut above = program.ancestors().skip(1);
+    let manifest = above.find_map(|one| fs::read_to_string(one.join(MANIFEST)).ok())?;
+    return Some(Kit { acts: acts(&manifest), program });
+  }
+  let one = found(here, here, places).into_iter().find(|one| one.name == name)?;
+  let file = frontmatter(&one.manifest).meta(PROCESS)?.to_owned();
+  let program = match &one.place {
+    Place::Folder(folder) => programmed(folder, &one.manifest)?,
+    Place::Shipped(files) => {
+      let text = files.iter().find(|two| two.0 == file)?.1;
+      let copied = copy(name, &file, text, places);
+      (!copied.is_empty()).then(|| files::placed(Path::new(""), &copied).ok()).flatten()?
+    }
+  };
+  Some(Kit { acts: acts(&one.manifest), program })
+}
+
+/// The kinds of the acts that a manifest names under `furb-acts`.
+fn acts(manifest: &str) -> Vec<String> {
+  let named = frontmatter(manifest).meta(ACTS).unwrap_or_default().to_owned();
+  named.split_whitespace().map(str::to_owned).collect()
 }
 
 /// The program of the process that the manifest of a skill in a folder names under `metadata` as

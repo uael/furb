@@ -16,7 +16,7 @@ use super::{
 };
 use crate::testing::Yard;
 use crate::value::{ObjectRef, Text, entry};
-use crate::world::skills::process;
+use crate::world::skills::{Kit, kit};
 use crate::{
   Ear, Engine, Fact, Object,
   ear::{ear, hear, say},
@@ -218,12 +218,12 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
 }
 
 #[test]
-fn the_process_of_a_skill_is_the_file_of_its_folder_that_its_manifest_names() {
+fn the_kit_of_a_skill_is_the_process_of_its_folder_and_the_acts_that_its_manifest_names() {
   let at = place("process");
   let skills = at.join(".furb").join("skills");
   folder(
     &skills.join("note"),
-    &skill("note", &[("word", "note.py"), ("process", "run.ts")]),
+    &skill("note", &[("word", "note.py"), ("process", "run.ts"), ("acts", "note_add note_drop")]),
     "x = 1\n",
   );
   folder(
@@ -232,12 +232,18 @@ fn the_process_of_a_skill_is_the_file_of_its_folder_that_its_manifest_names() {
     "x = 1\n",
   );
   folder(&skills.join("bare"), &skill("bare", &[("word", "note.py")]), "x = 1\n");
-  let found = |name: &str| process(name, &at, &places(&at));
-  assert_eq!(found("note"), Some(skills.join("note").join("run.ts")));
-  assert_eq!(found("out"), None, "a process that leaves the folder of its skill");
-  assert_eq!(found("bare"), None, "a manifest that names no process");
-  assert_eq!(found("memory"), None, "the crate carries no process of an official skill");
-  assert_eq!(found("absent"), None);
+  let found = |name: &str, program: Option<&str>| kit(name, program, &at, &places(&at));
+  let note = Kit {
+    program: skills.join("note").join("run.ts"),
+    acts: vec!["note_add".to_owned(), "note_drop".to_owned()],
+  };
+  assert_eq!(found("note", None), Some(note.clone()));
+  let named = note.program.display().to_string();
+  assert_eq!(found("other", Some(&named)), Some(note), "the program that a fact enable names");
+  assert_eq!(found("out", None), None, "a process that leaves the folder of its skill");
+  assert_eq!(found("bare", None), None, "a manifest that names no process");
+  assert_eq!(found("memory", None), None, "an official skill with no process");
+  assert_eq!(found("absent", None), None);
 }
 
 #[test]
@@ -250,8 +256,7 @@ fn a_manifest_names_no_field_of_furb_but_those_that_it_knows() {
   );
   folder(&at.join("bad"), &skill("note", &[("word", "note.py"), ("view", "view.ts")]), "x = 1\n");
   let manifest = at.join("bad").join("SKILL.md").display().to_string();
-  let fields =
-    "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-process, furb-config";
+  let fields = "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-process, furb-acts, furb-config";
   assert_eq!(
     load("note", &at.join("bad"), &places(&at)).unwrap_err().message(),
     format!("The manifest gives furb-view, and the fields of furb are {fields}: {manifest}")
@@ -568,7 +573,7 @@ fn the_ear_tells_the_root_once_why_each_skill_that_does_not_play_does_not_play()
   let (record, store) = world::store(at.join("record.jsonl")).unwrap();
   let why = ["The skill a does not play: one", "The skill b does not play: two"];
   let ears = [
-    ("extensions", telling(vec![], why.map(str::to_owned).to_vec(), places(at), None)),
+    ("extensions", telling(vec![], why.map(str::to_owned).to_vec(), places(at))),
     ("stand", standing(at.to_owned())),
     ("files", world::files(world::Scratch::own(), at.join("user"), None)),
     ("store", store),
@@ -589,54 +594,6 @@ fn the_ear_tells_the_root_once_why_each_skill_that_does_not_play_does_not_play()
 }
 
 #[test]
-fn a_life_that_no_host_runs_processes_for_tells_the_root_once_of_each_skill_whose_process_does_not_run()
- {
-  let notes = |hosted: bool| {
-    let yard = place(if hosted { "hosted" } else { "unhosted" });
-    let at: &Path = &yard;
-    folder(
-      &at.join(".furb").join("skills").join("note"),
-      &skill("note", &[("word", "note.py"), ("process", "run.py")]),
-      "x = 1\n",
-    );
-    let (record, store) = world::store(at.join("record.jsonl")).unwrap();
-    let unhosted = (!hosted).then(|| at.to_owned());
-    let ears = [
-      ("extensions", telling(vec![note("x = 1\n")], vec![], places(at), unhosted)),
-      ("stand", standing(at.to_owned())),
-      ("files", world::files(world::Scratch::own(), at.join("user"), None)),
-      ("store", store),
-    ];
-    let mut engine = Engine::boot(record, ears).unwrap();
-    assert!(engine.raised().is_none(), "{:?}", engine.raised());
-    engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
-    let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
-    let told: Vec<String> = engine
-      .transcript(on)
-      .unwrap()
-      .iter()
-      .filter(|one| one.kind() == "tell" && one.by() == "extensions")
-      .filter_map(|one| one.word(0).and_then(|notes| entry(&notes, 0)))
-      .filter_map(|note| note.as_str().map(str::to_owned))
-      .collect();
-    let program = at.join(".furb").join("skills").join("note").join("run.py");
-    (told, program)
-  };
-  let (told, program) = notes(false);
-  let line = format!(
-    "The extension note runs its process {} only in a life that the daemon of the machine holds, so \
-     each act that the process answers waits here: open the life in the window or with `furb prompt`.",
-    program.display()
-  );
-  assert_eq!(told, [line]);
-  assert_eq!(
-    notes(true).0,
-    Vec::<String>::new(),
-    "a life whose host runs the process tells nothing"
-  );
-}
-
-#[test]
 fn a_life_that_opens_again_on_its_record_replays_the_note_of_the_former_key_and_tells_it_no_more() {
   let yard = place("retold");
   let at: &Path = &yard;
@@ -644,7 +601,7 @@ fn a_life_that_opens_again_on_its_record_replays_the_note_of_the_former_key_and_
   let opened = || {
     let (record, store) = world::store(at.join("record.jsonl")).unwrap();
     let ears = [
-      ("extensions", telling(vec![], why.to_vec(), places(at), None)),
+      ("extensions", telling(vec![], why.to_vec(), places(at))),
       ("stand", standing(at.to_owned())),
       ("files", world::files(world::Scratch::own(), at.join("user"), None)),
       ("store", store),

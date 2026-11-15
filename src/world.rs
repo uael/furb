@@ -24,6 +24,7 @@ pub mod config;
 pub(crate) mod disk;
 mod fetch;
 pub(crate) mod files;
+pub(crate) mod kits;
 mod log;
 pub mod mcp;
 mod operator;

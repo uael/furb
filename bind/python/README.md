@@ -45,8 +45,6 @@ The words of `opened`, each of which can be left out:
 - `keeps` false keeps nothing in the record, and `inspecting` true opens a life that keeps nothing, enables nothing
   new, and asks no model.
 - `skills` false enables no new skill, and `config` names the config directory of the user.
-- `processes` true says that the host runs the process of each skill that the life plays, as the daemon of the machine
-  does. A life with no such host tells its root once of each skill whose process does not run there.
 - `answer`, a function, answers each request in place of the models, as the suite of furb does.
 - `stream`, a function, hears what a model writes as it writes it, and `retrying` each retry of a call of a model.
 - `log`, a function, hears each report of the life that no model reads, one line each, in place of the stderr of the

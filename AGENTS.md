@@ -14,7 +14,7 @@ API of its own:
 - `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build/verbs.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file for each concern: the files, the commands,
-  the pages of the web, the client of the MCP servers, the time, the store of the record, the log of a life, the reader of a record with no life, the
+  the pages of the web, the client of the MCP servers, the host of the process of each kit, the time, the store of the record, the log of a life, the reader of a record with no life, the
   scratch directory, the rules by which a console reads the operator, and the provider of models, which asks each model
   through rig and streams what it writes. The doc comments of `src/world.rs` and of each module say what each does, the
   tables of [`CONTRIBUTING.md`](CONTRIBUTING.md#the-world-and-the-life) list its files, and `docs/models.md` tells a
@@ -182,8 +182,8 @@ The TypeScript side is a bun workspace at the root, whose packages are the door 
   act that is answered later can be awaited. It includes a `Session`: an engine on the ears of the crate, the
   provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. Its
   model of a life, `furb/life` in `src/life`, gives the views of a life that every host draws, with no native
-  code. `furb/skill`, in `src/skill.ts`, is the client of the process of a skill, which dials the daemon of the
-  machine as the protocol says. `bun run build` makes its build in `bind/typescript/dist` again, which its tests read.
+  code. `furb/skill`, in `src/skill.ts`, is the client of the process of a kit, which speaks to its life on its stdin
+  and its stdout as the protocol says. `bun run build` makes its build in `bind/typescript/dist` again, which its tests read.
 
 `docs/examples/` holds the examples of the framework: five short programs for each door, in `python/`,
 `typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on

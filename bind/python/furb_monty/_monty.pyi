@@ -117,7 +117,6 @@ class Opening(TypedDict):
   inspecting: NotRequired[bool | None]
   whole: NotRequired[bool | None]
   skills: NotRequired[bool | None]
-  processes: NotRequired[bool | None]
   config: NotRequired[str | None]
   actor: NotRequired[str | None]
   roster: NotRequired[list[str] | None]

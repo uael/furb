@@ -1,13 +1,12 @@
-"""The client of the process of a skill, in Python, as `@uael/furb/skill` is in TypeScript.
+"""The client of the process of a kit, in Python, as `@uael/furb/skill` is in TypeScript.
 
-The daemon of the machine starts the process of a skill with `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL`. `Skill.attach`
-dials the daemon from them and attaches the life as a peer of the kind skill. The skill then hears the facts of the
-kinds that it asks, says verbs that the life takes under its name, answers the acts that its word takes, and serves a
-tree to each view that a window mounts.
+A life starts the process of a kit at the first act of a kind that the manifest of the kit names under `furb-acts`,
+with `FURB_LIFE` and `FURB_SKILL`, and speaks to it on its stdin and its stdout, one frame of JSON for each line.
+`Skill.attach` says its hello and attaches the life. The kit then answers the acts of its kinds, hears the facts of
+the kinds that it asks, and says verbs that the life takes. A kit draws nothing: its word draws its views.
 
-    skill = await Skill.attach(kinds=["prompt"])
-    skill.heard(lambda fact, seq: fact[5] == "ping" and asyncio.ensure_future(skill.run("pong = 1")))
-    skill.served(lambda view: asyncio.ensure_future(view.tree({"id": "said", "node": "text", "runs": [{"text": "hi"}]})))
+    skill = await Skill.attach(kinds=[])
+    skill.answers("note_add", lambda fact: f"added {fact[4]}")
     await skill.closed
 
 The types of the protocol stand in `furb.protocol`, which the schema of the daemon makes.
@@ -18,35 +17,27 @@ import contextlib
 import inspect
 import json
 import os
-import re
 import sys
+import threading
 from collections.abc import Callable, Collection, Mapping
-from pathlib import Path
+from typing import Protocol
 
-from furb.protocol import PROTOCOL, Answer, Effect, Frame, Kind, Mount, Node, Peer, Slot, ViewEvent
+from furb.protocol import PROTOCOL, Answer, Frame, Kind, Peer
 
-HOST = "FURB_HOST"
 LIFE = "FURB_LIFE"
 SKILL = "FURB_SKILL"
-"""The variables that the daemon gives the process of a skill: the folder where it listens, the record of the life
-that the process serves, and the name of its skill."""
+"""The variables that the life gives the process of a kit: the record of the life that it serves, and the name of its
+kit."""
 
 LIMIT = 1 << 30
-"""The longest line that a connection reads: a frame of the daemon is one line, and a fact can hold a large text."""
+"""The longest line that a connection reads: a frame of the life is one line, and a fact can hold a large text."""
 
 type Fact = list[object]
-"""A fact of the life as the daemon tells it: its kind, the act that it is about, who said it, and its words."""
-
-
-def daemon_place(folder: str) -> str:
-  """Where a peer dials the daemon that listens in a folder: its socket, or its named pipe on Windows."""
-  return (
-    "\\\\.\\pipe\\furb-" + re.sub(r"[\\/:]", "-", folder) if sys.platform == "win32" else str(Path(folder, "host.sock"))
-  )
+"""A fact of the life as the life tells it: its kind, the act that it is about, who said it, and its words."""
 
 
 class Refused(Exception):
-  """A refusal of the daemon, named by its kind, as `closed`, `role` or `no_skill`, and `refused` when it says no more."""
+  """A refusal of the life, named by its kind, as `closed` or `role`, and `refused` when it says no more."""
 
   def __init__(self, why: str, kind: str = "refused") -> None:
     super().__init__(why)
@@ -54,27 +45,51 @@ class Refused(Exception):
 
 
 class Closed(Exception):
-  """A request that the daemon left with no answer when its connection closed, as when it ends or hands over."""
+  """A request that the life left with no answer when its stream closed, as when it ends."""
 
 
-async def piped(place: str) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-  """The streams of a named pipe of Windows, where asyncio opens no pipe by a stream function of its own."""
+class Writer(Protocol):
+  """Where a connection writes its lines: a stream of asyncio, or the stdout of this process."""
+
+  def write(self, data: bytes) -> object: ...
+
+  def close(self) -> object: ...
+
+
+class Stdout:
+  """The stdout of this process, written whole for each line, which the life reads."""
+
+  def write(self, data: bytes) -> None:
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+  def close(self) -> None:
+    sys.stdout.close()
+
+
+def stdin() -> asyncio.StreamReader:
+  """The stdin of this process as a stream, fed by a thread, since asyncio reads no pipe of stdin on Windows."""
   loop = asyncio.get_running_loop()
   reader = asyncio.StreamReader(LIMIT)
-  protocol = asyncio.StreamReaderProtocol(reader)
-  transport, _ = await loop.create_pipe_connection(lambda: protocol, place)  # ty: ignore[unresolved-attribute]
-  return reader, asyncio.StreamWriter(transport, protocol, reader, loop)
+
+  def fed() -> None:
+    for line in sys.stdin.buffer:
+      loop.call_soon_threadsafe(reader.feed_data, line)
+    loop.call_soon_threadsafe(reader.feed_eof)
+
+  threading.Thread(target=fed, daemon=True).start()
+  return reader
 
 
 class Connection:
-  """One connection to the daemon, after its hello. Each verb takes a number and its answer, in any order, and each
-  frame that the daemon pushes goes to each listener of `pushed`. `closed` is done when the stream ends, from either
+  """One connection to the life, after its hello. Each verb takes a number and its answer, in any order, and each
+  frame that the life pushes goes to each listener of `pushed`. `closed` is done when the stream ends, from either
   side, and each verb that waits then raises `Closed`."""
 
   peer: Peer
   closed: asyncio.Future[None]
 
-  def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+  def __init__(self, reader: asyncio.StreamReader, writer: Writer) -> None:
     self.reader, self.writer = reader, writer
     self.next = 0
     self.waiting: dict[int, asyncio.Future[Answer]] = {}
@@ -82,25 +97,21 @@ class Connection:
     self.closed = asyncio.get_running_loop().create_future()
     self.reading = asyncio.ensure_future(self.read())
 
-  @classmethod
-  async def dial(cls, place: str, kind: Kind, name: str | None = None) -> Connection:
-    """A connection to the daemon at a place, as a peer of a kind, with the name of a skill for a skill."""
-    win = sys.platform == "win32"
-    reader, writer = await (piped(place) if win else asyncio.open_unix_connection(place, limit=LIMIT))
-    connection = cls(reader, writer)
+  async def hello(self, kind: Kind, name: str | None = None) -> None:
+    """The hello of this connection, as a peer of a kind, with the name of its kit, and the peer that the life
+    welcomes."""
     hello: dict[str, object] = {"verb": "hello", "protocol": PROTOCOL, "kind": kind, "name": name}
-    welcome = await connection.ask(hello)
+    welcome = await self.ask(hello)
     if welcome["answer"] != "welcome":
-      connection.close()
-      why = f"The daemon gave {welcome['answer']}, and no welcome."
+      self.close()
+      why = f"The life gave {welcome['answer']}, and no welcome."
       raise Refused(why)
-    connection.peer = welcome["data"]["peer"]
-    return connection
+    self.peer = welcome["data"]["peer"]
 
   async def ask(self, verb: Mapping[str, object]) -> Answer:
-    """The answer of the daemon to a verb, or its refusal as a `Refused`. A field that is None is not said."""
+    """The answer of the life to a verb, or its refusal as a `Refused`. A field that is None is not said."""
     if self.closed.done():
-      why = "This connection holds no stream to the daemon."
+      why = "This connection holds no stream to the life."
       raise Closed(why)
     number, self.next = self.next, self.next + 1
     waits = self.waiting[number] = asyncio.get_running_loop().create_future()
@@ -109,7 +120,7 @@ class Connection:
     return await waits
 
   def pushed(self, listener: Callable[[Frame], object]) -> Callable[[], None]:
-    """Each frame that the daemon pushes from now on, heard until the call that this gives."""
+    """Each frame that the life pushes from now on, heard until the call that this gives."""
     self.listeners.append(listener)
     return lambda: self.listeners.remove(listener)
 
@@ -118,14 +129,14 @@ class Connection:
 
   async def read(self) -> None:
     try:
-      # A daemon that resets the stream ends it as one that closes it.
+      # A life that resets the stream ends it as one that closes it.
       with contextlib.suppress(ConnectionError):
         while line := await self.reader.readline():
           if line.strip():
             self.heard(json.loads(line))
     finally:
       for waits in self.waiting.values():
-        waits.done() or waits.set_exception(Closed("The daemon closed the connection."))
+        waits.done() or waits.set_exception(Closed("The life closed the connection."))
       self.waiting.clear()
       self.writer.close()
       self.closed.set_result(None)
@@ -144,64 +155,42 @@ class Connection:
       listener(frame)
 
 
-class View:
-  """A view of the skill that a window mounted: its viewer and its slot. `tree` serves its tree, each in the place of
-  the one before, and `effect` asks its one window to do something. What a person does to its nodes goes to each
-  listener of `events`, and `disposed` is done when the window or the daemon ends it."""
-
-  def __init__(self, connection: Connection, mount: Mount) -> None:
-    self.connection = connection
-    self.viewer: str = mount["viewer"]
-    self.slot: Slot = mount["slot"]
-    self.version = 0
-    self.listeners: list[Callable[[ViewEvent], object]] = []
-    self.disposed: asyncio.Future[None] = asyncio.get_running_loop().create_future()
-
-  async def tree(self, tree: Node) -> None:
-    self.version += 1
-    verb = {"verb": "view.tree", "viewer": self.viewer, "slot": self.slot, "version": self.version, "tree": tree}
-    await self.connection.ask(verb)
-
-  async def effect(self, effect: Effect) -> None:
-    await self.connection.ask({"verb": "view.effect", "viewer": self.viewer, "effect": effect})
-
-  def events(self, listener: Callable[[ViewEvent], object]) -> Callable[[], None]:
-    self.listeners.append(listener)
-    return lambda: self.listeners.remove(listener)
-
-
 class Skill:
-  """The process of a skill as a peer of the daemon: it attaches the life that the daemon started it for, under the
-  name of its skill, hears the facts of the kinds that it asked, says verbs to the life, which the life takes under
-  that name, and serves a view to each window that mounts one."""
+  """The process of a kit as a peer of its life: it attaches the life under the name of its kit, hears the facts of the
+  kinds that it asked, answers the acts of its kinds, and says verbs to the life, which the life takes."""
 
   def __init__(self, connection: Connection, name: str, life: str, kinds: Collection[str] | None) -> None:
     self.connection, self.name, self.life, self.kinds = connection, name, life, kinds
-    self.views: dict[str, View] = {}
     self.facts: list[Callable[[Fact, int], object]] = []
     self.answering: dict[str, Callable[[Fact], object]] = {}
-    self.answers_running: set[asyncio.Task[None]] = set()
-    self.mounts: list[Callable[[View], object]] = []
+    self.running: dict[str, asyncio.Task[None]] = {}
     connection.pushed(self.pushed)
 
   @classmethod
   async def attach(
-    cls, kinds: Collection[str] | None = None, start: int = 0, env: Mapping[str, str] = os.environ
+    cls,
+    kinds: Collection[str] | None = None,
+    start: int = 0,
+    env: Mapping[str, str] = os.environ,
+    streams: tuple[asyncio.StreamReader, Writer] | None = None,
   ) -> Skill:
-    """The skill of this process attached to its life, from the variables that the daemon gave it. It hears the
-    facts of the kinds that it names, each kind when it names none, from the place `start` of the log of the life."""
-    host, life, name = env.get(HOST), env.get(LIFE), env.get(SKILL)
-    if not (host and life and name):
-      why = f"A process of a skill needs {HOST}, {LIFE} and {SKILL}, which the daemon gives it."
+    """The kit of this process attached to its life, on the stdin and the stdout of this process unless `streams`
+    names others, from the variables that the life gave it. It hears the facts of the kinds that it names, each kind
+    when it names none, from the place `start` of the life."""
+    life, name = env.get(LIFE), env.get(SKILL)
+    if life is None or not name:
+      why = f"A process of a kit needs {LIFE} and {SKILL}, which its life gives it."
       raise LookupError(why)
-    connection = await Connection.dial(daemon_place(host), "skill", name)
+    reader, writer = streams or (stdin(), Stdout())
+    connection = Connection(reader, writer)
+    await connection.hello("skill", name)
     skill = cls(connection, name, life, kinds)
     await connection.ask({"verb": "attach", "life": life, "from": start})
     return skill
 
   @property
   def closed(self) -> asyncio.Future[None]:
-    """Done when the connection to the daemon ends, as at the end of the life or of the daemon."""
+    """Done when the stream of the life ends, as at the end of the life."""
     return self.connection.closed
 
   def heard(self, listener: Callable[[Fact, int], object]) -> Callable[[], None]:
@@ -210,10 +199,10 @@ class Skill:
     return lambda: self.facts.remove(listener)
 
   def answers(self, kind: str, answer: Callable[[Fact], object]) -> Callable[[], None]:
-    """Each act of a kind that the word of the skill took with a started, and that is not done, answered from now on,
-    whatever kinds the skill hears: the skill closes it with what `answer` gives for its fact, awaited when it is
-    awaitable, or with a refusal that names what it raised. An act that is done already, as one of the past that an
-    attach reads, gets no answer."""
+    """Each act of a kind that the life gives the kit, and that is not done, answered from now on, whatever kinds the
+    kit hears: the kit closes it with what `answer` gives for its fact, awaited when it is awaitable, or with a refusal
+    that names what it raised. An act that is done already gets no answer, and the done of an act that a control
+    ended cancels its answer."""
     self.answering[kind] = answer
 
     def unanswered() -> None:
@@ -233,13 +222,8 @@ class Skill:
         value = json.dumps({"is": "Refused", "args": [str(no) or type(no).__name__]})
       await self.say({"verb": "close", "act": act, "value": value})
 
-  def served(self, listener: Callable[[View], object]) -> Callable[[], None]:
-    """Each view that a window mounts from now on."""
-    self.mounts.append(listener)
-    return lambda: self.mounts.remove(listener)
-
   async def say(self, verb: Mapping[str, object]) -> Answer:
-    """The answer of the life to a verb that the skill says, under its name."""
+    """The answer of the life to a verb that the kit says."""
     return await self.connection.ask({**verb, "life": self.life})
 
   async def run(self, word: str, on: str | None = None) -> str:
@@ -257,29 +241,21 @@ class Skill:
     match frame:
       case {"frame": "event", "life": self.life, "seq": int(seq), "event": {"event": "fact", "data": list(fact)}}:
         if (answer := self.answering.get(str(fact[0]))) is not None:
-          task = asyncio.ensure_future(self.answered(fact, answer))
-          self.answers_running.add(task)
-          task.add_done_callback(self.answers_running.discard)
+          task = self.running[str(fact[1])] = asyncio.ensure_future(self.answered(fact, answer))
+          task.add_done_callback(lambda _: self.running.pop(str(fact[1]), None))
+        elif fact[0] == "done" and (task := self.running.get(str(fact[1]))) is not None:
+          task.cancel()
         if self.kinds is None or fact[0] in self.kinds:
           for listener in list(self.facts):
             listener(fact, seq)
-      case {"frame": "view.mount", "life": self.life}:
-        view = self.views[frame["viewer"]] = View(self.connection, frame)
-        for listener in list(self.mounts):
-          listener(view)
-      case {"frame": "view.event", "viewer": str(viewer)} if viewer in self.views:
-        for listener in list(self.views[viewer].listeners):
-          listener(frame)
-      case {"frame": "view.dispose", "viewer": str(viewer)} if viewer in self.views:
-        self.views.pop(viewer).disposed.set_result(None)
 
 
 def named(answer: Answer) -> str:
   """The act that a verb made, as the answer of the daemon names it."""
   if answer["answer"] != "act":
-    why = f"The daemon gave {answer['answer']}, and no act."
+    why = f"The life gave {answer['answer']}, and no act."
     raise Refused(why)
   return answer["data"]
 
 
-__all__ = ["HOST", "LIFE", "SKILL", "Closed", "Connection", "Fact", "Refused", "Skill", "View", "daemon_place"]
+__all__ = ["LIFE", "SKILL", "Closed", "Connection", "Fact", "Refused", "Skill", "Stdout", "Writer", "stdin"]

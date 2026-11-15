@@ -157,12 +157,6 @@ pub struct Opening {
   /// its record enables either way.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub skills: Option<bool>,
-  /// Whether a host runs the process of each extension that the life plays, as the daemon of the
-  /// machine does; false when unsaid. A life that works with no such host tells its root once, at
-  /// the first play of an extension that names a process, that the process does not run there and
-  /// where it runs.
-  #[cfg_attr(feature = "python", pyo3(default))]
-  pub processes: Option<bool>,
   /// The config directory of the user, which the configs and the official extensions read; the one of this process
   /// when unsaid.
   #[cfg_attr(feature = "python", pyo3(default))]
@@ -327,12 +321,13 @@ impl Opening {
     let config = places.config.clone();
     // An ear that holds nothing that a fresh one lacks starts again after it raises.
     let user = config.clone();
-    let unhosted = (works && self.processes != Some(true)).then(|| project.clone());
-    let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
+    let servers = world::mcp::Settings::of(project.clone(), config.clone(), gallery.clone());
+    let life = self.record.clone().unwrap_or_default();
     let ears = vec![
       ("provider", provider),
-      (skill::EAR, skill::telling(played, refused, places, unhosted)),
+      (skill::EAR, skill::telling(played, refused, places.clone())),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
+      ("kits", working(works.then(|| world::kits::kits(life, project, places)))),
       (
         "mcp",
         working(works.then(|| {
