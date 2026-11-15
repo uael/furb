@@ -283,34 +283,45 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
   )
 
   def ear(id):
-    t = reading(o := source or ROOT)
-    h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
-    hi = next(n for n, x in enumerate(h) if n > (lo := h.index("chain()")) and re.fullmatch(r"#chain\d+", x))
+    t = reading(source or ROOT)
+    h = [x[3:] == (["chain()"],) or x[0] for x in t] + [True, "setup"]
+    hi = h.index("setup", lo := h.index(True))
     hi *= hi < len(t)
+    copied = "stand" in h[lo:hi]
     running, waiting, last, bound, held, due = set(), {}, standing(), 0, {}, set()
     barren, wrote, awaited, did, seen = {}, {}, {}, {}, {}
     step = reply = note = to = ""
-    leaps, dropped = [], []
+    leaps, dropped, plan = [], [], []
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
-    def crafts(code):
-      return rung(code, to=stood)
+    def stands(prior):
+      went = last[1] * (prior[1:2] != last[1:2]) * all(get(x[2]) and all(get(x[2])[4::2]) for x in transcript(id, "cd"))
+      return "stand()" + (went and f"\ncd({went!r})")
 
-    def placed(went):
-      return crafts("stand()" + (went and f"\ncd({went!r})"))
+    def setup():
+      e = last[4:] and last[4]
+      files = [[f"rung(read({x[1]!r}, HIDDEN).content)" for x in e if x[1] and x[3] == k] for k in (0, 1)]
+      lives = [[x[2] for x in e if x[2] and x[3] == k] for k in (0, 1)]
+      return [
+        ['debug(t"{standing()[4]=}")'] * bool(last[4:]) + [f"read({last[3]!r})", *files[0], stands([]), *lives[0]],
+        *[("setup", id), files[1] + lives[1]] * (id == ROOT),
+        None,
+      ]
 
-    def seeded():
-      placed(last[1])
-      if last[4:]:
-        crafts('debug(t"{standing()[4]=}")')
-        crafts(f"read({last[3]!r})")
-        for k in range(1 + (id == ROOT)):
-          k and (yield "setup", id)
-          for x in last[4]:
-            x[1] and x[3] == k and crafts(f"rung(read({x[1]!r}, HIDDEN).content)")
-          for y in last[4]:
-            y[3] == k and y[2] and crafts(y[2])
-      return True
+    def staged():
+      while plan and not crafted(id):
+        if isinstance(it := plan.pop(0), list):
+          for code in it:
+            rung(code, to=stood)
+        else:
+          yield it or opened(
+            id,
+            "Never",
+            label=label,
+            source=source,
+            actor=stood * (not source),
+            actor_via=(not source) * (get(id)[3] or "stand"),
+          )
 
     def thread(of):
       return next((g for g in lineage(of) if prompted(g)), "")
@@ -349,14 +360,12 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         with site.set(of):
           rung(words)
 
-    if source or "stand" in h[lo:hi]:
+    if source or copied:
       kin = {
         source,
         id,
         *[n for one in ([x[1] for x in t if question(x)] if kept is None else kept) for n in lineage(one)],
       }
-      later = {x[1] for x in t[h.index("setup") :] if question(x) and (not get(x[2]) or x[:3:2] == ("rung", ROOT))}
-      later |= {x[1] for x in t if x[0] == "run" and not later.isdisjoint(lineage(x[4]))}
       bound = len(
         (
           yield (
@@ -365,7 +374,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             [
               it
               for n, it in enumerate(t)
-              if (lo <= n < hi and later.isdisjoint(lineage(it[1])))
+              if (lo <= n <= hi and ROOT in lineage(it[1]))
               or (source and (not (b := get(it[1])) or (b[2] if b[0] == "reply" else it[1]) in kin))
             ],
           )
@@ -374,22 +383,11 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     ladder = {x: w for x, w in program(source or id).items() if over(x) or not get(x)}
     yield "started", id
 
-    def opening():
-      return opened(
-        id,
-        "Never",
-        label=label,
-        source=source,
-        actor=stood * (not source),
-        actor_via=(not source) * (get(id)[3] or "stand"),
-      )
-
-    top = opening()
-    if last and (source or not last[3:]):
-      yield top
-      top = ""
+    if last:
+      was = answer("stand", id, [])
+      plan = [[stands(was)]] * (copied and was != last) + [None] if source or copied or not last[3:] else setup()
+    yield from staged()
     yield from replay()
-    seat = top and last and (transcript(id, "stand") or (yield from seeded()))
     while True:
       r = get((a := (yield {id, "stand", "reply"}))[1]) or a
       match a:
@@ -397,16 +395,12 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           was, last = last, standing()
           if last[2:3] != was[2:3]:
             stood = module()["actor"] = last[2]
-            top = top and opening()
-          if not was:
-            top and (yield ("tell", id, ["chain()"]) if last[3:] else top)
-            top *= bool(last[3:])
-            if last[4:] and top and id == ROOT and not transcript(id, "reply"):
-              seat = yield from seeded()
-          elif last[3:] and not top:
-            placed(
-              last[1] * (was[1] != last[1]) * all(get(x[2]) and all(get(x[2])[4::2]) for x in transcript(id, "cd"))
-            )
+          if was:
+            last[3:] and not plan and rung(stands(was), to=stood)
+          elif plan is not None:
+            last[3:] and (yield "tell", id, ["chain()"])
+            plan = setup() if last[3:] else [None]
+            yield from staged()
         case ("done", _, by, Refused() as why) if (
           r[0] == "reply"
           and r[3] != id
@@ -469,7 +463,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           dropped += out
           yield "started", leap
         case ("carried", *_):
-          top = ""
+          plan = None
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
         case ("write", about, by, _, Text(path, content) as text) if prompted(path) and scope(path) == id:
@@ -486,12 +480,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
               Text(path, "".join(x[3] for x in transcript(door[1], "out") if x[1::3] == door.groups())),
             ),
           )
-        case ("done", *_) if top and r[0] == "rung" and not crafted(id):
-          if seat:
-            yield top
-            top = ""
-          else:
-            seat = placed(last[1])
+        case ("done", *_) if plan and r[0] == "rung":
+          yield from staged()
         case ("rung", rid, by, _, "", *_):
           waiting[rid] = ""
           prompted(by) and not over(by) and barren.setdefault(by, 0)

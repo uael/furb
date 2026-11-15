@@ -1130,11 +1130,11 @@ async fn doctrine(co: &mut Co) -> Result<Option<(String, String)>, Fault> {
   Ok(text(2).zip(text(3)))
 }
 
-/// Whether the engine seeded the root at this stand, which it does on a root of a new record: the
-/// root then holds the
-/// fact setup, which the engine says as it crafts the setup, before this ear hears the stand.
+/// Whether the engine seeds the root at this stand, which it does on a root of a new record: the
+/// root then holds the bare paragraph `chain()`, which the engine tells as it hears the stand,
+/// before this ear hears it, while the fact setup comes only once the shared turns ran.
 async fn bare(co: &mut Co) -> Result<bool, Fault> {
-  Ok(!rooted(co, "setup").await?.is_empty())
+  told(co, "chain()").await
 }
 
 /// A word played on a chain as a rung, unless it is empty.

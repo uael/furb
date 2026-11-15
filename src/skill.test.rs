@@ -741,15 +741,20 @@ fn the_setup_of_the_root_ends_with_the_skills_of_the_root_alone_and_a_chain_with
   let shared = at.join("shared.py").display().to_string();
   let (shared, rooted) = (hidden(&shared), hidden(&rooted));
   assert_eq!(
-    root[life - 2..life],
+    root[life - 4..life - 2],
     [shared, "x = 1".to_owned()],
     "a file, then its code alone: {root:?}"
   );
   assert_eq!(root[life + 2], rooted, "{root:?}");
   let stood = format!("stand()\ncd({})", Object::string(at.display().to_string()).py_repr());
-  assert_eq!(root[1], stood, "the root tells its standing before every extension: {root:?}");
+  assert_eq!(
+    root[life - 2],
+    stood,
+    "the stand comes after the files, before the life words: {root:?}"
+  );
+  let told = &root[life - 1];
   assert!(
-    root[2].starts_with("#stand2\nstand2_roster = ") && root[2].contains("\n\n#cd1\ncd1_path = "),
+    told.starts_with("#stand2\nstand2_roster = ") && told.contains("\n\n#cd1\ncd1_path = "),
     "{root:?}"
   );
   let last = &root[life + 3];
@@ -801,11 +806,12 @@ fn a_later_life_on_a_new_standing_plays_a_stand_on_each_chain_and_a_cd_where_the
       turns.iter().filter(|one| one.as_ref().items().unwrap()[0].as_str() == Some("assistant"));
     said.next_back().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned()
   };
-  let first = |engine: &mut Engine, chain: &str| -> String {
+  let stand = |engine: &mut Engine, chain: &str| -> String {
     let turns = engine.turns(verbs::Turns { on: Some(chain.to_owned()) }).unwrap();
-    let mut said =
+    let said =
       turns.iter().filter(|one| one.as_ref().items().unwrap()[0].as_str() == Some("assistant"));
-    said.next().unwrap().as_ref().items().unwrap()[1].as_str().unwrap().to_owned()
+    let mut words = said.map(|one| one.as_ref().items().unwrap()[1].as_str().unwrap().to_owned());
+    words.find(|one| one.starts_with("stand()")).unwrap()
   };
   let mut engine = set_up(&at, vec![]);
   for label in ["two", "three"] {
@@ -819,7 +825,7 @@ fn a_later_life_on_a_new_standing_plays_a_stand_on_each_chain_and_a_cd_where_the
   engine.rung(moved).unwrap();
   let stood = format!("stand()\ncd({})", Object::string(at.display().to_string()).py_repr());
   assert_eq!(
-    first(&mut engine, "chain2"),
+    stand(&mut engine, "chain2"),
     stood,
     "a chain with no source holds the standing of the setup"
   );

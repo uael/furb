@@ -21,9 +21,9 @@ meanings. The entry of such a name here gives only its form in the engine.
 - standing: what the chains stand on, which the World answers a stand with: the roster, the directory, the default actor
   and the path of the doctrine, each path with `~` in place of the home of the user, as every path that the World writes
   for a model; its one home is the transcript of the root, where the done of the last stand holds it. A chain tells no
-  standing of its own: a stand that a word makes tells the roster and the actor, and a cd tells the directory, and each
-  chain whose standing names a doctrine plays both on itself, just before its open and again when a later life stands on
-  another standing. The engine reads the directory of the standing nowhere, and the World resolves against it the paths
+  standing of its own: a stand that a word makes tells the roster and the actor, and a cd tells the directory; the root
+  plays both on itself in its setup, and a chain whose standing names a doctrine plays both again when a later stand
+  gives another standing, and at its birth when the stand of the setup that it holds gave another one. The engine reads the directory of the standing nowhere, and the World resolves against it the paths
   of a chain that ran no cd.
 - stand: the act that asks the World for the standing, which boot makes on the root as a life opens and again at
   the tip of a later life, and which tells nothing then. A stand that a word makes tells its answer in a paragraph
@@ -173,31 +173,29 @@ meanings. The entry of such a name here gives only its form in the engine.
   chain take their turns one at a time, in the order they were made, a rung that one of them makes takes its turn
   within the turn of its maker, and every other word of the chain and every prompt to a model wait until none is open.
 - setup: the turns that the engine crafts on the root of a new record at its first stand, after the bare turn
-  `chain()`, from the standing alone, in `seeded()` of `engine.py`: the World gives in the standing, after the path of
-  the doctrine, each extension that the life runs as `[name, file, life word, root alone]`, and the root, when it holds
-  no reply, makes crafted rungs of its default actor: the read of the doctrine, the turn
-  `rung(read('<file>', HIDDEN).content)` of each extension of every chain that has a file, in the order of the life,
-  whose rung tells the code of the file alone in the turn after it and runs that code in the module of the root, the
-  file being the copy of the word in `words/<name>/<digest>/` of the config directory, under the start of its sha256, then one turn of their life words, which read the
-  place against the directory of the standing, as every chain that ran no cd, then the fact setup,
-  `("setup", "chain1", "chain1")`, then the same turns for the extensions of the root alone. No ear makes a rung of the
-  setup, so the transcript shows each word that ran, and the record holds only the standing that the World gave. Then
-  the root plays on itself one turn `stand()` and `cd('<the directory of the standing>')`, a rung with that word and
-  its default actor, just before its open, as each chain with no source does at its birth, after the setup that it
-  holds. The reads of the files come first, so their turns are the same text whatever the place and the actors, then
-  the life words, so their turns are the same text in one place whatever the actors, and a provider caches them across
-  records. The engine makes each of these rungs at once, so the root plays its stand after the last of them and tells
-  its open after its stand, in the same turn, just before its first prompt. Each chain with no source holds the setup
-  of the root as its prefix, with the same names, less the acts that the World, the operator or the root itself made
-  after the fact setup, as the stand of the root, and each act under one, and runs its words again, so every chain
-  shares one prefix, which the provider ends with a block that it marks for the cache. The fact teach,
-  `("teach", "chain1", "extensions", actor, doctrine, count)`, which the World says when the engine seeded the root,
-  before the count of enables, tells the ear of the extensions that the setup holds them, so it plays them on no chain.
-  A standing that gives no extensions, as that of a World that names no doctrine, as the World of the suite, seeds no
-  setup: the root tells its open at its first stand, the extensions play as rungs of the ear, and its chains run no
-  cd, so the World resolves their paths against the directory of the standing. A later life replays the setup from
-  the standing that the record holds. A life born on a checkpoint holds the fact teach and the enables in the turns of
-  its root, where the ear of the extensions reads them, so it teaches and enables nothing again.
+  `chain()`, from the standing alone, in `setup()` of `chain` in `engine.py`: the World gives in the standing, after the
+  path of the doctrine, each extension that the life runs as `[name, file, life word, root alone]`, the file being the
+  copy of the word in `words/<name>/<digest>/` of the config directory, under the start of its sha256. The root makes
+  crafted rungs of its default actor, in this order: the turn `debug(t"{standing()[4]=}")`, the read of the doctrine,
+  the turn `rung(read('<file>', HIDDEN).content)` of each extension of every chain that has a file, whose rung tells
+  the code of the file alone in the turn after it and runs that code in the module of the root, then one turn
+  `stand()` and `cd('<the directory of the standing>')`, then the life word of each of those extensions, then the fact
+  setup, `("setup", "chain1", "chain1")`, which the root says once those rungs ran, then the files and the life words of
+  the extensions of the root alone, then its open, just before its first prompt. The order is measured: the turns
+  before the stand are the same text in each directory and for each roster and actor, so a provider can cache them
+  across records, and the life words, as the memory of a folder, run after the cd that names their folder. No ear
+  makes a rung of the setup, so the transcript shows each word that ran, and the record holds only the standing that
+  the World gave. Each chain with no source holds the facts of the root from `chain()` to the fact setup that are about
+  the root or an act under it as its prefix, with the same names, and runs its words again, so every chain shares one
+  prefix, which the provider ends with a block that it marks for the cache; a chain born on another standing than the
+  one of that stand plays its own turn `stand()` before its open. The ear of the extensions reads the bare paragraph
+  `chain()` of the root at the first stand to know that the engine seeds it, and says the fact teach,
+  `("teach", "chain1", "extensions", actor, doctrine, count)`, before the count of enables, so it plays the extensions
+  on no chain. A standing that names no doctrine, as that of the World of the suite, seeds no setup: the root tells
+  its open at its first stand, the extensions play as rungs of the ear, and its chains run no cd, so the World
+  resolves their paths against the directory of the standing. A later life replays the setup from the standing that
+  the record holds. A life born on a checkpoint holds the fact teach and the enables in the turns of its root, where
+  the ear of the extensions reads them, so it teaches and enables nothing again.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with
@@ -269,8 +267,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   each chain there and ends the turns of each with one tell, `#chainN crossed`, which binds the lines of the minified
   engine that differ as `chainN_diff`, so a chain only grows.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
-  whose origin had the extension, since that chain made the rung of its origin again. In a setup, the life words of
-  the extensions run as one turn of the default actor, after the turns of their files.
+  whose origin had the extension, since that chain made the rung of its origin again. In a setup, the life word of
+  each extension runs as a turn of the default actor, after the turn of the stand.
 
 ## Laws no test holds
 
