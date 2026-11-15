@@ -103,11 +103,24 @@ pub struct Tokens {
   pub removed_ground: Color,
   /// The veil over the window while a list part stands over it, which dims each cell under it.
   pub veil: Color,
-  /// The bar of a thread and the badge of a project, each far from the others and from the colors
-  /// of attention, of a failure and of a line that a change adds, so two threads side by side read
-  /// apart and no badge reads as a change: purple, rose, gold and slate. None is the orange of the accent, which is the bar of a new thread, so a turn of the
-  /// input to a new thread always changes the color of its bar.
-  pub hues: [Color; 4],
+  /// The hues of the work: the bar of a thread, and under the bar of its time each chain that
+  /// works, the chain of the thread in the hue of the thread. Each is far from the others and from
+  /// the colors of attention, of a failure and of a line that a change adds, so two threads side by
+  /// side read apart: purple, rose and gold. None is the orange of the accent, which is the bar of
+  /// a new thread, so a turn of the input to a new thread always changes the color of its bar.
+  pub hues: [Color; 3],
+  /// The square badges of projects: ice, denim and clay. No hue of the work takes them, so a reader
+  /// never takes a project for a thread or a chain, and a badge is a ground of its own where each
+  /// hue of the work colors a text.
+  pub projects: [Badge; 3],
+}
+
+/// The square badge of a project: its letters in its hue, on its hue mixed into the background,
+/// a ground that it keeps on each surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Badge {
+  pub letters: Color,
+  pub ground: Color,
 }
 
 impl Tokens {
@@ -120,7 +133,9 @@ impl Tokens {
     let base = dark.map_or(BASE, |told| Color::default_with(told.r, told.g, told.b));
     let [panel, raised, lifted, border] = STEPS.map(|share| mixed(base, WHITE, share));
     let (orange, text) = (Color::hex(0xfa_b283), Color::hex(0xe4_e4e4));
-    let hues = [0xa3_83e2, 0xe8_89a8, 0xd6_b860, 0x93_a2b7].map(Color::hex);
+    let hues = [0xa3_83e2, 0xe8_89a8, 0xd6_b860].map(Color::hex);
+    let projects = [0xa9_c4d9, 0x7f_9dd0, 0xc0_8a6e]
+      .map(|hue| Badge { letters: Color::hex(hue), ground: mixed(base, Color::hex(hue), 24) });
     let (added, danger) = (Color::hex(0x56_b6c2), Color::hex(0xef_6c6c));
     Self {
       base,
@@ -140,6 +155,7 @@ impl Tokens {
       removed_ground: mixed(base, danger, 18),
       veil: Color::rgba(base.r, base.g, base.b, 160),
       hues,
+      projects,
     }
   }
 

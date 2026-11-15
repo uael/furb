@@ -94,7 +94,11 @@ fn palette(tokens: &Tokens) -> Vec<Rgb> {
     tokens.added_ground,
     tokens.removed_ground,
   ];
-  let named = named.into_iter().chain(tokens.hues).map(|color| Rgb([color.r, color.g, color.b]));
+  let named = named
+    .into_iter()
+    .chain(tokens.hues)
+    .chain(tokens.projects.iter().flat_map(|one| [one.letters, one.ground]))
+    .map(|color| Rgb([color.r, color.g, color.b]));
   let mut colors: Vec<Rgb> = named.chain(SYNTAX.map(|(_, value)| Rgb::hex(value))).collect();
   let (veil, alpha) = ([tokens.veil.r, tokens.veil.g, tokens.veil.b], u16::from(tokens.veil.a));
   let veiled = colors.iter().map(|color| {

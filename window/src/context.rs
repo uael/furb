@@ -118,7 +118,7 @@ impl Model {
   /// color: its kinds of content once the client parted its turns, else what came from the cache.
   fn kinds(&self, context: &Context) -> Vec<Kind> {
     let t = &self.tokens;
-    let [purple, rose, gold, slate] = t.hues;
+    let [purple, rose, gold] = t.hues;
     let parts = self.client.thread.as_ref().and_then(|one| one.thread.parts.as_ref());
     if let Some(parts) =
       parts.filter(|one| self.client.split == Split::Kinds && !one.kinds.is_empty())
@@ -128,7 +128,7 @@ impl Model {
           Content::Turns => t.accent,
           Content::Kits => purple,
           Content::Skills => gold,
-          Content::Mcp => slate,
+          Content::Mcp => t.projects[0].letters,
           Content::Memory => rose,
           Content::Doctrine => t.text,
           Content::Engine => t.muted,

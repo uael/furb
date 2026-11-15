@@ -584,7 +584,7 @@ impl Model {
       run(machine, prose),
       run(" ▾", muted),
       gap(),
-      run(badge.content.to_string(), badge.style.bg(t.raised)),
+      badge,
       run(name, prose),
       run(" ▾", muted),
     ]);

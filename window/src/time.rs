@@ -11,7 +11,7 @@
 use std::{cmp::Ordering, collections::HashMap, ptr};
 
 use furb_client::{Chains, Flow, Time, resting};
-use opentui::style::Style;
+use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
@@ -140,13 +140,26 @@ impl Model {
     }
   }
 
-  /// The ink of a chain under the bar by its place among the chains: while it works, the hues of
-  /// the threads in turn, so the chains that work side by side never share one, less the slate,
-  /// which reads near the grey of a chain that rests; grey while it rests.
-  fn ink(&self, at: usize, rests: bool) -> Style {
+  /// The ink of a chain under the bar, grey while it rests. While it works, the chain that holds
+  /// the thread takes the hue of the thread, as its bar, and each other chain takes in turn by its
+  /// place among them the hues of the work less that one, so no other chain reads as the thread.
+  fn ink(&self, chains: &Chains, at: usize) -> Style {
     let t = &self.tokens;
-    let colored = &t.hues[..t.hues.len() - 1];
-    Style::new().fg(if rests { t.muted } else { colored[at % colored.len()] })
+    let key = self.client.thread.as_ref().map(|one| &one.thread.key);
+    let holder = key.and_then(|key| {
+      chains.tracks.iter().position(|one| one.threads.iter().any(|began| began.prompt == key.2))
+    });
+    let hue = key.map(|key| self.hue(key));
+    let ink = match hue {
+      _ if resting(chains.tracks[at].state) => t.muted,
+      Some(hue) if holder == Some(at) => hue,
+      _ => {
+        let others: Vec<Color> = t.hues.into_iter().filter(|one| Some(*one) != hue).collect();
+        let place = at - usize::from(holder.is_some_and(|one| one < at));
+        others[place % others.len()]
+      }
+    };
+    Style::new().fg(ink)
   }
 
   /// A row for each chain that shows under the bar, on the columns of its track: a heavy cell where
@@ -168,7 +181,7 @@ impl Model {
       .enumerate()
       .map(|(row, (track, depth))| {
         let at = chains.tracks.iter().position(|one| ptr::eq(one, *track)).unwrap_or(row);
-        let ink = self.ink(at, resting(track.state));
+        let ink = self.ink(chains, at);
         let acted: Vec<usize> = track.moments.iter().map(column).collect();
         let began: Vec<usize> = track.threads.iter().map(|one| column(&one.at)).collect();
         let before = track.moments.iter().any(|moment| *moment < first);
@@ -178,10 +191,7 @@ impl Model {
           let flow = flows.at(row, one);
           let (sign, style) = match (began.contains(&one), acted.contains(&one), one == mark) {
             _ if one == 0 && before => ("‹", ink),
-            _ if let Some((sign, flow)) = flow => {
-              let sender = &chains.tracks[flow.sender];
-              (sign, self.ink(flow.sender, resting(sender.state)))
-            }
+            _ if let Some((sign, flow)) = flow => (sign, self.ink(chains, flow.sender)),
             (true, ..) => ("◆", ink),
             (false, true, _) => ("━", ink),
             (false, false, true) => ("│", Style::new().fg(t.text)),

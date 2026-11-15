@@ -30,6 +30,10 @@ fn each_color_of_a_text_keeps_a_contrast_of_4_5_to_1_on_each_surface() {
       assert!(ratio >= 4.5, "{text:?} on {surface:?} has a contrast of {ratio:.2}");
     }
   }
+  for badge in tokens.projects {
+    let ratio = contrast(badge.letters, badge.ground);
+    assert!(ratio >= 4.5, "{badge:?} has a contrast of {ratio:.2}");
+  }
 }
 
 #[test]

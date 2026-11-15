@@ -250,11 +250,9 @@ impl Model {
     let changes = card.project.as_deref().and_then(|folder| self.client.changes(key.0, folder));
     let branch = changes.and_then(|one| one.branch.as_deref()).map(|one| format!(" · ⑂ {one}"));
     let place = format!("{project}{machine}{}{session}", branch.unwrap_or_default());
-    let badge = self.badge(&project);
-    let badge = run(badge.content, on(badge.style));
     let left = vec![
       run("  ", on(Style::new())),
-      badge,
+      self.badge(&project),
       run(" ", on(Style::new())),
       run(place, on(t.style(Role::Muted))),
     ];
@@ -352,11 +350,11 @@ impl Model {
 }
 
 impl Model {
-  /// The badge of a project, as each row that stands in it draws it: its two letters, bold in the
-  /// hue of the project.
+  /// The badge of a project, as each row that stands in it draws it: its two letters, bold.
   pub(crate) fn badge(&self, project: &str) -> Span<'static> {
-    let hue = self.tokens.hues[hash(project) % self.tokens.hues.len()];
-    run(badge(project), Style::new().fg(hue).bold())
+    let projects = &self.tokens.projects;
+    let one = projects[hash(project) % projects.len()];
+    run(badge(project), Style::new().fg(one.letters).bg(one.ground).bold())
   }
 
   /// Whether a life runs the session of a card: the life that the window opens, or the one that its

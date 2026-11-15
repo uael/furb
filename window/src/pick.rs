@@ -734,8 +734,8 @@ impl Model {
   /// The rows of the entries that the part shows: a head before the first entry of each part of the
   /// list while no text filters it, and each entry, the chosen one on the lifted ground with a bar
   /// in the hue of its thread, as the selected card of the list. In a list of things that say what
-  /// they do, what each says stands whole under its name. A row of an entry carries its place. The rows start at the one that keeps the chosen entry in
-  /// view.
+  /// they do, what each says stands whole under its name. A row of an entry carries its place. The
+  /// rows start at the one that keeps the chosen entry in view.
   fn shown_entries(
     &self,
     entries: &[Entry],
@@ -765,8 +765,7 @@ impl Model {
         if chosen { run("▌", ground(Style::new().fg(hue))) } else { run(" ", Style::new()) };
       let badge = match &entry.project {
         Some(project) => {
-          let badge = self.badge(project);
-          vec![run(badge.content, ground(badge.style)), run(" ", ground(Style::new()))]
+          vec![self.badge(project), run(" ", ground(Style::new()))]
         }
         None if badged(&entry.part) => vec![run("   ", ground(Style::new()))],
         None => Vec::new(),
