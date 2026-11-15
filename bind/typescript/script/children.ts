@@ -1,5 +1,5 @@
 /** How a child of the test script ended: the code that it exited with, and whether SIGKILL ended it, as the watcher of
- * memory (script/memwatch.sh) ends the largest test process while the memory is tight, and as the kernel ends a process
+ * memory (cargo xtask memwatch) ends the largest test process while the memory is tight, and as the kernel ends a process
  * when the memory runs out. The run of such a child still fails. */
 export interface Ended {
   code: number | null;

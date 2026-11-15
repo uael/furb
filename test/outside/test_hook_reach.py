@@ -81,8 +81,9 @@ def test_each_hook_of_the_tests_starts_at_once_while_the_memory_is_tight(tmp_pat
 
 
 def test_only_the_watcher_reads_the_memory() -> None:
-  readers = [p.name for p in (ROOT / "script").rglob("*") if p.is_file() and b"memorystatus" in p.read_bytes()]
-  assert readers == ["memwatch.sh"]
+  tools = [*(ROOT / "script").rglob("*"), *(ROOT / "xtask" / "src").rglob("*")]
+  readers = [p.name for p in tools if p.is_file() and b"memorystatus" in p.read_bytes()]
+  assert readers == ["memwatch.rs"]
 
 
 def test_a_file_of_the_engine_of_the_crate_or_of_a_manifest_reaches_the_whole_suite() -> None:

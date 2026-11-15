@@ -275,7 +275,7 @@ async def lane_fill() -> list[str]:
     started.append(id)
   if running or started:
     if not lane_guard or over(lane_guard[0]):
-      lane_guard[:] = [str(bash("sh script/memwatch.sh", ok=True, show=HIDDEN, timeout=86400.0))]
+      lane_guard[:] = [str(bash("cargo xtask memwatch", ok=True, show=HIDDEN, timeout=86400.0))]
   elif lane_guard and not over(lane_guard[0]):
     cancel(lane_guard[0], "no row runs")
   return started

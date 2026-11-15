@@ -25,7 +25,8 @@ test("a child that SIGKILL ends is ended by memory, and a child that fails or pa
   expect(endedByMemory("a.test.ts")).toContain("was ended by SIGKILL");
 });
 
-const watcher = join(import.meta.dir, "../../../../script/memwatch.sh");
+// The root of the tree, where cargo builds and runs the watcher of xtask.
+const root = join(import.meta.dir, "../../../..");
 const MB = 1024;
 
 test.skipIf(process.platform === "win32")(
@@ -71,7 +72,8 @@ test.skipIf(process.platform === "win32")(
       writeFileSync(join(shim, "sysctl"), "#!/bin/sh\necho 4\n");
       chmodSync(join(shim, "ps"), 0o755);
       chmodSync(join(shim, "sysctl"), 0o755);
-      const look = Bun.spawnSync(["sh", watcher, "--once"], {
+      const look = Bun.spawnSync(["cargo", "xtask", "memwatch", "--once"], {
+        cwd: root,
         // The fake children hold 4000 MB in all, under the sizes that make the work the cause by default.
         env: { ...process.env, PATH: `${shim}:${process.env.PATH}`, FURB_WATCH_MIN: "1" },
       });

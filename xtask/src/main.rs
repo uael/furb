@@ -12,6 +12,7 @@ mod deepswe;
 mod jobs;
 mod links;
 mod lives;
+mod memwatch;
 mod opens;
 mod paths;
 mod promise;
@@ -310,6 +311,20 @@ enum Task {
     /// The folder of the proof, which keeps the packed crates in crates/; a new folder by default.
     folder: Option<PathBuf>,
   },
+  /// Watch the memory beside the work, and end the largest test process while the memory is tight
+  /// and the work can be the cause.
+  ///
+  /// The memory is tight on macOS at the warn level of the kernel or above, and on Linux when less
+  /// than `FURB_WATCH_FREE` percent of it is available, 20. The work can be the cause when its
+  /// largest test process holds `FURB_WATCH_MIN` KB, 4 GB, or the work holds `FURB_WATCH_LANE` KB,
+  /// 8 GB; the work is each test process and each process that names a tree of the clone of this
+  /// folder, less a daemon of furb. `FURB_WATCH_POLL` gives the seconds between two looks, 2, and
+  /// `FURB_WATCH_AFTER` the seconds after an end, 30. Each end is a line of `FURB_WATCH_LOG`.
+  Memwatch {
+    /// Look one time, then end.
+    #[arg(long)]
+    once: bool,
+  },
   /// Make, land and close a worktree of this clone.
   Tree {
     #[command(subcommand)]
@@ -427,6 +442,7 @@ fn run() -> Result<ExitCode, Fault> {
     Task::Paths => paths::check(),
     Task::Tree { verb } => tree::run(&root, verb),
     Task::Links { fix } => links::check(&root, fix),
+    Task::Memwatch { once } => memwatch::watch(once),
     Task::ProveCrate { folder } => prove::crates(&root, folder),
     Task::Opens(opens) => opens.run(&root),
     Task::Catalog => catalog::refresh(&root),

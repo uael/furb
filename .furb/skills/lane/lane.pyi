@@ -55,7 +55,7 @@ async def lane_fill() -> list[str]:
   It reads main as red when the last run of the gates on main failed.
   It takes a running row back to open when no chain of its label or of its runner holds an open prompt or rung, since that row runs nowhere and holds no place.
   After three blocked rows in a row, it starts nothing and tells the operator once.
-  It keeps script/memwatch.sh running while a row runs, and ends it when none runs.
+  It keeps cargo xtask memwatch running while a row runs, and ends it when none runs.
   """
 
 async def lane_steer(tree: str, ground: str, since: str, overdue: str = "", model: str = "") -> list[tuple[str, str, str]]:

@@ -36,15 +36,15 @@ async def test_lane_fill_starts_nothing_after_three_blocked_rows(laning: Bench) 
 
 
 async def test_lane_fill_keeps_the_watcher_of_memory_while_a_row_runs(laning: Bench) -> None:
-  """It keeps script/memwatch.sh running while a row runs, and ends it when none runs."""
+  """It keeps cargo xtask memwatch running while a row runs, and ends it when none runs."""
   laning.say("run list", "success\n")
   laning.sand.hold = "memwatch"
   await laning.word('lane_ask("a", "a", "s", tree="ta")')
   await laning.value("await lane_fill()")
-  [guard] = [x[1] for x in said(laning.log, "bash") if x[4] == "sh script/memwatch.sh"]
+  [guard] = [x[1] for x in said(laning.log, "bash") if x[4] == "cargo xtask memwatch"]
   assert laning.engine.peek(guard) is None
   await laning.value("await lane_fill()")
-  assert [x[1] for x in said(laning.log, "bash") if x[4] == "sh script/memwatch.sh"] == [guard]
+  assert [x[1] for x in said(laning.log, "bash") if x[4] == "cargo xtask memwatch"] == [guard]
   await laning.word('lane_put("a", state="landed")')
   await laning.value("await lane_fill()")
   await settle()
