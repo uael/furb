@@ -1564,11 +1564,16 @@ export interface ChainTrack {
   threads: Began[];
 }
 /**
- * A thread of a chain and the moment its prompt began.
+ * A thread of a chain: its prompt, the moment it began, the chain whose word asked it, none when
+ * the operator or the chain itself asked it, the moment its prompt ended, none while it lives,
+ * and the first line of its message, so a window draws a prompt between two chains as a link.
  */
 export interface Began {
   prompt: string;
   at: number;
+  by?: string | null;
+  ended?: number | null;
+  says?: string;
 }
 /**
  * Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the
@@ -1737,4 +1742,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 58;
+export const PROTOCOL = 59;

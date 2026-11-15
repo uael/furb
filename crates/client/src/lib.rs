@@ -47,7 +47,7 @@ pub use question::{Form, HOLD};
 pub use running::{BACKGROUND, Control, Live, Running};
 pub use settings::Settings;
 pub use thread::{Anchor, Fold, Opened, PAGE, Pending, Thread, rests};
-pub use time::{Chains, Time, resting};
+pub use time::{Chains, Flow, Time, resting};
 pub use views::{Filled, View};
 
 /// What each machine told, the cards of all of them in the order of the list as it last settled,

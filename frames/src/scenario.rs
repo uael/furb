@@ -701,6 +701,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // The chains of the life stand as a tree under the bar of the time: the agents that work,
         // in color, under the root that made them, and the one that rests is found by a text.
         step("x-chains", &[Act::Key("C-x"), Act::Key("t")], "type to find a chain"),
+        // Each prompt of the root to an agent flows down to its track, and the pointer on the flow
+        // says what it asks.
+        step("x-flow", &[Act::Pointer { on: "▼", button: 35 }], "root asks bench"),
       ],
     }),
   },

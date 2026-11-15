@@ -631,7 +631,7 @@ fn the_seen_of_one_operator_does_not_clear_the_unread_mark_of_another() {
 }
 
 #[test]
-fn each_chain_stands_in_time_with_its_label_its_state_its_moments_and_the_start_of_each_thread() {
+fn each_chain_stands_in_time_with_its_label_its_state_its_moments_and_who_asked_each_thread() {
   let facts = [
     json!(["chain", "chain1", "operator", "", "root", ""]),
     json!(["prompt", "prompt1", "operator", "chain1", "str", "Fix the setup.", ""]),
@@ -647,10 +647,26 @@ fn each_chain_stands_in_time_with_its_label_its_state_its_moments_and_the_start_
   let named: Vec<(&str, &str)> =
     tracks.iter().map(|one| (one.chain.as_str(), one.label.as_str())).collect();
   assert_eq!(named, [("chain1", "root"), ("chain2", "worker")]);
-  // A message to a thread starts no thread of its own.
-  let starts = |id: &str| vec![Began { prompt: id.to_owned(), at: began(id) }];
+  // A message to a thread starts no thread of its own. A prompt that the word of the root asked
+  // names the root, which a window draws as a link between the two tracks.
+  let ended = life.shared("prompt1").and_then(|act| act.ended);
+  assert!(ended.is_some());
+  let first = Began {
+    prompt: "prompt1".to_owned(),
+    at: began("prompt1"),
+    by: None,
+    ended,
+    says: "Fix the setup.".to_owned(),
+  };
+  let asked = Began {
+    prompt: "prompt2".to_owned(),
+    at: began("prompt2"),
+    by: Some("chain1".to_owned()),
+    ended: None,
+    says: "Choose what stays.".to_owned(),
+  };
   let threads: Vec<Vec<Began>> = tracks.iter().map(|one| one.threads.clone()).collect();
-  assert_eq!(threads, [starts("prompt1"), starts("prompt2")]);
+  assert_eq!(threads, [vec![first], vec![asked]]);
   assert_eq!(tracks[1].moments, [began("prompt2")]);
   assert_eq!((tracks[0].state, tracks[1].state), (State::Delegates, State::Runs));
 }

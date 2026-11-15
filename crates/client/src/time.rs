@@ -93,6 +93,57 @@ impl Chains {
   }
 }
 
+/// A prompt between two chains under the bar, as a flow between their tracks: the places among the
+/// tracks of the chain that sends it and of the chain that takes it, their rows among the chains
+/// that show, none for one that does not show, its moment, whether it is the answer that goes
+/// back, its prompt, and the first line of its message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Flow {
+  pub sender: usize,
+  pub receiver: usize,
+  pub from: Option<usize>,
+  pub to: Option<usize>,
+  pub at: u64,
+  pub answer: bool,
+  pub prompt: String,
+  pub says: String,
+}
+
+impl Chains {
+  /// Each prompt that a word of one chain asked of another, and its answer once its prompt ended,
+  /// with at least one of the two chains among the ones that show.
+  pub fn flows(&self) -> Vec<Flow> {
+    let shown = self.shown();
+    let row = |chain: &str| shown.iter().position(|(one, _)| one.chain == chain);
+    let place = |chain: &str| self.tracks.iter().position(|one| one.chain == chain);
+    let mut flows = Vec::new();
+    for (asked, track) in self.tracks.iter().enumerate() {
+      for thread in &track.threads {
+        let Some(by) = thread.by.as_deref() else { continue };
+        let (Some(asker), from, to) = (place(by), row(by), row(&track.chain)) else { continue };
+        if from.is_none() && to.is_none() {
+          continue;
+        }
+        let flow = |sender, receiver, from, to, at, answer| Flow {
+          sender,
+          receiver,
+          from,
+          to,
+          at,
+          answer,
+          prompt: thread.prompt.clone(),
+          says: thread.says.clone(),
+        };
+        flows.push(flow(asker, asked, from, to, thread.at, false));
+        if let Some(ended) = thread.ended {
+          flows.push(flow(asked, asker, to, from, ended, true));
+        }
+      }
+    }
+    flows
+  }
+}
+
 /// The label of the chain of a rewind, by which the line of its word says that it branches.
 const REWIND: &str = "rewind";
 

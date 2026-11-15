@@ -332,8 +332,25 @@ impl Held {
           let on: Vec<&Act> = self.on_chain(&chain.id).filter(|act| act.id != chain.id).collect();
           // A prompt on the chain itself starts a thread; one on a prompt is a message of it.
           let starts = on.iter().filter(|act| act.kind == Kind::Prompt && act.on == chain.id);
-          let mut threads: Vec<Began> =
-            starts.map(|act| Began { prompt: act.id.clone(), at: act.began }).collect();
+          // A prompt that a word of another chain asked is a link between their tracks, and one
+          // that the operator said has no act as its maker.
+          let asker = |act: &Act| {
+            let maker = (&self).act(&act.by).map(|maker| maker.chain.clone());
+            maker.filter(|one| *one != chain.id)
+          };
+          let says = |act: &Act| {
+            let text = act.words.get(1).and_then(Value::as_str).unwrap_or_default();
+            text.lines().find(|line| !line.trim().is_empty()).unwrap_or_default().to_owned()
+          };
+          let mut threads: Vec<Began> = starts
+            .map(|act| Began {
+              prompt: act.id.clone(),
+              at: act.began,
+              by: asker(act),
+              ended: act.ended,
+              says: says(act),
+            })
+            .collect();
           threads.sort_by_key(|one| one.at);
           ChainTrack {
             chain: chain.id.clone(),

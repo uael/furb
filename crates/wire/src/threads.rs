@@ -59,11 +59,19 @@ pub struct ChainTrack {
   pub threads: Vec<Began>,
 }
 
-/// A thread of a chain and the moment its prompt began.
+/// A thread of a chain: its prompt, the moment it began, the chain whose word asked it, none when
+/// the operator or the chain itself asked it, the moment its prompt ended, none while it lives,
+/// and the first line of its message, so a window draws a prompt between two chains as a link.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Began {
   pub prompt: String,
   pub at: u64,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub by: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub ended: Option<u64>,
+  #[serde(default)]
+  pub says: String,
 }
 
 /// How a thread concerns the operator: a question waits for him in it, or he started it and it

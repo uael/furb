@@ -1581,11 +1581,16 @@ class Read(TypedDict):
 
 class Began(TypedDict):
   """
-  A thread of a chain and the moment its prompt began.
+  A thread of a chain: its prompt, the moment it began, the chain whose word asked it, none when
+  the operator or the chain itself asked it, the moment its prompt ended, none while it lives,
+  and the first line of its message, so a window draws a prompt between two chains as a link.
   """
 
   prompt: str
   at: int
+  by: NotRequired[str | None]
+  ended: NotRequired[int | None]
+  says: NotRequired[str]
 
 
 Mark1 = TypedDict("Mark1", {"is": Literal["ran"]})
@@ -3108,4 +3113,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 58
+PROTOCOL = 59

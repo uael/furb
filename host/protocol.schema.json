@@ -4710,13 +4710,31 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ended": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "says": {
+          "type": "string",
+          "default": ""
         }
       },
       "required": [
         "prompt",
         "at"
       ],
-      "description": "A thread of a chain and the moment its prompt began."
+      "description": "A thread of a chain: its prompt, the moment it began, the chain whose word asked it, none when\nthe operator or the chain itself asked it, the moment its prompt ended, none while it lives,\nand the first line of its message, so a window draws a prompt between two chains as a link."
     },
     "Page": {
       "type": "object",
@@ -6083,5 +6101,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 58
+  "x-protocol": 59
 }

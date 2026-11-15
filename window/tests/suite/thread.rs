@@ -476,6 +476,34 @@ fn the_chains_under_the_bar_of_the_time_stand_as_a_tree_under_the_chain_that_mad
 }
 
 #[test]
+fn a_prompt_of_one_chain_to_another_flows_between_their_tracks_and_a_click_opens_it() {
+  let message = format!("measure the open on three chains\n{DELEGATES}");
+  let (app, _daemon, _peer) = opened(&message, "README.md");
+  app.press("ctrl+x");
+  app.press("t");
+  // The root asks bench: a tee on its track and an arrow down to the track of bench.
+  let cell = |frame: &str, label: &str, sign: char| {
+    let left = |line: &str| line.chars().take(LEFT).collect::<String>();
+    let line = frame.lines().map(left).position(|line| line.trim_end().ends_with(label))?;
+    let column = frame.lines().nth(line)?.chars().take(LEFT).position(|one| one == sign)?;
+    Some((column, line))
+  };
+  let flowed = app.wait_until(PATIENCE, || {
+    let frame = app.text();
+    cell(&frame, " root", '┬').is_some() && cell(&frame, "bench", '▼').is_some()
+  });
+  let frame = app.text();
+  assert!(flowed, "no flow joins the root and bench:\n{frame}");
+  let (x, y) = cell(&frame, "bench", '▼').unwrap();
+  let (x, y) = (u16::try_from(x).unwrap(), u16::try_from(y).unwrap());
+  app.hover(x, y);
+  shows(&app, "root asks bench: Run the bench of the replay");
+  app.click(x, y);
+  // The prompt opens as an agent opens, at its own head.
+  shows(&app, "┃ Run the bench of the replay");
+}
+
+#[test]
 fn a_message_queued_while_the_chain_works_shows_as_a_chip_and_a_cross_takes_it_back() {
   let message = format!("why is the seed slow on a big record\n{THINKS}");
   let (app, _daemon, _peer) = opened(&message, "proof = await bash(");

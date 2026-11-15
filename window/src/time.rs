@@ -4,10 +4,13 @@
 //! pointer. Under it, while
 //! the operator holds them open, the chains of the life stand on the same moments, one row each,
 //! so a column is one moment in every row; a click on a chain opens its thread at that moment.
+//! A prompt that a word of one chain asked of another flows down its column from the track of
+//! the asker to the track of the chain that it asks, and its answer flows back, as the flow events
+//! of a profiler join two tracks.
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::HashMap};
 
-use furb_client::{Time, resting};
+use furb_client::{Chains, Flow, Time, resting};
 use opentui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
@@ -21,6 +24,21 @@ use crate::{
 
 /// The columns before the track: the margin, the play button, and a blank.
 const BEFORE: usize = 5;
+
+/// The flows between the chains under the bar, and their cells by row and column: the sign, and the
+/// place of the flow among the flows.
+#[derive(Default)]
+struct Flows {
+  all: Vec<Flow>,
+  cells: HashMap<(usize, usize), (&'static str, usize)>,
+}
+
+impl Flows {
+  /// The sign and the flow at a cell of the rows of the chains.
+  fn at(&self, row: usize, column: usize) -> Option<(&'static str, &Flow)> {
+    self.cells.get(&(row, column)).map(|(sign, at)| (*sign, &self.all[*at]))
+  }
+}
 
 /// The columns of the track of a bar, each the moment nearest to its share of the track.
 struct Axis {
@@ -95,16 +113,14 @@ impl Model {
     let label = BEFORE + room;
     hot.push((label..label + said, Some(Click::Key(Does::Chains))));
     line.push(run(format!("{says:>said$}"), muted));
-    let row = 1 + self.open_rows().len();
-    let pointed = self.pointed().filter(|(_, y)| usize::from(*y) == row);
-    let under = pointed
-      .and_then(|(x, _)| usize::from(x).checked_sub(BEFORE).filter(|one| *one < room))
-      .and_then(|one| time.message(axis.place(one)));
+    let flows = time.chains.as_ref().map(|chains| flowed(time, chains, &axis)).unwrap_or_default();
+    let under = self.under(time, &axis, &flows);
     // The chains stand right under the bar, so a column reads as one moment down each row, and one
-    // row under them says the message under the pointer, else what finds a chain.
+    // row under them says what is under the pointer, else what finds a chain.
     let mut rows = vec![Row { line, hot, ..Row::default() }];
-    rows.extend(self.chain_rows(time, &axis, mark));
-    let said = under.map(|text| cut(text, room)).or_else(|| found(time));
+    rows.extend(self.chain_rows(time, &axis, &flows));
+    let wide = self.wide().saturating_sub(BEFORE);
+    let said = under.map(|text| cut(&text, wide)).or_else(|| found(time));
     rows.push(Row::of(vec![run(
       format!("{}{}", " ".repeat(BEFORE), said.unwrap_or_default()),
       muted,
@@ -112,14 +128,36 @@ impl Model {
     rows
   }
 
-  /// A row for each chain that shows under the bar, on the columns of its track: a heavy cell where
-  /// an act of the chain began or ended, a diamond where a thread of it began, the column of the
-  /// moment that the thread shows across each row, and the label of the chain at its end. A chain
-  /// that works takes its hue, and one that rests is grey. A chain that acted before the first
-  /// moment of the thread says so at the start of its row.
-  fn chain_rows(&self, time: &Time, axis: &Axis, mark: usize) -> Vec<Row> {
-    let Some(chains) = time.chains.as_ref() else { return Vec::new() };
+  /// What the pointer is on under the bar: on the track, the message in force at its moment, and on
+  /// a flow between the chains, what it asks or answers.
+  fn under(&self, time: &Time, axis: &Axis, flows: &Flows) -> Option<String> {
+    let row = 1 + self.open_rows().len();
+    let (x, y) = self.pointed()?;
+    let column = usize::from(x).checked_sub(BEFORE).filter(|one| *one < axis.room)?;
+    match usize::from(y).checked_sub(row)? {
+      0 => time.message(axis.place(column)).map(str::to_owned),
+      below => flows.at(below - 1, column).map(|(_, flow)| flow_says(time, flow)),
+    }
+  }
+
+  /// The ink of a chain under the bar by its label: the hue of the chain while it works, and grey
+  /// while it rests.
+  fn ink(&self, label: &str, rests: bool) -> Style {
     let (t, record) = (&self.tokens, self.client.thread.as_ref().map(|one| &one.thread.key.1));
+    let hue = t.hues[hued(record.map_or("", String::as_str), label) % t.hues.len()];
+    Style::new().fg(if rests { t.muted } else { hue })
+  }
+
+  /// A row for each chain that shows under the bar, on the columns of its track: a heavy cell where
+  /// an act of the chain began or ended, a diamond where a thread of it began, the cells of the
+  /// flows between the chains in the ink of the chain that sends each, the column of the moment
+  /// that the thread shows across each row, and the label of the chain at its end. A chain that
+  /// works takes its hue, and one that rests is grey. A chain that acted before the first moment
+  /// of the thread says so at the start of its row. A click on a flow opens its prompt.
+  fn chain_rows(&self, time: &Time, axis: &Axis, flows: &Flows) -> Vec<Row> {
+    let mark = axis.column(time.place());
+    let Some(chains) = time.chains.as_ref() else { return Vec::new() };
+    let t = &self.tokens;
     let muted = t.style(Role::Muted);
     let shown = chains.shown();
     let column = |moment: &u64| axis.column(time.moments.partition_point(|one| one < moment));
@@ -128,23 +166,30 @@ impl Model {
       .iter()
       .enumerate()
       .map(|(row, (track, depth))| {
-        let hue = t.hues[hued(record.map_or("", String::as_str), &track.label) % t.hues.len()];
-        let ink = Style::new().fg(if resting(track.state) { t.muted } else { hue });
+        let ink = self.ink(&track.label, resting(track.state));
         let acted: Vec<usize> = track.moments.iter().map(column).collect();
         let began: Vec<usize> = track.threads.iter().map(|one| column(&one.at)).collect();
         let before = track.moments.iter().any(|moment| *moment < first);
         let mut line: Line = vec![run("  ", muted), run("▪", ink), run("  ", muted)];
         let mut hot: Vec<Hot> = Vec::new();
         for one in 0..axis.room {
+          let flow = flows.at(row, one);
           let (sign, style) = match (began.contains(&one), acted.contains(&one), one == mark) {
             _ if one == 0 && before => ("‹", ink),
+            _ if let Some((sign, flow)) = flow => {
+              let sender = &chains.tracks[flow.sender];
+              (sign, self.ink(&sender.label, resting(sender.state)))
+            }
             (true, ..) => ("◆", ink),
             (false, true, _) => ("━", ink),
             (false, false, true) => ("│", Style::new().fg(t.text)),
             (false, false, false) => ("─", Style::new().fg(t.border)),
           };
           line.push(run(sign, style));
-          let click = Click::Chain { row, at: axis.place(one) };
+          let click = match flow {
+            Some((_, flow)) => Click::Agent(flow.prompt.clone()),
+            None => Click::Chain { row, at: axis.place(one) },
+          };
           hot.push((BEFORE + one..BEFORE + one + 1, Some(click)));
         }
         let label = if track.label.is_empty() { &track.chain } else { &track.label };
@@ -206,6 +251,52 @@ impl Model {
     if let (Some(opened), Some(_)) = (self.client.thread.as_mut(), moment) {
       opened.thread.time = Some(Time { at: moment, stale: true, ..Time::default() });
     }
+  }
+}
+
+/// The cells of the flows between the chains that show, on the column of the moment of each: a
+/// tee on the row of the chain that sends it, an arrow on the row of the chain that takes it,
+/// and a line on each row between them, solid for a prompt and dotted for its answer. A flow to
+/// or from a chain that does not show runs to the edge under the last row, where an arrow says
+/// that it leaves or comes in. A later flow on a cell draws over an earlier one.
+fn flowed(time: &Time, chains: &Chains, axis: &Axis) -> Flows {
+  let all = chains.flows();
+  let last = chains.shown().len().saturating_sub(1);
+  let mut cells = HashMap::new();
+  for (at, flow) in all.iter().enumerate() {
+    let column = axis.column(time.moments.partition_point(|one| *one < flow.at));
+    let line = if flow.answer { "┆" } else { "│" };
+    let (top, bottom, signs) = match (flow.from, flow.to) {
+      (Some(from), Some(to)) if from < to => (from, to, ("┬", "▼")),
+      (Some(from), Some(to)) => (to, from, ("▲", "┴")),
+      (Some(from), None) if from == last => (from, from, ("↓", "↓")),
+      (Some(from), None) => (from, last, ("┬", "↓")),
+      (None, Some(to)) if to == last => (to, to, ("↑", "↑")),
+      (None, Some(to)) => (to, last, ("▲", "↑")),
+      (None, None) => continue,
+    };
+    cells.insert((top, column), (signs.0, at));
+    for row in top + 1..bottom {
+      cells.insert((row, column), (line, at));
+    }
+    cells.insert((bottom, column), (signs.1, at));
+  }
+  Flows { all, cells }
+}
+
+/// What a flow under the pointer says: the chain that sends it, whether it asks or answers, the
+/// chain that takes it, and the first line of its message.
+fn flow_says(time: &Time, flow: &Flow) -> String {
+  let Some(chains) = time.chains.as_ref() else { return String::new() };
+  let label = |at: usize| {
+    let track = &chains.tracks[at];
+    if track.label.is_empty() { track.chain.clone() } else { track.label.clone() }
+  };
+  let (sender, receiver, says) = (label(flow.sender), label(flow.receiver), &flow.says);
+  if flow.answer {
+    format!("{sender} answers {receiver} on “{says}” · click to open it")
+  } else {
+    format!("{sender} asks {receiver}: {says} · click to open it")
   }
 }
 
