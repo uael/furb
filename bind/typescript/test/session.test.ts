@@ -504,6 +504,30 @@ test("unfinished model work and waits go on as their record reopens, with no res
   }
 });
 
+test("an answer that the host never settles leaves its reply open after the collector takes it, so the end of the life cuts it", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-unsettled-"));
+  const record = join(cwd, "life.jsonl");
+  const session = new Session({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
+  try {
+    const engine = session.open();
+    engine.prompt("str", { message: "never", on: engine.root });
+    await tick();
+    Bun.gc(true);
+    await tick();
+    await tick();
+  } finally {
+    await session.dispose();
+  }
+  const facts = (await readFile(record, "utf8"))
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line)[0] as string[]);
+  const started = facts.filter((a) => a[0] === "started" && a[1]?.startsWith("reply")).map((a) => a[1]);
+  expect(started.length).toBeGreaterThan(0);
+  expect(facts.filter((a) => a[0] === "done" && started.includes(a[1]))).toEqual([]);
+  await rm(cwd, { recursive: true });
+});
+
 test("work that ends with its life again and again parks until the host retries it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-parked-"));
   const record = join(cwd, "life.jsonl");

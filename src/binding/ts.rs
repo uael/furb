@@ -11,8 +11,9 @@
 )]
 mod host;
 
+use futures::channel::oneshot::Canceled;
 use indexmap::IndexMap;
-use std::{rc::Rc, sync::Arc};
+use std::{future, rc::Rc, sync::Arc};
 
 use napi::{
   Env, JsValue, Status,
@@ -229,7 +230,14 @@ impl FromNapiValue for Answer {
       let writing = Writing(told);
       Box::pin(async move {
         let promise = called.call_async_catch((request, writing)).await.map_err(|no| no.reason)?;
-        let turn = promise.await.map_err(|no| no.reason)?;
+        let turn = match promise.await {
+          Ok(turn) => turn,
+          // The collector of JavaScript drops a promise that nothing settles, and napi then
+          // ends its future as cancelled: no answer comes, so the reply stays open, and the
+          // end of the life cuts it, as it cuts a reply that a model has not answered yet.
+          Err(no) if no.reason == Canceled.to_string() => return future::pending().await,
+          Err(no) => return Err(no.reason),
+        };
         wire::inward(&turn).map_err(|fault| fault.message())
       })
     })))
