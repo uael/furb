@@ -17,7 +17,6 @@ use std::{
   collections::VecDeque,
   env,
   fs::{self, File},
-  io::Write as _,
   ops::Deref,
   path::{Path, PathBuf},
   process,
@@ -40,8 +39,8 @@ use furb_host::{
   DaemonError, Door, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
   access::{Access, Ports},
   protocol::{
-    Answer, Axis, Card, Config, Dispose, Draft, Effect, Frame, Gesture, Hello, Kind, Listed, Model,
-    Mount, Node, PROTOCOL, Present, Project, Request, Role, Shape, Slot, Tree, Verb, ViewEffect,
+    Answer, Axis, Card, Config, Dispose, Draft, Effect, Frame, Gesture, Hello, Kind, Listed, Mount,
+    Node, PROTOCOL, Present, Project, Request, Role, Shape, Slot, Tree, Verb, ViewEffect,
     ViewEvent,
   },
   run,
@@ -744,6 +743,8 @@ async fn the_projects_are_those_of_the_list_with_their_sessions_and_their_last_u
 #[tokio::test]
 async fn the_models_are_those_that_the_catalog_offers_with_no_life() {
   use std::os::unix::fs::PermissionsExt;
+
+  use furb_host::protocol::Model;
   let at = place();
   let (local, _daemon) = started(&at, GRACE).await;
   let mut window = Window::dialed(&local).await;
@@ -967,6 +968,8 @@ async fn each_window_of_a_life_that_opens_hears_how_far_the_open_stands_then_its
 #[cfg(unix)]
 #[tokio::test]
 async fn a_verb_that_waited_for_an_open_that_failed_hears_why() {
+  use std::io::Write as _;
+
   use furb::life::Stage;
   let at = place();
   let (local, _daemon) = started(&at, SHORT).await;
