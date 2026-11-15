@@ -488,7 +488,7 @@ impl Model {
     let room = self.wide().saturating_sub(6);
     let spare = |right: &(Line, _)| room.checked_sub(width(&right.0) + 2 + fixed);
     let (whole, least) = (machine.width() + 1 + project.width(), SHORTEST + 2 + project.width());
-    let tries = [(0, whole), (1, whole), (1, least), (1, SHORTEST), (2, whole), (2, least)];
+    let tries = [(0, whole), (1, whole), (1, least), (1, SHORTEST)];
     let (short, need) = tries
       .into_iter()
       .find(|(short, need)| spare(&self.controls(*short)).is_some_and(|spare| spare >= *need))
@@ -614,9 +614,15 @@ impl Model {
     let (at, life) = match target {
       Target::Thread(key) => {
         let opened = self.client.thread.as_ref()?;
-        let block = opened.thread.exchanges.values().rev().find_map(|one| one.block.as_ref());
-        if let Some(Maker::Model { model, effort }) = block.map(|one| &one.maker) {
-          return Some((model.clone(), effort.clone()));
+        // A word of Python that the operator ran on the thread asked no model, so the model of the
+        // thread is the one of the last block that a model wrote.
+        let blocks = opened.thread.exchanges.values().rev().filter_map(|one| one.block.as_ref());
+        let model = blocks.map(|one| &one.maker).find_map(|maker| match maker {
+          Maker::Model { model, effort } => Some((model.clone(), effort.clone())),
+          _ => None,
+        });
+        if model.is_some() {
+          return model;
         }
         (key.0, key.1)
       }
@@ -671,7 +677,7 @@ impl Model {
   /// The row of hints: why the daemon refused the last message, else the keys of a form, of the
   /// completion or of the bar of the time, else the word of python that the window ran, as it runs
   /// and what it came to, else the state of the open thread while it works, with the key that stops
-  /// it, else the folder of the window; and at its right how many other threads ask the operator,
+  /// it, else the keys of the mode of Python while it is on, else the folder of the window; and at its right how many other threads ask the operator,
   /// and the key that turns the input, or that refuses the question of a form.
   fn hints(&self) -> Row {
     let t = &self.tokens;
@@ -700,25 +706,25 @@ impl Model {
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
     // The keys of what stands over the input: a form, the completion, or the bar of the time.
     let keyed = self.form_hints().or_else(|| self.completion_hints()).or_else(|| self.time_hints());
-    let place =
-      fault.is_none() && says.is_none() && keyed.is_none() && self.word.is_none() && !works;
+    let room = self.wide().saturating_sub(2).saturating_sub(width(&key) + 2);
+    let word = Some(self.word_hints(room)).filter(|(hints, _)| !hints.is_empty());
+    let python = self.python_hints().filter(|_| !works);
+    let place = fault.is_none() && says.is_none() && keyed.is_none() && word.is_none() && !works;
+    let place = place && python.is_none();
     let (left, loaders) = match (fault, says) {
       (Some(fault), _) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], vec![]),
       (None, Some((says, color))) => {
         (vec![run(format!("  {says}"), Style::new().fg(color))], vec![])
       }
       (None, None) if keyed.is_some() => (keyed.unwrap_or_default(), vec![]),
-      (None, None) if self.word.is_some() => {
-        let (hints, loader) =
-          self.word_hints(self.wide().saturating_sub(2).saturating_sub(width(&key) + 2));
-        (hints, loader.into_iter().collect())
-      }
+      (None, None) if let Some((hints, loader)) = word => (hints, loader.into_iter().collect()),
       (None, None) if works => {
         let (working, loader) = self.working(card);
         let at = columns(&working);
         hot.push((at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop))));
         (working, vec![(2, loader), (4, Loader::Light(WORKS))])
       }
+      (None, None) if let Some(python) = python => (python, vec![]),
       // The launcher of a new session names its machine, so the row says the folder alone.
       (None, None) => (self.place(!matches!(self.client.target(), Target::New(..))), vec![]),
     };
@@ -785,6 +791,13 @@ impl Model {
     let mut line = vec![run(text, muted)];
     line.extend(branch.map(|one| run(one, muted)));
     line
+  }
+
+  /// The keys of the mode of Python while it is on: the key that runs the word, and the key that
+  /// turns the input back to a message.
+  fn python_hints(&self) -> Option<Line> {
+    let keys = format!("  {} run · {} a message", self.key(Does::Send), self.key(Does::Python));
+    self.client.draft.python.then(|| vec![run(keys, self.tokens.style(Role::Muted))])
   }
 
   /// The hints of the word that the window ran, in a room of columns: a mark that moves while it

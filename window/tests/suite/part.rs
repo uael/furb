@@ -140,7 +140,7 @@ fn offered() -> (TestApp, Daemon) {
 
 #[cfg(unix)]
 #[test]
-fn where_room_is_short_the_names_of_the_launcher_give_way_and_its_effort_stays() {
+fn where_room_is_short_the_machine_gives_way_and_the_project_and_the_effort_stay() {
   let (app, _daemon) = offered();
   // The launcher row at a width, once it is the one that the test expects, or as it stands then.
   let launcher = |wide: u16, expected: &str| {
@@ -156,14 +156,10 @@ fn where_room_is_short_the_names_of_the_launcher_give_way_and_its_effort_stays()
   // With room for each, the launcher names the machine, the project, the model and its effort.
   let wide = "┃ Message Python This computer ▾ FT furb-try ▾ opus high";
   assert_eq!(launcher(110, wide), wide);
-  // Where the room runs short, the machine gives way to a few letters first, then the project to
-  // its badge, and the effort, which a click changes in place, stays.
+  // Where the room runs short, the machine gives way to a few letters first, and the project and
+  // the effort, which a click changes in place, stay.
   let short = "┃ Message Python This… ▾ FT furb-try ▾ opus high";
   assert_eq!(launcher(100, short), short);
-  // Where even a few letters of the machine leave the project no room, the project gives way to its
-  // badge, and the machine takes its name back.
-  let shorter = "┃ Message Python This computer ▾ FT ▾ opus high";
-  assert_eq!(launcher(60, shorter), shorter);
 }
 
 #[cfg(unix)]

@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/furb-try                       ⌃P go to
+  ⏎ run · ⌃X Y a message                           ⌃P go to

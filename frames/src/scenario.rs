@@ -525,7 +525,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         ),
         step("b", &[Act::Key("Enter")], " 2  answer = 41 + 1"),
         step("c", &[Act::Type("raise ValueError('no')"), Act::Key("Enter")], "✗  raise ValueError"),
-        step("d", &[Act::Key("Escape")], "~/demo"),
+        step("d", &[Act::Key("Escape")], "⏎ run · "),
       ],
     }),
   },
