@@ -196,12 +196,12 @@ impl Model {
         self.client.restore = self.unopened(at, id, why);
       }
       (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
-      (Asked::Parts(key, read), Ok(Frame::Reply { answer, .. })) => {
-        self.client.parted(&key, read, Some(answer));
-      }
-      (Asked::Parts(key, read), _) => self.client.parted(&key, read, None),
+      (Asked::Parts(key, read), heard) => self.client.parted(&key, read, replied(heard)),
       (Asked::Moments(key), heard) => self.client.timed(&key, heard.ok()),
       (Asked::Tracks(key), heard) => self.client.tracked(&key, heard.ok()),
+      (asked @ (Asked::Settings | Asked::Setting), heard) => {
+        self.client.configured(&asked, heard.ok());
+      }
       (Asked::Back(text), Ok(Frame::Reply { .. })) => {
         self.client.restore = Some(self.before_draft(text));
       }
@@ -520,6 +520,14 @@ impl Model {
     };
     let (above, under) = (first.saturating_sub(PINNED + 1), (last + 2).saturating_sub(PINNED));
     self.scroll = self.scroll.max(under.saturating_sub(self.room())).min(above);
+  }
+}
+
+/// The answer of a reply, none for a refusal or a lost machine.
+fn replied(heard: Heard) -> Option<Answer> {
+  match heard {
+    Ok(Frame::Reply { answer, .. }) => Some(answer),
+    _ => None,
   }
 }
 

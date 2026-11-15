@@ -17,6 +17,7 @@ mod opens;
 mod outbox;
 mod question;
 mod running;
+mod settings;
 mod thread;
 mod time;
 mod views;
@@ -42,6 +43,7 @@ pub use opens::{Ask, Hold, Life, Step};
 pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
 pub use question::{Form, HOLD};
 pub use running::{BACKGROUND, Control, Running};
+pub use settings::Settings;
 pub use thread::{Anchor, Fold, Opened, PAGE, Pending, Thread, rests};
 pub use time::{Chains, Time, resting};
 pub use views::{Filled, View};
@@ -89,6 +91,8 @@ pub struct Client {
   pub gestures: Vec<(usize, ViewEvent)>,
   /// The input node of a view that the input of the client fills, while it fills one.
   pub filled: Option<Filled>,
+  /// The settings of a session, while the operator reads them.
+  pub settings: Option<Settings>,
   /// What the operator did to sessions that run, with the machine of each, until it goes.
   pub controls: Vec<(usize, Verb)>,
   /// What the last thing that the operator did did not do, and why, until the next one.

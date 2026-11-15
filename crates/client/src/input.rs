@@ -48,13 +48,14 @@ impl Client {
     };
   }
 
-  /// The text of the input sent to its target: it waits in the queue, the client holds its life, and
-  /// the thread that it goes to shows it at once. A message to no thread starts one, which opens, so
-  /// the next message goes to it, and a new session opens on the actor that the operator chose for
-  /// it. A word of python shows in no thread. A message from a moment of the past of the open thread
-  /// goes as the word of a rewind, and one that starts with `/btw ` as the word of a question aside.
-  /// While the input fills an input of a view, the text goes to that node alone. A machine that the
-  /// client dials again, or a life that a fault ended, takes nothing, and the error says why.
+  /// The text of the input sent to its target: it waits in the queue, the client holds its life,
+  /// and the thread that it goes to shows it at once. A message to no thread starts one, which
+  /// opens, so the next message goes to it, and a new session opens on the actor that the operator
+  /// chose for it. A word of python shows in no thread. A message from a moment of the past of the
+  /// open thread goes as the word of a rewind, and one that starts with `/btw ` as the word of a
+  /// question aside. While the input fills an input of a view, the text goes to that node alone. A
+  /// machine that the client dials again, or a life that a fault ended, takes nothing, and the
+  /// error says why.
   pub fn send(&mut self, text: String) -> Result<(), String> {
     if self.submit_fill(&text) {
       return Ok(());

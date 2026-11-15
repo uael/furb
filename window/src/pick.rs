@@ -46,6 +46,8 @@ pub(crate) enum Pick {
   Session,
   /// What a leave does to the sessions that the window holds and that work.
   Leave,
+  /// The settings of the session that the input sends to.
+  Settings,
 }
 
 /// The list part, while it is open: what it lists, the text that filters it, and the place of the
@@ -83,6 +85,8 @@ pub(crate) enum Choice {
   Control(Control),
   /// What a leave does to each session that works, or none to stay.
   Leave(Option<Control>),
+  /// A setting, by its place among the settings, which takes one step.
+  Setting(usize),
   /// Nothing: a key that only a form or a list hears.
   #[default]
   None,
@@ -133,6 +137,7 @@ impl Pick {
       Self::History => "History",
       Self::Session => "The session",
       Self::Leave => "Sessions still work",
+      Self::Settings => "Settings",
     }
   }
 
@@ -146,6 +151,7 @@ impl Pick {
       Self::Models => "Search a model",
       Self::History => "Search what you sent here",
       Self::Session | Self::Leave => "Search a choice",
+      Self::Settings => "Search a setting",
     }
   }
 
@@ -158,6 +164,7 @@ impl Pick {
       Self::Models => "take it",
       Self::History => "write it",
       Self::Session | Self::Leave => "do it",
+      Self::Settings => "change it",
     }
   }
 }
@@ -175,6 +182,12 @@ impl Model {
     let filter = if of == Pick::History { self.client.draft.text.clone() } else { String::new() };
     if of == Pick::History {
       self.client.ask_history();
+    }
+    if of == Pick::Settings
+      && let Err(why) = self.client.read_settings()
+    {
+      self.client.notice = Some(why);
+      return;
     }
     self.picker = Some(Picker { of, filter, at: 0 });
     if of == Pick::Sessions {
@@ -203,6 +216,7 @@ impl Model {
       Pick::History => self.sent(),
       Pick::Session => self.session_choices(),
       Pick::Leave => self.leave_choices(),
+      Pick::Settings => self.settings(),
     };
     // The filter matches the text of a row and its right, and lights the letters of its text.
     let texts: Vec<String> = all.iter().map(|one| format!("{} {}", one.left, one.right)).collect();
@@ -496,8 +510,7 @@ impl Model {
   /// that a row names is done by the hand, which this gives.
   pub(crate) fn took(&mut self, at: usize) -> Option<Does> {
     let entry = self.entries().into_iter().nth(at)?;
-    let of = self.picker.as_ref()?.of;
-    self.picker = None;
+    let (of, filter) = self.picker.take().map(|one| (one.of, one.filter))?;
     match entry.choice {
       Choice::Thread(key) => self.went(key),
       Choice::Session(target) => self.aimed(target),
@@ -512,6 +525,10 @@ impl Model {
       Choice::Running(at, life) => self.act_on(at, life),
       Choice::Control(control) => self.controlled(control),
       Choice::Leave(control) => self.left_with(control),
+      Choice::Setting(place) => {
+        self.client.step_setting(place);
+        self.picker = Some(Picker { of, filter, at });
+      }
       Choice::None => self.picker = Some(Picker { of, filter: String::new(), at }),
     }
     None

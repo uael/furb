@@ -699,7 +699,21 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     }),
   },
   Scenario { name: "20-models", has: none("9. The launcher picks the model and its effort") },
-  Scenario { name: "21-config", has: none("17. After the first window") },
+  Scenario {
+    name: "21-config",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[],
+      pace: &[],
+      steps: &[
+        step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
+        // The settings of the session list each key with what it does, its value and its layer.
+        step("a", &[Act::Key("C-x"), Act::Key(",")], "Settings"),
+        // Enter flips a boolean in the config of the project, and the list reads it again.
+        step("b", &[Act::Type("naming"), Act::Key("Down"), Act::Key("Enter")], "true  project"),
+      ],
+    }),
+  },
   Scenario {
     name: "22-help-keys",
     has: Has::Walk(Walk {

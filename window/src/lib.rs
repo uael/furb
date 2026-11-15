@@ -35,6 +35,7 @@ mod question;
 mod review;
 mod running;
 mod screen;
+mod settings;
 mod thread;
 mod time;
 pub mod tokens;

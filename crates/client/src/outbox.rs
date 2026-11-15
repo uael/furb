@@ -119,6 +119,10 @@ pub enum Asked {
   Moments(Key),
   /// The chains of the life of a thread, under the bar of its time.
   Tracks(Key),
+  /// The settings of a session that the operator reads.
+  Settings,
+  /// A change of a setting of a session.
+  Setting,
 }
 
 impl Client {
@@ -146,6 +150,7 @@ impl Client {
     due.extend(self.parts_due());
     due.extend(self.moments_due());
     due.extend(self.tracks_due());
+    due.extend(self.settings_due());
     if listing {
       due.extend(self.lists_due());
     }
