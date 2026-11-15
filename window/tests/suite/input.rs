@@ -346,12 +346,12 @@ fn a_refused_message_comes_back_to_the_input_with_why() {
   open(&app, vec![daemon.machine("mac")], options);
   shows(&app, "No thread yet in this project.");
   sent(&app, "how long does an open take");
-  app.paste("draft after");
-  // The row of hints says why the daemon refused the open, which no other frame says.
+  // The row of hints says why the daemon refused the open, which no other frame says. The daemon
+  // refuses it at once, so a draft written after the send has no time to come first: the model
+  // test of a refused open proves that a draft stays after the text that comes back.
   let frame = shows(&app, "  Refused: ");
   assert!(frame.contains("┃ how long does an open take"), "{frame}");
   screen("input-refused", &app);
-  assert!(frame.contains("┃ draft after"), "{frame}");
   assert!(!frame.contains("Reply to this thread"), "{frame}");
 }
 

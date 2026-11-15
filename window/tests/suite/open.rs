@@ -310,23 +310,20 @@ fn an_escape_goes_back_while_it_opens_and_the_same_card_joins_the_same_open() {
 fn an_open_that_fails_says_why_and_how_to_go_back_and_loses_no_draft() {
   let title = "remove the gate from the engine";
   let app = app();
-  let (daemon, go) = resting(&app, &[title]);
-  // Another holder owns the lease of the record.
+  let (daemon, _) = resting(&app, &[title]);
+  // Another holder owns the lease of the record, so the daemon refuses the open at once.
   let owner = File::create(lease(&record(&daemon, 0))).unwrap();
   owner.try_lock().unwrap();
   card(&app, title);
   app.advance(Duration::from_secs(1));
-  app.paste("and the replay");
-  app.press("enter");
-  shows(&app, "┃ and the replay");
-  app.paste("a draft");
-  File::create(&go).unwrap();
-  // The refused message can say the fault before the end of the life comes: wait for the end.
-  let frame = shows(&app, "The window reads this session and sends it nothing.");
+  let frame = shows(&app, "The record stays as it was.");
   assert!(frame.contains("Another process owns"), "{frame}");
   assert!(!frame.contains("Opening"), "{frame}");
+  // A message to the thread is refused the same way, and comes back to the input whole.
+  app.paste("and the replay");
+  app.press("enter");
   let frame = shows(&app, "┃ and the replay");
-  assert!(frame.contains("┃ a draft"), "{frame}");
+  assert!(frame.contains("Another process owns"), "{frame}");
   // The machine says that no life holds the record: the card rests again.
   shows(&app, "● now");
   screen("open-failed", &app);

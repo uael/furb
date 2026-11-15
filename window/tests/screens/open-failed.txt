@@ -2,9 +2,11 @@
   Refused: Another process owns
   ~/furb/.furb/sessions/rest0.jsonl.                           Resting 1
                                                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-  The window reads this session and sends it nothing. ⎋       ▐ remove the gate from the…   ● now ▌
-  goes back.                                                  ▐ FU furb                      opus ▌
+  The record stays as it was. ⎋ goes back.                    ▐ remove the gate from the…   ● now ▌
+                                                              ▐ FU furb                      opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+
+
 
 
 
@@ -22,8 +24,6 @@
 
 ┃
 ┃ and the replay
-┃
-┃ a draft
 ┃
 ┃  Message  Python    → remove the gate… ▾    opus   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

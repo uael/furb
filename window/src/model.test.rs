@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use furb::view::{self, Part, Standing};
 use furb_client::{Ask, Asked};
-use furb_host::protocol::{Answer, Card, Frame, Kind, PROTOCOL, Peer, Role, Verb};
+use furb_host::{
+  ProtocolError,
+  protocol::{Answer, Card, Frame, Kind, PROTOCOL, Peer, Role, Verb},
+};
 use jiff::tz::TimeZone;
 
 use super::{Link, Model, Told};
@@ -110,6 +113,24 @@ fn a_loss_gives_each_message_on_its_way_back_to_the_input_and_a_new_hello_hears_
   assert_eq!(model.client.machines[0].link, Link::Dialing);
   assert!(model.hear(0, Ok(Frame::Reply { id: 9, answer: Answer::Cards(Vec::new()) })));
   assert_eq!(model.client.machines[0].link, Link::Listed);
+}
+
+#[test]
+fn a_refused_open_gives_its_message_back_before_the_draft_that_he_wrote_since() {
+  let mut model = model(vec![card("a", "one", Standing::Rests, 5)], 30);
+  model.selected = model.client.settled.first().map(|one| one.1.clone());
+  model.open_thread();
+  assert!(model.send("how long does an open take".to_owned()));
+  let (life, _) = model.client.opens_due().pop().unwrap();
+  model.client.asked_open(&life, Some(7));
+  model.client.asked.insert((0, 7), Asked::Open);
+  model.draft.text = "draft after".to_owned();
+  let why = "Another process owns the record.".to_owned();
+  let refused =
+    Frame::Refused { id: Some(7), error: ProtocolError::Refused { why: why.clone() }, why };
+  assert!(model.hear(0, Ok(refused)));
+  assert_eq!(model.restore.as_deref(), Some("how long does an open take\n\ndraft after"));
+  assert!(model.client.outgoing.is_empty() && model.client.holds.is_empty());
 }
 
 #[test]
