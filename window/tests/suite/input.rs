@@ -76,7 +76,7 @@ fn told(daemon: &Daemon, sessions: &Path) -> Vec<String> {
 #[test]
 fn a_message_starts_a_new_session_and_its_answer_shows_in_its_thread() {
   let (app, daemon, sessions) = started();
-  assert!(app.text().contains("This computer   furb-try · new session ▾"), "{}", app.text());
+  assert!(app.text().contains("+ new session in"), "{}", app.text());
   assert_eq!(bar(&app), BLUE);
   daemon.hold();
   sent(&app, &format!("how long does an open take {ANSWERS}"));
@@ -121,14 +121,14 @@ fn three_enters_in_a_row_send_three_messages_in_order_and_the_up_arrow_cancels_n
   screen("input-in-order", &app);
 }
 
-/// The text of an input of one row, which stands above the launcher and the hints, once it shows
-/// a text: the window draws the text that the editor takes at its next frame. The box of the
-/// context stands at its right.
+/// The text of an input of one row, which stands above a blank row of its box, the launcher, the
+/// last row of its box and the hints, once it shows a text: the window draws the text that the
+/// editor takes at its next frame. The box of the context stands at its right.
 fn typed(app: &TestApp, text: &str) -> String {
   let row = || {
     let frame = app.text();
     let lines: Vec<&str> = frame.lines().collect();
-    let input: String = lines[lines.len() - 3].chars().take(LEFT).collect();
+    let input: String = lines[lines.len() - 5].chars().take(LEFT).collect();
     input.trim_start_matches(['┃', ' ']).trim_end().to_owned()
   };
   let shown = app.wait_until(PATIENCE, || row() == text);
@@ -185,7 +185,7 @@ fn the_input_shows_in_grey_the_rest_of_what_he_sent_and_the_right_arrow_takes_it
   app.paste("fi");
   typed(&app, &first);
   let frame = app.render();
-  let row = (frame.height as usize - 3) * frame.width as usize;
+  let row = (frame.height as usize - 5) * frame.width as usize;
   let (written, rest) = (&frame.cells[row + 2], &frame.cells[row + 4]);
   assert_ne!(written.fg, rest.fg, "the rest is grey and what he wrote is not");
   screen("input-suggested", &app);
@@ -209,7 +209,7 @@ fn the_key_of_a_new_thread_turns_the_input_and_its_bar_and_a_reply_reaches_a_thr
   let hue = bar(&app);
   app.press("ctrl+n");
   let frame = shows(&app, "┃ Ask in a new thread");
-  assert!(frame.contains("⌃N back to the thread"), "{frame}");
+  assert!(frame.contains("↩ ⌃N"), "{frame}");
   assert_eq!(bar(&app), BLUE);
   screen("input-new-thread", &app);
   app.press("ctrl+n");
@@ -362,9 +362,8 @@ fn the_python_switch_runs_a_word_of_the_operator() {
   // The card of the thread, which the model answered, as its machine tells it after the page, once
   // he read its end.
   shows(&app, "Resolved 1");
-  clicked(&app, "○ Python", 0, 0);
-  let frame = shows(&app, "● Python");
-  assert!(frame.contains("┃ A word of Python to run"), "{frame}");
+  clicked(&app, " Python ", 0, 1);
+  let frame = shows(&app, "┃ A word of Python to run");
   app.paste("answer = 41 + 1");
   screen("input-python", &app);
   app.press("enter");
@@ -387,8 +386,8 @@ fn the_row_of_hints_says_what_a_word_came_to_until_an_escape() {
   let (app, _daemon, _sessions) = started();
   sent(&app, &format!("how long does an open take {ANSWERS}"));
   shows(&app, "Resolved 1");
-  clicked(&app, "○ Python", 0, 0);
-  shows(&app, "● Python");
+  clicked(&app, " Python ", 0, 1);
+  shows(&app, "┃ A word of Python to run");
   // A word that waits shows a mark that moves while it runs, then a check once it ran.
   sent(&app, "await wait(1, __name__)\nanswer = 41 + 1");
   let running = shows(&app, "await wait(1, __name__)\\nanswer = 41 + 1");
@@ -412,7 +411,7 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   sent(&app, &format!("where does the time go {WORKS}"));
   shows(&app, "Working · ⎋ ⎋ stop");
   paged(&app);
-  clicked(&app, "This computer", 0, 16);
+  clicked(&app, "→ w", 0, 0);
   let frame = shows(&app, "Search a session");
   assert!(frame.contains("+ new session") && frame.contains("2 / 2"), "{frame}");
   screen("input-picker", &app);
@@ -421,7 +420,7 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   assert!(!frame.contains("where does the time go     "), "{frame}");
   app.press("enter");
   shows(&app, "┃ Ask for a change, a review or an answer");
-  shows(&app, "furb-try · new session ▾");
+  shows(&app, "+ new session in");
   // The key opens it too, and an escape closes it with no choice.
   app.press("ctrl+x");
   app.press("o");
@@ -429,5 +428,5 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   app.press("escape");
   let closed = app.wait_until(PATIENCE, || !app.text().contains("Search a session"));
   assert!(closed, "{}", app.text());
-  assert!(app.text().contains("furb-try · new session ▾"), "{}", app.text());
+  assert!(app.text().contains("+ new session in"), "{}", app.text());
 }

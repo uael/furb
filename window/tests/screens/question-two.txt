@@ -1,4 +1,4 @@
- furb · what does the head say                  [ Resolve ]    All projects ▾         this machine
+ furb · what does the head say                     Resolve     All projects ▾         this machine
 ┃
 ┃ what does the head say                                       Needs you 1
 ┃ (the model asks twice)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -26,5 +26,5 @@
 ┃ › yes
 ┃   no
 ┃   type another answer                                        Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃  Message  Python    → what does the… ▾      opus   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · ⏎ answer · ⇥ next                   ⌃C refuse

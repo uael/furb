@@ -20,11 +20,11 @@
 
 
 
-
-
-
+┃
 ┃ and the replay
 ┃
-┃ a draft                                                      Context               No answer yet
-  This computer   furb ▾                    opus   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/furb                                             ⎋ back
+┃ a draft
+┃
+┃  Message  Python    → remove the gate… ▾    opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/furb                             ⎋ back

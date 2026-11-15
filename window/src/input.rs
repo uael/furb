@@ -504,7 +504,7 @@ impl Model {
       (None, _) => {
         let says = match self.target() {
           _ if self.draft.python => "A word of Python to run",
-          Target::Thread(_) if opens => "Write while it opens. Your message goes when it is open.",
+          Target::Thread(_) if opens => "Your message goes once the session is open",
           Target::Thread(_) if ended => "A reply opens this thread again",
           Target::Thread(_) if self.thread.as_ref().is_some_and(|one| one.from.is_some()) => {
             "Write to this agent"
@@ -590,35 +590,47 @@ impl Model {
       Target::New(_) => ("+ ", format!("new session in {}", self.project()), t.accent),
     };
     let mut left: Line = switch.into();
-    left.extend([gap(), run(mark, muted), run(format!("{target} ▾"), raised.fg(color))]);
+    left.extend([gap(), run(mark, muted), run(target, raised.fg(color))]);
     let turn = match (&self.aim, &self.thread) {
-      (None, Some(_)) => Some("+ New thread"),
-      (Some(_), Some(_)) => Some("↩ Back to the thread"),
+      (None, Some(_)) => Some(("+ New thread", "+")),
+      (Some(_), Some(_)) => Some(("↩ Back to the thread", "↩")),
       (_, None) => None,
     };
-    let mut right: Line = Vec::new();
-    if let Some((model, effort)) = self.maker() {
-      right.push(run(model, prose));
-      right.extend(effort.map(|one| run(format!("  {one}"), muted)));
-    }
-    if let Some(turn) = turn {
-      let key = run(format!(" {}", self.key(Does::NewThread)), muted);
-      right.extend([gap(), run(turn, raised.fg(t.accent)), key]);
-    }
     let ring = self.ring();
-    if let Some(ring) = &ring {
-      right.extend([gap(), run(ring.clone(), prose)]);
-    }
     let room = self.wide().saturating_sub(6);
-    // The target gives way to the model and the turn down to a few words.
-    let fits = room.saturating_sub(width(&right) + 2 + width(&left[..3]) + 2).max(SESSION);
+    let wanted = left.last().map_or(0, |one| one.content.width());
+    // The target says where the message goes, so it keeps its words first: the turn gives way to
+    // its mark and its key, then the effort, then the target to a few words.
+    let right = |short: usize| {
+      let mut right: Line = Vec::new();
+      if let Some((model, effort)) = self.maker() {
+        right.push(run(model, prose));
+        right.extend(effort.filter(|_| short < 2).map(|one| run(format!("  {one}"), muted)));
+      }
+      if let Some((words, mark)) = turn {
+        let key = run(format!(" {}", self.key(Does::NewThread)), muted);
+        right.extend([gap(), run(if short > 0 { mark } else { words }, raised.fg(t.accent)), key]);
+      }
+      if let Some(ring) = &ring {
+        right.extend([gap(), run(ring.clone(), prose)]);
+      }
+      right
+    };
+    // The target leaves room for the mark before it and the arrow of its picker after it.
+    let fits = |right: &Line| room.saturating_sub(width(right) + 2 + width(&left[..3]) + 2 + 2);
+    let right = [right(0), right(1)]
+      .into_iter()
+      .find(|one| fits(one) >= wanted)
+      .or_else(|| [right(1), right(2)].into_iter().find(|one| fits(one) >= SESSION))
+      .unwrap_or_else(|| right(2));
+    let fits = fits(&right);
     let target = left.pop().map(|one| run(cut(&one.content, fits), one.style));
-    left.extend(target);
+    left.extend(target.into_iter().chain([run(" ▾", raised.fg(color))]));
     let line = spread(left, right, room, raised);
     let at = columns(&line);
     let mut hot = vec![
       (at[0].start + 2..at[1].end + 2, Some(Click::Key(Does::Python))),
-      (at[3].start + 2..at[4].end + 2, Some(Click::Key(Does::Sessions))),
+      (at[3].start + 2..at[5].end + 2, Some(Click::Key(Does::Sessions))),
     ];
     // The runs at the end of the line: the turn and its key, then the ring when it shows.
     let end = at.len() - if ring.is_some() { 2 } else { 0 };
@@ -713,7 +725,10 @@ impl Model {
       (_, None) => (Does::List, "the list"),
     };
     let key = vec![run(format!("{} {name}", self.key(does)), muted)];
-    let (left, loader) = match (self.fault.as_ref().filter(|one| Some(*one) != shown), says) {
+    let fault = self.fault.as_ref().filter(|one| Some(*one) != shown);
+    let place = fault.is_none() && says.is_none() && self.form().is_none() && self.word.is_none();
+    let place = place && !works;
+    let (left, loader) = match (fault, says) {
       (Some(fault), _) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], None),
       (None, Some((says, color))) => (vec![run(format!("  {says}"), Style::new().fg(color))], None),
       (None, None) if self.form().is_some() => (self.form_hints().unwrap_or_default(), None),
@@ -738,9 +753,16 @@ impl Model {
         (vec![run(format!("  {machine} · {}", self.folder_shown()), muted)], None)
       }
     };
-    let room = self.wide().saturating_sub(2).saturating_sub(width(&left) + width(&key) + 2);
+    // The machine and the folder of a thread that rests give way to the threads that ask him, which
+    // the row never hides.
+    let kept = if place { 2 } else { width(&left) };
+    let room = self.wide().saturating_sub(2).saturating_sub(kept + width(&key) + 2);
     let others = self.others_ask(room);
     let right: Line = others.iter().chain(&key).cloned().collect();
+    // A place that does not fit says its folder alone, which tells more than the machine.
+    let fits = width(&left) + 2 + width(&right) <= self.wide().saturating_sub(2);
+    let left =
+      if place && !fits { vec![run(format!("  {}", self.folder_shown()), muted)] } else { left };
     let line = spread(left, right.clone(), self.wide().saturating_sub(2), Style::new());
     let end = width(&line);
     let start = end - width(&right);

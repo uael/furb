@@ -1,4 +1,4 @@
- furb · agent · Run the bench of the replay        [ Back ]    All projects ▾         this machine
+ furb · agent · Run the bench of the replay           Back     All projects ▾         this machine
 ┃
 ┃ Run the bench of the replay                                  Working 1
 ┃ (the agent waits)                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -22,9 +22,9 @@
 
 
 
-
-
-
-┃ Write to this agent                                          Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/src/furb-try                                     ⎋ back
+┃
+┃ Write to this agent
+┃
+┃  Message  Python    → Run the bench of… ▾   opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/src/furb-try                     ⎋ back

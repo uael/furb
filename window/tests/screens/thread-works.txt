@@ -1,4 +1,4 @@
- furb · where does the time of a resume go      [ Resolve ]    All projects ▾         this machine
+ furb · where does the time of a resume go         Resolve     All projects ▾         this machine
 ┃
 ┃ where does the time of a resume go                           Working 1
 ┃ (the model writes a long word)                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -22,9 +22,9 @@
 
 
 
-
-
-
-┃ Reply to this thread                                         Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⠋ Working · ⎋ ⎋ stop                        ⌃N new thread
+┃
+┃ Reply to this thread
+┃
+┃  Message  Python    → where does the… ▾     opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⠋ Working · ⎋ ⎋ stop                          ⌃P commands

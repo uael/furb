@@ -20,11 +20,11 @@
 
 
 
-
-
-
+┃
 ┃ how long does an open take
 ┃
 ┃ draft after
-  This computer   broken · new session ▾           ○ Python
+┃
+┃  Message  Python    + new session in broken ▾
+┃
   Refused: Could not use…                       ⌃P commands

@@ -22,9 +22,9 @@
                        ⎋ ⎋         stop the work of the thread
                        ⌃X R        resolve the thread, or reply to open it…
                        ⌃X ↓        the next agent of the thread
-
-                      ↑↓ move · ⏎ run · ⎋ close
-
-┃ Ask for a change, a review or an answer
-  This computer   furb-try · new session ▾                                                ○ Python
-  ~/src/furb-try                                                                     ⌃X L the list
+┃
+┃ Ask for a change,   ↑↓ move · ⏎ run · ⎋ close
+┃
+┃  Message  Python    + new session in furb-try ▾
+┃
+  This computer · ~/src/furb-try                                                     ⌃X L the list

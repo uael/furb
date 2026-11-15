@@ -22,9 +22,9 @@
 
 
 
-
-
-
+┃
 ┃ Ask for a change, a review or an answer
-  This computer   furb · new session ▾             ○ Python
-  ~/furb                                        ⌃P commands
+┃
+┃  Message  Python    + new session in furb ▾
+┃
+  This computer · ~/furb                        ⌃P commands

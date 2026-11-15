@@ -1,4 +1,4 @@
- furb · why is the seed slow on a big record    [ Resolve ]    All projects ▾         this machine
+ furb · why is the seed slow on a big record       Resolve     All projects ▾         this machine
 ┃
 ┃ why is the seed slow on a big record                         Working 1
 ┃ (the model thinks)                                          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -22,9 +22,9 @@
 
 
 
-
-
-
-┃ Reply to this thread                                         Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⠋ Working · ⎋ ⎋ stop                        ⌃N new thread
+┃
+┃ Reply to this thread
+┃
+┃  Message  Python    → why is the seed… ▾    opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⠋ Working · ⎋ ⎋ stop                          ⌃P commands

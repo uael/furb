@@ -1,9 +1,6 @@
- furb-try · fix the build (the…     ✓ Resolved   [ Reopen ]    All projects ▾         this machine
+ furb-try · fix the build (the…       ✓ Resolved    Reopen     All projects ▾         this machine
 
-       python                                                  Resolved 1 ▸
-    1  open = boot + seed
-
-  See the trace.
+  See the trace.                                               Resolved 1 ▸
 
 ┃
 ┃ say what moved (the model answers)
@@ -25,6 +22,9 @@
 
   See the trace.
 
-┃ fix the build (the model answers)                            Context               No answer yet
-  This computer   furb-try ▾           opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/furb-try                                  ⌃N new thread
+┃
+┃ fix the build (the model answers)
+┃
+┃  Message  Python    → fix the build… ▾      opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/furb-try                    ⌃P commands

@@ -1,4 +1,4 @@
- furb · measure the open on three chains        [ Resolve ]    All projects ▾         this machine
+ furb · measure the open on three chains           Resolve     All projects ▾         this machine
 ┃
 ┃ measure the open on three chains                             Working 1
 ┃ (the model delegates)                                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -17,14 +17,14 @@
 
 
 
-
-
-
   └ Run the bench of the replay             ◐ Working  opus
     await wait(600, chain)
   └ Read the boot of the host               ⠋ Working  opus
   └ Count the lines of README.md           ✓ Resolved  opus
 
-┃ Reply to this thread                                         Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃
+┃ Reply to this thread
+┃
+┃  Message  Python    → measure the open… ▾   opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ⠋ Working · ⎋ ⎋ stop                          ⌃X ↓ agents

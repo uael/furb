@@ -266,7 +266,7 @@ fn a_message_written_while_the_session_opens_goes_once_it_stands_and_gets_its_an
   let (_daemon, go) = resting(&app, &[title]);
   card(&app, title);
   app.advance(Duration::from_secs(1));
-  let frame = shows(&app, "┃ Write while it opens. Your message goes when it is open.");
+  let frame = shows(&app, "┃ Your message goes once the session is open");
   assert!(frame.contains("⎋ back"), "{frame}");
   app.paste(&format!("and the replay {ANSWERS}"));
   app.press("enter");

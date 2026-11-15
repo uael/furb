@@ -1,4 +1,4 @@
- furb · which keys does the form take           [ Resolve ]    All projects ▾         this machine
+ furb · which keys does the form take              Resolve     All projects ▾         this machine
 ┃
 ┃ which keys does the form take                                Needs you 1
 ┃ (the model asks ticks)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -26,5 +26,5 @@
 ┃   [ ] down
 ┃ › [x] tab
 ┃   type another answer                                        Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃  Message  Python    → which keys does… ▾    opus   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · Space tick · ⏎ answer               ⌃C refuse

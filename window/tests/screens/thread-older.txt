@@ -1,4 +1,4 @@
- furb · ground the branch,…         ✓ Resolved   [ Reopen ]    All projects ▾         this machine
+ furb · ground the branch, message…   ✓ Resolved    Reopen     All projects ▾         this machine
 ┃
 ┃ ground the branch, message by message                        Resolved 1 ▸
 ┃
@@ -21,10 +21,10 @@
     3  close(None)
 
 ┃
-┃ and the step 3
-┃
-
   Jump to latest ↓                                        ↘
-┃ A reply opens this thread again                              Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/src/furb-try                              ⌃N new thread
+┃
+┃ A reply opens this thread again
+┃
+┃  Message  Python    → ground the… ▾         opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/src/furb-try                ⌃P commands

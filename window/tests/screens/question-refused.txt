@@ -1,4 +1,4 @@
- furb · how many rows                           [ Resolve ]    All projects ▾         this machine
+ furb · how many rows                              Resolve     All projects ▾         this machine
 ┃
 ┃ how many rows                                                Needs you 1
 ┃ (the model asks a number)                                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -26,5 +26,5 @@
 ┃
 ┃ many
 ┃ Refused: "many" is no int: invalid digit found in string     Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃  Message  Python    → how many rows ▾       opus   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ⏎ answer                                        ⌃C refuse

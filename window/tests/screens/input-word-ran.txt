@@ -1,4 +1,4 @@
- furb-try · how long does an open…  ✓ Resolved   [ Reopen ]    All projects ▾         this machine
+ furb-try · how long does an open…    ✓ Resolved    Reopen     All projects ▾         this machine
 ┃
 ┃ how long does an open take (the model answers)               Resolved 1 ▸
 ┃
@@ -22,9 +22,9 @@
 
 
 
-
-
-
-┃ A word of Python to run                                      Context               No answer yet
-  This computer   furb-try ▾           opus/high   ● Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ✓ await wait(1, __name__)\nanswer = 41 + 1  ⌃N new thread
+┃
+┃ A word of Python to run
+┃
+┃  Message  Python    → how long does an… ▾   opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ✓ await wait(1, __name__)\nanswer = 41 + 1    ⌃P commands

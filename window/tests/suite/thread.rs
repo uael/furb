@@ -352,7 +352,7 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
   // it shows the list with each part of its box.
   assert!(!app.text().contains("○ 12%"), "{}", app.text());
   app.resize(80, 30);
-  shows(&app, "○ Python   ○ 12%");
+  shows(&app, "○ 12%");
   screen("thread-context-ring", &app);
   clicked(&app, "○ 12%", 0, 0);
   shows(&app, "From the cache");

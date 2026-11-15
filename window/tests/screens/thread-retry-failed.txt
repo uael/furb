@@ -1,4 +1,4 @@
- furb · the bench stalls on a cold build        [ Resolve ]    All projects ▾         this machine
+ furb · the bench stalls on a cold build           Resolve     All projects ▾         this machine
 ┃
 ┃ the bench stalls on a cold build                             Needs you 1
 ┃ (the model is asked again)                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -22,9 +22,9 @@
 
 
 
-
-
-
-┃ Reply to this thread                                         Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/src/furb-try                              ⌃N new thread
+┃
+┃ Reply to this thread
+┃
+┃  Message  Python    → the bench stalls… ▾   opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/src/furb-try                ⌃P commands

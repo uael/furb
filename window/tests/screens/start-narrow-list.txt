@@ -1,4 +1,4 @@
- furb · Debug…    ✗ Failed   [ Reopen ]    All projects ▾       studio offline
+ furb · Debug…      ✗ Failed    Reopen     All projects ▾       studio offline
 ┃
 ┃ Debug stuck TUI after merge               TUI scope for the new…    ◆ Input
 ┃ (the model works on it)                   FU furb                      opus
@@ -22,9 +22,9 @@
                                             where does the time go        11h
                                             FU furb                      opus
 
-                                            Ground the branch…   ‖ Paused 11h
-                                            FU furb                      opus
-
-┃ A reply opens this thread again          Context               No answer yet
-  This computer   furb ▾       ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/src/furb-try    ◆ 1   ⌃N new thread
+┃                                           Ground the branch…   ‖ Paused 11h
+┃ A reply opens this thread again           FU furb                      opus
+┃
+┃  Message  Python    → ……opus   + ⌃N      Context               No answer yet
+┃                                          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+…   ◆ 1 other thread asks   ⌃P commands

@@ -22,9 +22,9 @@
 
 
 
-
-
-
-┃ Write while it opens. Your message goes when it is open.     Context               No answer yet
-  This computer   furb ▾                    opus   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/furb                                             ⎋ back
+┃
+┃ Your message goes once the session is open
+┃
+┃  Message  Python    → remove the gate… ▾    opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/furb                             ⎋ back

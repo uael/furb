@@ -1,4 +1,4 @@
- furb · where does the list stand               [ Resolve ]    All projects ▾         this machine
+ furb · where does the list stand                  Resolve     All projects ▾         this machine
 ┃
 ┃ where does the list stand                                    Needs you 1
 ┃ (the model asks a choice)                                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -26,5 +26,5 @@
 ┃   right
 ┃   left
 ┃ › at the top                                                 Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃  Message  Python    → where does the… ▾     opus   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · ⏎ answer                            ⌃C refuse

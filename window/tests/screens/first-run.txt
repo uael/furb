@@ -22,9 +22,9 @@
 
 
 
-
-
-
+┃
 ┃ Ask for a change, a review or an answer
-  This computer   furb-try · new session ▾         ○ Python
-  ~/src/furb-try                                ⌃P commands
+┃
+┃  Message  Python    + new session in furb-try ▾
+┃
+  This computer · ~/src/furb-try                ⌃P commands

@@ -1,4 +1,4 @@
- furb-try · where does the time go (the model…  [ Resolve ]    All projects ▾         this machine
+ furb-try · where does the time go (the model…     Resolve     All projects ▾         this machine
 ┃
 ┃ where does the time go (the model works on it)               Working 1
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
@@ -22,9 +22,9 @@
 
 
 
-
-
-
-┃ Ask in a new thread                                          Context               No answer yet
-  This computer   furb-try · where does…    opus   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⠋ Working · ⎋ ⎋ stop                ⌃N back to the thread
+┃
+┃ Ask in a new thread
+┃
+┃  Message  Python    + new thread in… ▾      opus   ↩ ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⠋ Working · ⎋ ⎋ stop                          ⌃P commands

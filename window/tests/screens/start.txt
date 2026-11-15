@@ -22,9 +22,9 @@
                                                                 FU furb                      opus
 
                                                                 where does the time go        11h
-                                                                FU furb                      opus
-
-                                                                Ground the branch…   ‖ Paused 11h
-┃ Ask for a change, a review or an answer                       FU furb                      opus
-  This computer   furb-try · new session ▾         ○ Python
-  ~/src/furb-try                                ⌃P commands    Resolved 1 ▸
+┃                                                               FU furb                      opus
+┃ Ask for a change, a review or an answer
+┃                                                               Ground the branch…   ‖ Paused 11h
+┃  Message  Python    + new session in furb-try ▾               FU furb                      opus
+┃
+  This computer · ~/src/furb-try                ⌃P commands    Resolved 1 ▸

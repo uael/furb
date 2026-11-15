@@ -1,4 +1,4 @@
- furb · read the trace of the open                     ✓ Resolved   [ Reopen ]
+ furb · read the trace of the open                       ✓ Resolved    Reopen
 ┃
 ┃ read the trace of the open
 ┃ (the model reads much)
@@ -22,9 +22,9 @@
 
 
 
-
-
-
+┃
 ┃ A reply opens this thread again
-  This computer   furb ▾                          opus/high   ○ Python   ○ 12%
-  ~/src/furb-try                                                 ⌃N new thread
+┃
+┃  Message  Python    → read the trace of the… ▾   opus  high   + ⌃N   ○ 12%
+┃
+  This computer · ~/src/furb-try                                   ⌃P commands

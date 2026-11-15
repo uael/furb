@@ -1,4 +1,4 @@
- furb · why is the window stuck…    ✓ Resolved   [ Reopen ]    All projects ▾         this machine
+ furb · why is the window stuck…      ✓ Resolved    Reopen     All projects ▾         this machine
 ┃
 ┃ why is the window stuck after a switch of model              Resolved 1 ▸
 ┃ (the model fails)
@@ -22,9 +22,9 @@
 
 
 
-
-
-
-┃ A reply opens this thread again                              Context               No answer yet
-  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/src/furb-try                              ⌃N new thread
+┃
+┃ A reply opens this thread again
+┃
+┃  Message  Python    → why is the window… ▾  opus   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/src/furb-try                ⌃P commands
