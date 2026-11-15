@@ -194,7 +194,3 @@ fn counted(unit: &Unit, done: u64, of: u64, whole: bool) -> String {
     Unit::Thousandths => format!("{}%", done * 100 / of.max(1)),
   }
 }
-
-#[cfg(test)]
-#[path = "opens.test.rs"]
-mod test;

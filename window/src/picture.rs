@@ -56,7 +56,3 @@ pub(crate) fn marked(line: &str, plain: Style, mark: Style) -> Line {
   }
   out
 }
-
-#[cfg(test)]
-#[path = "picture.test.rs"]
-mod test;

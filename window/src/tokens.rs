@@ -376,7 +376,3 @@ fn smoother(at: i64) -> i64 {
   let at = at.clamp(0, 1000);
   at * at * at * (6 * at * at - 15_000 * at + 10_000_000) / 1_000_000_000_000
 }
-
-#[cfg(test)]
-#[path = "tokens.test.rs"]
-mod test;

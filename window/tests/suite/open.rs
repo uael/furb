@@ -36,13 +36,13 @@ use {
 const LEFT: usize = 61;
 
 /// The message of the thread of a session at rest, whose first line is its title.
-fn message(title: &str) -> String {
+pub(crate) fn message(title: &str) -> String {
   format!("{title}\n{ANSWERS}")
 }
 
 /// The options of a window in the project of its daemon, whose home folder is the folder of that
 /// daemon, so a path of a record shows the same in each run.
-fn homed(daemon: &Daemon) -> Options {
+pub(crate) fn homed(daemon: &Daemon) -> Options {
   let (folder, home) = (daemon.file("furb"), daemon.file("furb").parent().map(PathBuf::from));
   Options { folder, home, ..options(&daemon.file("cards.json")) }
 }
@@ -74,12 +74,12 @@ fn resting(app: &TestApp, titles: &[&str]) -> (Daemon, PathBuf) {
 
 /// The record of a session at rest of a machine, by its place among the titles of the machine.
 #[cfg(unix)]
-fn record(daemon: &Daemon, at: usize) -> PathBuf {
+pub(crate) fn record(daemon: &Daemon, at: usize) -> PathBuf {
   daemon.file("furb").join(".furb").join("sessions").join(format!("rest{at}.jsonl"))
 }
 
 /// The card of a thread clicked.
-fn card(app: &TestApp, title: &str) {
+pub(crate) fn card(app: &TestApp, title: &str) {
   app.click(80, row(app, &title[..15]));
 }
 

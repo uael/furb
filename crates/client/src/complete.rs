@@ -412,7 +412,3 @@ pub fn mentioned(text: &str) -> Vec<(Range<usize>, &str)> {
   }
   found
 }
-
-#[cfg(test)]
-#[path = "complete.test.rs"]
-mod test;

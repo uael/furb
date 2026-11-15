@@ -532,7 +532,3 @@ fn replied(heard: Heard) -> Option<Answer> {
     _ => None,
   }
 }
-
-#[cfg(test)]
-#[path = "model.test.rs"]
-mod test;

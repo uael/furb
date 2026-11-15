@@ -231,7 +231,3 @@ impl Client {
     self.now / 1000
   }
 }
-
-#[cfg(test)]
-#[path = "input.test.rs"]
-mod test;

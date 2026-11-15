@@ -1,6 +1,6 @@
 use std::{cell::Cell, collections::BTreeMap, ops::Range, path::PathBuf};
 
-use furb::view::{self, Block, Exchange, Line as Code, Maker, Mark, Page, Standing, Thought, Work};
+use furb::view::{self, Block, Exchange, Line as Code, Maker, Mark, Page, Standing};
 use furb_host::protocol::{Card, Verb};
 use jiff::tz::TimeZone;
 
@@ -10,7 +10,7 @@ use furb_client::Thread;
 use crate::{
   Options, System,
   model::{Link, Model, Told},
-  tokens::{Loader, Tokens},
+  tokens::Tokens,
 };
 
 /// One exchange of a thread: a message, and a block of two lines that ran.
@@ -92,31 +92,6 @@ fn opened(end: Page) -> Model {
   model
 }
 
-/// The text of each row of the left side.
-fn texts(model: &Model) -> Vec<String> {
-  let left = model.left();
-  left.rows.iter().map(|row| row.iter().map(|one| one.content.as_ref()).collect()).collect()
-}
-
-#[test]
-fn a_page_of_older_exchanges_keeps_each_row_that_the_operator_reads_where_it_stands() {
-  let mut model = opened(page(10..30));
-  // He reads away from the end, until less than a screen of the feed stands above him: the window
-  // asks the page before the first exchange that it holds.
-  let mut asked = None;
-  while asked.is_none() {
-    asked = model.scroll_feed(-3);
-  }
-  let Some(Verb::Thread { before, limit, .. }) = asked else { panic!("a page of the thread") };
-  assert_eq!((before, limit), (Some(10), 20));
-  let read = texts(&model);
-  assert!(!read.iter().any(|row| row.contains("earlier messages")), "{read:#?}");
-
-  model.client.thread.as_mut().expect("a thread is open").thread.asked.insert(2, Some(10));
-  assert!(model.answered(0, 2, Ok(page(0..10))));
-  assert_eq!(texts(&model), read);
-}
-
 #[test]
 fn a_frame_makes_the_rows_of_the_exchanges_that_show_and_of_no_other() {
   // A thread of thousands of exchanges, which the window holds whole, each of four rows.
@@ -157,61 +132,4 @@ fn a_thread_that_ends_twice_in_one_second_is_said_seen_at_each_end_and_reads_at_
     model.client.machines[0].cards[0].thread.readers.clear();
     assert_eq!(model.client.seen_due(), None);
   }
-}
-
-#[test]
-fn a_light_passes_over_the_word_of_a_model_that_writes_or_thinks_and_not_once_it_thought() {
-  let writes = Code {
-    number: 3,
-    text: String::new(),
-    mark: Mark::Runs { work: Work::Writes, began: None },
-    output: None,
-    made: Vec::new(),
-  };
-  let maker = Maker::Model { model: "claude-cli:opus".to_owned(), effort: None };
-  let thought = Thought { text: "the seed".to_owned(), began: 0, took: None };
-  let block = Block { maker, lines: vec![writes], more: false, thought: Some(thought) };
-  let mut end = page(0..1);
-  end.exchanges[0].block = Some(block);
-  let mut model = opened(end);
-  let lights = |model: &Model| -> Vec<(String, &'static str)> {
-    let left = model.left();
-    let lit = left.loaders.iter().filter_map(|spot| match spot.loader {
-      Loader::Light(word) => Some((texts(model)[usize::from(spot.y)].clone(), word)),
-      _ => None,
-    });
-    lit
-      .map(|(row, word)| (row.split_whitespace().next().unwrap_or_default().to_owned(), word))
-      .collect()
-  };
-  assert_eq!(lights(&model), [("writes".to_owned(), "writes"), ("thinks".to_owned(), "thinks")]);
-  let opened = model.client.thread.as_mut().expect("a thread is open");
-  let exchange = opened.thread.exchanges.get_mut(&0).expect("the exchange");
-  exchange.block.as_mut().and_then(|one| one.thought.as_mut()).expect("a thought").took = Some(3);
-  assert_eq!(lights(&model), [("writes".to_owned(), "writes")]);
-}
-
-#[test]
-fn the_call_of_prompt_that_a_line_awaits_shines_while_its_agent_works() {
-  let awaits = Code {
-    number: 3,
-    text: "lines = await prompt(str, 'Count the lines', on=chain('count'))".to_owned(),
-    mark: Mark::Runs { work: Work::Agent, began: None },
-    output: None,
-    made: Vec::new(),
-  };
-  let maker = Maker::Model { model: "claude-cli:opus".to_owned(), effort: None };
-  let block = Block { maker, lines: vec![awaits], more: true, thought: None };
-  let mut end = page(0..1);
-  end.exchanges[0].block = Some(block);
-  let model = opened(end);
-  let left = model.left();
-  let rows = texts(&model);
-  let shines: Vec<String> = left
-    .loaders
-    .iter()
-    .filter(|spot| spot.loader == Loader::Light("prompt"))
-    .map(|spot| rows[usize::from(spot.y)].chars().skip(usize::from(spot.x)).take(7).collect())
-    .collect();
-  assert_eq!(shines, ["prompt("]);
 }

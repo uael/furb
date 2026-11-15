@@ -7,10 +7,17 @@ mod yard;
 
 mod cards;
 mod daemon;
+mod image;
 mod input;
+mod list;
+mod loss;
+mod mention;
+mod motion;
 mod open;
+mod palette;
 mod part;
 mod question;
 mod screens;
+mod system;
 mod thread;
 mod walk;

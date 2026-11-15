@@ -290,7 +290,3 @@ pub(crate) fn pressed(key: &KeyEvent, led: bool) -> Option<Does> {
   };
   keys().find(|one| one.forms.iter().any(form)).map(|one| one.does)
 }
-
-#[cfg(test)]
-#[path = "keys.test.rs"]
-mod test;

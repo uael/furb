@@ -408,7 +408,3 @@ pub(crate) fn closed(answered: &Answered, login: &str) -> String {
   };
   format!("{reply} · {who}")
 }
-
-#[cfg(test)]
-#[path = "question.test.rs"]
-mod test;

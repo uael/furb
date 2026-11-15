@@ -379,9 +379,9 @@ impl Peer {
       on: None,
     };
     let Answer::Act(prompt) = self.ask(verb) else { panic!("no prompt") };
-    let stands = if [WORKS, THINKS, RETRIES].iter().any(|one| message.contains(one)) {
+    let stands = if [WORKS, THINKS, PONDERS, RETRIES].iter().any(|one| message.contains(one)) {
       "thinks"
-    } else if message.contains(LONG) || message.contains(DELEGATES) {
+    } else if [LONG, DELEGATES, AWAITS].iter().any(|one| message.contains(one)) {
       "runs"
     } else if message.contains(ASKS) || QUESTIONS.iter().any(|one| message.contains(one.0)) {
       "asks"
@@ -468,9 +468,16 @@ pub(crate) const READ: &str = "The model read the refusal.";
 /// The words of a message of a test that make the model think and write a word that it never
 /// ends, write a long word that waits, answer with prose, or write a word that fails once.
 pub(crate) const THINKS: &str = "(the model thinks)";
+/// The words of a message of a test that make the model think for ever.
+pub(crate) const PONDERS: &str = "(the model thinks for ever)";
 pub(crate) const LONG: &str = "(the model writes a long word)";
 pub(crate) const ANSWERS: &str = "(the model answers)";
 pub(crate) const FAILS: &str = "(the model fails)";
+
+/// The words that the model of a test answers to [`ASKS`] and to [`FAILS`].
+const ASKED: &str = "await prompt(str, 'Which key sends the queue?', to=OPERATOR)\nclose(None)";
+const FAILED: &str =
+  "x = 1\nraise ValueError('a maximum of 4 blocks with cache_control may be provided')";
 
 /// The words of a message of a test whose model the provider asks again once, after a cause that
 /// passes, and which then fails for good.
@@ -490,14 +497,21 @@ boot = prompt(str, 'Read the boot of the host\\n(the model works on it)', on=cha
 lines = await prompt(str, 'Count the lines of README.md\\n(the agent answers)', on=chain('count'))
 await wait(600, bench)";
 
+/// The words of a message of a test that make the model await an agent that works for ever.
+pub(crate) const AWAITS: &str = "(the model awaits an agent)";
+
 /// The words of a message of a test that make the model write a file, read it and close.
 pub(crate) const OPENS: &str = "(the model opens a file)";
 
 /// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`] and
 /// [`OPENS`], each with the word that answers it: the first agent answers at once, and the second
 /// waits on its chain.
-const ANSWERED: [(&str, &str); 5] = [
+const ANSWERED: [(&str, &str); 6] = [
   (DELEGATES, DELEGATE),
+  (
+    AWAITS,
+    "lines = await prompt(str, 'Count the lines\\n(the model works on it)', on=chain('count'))",
+  ),
   ("(the agent answers)", "close('README.md has 3 lines.')"),
   ("(the agent waits)", "n = 2\nawait wait(600, chain)"),
   (READS, "close('The trace holds the open of each chain.')"),
@@ -544,18 +558,18 @@ fn scripted(at: &Path, claude: &Path) -> Opening {
       if request.contains(WORKS) {
         future::pending::<()>().await;
       }
-      if request.contains(THINKS) {
+      // A model that thinks for ever writes no line of a word.
+      if request.contains(THINKS) || request.contains(PONDERS) {
         told(
           "",
           "I read the stages from the frames and sum them, so the open shows where its time goes. ",
         );
-        told("", "Then the seed");
-        told("cost = tokens(word)\nproof = await bash('pytest -q test/outside", "");
+        if request.contains(THINKS) {
+          told("", "Then the seed");
+          told("cost = tokens(word)\nproof = await bash('pytest -q test/outside", "");
+        }
         future::pending::<()>().await;
       }
-      let asks = "await prompt(str, 'Which key sends the queue?', to=OPERATOR)\nclose(None)";
-      let fails =
-        "x = 1\nraise ValueError('a maximum of 4 blocks with cache_control may be provided')";
       let named = QUESTIONS.iter().chain(&ANSWERED).find(|one| request.contains(one.0));
       let read = format!("close({READ:?})");
       let told = "await prompt(None, 'The bench ran.', to=OPERATOR)\nclose(None)";
@@ -566,13 +580,13 @@ fn scripted(at: &Path, claude: &Path) -> Opening {
       } else if request.contains(TELLS) {
         told
       } else if request.contains(ASKS) {
-        asks
+        ASKED
       } else if request.contains(LONG) {
         WORD
       } else if request.contains(ANSWERS) {
         PROSE
       } else if request.contains(FAILS) && !request.contains("ValueError") {
-        fails
+        FAILED
       } else {
         "close(None)"
       };

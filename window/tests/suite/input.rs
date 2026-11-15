@@ -29,7 +29,7 @@ const ORANGE: Color = Color::hex(0xfa_b283);
 /// A window in the folder of a project that the list of the machine does not name yet, whose home
 /// folder is the folder of the test, so a path of it shows the same in each run. The folder of the
 /// records of the sessions that the window starts.
-fn started() -> (TestApp, Daemon, PathBuf) {
+pub(crate) fn started() -> (TestApp, Daemon, PathBuf) {
   let app = app();
   let mut daemon = Daemon::bound(&app);
   daemon.served();
@@ -50,7 +50,7 @@ fn paged(app: &TestApp) -> String {
 }
 
 /// The text of the input sent.
-fn sent(app: &TestApp, text: &str) {
+pub(crate) fn sent(app: &TestApp, text: &str) {
   app.paste(text);
   app.press("enter");
 }
@@ -63,7 +63,7 @@ fn bar(app: &TestApp) -> Color {
 
 /// The texts of the messages of the thread of the one session of a project, as its daemon holds
 /// them: none while the daemon holds no card of it.
-fn told(daemon: &Daemon, sessions: &Path) -> Vec<String> {
+pub(crate) fn told(daemon: &Daemon, sessions: &Path) -> Vec<String> {
   let Ok(records) = fs::read_dir(sessions) else { return Vec::new() };
   let records = records.flatten().map(|one| one.path());
   let mut records = records.filter(|one| one.extension().is_some_and(|ext| ext == "jsonl"));
