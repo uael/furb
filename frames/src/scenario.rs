@@ -192,7 +192,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       sessions: &[],
       words: &["await bash('sleep 30')\nclose('slept')", ASKS],
       steps: &[
-        step("x-first", &[Act::Type("Run the bench."), Act::Key("Enter")], "⎋ ⎋ stop"),
+        step("x-first", &[Act::Type("Run the bench."), Act::Key("Enter")], "⎋ stop"),
         step(
           "a",
           &[Act::Key("C-n"), Act::Type("Place the list of cards."), Act::Key("Enter")],
@@ -398,7 +398,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         "out = await bash('seq 1 300')\nclose(f'It printed {len(out.stdout.lines)} lines.')",
       ],
       steps: &[
-        step("a", &[Act::Type("Run the slow script."), Act::Key("Enter")], "⎋ ⎋ stop"),
+        step("a", &[Act::Type("Run the slow script."), Act::Key("Enter")], "⎋ stop"),
         // The last line that the command writes shows while it still runs, so the step waits
         // for the close of the thread: a message sent before it would go to the word that awaits.
         step("b", &[], "✓ Resolved"),
@@ -477,7 +477,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       sessions: &[],
       words: &["await bash('sleep 20')\nclose('slept')", "await bash1\nclose('The bench ran.')"],
       steps: &[
-        step("a", &[Act::Type("Wait for the bench."), Act::Key("Enter")], "⎋ ⎋ stop"),
+        step("a", &[Act::Type("Wait for the bench."), Act::Key("Enter")], "⎋ stop"),
         step("b", &[Act::Type("Stop after the boot."), Act::Key("Enter")], "Stop after the boot."),
         step("c", &[Act::Key("Escape"), Act::Key("Escape")], "Stop after the boot."),
       ],

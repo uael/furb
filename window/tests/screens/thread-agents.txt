@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → measure the… ▾  opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ◐ Working · ⎋ ⎋ stop                          ⌃X ↓ agents
+  ◐ Working · ⎋ stop                            ⌃X ↓ agents

@@ -237,7 +237,7 @@ fn the_input_shows_in_grey_the_rest_of_what_he_sent_and_the_right_arrow_takes_it
 fn the_key_of_a_new_thread_turns_the_input_and_its_bar_and_a_reply_reaches_a_thread_that_works() {
   let (app, daemon, sessions) = started();
   sent(&app, &format!("where does the time go {WORKS}"));
-  shows(&app, "Working · ⎋ ⎋ stop");
+  shows(&app, "Working · ⎋ stop");
   paged(&app);
   let hue = bar(&app);
   app.press("ctrl+n");
@@ -260,7 +260,7 @@ fn the_key_of_a_new_thread_turns_the_input_and_its_bar_and_a_reply_reaches_a_thr
 fn two_escapes_stop_the_work_of_the_thread_and_one_says_that_it_armed_the_stop() {
   let (app, _daemon, _sessions) = started();
   sent(&app, &format!("where does the time go {WORKS}"));
-  shows(&app, "Working · ⎋ ⎋ stop");
+  shows(&app, "Working · ⎋ stop");
   app.press("escape");
   shows(&app, "⎋ again stops the work");
   // Another key forgets the first escape, so the next one arms the stop again.
@@ -272,7 +272,7 @@ fn two_escapes_stop_the_work_of_the_thread_and_one_says_that_it_armed_the_stop()
   assert!(!frame.contains("Stopped"), "{frame}");
   app.press("escape");
   let frame = shows(&app, "Stopped");
-  assert!(!frame.contains("Working · ⎋ ⎋ stop"), "{frame}");
+  assert!(!frame.contains("Working · ⎋ stop"), "{frame}");
 }
 
 #[test]
@@ -317,7 +317,7 @@ fn a_thread_that_ended_turns_the_input_to_it_and_a_reply_opens_it_and_the_button
 fn a_resolve_of_a_thread_that_works_waits_for_its_confirm() {
   let (app, _daemon, _sessions) = started();
   sent(&app, &format!("where does the time go {WORKS}"));
-  shows(&app, "Working · ⎋ ⎋ stop");
+  shows(&app, "Working · ⎋ stop");
   paged(&app);
   app.press("ctrl+x");
   app.press("r");
@@ -326,14 +326,14 @@ fn a_resolve_of_a_thread_that_works_waits_for_its_confirm() {
   // Another key leaves the confirm, and the thread still works.
   app.press("escape");
   let frame = shows(&app, " Resolve ");
-  assert!(frame.contains("Working · ⎋ ⎋ stop") && !frame.contains("Stop and resolve"), "{frame}");
+  assert!(frame.contains("Working · ⎋ stop") && !frame.contains("Stop and resolve"), "{frame}");
   let (x, y) = at(&app, " Resolve ", 0);
   app.click(x, y);
   shows(&app, " Stop and resolve ");
   let (x, y) = at(&app, " Stop and resolve ", 0);
   app.click(x, y);
   let frame = shows(&app, "✓ Resolved");
-  assert!(!frame.contains("Working · ⎋ ⎋ stop"), "{frame}");
+  assert!(!frame.contains("Working · ⎋ stop"), "{frame}");
 }
 
 #[test]
@@ -446,7 +446,7 @@ fn a_word_of_python_shows_in_its_thread_as_his_code_and_a_line_that_raised_says_
 fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends_to() {
   let (app, _daemon, _sessions) = started();
   sent(&app, &format!("where does the time go {WORKS}"));
-  shows(&app, "Working · ⎋ ⎋ stop");
+  shows(&app, "Working · ⎋ stop");
   paged(&app);
   clicked(&app, "→ w", 0, 0);
   let frame = shows(&app, "Search a session");

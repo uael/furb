@@ -741,14 +741,14 @@ impl Model {
   }
 
   /// The hint of the work of the open thread: its time, which counts each second as the time of a
-  /// line that runs, where a card says its age in minutes, the key that stops it, and the mark of
-  /// that work: a model, a command or agents.
+  /// line that runs, where a card says its age in minutes, the key that starts to stop it, whose
+  /// second press the row then asks, and the mark of that work: a model, a command or agents.
   fn working(&self, card: Option<&Card>) -> (Line, Loader) {
     let t = &self.tokens;
     let worked = card.map(|card| self.second().saturating_sub(card.since)).filter(|one| *one > 0);
     let age = worked.map(|seconds| format!(" {}", timer(seconds)));
     let working = format!("    {WORKS}{}", age.unwrap_or_default());
-    let stop = format!(" · {} stop", self.key(Does::Stop));
+    let stop = format!(" · {} stop", self.key(Does::Close));
     let loader = match card.map(|card| &card.thread.standing) {
       Some(Standing::Runs) => Loader::Command,
       Some(Standing::Delegates) => Loader::Agent,

@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    + new thread in… ▾      opus   ↩ ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⠋ Working · ⎋ ⎋ stop                          ⌃P commands
+  ⠋ Working · ⎋ stop                            ⌃P commands
