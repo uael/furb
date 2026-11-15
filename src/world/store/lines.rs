@@ -45,8 +45,13 @@ pub struct Lines {
 impl Lines {
   /// The file of lines at a path, under its lease, or the refusal when another process holds it.
   pub fn open(path: impl AsRef<Path>) -> Result<Self, Fault> {
+    let path = path.as_ref();
+    Self::under(path, leased(path)?)
+  }
+
+  /// The file of lines at a path, under a lease of it that the caller holds.
+  pub(crate) fn under(path: impl AsRef<Path>, lease: Lease) -> Result<Self, Fault> {
     let path = path.as_ref().to_path_buf();
-    let lease = leased(&path)?;
     // Not an append handle: on Windows it cannot cut a torn line, and the lease gives one writer.
     let mut file = OpenOptions::new()
       .create(true)

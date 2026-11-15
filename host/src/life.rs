@@ -483,6 +483,10 @@ impl Life {
   /// of the `stream` and the `log` of the opening. A life that does not open ends at once, with its
   /// fault.
   pub fn spawn(opening: Opening) -> Result<LifeHandle, LifeError> {
+    // The life holds the record that it keeps from its spawn, before it reads it, so a host that
+    // spawns it answers only once no other process can take the record.
+    let lease = opening.record.as_deref().filter(|_| opening.keeps()).map(world::Lease::of);
+    let lease = lease.transpose().map_err(|fault| LifeError::Refused(fault.to_string()))?;
     let (inbox, received) = mpsc::unbounded_channel();
     let (readers, _) = broadcast::channel(BEHIND);
     let told = readers.clone();
@@ -493,7 +497,7 @@ impl Life {
     let told = Tells { readers: told, name: named, opens: opened, cards: carded };
     thread::Builder::new()
       .name("furb-life".to_owned())
-      .spawn(move || lived(opening, received, told))
+      .spawn(move || lived(opening, lease, received, told))
       .map_err(LifeError::Thread)?;
     Ok(LifeHandle { inbox, readers, name, opens, cards })
   }
@@ -1016,9 +1020,14 @@ fn digested(text: &str) -> u64 {
   clippy::disallowed_methods,
   reason = "the thread of each life blocks on its own current_thread runtime by design (#983 section 2)"
 )]
-fn lived(opening: Opening, received: UnboundedReceiver<Message>, tells: Tells) {
+fn lived(
+  opening: Opening,
+  lease: Option<world::Lease>,
+  received: UnboundedReceiver<Message>,
+  tells: Tells,
+) {
   match runtime::Builder::new_current_thread().enable_all().build() {
-    Ok(runtime) => LocalSet::new().block_on(&runtime, run(opening, received, tells)),
+    Ok(runtime) => LocalSet::new().block_on(&runtime, run(opening, lease, received, tells)),
     Err(no) => {
       let ended = Event::Ended(Some(format!("the life has no runtime: {no}")));
       tells.readers.send((0, Arc::new(ended))).ok();
@@ -1036,7 +1045,13 @@ struct Tells {
 }
 
 /// The life: opened, then driven until it ends, and its log held for the readers after its end.
-async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tells: Tells) {
+/// The lease of its record goes when it ends, so a later life of the record takes it.
+async fn run(
+  mut opening: Opening,
+  lease: Option<world::Lease>,
+  mut received: UnboundedReceiver<Message>,
+  tells: Tells,
+) {
   let Tells { readers, name, opens, cards } = tells;
   let record = opening.record.clone().filter(|_| opening.keeps());
   let (told, heard) = mpsc::unbounded_channel();
@@ -1061,7 +1076,8 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
   let folder = PathBuf::from(&opening.directory);
   let journal = life.record.clone().map(|one| Journal::spawn(folder, journal(&one), told.clone()));
   // The open, the move and the life hold large futures, which stay on the heap.
-  let end = Box::pin(lives(opening, &mut life, &mut received, &told, journal.as_ref())).await;
+  let lives = lives(opening, lease, &mut life, &mut received, &told, journal.as_ref());
+  let end = Box::pin(lives).await;
   let fault = flushed(end.fault, journal.as_ref()).await;
   for asked in end.asked {
     asked.send(fault.clone().map_or(Ok(Reply::Done), |one| Err(LifeError::Refused(one)))).ok();
@@ -1140,6 +1156,7 @@ struct End {
 /// opens by the record once, and tells its past after that open and before its birth.
 async fn lives(
   opening: Opening,
+  lease: Option<world::Lease>,
   life: &mut Life,
   received: &mut UnboundedReceiver<Message>,
   told: &UnboundedSender<Event>,
@@ -1168,7 +1185,7 @@ async fn lives(
     kept.is_some()
   };
   let again = opening.clone();
-  let engine = match opening.open(ears, progress.clone(), &mut stands).await {
+  let engine = match opening.open(ears, progress.clone(), &mut stands, lease.clone()).await {
     Ok((engine, _)) => engine,
     Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new(), stood: false },
   };
@@ -1186,7 +1203,7 @@ async fn lives(
     }
   }
   let engine = match record.as_deref().filter(|_| engine.crosses()) {
-    Some(_) => match moved(engine, again, life, told, journal, &progress).await {
+    Some(_) => match moved(engine, again, lease, life, told, journal, &progress).await {
       Ok(engine) => engine,
       Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new(), stood: true },
     },
@@ -1204,6 +1221,7 @@ async fn lives(
 async fn moved(
   engine: Engine,
   opening: Opening,
+  lease: Option<world::Lease>,
   life: &mut Life,
   told: &UnboundedSender<Event>,
   journal: Option<&Journal>,
@@ -1218,8 +1236,8 @@ async fn moved(
   while let Ok(event) = life.heard.try_recv() {
     life.told(Some(event));
   }
-  let (engine, _) =
-    opening.open(ears(told.clone(), journal), progress.clone(), &mut |_| false).await?;
+  let ears = ears(told.clone(), journal);
+  let (engine, _) = opening.open(ears, progress.clone(), &mut |_| false, lease).await?;
   let birth = iter::from_fn(|| life.heard.try_recv().ok()).collect();
   life.opened(birth, true, progress);
   Ok(engine)

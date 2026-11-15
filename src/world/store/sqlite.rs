@@ -34,8 +34,13 @@ pub struct Sqlite {
 impl Sqlite {
   /// The database of SQLite at a path, under its lease, or the refusal when another process holds it.
   pub fn open(path: impl AsRef<Path>) -> Result<Self, Fault> {
+    let path = path.as_ref();
+    Self::under(path, leased(path)?)
+  }
+
+  /// The database of SQLite at a path, under a lease of it that the caller holds.
+  pub(crate) fn under(path: impl AsRef<Path>, lease: Lease) -> Result<Self, Fault> {
     let path = path.as_ref().to_path_buf();
-    let lease = leased(&path)?;
     let db = Connection::open(&path).map_err(StoreError::sqlite(&path))?;
     db.execute_batch(&format!("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; {TABLE};"))
       .map_err(StoreError::sqlite(&path))?;

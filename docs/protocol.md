@@ -409,6 +409,9 @@ once it listens. A second daemon refuses to start there.
 - `open` gives the life of a record, by its absolute path, in the folder `cwd`, the folder of the record when it is
   not given. Each life opens on a thread of its own, so the daemon answers each verb while a life opens, and a fault
   of one life ends that life alone. Each verb of a life refuses with `closed` when no life lives on its record.
+  The daemon answers an `open` only once its life holds the lease of the record, before the life reads it, so a
+  process that opens the record after that answer, as `furb run` or another daemon, is refused with the reason, and
+  the life goes on. An `open` of a record that another process holds is refused at once with the reason.
 - Each life keeps the journal of the changes of its files beside its record, as `<record>.changes.jsonl`: one line
   for each write of a file, with its `path`, the text `before` and `after` it, its `act`, `made` when the write
   made the file, and `unread` with why when the file could not be read as text, whose `before` is then empty and

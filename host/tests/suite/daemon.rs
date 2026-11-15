@@ -17,6 +17,7 @@ use std::{
   collections::VecDeque,
   env,
   fs::{self, File},
+  io::Write as _,
   ops::Deref,
   path::{Path, PathBuf},
   process,
@@ -925,10 +926,6 @@ async fn a_verb_that_waited_for_an_open_that_failed_hears_why() {
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   window.ended(&life).await;
   checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
-  // Another holder owns the lease of the record, and the open stands at the catalog until the
-  // verb waits for it.
-  let lease = File::create(format!("{life}.lock")).unwrap();
-  lease.try_lock().unwrap();
   let (claude, go) = waiting(&at);
   let open = Verb::Open {
     life: life.clone(),
@@ -944,6 +941,10 @@ async fn a_verb_that_waited_for_an_open_that_failed_hears_why() {
   assert_eq!(window.ask(open).await, Ok(Answer::Done));
   let found = |frame: &Frame| matches!(frame, Frame::Opening { stage: Stage::Find, done, of, .. } if done == of);
   read_until(&mut window, &mut Vec::new(), found).await;
+  // The record takes a line that is no entry while the open stands at the catalog, so the open
+  // reads the record again after the verb waits for it, and fails.
+  let at_byte = fs::metadata(&life).unwrap().len();
+  fs::OpenOptions::new().append(true).open(&life).unwrap().write_all(b"no entry\n").unwrap();
   let inspect = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
   let asked = Request { id: window.next, verb: inspect };
   window.lines.send(serde_json::to_string(&asked).unwrap()).await.unwrap();
@@ -953,7 +954,7 @@ async fn a_verb_that_waited_for_an_open_that_failed_hears_why() {
   let mut read = Vec::new();
   read_until(&mut window, &mut read, refused).await;
   let Some(Frame::Refused { why, .. }) = read.pop() else { unreachable!("the wait ends on it") };
-  assert_eq!(why, format!("Refused: Another process owns {life}."));
+  assert_eq!(why, format!("Refused: Invalid record entry at byte {at_byte} in {life}."));
 }
 
 #[cfg(unix)]
@@ -964,20 +965,45 @@ async fn a_verb_said_after_an_open_failed_hears_why_until_the_next_open() {
   let mut window = Window::dialed(&local).await;
   cards(&mut window).await;
   let life = at.join("a.jsonl").display().to_string();
-  // Another holder owns the lease of the record, so the open fails at once.
-  let lease = File::create(format!("{life}.lock")).unwrap();
-  lease.try_lock().unwrap();
+  // The record holds a line that is no entry, so the open fails after its answer.
+  fs::write(&life, "no entry\n").unwrap();
   open(&mut window, &at, "a.jsonl", None).await;
   // The daemon holds the life no more before the verb comes, as for a window that said it after
   // the answer to its open.
   window.gone(&life).await;
   let inspect = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
-  let why = format!("Refused: Another process owns {life}.");
+  let why = format!("Refused: Invalid record entry at byte 0 in {life}.");
   assert_eq!(window.ask(inspect).await, Err(ProtocolError::Refused { why }));
-  drop(lease);
+  fs::remove_file(&life).unwrap();
   open(&mut window, &at, "a.jsonl", None).await;
   let pending = window.ask(Verb::Pending { life }).await;
   assert!(pending.is_ok(), "{pending:?}");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn an_open_of_a_record_that_another_process_holds_is_refused_at_once_with_the_reason() {
+  let at = place();
+  let (local, _daemon) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  let life = at.join("a.jsonl").display().to_string();
+  let lease = File::create(format!("{life}.lock")).unwrap();
+  lease.try_lock().unwrap();
+  let verb = Verb::Open {
+    life: life.clone(),
+    cwd: Some(at.display().to_string()),
+    actor: None,
+    roster: None,
+    skills: None,
+    config: None,
+    claude: None,
+    answers: false,
+    attach: None,
+  };
+  let why = format!("Refused: Another process owns {life}.");
+  assert_eq!(window.ask(verb).await, Err(ProtocolError::Refused { why }));
+  drop(lease);
+  open(&mut window, &at, "a.jsonl", None).await;
 }
 
 #[tokio::test]

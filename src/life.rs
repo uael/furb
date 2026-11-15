@@ -44,6 +44,8 @@ struct Prepared {
   /// The image of the record, when one agrees with it: the life then opens from it, and reads no
   /// entry.
   image: Option<Image>,
+  /// The lease of the record that the life keeps, which it holds before it reads the record.
+  lease: Option<world::Lease>,
 }
 
 /// The extensions that the configs turn on and the provider of the models, which a life waits for
@@ -55,6 +57,19 @@ struct Waited {
   /// The line that tells why each extension that the configs turn on does not play.
   refused: Vec<String>,
   provider: world::Provider,
+}
+
+/// How a host takes a life, which says whether it opens by its image and whether it first moves to
+/// this build, as [`Opening::tip`] says.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Taken {
+  /// Its parts, which the host boots by its record alone, on this build.
+  Parts,
+  /// Booted, by its image or its record, on this build.
+  Boot,
+  /// Opened, by its image or its record, on the texts that they hold, which its host moves to this
+  /// build after.
+  Open,
 }
 
 /// What the open of a life from its image comes to.
@@ -230,7 +245,7 @@ impl Opening {
   /// and the files of the record are made again in one that is missing.
   pub fn parts(self) -> Result<(Vec<Object>, Ears), Fault> {
     let untold = Progress::default();
-    let prepared = self.prepared(&untold, false, true)?;
+    let prepared = self.prepared(&untold, Taken::Parts, None)?;
     self.parted(prepared, &untold)
   }
 
@@ -252,15 +267,16 @@ impl Opening {
   /// waited for.
   fn parted(self, mut prepared: Prepared, told: &Progress) -> Result<(Vec<Object>, Ears), Fault> {
     let keeps = self.keeps != Some(false) && self.works();
-    let (last, store) = match (&self.record, prepared.last.take(), keeps) {
-      (Some(path), read, true) => {
+    // A life that keeps its record holds its lease, which its store takes.
+    let (last, store) = match (&self.record, prepared.last.take(), prepared.lease.take()) {
+      (Some(path), read, Some(lease)) => {
         let (path, bytes) = (Path::new(path), size(path));
         let mut reads = |at| (told.0)(Stage::Read, at, bytes);
-        let (last, store) = world::stored(path, read, &mut reads)?;
+        let (last, store) = world::stored(path, lease, read, &mut reads)?;
         (last, Some(store))
       }
-      (Some(_), Some(read), false) => (read, None),
-      (Some(path), None, false) => (world::last(Path::new(path), &mut |_| {})?, None),
+      (Some(_), Some(read), None) => (read, None),
+      (Some(path), None, None) => (world::last(Path::new(path), &mut |_| {})?, None),
       (None, ..) => (world::Last::default(), None),
     };
     // The log takes where the last entries start, so a life after a checkpoint writes on after the
@@ -341,9 +357,20 @@ impl Opening {
   /// What the life waits for before it boots: the extensions that the configs turn on, and the
   /// provider of the models, whose catalog asks the servers and the command lines of the models. A
   /// host with a runtime waits for it on a blocking thread.
-  fn prepared(&self, told: &Progress, images: bool, crosses: bool) -> Result<Prepared, Fault> {
+  fn prepared(
+    &self,
+    told: &Progress,
+    taken: Taken,
+    lease: Option<world::Lease>,
+  ) -> Result<Prepared, Fault> {
     let works = self.works();
-    let (image, last) = self.tip(told, images, crosses)?;
+    // A life holds the record that it keeps before it reads it, so no other process takes the
+    // record between the read and the store of the life.
+    let lease = match lease {
+      Some(lease) => Some(lease),
+      None => self.record.as_deref().filter(|_| self.keeps()).map(world::Lease::of).transpose()?,
+    };
+    let (image, last) = self.tip(told, taken, lease.as_ref())?;
     // The models of a life read the engine that the life runs: the one that its image holds, or
     // the one that the last segment of its record holds; and each chain that read another engine
     // first reads that one, as the image or the last checkpoint says.
@@ -393,7 +420,7 @@ impl Opening {
       Some(one) => provider.system(one.into()),
       None => provider,
     };
-    Ok(Prepared { waited: Waited { places, played, refused, provider }, last, image })
+    Ok(Prepared { waited: Waited { places, played, refused, provider }, last, image, lease })
   }
 
   /// The last entries of the record, from its last checkpoint, as the boot takes them, with each
@@ -421,22 +448,22 @@ impl Opening {
 
   /// The image of the record when one agrees with it, else the last entries of the record, which
   /// the open reads in the stage find. A life that keeps its record and runs another engine, Kernel
-  /// or checkpointer than this build crosses first, as [`Opening::crossed`] says, and then opens by
-  /// its record, but for a life that `crosses` not: it opens on those texts, by its image or by its
-  /// record, and its host moves it to this build after, by [`Engine::cross`]. A record of a schema
-  /// that this build does not open, as one from before the stable cut, is refused, by its image
-  /// too.
+  /// or checkpointer than this build crosses first, under the lease that it holds, as
+  /// [`Opening::crossed`] says, and then opens by its record, but for a life that is
+  /// [`Taken::Open`]: it opens on those texts, by its image or by its record, and its host moves it
+  /// to this build after, by [`Engine::cross`]. A record of a schema that this build does not open,
+  /// as one from before the stable cut, is refused, by its image too.
   fn tip(
     &self,
     told: &Progress,
-    images: bool,
-    crosses: bool,
+    taken: Taken,
+    lease: Option<&world::Lease>,
   ) -> Result<(Option<Image>, Option<world::Last>), Fault> {
     // The first stage is told at once, also for a record that is not there yet, so a host never
     // waits for the first one behind the catalog.
     let bytes = self.record.as_deref().map_or(0, size);
     (told.0)(Stage::Find, 0, bytes);
-    let image = self.image(images).inspect(|_| (told.0)(Stage::Find, bytes, bytes));
+    let image = self.image(taken != Taken::Parts).inspect(|_| (told.0)(Stage::Find, bytes, bytes));
     let last = match image {
       Some(_) => None,
       None => self.last(&mut |at| (told.0)(Stage::Find, at, bytes))?,
@@ -445,11 +472,14 @@ impl Opening {
       world::readable(slice::from_ref(&image.half.made))?;
     }
     let texts = Self::texts(image.as_ref(), last.as_ref())?;
-    if !self.keeps() || !crosses || texts == Self::texts(None, None)? {
+    // Only a life that keeps its record holds its lease, so only such a life crosses.
+    let crossing = lease.filter(|_| taken != Taken::Open);
+    let Some(lease) = crossing else { return Ok((image, last)) };
+    if texts == Self::texts(None, None)? {
       return Ok((image, last));
     }
     (told.0)(Stage::Cross, 0, 0);
-    self.crossed()?;
+    self.crossed(lease)?;
     Ok((None, self.last(&mut |_| {})?))
   }
 
@@ -472,11 +502,11 @@ impl Opening {
   /// tip, and writes after its last entry its checkpoint, which tells each chain the change, then
   /// the fact made of this build, as [`checkpoint::crossed`] says. The image goes, since no life
   /// goes on from it: the life then opens from that checkpoint, on this build.
-  fn crossed(&self) -> Result<(), Fault> {
+  fn crossed(&self, lease: &world::Lease) -> Result<(), Fault> {
     let Some(path) = self.record.as_deref().map(Path::new) else { return Ok(()) };
     let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     let (mut engine, _) = inspects.boot::<String>([])?;
-    checkpoint::crossed(path, &mut engine)?;
+    checkpoint::crossed_under(path, lease.clone(), &mut engine)?;
     drop(engine);
     image::drop_of(path);
     Ok(())
@@ -565,7 +595,7 @@ impl Opening {
   ) -> Result<(Engine, Vec<Object>), Fault> {
     let untold = Progress::default();
     let host = host.into_iter().map(|(name, ear)| (name.into(), ear)).collect();
-    let prepared = self.prepared(&untold, true, true)?;
+    let prepared = self.prepared(&untold, Taken::Boot, None)?;
     match self.imaged(host, prepared, &mut |_| true)? {
       Imaged::Life(engine) => Ok((engine, Vec::new())),
       Imaged::Back(host, prepared) => self.booted(host, prepared, &untold),
@@ -586,14 +616,22 @@ impl Opening {
   /// record holds, as those of an earlier build, so its host shows it at once: the host then moves
   /// it to this build as a stage of its own, before any word runs, by [`Engine::cross`] and an open
   /// again, while [`Engine::crosses`] says that it runs other texts.
+  ///
+  /// A host that took the lease of the record before, as it holds a life from its birth, gives it
+  /// here, and the life opens under it; else a life that keeps its record takes its lease first.
+  #[expect(
+    clippy::too_many_arguments,
+    reason = "an open takes each thing that its host gives: its ears, its two callbacks and its lease"
+  )]
   pub async fn open<N: Into<String>>(
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
     told: Progress,
     stands: &mut dyn FnMut(&[u8]) -> bool,
+    lease: Option<world::Lease>,
   ) -> Result<(Engine, Vec<Object>), Fault> {
     let host = host.into_iter().map(|(name, ear)| (name.into(), ear)).collect();
-    let (opening, prepared) = self.waited(&told).await?;
+    let (opening, prepared) = self.waited(&told, lease).await?;
     if prepared.image.is_some() {
       (told.0)(Stage::Seed, 0, 0);
     }
@@ -605,10 +643,14 @@ impl Opening {
 
   /// What the life waits for before it boots, as [`Opening::prepared`] gives it, from a blocking
   /// thread of the runtime.
-  async fn waited(self, told: &Progress) -> Result<(Self, Prepared), Fault> {
+  async fn waited(
+    self,
+    told: &Progress,
+    lease: Option<world::Lease>,
+  ) -> Result<(Self, Prepared), Fault> {
     let waits = told.clone();
     let waited = task::spawn_blocking(move || {
-      let prepared = self.prepared(&waits, true, false);
+      let prepared = self.prepared(&waits, Taken::Open, lease);
       (self, prepared)
     });
     match waited.await {
@@ -684,7 +726,8 @@ impl Opening {
     let path = record.filter(|_| keeps);
     // The entries that a life kept after the image, which went on from it and wrote no later one,
     // or the image is stale.
-    let after = record.map(|one| world::stored_after(one, image.bytes, keeps)).transpose()?;
+    let lease = prepared.lease.clone().filter(|_| keeps);
+    let after = record.map(|one| world::stored_after(one, image.bytes, lease)).transpose()?;
     let goes = after.as_ref().is_some_and(Option::is_some);
     let world::After { entries: tail, store } = after.flatten().unwrap_or_default();
     let mut ears = self.eared(prepared.waited.clone(), None, true)?;
@@ -747,7 +790,7 @@ impl Opening {
     let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     for at in checkpoint::all(&record) {
       let before = checkpoint::booted(record[..at].to_vec());
-      let prepared = inspects.prepared(&Progress::default(), false, true)?;
+      let prepared = inspects.prepared(&Progress::default(), Taken::Parts, None)?;
       let ears = inspects.eared(prepared.waited, Some(&before), checkpoint::stood(&before))?;
       let mut engine = Engine::boot(before, ears)?;
       if let Some(no) = engine.raised() {

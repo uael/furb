@@ -373,7 +373,8 @@ async fn run(opening: Opening, word: String) -> Result<(), CliError> {
 /// tip, then the fact made of this build, so the next life on the record runs this build.
 async fn checkpoint(opening: Opening, record: &Path) -> Result<(), CliError> {
   let inspects = Opening { inspecting: Some(true), ..opening };
-  let (mut engine, _) = inspects.open::<String>([], Progress::default(), &mut |_| true).await?;
+  let (mut engine, _) =
+    inspects.open::<String>([], Progress::default(), &mut |_| true, None).await?;
   Ok(checkpoint::crossed(record, &mut engine)?)
 }
 

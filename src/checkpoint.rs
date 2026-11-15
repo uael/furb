@@ -31,11 +31,6 @@
 //! from a life born on it. An open from the first entry is born again at each checkpoint in the
 //! same way, as [`reborn`] proves, and reaches the state of the open from the last one.
 
-#![expect(
-  clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
-)]
-
 use std::{path::Path, slice};
 
 use similar::TextDiff;
@@ -225,9 +220,19 @@ impl Engine {
 /// read and is told the lines of the engine that differ. This is the one place where a record
 /// crosses to the texts of a build.
 pub fn crossed(path: &Path, engine: &mut Engine) -> Result<(), Fault> {
+  crossed_under(path, world::Lease::of(path)?, engine)
+}
+
+/// The crossing of [`crossed`], written under a lease of the record that the caller holds.
+pub(crate) fn crossed_under(
+  path: &Path,
+  lease: world::Lease,
+  engine: &mut Engine,
+) -> Result<(), Fault> {
   let build = world::running(&[]);
-  keep(path, written_before(engine, &build)?)?;
-  keep(path, build)
+  let mut store = world::Format::of(path).under(path, lease)?;
+  store.keep(written_before(engine, &build)?.as_ref())?;
+  store.keep(build.as_ref())
 }
 
 /// Whether the checkpoint at a place of a record is a birth that a life gathers again: the life
@@ -281,12 +286,6 @@ fn fields(one: &Object) -> Option<Vec<(String, serde_json::Value)>> {
       .filter_map(|(key, value)| Some((key.as_str()?.to_owned(), wire::record(value))))
       .collect(),
   )
-}
-
-/// An entry kept after the last entry of the record at a path, as the store of a life keeps one,
-/// for a record that no life holds.
-pub(crate) fn keep(path: &Path, one: Object) -> Result<(), Fault> {
-  world::Format::of(path).open(path)?.keep(one.as_ref())
 }
 
 /// The highest number that each kind took in a record, its checkpoints among them, as a map. A

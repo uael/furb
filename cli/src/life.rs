@@ -39,7 +39,7 @@ impl Life {
   pub(crate) async fn lived(opening: Opening) -> Result<Self, CliError> {
     let record = opening.record.as_ref().filter(|_| opening.keeps()).map(PathBuf::from);
     let ears = [("console", console::terminal())];
-    let (engine, _) = opening.open(ears, Progress::default(), &mut |_| true).await?;
+    let (engine, _) = opening.open(ears, Progress::default(), &mut |_| true, None).await?;
     let root = engine.root().to_owned();
     Ok(Self { engine, root, record })
   }

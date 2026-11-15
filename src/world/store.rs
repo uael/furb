@@ -15,6 +15,7 @@ use std::{
   path::Path,
   rc::Rc,
   slice,
+  sync::Arc,
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -117,16 +118,17 @@ pub(crate) struct Last {
 /// read passed told after each line. A database reads each time and tells none.
 pub(crate) fn stored(
   path: &Path,
+  lease: Lease,
   read: Option<Last>,
   reached: &mut dyn FnMut(u64),
 ) -> Result<(Last, Box<dyn Ear>), Fault> {
   match Format::of(path) {
     Format::Sqlite => {
-      let (entries, ear) = keeping(Sqlite::open(path)?)?;
+      let (entries, ear) = keeping(Sqlite::under(path, lease)?)?;
       Ok((Last { entries, ..Last::default() }, ear))
     }
     Format::Lines => {
-      let mut store = Lines::open(path)?;
+      let mut store = Lines::under(path, lease)?;
       let Last { entries, from, end, tail } = store.last(read, reached)?;
       let (entries, ear) = kept_by(store, Some(entries));
       Ok((Last { entries, from, end, tail }, ear))
@@ -142,8 +144,12 @@ pub(crate) fn stored(
 /// as a boot says a record again. Nothing when no life goes on from the image: the record is
 /// shorter than those bytes, or an entry after them is a checkpoint or names an engine, since each
 /// fact after such an entry comes from a life that was born on it.
-pub(crate) fn stored_after(path: &Path, bytes: u64, keeps: bool) -> Result<Option<After>, Fault> {
-  let mut store = keeps.then(|| Lines::open(path)).transpose()?;
+pub(crate) fn stored_after(
+  path: &Path,
+  bytes: u64,
+  lease: Option<Lease>,
+) -> Result<Option<After>, Fault> {
+  let mut store = lease.map(|lease| Lines::under(path, lease)).transpose()?;
   if fs::metadata(path).is_ok_and(|held| held.len() < bytes) {
     return Ok(None);
   }
@@ -729,9 +735,14 @@ impl Format {
 
   /// The store of the record at a path, under its lease.
   pub(crate) fn open(self, path: &Path) -> Result<Box<dyn Store>, Fault> {
+    self.under(path, leased(path)?)
+  }
+
+  /// The store of the record at a path, under a lease of it that the caller holds.
+  pub(crate) fn under(self, path: &Path, lease: Lease) -> Result<Box<dyn Store>, Fault> {
     Ok(match self {
-      Self::Sqlite => Box::new(Sqlite::open(path)?),
-      Self::Lines => Box::new(Lines::open(path)?),
+      Self::Sqlite => Box::new(Sqlite::under(path, lease)?),
+      Self::Lines => Box::new(Lines::under(path, lease)?),
     })
   }
 
@@ -769,12 +780,27 @@ fn now() -> u64 {
   u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
 }
 
-/// The lease of a record: the lock on the file beside it, which ends when the lease goes. A process that this one
-/// starts holds a copy of the file until its program runs, so the lease ends the lock itself, and not with the last
-/// copy of the file.
-struct Lease(File);
+/// The lease of a record: the lock on the file beside it, which ends when the last clone of the
+/// lease goes. A host takes it when a life of the record is born, before the life reads its record,
+/// and the store of the life holds a clone of it, so no other process takes the record between the
+/// two. A process that this one starts holds a copy of the file until its program runs, so the
+/// lease ends the lock itself, and not with the last copy of the file.
+#[derive(Clone)]
+pub struct Lease {
+  _locked: Arc<Locked>,
+}
 
-impl Drop for Lease {
+/// The lock of a lease, which ends when it goes.
+struct Locked(File);
+
+impl Lease {
+  /// The lease of the record at a path, or the refusal when another process holds it.
+  pub fn of(path: impl AsRef<Path>) -> Result<Self, Fault> {
+    Ok(leased(path.as_ref())?)
+  }
+}
+
+impl Drop for Locked {
   #[expect(
     clippy::let_underscore_must_use,
     reason = "a drop cannot return the fault of an unlock, and the kernel ends the lock with the process"
@@ -803,7 +829,7 @@ fn leased(path: &Path) -> Result<Lease, StoreError> {
     .open(&lock)
     .map_err(StoreError::io(&lock))?;
   match file.try_lock() {
-    Ok(()) => Ok(Lease(file)),
+    Ok(()) => Ok(Lease { _locked: Arc::new(Locked(file)) }),
     Err(TryLockError::WouldBlock) => Err(StoreError::Owned { path: path.to_path_buf() }),
     Err(TryLockError::Error(no)) => Err(StoreError::io(&lock)(no)),
   }

@@ -71,6 +71,12 @@ fn kinds(record: &[Object]) -> Vec<String> {
   record.iter().map(fact).collect()
 }
 
+/// An entry kept after the last entry of the record at a path, as the store of a life keeps one,
+/// for a record that no life holds.
+fn keep(path: &Path, one: &Object) -> Result<(), Fault> {
+  world::Format::of(path).open(path)?.keep(one.as_ref())
+}
+
 #[test]
 fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record_enables() {
   let at = yard("configs");
@@ -444,7 +450,7 @@ fn a_life_whose_open_act_a_verb_of_no_words_made_ends_with_a_checkpoint_in_its_r
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   let written = checkpoint::written(&mut inspected).expect("the life gathers its checkpoint");
   drop(inspected);
-  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  keep(&at.join("record.jsonl"), &written).unwrap();
   let kept = world::kept(at.join("record.jsonl")).unwrap();
   assert!(checkpoint::last(&kept).is_some(), "the record holds a checkpoint entry");
 }
@@ -476,7 +482,7 @@ fn a_life_whose_module_binds_the_name_of_a_builtin_opens_from_its_checkpoint_wit
   let mut inspected = Opening { inspecting: Some(true), ..open() }.boot::<String>([]).unwrap().0;
   let written = checkpoint::written(&mut inspected).expect("the life gathers its checkpoint");
   drop(inspected);
-  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  keep(&at.join("record.jsonl"), &written).unwrap();
   for _ in 0..2 {
     let mut again = open().boot::<String>([]).unwrap().0;
     assert_eq!(
@@ -1410,7 +1416,7 @@ fn an_open_that_inspects_a_record_whose_tip_is_a_checkpoint_replays_the_life_wor
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   let written = checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
-  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  keep(&at.join("record.jsonl"), &written).unwrap();
   // As furb turns opens it, and from its first entry, born again at each checkpoint.
   let inspects = Opening { inspecting: Some(true), ..scripted(&at, &[]) };
   let mut inspected =
@@ -1447,7 +1453,7 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   let written = checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
-  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  keep(&at.join("record.jsonl"), &written).unwrap();
   let mut later =
     scripted(&at, &["rounds += 1\nclose(f'round {rounds}')"]).boot::<String>([]).unwrap().0;
   let word = format!(
@@ -1496,7 +1502,7 @@ fn a_life_born_on_a_checkpoint_binds_the_function_whose_default_reads_a_tuple_of
     Opening { inspecting: Some(true), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
   let written = checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
-  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  keep(&at.join("record.jsonl"), &written).unwrap();
   let mut later = opening(&at, true).boot::<String>([]).unwrap().0;
   let kinds = "sorted({x[0] for x in transcript('chain1') if x[0] in ('catchup', 'remember', 'compacted', 'fitted')})";
   assert_eq!(
@@ -1883,7 +1889,7 @@ fn the_log_of_a_life_after_a_checkpoint_holds_the_facts_of_the_lives_before_it_a
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   let written = checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
-  checkpoint::keep(&record, written).unwrap();
+  keep(&record, &written).unwrap();
   for word in ["close('said after')", "close('said last')"] {
     let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
     closed(&mut later, word);
@@ -1914,7 +1920,7 @@ fn a_chain_that_only_a_value_names_goes_on_from_a_checkpoint_with_its_own_module
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   let written = checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
-  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  keep(&at.join("record.jsonl"), &written).unwrap();
   let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert_eq!(
     closed(&mut later, "close([kids, module(kids[0]).get('n')])").as_ref().py_repr(),
@@ -1938,7 +1944,7 @@ fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   let written = checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
-  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  keep(&at.join("record.jsonl"), &written).unwrap();
   let mut later = scripted(&at, &["close('fresh')"]).boot::<String>([]).unwrap().0;
   let again = format!(
     "wake('chain2')\ngot = await Act('{waiting}')\nclose([got, [x[1] for c in ['chain1', 'chain2', 'chain3', 'chain4'] for x in transcript(c, 'prompt') if not over(x[1])], str(chain('more'))])"
@@ -2043,7 +2049,7 @@ fn an_open_tells_each_stage_in_order_and_ends_with_each_entry_of_its_boot_counte
     Progress(Arc::new(move |stage, done, of| heard.lock().unwrap().push((stage, done, of))));
   let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
   let later =
-    reactor.block_on(opening(&at, true).open::<String>([], progress, &mut |_| true)).unwrap();
+    reactor.block_on(opening(&at, true).open::<String>([], progress, &mut |_| true, None)).unwrap();
   let told = told.lock().unwrap().clone();
   assert_eq!(told.first(), Some(&(Stage::Find, 0, bytes)), "the open tells its first stage first");
   let mut stages: Vec<Stage> = told.iter().map(|one| one.0).collect();
@@ -2103,8 +2109,9 @@ fn an_open_whose_image_does_not_load_tells_no_stage_again() {
   let progress =
     Progress(Arc::new(move |stage, done, of| heard.lock().unwrap().push((stage, done, of))));
   let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
-  let (mut later, replayed) =
-    reactor.block_on(opening(&at, true).open::<String>([], progress, &mut |_| false)).unwrap();
+  let (mut later, replayed) = reactor
+    .block_on(opening(&at, true).open::<String>([], progress, &mut |_| false, None))
+    .unwrap();
   assert!(!replayed.is_empty(), "the life opens by its record");
   assert_eq!(closed(&mut later, "close(x)").as_ref().py_repr(), "1");
   let told = told.lock().unwrap().clone();
@@ -2127,7 +2134,10 @@ fn a_life_opens_on_the_image_of_another_engine_and_then_moves_to_this_build() {
   let reactor = runtime::Builder::new_current_thread().enable_all().build().unwrap();
   let open = || {
     let opening = Opening { skills: Some(false), ..opening(&at, true) };
-    reactor.block_on(opening.open::<String>([], Progress::default(), &mut |_| true)).unwrap().0
+    reactor
+      .block_on(opening.open::<String>([], Progress::default(), &mut |_| true, None))
+      .unwrap()
+      .0
   };
   let read =
     |life: &mut Engine| closed(life, "close([x, globals().get('crossed')])").as_ref().py_repr();

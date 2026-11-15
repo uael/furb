@@ -336,7 +336,7 @@ impl Window {
   }
 
   /// A word run on the root to its end, which it reaches with no fault.
-  async fn ran(&mut self, word: &str) {
+  pub(crate) async fn ran(&mut self, word: &str) {
     let rung = self.run(word).await;
     let value = self.done(&rung).await;
     assert!(value.is_null(), "{word} ended with {value}");

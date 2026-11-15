@@ -139,7 +139,7 @@ impl Open {
     let ears = [("console", console(Rc::clone(&asked)))];
     // The life finds the acts that its program made in the entries of its record, so it stands
     // on no image.
-    let (engine, record) = opening.open(ears, Progress::default(), &mut |_| false).await?;
+    let (engine, record) = opening.open(ears, Progress::default(), &mut |_| false, None).await?;
     let made = record
       .iter()
       .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
