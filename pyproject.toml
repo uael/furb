@@ -23,6 +23,10 @@ dependencies = [
     "furb-cli==0.4.2", # x-release-please-version
 ]
 
+[project.optional-dependencies]
+# The World part of the kit mcp, `.agents/skills/mcp/process.py`, speaks to the servers through the official SDK.
+mcp = ["mcp>=2.3.0"]
+
 [project.urls]
 Source = "https://github.com/uael/furb"
 Issues = "https://github.com/uael/furb/issues"
@@ -34,6 +38,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
   "datamodel-code-generator>=0.96.0",
+  "mcp>=2.3.0",
   "pre-commit>=4.6.2",
   "pytest>=9.1.1",
   "pytest-asyncio>=1.4.0",
@@ -107,6 +112,8 @@ ignore = ["S101"]
 "src/furb/__init__.py" = ["A004"]
 # The client of a skill names its errors as the client of TypeScript and the engine do.
 "src/furb/skill.py" = ["N818"]
+# A process of a kit names its refusal as the engine names it.
+".agents/skills/*/process.py" = ["N818"]
 # A word speaks the vocabulary of the engine, which a model reads: the ear of an act takes its id, untyped, as the
 # ears of the engine do.
 ".agents/skills/*/*.py" = ["A002", "ANN001"]
