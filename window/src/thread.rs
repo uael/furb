@@ -14,13 +14,16 @@ use std::{
   time::Duration,
 };
 
-use furb::view::{Card as Agent, Exchange, Page};
+use furb::{
+  engine::OPERATOR,
+  view::{Card as Agent, Exchange, Page},
+};
 use furb_host::protocol::{Card, Verb};
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-  input::Pending,
+  input::{Asked, Pending},
   keys::Does,
   line::Line,
   list::hash,
@@ -59,9 +62,6 @@ pub(crate) struct Opened {
   pub(crate) since: Duration,
   /// The form of the question of the thread that the input answers.
   pub(crate) form: Option<Form>,
-  /// The time of the card of the thread when the window last said that the operator saw its end,
-  /// so the window says it once each time the thread ends.
-  pub(crate) seen: Option<u64>,
   /// Whether the window asks the page of the end again, since the connection to its machine ended
   /// and the new one tells no change of the thread until the window reads its end there.
   pub(crate) again: bool,
@@ -518,18 +518,25 @@ impl Model {
   }
 
   /// What the operator saw, once the feed of the open thread follows its end and its card says
-  /// that the thread ended and that he did not read it: the window says it once each time the
-  /// thread ends, so a thread that he reads never waits for him.
+  /// that the thread ended and that he did not read it. The card shows him as a reader at once, as
+  /// the daemon will, so the thread that he reads never shows as unread, and the window says it
+  /// once each time the thread ends.
   pub(crate) fn seen_due(&mut self) -> Option<(usize, Verb)> {
     let opened = self.thread.as_ref().filter(|one| one.top.is_none() && one.above.is_some())?;
-    let card = self.told_card(&opened.key)?;
-    if !card.thread.unread(&self.machines[opened.key.0].login) || opened.seen == Some(card.since) {
+    let key = opened.key.clone();
+    let login = self.machines[key.0].login.clone();
+    // A card that the daemon told before it read the last Seen says unread once more.
+    let saying = self.asked.iter().any(|(asked, what)| asked.0 == key.0 && *what == Asked::Seen);
+    if saying || !self.told_card(&key)?.thread.unread(&login) {
       return None;
     }
-    let since = card.since;
-    let opened = self.thread.as_mut()?;
-    opened.seen = Some(since);
-    let (at, life, about) = opened.key.clone();
+    let reader = format!("{OPERATOR}/{login}");
+    let told = |card: &Card| card.life == key.1 && card.thread.prompt == key.2;
+    let settled = self.settled.iter_mut().map(|one| &mut one.2);
+    for card in self.machines[key.0].cards.iter_mut().chain(settled).filter(|card| told(card)) {
+      card.thread.readers.push(reader.clone());
+    }
+    let (at, life, about) = key;
     Some((at, Verb::Seen { life, about }))
   }
 

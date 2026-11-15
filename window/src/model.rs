@@ -251,7 +251,7 @@ impl Model {
     }
     if let Some(opened) = self.thread.as_mut().filter(|one| one.key.0 == at) {
       opened.asked.clear();
-      (opened.again, opened.seen) = (true, None);
+      opened.again = true;
     }
     true
   }
