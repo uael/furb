@@ -360,8 +360,10 @@ daemon answers requests in any order.
     opened the life after it began. The tail moves as the command writes;
   - `agents`, each thread that a word of the thread started on another chain, in the order the thread made them, as
     a card without its life, with `began`, the millisecond of the epoch at which the daemon saw it begin, `took`, the
-    seconds that it took once it ended, and `line`, the line of its last word where it stands: the line that runs or
-    asks, else its last line. A note to a chain that works is no agent: its model reads it at its next step;
+    seconds that it took once it ended, `line`, the line of its last word where it stands: the line that runs or
+    asks, else its last line, and `at`, the number in the thread of the line of the word that made it, absent when
+    no line of a word of the thread made it. A note to a chain that works is no agent: its model reads it at its
+    next step;
   - `context`, null before the first answer on the chain of the thread: what its last answer `read`, its `tokens` in
     all, of which it read `cached` from the cache and `written` to it, the `window` that the roster of the standing
     gives the actor of that answer, null when the roster names no such actor, and the `dollars` of each answer on the

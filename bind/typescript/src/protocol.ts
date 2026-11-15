@@ -1578,8 +1578,9 @@ export interface Answered {
  * An agent of a thread: the thread that a word of the thread started on another chain, as a card,
  * with the millisecond of the epoch at which the host saw it begin, the seconds that it took once
  * it ended, counted from milliseconds as the time of a thought, and the line of its last word
- * where it stands: the line that runs or asks, else the last one. A host that opened the life
- * after the agent began saw it begin at that open.
+ * where it stands: the line that runs or asks, else the last one, and the number in the thread
+ * of the line of the word that made it, none when no line of a word of the thread made it. A host
+ * that opened the life after the agent began saw it begin at that open.
  */
 export interface Agent {
   prompt: string;
@@ -1591,6 +1592,7 @@ export interface Agent {
   began?: number | null;
   took?: number | null;
   line?: Line | null;
+  at?: number | null;
 }
 /**
  * The context of a chain at its last answer: what that answer read, the window that the roster of
@@ -1630,4 +1632,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 45;
+export const PROTOCOL = 46;

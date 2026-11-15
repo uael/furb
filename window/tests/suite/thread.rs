@@ -248,26 +248,28 @@ fn an_older_page_keeps_the_rows_that_the_operator_reads() {
 }
 
 #[test]
-fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_escape() {
+fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() {
   let message = format!("measure the open on three chains\n{DELEGATES}");
   let (app, _daemon, _peer) = opened(&message, "README.md");
   shows(&app, "✓ Resolved");
-  // The agents from the first that works: each with its state and its model, the line where it
-  // stands while it lives, and the one that ended among them with its mark. The card counts the
-  // agents that work.
+  // Each agent stands under the line of the block that made it, with its state and its model,
+  // and the line where it stands while it lives. The card counts the agents that work.
   let frame = app.text();
-  let dock: Vec<String> = frame
+  let agents: Vec<String> = frame
     .lines()
-    .skip_while(|line| !line.contains("└ Run the bench"))
-    .take(4)
+    .skip_while(|line| !line.contains("1  bench = prompt("))
+    .take(7)
     .map(|line| line.chars().take(LEFT).collect::<String>().trim_end().to_owned())
     .collect();
   assert_eq!(
-    dock,
+    agents,
     [
+      "    1  bench = prompt(str, 'Run the bench of the repl…+42",
       "  └ Run the bench of the replay             ◐ Working  opus",
       "    await wait(600, chain)",
+      "    2  boot = prompt(str, 'Read the boot of the host\\…+44",
       "  └ Read the boot of the host               ⠋ Working  opus",
+      "    3  lines = await prompt(str, 'Count the lines of …+51",
       "  └ Count the lines of README.md           ✓ Resolved  opus",
     ]
     .map(str::to_owned),
@@ -287,14 +289,14 @@ fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_esc
   shows(&app, "await wait(600, chain)");
   screen("thread-agent", &app);
 
-  // An escape opens the thread that it came from again, with its dock, whose key the row of hints
-  // names.
+  // An escape opens the thread that it came from again, with its agents, whose key the row of
+  // hints names.
   app.press("escape");
   shows(&app, " Resolve ");
   shows(&app, "└ Count the lines of README.md");
   shows(&app, "⌃X ↓ agents");
 
-  // The key steps through the agents of the dock, from the first, and from the last to the first.
+  // The key steps through the agents of the thread, from the first, and from the last to the first.
   let into = |title: &str| {
     app.press("ctrl+x");
     app.press("down");

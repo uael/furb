@@ -1,7 +1,8 @@
 //! The rows of an open thread, from the exchanges that its daemon gave: the message of the operator
 //! on its band, the block of code of the answer, which rolls in seven rows, the thought of its
 //! model on one row, what the answer said as markdown, and the messages of the operator that the
-//! thread does not show yet, then the dock of the agents of the thread.
+//! thread does not show yet, each agent under the line of the block that made it, then the dock of
+//! the agents that no line made.
 
 use furb::view::{
   Agent, Block, Exchange, Line as Code, Maker, Mark, Output, Retrying, Said, Saying, Standing,
@@ -324,6 +325,7 @@ impl Feed<'_> {
     }
     for (line, colors) in block.lines.iter().zip(colored.iter()).skip(first) {
       rows.extend(self.code(line, colors.clone(), numbers));
+      rows.extend(self.agents(Some(line.number)));
     }
     if block.more {
       rows.push(Row::of(self.boxed(vec![run(format!("{:>gutter$}", "…"), muted)], t.raised)));
@@ -500,21 +502,28 @@ impl Feed<'_> {
     rows
   }
 
-  /// The dock of the agents of the thread: the agents from the first that does not rest to the
-  /// last, so an agent that ends among others that work keeps its row with its mark, and one row
-  /// that counts the agents before them, with a blank row above and under them. Each agent takes a
-  /// row with its title, its state, its time and its model, and one more with the line where it
-  /// stands while it lives. A click on an agent opens its thread in place.
+  /// The dock of the agents of the thread that no line of a block made, with a blank row above
+  /// and under them.
   pub(crate) fn dock(&self) -> Vec<Row> {
-    let (done, shown) = self.opened.docked();
-    let mut rows: Vec<Row> = shown.iter().flat_map(|agent| self.agent(agent)).collect();
-    if done > 0 {
-      let noun = if done == 1 { "agent" } else { "agents" };
-      rows.insert(0, says(&format!("└ {done} {noun} done"), self.style(Role::Muted)));
-    }
+    let mut rows = self.agents(None);
     if !rows.is_empty() {
       rows.insert(0, Row::default());
       rows.push(Row::default());
+    }
+    rows
+  }
+
+  /// The agents that a line made, or those of the dock: from the first that does not rest to the
+  /// last, so an agent that ends among others that work keeps its row with its mark, and one row
+  /// that counts the agents before them. Each agent takes a row with its title, its state, its time
+  /// and its model, and one more with the line where it stands while it lives. A click on an agent
+  /// opens its thread in place.
+  fn agents(&self, at: Option<usize>) -> Vec<Row> {
+    let (done, shown) = self.opened.made(at);
+    let mut rows: Vec<Row> = shown.into_iter().flat_map(|agent| self.agent(agent)).collect();
+    if done > 0 {
+      let noun = if done == 1 { "agent" } else { "agents" };
+      rows.insert(0, says(&format!("└ {done} {noun} done"), self.style(Role::Muted)));
     }
     rows
   }

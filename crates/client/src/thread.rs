@@ -49,6 +49,16 @@ impl Opened {
     (first, &agents[first..])
   }
 
+  /// The agents that the line of a block numbered so made, or those of the dock that no line made,
+  /// from the first that does not rest to the last, and how many of them stand before it. A line
+  /// whose agents all rest shows each, as what it did; the dock then shows none.
+  pub fn made(&self, at: Option<usize>) -> (usize, Vec<&Agent>) {
+    let agents: Vec<&Agent> = self.thread.agents.iter().filter(|one| one.at == at).collect();
+    let rested = if at.is_some() { 0 } else { agents.len() };
+    let first = agents.iter().position(|agent| !rests(agent)).unwrap_or(rested);
+    (first, agents[first..].to_vec())
+  }
+
   /// The card of the thread of an agent, as the dock of the thread that it came from holds it,
   /// which says its title and its state before its own page comes.
   pub fn agent(&self) -> Option<&card::Card> {

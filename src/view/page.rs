@@ -267,15 +267,37 @@ impl<'a> Reader<'a> {
       one.more = busy && (at + 1 == messages || one.rungs.last().is_some_and(|rung| lives(rung)));
     }
     let exchanges = (start..end).map(|at| self.exchange(at, &answers[at], &mut number)).collect();
+    // The count of the lines of the thread before each rung, which numbers each line of its word.
+    let mut before: HashMap<&str, usize> = HashMap::new();
+    let mut lined = 0;
+    for rung in answers.iter().flat_map(|one| &one.rungs) {
+      before.insert(&rung.id, lined);
+      lined += count(rung, self.streams);
+    }
     let agents = rungs.iter().flat_map(|rung| {
       self
         .held
         .made_by(&rung.id)
         .filter(|act| act.kind == Kind::Prompt && act.chain != rung.chain)
         .filter(|act| !act.asks_operator() && !noted(act, &self.held))
+        .map(|agent| (*rung, agent))
     });
-    let agents = agents.map(|agent| self.agent(agent)).collect();
+    let agents = agents
+      .map(|(rung, agent)| Agent {
+        at: before.get(rung.id.as_str()).and_then(|before| self.made_at(rung, *before, agent)),
+        ..self.agent(agent)
+      })
+      .collect();
     Page { exchanges, above: start, agents, context: self.context(&prompts[0].chain) }
+  }
+
+  /// The number in the thread of the line of the word of a rung that made an act.
+  fn made_at(self, rung: &Act, before: usize, made: &Act) -> Option<usize> {
+    let word = rung.word.as_ref()?;
+    let acts: Vec<&Act> = self.held.made_by(&rung.id).filter(|act| waits(act)).collect();
+    let source = placed(word, &acts)[acts.iter().position(|act| act.id == made.id)?]?;
+    let lines = self.lines(rung, before);
+    at_line(&lines, before, source).map(|at| lines[at].number)
   }
 
   /// The context of a chain at its last answer, and none before it.
@@ -574,6 +596,7 @@ impl<'a> Reader<'a> {
       began: began.copied(),
       took: began.zip(ended).map(|(began, ended)| ended.saturating_sub(*began) / 1000),
       line: stands.or(lines.len().checked_sub(1)).map(|at| lines[at].clone()),
+      at: None,
     }
   }
 }

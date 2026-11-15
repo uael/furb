@@ -5000,6 +5000,14 @@
             }
           ],
           "default": null
+        },
+        "at": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
         }
       },
       "required": [
@@ -5007,7 +5015,7 @@
         "title",
         "standing"
       ],
-      "description": "An agent of a thread: the thread that a word of the thread started on another chain, as a card,\nwith the millisecond of the epoch at which the host saw it begin, the seconds that it took once\nit ended, counted from milliseconds as the time of a thought, and the line of its last word\nwhere it stands: the line that runs or asks, else the last one. A host that opened the life\nafter the agent began saw it begin at that open."
+      "description": "An agent of a thread: the thread that a word of the thread started on another chain, as a card,\nwith the millisecond of the epoch at which the host saw it begin, the seconds that it took once\nit ended, counted from milliseconds as the time of a thought, and the line of its last word\nwhere it stands: the line that runs or asks, else the last one, and the number in the thread\nof the line of the word that made it, none when no line of a word of the thread made it. A host\nthat opened the life after the agent began saw it begin at that open."
     },
     "Context": {
       "type": "object",
@@ -5734,5 +5742,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 45
+  "x-protocol": 46
 }

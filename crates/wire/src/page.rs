@@ -65,8 +65,9 @@ impl Context {
 /// An agent of a thread: the thread that a word of the thread started on another chain, as a card,
 /// with the millisecond of the epoch at which the host saw it begin, the seconds that it took once
 /// it ended, counted from milliseconds as the time of a thought, and the line of its last word
-/// where it stands: the line that runs or asks, else the last one. A host that opened the life
-/// after the agent began saw it begin at that open.
+/// where it stands: the line that runs or asks, else the last one, and the number in the thread
+/// of the line of the word that made it, none when no line of a word of the thread made it. A host
+/// that opened the life after the agent began saw it begin at that open.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Agent {
   #[serde(flatten)]
@@ -77,6 +78,8 @@ pub struct Agent {
   pub took: Option<u64>,
   #[serde(default)]
   pub line: Option<Line>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub at: Option<usize>,
 }
 
 /// One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
