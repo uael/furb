@@ -71,7 +71,7 @@ enum Task {
 enum Suite {
   /// The tests of each crate of the workspace, with cargo-nextest.
   Rust,
-  /// The suite of the contract on both engines and the suites of the extensions, with pytest.
+  /// The suite of the contract on both engines and the suites of the skills, with pytest.
   Python,
   /// The tests of the TypeScript side, with the runner of `bun run test`.
   Typescript,
@@ -209,7 +209,7 @@ impl Script {
   fn run(&self, root: &Path, words: &[String]) -> Result<ExitCode, Fault> {
     let path = self.path.to_string_lossy();
     let words = strs(words);
-    if self.path.extension().is_some_and(|extension| extension == "sh") {
+    if self.path.extension().is_some_and(|suffix| suffix == "sh") {
       return spawn(root, "sh", &[&[path.as_ref()], &words[..]].concat());
     }
     // A script that imports furb runs on the build of this tree, which a plain `uv run` makes again
@@ -232,9 +232,9 @@ fn scripts(root: &Path) -> Result<Vec<Script>, Fault> {
       .map_err(|source| Fault::Read { path: root.join(folder), source })?;
     for entry in entries {
       let path = entry.map_err(|source| Fault::Read { path: root.join(folder), source })?.path();
-      let (Some(stem), Some(extension)) = (path.file_stem(), path.extension()) else { continue };
-      let python = extension == "py";
-      if !python && extension != "sh" {
+      let (Some(stem), Some(suffix)) = (path.file_stem(), path.extension()) else { continue };
+      let python = suffix == "py";
+      if !python && suffix != "sh" {
         continue;
       }
       let source = read(&path)?;
