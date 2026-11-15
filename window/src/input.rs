@@ -489,7 +489,7 @@ impl Model {
   /// The box of the text of the input: over its bands, or over the row of a form where the
   /// operator writes.
   pub(crate) fn area(&self) -> Area {
-    let opens = self.thread.as_ref().is_some_and(|one| self.opens(one));
+    let opens = self.thread.as_ref().is_some_and(|one| self.says_opens(one));
     let ended = self.thread.as_ref().and_then(|one| self.told_card(&one.key));
     let ended = ended.is_some_and(|card| card.thread.ended());
     let top = usize::from(self.size.1).saturating_sub(self.input_rows());
@@ -718,7 +718,7 @@ impl Model {
     let says = self.armed_says().map(|one| (one, t.attention)).or(notice);
     let (does, name) = match (&self.aim, &self.thread) {
       _ if self.form().is_some() => (Does::Empty, "refuse"),
-      (None, Some(_)) if self.leaves() => (Does::Close, "back"),
+      (None, Some(_)) if self.says_leaves() => (Does::Close, "back"),
       (None, Some(opened)) if !opened.docked().1.is_empty() => (Does::Agent, "agents"),
       (_, Some(_)) => (Does::Commands, "commands"),
       (_, None) if self.listed() => (Does::Commands, "commands"),

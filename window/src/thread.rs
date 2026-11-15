@@ -28,7 +28,7 @@ use crate::{
   line::Line,
   list::hash,
   model::{Key, Model},
-  opens::Hold,
+  opens::{Hold, QUIET},
   question::Form,
   tokens::Loader,
 };
@@ -443,6 +443,21 @@ impl Model {
   pub(crate) fn opens(&self, opened: &Opened) -> bool {
     let hold = self.holds.get(&(opened.key.0, opened.key.1.clone()));
     opened.above.is_none() && hold.is_some_and(|hold| !hold.stood)
+  }
+
+  /// Whether the window says that the open thread opens: from [`QUIET`] on, as the bar of the open,
+  /// so an open that takes less than that shows no text that comes and goes.
+  pub(crate) fn says_opens(&self, opened: &Opened) -> bool {
+    let hold = self.holds.get(&(opened.key.0, opened.key.1.clone()));
+    let waited = hold.is_some_and(|hold| self.moved.saturating_sub(hold.since) >= QUIET);
+    self.opens(opened) && waited
+  }
+
+  /// Whether the row of hints offers the key that goes back: from an agent, from a fault, and from
+  /// an open that the window says.
+  pub(crate) fn says_leaves(&self) -> bool {
+    let says = |one: &Opened| one.from.is_some() || one.fault.is_some() || self.says_opens(one);
+    self.thread.as_ref().is_some_and(says)
   }
 
   /// The page of the end of the open thread, when the window holds none of it and asked none, once
