@@ -28,6 +28,7 @@ test("the package gives the types of the protocol and its version", () => {
     ],
   };
   const mount: Mount = { viewer: "v1", life: "life.jsonl", slot: { slot: "dock", on: "chain1" }, skill: "k" };
-  expect(PROTOCOL).toBe(23);
+  // The first test holds its value to the schema, its one home.
+  expect(Number.isInteger(PROTOCOL)).toBe(true);
   expect(JSON.parse(JSON.stringify({ mount, tree }))).toEqual({ mount, tree });
 });
