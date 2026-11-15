@@ -77,17 +77,19 @@ pub struct Tokens {
   pub hover: Color,
   /// The second line of a card, a thought, a hint, a placeholder, a mark of what is done.
   pub muted: Color,
-  /// Work that runs, a link, the dot of what is not read.
+  /// Work that runs, a link, a change of a file: the warm orange that gives the window its tone.
   pub accent: Color,
-  /// A thread that waits for the operator, the form of a question, a pause that furb made, an
-  /// open past its bound.
+  /// What is for the operator: a thread that waits for him, the form of a question, a pause that
+  /// furb made, an open past its bound, and the dot of an end that he did not read. It is blue, far
+  /// from the orange of work, so his turn and the work of the machine never read alike.
   pub attention: Color,
   /// A failure, the cross of a line that failed, and a line that a change removes.
   pub danger: Color,
-  /// A line that a change adds.
+  /// A line that a change adds: a cool cyan against the warm red of a line that it removes, as a
+  /// diff reads, with no green, which the window shows nowhere.
   pub added: Color,
   /// The mark of a session whose life runs, which a person can pause or end, where a session that
-  /// only rests in its record has none.
+  /// only rests in its record has none: the orange of work.
   pub live: Color,
   /// The ground of a line that a change adds, of its hue, so its code keeps the colors of its
   /// grammar.
@@ -98,8 +100,8 @@ pub struct Tokens {
   pub veil: Color,
   /// The bar of a thread and the badge of a project, each far from the others and from the colors
   /// of attention and of a failure, so two threads side by side read apart: purple, rose, teal and
-  /// mint. None is the blue of the accent, which is the bar of a new thread, so a turn of the input
-  /// to a new thread always changes the color of its bar.
+  /// slate. None is the orange of the accent, which is the bar of a new thread, so a turn of the
+  /// input to a new thread always changes the color of its bar.
   pub hues: [Color; 4],
 }
 
@@ -112,9 +114,9 @@ impl Tokens {
     let dark = terminal.filter(|told| ThemeMode::from_background(*told) == ThemeMode::Dark);
     let base = dark.map_or(BASE, |told| Color::default_with(told.r, told.g, told.b));
     let [panel, raised, lifted, border] = STEPS.map(|share| mixed(base, WHITE, share));
-    let blue = Color::hex(0x76_99fe);
-    let hues = [0xa3_83e2, 0xe8_89a8, 0x4f_c1c9, 0x79_d4a2].map(Color::hex);
-    let (added, danger) = (Color::hex(0x6f_cf8f), Color::hex(0xef_6c6c));
+    let orange = Color::hex(0xfa_b283);
+    let hues = [0xa3_83e2, 0xe8_89a8, 0x4f_c1c9, 0x93_a2b7].map(Color::hex);
+    let (added, danger) = (Color::hex(0x56_b6c2), Color::hex(0xef_6c6c));
     Self {
       base,
       panel,
@@ -124,11 +126,11 @@ impl Tokens {
       text: Color::hex(0xe4_e4e4),
       hover: WHITE,
       muted: Color::hex(0x94_9494),
-      accent: blue,
-      attention: Color::hex(0xf5_a742),
+      accent: orange,
+      attention: Color::hex(0x76_99fe),
       danger,
       added,
-      live: added,
+      live: orange,
       added_ground: mixed(base, added, 18),
       removed_ground: mixed(base, danger, 18),
       veil: Color::rgba(base.r, base.g, base.b, 160),
@@ -204,14 +206,15 @@ pub(crate) fn mixed(from: Color, to: Color, share: u16) -> Color {
 }
 
 /// The colors of python inside a block of code, by the name of a capture of its grammar, from the
-/// syntax of `OpenCode` v2. A name that this list does not hold takes the text.
+/// syntax of `OpenCode` v2, less its green: a string takes a pale cyan. A name that this list does
+/// not hold takes the text.
 pub const SYNTAX: [(&str, u32); 9] = [
   ("comment", 0x80_8080),
   ("keyword", 0x9d_7cd8),
   ("function", 0xfa_b283),
   ("constructor", 0xe5_c07b),
   ("type", 0xe5_c07b),
-  ("string", 0x7f_d88f),
+  ("string", 0x99_d5e0),
   ("number", 0xf5_a742),
   ("constant", 0xf5_a742),
   ("escape", 0x56_b6c2),

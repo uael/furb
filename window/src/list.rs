@@ -328,7 +328,7 @@ impl Model {
       Standing::Delegates => working(Loader::Agent),
       Standing::Stopped => ("", "Stopped".into(), None, age.clone()),
       Standing::Resolved if card.thread.unread(&self.client.machines[key.0].login) => {
-        ("●", String::new(), Some(t.accent), since())
+        ("●", String::new(), Some(t.attention), since())
       }
       Standing::Rests | Standing::Resolved => ("", String::new(), None, since()),
     };

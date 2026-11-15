@@ -103,7 +103,7 @@ impl Model {
       let lit = pointed.and_then(|y| y.checked_sub(ABOVE)) == u16::try_from(at).ok();
       let (mark, color) = match one.state {
         Change::Added => ("A", t.added),
-        Change::Modified => ("M", t.attention),
+        Change::Modified => ("M", t.accent),
         Change::Deleted => ("D", t.danger),
         Change::Renamed => ("R", t.accent),
         Change::Untracked => ("U", t.added),

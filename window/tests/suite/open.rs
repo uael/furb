@@ -251,7 +251,7 @@ fn the_head_names_the_stage_of_an_open_and_counts_its_seconds_then_shows_each_st
   let opening = app.render();
   let (x, y) = at(&app, "Opening ·", 0);
   let cell = usize::from(y) * opening.width as usize + usize::from(x);
-  assert_eq!(opening.cells[cell].fg, Color::hex(0xf5_a742), "{frame}");
+  assert_eq!(opening.cells[cell].fg, Color::hex(0x76_99fe), "{frame}");
   // The bar goes when the page comes, with no time of its own.
   File::create(&go).unwrap();
   let frame = shows(&app, "Two stages hold most");

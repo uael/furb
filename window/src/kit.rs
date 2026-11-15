@@ -122,7 +122,7 @@ impl Model {
   fn diffed(&self, line: &str) -> Span<'static> {
     let t = &self.tokens;
     let color = match line.as_bytes().first() {
-      Some(b'+') => t.hues[3],
+      Some(b'+') => t.added,
       Some(b'-') => t.danger,
       _ => t.muted,
     };
@@ -137,7 +137,7 @@ impl Model {
       Tone::Muted => t.muted,
       Tone::Faint => t.border,
       Tone::Accent => t.accent,
-      Tone::Success => t.hues[3],
+      Tone::Success => t.added,
       Tone::Warning => t.attention,
       Tone::Danger => t.danger,
     };

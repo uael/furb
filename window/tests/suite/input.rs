@@ -23,8 +23,8 @@ use crate::{
   thread::{LEFT, at, clicked},
 };
 
-/// The blue of the bar of a new thread.
-const BLUE: Color = Color::hex(0x76_99fe);
+/// The orange of the accent: the bar of a new thread, and each letter that a search matches.
+const ORANGE: Color = Color::hex(0xfa_b283);
 
 /// A window in the folder of a project that the list of the machine does not name yet, whose home
 /// folder is the folder of the test, so a path of it shows the same in each run. The folder of the
@@ -80,7 +80,7 @@ fn told(daemon: &Daemon, sessions: &Path) -> Vec<String> {
 fn a_message_starts_a_new_session_and_its_answer_shows_in_its_thread() {
   let (app, daemon, sessions) = started();
   assert!(app.text().contains("This computer ▾"), "{}", app.text());
-  assert_eq!(bar(&app), BLUE);
+  assert_eq!(bar(&app), ORANGE);
   daemon.hold();
   sent(&app, &format!("how long does an open take {ANSWERS}"));
   // His message shows at once, before the model answers, and the input replies to its thread.
@@ -192,7 +192,7 @@ fn ctrl_r_searches_what_he_sent_here_from_what_he_wrote_and_writes_the_text_that
   let (x, y) = at(&app, "moved", 0);
   let frame = app.render();
   let cell = |x: u16| frame.cells[usize::from(y) * frame.width as usize + usize::from(x)].fg;
-  let lit: Vec<bool> = (x..x + 5).map(|x| cell(x) == BLUE).collect();
+  let lit: Vec<bool> = (x..x + 5).map(|x| cell(x) == ORANGE).collect();
   assert_eq!(lit, [true, false, true, false, true], "the letters m, v and d are lit");
   // Enter writes the text into the input, and closes the list.
   app.press("enter");
@@ -243,7 +243,7 @@ fn the_key_of_a_new_thread_turns_the_input_and_its_bar_and_a_reply_reaches_a_thr
   app.press("ctrl+n");
   let frame = shows(&app, "┃ Ask in a new thread");
   assert!(frame.contains("↩ ⌃N"), "{frame}");
-  assert_eq!(bar(&app), BLUE);
+  assert_eq!(bar(&app), ORANGE);
   screen("input-new-thread", &app);
   app.press("ctrl+n");
   shows(&app, "┃ Reply to this thread");
