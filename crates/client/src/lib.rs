@@ -15,6 +15,7 @@ mod matched;
 mod opens;
 mod outbox;
 mod question;
+mod running;
 mod thread;
 mod views;
 
@@ -25,7 +26,7 @@ use std::{
 
 use furb_wire::{
   Part,
-  protocol::{Card, ViewEvent},
+  protocol::{Card, Verb, ViewEvent},
 };
 
 pub use changes::{Review, Seen};
@@ -37,6 +38,7 @@ pub use matched::{Matched, pathed, ranked};
 pub use opens::{Ask, Hold, Life, Step};
 pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
 pub use question::{Form, HOLD};
+pub use running::{BACKGROUND, Control, Running};
 pub use thread::{Anchor, Fold, Opened, PAGE, Pending, Thread, rests};
 pub use views::{Filled, View};
 
@@ -79,6 +81,8 @@ pub struct Client {
   pub gestures: Vec<(usize, ViewEvent)>,
   /// The input node of a view that the input of the client fills, while it fills one.
   pub filled: Option<Filled>,
+  /// What the operator did to sessions that run, with the machine of each, until it goes.
+  pub controls: Vec<(usize, Verb)>,
   /// What the last thing that the operator did did not do, and why, until the next one.
   pub notice: Option<String>,
   /// The millisecond of the clock of the machine of the client.

@@ -580,6 +580,65 @@ fn a_view_of_a_skill_shows_under_its_thread_live_and_takes_a_press_and_an_input(
 }
 
 #[test]
+fn go_to_names_each_session_that_runs_and_a_pause_ends_its_life() {
+  let (app, _daemon, _) = started();
+  sent(&app, &format!("work on it {WORKS}"));
+  paged(&app);
+  app.press("ctrl+o");
+  shows(&app, "working · here");
+  app.press("escape");
+  app.press("ctrl+x");
+  app.press("s");
+  shows(&app, "Kill it: its work stops");
+  app.type_text("pause");
+  app.press("enter");
+  app.press("ctrl+o");
+  let ended = app.wait_until(PATIENCE, || {
+    app.press("escape");
+    app.press("ctrl+o");
+    !app.text().contains("working · here") && app.text().contains("Go to")
+  });
+  assert!(ended, "{}", app.text());
+}
+
+#[test]
+fn a_session_of_go_to_takes_a_kill_which_stops_its_work() {
+  let (app, _daemon, _) = started();
+  sent(&app, &format!("work on it {WORKS}"));
+  paged(&app);
+  app.press("ctrl+o");
+  shows(&app, "working · here");
+  app.type_text("working here");
+  app.press("enter");
+  shows(&app, "Kill it: its work stops");
+  app.type_text("kill");
+  app.press("enter");
+  let stopped = app.wait_until(PATIENCE, || {
+    app.press("escape");
+    app.press("ctrl+o");
+    !app.text().contains("working · here") && app.text().contains("Go to")
+  });
+  assert!(stopped, "{}", app.text());
+}
+
+#[test]
+fn a_leave_while_a_session_works_asks_and_keeps_it_running_in_the_background() {
+  let (app, daemon, _) = started();
+  sent(&app, &format!("work on it {WORKS}"));
+  paged(&app);
+  app.press("ctrl+d");
+  app.press("ctrl+d");
+  let asked = shows(&app, "Sessions still work");
+  assert!(!app.app().is_quitting(), "{asked}");
+  app.type_text("keep");
+  app.press("enter");
+  assert!(app.wait_until(PATIENCE, || app.app().is_quitting()), "{}", app.text());
+  let Answer::Lives(lives) = daemon.peer().ask(Verb::List { config: None }) else { unreachable!() };
+  let pinned = lives.iter().any(|one| one.held && one.pins == ["background"]);
+  assert!(pinned, "{lives:?}");
+}
+
+#[test]
 fn a_slash_offers_the_commands_and_runs_the_one_that_he_takes() {
   let (app, _daemon, _) = started();
   app.type_text("/mod");

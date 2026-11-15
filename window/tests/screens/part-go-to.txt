@@ -3,18 +3,18 @@
   Nothing needs you.                                           Working 1
 
     Go to                                               ⎋       ● run the bench of…     ⠋ Working
-    ▌Search a thread, a session, a project          1 / 2         FU furb                    opus
+    ▌Search a thread, a session, a project          1 / 3         FU furb                    opus
 
     Working                                                    Resolved 1 ▸
     ▌FU run the bench of replay                     furb
+
+    Running
+     FU run the bench of replay                  working
 
     Projects
      FU furb                                  3 sessions
 
     ↑↓ move · ⏎ open · ⎋ close
-
-
-
 
 
 

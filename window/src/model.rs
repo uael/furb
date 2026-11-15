@@ -68,6 +68,16 @@ pub(crate) struct Model {
   pub(crate) picker: Option<Picker>,
   /// The word of python that the window ran last, until the next one goes or an escape.
   pub(crate) word: Option<Word>,
+  /// What the choices of sessions act on, while the list part shows them or a leave waits.
+  pub(crate) acts: Option<Acts>,
+}
+
+/// What the choices of sessions act on: one session, by its machine and its record, or the leave
+/// of the window, which leaves once each choice went.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Acts {
+  On(usize, String),
+  Leaving,
 }
 
 impl Model {
@@ -97,6 +107,7 @@ impl Model {
       armed: None,
       picker: None,
       word: None,
+      acts: None,
     }
   }
 
@@ -199,6 +210,10 @@ impl Model {
         | Asked::View,
         Ok(Frame::Refused { why, .. }),
       ) => self.fault = Some(why),
+      // A choice for a session that its machine refused keeps the window, which says why.
+      (Asked::Running, Ok(Frame::Refused { why, .. })) => {
+        (self.acts, self.fault) = (None, Some(why));
+      }
       (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {
         self.client.machines[at].lives = lives;
       }

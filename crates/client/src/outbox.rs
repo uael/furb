@@ -110,6 +110,8 @@ pub enum Asked {
   Changes(String, Option<String>),
   /// A verb of a view: its mount, a gesture on one of its nodes, or its end.
   View,
+  /// What the operator did to a session that runs: its pause, its kill or its pin.
+  Running,
 }
 
 impl Client {

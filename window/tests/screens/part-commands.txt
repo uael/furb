@@ -3,7 +3,7 @@
   Nothing needs you.                                           Working 1
 
     Commands                                            ⎋       ● run the bench of…     ⠋ Working
-    ▌Search a command                              1 / 20         FU furb                    opus
+    ▌Search a command                              1 / 21         FU furb                    opus
 
     Go                                                         Resolved 1 ▸
     ▌Go to a project or a session                     ⌃O
@@ -18,12 +18,12 @@
      Jump to the latest                                ↘
      Stop the work of the thread                     ⎋ ⎋
      Resolve the thread, or reply to open it again  ⌃X R
+     Pause, kill or keep the session                ⌃X S
      The next agent of the thread                   ⌃X ↓
 
-    The input
-     Leave, twice on an empty input                   ⌃D
+    ↑↓ move · ⏎ run · ⎋ close
 ┃
-┃   ↑↓ move · ⏎ run · ⎋ close
+┃ Ask for a change, a review or an answer
 ┃
 ┃  Message  Python    This computer ▾   FT ▾   opus  high
 ┃

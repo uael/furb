@@ -33,7 +33,7 @@ use crate::{
   keys::{self, Does},
   line::Line,
   link::{self, Asker, Heard},
-  model::{Model, Told},
+  model::{Acts, Model, Told},
   pick::Pick,
   question::Keyed,
   review::{NEXT, PREVIOUS},
@@ -428,6 +428,14 @@ fn tick(app: &App, window: &Shared) {
 /// away.
 fn hear(app: &App, window: &Shared, at: usize, heard: Heard) {
   let changed = tell(app, window, |model| model.hear(at, heard));
+  // A leave that chose what each session that works does waits until each choice went.
+  let leaves = {
+    let model = &window.borrow().screen.model;
+    model.acts == Some(Acts::Leaving) && !model.client.controlling()
+  };
+  if leaves {
+    return app.quit();
+  }
   if changed {
     rest(app, window);
     keep(app, window);
@@ -498,9 +506,8 @@ fn pump(window: &Shared) {
   {
     model.client.asked.insert((at, id), Asked::Say);
   }
-  let mut due = model.client.views_due();
-  due.extend(model.client.changes_due());
-  for (at, verb, asked) in due {
+  let due = [model.client.views_due(), model.client.controls_due(), model.client.changes_due()];
+  for (at, verb, asked) in due.concat() {
     if let Some(id) = ask(askers, model, at, verb) {
       model.client.asked.insert((at, id), asked);
     }
@@ -795,6 +802,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Model => |model| model.pick(Pick::Models),
     Does::Effort => Model::effort,
     Does::Changes => |model| model.client.review(),
+    Does::Running => Model::act_on_open,
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,
     Does::Agent => Model::next_agent,
@@ -813,12 +821,7 @@ fn act(app: &App, window: &Shared, does: Does) {
         model.take_back().map(|(asked, text)| (asked, Asked::Back(text)))
       });
     }
-    Does::Leave => {
-      if tell(app, window, |model| model.armed.replace(Armed::Leave) == Some(Armed::Leave)) {
-        app.quit();
-      }
-      return;
-    }
+    Does::Leave => return left(app, window),
     Does::PageUp | Does::PageDown => {
       // A page keeps two rows of the screen before it in view.
       let verb = tell(app, window, |model| {
@@ -874,6 +877,17 @@ fn projected(window: &Shared, of: Option<usize>) {
     if let Some(id) = ask(askers, &mut screen.model, at, Verb::Projects { config: None }) {
       screen.model.client.asked.insert((at, id), Asked::Projects);
     }
+  }
+}
+
+/// A leave: a first press arms it, and a second leaves, or asks first what each session that the
+/// window holds and that works does.
+fn left(app: &App, window: &Shared) {
+  let leaves = tell(app, window, |model| {
+    model.armed.replace(Armed::Leave) == Some(Armed::Leave) && model.leaves_now()
+  });
+  if leaves {
+    app.quit();
   }
 }
 

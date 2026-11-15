@@ -55,6 +55,7 @@ pub(crate) enum Does {
   Model,
   Effort,
   Changes,
+  Running,
 }
 
 /// One stroke of a key: whether it holds control and alt, and its key.
@@ -140,6 +141,7 @@ const THREAD: &[Bound] = &[
     Some("resolve"),
     &[&led('r')],
   ),
+  bound(Does::Running, "pause, kill or keep the session", Some("running"), &[&led('s')]),
   bound(
     Does::Agent,
     "the next agent of the thread",

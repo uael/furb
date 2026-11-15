@@ -8,7 +8,7 @@ use furb::view::{Part, Sent};
 use furb_host::protocol::Card;
 use opentui::style::Style;
 
-use furb_client::{Link, Matched, Target, Told, ranked};
+use furb_client::{Control, Link, Matched, Target, Told, ranked};
 use furb_host::protocol::Model as Offered;
 
 use crate::{
@@ -41,6 +41,10 @@ pub(crate) enum Pick {
   Models,
   /// What he sent where the input sends, the newest first.
   History,
+  /// What the operator does to one session that runs.
+  Session,
+  /// What a leave does to the sessions that the window holds and that work.
+  Leave,
 }
 
 /// The list part, while it is open: what it lists, the text that filters it, and the place of the
@@ -67,6 +71,12 @@ pub(crate) enum Choice {
   Sent(Sent),
   /// What a key does.
   Key(Does),
+  /// A session that runs, by its machine and its record, whose choices the list then shows.
+  Running(usize, String),
+  /// What the operator does to the session that the list part acts on.
+  Control(Control),
+  /// What a leave does to each session that works, or none to stay.
+  Leave(Option<Control>),
   /// Nothing: a key that only a form or a list hears.
   #[default]
   None,
@@ -113,6 +123,8 @@ impl Pick {
       Self::Projects => "Projects",
       Self::Models => "Models",
       Self::History => "History",
+      Self::Session => "The session",
+      Self::Leave => "Sessions still work",
     }
   }
 
@@ -126,6 +138,7 @@ impl Pick {
       Self::Projects => "Search a project",
       Self::Models => "Search a model",
       Self::History => "Search what you sent here",
+      Self::Session | Self::Leave => "Search a choice",
     }
   }
 
@@ -137,6 +150,7 @@ impl Pick {
       Self::Sessions | Self::Machines | Self::Projects => "send there",
       Self::Models => "take it",
       Self::History => "write it",
+      Self::Session | Self::Leave => "do it",
     }
   }
 }
@@ -181,6 +195,8 @@ impl Model {
       Pick::Projects => self.projects(),
       Pick::Models => self.models(),
       Pick::History => self.sent(),
+      Pick::Session => self.session_choices(),
+      Pick::Leave => self.leave_choices(),
     };
     // The filter matches the text of a row and its right, and lights the letters of its text.
     let texts: Vec<String> = all.iter().map(|one| format!("{} {}", one.left, one.right)).collect();
@@ -214,6 +230,7 @@ impl Model {
     let mut all: Vec<Entry> =
       self.client.settled.iter().filter(needs).map(|one| thread("Needs you", one)).collect();
     all.extend(self.client.settled.iter().filter(works).map(|one| thread("Working", one)));
+    all.extend(self.running_places());
     let sessions = self.known_sessions();
     if searches {
       let rest = |one: &&(Part, Key, Card)| !needs(one) && !works(one);
@@ -449,6 +466,9 @@ impl Model {
       Choice::Actor(actor) => self.took_actor(actor),
       Choice::Sent(sent) => self.client.recall(&sent),
       Choice::Key(does) => return Some(does),
+      Choice::Running(at, life) => self.act_on(at, life),
+      Choice::Control(control) => self.controlled(control),
+      Choice::Leave(control) => self.left_with(control),
       Choice::None => self.picker = Some(Picker { of, filter: String::new(), at }),
     }
     None

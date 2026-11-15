@@ -54,7 +54,7 @@ fn go_to_lists_the_threads_that_work_and_the_projects_and_finds_a_session_with_n
   screen("part-go-to", &app);
   // The arrows move the chosen row, and letters filter the rows as he types.
   app.press("down");
-  shows(&app, "2 / 2");
+  shows(&app, "2 / 3");
   app.type_text("setup");
   let frame = shows(&app, "▌setup");
   assert!(frame.contains("setup-only") && frame.contains("1 / 1"), "{frame}");
