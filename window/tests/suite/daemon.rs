@@ -30,7 +30,11 @@ use furb_window::Machine;
 use futures::{SinkExt, StreamExt};
 use opentui::testing::TestApp;
 use serde_json::json;
-use tokio::{process::Command, runtime::Handle, time::timeout};
+use tokio::{
+  process::Command,
+  runtime::Handle,
+  time::{sleep, timeout},
+};
 use tokio_util::codec::{Framed, LinesCodec};
 
 use crate::yard::Yard;
@@ -118,6 +122,17 @@ impl Daemon {
     };
     let asked = self.runtime.block_on(async { timeout(PATIENCE, asked).await });
     assert!(matches!(asked, Ok((Some(Ok(_)), Some(Ok(_))))), "a window dials the daemon");
+  }
+
+  /// The model of each life of the daemon answers nothing until the test lets it, so a frame of
+  /// the window that the test reads shows what the window drew before an answer.
+  pub(crate) fn hold(&self) {
+    File::create(self.yard.join("held")).unwrap();
+  }
+
+  /// The model of each life of the daemon answers again.
+  pub(crate) fn let_go(&self) {
+    fs::remove_file(self.yard.join("held")).unwrap();
   }
 
   /// A project of the machine, which the daemon lists, and the folder of its sessions.
@@ -410,12 +425,18 @@ const PROSE: &str = "found = 2
 close('The open takes **329 s**. Two stages hold most of it: 181 s to send each entry to the ears of the host, and 104 s in the boot.\\n\\n- `seed` reads each chain once\\n- the image skips the boot\\n\\n```python\\nopen = boot + seed\\n```\\n\\nSee [the trace](https://github.com/uael/furb/issues/988).')";
 
 /// The opening of each life of the daemon of a test: the config of the test, no skill, a claude
-/// command line of the test, and a model that answers from the message that it reads. It closes
-/// the prompt of a message, asks the operator, or never answers.
+/// command line of the test, and a model that answers from the message that it reads, once the test
+/// holds its answers no more. It closes the prompt of a message, asks the operator, or never
+/// answers.
 fn scripted(at: &Path, claude: &Path) -> Opening {
-  let answer = Answered(Arc::new(|request, told| {
+  let held = at.join("held");
+  let answer = Answered(Arc::new(move |request, told| {
     let request = request.to_string();
+    let held = held.clone();
     Box::pin(async move {
+      while held.exists() {
+        sleep(Duration::from_millis(10)).await;
+      }
       if request.contains(WORKS) {
         future::pending::<()>().await;
       }

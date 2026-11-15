@@ -10,7 +10,7 @@ use crate::{
   cards::{app, options, shows},
   daemon::{ANSWERS, Daemon, Hold, PATIENCE, Peer, WORKS},
   screens::screen,
-  thread::{at, lights},
+  thread::clicked,
 };
 
 /// A window on a machine with a session that works, a session at rest whose thread the model
@@ -77,9 +77,7 @@ fn the_commands_run_from_their_list_and_each_key_shows_its_forms() {
   assert!(frame.contains("Show or hide the list") && frame.contains("⌃X L"), "{frame}");
   screen("part-commands", &app);
   // A row takes a click, and its text lights under the pointer.
-  let (x, y) = at(&app, "Show or hide the list", 0);
-  lights(&app, x, y);
-  app.click(x, y);
+  clicked(&app, "Show or hide the list", 0, 0);
   assert!(gone(&app, "All projects"), "the list hid: {}", app.text());
   app.press("ctrl+x");
   app.press("?");

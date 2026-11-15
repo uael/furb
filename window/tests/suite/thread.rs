@@ -40,28 +40,55 @@ fn moved(before: &Capture, after: &Capture) -> Vec<(usize, usize, String)> {
   differ.map(|(at, (_, other))| (at % width, at / width, other.symbol.clone())).collect()
 }
 
-/// The pointer on a cell of a thing that takes a click: the text of that thing goes bright white,
-/// with no other change of any cell, and comes back when the pointer leaves.
-pub(crate) fn lights(app: &TestApp, x: u16, y: u16) {
-  app.hover(0, 0);
-  let before = app.render();
-  app.hover(x, y);
-  let lit = app.render();
-  let width = usize::try_from(lit.width).unwrap();
-  let at = usize::from(y) * width + usize::from(x);
-  assert_eq!(lit.cells[at].fg, Color::hex(0xff_ffff), "the cell {x},{y} is not lit");
-  for (one, other) in before.cells.iter().zip(&lit.cells) {
-    if one != other {
-      assert_eq!((&other.symbol, other.bg, other.fg), (&one.symbol, one.bg, Color::hex(0xff_ffff)));
+/// The pointer on a cell of a thing that takes a click, a count of cells into a text that stands at
+/// a column or after it: the text of that thing goes bright white, with no other change of any
+/// cell, and comes back when the pointer leaves. The daemon serves the window on the runtime of
+/// the app, so a frame of it can come between the frames of the hover and move the text: such a
+/// hover is read again.
+pub(crate) fn lights(app: &TestApp, text: &str, from: usize, inside: u16) {
+  let mut hovers = 0;
+  let lit = app.wait_until(PATIENCE, || {
+    hovers += 1;
+    app.hover(0, 0);
+    let before = app.render();
+    let (x, y) = place(&before.text(), text, from);
+    let x = x + inside;
+    app.hover(x, y);
+    let lit = app.render();
+    app.hover(0, 0);
+    if app.render().cells != before.cells {
+      return false;
     }
-  }
-  app.hover(0, 0);
-  assert_eq!(app.render().cells, before.cells, "the pointer left the cell {x},{y}");
+    let width = usize::try_from(lit.width).unwrap();
+    let at = usize::from(y) * width + usize::from(x);
+    assert_eq!(lit.cells[at].fg, Color::hex(0xff_ffff), "the cell {x},{y} is not lit");
+    for (one, other) in before.cells.iter().zip(&lit.cells) {
+      if one != other {
+        let white = Color::hex(0xff_ffff);
+        assert_eq!((&other.symbol, other.bg, other.fg), (&one.symbol, one.bg, white));
+      }
+    }
+    true
+  });
+  assert!(lit, "no frame of the daemon left {text:?} still in {hovers} hovers");
 }
 
-/// The first cell of a text in the window, at a column or after it: its column and its row.
+/// A click on a cell of a thing, a count of cells into a text that stands at a column or after it,
+/// once the cell lights under the pointer. The click hits the frame where it found the text.
+pub(crate) fn clicked(app: &TestApp, text: &str, from: usize, inside: u16) {
+  lights(app, text, from, inside);
+  let (x, y) = at(app, text, from);
+  app.click(x + inside, y);
+}
+
+/// The first cell of a text in the window, at a column or after it: its column and its row, in
+/// the frame that the next click hits.
 pub(crate) fn at(app: &TestApp, text: &str, from: usize) -> (u16, u16) {
-  let frame = app.text();
+  place(&app.text(), text, from)
+}
+
+/// The first cell of a text in a frame, at a column or after it: its column and its row.
+fn place(frame: &str, text: &str, from: usize) -> (u16, u16) {
   let found = frame.lines().enumerate().find_map(|(y, line)| {
     let after: String = line.chars().skip(from).collect();
     after.find(text).map(|at| (from + after[..at].chars().count(), y))
@@ -106,9 +133,7 @@ fn a_thread_that_works_rolls_its_block_in_seven_rows_and_only_its_loaders_move()
   assert!(cells.iter().all(|one| frames.contains(&one.2.as_str())), "{cells:?}");
 
   // The fold of the block takes a click, so it lights under the pointer, and it opens the block.
-  let (x, y) = at(&app, "4 lines", 0);
-  lights(&app, x, y);
-  app.click(x, y);
+  clicked(&app, "4 lines", 0, 0);
   shows(&app, "▴  9 lines");
   assert!(app.text().contains("1  birth = "), "{}", app.text());
 }
@@ -125,9 +150,7 @@ fn a_model_that_thinks_shows_its_thought_on_one_row_and_the_line_that_it_writes(
   screen("thread-writes", &app);
 
   // The thought takes a click: it lights under the pointer, and opens whole.
-  let (x, y) = at(&app, "I read the stages", 0);
-  lights(&app, x, y);
-  app.click(x, y);
+  clicked(&app, "I read the stages", 0, 0);
   shows(&app, "Then the seed");
 }
 
@@ -142,8 +165,7 @@ fn a_thread_at_rest_shows_its_answer_as_prose_and_a_hover_lights_only_the_text()
   screen("thread-rests", &app);
   // The card, the button that opens it again, and the link of the answer.
   for (text, from) in [("how long does an open", LEFT), ("[ Reopen ]", 0), ("the trace", 0)] {
-    let (x, y) = at(&app, text, from);
-    lights(&app, x + 2, y);
+    lights(&app, text, from, 2);
   }
 }
 

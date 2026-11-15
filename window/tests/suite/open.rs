@@ -26,7 +26,7 @@ use {
   crate::{
     cards::CLOCK,
     daemon::aged,
-    thread::{at, lights},
+    thread::{at, clicked},
   },
   opentui::style::Color,
   std::fs,
@@ -79,7 +79,7 @@ fn record(daemon: &Daemon, at: usize) -> PathBuf {
 }
 
 /// The card of a thread clicked.
-fn clicked(app: &TestApp, title: &str) {
+fn card(app: &TestApp, title: &str) {
   app.click(80, row(app, &title[..15]));
 }
 
@@ -101,7 +101,7 @@ fn a_session_whose_daemon_ended_opens_in_a_window_of_a_new_daemon_and_shows_the_
   let mut peer = daemon.peer();
   peer.rested(&record, &message(title), None);
   open(&first, vec![daemon.machine("mac")], homed(&daemon));
-  clicked(&first, title);
+  card(&first, title);
   shows(&first, "Two stages hold most");
   // The window says that he read the end of the thread, and the record keeps it once its card
   // tells it.
@@ -118,7 +118,7 @@ fn a_session_whose_daemon_ended_opens_in_a_window_of_a_new_daemon_and_shows_the_
   open(&second, vec![daemon.machine("mac")], homed(&daemon));
   // So the thread stands with the resolved ones.
   second.click(80, row(&second, "Resolved 1"));
-  clicked(&second, title);
+  card(&second, title);
   shows(&second, "Two stages hold most");
   assert_eq!(left(&second), before);
   screen("open-stood", &second);
@@ -135,7 +135,7 @@ fn a_window_dials_its_machine_again_after_a_handover_and_its_thread_comes_back_w
   let mut peer = daemon.peer();
   peer.rested(&record, &message(title), None);
   open(&app, vec![daemon.machine("mac")], homed(&daemon));
-  clicked(&app, title);
+  card(&app, title);
   shows(&app, "Two stages hold most");
   app.advance(AWAY);
   shows(&app, "Resolved 1");
@@ -163,7 +163,7 @@ fn while_the_machine_is_away_the_input_keeps_his_words_until_it_answers() {
   let mut peer = daemon.peer();
   peer.rested(&record, &message(title), None);
   open(&app, vec![daemon.machine("mac")], homed(&daemon));
-  clicked(&app, title);
+  card(&app, title);
   shows(&app, "Two stages hold most");
   // The daemon ends with the app whose runtime serves it, and its lives with it.
   drop((peer, host));
@@ -202,7 +202,7 @@ fn an_open_that_ends_under_400_ms_shows_no_bar_and_its_page_takes_the_rows_of_th
   let title = "remove the gate from the engine";
   let app = app();
   let (_daemon, go) = resting(&app, &[title]);
-  clicked(&app, title);
+  card(&app, title);
   // The first frame shows the head, and the message of the thread as its card holds it.
   let frame = shows(&app, &format!("┃ {title}"));
   assert!(!frame.contains("Opening"), "{frame}");
@@ -224,7 +224,7 @@ fn the_head_names_the_stage_of_an_open_and_counts_its_seconds_then_shows_each_st
   let title = "remove the gate from the engine";
   let app = app();
   let (daemon, go) = resting(&app, &[title]);
-  clicked(&app, title);
+  card(&app, title);
   shows(&app, &format!("┃ {title}"));
   app.advance(Duration::from_millis(400));
   shows(&app, "Opening · reads the record");
@@ -263,7 +263,7 @@ fn a_message_written_while_the_session_opens_goes_once_it_stands_and_gets_its_an
   let title = "remove the gate from the engine";
   let app = app();
   let (_daemon, go) = resting(&app, &[title]);
-  clicked(&app, title);
+  card(&app, title);
   app.advance(Duration::from_secs(1));
   let frame = shows(&app, "┃ Write while it opens. Your message goes when it is open.");
   assert!(frame.contains("⎋ back"), "{frame}");
@@ -280,14 +280,14 @@ fn an_escape_goes_back_while_it_opens_and_the_same_card_joins_the_same_open() {
   let (gate, time) = ("remove the gate from the engine", "where does the time of a resume go");
   let app = app();
   let (_daemon, go) = resting(&app, &[gate, time]);
-  clicked(&app, gate);
+  card(&app, gate);
   app.advance(Duration::from_secs(1));
   shows(&app, "1.0 s");
   app.press("escape");
   let frame = shows(&app, "go to a project");
   assert!(frame.contains("Opening"), "the open goes on:\n{frame}");
   // A second open runs beside the first.
-  clicked(&app, time);
+  card(&app, time);
   app.advance(Duration::from_secs(1));
   let frame = shows(&app, &format!("furb · {}", &time[..20]));
   // The head of the thread, and the card of each open.
@@ -298,7 +298,7 @@ fn an_escape_goes_back_while_it_opens_and_the_same_card_joins_the_same_open() {
   assert!(read, "{}", app.text());
   screen("open-home", &app);
   // The first card again: its open counts from its first ask.
-  clicked(&app, gate);
+  card(&app, gate);
   shows(&app, "2.0 s");
   File::create(&go).unwrap();
   shows(&app, "Two stages hold most");
@@ -313,7 +313,7 @@ fn an_open_that_fails_says_why_and_how_to_go_back_and_loses_no_draft() {
   // Another holder owns the lease of the record.
   let owner = File::create(lease(&record(&daemon, 0))).unwrap();
   owner.try_lock().unwrap();
-  clicked(&app, title);
+  card(&app, title);
   app.advance(Duration::from_secs(1));
   app.paste("and the replay");
   app.press("enter");
@@ -329,9 +329,7 @@ fn an_open_that_fails_says_why_and_how_to_go_back_and_loses_no_draft() {
   shows(&app, "● now");
   screen("open-failed", &app);
   // The way back takes a click, as its key does, and lights under the pointer.
-  let (x, y) = at(&app, "⎋ back", 0);
-  lights(&app, x, y);
-  app.click(x, y);
+  clicked(&app, "⎋ back", 0, 0);
   shows(&app, "go to a project");
 }
 
@@ -346,7 +344,7 @@ fn a_session_that_a_life_holds_opens_with_no_bar_and_its_other_window_goes_on() 
   let life = peer.opened(&sessions.join("gate.jsonl"), true);
   let prompt = peer.said(&life, &message(title));
   open(&app, vec![daemon.machine("mac")], homed(&daemon));
-  clicked(&app, title);
+  card(&app, title);
   app.advance(Duration::from_secs(1));
   let frame = shows(&app, "Two stages hold most");
   assert!(!frame.contains("Opening"), "{frame}");

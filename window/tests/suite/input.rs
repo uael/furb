@@ -17,7 +17,7 @@ use crate::{
   cards::{app, options, shows},
   daemon::{ANSWERS, ASKS, Daemon, PATIENCE, WORKS},
   screens::screen,
-  thread::{at, lights},
+  thread::{at, clicked},
 };
 
 /// The blue of the bar of a new thread.
@@ -78,11 +78,13 @@ fn a_message_starts_a_new_session_and_its_answer_shows_in_its_thread() {
   let (app, daemon, sessions) = started();
   assert!(app.text().contains("This computer   furb-try · new session ▾"), "{}", app.text());
   assert_eq!(bar(&app), BLUE);
+  daemon.hold();
   sent(&app, &format!("how long does an open take {ANSWERS}"));
-  // His message shows at once, before the daemon answers.
+  // His message shows at once, before the model answers, and the input replies to its thread.
   let frame = app.text();
   assert!(frame.contains("┃ how long does an open take"), "{frame}");
   assert!(frame.contains("┃ Reply to this thread"), "{frame}");
+  daemon.let_go();
   shows(&app, "Two stages hold most");
   // The card of the thread, which the model answered, as its machine tells it after the page. He
   // reads its end, so it waits for him in no part of the list, and rests with the resolved ones,
@@ -182,9 +184,7 @@ fn a_thread_that_ended_turns_the_input_to_it_and_a_reply_opens_it_and_the_button
   let frame = shows(&app, "[ Resolve ]");
   assert!(!frame.contains("✓ Resolved"), "{frame}");
   // The button resolves it: its close ends the question, and the head says that it is resolved.
-  let (x, y) = at(&app, "[ Resolve ]", 0);
-  lights(&app, x + 2, y);
-  app.click(x + 2, y);
+  clicked(&app, "[ Resolve ]", 0, 2);
   shows(&app, "✓ Resolved   [ Reopen ]");
   shows(&app, "◆ Which key sends the…     refused");
   assert_eq!(told(&daemon, &sessions).len(), 2);
@@ -281,9 +281,7 @@ fn the_python_switch_runs_a_word_of_the_operator() {
   // The card of the thread, which the model answered, as its machine tells it after the page, once
   // he read its end.
   shows(&app, "Resolved 1");
-  let (x, y) = at(&app, "○ Python", 0);
-  lights(&app, x, y);
-  app.click(x, y);
+  clicked(&app, "○ Python", 0, 0);
   let frame = shows(&app, "● Python");
   assert!(frame.contains("┃ A word of Python to run"), "{frame}");
   app.paste("answer = 41 + 1");
@@ -309,10 +307,7 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   sent(&app, &format!("where does the time go {WORKS}"));
   shows(&app, "Working · ⎋ ⎋ stop");
   paged(&app);
-  let (x, y) = at(&app, "This computer", 0);
-  let x = x + 16;
-  lights(&app, x, y);
-  app.click(x, y);
+  clicked(&app, "This computer", 0, 16);
   let frame = shows(&app, "Search a session");
   assert!(frame.contains("+ new session") && frame.contains("2 / 2"), "{frame}");
   screen("input-picker", &app);

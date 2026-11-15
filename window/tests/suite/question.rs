@@ -16,7 +16,7 @@ use crate::{
     ANSWERS, ASKS, CHOOSES, CONFIRMS, COUNTS, Daemon, PATIENCE, Peer, READ, TELLS, TICKS, TWICE,
   },
   screens::screen,
-  thread::{at, lights},
+  thread::clicked,
 };
 
 /// How long a form takes no key after it shows.
@@ -93,9 +93,7 @@ fn a_choice_is_answered_by_its_key_and_the_word_that_asked_goes_on() {
 #[test]
 fn a_click_on_a_choice_answers_it() {
   let (app, _daemon, _peer) = asked(&format!("where does the list stand\n{CHOOSES}"));
-  let (x, y) = at(&app, "┃   left", 0);
-  lights(&app, x + 4, y);
-  app.click(x + 4, y);
+  clicked(&app, "┃   left", 0, 4);
   shows(&app, "left · you");
 }
 
@@ -234,9 +232,7 @@ fn a_question_of_another_thread_marks_its_card_and_shows_no_form() {
   assert!(formless(&app) && frame.contains("┃ A reply opens this thread again"), "{frame}");
   screen("question-elsewhere", &app);
   // The count takes a click, which goes to the thread that asks.
-  let (x, y) = at(&app, "1 other thread asks", 0);
-  lights(&app, x, y);
-  app.click(x, y);
+  clicked(&app, "1 other thread asks", 0, 0);
   shows(&app, ASKER);
 }
 
