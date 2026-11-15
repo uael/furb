@@ -1380,8 +1380,9 @@ impl Lives {
   /// The cards of one record of a project now: those that its life told, when one lives and
   /// told some, else those of the index beside it. A record with no index that agrees with it
   /// gives no card yet, since the daemon does not know its threads, and goes once to the task that
-  /// makes its index, unless a life holds it, which tells its cards itself: its cards come once its
-  /// index stands. So no list waits for the fold of a record, and no card comes that then goes.
+  /// makes its index, unless a life holds it, which tells its cards itself: until it tells them, an
+  /// index of an older tip says them. So no list waits for the fold of a record, and no card comes
+  /// that then goes.
   fn cards_of(&mut self, life: &str, project: Option<&String>) -> Vec<Card> {
     let record = Path::new(life);
     let (viewers, pins) = match self.held.get(life) {
@@ -1415,14 +1416,17 @@ impl Lives {
     Vec::new()
   }
 
-  /// The session of a record now: the one that its life told, when one lives and told one, else
-  /// the one of the index beside it, when the index agrees with the record.
+  /// The session of a record now: the one that its life told, when the daemon holds one that told
+  /// one, else the one of the index beside it, when the index agrees with the record.
   fn session(&self, life: &str) -> Option<Arc<Session>> {
-    let told = match self.held.get(life) {
-      Some(Held { handle, stage: Stage::Living(_), .. }) => handle.session(),
-      _ => None,
-    };
-    told.or_else(|| cards::kept(Path::new(life)).map(Arc::new))
+    let record = Path::new(life);
+    match self.held.get(life) {
+      // A life that opens tells no session until its fold stands, and its open can write to its
+      // record first. Until it tells one, the index says the threads of an older tip, which the
+      // record holds still, since a record only grows.
+      Some(Held { handle, .. }) => handle.session().or_else(|| cards::older(record).map(Arc::new)),
+      None => cards::kept(record).map(Arc::new),
+    }
   }
 
   /// What a site sent in the project of a record, the newest first and each text once: what it

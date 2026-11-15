@@ -91,8 +91,18 @@ fn index(record: &Path) -> PathBuf {
 /// is not the tip that the index names. It reads the index and the end of the record, and no
 /// more of the record.
 pub(crate) fn kept(record: &Path) -> Option<Session> {
-  let indexed: Indexed = serde_json::from_slice(&fs::read(index(record)).ok()?).ok()?;
+  let indexed = indexed(record)?;
   (Tip::of(record, None).ok()? == indexed.tip).then_some(indexed.session)
+}
+
+/// The session that the index of a record keeps, at the tip that it names, which may be an older
+/// tip of the record.
+pub(crate) fn older(record: &Path) -> Option<Session> {
+  indexed(record).map(|one| one.session)
+}
+
+fn indexed(record: &Path) -> Option<Indexed> {
+  serde_json::from_slice(&fs::read(index(record)).ok()?).ok()
 }
 
 /// The index of a record written from a session, at the tip of the record now. It is written

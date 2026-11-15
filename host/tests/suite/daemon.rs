@@ -2948,6 +2948,62 @@ async fn the_cards_of_a_record_stay_the_same_through_each_birth_on_a_checkpoint_
   assert_eq!(same(&folded), same(&rests));
 }
 
+/// A life that opens on a record whose index names an older tip keeps the cards of that index in
+/// the list until it tells its own: a record only grows, so each thread of the index stands in it.
+/// So a window that dials while the life opens, as after a handover, sees each thread it saw.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_life_that_opens_keeps_the_cards_of_an_older_index_until_it_tells_its_own() {
+  use std::os::unix::fs::PermissionsExt;
+  let at = place();
+  let (_, sessions) = project(&at);
+  let (local, _daemon) = started(&at, Duration::ZERO).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let life = held(&mut window, &sessions, "one.jsonl").await;
+  messaged(&mut window, &life, "ground the branch").await;
+  card(&mut window, |card| card.thread.standing == Standing::Resolved).await;
+  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  let rests = card(&mut window, |card| !card.held).await;
+  let index = format!("{life}.threads.json");
+  let mut kept: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
+  kept["tip"]["bytes"] = json!(1);
+  fs::write(&index, kept.to_string()).unwrap();
+  // The open waits at the catalog of its models, after the read of its record, until the test
+  // makes the file `go`: its claude command line waits for it.
+  let (waits, go) = (at.join("waits"), at.join("go"));
+  let script = format!("#!/bin/sh\nuntil [ -e '{}' ]; do sleep 0.02; done\n", go.display());
+  fs::write(&waits, script).unwrap();
+  fs::set_permissions(&waits, fs::Permissions::from_mode(0o755)).unwrap();
+  let verb = Verb::Open {
+    life: life.clone(),
+    cwd: Some(sessions.display().to_string()),
+    actor: None,
+    roster: None,
+    skills: None,
+    config: None,
+    claude: Some(waits.display().to_string()),
+    answers: false,
+    attach: Some(0),
+  };
+  let opens = tokio::spawn(async move { window.ask(verb).await });
+  let mut later = Window::dialed(&local).await;
+  let open = async {
+    while !later.listed().await.iter().any(|one| one.life == life && one.held) {
+      time::sleep(Duration::from_millis(10)).await;
+    }
+  };
+  timeout(PATIENCE, open).await.expect("the life opens");
+  let told: Vec<Card> = cards(&mut later)
+    .await
+    .into_iter()
+    .map(|one| Card { held: false, thread: one.thread.at_rest(), ..one })
+    .collect();
+  assert_eq!(told, vec![rests]);
+  fs::write(&go, "").unwrap();
+  assert_eq!(opens.await.unwrap(), Ok(Answer::Done));
+}
+
 #[tokio::test]
 async fn the_cards_of_a_record_at_rest_come_from_its_index_and_never_from_a_fold_in_the_list() {
   let at = place();
