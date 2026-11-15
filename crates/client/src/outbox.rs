@@ -129,7 +129,9 @@ impl Client {
     let message = next.text.clone();
     // A message waits for its answer, on a thread as on a new one: it is a question.
     let verb = if next.python {
-      Verb::Run { life, word: message, on: None }
+      // A word on a thread is a turn of the operator on it, which the thread shows.
+      let on = next.thread.clone().filter(|thread| !thread.is_empty());
+      Verb::Run { life, word: message, on }
     } else {
       Verb::Prompt { life, shape: "str".to_owned(), message, to: None, on: next.thread.clone() }
     };

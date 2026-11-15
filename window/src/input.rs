@@ -764,11 +764,15 @@ impl Model {
 
   /// The hints of the word that the window ran, in a room of columns: a mark that moves while it
   /// runs, then a check when it ran, or its fault, and its text on one line, cut with the count of
-  /// the characters that the cut hides.
+  /// the characters that the cut hides. A word that the open thread shows has its trace there.
   fn word_hints(&self, room: usize) -> (Line, Option<(usize, Loader)>) {
     let t = &self.tokens;
     let muted = t.style(Role::Muted);
-    let Some(word) = &self.word else { return (Vec::new(), None) };
+    let mut opened = self.client.thread.iter().flat_map(|one| one.thread.exchanges.values());
+    let Some(word) = self.word.as_ref().filter(|word| !opened.any(|one| one.message == word.rung))
+    else {
+      return (Vec::new(), None);
+    };
     let text = word.text.trim().replace('\n', "\\n");
     let (head, loader) = match &word.ran {
       None => (vec![run("    ", muted)], Some((2, Loader::Command))),

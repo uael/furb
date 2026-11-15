@@ -295,8 +295,15 @@ impl<'a> Reader<'a> {
     // said among them: a wake or an acknowledgment that the engine says is no message.
     let prompts: Vec<&Act> =
       [prompt].into_iter().chain(self.held.on_chain(&prompt.chain).filter(on)).collect();
-    let messages: Vec<&Act> =
+    // Each word that an operator ran on a prompt of the thread is a message of his, as code.
+    let word = |act: &&Act| {
+      act.kind == Kind::Rung && operator(&act.by) && prompts.iter().any(|one| one.id == act.on)
+    };
+    let words: Vec<&Act> = self.held.on_chain(&prompt.chain).filter(word).collect();
+    let mut messages: Vec<&Act> =
       prompts.iter().copied().filter(|one| one.id == thread || operator(&one.by)).collect();
+    messages.extend(&words);
+    messages.sort_by_key(|one| one.began);
     // What answers a message is what came after it and before the next one, whichever prompt of
     // the thread a rung advances: a model goes on with the prompt of the thread while the operator
     // says more on it.
@@ -312,6 +319,7 @@ impl<'a> Reader<'a> {
       })
       .collect();
     let mut rungs: Vec<&Act> = prompts.iter().flat_map(|one| self.rungs(&one.id)).collect();
+    rungs.extend(words);
     rungs.sort_by_key(|rung| rung.began);
     for rung in &rungs {
       answers[after(rung.began)].rungs.push(rung);
@@ -319,7 +327,7 @@ impl<'a> Reader<'a> {
         answers[after(asked.began)].asked.push(asked);
       }
     }
-    for message in &messages {
+    for message in messages.iter().filter(|one| one.kind == Kind::Prompt) {
       if let Some(ended) = message.ended.filter(|_| message.value().is_some_and(Value::is_string)) {
         answers[after(ended)].closes.push(message);
       }
@@ -384,11 +392,13 @@ impl<'a> Reader<'a> {
       thought,
     });
     let message = answers.message;
+    let python = message.kind == Kind::Rung;
     Exchange {
       at,
       message: message.id.clone(),
       by: message.maker.clone(),
-      text: text(message.words.get(1)),
+      text: if python { String::new() } else { text(message.words.get(1)) },
+      python,
       runs: !message.done(),
       block,
       said: said.into_iter().map(|(_, one)| one).collect(),

@@ -133,6 +133,51 @@ fn a_line_that_failed_carries_its_reason() {
 }
 
 #[test]
+fn a_word_that_an_operator_ran_on_a_thread_is_a_message_of_his_as_code_on_that_thread_alone() {
+  let mut streams = Streamed::default();
+  let mut facts = thread();
+  let fault = json!({"is": "ValueError", "args": ["no at line 2"]});
+  facts.extend([
+    json!(["prompt", "prompt4", "operator", "chain1", "str", "another thread", ""]),
+    json!([
+      "rung",
+      "rung3",
+      "operator/uael",
+      "prompt1",
+      "answer = 41 + 1\nraise ValueError('no')",
+      "",
+      ""
+    ]),
+    json!([
+      "run",
+      "run3",
+      "chain1",
+      "chain1",
+      "rung3",
+      "answer = 41 + 1\nraise ValueError('no')",
+      ""
+    ]),
+    json!(["done", "run3", "chain1", fault]),
+    json!(["done", "rung3", "chain1", fault]),
+  ]);
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let word = &page.exchanges[2];
+  assert_eq!(
+    (word.at, word.message.as_str(), word.python, word.text.as_str(), word.runs),
+    (2, "rung3", true, "", false)
+  );
+  let block = word.block.as_ref().unwrap();
+  let why = "ValueError: no at line 2".to_owned();
+  assert_eq!(
+    texts(block),
+    [(6, "answer = 41 + 1", &Mark::Ran), (7, "raise ValueError('no')", &Mark::Failed { why })]
+  );
+  let other = held.page(&streams, "prompt4", Reach { before: None, limit: 10 });
+  assert_eq!(other.exchanges.iter().map(|one| one.python).collect::<Vec<_>>(), [false]);
+}
+
+#[test]
 fn a_fault_whose_reason_names_no_line_marks_the_line_of_the_act_that_failed() {
   let mut streams = Streamed::default();
   let word = "side = await prompt(Literal['right', 'left'], 'Where?', to=OPERATOR)\nclose(side)";

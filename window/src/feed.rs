@@ -196,12 +196,17 @@ impl Feed<'_> {
   }
 
   /// The rows of one exchange: the message of the operator on its band, the block, the thought,
-  /// and what the answer said.
+  /// and what the answer said. A word of Python that he ran is his message as code: its block on
+  /// the band of his messages, with no head.
   fn exchange(&self, exchange: &Exchange) -> Vec<Row> {
     let his = matches!(exchange.by, Maker::Operator | Maker::Member { .. });
-    let mut rows = self.message(&exchange.text, his);
-    if let Some(block) = &exchange.block {
-      rows.extend(self.block(&exchange.message, block));
+    let mut rows = Vec::new();
+    match &exchange.block {
+      Some(block) if exchange.python => rows.extend(self.word(&exchange.message, block)),
+      block => {
+        rows.extend(self.message(&exchange.text, his));
+        rows.extend(block.iter().flat_map(|block| self.block(&exchange.message, block)));
+      }
     }
     for said in &exchange.said {
       rows.extend(self.said(said));
@@ -249,16 +254,48 @@ impl Feed<'_> {
     self.wide.saturating_sub(2 * PAD)
   }
 
+  /// A word of Python that the operator ran: the lines of its block on the band of his messages,
+  /// with the bar in the color of the thread and a blank row of the band above and under them, so
+  /// his code reads as a message of his, and its numbers stand in the column of those of a model.
+  fn word(&self, message: &str, block: &Block) -> Vec<Row> {
+    let t = &self.model.tokens;
+    let bar = run("┃", Style::new().fg(self.model.hue(&self.opened.thread.key)).bg(t.raised));
+    let blank = Row::of(self.boxed(Vec::new(), t.raised));
+    let mut rows = vec![blank.clone()];
+    rows.extend(self.lines(message, block));
+    rows.push(blank);
+    for row in &mut rows {
+      row.line.splice(..1, [bar.clone(), run(" ", Style::new().bg(t.raised))]);
+    }
+    rows.push(Row::default());
+    rows
+  }
+
   /// The block of an answer, as a block of code of the markdown: the model as its head, then the
   /// window of seven rows that rolls, or each line once the operator opened it, each with its
   /// number in the thread, close to the left of the box. The thought stands under it.
   fn block(&self, message: &str, block: &Block) -> Vec<Row> {
     let t = &self.model.tokens;
+    let gutter = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
+    let head = format!("{:width$}  {}", "", block.maker.shown(), width = gutter.width);
+    let mut rows = vec![Row::of(self.boxed(vec![run(head, self.style(Role::Muted))], t.raised))];
+    rows.extend(self.lines(message, block));
+    if let Some(thought) = &block.thought {
+      rows.push(Row::default());
+      rows.extend(self.thought(message, thought));
+    }
+    rows.push(Row::default());
+    rows
+  }
+
+  /// The lines of a block in its box: the window of seven rows that rolls, or each line once the
+  /// operator opened it, then a row that says that more comes.
+  fn lines(&self, message: &str, block: &Block) -> Vec<Row> {
+    let t = &self.model.tokens;
     let muted = self.style(Role::Muted);
     let numbers = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
     let gutter = numbers.width;
-    let head = vec![run(format!("{:gutter$}  {}", "", block.maker.shown()), muted)];
-    let mut rows = vec![Row::of(self.boxed(head, t.raised))];
+    let mut rows = Vec::new();
     let code = self.style(Role::Prose).bg(t.raised);
     let text = self
       .model
@@ -279,11 +316,6 @@ impl Feed<'_> {
     if block.more {
       rows.push(Row::of(self.boxed(vec![run(format!("{:>gutter$}", "…"), muted)], t.raised)));
     }
-    if let Some(thought) = &block.thought {
-      rows.push(Row::default());
-      rows.extend(self.thought(message, thought));
-    }
-    rows.push(Row::default());
     rows
   }
 
