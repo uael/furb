@@ -2,8 +2,8 @@
 ┃
 ┃ where does the time go (the model works on it)               Working 1
 ┃                                                                               ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-                      Send to                                                ⎋  ime go…  ⠋ Working▌
-       opus/high      ▌Search a session                                  2 / 2                opus▌
+                      Send to                                                ⎋  ime go…  ⠋ Working
+       opus/high      ▌Search a session                                  2 / 2                opus
     …                                                                           ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
                        FT + new session                              furb-try
                       ▌FT where does the time go (the model works on it)furb-try

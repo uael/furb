@@ -1,10 +1,10 @@
  furb · where does the time of a resume go      [ Resolve ]    All projects ▾         this machine
 ┃
 ┃ where does the time of a resume go                           Working 1
-┃ (the model writes a long word)                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                              ▌where does the time of…  ◐ Working▌
-                                                               ▌FU furb                       opus▌
-       opus/high                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+┃ (the model writes a long word)                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ where does the time of…  ◐ Working
+                                                              ▐ FU furb                       opus
+       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     …  4 lines
     5  stages = ['read', 'boot', 'seed', 'turns']
     6  for stage in stages:

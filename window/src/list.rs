@@ -151,33 +151,33 @@ impl Model {
     line
   }
 
-  /// The row between two cards. The selected card takes half of it, above and under, so its
-  /// ground has clipped corners and no card changes height.
+  /// The row between two cards. The selected card takes half of it, above and under, so no card
+  /// changes height: its ground has clipped corners at its right, and its bar in the hue of its
+  /// thread stands as tall as its ground at its left.
   fn gap(&self, above: Option<usize>, under: Option<usize>) -> Line {
-    let chosen = |at: Option<usize>| at.is_some_and(|at| self.chosen(at));
-    let edge = |left: &str, fill: &str, right: &str| format!(" {left}{}{right}", fill.repeat(CARD));
-    let row = match (chosen(above), chosen(under)) {
-      (true, _) => edge("▝", "▀", "▘"),
-      (_, true) => edge("▗", "▄", "▖"),
+    let chosen = |at: Option<usize>| at.filter(|at| self.chosen(*at));
+    let (at, [bar, fill, corner]) = match (chosen(above), chosen(under)) {
+      (Some(at), _) => (at, ["▝", "▀", "▘"]),
+      (_, Some(at)) => (at, ["▗", "▄", "▖"]),
       _ => return Vec::new(),
     };
-    vec![run(row, Style::new().fg(self.tokens.lifted))]
+    let ground = Style::new().fg(self.tokens.lifted);
+    let hue = self.hue(&self.settled[at].1);
+    vec![run(bar, Style::new().fg(hue)), run(fill.repeat(CARD + 1), ground), run(corner, ground)]
   }
 
-  /// A line of a card between its two edges. The edges of a card on a ground are half blocks, and
-  /// the selected card has a bar in the hue of its thread at its left.
+  /// A line of a card between its two edges. The selected card stands on a ground, with one column
+  /// of it on each side of its text, and with its bar at its left.
   fn edged(&self, at: usize, ground: Option<Color>, line: Line) -> Line {
-    let t = &self.tokens;
-    let key = &self.settled[at].1;
-    let hue = self.hue(key);
-    let half = |mark: &str| {
-      ground.map_or(run(" ", Style::new()), |ground| run(mark, Style::new().fg(ground)))
+    let Some(ground) = ground else {
+      let mut row = vec![run("  ", Style::new())];
+      row.extend(line);
+      return row;
     };
-    let left =
-      if self.chosen(at) { run("▌", Style::new().fg(hue).bg(t.lifted)) } else { half("▐") };
-    let mut row = vec![run(" ", Style::new()), left];
+    let edge = || run(" ", Style::new().bg(ground));
+    let mut row = vec![run("▐", Style::new().fg(self.hue(&self.settled[at].1))), edge()];
     row.extend(line);
-    row.push(half("▌"));
+    row.push(edge());
     row
   }
 

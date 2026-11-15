@@ -1,10 +1,10 @@
  furb · what does the head say                  [ Resolve ]    All projects ▾         this machine
 ┃
 ┃ what does the head say                                       Needs you 1
-┃ (the model asks twice)                                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                              ▌what does the head say     ◆ Input▌
-                                                               ▌FU furb                       opus▌
-       opus/high                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+┃ (the model asks twice)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ what does the head say     ◆ Input
+                                                              ▐ FU furb                       opus
+       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     ◆  one = prompt(bool, 'Does the head count the que…+22
     ◆  two = prompt(str, 'What does the head say?', to…+10
     3  close(f'{await one} {await two}')

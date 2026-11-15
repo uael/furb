@@ -2,10 +2,10 @@
 ┃
 ┃ Debug stuck TUI after merge               TUI scope for the new…     ◆ Input
 ┃ (the model works on it)                   FU furb                       opus
-┃                                          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-                                           ▌Debug stuck TUI after…    ✗ Failed▌
-       opus/high                           ▌FU furb                       opus▌
-                                           ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+┃                                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+                                          ▐ Debug stuck TUI after…    ✗ Failed
+       opus/high                          ▐ FU furb                       opus
+                                          ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
                                            Working 2
 
                                             run the…       Working as of 09:12
