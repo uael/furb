@@ -69,9 +69,9 @@ pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
 /// end once its stdout closed.
 const STALL: Duration = Duration::from_mins(15);
 
-/// How long a process waits for its program when the program is missing or does not run, unless
-/// `FURB_CLAUDE_GONE` gives other seconds: the command line that updates itself replaces its
-/// program, and its link points at nothing for a moment.
+/// How long a process waits for its program when the program is missing or does not run: the
+/// command line that updates itself replaces its program, and its link points at nothing for a
+/// moment.
 const GONE: Duration = Duration::from_secs(60);
 
 /// What the command line says when it holds no conversation under the id that a process resumes, as
@@ -192,9 +192,8 @@ impl Claude {
 
   /// The command line at this program, and how long a turn may go with no progress. With no
   /// program, it is the one that `FURB_CLAUDE_BIN` names, or the one found on this machine; with no
-  /// stall, `FURB_CLAUDE_STALL` gives it in seconds, or it is 900 seconds. A process waits for a
-  /// program that is missing or does not run for the seconds that `FURB_CLAUDE_GONE` gives, or for
-  /// 60 seconds.
+  /// stall, `FURB_CLAUDE_STALL` gives it in seconds, or it is 900 seconds. A process waits 60
+  /// seconds for a program that is missing or does not run.
   pub fn with(bin: Option<PathBuf>, stall: Option<Duration>) -> Self {
     let bin = bin.or_else(located).unwrap_or_else(|| PROGRAM.into());
     Self::with_command(bin, Vec::new(), stall)
@@ -229,7 +228,7 @@ impl Claude {
     let accounts = Arc::new(Accounts::new(accounts, switch));
     let (keeper, asked) = mpsc::unbounded_channel();
     runtime().spawn(keeper::kept(asked, Arc::clone(&accounts), keeper.downgrade()));
-    Self { program: Program::with(bin, args, accounts), stall, gone: patience(), keeper }
+    Self { program: Program::with(bin, args, accounts), stall, gone: GONE, keeper }
   }
 
   /// Whether the command line is signed in, as `claude auth status` says. It counts as signed in
@@ -541,13 +540,6 @@ impl Claude {
 /// A failure of the command line, in its own words.
 fn failed(why: impl Into<String>) -> CompletionError {
   CompletionError::ProviderError(why.into())
-}
-
-/// How long a process waits for its program: the seconds that `FURB_CLAUDE_GONE` gives, or
-/// [`GONE`].
-fn patience() -> Duration {
-  let seconds = env::var("FURB_CLAUDE_GONE").ok().and_then(|one| one.parse::<f64>().ok());
-  seconds.and_then(|one| Duration::try_from_secs_f64(one).ok()).unwrap_or(GONE)
 }
 
 #[cfg(all(test, unix))]

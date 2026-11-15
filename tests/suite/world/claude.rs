@@ -134,6 +134,21 @@ fn a_command_prefix_reaches_each_process_of_a_conversation_once_before_its_flags
 }
 
 #[test]
+fn a_turn_waits_for_a_program_that_an_update_took_away() {
+  let yard = Yard::new("update");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  yard.away();
+  let back = thread::scope(|scope| {
+    scope.spawn(|| {
+      pause(Duration::from_millis(300));
+      yard.back();
+    });
+    asked(&model, &[user("first")], json!({"session": "chain"}))
+  });
+  assert_eq!(back.unwrap().choice, [AssistantContent::text("close(\"reply 1\")")]);
+}
+
+#[test]
 fn a_prefix_that_found_no_claude_fails_as_a_missing_program_and_the_next_turn_begins_the_conversation()
  {
   let yard = Yard::new("vanish");

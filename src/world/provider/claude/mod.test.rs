@@ -1,17 +1,16 @@
-//! The claude command line as a model of rig, while its program is missing, against a command line
-//! that answers from a script, which `fake-claude.sh` says. A process waits a minute for a missing
-//! program, which only `FURB_CLAUDE_GONE` of the process shortens, and a test sets no variable of
-//! its process: these tests give the wait to the command line beside its module. The rest of the
-//! command line stands in the suite of the crate.
+//! The claude command line as a model of rig, while its program stays missing past the wait of a
+//! process, against a command line that answers from a script, which `fake-claude.sh` says. That
+//! wait is a minute, and no door shortens it, so these tests shorten it with `Claude::waiting`.
+//! The rest of the command line stands in the suite of the crate.
 
 #![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 
-use std::{fs, os::unix::fs::PermissionsExt, thread, time::Duration};
+use std::{fs, os::unix::fs::PermissionsExt, time::Duration};
 
 use rig_core::{
   completion,
   completion::{CompletionError, CompletionModel, CompletionRequest},
-  message::{AssistantContent, Message, Text, UserContent},
+  message::{Message, Text, UserContent},
 };
 use serde_json::{Value, json};
 
@@ -52,20 +51,9 @@ fn asked(
 }
 
 #[test]
-fn a_turn_waits_for_a_program_that_an_update_took_away_and_then_names_the_program_it_did_not_find()
-{
+fn a_turn_whose_program_stays_away_past_its_wait_names_the_program_that_it_did_not_find() {
   let yard = Yard::new("update");
   let settings = json!({"session": "chain"});
-  let model = yard.claude(10_000).waiting(Duration::from_secs(10)).completion_model("sonnet");
-  yard.away();
-  let back = thread::scope(|scope| {
-    scope.spawn(|| {
-      pause(Duration::from_millis(300));
-      yard.back();
-    });
-    asked(&model, &[user("first")], settings.clone())
-  });
-  assert_eq!(back.unwrap().choice, [AssistantContent::text("close(\"reply 1\")")]);
   let model = yard.claude(10_000).waiting(Duration::ZERO).completion_model("sonnet");
   yard.away();
   let no = asked(&model, &[user("first")], settings).unwrap_err();
