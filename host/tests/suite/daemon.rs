@@ -2348,12 +2348,13 @@ async fn work_that_rests_or_waits_for_the_operator_never_stalls_and_stalls_once_
   window.attach(&life).await;
   let rests = window.during(QUIET * 2).await;
   assert!(!rests.iter().any(stall), "a life that rests tells no stall");
-  // A command on a chain of its own writes for a while, a rung that awaits it is paused, a rung
-  // and the run of the root await a prompt to the operator, and the root then waits on a command.
-  let word = "long = bash(\"for i in $(seq 20); do echo $i; sleep 0.1; done\", on=chain(\"far\"))\n\
-              stopped = rung(\"x = 2\", long, on=chain(\"stopped\"))\npause(stopped)\n\
-              q = prompt(str, \"q\", to=OPERATOR)\nrung(\"x = 1\", q, on=chain(\"held\"))\n\
-              await q\nawait bash(\"sleep 20\", timeout=60)";
+  // Two rungs and the run of the root await a prompt to the operator, one of the rungs is paused,
+  // and the root then waits on a command. No act runs while he does not answer: a command that
+  // runs then would hold the watch to the clock of the machine, which a loaded machine stops for
+  // longer than the bound.
+  let word = "q = prompt(str, \"q\", to=OPERATOR)\n\
+              stopped = rung(\"x = 2\", q, on=chain(\"stopped\"))\npause(stopped)\n\
+              rung(\"x = 1\", q, on=chain(\"held\"))\nawait q\nawait bash(\"sleep 20\", timeout=60)";
   let verb = Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
   let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
   let asked = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Fact(fact), .. } if fact[0] == "prompt" && fact[5] == "q");
