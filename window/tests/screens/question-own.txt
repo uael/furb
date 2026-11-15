@@ -25,6 +25,6 @@
 ┃
 ┃   right
 ┃   left
-┃ › at the top
-  This computer   furb ▾               opus/high   ○ Python
+┃ › at the top                                                 Context               No answer yet
+  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · ⏎ answer                            ⌃C refuse

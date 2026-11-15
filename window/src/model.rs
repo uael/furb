@@ -27,7 +27,7 @@ use crate::{
   list::Row,
   opens::{Ask, Hold, Life, Step},
   pick::Picker,
-  thread::Opened,
+  thread::{Fold, Opened},
   tokens::{BESIDE, LIST, SIDE, Tokens},
 };
 
@@ -367,6 +367,11 @@ impl Model {
         self.selected = self.settled.get(at).map(|one| one.1.clone());
         self.open_thread();
       }
+      Some(Row::Context(_)) => {
+        if let Some(opened) = self.thread.as_mut() {
+          opened.fold(Fold::Context);
+        }
+      }
       Some(Row::Head(Part::Resolved)) => {
         self.open = !self.open;
         // The resolved threads end the list, so the list moves to its end to show them.
@@ -470,21 +475,39 @@ impl Model {
 
   /// The rows of the list that scroll, and how many of them show.
   fn room(&self) -> usize {
-    usize::from(self.size.1).saturating_sub(PINNED)
+    usize::from(self.size.1).saturating_sub(PINNED + self.boxed())
   }
 
-  /// The row of the list at a row of the window.
+  /// The rows at the foot of the list that the box of the context takes, with the blank row above
+  /// it, as the input has one above it.
+  fn boxed(&self) -> usize {
+    let rows = self.context_rows().len();
+    if rows == 0 { 0 } else { rows + 1 }
+  }
+
+  /// The row of the list at a row of the window: a row of the box of the context at its foot.
   pub(crate) fn row(&self, y: usize) -> Option<Row> {
+    let foot = usize::from(self.size.1).saturating_sub(self.boxed());
+    if y >= foot {
+      return Some(if y == foot { Row::Blank } else { Row::Context(y - foot - 1) });
+    }
     let rows = self.rows();
     rows.get(if y < PINNED { y } else { y + self.scroll }).copied()
   }
 
-  /// The rows of the list that show, from the top of the window.
+  /// The rows of the list that show, from the top of the window, and the box of the context at
+  /// its foot.
   pub(crate) fn shown(&self) -> impl Iterator<Item = Row> {
     let rows = self.rows();
     let pinned = rows.len().min(PINNED);
-    let scrolled: Vec<Row> =
+    let mut scrolled: Vec<Row> =
       rows[pinned..].iter().skip(self.scroll).take(self.room()).copied().collect();
+    let boxed = self.boxed();
+    if boxed > 0 {
+      scrolled.resize(self.room(), Row::Blank);
+      scrolled.push(Row::Blank);
+      scrolled.extend((0..boxed - 1).map(Row::Context));
+    }
     rows.into_iter().take(pinned).chain(scrolled)
   }
 

@@ -4051,13 +4051,50 @@
             "null"
           ],
           "description": "The account of the last answer, none when that answer named none."
+        },
+        "read": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Read"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the last answer read."
         }
       },
       "required": [
         "dollars",
         "answers"
       ],
-      "description": "What the answers of models cost: their dollars, how many they are, and the actor of the last."
+      "description": "What the answers of models cost: their dollars, how many they are, and the actor of the last\nand what it read."
+    },
+    "Read": {
+      "type": "object",
+      "properties": {
+        "tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cached": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "written": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "tokens",
+        "cached",
+        "written"
+      ],
+      "description": "What an answer of a model read: the tokens of its whole prompt, and of them those that it read\nfrom the cache and those that it wrote to it."
     },
     "Page": {
       "type": "object",
@@ -4078,6 +4115,17 @@
           "items": {
             "$ref": "#/definitions/Agent"
           }
+        },
+        "context": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Context"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -4085,7 +4133,7 @@
         "above",
         "agents"
       ],
-      "description": "Some exchanges of a thread, the oldest first, with how many exchanges stand before them, and the\nagents of the whole thread, in the order the thread made them."
+      "description": "Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the\nagents of the whole thread, in the order the thread made them, and the context of its chain."
     },
     "Exchange": {
       "type": "object",
@@ -4522,6 +4570,31 @@
         "standing"
       ],
       "description": "An agent of a thread: the thread that a word of the thread started on another chain, as a card,\nwith the second of the epoch at which the host saw it begin, the seconds that it took once it\nended, counted from milliseconds as the time of a thought, and the line of its last word where\nit stands: the line that runs or asks, else the last one. A host that opened the life after the\nagent began saw it begin at that open."
+    },
+    "Context": {
+      "type": "object",
+      "properties": {
+        "read": {
+          "$ref": "#/definitions/Read"
+        },
+        "window": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "dollars": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "read",
+        "dollars"
+      ],
+      "description": "The context of a chain at its last answer: what that answer read, the window that the roster of\nthe standing offers its actor, none when the roster holds no such actor, and the dollars of each\nanswer on the chain."
     },
     "ProtocolError": {
       "oneOf": [
@@ -5206,5 +5279,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 26
+  "x-protocol": 27
 }

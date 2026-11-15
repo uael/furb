@@ -1,11 +1,11 @@
 //! The thread that each peer reads, told again to it at each change.
 //!
 //! A peer that reads the end of a thread hears a frame `thread` with each exchange of the end that
-//! is new or changed since it last heard it. A task of the daemon waits for an event of the life
-//! that a page reads, an act or what a model wrote, gathers the events of a moment, asks the life
-//! the page of the end again and tells the difference. So the life does no work for a thread that
-//! no peer reads, and a page costs the life the time of the thread, as `furb::view::Held::page`
-//! says, at most once in [`MOMENT`].
+//! is new or changed since it last heard it, with the agents and the context as they stand. A task
+//! of the daemon waits for an event of the life that a page reads, an act or what a model wrote,
+//! gathers the events of a moment, asks the life the page of the end again and tells the
+//! difference. So the life does no work for a thread that no peer reads, and a page costs the life
+//! the time of the thread, as `furb::view::Held::page` says, at most once in [`MOMENT`].
 
 use std::time::Duration;
 
@@ -86,8 +86,12 @@ impl Read {
       let Ok(Reply::Page(page)) = self.handle.send(command).await else { return };
       let changed: Vec<_> =
         page.exchanges.iter().filter(|one| !told.exchanges.contains(one)).cloned().collect();
-      if !changed.is_empty() || page.above != told.above || page.agents != told.agents {
-        let page = Page { exchanges: changed, above: page.above, agents: page.agents.clone() };
+      // What a page holds beside its exchanges, which a frame tells whole.
+      let moved =
+        page.above != told.above || page.agents != told.agents || page.context != told.context;
+      if !changed.is_empty() || moved {
+        let (agents, context) = (page.agents.clone(), page.context.clone());
+        let page = Page { exchanges: changed, above: page.above, agents, context };
         let frame = Frame::Thread { life: self.life.clone(), thread: self.thread.clone(), page };
         if self.outbox.send(frame).is_err() {
           return;

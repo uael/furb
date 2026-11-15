@@ -25,6 +25,6 @@
 
 
 
-┃ Write while it opens. Your message goes when it is open.
-  This computer   furb ▾                    opus   ○ Python
+┃ Write while it opens. Your message goes when it is open.     Context               No answer yet
+  This computer   furb ▾                    opus   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ~/furb                                             ⎋ back

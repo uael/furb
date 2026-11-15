@@ -16,7 +16,7 @@ use std::{
 
 use furb::{
   engine::OPERATOR,
-  view::{Agent, Exchange, Page, Standing},
+  view::{Agent, Context, Exchange, Page, Standing},
 };
 use furb_host::protocol::{Card, Verb};
 use opentui::style::{Color, Span, Style};
@@ -67,6 +67,8 @@ pub(crate) struct Opened {
   pub(crate) again: bool,
   /// The thread whose agent this thread is, which an escape opens again where he read it.
   pub(crate) from: Option<Box<Self>>,
+  /// The context of the chain of the thread at its last answer.
+  pub(crate) context: Option<Context>,
 }
 
 /// A row of the feed as a place that holds when rows come above it: a count of rows from the
@@ -77,11 +79,14 @@ pub(crate) struct Anchor {
   pub(crate) row: isize,
 }
 
-/// What a click opens or folds in the feed: the block or the thought of the answer to a message.
+/// What a click opens or folds in a thread: the block or the thought of the answer to a message,
+/// or the parts of the box of its context.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum Fold {
   Block(String),
   Thought(String),
+  /// The parts of the box of the context.
+  Context,
 }
 
 /// What a click on a row does: it opens or folds a part of the feed, it does what a key does, it
@@ -94,6 +99,7 @@ pub(crate) enum Click {
   Pick(usize),
   Answer(usize),
   Agent(String),
+  Context,
 }
 
 /// The columns of a row that go bright under the pointer, and what a click there does.
@@ -315,11 +321,18 @@ impl<V> Items<'_, V> {
 }
 
 impl Opened {
+  /// A part opened when it was folded, and folded when it was open.
+  pub(crate) fn fold(&mut self, fold: Fold) {
+    if !self.unfolded.remove(&fold) {
+      self.unfolded.insert(fold);
+    }
+  }
+
   /// A page that the daemon gave, or a change of the thread that it told: each exchange takes the
-  /// place of the one before it, and the agents are those of the whole thread now.
+  /// place of the one before it, and the agents and the context are those of the thread now.
   fn took(&mut self, page: Page) {
     self.above = Some(self.above.map_or(page.above, |above| above.min(page.above)));
-    self.agents = page.agents;
+    (self.agents, self.context) = (page.agents, page.context);
     self.fault = None;
     self.exchanges.extend(page.exchanges.into_iter().map(|one| (one.at, one)));
     self.shown();
@@ -507,10 +520,7 @@ impl Model {
     let click = self.left_rows().into_iter().nth(y).and_then(|row| row.click(x));
     match click? {
       Click::Fold(fold) => {
-        let opened = self.thread.as_mut()?;
-        if !opened.unfolded.remove(&fold) {
-          opened.unfolded.insert(fold);
-        }
+        self.thread.as_mut()?.fold(fold);
         None
       }
       Click::Pick(at) => self.took(at),
@@ -518,6 +528,10 @@ impl Model {
       Click::Answer(at) => self.choose(at),
       Click::Agent(prompt) => {
         self.open_agent(prompt);
+        None
+      }
+      Click::Context => {
+        self.ringed();
         None
       }
     }

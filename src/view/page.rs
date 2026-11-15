@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-  act::{Act, Kind, Maker, RunState, fault, operator},
+  act::{Act, Kind, Maker, Read, RunState, fault, operator},
   cards::{Card, Standing},
   fold::followed,
   held::Held,
@@ -20,13 +20,25 @@ use super::{
   threads::{Lookup, message_of, noted},
 };
 
-/// Some exchanges of a thread, the oldest first, with how many exchanges stand before them, and the
-/// agents of the whole thread, in the order the thread made them.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the
+/// agents of the whole thread, in the order the thread made them, and the context of its chain.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Page {
   pub exchanges: Vec<Exchange>,
   pub above: usize,
   pub agents: Vec<Agent>,
+  #[serde(default)]
+  pub context: Option<Context>,
+}
+
+/// The context of a chain at its last answer: what that answer read, the window that the roster of
+/// the standing offers its actor, none when the roster holds no such actor, and the dollars of each
+/// answer on the chain.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Context {
+  pub read: Read,
+  pub window: Option<u64>,
+  pub dollars: f64,
 }
 
 /// An agent of a thread: the thread that a word of the thread started on another chain, as a card,
@@ -363,7 +375,15 @@ impl<'a> Reader<'a> {
         .filter(|act| act.kind == Kind::Prompt && act.chain != rung.chain)
         .filter(|act| !act.asks_operator() && !noted(act, &self.held))
     });
-    Page { exchanges, above: start, agents: agents.map(|agent| self.agent(agent)).collect() }
+    let agents = agents.map(|agent| self.agent(agent)).collect();
+    Page { exchanges, above: start, agents, context: self.context(&prompts[0].chain) }
+  }
+
+  /// The context of a chain at its last answer, and none before it.
+  fn context(self, chain: &str) -> Option<Context> {
+    let spend = self.held.act(chain)?.spend.as_ref()?;
+    let window = spend.actor.as_deref().and_then(|actor| self.held.window(actor));
+    Some(Context { read: spend.read?, window, dollars: spend.dollars })
   }
 
   /// A thread, its prompt, as a page reads it: none for a prompt that is no thread.

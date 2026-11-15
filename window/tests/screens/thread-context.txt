@@ -1,0 +1,30 @@
+ furb · read the trace of the open  ✓ Resolved   [ Reopen ]    All projects ▾         this machine
+┃
+┃ read the trace of the open                                   Resting 1
+┃ (the model reads much)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ read the trace of the open    now ▌
+                                                              ▐ FU furb                      opus ▌
+       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    1  close('The trace holds the open of each chain.')
+
+  The trace holds the open of each chain.
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                               Context ▾                       12%
+                                                               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                                               ■ From the cache          98k   10%
+                                                               ■ Written to the cache   8.4k    1%
+┃ A reply opens this thread again                              ■ New                     17k    2%
+  This computer   furb ▾               opus/high   ○ Python    ■ Free                   876k   88%
+  ~/src/furb-try                              ⌃N new thread    124k of 1M · 98k cached       $0.75

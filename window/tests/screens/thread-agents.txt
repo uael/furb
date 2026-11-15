@@ -25,6 +25,6 @@
   └ Read the boot of the host               ⠋ Working  opus
   └ Count the lines of README.md           ✓ Resolved  opus
 
-┃ Reply to this thread
-  This computer   furb ▾               opus/high   ○ Python
+┃ Reply to this thread                                         Context               No answer yet
+  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ⠋ Working · ⎋ ⎋ stop                          ⌃X ↓ agents

@@ -306,12 +306,16 @@ daemon answers requests in any order.
   - `agents`, each thread that a word of the thread started on another chain, in the order the thread made them, as
     a card without its life, with `began`, the second of the epoch at which the daemon saw it begin, `took`, the
     seconds that it took once it ended, and `line`, the line of its last word where it stands: the line that runs or
-    asks, else its last line. A note to a chain that works is no agent: its model reads it at its next step.
+    asks, else its last line. A note to a chain that works is no agent: its model reads it at its next step;
+  - `context`, null before the first answer on the chain of the thread: what its last answer `read`, its `tokens` in
+    all, of which it read `cached` from the cache and `written` to it, the `window` that the roster of the standing
+    gives the actor of that answer, null when the roster names no such actor, and the `dollars` of each answer on the
+    chain.
 
   The page of the end also makes the peer hear a frame `thread` with the `life`, the `thread` and a `page` at each
   change of that thread, until it reads the end of another thread or leaves: a peer reads one thread at a time. The page
-  of a frame holds each exchange of the end that is new or that changed, by its `at`, with `above` and `agents` as they
-  stand. The daemon asks the life a page at most once in 100 ms, after an act of the life, a part that a model wrote or
+  of a frame holds each exchange of the end that is new or that changed, by its `at`, with `above`, `agents` and
+  `context` as they stand. The daemon asks the life a page at most once in 100 ms, after an act of the life, a part that a model wrote or
   a retry of its call. What a model thought, when each work began and when each agent ended are no facts of the
   record: the life holds them while it lives, so a life that opens again shows no thought of the words before it.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`

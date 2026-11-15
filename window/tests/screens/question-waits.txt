@@ -25,6 +25,6 @@
   ◆ Where does the list of cards stand?
 
   ◆ A question waits. It shows when the input is empty.
-┃ the bar is too wide
-  This computer   furb ▾               opus/high   ○ Python
+┃ the bar is too wide                                          Context               No answer yet
+  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ~/src/furb-try                              ⌃N new thread

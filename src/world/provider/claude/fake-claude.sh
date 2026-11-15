@@ -15,8 +15,9 @@
 # stderr, and ends it with a failure. When the file loud stands beside it, it writes more on the stderr than its pipe
 # holds before it reads any input, when the file odd stands beside it, it writes a line that is no JSON before it reads
 # any input, and when the file deaf stands beside it, it reads no input and lives on. When the file cost stands beside
-# it, each turn costs the dollars that it holds. It writes the MAX_THINKING_TOKENS of each process beside it too, or
-# unset. It writes the CLAUDE_CODE_OAUTH_TOKEN and the CLAUDE_CONFIG_DIR of each process beside it too, in token.N and
+# it, each turn costs the dollars that it holds, and when the file usage stands beside it, each request says the
+# usage that it holds. It writes the MAX_THINKING_TOKENS of each process beside it too, or unset. It writes the
+# CLAUDE_CODE_OAUTH_TOKEN and the CLAUDE_CONFIG_DIR of each process beside it too, in token.N and
 # configdir.N, or unset. When the file limited.TOKEN stands beside it, each turn of a process whose token is TOKEN gets
 # a result that says the usage limit ends in as many seconds as the file holds, and when the file signedout.TOKEN
 # stands beside it, a result that says the account is signed out. When the file lost stands beside it, a process
@@ -147,7 +148,9 @@ while IFS= read -r line; do
   n=$((n + 1))
   count=$(( $(cat "$here/count" 2>/dev/null || echo 0) + 1 ))
   echo "$count" > "$here/count"
-  used="{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
+  spent='{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":20,"cache_creation_input_tokens":3}'
+  if [ -f "$here/usage" ]; then spent=$(cat "$here/usage"); fi
+  used=$spent
   case $line in
     *LOOP*)
       say '{"type":"message_start"}'
@@ -203,7 +206,7 @@ while IFS= read -r line; do
   # As the real command line, the message settles with the usage of its start, which counts one
   # token out, and the delta at its end says what it spent in all.
   settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":1,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
-  say '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":20,"cache_creation_input_tokens":3}}'
+  say "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":$spent}"
   # A line that holds LATE gets a message settled again after its delta, with the usage of its start.
   case $line in *LATE*) settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":1,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}" ;; esac
   say '{"type":"message_stop"}'
