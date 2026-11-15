@@ -17,16 +17,33 @@ use super::{
   ladder::lives,
   quote::{quotes, writing},
   state::{State, working},
-  threads::{Lookup, message_of},
+  threads::{Lookup, message_of, noted},
 };
 
 /// Some exchanges of a thread, the oldest first, with how many exchanges stand before them, and the
-/// agents of the whole thread.
+/// agents of the whole thread, in the order the thread made them.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Page {
   pub exchanges: Vec<Exchange>,
   pub above: usize,
-  pub agents: Vec<Card>,
+  pub agents: Vec<Agent>,
+}
+
+/// An agent of a thread: the thread that a word of the thread started on another chain, as a card,
+/// with the second of the epoch at which the host saw it begin, the seconds that it took once it
+/// ended, counted from milliseconds as the time of a thought, and the line of its last word where
+/// it stands: the line that runs or asks, else the last one. A host that opened the life after the
+/// agent began saw it begin at that open.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Agent {
+  #[serde(flatten)]
+  pub card: Card,
+  #[serde(default)]
+  pub began: Option<u64>,
+  #[serde(default)]
+  pub took: Option<u64>,
+  #[serde(default)]
+  pub line: Option<Line>,
 }
 
 /// One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
@@ -174,15 +191,17 @@ impl Answered {
 }
 
 /// What a host heard of a life beside its facts, which a page reads: what each model wrote and
-/// thought for a rung and the retry of its call that waits, and the millisecond of the epoch at
-/// which each act that lives began, which
-/// a page gives in seconds. The record holds neither: the turn of a reply keeps its thought sealed,
-/// and a fact tells no time, so a host keeps it in the image of the life, once [`Held::shown`] let
-/// go of each thought that no page shows.
+/// thought for a rung and the retry of its call that waits, the millisecond of the epoch at which
+/// each act that lives began, and at which each prompt began and ended, which a page gives in
+/// seconds, so an agent that ended says how long it took. The record holds none of it: the turn
+/// of a reply keeps its thought sealed, and a fact tells no time, so a host keeps it in the image
+/// of the life, once [`Held::shown`] let go of each thought that no page shows.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Streamed {
   wrote: HashMap<String, Wrote>,
   began: HashMap<String, u64>,
+  #[serde(default)]
+  ended: HashMap<String, u64>,
 }
 
 /// What a model wrote for a rung: its text until the rung has its word, its thought, the
@@ -220,8 +239,8 @@ impl Streamed {
   }
 
   /// An act as it stands now, at a millisecond of the epoch: an act that lives keeps when it began,
-  /// a rung that has its word keeps only the thought of its model, and the end of a reply ends the
-  /// retry of its rung.
+  /// a prompt keeps when it began and ended, a rung that has its word keeps only the thought of its
+  /// model, and the end of a reply ends the retry of its rung.
   pub fn heard(&mut self, act: &Act, now: u64) {
     if act.kind == Kind::Reply
       && act.done()
@@ -229,7 +248,11 @@ impl Streamed {
     {
       wrote.retry = None;
     }
-    if act.done() && act.run != Some(RunState::Running) {
+    if act.done() && act.kind == Kind::Prompt {
+      if self.began.contains_key(&act.id) {
+        self.ended.entry(act.id.clone()).or_insert(now);
+      }
+    } else if act.done() && act.run != Some(RunState::Running) {
       self.began.remove(&act.id);
     } else {
       self.began.entry(act.id.clone()).or_insert(now);
@@ -337,7 +360,8 @@ impl<'a> Reader<'a> {
       self
         .held
         .made_by(&rung.id)
-        .filter(|act| act.kind == Kind::Prompt && act.chain != rung.chain && !act.asks_operator())
+        .filter(|act| act.kind == Kind::Prompt && act.chain != rung.chain)
+        .filter(|act| !act.asks_operator() && !noted(act, &self.held))
     });
     Page { exchanges, above: start, agents: agents.map(|agent| self.agent(agent)).collect() }
   }
@@ -524,9 +548,8 @@ impl<'a> Reader<'a> {
     lines
   }
 
-  /// An agent of a thread, as a card: the thread that a word of the thread started on another
-  /// chain.
-  fn agent(self, prompt: &Act) -> Card {
+  /// An agent of a thread: the thread that a word of the thread started on another chain.
+  fn agent(self, prompt: &Act) -> Agent {
     let rungs: Vec<&Act> = self.rungs(&prompt.id).collect();
     let work: Vec<&Act> = rungs
       .iter()
@@ -545,13 +568,23 @@ impl<'a> Reader<'a> {
       _ => None,
     });
     let title = text(prompt.words.get(1));
-    Card {
+    let card = Card {
       prompt: prompt.id.clone(),
       title: title.lines().find(|line| !line.trim().is_empty()).unwrap_or_default().to_owned(),
       standing: Standing::of(state, prompt.done(), by),
       model,
       agents: 0,
       readers: Vec::new(),
+    };
+    let lines = rungs.last().map(|last| self.lines(last, 0)).unwrap_or_default();
+    let stands = lines.iter().rposition(|line| line.mark != Mark::Ran);
+    let began = self.streams.began.get(&prompt.id);
+    let ended = self.streams.ended.get(&prompt.id);
+    Agent {
+      card,
+      began: began.map(|at| at / 1000),
+      took: began.zip(ended).map(|(began, ended)| ended.saturating_sub(*began) / 1000),
+      line: stands.or(lines.len().checked_sub(1)).map(|at| lines[at].clone()),
     }
   }
 }

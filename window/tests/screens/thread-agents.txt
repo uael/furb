@@ -1,0 +1,30 @@
+ furb · measure the open on three chains        [ Resolve ]    All projects ▾         this machine
+┃
+┃ measure the open on three chains                             Working 1
+┃ (the model delegates)                                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ measure the open on…    ◐ Working ▌
+                                                              ▐ FU furb                   opus ↳2 ▌
+       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    1  bench = prompt(str, 'Run the bench of the repl…+42
+    2  boot = prompt(str, 'Read the boot of the host\…+44
+    3  lines = await prompt(str, 'Count the lines of …+51
+    ◐  await wait(600, bench)
+    …
+
+
+
+
+
+
+
+
+
+
+  ↳ Run the bench of the replay             ◐ Working  opus
+    await wait(600, chain)
+  ↳ Read the boot of the host               ⠋ Working  opus
+  ↳ Count the lines of README.md           ✓ Resolved  opus
+
+┃ Reply to this thread
+  This computer   furb ▾               opus/high   ○ Python
+  ⠋ Working · ⎋ ⎋ stop                        ⌃N new thread

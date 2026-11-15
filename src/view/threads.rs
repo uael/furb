@@ -165,6 +165,12 @@ enum Verdict<'a> {
   Aside(Aside),
 }
 
+/// Whether a prompt is a note to its chain, as the threads of the chain read it: a notice, a word
+/// of the operator or a wake, which no list of threads holds.
+pub(super) fn noted<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> bool {
+  matches!(verdict(act, rows), Verdict::Aside(Aside::Notice | Aside::Rung | Aside::Wake))
+}
+
 /// The thread that a prompt of a chain is a message of, as the threads of the chain read it.
 pub(super) fn message_of<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> Option<&'a str> {
   match verdict(act, rows) {

@@ -4019,7 +4019,7 @@
         "agents": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/Card2"
+            "$ref": "#/definitions/Agent"
           }
         }
       },
@@ -4028,7 +4028,7 @@
         "above",
         "agents"
       ],
-      "description": "Some exchanges of a thread, the oldest first, with how many exchanges stand before them, and the\nagents of the whole thread."
+      "description": "Some exchanges of a thread, the oldest first, with how many exchanges stand before them, and the\nagents of the whole thread, in the order the thread made them."
     },
     "Exchange": {
       "type": "object",
@@ -4398,7 +4398,7 @@
       ],
       "description": "What a question came to: a value, as a person reads it, or a refusal with its reason."
     },
-    "Card2": {
+    "Agent": {
       "type": "object",
       "properties": {
         "prompt": {
@@ -4428,6 +4428,35 @@
             "type": "string"
           },
           "default": []
+        },
+        "began": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "default": null
+        },
+        "took": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "default": null
+        },
+        "line": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Line"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -4435,7 +4464,7 @@
         "title",
         "standing"
       ],
-      "description": "One thread that the operator started, as a card of a list shows it: its prompt, its title, how\nit stands, the model that wrote its last word, how many agents work under it, and the site of\neach operator who read it to its end, `operator` for each of them and `operator/<login>` for\none member. A question of an agent under it is a question of the card."
+      "description": "An agent of a thread: the thread that a word of the thread started on another chain, as a card,\nwith the second of the epoch at which the host saw it begin, the seconds that it took once it\nended, counted from milliseconds as the time of a thought, and the line of its last word where\nit stands: the line that runs or asks, else the last one. A host that opened the life after the\nagent began saw it begin at that open."
     },
     "ProtocolError": {
       "oneOf": [
@@ -5120,5 +5149,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 24
+  "x-protocol": 25
 }

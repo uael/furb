@@ -11,7 +11,7 @@ use opentui::{native::Capture, style::Color, testing::TestApp};
 
 use crate::{
   cards::{app, options, row, shows},
-  daemon::{ANSWERS, Daemon, FAILS, LONG, PATIENCE, Peer, RETRIES, THINKS},
+  daemon::{ANSWERS, DELEGATES, Daemon, FAILS, LONG, PATIENCE, Peer, RETRIES, THINKS},
   screens::screen,
 };
 
@@ -241,4 +241,47 @@ fn an_older_page_keeps_the_rows_that_the_operator_reads() {
   assert!(came, "the older page never came:\n{}", app.text());
   assert!(up_until(&app, |text| text.contains(first)), "{}", app.text());
   screen("thread-older", &app);
+}
+
+#[test]
+fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_escape() {
+  let message = format!("measure the open on three chains\n{DELEGATES}");
+  let (app, _daemon, _peer) = opened(&message, "README.md");
+  shows(&app, "✓ Resolved");
+  // The agents from the first that works: each with its state and its model, the line where it
+  // stands while it lives, and the one that ended among them with its mark. The card counts the
+  // agents that work.
+  let frame = app.text();
+  let dock: Vec<String> = frame
+    .lines()
+    .skip_while(|line| !line.contains("↳ Run the bench"))
+    .take(4)
+    .map(|line| line.chars().take(LEFT).collect::<String>().trim_end().to_owned())
+    .collect();
+  assert_eq!(
+    dock,
+    [
+      "  ↳ Run the bench of the replay             ◐ Working  opus",
+      "    await wait(600, chain)",
+      "  ↳ Read the boot of the host               ⠋ Working  opus",
+      "  ↳ Count the lines of README.md           ✓ Resolved  opus",
+    ]
+    .map(str::to_owned),
+    "{frame}"
+  );
+  shows(&app, "opus ↳2");
+  screen("thread-agents", &app);
+
+  // A click on an agent opens its thread in place: its head says that it is one.
+  clicked(&app, "↳ Run the bench", 0, 2);
+  shows(&app, "[ Back ]");
+  let head = app.text().lines().next().unwrap().to_owned();
+  assert!(head.starts_with(" furb · ↳ Run the bench of the replay "), "{head}");
+  shows(&app, "await wait(600, chain)");
+  screen("thread-agent", &app);
+
+  // An escape opens the thread that it came from again, with its dock.
+  app.press("escape");
+  shows(&app, "[ Resolve ]");
+  shows(&app, "↳ Count the lines of README.md");
 }
