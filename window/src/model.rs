@@ -6,7 +6,7 @@
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
 
-use std::{path::PathBuf, time::Duration};
+use std::{io, path::PathBuf, time::Duration};
 
 use furb::view::{Part, age, homed, since};
 use furb_client::{Ask, Asked, Client, Hold, Listing, Step, Target};
@@ -60,6 +60,8 @@ pub(crate) struct Model {
   pub(crate) zone: TimeZone,
   /// The system of the client, which says how a text writes a key.
   pub(crate) system: System,
+  /// The opener of an address in the browser of the client.
+  pub(crate) browse: fn(&str) -> io::Result<()>,
   pub(crate) tokens: Tokens,
   /// Why the window could not keep its cards.
   pub(crate) fault: Option<String>,
@@ -111,6 +113,7 @@ impl Model {
       home: options.home.clone(),
       zone: options.zone.clone(),
       system: options.system,
+      browse: options.browse,
       tokens,
       fault: None,
       thread: None,
@@ -312,6 +315,8 @@ impl Model {
       Some(Row::Card(at, _) | Row::Resolved(at)) => {
         self.selected = self.client.settled.get(at).map(|one| one.1.clone());
         self.open_thread();
+        // A click on a thread shows its end, also when it is open already.
+        self.jump();
       }
       Some(Row::Context(_)) => {
         if let Some(opened) = self.thread.as_mut() {

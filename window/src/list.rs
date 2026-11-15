@@ -110,7 +110,9 @@ impl Model {
           let style = if cells { one.style } else { one.style.fg(t.hover) };
           run(one.content, style)
         };
-        if matches!(pointed, Some(Row::Context(_))) {
+        // The box takes a click once an answer told the context, which its parts then show.
+        let told = self.thread.as_ref().is_some_and(|one| one.thread.context.is_some());
+        if told && matches!(pointed, Some(Row::Context(_))) {
           line.into_iter().map(lit).collect()
         } else {
           line
@@ -169,7 +171,9 @@ impl Model {
       Part::Resolved if self.open => ("Resolved", " ▾"),
       Part::Resolved => ("Resolved", " ▸"),
     };
-    let on = |style: Style| if pointed { style.fg(t.hover) } else { style };
+    // Only the head of the resolved threads takes a click, which folds them.
+    let lit = pointed && part == Part::Resolved;
+    let on = |style: Style| if lit { style.fg(t.hover) } else { style };
     let count = self.client.settled.iter().filter(|one| one.0 == part).count();
     let head = vec![
       run(name, on(t.style(Role::Prose))),

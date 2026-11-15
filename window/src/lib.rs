@@ -35,7 +35,7 @@ mod thread;
 pub mod tokens;
 
 use std::{
-  env,
+  env, io,
   path::PathBuf,
   time::{SystemTime, UNIX_EPOCH},
 };
@@ -72,6 +72,8 @@ pub struct Options {
   pub still: bool,
   /// The system of the client, which says how a text of the window writes a key.
   pub system: System,
+  /// The opener of an address of a link in the browser of the client.
+  pub browse: fn(&str) -> io::Result<()>,
 }
 
 impl Options {
@@ -92,7 +94,8 @@ impl Options {
     let (zone, system) = (TimeZone::system(), System::here());
     // The home holds no link either, so a path of the folder shows its home as `~`.
     let home = env::home_dir().map(|home| dunce::canonicalize(&home).unwrap_or(home));
-    Ok(Self { folder, home, kept, zone, clock, still: still().is_some(), system })
+    let browse = world::browse;
+    Ok(Self { folder, home, kept, zone, clock, still: still().is_some(), system, browse })
   }
 }
 

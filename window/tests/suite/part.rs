@@ -17,7 +17,7 @@ use crate::{
 
 /// A window on a machine with a session that works, a session at rest whose thread the model
 /// answered, and a session that holds no thread of the operator.
-fn machine() -> (TestApp, Daemon, Peer) {
+pub(crate) fn machine() -> (TestApp, Daemon, Peer) {
   let app = app();
   let mut daemon = Daemon::bound(&app);
   let sessions = daemon.project("furb");

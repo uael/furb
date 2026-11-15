@@ -35,7 +35,7 @@ use tokio::{
 
 use super::config::Login;
 use crate::value;
-use crate::world::disk;
+use crate::world::{self, disk};
 use std::sync;
 use tokio::task;
 use tokio::time;
@@ -157,19 +157,7 @@ pub(super) fn vault(config: &Path) -> Arc<dyn Vault> {
 
 /// The opener of the system, which opens an address in the default browser.
 pub(super) fn opener() -> Opener {
-  Arc::new(|address: &str| {
-    let mut command = if cfg!(target_os = "macos") {
-      Command::new("open")
-    } else if cfg!(windows) {
-      let mut command = Command::new("rundll32");
-      command.arg("url.dll,FileProtocolHandler");
-      command
-    } else {
-      Command::new("xdg-open")
-    };
-    command.arg(address).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-    command.spawn().map(drop)
-  })
+  Arc::new(world::browse)
 }
 
 /// The address of the metadata of the resource that a challenge of a server names, in its `resource_metadata`.

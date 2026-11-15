@@ -49,6 +49,7 @@ fn failed(system: System) -> Vec<String> {
     clock: || 0,
     still: false,
     system,
+    browse: |_| Ok(()),
   };
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);
   model.settle();
@@ -83,6 +84,7 @@ fn a_page_refused_while_its_life_opens_ends_the_open_on_its_card_too() {
     clock: || 0,
     still: false,
     system: System::MacOs,
+    browse: |_| Ok(()),
   };
   let told = Told { name: "mac".to_owned(), link: Link::Listed, ..Told::default() };
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);

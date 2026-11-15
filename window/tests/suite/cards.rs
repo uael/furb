@@ -40,6 +40,7 @@ pub(crate) fn options(kept: &Path) -> Options {
     clock: || CLOCK * 1000,
     still: false,
     system: System::MacOs,
+    browse: |_| Ok(()),
   }
 }
 

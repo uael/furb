@@ -30,7 +30,7 @@ const LEFT: usize = 61;
 
 /// A window on a machine with one session whose thread says a message, opened by a click on its
 /// card, once the thread shows a text. The life of the thread and its prompt.
-fn opened(message: &str, shown: &str) -> (TestApp, Daemon, Peer, String, String) {
+pub(crate) fn opened(message: &str, shown: &str) -> (TestApp, Daemon, Peer, String, String) {
   let app = app();
   let mut daemon = Daemon::bound(&app);
   let sessions = daemon.project("furb");

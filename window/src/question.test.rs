@@ -49,6 +49,7 @@ fn asked(shape: &str, system: System) -> Model {
     clock: || 0,
     still: false,
     system,
+    browse: |_| Ok(()),
   };
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);
   model.settle();

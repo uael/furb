@@ -79,6 +79,7 @@ pub(crate) enum Click {
   Answer(usize),
   Agent(String),
   Context,
+  Link(String),
 }
 
 /// The columns of a row that go bright under the pointer, and what a click there does.
@@ -104,20 +105,31 @@ impl Row {
     Self { line, hot: vec![(0..wide, Some(click))], loader: None }
   }
 
-  /// What a click on a column of the row does.
+  /// What a click on a column of the row does: what its hot columns say, else the open of the
+  /// link there.
   pub(crate) fn click(&self, x: usize) -> Option<Click> {
-    self.hot.iter().find(|hot| hot.0.contains(&x)).and_then(|hot| hot.1.clone())
+    match self.hot.iter().find(|hot| hot.0.contains(&x)) {
+      Some(hot) => hot.1.clone(),
+      None => self.link(x).map(|link| Click::Link(link.to_owned())),
+    }
+  }
+
+  /// The address of the link at a column of the row.
+  fn link(&self, x: usize) -> Option<&str> {
+    let at = columns(&self.line).iter().position(|one| one.contains(&x))?;
+    self.line[at].link.as_deref()
   }
 
   /// The row with its text bright where the pointer is on a thing that takes a click: its hot
-  /// columns, or a link.
+  /// columns, or each word of the link there.
   pub(crate) fn lit(mut self, x: usize, hover: Color) -> Self {
     let hot = self.hot.iter().map(|hot| hot.0.clone()).find(|hot| hot.contains(&x));
+    let link = self.link(x).map(str::to_owned);
     let mut start = 0;
     for one in &mut self.line {
       let end = start + one.content.width();
       let on = |range: &Range<usize>| range.start < end && start < range.end;
-      if hot.as_ref().map_or(one.link.is_some() && (start..end).contains(&x), on) {
+      if hot.as_ref().map_or(link.is_some() && one.link.as_deref() == link.as_deref(), on) {
         one.style = one.style.fg(hover);
       }
       start = end;
@@ -512,6 +524,13 @@ impl Model {
       }
       Click::Context => {
         self.ringed();
+        None
+      }
+      Click::Link(address) => {
+        self.notice = Some(match (self.browse)(&address) {
+          Ok(()) => format!("Opened {address} in the browser."),
+          Err(no) => format!("The browser did not open {address}: {no}"),
+        });
         None
       }
     }

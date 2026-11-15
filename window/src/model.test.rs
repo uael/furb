@@ -51,6 +51,7 @@ fn model(cards: Vec<Card>, rows: u16) -> Model {
     clock: || 0,
     still: false,
     system: System::MacOs,
+    browse: |_| Ok(()),
   };
   let mut model = Model::new(vec![told], (100, rows), Tokens::on(None), &options);
   model.settle();
@@ -235,6 +236,7 @@ fn shown(folder: &str, home: &str) -> String {
     clock: || 0,
     still: false,
     system: System::MacOs,
+    browse: |_| Ok(()),
   };
   Model::new(Vec::new(), (100, 30), Tokens::on(None), &options).folder_shown()
 }

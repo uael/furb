@@ -35,8 +35,9 @@ mod store;
 mod time;
 
 use std::{
-  env,
+  env, io,
   path::{Component, Path, PathBuf},
+  process::{Command, Stdio},
 };
 
 pub use bash::{bash, program, shell};
@@ -152,6 +153,22 @@ pub fn cache() -> Option<PathBuf> {
     }
   });
   base.map(|base| base.join("furb"))
+}
+
+/// An address opened in the default browser of this machine, by the opener of its system, which
+/// runs apart: the call ends once the opener started.
+pub fn browse(address: &str) -> io::Result<()> {
+  let mut command = if cfg!(target_os = "macos") {
+    Command::new("open")
+  } else if cfg!(windows) {
+    let mut command = Command::new("rundll32");
+    command.arg("url.dll,FileProtocolHandler");
+    command
+  } else {
+    Command::new("xdg-open")
+  };
+  command.arg(address).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+  command.spawn().map(drop)
 }
 
 #[cfg(test)]

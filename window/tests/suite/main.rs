@@ -13,3 +13,4 @@ mod part;
 mod question;
 mod screens;
 mod thread;
+mod walk;
