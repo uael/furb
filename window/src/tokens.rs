@@ -26,11 +26,12 @@ pub const HEAD: u16 = 1;
 /// blank after it.
 pub const TEXT: u16 = 2;
 
-/// The width of the list of cards.
+/// The width of the list of cards, at least.
 pub(crate) const LIST: u16 = 38;
 
-/// The columns of the list and of the column of its panel at its left.
-pub(crate) const SIDE: u16 = LIST + 1;
+/// The most columns of the list of cards, which a wide window gives it: a title of about fifty
+/// letters then stands whole on its card.
+pub(crate) const LISTS: u16 = 56;
 
 /// The least width of the window that shows the list beside the thread.
 pub(crate) const BESIDE: u16 = 100;

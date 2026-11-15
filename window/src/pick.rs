@@ -24,7 +24,7 @@ use crate::{
   list::project,
   model::{Key, Model},
   thread::{Click, Row, hued},
-  tokens::{BESIDE, OVER, PART, PARTS, Role, SIDE},
+  tokens::{BESIDE, OVER, PART, PARTS, Role},
 };
 
 /// What a list part lists.
@@ -642,7 +642,7 @@ impl Model {
   /// most, so each entry stands whole on one row while the window has the room.
   fn spans(&self, entries: &[Entry]) -> (u16, u16) {
     let beside = self.listed() && self.size.0 >= BESIDE;
-    let columns = if beside { self.size.0.saturating_sub(SIDE) } else { self.size.0 };
+    let columns = if beside { self.size.0.saturating_sub(self.panel_width()) } else { self.size.0 };
     let rises = self.picker.as_ref().is_some_and(|one| one.of == Pick::History);
     let input = u16::try_from(self.wide().saturating_sub(2)).unwrap_or(PART);
     let asked = entries.iter().map(|one| one.width(badged(entries)) + 4).max().unwrap_or_default();

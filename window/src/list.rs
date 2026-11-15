@@ -11,13 +11,8 @@ use crate::{
   keys::Does,
   line::{Line, edged, run, spread},
   model::{Key, Link, Model},
-  tokens::{CALL, LIST, Loader, Role, WORKS, called, mixed},
+  tokens::{CALL, Loader, Role, WORKS, called, mixed},
 };
-
-/// The columns of a card between its two edges. The edges of a card stand in the columns where the
-/// head of the list starts and ends, so a card has one column of its ground on each side of its
-/// text.
-const CARD: usize = LIST as usize - 5;
 
 /// A row of the list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -167,7 +162,12 @@ impl Model {
     };
     let style = if pointed { t.style(Role::Prose).fg(t.hover) } else { t.style(Role::Prose) };
     let left = vec![run(" ", Style::new()), run(format!("{scope} ▾"), style)];
-    spread(left, vec![run(machines, t.style(Role::Muted))], usize::from(LIST) - 2, Style::new())
+    spread(
+      left,
+      vec![run(machines, t.style(Role::Muted))],
+      usize::from(self.list_width()) - 2,
+      Style::new(),
+    )
   }
 
   /// The head of a part: its name and its count. The head of the resolved threads takes a click,
@@ -190,7 +190,7 @@ impl Model {
       run(format!(" {count}{fold}"), on(t.style(Role::Muted))),
     ];
     let mut line = vec![run(" ", Style::new())];
-    line.extend(spread(head, Vec::new(), usize::from(LIST) - 2, on(Style::new())));
+    line.extend(spread(head, Vec::new(), usize::from(self.list_width()) - 2, on(Style::new())));
     line
   }
 
@@ -205,7 +205,11 @@ impl Model {
     };
     let ground = Style::new().fg(self.tokens.lifted);
     let hue = self.hue(&self.client.settled[at].1);
-    vec![run(bar, Style::new().fg(hue)), run(fill.repeat(CARD + 2), ground), run(end, ground)]
+    vec![
+      run(bar, Style::new().fg(hue)),
+      run(fill.repeat(self.card_width() + 2), ground),
+      run(end, ground),
+    ]
   }
 
   /// A line of a card between its two edges, with the bar in the hue of its thread.
@@ -240,7 +244,7 @@ impl Model {
       if live { ("● ", t.style(Role::Title)) } else { ("  ", t.style(Role::Prose)) };
     let title =
       vec![run(mark, on(Style::new().fg(t.live))), run(card.thread.title.clone(), on(style))];
-    let first = spread(title, self.state(key, card, ground), CARD, on(Style::new()));
+    let first = spread(title, self.state(key, card, ground), self.card_width(), on(Style::new()));
 
     let project = project(card);
     let machine = if key.0 > 0 { format!("@{}", told.name) } else { String::new() };
@@ -269,7 +273,7 @@ impl Model {
     let right =
       [initials.join(" "), marks].into_iter().filter(|one| !one.is_empty()).collect::<Vec<_>>();
     let right = vec![run(right.join("  "), on(t.style(Role::Muted)))];
-    let second = spread(left, right, CARD, on(Style::new()));
+    let second = spread(left, right, self.card_width(), on(Style::new()));
     [self.edged(at, ground.bg, first), self.edged(at, ground.bg, second)]
   }
 
@@ -288,7 +292,8 @@ impl Model {
       Some(_) => "read only".to_owned(),
       None => self.age(card.since).unwrap_or_else(|| "now".to_owned()),
     };
-    let line = spread(left, vec![run(age, on(t.style(Role::Muted)))], CARD, on(Style::new()));
+    let line =
+      spread(left, vec![run(age, on(t.style(Role::Muted)))], self.card_width(), on(Style::new()));
     self.edged(at, ground.bg, line)
   }
 
@@ -350,6 +355,13 @@ impl Model {
 }
 
 impl Model {
+  /// The columns of a card between its two edges. The edges of a card stand in the columns where
+  /// the head of the list starts and ends, so a card has one column of its ground on each side of
+  /// its text.
+  fn card_width(&self) -> usize {
+    usize::from(self.list_width()) - 5
+  }
+
   /// The badge of a project, as each row that stands in it draws it: its two letters, bold.
   pub(crate) fn badge(&self, project: &str) -> Span<'static> {
     let projects = &self.tokens.projects;

@@ -27,7 +27,7 @@ use crate::{
   link::Heard,
   list::Row,
   pick::Picker,
-  tokens::{BESIDE, CALL, LIST, MEASURE, SIDE, Tokens},
+  tokens::{BESIDE, CALL, LIST, LISTS, MEASURE, Tokens},
 };
 
 /// The rows at the top of the list that never scroll.
@@ -398,7 +398,20 @@ impl Model {
 
   /// Whether a column of the window stands on the list.
   pub(crate) fn on_list(&self, x: u16) -> bool {
-    self.listed() && x >= self.size.0.saturating_sub(LIST)
+    self.listed() && x >= self.size.0.saturating_sub(self.list_width())
+  }
+
+  /// The columns of the list of cards: its least width, and half of the columns that a wider
+  /// window leaves past the measure of the left side, up to its most, so a long title stands whole
+  /// where the window has the room, and the left side keeps a margin on each side.
+  pub(crate) fn list_width(&self) -> u16 {
+    let spare = self.size.0.saturating_sub(LIST + 1 + MEASURE) / 2;
+    LIST + spare.min(LISTS - LIST)
+  }
+
+  /// The columns of the list and of the column of its panel at its left.
+  pub(crate) fn panel_width(&self) -> u16 {
+    self.list_width() + 1
   }
 
   /// How many columns the left side draws: those that the list leaves it, at most a measure.
@@ -419,7 +432,7 @@ impl Model {
 
   /// The columns that the list leaves to the left side while the list shows.
   fn side(&self) -> u16 {
-    self.size.0.saturating_sub(if self.listed() { SIDE } else { 0 })
+    self.size.0.saturating_sub(if self.listed() { self.panel_width() } else { 0 })
   }
 
   /// Whether each machine answered or was lost, so the window knows what stands.

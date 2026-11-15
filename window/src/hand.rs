@@ -43,7 +43,7 @@ use crate::{
   question::Keyed,
   review::{NEXT, PREVIOUS},
   thread::Spot,
-  tokens::{AWAY, Role, SIDE, Tokens},
+  tokens::{AWAY, Role, Tokens},
 };
 
 /// How long the window waits for a machine before it says that it waits.
@@ -216,8 +216,7 @@ fn drawn(app: &App, model: Model, area: &Textarea, review: (&ScrollBox, &Diff)) 
   let stage = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Bottom, 0);
   // The list stands on a panel, so a change of ground parts it from the home, with no line.
   let side = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Right, 0);
-  let side =
-    side.position(Edge::Bottom, 0).width(SIDE).bg(tokens.panel).padding_edge(Edge::Left, 1);
+  let side = side.position(Edge::Bottom, 0).bg(tokens.panel).padding_edge(Edge::Left, 1);
   let side = side.child(&list);
   app.root().child(&stage.child(&home).child(area)).child(&side);
   app.focus(area);
@@ -235,8 +234,14 @@ fn drawn(app: &App, model: Model, area: &Textarea, review: (&ScrollBox, &Diff)) 
   screen.part(Model::list, move |lines| {
     list.set_text(written(lines));
   });
-  screen.part(Model::listed, move |listed| {
-    side.visible(*listed);
+  screen.part(Model::listed, {
+    let side = side.clone();
+    move |listed| {
+      side.visible(*listed);
+    }
+  });
+  screen.part(Model::panel_width, move |width| {
+    side.width(*width);
   });
   completion(app, &stage, &mut screen, &tokens);
   veiled(app, &mut screen, &tokens);
@@ -301,8 +306,7 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
   let page = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Left, 0);
   let page = page.position(Edge::Right, 0).position(Edge::Bottom, 0).bg(tokens.base);
   let panel = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Right, 0);
-  let panel =
-    panel.position(Edge::Bottom, 0).width(SIDE).bg(tokens.panel).padding_edge(Edge::Left, 1);
+  let panel = panel.position(Edge::Bottom, 0).bg(tokens.panel).padding_edge(Edge::Left, 1);
   let panel = panel.child(&side);
   let head = head.absolute().position(Edge::Top, 0).position(Edge::Left, 0);
   let scroll = scroll.absolute().position(Edge::Top, 2).position(Edge::Left, 1);
@@ -310,13 +314,15 @@ fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&Scr
   let foot = foot.absolute().position(Edge::Bottom, 0).position(Edge::Left, 0);
   let page = page.child(&head).child(&scroll).child(&foot).child(&panel);
   app.root().child(&page.z_index(3).visible(false));
-  screen.part(Model::reviewing, move |shown| {
+  let reviewing = |model: &Model| (model.reviewing(), model.panel_width());
+  screen.part(reviewing, move |(shown, width)| {
     page.visible(shown.is_some());
+    panel.width(*width);
     if let Some(shown) = shown {
       head.set_text(shown.head.clone());
       panel.visible(shown.side.is_some());
       side.set_text(written(shown.side.as_deref().unwrap_or_default()));
-      scroll.position(Edge::Right, if shown.side.is_some() { SIDE + 1 } else { 1 });
+      scroll.position(Edge::Right, if shown.side.is_some() { width + 1 } else { 1 });
       foot.set_text(shown.foot.clone());
       let view = if shown.split { DiffView::Split } else { DiffView::Unified };
       diff.set_diff(shown.diff.clone()).filetype(shown.kind).view(view);

@@ -13,12 +13,8 @@ use furb_client::{Content, Fold, Split};
 use crate::{
   line::{Line, run, spread},
   model::Model,
-  tokens::{LIST, Role},
+  tokens::Role,
 };
-
-/// The columns of the text of the box, two in from each edge of the side of the list, as the head
-/// of the resolved threads stands.
-const INNER: usize = LIST as usize - 3;
 
 /// A part of what an answer read, or the room that it left: its name, its tokens and its color.
 struct Kind {
@@ -35,12 +31,15 @@ impl Model {
       return Vec::new();
     };
     let t = &self.tokens;
+    // The text of the box stands two columns in from each edge of the list, as the head of the
+    // resolved threads stands.
+    let inner = usize::from(self.list_width()) - 3;
     let (prose, muted) = (t.style(Role::Prose), t.style(Role::Muted));
     let Some(context) = &opened.thread.context else {
       // The box keeps its rows before the first answer, so nothing moves when it comes.
       let free = [Kind { name: "Free", tokens: 1, color: t.border }];
-      let head = row(vec![run("Context", prose)], vec![run("No answer yet", muted)]);
-      return vec![head, bar(&free, 1), Vec::new()];
+      let head = row(inner, vec![run("Context", prose)], vec![run("No answer yet", muted)]);
+      return vec![head, bar(inner, &free, 1), Vec::new()];
     };
     let open = opened.unfolded.contains(&Fold::Context);
     let fold = if open { " ▾" } else { " ▸" };
@@ -48,19 +47,24 @@ impl Model {
     let read = &context.read;
     let whole = context.whole();
     let used = context.window.map(|_| share(read.tokens, whole));
-    let mut rows = vec![row(head, vec![run(used.unwrap_or_else(|| tokens(read.tokens)), prose)])];
+    let mut rows =
+      vec![row(inner, head, vec![run(used.unwrap_or_else(|| tokens(read.tokens)), prose)])];
     let kinds = self.kinds(context);
-    rows.push(bar(&kinds, whole));
+    rows.push(bar(inner, &kinds, whole));
     if open {
       rows.extend(kinds.iter().map(|kind| {
         let share = share(kind.tokens, whole);
         let left = vec![run("■ ", Style::new().fg(kind.color)), run(kind.name, muted)];
-        row(left, vec![run(format!("{}  {share:>4}", tokens(kind.tokens)), muted)])
+        row(inner, left, vec![run(format!("{}  {share:>4}", tokens(kind.tokens)), muted)])
       }));
     }
     let of = context.window.map(|window| format!(" of {}", tokens(window))).unwrap_or_default();
     let numbers = format!("{}{of} · {} cached", tokens(read.tokens), tokens(read.cached));
-    rows.push(row(vec![run(numbers, muted)], vec![run(format!("${:.2}", context.dollars), prose)]));
+    rows.push(row(
+      inner,
+      vec![run(numbers, muted)],
+      vec![run(format!("${:.2}", context.dollars), prose)],
+    ));
     rows
   }
 
@@ -156,14 +160,14 @@ impl Model {
 /// The bar: one cell for each share of the whole, in the color of the part that it counts. A part
 /// that holds tokens takes one cell at least, and the last part takes the cells that the rounding
 /// left, so the bar fills its row.
-fn bar(kinds: &[Kind], whole: u64) -> Line {
+fn bar(inner: usize, kinds: &[Kind], whole: u64) -> Line {
   let mut cells: Vec<usize> = kinds
     .iter()
-    .map(|kind| if kind.tokens > 0 { shared(kind.tokens, whole, INNER).max(1) } else { 0 })
+    .map(|kind| if kind.tokens > 0 { shared(kind.tokens, whole, inner).max(1) } else { 0 })
     .collect();
   let others: usize = cells.iter().rev().skip(1).sum();
   if let Some(last) = cells.last_mut() {
-    *last = INNER.saturating_sub(others);
+    *last = inner.saturating_sub(others);
   }
   let mut line = vec![run(" ", Style::new())];
   line.extend(
@@ -182,8 +186,8 @@ fn shared(tokens: u64, whole: u64, steps: usize) -> usize {
 }
 
 /// A row of the box: its text at its left and its value at its right.
-fn row(left: Line, right: Line) -> Line {
+fn row(inner: usize, left: Line, right: Line) -> Line {
   let mut line = vec![run(" ", Style::new())];
-  line.extend(spread(left, right, INNER, Style::new()));
+  line.extend(spread(left, right, inner, Style::new()));
   line
 }

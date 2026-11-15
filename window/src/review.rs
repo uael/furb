@@ -15,7 +15,7 @@ use crate::{
   keys::Does,
   line::{Line, cut, edged, run, spread},
   model::Model,
-  tokens::{BESIDE, LIST, Role, SIDE},
+  tokens::{BESIDE, Role},
 };
 
 /// The rows of the panel above its first file: its head and a blank row.
@@ -82,11 +82,13 @@ impl Model {
       1 => "1 file".to_owned(),
       many => format!("{many} files"),
     };
+    // The head stands in the columns of the first row of the list, whose panel this is.
     let left = vec![
+      run(" ", Style::new()),
       run("Changes", self.tokens.style(Role::Title)),
       run(format!("  {count}"), self.tokens.style(Role::Muted)),
     ];
-    spread(left, self.counts(added, removed), usize::from(LIST) - 1, Style::new())
+    spread(left, self.counts(added, removed), usize::from(self.list_width()) - 2, Style::new())
   }
 
   /// A row for each changed file, as a card of the list: how it differs, its name and its folder,
@@ -97,7 +99,7 @@ impl Model {
     let t = &self.tokens;
     let files = changes.map(|one| &one.files[..]).unwrap_or_default();
     let pointed = self.pointer.filter(|(x, _)| self.on_side(*x)).map(|(_, y)| y);
-    let room = usize::from(LIST) - 5;
+    let room = usize::from(self.list_width()) - 5;
     let row = |(place, slot): (usize, Slot<'_>)| {
       let at = match slot {
         Slot::Folder(folder) => {
@@ -166,7 +168,7 @@ impl Model {
 
   /// The columns of the diff: those that the panel leaves, less one on each side.
   pub(crate) fn diff_width(&self) -> usize {
-    usize::from(self.size.0.saturating_sub(if self.sided() { SIDE } else { 0 } + 2))
+    usize::from(self.size.0.saturating_sub(if self.sided() { self.panel_width() } else { 0 } + 2))
   }
 
   /// Whether the panel of the files shows: where the list shows beside a thread.
@@ -188,7 +190,7 @@ impl Model {
 
   /// Whether a column of the window stands on the panel of the review.
   fn on_side(&self, x: u16) -> bool {
-    x >= self.size.0.saturating_sub(LIST)
+    x >= self.size.0.saturating_sub(self.list_width())
   }
 
   /// The file of the review at a cell of the window, which a click reads.
