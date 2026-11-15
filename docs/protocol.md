@@ -460,8 +460,9 @@ once it listens. A second daemon refuses to start there.
   refused with `shown` while a window of another peer holds the life, so no view ends a life that another view
   shows.
 - The daemon of a machine ends once it holds no peer and no life for its grace, so it does not outlive the windows
-  that started it; a window that dials later starts a new one. A daemon waits for its first peer before this bound
-  runs, and a daemon with a door on the tailnet does not end by it.
+  that started it; a window that dials later starts a new one. A daemon that no peer dials within a minute of its
+  start ends too, so a program that starts it and ends before it dials leaves no daemon. A daemon with a door on the
+  tailnet does not end by either bound.
 - A life whose record does not hold each fact that it said yet, as on a full disk, does not end: its end, after the
   grace, at a handover or at the end of the daemon, waits until the record holds them, and the life tells why in a
   notice. Past 20000 facts that the record lacks, the life pauses each chain that lives and each chain

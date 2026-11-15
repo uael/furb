@@ -97,6 +97,10 @@ use crate::{
 /// How long a life with no holder lives, unless the settings of the daemon say otherwise.
 pub const GRACE: Duration = Duration::from_secs(30);
 
+/// How long the start of the daemon of a machine takes: a program that starts it waits that long
+/// for it to listen, and the daemon then waits that long for its first peer.
+pub const STARTING: Duration = Duration::from_secs(60);
+
 /// How many frames of the events of a life may wait for a window before the daemon reads the next
 /// event: a window that reads slowly stands behind the life, and reads the log of the life again
 /// once it reads on, in the place of a copy of each event in its outbox. That read holds a place
@@ -112,6 +116,9 @@ pub struct Settings {
   pub opening: Opening,
   /// How long a life with no holder lives before it writes its image and ends.
   pub grace: Duration,
+  /// How long the daemon waits for its first peer before it ends, so a program that starts it and
+  /// ends before it dials leaves no daemon.
+  pub first: Duration,
   /// How long a life that holds an open act says no fact before the daemon tells each of its
   /// windows and its root chain that it stalled.
   pub stall: Duration,
@@ -206,19 +213,15 @@ where
     None => None,
   };
   let (grace, lasting) = (settings.grace, doors.is_some());
-  // A daemon that no peer reached yet waits for the first one, which the program that started it
-  // sends.
-  let mut met = !handed.is_empty();
+  let mut quiet = (!lasting && handed.is_empty()).then(|| Instant::now() + settings.first);
   let (daemon, mut leave, mut empty) = Daemon::spawn(settings, handed, user.name.to_string());
   let mut peers = JoinSet::new();
-  let mut quiet = None;
   let mut stops = heard(log.as_ref());
   let leaving = loop {
     tokio::select! {
       () = stopped(stops.as_mut()) => return stop(&daemon, stops.as_mut(), log.as_ref()).await,
       accepted = listener.accept() => match accepted {
         Ok(stream) => {
-          met = true;
           peers.spawn(peer(daemon.clone(), identity.clone(), user.clone(), stream));
         }
         Err(no) => report(log.as_ref(), &no),
@@ -231,7 +234,6 @@ where
       },
       knocked = knock(door.as_ref()) => match knocked {
         Ok((stream, ticket)) => {
-          met = true;
           peers.spawn(window(daemon.clone(), ticket, stream));
         }
         Err(no) => report(log.as_ref(), &no),
@@ -246,8 +248,9 @@ where
       leaving = &mut leave => break leaving.ok(),
     }
     // The daemon of this machine ends once it holds no peer and no life for its grace, so no
-    // daemon outlives the windows that started it. A daemon on the tailnet serves its doors.
-    let idle = met && !lasting && peers.is_empty() && *empty.borrow();
+    // daemon outlives the windows that started it; until its first peer the deadline of its start
+    // holds. A daemon on the tailnet serves its doors.
+    let idle = !lasting && peers.is_empty() && *empty.borrow();
     quiet = if idle { quiet.or_else(|| Some(Instant::now() + grace)) } else { None };
   };
   drop((listener, doors, door));

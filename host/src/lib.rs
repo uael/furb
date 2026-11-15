@@ -45,7 +45,7 @@ mod stops;
 pub mod transport;
 mod views;
 
-pub use daemon::{GRACE, Settings, Tailnet, run, upgrade};
+pub use daemon::{GRACE, STARTING, Settings, Tailnet, run, upgrade};
 pub use door::Door;
 pub use error::{AccessError, DaemonError, LifeError, ProtocolError, TransportError};
 use furb_wire::event;

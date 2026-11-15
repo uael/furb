@@ -23,7 +23,7 @@ use yard::Yard;
 
 use furb::life::Opening;
 use furb_host::{
-  AccessError, Host, Outbox, ProtocolError, STALL, Settings, Tailnet, TransportError,
+  AccessError, Host, Outbox, ProtocolError, STALL, STARTING, Settings, Tailnet, TransportError,
   access::{Access, Config, Ports},
   protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Peer, Request, Role, Verb},
   run, serve,
@@ -265,6 +265,7 @@ async fn tailed(identity: Tailscale) -> (Ports, Yard) {
   let settings = Settings {
     opening,
     grace: Duration::from_secs(1),
+    first: STARTING,
     stall: STALL,
     tailnet: Some(Tailnet { identity, ports }),
     door: Some(held.join("door/window.json")),
@@ -405,6 +406,7 @@ async fn daemon(yard: &Yard, file: &Path) -> JoinHandle<()> {
   let settings = Settings {
     opening,
     grace: Duration::from_secs(1),
+    first: STARTING,
     stall: STALL,
     tailnet: None,
     door: Some(file.to_owned()),

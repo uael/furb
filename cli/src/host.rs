@@ -20,7 +20,7 @@ use tokio_util::codec::{Framed, LinesCodec};
 
 use furb::{life::Opening, skill::Places, view::Phase, world};
 use furb_host::{
-  DaemonError, ProtocolError, STALL, Settings, Tailnet, TransportError,
+  DaemonError, ProtocolError, STALL, STARTING, Settings, Tailnet, TransportError,
   access::Config,
   protocol::{Answer, BOUND, Frame, Hello, Kind, PROTOCOL, Request, Verb},
   run,
@@ -48,7 +48,8 @@ pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliErr
       .inspect_err(|no| eprintln!("furb host: no watch of {}: {no}", path.display()))
       .ok()
   });
-  let settings = Settings { opening: Opening::default(), grace, stall, tailnet, door, host };
+  let opening = Opening::default();
+  let settings = Settings { opening, grace, first: STARTING, stall, tailnet, door, host };
   let local = Local::new(&folder);
   if upgrading {
     return Ok(upgrade(&local, settings).await?);

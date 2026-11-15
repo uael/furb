@@ -20,7 +20,7 @@ use furb::{
   life::{Answer as Answered, Opening},
 };
 use furb_host::{
-  GRACE, STALL, Settings,
+  GRACE, STALL, STARTING, Settings,
   protocol::{Answer, Card, Frame, Hello, Kind, PROTOCOL, Request, Verb},
   run,
   transport::{Dialer, Listener, Local},
@@ -207,6 +207,7 @@ impl Daemon {
     Settings {
       opening: scripted(&self.yard, &self.claude),
       grace: Duration::ZERO,
+      first: STARTING,
       stall: STALL,
       tailnet: None,
       door: None,

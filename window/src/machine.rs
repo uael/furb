@@ -12,7 +12,7 @@ use std::{
 
 use furb::world;
 use furb_host::{
-  TransportError,
+  STARTING, TransportError,
   transport::{Dialer, Local},
 };
 use tokio::{
@@ -21,9 +21,6 @@ use tokio::{
 };
 
 use crate::Error;
-
-/// How long the window waits for a daemon that it started to listen.
-const STARTING: Duration = Duration::from_secs(60);
 
 /// How long the window waits between two dials of a daemon that starts.
 const AGAIN: Duration = Duration::from_millis(25);

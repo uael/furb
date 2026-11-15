@@ -28,7 +28,7 @@ use furb::{
   world::Told,
 };
 use furb_host::{
-  Command, Event, GRACE, Life, LifeHandle, Reply, STALL, Seq, Settings,
+  Command, Event, GRACE, Life, LifeHandle, Reply, STALL, STARTING, Seq, Settings,
   protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
   run,
   transport::{Dialer, Local},
@@ -400,6 +400,7 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(window: (usize, usi
   let settings = Settings {
     opening: opening(&at),
     grace: GRACE,
+    first: STARTING,
     stall: STALL,
     tailnet: None,
     door: None,
