@@ -803,10 +803,12 @@ fn size(path: impl AsRef<Path>) -> u64 {
   fs::metadata(path).map_or(0, |held| held.len())
 }
 
-/// The default actor of a standing, and the name of each model of its roster but the operator.
+/// The default actor of a standing and the name of each model of its roster, each but the operator,
+/// who is no model of the catalog, so a later life never tells that the operator left it.
 fn offered(standing: ObjectRef<'_>) -> (Option<String>, Option<Vec<String>>) {
   let Some(held) = standing.items() else { return (None, None) };
-  let actor = held.get(2).and_then(ObjectRef::as_str).map(str::to_owned);
+  let actor =
+    held.get(2).and_then(ObjectRef::as_str).filter(|one| *one != OPERATOR).map(str::to_owned);
   let roster = held.first().and_then(ObjectRef::items).map(|models| {
     let names =
       models.iter().filter_map(|model| Some(model.items()?.first()?.as_str()?.to_owned()));

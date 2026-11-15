@@ -1278,6 +1278,29 @@ fn a_record_of_an_engine_that_gathers_no_checkpoint_opens_to_inspect_alone() {
   assert!(inspects.boot::<String>([]).is_ok(), "a life that inspects reads it");
 }
 
+/// The operator is no model of the catalog, so a later life whose standing names the operator as
+/// its actor, as the standing of a life whose models left the catalog does, tells no chain that the
+/// operator left it, by its image or by its record.
+#[test]
+fn a_life_never_tells_that_the_operator_left_the_catalog() {
+  for imaged in [true, false] {
+    let at = yard("left-once");
+    let record = at.join("record.jsonl");
+    laid(&replays().join("ranks.jsonl"), &record);
+    let mut first = opening(&at, true).boot::<String>([]).unwrap().0;
+    assert!(image::keep(&mut first, &record, &()).unwrap(), "the life writes its image");
+    drop(first);
+    if !imaged {
+      image::drop_of(&record);
+    }
+    let mut later = opening(&at, true).boot::<String>([]).unwrap().0;
+    let word =
+      "len([x for x in transcript('chain1', 'tell') if 'names left the catalog' in x[3][0]])";
+    let told = later.word(word, vec![]).unwrap();
+    assert_eq!(told.as_ref().as_int(), Some(1), "imaged {imaged}");
+  }
+}
+
 #[test]
 fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
   for (record, first) in [("ranks.jsonl", "bash2"), ("speaker.jsonl", "reply4")] {
