@@ -2393,6 +2393,24 @@ fn crashed(frame: &Frame) -> bool {
 
 #[cfg(unix)]
 #[tokio::test]
+async fn the_process_of_a_skill_that_is_a_module_of_python_runs_on_a_python() {
+  let at = place();
+  let skill = at.join(".furb").join("skills").join("probe");
+  fs::create_dir_all(&skill).unwrap();
+  fs::write(skill.join("SKILL.md"), PROBE.replace("probe.sh", "kit.py")).unwrap();
+  fs::write(skill.join("probe.py"), "PROBED = 1\n").unwrap();
+  // The module is no program of its own: it has no line #! and may not run as it stands.
+  let kit = "import os, time\nwith open('started', 'a') as out:\n  out.write(os.environ['FURB_SKILL'] + '\\n')\ntime.sleep(600)\n";
+  fs::write(skill.join("kit.py"), kit).unwrap();
+  let mut window = hosting(&at).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
+  assert_eq!(lines(&skill.join("started"), 1).await, ["probe"]);
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn the_process_of_a_skill_comes_from_the_folder_that_the_chain_played_it_from() {
   let at = place();
   let (one, two) = (at.join("one"), at.join("two"));

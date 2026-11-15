@@ -3,7 +3,7 @@
 `furb-host` is the daemon of a machine: it holds each life, and each window or skill reaches it over one protocol. This
 page says that protocol. Its version is `PROTOCOL`. The crate gives its JSON Schema in
 `host/protocol.schema.json`, and `bind/typescript/src/protocol.ts` holds the types that `bun run protocol` makes from
-that schema. A test of each side fails when the schema or the types do not agree with the code.
+that schema, and `src/furb/protocol.py` those that `cargo xtask protocol` makes. A test of each side fails when the schema or the types do not agree with the code.
 
 ## Transports
 
@@ -491,8 +491,8 @@ once it listens. A second daemon refuses to start there.
   life. A process that ends before its life tells the operator once, as a prompt of `None` to `operator` under
   `skill/<name>`, with its exit and the last 20 lines of its stderr, and starts again at the next fact `enable` of its
   skill. The variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` of the process give the folder of the local
-  transport, the record of the life and the name of the skill. `@uael/furb/skill` gives its client, and
-  `docs/skills.md` says the field.
+  transport, the record of the life and the name of the skill. `@uael/furb/skill` gives its client in TypeScript,
+  `furb.skill` in Python, and `docs/skills.md` says the field.
 
 ## Views
 

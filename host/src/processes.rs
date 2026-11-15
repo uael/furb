@@ -22,8 +22,9 @@
 )]
 use std::{
   collections::{HashMap, VecDeque},
+  env,
   ffi::OsStr,
-  io,
+  fs, io,
   path::{Path, PathBuf},
   pin::pin,
   process::{ExitStatus, Stdio},
@@ -69,7 +70,8 @@ pub const LIFE: &str = "FURB_LIFE";
 /// The variable of the environment of a process that gives the name of its skill.
 pub const SKILL: &str = "FURB_SKILL";
 
-/// The extensions of a module that bun runs, where any other program runs as it stands.
+/// The extensions of a module that bun runs, where a module of Python runs on [`python`] and any
+/// other program runs as it stands.
 const SCRIPTS: [&str; 6] = ["ts", "tsx", "mts", "js", "mjs", "cjs"];
 
 /// How many of the last lines of its stderr the operator reads when a process ends before its life,
@@ -197,14 +199,18 @@ impl Played {
   /// The process of a skill, in the folder of its program, with the variables that say where it
   /// dials and what it serves.
   fn spawned(&self, name: &str, program: &Path) -> Result<(Child, Group), Unborn> {
-    let script =
-      program.extension().and_then(OsStr::to_str).is_some_and(|one| SCRIPTS.contains(&one));
-    let mut command = if script {
-      let mut bun = Program::new("bun");
-      bun.arg(program);
-      bun
-    } else {
-      Program::new(program)
+    let runner = match program.extension().and_then(OsStr::to_str) {
+      Some(one) if SCRIPTS.contains(&one) => Some(PathBuf::from("bun")),
+      Some("py") => Some(python()),
+      _ => None,
+    };
+    let mut command = match runner {
+      Some(runner) => {
+        let mut command = Program::new(runner);
+        command.arg(program);
+        command
+      }
+      None => Program::new(program),
     };
     command
       .current_dir(program.parent().unwrap_or(Path::new(".")))
@@ -217,6 +223,17 @@ impl Played {
       .kill_on_drop(true);
     spawn(&mut command)
   }
+}
+
+/// The Python that runs a module of a skill: the one beside the program of the daemon, which the
+/// environment that installed furb holds, so the module imports `furb.skill`; else the one on PATH.
+fn python() -> PathBuf {
+  let name = if cfg!(windows) { "python.exe" } else { "python3" };
+  let beside = env::current_exe()
+    .and_then(fs::canonicalize)
+    .ok()
+    .and_then(|program| Some(program.parent()?.join(name)).filter(|one| one.is_file()));
+  beside.unwrap_or_else(|| PathBuf::from(name))
 }
 
 /// A line of the daemon, in its log, else on stderr.

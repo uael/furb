@@ -33,6 +33,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+  "datamodel-code-generator>=0.96.0",
   "pre-commit>=4.6.2",
   "pytest>=9.1.1",
   "pytest-asyncio>=1.4.0",
@@ -104,6 +105,8 @@ ignore = ["S101"]
 # A life speaks the vocabulary of the engine, whose ids shadow a builtin, and open opens a life as open opens a file.
 "src/furb/life.py" = ["A001", "A002", "PLR0913"]
 "src/furb/__init__.py" = ["A004"]
+# The client of a skill names its errors as the client of TypeScript and the engine do.
+"src/furb/skill.py" = ["N818"]
 # A word speaks the vocabulary of the engine, which a model reads: the ear of an act takes its id, untyped, as the
 # ears of the engine do.
 ".agents/skills/*/*.py" = ["A002", "ANN001"]

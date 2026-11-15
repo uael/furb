@@ -203,7 +203,8 @@ What the notes are for.
   work of the root needs, as a loop that conducts workers: each other chain then reads none of its words, and a model
   there is free to bind each name that it defines.
 - `furb-process` is the file of the process of the extension, relative to the folder: a module of TypeScript or of
-  JavaScript, which bun runs, or any other program. When a life plays the extension, the daemon of the machine starts
+  JavaScript, which bun runs, a module of Python, which the Python beside the program `furb` runs, else `python3`, or
+  any other program. When a life plays the extension, the daemon of the machine starts
   it in the folder of the skill, at the end of the replay of the record, and ends it when the life ends or when
   the life plays a new word of the extension. Its variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` give the folder
   where the daemon listens, the record of the life and the name of the extension, so it dials the daemon and attaches
@@ -228,6 +229,26 @@ skill.heard((fact) => {
 });
 skill.served((view) => void view.tree({ id: "said", node: "text", runs: [{ text: "served" }] }));
 await skill.closed;
+```
+
+The module `furb.skill` gives a process of Python the same calls, on asyncio, and `furb.protocol` the types of the
+protocol:
+
+```python
+import asyncio
+
+from furb.skill import Skill
+
+
+async def main() -> None:
+  skill = await Skill.attach(kinds=["prompt"])
+  skill.heard(lambda fact, seq: fact[5] == "ping" and asyncio.ensure_future(skill.run("pong = 1")))
+  served = {"id": "said", "node": "text", "runs": [{"text": "served"}]}
+  skill.served(lambda view: asyncio.ensure_future(view.tree(served)))
+  await skill.closed
+
+
+asyncio.run(main())
 ```
 
 A field of furb that the manifest does not know is refused with its path, so a typo does not pass.
