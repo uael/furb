@@ -203,9 +203,9 @@ pub enum Loader {
   Command,
   /// An agent that works for a line: an arrow that pulses from muted to its color.
   Agent,
-  /// The open thread works: a light sweeps over the word of work, then the word goes white whole
-  /// for a moment.
-  Light,
+  /// A word that says what works, as `Working` of the open thread, a model that `thinks` or that
+  /// `writes`: a light sweeps over it from its left, then the word goes white whole for a moment.
+  Light(&'static str),
 }
 
 /// How long one pulse of the arrow of an agent takes.
@@ -218,19 +218,22 @@ const SWEEP: u128 = 25;
 const WHOLE: [u128; 3] = [9, 10, 11];
 
 impl Loader {
-  /// The frames of the mark, in their order.
+  /// The frames of a glyph, in their order: none for the light, whose one frame is its word.
   pub const fn frames(self) -> &'static [&'static str] {
     match self {
       Self::Model => &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
       Self::Command => &["◐", "◓", "◑", "◒"],
       Self::Agent => &["↳"],
-      Self::Light => &[WORKS],
+      Self::Light(_) => &[],
     }
   }
 
   /// The frame of the mark after a time of work. The marks of the window read one time, so two
   /// marks of one kind show the same frame.
   pub fn frame(self, after: Duration) -> &'static str {
+    if let Self::Light(word) = self {
+      return word;
+    }
     let frames = self.frames();
     let steps = after.as_millis() / self.step().as_millis();
     frames[usize::try_from(steps).unwrap_or_default() % frames.len()]
@@ -239,14 +242,14 @@ impl Loader {
   /// How long one frame stays.
   pub const fn step(self) -> Duration {
     match self {
-      Self::Model | Self::Agent | Self::Light => Duration::from_millis(80),
+      Self::Model | Self::Agent | Self::Light(_) => Duration::from_millis(80),
       Self::Command => Duration::from_millis(120),
     }
   }
 
   /// The cells of the mark after a time of work, each with its color, from the color of its place:
   /// the frame of a glyph in that color, the arrow of an agent between muted and that color, or
-  /// each letter of the word of work between that color and white as the light passes it.
+  /// each letter of its word between that color and white as the light passes it.
   pub fn cells(self, after: Duration, color: Color, tokens: &Tokens) -> Vec<(&'static str, Color)> {
     match self {
       Self::Model | Self::Command => vec![(self.frame(after), color)],
@@ -257,7 +260,7 @@ impl Loader {
         let share = 100 * x * x * (3 * half - 2 * x) / (half * half * half);
         vec![(self.frame(after), mixed(tokens.muted, color, u16::try_from(share).unwrap_or(100)))]
       }
-      Self::Light => {
+      Self::Light(word) => {
         let step = after.as_millis() / self.step().as_millis() % SWEEP;
         // The light stands on the letter before the step, so it enters from the left of the word.
         let lit = |at: u128| match (at + 1).abs_diff(step) {
@@ -267,7 +270,7 @@ impl Loader {
           1 => 45,
           _ => 0,
         };
-        let letters = WORKS.char_indices().map(|(at, one)| &WORKS[at..at + one.len_utf8()]);
+        let letters = word.char_indices().map(|(at, one)| &word[at..at + one.len_utf8()]);
         let cells = (0..).zip(letters).map(|(at, one)| (one, mixed(color, WHITE, lit(at))));
         cells.collect()
       }

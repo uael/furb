@@ -713,7 +713,7 @@ impl Model {
         let (working, loader) = self.working(card);
         let at = columns(&working);
         hot.push((at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop))));
-        (working, vec![(2, loader), (4, Loader::Light)])
+        (working, vec![(2, loader), (4, Loader::Light(WORKS))])
       }
       // The launcher of a new session names its machine, so the row says the folder alone.
       (None, None) => (self.place(!matches!(self.client.target(), Target::New(..))), vec![]),

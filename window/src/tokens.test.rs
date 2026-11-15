@@ -48,7 +48,7 @@ fn a_light_terminal_takes_the_dark_background_of_the_window() {
 fn a_light_sweeps_the_word_of_work_from_its_left_then_whitens_it_whole_then_rests() {
   let tokens = Tokens::on(None);
   let lit = |millis: u64| -> Vec<bool> {
-    let cells = Loader::Light.cells(Duration::from_millis(millis), tokens.accent, &tokens);
+    let cells = Loader::Light(WORKS).cells(Duration::from_millis(millis), tokens.accent, &tokens);
     cells.iter().map(|(_, color)| *color == tokens.hover).collect()
   };
   let word =
@@ -56,8 +56,11 @@ fn a_light_sweeps_the_word_of_work_from_its_left_then_whitens_it_whole_then_rest
   let steps = [80, 400, 800, 900, 1500, 2000 + 80];
   let shown: Vec<String> = steps.map(|millis| word(&lit(millis))).to_vec();
   assert_eq!(shown, ["#......", "....#..", "#######", "#######", ".......", "#......"]);
-  let letters: String =
-    Loader::Light.cells(Duration::ZERO, tokens.accent, &tokens).iter().map(|one| one.0).collect();
+  let letters: String = Loader::Light(WORKS)
+    .cells(Duration::ZERO, tokens.accent, &tokens)
+    .iter()
+    .map(|one| one.0)
+    .collect();
   assert_eq!(letters, WORKS);
 }
 

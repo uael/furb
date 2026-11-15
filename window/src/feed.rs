@@ -24,6 +24,12 @@ use crate::{
   tokens::{APART, Loader, Role, WORKS},
 };
 
+/// The word on the line of a block whose model has not begun to write it.
+const WRITES: &str = "writes";
+
+/// The word of the thought of a model while it thinks.
+const THINKS: &str = "thinks";
+
 /// The columns of the left padding of a block, and of its ground before its text.
 const PAD: usize = 3;
 
@@ -360,15 +366,14 @@ impl Feed<'_> {
       Mark::Retries(retry) => (wrapped(&retry.why, room), self.style(Role::Muted)),
       _ => (Vec::new(), Style::new()),
     };
+    let writes = matches!(mark, Mark::Runs { work: Work::Writes, .. }) && line.text.is_empty();
     let colors = match mark {
       Mark::Retries(retry) => self.retry(retry),
       Mark::Failed { .. } if line.text.is_empty() && !under.is_empty() => {
         vec![run(under.remove(0), look)]
       }
       // A model asked for a line that it has not begun says so, so the lit row is never empty.
-      Mark::Runs { work: Work::Writes, .. } if line.text.is_empty() => {
-        vec![run("writes", self.style(Role::Muted).italic())]
-      }
+      _ if writes => vec![run(WRITES, self.style(Role::Muted).italic())],
       _ => colors,
     };
     let ground = if loader.is_some() { t.lifted } else { t.raised };
@@ -377,10 +382,10 @@ impl Feed<'_> {
     let mut text = vec![run(format!("{number:>gutter$}  "), Style::new().fg(color))];
     text.extend(clipped(colors, room, self.style(Role::Muted)));
     let shown = self.boxed(spread(text, timer, inner, Style::new()), ground);
-    let mut rows = vec![Row {
-      loaders: loader.map(|one| (PAD + gutter - 1, one)).into_iter().collect(),
-      ..Row::of(shown)
-    }];
+    // The light passes over the word that says that the model writes, as over each word of work.
+    let writes = (writes && loader.is_some()).then_some((PAD + gutter + 2, Loader::Light(WRITES)));
+    let loaders = loader.map(|one| (PAD + gutter - 1, one)).into_iter().chain(writes).collect();
+    let mut rows = vec![Row { loaders, ..Row::of(shown) }];
     rows.extend(output.into_iter().flatten());
     let under = under
       .iter()
@@ -428,14 +433,16 @@ impl Feed<'_> {
       // The last words keep room for the word before them and a time of eight columns after.
       None => {
         let words = tail(&thought.text, room.saturating_sub(" thinks · ".len() + 2 + 8));
-        ("thinks", words, self.model.since(thought.began))
+        (THINKS, words, self.model.since(thought.began))
       }
       Some(took) => ("thought", thought.first().to_owned(), Some(took).filter(|one| *one > 0)),
     };
     let time = seconds.map(|seconds| run(timer(seconds), muted));
     let said = vec![run(format!("  {word} · "), muted), run(text, style)];
     let line = spread(said, time.into_iter().collect(), room + 2, Style::new());
-    vec![Row::clicked(line, Click::Fold(fold))]
+    // While the model thinks, the light passes over the word that says so.
+    let light = thought.took.is_none().then_some((2, Loader::Light(THINKS)));
+    vec![Row { loaders: light.into_iter().collect(), ..Row::clicked(line, Click::Fold(fold)) }]
   }
 
   /// What an answer said, as markdown from the column of the text. A question is one line with its

@@ -1,6 +1,6 @@
 use std::{cell::Cell, collections::BTreeMap, ops::Range, path::PathBuf};
 
-use furb::view::{self, Block, Exchange, Line as Code, Maker, Mark, Page, Standing};
+use furb::view::{self, Block, Exchange, Line as Code, Maker, Mark, Page, Standing, Thought, Work};
 use furb_host::protocol::{Card, Verb};
 use jiff::tz::TimeZone;
 
@@ -10,7 +10,7 @@ use furb_client::Thread;
 use crate::{
   Options, System,
   model::{Link, Model, Told},
-  tokens::Tokens,
+  tokens::{Loader, Tokens},
 };
 
 /// One exchange of a thread: a message, and a block of two lines that ran.
@@ -155,4 +155,35 @@ fn a_thread_that_ends_twice_in_one_second_is_said_seen_at_each_end_and_reads_at_
     model.client.machines[0].cards[0].thread.readers.clear();
     assert_eq!(model.client.seen_due(), None);
   }
+}
+
+#[test]
+fn a_light_passes_over_the_word_of_a_model_that_writes_or_thinks_and_not_once_it_thought() {
+  let writes = Code {
+    number: 3,
+    text: String::new(),
+    mark: Mark::Runs { work: Work::Writes, began: None },
+    output: None,
+  };
+  let maker = Maker::Model { model: "claude-cli:opus".to_owned(), effort: None };
+  let thought = Thought { text: "the seed".to_owned(), began: 0, took: None };
+  let block = Block { maker, lines: vec![writes], more: false, thought: Some(thought) };
+  let mut end = page(0..1);
+  end.exchanges[0].block = Some(block);
+  let mut model = opened(end);
+  let lights = |model: &Model| -> Vec<(String, &'static str)> {
+    let left = model.left();
+    let lit = left.loaders.iter().filter_map(|spot| match spot.loader {
+      Loader::Light(word) => Some((texts(model)[usize::from(spot.y)].clone(), word)),
+      _ => None,
+    });
+    lit
+      .map(|(row, word)| (row.split_whitespace().next().unwrap_or_default().to_owned(), word))
+      .collect()
+  };
+  assert_eq!(lights(&model), [("writes".to_owned(), "writes"), ("thinks".to_owned(), "thinks")]);
+  let opened = model.client.thread.as_mut().expect("a thread is open");
+  let exchange = opened.thread.exchanges.get_mut(&0).expect("the exchange");
+  exchange.block.as_mut().and_then(|one| one.thought.as_mut()).expect("a thought").took = Some(3);
+  assert_eq!(lights(&model), [("writes".to_owned(), "writes")]);
 }
