@@ -1,9 +1,9 @@
- furb · the bench stalls on a cold build           Resolve     All projects ▾        This computer
+● furb · the bench stalls on a cold build          Resolve     All projects ▾        This computer
 ┃
 ┃ the bench stalls on a cold build                             Needs you 1
 ┃ (the model is asked again)                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ the bench stalls on a…   ‖ Paused ▌
-                                                              ▐ FU furb                      opus ▌
+┃                                                             ▐ ● the bench stalls on…   ‖ Paused ▌
+                                                              ▐   FU furb                    opus ▌
        opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     ✗  claude-cli:opus/high answered nothing:
        ProviderError: the request is malformed

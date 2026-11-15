@@ -30,7 +30,7 @@ fn opened(message: &str, shown: &str) -> (TestApp, Daemon, Peer) {
   peer.said(&life, message);
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
   let title = message.lines().next().unwrap();
-  app.click(80, row(&app, &title[..19]));
+  app.click(80, row(&app, &title[..15]));
   shows(&app, shown);
   (app, daemon, peer)
 }
@@ -282,7 +282,7 @@ fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_esc
   // The head names the agent once its card or its page came, which can follow the button.
   let head = || app.text().lines().next().unwrap().to_owned();
   let named =
-    app.wait_until(PATIENCE, || head().starts_with(" furb · agent · Run the bench of the replay "));
+    app.wait_until(PATIENCE, || head().starts_with("● furb · agent · Run the bench of the replay "));
   assert!(named, "{}", head());
   shows(&app, "await wait(600, chain)");
   screen("thread-agent", &app);

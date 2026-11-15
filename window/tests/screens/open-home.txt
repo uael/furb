@@ -1,12 +1,12 @@
  furb                                                          All projects ▾        This computer
 
   Nothing needs you.                                           Resting 2
-
-  ⌃O          go to a project or a session                      where does the time…    ⠴ Opening
-  ⌃P          commands                                          FU furb                      opus
-  ⌃X ?        each key
-                                                                remove the gate from…   ⠴ Opening
-                                                                FU furb                      opus
+  ● 2 sessions run.
+                                                                ● where does the time…  ⠴ Opening
+  ⌃O          go to a project or a session                        FU furb                    opus
+  ⌃P          commands
+  ⌃X ?        each key                                          ● remove the gate…      ⠴ Opening
+                                                                  FU furb                    opus
 
 
 

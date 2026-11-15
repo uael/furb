@@ -222,7 +222,7 @@ fn a_question_of_another_thread_marks_its_card_and_shows_no_form() {
   shows(&app, "Resolved 1");
   let frame = shows(&app, "◆ 1 other thread asks");
   assert!(
-    frame.contains("Needs you") && frame.contains("which key sends the…      ◆ Input"),
+    frame.contains("Needs you") && frame.contains("which key sends the…    ◆ Input"),
     "{frame}"
   );
   assert!(formless(&app) && frame.contains("┃ A reply opens this thread again"), "{frame}");

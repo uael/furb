@@ -86,6 +86,9 @@ pub struct Tokens {
   pub danger: Color,
   /// A line that a change adds.
   pub added: Color,
+  /// The mark of a session whose life runs, which a person can pause or end, where a session that
+  /// only rests in its record has none.
+  pub live: Color,
   /// The ground of a line that a change adds, of its hue, so its code keeps the colors of its
   /// grammar.
   pub added_ground: Color,
@@ -125,6 +128,7 @@ impl Tokens {
       attention: Color::hex(0xf5_a742),
       danger,
       added,
+      live: added,
       added_ground: mixed(base, added, 18),
       removed_ground: mixed(base, danger, 18),
       veil: Color::rgba(base.r, base.g, base.b, 160),

@@ -1,9 +1,9 @@
- furb · how many rows                              Resolve     All projects ▾        This computer
+● furb · how many rows                             Resolve     All projects ▾        This computer
 ┃
 ┃ how many rows                                                Needs you 1
 ┃ (the model asks a number)                                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ how many rows             ◆ Input ▌
-                                                              ▐ FU furb                      opus ▌
+┃                                                             ▐ ● how many rows           ◆ Input ▌
+                                                              ▐   FU furb                    opus ▌
        opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     ◆  rows = await prompt(int, 'How many rows does t…+28
     2  close(str(rows))

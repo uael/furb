@@ -1,4 +1,4 @@
- furb · how long does an open take            ✓ Resolved       All projects ▾        This computer
+● furb · how long does an open take           ✓ Resolved       All projects ▾        This computer
 ┃
 ┃ how long does an open take                                   Resolved 1 ▾
 ┃ (the model answers)

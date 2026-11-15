@@ -1,4 +1,4 @@
- furb · Debug stuck TUI after merge                                ✗ Failed
+● furb · Debug stuck TUI after merge                               ✗ Failed
 ┃
 ┃ Debug stuck TUI after merge
 ┃ (the model works on it)

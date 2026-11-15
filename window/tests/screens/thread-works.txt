@@ -1,9 +1,9 @@
- furb · where does the time of a resume go         Resolve     All projects ▾        This computer
+● furb · where does the time of a resume go        Resolve     All projects ▾        This computer
 ┃
 ┃ where does the time of a resume go                           Working 1
 ┃ (the model writes a long word)                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ where does the time…    ◐ Working ▌
-                                                              ▐ FU furb                      opus ▌
+┃                                                             ▐ ● where does the time…  ◐ Working ▌
+                                                              ▐   FU furb                    opus ▌
        opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     …  4 lines
     5  stages = ['read', 'boot', 'seed', 'turns']

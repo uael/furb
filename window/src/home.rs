@@ -72,6 +72,7 @@ impl Model {
       // The key shows where the row holds the two whole.
       let key = if says.width() + 2 + key.width() <= room { key } else { String::new() };
       rows.push(self.said(&says, prose, &key));
+      rows.extend(self.running());
       rows.push(Vec::new());
       let alone = self.alone();
       if !alone.is_empty() {
@@ -117,6 +118,34 @@ impl Model {
       Some(rest) if rest.starts_with('\\') => format!("~{}", rest.replace('\\', "/")),
       _ => shown,
     }
+  }
+
+  /// The row that counts the sessions whose life runs, behind the mark of their cards, and those of
+  /// them that no window views; none while no life runs.
+  fn running(&self) -> Option<Line> {
+    let mut lives: Vec<(usize, &str, bool)> = self
+      .client
+      .settled
+      .iter()
+      .filter(|(_, key, card)| self.live(key, card))
+      .map(|(_, key, card)| (key.0, card.life.as_str(), self.unheld(key.0, card)))
+      .collect();
+    lives.sort_unstable();
+    lives.dedup();
+    let alone = lives.iter().filter(|one| one.2).count();
+    let says = match (lives.len(), alone) {
+      (0, _) => return None,
+      (1, 0) => "1 session runs.".to_owned(),
+      (1, _) => "1 session runs, with no window.".to_owned(),
+      (count, 0) => format!("{count} sessions run."),
+      (count, alone) => format!("{count} sessions run, {alone} with no window."),
+    };
+    let muted = self.tokens.style(Role::Muted);
+    Some(vec![
+      run("  ", Style::new()),
+      run("● ", Style::new().fg(self.tokens.live)),
+      run(says, muted),
+    ])
   }
 
   /// Each session that works with no view, since when, and each thread that the operator paused,

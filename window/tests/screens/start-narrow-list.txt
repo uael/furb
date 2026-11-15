@@ -1,29 +1,29 @@
- furb · Debug stuck TUI…    ✗ Failed       All projects ▾       studio offline
+● furb · Debug stuck TUI…   ✗ Failed       All projects ▾       studio offline
 ┃
-┃ Debug stuck TUI after merge               TUI scope for the new…    ◆ Input
-┃ (the model works on it)                   FU furb                      opus
+┃ Debug stuck TUI after merge               ● TUI scope for the new…  ◆ Input
+┃ (the model works on it)                     FU furb                    opus
 ┃                                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-                                          ▐ Debug stuck TUI after…   ✗ Failed ▌
-       opus/high                          ▐ FU furb                      opus ▌
+                                          ▐ ● Debug stuck TUI…       ✗ Failed ▌
+       opus/high                          ▐   FU furb                    opus ▌
     ■                         stopped     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
                                            Working 2
 
-                                            run the…      Working as of 09:12
-                                            FC furb-cloud@studio       opus ◌
+                                              run the…    Working as of 09:12
+                                              FC furb-cloud@studio     opus ◌
 
-                                            which key sends…    ⠋ Working 11h
-                                            PH photowroom              opus ◌
+                                            ● which key sends…  ⠋ Working 11h
+                                              PH photowroom            opus ◌
 
                                            Resting 3
 
-                                            remove the gate from the…    ● 5h
-                                            FU furb                      opus
+                                              remove the gate from the…  ● 5h
+                                              FU furb                    opus
 
-                                            where does the time go        11h
-                                            FU furb                      opus
+                                              where does the time go      11h
+                                              FU furb                    opus
 
-┃                                           Ground the branch…   ‖ Paused 11h
-┃ A reply opens this thread again           FU furb                      opus
+┃                                             Ground the…        ‖ Paused 11h
+┃ A reply opens this thread again             FU furb                    opus
 ┃
 ┃  Message  Python    → ……opus   + ⌃N      Context               No answer yet
 ┃                                          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

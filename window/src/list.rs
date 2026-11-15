@@ -217,7 +217,13 @@ impl Model {
     let (_, key, card) = &self.client.settled[at];
     let told = &self.client.machines[key.0];
     let on = |style: Style| ground.on(style);
-    let title = vec![run(card.thread.title.clone(), on(t.style(Role::Title)))];
+    // A session whose life runs has its mark and its title bright; one that rests in its record
+    // has neither, so what runs reads at a glance down the list.
+    let live = self.live(key, card);
+    let (mark, style) =
+      if live { ("● ", t.style(Role::Title)) } else { ("  ", t.style(Role::Prose)) };
+    let title =
+      vec![run(mark, on(Style::new().fg(t.live))), run(card.thread.title.clone(), on(style))];
     let first = spread(title, self.state(key, card, ground), CARD, on(Style::new()));
 
     let project = project(card);
@@ -230,7 +236,12 @@ impl Model {
     let place = format!("{project}{machine}{}{session}", branch.unwrap_or_default());
     let badge = self.badge(&project);
     let badge = run(badge.content, on(badge.style));
-    let left = vec![badge, run(" ", on(Style::new())), run(place, on(t.style(Role::Muted)))];
+    let left = vec![
+      run("  ", on(Style::new())),
+      badge,
+      run(" ", on(Style::new())),
+      run(place, on(t.style(Role::Muted))),
+    ];
     let others = card.viewers.iter().filter(|login| **login != told.login);
     let initials: Vec<String> =
       others.map(|login| login.chars().take(2).collect::<String>().to_lowercase()).collect();
@@ -255,7 +266,9 @@ impl Model {
     let on = |style: Style| ground.on(style);
     let title = run(card.thread.title.clone(), on(t.style(Role::Muted)));
     let mark = if card.refused.is_some() { "  " } else { "✓ " };
-    let left = vec![run(mark, on(t.style(Role::Muted))), title];
+    let runs = self.live(&self.client.settled[at].1, card);
+    let look = if runs { Style::new().fg(t.live) } else { t.style(Role::Muted) };
+    let left = vec![run(mark, on(look)), title];
     let age = match card.refused {
       Some(_) => "read only".to_owned(),
       None => self.age(card.since).unwrap_or_else(|| "now".to_owned()),
@@ -323,6 +336,12 @@ impl Model {
   pub(crate) fn badge(&self, project: &str) -> Span<'static> {
     let hue = self.tokens.hues[hash(project) % self.tokens.hues.len()];
     run(badge(project), Style::new().fg(hue).bold())
+  }
+
+  /// Whether a life runs the session of a card: the life that the window opens, or the one that its
+  /// machine holds as it told in this connection, since a card kept from before says no more.
+  pub(crate) fn live(&self, key: &Key, card: &Card) -> bool {
+    self.client.holds.contains_key(&(key.0, card.life.clone())) || card.held && self.confirmed(key)
   }
 
   /// Whether a life holds the record of a card and no view holds that life. The window is a view of

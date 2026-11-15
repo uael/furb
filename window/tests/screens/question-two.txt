@@ -1,9 +1,9 @@
- furb · what does the head say                     Resolve     All projects ▾        This computer
+● furb · what does the head say                    Resolve     All projects ▾        This computer
 ┃
 ┃ what does the head say                                       Needs you 1
 ┃ (the model asks twice)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ what does the head say    ◆ Input ▌
-                                                              ▐ FU furb                      opus ▌
+┃                                                             ▐ ● what does the head say  ◆ Input ▌
+                                                              ▐   FU furb                    opus ▌
        opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     ◆  one = prompt(bool, 'Does the head count the qu…+23
     ◆  two = prompt(str, 'What does the head say?', t…+11

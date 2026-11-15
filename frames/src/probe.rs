@@ -90,6 +90,7 @@ fn palette(tokens: &Tokens) -> Vec<Rgb> {
     tokens.attention,
     tokens.danger,
     tokens.added,
+    tokens.live,
     tokens.added_ground,
     tokens.removed_ground,
   ];

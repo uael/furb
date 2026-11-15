@@ -1,4 +1,4 @@
- furb-try · how long does an open…    ✓ Resolved    Reopen     All projects ▾        This computer
+● furb-try · how long does an open…   ✓ Resolved    Reopen     All projects ▾        This computer
 ┃
                                                                Resolved 1 ▸
        opus/high

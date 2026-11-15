@@ -1,9 +1,9 @@
- furb · how long does an open take            ✓ Resolved       All projects ▾        This computer
+● furb · how long does an open take           ✓ Resolved       All projects ▾        This computer
 ┃
 ┃ how long does an open take                                   Needs you 1
 ┃ (the model answers)
-┃                                                               which key sends the…      ◆ Input
-                                                                FU furb                      opus
+┃                                                               ● which key sends the…    ◆ Input
+                                                                  FU furb                    opus
        opus/high
     1  found = 2                                               Resolved 1 ▸
     2  close('The open takes **329 s**. Two stages h…+251

@@ -2,8 +2,8 @@
 
   Nothing needs you.                                           Working 1
 
-    Go to                                               ⎋       run the bench of…       ⠋ Working
-    ▌Search a thread, a session, a project          1 / 2       FU furb                      opus
+    Go to                                               ⎋       ● run the bench of…     ⠋ Working
+    ▌Search a thread, a session, a project          1 / 2         FU furb                    opus
 
     Working                                                    Resolved 1 ▸
     ▌FU run the bench of replay                     furb

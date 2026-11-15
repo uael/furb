@@ -1,9 +1,9 @@
- furb · agent · Run the bench of the replay           Back     All projects ▾        This computer
+● furb · agent · Run the bench of the replay          Back     All projects ▾        This computer
 ┃
 ┃ Run the bench of the replay                                  Working 1
 ┃ (the agent waits)                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ measure the open on…    ◐ Working ▌
-                                                              ▐ FU furb                   opus └2 ▌
+┃                                                             ▐ ● measure the open on…  ◐ Working ▌
+                                                              ▐   FU furb                 opus └2 ▌
        opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     1  n = 2
     ◐  await wait(600, chain)

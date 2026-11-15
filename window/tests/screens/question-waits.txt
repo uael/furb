@@ -1,9 +1,9 @@
- furb · how long does an open take                 Resolve     All projects ▾        This computer
+● furb · how long does an open take                Resolve     All projects ▾        This computer
   the boot.
                                                                Resting 1
   • seed reads each chain once                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-  • the image skips the boot                                  ▐ how long does an open…    ◆ Input ▌
-                                                              ▐ FU furb                      opus ▌
+  • the image skips the boot                                  ▐ ● how long does an open…  ◆ Input ▌
+                                                              ▐   FU furb                    opus ▌
        python                                                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     1  open = boot + seed
 

@@ -1,4 +1,4 @@
- furb · why is the window stuck after a…      ✓ Resolved       All projects ▾        This computer
+● furb · why is the window stuck after a…     ✓ Resolved       All projects ▾        This computer
 ┃
 ┃ why is the window stuck after a switch of model              Resolved 1 ▸
 ┃ (the model fails)

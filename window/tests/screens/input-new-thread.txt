@@ -1,9 +1,9 @@
- furb-try · where does the time go (the model…     Resolve     All projects ▾        This computer
+● furb-try · where does the time go (the model…    Resolve     All projects ▾        This computer
 ┃
 ┃ where does the time go (the model works on it)               Working 1
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-                                                              ▐ where does the time…    ⠋ Working ▌
-       opus/high                                              ▐ FT furb-try                  opus ▌
+                                                              ▐ ● where does the time…  ⠋ Working ▌
+       opus/high                                              ▐   FT furb-try                opus ▌
     ⠋  writes                                                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     …
 

@@ -1,9 +1,9 @@
- furb-try · one (the model works on it)            Resolve     All projects ▾        This computer
+● furb-try · one (the model works on it)           Resolve     All projects ▾        This computer
 ┃
 ┃ one (the model works on it)                                  Working 1
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-                                                              ▐ one (the model works…   ◐ Working ▌
-       opus/high                                              ▐ FT furb-try                  opus ▌
+                                                              ▐ ● one (the model…       ◐ Working ▌
+       opus/high                                              ▐   FT furb-try                opus ▌
     ⠋  writes                                                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     …
 

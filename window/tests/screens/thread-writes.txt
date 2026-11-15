@@ -1,9 +1,9 @@
- furb · why is the seed slow on a big record       Resolve     All projects ▾        This computer
+● furb · why is the seed slow on a big record      Resolve     All projects ▾        This computer
 ┃
 ┃ why is the seed slow on a big record                         Working 1
 ┃ (the model thinks)                                          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ why is the seed slow…   ⠋ Working ▌
-                                                              ▐ FU furb                      opus ▌
+┃                                                             ▐ ● why is the seed…      ⠋ Working ▌
+                                                              ▐   FU furb                    opus ▌
        opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     1  cost = tokens(word)
     ⠋  proof = await bash('pytest -q test/outside

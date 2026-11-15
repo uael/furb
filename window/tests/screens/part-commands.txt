@@ -2,8 +2,8 @@
 
   Nothing needs you.                                           Working 1
 
-    Commands                                            ⎋       run the bench of…       ⠋ Working
-    ▌Search a command                              1 / 19       FU furb                      opus
+    Commands                                            ⎋       ● run the bench of…     ⠋ Working
+    ▌Search a command                              1 / 20         FU furb                    opus
 
     Go                                                         Resolved 1 ▸
     ▌Go to a project or a session                     ⌃O

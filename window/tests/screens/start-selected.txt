@@ -1,25 +1,25 @@
- furb · Debug stuck TUI after merge             ✗ Failed       All projects ▾       studio offline
+● furb · Debug stuck TUI after merge            ✗ Failed       All projects ▾       studio offline
 ┃
-┃ Debug stuck TUI after merge                                 ▐ FU furb                      opus ▌
+┃ Debug stuck TUI after merge                                 ▐   FU furb                    opus ▌
 ┃ (the model works on it)                                     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
 ┃                                                              Working 2
 
-       opus/high                                                run the…      Working as of 09:12
-    ■                                             stopped       FC furb-cloud@studio       opus ◌
+       opus/high                                                  run the…    Working as of 09:12
+    ■                                             stopped         FC furb-cloud@studio     opus ◌
 
-                                                                which key sends…    ⠋ Working 11h
-                                                                PH photowroom              opus ◌
+                                                                ● which key sends…  ⠋ Working 11h
+                                                                  PH photowroom            opus ◌
 
                                                                Resting 3
 
-                                                                remove the gate from the…    ● 5h
-                                                                FU furb                      opus
+                                                                  remove the gate from the…  ● 5h
+                                                                  FU furb                    opus
 
-                                                                where does the time go        11h
-                                                                FU furb                      opus
+                                                                  where does the time go      11h
+                                                                  FU furb                    opus
 
-                                                                Ground the branch…   ‖ Paused 11h
-                                                                FU furb                      opus
+                                                                  Ground the…        ‖ Paused 11h
+                                                                  FU furb                    opus
 
                                                                Resolved 1 ▾
 ┃

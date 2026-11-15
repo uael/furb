@@ -161,8 +161,14 @@ impl Feed<'_> {
       Some(_) => ("agent · ", title),
       None => ("", named.unwrap_or(title)),
     };
-    let left =
-      vec![run(format!(" {project} · {mark}"), muted), run(title, self.style(Role::Title))];
+    // The head marks a session whose life runs as its card does, in the column of the bars of the
+    // messages, so its project stands over their text.
+    let runs = card.is_some_and(|card| self.model.live(&root.thread.key, card));
+    let left = vec![
+      run(if runs { "●" } else { " " }, Style::new().fg(t.live)),
+      run(format!(" {project} · {mark}"), muted),
+      run(title, self.style(Role::Title)),
+    ];
     // A life that a fault ended takes no resolve: it only reads.
     let made = !self.opened.thread.key.2.is_empty() && !self.model.leaves() && !self.ended();
     let (mark, button) = match card.map(|card| &card.thread) {
