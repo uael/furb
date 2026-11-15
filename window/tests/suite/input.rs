@@ -313,25 +313,19 @@ fn ctrl_c_empties_the_input_then_names_his_last_message_that_runs_and_takes_it_b
   shows(&app, "┃ a draft to drop");
   app.press("ctrl+c");
   shows(&app, "┃ Ask for a change, a review or an answer");
-  // A message on a thread that works is read at its next step, so the thread is what still runs.
+  // Each message on a thread is a question that runs until its answer, so the last one runs.
   for word in ["one", "two", "three"] {
     sent(&app, &format!("{word} {WORKS}"));
   }
   assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions).len() == 3));
   paged(&app);
   app.press("ctrl+c");
-  let frame = shows(&app, "⌃C again takes back “one (the model works…");
-  assert!(frame.contains("Working 1"), "{frame}");
+  shows(&app, "⌃C again takes back “three (the model works…");
   screen("input-take-back", &app);
   app.press("ctrl+c");
-  let frame = shows(&app, "Stopped");
-  assert!(frame.contains(&format!("┃ one {WORKS}")), "{frame}");
-  // The card of the thread says that it works no more once its machine heard the stop.
-  assert!(app.wait_until(PATIENCE, || !app.text().contains("Working 1")), "{}", app.text());
-  // The first press empties the input, and the second says that nothing of his runs now.
-  app.press("ctrl+c");
-  app.press("ctrl+c");
-  shows(&app, "Nothing that you sent still runs here.");
+  // The question of the message stops, and its text comes back to the input.
+  let frame = shows(&app, "stopped");
+  assert_eq!(frame.matches(&format!("┃ three {WORKS}")).count(), 2, "{frame}");
 }
 
 #[test]

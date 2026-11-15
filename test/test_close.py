@@ -183,7 +183,7 @@ async def test_a_close_in_the_wrong_shape_is_a_raise_of_its_step_which_is_barren
   act = engine.prompt(int, "count", on=root)
   await settle()
   assert len([a for a in said(log, "rung") if a[2] == act]) == 3 and engine.paused(act)
-  assert [a[3] for a in said(log, "pause") if a[1] == act] == ["made nothing"]
+  assert [repr(a[3]) for a in said(log, "pause") if a[1] == act] == [repr(Refused("'bad' not int"))]
   sand, log, root = born("x = bash('slow')\nclose('bad')", "close('bad')", "close('bad')", "close(4)", auto=False)
   act = engine.prompt(int, "count", on=root)
   await settle()
@@ -237,6 +237,18 @@ async def test_a_close_of_a_prompt_that_another_says_first_cancels_each_act_unde
   (ear,) = [a[1] for a in log if a[0] == "shut"]
   assert (await act) == 22 and isinstance(engine.peek(command), CancelledError)
   assert f"#{command} cancelled by {ear}" in heads(engine.turns(on=root))
+
+
+async def test_for_a_close_a_question_on_a_prompt_is_under_that_prompt() -> None:
+  """For a close, a question on a prompt is under that prompt, with what is under that question, so a word cannot close a thread while a question on the thread waits for its answer, and a word of that question is a word under the thread."""
+  first = "[x[1] for x in transcript(of='prompt') if x[5] == 'count'][0]"
+  _, log, root = born("await wait(600, __name__)", f"close(1, {first})", "close('because')", "close(2)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  await settle()
+  why = engine.prompt(str, "why?", on=one)
+  assert (await why, await one) == ("because", 2)
+  refused = [engine.peek(a[1]) for a in said(log, "rung") if isinstance(engine.peek(a[1]), Refused)]
+  assert [str(x) for x in refused] == [f"{one} runs [{why!r}]: await or cancel each"]
 
 
 async def test_a_close_on_an_act_that_is_over_reaches_only_the_words_that_still_run_under_it() -> None:

@@ -167,15 +167,16 @@ def close(value: object, id=""):
     for x in listening()
     if prompted(id)
     and x != id
-    and under(x, id)
+    and covers(("cancel", id), x)
     and get(x)[0] in ("bash", "prompt")
     and not (over(x) or any(covers(c, x) for c in transcript(x, "cancel") + transcript(x, "close")))
   ]
-  if left and under(who, id):
+  inside = under(who, id) or any(under(who, x) for x in left)
+  if left and inside:
     raise Refused(f"{id} runs {left}: await or cancel each")
   [cancel(x) for x in left]
   control("close", "closed", id, value)
-  if under(who, id):
+  if inside:
     raise CancelledError()
 
 
@@ -280,7 +281,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
     running, waiting, last, bound, held, due = set(), {}, standing(), 0, {}, set()
-    barren, wrote, inbox, owed, took, awaited, did, seen = {}, {}, {}, {}, {}, {}, {}, {}
+    barren, wrote, awaited, did, seen = {}, {}, {}, {}, {}
     step = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
@@ -406,9 +407,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
           heed(thread(maker))
-        case ("prompt", m, by, p, "None", *_) if p in barren and thread(by) != p:
+        case ("prompt", _, by, p, "None", *_) if thread(by) != p:
           heed(p)
-          operated(by) and inbox.setdefault(p, []).append(m)
         case ("pause", about, by, _) if scope(by) != id == scope(about):
           heed(thread(r[2]))
         case ("close" | "cancel", about, by, *_) if r[2] in running or thread(by) == held.get(about):
@@ -426,7 +426,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             heed(held[about])
       a[0] == "wake" and [heed(x) for x in barren if covers(a, x)]
       if a[2] in did:
-        did[a[2]].add("close" if a[0] == "prompt" and operated(a[6]) else a[0])
+        did[a[2]].add(a[0])
       if a[0] in ("prompt", "rung") or (a[0] == "started" and not get(a[2]) and r[0] != "reply"):
         held[a[1]] = thread(r[2])
       elif a[0] == "done":
@@ -438,26 +438,22 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       if a[0] == "rung":
         did[a[1]] = set()
       if a[0] == "done" and r[0] == "rung" and (p := r[2]) in barren and not isinstance(a[3], CancelledError):
-        kinds, debt = did[a[1]], owed.get(p, [])
-        if "close" in kinds:
-          debt = owed[p] = [x for x in debt if x not in took.get(a[1], [])]
         broke, waited, word = isinstance(a[3], Exception), a[1] in awaited, ladder.get(a[1])
         busy, written = p in held.values(), wrote.setdefault(p, [])
         barren[p] = (barren[p] + 1) * bool(
           broke
-          or debt
           or (
             not waited
             and (
               word in written
-              or (kinds <= {"started", "ready", "done", "reply", "tell", "ran"} and seen.get(p) == module())
+              or (did[a[1]] <= {"started", "ready", "done", "reply", "tell", "ran"} and seen.get(p) == module())
             )
           )
         )
         written.append(word)
         if barren[p] // 3:
-          (debt or not busy) and pause(p, debt or "made nothing")
-        elif debt or broke or waited or "tell" in kinds or not busy:
+          busy or pause(p, a[3] if broke else "made nothing")
+        elif broke or waited or "tell" in did[a[1]] or not busy:
           due.add(p)
       match a:
         case ("carried", *_):
@@ -496,14 +492,10 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         case ("done", about, *_) if about == note and step in waiting:
           if (p := get(step)[2]) in barren:
             due.discard(p)
-            took[step] = [*inbox.get(p, [])]
             seen[p] = {**module()}
           with site.set(step):
             waiting[step] = reply = act("reply", id, controlled(idle), to)
         case ("ready", rid, _, word):
-          if rid in took:
-            inbox[p := r[2]] = inbox.get(p, [])[len(took[rid]) :]
-            took[rid] = owed[p] = owed.get(p, []) + took[rid]
           rid == step or bind(rid)
           ladder[(donor := r[5]) or rid] = word
           act("run", id, None, rid, unquoted(word), donor)
@@ -512,11 +504,9 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           pause(id, why)
         case ("done", about, *_) if about in barren:
           due.discard(about)
-          for fold in (barren, owed, wrote, seen):
+          for fold in (barren, wrote, seen):
             fold.pop(about, None)
-          for message in inbox.pop(about, []):
-            with site.set(message):
-              rung(to=r[6])
+          thread(r[2]) != r[3] and heed(r[3])
       if r[0] == "wants":
         rid = get(r[2])[4]
         running.discard(rid) if a[0] == "started" else running.add(rid)
@@ -524,15 +514,14 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           awaited[rid] = r[4]
       elif a[0] == "done":
         running.discard(a[1])
-        for fold in (took, awaited, did):
+        for fold in (awaited, did):
           fold.pop(a[1], None)
       if running:
         continue
       if (step not in waiting or paused(step)) and (
-        (got := next((x for x in waiting if not (paused(x) or over(x) or waiting[x])), "")),
-        step := got or step * (step in waiting),
-      )[0]:
-        maker, to = get(step)[2::4]
+        got := next((x for x in waiting if not (paused(x) or over(x) or waiting[x])), "")
+      ):
+        maker, to = get(step := got)[2::4]
         if offered(last[0], to) is None:
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:

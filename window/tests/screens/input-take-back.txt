@@ -2,7 +2,7 @@
 ┃
 ┃ one (the model works on it)                                  Working 1
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-                                                              ▐ one (the model works…   ⠋ Working ▌
+                                                              ▐ one (the model works…   ◐ Working ▌
        opus/high                                              ▐ FT furb-try                  opus ▌
     ⠋                                                         ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     …
@@ -11,15 +11,15 @@
 ┃ two (the model works on it)
 ┃
 
+       opus/high
+    …
+
 ┃
 ┃ three (the model works on it)
 ┃
 
-
-
-
-
-
+       opus/high
+    …
 
 
 ┃
@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → one (the… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⌃C again takes back “one (the model works…    ⌃P commands
+  ⌃C again takes back “three (the model works…  ⌃P commands

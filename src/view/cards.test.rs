@@ -57,13 +57,6 @@ fn a_thread_that_worked_rests_once_no_life_holds_its_record() {
 }
 
 #[test]
-fn a_message_on_an_open_thread_is_a_notice_and_on_an_ended_thread_a_question() {
-  let shapes = [Standing::Thinks, Standing::Rests, Standing::Resolved, Standing::Stopped]
-    .map(|standing| card(standing, &[]).reply());
-  assert_eq!(shapes, ["None", "None", "str", "str"]);
-}
-
-#[test]
 fn the_skills_of_a_life_are_those_that_the_last_read_of_the_index_on_its_root_told() {
   let index = |names: &[&str]| {
     let lines = names.iter().map(|name| format!("{name} (code, on): Does {name}"));

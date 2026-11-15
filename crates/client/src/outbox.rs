@@ -167,14 +167,11 @@ impl Client {
     let next = self.outgoing.front().filter(|next| self.stands(next.at, &next.life))?;
     let life = next.life.clone();
     let message = next.text.clone();
-    let verb = match &next.thread {
-      _ if next.python => Verb::Run { life, word: message, on: None },
-      None => Verb::Prompt { life, shape: "str".to_owned(), message, to: None, on: None },
-      Some(thread) => {
-        let card = self.card(&(next.at, life.clone(), thread.clone()));
-        let shape = card.map_or("None", |card| card.thread.reply()).to_owned();
-        Verb::Prompt { life, shape, message, to: None, on: Some(thread.clone()) }
-      }
+    // A message waits for its answer, on a thread as on a new one: it is a question.
+    let verb = if next.python {
+      Verb::Run { life, word: message, on: None }
+    } else {
+      Verb::Prompt { life, shape: "str".to_owned(), message, to: None, on: next.thread.clone() }
     };
     Some((next.at, verb))
   }

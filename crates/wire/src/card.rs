@@ -109,13 +109,6 @@ impl Card {
     matches!(self.standing, Standing::Resolved | Standing::Stopped | Standing::Failed)
   }
 
-  /// The shape of a message of the operator on the thread: none while its prompt is open, so its
-  /// model reads the message at its next step, and a text once the thread ended, which opens the
-  /// thread again as a question.
-  pub fn reply(&self) -> &'static str {
-    if self.ended() { "str" } else { "None" }
-  }
-
   /// The card of a thread whose record no life holds: nothing works there, so a thread that worked
   /// rests, and no agent of it works.
   #[must_use]
