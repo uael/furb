@@ -19,7 +19,7 @@ pub const PROTOCOL: u32 = 47;
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
 /// version on, or the daemon maps it, and `host/tests/kits` holds what a skill of each version
-/// says.
+/// says and reads.
 pub const KITS: u32 = 44;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.

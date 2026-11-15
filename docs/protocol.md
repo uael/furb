@@ -93,7 +93,9 @@ The first frame of a peer is its hello:
   exception: a kit works from the moment that it is written, so the daemon takes a skill of each version from `KITS`
   to its own. What a skill says keeps its meaning across those versions, or the daemon maps it, and
   `host/tests/kits/<version>.jsonl` holds the lines that a skill of each version says, which a test of the crate
-  replays on each later daemon. A change of the protocol that breaks one of those lines adds its mapping. A first frame
+  replays on each later daemon. `host/tests/kits/<version>.heard.jsonl` holds the frames that a skill of each version
+  reads, and the test holds each later daemon to tell a frame of each with each key of it, of the same type, and the
+  same name for a variant. A change of the protocol that breaks one of those lines adds its mapping. A first frame
   that is no hello gets the refusal `first`, and the daemon closes the peer. A second hello gets the refusal `again`.
 - The version rises with each change of the schema, `host/protocol.schema.json`: a test of the crate keeps the digest
   of the schema of each version. A window that meets a daemon of another version does not wait and asks no handover,

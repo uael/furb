@@ -19,6 +19,7 @@ from furb import skill as client
 from furb.protocol import PROTOCOL
 
 GOLDEN = Path(__file__).resolve().parents[2] / "host" / "tests" / "kits" / "44.jsonl"
+HEARD = GOLDEN.with_suffix(".heard.jsonl")
 PEER = {"operator": "o", "role": "write", "kind": "skill", "name": "k"}
 
 
@@ -180,6 +181,21 @@ async def test_a_skill_answers_each_open_act_of_its_kind_with_a_close_and_skips_
     "k.count1",
     "k.drop1",
   ]
+
+
+async def test_a_skill_reads_each_frame_that_a_kit_of_its_version_reads(daemon: Daemon) -> None:
+  skill = await client.Skill.attach(env=env(daemon))
+  facts: list[list[object]] = []
+  views: list[client.View] = []
+  gestures: list[object] = []
+  skill.heard(lambda fact, _seq: facts.append(fact))
+  skill.served(lambda view: (views.append(view), view.events(gestures.append)))
+  heard = [json.loads(line) for line in HEARD.read_text().splitlines()]
+  for frame in heard:
+    daemon.push(frame)
+  await until(lambda: views and views[0].disposed.done())
+  assert facts == [heard[0]["event"]["data"]]
+  assert gestures == [heard[2]]
 
 
 async def test_a_refusal_names_its_kind_and_a_close_ends_each_verb_that_waits(daemon: Daemon) -> None:

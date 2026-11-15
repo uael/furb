@@ -1675,6 +1675,59 @@ async fn a_skill_serves_a_tree_to_a_writer_and_a_reader_and_hears_the_writer_alo
 }
 
 #[tokio::test]
+async fn each_frame_that_a_kit_of_each_version_reads_stands_in_what_the_daemon_tells_it() {
+  let at = place();
+  let local = started_as(&at, &[Role::Write, Role::Write]).await;
+  let mut skill = Window::dialed_as(&local, Kind::Skill, Some("k")).await;
+  let mut writer = Window::dialed(&local).await;
+  let life = opened(&mut writer, &at, "a.jsonl").await;
+  skill.attach(&life).await;
+  writer.attach(&life).await;
+  writer.ran(&life, "x = 1").await;
+  assert_eq!(writer.ask(mount(&life, "w")).await, Ok(Answer::Done));
+  let mut told = vec![skill.until(|frame| matches!(frame, Frame::ViewMount(_))).await];
+  assert_eq!(skill.ask(tree("w")).await, Ok(Answer::Done));
+  writer.until(|frame| matches!(frame, Frame::ViewTree(_))).await;
+  assert_eq!(writer.ask(pressed("w")).await, Ok(Answer::Done));
+  told.push(skill.until(|frame| matches!(frame, Frame::ViewEvent(_))).await);
+  assert_eq!(writer.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  told.push(skill.until(|frame| matches!(frame, Frame::ViewDispose(_))).await);
+  told.extend(skill.pushed.drain(..));
+  let told: Vec<Value> = told.iter().map(|frame| serde_json::to_value(frame).unwrap()).collect();
+  let kits = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/kits");
+  for heard in fs::read_dir(&kits).unwrap().flatten().map(|one| one.path()) {
+    if !heard.to_string_lossy().ends_with(".heard.jsonl") {
+      continue;
+    }
+    for line in fs::read_to_string(&heard).unwrap().lines() {
+      let read: Value = serde_json::from_str(line).unwrap();
+      let stands =
+        told.iter().any(|frame| frame["frame"] == read["frame"] && holds("", frame, &read));
+      assert!(stands, "{}: no frame holds {line}", heard.display());
+    }
+  }
+}
+
+/// The keys whose text names a variant, which a kit matches on as it stands.
+const TAGS: [&str; 4] = ["frame", "event", "slot", "kind"];
+
+/// Whether a value that the daemon told holds each key that a kit reads, under a key, with a value
+/// of the same type, and the same text where the key names a variant.
+fn holds(key: &str, told: &Value, read: &Value) -> bool {
+  match (told, read) {
+    (Value::Object(told), Value::Object(read)) => {
+      read.iter().all(|(key, one)| told.get(key).is_some_and(|two| holds(key, two, one)))
+    }
+    (Value::Array(_), Value::Array(_))
+    | (Value::Number(_), Value::Number(_))
+    | (Value::Bool(_), Value::Bool(_))
+    | (Value::Null, Value::Null) => true,
+    (Value::String(told), Value::String(read)) => told == read || !TAGS.contains(&key),
+    _ => false,
+  }
+}
+
+#[tokio::test]
 async fn a_mount_needs_a_skill_and_a_holder_and_a_view_ends_with_its_peer() {
   let at = place();
   let local = started_as(&at, &[Role::Write, Role::Write]).await;
