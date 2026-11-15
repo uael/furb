@@ -13,7 +13,10 @@ use std::{
 };
 
 use furb::view::Part;
-use furb_host::protocol::{Answer, Card, Frame, Listed};
+use furb_host::{
+  Event,
+  protocol::{Answer, Card, Frame, Listed},
+};
 use jiff::{Timestamp, tz::TimeZone};
 use serde::{Deserialize, Serialize};
 
@@ -194,6 +197,9 @@ impl Model {
       }
       Ok(Frame::Cards { ref life, ref changed, .. }) if changed.iter().any(|card| !card.held) => {
         self.ended(at, life);
+      }
+      Ok(Frame::Event { life, event: Event::Ended(Some(fault)), .. }) => {
+        return self.failed(at, &life, fault);
       }
       _ => {}
     }

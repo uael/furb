@@ -179,6 +179,19 @@ impl Model {
     (!self.outgoing.is_empty()).then(|| self.refused(why))
   }
 
+  /// The end of a life that a fault ended, which its machine tells a window that attached past the
+  /// tip, as when its open failed: the window lets the life go, the open thread says why, and a
+  /// message that waited for it comes back to the input, so nothing waits for ever.
+  pub(crate) fn failed(&mut self, at: usize, life: &str, fault: String) -> bool {
+    let held = self.holds.remove(&(at, life.to_owned())).is_some();
+    let open = self.thread.as_mut().filter(|one| (one.key.0, one.key.1.as_str()) == (at, life));
+    let shown = open.map(|opened| opened.fault = Some(fault.clone())).is_some();
+    if held && !self.outgoing.is_empty() {
+      self.restore = Some(self.refused(fault));
+    }
+    held || shown
+  }
+
   /// A stage of the open of a life that a machine told, as the window hears it now: whether the
   /// window holds that life.
   pub(crate) fn opening(&mut self, at: usize, life: String, step: Step) -> bool {
