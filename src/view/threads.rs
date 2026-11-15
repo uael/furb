@@ -32,6 +32,23 @@ impl<'a> Lookup<'a> for Rows<'a> {
   }
 }
 
+/// What finds an act of a life by its name and says whether an agent works on a chain at a place
+/// of the life, which decides what a note to that chain is.
+pub(super) trait Works<'a>: Lookup<'a> {
+  fn works(&self, chain: &str, at: u64) -> bool;
+}
+
+/// Whether one of the acts of a chain is an agent that works at a place: a prompt to its model
+/// that began before it and was not done then.
+pub(super) fn works<'a>(on: impl IntoIterator<Item = &'a Act>, at: u64) -> bool {
+  on.into_iter().any(|one| {
+    one.kind == Kind::Prompt
+      && !one.asks_operator()
+      && one.began < at
+      && one.ended.is_none_or(|end| end > at)
+  })
+}
+
 /// How deep a walk up the threads or the makers goes at most.
 const DEEP: usize = 64;
 
@@ -75,12 +92,12 @@ enum Verdict<'a> {
 
 /// Whether a prompt is a note to its chain, as the threads of the chain read it: a notice, a word
 /// of the operator or a wake, which no list of threads holds.
-pub(super) fn noted<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> bool {
+pub(super) fn noted<'a>(act: &'a Act, rows: &impl Works<'a>) -> bool {
   matches!(verdict(act, rows), Verdict::Aside(Aside::Notice | Aside::Rung | Aside::Wake))
 }
 
 /// The thread that a prompt of a chain is a message of, as the threads of the chain read it.
-pub(super) fn message_of<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> Option<&'a str> {
+pub(super) fn message_of<'a>(act: &'a Act, rows: &impl Works<'a>) -> Option<&'a str> {
   match verdict(act, rows) {
     Verdict::Message(thread) if !act.asks_operator() => Some(thread),
     _ => None,
@@ -90,14 +107,19 @@ pub(super) fn message_of<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> Option<&'a
 /// What a prompt to a model is: a message of a thread when it stands on one, the acknowledgment of
 /// an act that a chain made, which belongs to the thread of that act, a notice, a word of the
 /// operator, a wake or a question of another chain, and else a thread of its own, as each prompt
-/// that the operator made himself. What the watch of the daemon tells of a stall, and what the act
-/// that names the session asks, are notices: no one of the operator made them.
-fn verdict<'a>(act: &'a Act, rows: &impl Lookup<'a>) -> Verdict<'a> {
+/// that the operator made himself. A note that a word puts on another chain where no agent works
+/// starts work there, as a question does, while a note to a chain whose agent works steers that
+/// agent. What the watch of the daemon tells of a stall, and what the act that names the session
+/// asks, are notices: no one of the operator made them.
+fn verdict<'a>(act: &'a Act, rows: &impl Works<'a>) -> Verdict<'a> {
   if act.thread().is_some() {
     return Verdict::Message(root_of(act, rows));
   }
   let maker = rows.act(act.by.as_str());
-  let none = act.words.first().is_some_and(|shape| shape == "None");
+  let starts = maker.is_some_and(|one| {
+    one.kind == Kind::Rung && one.chain != act.chain && !rows.works(&act.chain, act.began)
+  });
+  let none = !starts && act.words.first().is_some_and(|shape| shape == "None");
   match maker {
     Some(maker) if none && maker.kind == Kind::Chain => acknowledged(act, rows),
     _ if act.by == WATCH => Verdict::Aside(Aside::Notice),
@@ -220,7 +242,8 @@ pub fn chain_notes(on: &[&Act], rows: &Rows<'_>, read: u64) -> Vec<NoteRun> {
 }
 
 /// The threads and the asides of one chain.
-fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
+fn sorted<'a>(on: &[&'a Act], rows: &Rows<'a>) -> (Vec<ChainThread>, Vec<ChainAside>) {
+  let chain = OnChain { rows, on };
   let mut out: Vec<ChainThread> = Vec::new();
   let mut asides: Vec<(u64, ChainAside)> = Vec::new();
   let mut later: Vec<(&str, &Act)> = Vec::new();
@@ -229,7 +252,7 @@ fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
       later.extend(thread_of(act, rows).map(|thread| (thread, act)));
       continue;
     }
-    match verdict(act, rows) {
+    match verdict(act, &chain) {
       Verdict::Message(thread) => later.push((thread, act)),
       Verdict::Aside(aside) => asides.push((act.began, aside_of(act, aside))),
       Verdict::Own => out.push(opened(act, rows)),
@@ -491,3 +514,22 @@ pub fn attention<S: BuildHasher>(
 #[cfg(test)]
 #[path = "threads.test.rs"]
 mod tests;
+
+/// The acts of one chain beside the acts of the life, which say whether an agent works on that
+/// chain with no walk of the whole life.
+struct OnChain<'r, 'a> {
+  rows: &'r Rows<'a>,
+  on: &'r [&'a Act],
+}
+
+impl<'a> Lookup<'a> for OnChain<'_, 'a> {
+  fn act(&self, id: &str) -> Option<&'a Act> {
+    self.rows.act(id)
+  }
+}
+
+impl<'a> Works<'a> for OnChain<'_, 'a> {
+  fn works(&self, chain: &str, at: u64) -> bool {
+    works(self.on.iter().copied().filter(|one| one.chain == chain), at)
+  }
+}

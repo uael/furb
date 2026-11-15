@@ -29,8 +29,8 @@ use super::{
   desk::desk,
   ladder::{Index, folded, lives},
   threads::{
-    Lookup, Rows, attention, chain_asides, chain_notes, chain_threads, chain_tree, nest_threads,
-    order_threads,
+    Lookup, Rows, Works, attention, chain_asides, chain_notes, chain_threads, chain_tree,
+    nest_threads, order_threads, works,
   },
   time::{as_of, moments_of},
 };
@@ -61,6 +61,12 @@ pub struct Held {
 impl<'a> Lookup<'a> for &'a Held {
   fn act(&self, id: &str) -> Option<&'a Act> {
     self.at.get(id).map(|at| &*self.acts[*at])
+  }
+}
+
+impl<'a> Works<'a> for &'a Held {
+  fn works(&self, chain: &str, at: u64) -> bool {
+    works(self.on_chain(chain), at)
   }
 }
 

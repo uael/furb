@@ -225,7 +225,26 @@ fn the_agents_of_a_thread_stand_as_cards() {
 }
 
 #[test]
-fn an_agent_says_when_it_began_when_it_ended_and_the_line_where_it_stands_and_a_note_is_none() {
+fn a_note_to_a_chain_where_no_agent_works_is_an_agent_and_a_note_to_the_operator_is_none() {
+  let mut streams = Streamed::default();
+  let mut facts = thread();
+  facts.extend([
+    json!(["chain", "chain2", "rung2", "chain1", "fix", ""]),
+    json!(["prompt", "prompt4", "rung2", "chain2", "None", "Fix this failure", ""]),
+    json!(["rung", "rung4", "prompt4", "chain2", "", "", "claude-cli:sonnet"]),
+    json!(["prompt", "prompt5", "rung2", "chain2", "None", "It fails.", "operator"]),
+  ]);
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let titles: Vec<&str> = page.agents.iter().map(|one| one.card.title.as_str()).collect();
+  assert_eq!(titles, ["Fix this failure"]);
+  let counts: Vec<(String, usize)> =
+    held.cards().into_iter().map(|one| (one.title, one.agents)).collect();
+  assert_eq!(counts, [("where does the time go".to_owned(), 1)]);
+}
+
+#[test]
+fn an_agent_says_when_it_began_when_it_ended_and_the_line_where_it_stands() {
   let mut facts = thread();
   facts.extend([
     json!(["chain", "chain2", "rung2", "chain1", "worker", ""]),
@@ -240,8 +259,6 @@ fn an_agent_says_when_it_began_when_it_ended_and_the_line_where_it_stands_and_a_
     json!(["done", "prompt4", "rung4", "3 lines"]),
     json!(["done", "run4", "chain2", null]),
     json!(["done", "rung4", "chain2", null]),
-    // A note to a chain that works is no agent: its model reads it at its next step.
-    json!(["prompt", "prompt6", "rung2", "chain3", "None", "and the seed", ""]),
   ]);
   // The host hears each fact 600 ms after the one before, from the second 100 on.
   let (mut fold, mut held, mut streams) = (Fold::default(), Held::default(), Streamed::default());
