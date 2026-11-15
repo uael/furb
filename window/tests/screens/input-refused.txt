@@ -25,6 +25,6 @@
 ┃
 ┃ draft after
 ┃
-┃  Message  Python    + new session in broken ▾
+┃  Message  Python    This computer ▾   BR broken ▾
 ┃
   Refused: Could not use…                       ⌃P commands

@@ -25,6 +25,6 @@
 ┃                                                               FU furb                      opus
 ┃ Ask for a change, a review or an answer
 ┃                                                               Ground the branch…   ‖ Paused 11h
-┃  Message  Python    + new session in furb-try ▾               FU furb                      opus
+┃  Message  Python    This computer ▾   FT furb-try ▾           FU furb                      opus
 ┃
-  This computer · ~/src/furb-try                ⌃P commands    Resolved 1 ▸
+  ~/src/furb-try                                ⌃P commands    Resolved 1 ▸

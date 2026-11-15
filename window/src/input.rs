@@ -13,7 +13,7 @@ use std::mem;
 use furb::view::{Act, Maker, RunState, Standing, timer};
 use furb_host::protocol::{Answer, Card, Verb};
 use jiff::Timestamp;
-use opentui::style::{Color, Style};
+use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
@@ -592,7 +592,7 @@ impl Model {
     let (mark, target, color) = match self.target() {
       Target::Thread(key) => ("→ ", self.title().unwrap_or_default(), self.hue(&key)),
       Target::Session(..) => ("+ ", format!("new thread in {}", self.session()), t.accent),
-      Target::New(_) => ("+ ", format!("new session in {}", self.project()), t.accent),
+      Target::New(at) => return self.launch(at, switch),
     };
     let mut left: Line = switch.into();
     left.extend([gap(), run(mark, muted), run(target, raised.fg(color))]);
@@ -628,6 +628,37 @@ impl Model {
       let ring = &at[at.len() - 1];
       hot.push((ring.start + 2..ring.end + 2, Some(Click::Context)));
     }
+    let Row { line, .. } = self.band(line);
+    Row { hot, ..Row::of(line) }
+  }
+
+  /// The launcher of a new session: after the switch, where it will run, the machine and then the
+  /// project with its badge, each with the arrow of the part that chooses it, and at the right the
+  /// model and the effort that it will take, as the row under the prompt of a desktop app says.
+  fn launch(&self, at: usize, switch: [Span<'static>; 2]) -> Row {
+    let t = &self.tokens;
+    let raised = Style::new().bg(t.raised);
+    let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
+    let machine = if at == 0 { "This computer" } else { &self.machines[at].name };
+    let project = self.project();
+    let badge = self.badge(&project);
+    let mut left: Line = switch.into();
+    left.extend([
+      run(" ".repeat(APART), raised),
+      run(machine.to_owned(), prose),
+      run(" ▾", muted),
+      run(" ".repeat(APART), raised),
+      run(badge.content.to_string(), badge.style.bg(t.raised)),
+      run(format!(" {project}"), prose),
+      run(" ▾", muted),
+    ]);
+    let line = spread(left, self.controls(0), self.wide().saturating_sub(6), raised);
+    let at = columns(&line);
+    let hot = vec![
+      (at[0].start + 2..at[1].end + 2, Some(Click::Key(Does::Python))),
+      (at[3].start + 2..at[4].end + 2, Some(Click::Key(Does::Sessions))),
+      (at[6].start + 2..at[8].end + 2, Some(Click::Key(Does::Sessions))),
+    ];
     let Row { line, .. } = self.band(line);
     Row { hot, ..Row::of(line) }
   }
@@ -713,7 +744,14 @@ impl Model {
         (key.0, key.1)
       }
       Target::Session(at, life) => (at, life),
-      Target::New(_) => return None,
+      // A new session stands on the model of the last session of its project, as it reads its
+      // skills.
+      Target::New(at) => {
+        let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
+        let here = self.project();
+        let mut ours = cards.iter().rev().filter(|card| project(card) == here);
+        return ours.find_map(|card| card.thread.model.as_deref()).map(short);
+      }
     };
     let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     let mut ours = cards.iter().rev().filter(|card| card.life == life);
@@ -762,7 +800,8 @@ impl Model {
         hot.push((at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop))));
         (working, Some((2, loader)))
       }
-      (None, None) => (self.place(true), None),
+      // The launcher of a new session names its machine, so the row says the folder alone.
+      (None, None) => (self.place(!matches!(self.target(), Target::New(_))), None),
     };
     // The machine and the folder of a thread that rests give way to the threads that ask him, which
     // the row never hides.

@@ -76,7 +76,7 @@ fn told(daemon: &Daemon, sessions: &Path) -> Vec<String> {
 #[test]
 fn a_message_starts_a_new_session_and_its_answer_shows_in_its_thread() {
   let (app, daemon, sessions) = started();
-  assert!(app.text().contains("+ new session in"), "{}", app.text());
+  assert!(app.text().contains("This computer ▾"), "{}", app.text());
   assert_eq!(bar(&app), BLUE);
   daemon.hold();
   sent(&app, &format!("how long does an open take {ANSWERS}"));
@@ -421,7 +421,7 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   assert!(!frame.contains("where does the time go     "), "{frame}");
   app.press("enter");
   shows(&app, "┃ Ask for a change, a review or an answer");
-  shows(&app, "+ new session in");
+  shows(&app, "This computer ▾");
   // The key opens it too, and an escape closes it with no choice.
   app.press("ctrl+x");
   app.press("o");
@@ -429,5 +429,5 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   app.press("escape");
   let closed = app.wait_until(PATIENCE, || !app.text().contains("Search a session"));
   assert!(closed, "{}", app.text());
-  assert!(app.text().contains("+ new session in"), "{}", app.text());
+  assert!(app.text().contains("This computer ▾"), "{}", app.text());
 }

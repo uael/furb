@@ -370,8 +370,14 @@ fn a_session_that_a_fault_ended_shows_its_thread_and_why_and_takes_no_message() 
   let before = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/replay/speaker.jsonl");
   fs::copy(before, record(&daemon, 0)).unwrap();
   open(&app, vec![daemon.machine("mac")], homed(&daemon));
-  let card = row(&app, "FU furb") - 1;
-  app.click(70, card);
+  // The launcher of a new session names the project too, with the arrow of its picker.
+  let mut at = None;
+  let carded = app.wait_until(PATIENCE, || {
+    at = app.text().lines().position(|line| line.contains("FU furb") && !line.contains('▾'));
+    at.is_some()
+  });
+  assert!(carded, "the card never showed:\n{}", app.text());
+  app.click(70, u16::try_from(at.unwrap()).unwrap() - 1);
   shows(&app, "1  b = await bash('echo a')");
   let frame = shows(&app, "The window reads this session and sends it nothing.");
   let left: Vec<String> = frame.lines().map(|line| line.chars().take(LEFT).collect()).collect();

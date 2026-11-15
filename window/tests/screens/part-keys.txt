@@ -25,6 +25,6 @@
 ┃
 ┃ Ask for a change,   ↑↓ move · ⏎ run · ⎋ close
 ┃
-┃  Message  Python    + new session in furb-try ▾
+┃  Message  Python    This computer ▾   FT furb-try ▾
 ┃
-  This computer · ~/src/furb-try                                                     ⌃X L the list
+  ~/src/furb-try                                                                     ⌃X L the list

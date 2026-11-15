@@ -25,6 +25,6 @@
 ┃
 ┃ Ask for a change, a review or an answer
 ┃
-┃  Message  Python    + new session in furb ▾
+┃  Message  Python    This computer ▾   FU furb ▾    opus
 ┃
-  This computer · ~/furb                        ⌃P commands
+  ~/furb                                        ⌃P commands
