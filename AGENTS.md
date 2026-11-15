@@ -508,7 +508,7 @@ fix what your change broke, and report what was broken before.
   fails on a break, and on a sentence that changes, unless the title holds `!`, and unless `--wording` says that the
   pull request holds the label wording for the sentence. A change that stands already at the ref of `--since`, the base of
   the pull request, is known and fails nothing. `.github/workflows/contract.yml` runs it on each pull request.
-- `uv run python script/paths.py`: check that each path of the repository that a file of `script/` or of
+- `cargo xtask paths`: check that each path of the repository that a file of `script/`, of `xtask/src/` or of
   `.github/workflows/` names is a file or a folder that git holds, or a file that a build makes and git ignores. It
   names the file, the line and the path of each one that stands no more, and it reads git alone. The hooks run it.
 - `python3 -I script/unused.py [--tests]`: list each exported name of the TypeScript side and each public item of the

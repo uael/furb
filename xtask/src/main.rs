@@ -6,6 +6,7 @@
 //! their commands; a task that no tool does, as `clean-caches`, does its work here.
 
 mod caches;
+mod paths;
 mod watch;
 
 use std::{
@@ -116,6 +117,14 @@ enum Task {
     #[arg(long)]
     once: bool,
   },
+  /// Fail on each path of the repository that a tool of a developer or a workflow names and that
+  /// git does not hold, with its file and its line.
+  ///
+  /// It reads each file of script/, xtask/src/ and .github/workflows/. A path whose first part is a
+  /// folder of the repository stands when git holds it as a file or a folder, or ignores it as what
+  /// a build makes. A path with a variable or a pattern in it is not checked, and a path after
+  /// `$root/` is a path of the repository.
+  Paths,
   /// Print each task and each option whose name or help holds each of the words, in any case.
   Search {
     #[arg(required = true)]
@@ -156,6 +165,8 @@ enum Fault {
   Watch(#[from] notify::Error),
   #[error("the watch of the refs ended")]
   Unwatched,
+  #[error("the pattern of the paths failed: {0}")]
+  Pattern(#[from] fancy_regex::Error),
 }
 
 /// A script of `script/` that runs on its own, as a task.
@@ -209,6 +220,7 @@ fn run() -> Result<ExitCode, Fault> {
       watch::Watch { branch, tree, every, table, inbox, owners, pid, once }.run(&root)
     }
     Task::CleanCaches { scratch, uv } => caches::clean(&root, scratch, uv.as_deref()),
+    Task::Paths => paths::check(),
     Task::Search { words } => {
       search(&command, &words);
       Ok(ExitCode::SUCCESS)

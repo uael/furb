@@ -28,7 +28,7 @@ WHOLE = re.compile(
   r"(src/|build/|build\.rs$|bind/python/|tests/|docs/examples/python/"
   r"|pyproject\.toml$|Cargo\.(toml|lock)$|rust-toolchain\.toml$|uv\.lock$|\.furb/config\.json$)"
 )
-# The harness of each suite, as files that git holds, so that script/paths.py checks each name.
+# The harness of each suite, as files that git holds, so that `cargo xtask paths` checks each name.
 HARNESS = {
   "test/conftest.py",
   "test/outside/conftest.py",

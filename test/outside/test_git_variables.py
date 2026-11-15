@@ -9,10 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 CLEAN = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "COVERAGE_PROCESS_"))}
-GITS = [
-  "test/outside/test_paths.py::test_a_folder_that_a_rule_of_git_ignores_as_a_folder_stands_before_a_build_makes_it",
-  ".furb/skills/lane/test/test_lane_land.py",
-]
+GITS = [".furb/skills/lane/test/test_lane_land.py"]
 
 
 # The run of pytest that this test starts has the one limit of the test, which ends that run and says so. The limit of
