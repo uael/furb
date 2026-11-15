@@ -856,6 +856,13 @@ impl PyEngine {
     self.call(|engine| engine.feed(&tail))
   }
 
+  /// The names of the acts that the journal of the life holds, each that an ear of the outside
+  /// took and that is not done.
+  #[pyo3(name = "held")]
+  fn journal_held(&self) -> Result<Value, Fault> {
+    self.call(Engine::held).map(Value)
+  }
+
   /// One callable the engine made, called back by the number it went out under, with these words.
   #[pyo3(signature = (n, args = None, kwargs = None))]
   #[expect(

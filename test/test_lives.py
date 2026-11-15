@@ -2,9 +2,9 @@
 
 from collections.abc import Generator
 
-from conftest import born, keeping
+from conftest import Sand, Wrapping, born, keeping, kernel
 from furb import engine
-from furb.engine import OPERATOR
+from furb.engine import OPERATOR, idle
 
 
 def once() -> Generator[tuple | None, tuple | None]:
@@ -30,3 +30,14 @@ async def test_lives_carries_a_fact_into_an_ear_and_says_everything_the_ear_yiel
   mark = len(log)
   assert engine.lives(once(), None) is False
   assert log[mark:] == [("done", "none://one", OPERATOR, None)]
+
+
+async def test_boot_defines_lives_again_and_the_journal_binds_it_again() -> None:
+  """boot defines lives again at each life, and the journal binds it again, as boot says, so each ear that is no act hears a fact that the journal says again under the name journal."""
+  journal = Wrapping(idle("journal"))
+  engine.boot(journal, **kernel(), world=Sand().hears())
+  first = engine.lives
+  assert first is journal.lives
+  again = Wrapping(idle("journal"))
+  engine.boot(again, **kernel(), world=Sand().hears())
+  assert engine.lives is again.lives and engine.lives is not first

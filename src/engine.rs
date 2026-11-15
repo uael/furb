@@ -703,6 +703,16 @@ impl Engine {
     fed
   }
 
+  /// The names of the acts that the journal of the life holds, each that an ear of the outside
+  /// took and that is not done, as `held` of the checkpointer gives them. The engine of a build
+  /// whose checkpointer holds no journal refuses it.
+  pub fn held(&mut self) -> Result<Object, Fault> {
+    self.run(|sand, outside| {
+      let got = sand.call(outside, &outside.opened.held.clone(), vec![], vec![])?;
+      outside.outward(sand, &got)
+    })
+  }
+
   /// What `body` gives, run as the engine's own work, with no bound of the turn but for each word
   /// that it steps.
   pub(crate) fn unbounded<T>(&mut self, body: impl FnOnce(&mut Self) -> T) -> T {
@@ -897,7 +907,7 @@ impl Engine {
   /// the outside took and that is not done, and a wake of each that no other act of them made puts
   /// it to the outside again, so a life opens by its image as it opens by its record.
   pub(crate) fn flight(&mut self) -> Result<(), Fault> {
-    let held = self.checkpointed("held", vec![])?;
+    let held = self.held()?;
     let ids = held.as_ref().items().unwrap_or_default();
     let ids = ids.iter().filter_map(|one| one.as_str().map(str::to_owned)).collect();
     let pending = self.above(ids)?;

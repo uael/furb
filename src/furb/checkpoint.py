@@ -4,12 +4,10 @@ tip of a life that stands. gathered gives the data of a checkpoint at the tip of
 that a later life boots on from that data, so the build that opens a checkpoint, and not the one that wrote it, says
 how its own journal makes each chain again.
 
-The journal is the journal that the engine held, in its form. Boot gives it the tables of the life, and at its first
-run it binds numbered, offers, drive and lives again in the names of its engine, each over the one that stood. A boot
-binds numbered, offers and drive again, and lives is no name that boot binds, so the journal of the next life takes
-the one that stood under the last journal. LIFE holds what one life of this process needs past the call that made its
-journal: that pair of lives, the function that takes a tail, and the numbered of that journal, by which fed knows
-that the life that stands is its own.
+The journal is the journal that the engine held, in its form. Boot calls it with numbered, offers, drive and lives,
+which it defines again at each boot, and with the tables of the life by name, binds again in their place the four
+that the call gives, and drives the ear that the call gives last under the name journal. fed and held are given the
+journal that a boot took, so no life holds anything of another and nothing outlives the life.
 
 This interpreter imports it, and the sandbox of the crate loads it in a module of its own, as it loads the Kernel. Each
 call is given the names of its engine, which it reads at each call and never holds, since boot binds the bus into the
@@ -20,26 +18,31 @@ as the contract of the engine holds those of the engine.
 import re
 from collections import Counter
 
-LIFE = {}
 
+class Journal:
+  """The journal of one life: boot calls it with the four names that it binds again, numbered, offers, drive and
+  lives, and with the tables of the life, binds again the four that the call gives, and drives the ear that it gives
+  last under the name journal, which says the record again and keeps what the life says. more and flying stand once a
+  boot took it, and fed and held reach the life through them."""
 
-def journal(names, record=()):
-  site, question, scope, covers, over, module, acting, drifted, refused = (
-    names[x] for x in ("site", "question", "scope", "covers", "over", "module", "acting", "Drift", "Refused")
-  )
-  record = [*record]
-  first, owned, pending = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
-  due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
-  ranks = {id(e): n for n, (e,) in enumerate(record)}
-  saved, again = {e[1]: e for (e,) in record if question(e)}, {}
-  asked, strays, back = {}, {}, []
+  def __init__(self, names, record=()):
+    self.names, self.record, self.more, self.flying = names, [*record], None, None
 
-  def ear(outside, known, taken, held, holds, log, top, a=(), last=None):
-    say, act, get, drive, counted, offers, carried, transcript = (
-      names[x] for x in ("say", "act", "get", "drive", "numbered", "offers", "lives", "transcript")
+  def __call__(self, counted, offers, drive, carried, *, outside, known, taken, held, holds, log, top):
+    names, record = self.names, self.record
+    site, question, scope, covers, over, module, acting, drifted, refused, say, act, get, transcript = (
+      names[x]
+      for x in (
+        *("site", "question", "scope", "covers", "over", "module", "acting", "Drift", "Refused"),
+        *("say", "act", "get", "transcript"),
+      )
     )
-    if carried is LIFE.get("lives"):
-      carried = LIFE["carried"]
+    first, owned, pending = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
+    due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
+    ranks = {id(e): n for n, (e,) in enumerate(record)}
+    saved, again = {e[1]: e for (e,) in record if question(e)}, {}
+    asked, strays, back = {}, {}, []
+    a, last = (), None
 
     def holding(quest):
       top[quest[0]] = max(top[quest[0]], int(quest[1][len(quest[0]) :]))
@@ -156,58 +159,63 @@ def journal(names, record=()):
           pending[x] = ()
       return [*pending]
 
-    LIFE.update(lives=lives, carried=carried, more=more, numbered=numbered, flying=flying)
-    names.update(numbered=numbered, offers=offered, drive=driven, lives=lives)
-    try:
-      while True:
-        while owed() and (
-          not log
-          or (due[-1][0] == "joined" and not question(due[-2]) and due.pop() and due)
-          or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken and due[-1][2] in outside)
-        ):
-          recount(due.pop())
-        while back and not owed():
-          yield back.pop(0)
-        b = a
-        match a := (yield):
-          case (kind, about, by, *_) if (
-            (q := get(about)) and by != "journal" and (by or repr(first.get(about)) != repr(a))
+    def keeps():
+      nonlocal a, last
+      try:
+        while True:
+          while owed() and (
+            not log
+            or (due[-1][0] == "joined" and not question(due[-2]) and due.pop() and due)
+            or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken and due[-1][2] in outside)
           ):
-            if not by and a != q and ((owed() and strays.get(about, 1)) or about in first):
-              raise drift(about, about in first and a)
-            if by not in known and by not in owned:
-              glue = (
-                b is last is not None
-                and kind not in ("started", "done")
-                and ("keep", "", (("joined", "", "journal", kind, about),))
-              )
-              if about not in saved:
-                a is q and glue and back.append(glue)
+            recount(due.pop())
+          while back and not owed():
+            yield back.pop(0)
+          b = a
+          match a := (yield):
+            case (kind, about, by, *_) if (
+              (q := get(about)) and by != "journal" and (by or repr(first.get(about)) != repr(a))
+            ):
+              if not by and a != q and ((owed() and strays.get(about, 1)) or about in first):
+                raise drift(about, about in first and a)
+              if by not in known and by not in owned:
+                glue = (
+                  b is last is not None
+                  and kind not in ("started", "done")
+                  and ("keep", "", (("joined", "", "journal", kind, about),))
+                )
+                if about not in saved:
+                  a is q and glue and back.append(glue)
+                  back.append(("keep", "", (saved.setdefault(about, q),)))
+                if a is not q:
+                  glue and back.append(glue)
+                  back.append(("keep", "", (a,)))
+                last = a
+              elif a is q and about not in saved:
                 back.append(("keep", "", (saved.setdefault(about, q),)))
-              if a is not q:
-                glue and back.append(glue)
-                back.append(("keep", "", (a,)))
-              last = a
-            elif a is q and about not in saved:
-              back.append(("keep", "", (saved.setdefault(about, q),)))
-            if kind == "wake" and not owed():
-              for name in [x for x in pending if covers(a, x) and not over(x)]:
-                del pending[name]
-                taken.discard(name)
-                offers(known[name])
-        # The program of a born chain starts with its birth, so each module that a chain makes again, as a fork of a
-        # born chain makes its own, takes the bind of the last fact carried of that chain, or of the chain it forks.
-        if a and a[0] == "module":
-          born = a[1]
-          while not transcript(born, "carried") and get(born)[5]:
-            born = get(born)[5]
-          for x in transcript(born, "carried")[-1:]:
-            x[5:] and bind(a[3], a[1], x[4], x[5])
-    finally:
-      for pile in log, due, first, saved, back:
-        pile.clear()
+              if kind == "wake" and not owed():
+                for name in [x for x in pending if covers(a, x) and not over(x)]:
+                  del pending[name]
+                  taken.discard(name)
+                  offers(known[name])
+          # The program of a born chain starts with its birth, so each module that a chain makes again, as a fork of a
+          # born chain makes its own, takes the bind of the last fact carried of that chain, or of the chain it forks.
+          if a and a[0] == "module":
+            born = a[1]
+            while not transcript(born, "carried") and get(born)[5]:
+              born = get(born)[5]
+            for x in transcript(born, "carried")[-1:]:
+              x[5:] and bind(a[3], a[1], x[4], x[5])
+      finally:
+        for pile in log, due, first, saved, back:
+          pile.clear()
 
-  return ear
+    self.more, self.flying = more, flying
+    return numbered, offered, driven, lives, keeps()
+
+
+def journal(names, record=()):
+  return Journal(names, record)
 
 
 def bind(module, about, values, definitions):
@@ -228,23 +236,23 @@ def bind(module, about, values, definitions):
       pass
 
 
-def fed(names, entries):
+def fed(journal, entries):
   def poke():
     return
     yield
 
-  if names["numbered"] is not LIFE.get("numbered"):
-    why = "no journal of the checkpointer keeps this life, so nothing takes a tail"
-    raise names["Refused"](why)
-  LIFE["more"](entries)
-  names["drive"](poke(), "tail")
+  booted(journal, "nothing takes a tail").more(entries)
+  journal.names["drive"](poke(), "tail")
 
 
-def held(names):
-  if names["numbered"] is not LIFE.get("numbered"):
-    why = "no journal of the checkpointer keeps this life, so it holds no act"
-    raise names["Refused"](why)
-  return LIFE["flying"]()
+def held(journal):
+  return booted(journal, "it holds no act").flying()
+
+
+def booted(journal, so):
+  if journal.more is None:
+    raise journal.names["Refused"]("no boot took this journal, so " + so)
+  return journal
 
 
 def seed(names, data):

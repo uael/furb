@@ -21,7 +21,6 @@ from conftest import (
   ids,
   journaled,
   keeping,
-  kernel,
   life,
   lived,
   opened,
@@ -711,27 +710,6 @@ async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_
     engine.read(f"{command}/stdout", on=over)
   engine.bash("echo more", on=over)
   assert len(first) == was and len(said(second, "bash")) == 1
-
-
-async def test_boot_gives_the_journal_the_tables_of_the_life() -> None:
-  """boot gives the journal the tables of the life, the ears of the outside by name, its acts by name, the names of the acts that an ear took, its facts by chain and by view, the function that holds a fact on a chain, its log, which holds each fact until each ear that waits for it heard it, and the highest number of each kind, and the journal gives the ear that boot brings to life last, under the name journal."""
-  tables: list = []
-  heard: list[tuple] = []
-
-  def journal(*given: object) -> Generator[tuple | None, tuple]:
-    tables.extend(given)
-    return keeping(heard)
-
-  root = engine.boot(journal, **kernel(), world=Sand().hears())
-  outside, known, taken, held, holds, log, top = tables
-  assert [*outside] == [*kernel(), "world"] and outside["world"] is engine.listening()["world"]
-  assert known[root] == engine.get(root) and known["stand1"] == engine.get("stand1") and {root, "stand1"} <= taken
-  assert held[root, ""] == engine.transcript(root) and held[root, "stand"] == engine.transcript(root, "stand")
-  assert (log, dict(top)) == ([], {"chain": 1, "stand": 1})
-  holds(root, [("note", root, "mine")])
-  assert engine.transcript(root, "note") == engine.transcript(root, "mine") == [("note", root, "mine")]
-  assert [*engine.listening()][-2:] == ["journal", root] and engine.get(root) in heard
-  assert engine.bash("echo one", on=root) == "bash1" and top["bash"] == 1
 
 
 async def test_the_names_operator_and_journal_are_the_lifes_own() -> None:

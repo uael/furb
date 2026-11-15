@@ -4,9 +4,9 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import Sand, born, keeping, relived, said, settle, verbs, viewed
+from conftest import Sand, Wrapping, born, keeping, kernel, relived, said, settle, verbs, viewed
 from furb import engine
-from furb.engine import OPERATOR, Refused
+from furb.engine import OPERATOR, Refused, idle
 
 
 def ends(mark: list[tuple]) -> Generator[tuple | None, tuple | None]:
@@ -187,3 +187,15 @@ async def raises_again() -> None:
   later = viewed(over)
   assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
   assert engine.module(over)["last"] == engine.module(again)["last"]
+
+
+async def test_the_journal_binds_drive_again_and_boot_binds_what_it_gives() -> None:
+  """The journal binds drive again, as boot says, to know each generator that an act brought to life, so the record keeps what such a generator says only through that act."""
+  journal = Wrapping(idle("journal"))
+  root = engine.boot(journal, **kernel(), world=Sand().hears())
+  assert engine.drive is journal.drive and engine.listening()["journal"] is journal.ear
+  sand, _, root = born()
+  await engine.bash("echo hi", on=root)
+  await settle()
+  assert [e[0] for (e,) in sand.record if e[1] == "bash1"] == ["bash", "started", "out", "done"]
+  assert [e for (e,) in sand.record if e[2] == "bash1"] == []

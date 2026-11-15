@@ -119,6 +119,7 @@ def __parking(ear):
 
 __fresh = {"kernel": lambda: __kernel["kernel"](__engine)}
 __seeded = []
+__journaled = []
 
 def __seed(data):
   __seeded[:] = __checkpointed("seed", data)
@@ -130,13 +131,14 @@ def __boot(entries, **ears):
   # The checkpointer of a build before the journal left the engine holds no journal: the boot of that engine takes the
   # record and says it again itself.
   if __checkpointer_source and "journal" in __checkpointer:
-    return __engine["boot"](__checkpointer["journal"](__engine, record), **ears)
+    __journaled[:] = [__checkpointer["journal"](__engine, record)]
+    return __engine["boot"](__journaled[0], **ears)
   return __engine["boot"](record, **ears)
 
-def __fed(entries):
-  if not (__checkpointer_source and "fed" in __checkpointer):
-    raise __engine["Refused"]("the engine of this record says its record again itself, and takes no tail")
-  __checkpointer["fed"](__engine, __record["recorded"](__engine, entries))
+def __journal(name, *args):
+  if not __journaled:
+    raise __engine["Refused"]("the engine of this record says its record again itself, and holds no journal")
+  return __checkpointer[name](__journaled[0], *args)
 
 def __gate():
   # A record of an earlier build holds gate acts. Its engine makes each again in a replay, reads who answered it by
@@ -197,7 +199,8 @@ def __lasting(name, ear):
   "unmade": lambda: __record["Recorded"](),
   "seed": __seed,
   "boot": __boot,
-  "fed": __fed,
+  "fed": lambda entries: __journal("fed", __record["recorded"](__engine, entries)),
+  "held": lambda: __journal("held"),
 }"#;
 
 /// What the opening gave, by name: the callables of the sandbox that the host calls it by, each
@@ -251,6 +254,9 @@ pub(crate) struct Opened {
   /// The entries that follow the tip of the life, given to its journal as boot gives it a record,
   /// which says them again at once.
   pub(super) fed: Object,
+  /// The names of the acts that the journal of the life holds, each that an ear of the outside
+  /// took and that is not done.
+  pub(super) held: Object,
 }
 
 impl Default for Opened {
@@ -285,6 +291,7 @@ impl Opened {
       seed: at("seed")?,
       boot: at("boot")?,
       fed: at("fed")?,
+      held: at("held")?,
     })
   }
 }

@@ -1,23 +1,23 @@
 from collections.abc import Callable, Iterable
 
-from furb.engine import Ear, Entry
+from furb.engine import Entry, Journal
 
-def journal(names: dict[str, object], record: Iterable[Entry] = ()) -> Callable[..., Ear]:
+def journal(names: dict[str, object], record: Iterable[Entry] = ()) -> Journal:
   """journal gives what boot takes as its journal, from the names of an engine and a record, so a life that boots on it says that record again and keeps what it says after it, as boot says.
   A journal that is given no record says nothing again, so its life is a new life, which names each act by its number alone.
   """
 
-def fed(names: dict[str, object], entries: Iterable[Entry]) -> None:
-  """fed gives the journal of the life the entries that follow its tip, which the journal says again at once as it says a record again, so a life that stood at a place of a record and is fed the entries after that place stands where a life that boots on the whole record stands.
+def fed(journal: Journal, entries: Iterable[Entry]) -> None:
+  """fed gives the journal that a boot took the entries that follow the tip of its life, which the journal says again at once as it says a record again, so a life that stood at a place of a record and is fed the entries after that place stands where a life that boots on the whole record stands.
   The outside is asked nothing that a fed entry answers, and the journal keeps no fed entry again.
   A fed answer of an act that the life holds and that is not over lands at its place, so a word that awaits that act goes on.
-  fed on a life that no journal of the checkpointer keeps is refused, since nothing takes a tail there.
+  fed on a journal that no boot took is refused, since nothing takes a tail there.
   """
 
-def held(names: dict[str, object]) -> list[str]:
-  """held makes the journal of the life hold each act that an ear of the outside took and that is not done, as it holds each act that a record shows started and not done, and gives the name of each act that it holds, so a life that opens from an image puts each act that the ears of the life before held in flight to its fresh ear at a wake, as a life that opens by its record does.
+def held(journal: Journal) -> list[str]:
+  """held makes the journal that a boot took hold each act that an ear of the outside took and that is not done, as it holds each act that a record shows started and not done, and gives the name of each act that it holds, so a life that opens from an image puts each act that the ears of the life before held in flight to its fresh ear at a wake, as a life that opens by its record does.
   A wake of an act that the journal holds puts it to the ears of the outside again, as an act that an earlier life took.
-  held on a life that no journal of the checkpointer keeps is refused, since nothing holds an act there.
+  held on a journal that no boot took is refused, since nothing holds an act there.
   """
 
 def seed(names: dict[str, object], data: object) -> list[Entry]:

@@ -47,8 +47,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   an act that is not done, and says the run done with what the word gave. It refuses, where the word waited, an await
   that cannot settle: of what is no act, of a chain, of a name of no act, and of the rung or the run of the word itself.
 - boot: the life, given the journal and the generators of the outside, which binds say, act, drive, get, peek,
-  transcript, numbered and offers, and gives the root. It brings the journal to life last, so the journal says its
-  record again before boot makes the root that the record does not hold and stands the life.
+  transcript, numbered, offers and lives, binds numbered, offers, drive and lives again to what the journal gives, and
+  gives the root. It brings the ear of the journal to life last, so the journal says its record again before boot
+  makes the root that the record does not hold and stands the life.
 - bus: what boot binds for every verb to speak through: say for a fact, act for an act, and drive for a generator;
   it keeps what each ear waits for, and gives each fact to the ears that wait for it.
 - fact: a tuple of its kind, the act it is about, who said it, and its words.
@@ -198,16 +199,17 @@ meanings. The entry of such a name here gives only its form in the engine.
 - grant: the act of the official extension grant, which the engine does not hold, that puts a ceiling on a chain:
   dollars, a share of the window, or both.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
-- journal: the ear of the life that hears everything, says a keep for each entry of the record, and says again the
-  record that it is given. `journal` of the checkpointer makes it, and boot gives it the tables of the life. The bus
-  holds four things for it and no more: it brings the journal to life last, it puts no act to the journal while the
-  act is made, so the journal hears each act at its place in the log, it gives the journal nothing to hear each time
-  nothing is left to hear, so the journal says the next entry that it owes, and it lets what the journal raises out.
-  At its first run the journal binds again four names of its engine, each over the one that stood: `numbered`, to give
-  an act the name that the record holds, `offers`, to answer an act from the record before the outside hears it,
-  `drive`, to know each generator that an act brought to life, and `lives`, to give each ear that is no act a fact said
-  again under the name journal. `fed` of the checkpointer gives it the entries that follow the tip of a life that
-  stands, as the entries after an image of the life, which it says again by the same code.
+- journal: what boot takes, whose ear hears everything, says a keep for each entry of the record, and says again the
+  record that it is given. `journal` of the checkpointer makes it. boot calls it with four names of its engine and
+  the tables of the life, and binds in their place the four that it gives, in a line that a model reads: `numbered`,
+  to give an act the name that the record holds, `offers`, to answer an act from the record before the outside hears
+  it, `drive`, to know each generator that an act brought to life, and `lives`, to give each ear that is no act a
+  fact said again under the name journal. The bus holds four things for its ear and no more: it brings that ear to
+  life last, it puts no act to the journal while the act is made, so the journal hears each act at its place in the
+  log, it gives the journal nothing to hear each time nothing is left to hear, so the journal says the next entry
+  that it owes, and it lets what the journal raises out. `fed` and `held` of the checkpointer are given the journal
+  that a boot took, which the opening of the sandbox keeps: `fed` gives it the entries that follow the tip of a life
+  that stands, as the entries after an image of the life, which it says again by the same code.
 - record: the entries the journal keeps, in the order they were said.
 - scratch directory: the directory of the machine that the World keeps for a record, which every chain of the record
   shares, which a path of scratch:// names and a command reads as TMPDIR; the opening of a life takes it, and makes

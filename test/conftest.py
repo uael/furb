@@ -19,6 +19,7 @@ from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
+from typing import Never, TypedDict, Unpack
 
 import pytest
 
@@ -74,9 +75,11 @@ CHECKPOINTERS = {furb.python: furb.checkpoint, furb_monty.engine: furb_monty.che
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
 MONTY_SKIPS = {
-  "test_fed_on_a_life_that_no_journal_of_the_checkpointer_keeps_is_refused",
-  "test_held_on_a_life_that_no_journal_of_the_checkpointer_keeps_is_refused",
-  "test_boot_gives_the_journal_the_tables_of_the_life",
+  "test_fed_on_a_journal_that_no_boot_took_is_refused",
+  "test_held_on_a_journal_that_no_boot_took_is_refused",
+  "test_boot_calls_the_journal_with_the_four_names_and_the_tables_of_the_life",
+  "test_the_journal_binds_drive_again_and_boot_binds_what_it_gives",
+  "test_boot_defines_lives_again_and_the_journal_binds_it_again",
   "test_each_scan_of_all_its_facts_that_the_ear_of_a_chain_makes_at_a_fact_reads_its_reading",
   "test_at_each_told_rung_the_chain_reads_only_the_facts_after_its_last_told_rung",
   "test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_took_and_the_rung_of_a_run_that_awaited",
@@ -493,10 +496,20 @@ def given(record: Sequence[tuple]) -> Sequence[tuple]:
   return furb.record.recorded(ENGINE, list(record)) if engine is furb.python else record
 
 
-def journaled(record: Sequence[tuple] = ()) -> Callable[..., Kernel]:
+JOURNALS: list = []
+
+
+def journaled(record: Sequence[tuple] = ()) -> Callable[..., tuple]:
   """The journal a life of the suite is given: the journal of the checkpointer of its engine, on a record as a host
-  gives it. The door of monty gives what its boot takes in the place of that journal, which its sandbox makes."""
-  return checkpoint.journal(ENGINE, given(record))
+  gives it, which last_journal gives until the next. The door of monty gives what its boot takes in the place of that
+  journal, which its sandbox makes."""
+  JOURNALS[:] = [checkpoint.journal(ENGINE, given(record))]
+  return JOURNALS[0]
+
+
+def last_journal() -> Callable[..., tuple]:
+  """The journal that journaled gave last, which the last life of the suite booted on."""
+  return JOURNALS[0]
 
 
 def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list[tuple], str]:
@@ -679,6 +692,39 @@ async def relived(sand: Sand, record: Sequence[tuple]) -> tuple[list[tuple], str
   log, root = life(sand, record)
   await settle(300)
   return log, root
+
+
+class Tables(TypedDict):
+  """The tables of a life that boot gives its journal by name."""
+
+  outside: dict[str, Generator]
+  known: dict[str, tuple]
+  taken: set[str]
+  held: dict[tuple[str, str], list[tuple]]
+  holds: Callable[[str, list[tuple]], None]
+  log: list[tuple]
+  top: dict[str, int]
+
+
+class Bare:
+  """A journal that keeps nothing, as boot takes one: it gives back the four names that boot binds again as boot gives
+  them, then the ear that it is given, and keeps those names and the tables that boot gives it by name."""
+
+  def __init__(self, ear: Generator[object, Never]) -> None:
+    self.ear = ear
+
+  def __call__(self, numbered: object, offers: object, drive: object, lives: object, **tables: Unpack[Tables]) -> tuple:
+    self.names, self.tables = (numbered, offers, drive, lives), tables
+    return (*self.names, self.ear)
+
+
+class Wrapping(Bare):
+  """A bare journal that binds drive and lives again, each to a function that calls the one that boot gave it."""
+
+  def __call__(self, numbered: object, offers: object, drive: object, lives: object, **tables: object) -> tuple:
+    numbered, offers, drive, lives, ear = super().__call__(numbered, offers, drive, lives, **tables)  # ty: ignore[invalid-argument-type]
+    self.drive, self.lives = partial(drive), partial(lives)
+    return numbered, offers, self.drive, self.lives, ear
 
 
 def keeping(heard: list[tuple], say: tuple | None = None) -> Generator[tuple | None, tuple]:

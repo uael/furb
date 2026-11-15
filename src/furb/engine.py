@@ -785,15 +785,6 @@ def idle(id):
     yield {id}
 
 
-def lives(g, a):
-  try:
-    while isinstance(a := g.send(a), tuple):
-      a = say(*a)
-  except StopIteration:
-    return False
-  return a
-
-
 def controlled(ear, lasting=False):
   def lived(id):
     g, later, halt = ear(id), [], paused(id)
@@ -820,7 +811,7 @@ def controlled(ear, lasting=False):
 
 
 def boot(journal, **outside):
-  global say, act, drive, get, peek, transcript, reading, listening, numbered, offers
+  global say, act, drive, get, peek, transcript, reading, listening, numbered, offers, lives
   get_running_loop()
   made, known, done, held, cuts, log, alive, born, busy, heed, taken, top, upto = (
     Counter(),
@@ -837,6 +828,14 @@ def boot(journal, **outside):
     Counter(),
     {},
   )
+
+  def lives(g, a):
+    try:
+      while isinstance(a := g.send(a), tuple):
+        a = say(*a)
+    except StopIteration:
+      return False
+    return a
 
   def numbered(kind, *words):
     top[kind] += 1
@@ -974,12 +973,12 @@ def boot(journal, **outside):
     kept, cut = cuts.get(on := scope(on or site.get()), ([], 0))
     return [*kept[at:], *held.get((on, ""), [])[cut + max(0, at - len(kept)) :]]
 
-  for who, listener in [
-    (OPERATOR, idle(OPERATOR)),
-    *outside.items(),
-    ("journal", journal(outside, known, taken, held, holds, log, top)),
-  ]:
+  for who, listener in [(OPERATOR, idle(OPERATOR)), *outside.items()]:
     drive(listener, who)
+  numbered, offers, drive, lives, keeps = journal(
+    numbered, offers, drive, lives, outside=outside, known=known, taken=taken, held=held, holds=holds, log=log, top=top
+  )
+  drive(keeps, "journal")
   root = Act(ROOT) if known else chain("root")
   stand(ROOT)
   return root

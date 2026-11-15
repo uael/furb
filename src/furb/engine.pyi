@@ -61,6 +61,18 @@ The Kernel takes a run as that run, begins its word in the module of the chain w
 The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
 The Kernel holds the run of the word of a turn of a model, once that word is over, while a command that the word started and did not await is open, for 30 seconds at the most, by a wait that the run makes, so the chain tells what the command gave before it asks the next reply.
 """
+type Journal = Callable[
+  ...,
+  tuple[
+    Callable[..., str],
+    Callable[[Question], None],
+    Callable[[Ear, str], None],
+    Callable[[Ear, Fact | None], set[str] | Literal[False] | None],
+    Ear,
+  ],
+]
+"""boot calls the journal with numbered, offers, drive and lives, the four names that the journal binds again, and by name with the tables of the life: the ears of the outside, its acts by name, the names of the acts that an ear took, its facts by chain and by view, the function that holds a fact on a chain, its log, which holds each fact until each ear that waits for it heard it, and the highest number of each kind; boot binds those four names again to the first four that the journal gives, and brings the ear that the journal gives last to life last, under the name journal.
+"""
 
 type Show = tuple | Callable[[list[str]], list[int]]
 """A show says which lines of a text to tell, and picked gives their numbers from the lines of the text.
@@ -114,6 +126,7 @@ def drive(g: Ear, name: str) -> None:
   A generator brought to life under a name and nothing more: it hears from the tip and runs to its first wait, and one born while a fact goes round hears from the next.
   It lives until it returns, and an act that hears nothing more returns at the first fact it hears after its own end.
   A generator that yields a saying is given the fact as the bus said it, one that yields a set of names waits for the next fact that names one of them, and one that yields nothing waits for the next fact said.
+  The journal binds drive again, as boot says, to know each generator that an act brought to life, so the record keeps what such a generator says only through that act.
   """
 
 def transcript(on: str = "", of: str = "") -> list[Fact]:
@@ -1081,7 +1094,9 @@ def idle(id: str) -> Generator[set[str], Fact]:
   """idle waits for the facts about its own name and says nothing of its own, which is the ear of a reply and the ear of the operator."""
 
 def lives(g: Ear, a: Fact | None) -> set[str] | Literal[False] | None:
-  """lives carries a fact into an ear, says everything the ear yields, and gives what the ear waits for, or False once the ear is over."""
+  """lives carries a fact into an ear, says everything the ear yields, and gives what the ear waits for, or False once the ear is over.
+  boot defines lives again at each life, and the journal binds it again, as boot says, so each ear that is no act hears a fact that the journal says again under the name journal.
+  """
 
 def controlled(ear: Callable[[str], Ear], lasting: bool = False) -> Callable[[str], Ear]:
   """An act is paused while the last control in record order that is over it is a pause.
@@ -1098,7 +1113,7 @@ def controlled(ear: Callable[[str], Ear], lasting: bool = False) -> Callable[[st
   A lasting ear lives past the done of its act until it returns, as the ear of a command does to hear that done, whoever said it, and to tell its exit, and a cancel or a close over its act ends the act all the same.
   """
 
-def boot(journal: Callable[..., Ear], **outside: Ear) -> Act[Never]:
+def boot(journal: Journal, **outside: Ear) -> Act[Never]:
   """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek, transcript and reading, which read the tables.
   A verb from a rung takes the chain of the rung when the call leaves on unsaid.
   The kind of an act is the verb that made the act, or the kind an ear made it with.
@@ -1128,7 +1143,6 @@ def boot(journal: Callable[..., Ear], **outside: Ear) -> Act[Never]:
   The engine serves the doors of the file itself, and asks the World for nothing.
   A later life reads the same text from a door.
   It is given the journal, which holds what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own.
-  boot gives the journal the tables of the life, the ears of the outside by name, its acts by name, the names of the acts that an ear took, its facts by chain and by view, the function that holds a fact on a chain, its log, which holds each fact until each ear that waits for it heard it, and the highest number of each kind, and the journal gives the ear that boot brings to life last, under the name journal.
   It opens the root, the first act of any record, which every life opens under the one name, and which a record that holds it already gives back, and that root is what it gives back.
   What the record holds of an act made again keeps that act from the outside: a done that is its first answer the journal says at once, and an act that the outside started the journal says started at once and holds, since it cannot run it, so no ear of the outside hears that act, and a chain with a source which asks again what its origin asked is answered from the record too.
   The record a life was opened from, from which the journal answers what it holds of an act, so that an act the World did once is done no more.
