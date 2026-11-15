@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import engine_of, pytest_xdist_auto_num_workers  # noqa: F401
+from conftest import engine_of, pytest_configure  # noqa: F401
 from skills.conftest import Bench
 from furb.engine import OPERATOR
 

@@ -12,7 +12,7 @@
 // test. A build behind its sources, as after a switch of branch, shows a warning before the run and again after a
 // failure, since tests that read that build then fail as they fail on main. CI=true skips that check.
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { setPriority, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Glob } from "bun";
 import { endedByMemory } from "./children.ts";
@@ -21,6 +21,9 @@ import { LIMIT, longestFirst } from "./order.ts";
 import { exactly, runners, runTest, testFiles } from "./run.ts";
 import { stale, warning } from "./stale.ts";
 
+// The runs go at the lowest priority, which each process of a run inherits, as each task of `cargo xtask` does: three
+// agents share one machine with its owner, whose window stays responsive. Windows takes no such priority.
+if (process.platform !== "win32") setPriority(19);
 const given = process.argv.slice(2);
 const flags = given.filter((one) => one.startsWith("-"));
 const filters = given.filter((one) => !one.startsWith("-"));

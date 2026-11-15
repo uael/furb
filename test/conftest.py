@@ -892,12 +892,11 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     metafunc.parametrize("engine_of", list(ENGINES), indirect=True)
 
 
-def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:  # noqa: ARG001
-  """`-n auto` takes a third of the cores, as each task of `cargo xtask` gives a runner: three agents share one machine
-  with its owner. PYTEST_XDIST_AUTO_NUM_WORKERS names another count, and CI takes each core."""
-  if "PYTEST_XDIST_AUTO_NUM_WORKERS" in os.environ or "CI" in os.environ:
-    return None
-  return max(1, (os.cpu_count() or 1) // 3)
+def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
+  """The suite runs at the lowest priority, which each worker inherits, as each task of `cargo xtask` does: three agents
+  share one machine with its owner, whose window stays responsive."""
+  if hasattr(os, "nice"):
+    os.nice(19 - os.nice(0))
 
 
 @pytest.fixture(autouse=True, scope="session")

@@ -28,7 +28,6 @@ mod width;
 mod yard;
 
 use std::{
-  env,
   ffi::OsStr,
   fs, io,
   path::{Path, PathBuf},
@@ -432,34 +431,18 @@ fn main() -> ExitCode {
   }
 }
 
-/// The variables by which a build and each runner of tests take their count of workers.
-const WORKERS: [&str; 4] =
-  ["CARGO_BUILD_JOBS", "NEXTEST_TEST_THREADS", "PYTEST_XDIST_AUTO_NUM_WORKERS", "FURB_TEST_JOBS"];
-
-/// Run the task at the lowest priority, and give each build and each runner of tests that it starts
-/// a third of the cores, unless a variable of `WORKERS` names its own count or the task runs on CI.
-/// Three agents share one machine with its owner: a task at the width of the machine for each moved
-/// the load of 14 cores past 400, and slowed each of them. The children inherit both.
-fn bounded() {
+/// Run the task at the lowest priority, which each program that it starts inherits: three agents
+/// share one machine with its owner, whose window stays responsive while each build and each
+/// runner of tests takes the width of the machine.
+fn lowered() {
   #[cfg(unix)]
   if let Err(error) = setpriority_process(None, 19) {
     eprintln!("cargo xtask: the task keeps its priority: {error}");
   }
-  if env::var_os("CI").is_some() {
-    return;
-  }
-  let share = thread::available_parallelism().map_or(1, |cores| (cores.get() / 3).max(1));
-  for name in WORKERS.into_iter().filter(|name| env::var_os(name).is_none()) {
-    #[expect(unsafe_code, reason = "std sets a variable of the process only in an unsafe call")]
-    // SAFETY: main calls this first, before the task starts a thread that reads the environment.
-    unsafe {
-      env::set_var(name, share.to_string());
-    }
-  }
 }
 
 fn run() -> Result<ExitCode, Fault> {
-  bounded();
+  lowered();
   let root = root();
   let scripts = scripts(&root)?;
   let tasks = Xtask::command();

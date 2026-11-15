@@ -325,10 +325,10 @@ changed files reach, `test <suite>` runs a suite, and `test` alone runs every su
 `target/xtask/<suite>.log`, in about a minute; `frames` the frames of the window, `search <words>` finds a task or an
 option, and each script of `script/` that runs on its own is a task of its name, whose help is its docstring. The
 commands below are the ones it routes to. Three agents share one machine with its owner, so each task runs at the
-lowest priority, and gives each build and each runner of tests that it starts a third of the cores in
-`CARGO_BUILD_JOBS`, `NEXTEST_TEST_THREADS`, `PYTEST_XDIST_AUTO_NUM_WORKERS` and `FURB_TEST_JOBS`, unless one of them is
-set or `CI` is. A runner started directly takes the same third: `test-threads` of `.config/nextest.toml`, the hook
-`pytest_xdist_auto_num_workers` of `test/conftest.py` for `-n auto`, and `runners()` of the TypeScript tests.
+lowest priority, which each build and each runner of tests that it starts inherits, at the width of the machine; the
+suite of Python (`pytest_configure` of `test/conftest.py`) and the runner of the TypeScript tests lower their own
+priority the same way. A plain `cargo nextest run` keeps the priority of its shell: start it with `nice -n 19`, or run
+it as `cargo xtask test rust`.
 
 Run every command from the root of the repository. Before it runs a command, `uv run` syncs the environment. The
 sync builds a package of the workspace again when the environment does not hold it, as in a new checkout, or when a
@@ -424,7 +424,7 @@ fix what your change broke, and report what was broken before.
 - `cargo xtask targets`: clippy of the workspace on Linux and on Windows, which a Mac does not build, so code under a
   `cfg` of those systems fails here and not first in the gates. zig compiles the C of the dependencies; it needs the
   targets `rustup target add x86_64-unknown-linux-gnu x86_64-pc-windows-gnu`. Its first run in a tree takes about a
-  minute or more, and a run after a change takes seconds. Run it before you land a change of Rust.
+  minute or more, and a run after a change takes seconds. The watch of a branch runs it at each new head.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`, and the words of
   `.furb/skills` too, less their tests.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo nextest run
@@ -508,13 +508,12 @@ fix what your change broke, and report what was broken before.
   `uv cache prune`, each copy of a wheel and each editable build of uv that no entry uses.
 - `cargo xtask watch --tree DIR --table FILE --inbox FILE [--branch B] [--every MIN] [--owners FILE] [--pid FILE]`:
   check the head of a branch whole each time it moves, at most once in each interval, in a worktree of its own that it
-  detaches at that head. It runs the hooks of a commit on the files that changed since the head that it checked before,
-  then each suite, then clippy and biome, one part after the other. A part starts only while the load of the machine is
-  under its count of cores, which it reads each minute while it waits, and runs at the lowest priority with a third of
-  the cores for each runner and each build, as each task does. A green writes one line in the
-  table; a red writes one entry in the inbox, with each test or file that failed, its owner from the file of owners, and
-  the commits since the last green, or since the head checked before. It blocks nothing, and it wakes on the write of
-  the ref.
+  detaches at that head. It runs the hooks of a commit on the files that changed since the head that it checked
+  before, then each suite, then clippy and biome, then `cargo xtask targets`, one part after the other. A part starts
+  only while the load of the machine is under its count of cores, which it reads each minute while it waits, and runs
+  at the lowest priority, as each task does. A green writes one line in the table; a red writes one entry in the
+  inbox, with each test or file that failed, its owner from the file of owners, and the commits since the last green,
+  or since the head checked before. It blocks nothing, and it wakes on the write of the ref.
 - `cargo xtask links [--fix]`: check that each link in a README that a package carries works on the page of the
   package on PyPI, npm or crates.io, which read no relative link. It lists each package and its README from the
   manifests, and fails on a relative link, which `--fix` writes as absolute, at `main` on GitHub. The hooks run it.
@@ -538,7 +537,7 @@ fix what your change broke, and report what was broken before.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `bind/typescript/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
-  seconds, and runs a third of the cores at once, each core on CI, or as many as `FURB_TEST_JOBS` names. A
+  seconds, and runs as many at once as the machine has cores, or as `FURB_TEST_JOBS` names when it names fewer. A
   word after `bun run test` filters the files by their path or by `typescript/file`, as `typescript/engine`, and a filter
   that matches no file fails. Use it, and not a plain
   `bun test <file>`, which keeps `claude` on the PATH and fails where a test names a model, and says so; a bunfig.toml
