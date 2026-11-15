@@ -218,14 +218,16 @@ impl Model {
     let words = hold.steps.last().map_or("starts", |one| said(one.stage).0);
     let left =
       vec![run("  Opening", Style::new().fg(color)), run(format!(" · {words}"), self.prose(over))];
+    // The bar fills in the color of the open, and its room stands in the color of a border.
     let share = hold.share().map(|share| {
       let full = usize::try_from(share).unwrap_or_default() * BAR / 100;
-      format!("{}{}  ", "▰".repeat(full), "▱".repeat(BAR - full))
+      let room = format!("{}  ", "━".repeat(BAR - full));
+      [run("━".repeat(full), Style::new().fg(color)), run(room, Style::new().fg(t.border))]
     });
     let time =
       if over { format!("{}, over {}", elapsed(took), elapsed(BOUND)) } else { elapsed(took) };
-    let right =
-      vec![run(share.unwrap_or_default(), Style::new().fg(color)), run(time, self.prose(over))];
+    let mut right: Line = share.into_iter().flatten().collect();
+    right.push(run(time, self.prose(over)));
     let mut rows = vec![Row::of(spread(left, right, self.wide().saturating_sub(2), Style::new()))];
     if took >= STAGES {
       rows.extend(hold.steps.iter().enumerate().map(|(at, step)| self.stage_row(hold, at, step)));

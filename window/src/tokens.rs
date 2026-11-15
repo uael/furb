@@ -201,7 +201,7 @@ impl Loader {
     match self {
       Self::Model => &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
       Self::Command => &["◐", "◓", "◑", "◒"],
-      Self::Agent => &["↳"],
+      Self::Agent => &["└"],
     }
   }
 

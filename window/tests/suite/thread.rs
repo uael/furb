@@ -254,29 +254,29 @@ fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_esc
   let frame = app.text();
   let dock: Vec<String> = frame
     .lines()
-    .skip_while(|line| !line.contains("↳ Run the bench"))
+    .skip_while(|line| !line.contains("└ Run the bench"))
     .take(4)
     .map(|line| line.chars().take(LEFT).collect::<String>().trim_end().to_owned())
     .collect();
   assert_eq!(
     dock,
     [
-      "  ↳ Run the bench of the replay             ◐ Working  opus",
+      "  └ Run the bench of the replay             ◐ Working  opus",
       "    await wait(600, chain)",
-      "  ↳ Read the boot of the host               ⠋ Working  opus",
-      "  ↳ Count the lines of README.md           ✓ Resolved  opus",
+      "  └ Read the boot of the host               ⠋ Working  opus",
+      "  └ Count the lines of README.md           ✓ Resolved  opus",
     ]
     .map(str::to_owned),
     "{frame}"
   );
-  shows(&app, "opus ↳2");
+  shows(&app, "opus └2");
   screen("thread-agents", &app);
 
   // A click on an agent opens its thread in place: its head says that it is one.
-  clicked(&app, "↳ Run the bench", 0, 2);
+  clicked(&app, "└ Run the bench", 0, 2);
   shows(&app, "[ Back ]");
   let head = app.text().lines().next().unwrap().to_owned();
-  assert!(head.starts_with(" furb · ↳ Run the bench of the replay "), "{head}");
+  assert!(head.starts_with(" furb · agent · Run the bench of the replay "), "{head}");
   shows(&app, "await wait(600, chain)");
   screen("thread-agent", &app);
 
@@ -284,14 +284,14 @@ fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_esc
   // names.
   app.press("escape");
   shows(&app, "[ Resolve ]");
-  shows(&app, "↳ Count the lines of README.md");
+  shows(&app, "└ Count the lines of README.md");
   shows(&app, "⌃X ↓ agents");
 
   // The key steps through the agents of the dock, from the first, and from the last to the first.
   let into = |title: &str| {
     app.press("ctrl+x");
     app.press("down");
-    shows(&app, &format!(" furb · ↳ {title} "));
+    shows(&app, &format!(" furb · agent · {title} "));
   };
   for title in [
     "Run the bench of the replay",

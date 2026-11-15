@@ -109,7 +109,7 @@ impl Feed<'_> {
     let title = self.model.title().unwrap_or_default();
     // The selected card names the thread that an agent came from, so the head names the agent.
     let (mark, title) = match &self.opened.from {
-      Some(_) => ("↳ ", title),
+      Some(_) => ("agent · ", title),
       None => ("", named.unwrap_or(title)),
     };
     let left =
@@ -377,7 +377,7 @@ impl Feed<'_> {
     let mut rows: Vec<Row> = shown.iter().flat_map(|agent| self.agent(agent)).collect();
     if done > 0 {
       let noun = if done == 1 { "agent" } else { "agents" };
-      rows.insert(0, says(&format!("↳ {done} {noun} done"), self.style(Role::Muted)));
+      rows.insert(0, says(&format!("└ {done} {noun} done"), self.style(Role::Muted)));
     }
     if !rows.is_empty() {
       rows.insert(0, Row::default());
@@ -409,7 +409,7 @@ impl Feed<'_> {
     };
     let model = card.model.as_deref().and_then(|one| one.rsplit(':').next()).unwrap_or_default();
     let title = if rest { muted } else { self.style(Role::Prose) };
-    let left = vec![run("  ↳ ", muted), run(card.title.clone(), title)];
+    let left = vec![run("  └ ", muted), run(card.title.clone(), title)];
     let mut right = vec![run(word, Style::new().fg(color))];
     right.extend(time.map(|time| run(format!(" {time}"), muted)));
     right.push(run(format!("  {model}"), muted));
