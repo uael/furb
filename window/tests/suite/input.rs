@@ -114,6 +114,8 @@ fn three_enters_in_a_row_send_three_messages_in_order_and_the_up_arrow_cancels_n
   // The up arrow moves in the input: the text stays, and the thread still works.
   app.paste("a draft");
   app.press("up");
+  // The frame of the step: nothing that he sent starts with the draft, which stays.
+  shows(&app, "Nothing that you sent here starts so.");
   let frame = shows(&app, "┃ a draft");
   assert!(frame.contains(" Working 1") && !frame.contains("Stopped"), "{frame}");
   screen("input-in-order", &app);

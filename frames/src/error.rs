@@ -7,6 +7,8 @@ pub(crate) enum Error {
   Read { path: PathBuf, source: io::Error },
   #[error("{} cannot be written: {source}", path.display())]
   Write { path: PathBuf, source: io::Error },
+  #[error("{} cannot be locked: {source}", path.display())]
+  Lock { path: PathBuf, source: io::Error },
   #[error("the recording is not valid: {0}")]
   Cast(&'static str),
   #[error("a frame or a recording is not valid JSON: {0}")]

@@ -5,10 +5,11 @@
 //! shows what the step waits for and the window stopped writing. No model and no network.
 
 use std::{
-  env, fs,
+  env,
+  fs::{self, File},
   io::{self, Read, Write},
   path::{Path, PathBuf},
-  process::Stdio,
+  process::{self, Stdio},
   str,
   time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -16,6 +17,7 @@ use std::{
 use tokio::{
   io::{AsyncBufReadExt, BufReader},
   process::{Child, Command},
+  task,
   time::{sleep, timeout},
 };
 use unicode_width::UnicodeWidthStr;
@@ -63,12 +65,27 @@ pub(crate) async fn capture(
   bin: &Path,
   root: &Path,
 ) -> Result<Captured, Error> {
+  let _turn = turn(root).await?;
   let rig = Rig::made(walk, bin, root)?;
   let captured = rig.captured(walk, size).await;
   let removed = fs::remove_dir_all(&rig.root);
   let captured = captured?;
   removed.map_err(|source| Error::Write { path: rig.root.clone(), source })?;
   Ok(captured)
+}
+
+/// The turn of a capture at its root, which it holds until it ends. Two captures of one walk at
+/// one size, from two trees or from a gate, take turns, since the root stays the same at each run:
+/// the path of a session hues its thread. The system frees the turn of a capture that dies.
+async fn turn(root: &Path) -> Result<File, Error> {
+  let path = root.with_extension("lock");
+  let locked = path.clone();
+  let taken = task::spawn_blocking(move || {
+    let file = File::create(&locked)?;
+    file.lock()?;
+    Ok(file)
+  });
+  taken.await.map_err(io::Error::other).flatten().map_err(|source| Error::Lock { path, source })
 }
 
 /// The folders of a capture: the home of the operator with the project of the window, the cache
@@ -131,7 +148,9 @@ impl Rig {
     let mut daemon = self.daemon().await?;
     let name =
       self.root.file_name().map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-    let tmux = Tmux { socket: format!("ff{name}") };
+    // A tmux server can outlive the turn of the capture before it for a moment, so each run
+    // speaks to a server of its own.
+    let tmux = Tmux { socket: format!("ff{name}-{}", process::id()) };
     let walked = self.walked(&tmux, walk, size).await;
     let ended = tmux.run(&["kill-server"]).await;
     daemon.kill().await.map_err(|source| Error::Process { what: "the daemon", source })?;
@@ -317,7 +336,7 @@ impl Rig {
 /// A glyph cut between two reads waits for its end.
 pub(crate) fn stamp(path: &Path) -> Result<(), Error> {
   let wrote = |source| Error::Write { path: path.to_owned(), source };
-  let mut file = fs::File::create(path).map_err(wrote)?;
+  let mut file = File::create(path).map_err(wrote)?;
   let mut input = io::stdin().lock();
   let (mut buffer, mut held) = (vec![0; 65536], Vec::new());
   loop {
