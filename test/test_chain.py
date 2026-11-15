@@ -722,8 +722,8 @@ async def test_to_await_a_chain_never_returns() -> None:
   """To await a chain never returns."""
   _, _, _ = born()
   two = engine.chain("two")
-  with pytest.raises(TimeoutError):
-    await asyncio.wait_for(asyncio.shield(two), 0.01)
+  with pytest.raises(Refused, match=two + " never settles"):
+    await asyncio.wait_for(two, 1)
 
 
 async def test_a_chain_has_a_globals_dict_and_a_working_directory_of_its_own() -> None:

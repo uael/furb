@@ -80,7 +80,7 @@ async def test_the_operator_is_given_the_exit_of_a_command_whatever_its_code() -
 
 
 async def test_a_word_that_awaits_a_chain_raises_refused_where_it_waited() -> None:
-  """A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further."""
+  """A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further, and so does the operator."""
   _, log, root = born("sub = chain('sub')\nawait sub\nclose(1)", "close(2)")
   assert await engine.prompt(int, "fork", on=root) == 2
   await settle()
@@ -93,6 +93,8 @@ async def test_a_word_that_awaits_a_chain_raises_refused_where_it_waited() -> No
   ]
   assert "#rung1 raised\nrung1_raised = Refused('chain2 never settles')" in paragraphs(engine.turns(on=root))
   assert [(a[1], a[4]) for a in said(log, "chain")] == [("chain1", "root"), ("chain2", "sub")]
+  with pytest.raises(Refused, match="chain2 never settles"):
+    await asyncio.wait_for(engine.Act("chain2"), 1)
 
 
 async def test_a_word_that_awaits_a_name_of_no_act_of_the_life_raises_refused_where_it_waited() -> None:

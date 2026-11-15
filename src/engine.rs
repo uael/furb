@@ -1024,12 +1024,12 @@ impl Engine {
   }
 
   /// What to do when an act is done, given what it came to: told at once for an act that is done already, and once
-  /// when it is, after the entry in which it was. This is how a door that drives the engine itself awaits. A name of no
-  /// act is refused, since no done can settle it, as `Act.__await__` refuses it.
+  /// when it is, after the entry in which it was. This is how a door that drives the engine itself awaits. A chain and a
+  /// name of no act are refused, since no done can settle them, as `Act.__await__` refuses them.
   pub fn watch(&mut self, id: &str, then: impl FnMut(&Object) + 'static) -> Result<(), Fault> {
-    if self.get(id)?.is_none() {
-      return Err(Fault::refused(format!("{id} never settles")));
-    }
+    self.run(|sand, outside| {
+      sand.call(outside, &outside.opened.settles.clone(), vec![Object::string(id)], vec![]).map(drop)
+    })?;
     self.watchers.entry(id.to_owned()).or_default().push(Box::new(then));
     self.told()
   }

@@ -758,7 +758,7 @@ class Act[T = object](str):
     To await a cancelled act raises CancelledError.
     A word that awaits a command whose code is not one that the command accepts raises Refused where it waited, and the command keeps its Exit, which peek gives.
     The operator, which awaits from outside a run, is given the Exit of a command whatever its code, since the codes that a command accepts rule the word that awaits it.
-    A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further.
+    A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further, and so does the operator.
     A word that awaits a name of no act of the life raises Refused where it waited, since no done can settle it, and so does the operator.
     A word that awaits its own rung or its own run raises Refused where it waited, since its completion depends on that word ending.
     The awaiter of the prompt raises that exception.

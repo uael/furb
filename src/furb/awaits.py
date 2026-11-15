@@ -11,6 +11,7 @@ from asyncio import get_running_loop
 from collections.abc import Generator
 
 from furb import python as engine
+from furb.kernel import unsettled
 
 
 class Act[T = object](engine.Act[T]):
@@ -19,8 +20,8 @@ class Act[T = object](engine.Act[T]):
   def __await__(self) -> Generator[object, None, T]:
     if engine.acting():
       return (yield from super().__await__())
-    if not engine.get(self):
-      raise engine.Refused(self + " never settles")
+    if (no := unsettled(vars(engine), "", self)) is not None:
+      raise no
     settled = get_running_loop().create_future()
 
     def pend() -> Generator[None, tuple]:

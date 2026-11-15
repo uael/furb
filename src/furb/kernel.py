@@ -56,6 +56,28 @@ def verb(names: Names, which: str) -> Callable[..., object]:
   return got
 
 
+def refusing(names: Names, why: str) -> BaseException:
+  """A refusal of the engine, with why it refuses."""
+  made = verb(names, "Refused")(why)
+  assert isinstance(made, BaseException)
+  return made
+
+
+def unsettled(names: Names, rung: str, got: object) -> BaseException | None:
+  """Why a wait for what is awaited cannot end, as the refusal that the awaiter raises where it waited, or nothing: a
+  rung awaits an act and nothing else, a chain and a name of no act never settle, and the end of its own rung or of
+  its own run depends on the word itself. The operator awaits from no rung, so its rung is empty."""
+  if not isinstance(got, str):
+    return refusing(names, f"a rung awaits an act, and {got!r} is none")
+  made = verb(names, "get")(got)
+  if verb(names, "question")(("chain", got)) or not isinstance(made, tuple):
+    return refusing(names, got + " never settles")
+  own = got == rung or (verb(names, "question")(("run", got)) and made[4] == rung)
+  if own and not verb(names, "over")(got):
+    return refusing(names, f"{rung} cannot await its own completion through {got}")
+  return None
+
+
 def ran_in(word: str, rung: str, module: dict[str, object]) -> object:
   """The word of a rung, run in the globals of its chain.
 
@@ -197,7 +219,7 @@ class Running:
         try:
           frame = self.frames[run]
           got = frame.throw(given) if isinstance(given, BaseException) else frame.send(given)
-          while (no := self.unsettled(rung, got)) is not None:
+          while (no := unsettled(self.names, rung, got)) is not None:
             got = frame.throw(no)
           assert isinstance(got, str)
         except StopIteration:
@@ -252,27 +274,7 @@ class Running:
     if ok:
       return value
     ended = f"timed out after {asked[6]}s" if code is None else f"exited {code}"
-    return self.refusing(f"{made} {ended}")
-
-  def unsettled(self, rung: str, got: object) -> BaseException | None:
-    """Why the word of a rung cannot wait for what it awaits, as the refusal that it raises where it waited, or
-    nothing: a rung awaits an act and nothing else, a chain and a name of no act never settle, and the end of its own
-    rung or of its own run depends on the word itself."""
-    if not isinstance(got, str):
-      return self.refusing(f"a rung awaits an act, and {got!r} is none")
-    made = verb(self.names, "get")(got)
-    if verb(self.names, "question")(("chain", got)) or not isinstance(made, tuple):
-      return self.refusing(got + " never settles")
-    own = got == rung or (verb(self.names, "question")(("run", got)) and made[4] == rung)
-    if own and not verb(self.names, "over")(got):
-      return self.refusing(f"{rung} cannot await its own completion through {got}")
-    return None
-
-  def refusing(self, why: str) -> BaseException:
-    """A refusal of the engine, which a job is done with when its part of a word is no part of the word that ran."""
-    made = verb(self.names, "Refused")(why)
-    assert isinstance(made, BaseException)
-    return made
+    return refusing(self.names, f"{made} {ended}")
 
   def begin(self, run: str) -> None:
     """A job taken, put in the line of its rung: it runs when the jobs of that rung before it are over. The job of a
@@ -333,13 +335,17 @@ class Running:
     kind, _, rung, whole, before = self.of(run)
     if kind != "run":
       ok = before == len(held)
-      return whole if ok else self.refusing(f"a part of {rung} follows {before} characters of it, and {len(held)} ran")
+      return (
+        whole
+        if ok
+        else refusing(self.names, f"a part of {rung} follows {before} characters of it, and {len(held)} ran")
+      )
     if whole.startswith(held):
       return whole[len(held) :]
     # A turn ends with no blank at its end, so the word may hold what ran less the blank lines after it.
     if held.startswith(whole) and not held[len(whole) :].strip():
       return ""
-    return self.refusing(f"{held!r:.100} of the word of {rung} ran, and its run holds another")
+    return refusing(self.names, f"{held!r:.100} of the word of {rung} ran, and its run holds another")
 
   def cancelled(self) -> BaseException:
     """The CancelledError of the engine, which a run is done with when its word is dropped or never begins."""
