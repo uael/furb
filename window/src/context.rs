@@ -118,7 +118,7 @@ impl Model {
   /// color: its kinds of content once the client parted its turns, else what came from the cache.
   fn kinds(&self, context: &Context) -> Vec<Kind> {
     let t = &self.tokens;
-    let [purple, rose, teal, slate] = t.hues;
+    let [purple, rose, gold, slate] = t.hues;
     let parts = self.client.thread.as_ref().and_then(|one| one.thread.parts.as_ref());
     if let Some(parts) =
       parts.filter(|one| self.client.split == Split::Kinds && !one.kinds.is_empty())
@@ -127,7 +127,7 @@ impl Model {
         let color = match content {
           Content::Turns => t.accent,
           Content::Kits => purple,
-          Content::Skills => teal,
+          Content::Skills => gold,
           Content::Mcp => slate,
           Content::Memory => rose,
           Content::Doctrine => t.text,
@@ -142,7 +142,7 @@ impl Model {
     }
     let kind = |(portion, tokens)| {
       let (name, color) = match portion {
-        Portion::Cached => ("From the cache", teal),
+        Portion::Cached => ("From the cache", gold),
         Portion::Written => ("Written to the cache", purple),
         Portion::New => ("New", rose),
         Portion::Free => ("Free", t.border),
