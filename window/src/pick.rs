@@ -4,7 +4,7 @@
 //! closes it and gives the focus back to the input. The pointer does the same: a click takes a row,
 //! and a click beside the part closes it.
 
-use std::{borrow::Cow, cmp::Reverse};
+use std::{borrow::Cow, cmp::Reverse, ops::Range};
 
 use furb::view::{Part, Sent, Skill};
 use furb_host::protocol::Card;
@@ -691,16 +691,7 @@ impl Model {
       rows.push(Row::default());
       shown.reverse();
     }
-    for (at, line) in shown {
-      let Some(at) = at else {
-        rows.push(Row::of(padded(line)));
-        continue;
-      };
-      // A row that takes nothing takes no click, and the pointer does not light it.
-      let clicked =
-        (entries[at].choice != Choice::None).then(|| (2..2 + room, Some(Click::Pick(at))));
-      rows.push(Row { hot: clicked.into_iter().collect(), ..Row::of(padded(line)) });
-    }
+    rows.extend(self.entry_rows(&entries, shown, room));
     rows.push(Row::default());
     if rises {
       rows.extend([filter, Row::default()]);
@@ -714,6 +705,34 @@ impl Model {
     }
     let x = columns.saturating_sub(width) / 2;
     Some(Over { x, y: OVER, width, rows })
+  }
+
+  /// The rows of the entries that show, each between two columns on each side, each that takes
+  /// something with its click. The thumb of the rows that show stands in the column at the right
+  /// of the entries while rows wait above or below them.
+  fn entry_rows(
+    &self,
+    entries: &[Entry],
+    shown: Vec<(Option<usize>, Line)>,
+    room: usize,
+  ) -> Vec<Row> {
+    let rises = self.picker.as_ref().is_some_and(|one| one.of == Pick::History);
+    let thumb = thumb(&shown, entries.len(), rises);
+    let bar = run("┃", Style::new().fg(self.tokens.border));
+    let row = |(place, (at, line)): (usize, (Option<usize>, Line))| {
+      let mut row = vec![run("  ", Style::new())];
+      row.extend(spread(line, Vec::new(), room, Style::new()));
+      row.extend([
+        run(" ", Style::new()),
+        if thumb.contains(&place) { bar.clone() } else { run(" ", Style::new()) },
+      ]);
+      // A row that takes nothing takes no click, and the pointer does not light it.
+      let clicked = at
+        .filter(|at| entries[*at].choice != Choice::None)
+        .map(|at| (2..2 + room, Some(Click::Pick(at))));
+      Row { hot: clicked.into_iter().collect(), ..Row::of(row) }
+    };
+    shown.into_iter().enumerate().map(row).collect()
   }
 
   /// The keys that the foot of a list part names: to move, to take the chosen row, to close.
@@ -882,6 +901,22 @@ fn stem(life: &str) -> String {
 /// The last part of a path of a folder.
 fn tail(path: &str) -> &str {
   path.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
+/// The rows of the shown rows of a list part that its thumb covers: the share of the entries that
+/// show, at the place of those that wait above them, and none while each entry shows. The history
+/// stands newest at its foot, so what waits above it is what comes after.
+fn thumb(shown: &[(Option<usize>, Line)], count: usize, rises: bool) -> Range<usize> {
+  let at = shown.iter().filter_map(|one| one.0);
+  let (Some(first), Some(last)) = (at.clone().min(), at.max()) else { return 0..0 };
+  if first == 0 && last + 1 >= count {
+    return 0..0;
+  }
+  let (above, below) = (first, count - 1 - last);
+  let (above, below) = if rises { (below, above) } else { (above, below) };
+  let rows = shown.len();
+  let start = (rows * above / count).min(rows - 1);
+  start..(rows - rows * below / count).max(start + 1)
 }
 
 /// The rows of the projects of Go to: each project of a session, with its count of sessions.

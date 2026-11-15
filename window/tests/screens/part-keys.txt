@@ -5,12 +5,12 @@
                   Each key
   ⌃P          go  ▌Search a key                                             1 / 30
   ⌃X ?        ea
-                  Go
-                  ▌⌃P or ⌃O    go to anything, or run a command
-                   ⌃X ?        each key
-                   ⌥A or ⌃X A  the next thread that needs you
-                   ⌥↓ or ⌃X J  the next card
-                   ⌥↑ or ⌃X K  the card before
+                  Go                                                               ┃
+                  ▌⌃P or ⌃O    go to anything, or run a command                    ┃
+                   ⌃X ?        each key                                            ┃
+                   ⌥A or ⌃X A  the next thread that needs you                      ┃
+                   ⌥↓ or ⌃X J  the next card                                       ┃
+                   ⌥↑ or ⌃X K  the card before                                     ┃
                    ⌃X L        show or hide the list
 
                   The thread
