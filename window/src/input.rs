@@ -13,17 +13,17 @@ use std::mem;
 use furb::view::{Act, Maker, RunState};
 use furb_host::protocol::{Answer, Verb};
 use jiff::Timestamp;
-use opentui::style::{Span, Style};
+use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
   keys::Does,
-  line::{Line, clipped, run, spread},
+  line::{Line, clipped, cut, run, spread},
   list::project,
   model::{Key, Model},
   opens::{Ask, Hold, Life},
   thread::{Click, Opened, Row, columns, width},
-  tokens::{Loader, Role},
+  tokens::{APART, Loader, Role},
 };
 
 /// How many rows of text the input grows to before its text scrolls.
@@ -476,7 +476,7 @@ impl Model {
 
   /// How many rows the text of the input takes, as the editor wraps it at its columns.
   pub(crate) fn grown(&self) -> usize {
-    let room = self.wide().saturating_sub(4).max(1);
+    let room = self.wide().saturating_sub(6).max(1);
     let rows = self.draft.text.split('\n').map(|line| line.width().div_ceil(room).max(1)).sum();
     usize::clamp(rows, 1, GROWS)
   }
@@ -513,8 +513,9 @@ impl Model {
           Target::Session(..) => "Ask in a new thread",
           Target::New(_) => "Ask for a change, a review or an answer",
         };
+        // The text stands under the blank row that opens the box, as in the box of a message.
         let waits = usize::from(self.waiting_row().is_some());
-        (2, waits, self.grown(), says.to_owned())
+        (2, waits + 1, self.grown(), says.to_owned())
       }
     };
     let shown = self.form().is_none() || self.form_rows(self.grown()).1.is_some();
@@ -522,76 +523,114 @@ impl Model {
     Area {
       x: number(x),
       y: number(top + row),
-      width: number(self.wide().saturating_sub(x + 2)),
+      width: number(self.wide().saturating_sub(x + 4)),
       height: number(height),
       placeholder,
       shown,
     }
   }
 
-  /// The rows of the input: the form of a question of the open thread, or a band for each row of
-  /// its text, which the editor covers, with a bar in the color of its target, under the row that
-  /// says that a question waits; then the launcher and the hints.
+  /// The rows of the input: the form of a question of the open thread, or its box under the row
+  /// that says that a question waits; then the row of hints. The box is the box of a message of the
+  /// feed, with a bar in the color of its target: a blank row, a band for each row of its text,
+  /// which the editor covers, a blank row, the row of its controls, and a blank row.
   pub(crate) fn input(&self) -> Vec<Row> {
-    let t = &self.tokens;
-    let bar = match self.target() {
-      Target::Thread(key) => self.hue(&key),
-      Target::Session(..) | Target::New(_) => t.accent,
-    };
-    let band = |_| {
-      let raised = Style::new().bg(t.raised);
-      let fill = run(" ".repeat(self.wide().saturating_sub(1)), raised);
-      Row::of(vec![run("┃", raised.fg(bar)), fill])
-    };
     let mut rows = match self.form() {
-      Some(_) => self.form_rows(self.grown()).0,
-      None => self.waiting_row().into_iter().chain((0..self.grown()).map(band)).collect(),
+      Some(_) => {
+        let mut rows = self.form_rows(self.grown()).0;
+        rows.push(self.launcher());
+        rows
+      }
+      None => {
+        let band = |_| self.band(Vec::new());
+        let bands = (0..self.grown() + 2).map(band);
+        let mut rows: Vec<Row> = self.waiting_row().into_iter().chain(bands).collect();
+        rows.extend([self.launcher(), self.band(Vec::new())]);
+        rows
+      }
     };
-    rows.push(self.launcher());
     rows.push(self.hints());
     rows
   }
 
-  /// The line of the launcher: at its left the machine and the session that the input sends to,
-  /// which picks another, and at its right the model with its effort and the switch of python.
+  /// The bar of the input: the color of the thread that it replies to, or the accent for a new
+  /// thread.
+  fn bar(&self) -> Color {
+    match self.target() {
+      Target::Thread(key) => self.hue(&key),
+      Target::Session(..) | Target::New(_) => self.tokens.accent,
+    }
+  }
+
+  /// A row of the box of the input: its bar, then a line of the columns of the box with one blank
+  /// column on each side, as wide as the box of a message of the feed.
+  fn band(&self, line: Line) -> Row {
+    let raised = Style::new().bg(self.tokens.raised);
+    let room = self.wide().saturating_sub(6);
+    let mut row = vec![run("┃", raised.fg(self.bar())), run(" ", raised)];
+    row.extend(spread(line, Vec::new(), room, raised));
+    row.push(run("  ", raised));
+    Row::of(row)
+  }
+
+  /// The row of the controls of the box of the input: at its left the switch between a message and
+  /// a word of Python, and what the input sends to, which picks another; at its right the model with
+  /// its effort, and the key that turns the input to a new thread and back.
   fn launcher(&self) -> Row {
     let t = &self.tokens;
-    let (muted, prose) = (t.style(Role::Muted), t.style(Role::Prose));
-    let at = match self.target() {
-      Target::Thread(key) => key.0,
-      Target::Session(at, _) | Target::New(at) => at,
+    let raised = Style::new().bg(t.raised);
+    let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
+    let on = prose.bg(t.lifted);
+    let (message, python) = if self.draft.python { (muted, on) } else { (on, muted) };
+    let switch = [run(" Message ", message), run(" Python ", python)];
+    let gap = || run(" ".repeat(APART), raised);
+    let (mark, target, color) = match self.target() {
+      Target::Thread(key) => ("→ ", self.title().unwrap_or_default(), self.hue(&key)),
+      Target::Session(..) => ("+ ", format!("new thread in {}", self.session()), t.accent),
+      Target::New(_) => ("+ ", format!("new session in {}", self.project()), t.accent),
     };
-    let machine = if at == 0 { "This computer".to_owned() } else { self.machines[at].name.clone() };
-    let session = format!("{} ▾", self.session());
-    let left = vec![run(format!("  {machine}   "), muted), run(session, prose)];
-    let switch = if self.draft.python {
-      run("● Python", Style::new().fg(t.accent))
-    } else {
-      run("○ Python", prose)
+    let mut left: Line = switch.into();
+    left.extend([gap(), run(mark, muted), run(format!("{target} ▾"), raised.fg(color))]);
+    let turn = match (&self.aim, &self.thread) {
+      (None, Some(_)) => Some("+ New thread"),
+      (Some(_), Some(_)) => Some("↩ Back to the thread"),
+      (_, None) => None,
     };
-    let ring = self.ring().map(|ring| [run("   ", muted), run(ring, prose)]);
-    // The session gives way to the model down to a few words, then the model gives way.
-    let room = self.wide().saturating_sub(2);
-    let session = width(&left[1..]).min(SESSION);
-    let switched = switch.content.width() + ring.as_ref().map_or(0, |ring| width(ring));
-    let model = self.maker().map(|model| run(format!("{model}   "), muted));
-    let fits =
-      |one: &Span<'_>| width(&left[..1]) + session + one.content.width() + 2 + switched <= room;
-    let model = model.filter(fits);
-    let right: Line = model.into_iter().chain([switch]).chain(ring.into_iter().flatten()).collect();
-    let line = spread(left, right, room, Style::new());
-    // The runs of the line: the machine, the session, the fill, the model when it shows, the
-    // switch, and the ring of the context when it shows.
-    let at = columns(&line);
-    let ringed = self.ring().is_some();
-    let switch = at.len() - if ringed { 3 } else { 1 };
-    let mut hot = vec![
-      (at[1].clone(), Some(Click::Key(Does::Sessions))),
-      (at[switch].clone(), Some(Click::Key(Does::Python))),
-    ];
-    if ringed {
-      hot.push((at[at.len() - 1].clone(), Some(Click::Context)));
+    let mut right: Line = Vec::new();
+    if let Some((model, effort)) = self.maker() {
+      right.push(run(model, prose));
+      right.extend(effort.map(|one| run(format!("  {one}"), muted)));
     }
+    if let Some(turn) = turn {
+      let key = run(format!(" {}", self.key(Does::NewThread)), muted);
+      right.extend([gap(), run(turn, raised.fg(t.accent)), key]);
+    }
+    let ring = self.ring();
+    if let Some(ring) = &ring {
+      right.extend([gap(), run(ring.clone(), prose)]);
+    }
+    let room = self.wide().saturating_sub(6);
+    // The target gives way to the model and the turn down to a few words.
+    let fits = room.saturating_sub(width(&right) + 2 + width(&left[..3]) + 2).max(SESSION);
+    let target = left.pop().map(|one| run(cut(&one.content, fits), one.style));
+    left.extend(target);
+    let line = spread(left, right, room, raised);
+    let at = columns(&line);
+    let mut hot = vec![
+      (at[0].start + 2..at[1].end + 2, Some(Click::Key(Does::Python))),
+      (at[3].start + 2..at[4].end + 2, Some(Click::Key(Does::Sessions))),
+    ];
+    // The runs at the end of the line: the turn and its key, then the ring when it shows.
+    let end = at.len() - if ring.is_some() { 2 } else { 0 };
+    if turn.is_some() {
+      let (turn, key) = (&at[end - 2], &at[end - 1]);
+      hot.push((turn.start + 2..key.end + 2, Some(Click::Key(Does::NewThread))));
+    }
+    if ring.is_some() {
+      let ring = &at[at.len() - 1];
+      hot.push((ring.start + 2..ring.end + 2, Some(Click::Context)));
+    }
+    let Row { line, .. } = self.band(line);
     Row { hot, ..Row::of(line) }
   }
 
@@ -625,15 +664,20 @@ impl Model {
   /// The model that the target of the input speaks to: the one of the last block of the open
   /// thread with its effort, else the one that its card or the last card of its session names. A
   /// new session names none until its life stands.
-  fn maker(&self) -> Option<String> {
-    let short = |model: &str| model.rsplit(':').next().unwrap_or(model).to_owned();
+  fn maker(&self) -> Option<(String, Option<String>)> {
+    // An actor names its model after its provider, and its effort after a slash.
+    let short = |model: &str| {
+      let model = model.rsplit(':').next().unwrap_or(model);
+      let (name, effort) =
+        model.split_once('/').map_or((model, None), |(one, two)| (one, Some(two)));
+      (name.to_owned(), effort.map(str::to_owned))
+    };
     let (at, life) = match self.target() {
       Target::Thread(key) => {
         let opened = self.thread.as_ref()?;
         let block = opened.exchanges.values().rev().find_map(|one| one.block.as_ref());
         if let Some(Maker::Model { model, effort }) = block.map(|one| &one.maker) {
-          let name = short(model);
-          return Some(effort.as_ref().map_or(name.clone(), |one| format!("{name}/{one}")));
+          return Some((short(model).0, effort.clone()));
         }
         (key.0, key.1)
       }
@@ -664,8 +708,7 @@ impl Model {
       _ if self.form().is_some() => (Does::Empty, "refuse"),
       (None, Some(_)) if self.leaves() => (Does::Close, "back"),
       (None, Some(opened)) if !opened.docked().1.is_empty() => (Does::Agent, "agents"),
-      (None, Some(_)) => (Does::NewThread, "new thread"),
-      (Some(_), Some(_)) => (Does::NewThread, "back to the thread"),
+      (_, Some(_)) => (Does::Commands, "commands"),
       (_, None) if self.listed() => (Does::Commands, "commands"),
       (_, None) => (Does::List, "the list"),
     };
@@ -686,7 +729,14 @@ impl Model {
         hot.push((at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop))));
         (working, Some((2, Loader::Model)))
       }
-      (None, None) => (vec![run(format!("  {}", self.folder_shown()), muted)], None),
+      (None, None) => {
+        let at = match self.target() {
+          Target::Thread(key) => key.0,
+          Target::Session(at, _) | Target::New(at) => at,
+        };
+        let machine = if at == 0 { "This computer" } else { &self.machines[at].name };
+        (vec![run(format!("  {machine} · {}", self.folder_shown()), muted)], None)
+      }
     };
     let room = self.wide().saturating_sub(2).saturating_sub(width(&left) + width(&key) + 2);
     let others = self.others_ask(room);

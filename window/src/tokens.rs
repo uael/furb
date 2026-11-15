@@ -81,8 +81,10 @@ pub struct Tokens {
   pub danger: Color,
   /// The veil over the window while a list part stands over it, which dims each cell under it.
   pub veil: Color,
-  /// The bar of a thread and the badge of a project: purple, blue and orange.
-  pub hues: [Color; 3],
+  /// The bar of a thread and the badge of a project, each far from the others and from the colors
+  /// of attention and of a failure, so two threads side by side read apart: purple, blue, rose, teal
+  /// and mint.
+  pub hues: [Color; 5],
 }
 
 impl Tokens {
@@ -94,8 +96,8 @@ impl Tokens {
     let dark = terminal.filter(|told| ThemeMode::from_background(*told) == ThemeMode::Dark);
     let base = dark.map_or(BASE, |told| Color::default_with(told.r, told.g, told.b));
     let [panel, raised, lifted, border] = STEPS.map(|share| mixed(base, WHITE, share));
-    let (purple, blue, orange) =
-      (Color::hex(0xa3_83e2), Color::hex(0x76_99fe), Color::hex(0xec_b081));
+    let blue = Color::hex(0x76_99fe);
+    let hues = [0xa3_83e2, 0x76_99fe, 0xe8_89a8, 0x4f_c1c9, 0x79_d4a2].map(Color::hex);
     Self {
       base,
       panel,
@@ -109,7 +111,7 @@ impl Tokens {
       attention: Color::hex(0xf5_a742),
       danger: Color::hex(0xef_6c6c),
       veil: Color::rgba(base.r, base.g, base.b, 160),
-      hues: [purple, blue, orange],
+      hues,
     }
   }
 

@@ -259,7 +259,7 @@ impl Feed<'_> {
     };
     let (number, color, loader) = match &line.mark {
       Mark::Runs { work, .. } => (" ".to_owned(), t.accent, Some(loader(*work))),
-      Mark::Retries(_) => (" ".to_owned(), t.attention, Some(Loader::Model)),
+      Mark::Retries(_) => (" ".to_owned(), t.accent, Some(Loader::Model)),
       Mark::Asks => ("◆".to_owned(), t.attention, None),
       Mark::Failed { .. } => ("✗".to_owned(), t.danger, None),
       Mark::Ran => (line.number.to_string(), t.muted, None),
@@ -302,7 +302,7 @@ impl Feed<'_> {
     let wait = if left > 0 { format!(" in {}", timer(left)) } else { String::new() };
     vec![run(
       format!("Attempt {attempt} of {most}{wait}"),
-      Style::new().fg(self.model.tokens.attention),
+      Style::new().fg(self.model.tokens.accent),
     )]
   }
 

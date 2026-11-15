@@ -94,13 +94,13 @@ impl Model {
   /// what it wrote to the cache, what was new, and the room that it left in the window.
   fn kinds(&self, context: &Context) -> Vec<Kind> {
     let t = &self.tokens;
-    let [purple, blue, orange] = t.hues;
+    let [purple, blue, rose, ..] = t.hues;
     let read = &context.read;
     let new = read.tokens.saturating_sub(read.cached + read.written);
     let mut kinds = vec![
       Kind { name: "From the cache", tokens: read.cached, color: blue },
       Kind { name: "Written to the cache", tokens: read.written, color: purple },
-      Kind { name: "New", tokens: new, color: orange },
+      Kind { name: "New", tokens: new, color: rose },
     ];
     if let Some(window) = context.window {
       kinds.push(Kind {
