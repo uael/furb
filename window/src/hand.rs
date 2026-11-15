@@ -154,7 +154,7 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
 /// The editor of the text of the input, which has the focus. Enter sends, so a line breaks with
 /// shift and enter, and the end goes to the end of the feed, as the table of the keys says.
 fn edited(app: &App, tokens: &Tokens) -> Textarea {
-  let area = Textarea::new(app).absolute().wrap(WrapMode::Char);
+  let area = Textarea::new(app).absolute().wrap(WrapMode::Word);
   let area = area.colors(tokens.text, tokens.raised).focused_colors(tokens.text, tokens.raised);
   let area = area.placeholder_color(tokens.muted).cursor_color(tokens.text);
   area.bind("shift+enter", EditorAction::Newline).unbind("end")

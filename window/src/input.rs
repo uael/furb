@@ -18,7 +18,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
   keys::Does,
-  line::{Line, clipped, cut, run, spread},
+  line::{Line, clipped, cut, run, spread, wrapped},
   list::project,
   model::{Key, Model},
   opens::{Ask, Hold, Life},
@@ -477,7 +477,8 @@ impl Model {
   /// How many rows the text of the input takes, as the editor wraps it at its columns.
   pub(crate) fn grown(&self) -> usize {
     let room = self.wide().saturating_sub(6).max(1);
-    let rows = self.draft.text.split('\n').map(|line| line.width().div_ceil(room).max(1)).sum();
+    // The editor wraps at a word boundary, as the box of a message does.
+    let rows = self.draft.text.split('\n').map(|line| wrapped(line, room).len().max(1)).sum();
     usize::clamp(rows, 1, GROWS)
   }
 
