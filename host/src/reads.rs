@@ -11,7 +11,10 @@ use std::time::Duration;
 
 use furb::view::{Page, Reach};
 use tokio::{
-  sync::broadcast::{Receiver, error::RecvError},
+  sync::broadcast::{
+    Receiver,
+    error::{RecvError, TryRecvError},
+  },
   task::AbortHandle,
   time::sleep,
 };
@@ -71,6 +74,9 @@ impl Read {
         Err(RecvError::Closed) => return,
       }
       sleep(MOMENT).await;
+      if !self.gathered() {
+        return;
+      }
       let reach = Reach { before: None, limit: self.limit };
       let command = Command::Thread { thread: self.thread.clone(), reach };
       let Ok(Reply::Page(page)) = self.handle.send(command).await else { return };
@@ -84,6 +90,19 @@ impl Read {
         }
       }
       told = page;
+    }
+  }
+
+  /// Each event that came in the moment, taken so that one page answers all of them: false once
+  /// the life is gone.
+  fn gathered(&mut self) -> bool {
+    loop {
+      match self.heard.try_recv() {
+        Ok((_, event)) if matches!(*event, Event::Ended(_)) => return false,
+        Ok(_) | Err(TryRecvError::Lagged(_)) => {}
+        Err(TryRecvError::Empty) => return true,
+        Err(TryRecvError::Closed) => return false,
+      }
     }
   }
 }
