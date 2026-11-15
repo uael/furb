@@ -216,7 +216,8 @@ fn a_model_asked_again_says_its_attempt_its_wait_and_why_then_its_failure_and_th
   // The thread and the hint row say that the pause holds, that nothing is lost and what ends it:
   // a message wakes the thread and asks the model again, which fails again here.
   let frame = app.text();
-  let way = ["‖ This thread is paused. Nothing is lost: a message", "resumes it.", "Change the model"];
+  let way =
+    ["‖ This thread is paused. Nothing is lost: a message", "resumes it.", "Change the model"];
   assert!(way.iter().all(|line| frame.contains(line)), "{frame}");
   assert!(frame.contains("‖ Paused · a message resumes it"), "{frame}");
   app.paste("try once more");
