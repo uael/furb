@@ -317,7 +317,7 @@ impl Peer {
     let Answer::Act(prompt) = self.ask(verb) else { panic!("no prompt") };
     let stands = if [WORKS, THINKS, RETRIES].iter().any(|one| message.contains(one)) {
       "thinks"
-    } else if message.contains(LONG) {
+    } else if message.contains(LONG) || message.contains(DELEGATES) {
       "runs"
     } else if message.contains(ASKS) || QUESTIONS.iter().any(|one| message.contains(one.0)) {
       "asks"
@@ -412,6 +412,23 @@ pub(crate) const FAILS: &str = "(the model fails)";
 /// passes, and which then fails for good.
 pub(crate) const RETRIES: &str = "(the model is asked again)";
 
+/// The words of a message of a test that make the model start three agents and wait on the first:
+/// it waits on a command, the second writes for ever, and the third answers at once.
+pub(crate) const DELEGATES: &str = "(the model delegates)";
+const DELEGATE: &str =
+  "bench = prompt(str, 'Run the bench of the replay\\n(the agent waits)', on=chain('bench'))
+boot = prompt(str, 'Read the boot of the host\\n(the model works on it)', on=chain('boot'))
+lines = await prompt(str, 'Count the lines of README.md\\n(the agent answers)', on=chain('count'))
+await wait(600, bench)";
+
+/// The words of [`DELEGATES`] and those that its agents read in their prompts, each with the word
+/// that answers it: the first agent answers at once, and the second waits on its chain.
+const AGENTS: [(&str, &str); 3] = [
+  (DELEGATES, DELEGATE),
+  ("(the agent answers)", "close('README.md has 3 lines.')"),
+  ("(the agent waits)", "n = 2\nawait wait(600, chain)"),
+];
+
 /// The long word of a model of a test, which waits ten minutes on its chain at its end: a wait
 /// needs an act, and a chain is over only at its end.
 const WORD: &str = "birth = 'async def boot(): return await seed()'
@@ -461,13 +478,13 @@ fn scripted(at: &Path, claude: &Path) -> Opening {
       let asks = "await prompt(str, 'Which key sends the queue?', to=OPERATOR)\nclose(None)";
       let fails =
         "x = 1\nraise ValueError('a maximum of 4 blocks with cache_control may be provided')";
-      let question = QUESTIONS.iter().find(|one| request.contains(one.0)).map(|one| one.1);
+      let named = QUESTIONS.iter().chain(&AGENTS).find(|one| request.contains(one.0));
       let read = format!("close({READ:?})");
       let told = "await prompt(None, 'The bench ran.', to=OPERATOR)\nclose(None)";
       let word = if request.contains("refused the question") {
         &read
-      } else if let Some(question) = question {
-        question
+      } else if let Some((_, word)) = named {
+        word
       } else if request.contains(TELLS) {
         told
       } else if request.contains(ASKS) {

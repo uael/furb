@@ -397,7 +397,29 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
     }),
   },
-  Scenario { name: "18-parallel", has: none("8. The dock of agents") },
+  Scenario {
+    name: "18-parallel",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      // The claude command line of the tests answers its turns in the order that it reads them, so
+      // the word starts the agent that takes a turn, waits until it took it, then starts the one
+      // that takes the next; the agent that reads the boot gets no answer, and writes for ever.
+      words: &[
+        "bench = prompt(str, 'Run the bench of the replay', on=chain('bench'))\nboot = prompt(str, 'Read the boot of the host\\nWAIT', on=chain('boot'))\nawait wait(5, bench)\nlines = await prompt(str, 'Count the lines of README.md', on=chain('count'))\nawait wait(600, bench)",
+        "report = await bash('sleep 30; echo the bench ran')\nclose(report.stdout.content)",
+        "close('README.md has 3 lines.')",
+      ],
+      steps: &[
+        step(
+          "b",
+          &[Act::Type("Measure the open on three chains."), Act::Key("Enter")],
+          "✓ Resolved  opus",
+        ),
+        step("d", &[Act::Pointer { on: "↳ Run the bench", button: 0 }], "[ Back ]"),
+        step("c", &[Act::Key("Escape")], "[ Resolve ]"),
+      ],
+    }),
+  },
   Scenario { name: "19-context", has: none("7. The context box") },
   Scenario { name: "20-models", has: none("9. The launcher picks the model and its effort") },
   Scenario { name: "21-config", has: none("17. After the first window") },

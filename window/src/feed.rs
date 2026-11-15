@@ -4,7 +4,8 @@
 //! thread does not show yet, then the dock of the agents of the thread.
 
 use furb::view::{
-  Block, Exchange, Line as Code, Maker, Mark, Retrying, Said, Saying, Standing, Thought, Work,
+  Agent, Block, Exchange, Line as Code, Maker, Mark, Retrying, Said, Saying, Standing, Thought,
+  Work,
 };
 use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
@@ -54,7 +55,7 @@ impl Feed<'_> {
       }
     };
     if self.opened.items().last() == Some(item) {
-      rows.extend(self.opened.pending.iter().flat_map(|one| self.message(&one.text)));
+      rows.extend(self.opened.pending.iter().flat_map(|one| self.message(&one.text, true)));
     }
     rows
   }
@@ -80,7 +81,7 @@ impl Feed<'_> {
       // Until its page comes, the thread shows what its card holds: the first line of its message.
       (None, None) => {
         let card = self.model.told_card(&self.opened.key);
-        return card.map(|card| self.message(&card.thread.title)).unwrap_or_default();
+        return card.map(|card| self.message(&card.thread.title, true)).unwrap_or_default();
       }
       (None, Some(0)) => return Vec::new(),
       (None, Some(above)) => {
@@ -96,19 +97,26 @@ impl Feed<'_> {
   /// button that resolves it, once the daemon made the thread and gave its page. A thread that
   /// ended shows how, and its button turns the input to it, since a reply opens it again. A resolve
   /// of a thread that works waits for a confirm on the button, which says that it stops the work.
+  /// The thread of an agent says that it is one, and its button goes back to the thread that it
+  /// came from.
   pub(crate) fn head(&self) -> Row {
     let t = &self.model.tokens;
-    let card = self.model.told_card(&self.opened.key);
+    let root = self.opened.root();
+    let card = self.model.told_card(&root.key);
     let project = card.map(project).unwrap_or_default();
     let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
-    let title = named.or_else(|| self.model.title()).unwrap_or_default();
-    let left = vec![
-      run(format!(" {project} · "), self.style(Role::Muted)),
-      run(title, self.style(Role::Title)),
-    ];
-    let made = !self.opened.key.2.is_empty() && !self.model.leaves();
     let (prose, muted) = (self.style(Role::Prose), self.style(Role::Muted));
+    let title = self.model.title().unwrap_or_default();
+    // The selected card names the thread that an agent came from, so the head names the agent.
+    let (mark, title) = match &self.opened.from {
+      Some(_) => ("↳ ", title),
+      None => ("", named.unwrap_or(title)),
+    };
+    let left =
+      vec![run(format!(" {project} · {mark}"), muted), run(title, self.style(Role::Title))];
+    let made = !self.opened.key.2.is_empty() && !self.model.leaves();
     let (mark, button) = match card.map(|card| &card.thread) {
+      _ if self.opened.from.is_some() => (None, Some((run("[ Back ]", prose), Does::Close))),
       _ if !made => (None, None),
       Some(thread) if thread.ended() => {
         let mark = match thread.standing {
@@ -116,20 +124,21 @@ impl Feed<'_> {
           Standing::Failed => run("✗ Failed", Style::new().fg(t.danger)),
           _ => run("Stopped", muted),
         };
-        (Some(mark), Some(run("[ Reopen ]", prose)))
+        (Some(mark), Some((run("[ Reopen ]", prose), Does::Resolve)))
       }
       Some(thread)
         if thread.works() && self.model.armed == Some(Armed::Resolve(self.opened.key.clone())) =>
       {
-        (None, Some(run("[ Stop and resolve ]", Style::new().fg(t.attention))))
+        (None, Some((run("[ Stop and resolve ]", Style::new().fg(t.attention)), Does::Resolve)))
       }
-      _ => (None, Some(run("[ Resolve ]", prose))),
+      _ => (None, Some((run("[ Resolve ]", prose), Does::Resolve))),
     };
     let apart = |mark| [mark, run(" ".repeat(APART), Style::new())];
-    let right: Line = mark.into_iter().flat_map(apart).chain(button.clone()).collect();
+    let right: Line =
+      mark.into_iter().flat_map(apart).chain(button.clone().map(|one| one.0)).collect();
     let line = spread(left, right, self.wide.saturating_sub(2), Style::new());
     let end = width(&line);
-    let hot = button.map(|one| (end - one.content.width()..end, Some(Click::Key(Does::Resolve))));
+    let hot = button.map(|(one, does)| (end - one.content.width()..end, Some(Click::Key(does))));
     Row { hot: hot.into_iter().collect(), ..Row::of(line) }
   }
 
@@ -144,7 +153,8 @@ impl Feed<'_> {
   /// The rows of one exchange: the message of the operator on its band, the block, the thought,
   /// and what the answer said.
   fn exchange(&self, exchange: &Exchange) -> Vec<Row> {
-    let mut rows = self.message(&exchange.text);
+    let his = matches!(exchange.by, Maker::Operator | Maker::Member { .. });
+    let mut rows = self.message(&exchange.text, his);
     if let Some(block) = &exchange.block {
       rows.extend(self.block(&exchange.message, block));
     }
@@ -154,12 +164,13 @@ impl Feed<'_> {
     rows
   }
 
-  /// A message of the operator on a raised band, with a bar in the color of the thread, and a
-  /// blank row under it.
-  fn message(&self, text: &str) -> Vec<Row> {
+  /// A message on a raised band, with a bar in the color of the thread when an operator said it,
+  /// and muted when a model gave it to its agent, and a blank row under it.
+  fn message(&self, text: &str, his: bool) -> Vec<Row> {
     let t = &self.model.tokens;
     let band = Style::new().bg(t.raised);
-    let bar = run("┃", Style::new().fg(self.model.hue(&self.opened.key)).bg(t.raised));
+    let hue = if his { self.model.hue(&self.opened.key) } else { t.muted };
+    let bar = run("┃", Style::new().fg(hue).bg(t.raised));
     let banded = |text: Line| {
       let mut line = vec![bar.clone(), run(" ", band)];
       line.extend(spread(text, Vec::new(), self.wide.saturating_sub(4), band));
@@ -356,43 +367,73 @@ impl Feed<'_> {
     rows
   }
 
-  /// The dock of the agents of the thread: one row for each agent that works, asks or failed, and
-  /// one row that counts the others.
+  /// The dock of the agents of the thread: the agents from the first that does not rest to the
+  /// last, so an agent that ends among others that work keeps its row with its mark, and one row
+  /// that counts the agents before them, with a blank row above and under them. Each agent takes a
+  /// row with its title, its state, its time and its model, and one more with the line where it
+  /// stands while it lives. A click on an agent opens its thread in place.
   pub(crate) fn dock(&self) -> Vec<Row> {
-    let t = &self.model.tokens;
-    let rests = |standing: &Standing| {
-      matches!(standing, Standing::Resolved | Standing::Rests | Standing::Stopped)
-    };
-    let mut rows = Vec::new();
-    for agent in self.opened.agents.iter().filter(|agent| !rests(&agent.standing)) {
-      let (mark, word, color) = match &agent.standing {
-        Standing::Asks { .. } => (None, "◆ Input", t.attention),
-        Standing::Failed => (None, "✗ Failed", t.danger),
-        Standing::Paused { .. } => (None, "‖ Paused", t.attention),
-        Standing::Thinks => (Some(Loader::Model), "  Working", t.accent),
-        _ => (Some(Loader::Command), "  Working", t.accent),
-      };
-      let model = agent.model.as_deref().and_then(|one| one.rsplit(':').next()).unwrap_or_default();
-      let left = vec![
-        run("  ↳ ", self.style(Role::Muted)),
-        run(agent.title.clone(), self.style(Role::Prose)),
-      ];
-      let right =
-        vec![run(word, Style::new().fg(color)), run(format!("  {model}"), self.style(Role::Muted))];
-      let line = spread(left, right.clone(), self.wide.saturating_sub(2), Style::new());
-      let x = width(&line) - width(&right);
-      rows.push(Row { loader: mark.map(|one| (x, one)), ..Row::of(line) });
-    }
-    let done = self.opened.agents.len() - rows.len();
-    if done > 0 {
-      let noun = if done == 1 { "agent" } else { "agents" };
-      rows.push(says(&format!("↳ {done} {noun} done"), self.style(Role::Muted)));
+    let agents = &self.opened.agents;
+    let first = agents.iter().position(|agent| !rests(&agent.card.standing));
+    let (done, shown) = agents.split_at(first.unwrap_or(agents.len()));
+    let mut rows: Vec<Row> = shown.iter().flat_map(|agent| self.agent(agent)).collect();
+    if !done.is_empty() {
+      let noun = if done.len() == 1 { "agent" } else { "agents" };
+      rows.insert(0, says(&format!("↳ {} {noun} done", done.len()), self.style(Role::Muted)));
     }
     if !rows.is_empty() {
       rows.insert(0, Row::default());
+      rows.push(Row::default());
     }
     rows
   }
+
+  /// The rows of one agent of the dock: its title with its state, its time and its model, then
+  /// the line where it stands while it lives. Each takes a click that opens its thread.
+  fn agent(&self, agent: &Agent) -> Vec<Row> {
+    let t = &self.model.tokens;
+    let card = &agent.card;
+    let (muted, rest) = (self.style(Role::Muted), rests(&card.standing));
+    // A time shows from one second on, as the time of a line that runs.
+    let since =
+      agent.began.filter(|began| self.model.now > *began).map(|began| self.model.now - began);
+    let time = agent.took.or(since).filter(|seconds| *seconds > 0).map(timer);
+    let working = |loader| (Some(loader), "  Working", t.accent);
+    let (mark, word, color) = match &card.standing {
+      Standing::Asks { .. } => (None, "◆ Input", t.attention),
+      Standing::Failed => (None, "✗ Failed", t.danger),
+      Standing::Paused { .. } => (None, "‖ Paused", t.attention),
+      Standing::Thinks => working(Loader::Model),
+      Standing::Runs => working(Loader::Command),
+      Standing::Delegates => working(Loader::Agent),
+      Standing::Stopped => (None, "Stopped", t.muted),
+      Standing::Rests | Standing::Resolved => (None, "✓ Resolved", t.muted),
+    };
+    let model = card.model.as_deref().and_then(|one| one.rsplit(':').next()).unwrap_or_default();
+    let title = if rest { muted } else { self.style(Role::Prose) };
+    let left = vec![run("  ↳ ", muted), run(card.title.clone(), title)];
+    let mut right = vec![run(word, Style::new().fg(color))];
+    right.extend(time.map(|time| run(format!(" {time}"), muted)));
+    right.push(run(format!("  {model}"), muted));
+    let line = spread(left, right.clone(), self.wide.saturating_sub(2), Style::new());
+    let x = width(&line) - width(&right);
+    let open = Click::Agent(card.prompt.clone());
+    let mut rows =
+      vec![Row { loader: mark.map(|one| (x, one)), ..Row::clicked(line, open.clone()) }];
+    if let Some(stands) = agent.line.as_ref().filter(|_| !rest) {
+      let text = vec![run(self.model.homed(&stands.text), muted)];
+      let room = self.wide.saturating_sub(8);
+      let mut line = vec![run("    ", Style::new())];
+      line.extend(clipped(text, room, muted));
+      rows.push(Row::clicked(line, open));
+    }
+    rows
+  }
+}
+
+/// Whether an agent rests: it ended and asks nothing more of anyone.
+fn rests(standing: &Standing) -> bool {
+  matches!(standing, Standing::Resolved | Standing::Rests | Standing::Stopped)
 }
 
 /// A row of prose from the column of the text.

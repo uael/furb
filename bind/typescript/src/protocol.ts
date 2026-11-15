@@ -1315,12 +1315,12 @@ export interface Spend {
 }
 /**
  * Some exchanges of a thread, the oldest first, with how many exchanges stand before them, and the
- * agents of the whole thread.
+ * agents of the whole thread, in the order the thread made them.
  */
 export interface Page {
   exchanges: Exchange[];
   above: number;
-  agents: Card2[];
+  agents: Agent[];
 }
 /**
  * One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
@@ -1396,18 +1396,22 @@ export interface Answered {
   reply: Reply;
 }
 /**
- * One thread that the operator started, as a card of a list shows it: its prompt, its title, how
- * it stands, the model that wrote its last word, how many agents work under it, and the site of
- * each operator who read it to its end, `operator` for each of them and `operator/<login>` for
- * one member. A question of an agent under it is a question of the card.
+ * An agent of a thread: the thread that a word of the thread started on another chain, as a card,
+ * with the second of the epoch at which the host saw it begin, the seconds that it took once it
+ * ended, counted from milliseconds as the time of a thought, and the line of its last word where
+ * it stands: the line that runs or asks, else the last one. A host that opened the life after the
+ * agent began saw it begin at that open.
  */
-export interface Card2 {
+export interface Agent {
   prompt: string;
   title: string;
   standing: Standing;
   model?: string | null;
   agents?: number;
   readers?: string[];
+  began?: number | null;
+  took?: number | null;
+  line?: Line | null;
 }
 /**
  * One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
@@ -1437,4 +1441,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 24;
+export const PROTOCOL = 25;

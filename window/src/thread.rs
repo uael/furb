@@ -16,7 +16,7 @@ use std::{
 
 use furb::{
   engine::OPERATOR,
-  view::{Card as Agent, Exchange, Page},
+  view::{Agent, Exchange, Page},
 };
 use furb_host::protocol::{Card, Verb};
 use opentui::style::{Color, Span, Style};
@@ -65,6 +65,8 @@ pub(crate) struct Opened {
   /// Whether the window asks the page of the end again, since the connection to its machine ended
   /// and the new one tells no change of the thread until the window reads its end there.
   pub(crate) again: bool,
+  /// The thread whose agent this thread is, which an escape opens again where he read it.
+  pub(crate) from: Option<Box<Self>>,
 }
 
 /// A row of the feed as a place that holds when rows come above it: a count of rows from the
@@ -83,14 +85,15 @@ pub(crate) enum Fold {
 }
 
 /// What a click on a row does: it opens or folds a part of the feed, it does what a key does, it
-/// picks an entry of the picker of the sessions, or it answers a question with a value of its
-/// form.
+/// picks an entry of the picker of the sessions, it answers a question with a value of its form,
+/// or it opens the thread of an agent, its prompt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Click {
   Fold(Fold),
   Key(Does),
   Pick(usize),
   Answer(usize),
+  Agent(String),
 }
 
 /// The columns of a row that go bright under the pointer, and what a click there does.
@@ -334,6 +337,11 @@ impl Opened {
     Verb::Thread { life, thread, before, limit: PAGE }
   }
 
+  /// The thread that the operator opened from the list, whose agent this thread is, or this one.
+  pub(crate) fn root(&self) -> &Self {
+    self.from.as_deref().map_or(self, Self::root)
+  }
+
   /// The parts of the feed. The head shows until the first exchange of the thread is held, and
   /// holds the messages of a thread that the daemon did not make yet.
   pub(crate) fn items(&self) -> Items<'_, Exchange> {
@@ -355,9 +363,26 @@ impl Model {
     self.aim = None;
   }
 
-  /// The thread closed while it opens or after its open failed, and the list in its place. The
-  /// open goes on.
+  /// The thread of an agent of the open thread opened in its place, and the input turned to it.
+  /// The thread that it came from waits as the operator read it, and asks its end again when it
+  /// opens again, since the daemon tells a window the changes of one thread at a time.
+  fn open_agent(&mut self, prompt: String) {
+    let Some(mut from) = self.thread.take() else { return };
+    let key = (from.key.0, from.key.1.clone(), prompt);
+    (from.asked, from.again) = (HashMap::new(), true);
+    self.thread =
+      Some(Opened { key, since: self.moved, from: Some(Box::new(from)), ..Opened::default() });
+    (self.aim, self.armed) = (None, None);
+  }
+
+  /// An escape from the open thread: from the thread of an agent, back to the thread that it came
+  /// from; from a thread that opens or whose open failed, back to the list, while the open goes on.
+  /// Whether it went back.
   pub(crate) fn back(&mut self) -> bool {
+    if let Some(from) = self.thread.as_mut().and_then(|one| one.from.take()) {
+      (self.thread, self.aim) = (Some(*from), None);
+      return true;
+    }
     let leaves = self.leaves();
     if leaves {
       (self.thread, self.selected, self.aim) = (None, None, None);
@@ -365,9 +390,13 @@ impl Model {
     leaves
   }
 
-  /// Whether an escape goes back from the open thread: it opens, or its page did not come.
+  /// Whether an escape goes back from the open thread: it is the thread of an agent, it opens, or
+  /// its page did not come.
   pub(crate) fn leaves(&self) -> bool {
-    self.thread.as_ref().is_some_and(|one| one.fault.is_some() || self.opens(one))
+    self
+      .thread
+      .as_ref()
+      .is_some_and(|one| one.from.is_some() || one.fault.is_some() || self.opens(one))
   }
 
   /// Whether the life of an open thread opens and its page did not come.
@@ -460,6 +489,10 @@ impl Model {
       Click::Pick(at) => self.took(at),
       Click::Key(does) => Some(does),
       Click::Answer(at) => self.choose(at),
+      Click::Agent(prompt) => {
+        self.open_agent(prompt);
+        None
+      }
     }
   }
 

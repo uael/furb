@@ -502,6 +502,9 @@ impl Model {
           _ if self.draft.python => "A word of Python to run",
           Target::Thread(_) if opens => "Write while it opens. Your message goes when it is open.",
           Target::Thread(_) if ended => "A reply opens this thread again",
+          Target::Thread(_) if self.thread.as_ref().is_some_and(|one| one.from.is_some()) => {
+            "Write to this agent"
+          }
           Target::Thread(_) => "Reply to this thread",
           Target::Session(..) => "Ask in a new thread",
           Target::New(_) => "Ask for a change, a review or an answer",

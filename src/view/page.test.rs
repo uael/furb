@@ -171,9 +171,49 @@ fn the_agents_of_a_thread_stand_as_cards() {
   let held = held(facts, &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let [agent] = page.agents.as_slice() else { panic!("{page:?}") };
-  assert_eq!(agent.title, "study the boot");
-  assert_eq!(agent.standing, Standing::Thinks);
-  assert_eq!(agent.model.as_deref(), Some("claude-cli:sonnet"));
+  assert_eq!(agent.card.title, "study the boot");
+  assert_eq!(agent.card.standing, Standing::Thinks);
+  assert_eq!(agent.card.model.as_deref(), Some("claude-cli:sonnet"));
+}
+
+#[test]
+fn an_agent_says_when_it_began_when_it_ended_and_the_line_where_it_stands_and_a_note_is_none() {
+  let mut facts = thread();
+  facts.extend([
+    json!(["chain", "chain2", "rung2", "chain1", "worker", ""]),
+    json!(["prompt", "prompt4", "rung2", "chain2", "str", "count the lines", ""]),
+    json!(["rung", "rung4", "prompt4", "chain2", "", "", "claude-cli:sonnet"]),
+    json!(["run", "run4", "chain2", "chain2", "rung4", "close('3 lines')", ""]),
+    json!(["chain", "chain3", "rung2", "chain1", "bench", ""]),
+    json!(["prompt", "prompt5", "rung2", "chain3", "str", "run the bench", ""]),
+    json!(["rung", "rung5", "prompt5", "chain3", "", "", "claude-cli:sonnet"]),
+    json!(["run", "run5", "chain3", "chain3", "rung5", "n = 1\nout = await bash('make')", ""]),
+    json!(["bash", "bash5", "rung5", "chain3", "make", "", 120.0, null]),
+    json!(["done", "prompt4", "rung4", "3 lines"]),
+    json!(["done", "run4", "chain2", null]),
+    json!(["done", "rung4", "chain2", null]),
+    // A note to a chain that works is no agent: its model reads it at its next step.
+    json!(["prompt", "prompt6", "rung2", "chain3", "None", "and the seed", ""]),
+  ]);
+  // The host hears each fact 600 ms after the one before, from the second 100 on.
+  let (mut fold, mut held, mut streams) = (Fold::default(), Held::default(), Streamed::default());
+  for (at, fact) in facts.iter().enumerate() {
+    for act in fold.recorded(fact) {
+      streams.heard(&act, 100_000 + at as u64 * 600);
+      held.heard(&act);
+    }
+  }
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let [counts, bench] = page.agents.as_slice() else { panic!("{page:?}") };
+  // It began at 107.8 s and ended at 112.6 s: it took 4.8 s, so 4, though its seconds differ by 5.
+  let times = (counts.card.title.as_str(), counts.began, counts.took);
+  assert_eq!(times, ("count the lines", Some(107), Some(4)));
+  let line = counts.line.as_ref().map(|line| (line.text.as_str(), &line.mark));
+  assert_eq!(line, Some(("close('3 lines')", &Mark::Ran)));
+  assert_eq!((bench.began, bench.took), (Some(110), None));
+  let runs = Mark::Runs { work: Work::Command, since: Some(112) };
+  let line = bench.line.as_ref().map(|line| (line.text.as_str(), &line.mark));
+  assert_eq!(line, Some(("out = await bash('make')", &runs)));
 }
 
 #[test]

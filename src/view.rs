@@ -28,8 +28,8 @@ pub use ladder::{Rung, SHOWN, Shown};
 pub use named::word;
 pub use named::{NAME, Named, said};
 pub use page::{
-  Answered, Block, Exchange, Line, Mark, Page, Reach, Reply, Retrying, Said, Saying, Streamed,
-  Thought, Work,
+  Agent, Answered, Block, Exchange, Line, Mark, Page, Reach, Reply, Retrying, Said, Saying,
+  Streamed, Thought, Work,
 };
 pub use quote::{Quote, Writing, quotes, writing};
 pub use state::{State, chain_state, restate, working};
