@@ -521,6 +521,7 @@ impl Rig {
       "f2p": out_of("f2p_passed", "f2p_total"), "p2p": out_of("p2p_passed", "p2p_total"),
       "usd": numbers["usd"], "wall_seconds": numbers["wall_seconds"], "answers": numbers["answers"],
       "commands": numbers["commands"], "value": numbers["value"], "stopped": meta["stopped"],
+      "crash": numbers["crash"],
       "engine": spoke(self.command("git").arg("-C").arg(&self.root).args(["rev-parse", "HEAD"]))?,
       "base": meta["base"], "at": stamp,
     });
