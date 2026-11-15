@@ -439,7 +439,10 @@ impl<'a> Reader<'a> {
     let mut lines = self.marked(rung, before, &made);
     for (act, place) in &made {
       let Some(at) = place.and_then(|source| at_line(&lines, before, source)) else { continue };
-      lines[at].made.push(outcome(act));
+      // A chain is where an act runs, not what the line came to.
+      if act.kind != Kind::Chain {
+        lines[at].made.push(outcome(act));
+      }
       if let Some(output) = self.output(act) {
         lines[at].output = Some(output);
       }

@@ -25,15 +25,8 @@ pub enum Content {
 impl Content {
   /// Each kind, in the order of the bar, which is the order in which the chain reads them: its
   /// system prompt first, then its setup, then the turns of the work at its end.
-  pub const ALL: [Self; 7] = [
-    Self::Engine,
-    Self::Doctrine,
-    Self::Kits,
-    Self::Skills,
-    Self::Mcp,
-    Self::Memory,
-    Self::Turns,
-  ];
+  pub const ALL: [Self; 7] =
+    [Self::Engine, Self::Doctrine, Self::Kits, Self::Skills, Self::Mcp, Self::Memory, Self::Turns];
 
   /// The name of the kind, as the box writes it.
   pub const fn name(self) -> &'static str {

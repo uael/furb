@@ -465,6 +465,32 @@ fn a_line_says_what_each_act_that_it_made_came_to_one_for_each_pass_of_a_loop() 
 }
 
 #[test]
+fn the_chain_that_a_line_makes_for_its_prompt_is_no_outcome_of_the_line() {
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "ask", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus"]),
+    json!([
+      "run",
+      "run1",
+      "chain1",
+      "chain1",
+      "rung1",
+      "found = await prompt(str, 'a', on=chain('a'))",
+      ""
+    ]),
+    json!(["chain", "chain2", "rung1", "", "a", ""]),
+    json!(["prompt", "prompt2", "rung1", "chain2", "str", "a", ""]),
+    json!(["done", "prompt2", "chain2", "x"]),
+  ];
+  let mut streams = Streamed::default();
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  assert_eq!(block.lines[0].made, [Made::Done("'x'".to_owned())]);
+}
+
+#[test]
 fn a_reason_that_names_a_line_only_inside_a_word_marks_the_line_of_the_act_that_failed() {
   let mut streams = Streamed::default();
   let fault = json!({"is": "RuntimeError", "args": ["the deadline 3 passed"]});
@@ -745,7 +771,8 @@ fn each_act_of_a_comprehension_marks_its_line_and_a_later_call_its_own() {
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.as_ref().unwrap();
   let made: Vec<usize> = block.lines.iter().map(|line| line.made.len()).collect();
-  assert_eq!(made, [4, 0, 2]);
+  // A chain is no outcome of its line: two prompts on the first line, one on the last.
+  assert_eq!(made, [2, 0, 1]);
   let at: Vec<Option<usize>> = page.agents.iter().map(|agent| agent.at).collect();
   assert_eq!(at, [Some(1), Some(1), Some(3)]);
 }

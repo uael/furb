@@ -2555,8 +2555,9 @@ class Line(TypedDict):
   """
   One line of a block: its number in the thread, its text, in which each quote stands as the
   binding that it makes and a string of many lines as one line with its escapes, its mark, what
-  the last command that it awaited wrote, and what each act that it made came to, in the order it
-  made them: one for each pass of a loop, the last of which is the value that it bound.
+  the last command that it awaited wrote, and what each act that it made came to but a chain, in
+  the order it made them: one for each pass of a loop, the last of which is the value that it
+  bound.
   """
 
   number: int
