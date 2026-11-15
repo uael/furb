@@ -85,9 +85,11 @@ jobs:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
       - run: bun run build
-      # Each program of the tests of the crate, with the folder of its package, which cargo runs it in.
+      # Each program of the tests of the crate, with the folder of its package, which cargo runs it in. The report of
+      # --timings says how long each crate took to build, which the step after the build keeps as an artifact.
       - run: |
-          cargo test --locked --workspace --features furb/typescript --no-run --message-format json-render-diagnostics \
+          cargo test --locked --workspace --features furb/typescript --no-run --timings \
+            --message-format json-render-diagnostics \
             | tr -d '\r' | jq -r --arg root "$GITHUB_WORKSPACE" '
               def here: gsub("\\\\"; "/") | ltrimstr($root | gsub("\\\\"; "/")) | ltrimstr("/");
               select(.reason == "compiler-artifact" and .executable != null)
@@ -119,6 +121,11 @@ jobs:
           name: build-${{ inputs.os }}
           path: ${{ runner.temp }}/copy
           retention-days: 1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: timings-${{ inputs.os }}
+          path: target/cargo-timings/cargo-timing.html
+          retention-days: 7
       - uses: ./.github/actions/clear
       - if: failure()
         run: >-
