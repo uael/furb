@@ -1,11 +1,12 @@
 //! The watch of each life that the daemon holds. It stands outside the life: no word and no ear of
 //! the life runs it, so it sees a life whose words are lost, which no watch that a word runs can.
 //! A life is stalled when it holds an open act, a run of a word, a reply of a model or a command,
-//! and says no fact and no model writes for the bound of the daemon, [`STALL`] unless `host.json`
-//! says otherwise. A chain is stalled when it holds a rung with a word while nothing else lives on
-//! it, no run, no reply, no command and no wait, and no act of it changes for [`HUNG`], or when a
-//! reply of a model on it writes nothing and no act of it changes for [`THINK`], even while other
-//! chains work. That is a chain whose word or model is lost, and the watch wakes that chain alone.
+//! and says no fact, and no model writes or is asked again, for the bound of the daemon,
+//! [`STALL`] unless `host.json` says otherwise. A chain is stalled when it holds a rung with a word
+//! while nothing else lives on it, no run, no reply, no command and no wait, and no act of it
+//! changes for [`HUNG`], or when a reply of a model on it writes nothing, is not asked again, and
+//! no act of it changes for [`THINK`], even while other chains work. That is a chain whose word or
+//! model is lost, and the watch wakes that chain alone.
 //! A rung with no word, or a prompt to a model, with nothing else on its chain rests: the
 //! chain asks a thread only for a fact of its own, so a thread that rests waits for that fact
 //! on purpose, and the watch never wakes it. Work that waits for the operator waits on purpose
@@ -92,7 +93,7 @@ impl Quiet {
     match event {
       Event::Fact(fact) => self.fact(fact),
       Event::Act(act) => self.act(act),
-      Event::Text { chain, .. } => self.wrote(chain),
+      Event::Text { chain, .. } | Event::Retried { chain, .. } => self.wrote(chain),
       Event::Reborn(_) => {
         self.acts.clear();
         self.ours.clear();
@@ -125,7 +126,8 @@ impl Quiet {
     }
   }
 
-  /// What a model wrote for a chain, which shows that the life and that chain live.
+  /// What a model wrote for a chain, or a retry of its call, which shows that the life and that
+  /// chain live.
   fn wrote(&mut self, chain: &str) {
     let now = Instant::now();
     self.last = now;

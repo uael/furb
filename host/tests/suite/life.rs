@@ -19,7 +19,7 @@ use std::{
     atomic::{AtomicUsize, Ordering},
     mpsc::channel,
   },
-  time::Duration,
+  time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use furb::{
@@ -27,7 +27,7 @@ use furb::{
   ear::{ear, hear},
   life::{Answer, Opening, Progress},
   view,
-  view::{Act, Kind, Phase, RunState, State},
+  view::{Act, Kind, Line, Mark, Phase, Reach, Retrying, RunState, State},
   world::{
     CONSOLE, Scratch,
     config::{Change, Layer},
@@ -860,6 +860,55 @@ async fn a_change_of_the_roster_offers_its_models_at_the_next_stand_of_the_life(
   let stand = made(&life, Command::Roster(roster)).await;
   until(&mut events, done(&stand)).await;
   assert!(offered().await.contains(&"claude-cli:sonnet".to_owned()));
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
+}
+
+#[tokio::test]
+async fn a_retry_of_a_model_shows_on_the_line_that_it_writes_and_its_failure_once_when_the_attempts_end()
+ {
+  let at = place("retry");
+  let calls = AtomicUsize::new(0);
+  let answer = Answer(Arc::new(move |_, _| {
+    let first = calls.fetch_add(1, Ordering::SeqCst) == 0;
+    let why = if first { "the provider is overloaded" } else { "the request is malformed" };
+    Box::pin(async move { Err(why.to_owned()) })
+  }));
+  let life = Life::spawn(Opening { answer: Some(answer), ..scripted(&at, &[]) }).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let shape = "None".to_owned();
+  let message = "Ground the branch.".to_owned();
+  let now = || SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+  let before = now();
+  let prompt = made(&life, Command::Prompt { shape, message, to: None, on: None }).await;
+  let page = || async {
+    let reach = Reach { before: None, limit: 10 };
+    let Reply::Page(page) =
+      life.send(Command::Thread { thread: prompt.clone(), reach }).await.unwrap()
+    else {
+      panic!("the page of a thread")
+    };
+    let block = page.exchanges[0].block.clone().expect("a block that answers the message");
+    block.lines
+  };
+  let got = until(&mut events, |event| matches!(event, Event::Retried { .. })).await;
+  let Some(Event::Retried { retry, .. }) = got.last().map(|one| &*one.1) else { unreachable!() };
+  // The first retry waits four seconds, from a moment between the two reads of the clock.
+  assert!((before + 4..=now() + 5).contains(&retry.at), "{before} {}", retry.at);
+  let why = "the provider is overloaded".to_owned();
+  let retries = Retrying { attempt: 2, most: 10, wait: 4, at: retry.at, why };
+  let waits = Line { number: 1, text: String::new(), mark: Mark::Retries(retries) };
+  assert_eq!(page().await, [waits]);
+  // The model is asked again once the call fails for good, and that call fails too, so the
+  // provider pauses the chain: its thread shows the failure once.
+  until(&mut events, stands("chain1".to_owned(), State::Paused)).await;
+  let replied =
+    |event: &Event| matches!(event, Event::Act(act) if act.kind == Kind::Reply && act.done());
+  until(&mut events, replied).await;
+  let why = "claude-cli:opus/high answered nothing: ProviderError: the request is malformed";
+  let why = why.to_owned();
+  let failed = Line { number: 1, text: String::new(), mark: Mark::Failed { why } };
+  assert_eq!(page().await, [failed]);
   life.send(Command::End).await.unwrap();
   while events.next().await.is_some() {}
 }

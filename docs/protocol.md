@@ -227,9 +227,12 @@ daemon answers requests in any order.
   `count` and its `unread` count: the notes that began or ended after the place `read`, which the window says since
   only it knows what the operator saw. A `threads` with no `read` reads nothing, so each note is unread.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
-  in the log of the life and the `event`: `fact`, `act`, `text`, `queued`, `notice`, `changed`, `reborn` or `ended`. After
-  `reborn`, which a life tells once it told the past of its record, the life goes on from its last checkpoint, and its
-  acts come again as they stand.
+  in the log of the life and the `event`: `fact`, `act`, `text`, `retried`, `queued`, `notice`, `changed`, `reborn` or
+  `ended`. A `retried` names the `rung` and the `chain` of a reply whose call of its model failed for a cause that
+  passes, and its `retry`: the `attempt` that comes, the `most` attempts, the seconds that the provider `wait`s before
+  that attempt and the second of the epoch `at` which it comes, and `why` the attempt before it failed; what the model
+  wrote for that rung before it is void. After `reborn`, which a life tells once it told the past of its record, the
+  life goes on from its last checkpoint, and its acts come again as they stand.
 - The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
   checkpoint. The log lets go of each of them once it told it, since the record holds it, and of each fact that an open
   told, which the file of the log of the record holds, and a window that attaches before them reads them again from the
@@ -285,20 +288,22 @@ daemon answers requests in any order.
     A question that is not closed waits for the operator: `answer` closes it with a line of its shape, and `close`
     with a refusal, `{"is": "Refused", "args": ["why"]}`, closes it with words that its model reads;
   - a `block` holds `maker`, the model that wrote its last word, `more`, whether more comes since the answer works,
-    `thought`, the `text` that its model thought before it wrote and the seconds that it `took`, null while it
-    thinks, and `lines`. A line has its `number` in the thread, which goes on from block to block, its `text`, in
-    which a quote stands as the binding that it makes and a string of many lines as one line with its escapes, and
-    its `mark`: `ran`; `runs` with the `work` that it waits for, `writes` while its model writes it, `command` or
-    `agent`, and `since`, the second of the epoch at which the daemon saw that work begin; `asks`; or `failed` with
-    `why`;
+    `thought`, the `text` that its model thought before it wrote and the seconds that it `took`, null while it thinks,
+    and `lines`. A line has its `number` in the thread, which goes on from block to block, its `text`, in which a quote
+    stands as the binding that it makes and a string of many lines as one line with its escapes, and its `mark`: `ran`;
+    `runs` with the `work` that it waits for, `writes` while its model writes it, `command` or `agent`, and `since`, the
+    second of the epoch at which the daemon saw that work begin; `asks`; `retries`, the line that its model writes while
+    its provider waits to ask it again, with the `attempt`, the `most`, the `wait`, the `at` and the `why` of the retry;
+    or `failed` with `why`, which the line that its model writes takes when the call of its model failed and no attempt
+    is left;
   - `agents`, each thread that a word of the thread started on another chain, as a card without its life.
 
   The page of the end also makes the peer hear a frame `thread` with the `life`, the `thread` and a `page` at each
-  change of that thread, until it reads the end of another thread or leaves: a peer reads one thread at a time. The
-  page of a frame holds each exchange of the end that is new or that changed, by its `at`, with `above` and
-  `agents` as they stand. The daemon asks the life a page at most once in 100 ms, after an act of the life or a part
-  that a model wrote. What a model thought, and when each work began, are no facts of the record: the life holds
-  them while it lives, so a life that opens again shows no thought of the words before it.
+  change of that thread, until it reads the end of another thread or leaves: a peer reads one thread at a time. The page
+  of a frame holds each exchange of the end that is new or that changed, by its `at`, with `above` and `agents` as they
+  stand. The daemon asks the life a page at most once in 100 ms, after an act of the life, a part that a model wrote or
+  a retry of its call. What a model thought, and when each work began, are no facts of the record: the life holds them
+  while it lives, so a life that opens again shows no thought of the words before it.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
 - While a life opens, the daemon pushes to each window of the life a frame
@@ -336,19 +341,19 @@ daemon answers requests in any order.
   verb that waited for it, and each such verb that comes after its end, in the place of `closed`, until the next
   open of the record: a peer that heard the answer to its open cannot know when the open failed. The daemon answers
   each other verb at once.
-- The daemon watches each life that it holds, from outside the life: no word and no ear of the life runs the watch.
-  When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact and no model
-  writes for the bound of a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes
-  to each window of the life a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
-  `notice` that a window shows as it stands. It also sends the notice to the root chain of the life as a prompt of
-  `None`, so that its actor wakes.
-- The watch also holds the last change of each chain. A chain stalls when it holds a rung that no run, reply, command
-  or wait lives beside on it, or a prompt to a model with no rung and nothing else on it, and no act of it changes for
-  60 seconds, or when a reply of a model on it writes nothing and no act of it changes for 5 minutes, each bound or
-  the bound of a stall when that is shorter, even while other chains work. Work that waits for the operator never
-  stalls a chain or the life: a paused act, a prompt to the operator, an act on a chain that asks him, and a rung or
-  a run whose word awaits such a prompt. The daemon pushes the frame `stalled` with the acts of that chain alone, and
-  sends the notice as a prompt of `None` on that chain, so that its own actor wakes and no other.
+- The daemon watches each life that it holds, from outside the life: no word and no ear of the life runs the watch. When
+  a life holds an open act, a run of a word, a reply of a model or a command, and says no fact, and no model writes or
+  is asked again, for the bound of a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon
+  pushes to each window of the life a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind`
+  and its `chain`, and the `notice` that a window shows as it stands. It also sends the notice to the root chain of the
+  life as a prompt of `None`, so that its actor wakes.
+- The watch also holds the last change of each chain. A chain stalls when it holds a rung that no run, reply, command or
+  wait lives beside on it, or a prompt to a model with no rung and nothing else on it, and no act of it changes for 60
+  seconds, or when a reply of a model on it writes nothing, is not asked again, and no act of it changes for 5 minutes,
+  each bound or the bound of a stall when that is shorter, even while other chains work. Work that waits for the
+  operator never stalls a chain or the life: a paused act, a prompt to the operator, an act on a chain that asks him,
+  and a rung or a run whose word awaits such a prompt. The daemon pushes the frame `stalled` with the acts of that chain
+  alone, and sends the notice as a prompt of `None` on that chain, so that its own actor wakes and no other.
 - The watch tells each stall once: nothing more until a fact of an act that its message did not make, on that chain
   for the stall of a chain, and a new stall after that fact. A stall is no fact of the record.
 

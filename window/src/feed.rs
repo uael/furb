@@ -4,7 +4,7 @@
 //! thread does not show yet, then the dock of the agents of the thread.
 
 use furb::view::{
-  Block, Exchange, Line as Code, Maker, Mark, Said, Saying, Standing, Thought, Work,
+  Block, Exchange, Line as Code, Maker, Mark, Retrying, Said, Saying, Standing, Thought, Work,
 };
 use opentui::style::{Color, Style};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
@@ -233,9 +233,12 @@ impl Feed<'_> {
 
   /// One line of a block: its number in a gutter of a count of columns, or the mark of how it
   /// stands in its place, and its code, cut to the box. The line that runs is lit, with its loader
-  /// and its time after one second. The error of a line that failed stands under it.
+  /// and its time after one second, and the line whose model is asked again says the attempt that
+  /// comes and its wait. Why a line failed, or why its model is asked again, stands under it, or
+  /// in its place when its model wrote none of it.
   fn code(&self, line: &Code, colors: Line, gutter: usize) -> Vec<Row> {
     let t = &self.model.tokens;
+    let inner = self.inner();
     let since = match line.mark {
       Mark::Runs { since: Some(since), .. } if self.model.now > since => {
         Some(self.model.now - since)
@@ -244,29 +247,51 @@ impl Feed<'_> {
     };
     let (number, color, loader) = match &line.mark {
       Mark::Runs { work, .. } => (" ".to_owned(), t.accent, Some(loader(*work))),
+      Mark::Retries(_) => (" ".to_owned(), t.attention, Some(Loader::Model)),
       Mark::Asks => ("◆".to_owned(), t.attention, None),
       Mark::Failed { .. } => ("✗".to_owned(), t.danger, None),
       Mark::Ran => (line.number.to_string(), t.muted, None),
     };
+    let room = inner.saturating_sub(gutter + 2);
+    let (mut under, look) = match &line.mark {
+      Mark::Failed { why } => (wrapped(why, room), Style::new().fg(t.danger)),
+      Mark::Retries(retry) => (wrapped(&retry.why, room), self.style(Role::Muted)),
+      _ => (Vec::new(), Style::new()),
+    };
+    let colors = match &line.mark {
+      Mark::Retries(retry) => self.retry(retry),
+      Mark::Failed { .. } if line.text.is_empty() && !under.is_empty() => {
+        vec![run(under.remove(0), look)]
+      }
+      _ => colors,
+    };
     let ground = if loader.is_some() { t.lifted } else { t.raised };
     let timer =
       since.map(|since| vec![run(timer(since), self.style(Role::Muted))]).unwrap_or_default();
-    let room =
-      self.inner().saturating_sub(gutter + 2 + width(&timer) + 2 * usize::from(!timer.is_empty()));
+    let room = room.saturating_sub(width(&timer) + 2 * usize::from(!timer.is_empty()));
     let mut text = vec![run(format!("{number:>gutter$}  "), Style::new().fg(color))];
     text.extend(clipped(colors, room, self.style(Role::Muted)));
-    let shown = self.boxed(spread(text, timer, self.inner(), Style::new()), ground);
+    let shown = self.boxed(spread(text, timer, inner, Style::new()), ground);
     let mut rows =
       vec![Row { loader: loader.map(|one| (PAD + gutter - 1, one)), ..Row::of(shown) }];
-    if let Mark::Failed { why } = &line.mark {
-      let error = Style::new().fg(t.danger);
-      let lines = wrapped(why, self.inner().saturating_sub(gutter + 2));
-      let errors = lines
-        .iter()
-        .map(|one| self.boxed(vec![run(format!("{:gutter$}  {one}", ""), error)], t.raised));
-      rows.extend(errors.map(Row::of));
-    }
+    let under = under
+      .iter()
+      .map(|one| self.boxed(vec![run(format!("{:gutter$}  {one}", ""), look)], t.raised));
+    rows.extend(under.map(Row::of));
     rows
+  }
+
+  /// What a line whose model is asked again says: the attempt that comes of the most, and the time
+  /// left before it while it waits. The time left is never more than the wait, so a clock of the
+  /// window that stands behind the host shows the wait.
+  fn retry(&self, retry: &Retrying) -> Line {
+    let Retrying { attempt, most, wait, at, .. } = retry;
+    let left = at.saturating_sub(self.model.now).min(*wait);
+    let wait = if left > 0 { format!(" in {}", timer(left)) } else { String::new() };
+    vec![run(
+      format!("Attempt {attempt} of {most}{wait}"),
+      Style::new().fg(self.model.tokens.attention),
+    )]
   }
 
   /// The thought of a model as one muted row through its whole life: its last words while it

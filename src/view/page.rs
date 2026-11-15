@@ -68,15 +68,30 @@ pub struct Line {
 }
 
 /// How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
-/// second of the epoch since which it does when the host saw it begin; it asks the operator; or it
-/// failed, with the reason that a person reads.
+/// second of the epoch since which it does when the host saw it begin; it asks the operator; its
+/// model is asked again after a call that failed; or it failed, with the reason that a person
+/// reads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "is", rename_all = "snake_case")]
 pub enum Mark {
   Ran,
   Runs { work: Work, since: Option<u64> },
   Asks,
+  Retries(Retrying),
   Failed { why: String },
+}
+
+/// A call of a model that failed for a cause that passes, so its provider asks the model again:
+/// the attempt that comes, the most attempts of the call, the seconds that the provider waits
+/// before that attempt and the second of the epoch at which it comes, and why the attempt before
+/// it failed. What the model wrote before is void.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Retrying {
+  pub attempt: u32,
+  pub most: u32,
+  pub wait: u64,
+  pub at: u64,
+  pub why: String,
 }
 
 /// What a line that runs waits for: its model that writes it, a command or a wait, or an agent.
@@ -159,7 +174,8 @@ impl Answered {
 }
 
 /// What a host heard of a life beside its facts, which a page reads: what each model wrote and
-/// thought for a rung, and the millisecond of the epoch at which each act that lives began, which
+/// thought for a rung and the retry of its call that waits, and the millisecond of the epoch at
+/// which each act that lives began, which
 /// a page gives in seconds. The record holds neither: the turn of a reply keeps its thought sealed,
 /// and a fact tells no time, so a host keeps it in the image of the life, once [`Held::shown`] let
 /// go of each thought that no page shows.
@@ -169,15 +185,18 @@ pub struct Streamed {
   began: HashMap<String, u64>,
 }
 
-/// What a model wrote for a rung: its text until the rung has its word, its thought, and the
+/// What a model wrote for a rung: its text until the rung has its word, its thought, the
 /// milliseconds at which it began and at which its thought ended, so a thought that ends within
-/// a second of its start took no second, whatever second its start and its end fall in.
+/// a second of its start took no second, whatever second its start and its end fall in, and the
+/// retry of its call until the model writes again or the reply ends.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Wrote {
   text: String,
   thinking: String,
   began: u64,
   thought: Option<u64>,
+  #[serde(default)]
+  retry: Option<Retrying>,
 }
 
 impl Streamed {
@@ -187,15 +206,29 @@ impl Streamed {
       self.wrote.entry(rung.to_owned()).or_insert_with(|| Wrote { began: now, ..Wrote::default() });
     wrote.text.push_str(text);
     wrote.thinking.push_str(thinking);
+    wrote.retry = None;
     if !wrote.text.is_empty() && !wrote.thinking.is_empty() {
       wrote.thought.get_or_insert(now);
     }
   }
 
+  /// A retry of the call of the model of a rung: what the model wrote and thought for it is void,
+  /// and the next attempt begins at the second of the retry.
+  pub fn retried(&mut self, rung: &str, retry: Retrying) {
+    let began = retry.at.saturating_mul(1000);
+    self.wrote.insert(rung.to_owned(), Wrote { began, retry: Some(retry), ..Wrote::default() });
+  }
+
   /// An act as it stands now, at a millisecond of the epoch: an act that lives keeps when it began,
-  /// and a rung
-  /// that has its word keeps only the thought of its model.
+  /// a rung that has its word keeps only the thought of its model, and the end of a reply ends the
+  /// retry of its rung.
   pub fn heard(&mut self, act: &Act, now: u64) {
+    if act.kind == Kind::Reply
+      && act.done()
+      && let Some(wrote) = self.wrote.get_mut(&act.by)
+    {
+      wrote.retry = None;
+    }
     if act.done() && act.run != Some(RunState::Running) {
       self.began.remove(&act.id);
     } else {
@@ -367,7 +400,13 @@ impl<'a> Reader<'a> {
     let mut lines = Vec::new();
     // Each thing said, at the place in the life where it was said.
     let mut said = Vec::new();
-    for rung in &answers.rungs {
+    let last = answers.rungs.len().saturating_sub(1);
+    for (at, rung) in answers.rungs.iter().enumerate() {
+      // A rung that ended with no word failed, and the rung after it asked its model again, so
+      // the last rung alone tells how the answer stands, as a retry voids what came before it.
+      if at < last && rung.word.is_none() && rung.done() {
+        continue;
+      }
       lines.extend(self.lines(rung, *number));
       *number += count(rung, self.streams);
     }
@@ -413,18 +452,7 @@ impl<'a> Reader<'a> {
   /// it. While its model writes the word, the lines that came ran and the line that comes runs.
   fn lines(self, rung: &Act, before: usize) -> Vec<Line> {
     let began = |id: &str| self.streams.began.get(id).map(|at| at / 1000);
-    let Some(word) = &rung.word else {
-      let streamed = self.streams.wrote.get(&rung.id).filter(|one| !one.text.is_empty());
-      let Some(streamed) = streamed else { return Vec::new() };
-      let came = writing(&streamed.text, "");
-      let ran = came.lines.split('\n').zip(&came.numbers).filter(|_| !came.lines.is_empty());
-      let mut lines: Vec<Line> = ran
-        .map(|(text, at)| Line { number: before + at, text: text.to_owned(), mark: Mark::Ran })
-        .collect();
-      let writes = Mark::Runs { work: Work::Writes, since: Some(streamed.began / 1000) };
-      lines.push(Line { number: before + came.count + 1, text: came.tail, mark: writes });
-      return lines;
-    };
+    let Some(word) = &rung.word else { return self.writing(rung, before) };
     let mut lines: Vec<Line> = shown(word)
       .into_iter()
       .map(|(at, text)| Line { number: before + at + 1, text, mark: Mark::Ran })
@@ -468,6 +496,31 @@ impl<'a> Reader<'a> {
         lines[at].mark = Mark::Asks;
       }
     }
+    lines
+  }
+
+  /// The lines that the model of a rung with no word wrote so far: those that came ran, and the
+  /// line that comes runs, waits for the retry of its call, or failed with the last reply of the
+  /// rung.
+  fn writing(self, rung: &Act, before: usize) -> Vec<Line> {
+    let replies = self.held.made_by(&rung.id).filter(|act| act.kind == Kind::Reply);
+    let failed = replies.last().filter(|reply| reply.failed()).and_then(|reply| {
+      let (_, args) = fault(reply.value()?)?;
+      Some(Mark::Failed { why: text(args.first()) })
+    });
+    let streamed = self.streams.wrote.get(&rung.id);
+    let mark = failed.or_else(|| streamed?.retry.clone().map(Mark::Retries));
+    let (text, began) = streamed.map_or(("", 0), |one| (one.text.as_str(), one.began));
+    if text.is_empty() && mark.is_none() {
+      return Vec::new();
+    }
+    let came = writing(text, "");
+    let ran = came.lines.split('\n').zip(&came.numbers).filter(|_| !came.lines.is_empty());
+    let mut lines: Vec<Line> = ran
+      .map(|(text, at)| Line { number: before + at, text: text.to_owned(), mark: Mark::Ran })
+      .collect();
+    let mark = mark.unwrap_or(Mark::Runs { work: Work::Writes, since: Some(began / 1000) });
+    lines.push(Line { number: before + came.count + 1, text: came.tail, mark });
     lines
   }
 

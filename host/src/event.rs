@@ -7,7 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use furb::view::Act;
+use furb::view::{Act, Retrying};
 
 use crate::queue::FollowUp;
 
@@ -27,6 +27,10 @@ pub enum Event {
   /// What a model added to its text and to its thought, as it writes the reply of a rung on a
   /// chain. It is no fact, and the turn of the reply holds all of it.
   Text { rung: String, chain: String, text: String, thinking: String },
+  /// A call of a model that failed for a cause that passes, as it writes the reply of a rung on a
+  /// chain, and the retry of its provider after a wait. What the model wrote for the rung before
+  /// it is void. It is no fact.
+  Retried { rung: String, chain: String, retry: Retrying },
   /// The follow-ups that wait on a chain, in order, each time that a fact of the operator or a send
   /// of the life changed them.
   Queued { chain: String, waiting: Vec<FollowUp> },
