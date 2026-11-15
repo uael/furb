@@ -70,28 +70,26 @@ impl Feed<'_> {
   }
 
   /// Each follow-up that waits on the thread, which its life sends once the chain of the thread
-  /// rests, as a chip and its message, and the cross that takes it back to the input.
+  /// rests, as a chip and its message, and the cross that takes it back to the input. The part
+  /// above it ends with a blank row.
   fn queued(&self) -> Vec<Row> {
     let waiting = self.model.client.follow_ups();
-    let mut rows: Vec<Row> = waiting
+    waiting
       .into_iter()
       .map(|one| {
         let chip = run(" queued ", self.style(Role::Button));
         let back = " ✕";
-        let room = self.wide.saturating_sub(4 + 8 + 2 + back.width());
+        let room = self.wide.saturating_sub(2 + 8 + 2 + back.width());
         let text = one.message.lines().next().unwrap_or_default();
-        let mut line = vec![run("    ", Style::new()), chip, run("  ", Style::new())];
+        // The chip starts at the column of the text of a message and of what a model said.
+        let mut line = vec![run("  ", Style::new()), chip, run("  ", Style::new())];
         line.push(run(line::cut(text, room), self.style(Role::Muted)));
         let end = width(&line);
         line.push(run(back, self.style(Role::Muted)));
         let hot = vec![(end..end + back.width(), Some(Click::Unqueue(one.entry.clone())))];
         Row { hot, ..Row::of(line) }
       })
-      .collect();
-    if !rows.is_empty() {
-      rows.insert(0, Row::default());
-    }
-    rows
+      .collect()
   }
 
   /// What a pause that holds the thread leaves him: that it holds, and the way out as buttons. His
