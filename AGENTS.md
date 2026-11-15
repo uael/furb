@@ -572,7 +572,7 @@ Every pull request and every push to `main` runs the gates in `.github/workflows
 include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates
 of the crate run on Windows and on macOS too. The gates of the TypeScript side run on Linux, on macOS, and on Windows.
 A pull request and a push to `main` run the jobs on macOS and on Windows only when a path that they change can behave
-in another way there, as `script/scope.py` says. A run by hand and the run of each night run every job.
+in another way there, as `cargo xtask scope` says. A run by hand and the run of each night run every job.
 
 A release is one version of every package: `@uael/furb` on npm, which a user installs as
 `npm install furb@npm:@uael/furb`, with the engine of each system as `@uael/furb-<system>`, and `furb`, `furb-monty` and

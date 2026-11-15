@@ -286,7 +286,7 @@ PUBLIC = [
   *PROJECT.glob("*/*.md"),
   *ROOT.glob(".github/**/*.md"),
   *ROOT.glob(".github/**/*.yml"),
-  ROOT / "script" / "scope.py",
+  ROOT / "xtask" / "src" / "scope.rs",
 ]
 FRENCH = re.compile(
   r"\b(les|des|une|pour|avec|dans|sans|sont|mais|donc|nous|vous|elle|qui|pas|tr\u00e8s|aussi|comme|cette|ces|c'est|il faut|j'ai|n'est)\b",

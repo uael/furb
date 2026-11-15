@@ -51,7 +51,7 @@ jobs:
   scope:
     # A runner of macOS waits in a queue of its own, for 10 minutes in the median. The jobs on Linux always run and hold
     # the whole proof of the logic; the jobs on macOS and on Windows prove the system alone, so a pull request and a
-    # push to main run them only when a path that they change can behave in another way there, which script/scope.py
+    # push to main run them only when a path that they change can behave in another way there, which `cargo xtask scope`
     # says. A run by hand given a base runs what the paths between that base and its head need, and says the base as
     # base=<sha>, which the oracle of a lane reads. A run by hand with no base, and the run of each night, run every job.
     # The commit of a pull request is the merge of its branch into the base, whose first parent is the base, so two
@@ -61,9 +61,11 @@ jobs:
     # one commit in under 40 seconds.
     # A job that a push to main skips saves no cache of rust, and the cache that it saved before stays valid: its key
     # holds each manifest and the lock of cargo, and a change of them runs every job.
+    # The program xtask stands in a cache whose key is the hash of what builds it, so a run builds it only when xtask,
+    # the lock or the toolchain changed, and the other runs set up no rust.
     name: the scope
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     outputs:
       suite_os: ${{ steps.scope.outputs.suite_os }}
       ts_os: ${{ steps.scope.outputs.ts_os }}
@@ -76,22 +78,34 @@ jobs:
           ref: ${{ inputs.head }}
           fetch-depth: 2
           persist-credentials: false
+      - id: xtask
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/xtask
+          key: xtask-${{ runner.os }}-${{ hashFiles('xtask/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/config.toml') }}
+      - if: steps.xtask.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup
+        with:
+          python: none
+          rust: tools
+      - if: steps.xtask.outputs.cache-hit != 'true'
+        run: cargo build -p xtask && mkdir -p ~/.cache/xtask && cp target/debug/xtask ~/.cache/xtask/
       - id: scope
         env:
           BEFORE: ${{ github.event.before }}
           BASE: ${{ inputs.base }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            git diff --name-only HEAD^1 HEAD | python3 script/scope.py
+            git diff --name-only HEAD^1 HEAD | "$HOME/.cache/xtask/xtask" scope
           elif [ -n "$BASE" ]; then
             git fetch -q --depth=1 --no-tags origin "$BASE" && base=$(git rev-parse FETCH_HEAD) || exit 1
             echo "base=$base"
-            git diff --name-only "$base" HEAD | python3 script/scope.py
+            git diff --name-only "$base" HEAD | "$HOME/.cache/xtask/xtask" scope
           elif [ "$GITHUB_EVENT_NAME" = push ] && [ -n "${BEFORE//0/}" ] \
             && git fetch -q --depth=1 --no-tags origin "$BEFORE" && changed=$(git diff --name-only "$BEFORE" HEAD); then
-            printf '%s\n' "$changed" | python3 script/scope.py
+            printf '%s\n' "$changed" | "$HOME/.cache/xtask/xtask" scope
           else
-            python3 script/scope.py --all
+            "$HOME/.cache/xtask/xtask" scope --all
           fi | tee -a "$GITHUB_OUTPUT"
 
   hooks:

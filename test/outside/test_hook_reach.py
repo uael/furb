@@ -94,7 +94,7 @@ def test_a_file_of_the_engine_of_the_crate_or_of_a_manifest_reaches_the_whole_su
 def test_a_script_reaches_the_tests_that_name_it_and_no_other() -> None:
   assert "test/outside/test_title_script.py" in reach.suite(["script/title.py"])
   assert "test/test_boot.py" not in reach.suite(["script/title.py"])
-  assert "test/outside/test_scope.py" in reach.suite(["script/scope.py"])
+  assert "test/outside/test_contract_diff.py" in reach.suite(["xtask/python/contract.py"])
 
 
 def test_a_file_of_a_skill_reaches_its_tests_and_the_hygiene_laws() -> None:
@@ -114,7 +114,7 @@ def test_each_file_of_the_harness_is_a_file_that_git_holds_and_reaches_the_whole
 
 
 def test_every_file_of_the_tree_reaches_the_whole_set_as_a_run_with_all_files_gives_it() -> None:
-  every = ["script/scope.py", "src/furb/engine.py", "Cargo.toml", "host/src/daemon.rs"]
+  every = ["xtask/python/tokens.py", "src/furb/engine.py", "Cargo.toml", "host/src/daemon.rs"]
   assert reach.suite(every) is None and reach.crates(every) is None
 
 
@@ -132,7 +132,7 @@ def test_a_contract_test_an_official_skill_test_and_a_project_contract_reach_the
   assert laws in reach.suite([".agents/skills/memory/test/test_memory.py"])
   assert laws in reach.suite([".furb/skills/pr/pr.py"])
   assert laws in reach.suite([".furb/skills/pr/test/test_commit.py"])
-  assert laws not in reach.suite(["test/outside/test_scope.py"])
+  assert laws not in reach.suite(["test/outside/test_scope_step.py"])
 
 
 def test_a_file_of_each_crate_with_tests_reaches_its_hook_and_its_crate() -> None:

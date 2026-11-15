@@ -1,4 +1,4 @@
-"""The step of the scope in the gates gives a change of prose alone no job of code, on its pull request and on its push to main."""
+"""The step of the scope in the gates gives the scope the paths of its change, on its pull request and on its push to main."""
 
 import os
 import shutil
@@ -27,12 +27,15 @@ def git(where: Path, *words: str) -> str:
 
 
 @pytest.mark.parametrize("event", ["pull_request", "push"])
-def test_a_change_of_prose_alone_runs_no_job_of_code_on_its_pull_request_and_on_its_push_to_main(
+def test_the_step_gives_the_scope_the_paths_of_its_change_on_its_pull_request_and_on_its_push_to_main(
   tmp_path: Path, event: str
 ) -> None:
-  origin, clone = tmp_path / "origin", tmp_path / "clone"
-  (origin / "script").mkdir(parents=True)
-  shutil.copy(ROOT / "script" / "scope.py", origin / "script" / "scope.py")
+  origin, clone, home = tmp_path / "origin", tmp_path / "clone", tmp_path / "home"
+  # The program xtask that the cache of the job holds, which says what the step gave it.
+  xtask = home / ".cache" / "xtask" / "xtask"
+  xtask.parent.mkdir(parents=True)
+  xtask.write_text('#!/bin/sh\necho "$@" > "$HOME/said"\ncat >> "$HOME/said"\necho code=false\n')
+  xtask.chmod(0o755)
   (origin / "docs").mkdir(parents=True)
   (origin / "docs" / "guide.md").write_text("old\n")
   git(origin, "init", "-q", "-b", "main")
@@ -43,7 +46,7 @@ def test_a_change_of_prose_alone_runs_no_job_of_code_on_its_pull_request_and_on_
   git(origin, "commit", "-q", "-am", "prose")
   git(tmp_path, "clone", "-q", str(origin), str(clone))
   output = tmp_path / "output"
-  env = {**os.environ, "GITHUB_EVENT_NAME": event, "BEFORE": before, "GITHUB_OUTPUT": str(output)}
+  env = {**os.environ, "GITHUB_EVENT_NAME": event, "BEFORE": before, "GITHUB_OUTPUT": str(output), "HOME": str(home)}
   subprocess.run([BASH, "-e", "-c", step()], cwd=clone, env=env, check=True, capture_output=True)  # noqa: S603
-  got = dict(line.split("=", 1) for line in output.read_text().splitlines())
-  assert got["code"] == "false" and got["build_os"] == '["ubuntu-latest"]'
+  assert (home / "said").read_text() == "scope\ndocs/guide.md\n"
+  assert output.read_text() == "code=false\n"

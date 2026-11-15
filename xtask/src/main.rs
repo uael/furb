@@ -19,6 +19,7 @@ mod opens;
 mod paths;
 mod promise;
 mod prove;
+mod scope;
 mod targets;
 mod tree;
 mod unused;
@@ -340,6 +341,17 @@ enum Task {
     #[arg(long)]
     once: bool,
   },
+  /// Say which jobs of the gates a change needs, from the paths that it changes.
+  ///
+  /// The paths come one on each line from the standard input, and the answer is the lines
+  /// `key=value` that the step of the scope in the gates takes into its outputs: the systems of
+  /// the suite, of the bindings and of the tests of the crate, the systems that build for them, and
+  /// whether the change holds code.
+  Scope {
+    /// Run every job, as a run by hand with no base and the run of each night do.
+    #[arg(long)]
+    all: bool,
+  },
   /// The bench of a loop: furb that triages support tickets against the claude command line, on
   /// the same local server, scored on the totals of the server and the share of right labels.
   ///
@@ -484,6 +496,7 @@ impl Task {
       Self::Links { fix } => links::check(root, fix),
       Self::BenchLoop(bench) => bench.run(root),
       Self::Memwatch { once } => memwatch::watch(once),
+      Self::Scope { all } => scope::run(all),
       Self::ProveCrate { folder } => prove::crates(root, folder),
       Self::Opens(opens) => opens.run(root),
       Self::Catalog => catalog::refresh(root),
