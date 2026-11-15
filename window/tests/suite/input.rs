@@ -492,3 +492,13 @@ fn a_slash_offers_the_commands_and_runs_the_one_that_he_takes() {
   let shown = shows(&app, "Search a model");
   assert!(!shown.contains("/mod"), "the command leaves the input:\n{shown}");
 }
+
+#[test]
+fn a_click_on_the_list_keeps_the_keys_with_the_input() {
+  let (app, _daemon, _) = started();
+  sent(&app, &format!("how long does an open take {ANSWERS}"));
+  shows(&app, "Resolved 1");
+  clicked(&app, "Resolved 1", LEFT, 0);
+  app.type_text("and the seed?");
+  assert_eq!(typed(&app, "and the seed?"), "and the seed?");
+}

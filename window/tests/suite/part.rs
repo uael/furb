@@ -108,7 +108,9 @@ fn a_click_on_the_project_of_a_new_session_lists_the_projects_and_one_aims_the_i
   shows(&app, "3 sessions");
   let (x, y) = cell(&app, "FU furb", "3 sessions");
   app.click(x, y);
-  shows(&app, "FU furb ▾");
+  // The project opens for a new session at once, and no session of it that he did not pick.
+  let frame = shows(&app, "FU furb ▾");
+  assert!(frame.contains("Ask for a change, a review or an answer"), "{frame}");
 }
 
 /// A window in a project with no session, in a folder that stands, on a machine whose catalog
