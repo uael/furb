@@ -136,9 +136,9 @@ API of its own:
   the open of each life stands, which each window of the life hears as frames while the life opens, and `daemon` the
   daemon of the machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
   a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
-  protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`, and
-  `cargo xtask protocol` makes `src/furb/protocol.py`, the types of `furb.skill`, the client of the process of a skill
-  in Python.
+  protocol, and `bun run protocol` makes again from `host/protocol.schema.json` the types of each client of the daemon:
+  `bind/typescript/src/protocol.ts`, and `src/furb/protocol.py`, the types of `furb.skill`, the client of the process
+  of a skill in Python, which it makes through `cargo xtask protocol`.
 
 - `window/` is `furb-window`, the fourth package of the workspace of the crate: the window of furb, in Rust on the Rust
   package of OpenTUI, which grows screen by screen. Today it holds the client of the daemon on

@@ -1,7 +1,7 @@
 """Make the types of the protocol for a process of Python, src/furb/protocol.py, from host/protocol.schema.json.
 
-`bun run protocol` makes the same types for TypeScript. Run both after a change of the protocol: a test fails while
-either file is not what its command makes.
+`bun run protocol` runs it after it makes the same types for TypeScript: run that after a change of the protocol. A
+test fails while either file is not what the schema makes.
 
 Usage: cargo xtask protocol
 """
