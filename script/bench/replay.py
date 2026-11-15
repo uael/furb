@@ -28,8 +28,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import deepswe
-from real import lived, say
+from real import AGAIN, ASKED, CONFIDENT, lived, outside, say, seeded
 
 from furb import engine
 from furb.world import answered, kept
@@ -66,8 +65,7 @@ def counted(before: dict[str, float]) -> dict[str, float]:
 
 def told(task: str) -> tuple[Path, str, str]:
   """A fresh checkout of the task, its instruction as the task wrote it, and the commit of its base."""
-  _, path, _, syn = deepswe.seeded(task)
-  return deepswe.WORK / task / "app", (path / "instruction.md").read_text(encoding="utf-8").rstrip(), syn
+  return seeded(task)
 
 
 async def first(app: Path, message: str, record: Path, cap: float) -> object:
@@ -89,9 +87,9 @@ async def first(app: Path, message: str, record: Path, cap: float) -> object:
         engine.cancel(act)
         await asyncio.sleep(10)
         return None
-      if not isinstance(got, (int, float)) or float(got) >= deepswe.CONFIDENT:
+      if not isinstance(got, (int, float)) or float(got) >= CONFIDENT:
         return got
-      message = deepswe.AGAIN.format(got)
+      message = AGAIN.format(got)
     return got
   finally:
     world.end()
@@ -122,7 +120,10 @@ def drifted(record: Path, app: Path, base: str) -> dict[str, object]:
     if fact[0] == "done" and fact[1].startswith(("read", "write")) and isinstance(fact[3], engine.Text)
   ]
   ran = subprocess.run(  # noqa: S603
-    [*deepswe.gits(app), "diff", "--name-only", base], capture_output=True, text=True, check=False
+    ["git", "-C", str(app), "--git-dir", ".git", "diff", "--name-only", base],  # noqa: S607
+    capture_output=True,
+    text=True,
+    check=False,
   )
   paths += [app / one for one in ran.stdout.splitlines()]
   read = next((one for one in paths if one.is_absolute() and one.is_file()), None)
@@ -161,7 +162,7 @@ def baseline(task: str, cap: float) -> dict[str, object]:
 
 def main() -> int:
   """The first life, the later lives, the life after a change, and the baseline, each kept in the directory out."""
-  deepswe.outside()
+  outside()
   whole = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   whole.add_argument("task", help="The task of DeepSWE, as the collection names it.")
   whole.add_argument("--out", type=Path, required=True, help="The directory of the record and of the results.")
@@ -186,7 +187,7 @@ def main() -> int:
   os.chdir(app)
   say(f"[replay] the first life works {args.task} on {ACTOR}, for {args.cap:.0f} seconds at most")
   before, began = server(), time.monotonic()
-  got = asyncio.run(first(app, message + deepswe.ASKED, record, args.cap))
+  got = asyncio.run(first(app, message + ASKED, record, args.cap))
   usage = [one[3][2] for one in answered(kept(record)) if one[3][2]]
   found["first"] = {
     "value": got,

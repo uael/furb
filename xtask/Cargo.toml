@@ -11,7 +11,16 @@ publish = false
 workspace = true
 
 [dependencies]
-clap = { version = "4.6", features = ["derive", "string"] }
+clap = { version = "4.6", features = ["derive", "env", "string"] }
 fancy-regex = "0.20"
 notify = "8"
+# The task deepswe: the manifests of the registry of an image and the files of a task, the tar of
+# each layer of an image, gzipped or not, and the toml of a task.
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+flate2 = "1"
+tar = "0.4"
+toml = "1"
+# The bound of each step of the rig, which waits on its child with no poll.
+wait-timeout = "0.2"
 thiserror = "2"

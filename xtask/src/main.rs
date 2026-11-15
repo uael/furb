@@ -6,6 +6,7 @@
 //! their commands; a task that no tool does, as `clean-caches`, does its work here.
 
 mod caches;
+mod deepswe;
 mod paths;
 mod watch;
 
@@ -118,6 +119,28 @@ enum Task {
     #[arg(long)]
     once: bool,
   },
+  /// Put one life of furb against one task of the DeepSWE collection, and grade what it left with
+  /// the verifier of the task.
+  ///
+  /// The one law of the rig is that no rule of it reaches the model. The system prompt is the
+  /// engine, and the life runs the extensions that the configs turn on, with compaction on in the
+  /// checkout, so the chain compacts before it fills its window. The message is the instruction of
+  /// the task as the task wrote it, and one line that asks the model to close with a float from 0
+  /// to 1 for how sure it is that the work is done. Under 0.9, the operator says that the level is
+  /// too low and asks the model to go on, on the same chain. When the model closes at 0.9 or more
+  /// and its checkout holds no change against the base, the operator says once that nothing is
+  /// submitted and asks it to go on. The model reads no other word.
+  ///
+  /// Before the first run, `tools` installs the reporters, and `validate <task>` grades the
+  /// reference solution of a task once, before a run spends money on it. `turns <task>` shows what
+  /// the model read, turn by turn, which is where a friction of the engine shows, and `traces/`
+  /// keeps the record and the result of each graded run.
+  Deepswe {
+    #[command(flatten)]
+    places: deepswe::Places,
+    #[command(subcommand)]
+    verb: deepswe::Verb,
+  },
   /// Fail on each path of the repository that a tool of a developer or a workflow names and that
   /// git does not hold, with its file and its line.
   ///
@@ -168,6 +191,8 @@ enum Fault {
   Unwatched,
   #[error("the pattern of the paths failed: {0}")]
   Pattern(#[from] fancy_regex::Error),
+  #[error(transparent)]
+  Deepswe(#[from] deepswe::Fault),
 }
 
 /// A script of `script/` that runs on its own, as a task.
@@ -222,6 +247,7 @@ fn run() -> Result<ExitCode, Fault> {
     }
     Task::CleanCaches { scratch, uv } => caches::clean(&root, scratch, uv.as_deref()),
     Task::Paths => paths::check(),
+    Task::Deepswe { places, verb } => Ok(deepswe::run(&root, places, verb)?),
     Task::Search { words } => {
       search(&command, &words);
       Ok(ExitCode::SUCCESS)

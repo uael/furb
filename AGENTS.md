@@ -4,9 +4,9 @@ The engine is `src/furb/engine.py`, one file. It depends only on the Python inte
 that boot is given: the ears of the World and the Kernel. The contract, `src/furb/engine.pyi`, defines it, and
 the suite in `test/` proves it. `src/furb/AGENTS.md` holds the technical names of the engine and the laws that no test
 can hold. `DOCTRINE.md` tells a model how to work in furb, and the entries doctrine and setup of `src/furb/AGENTS.md`
-say how a life reads it. `script/AGENTS.md` says how to run the DeepSWE rig. Claude Code reads each `AGENTS.md` through
-a `CLAUDE.md` beside it that holds only `@AGENTS.md`, and the skills of `.agents/skills` through `.claude/skills`, a
-link to that folder.
+say how a life reads it. `cargo xtask deepswe --help` says how to run the DeepSWE rig. Claude Code reads each
+`AGENTS.md` through a `CLAUDE.md` beside it that holds only `@AGENTS.md`, and the skills of `.agents/skills` through
+`.claude/skills`, a link to that folder.
 
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
@@ -464,7 +464,8 @@ fix what your change broke, and report what was broken before.
   `FURB_LOCAL_URL` names. It is no test of the suite and spends one prompt.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
-- `uv run python script/deepswe.py`: the DeepSWE rig, which `script/AGENTS.md` says how to run.
+- `cargo xtask deepswe`: the DeepSWE rig, whose `--help` says its verbs and its one law, and whose module doc,
+  `xtask/src/deepswe.rs`, says where each thing stands.
 - `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
   works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
   Code on the same model works the task as the baseline. Its docstring says how to run it.
@@ -483,8 +484,9 @@ fix what your change broke, and report what was broken before.
   local server with a word of furb that asks one prompt per ticket, with a life of furb whose model writes its own
   words, with a word of furb that asks one prompt per batch, and with the claude command line, and scores each arm on
   the totals of the server and the share of right labels. It asks a model and spends what the server serves.
-- `script/real.py` is no command: it holds what `smoke.py`, `play.py` and `deepswe.py` share, which is the life they
-  open on the engine of this interpreter, the actor they ask, and what the answers of a record cost.
+- `script/real.py` is no command: it holds what `smoke.py`, `play.py` and the benches of DeepSWE share, which is the
+  life they open on the engine of this interpreter, the actor they ask, what the answers of a record cost, and the
+  verbs of `cargo xtask deepswe` that a bench calls.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
   models.dev and from the data of pi-ai. A life updates its own copy of models.dev and of the providers of
   pi-ai in the cache of furb once a day, and the newer of the cache and the snapshot holds for each provider.

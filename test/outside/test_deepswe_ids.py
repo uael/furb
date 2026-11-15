@@ -6,7 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-PLUGIN = Path(__file__).parents[2] / "script"
+PLUGIN = Path(__file__).parents[2] / "xtask" / "src" / "deepswe"
 TEST = """import pytest
 from settings import DEFAULTS, validate
 

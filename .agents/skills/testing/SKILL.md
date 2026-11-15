@@ -38,9 +38,9 @@ Never open a life on a real record, and never run the engine against the record,
 owner. A replay of a record is a live run: its ears write files and run commands. Give a test a directory of its
 own, as `Sand` and `tmp_path` do.
 
-`script/smoke.py`, `script/play.py` and `script/deepswe.py` ask a real model. Each spends prompts, so
+`script/smoke.py`, `script/play.py` and `cargo xtask deepswe run` ask a real model. Each spends prompts, so
 run one only when the owner asks, or when the change touches the provider and no scripted model can prove it.
-`script/AGENTS.md` says how to run the rig of DeepSWE.
+`cargo xtask deepswe --help` says how to run the rig of DeepSWE.
 
 The suite and the gates of TypeScript run on Linux, on macOS and on Windows. A proof on one system does not
 prove the others. When CI fails on a system you do not have, read its log before you change anything.

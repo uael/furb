@@ -30,8 +30,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import deepswe
-from real import lived, say
+from real import AGAIN, ASKED, CONFIDENT, TASKS, WORK, deepswe, lived, outside, say, seeded
 
 from furb import engine
 from furb.world import answered, kept
@@ -46,6 +45,8 @@ CAP = 1200.0
 """CAP is the seconds that the lives of a run may work, summed, from the wake of each to its end."""
 EARLY, LATE = 0.0, 300.0
 """EARLY and LATE bound the seconds from the first answer of a life to its kill, which the bench draws at random."""
+TICK = 2.0
+"""TICK is the seconds between two looks at a life that works."""
 
 
 def server() -> dict[str, float]:
@@ -82,8 +83,8 @@ def asked(root: str) -> str:
 async def life(args: argparse.Namespace) -> int:
   """One life of a run: a new one asks the task, and a later one wakes the work of its record and waits for it."""
   run = args.out / args.task
-  app = deepswe.WORK / args.task / "app"
-  told = (deepswe.read_task(args.task)[0] / "instruction.md").read_text(encoding="utf-8").rstrip()
+  app = WORK / args.task / "app"
+  told = (TASKS / args.task / "instruction.md").read_text(encoding="utf-8").rstrip()
   if (app / ".venv" / "bin").is_dir():
     os.environ["PATH"] = os.pathsep.join([str(app / ".venv" / "bin"), os.environ["PATH"]])
   os.chdir(app)
@@ -93,26 +94,25 @@ async def life(args: argparse.Namespace) -> int:
   pending = sorted({str(x[1]) for x in facts if x[0] == "started"} - {str(x[1]) for x in facts if x[0] == "done"})
   for chain in dict.fromkeys([root, *(engine.scope(one) for one in pending)]):
     engine.wake(chain)
-  act = asked(root) or engine.prompt(float, told + deepswe.ASKED, ACTOR, on=root)
+  act = asked(root) or engine.prompt(float, told + ASKED, ACTOR, on=root)
   line(run / "lives.jsonl", life=args.life, ready=time.time(), entries=len(held), pending=pending, act=act)
-  began, got, stopped, looks = time.monotonic(), None, "", 0
-  mark: dict[str, float] = {"did": 0, "answers": 0}
+  began, got, stopped = time.monotonic(), None, ""
   try:
     while True:
       while engine.peek(act, ...) is ...:
         if time.monotonic() - began > args.cap:
           stopped = "the cap ran out"
           break
-        if (looks := looks + 1) % deepswe.LOOK == 0 and (why := deepswe.watched(record, root, began, mark)):
-          stopped = why
+        if engine.paused(root):
+          stopped = "a pause stands over the chain, which buys nothing more"
           break
-        await asyncio.sleep(deepswe.TICK)
+        await asyncio.sleep(TICK)
       if stopped:
         break
       got = engine.peek(act)
-      if not isinstance(got, (int, float)) or float(got) >= deepswe.CONFIDENT:
+      if not isinstance(got, (int, float)) or float(got) >= CONFIDENT:
         break
-      act = engine.prompt(float, deepswe.AGAIN.format(got), ACTOR, on=root)
+      act = engine.prompt(float, AGAIN.format(got), ACTOR, on=root)
   except Exception as no:
     stopped = f"the task was refused: {no!r}"
   finally:
@@ -155,7 +155,7 @@ def crash(args: argparse.Namespace) -> int:
   run.mkdir(parents=True)
   seed = args.seed if args.seed is not None else random.randrange(1 << 30)  # noqa: S311
   draw = random.Random(seed)  # noqa: S311
-  work, task, _, syn = deepswe.seeded(args.task)
+  seeded(args.task)
   record = run / "record.jsonl"
   before, worked = server(), 0.0
   say(f"[crash] {args.task}: {args.kills} kills, a cap of {args.cap:.0f} seconds, seed {seed}")
@@ -197,9 +197,12 @@ def crash(args: argparse.Namespace) -> int:
       break
   after = server()
   spent = {name: after[name] - before[name] for name in after if name in before}
-  patch = run / "model.patch"
-  deepswe.frozen(work / "app", syn, patch)
-  reward = deepswe.graded(task, work / "base", syn, patch, run / "reward.json")
+  deepswe("freeze", args.task)
+  graded = subprocess.run(["cargo", "xtask", "deepswe", "grade", args.task], check=False)  # noqa: S603, S607
+  say(f"[crash] the grade exited {graded.returncode}")
+  for name in ("model.patch", "reward.json"):
+    shutil.copy(WORK / args.task / ".run" / name, run / name)
+  reward = json.loads((run / "reward.json").read_text(encoding="utf-8"))
   line(run / "run.jsonl", seed=seed, server=spent, answers=len(answered(kept(record))), reward=reward)
   return 0
 
@@ -320,7 +323,7 @@ def report(args: argparse.Namespace) -> int:
 
 def main() -> None:
   """The door of the operator onto the bench."""
-  deepswe.outside()
+  outside()
   whole = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   verbs = whole.add_subparsers(dest="verb", required=True)
   doing = verbs.add_parser("run", help=crash.__doc__)

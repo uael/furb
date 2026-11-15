@@ -78,7 +78,7 @@ builtins = []
 
 [tool.ruff.per-file-target-version]
 # The verifier images use Python versions older than this repository.
-"script/pytest_ids.py" = "py38"
+"xtask/src/deepswe/pytest_ids.py" = "py38"
 
 [tool.ruff.lint]
 select = [

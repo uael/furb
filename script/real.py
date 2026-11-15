@@ -1,13 +1,14 @@
 """What the scripts that run a real life share: the life they open on the engine of this interpreter, the claude they
 ask, and what the answers of a record cost.
 
-The scripts run the engine of CPython, as the DeepSWE rig needs, on the World of `furb.world`, which opens the life on
+The scripts run the engine of CPython, as the benches of DeepSWE need, on the World of `furb.world`, which opens the life on
 the ears of the crate, the provider of the crate among them, and on the Kernel of the crate. The command
 line `furb` runs the engine of the crate; a script runs it as a program of its own.
 """
 
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -76,3 +77,42 @@ def bought(record: Path) -> list[tuple]:
 def spent(record: Path) -> float:
   """The dollars that the answers of the record cost."""
   return sum(one[3][2][4] for one in bought(record) if one[3][2])
+
+
+WORK = Path(os.environ.get("DEEPSWE_WORK") or Path.home() / ".cache/furb/deepswe-work")
+"""WORK is where `cargo xtask deepswe` stands the checkout of each task."""
+TASKS = Path(os.environ.get("DEEPSWE_DIR") or Path.home() / ".cache/furb/deep-swe") / "tasks"
+"""TASKS is the folder of the tasks of the collection that `cargo xtask deepswe` fetches."""
+# The words of the rig of `cargo xtask deepswe`, in xtask/src/deepswe.rs, which a bench puts to its own life.
+ASKED = "\n\nWhen the work is done, close with a float from 0 to 1: how sure you are that this task is complete."
+AGAIN = "confidence level {} is too low, continue"
+CONFIDENT = 0.9
+
+
+def deepswe(*words: str) -> None:
+  """One verb of `cargo xtask deepswe`, which seeds, freezes and grades a task, and stops the script when it fails."""
+  root = Path(__file__).resolve().parent.parent
+  if subprocess.run(["cargo", "xtask", "deepswe", *words], cwd=root, check=False).returncode:  # noqa: S603, S607
+    say(f"cargo xtask deepswe {' '.join(words)} failed, so the script stops here")
+    raise SystemExit(1)
+
+
+def seeded(task: str) -> tuple[Path, str, str]:
+  """A fresh checkout of a task, its instruction as the task wrote it, and the commit of its base."""
+  deepswe("seed", task)
+  base = WORK / task / "base"
+  head = ["git", "-C", str(base), "--git-dir", ".git", "rev-parse", "HEAD"]
+  syn = subprocess.run(head, capture_output=True, text=True, check=True).stdout.strip()  # noqa: S603
+  return WORK / task / "app", (TASKS / task / "instruction.md").read_text(encoding="utf-8").rstrip(), syn
+
+
+def outside() -> None:
+  """Take the venv that runs the script out of the environment of its children, so a command of a model finds the
+  python of the checkout and not the one of furb."""
+  own = Path(sys.prefix).resolve()
+  if own == Path(sys.base_prefix).resolve():
+    return
+  path = os.environ.get("PATH", "").split(os.pathsep)
+  os.environ["PATH"] = os.pathsep.join(one for one in path if Path(one).resolve() != own / "bin")
+  if (named := os.environ.get("VIRTUAL_ENV")) and Path(named).resolve() == own:
+    del os.environ["VIRTUAL_ENV"]

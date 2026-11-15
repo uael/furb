@@ -14,4 +14,4 @@ disallowed-methods = [
 ]
 absolute-paths-max-segments = 2
 # The names of products that a doc comment writes as they are, beside the names that clippy knows.
-doc-valid-idents = ["..", "OpenTUI", "FFmpeg", "MinGW"]
+doc-valid-idents = ["..", "OpenTUI", "FFmpeg", "MinGW", "DeepSWE"]

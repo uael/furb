@@ -52,7 +52,7 @@ TRACES: list[tuple[str, re.Pattern[str], str]] = [
 ]
 # The prompts of the operator that a script wrote in the records of the replay, in place of the words of a person: those
 # of the replay, the messages of the record of the conductor, tests/conductor.jsonl, and the task and the nudge of the
-# bench of script/deepswe.py.
+# bench of cargo xtask deepswe.
 SCRIPTED = {
   "Are the other lives of the sample stopped?",
   "Check them again.",

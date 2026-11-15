@@ -286,7 +286,7 @@ plays the definitions of that word: its imports, its functions, its classes, its
 each name of state that it assigns, as `queue: list = []`, in file order. So a function and a constant take their new
 value, a new name of state takes its first value, a name of state that the chain holds, such as `queue`, keeps its
 value, and the life word does not run again. A change of a file that no write of the life makes reaches the life at its
-next start. A host that gives no extensions, as the DeepSWE rig does, enables none.
+next start. A host that gives no extensions enables none.
 
 Each thing that comes from the disk reaches a chain through a question that an ear of the World answers, and a later
 life gets the same answer from the record. So a replay is exact, and the World is asked nothing twice.
