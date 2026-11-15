@@ -8,7 +8,7 @@
 //! the asker to the track of the chain that it asks, and its answer flows back, as the flow events
 //! of a profiler join two tracks.
 
-use std::{cmp::Ordering, collections::HashMap};
+use std::{cmp::Ordering, collections::HashMap, ptr};
 
 use furb_client::{Chains, Flow, Time, resting};
 use opentui::style::Style;
@@ -18,7 +18,7 @@ use crate::{
   keys::Does,
   line::{Line, cut, run},
   model::Model,
-  thread::{Click, Hot, Row, hued},
+  thread::{Click, Hot, Row},
   tokens::Role,
 };
 
@@ -140,12 +140,13 @@ impl Model {
     }
   }
 
-  /// The ink of a chain under the bar by its label: the hue of the chain while it works, and grey
-  /// while it rests.
-  fn ink(&self, label: &str, rests: bool) -> Style {
-    let (t, record) = (&self.tokens, self.client.thread.as_ref().map(|one| &one.thread.key.1));
-    let hue = t.hues[hued(record.map_or("", String::as_str), label) % t.hues.len()];
-    Style::new().fg(if rests { t.muted } else { hue })
+  /// The ink of a chain under the bar by its place among the chains: while it works, the hues of
+  /// the threads in turn, so the chains that work side by side never share one, less the slate,
+  /// which reads near the grey of a chain that rests; grey while it rests.
+  fn ink(&self, at: usize, rests: bool) -> Style {
+    let t = &self.tokens;
+    let colored = &t.hues[..t.hues.len() - 1];
+    Style::new().fg(if rests { t.muted } else { colored[at % colored.len()] })
   }
 
   /// A row for each chain that shows under the bar, on the columns of its track: a heavy cell where
@@ -166,7 +167,8 @@ impl Model {
       .iter()
       .enumerate()
       .map(|(row, (track, depth))| {
-        let ink = self.ink(&track.label, resting(track.state));
+        let at = chains.tracks.iter().position(|one| ptr::eq(one, *track)).unwrap_or(row);
+        let ink = self.ink(at, resting(track.state));
         let acted: Vec<usize> = track.moments.iter().map(column).collect();
         let began: Vec<usize> = track.threads.iter().map(|one| column(&one.at)).collect();
         let before = track.moments.iter().any(|moment| *moment < first);
@@ -178,7 +180,7 @@ impl Model {
             _ if one == 0 && before => ("‹", ink),
             _ if let Some((sign, flow)) = flow => {
               let sender = &chains.tracks[flow.sender];
-              (sign, self.ink(&sender.label, resting(sender.state)))
+              (sign, self.ink(flow.sender, resting(sender.state)))
             }
             (true, ..) => ("◆", ink),
             (false, true, _) => ("━", ink),
