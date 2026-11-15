@@ -9,11 +9,11 @@ use std::{
 
 use serde_json::Value;
 
-/// A folder of the sessions of a checkout of a workspace of the list: its path, the main checkout
-/// of its workspace, and each record that it holds.
+/// A folder of the sessions of a checkout of a project of the list: its path, the main checkout
+/// of its project, and each record that it holds.
 pub(crate) struct Sessions {
   pub(crate) folder: PathBuf,
-  pub(crate) workspace: String,
+  pub(crate) project: String,
   pub(crate) records: Vec<String>,
 }
 
@@ -32,7 +32,7 @@ pub(crate) fn recorded(config: &Path) -> Vec<Sessions> {
       let entries = fs::read_dir(&folder).into_iter().flatten().flatten();
       let records = entries.map(|entry| entry.path()).filter(|path| record(path));
       let records = records.map(|path| path.display().to_string()).collect();
-      found.push(Sessions { folder, workspace: main.to_owned(), records });
+      found.push(Sessions { folder, project: main.to_owned(), records });
     }
   }
   found

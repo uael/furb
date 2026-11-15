@@ -563,13 +563,8 @@ fn configured_catalog(
   config: Option<String>,
 ) -> Result<world::Catalog, Fault> {
   let directory =
-    directory.map_or_else(|| env::current_dir().unwrap_or_default(), path::PathBuf::from);
-  let config = config.map(path::PathBuf::from);
-  let claude: Option<path::PathBuf> = claude.map(Into::into);
-  world::Catalog::load(claude.clone())
-    .claude(claude, None)
-    .configured(&directory, config.as_deref())
-    .map_err(|no| Fault::refused(no.to_string()))
+    directory.unwrap_or_else(|| env::current_dir().unwrap_or_default().display().to_string());
+  Opening { directory, config, claude, ..Opening::default() }.catalog()
 }
 
 /// What a first run checks of this machine, as a host reads it: whether the claude command line offers a model and

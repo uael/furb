@@ -232,7 +232,7 @@ impl Model {
         if !sessions.iter().any(|one| one.at == at && one.life == listed.life) {
           let name = listed.name.clone().filter(|name| !name.is_empty());
           let name = name.unwrap_or_else(|| stem(&listed.life));
-          let project = listed.workspace.as_deref().map_or("", |one| tail(one)).to_owned();
+          let project = listed.project.as_deref().map_or("", |one| tail(one)).to_owned();
           let life = listed.life.clone();
           sessions.push(Session { at, life, name, project });
         }

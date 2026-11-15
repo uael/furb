@@ -520,6 +520,18 @@ impl Opening {
     image::read(Path::new(record))
   }
 
+  /// The catalog of the models that a life of this opening reads: the settings of its config
+  /// folder and of its directory, and its claude command line. A host that holds no life yet
+  /// lists the models that an open may take from it.
+  pub fn catalog(&self) -> Result<Catalog, Fault> {
+    let claude = self.claude.as_ref().map(PathBuf::from);
+    let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
+    Catalog::load(claude.clone())
+      .claude(claude, stall)
+      .configured(Path::new(&self.directory), self.config.as_deref().map(Path::new))
+      .map_err(|no| Fault::refused(no.to_string()))
+  }
+
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
   /// gives one, and which a life that inspects asks nothing; and the native search of the web of each of them, which
   /// the provider answers the question search with. Its roster is the one of the home of the
@@ -539,10 +551,7 @@ impl Opening {
     let config = self.config.as_ref().map(PathBuf::from);
     let directory = self.directory.clone();
     let user = config.clone().unwrap_or_else(|| Places::here().config);
-    let catalog = Catalog::load(claude.clone())
-      .claude(claude.clone(), stall)
-      .configured(Path::new(&directory), config.as_deref())
-      .map_err(|no| Fault::refused(no.to_string()))?;
+    let catalog = self.catalog()?;
     let asks: world::Hosted =
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
     let answer =

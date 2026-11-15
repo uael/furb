@@ -17,6 +17,16 @@ export type Request1 =
       verb: "list";
     }
   | {
+      config?: string | null;
+      verb: "projects";
+    }
+  | {
+      cwd?: string | null;
+      config?: string | null;
+      claude?: string | null;
+      verb: "models";
+    }
+  | {
       verb: "cards";
     }
   | {
@@ -573,6 +583,14 @@ export type Answer =
       data: Listed[];
     }
   | {
+      answer: "projects";
+      data: Project[];
+    }
+  | {
+      answer: "models";
+      data: Model[];
+    }
+  | {
       answer: "cards";
       data: Card[];
     }
@@ -1059,8 +1077,9 @@ export interface Peer {
   name?: string | null;
 }
 /**
- * A record of the machine: the main checkout of the workspace whose sessions hold it, when the
+ * A record of the machine: the main checkout of the project whose sessions hold it, when the
  * list names one, else the checkout whose `.furb/sessions` holds a record that a life holds,
+ * the second of the epoch of the last write of the record, when the disk holds it,
  * whether a life of the daemon holds it now, whether that life lives and does not
  * end, whether a window holds that life, and the name of its session while a life holds it: the
  * one that the operator said last on the root, which wins, else the one that the skill naming
@@ -1068,7 +1087,8 @@ export interface Peer {
  */
 export interface Listed {
   life: string;
-  workspace?: string | null;
+  project?: string | null;
+  used?: number | null;
   held: boolean;
   open: boolean;
   /**
@@ -1081,6 +1101,26 @@ export interface Listed {
    */
   pins?: string[];
   name?: string | null;
+}
+/**
+ * The closed set of the nodes of a view, which each window draws in its own way.
+ * A project of the machine: its main checkout, the count of the records of its sessions, and the
+ * second of the epoch of the last write of one of them.
+ */
+export interface Project {
+  folder: string;
+  sessions: number;
+  used?: number | null;
+}
+/**
+ * A model that the catalog of a machine offers: the name that a stand takes, the levels of effort
+ * that it takes, the tokens of its window, and whether it sees images.
+ */
+export interface Model {
+  name: string;
+  efforts: string[];
+  window: number;
+  images: boolean;
 }
 /**
  * A card of the machine: one thread that an operator started, in the record of its session. It
@@ -1522,4 +1562,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 37;
+export const PROTOCOL = 38;

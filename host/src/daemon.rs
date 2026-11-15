@@ -32,21 +32,22 @@ use std::{
   cmp::Reverse,
   collections::{HashMap, HashSet},
   fmt::Display,
-  mem,
+  fs, mem,
   net::{IpAddr, SocketAddr},
   path::{Path, PathBuf},
   pin::pin,
   sync::Arc,
-  time::Duration,
+  time::{Duration, UNIX_EPOCH},
 };
 
 use furb::{
   engine::OPERATOR,
   life::{Answer as Answered, Log, Opening},
+  value::Fault,
   view::{self, Reach, Sent, WATCH},
   wire::parsed,
   world::{
-    Members, Roster,
+    self, Members, Roster,
     codex::{self, SignIn},
     config::Change,
   },
@@ -76,8 +77,8 @@ use crate::{
   opens::Heard,
   processes::{self, Played},
   protocol::{
-    Answer, BOUND, Card, Config, Draft, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL,
-    Peer, Request, Verb,
+    Answer, BOUND, Card, Config, Draft, Frame, Handed, Hello, Kind, Listed, Model, Mount, Open,
+    PROTOCOL, Peer, Project, Request, Verb,
   },
   reads::{Read, Readers},
   records,
@@ -763,6 +764,30 @@ struct Faulted {
   life: Option<LifeHandle>,
 }
 
+/// The second of the epoch of the last write of a record, when the disk holds it.
+fn used(life: &str) -> Option<u64> {
+  let modified = fs::metadata(life).and_then(|held| held.modified()).ok()?;
+  modified.duration_since(UNIX_EPOCH).ok().map(|since| since.as_secs())
+}
+
+/// The models that the catalog of an opening offers, read on a thread that may block, since the
+/// catalog may ask the claude command line, then told to the peer that asked.
+async fn models(opening: Opening, reply: Replied) {
+  let offered = spawn_blocking(move || Ok::<_, Fault>(opening.catalog()?.offered())).await;
+  let answer = match offered {
+    Ok(Ok(models)) => Ok(Answer::Models(models.iter().map(model).collect())),
+    Ok(Err(fault)) => Err(ProtocolError::Refused { why: fault.to_string() }),
+    Err(no) => Err(ProtocolError::Refused { why: format!("the catalog gave no models: {no}") }),
+  };
+  reply.send(answer).ok();
+}
+
+/// A model of the catalog, as the protocol says it.
+fn model(one: &world::Model) -> Model {
+  let efforts = one.efforts().into_iter().map(str::to_owned).collect();
+  Model { name: one.name().to_owned(), efforts, window: one.window(), images: one.sees() }
+}
+
 /// The index of the threads of each record that the daemon asks, made one at a time on a thread
 /// that may block, so the fold of a large record holds back no verb and no second fold, then the
 /// daemon told, which tells the cards of the record again.
@@ -953,6 +978,11 @@ impl Lives {
         return self.open(life, birth, reply);
       }
       Verb::List { config } => Ok(Answer::Lives(self.listed(config))),
+      Verb::Projects { config } => Ok(Answer::Projects(Project::of(&self.listed(config)))),
+      Verb::Models { cwd, config, claude } => {
+        tokio::spawn(models(self.offering(cwd, config, claude), reply));
+        return;
+      }
       Verb::Cards => Ok(Answer::Cards(self.cards(outbox))),
       Verb::Skills { life } => Ok(Answer::Skills(self.skills(&life))),
       Verb::Attach { life, from } => self.attach(&life, from, peer, outbox),
@@ -1047,6 +1077,23 @@ impl Lives {
       }
     }
     all
+  }
+
+  /// The opening whose catalog lists the models that an open with these settings may take: those
+  /// of the daemon where the peer names none.
+  fn offering(
+    &self,
+    cwd: Option<String>,
+    config: Option<String>,
+    claude: Option<String>,
+  ) -> Opening {
+    let base = &self.settings.opening;
+    Opening {
+      directory: cwd.unwrap_or_default(),
+      config: config.or_else(|| base.config.clone()),
+      claude: claude.or_else(|| base.claude.clone()),
+      ..base.clone()
+    }
   }
 
   /// A life born on a thread of its own, with no holder yet, and watched for its end.
@@ -1270,9 +1317,10 @@ impl Lives {
     let mut listed: Vec<Listed> = Vec::new();
     for one in &found {
       for life in &one.records {
-        let workspace = Some(one.workspace.clone());
+        let (project, used) = (Some(one.project.clone()), used(life));
         let (held, open, watched, pins, name) = (false, false, false, Vec::new(), None);
-        listed.push(Listed { life: life.clone(), workspace, held, open, watched, pins, name });
+        let life = life.clone();
+        listed.push(Listed { life, project, used, held, open, watched, pins, name });
       }
     }
     for (life, held) in &self.held {
@@ -1287,11 +1335,11 @@ impl Lives {
       }
       // A record that a life opens stands in the list before the disk holds it.
       let at = Path::new(life).parent();
-      let workspace = found.iter().find(|one| Some(one.folder.as_path()) == at);
-      let workspace = workspace.map(|one| one.workspace.clone());
-      let workspace = workspace.or_else(|| records::checkout(Path::new(life)));
-      let held = true;
-      listed.push(Listed { life: life.clone(), workspace, held, open, watched, pins, name });
+      let project = found.iter().find(|one| Some(one.folder.as_path()) == at);
+      let project = project.map(|one| one.project.clone());
+      let project = project.or_else(|| records::checkout(Path::new(life)));
+      let (held, used) = (true, used(life));
+      listed.push(Listed { life: life.clone(), project, used, held, open, watched, pins, name });
     }
     listed.sort_by(|one, other| one.life.cmp(&other.life));
     listed
@@ -1303,10 +1351,10 @@ impl Lives {
   fn cards(&mut self, peer: &Outbox) -> Vec<Card> {
     self.told.watched();
     let mut all = Vec::new();
-    for Listed { life, workspace, .. } in self.listed(None) {
-      let cards = self.cards_of(&life, workspace.as_ref());
+    for Listed { life, project, .. } in self.listed(None) {
+      let cards = self.cards_of(&life, project.as_ref());
       all.extend(cards.iter().cloned());
-      self.told.tell(&life, workspace, cards);
+      self.told.tell(&life, project, cards);
     }
     self.told.watch(peer.clone());
     all
@@ -1320,7 +1368,7 @@ impl Lives {
     let project = match self.told.project(life) {
       Some(project) => project.clone(),
       None => {
-        self.listed(None).into_iter().find(|one| one.life == life).and_then(|one| one.workspace)
+        self.listed(None).into_iter().find(|one| one.life == life).and_then(|one| one.project)
       }
     };
     let cards = self.cards_of(life, project.as_ref());
@@ -1404,12 +1452,12 @@ impl Lives {
     let listed = self.listed(None);
     let project = |one: &str| {
       let listed = listed.iter().find(|listed| listed.life == one);
-      listed.and_then(|one| one.workspace.clone()).or_else(|| records::checkout(Path::new(one)))
+      listed.and_then(|one| one.project.clone()).or_else(|| records::checkout(Path::new(one)))
     };
     let ours = project(life);
     let mut others: Vec<(u64, &str)> = listed
       .iter()
-      .filter(|one| one.life != life && ours.is_some() && one.workspace == ours)
+      .filter(|one| one.life != life && ours.is_some() && one.project == ours)
       .map(|one| (cards::changed(Path::new(&one.life)), one.life.as_str()))
       .collect();
     others.sort_by_key(|one| Reverse(one.0));

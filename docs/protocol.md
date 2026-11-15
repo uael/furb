@@ -108,6 +108,8 @@ daemon answers requests in any order.
 | Verb | Fields | Role |
 | --- | --- | --- |
 | `list` | `config` | read |
+| `projects` | `config` | read |
+| `models` | `cwd`, `config`, `claude` | read |
 | `cards` | | read |
 | `history` | `life` | read |
 | `skills` | `life` | read |
@@ -180,20 +182,29 @@ daemon answers requests in any order.
   it connects, and a refusal when the operator cancels it or it fails. A set to `false` cancels a sign-in that runs. A
   window keeps no state of the sign-in beside these frames and asks for none. The verb `cancel_sign_in` cancels the
   sign-in that the daemon runs for a life and writes no config, so the set that asked it is refused.
-- `list` gives each record of the machine as `lives`: each record of the sessions of each workspace that
+- `list` gives each record of the machine as `lives`: each record of the sessions of each project that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
-  `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each
-  record that a life of the daemon holds, whose `workspace` is the checkout whose `.furb/sessions` holds it when the
-  list names no workspace for it. `held` says whether a life holds the record now, and `open` whether that
+  `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `project`, and each
+  record that a life of the daemon holds, whose `project` is the checkout whose `.furb/sessions` holds it when the
+  list names no project for it. `used` is the second of the epoch of the last write of the record, when the disk
+  holds it. `held` says whether a life holds the record now, and `open` whether that
   life lives and does not end, and `watched` whether a window of any connection holds the life, which a pin
   does not make, so a window finds the sessions that no window holds from the one list. `pins` names the holder of
   each pin of the life: a life that a pin holds and no window holds stands in the background, and a life that
   nothing holds is in its grace, and ends. A window lists its sessions from it, so a window on another machine lists them the
   same way.
+- `projects` gives the projects of the records that `list` gives with the same `config`: each `folder`, the main
+  checkout of a project, once, with the count of its records as `sessions` and the latest `used` of them, the one used
+  last first. A record of no project stands in none.
+- `models` gives the models that the catalog of the machine offers to a life in the folder `cwd`, with the settings
+  of the folder `config` and the claude command line at `claude`, each as `open` takes it, the ones of the daemon
+  when the peer names none. It needs no life. Each model has its `name`, which `actor` of `open` takes, its
+  `efforts`, the tokens of its `window`, and whether it sees `images`.
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
 - An answer is a frame `reply` with the `id`, an `answer` that names its kind, and its `data`: `done`, `welcome`,
-  `lives`, `act` (the name of the act that the verb made), `value`, `values`, `inspected` or `presence`.
+  `lives`, `projects`, `models`, `act` (the name of the act that the verb made), `value`, `values`, `inspected` or
+  `presence`.
 - A refusal is a frame `refused` with the `id`, or none for a frame that could not be read, the `error` as data, and
   `why`, the text that a person reads.
 - An `open` that makes a life gives it the `actor`, the `roster` and the `skills` that it names, and the settings

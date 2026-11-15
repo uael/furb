@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 37;
+pub const PROTOCOL: u32 = 38;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -92,12 +92,29 @@ pub struct Request {
 #[serde(tag = "verb", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Verb {
   Hello(Hello),
-  /// The records of the machine: each record of the sessions of each workspace that
+  /// The records of the machine: each record of the sessions of each project that
   /// `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer
   /// names none, as a window keeps its list there, and each record that a life of the daemon holds.
   List {
     #[serde(default)]
     config: Option<String>,
+  },
+  /// The projects of the records that `list` gives with the same config, as [`Project::of`] folds
+  /// them.
+  Projects {
+    #[serde(default)]
+    config: Option<String>,
+  },
+  /// The models that the catalog of the machine offers to a life in the folder `cwd`, with the
+  /// settings of the folder `config` and the claude command line at `claude`, each as `open`
+  /// takes it, with no life: the ones of the daemon when the peer names none.
+  Models {
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    config: Option<String>,
+    #[serde(default)]
+    claude: Option<String>,
   },
   /// The cards of the machine: each thread that an operator started in each record that `list`
   /// gives with no config. The peer then hears a frame `cards` at each change of them, until it
@@ -473,6 +490,8 @@ impl Verb {
       | Self::ViewMount(Mount { life, .. }) => Some(life),
       Self::Hello(_)
       | Self::List { .. }
+      | Self::Projects { .. }
+      | Self::Models { .. }
       | Self::Cards
       | Self::Handover
       | Self::ViewTree(_)
@@ -489,6 +508,8 @@ impl Verb {
       self,
       Self::Hello(_)
         | Self::List { .. }
+        | Self::Projects { .. }
+        | Self::Models { .. }
         | Self::Cards
         | Self::History { .. }
         | Self::Skills { .. }
@@ -623,6 +644,8 @@ pub enum Answer {
     build: String,
   },
   Lives(Vec<Listed>),
+  Projects(Vec<Project>),
+  Models(Vec<Model>),
   /// The cards of the machine.
   Cards(Vec<Card>),
   /// What the peer sent, the newest first.
@@ -675,8 +698,9 @@ pub struct Handed {
   pub pins: Vec<String>,
 }
 
-/// A record of the machine: the main checkout of the workspace whose sessions hold it, when the
+/// A record of the machine: the main checkout of the project whose sessions hold it, when the
 /// list names one, else the checkout whose `.furb/sessions` holds a record that a life holds,
+/// the second of the epoch of the last write of the record, when the disk holds it,
 /// whether a life of the daemon holds it now, whether that life lives and does not
 /// end, whether a window holds that life, and the name of its session while a life holds it: the
 /// one that the operator said last on the root, which wins, else the one that the skill naming
@@ -684,7 +708,8 @@ pub struct Handed {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Listed {
   pub life: String,
-  pub workspace: Option<String>,
+  pub project: Option<String>,
+  pub used: Option<u64>,
   pub held: bool,
   pub open: bool,
   /// Whether a window of any connection holds the life now: a pin holds it with no window.
@@ -857,6 +882,42 @@ fn inerts(nodes: Vec<Node>) -> Vec<Node> {
 }
 
 /// The closed set of the nodes of a view, which each window draws in its own way.
+/// A project of the machine: its main checkout, the count of the records of its sessions, and the
+/// second of the epoch of the last write of one of them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Project {
+  pub folder: String,
+  pub sessions: usize,
+  pub used: Option<u64>,
+}
+
+impl Project {
+  /// The projects of the records of a list, each once, the one used last first. A record of no
+  /// project stands in none.
+  pub fn of(lives: &[Listed]) -> Vec<Self> {
+    let mut projects: Vec<Self> = Vec::new();
+    for listed in lives {
+      let Some(folder) = &listed.project else { continue };
+      match projects.iter_mut().find(|one| &one.folder == folder) {
+        Some(one) => (one.sessions, one.used) = (one.sessions + 1, one.used.max(listed.used)),
+        None => projects.push(Self { folder: folder.clone(), sessions: 1, used: listed.used }),
+      }
+    }
+    projects.sort_by(|one, other| other.used.cmp(&one.used).then(one.folder.cmp(&other.folder)));
+    projects
+  }
+}
+
+/// A model that the catalog of a machine offers: the name that a stand takes, the levels of effort
+/// that it takes, the tokens of its window, and whether it sees images.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Model {
+  pub name: String,
+  pub efforts: Vec<String>,
+  pub window: u64,
+  pub images: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "node", rename_all = "snake_case")]
 pub enum Shape {

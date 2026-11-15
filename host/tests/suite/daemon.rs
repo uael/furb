@@ -27,7 +27,7 @@ use std::{
     mpsc::{Receiver, Sender, channel},
   },
   thread,
-  time::{Duration, Instant},
+  time::{Duration, Instant, UNIX_EPOCH},
 };
 
 use furb::{
@@ -40,8 +40,9 @@ use furb_host::{
   DaemonError, Door, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
   access::{Access, Ports},
   protocol::{
-    Answer, Axis, Card, Config, Dispose, Draft, Effect, Frame, Gesture, Hello, Kind, Listed, Mount,
-    Node, PROTOCOL, Present, Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
+    Answer, Axis, Card, Config, Dispose, Draft, Effect, Frame, Gesture, Hello, Kind, Listed, Model,
+    Mount, Node, PROTOCOL, Present, Project, Request, Role, Shape, Slot, Tree, Verb, ViewEffect,
+    ViewEvent,
   },
   run,
   transport::{Accepted, Dialer, Identity, Local, LocalApi, Tailscale, Who},
@@ -650,10 +651,10 @@ async fn the_presence_names_each_profile_once_and_the_draft_that_one_of_its_wind
   assert_eq!(third.ask(stranger).await, Err(ProtocolError::Unattached { life }));
 }
 
-#[tokio::test]
-async fn the_list_gives_each_record_of_the_sessions_of_each_workspace_and_whether_a_life_holds_it()
-{
-  let at = place();
+/// A folder `main` that the list of projects names, with a worktree `tree`, and the record
+/// `two.jsonl` in the sessions of the worktree, last written at the second 1000000 of the epoch:
+/// the folder of the sessions of `main`, and the one of `tree`.
+fn worktree(at: &Path) -> (PathBuf, PathBuf) {
   let main = at.join("main");
   let sessions = main.join(".furb").join("sessions");
   let tree = at.join("tree");
@@ -665,19 +666,29 @@ async fn the_list_gives_each_record_of_the_sessions_of_each_workspace_and_whethe
   fs::write(tree.join(".git"), "gitdir: elsewhere\n").unwrap();
   let tree = dunce::canonicalize(&tree).unwrap().join(".furb").join("sessions");
   fs::write(tree.join("two.jsonl"), "").unwrap();
+  let then = UNIX_EPOCH + Duration::from_secs(1_000_000);
+  File::options().write(true).open(tree.join("two.jsonl")).unwrap().set_modified(then).unwrap();
   fs::write(tree.join("two.changes.jsonl"), "").unwrap();
   let list = json!({ "workspaces": [{ "directory": main.display().to_string() }] });
   fs::create_dir_all(at.join("config")).unwrap();
   fs::write(at.join("config").join("workspaces.json"), list.to_string()).unwrap();
+  (sessions, tree)
+}
+
+#[tokio::test]
+async fn the_list_gives_each_record_of_the_sessions_of_each_project_and_whether_a_life_holds_it() {
+  let at = place();
+  let (sessions, tree) = worktree(&at);
   let (local, _daemon) = started(&at, GRACE).await;
   let mut window = Window::dialed(&local).await;
   let one = opened(&mut window, &sessions, "one.jsonl").await;
   let alone = opened(&mut window, &at, "a.jsonl").await;
-  let workspace = Some(main.display().to_string());
+  let project = Some(at.join("main").display().to_string());
   let mut wanted = vec![
     Listed {
       life: one,
-      workspace: workspace.clone(),
+      project: project.clone(),
+      used: None,
       held: true,
       open: true,
       watched: false,
@@ -686,7 +697,8 @@ async fn the_list_gives_each_record_of_the_sessions_of_each_workspace_and_whethe
     },
     Listed {
       life: alone,
-      workspace: None,
+      project: None,
+      used: None,
       held: true,
       open: true,
       watched: false,
@@ -695,7 +707,8 @@ async fn the_list_gives_each_record_of_the_sessions_of_each_workspace_and_whethe
     },
     Listed {
       life: tree.join("two.jsonl").display().to_string(),
-      workspace,
+      project,
+      used: Some(1_000_000),
       held: false,
       open: false,
       watched: false,
@@ -704,10 +717,47 @@ async fn the_list_gives_each_record_of_the_sessions_of_each_workspace_and_whethe
     },
   ];
   wanted.sort_by(|a, b| a.life.cmp(&b.life));
-  let listed = window.listed().await;
+  let mut listed = window.listed().await;
+  // A life writes its record as it goes, at a second that the test does not set.
+  listed.iter_mut().filter(|one| one.held).for_each(|one| one.used = None);
   assert_eq!(listed, wanted);
   let verbatim = |one: &Listed| one.life.starts_with(r"\\?\");
   assert!(!listed.iter().any(verbatim), "a worktree is listed under the path that made it");
+}
+
+#[tokio::test]
+async fn the_projects_are_those_of_the_list_with_their_sessions_and_their_last_use() {
+  let at = place();
+  let (sessions, _) = worktree(&at);
+  fs::write(sessions.join("one.jsonl"), "").unwrap();
+  let then = UNIX_EPOCH + Duration::from_secs(2_000_000);
+  File::options().write(true).open(sessions.join("one.jsonl")).unwrap().set_modified(then).unwrap();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let folder = at.join("main").display().to_string();
+  let used = Some(2_000_000);
+  let projects = window.ask(Verb::Projects { config: None }).await;
+  assert_eq!(projects, Ok(Answer::Projects(vec![Project { folder, sessions: 2, used }])));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_models_are_those_that_the_catalog_offers_with_no_life() {
+  use std::os::unix::fs::PermissionsExt;
+  let at = place();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  // A claude command line that says nothing offers the models of its own catalog.
+  let claude = at.join("claude");
+  fs::write(&claude, "#!/bin/sh\n").unwrap();
+  fs::set_permissions(&claude, fs::Permissions::from_mode(0o755)).unwrap();
+  let claude = Some(claude.display().to_string());
+  let models = Verb::Models { cwd: Some(at.display().to_string()), config: None, claude };
+  let Ok(Answer::Models(models)) = window.ask(models).await else { panic!("no models") };
+  let efforts = ["low", "medium", "high", "xhigh", "max"].map(str::to_owned).to_vec();
+  let opus = Model { name: "claude-cli:opus".to_owned(), efforts, window: 1_000_000, images: true };
+  assert!(models.contains(&opus), "{models:?}");
+  assert_eq!(window.listed().await, Vec::new(), "the daemon holds no life to list them");
 }
 
 #[tokio::test]

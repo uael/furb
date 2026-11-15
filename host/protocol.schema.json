@@ -48,7 +48,7 @@
         },
         {
           "type": "object",
-          "description": "The records of the machine: each record of the sessions of each workspace that\n`workspaces.json` in the folder `config` names, the config folder of the daemon when the peer\nnames none, as a window keeps its list there, and each record that a life of the daemon holds.",
+          "description": "The records of the machine: each record of the sessions of each project that\n`workspaces.json` in the folder `config` names, the config folder of the daemon when the peer\nnames none, as a window keeps its list there, and each record that a life of the daemon holds.",
           "properties": {
             "config": {
               "type": [
@@ -60,6 +60,60 @@
             "verb": {
               "type": "string",
               "const": "list"
+            }
+          },
+          "required": [
+            "verb"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The projects of the records that `list` gives with the same config, as [`Project::of`] folds\nthem.",
+          "properties": {
+            "config": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "projects"
+            }
+          },
+          "required": [
+            "verb"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The models that the catalog of the machine offers to a life in the folder `cwd`, with the\nsettings of the folder `config` and the claude command line at `claude`, each as `open`\ntakes it, with no life: the ones of the daemon when the peer names none.",
+          "properties": {
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "config": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "claude": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "models"
             }
           },
           "required": [
@@ -2501,6 +2555,44 @@
           "properties": {
             "answer": {
               "type": "string",
+              "const": "projects"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Project"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "models"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Model"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
               "const": "cards"
             },
             "data": {
@@ -2842,11 +2934,19 @@
         "life": {
           "type": "string"
         },
-        "workspace": {
+        "project": {
           "type": [
             "string",
             "null"
           ]
+        },
+        "used": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         },
         "held": {
           "type": "boolean"
@@ -2879,7 +2979,62 @@
         "held",
         "open"
       ],
-      "description": "A record of the machine: the main checkout of the workspace whose sessions hold it, when the\nlist names one, else the checkout whose `.furb/sessions` holds a record that a life holds,\nwhether a life of the daemon holds it now, whether that life lives and does not\nend, whether a window holds that life, and the name of its session while a life holds it: the\none that the operator said last on the root, which wins, else the one that the skill naming\ngave. An empty name takes the default name again."
+      "description": "A record of the machine: the main checkout of the project whose sessions hold it, when the\nlist names one, else the checkout whose `.furb/sessions` holds a record that a life holds,\nthe second of the epoch of the last write of the record, when the disk holds it,\nwhether a life of the daemon holds it now, whether that life lives and does not\nend, whether a window holds that life, and the name of its session while a life holds it: the\none that the operator said last on the root, which wins, else the one that the skill naming\ngave. An empty name takes the default name again."
+    },
+    "Project": {
+      "type": "object",
+      "properties": {
+        "folder": {
+          "type": "string"
+        },
+        "sessions": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "used": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "folder",
+        "sessions"
+      ],
+      "description": "The closed set of the nodes of a view, which each window draws in its own way.\nA project of the machine: its main checkout, the count of the records of its sessions, and the\nsecond of the epoch of the last write of one of them."
+    },
+    "Model": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "efforts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "window": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "images": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "efforts",
+        "window",
+        "images"
+      ],
+      "description": "A model that the catalog of a machine offers: the name that a stand takes, the levels of effort\nthat it takes, the tokens of its window, and whether it sees images."
     },
     "Card": {
       "type": "object",
@@ -5341,5 +5496,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 37
+  "x-protocol": 38
 }
