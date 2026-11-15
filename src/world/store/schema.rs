@@ -120,7 +120,3 @@ impl Schema {
     Ok(())
   }
 }
-
-#[cfg(test)]
-#[path = "schema.test.rs"]
-mod test;

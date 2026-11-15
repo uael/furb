@@ -2,3 +2,5 @@
 
 mod config;
 mod operator;
+mod schema;
+mod store;

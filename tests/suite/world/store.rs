@@ -3,12 +3,14 @@
 
 use std::{fs, path::Path};
 
-use super::{Lines, Sqlite, Store, crossings, digest, keeping, kept, last, stood, store, texts};
-use crate::testing::Yard;
-use crate::value;
-use crate::{
+use sha2::{Digest as _, Sha256};
+
+use crate::yard::Yard;
+use furb::{
+  value,
   value::{Fault, Object},
   wire::parsed,
+  world::{Lines, Sqlite, Store, crossings, keeping, kept, stood, store, texts},
 };
 use std::process;
 
@@ -26,7 +28,7 @@ fn facts() -> Vec<Object> {
     r#"[["tell","rung2","chain1",["line one\nline two \u2665",-7,null,[true,[]]]]]"#,
   ]
   .into_iter()
-  .map(|one| parsed(one).unwrap())
+  .map(|one| parsed(one).unwrap_or_else(|no| panic!("{no}")))
   .collect()
 }
 
@@ -37,10 +39,10 @@ fn shown(entries: &[Object]) -> Vec<String> {
 
 /// A record whose store kept each fact of the suite and let it go.
 fn filled(open: impl Fn(&Path) -> Result<Box<dyn Store>, Fault>, path: &Path) {
-  let mut one = open(path).unwrap();
-  assert!(one.entries().unwrap().is_empty());
+  let mut one = open(path).unwrap_or_else(|no| panic!("{no}"));
+  assert!(one.entries().unwrap_or_else(|no| panic!("{no}")).is_empty());
   for entry in facts() {
-    one.keep(entry.as_ref()).unwrap();
+    one.keep(entry.as_ref()).unwrap_or_else(|no| panic!("{no}"));
   }
 }
 
@@ -130,8 +132,7 @@ macro_rules! conformance {
       #[test]
       fn the_standing_of_a_record_is_the_list_that_its_last_done_of_a_stand_gave() {
         let path = at("standing");
-        let stood =
-          |path: &Path| last(path, &mut |_| {}).unwrap().entries.iter().rev().find_map(stood);
+        let stood = |path: &Path| kept(path).unwrap().iter().rev().find_map(stood);
         assert!(stood(&path).is_none());
         let mut one = open(&path).unwrap();
         one.entries().unwrap();
@@ -248,7 +249,7 @@ impl Store for Refusing {
 #[test]
 fn a_stop_message_that_failed_to_reach_the_operator_is_said_again_at_the_next_pass() {
   let (_, mut ear) = keeping(Refusing).unwrap();
-  let wake = waker();
+  let wake = Waker::noop().clone();
   let mut cx = Context::from_waker(&wake);
   let keep = || Fact::says("keep", "", [Object::string("journal"), facts()[0].clone()]);
   assert!(matches!(ear.resume(Heard::Born, &mut cx), Step::Wait(_)));
@@ -271,12 +272,15 @@ fn a_stop_message_that_failed_to_reach_the_operator_is_said_again_at_the_next_pa
   assert!(matches!(ear.resume(Heard::Fact(keep()), &mut cx), Step::Wait(_)));
 }
 
-use std::{cell::Cell, rc::Rc, task::Context};
+use std::{
+  cell::Cell,
+  rc::Rc,
+  task::{Context, Waker},
+};
 
-use crate::{
+use furb::{
   ear::{Ear, Heard, Step},
   fact::Fact,
-  testing::waker,
 };
 
 /// A file of lines whose disk the test fills and empties: a keep and a sync fail while it is full,
@@ -320,9 +324,12 @@ impl Store for Disk {
 fn disk(name: &str) -> (Yard, Box<dyn Ear>, Rc<Space>) {
   let path = place(name, "record.jsonl");
   let space = Rc::new(Space { full: Cell::new(false), free: Cell::new(u64::MAX) });
-  let store = Disk { lines: Lines::open(&path).unwrap(), space: Rc::clone(&space) };
-  let (_, mut ear) = keeping(store).unwrap();
-  let wake = waker();
+  let store = Disk {
+    lines: Lines::open(&path).unwrap_or_else(|no| panic!("{no}")),
+    space: Rc::clone(&space),
+  };
+  let (_, mut ear) = keeping(store).unwrap_or_else(|no| panic!("{no}"));
+  let wake = Waker::noop().clone();
   assert!(matches!(ear.resume(Heard::Born, &mut Context::from_waker(&wake)), Step::Wait(_)));
   (path, ear, space)
 }
@@ -330,14 +337,14 @@ fn disk(name: &str) -> (Yard, Box<dyn Ear>, Rc<Space>) {
 /// One pass of the ear on the keep of an entry: the message that it tells the operator, which
 /// goes, or nothing.
 fn pass(ear: &mut Box<dyn Ear>, entry: &Object) -> Option<String> {
-  let wake = waker();
+  let wake = Waker::noop().clone();
   let mut cx = Context::from_waker(&wake);
   let keep = Fact::says("keep", "", [Object::string("journal"), entry.clone()]);
   match ear.resume(Heard::Fact(keep), &mut cx) {
     Step::Wait(_) => None,
     Step::Call(call) => {
       assert_eq!(call.verb, "prompt");
-      let message = call.args[1].as_ref().as_str().unwrap().to_owned();
+      let message = call.args[1].as_ref().as_str().unwrap_or_else(|| panic!("nothing")).to_owned();
       assert!(matches!(
         ear.resume(Heard::Answer(Ok(Object::string("prompt1"))), &mut cx),
         Step::Wait(_)
@@ -399,7 +406,7 @@ fn a_record_whose_last_line_a_stop_tore_tells_the_operator_once_the_bytes_that_i
   fs::write(&path, text).unwrap();
   let (record, mut ear) = keeping(Lines::open(&path).unwrap()).unwrap();
   assert_eq!(record.len(), 1, "the open holds each line written whole");
-  let wake = waker();
+  let wake = Waker::noop().clone();
   assert!(matches!(ear.resume(Heard::Born, &mut Context::from_waker(&wake)), Step::Wait(_)));
   let told = pass(&mut ear, &entries[1]).expect("the first pass tells the bytes that the open cut");
   assert!(told.contains("it cut 14 bytes"), "{told}");
@@ -410,15 +417,18 @@ fn a_record_whose_last_line_a_stop_tore_tells_the_operator_once_the_bytes_that_i
 /// A fact made of the engine that a digest names, with the texts given.
 fn made_of(engine: &str, held: &[&str]) -> Object {
   let mut fact = serde_json::json!(["made", "chain1", "store", engine, 9, "1.0", "0.4.2"]);
-  fact.as_array_mut().unwrap().extend(held.iter().map(|one| serde_json::json!(one)));
-  parsed(&serde_json::json!([fact]).to_string()).unwrap()
+  fact
+    .as_array_mut()
+    .unwrap_or_else(|| panic!("nothing"))
+    .extend(held.iter().map(|one| serde_json::json!(one)));
+  parsed(&serde_json::json!([fact]).to_string()).unwrap_or_else(|no| panic!("{no}"))
 }
 
 #[test]
 fn the_texts_of_a_segment_are_those_of_its_last_fact_made_and_must_be_the_engine_that_it_names() {
   let (source, kernel, checkpointer) = ("x = 1\n", "y = 2\n", "z = 3\n");
   let other = "0".repeat(64);
-  let ours = (crate::ENGINE.to_owned(), crate::KERNEL.to_owned(), crate::CHECKPOINTER.to_owned());
+  let ours = (furb::ENGINE.to_owned(), furb::KERNEL.to_owned(), furb::CHECKPOINTER.to_owned());
   assert_eq!(
     texts(&[made_of(&other, &[])]).unwrap(),
     ours,
@@ -431,4 +441,15 @@ fn the_texts_of_a_segment_are_those_of_its_last_fact_made_and_must_be_the_engine
     "the last one counts, and it names the digest of the three texts that it holds"
   );
   assert!(texts(&[made_of(&other, &all)]).is_err(), "texts of another engine refuse it");
+}
+
+/// The digest of the texts of an engine, of its Kernel and of its checkpointer that a fact made
+/// names: the sha256 of each text, each followed by a byte zero.
+fn digest(texts: &[&str]) -> String {
+  let mut hash = Sha256::new();
+  for one in texts {
+    hash.update(one.as_bytes());
+    hash.update([0]);
+  }
+  format!("{:x}", hash.finalize())
 }

@@ -859,7 +859,3 @@ fn leased(path: &Path) -> Result<Lease, StoreError> {
     Err(TryLockError::Error(no)) => Err(StoreError::io(&lock)(no)),
   }
 }
-
-#[cfg(test)]
-#[path = "store.test.rs"]
-mod tests;

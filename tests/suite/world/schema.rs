@@ -1,5 +1,7 @@
-use super::{CHECKPOINT_SCHEMA, RECORD_SCHEMA, Schema, SchemaError};
-use crate::value::Object;
+//! The schema of a record and of a checkpoint, which a build opens by its major.
+
+use furb::value::Object;
+use furb::world::{CHECKPOINT_SCHEMA, RECORD_SCHEMA, Schema, SchemaError};
 
 #[test]
 fn a_schema_of_each_minor_of_the_major_opens_and_one_of_another_major_is_refused_with_both() {
