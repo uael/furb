@@ -741,7 +741,7 @@ fn a_slash_offers_the_commands_and_runs_the_one_that_he_takes() {
 fn go_to_opens_on_the_command_key_too_and_runs_a_command_as_its_slash_does() {
   let (app, _daemon, _) = started();
   app.press("super+p");
-  shows(&app, "Search a thread, a session");
+  shows(&app, "Search a thread, session");
   app.type_text("the model of the input");
   app.press("enter");
   shows(&app, "Search a model");
@@ -763,7 +763,7 @@ fn a_click_on_the_list_keeps_the_keys_with_the_input() {
 fn the_mouse_alone_reaches_and_runs_each_command_of_go_to() {
   let (app, _daemon, _) = started();
   clicked(&app, "go to anything", 0, 0);
-  shows(&app, "Search a thread, a session");
+  shows(&app, "Search a thread, session");
   assert!(!app.text().contains("The model of the input"), "the row is in view before the wheel");
   let (x, y) = at(&app, "Each key", 0);
   for _ in 0..30 {
@@ -811,7 +811,7 @@ fn each_command_of_a_slash_has_a_key_and_a_place_that_the_mouse_clicks() {
     // A second click on one cell soon after the first is a double click, which selects a word.
     app.advance(Duration::from_secs(1));
     clicked(&app, "go to anything", 0, 0);
-    shows(&app, "Search a thread, a session");
+    shows(&app, "Search a thread, session");
     let (x, y) = at(&app, "Search a", 0);
     for _ in 0..30 {
       if app.text().contains(&says) {

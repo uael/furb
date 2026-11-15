@@ -283,7 +283,12 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       words: &[],
       pace: &[],
       reads: false,
-      steps: &[step("a", &[], READY), step("b", &[Act::Key("C-x"), Act::Key("?")], "each key")],
+      steps: &[
+        step("a", &[], READY),
+        step("b", &[Act::Key("C-x"), Act::Key("?")], "each key"),
+        // Go to names the project of the folder, where no session stands yet.
+        step("c", &[Act::Key("Escape"), Act::Key("C-p")], "no session yet"),
+      ],
     }),
   },
   Scenario {

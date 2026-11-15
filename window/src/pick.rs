@@ -179,7 +179,7 @@ impl Pick {
 
   fn placeholder(self) -> &'static str {
     match self {
-      Self::GoTo => "Search a thread, a session, a project, a file, a skill, a command",
+      Self::GoTo => "Search a thread, session, project, file, skill or command",
       Self::Keys => "Search a key",
       Self::Sessions => "Search a session",
       Self::Machines => "Search a machine",
@@ -326,6 +326,13 @@ impl Model {
       all.extend(kept.into_iter().take(RECENT));
     }
     all.extend(projects(&sessions));
+    // A project that holds no session yet takes a new thread there, as the launcher picks it.
+    let held = |name: &str| sessions.iter().any(|one| one.project == name);
+    let fresh = self
+      .projects()
+      .into_iter()
+      .filter(|one| one.project.as_deref().is_some_and(|name| !held(name)));
+    all.extend(fresh.map(|one| Entry { part: "Projects".into(), ..one }));
     all.extend(self.commands());
     all
   }
@@ -646,6 +653,10 @@ impl Model {
     let rises = self.picker.as_ref().is_some_and(|one| one.of == Pick::History);
     let input = u16::try_from(self.wide().saturating_sub(2)).unwrap_or(PART);
     let asked = entries.iter().map(|one| one.width(badged(entries)) + 4).max().unwrap_or_default();
+    // The row of the filter holds its hint whole beside the widest count, `12 / 12`.
+    let hint = self.picker.as_ref().map(|one| one.of.placeholder().width());
+    let count = 2 * entries.len().to_string().len() + 3;
+    let asked = asked.max(hint.map_or(0, |hint| 1 + hint + 2 + count + 4));
     let asked = u16::try_from(asked).unwrap_or(PARTS).clamp(PART, PARTS);
     (columns, if rises { input } else { asked.min(columns.saturating_sub(4)) })
   }

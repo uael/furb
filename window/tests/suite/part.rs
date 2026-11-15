@@ -49,7 +49,7 @@ fn gone(app: &TestApp, text: &str) -> bool {
 fn go_to_lists_the_threads_that_work_and_the_projects_and_finds_a_session_with_no_thread_of_his() {
   let (app, _daemon, _peer) = machine();
   app.press("ctrl+o");
-  let frame = shows(&app, "Search a thread, a session, a project");
+  let frame = shows(&app, "Search a thread, session, project");
   // The sessions that he used last stand among the places before he searches.
   let parts = ["Working", "Sessions", "Projects"];
   assert!(parts.iter().all(|part| frame.contains(part)), "{frame}");
@@ -104,7 +104,7 @@ fn the_commands_run_from_go_to_and_each_key_shows_its_forms() {
 fn a_click_on_the_scope_of_the_list_opens_go_to() {
   let (app, _daemon, _peer) = machine();
   clicked(&app, "All projects ▾", 0, 0);
-  shows(&app, "Search a thread, a session, a project");
+  shows(&app, "Search a thread, session, project");
 }
 
 #[test]
