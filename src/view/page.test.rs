@@ -9,7 +9,7 @@ fn held(facts: impl IntoIterator<Item = Value>, streams: &mut Streamed) -> Held 
   let mut held = Held::default();
   for fact in facts {
     for act in fold.recorded(&fact) {
-      streams.heard(&act, 100);
+      streams.heard(&act, 100_000);
       held.heard(&act);
     }
   }
@@ -97,7 +97,7 @@ fn a_model_that_writes_shows_the_lines_that_came_the_line_that_comes_and_its_tho
   facts.push(json!(["rung", "rung3", "prompt3", "chain1", "", "", "claude-cli:opus/high"]));
   facts.push(json!(["reply", "reply1", "rung3", "chain1", "claude-cli:opus/high"]));
   let held = held(facts, &mut streams);
-  streams.wrote("rung3", ["", "The seed is read once. Then"], 101);
+  streams.wrote("rung3", ["", "The seed is read once. Then"], 101_000);
   let thought = |took| Some(Thought { text: "The seed is read once. Then".to_owned(), took });
   let block = |streams: &Streamed| {
     held.page(streams, "prompt1", Reach { before: None, limit: 1 }).exchanges[0]
@@ -106,7 +106,7 @@ fn a_model_that_writes_shows_the_lines_that_came_the_line_that_comes_and_its_tho
       .unwrap()
   };
   assert_eq!(block(&streams).thought, thought(None));
-  streams.wrote("rung3", ["d = 4\ne = rea", ""], 104);
+  streams.wrote("rung3", ["d = 4\ne = rea", ""], 104_000);
   let block = block(&streams);
   assert_eq!(block.thought, thought(Some(3)));
   assert_eq!(block.thought.as_ref().unwrap().first(), "The seed is read once.");
@@ -413,7 +413,7 @@ fn a_host_keeps_only_the_thoughts_that_a_page_shows() {
   let mut held = Held::default();
   let mut hear = |fact: Value, streams: &mut Streamed| {
     for act in fold.recorded(&fact) {
-      streams.heard(&act, 100);
+      streams.heard(&act, 100_000);
       held.heard(&act);
     }
   };
@@ -447,4 +447,19 @@ fn a_host_keeps_only_the_thoughts_that_a_page_shows() {
   let mut kept: Vec<&str> = streams.wrote.keys().map(String::as_str).collect();
   kept.sort_unstable();
   assert_eq!(kept, ["rung3", "rung4"]);
+}
+
+#[test]
+fn a_thought_under_a_second_took_no_second_whatever_seconds_it_falls_in() {
+  let mut streams = Streamed::default();
+  let mut facts = thread();
+  facts.push(json!(["rung", "rung3", "prompt3", "chain1", "", "", "claude-cli:opus/high"]));
+  facts.push(json!(["reply", "reply1", "rung3", "chain1", "claude-cli:opus/high"]));
+  let held = held(facts, &mut streams);
+  // The thought begins late in the second 110 and ends early in the second 111.
+  streams.wrote("rung3", ["", "A short thought."], 110_900);
+  streams.wrote("rung3", ["d = 4", ""], 111_100);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let thought = page.exchanges[0].block.as_ref().unwrap().thought.clone().unwrap();
+  assert_eq!(thought.took, Some(0));
 }

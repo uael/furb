@@ -501,7 +501,7 @@ impl Life {
     let queued = self.kept.queue.heard(&event);
     match &event {
       Event::Act(act) => {
-        self.kept.streams.heard(act, cards::now());
+        self.kept.streams.heard(act, cards::millis());
         let before = self.kept.held.took(Arc::clone(act)).map(|one| Event::Act(one).into());
         // Each reader hears the act as the life holds it, which keeps who made it through a birth.
         let held = self.kept.held.shared(&act.id).map(Arc::clone);
@@ -516,7 +516,7 @@ impl Life {
         }
       }
       Event::Text { rung, text, thinking, .. } => {
-        self.kept.streams.wrote(rung, [text, thinking], cards::now());
+        self.kept.streams.wrote(rung, [text, thinking], cards::millis());
       }
       _ => {}
     }

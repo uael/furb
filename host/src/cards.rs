@@ -82,6 +82,13 @@ pub(crate) fn now() -> u64 {
   seconds(SystemTime::now())
 }
 
+/// The millisecond of the epoch now.
+pub(crate) fn millis() -> u64 {
+  SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map_or(0, |since| u64::try_from(since.as_millis()).unwrap_or(u64::MAX))
+}
+
 fn seconds(time: SystemTime) -> u64 {
   time.duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs())
 }

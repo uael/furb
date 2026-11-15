@@ -159,10 +159,10 @@ impl Answered {
 }
 
 /// What a host heard of a life beside its facts, which a page reads: what each model wrote and
-/// thought for a rung, and the second of the epoch at which each act that lives began. The record
-/// holds neither: the turn of a reply keeps its thought sealed, and a fact tells no time, so a
-/// host keeps it in the image of the life, once [`Held::shown`] let go of each thought that no
-/// page shows.
+/// thought for a rung, and the millisecond of the epoch at which each act that lives began, which
+/// a page gives in seconds. The record holds neither: the turn of a reply keeps its thought sealed,
+/// and a fact tells no time, so a host keeps it in the image of the life, once [`Held::shown`] let
+/// go of each thought that no page shows.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Streamed {
   wrote: HashMap<String, Wrote>,
@@ -170,7 +170,8 @@ pub struct Streamed {
 }
 
 /// What a model wrote for a rung: its text until the rung has its word, its thought, and the
-/// seconds at which it began and at which its thought ended.
+/// milliseconds at which it began and at which its thought ended, so a thought that ends within
+/// a second of its start took no second, whatever second its start and its end fall in.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Wrote {
   text: String,
@@ -180,7 +181,7 @@ struct Wrote {
 }
 
 impl Streamed {
-  /// What a model added to the text and to the thought of a rung, at a second.
+  /// What a model added to the text and to the thought of a rung, at a millisecond of the epoch.
   pub fn wrote(&mut self, rung: &str, [text, thinking]: [&str; 2], now: u64) {
     let wrote =
       self.wrote.entry(rung.to_owned()).or_insert_with(|| Wrote { began: now, ..Wrote::default() });
@@ -191,7 +192,8 @@ impl Streamed {
     }
   }
 
-  /// An act as it stands now, at a second: an act that lives keeps the second it began, and a rung
+  /// An act as it stands now, at a millisecond of the epoch: an act that lives keeps when it began,
+  /// and a rung
   /// that has its word keeps only the thought of its model.
   pub fn heard(&mut self, act: &Act, now: u64) {
     if act.done() && act.run != Some(RunState::Running) {
@@ -386,7 +388,7 @@ impl<'a> Reader<'a> {
     said.sort_by_key(|(place, _)| *place);
     let streamed = self.thinker(answers).and_then(|rung| self.streams.wrote.get(&rung.id));
     let thought = streamed.and_then(|wrote| {
-      let took = wrote.thought.map(|ended| ended.saturating_sub(wrote.began));
+      let took = wrote.thought.map(|ended| ended.saturating_sub(wrote.began) / 1000);
       (!wrote.thinking.trim().is_empty()).then(|| Thought { text: wrote.thinking.clone(), took })
     });
     let block = answers.rungs.last().map(|last| Block {
@@ -410,7 +412,7 @@ impl<'a> Reader<'a> {
   /// The lines of the word of a rung, numbered from the count of the lines of the thread before
   /// it. While its model writes the word, the lines that came ran and the line that comes runs.
   fn lines(self, rung: &Act, before: usize) -> Vec<Line> {
-    let began = |id: &str| self.streams.began.get(id).copied();
+    let began = |id: &str| self.streams.began.get(id).map(|at| at / 1000);
     let Some(word) = &rung.word else {
       let streamed = self.streams.wrote.get(&rung.id).filter(|one| !one.text.is_empty());
       let Some(streamed) = streamed else { return Vec::new() };
@@ -419,7 +421,7 @@ impl<'a> Reader<'a> {
       let mut lines: Vec<Line> = ran
         .map(|(text, at)| Line { number: before + at, text: text.to_owned(), mark: Mark::Ran })
         .collect();
-      let writes = Mark::Runs { work: Work::Writes, since: Some(streamed.began) };
+      let writes = Mark::Runs { work: Work::Writes, since: Some(streamed.began / 1000) };
       lines.push(Line { number: before + came.count + 1, text: came.tail, mark: writes });
       return lines;
     };
