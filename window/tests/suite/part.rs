@@ -204,24 +204,15 @@ fn a_new_session_on_the_model_of_the_last_card_of_its_project_shows_its_default_
 }
 
 #[test]
-fn a_slash_that_starts_the_input_lists_the_commands_and_a_close_gives_it_back() {
+fn a_slash_that_starts_the_input_offers_the_commands_and_an_escape_hides_them() {
   let (app, _daemon, _peer) = machine();
-  app.type_text("/");
-  shows(&app, "Search a command");
-  app.type_text("list");
+  app.type_text("/li");
+  shows(&app, "Commands and skills");
   shows(&app, "Show or hide the list");
-  // An escape closes the list and gives the slash back, so a message can start with one.
+  // An escape hides the list and keeps the slash, so a message can start with one.
   app.press("escape");
-  assert!(gone(&app, "Search a command"), "{}", app.text());
-  shows(&app, "┃ /");
-  app.type_text("tmp holds the logs");
-  shows(&app, "┃ /tmp holds the logs");
-  // A slash again in an empty input opens the list, and a backspace on its empty filter takes the
-  // slash with it.
-  app.press("ctrl+u");
-  app.type_text("/");
-  shows(&app, "Search a command");
-  app.press("backspace");
-  assert!(gone(&app, "Search a command"), "{}", app.text());
-  assert!(!app.text().contains("┃ /"), "{}", app.text());
+  assert!(gone(&app, "Commands and skills"), "{}", app.text());
+  app.type_text("st holds the logs");
+  shows(&app, "┃ /list holds the logs");
+  assert!(!app.text().contains("Commands and skills"), "{}", app.text());
 }

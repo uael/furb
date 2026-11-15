@@ -89,7 +89,8 @@ pub struct Outgoing {
 /// What a request of the client asked of a daemon: the open of a life, a message, a control of a
 /// thread, as a stop or a resolve, the take back of a message with its text, the answer to a
 /// question, what the operator saw, the records of the machine, the models of its catalog, its
-/// projects, the end of the rung of a word, or the history of the input.
+/// projects, the end of the rung of a word, the history of the input, or a list that the
+/// completion of the input needs: the skills of a life, or the files of a folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Asked {
   Open,
@@ -103,6 +104,8 @@ pub enum Asked {
   Projects,
   Ended,
   History(Target),
+  Skills(String),
+  Files(String),
 }
 
 impl Client {

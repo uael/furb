@@ -95,6 +95,22 @@ async fn turn(root: &Path) -> Result<File, Error> {
   taken.await.map_err(io::Error::other).flatten().map_err(|source| Error::Lock { path, source })
 }
 
+/// The files of the project of the window: a small package of python, so a mention finds a file
+/// deep in folders, a dot file, and a folder that git leaves out.
+const PROJECT: [(&str, &str); 8] = [
+  ("README.md", "# demo\n\nThe project of the captures of the window.\n"),
+  (".gitignore", "build/\n"),
+  ("pyproject.toml", "[project]\nname = \"inventory\"\nversion = \"0.1.0\"\n"),
+  ("src/inventory/__init__.py", ""),
+  ("src/inventory/models.py", "class Item:\n  def __init__(self, name):\n    self.name = name\n"),
+  (
+    "src/inventory/storage/backends/json_backend.py",
+    "import json\n\n\ndef save(items, path):\n  json.dump([one.__dict__ for one in items], open(path, 'w'))\n",
+  ),
+  ("src/inventory/storage/backends/sqlite_backend.py", "import sqlite3\n"),
+  ("tests/test_storage.py", "def test_save():\n  pass\n"),
+];
+
 /// The folders of a capture: the home of the operator with the project of the window, the cache
 /// of furb, its config, and the claude command line with its words.
 struct Rig {
@@ -120,10 +136,9 @@ impl Rig {
         .map_err(|source| Error::Write { path: path.clone(), source })?;
       put(&path, text.as_bytes())
     };
-    write(
-      rig.project().join("README.md"),
-      "# demo\n\nThe project of the captures of the window.\n",
-    )?;
+    for (path, text) in PROJECT {
+      write(rig.project().join(path), text)?;
+    }
     write(root.join("config/config.json"), r#"{"skills": {"naming": false}}"#)?;
     let listed = serde_json::json!({ "workspaces": [{ "directory": rig.project() }] });
     write(root.join("config/workspaces.json"), &listed.to_string())?;

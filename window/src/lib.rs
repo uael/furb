@@ -12,6 +12,7 @@
 //! of the design, which each screen reads.
 
 mod code;
+mod complete;
 mod context;
 mod error;
 mod feed;

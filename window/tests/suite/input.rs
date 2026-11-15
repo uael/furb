@@ -468,3 +468,27 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   assert!(closed, "{}", app.text());
   assert!(app.text().contains("This… ▾   FT ▾"), "{}", app.text());
 }
+
+#[test]
+fn a_mention_offers_the_files_of_the_project_and_takes_one_by_its_path() {
+  let (app, daemon, _) = started();
+  let deep = daemon.file("furb-try").join("src/deep/storage.py");
+  fs::create_dir_all(deep.parent().unwrap()).unwrap();
+  fs::write(&deep, "").unwrap();
+  app.type_text("look at @stor");
+  let shown = shows(&app, "storage.py  src/deep/");
+  assert!(shown.contains("Files of furb-try"), "{shown}");
+  app.press("tab");
+  shows(&app, "look at @src/deep/storage.py");
+  assert!(!app.text().contains("Files of furb-try"), "{}", app.text());
+}
+
+#[test]
+fn a_slash_offers_the_commands_and_runs_the_one_that_he_takes() {
+  let (app, _daemon, _) = started();
+  app.type_text("/mod");
+  shows(&app, "/model");
+  app.press("enter");
+  let shown = shows(&app, "Search a model");
+  assert!(!shown.contains("/mod"), "the command leaves the input:\n{shown}");
+}

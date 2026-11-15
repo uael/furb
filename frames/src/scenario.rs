@@ -308,8 +308,38 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
     }),
   },
-  Scenario { name: "07-prompt-complete", has: none("17. After the first window") },
-  Scenario { name: "08-file-picker", has: none("17. After the first window") },
+  Scenario {
+    name: "07-prompt-complete",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[],
+      steps: &[
+        step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
+        step("a", &[Act::Type("/")], "Commands and skills"),
+        step("b", &[Act::Type("mo")], "model of the input"),
+        step(
+          "c",
+          &[Act::Key("BSpace"), Act::Key("BSpace"), Act::Type("comp"), Act::Key("Tab")],
+          "/compaction",
+        ),
+        step("d", &[Act::Key("C-c"), Act::Type("Where")], "does this run?"),
+      ],
+    }),
+  },
+  Scenario {
+    name: "08-file-picker",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[],
+      steps: &[
+        step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
+        step("a", &[Act::Type("look at @")], "Files of demo"),
+        step("b", &[Act::Type("json_b")], "json_backend.py"),
+        step("c", &[Act::Key("Tab")], "backends/json_backend.py"),
+        step("d", &[Act::Type("what does it store?"), Act::Key("Enter")], "reply 2"),
+      ],
+    }),
+  },
   Scenario { name: "09-image", has: none("10. The input: history, paste, image, mode") },
   Scenario {
     name: "10-shell-mode",

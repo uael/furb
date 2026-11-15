@@ -84,20 +84,21 @@ const fn led(letter: char) -> [Stroke; 2] {
   [LEADER, plain(KeyCode::Char(letter))]
 }
 
-/// A key of the table: what it does, as a text of the window says it, whether it is a command,
-/// which the list of the commands offers, and its forms, the form that a text names first: one
-/// stroke, the leader then a stroke, or a stroke twice.
+/// A key of the table: what it does, as a text of the window says it, the name of its command
+/// when it is one, which a slash at the start of a message and the list of the commands offer, and
+/// its forms, the form that a text names first: one stroke, the leader then a stroke, or a stroke
+/// twice.
 pub(crate) struct Bound {
   pub(crate) does: Does,
   pub(crate) says: &'static str,
-  pub(crate) command: bool,
+  pub(crate) command: Option<&'static str>,
   forms: &'static [&'static [Stroke]],
 }
 
 const fn bound(
   does: Does,
   says: &'static str,
-  command: bool,
+  command: Option<&'static str>,
   forms: &'static [&'static [Stroke]],
 ) -> Bound {
   Bound { does, says, command, forms }
@@ -106,58 +107,68 @@ const fn bound(
 /// The keys that go from one place of the window to another. A key with `alt` has a twin after the
 /// leader, since `alt` needs a setting of the terminal on macOS.
 const GO: &[Bound] = &[
-  bound(Does::GoTo, "go to a project or a session", true, &[&[ctrl('o')]]),
-  bound(Does::Commands, "commands", false, &[&[ctrl('p')]]),
-  bound(Does::Keys, "each key", true, &[&led('?')]),
+  bound(Does::GoTo, "go to a project or a session", Some("go"), &[&[ctrl('o')]]),
+  bound(Does::Commands, "commands", None, &[&[ctrl('p')]]),
+  bound(Does::Keys, "each key", Some("keys"), &[&led('?')]),
   bound(
     Does::Needed,
     "the next thread that needs you",
-    true,
+    Some("needed"),
     &[&[alt(KeyCode::Char('a'))], &led('a')],
   ),
-  bound(Does::Next, "the next card", true, &[&[alt(KeyCode::Down)], &led('j')]),
-  bound(Does::Previous, "the card before", true, &[&[alt(KeyCode::Up)], &led('k')]),
-  bound(Does::List, "show or hide the list", true, &[&led('l')]),
+  bound(Does::Next, "the next card", Some("next"), &[&[alt(KeyCode::Down)], &led('j')]),
+  bound(Does::Previous, "the card before", Some("previous"), &[&[alt(KeyCode::Up)], &led('k')]),
+  bound(Does::List, "show or hide the list", Some("list"), &[&led('l')]),
 ];
 
 /// The keys of the open thread.
 const THREAD: &[Bound] = &[
-  bound(Does::NewThread, "a new thread, and back to the thread", true, &[&[ctrl('n')]]),
-  bound(Does::Jump, "jump to the latest", true, &[&[plain(KeyCode::End)]]),
-  bound(Does::PageUp, "a page up", false, &[&[plain(KeyCode::PageUp)]]),
-  bound(Does::PageDown, "a page down", false, &[&[plain(KeyCode::PageDown)]]),
+  bound(Does::NewThread, "a new thread, and back to the thread", Some("new"), &[&[ctrl('n')]]),
+  bound(Does::Jump, "jump to the latest", Some("latest"), &[&[plain(KeyCode::End)]]),
+  bound(Does::PageUp, "a page up", None, &[&[plain(KeyCode::PageUp)]]),
+  bound(Does::PageDown, "a page down", None, &[&[plain(KeyCode::PageDown)]]),
   bound(
     Does::Stop,
     "stop the work of the thread",
-    true,
+    Some("stop"),
     &[&[plain(KeyCode::Escape), plain(KeyCode::Escape)]],
   ),
-  bound(Does::Resolve, "resolve the thread, or reply to open it again", true, &[&led('r')]),
-  bound(Does::Agent, "the next agent of the thread", true, &[&[LEADER, plain(KeyCode::Down)]]),
+  bound(
+    Does::Resolve,
+    "resolve the thread, or reply to open it again",
+    Some("resolve"),
+    &[&led('r')],
+  ),
+  bound(
+    Does::Agent,
+    "the next agent of the thread",
+    Some("agent"),
+    &[&[LEADER, plain(KeyCode::Down)]],
+  ),
 ];
 
 /// The keys of the input.
 const INPUT: &[Bound] = &[
-  bound(Does::Send, "send", false, &[&[plain(KeyCode::Enter)]]),
-  bound(Does::Empty, "empty the input, or take back your last message", false, &[&[ctrl('c')]]),
-  bound(Does::Leave, "leave, twice on an empty input", true, &[&[ctrl('d')]]),
-  bound(Does::Sessions, "the session that the input sends to", true, &[&led('o')]),
-  bound(Does::Python, "a word of Python, and back to a message", true, &[&led('y')]),
-  bound(Does::Machines, "the machine of a new session", true, &[&led('h')]),
-  bound(Does::Projects, "the project of a new session", true, &[&led('p')]),
-  bound(Does::History, "search what you sent here", true, &[&[ctrl('r')]]),
-  bound(Does::Model, "the model of the input", true, &[&led('m')]),
-  bound(Does::Effort, "the next effort of the model", true, &[&led('e')]),
+  bound(Does::Send, "send", None, &[&[plain(KeyCode::Enter)]]),
+  bound(Does::Empty, "empty the input, or take back your last message", None, &[&[ctrl('c')]]),
+  bound(Does::Leave, "leave, twice on an empty input", Some("quit"), &[&[ctrl('d')]]),
+  bound(Does::Sessions, "the session that the input sends to", Some("session"), &[&led('o')]),
+  bound(Does::Python, "a word of Python, and back to a message", Some("python"), &[&led('y')]),
+  bound(Does::Machines, "the machine of a new session", Some("machine"), &[&led('h')]),
+  bound(Does::Projects, "the project of a new session", Some("project"), &[&led('p')]),
+  bound(Does::History, "search what you sent here", Some("history"), &[&[ctrl('r')]]),
+  bound(Does::Model, "the model of the input", Some("model"), &[&led('m')]),
+  bound(Does::Effort, "the next effort of the model", Some("effort"), &[&led('e')]),
   bound(
     Does::Take,
     "take the grey rest of what you sent",
-    false,
+    None,
     &[&[plain(KeyCode::Right)], &[ctrl('f')]],
   ),
   bound(
     Does::TakeWord,
     "take one word of the grey rest",
-    false,
+    None,
     &[&[alt(KeyCode::Right)], &led('w')],
   ),
 ];
@@ -165,16 +176,21 @@ const INPUT: &[Bound] = &[
 /// The keys of a list and of the form of a question, which the editor of the input hears when
 /// neither shows.
 const FORM: &[Bound] = &[
-  bound(Does::Close, "close a list, or go back", false, &[&[plain(KeyCode::Escape)]]),
-  bound(Does::Up, "the row above", false, &[&[plain(KeyCode::Up)]]),
-  bound(Does::Down, "the row below", false, &[&[plain(KeyCode::Down)]]),
-  bound(Does::Tick, "tick a choice of a question", false, &[&[plain(KeyCode::Char(' '))]]),
-  bound(Does::NextQuestion, "the next question of the thread", false, &[&[plain(KeyCode::Tab)]]),
+  bound(Does::Close, "close a list, or go back", None, &[&[plain(KeyCode::Escape)]]),
+  bound(Does::Up, "the row above", None, &[&[plain(KeyCode::Up)]]),
+  bound(Does::Down, "the row below", None, &[&[plain(KeyCode::Down)]]),
+  bound(Does::Tick, "tick a choice of a question", None, &[&[plain(KeyCode::Char(' '))]]),
+  bound(Does::NextQuestion, "the next question of the thread", None, &[&[plain(KeyCode::Tab)]]),
 ];
 
 /// Each group of keys, with its name, in the order of the table.
 const TABLE: [(&str, &[Bound]); 4] =
   [("Go", GO), ("The thread", THREAD), ("The input", INPUT), ("A list or a question", FORM)];
+
+/// Each command of the table, in its order.
+pub(crate) fn commands() -> impl Iterator<Item = &'static Bound> {
+  keys().filter(|one| one.command.is_some())
+}
 
 /// Each key of the table.
 fn keys() -> impl Iterator<Item = &'static Bound> {

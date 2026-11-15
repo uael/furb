@@ -195,7 +195,7 @@ fn before(file: &Path) -> Value {
 
 /// A path that the World writes with `~` for the home of the user, as a path of the machine. The
 /// World writes the separator of the system after it, so `~\` on Windows.
-fn homed(path: &str) -> PathBuf {
+pub(crate) fn homed(path: &str) -> PathBuf {
   let slash = |one: char| one == '/' || cfg!(windows) && one == '\\';
   match (path.strip_prefix('~'), env::home_dir()) {
     (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with(slash) => {

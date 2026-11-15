@@ -3,8 +3,11 @@
 
 use furb_wire::{
   Part,
-  protocol::{Answer, Card, Frame, Listed, Model, Project},
+  card::Skill,
+  protocol::{Answer, Card, Files, Frame, Listed, Model, Project},
 };
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::Client;
@@ -49,6 +52,12 @@ pub struct Told {
   /// The projects of the machine, the one used last first, as it last gave them.
   #[serde(skip)]
   pub projects: Vec<Project>,
+  /// The files of each folder that a mention of the input looked in, as the machine last gave them.
+  #[serde(skip)]
+  pub files: HashMap<String, Files>,
+  /// The skills of each life, or of the folder of a new session, as the machine last gave them.
+  #[serde(skip)]
+  pub skills: HashMap<String, Vec<Skill>>,
 }
 
 /// What a frame changed of what a machine told: its cards or its login, nothing that the list

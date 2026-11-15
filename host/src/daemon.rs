@@ -71,6 +71,7 @@ use crate::{
   access::{Access, Ports},
   answers::Answerer,
   cards::{self, Session, Told},
+  changes,
   error::{DaemonError, LifeError, ProtocolError, TransportError},
   event::{Event, Seq},
   holders::{Holders, Window},
@@ -799,13 +800,14 @@ async fn files(folder: PathBuf, reply: Replied) {
 }
 
 /// The files of a folder and of each folder in it, by name, dot files too, less what an ignore
-/// file of git leaves out and the folder `.git`, at most [`FILES`] of them.
+/// file of git leaves out, the folder `.git` and the records of the sessions of furb, at most
+/// [`FILES`] of them.
 fn walked(folder: &Path) -> Files {
   let walk = WalkBuilder::new(folder)
     .hidden(false)
     .require_git(false)
     .sort_by_file_name(Ord::cmp)
-    .filter_entry(|one| one.file_name() != ".git")
+    .filter_entry(|one| one.file_name() != ".git" && !one.path().ends_with(".furb/sessions"))
     .build();
   let mut paths = Vec::new();
   // An entry that cannot be read names no file that a mention can take.
@@ -1046,7 +1048,7 @@ impl Lives {
         return;
       }
       Verb::Files { cwd } => {
-        tokio::spawn(files(PathBuf::from(cwd), reply));
+        tokio::spawn(files(changes::homed(&cwd), reply));
         return;
       }
       Verb::Cards => Ok(Answer::Cards(self.cards(outbox))),

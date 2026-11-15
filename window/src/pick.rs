@@ -43,15 +43,13 @@ pub(crate) enum Pick {
   History,
 }
 
-/// The list part, while it is open: what it lists, the text that filters it, the place of the
-/// chosen row among those that pass the filter, and whether a slash that he typed first in the
-/// input opened it, which a close gives back to the input.
+/// The list part, while it is open: what it lists, the text that filters it, and the place of the
+/// chosen row among those that pass the filter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Picker {
   pub(crate) of: Pick,
   pub(crate) filter: String,
   pub(crate) at: usize,
-  pub(crate) slashed: bool,
 }
 
 /// What a row of a list part takes.
@@ -157,7 +155,7 @@ impl Model {
     if of == Pick::History {
       self.client.ask_history();
     }
-    self.picker = Some(Picker { of, filter, at: 0, slashed: false });
+    self.picker = Some(Picker { of, filter, at: 0 });
     if of == Pick::Sessions {
       let now = match self.client.target() {
         Target::Thread(key) => Target::Session(key.0, key.1),
@@ -276,7 +274,7 @@ impl Model {
 
   /// Each command of the table of the keys, with its key, by the group of its key.
   fn commands(&self) -> Vec<Entry> {
-    let commands = keys::each(self.system).filter(|one| one.1.command);
+    let commands = keys::each(self.system).filter(|one| one.1.command.is_some());
     let entry = |(group, key, forms): (&'static str, &Bound, Vec<String>)| Entry {
       part: group,
       left: capital(key.says),
@@ -297,7 +295,7 @@ impl Model {
         part: group,
         left: format!("{forms:<KEYS$}"),
         says: key.says.to_owned(),
-        choice: if key.command { Choice::Key(key.does) } else { Choice::None },
+        choice: if key.command.is_some() { Choice::Key(key.does) } else { Choice::None },
         ..Entry::default()
       }
     };
@@ -446,12 +444,12 @@ impl Model {
       Choice::Thread(key) => self.went(key),
       Choice::Session(target) => self.aimed(target),
       Choice::Project(name) => {
-        self.picker = Some(Picker { of, filter: name, at: 0, slashed: false });
+        self.picker = Some(Picker { of, filter: name, at: 0 });
       }
       Choice::Actor(actor) => self.took_actor(actor),
       Choice::Sent(sent) => self.client.recall(&sent),
       Choice::Key(does) => return Some(does),
-      Choice::None => self.picker = Some(Picker { of, filter: String::new(), at, slashed: false }),
+      Choice::None => self.picker = Some(Picker { of, filter: String::new(), at }),
     }
     None
   }
@@ -638,7 +636,7 @@ struct Session {
 }
 
 /// A text with the letters at some places in the bright style, and the rest in the plain one.
-fn lit(text: &str, places: &[usize], plain: Style, bright: Style) -> Line {
+pub(crate) fn lit(text: &str, places: &[usize], plain: Style, bright: Style) -> Line {
   let mut line: Line = Vec::new();
   let mut chars = text.chars().enumerate().peekable();
   while let Some((at, first)) = chars.next() {

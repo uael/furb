@@ -106,7 +106,9 @@ pub enum Verb {
     config: Option<String>,
   },
   /// The files of the folder `cwd` and of each folder in it, which a mention of the input names:
-  /// dot files too, less what an ignore file of git leaves out and the folder `.git`.
+  /// dot files too, less what an ignore file of git leaves out, the folder `.git` and the records
+  /// of the sessions of furb, `.furb/sessions`. A `cwd` that starts with `~` names a folder of the
+  /// home of the user of the machine.
   Files {
     cwd: String,
   },

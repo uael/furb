@@ -91,21 +91,24 @@ impl Client {
     self.stepped();
   }
 
-  /// The text of the editor of the input, which the draft takes: a text that the walk did not show
-  /// ends the walk.
-  pub fn edited(&mut self, text: String) {
+  /// The text of the editor of the input, which the draft takes, with the place of its caret among
+  /// its characters: a text that the walk did not show ends the walk, and the word at the caret
+  /// takes its completion.
+  pub fn edited(&mut self, text: String, caret: usize) {
     if self.walk.as_ref().is_some_and(|walk| self.walk_text(walk) != Some(&text)) {
       self.walk = None;
     }
     self.draft.text = text;
+    self.complete_at(caret);
   }
 
   /// The rest of the newest text that he sent here that starts with what he wrote, while no walk
-  /// runs and no form of a question takes the input.
+  /// runs, no completion shows and no form of a question takes the input.
   pub fn suggested(&self) -> Option<&str> {
     let typed = &self.draft.text;
     let form = self.thread.as_ref().is_some_and(|opened| opened.form.is_some());
-    if self.walk.is_some() || typed.is_empty() || form {
+    let completes = self.completion.as_ref().is_some_and(|one| !one.hidden);
+    if self.walk.is_some() || typed.is_empty() || form || completes {
       return None;
     }
     let sent = self.history.as_ref()?.sent.as_ref()?;

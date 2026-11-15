@@ -100,6 +100,7 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   };
   let told = machines.iter().map(told).collect();
   let mut model = Model::new(told, app.size(), tokens, &options);
+  model.client.commands = Model::offered_commands();
   model.client.now = (options.clock)();
   model.settle();
   let area = edited(app, &tokens);
@@ -125,18 +126,7 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
       cx.stop_propagation();
     }
   });
-  let on = Rc::clone(&window);
-  area.on_change(move |cx, text| {
-    let text = text.to_owned();
-    tell(cx.app(), &on, |model| {
-      // A word that he writes leaves what a first press of a key named.
-      if !text.is_empty() {
-        model.armed = None;
-      }
-      model.edited(text);
-    });
-    colored(&on);
-  });
+  heard_edits(&window, &area);
   let on = Rc::clone(&window);
   app.on_mouse(move |cx, event| mouse(cx.app(), &on, *event));
   let on = Rc::clone(&window);
@@ -152,6 +142,30 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
     let asker = link::dialed(app, machine, move |app, heard| hear(app, &on, at, heard));
     window.borrow_mut().askers.push(asker);
   }
+}
+
+/// The editor of the input heard: a change of its text, which the draft takes with the place of
+/// its caret, and a move of its caret to another word, which completes that word.
+fn heard_edits(window: &Shared, area: &Textarea) {
+  let (on, editor) = (Rc::clone(window), area.clone());
+  area.on_change(move |cx, text| {
+    let text = text.to_owned();
+    let caret = usize::try_from(editor.cursor_offset()).unwrap_or_default();
+    tell(cx.app(), &on, |model| {
+      // A word that he writes leaves what a first press of a key named.
+      if !text.is_empty() {
+        model.armed = None;
+      }
+      model.client.edited(text, caret);
+    });
+    colored(&on);
+  });
+  // A move of the caret to another word completes that word.
+  let (on, editor) = (Rc::clone(window), area.clone());
+  area.on_cursor_change(move |cx, _, _| {
+    let caret = usize::try_from(editor.cursor_offset()).unwrap_or_default();
+    tell(cx.app(), &on, |model| model.client.complete_at(caret));
+  });
 }
 
 /// The editor of the text of the input, which has the focus. Enter sends, so a line breaks with
@@ -220,8 +234,25 @@ fn drawn(app: &App, model: Model, area: &Textarea) -> Screen<Model> {
   screen.part(Model::listed, move |listed| {
     side.visible(*listed);
   });
+  completion(app, &mut screen, &tokens);
   veiled(app, &mut screen, &tokens);
   screen
+}
+
+/// The panel of the completion of the input, over the feed on the top of the box of the input,
+/// while one shows.
+fn completion(app: &App, screen: &mut Screen<Model>, tokens: &Tokens) {
+  let rows = Text::new(app, "").wrap(WrapMode::None);
+  let part = View::new(app).absolute().bg(tokens.raised).child(&rows);
+  app.root().child(&part.z_index(1).visible(false));
+  screen.part(Model::drawn_completion, move |shown| {
+    part.visible(shown.is_some());
+    if let Some((x, y, width, lines)) = shown {
+      let height = u16::try_from(lines.len()).unwrap_or_default();
+      part.position(Edge::Left, *x).position(Edge::Top, *y).width(*width).height(height);
+      rows.set_text(written(lines));
+    }
+  });
 }
 
 /// The list part over each other widget, on a veil that dims the whole window, while one is open.
@@ -401,6 +432,11 @@ fn pump(window: &Shared) {
   {
     model.client.asked.insert((at, id), Asked::Say);
   }
+  if let Some((at, verb, asked)) = model.client.completion_due()
+    && let Some(id) = ask(askers, model, at, verb)
+  {
+    model.client.asked.insert((at, id), asked);
+  }
   if let Some((at, verb, target)) = model.client.history_due()
     && let Some(id) = ask(askers, model, at, verb)
   {
@@ -462,6 +498,9 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   if window.borrow().screen.model.picker.is_some() && picking(app, window, key) {
     return true;
   }
+  if completing(app, window, key) {
+    return true;
+  }
   let does = keys::pressed(key, led);
   // A letter after the leader is a key of the window, and no letter of a text.
   let typed =
@@ -520,13 +559,7 @@ fn picking(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   let taken = tell(app, window, |model| {
     let at = model.picker.as_ref().map(|one| one.at)?;
     match (key.code, text) {
-      (KeyCode::Escape, _) => model.unpicked(),
-      // A backspace on a list that a slash opened, with no text that filters it, takes the slash.
-      (KeyCode::Backspace, _)
-        if model.picker.as_ref().is_some_and(|one| one.slashed && one.filter.is_empty()) =>
-      {
-        model.picker = None;
-      }
+      (KeyCode::Escape, _) => model.picker = None,
       (KeyCode::Enter, _) => return Some(model.took(at)),
       (KeyCode::Up, _) => model.chose(-1),
       (KeyCode::Down, _) => model.chose(1),
@@ -540,6 +573,42 @@ fn picking(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   });
   let Some(does) = taken else { return false };
   if let Some(does) = does {
+    act(app, window, does);
+  }
+  true
+}
+
+/// A key while the completion of the input shows: the arrows move its chosen row, enter and tab
+/// take it, and escape hides it. Whether the completion took the key.
+fn completing(app: &App, window: &Shared, key: &KeyEvent) -> bool {
+  let shows = {
+    let model = &window.borrow().screen.model;
+    model.client.completion.as_ref().is_some_and(|one| !one.hidden) && model.picker.is_none()
+  };
+  if !shows || !key.modifiers.is_empty() {
+    return false;
+  }
+  match key.code {
+    KeyCode::Up => tell(app, window, |model| model.client.choose(-1)),
+    KeyCode::Down => tell(app, window, |model| model.client.choose(1)),
+    KeyCode::Escape => tell(app, window, |model| model.client.hide()),
+    KeyCode::Enter | KeyCode::Tab => return completed(app, window, None),
+    _ => return false,
+  }
+  true
+}
+
+/// A row of the completion taken, at a place or the chosen one: the editor takes the text with
+/// its name and the caret after it, and a command runs. Whether a row was taken.
+fn completed(app: &App, window: &Shared, place: Option<usize>) -> bool {
+  let Some(taken) = tell(app, window, |model| model.client.take(place)) else { return false };
+  {
+    let area = window.borrow().area.clone();
+    area.set_text(&taken.text);
+    area.set_cursor_offset(u32::try_from(taken.caret).unwrap_or(u32::MAX));
+  }
+  tell(app, window, |model| model.client.complete_at(taken.caret));
+  if let Some(does) = taken.command.as_deref().and_then(Model::command) {
     act(app, window, does);
   }
   true
@@ -764,6 +833,14 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
     });
     if let Some(does) = does {
       act(app, window, does);
+    }
+    return;
+  }
+  let place = window.borrow().screen.model.completion_at(event.x, event.y);
+  if let Some(place) = place {
+    tell(app, window, |model| model.pointer = Some((event.x, event.y)));
+    if matches!(event.kind, MouseEventKind::Down(MouseButton::Left)) {
+      completed(app, window, Some(place));
     }
     return;
   }

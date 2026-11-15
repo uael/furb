@@ -764,7 +764,7 @@ async fn the_models_are_those_that_the_catalog_offers_with_no_life() {
 }
 
 #[tokio::test]
-async fn the_files_of_a_folder_hold_its_dot_files_and_leave_out_what_git_ignores() {
+async fn the_files_of_a_folder_hold_its_dot_files_and_leave_out_what_git_ignores_and_the_records() {
   use furb_host::protocol::Files;
   let at = place();
   let (local, _daemon) = started(&at, GRACE).await;
@@ -777,13 +777,16 @@ async fn the_files_of_a_folder_hold_its_dot_files_and_leave_out_what_git_ignores
     ("sub/b.rs", ""),
     ("target/x.o", ""),
     (".git/HEAD", ""),
+    (".furb/sessions/a.jsonl", ""),
+    (".furb/config.json", "{}"),
   ] {
     let file = folder.join(path);
     fs::create_dir_all(file.parent().unwrap()).unwrap();
     fs::write(file, text).unwrap();
   }
   let files = Verb::Files { cwd: folder.display().to_string() };
-  let paths = [".env", ".gitignore", "a.txt", "sub/b.rs"].map(str::to_owned).to_vec();
+  let paths =
+    [".env", ".furb/config.json", ".gitignore", "a.txt", "sub/b.rs"].map(str::to_owned).to_vec();
   assert_eq!(window.ask(files).await, Ok(Answer::Files(Files { paths, more: false })));
   assert_eq!(window.listed().await, Vec::new(), "the daemon holds no life to walk them");
 }

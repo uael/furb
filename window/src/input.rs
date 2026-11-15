@@ -403,7 +403,7 @@ impl Model {
 
   /// The bar of the input: the color of the thread that it replies to, or the accent for a new
   /// thread.
-  fn bar(&self) -> Color {
+  pub(crate) fn bar(&self) -> Color {
     match self.client.target() {
       Target::Thread(key) => self.hue(&key),
       Target::Session(..) | Target::New(..) => self.tokens.accent,
@@ -694,13 +694,15 @@ impl Model {
     let key = vec![run(format!("{} {name}", self.key(does)), muted)];
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
     let place = fault.is_none() && says.is_none() && self.form().is_none() && self.word.is_none();
-    let place = place && !works;
+    let place = place && !works && self.completion_hints().is_none();
     let (left, loaders) = match (fault, says) {
       (Some(fault), _) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], vec![]),
       (None, Some((says, color))) => {
         (vec![run(format!("  {says}"), Style::new().fg(color))], vec![])
       }
-      (None, None) if self.form().is_some() => (self.form_hints().unwrap_or_default(), vec![]),
+      (None, None) if self.form().is_some() || self.completion_hints().is_some() => {
+        (self.form_hints().or_else(|| self.completion_hints()).unwrap_or_default(), vec![])
+      }
       (None, None) if self.word.is_some() => {
         let (hints, loader) =
           self.word_hints(self.wide().saturating_sub(2).saturating_sub(width(&key) + 2));

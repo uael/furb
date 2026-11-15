@@ -6,6 +6,7 @@
 //! thread that the operator reads and the input, with its target and its history, so each client
 //! maps the same state.
 
+mod complete;
 mod history;
 mod input;
 mod machine;
@@ -22,10 +23,11 @@ use std::{
 
 use furb_wire::{Part, protocol::Card};
 
+pub use complete::{Completed, Completes, Completion, Kind, Offer};
 pub use history::{History, Walk};
 pub use input::Draft;
 pub use machine::{Heard, Key, Link, Listing, Told};
-pub use matched::{Matched, ranked};
+pub use matched::{Matched, pathed, ranked};
 pub use opens::{Ask, Hold, Life, Step};
 pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
 pub use question::{Form, HOLD};
@@ -58,6 +60,10 @@ pub struct Client {
   pub history: Option<History>,
   /// The walk through the history of the input, from its first step until he writes or sends.
   pub walk: Option<Walk>,
+  /// The completion of the word at the caret of the input, while it completes one.
+  pub completion: Option<Completion>,
+  /// The commands that a slash at the start of a message offers, which a client gives.
+  pub commands: Vec<Offer>,
   /// What the last thing that the operator did did not do, and why, until the next one.
   pub notice: Option<String>,
   /// The millisecond of the clock of the machine of the client.

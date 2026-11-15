@@ -88,7 +88,7 @@
         },
         {
           "type": "object",
-          "description": "The files of the folder `cwd` and of each folder in it, which a mention of the input names:\ndot files too, less what an ignore file of git leaves out and the folder `.git`.",
+          "description": "The files of the folder `cwd` and of each folder in it, which a mention of the input names:\ndot files too, less what an ignore file of git leaves out, the folder `.git` and the records\nof the sessions of furb, `.furb/sessions`. A `cwd` that starts with `~` names a folder of the\nhome of the user of the machine.",
           "properties": {
             "cwd": {
               "type": "string"

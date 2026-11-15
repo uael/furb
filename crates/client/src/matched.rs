@@ -20,12 +20,26 @@ pub struct Matched {
 /// The rows of a list that a text matches, the best match first and rows of one score in their
 /// order: each row in its order, with no letter lit, while the text is empty.
 pub fn ranked<'a>(query: &str, rows: impl IntoIterator<Item = &'a str>) -> Vec<Matched> {
+  matched(query, rows, Config::DEFAULT)
+}
+
+/// The paths of a list that a text matches, as `ranked` ranks rows, with the bonus of a match
+/// that starts a part of a path, as a picker of files ranks them.
+pub fn pathed<'a>(query: &str, paths: impl IntoIterator<Item = &'a str>) -> Vec<Matched> {
+  matched(query, paths, Config::DEFAULT.match_paths())
+}
+
+fn matched<'a>(
+  query: &str,
+  rows: impl IntoIterator<Item = &'a str>,
+  config: Config,
+) -> Vec<Matched> {
   let rows = rows.into_iter().enumerate();
   if query.is_empty() {
     return rows.map(|(at, _)| Matched { at, lit: Vec::new() }).collect();
   }
   let pattern = Pattern::parse(query, CaseMatching::Ignore, Normalization::Smart);
-  let mut matcher = Matcher::new(Config::DEFAULT);
+  let mut matcher = Matcher::new(config);
   let mut chars = Vec::new();
   let mut scored: Vec<(u32, Matched)> = rows
     .filter_map(|(at, row)| {
