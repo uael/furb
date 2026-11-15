@@ -9,7 +9,7 @@ write your own.
 | [`catchup`](catchup) | What changed in the files that the chain read or wrote, told at each stand. |
 | [`memory`](memory) | The `AGENTS.md` or `CLAUDE.md` files of the project that apply to the files that the chain reads. |
 | [`skills`](skills) | The skills of the project and of the user, which `skills()` lists and `skill(name)` loads. |
-| [`compaction`](compaction) | `compact()`, `condense()` and `compacted()`, which cut a chain in place to the work that it still needs. |
+| [`compaction`](compaction) | `compact()`, `condense()` and `compacted()`, which jump a chain to a chain with the work that it still needs. |
 | [`naming`](naming) | `name_session()`, which names the session from the first message of the operator, and `rename_session(name)`, which says the name that the operator chose, on the root alone. |
 | [`ouroboros`](ouroboros) | How a model extends furb, in the text of its skill, and `extend()`, which writes an extension of the project. |
 | [`web`](web) | `web_search(query)` and `web_fetch(url)`. |

@@ -350,6 +350,17 @@ def cancel(id: str, why: object = None) -> None:
   A word cannot cancel a question of a person that is open, or an act whose cancel is over one, since a question of a person ends with its answer or by a person: the call raises Refused, which names the question and says that it waits for the answer, and says nothing.
   """
 
+def jump(drop: list[str] = [], word: str = "", on: str = "") -> Act[str]:
+  """A jump: the chain goes on as another chain, and keeps each fact that it held, so the turns of a chain never change.
+  jump makes, once no word of the chain runs or awaits and no reply of it is on the way, a chain with the chain as its source that keeps each act of its reading but those that drop names, runs word there first as a rung of the jump, and is done with that chain.
+  Each jump of a chain that comes before the chain rests makes that one chain, which keeps no act that one of them drops, and runs their words in the order of the jumps.
+  The chain that a jump makes keeps each stand and each cd of the chain whatever drop names, so it stands where the chain stood and works in its directory.
+  After the jump, each act and each fact that names the chain is on the chain that it jumped to, as each later jump says, so its threads, its messages and the next ask of its model are there.
+  Each open thread of the chain that a model answers is asked again on the chain that it jumped to, and each rung that waited for its reply on the chain is cancelled.
+  The reading and the transcript of a chain that jumped stay its own, so a model reads by its name the turns that its model read and the facts that were on it.
+  A word that jumps its own chain ends first, so no word runs across a jump.
+  """
+
 def close(value: object, id: str = "") -> None:
   """An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with.
   The close of the operator enters the record as a fact of its own.
@@ -1014,7 +1025,9 @@ def prompted(name: str) -> bool:
   """Whether a name is the name of a prompt, which its name says, as prompt3, and not prompt, chain3 or an empty name."""
 
 def scope(name: str) -> str:
-  """The scope of a question, from its name: the chain it is on, or the scope of the thread it is on, and itself for a chain, and nothing for a name of no question of the life."""
+  """The scope of a question, from its name: the chain it is on, or the scope of the thread it is on, and itself for a chain, and nothing for a name of no question of the life.
+  The scope of a name on a chain that jumped is the chain that the last jump went on as.
+  """
 
 def answer[T](kind: str, on: str, empty: T) -> T:
   """The answer of the last question of a kind on a chain that is of the type of empty, and empty when no such question stands."""

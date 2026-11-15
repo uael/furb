@@ -42,9 +42,10 @@ async def narrowed(tmp_path: Path, *script: str) -> tuple[Narrow, str]:
   return sand, root
 
 
-def cuts(root: str) -> list[str]:
-  """The words of the rungs that fitted made on a chain."""
-  return [str(a[4]) for a in engine.transcript(root) if a[0] == "rung" and str(a[2]).startswith("fitted")]
+def leaps(_: str) -> list[str]:
+  """The words of the jumps that fitted made, by their names."""
+  made = [one for n in range(1, 9) if (one := engine.get(f"jump{n}")) is not None]
+  return [str(one[5]) for one in made if str(one[2]).startswith("fitted")]
 
 
 async def test_fitted_watches_a_chain(tmp_path: Path) -> None:
@@ -53,9 +54,10 @@ async def test_fitted_watches_a_chain(tmp_path: Path) -> None:
   act = engine.prompt(int, "go", on=root)
   assert await act == 7
   summary = engine.module(root)["OVERFLOWED"]
-  assert cuts(root) == [f"<s:summary>\n{summary}</s:summary>\nreground()"]
-  assert [a for a in engine.transcript(root) if a[0] == "pause"] == []
-  assert "go" in repr(engine.turns(on=root)) and "line 199" not in repr(engine.turns(on=root)[-2:])
+  assert leaps(root) == [f"<s:summary>\n{summary}</s:summary>\nreground()"]
+  new = engine.scope(root)
+  assert [a for one in (root, new) for a in engine.reading(one) if a[0] == "pause"] == []
+  assert "go" in repr(engine.turns(on=new)) and "line 199" not in repr(engine.turns(on=new)[-2:])
 
 
 async def test_it_compacts_once_in_a_row_of_refusals(tmp_path: Path) -> None:
@@ -64,12 +66,12 @@ async def test_it_compacts_once_in_a_row_of_refusals(tmp_path: Path) -> None:
   wide, sand.most = sand.most, 10
   engine.prompt(int, "go", on=root)
   await settle()
-  assert len(cuts(root)) == 1
+  assert len(leaps(root)) == 1
   sand.most = wide
   sand.script[root] = ["read('big.txt')", "close(1)"]
   engine.prompt(None, "poke", on=root)
   await settle()
-  assert len(cuts(root)) == 2
+  assert len(leaps(root)) == 2
 
 
 async def test_it_never_completes(tmp_path: Path) -> None:

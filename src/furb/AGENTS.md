@@ -93,9 +93,14 @@ meanings. The entry of such a name here gives only its form in the engine.
 - prefix: the fact that carries what a chain with a source holds of the reading of its origin, which the chain says at
   its birth, before its open; the transcript of the chain holds those facts where the prefix stands.
 - cut: the fact that names what the model of a chain reads from it on: the facts that it keeps, then each fact said on
-  the chain after it. It takes nothing from the transcript, so a chain only grows; a compaction and a birth say one.
+  the chain after it. It takes nothing from the transcript, so a chain only grows; the birth of a checkpoint says one.
+- jump: the act by which a chain goes on as another chain, which the chain makes at rest with itself as its source,
+  less the acts that each jump drops; a compaction is a jump.
+- jumped: the table of the chains that jumped, each to the chain that it went on as. scope follows it, so each name
+  of a chain that jumped names the chain that it went on as, but its reading and its transcript, which own reads.
 - reading: what the model of a chain reads: the facts that its last cut kept, then each fact said on the chain after
   that cut, or the whole transcript of a chain that holds no cut; the turns, a fork and each scan at a fact read it.
+  The reading of a chain that jumped is its own, as its model read it.
 - carried turn: a fact on a chain about a name that no act of the life holds, as a turn that the chain took from
   another record or from a checkpoint; a chain with a source holds it whole.
 - note: one thing a tell says: a paragraph, or the binding of an act.
@@ -308,7 +313,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of the prompts that it refuses, and of the done of
   an act that one of its rungs made on another chain, or of the pause of the chain of such a prompt.
-- A recoverable error is one a model can correct on another turn: a cut turn, transient provider failure, or refusal of its word. The provider gives the next turn the cause, and never pauses the chain for these errors. It retries transient failures within its backoff first. A failed setting, missing model, unsupported input, a prompt too long for the context of the model or a fault of the host is not recoverable; do not retry it as a model error. A prompt too long is not, since the next turn holds the same turns and more: a chain that asked again at once looped, with 386 refused replies in 11 minutes, so the second such refusal in a row pauses the chain with its why. The refusal is an `Overflow`, a `Refused` of its own kind, so `fitted()`, in the life word of the extension compaction, cuts the chain to its open prompts before the next reply, and only a second refusal in a row pauses it.
+- A recoverable error is one a model can correct on another turn: a cut turn, transient provider failure, or refusal of its word. The provider gives the next turn the cause, and never pauses the chain for these errors. It retries transient failures within its backoff first. A failed setting, missing model, unsupported input, a prompt too long for the context of the model or a fault of the host is not recoverable; do not retry it as a model error. A prompt too long is not, since the next turn holds the same turns and more: a chain that asked again at once looped, with 386 refused replies in 11 minutes, so the second such refusal in a row pauses the chain with its why. The refusal is an `Overflow`, a `Refused` of its own kind, so `fitted()`, in the life word of the extension compaction, compacts the chain to its open prompts before the next reply, and only a second refusal in a row pauses it.
 - A drift is a hard error.
 - A change that makes room under the wall and rewrites the code of a fix names that fix, and shows that the test
   of the fix fails on the old form of its cause, since a test that does not hold the failure lets a later change undo

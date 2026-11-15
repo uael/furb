@@ -1,4 +1,4 @@
-"""compacted, a chain that compacts itself and goes on under its name."""
+"""compacted, a chain that compacts itself and goes on in the chain that it jumps to."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -31,14 +31,20 @@ async def wrapped(
   return root, act
 
 
-def made(root: str, by: str = "compacted1") -> list[str]:
-  """The words of the rungs that an act made on a chain."""
-  return [str(a[4]) for a in engine.transcript(root) if a[0] == "rung" and a[2] == by]
+def jumps(by: str) -> list[tuple]:
+  """The jumps that an act made, by their names."""
+  made = [one for n in range(1, 9) if (one := engine.get(f"jump{n}")) is not None]
+  return [one for one in made if one[2] == by]
 
 
-def compacted_on(root: str, by: str = "compacted1") -> bool:
-  """Whether a rung that an act made on a chain ran to its end: the fact that ends a step of compaction."""
-  return any(engine.over(str(a[1])) for a in engine.transcript(root) if a[0] == "rung" and a[2] == by)
+def made(by: str = "compacted1") -> list[str]:
+  """The words of the jumps that an act made."""
+  return [str(one[5]) for one in jumps(by)]
+
+
+def compacted_on(_: str, by: str = "compacted1") -> bool:
+  """Whether a jump that an act made is over: the fact that ends a step of compaction."""
+  return any(engine.over(one[1]) for one in jumps(by))
 
 
 def told_kept(root: str) -> bool:
@@ -65,8 +71,8 @@ async def test_compacted_wraps_a_chain(tmp_path: Path) -> None:
   """compacted() wraps a chain: after an answer that reads more than SHARE of the window of its actor, it asks choice() of the chain, and at the next reply on the chain once that came, it compacts the chain, which it wraps still."""
   root, act = await wrapped(tmp_path)
   assert engine.peek(act) == 3
-  assert engine.get("chain2") is None and len(choices(root)) == 1
-  assert made(root) == ["<s:summary>\ngist</s:summary>\nreground()"]
+  assert engine.scope(root) != root and len(choices(root)) == 1
+  assert made() == ["<s:summary>\ngist</s:summary>\nreground()"]
 
 
 async def test_the_chain_keeps_the_acts_that_the_model_chose(tmp_path: Path) -> None:
@@ -84,22 +90,23 @@ async def test_the_chain_keeps_the_acts_that_the_model_chose(tmp_path: Path) -> 
   sand.script[root] = ["read('a.txt')\nx = 1", "SHARE = 2\n" + chooser, ONCE, "close(x + y)"]
   assert await engine.prompt(int, "go", on=root) == 3
   await until(lambda: compacted_on(root))
-  told = {a[1] for a in engine.reading(root) if a[0] == "tell"}
-  again = [a[1] for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt" and a[1] != held["a.txt"]]
+  new = engine.scope(root)
+  told = {a[1] for a in engine.reading(new) if a[0] == "tell"}
+  again = [a[1] for a in engine.transcript(new) if a[0] == "read" and a[4] == "a.txt" and a[1] != held["a.txt"]]
   assert held["c.txt"] in told and held["d.txt"] not in told and held["a.txt"] not in told
-  assert again[0] in told and engine.module(root)["summary"] == "gist"
+  assert again[0] in told and engine.module(new)["summary"] == "gist"
 
 
 async def test_when_the_model_gives_no_tuple_it_compacts_the_chain_with_filters(tmp_path: Path) -> None:
   """When the model gives no tuple of a list and a str, it compacts the chain with FILTERS and no summary of the model."""
   root, act = await wrapped(tmp_path, "FILTERS = [lambda acts: []]\nread('a.txt')", chooser="close((1, 2))")
-  assert engine.peek(act) == 3 and made(root) == ["reground()"]
-  (one,) = [a[1] for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt"]
-  assert [a for a in engine.reading(root) if a[0] == "tell" and a[1] == one] == []
+  assert engine.peek(act) == 3 and made() == ["reground()"]
+  (one,) = [a[1] for a in engine.reading(root) if a[0] == "read" and a[4] == "a.txt"]
+  assert [a for a in engine.reading(engine.scope(root)) if a[0] == "tell" and a[1] == one] == []
 
 
-async def test_it_moves_stops_and_pauses_nothing(tmp_path: Path) -> None:
-  """It moves, stops and pauses nothing, so each open prompt, each rung that waits and each word that runs goes on in the chain."""
+async def test_it_stops_and_pauses_nothing(tmp_path: Path) -> None:
+  """It stops and pauses nothing, so each open prompt and each thread goes on in the chain that it compacts to, and each word that runs ends first."""
   sand, root, _ = compacting(tmp_path)
   await engine.rung("compacted()", on=root)
   sand.cost = FULL
@@ -109,14 +116,31 @@ async def test_it_moves_stops_and_pauses_nothing(tmp_path: Path) -> None:
   act = engine.prompt(int, "go", on=root)
   await until(lambda: opened(root, "n") and opened("chain2", "w?"))
   engine.prompt(None, "poke", on=root)
-  await until(lambda: compacted_on(root))
-  assert made(root) == ["<s:summary>\ngist</s:summary>\nreground()"]
+  await until(lambda: bool(jumps("compacted1")))
   ran = next(str(a[4]) for a in engine.transcript(root) if a[0] == "run" and a[5] == word)
-  assert not engine.over(ran) and not engine.over(act)
-  assert [a for one in (root, "chain2") for a in engine.transcript(one) if a[0] == "pause"] == []
+  assert (engine.scope(root), engine.over(ran), engine.over(act)) == (root, False, False)
   engine.close(5, asked("chain2", "w?"))
   engine.close(2, asked(root, "n"))
   assert await act == 7
+  await until(lambda: compacted_on(root))
+  assert made() == ["<s:summary>\ngist</s:summary>\nreground()"] and engine.over(ran)
+  assert [a for one in (root, "chain2") for a in engine.reading(one) if a[0] == "pause"] == []
+
+
+async def test_after_it_compacts_it_asks_choice_again_only_past_again(tmp_path: Path) -> None:
+  """After it compacts the chain, it asks choice() again only after an answer that reads more than the larger of SHARE and the share of the first answer after that compaction plus AGAIN, so a compaction that leaves the chain near SHARE is no loop."""
+  sand, root, _ = compacting(tmp_path)
+  await engine.rung("compacted()", on=root)
+  sand.cost = FULL
+  sand.script[root] = ["x = 1\ndebug(t'{x}')", GIST, "y = 2\ndebug(t'{y}')", "z = 3\ndebug(t'{z}')", "close(x + y + z)"]
+  assert await engine.prompt(int, "go", on=root) == 6
+  await until(lambda: compacted_on(root))
+  asked = lambda: {a[1] for a in [*choices(root), *choices(engine.scope(root))]}  # noqa: E731
+  assert len(asked()) == 1 and engine.scope(root) != root
+  sand.cost = (370000, 0, 0, 0, 0.0)
+  sand.script[root] = ["close(1)"]
+  assert await engine.prompt(int, "more", on=root) == 1
+  await until(lambda: len(asked()) == 2)
 
 
 async def test_it_never_completes(tmp_path: Path) -> None:
@@ -127,7 +151,7 @@ async def test_it_never_completes(tmp_path: Path) -> None:
   assert await engine.prompt(int, "go", on=root) == 1
   watcher = engine.module(root)["w"]
   await until(lambda: compacted_on(root, watcher))
-  assert made(root, watcher) == ["<s:summary>\ngist</s:summary>\nreground()"]
+  assert made(watcher) == ["<s:summary>\ngist</s:summary>\nreground()"]
   assert engine.peek(watcher, "open") == "open"
 
 
@@ -135,5 +159,5 @@ async def test_when_the_choice_ends_refused_it_keeps_the_chain_as_it_is(tmp_path
   """When the choice ends refused, it keeps the chain as it is, tells why, and asks no choice again."""
   root, act = await wrapped(tmp_path, chooser="close(Refused('no choice'))", ends=told_kept)
   assert engine.peek(act) == 3
-  assert made(root) == []
+  assert made() == []
   assert len(choices(root)) == 1

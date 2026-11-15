@@ -51,15 +51,20 @@ export const outcomeOf = (act?: Pick<Act, "phase">): unknown =>
   act?.phase.phase === "done" ? act.phase.value : null;
 /** Whether a pause holds an act that is not done. */
 export const isPaused = (act?: Pick<Act, "phase" | "pause">): boolean => Boolean(act?.pause) && !isDone(act);
-/** Whether a fact compacts its chain: a cut, which names what the model of the chain reads from then on, but the cut of
- * a birth, which keeps the fact carried of its checkpoint; and a prefix that another said on a chain, which is how an
- * engine from before the cut compacted it, where a chain says its own prefix at its birth. */
-export const compacts = ([kind, id, by, kept]: readonly unknown[]): boolean =>
-  (kind === "cut" &&
-    !(Array.isArray(kept) && kept.some((one) => Array.isArray(one) && one[0] === "carried"))) ||
-  (kind === "prefix" && by !== id);
-/** A compaction of a chain: a cut that a word said on the chain, after which its model reads only what the cut kept and
- * what came after it. It gives the chain, the act that said the cut, and its place in time, as the place of an act. */
+/** The chain that a fact compacts, or nothing: a jump, after which the chain goes on as a chain that keeps less; a cut,
+ * which is how an engine from before the jump compacted a chain, but the cut of a birth, which keeps the fact carried
+ * of its checkpoint; and a prefix that another said on a chain, which is how an engine from before the cut compacted
+ * it, where a chain says its own prefix at its birth. */
+export const compacts = ([kind, id, by, kept]: readonly unknown[]): string | undefined =>
+  kind === "jump"
+    ? String(kept)
+    : (kind === "cut" &&
+          !(Array.isArray(kept) && kept.some((one) => Array.isArray(one) && one[0] === "carried"))) ||
+        (kind === "prefix" && by !== id)
+      ? String(id)
+      : undefined;
+/** A compaction of a chain: a jump or a cut that a word said on the chain, after which its model reads only what it kept
+ * and what came after it. It gives the chain, the act that said it, and its place in time, as the place of an act. */
 export interface Compaction {
   chain: string;
   by: string;

@@ -1207,7 +1207,7 @@ test("a rung is asking while a reply of it runs, and no more once that reply is 
   expect(activity.acts.get("rung1")?.asking).toBeUndefined();
 });
 
-test("the activity keeps each compaction of a chain: a cut said on it, but the cut of a birth", () => {
+test("the activity keeps each compaction of a chain: a jump or a cut said on it, but the cut of a birth", () => {
   const activity = new Activity();
   const hear = (fact: Fact) => {
     const heard = activity.hear(fact);
@@ -1226,7 +1226,11 @@ test("the activity keeps each compaction of a chain: a cut said on it, but the c
       ["done", "bash2", "world", { is: "Exit", code: 0 }],
     ],
   ]);
-  expect(activity.compactions).toEqual([{ chain: "chain2", by: "rung3", at: 4 }]);
+  hear(["jump", "jump1", "rung4", "chain2", ["bash2"], ""]);
+  expect(activity.compactions).toEqual([
+    { chain: "chain2", by: "rung3", at: 4 },
+    { chain: "chain2", by: "rung4", at: 5 },
+  ]);
 });
 
 test("a place names a machine only as host:port or [address]:port, and a socket or a pipe of this machine stays a place", () => {

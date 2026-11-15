@@ -9,18 +9,19 @@ from skills.conftest import compacting
 
 
 async def test_condense_compacts_the_chain_at_once(tmp_path: Path) -> None:
-  """condense() asks choice() of the chain of the caller, and at once compacts that chain to the acts that the model chose, each act said on the chain after it asked, of each path only the last read or write, and the summary of the model, and gives the chain."""
+  """condense() asks choice() of the chain of the caller, and at once compacts that chain to the acts that the model chose, each act said on the chain after it asked, of each path only the last read or write, and the summary of the model, and gives the jump."""
   sand, root, _ = compacting(tmp_path)
   await engine.rung("write(Text('c.txt', 'c'))\nwrite(Text('d.txt', 'd'))", on=root)
   held = {str(a[4].path): str(a[1]) for a in engine.transcript(root) if a[0] == "write" and isinstance(a[4], Text)}
   chooser = f"close(([{held['c.txt']!r}], 'gist'))"
   sand.script[root] = ["close(await condense())", chooser]
-  assert await engine.prompt(str, "go", on=root) == root
+  went = await engine.prompt(str, "go", on=root)
   await settle()
-  told = {a[1] for a in engine.reading(root) if a[0] == "tell"}
-  assert engine.get("chain2") is None
+  new = str(engine.peek(went))
+  told = {a[1] for a in engine.reading(new) if a[0] == "tell"}
+  assert (engine.get(went)[0], engine.scope(root)) == ("jump", new)
   assert held["c.txt"] in told and held["d.txt"] not in told
-  assert engine.module(root)["summary"] == "gist"
+  assert engine.module(new)["summary"] == "gist"
 
 
 async def test_when_the_model_gives_no_tuple_it_compacts_the_chain_with_filters(tmp_path: Path) -> None:
@@ -29,13 +30,13 @@ async def test_when_the_model_gives_no_tuple_it_compacts_the_chain_with_filters(
   await engine.rung("FILTERS = [lambda acts: []]\nread('a.txt')", on=root)
   (one,) = [a[1] for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt"]
   sand.script[root] = ["close(await condense())", "close((1, 2))"]
-  assert await engine.prompt(str, "go", on=root) == root
+  new = str(engine.peek(await engine.prompt(str, "go", on=root)))
   await settle()
-  assert [str(a[4]) for a in engine.transcript(root) if a[0] == "rung" and str(a[4]).endswith("reground()")] == [
+  assert [str(a[4]) for a in engine.transcript(new) if a[0] == "rung" and str(a[4]).endswith("reground()")] == [
     "reground()"
   ]
-  assert [a for a in engine.reading(root) if a[0] == "tell" and a[1] == one] == []
-  assert "summary" not in engine.module(root)
+  assert [a for a in engine.reading(new) if a[0] == "tell" and a[1] == one] == []
+  assert "summary" not in engine.module(new)
 
 
 async def test_it_chooses_in_a_chain_whose_module_binds_list(tmp_path: Path) -> None:
@@ -44,6 +45,6 @@ async def test_it_chooses_in_a_chain_whose_module_binds_list(tmp_path: Path) -> 
   assert await engine.rung("globals()['list'] = 'ls -la'\nwrite(Text('c.txt', 'c'))", on=root) is None
   held = {str(a[4].path): str(a[1]) for a in engine.transcript(root) if a[0] == "write" and isinstance(a[4], Text)}
   sand.script[root] = ["close(await condense())", f"close(([{held['c.txt']!r}], 'gist'))"]
-  assert await engine.prompt(str, "go", on=root) == root
+  await engine.prompt(str, "go", on=root)
   await settle()
-  assert engine.module(root)["summary"] == "gist"
+  assert engine.module(engine.scope(root))["summary"] == "gist"

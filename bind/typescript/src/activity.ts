@@ -241,6 +241,8 @@ export class Activity {
     const [kind, id, by] = fact;
     const at = timed(kind) ? ++this.clock : this.clock;
     const question = isQuestion(kind, id);
+    const compacted = compacts(fact);
+    if (compacted) this.compactions.push({ chain: compacted, by, at });
     if (question) this.scopes.set(id, kind === "chain" ? id : this.scope(String(fact[3])) || String(fact[3]));
     if (question && kind === "run") {
       this.runs.set(id, String(fact[4]));
@@ -292,8 +294,6 @@ export class Activity {
     // says seen.
     if (kind === "seen" && (operated(by) || by === "journal")) {
       this.seen.set(id, at);
-    } else if (compacts(fact)) {
-      this.compactions.push({ chain: id, by, at });
     } else if (kind === "pause" || kind === "wake") {
       const paused = kind === "pause";
       const cause: PauseCause | undefined = paused

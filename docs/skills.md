@@ -64,20 +64,22 @@ reads it.
   when it stands elsewhere, and reloads the skill when the life runs it. A word that binds a name of the engine at its top is refused, and the write changes no file. Its life word, `await listed()`, reads
   `skills://`
   in the setup of the root, which every new chain holds.
-- **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name. `compact()` keeps
-  what `FILTERS` keep, binds a summary in its next word, and reads again with `reground()` each file that it kept,
+- **`compaction`** jumps a chain to a chain with the work that it still needs, and the work goes on there, while the
+  turns of the chain stay as its model read them. `compact()` keeps what `FILTERS` keep, binds a summary in the first
+  word there, and reads again with `reground()` each file that it kept,
   showing only what changed. The filters are `latest()`, the last read or write of each path, `quiet()`, which drops the
   commands, `recent(n)`, the acts of the last `n` replies, and `await chosen()`, which asks the model of the chain.
   `together(*filters)` joins them, and `supersede(keep)` applies one. `await condense()` asks the model of the chain what to keep and
   compacts at once. `compacted()` does the same for one chain each time an answer fills more than `SHARE`, 0.6, of the
-  window, and moves, stops and pauses nothing. `fitted()` watches a chain: when the model refuses a reply because its
-  prompt passes the window, it cuts the chain at once to its open prompts, with a summary that says why, so the next
+  window, and stops and pauses nothing. It compacts again only once an answer reads `AGAIN`, 0.15, more of the window
+  than the first answer after the compaction before, so a compaction that leaves the chain near `SHARE` is no loop. `fitted()` watches a chain: when the model refuses a reply because its
+  prompt passes the window, it compacts the chain at once to its open prompts, with a summary that says why, so the next
   reply reads less and the chain goes on with no pause. Its life word, `compacted(); fitted()`, wraps each chain with
   both, so a chain compacts to what a model chose, with its summary, before its prompt passes the window, and keeps
-  its reads and its findings. The cut of `fitted()` comes only as the last resort, when one reply grows past the
+  its reads and its findings. The compaction of `fitted()` comes only as the last resort, when one reply grows past the
   window before the compaction. Each compaction costs one turn more on the chain, to the model that wrote its last
   reply, which reads the chain from its cache.
-  A project changes `SHARE`, `FILTERS` or `BRIEF` in an extension of its own.
+  A project changes `SHARE`, `AGAIN`, `FILTERS` or `BRIEF` in an extension of its own.
 - **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
   on the root alone. At the first prompt that the operator makes in the life, even one made before the word plays, it asks the actor that its `automatic()`
   gives for a name of a few words, on a chain of its own labelled `naming`. With no such actor, or with no

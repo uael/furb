@@ -131,6 +131,9 @@ form must change, and so these breaks stand for the next major, 1.0.0.
 - `src/furb/engine.pyi grant: the def goes`: grant is the official kit grant, off by default; a word loads it with `await skill("grant")`, and the grant of each door, and the `Grant` door of the host, load it in the word that they run.
 - `src/furb/engine.pyi Grant: the alias goes`: as grant; the contract of the kit holds it.
 - `.agents/skills/compaction/compaction.pyi carry: the def goes`: compaction keeps a chain by supersede.
+- `.agents/skills/compaction/compaction.pyi supersede: its type of return changes from str to Act[str]`: supersede gives the jump of the chain, which an await gives as the chain that it jumped to, and each name of the chain names that chain after the jump.
+- `.agents/skills/compaction/compaction.pyi compact: its type of return changes from str to Act[str]`: compact gives the jump of the chain, which an await gives as the chain that it jumped to, and each name of the chain names that chain after the jump.
+- `.agents/skills/compaction/compaction.pyi condense: its type of return changes from str to Act[str]`: condense gives the jump of the chain, which an await gives as the chain that it jumped to, and each name of the chain names that chain after the jump.
 - `.agents/skills/compaction/compaction.pyi inherit: the def goes`: as carry.
 - `.agents/skills/compaction/compaction.pyi imported: the def goes`: as carry.
 - `.agents/skills/compaction/compaction.pyi CHOOSER: the const goes`: choice asks on the chain the model that wrote its last reply, which reads the chain from its cache.

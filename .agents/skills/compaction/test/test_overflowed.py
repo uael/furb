@@ -1,4 +1,4 @@
-"""OVERFLOWED, the summary of a cut for a prompt past the window."""
+"""OVERFLOWED, the summary of a compaction for a prompt past the window."""
 
 from pathlib import Path
 

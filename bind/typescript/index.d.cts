@@ -150,6 +150,8 @@ export declare class Engine {
   wake(id: string): void
   /** A cancel of that prompt reaches the acts that its rungs made on the chain with a source. */
   cancel(id: string, options?: { why?: unknown } | null): void
+  /** A jump: the chain goes on as another chain, and keeps each fact that it held, so the turns of a chain never change. */
+  jump(options?: { drop?: string[]; word?: string; on?: string } | null): Act & PromiseLike<string>
   /** An act ended from outside, by its name, with a value: it is done with it, and it ends what it made, since a close is a cancel that carries what the act it names is done with. */
   close(value: unknown, options?: { id?: string } | null): void
   /** What a word tells of itself as it runs: the text of a template, which debug makes as python makes the f-string of the same template. */

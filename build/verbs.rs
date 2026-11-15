@@ -206,6 +206,7 @@ enum Came {
   Object,
   Unit,
   Exit,
+  Str,
   /// A text, or nothing.
   MaybeStr,
 }
@@ -244,6 +245,7 @@ impl Answer {
       "Act" | "Act[object]" | "Act[T]" | "Act[Never]" | "Act[Standing]" => Self::Act(Came::Object),
       "Act[None]" => Self::Act(Came::Unit),
       "Act[Exit]" => Self::Act(Came::Exit),
+      "Act[str]" => Self::Act(Came::Str),
       "Act[str | None]" => Self::Act(Came::MaybeStr),
       _ => panic!("the build holds no kind of answer for `{annotation}`"),
     }
@@ -265,6 +267,7 @@ impl Answer {
       Self::Act(Came::Object) => "Act<'_, Object>",
       Self::Act(Came::Unit) => "Act<'_, ()>",
       Self::Act(Came::Exit) => "Act<'_, Exit>",
+      Self::Act(Came::Str) => "Act<'_, String>",
       Self::Act(Came::MaybeStr) => "Act<'_, Option<String>>",
     }
   }
@@ -287,6 +290,7 @@ impl Answer {
       Self::Act(Came::Object) => "Act & PromiseLike<unknown>",
       Self::Act(Came::Unit) => "Act & PromiseLike<null>",
       Self::Act(Came::Exit) => "Act & PromiseLike<ExitValue>",
+      Self::Act(Came::Str) => "Act & PromiseLike<string>",
       Self::Act(Came::MaybeStr) => "Act & PromiseLike<string | null>",
     }
   }

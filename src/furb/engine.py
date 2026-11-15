@@ -147,6 +147,10 @@ def cancel(id: str, why=None):
   control("cancel", "cancelled", id, why)
 
 
+def jump(drop=(), word="", on="") -> Act[str]:
+  return act("jump", on, None, [*drop], word)
+
+
 def close(value: object, id=""):
   match get(who := acting()):
     case ("rung", _, by, _, _, back, *_):
@@ -281,11 +285,12 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
   def ear(id):
     t = reading(o := source or ROOT)
     h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
-    hi = h.index("#" + o, lo := h.index("chain()"))
+    hi = next(n for n, x in enumerate(h) if n > (lo := h.index("chain()")) and re.fullmatch(r"#chain\d+", x))
     hi *= hi < len(t)
     running, waiting, last, bound, held, due = set(), {}, standing(), 0, {}, set()
     barren, wrote, awaited, did, seen = {}, {}, {}, {}, {}
     step = reply = note = to = ""
+    leaps, dropped = [], []
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def crafts(code):
@@ -459,6 +464,10 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         elif broke or waited or "tell" in did[a[1]] or not busy:
           due.add(p)
       match a:
+        case ("jump", leap, _, _, out, *_):
+          leaps.append(leap)
+          dropped += out
+          yield "started", leap
         case ("carried", *_):
           top = ""
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
@@ -521,6 +530,23 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           fold.pop(a[1], None)
       if running:
         continue
+      if leaps and not (awaited or any(waiting.values())):
+        jumped[id] = j = chain(
+          get(id)[4],
+          id,
+          [x[1] for x in reading(id) if question(x) and (x[1] not in dropped or x[0] in ("stand", "cd"))],
+        )
+        for leap in leaps:
+          with site.set(leap):
+            get(leap)[5] and rung(get(leap)[5])
+        for rid in waiting:
+          cancel(rid)
+        for p in barren:
+          with site.set(p):
+            rung(to=get(p)[6])
+        for leap in leaps:
+          yield "done", leap, j
+        return
       if (step not in waiting or paused(step)) and (
         got := next((x for x in waiting if not (paused(x) or over(x) or waiting[x])), "")
       ):
@@ -663,6 +689,8 @@ def question(a):
 def scope(name):
   while (a := get(name)) and a[0] != "chain":
     name = a[3]
+  while name in jumped:
+    name = jumped[name]
   return name * bool(a)
 
 
@@ -808,9 +836,9 @@ def controlled(ear, lasting=False):
 
 
 def boot(journal, **outside):
-  global say, act, drive, get, peek, transcript, reading, listening, numbered, offers, lives
+  global say, act, drive, get, peek, transcript, reading, listening, numbered, offers, lives, jumped
   get_running_loop()
-  made, known, done, held, cuts, log, alive, born, busy, heed, taken, top, upto = (
+  made, known, done, held, cuts, log, alive, born, busy, heed, taken, top, upto, jumped = (
     Counter(),
     {},
     {},
@@ -823,6 +851,7 @@ def boot(journal, **outside):
     {},
     set(),
     Counter(),
+    {},
     {},
   )
 
@@ -963,11 +992,14 @@ def boot(journal, **outside):
   def peek(at, waiting=None):
     return done.get(at, waiting)
 
+  def own(on):
+    return on if on in jumped else scope(on or site.get())
+
   def transcript(on="", of=""):
-    return held.get((scope(on or site.get()), of), [])[:]
+    return held.get((own(on), of), [])[:]
 
   def reading(on="", at=0):
-    kept, cut = cuts.get(on := scope(on or site.get()), ([], 0))
+    kept, cut = cuts.get(on := own(on), ([], 0))
     return [*kept[at:], *held.get((on, ""), [])[cut + max(0, at - len(kept)) :]]
 
   for who, listener in [(OPERATOR, idle(OPERATOR)), *outside.items()]:

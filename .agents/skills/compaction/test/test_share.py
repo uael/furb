@@ -22,4 +22,4 @@ async def test_share_is_the_share_of_the_window_past_which_compacted_compacts(tm
   sand.cost = (244000, 0, 0, 0, 0.0)
   sand.script[root] = ["x = 2\ndebug(t'{x}')", "SHARE = 2\nclose(([], ''))", "close(x)"]
   assert await engine.prompt(int, "past", on=root) == 2
-  assert len(choices(root)) == 1 and engine.get("chain2") is None
+  assert len(choices(root)) == 1 and engine.scope(root) != root

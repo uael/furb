@@ -205,8 +205,8 @@ def resolved(here: str, path: str) -> str:
 class Sand:
   """A World in memory, outside the engine.
 
-  `files` is its disk by path, `script` what its models answer by the id of the chain a reply is on, one word per
-  reply, `record` what it keeps of the keep facts of the journal, `fed` what was fed to its commands and `shut` those whose
+  `files` is its disk by path, `script` what its models answer by the id of the chain a reply is on, or by a name of a
+  chain that jumped to it, one word per reply, `record` what it keeps of the keep facts of the journal, `fed` what was fed to its commands and `shut` those whose
   stdin a write closed, `calls` every
   fact it answered or performed, in order, and `turns` the turns it read for each reply it took, by its name.
   `stands` is what a chain stands on, STANDS unless a test gives another, or the refusal it answers a stand with,
@@ -364,6 +364,7 @@ class Sand:
       case ("reply", about, _, on, _):
         yield "started", about
         self.turns[about] = engine.turns(on=on)
+        on = on if on in self.script else next((k for k in self.script if engine.scope(k) == on), on)
         if self.script.get(on):
           word = self.script[on].pop(0)
           turn = ("assistant", word, self.cost or (0, 0, 0, 0, 0.0), [f"signed {len(word)}"])

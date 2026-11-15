@@ -29,28 +29,28 @@ async def test_reground_reads_again_each_file_of_each_read_or_write_whose_tell_t
 
 
 async def test_reground_shows_a_file_whole_again_when_its_kept_read_is_one_of_a_reground(tmp_path: Path) -> None:
-  """reground() shows a file whole again when the read that the chain holds of it is one that a reground made, which showed only what changed, so a chain cut twice in a row still sees the text of each file that it kept."""
+  """reground() shows a file whole again when no tell that the chain holds of its read shows its whole text, as after a reground that showed only what changed, so a chain compacted twice in a row still sees the text of each file that it kept."""
   sand, root, _ = compacting(tmp_path)
   sand.script[root] = ["read('a.txt')\nclose(1)"]
   assert await engine.prompt(int, "read", on=root) == 1
   for n in range(2):
     sand.script[root].append("close(compact())")
-    assert await engine.prompt(str, f"compact {n}", on=root) == root
+    assert engine.get(await engine.prompt(str, f"compact {n}", on=root))[0] == "jump"
     await settle()
-  shown = [one for one in of(engine.turns(on=root), "read") if "one\ntwo" in one or "'one'" in one]
+  shown = [one for one in of(engine.turns(on=engine.scope(root)), "read") if "one\ntwo" in one or "'one'" in one]
   assert len(shown) == 1
 
 
-async def test_a_summary_that_holds_an_apostrophe_changes_nothing_of_what_a_cut_keeps(tmp_path: Path) -> None:
-  """reground() tells the reads that an earlier reground made by a mark that it owns, never by the text of a word, so a summary with an apostrophe leaves each kept file as whole as a plain one."""
+async def test_a_summary_that_holds_an_apostrophe_changes_nothing_of_what_a_compaction_keeps(tmp_path: Path) -> None:
+  """reground() reads whether the chain holds the whole text of a file in the tells that it holds, never in the text of a word, so a summary with an apostrophe leaves each kept file as whole as a plain one."""
   sand, root, _ = compacting(tmp_path)
   sand.script[root] = ["read('a.txt')\nclose(1)"]
   assert await engine.prompt(int, "read", on=root) == 1
   for n, summary in enumerate(["it's the gist", "plain"]):
     sand.script[root].append(f"close(compact(summary={summary!r}))")
-    assert await engine.prompt(str, f"compact {n}", on=root) == root
+    assert engine.get(await engine.prompt(str, f"compact {n}", on=root))[0] == "jump"
     await settle()
-  shown = [one for one in of(engine.turns(on=root), "read") if "one\ntwo" in one or "'one'" in one]
+  shown = [one for one in of(engine.turns(on=engine.scope(root)), "read") if "one\ntwo" in one or "'one'" in one]
   assert len(shown) == 1
 
 

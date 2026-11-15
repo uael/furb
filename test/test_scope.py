@@ -21,3 +21,12 @@ async def test_the_scope_of_a_question_from_its_name() -> None:
   thread = engine.prompt(str, "ask", to=OPERATOR, on=root)
   more = engine.prompt(str, "and", on=thread)
   assert engine.scope(more) == root and engine.scope(engine.prompt(None, "note", on=more)) == root
+
+
+async def test_the_scope_of_a_name_on_a_chain_that_jumped_is_the_chain_that_the_last_jump_went_on_as() -> None:
+  """The scope of a name on a chain that jumped is the chain that the last jump went on as."""
+  _, _, root = born()
+  act = engine.bash("echo hi", on=root)
+  new = await engine.jump(on=root)
+  newer = await engine.jump(on=new)
+  assert [engine.scope(x) for x in (root, act, new, newer)] == [newer] * 4
