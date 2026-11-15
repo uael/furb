@@ -15,7 +15,7 @@ use crate::{Fault, written};
 type Proof = (String, String);
 
 /// One command that runs proofs, and the line by which its output says that each one passed.
-pub(crate) struct Run {
+struct Run {
   program: &'static str,
   args: Vec<String>,
   passed: Vec<String>,
@@ -39,7 +39,7 @@ pub(crate) fn check(root: &Path, page: &Path) -> Result<ExitCode, Fault> {
 }
 
 /// Each proof that its run does not report as passed, after the tail of the output of that run.
-pub(crate) fn proven(root: &Path, found: &[Proof]) -> Result<Vec<Proof>, Fault> {
+fn proven(root: &Path, found: &[Proof]) -> Result<Vec<Proof>, Fault> {
   let mut failed = Vec::new();
   for run in runs(found) {
     println!("promise: {} {}", run.program, run.args.join(" "));
@@ -66,7 +66,7 @@ pub(crate) fn proven(root: &Path, found: &[Proof]) -> Result<Vec<Proof>, Fault> 
 
 /// The file and the name of each proof that the page names under its heading of the proofs and
 /// before what no machine proves yet, once each.
-pub(crate) fn proofs(text: &str) -> Result<Vec<Proof>, Fault> {
+fn proofs(text: &str) -> Result<Vec<Proof>, Fault> {
   let Some(start) = text.find("## The proofs that a machine runs") else { return Ok(Vec::new()) };
   let end = text[start..].find("What no machine proves yet").map_or(text.len(), |at| start + at);
   let mut found: Vec<Proof> = Vec::new();
@@ -82,7 +82,7 @@ pub(crate) fn proofs(text: &str) -> Result<Vec<Proof>, Fault> {
 
 /// One pytest for the proofs of python, and one cargo test for each target that holds proofs of
 /// rust.
-pub(crate) fn runs(found: &[Proof]) -> Vec<Run> {
+fn runs(found: &[Proof]) -> Vec<Run> {
   let mut made = Vec::new();
   let python: Vec<Proof> = found.iter().filter(|(file, _)| written(file, "py")).cloned().collect();
   if !python.is_empty() {
@@ -149,7 +149,3 @@ fn target(file: &str) -> Vec<String> {
     None => ["-p", package, "--lib"].map(str::to_owned).into(),
   }
 }
-
-#[cfg(test)]
-#[path = "promise.test.rs"]
-mod test;

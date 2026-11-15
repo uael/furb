@@ -9,6 +9,8 @@ mod links;
 mod memwatch;
 mod pack;
 mod paths;
+mod promise;
+mod scope;
 mod tree;
 mod unused;
 mod width;

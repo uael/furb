@@ -125,7 +125,3 @@ fn scope(paths: &[String]) -> Result<Map<String, Value>, Fault> {
 fn lines(answer: &Map<String, Value>) -> String {
   answer.iter().map(|(key, value)| format!("{key}={value}\n")).collect::<Vec<_>>().concat()
 }
-
-#[cfg(test)]
-#[path = "scope.test.rs"]
-mod test;
