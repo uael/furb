@@ -191,16 +191,31 @@ pub enum Role {
   Button,
 }
 
-/// A mark that moves in one cell while something works.
+/// The word of the state of a thing that works, on a card, in the dock and in the row of hints.
+pub(crate) const WORKS: &str = "Working";
+
+/// A mark that moves while something works: one cell, or the word of work for the light.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Loader {
   /// A model that writes.
   Model,
   /// A command that runs.
   Command,
-  /// An agent that works for a line, an arrow that stays.
+  /// An agent that works for a line: an arrow that pulses from muted to its color.
   Agent,
+  /// The open thread works: a light sweeps over the word of work, then the word goes white whole
+  /// for a moment.
+  Light,
 }
+
+/// How long one pulse of the arrow of an agent takes.
+const PULSE: Duration = Duration::from_millis(1200);
+
+/// The steps of one sweep of the light, and those at the end of the sweep when the word is white
+/// whole: with a step of 80 ms, the light passes in 0.7 s, the word stays white 0.24 s, and it
+/// rests until the next sweep, 2 s after the last.
+const SWEEP: u128 = 25;
+const WHOLE: [u128; 3] = [9, 10, 11];
 
 impl Loader {
   /// The frames of the mark, in their order.
@@ -208,7 +223,8 @@ impl Loader {
     match self {
       Self::Model => &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
       Self::Command => &["◐", "◓", "◑", "◒"],
-      Self::Agent => &["└"],
+      Self::Agent => &["↳"],
+      Self::Light => &[WORKS],
     }
   }
 
@@ -223,8 +239,38 @@ impl Loader {
   /// How long one frame stays.
   pub const fn step(self) -> Duration {
     match self {
-      Self::Model => Duration::from_millis(80),
-      Self::Command | Self::Agent => Duration::from_millis(120),
+      Self::Model | Self::Agent | Self::Light => Duration::from_millis(80),
+      Self::Command => Duration::from_millis(120),
+    }
+  }
+
+  /// The cells of the mark after a time of work, each with its color, from the color of its place:
+  /// the frame of a glyph in that color, the arrow of an agent between muted and that color, or
+  /// each letter of the word of work between that color and white as the light passes it.
+  pub fn cells(self, after: Duration, color: Color, tokens: &Tokens) -> Vec<(&'static str, Color)> {
+    match self {
+      Self::Model | Self::Command => vec![(self.frame(after), color)],
+      Self::Agent => {
+        // The pulse eases in and out: smoothstep over each half of its period.
+        let half = PULSE.as_millis() / 2;
+        let x = (after.as_millis() % PULSE.as_millis()).abs_diff(half).abs_diff(half);
+        let share = 100 * x * x * (3 * half - 2 * x) / (half * half * half);
+        vec![(self.frame(after), mixed(tokens.muted, color, u16::try_from(share).unwrap_or(100)))]
+      }
+      Self::Light => {
+        let step = after.as_millis() / self.step().as_millis() % SWEEP;
+        // The light stands on the letter before the step, so it enters from the left of the word.
+        let lit = |at: u128| match (at + 1).abs_diff(step) {
+          _ if WHOLE.contains(&step) => 100,
+          _ if step > WHOLE[0] => 0,
+          0 => 100,
+          1 => 45,
+          _ => 0,
+        };
+        let letters = WORKS.char_indices().map(|(at, one)| &WORKS[at..at + one.len_utf8()]);
+        let cells = (0..).zip(letters).map(|(at, one)| (one, mixed(color, WHITE, lit(at))));
+        cells.collect()
+      }
     }
   }
 }

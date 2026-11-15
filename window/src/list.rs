@@ -11,7 +11,7 @@ use crate::{
   keys::Does,
   line::{Line, run, spread},
   model::{Key, Link, Model},
-  tokens::{LIST, Loader, Role},
+  tokens::{LIST, Loader, Role, WORKS},
 };
 
 /// The columns of a card between its two edges. The edges of a card stand in the columns where the
@@ -289,9 +289,8 @@ impl Model {
     }
     let (needs, age) = (self.needs(key, card), self.age(card.since));
     let since = || Some(age.clone().unwrap_or_else(|| "now".to_owned()));
-    let working = |loader: Loader| {
-      (loader.frame(self.client.moved), "Working".into(), Some(t.accent), age.clone())
-    };
+    let working =
+      |loader: Loader| (loader.frame(self.client.moved), WORKS.into(), Some(t.accent), age.clone());
     // The mark, the word, the color of both, and the time of the state.
     let (mark, word, color, time) = match &card.thread.standing {
       Standing::Asks { .. } if needs => ("◆", "Input".into(), Some(t.attention), None),

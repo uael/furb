@@ -17,7 +17,7 @@ use crate::{
   list::project,
   model::{Key, Model},
   thread::{Click, Hot, Row, columns, width},
-  tokens::{APART, Loader, Role},
+  tokens::{APART, Loader, Role, WORKS},
 };
 
 /// How many rows of text the input grows to before its text scrolls.
@@ -695,21 +695,25 @@ impl Model {
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
     let place = fault.is_none() && says.is_none() && self.form().is_none() && self.word.is_none();
     let place = place && !works;
-    let (left, loader) = match (fault, says) {
-      (Some(fault), _) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], None),
-      (None, Some((says, color))) => (vec![run(format!("  {says}"), Style::new().fg(color))], None),
-      (None, None) if self.form().is_some() => (self.form_hints().unwrap_or_default(), None),
+    let (left, loaders) = match (fault, says) {
+      (Some(fault), _) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], vec![]),
+      (None, Some((says, color))) => {
+        (vec![run(format!("  {says}"), Style::new().fg(color))], vec![])
+      }
+      (None, None) if self.form().is_some() => (self.form_hints().unwrap_or_default(), vec![]),
       (None, None) if self.word.is_some() => {
-        self.word_hints(self.wide().saturating_sub(2).saturating_sub(width(&key) + 2))
+        let (hints, loader) =
+          self.word_hints(self.wide().saturating_sub(2).saturating_sub(width(&key) + 2));
+        (hints, loader.into_iter().collect())
       }
       (None, None) if works => {
         let (working, loader) = self.working(card);
         let at = columns(&working);
         hot.push((at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop))));
-        (working, Some((2, loader)))
+        (working, vec![(2, loader), (4, Loader::Light)])
       }
       // The launcher of a new session names its machine, so the row says the folder alone.
-      (None, None) => (self.place(!matches!(self.client.target(), Target::New(..))), None),
+      (None, None) => (self.place(!matches!(self.client.target(), Target::New(..))), vec![]),
     };
     // The machine and the folder of a thread that rests give way to the threads that ask him, which
     // the row never hides.
@@ -727,7 +731,7 @@ impl Model {
       hot.push((start..start + width(&others) - 3, Some(Click::Key(Does::Needed))));
     }
     hot.push((end - width(&key)..end, Some(Click::Key(does))));
-    Row { hot, loader, ..Row::of(line) }
+    Row { hot, loaders, ..Row::of(line) }
   }
 
   /// The hint of the work of the open thread: its time, which counts each second as the time of a
@@ -737,7 +741,7 @@ impl Model {
     let t = &self.tokens;
     let worked = card.map(|card| self.second().saturating_sub(card.since)).filter(|one| *one > 0);
     let age = worked.map(|seconds| format!(" {}", timer(seconds)));
-    let working = format!("    Working{}", age.unwrap_or_default());
+    let working = format!("    {WORKS}{}", age.unwrap_or_default());
     let stop = format!(" · {} stop", self.key(Does::Stop));
     let loader = match card.map(|card| &card.thread.standing) {
       Some(Standing::Runs) => Loader::Command,

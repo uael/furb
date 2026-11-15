@@ -34,6 +34,7 @@ use crate::{
   model::{Model, Told},
   pick::Pick,
   question::Keyed,
+  thread::Spot,
   tokens::{AWAY, Role, SIDE, Tokens},
 };
 
@@ -192,14 +193,19 @@ fn drawn(app: &App, model: Model, area: &Textarea) -> Screen<Model> {
   }
   let frames = |model: &Model| {
     let spots = model.left().loaders;
-    spots.into_iter().map(|spot| (spot, spot.loader.frame(model.client.moved))).collect::<Vec<_>>()
+    let shown = |spot: Spot| {
+      let color = spot.style.fg.unwrap_or(model.tokens.accent);
+      (spot, spot.loader.cells(model.client.moved, color, &model.tokens))
+    };
+    spots.into_iter().map(shown).collect::<Vec<_>>()
   };
   screen.part(frames, move |shown| {
     for (at, cell) in cells.iter().enumerate() {
       match shown.get(at) {
         Some((spot, frame)) => {
           let cell = cell.position(Edge::Top, spot.y).position(Edge::Left, spot.x);
-          cell.set_text(vec![Span::styled(*frame, spot.style)]);
+          let spans = frame.iter().map(|&(text, color)| Span::styled(text, spot.style.fg(color)));
+          cell.set_text(spans.collect::<Vec<_>>());
           cell.visible(true);
         }
         None => {

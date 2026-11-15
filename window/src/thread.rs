@@ -50,12 +50,12 @@ pub(crate) enum Click {
 pub(crate) type Hot = (Range<usize>, Option<Click>);
 
 /// A row of the left side: its runs, the parts that go bright under the pointer, and the column of
-/// its loader, a blank cell that a widget of its own draws.
+/// each of its loaders, which a widget of its own draws over the cells of the row.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct Row {
   pub(crate) line: Line,
   pub(crate) hot: Vec<Hot>,
-  pub(crate) loader: Option<(usize, Loader)>,
+  pub(crate) loaders: Vec<(usize, Loader)>,
 }
 
 impl Row {
@@ -66,7 +66,7 @@ impl Row {
   /// A row that takes a click in each column of its text.
   pub(crate) fn clicked(line: Line, click: Click) -> Self {
     let wide = width(&line);
-    Self { line, hot: vec![(0..wide, Some(click))], loader: None }
+    Self { line, hot: vec![(0..wide, Some(click))], loaders: Vec::new() }
   }
 
   /// What a click on a column of the row does: what its hot columns say, else the open of the
@@ -479,10 +479,11 @@ impl Model {
     {
       *row = mem::take(row).lit(usize::from(x), self.tokens.hover);
     }
-    let loaders = rows.iter().enumerate().filter_map(|(y, row)| {
-      let (x, loader) = row.loader?;
-      let style = spot(&row.line, x)?;
-      Some(Spot { x: u16::try_from(x).ok()?, y: u16::try_from(y).ok()?, loader, style })
+    let loaders = rows.iter().enumerate().flat_map(|(y, row)| {
+      row.loaders.iter().filter_map(move |&(x, loader)| {
+        let style = spot(&row.line, x)?;
+        Some(Spot { x: u16::try_from(x).ok()?, y: u16::try_from(y).ok()?, loader, style })
+      })
     });
     let loaders = loaders.collect();
     Left { rows: rows.into_iter().map(|row| row.line).collect(), loaders }

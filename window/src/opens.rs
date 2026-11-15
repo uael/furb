@@ -177,7 +177,7 @@ impl Model {
     let count = counted(&unit, step.done, step.of, done || step.done == step.of);
     let right = vec![run(format!("{count:>20}   {:>7}", elapsed(took)), style)];
     let line: Line = spread(left, right, self.wide().saturating_sub(2), Style::new());
-    Row { loader: (!done).then_some((4, Loader::Model)), ..Row::of(line) }
+    Row { loaders: (!done).then_some((4, Loader::Model)).into_iter().collect(), ..Row::of(line) }
   }
 }
 

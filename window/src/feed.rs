@@ -21,7 +21,7 @@ use crate::{
   prose,
   question::closed,
   thread::{Click, Item, Items, Row, width},
-  tokens::{APART, Loader, Role},
+  tokens::{APART, Loader, Role, WORKS},
 };
 
 /// The columns of the left padding of a block, and of its ground before its text.
@@ -372,8 +372,10 @@ impl Feed<'_> {
     let mut text = vec![run(format!("{number:>gutter$}  "), Style::new().fg(color))];
     text.extend(clipped(colors, room, self.style(Role::Muted)));
     let shown = self.boxed(spread(text, timer, inner, Style::new()), ground);
-    let mut rows =
-      vec![Row { loader: loader.map(|one| (PAD + gutter - 1, one)), ..Row::of(shown) }];
+    let mut rows = vec![Row {
+      loaders: loader.map(|one| (PAD + gutter - 1, one)).into_iter().collect(),
+      ..Row::of(shown)
+    }];
     rows.extend(output.into_iter().flatten());
     let under = under
       .iter()
@@ -495,7 +497,7 @@ impl Feed<'_> {
     // An agent that ended says how long it took, from one second on, as one that works does.
     let since = agent.began.and_then(|began| self.model.since(began));
     let time = agent.took.map_or(since, |took| Some(took).filter(|one| *one > 0)).map(timer);
-    let working = |loader| (Some(loader), "  Working", t.accent);
+    let working = |loader| (Some(loader), WORKS, t.accent);
     let (mark, word, color) = match &card.standing {
       _ if self.ended() && card.works() => (None, "Ended", t.muted),
       Standing::Asks { .. } => (None, "◆ Input", t.attention),
@@ -510,14 +512,18 @@ impl Feed<'_> {
     let model = card.model.as_deref().and_then(|one| one.rsplit(':').next()).unwrap_or_default();
     let title = if rest { muted } else { self.style(Role::Prose) };
     let left = vec![run("  └ ", muted), run(card.title.clone(), title)];
+    // A mark that moves stands in the two cells before its word.
+    let word = if mark.is_some() { format!("  {word}") } else { word.to_owned() };
     let mut right = vec![run(word, Style::new().fg(color))];
     right.extend(time.map(|time| run(format!(" {time}"), muted)));
     right.push(run(format!("  {model}"), muted));
     let line = spread(left, right.clone(), self.wide.saturating_sub(2), Style::new());
     let x = width(&line) - width(&right);
     let open = Click::Agent(card.prompt.clone());
-    let mut rows =
-      vec![Row { loader: mark.map(|one| (x, one)), ..Row::clicked(line, open.clone()) }];
+    let mut rows = vec![Row {
+      loaders: mark.map(|one| (x, one)).into_iter().collect(),
+      ..Row::clicked(line, open.clone())
+    }];
     // The line that its model has not begun to write says nothing that its state does not say.
     if let Some(stands) = agent.line.as_ref().filter(|one| !rest && !one.text.is_empty()) {
       let text = vec![run(self.model.homed(&stands.text), muted)];

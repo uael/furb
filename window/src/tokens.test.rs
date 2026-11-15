@@ -1,6 +1,8 @@
 use opentui::style::Color;
 
-use super::Tokens;
+use std::time::Duration;
+
+use super::{Loader, Tokens, WORKS};
 
 /// The relative luminance of a color, as WCAG 2 defines it.
 fn luminance(color: Color) -> f64 {
@@ -40,4 +42,29 @@ fn a_surface_is_the_background_of_the_terminal_mixed_toward_white_by_a_step_of_t
 #[test]
 fn a_light_terminal_takes_the_dark_background_of_the_window() {
   assert_eq!(Tokens::on(Some(Color::rgb(250, 250, 250))), Tokens::on(None));
+}
+
+#[test]
+fn a_light_sweeps_the_word_of_work_from_its_left_then_whitens_it_whole_then_rests() {
+  let tokens = Tokens::on(None);
+  let lit = |millis: u64| -> Vec<bool> {
+    let cells = Loader::Light.cells(Duration::from_millis(millis), tokens.accent, &tokens);
+    cells.iter().map(|(_, color)| *color == tokens.hover).collect()
+  };
+  let word =
+    |shown: &[bool]| shown.iter().map(|one| if *one { '#' } else { '.' }).collect::<String>();
+  let steps = [80, 400, 800, 900, 1500, 2000 + 80];
+  let shown: Vec<String> = steps.map(|millis| word(&lit(millis))).to_vec();
+  assert_eq!(shown, ["#......", "....#..", "#######", "#######", ".......", "#......"]);
+  let letters: String =
+    Loader::Light.cells(Duration::ZERO, tokens.accent, &tokens).iter().map(|one| one.0).collect();
+  assert_eq!(letters, WORKS);
+}
+
+#[test]
+fn the_arrow_of_an_agent_pulses_from_muted_to_its_color_and_back() {
+  let tokens = Tokens::on(None);
+  let at =
+    |millis: u64| Loader::Agent.cells(Duration::from_millis(millis), tokens.accent, &tokens)[0].1;
+  assert_eq!([at(0), at(600), at(1200)], [tokens.muted, tokens.accent, tokens.muted]);
 }
