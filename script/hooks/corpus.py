@@ -1,8 +1,10 @@
-"""Refuses a change of each file of a folder of tests/corpus that a tag holds.
+"""Refuses a change of each file of a folder of tests/corpus that a tag holds, and of the folder cut.
 
-Each folder of tests/corpus but next is named by the version of a release, and the tag v<version> holds it. Once that
-tag stands, no file of the folder changes again, so each later build proves that it opens the records of that release.
-Before 1.0.0 no promise covers a release, so a change whose title has ! may delete the files of a folder of 0.x.
+Each folder of tests/corpus but next and cut is named by the version of a release, and the tag v<version> holds it.
+Once that tag stands, no file of the folder changes again, so each later build proves that it opens the records of that
+release. Before 1.0.0 no promise covers a release, so a change whose title has ! may delete the files of a folder of
+0.x. The folder cut holds the records of the stable cut, from which each later build opens each record with no drift:
+once it stands, no file of it changes, whatever the title.
 
 With no argument it reads the staged changes, as a hook does, which knows no title and so lets a folder of 0.x go. With
 --base <ref> it reads the changes from the merge base of <ref> to HEAD, as CI does, and --title gives the title of the
@@ -43,11 +45,14 @@ def breaking(title: str) -> bool:
 
 
 def refused(base: str = "", title: str | None = None) -> list[str]:
-  """Each change that a tag forbids, with why."""
+  """Each change that a tag or the cut forbids, with why."""
   found = []
   for status, path in changes(base):
     folder, _, rest = path.removeprefix(CORPUS).partition("/")
-    if not rest or folder == "next" or not git("tag", "--list", f"v{folder}").strip():
+    if rest and folder == "cut" and git("ls-tree", "-d", base or "HEAD", f"{CORPUS}cut").strip():
+      found.append(f"{path}: {CORPUS}cut holds the records of the stable cut, so no file of it changes again")
+      continue
+    if not rest or folder in ("next", "cut") or not git("tag", "--list", f"v{folder}").strip():
       continue
     if status == "D" and folder.startswith("0.") and (title is None or breaking(title)):
       continue

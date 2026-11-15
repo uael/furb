@@ -1,4 +1,4 @@
-"""The hook of the corpus refuses a change of each file of a folder that a tag holds."""
+"""The hook of the corpus refuses a change of each file of a folder that a tag holds, and of the cut."""
 
 import importlib.util
 import os
@@ -63,3 +63,17 @@ def test_a_title_with_a_bang_deletes_a_folder_of_0x_and_never_one_of_1x() -> Non
   refused = corpus.refused("main", "feat(crate)!: Make the corpus again")
   assert [x.split(":")[0] for x in refused] == ["tests/corpus/1.0.0/work.jsonl"]
   assert len(corpus.refused("main", "feat(crate): Make the corpus again")) == 2
+
+
+def test_the_folder_of_the_cut_is_made_once_and_then_refuses_each_change() -> None:
+  put("tests/corpus/cut/work.jsonl", "[]\n")
+  git("add", "-A")
+  assert corpus.refused() == []
+  git("commit", "-qm", "test(corpus): Keep the records of the cut")
+  put("tests/corpus/cut/work.jsonl", "[3]\n")
+  put("tests/corpus/cut/more.jsonl", "[]\n")
+  git("add", "-A")
+  assert len(corpus.refused()) == 2
+  git("switch", "-qc", "change")
+  git("commit", "-qm", "feat(crate)!: Make the corpus again")
+  assert len(corpus.refused("main", "feat(crate)!: Make the corpus again")) == 2
