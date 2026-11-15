@@ -17,11 +17,14 @@ fn git(dir: &Path, args: &[&str]) -> String {
   String::from_utf8_lossy(&output.stdout).trim().to_owned()
 }
 
-/// A clone of a bare origin, whose main holds one commit.
+/// A clone of a bare origin, whose main holds one commit, on any config of the machine.
 fn cloned(yard: &Yard) -> PathBuf {
   let (origin, main) = (yard.join("origin.git"), yard.join("main"));
-  git(yard, &["init", "-q", "--bare", "origin.git"]);
-  git(yard, &["clone", "-q", &origin.to_string_lossy(), "main"]);
+  // The branch of a new repository is the one that the config of the machine names, as master on
+  // a runner, so the clone names main itself.
+  let first = ["-c", "init.defaultBranch=main"];
+  git(yard, &[&first[..], &["init", "-q", "--bare", "origin.git"]].concat());
+  git(yard, &[&first[..], &["clone", "-q", &origin.to_string_lossy(), "main"]].concat());
   for (key, value) in [("user.name", "t"), ("user.email", "t@t"), ("commit.gpgsign", "false")] {
     git(&main, &["config", key, value]);
   }

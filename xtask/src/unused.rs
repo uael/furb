@@ -4,7 +4,7 @@
 use std::{
   collections::{BTreeSet, HashMap, HashSet},
   fs,
-  path::{Path, PathBuf},
+  path::Path,
   process::ExitCode,
 };
 
@@ -244,18 +244,18 @@ fn resolve(text: &HashMap<String, String>, here: &str, spec: &str) -> Option<Str
     return None;
   }
   let spec = spec.strip_suffix(".js").or_else(|| spec.strip_suffix(".ts")).unwrap_or(spec);
-  let folder = Path::new(here).parent().unwrap_or(Path::new(""));
-  let mut base = PathBuf::new();
-  for part in folder.join(spec).components() {
-    match part.as_os_str().to_str() {
-      Some(".") => {}
-      Some("..") => {
-        base.pop();
-      }
-      _ => base.push(part),
+  // The paths of git name each file with `/` on every system, so the import resolves on them, and
+  // not on the paths of the machine, which Windows writes with `\`.
+  let mut base: Vec<&str> =
+    here.rsplit_once('/').map_or_else(Vec::new, |(folder, _)| folder.split('/').collect());
+  for part in spec.split('/') {
+    match part {
+      "." | "" => {}
+      ".." => drop(base.pop()),
+      one => base.push(one),
     }
   }
-  let base = base.to_string_lossy();
+  let base = base.join("/");
   [format!("{base}.ts"), format!("{base}/index.ts")].into_iter().find(|one| text.contains_key(one))
 }
 
