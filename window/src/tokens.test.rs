@@ -45,22 +45,24 @@ fn a_light_terminal_takes_the_dark_background_of_the_window() {
 }
 
 #[test]
-fn a_light_sweeps_the_word_of_work_from_its_left_then_whitens_it_whole_then_rests() {
+fn a_light_coasts_over_the_word_of_work_from_its_left_then_whitens_it_whole_then_fades() {
   let tokens = Tokens::on(None);
-  let lit = |millis: u64| -> Vec<bool> {
-    let cells = Loader::Light(WORKS).cells(Duration::from_millis(millis), tokens.accent, &tokens);
-    cells.iter().map(|(_, color)| *color == tokens.hover).collect()
+  let cells =
+    |millis: u64| Loader::Light(WORKS).cells(Duration::from_millis(millis), tokens.accent, &tokens);
+  let bright = |color: Color| u16::from(color.r) + u16::from(color.g) + u16::from(color.b);
+  let brightest = |millis: u64| {
+    let shown = cells(millis).iter().map(|(_, color)| bright(*color)).collect::<Vec<_>>();
+    shown.iter().enumerate().max_by_key(|(at, one)| (**one, usize::MAX - at)).map(|(at, _)| at)
   };
-  let word =
-    |shown: &[bool]| shown.iter().map(|one| if *one { '#' } else { '.' }).collect::<String>();
-  let steps = [80, 400, 800, 900, 1500, 2000 + 80];
-  let shown: Vec<String> = steps.map(|millis| word(&lit(millis))).to_vec();
-  assert_eq!(shown, ["#......", "....#..", "#######", "#######", ".......", "#......"]);
-  let letters: String = Loader::Light(WORKS)
-    .cells(Duration::ZERO, tokens.accent, &tokens)
-    .iter()
-    .map(|one| one.0)
-    .collect();
+  let fronts = [100, 300, 500, 700, 850].map(brightest);
+  assert!(fronts.is_sorted() && fronts[0] < fronts[4], "the light moves right: {fronts:?}");
+  let colors = |millis: u64| cells(millis).iter().map(|(_, color)| *color).collect::<Vec<_>>();
+  assert_eq!(colors(1000), vec![tokens.hover; WORKS.len()]);
+  let fading = colors(1260);
+  assert!(fading.iter().all(|one| *one != tokens.hover && *one != tokens.accent));
+  assert_eq!(colors(1600), vec![tokens.accent; WORKS.len()]);
+  assert_eq!(colors(2400 + 1000), colors(1000));
+  let letters: String = cells(0).iter().map(|one| one.0).collect();
   assert_eq!(letters, WORKS);
 }
 

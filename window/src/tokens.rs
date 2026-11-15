@@ -244,18 +244,24 @@ pub enum Loader {
   /// An agent that works for a line: an arrow that pulses from muted to its color.
   Agent,
   /// A word that says what works, as `Working` of the open thread, a model that `thinks` or that
-  /// `writes`: a light sweeps over it from its left, then the word goes white whole for a moment.
+  /// `writes`: a light coasts over it from its left with a soft tail, the word goes white whole for
+  /// a moment, then fades back.
   Light(&'static str),
 }
 
 /// How long one pulse of the arrow of an agent takes.
 const PULSE: Duration = Duration::from_millis(1200);
 
-/// The steps of one sweep of the light, and those at the end of the sweep when the word is white
-/// whole: with a step of 80 ms, the light passes in 0.7 s, the word stays white 0.24 s, and it
-/// rests until the next sweep, 2 s after the last.
-const SWEEP: u128 = 25;
-const WHOLE: [u128; 3] = [9, 10, 11];
+/// The beat of the light, in ms: its front crosses the word in `SWEEP`, the word stays white whole
+/// for `WHOLE` and fades back in `FADE`, and it rests until the next sweep, `BEAT` after the last.
+const BEAT: u128 = 2400;
+const SWEEP: u128 = 900;
+const WHOLE: u128 = 240;
+const FADE: u128 = 240;
+
+/// How far the light reaches, in cells: ahead of its front, and behind it as its tail.
+const AHEAD: i64 = 2;
+const TAIL: i64 = 6;
 
 impl Loader {
   /// The frames of a glyph, in their order: none for the light, whose one frame is its word.
@@ -301,21 +307,50 @@ impl Loader {
         vec![(self.frame(after), mixed(tokens.muted, color, u16::try_from(share).unwrap_or(100)))]
       }
       Self::Light(word) => {
-        let step = after.as_millis() / self.step().as_millis() % SWEEP;
-        // The light stands on the letter before the step, so it enters from the left of the word.
-        let lit = |at: u128| match (at + 1).abs_diff(step) {
-          _ if WHOLE.contains(&step) => 100,
-          _ if step > WHOLE[0] => 0,
-          0 => 100,
-          1 => 45,
-          _ => 0,
-        };
         let letters = word.char_indices().map(|(at, one)| &word[at..at + one.len_utf8()]);
-        let cells = (0..).zip(letters).map(|(at, one)| (one, mixed(color, WHITE, lit(at))));
+        let lit = light(after.as_millis() % BEAT, i64::try_from(word.chars().count()).unwrap_or(0));
+        let cells = (0..).zip(letters).map(|(at, one)| (one, mixed(color, WHITE, lit(at) / 10)));
         cells.collect()
       }
     }
   }
+}
+
+/// How white each letter of a word of `length` letters is, in thousandths, at `at` ms of the beat.
+/// The front coasts from before the first letter to past the last, as the light of the tabs of
+/// `OpenCode` v2 does, and each letter eases up as it nears and down as it falls behind.
+fn light(at: u128, length: i64) -> impl Fn(i64) -> u16 {
+  let thousandths = |part: u128, of: u128| i64::try_from(part * 1000 / of).unwrap_or(1000);
+  let whole = match at {
+    at if at < SWEEP => None,
+    at if at < SWEEP + WHOLE => Some(1000),
+    at if at < SWEEP + WHOLE + FADE => Some(1000 - smoother(thousandths(at - SWEEP - WHOLE, FADE))),
+    _ => Some(0),
+  };
+  let front = -AHEAD * 1000 + coast(thousandths(at.min(SWEEP), SWEEP)) * (length + AHEAD);
+  move |letter| {
+    let near = front - letter * 1000;
+    let share = whole.unwrap_or_else(|| match near {
+      near if near < 0 => smoother(1000 + near / AHEAD),
+      near => smoother(1000 - near / TAIL),
+    });
+    u16::try_from(share).unwrap_or(0)
+  }
+}
+
+/// A move in thousandths that speeds up over its first fifth, holds, and slows over its last.
+fn coast(at: i64) -> i64 {
+  match at {
+    at if at < 200 => at * at / 320,
+    at if at > 800 => 1000 - (1000 - at) * (1000 - at) / 320,
+    at => (at - 100) * 5 / 4,
+  }
+}
+
+/// The smootherstep of a share in thousandths, clamped to 0 and 1000.
+fn smoother(at: i64) -> i64 {
+  let at = at.clamp(0, 1000);
+  at * at * at * (6 * at * at - 15_000 * at + 10_000_000) / 1_000_000_000_000
 }
 
 #[cfg(test)]
