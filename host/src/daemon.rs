@@ -85,7 +85,7 @@ use crate::{
   stall::{Quiet, Stall},
   stops::Stops,
   transport::{
-    Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, own, upgraded,
+    Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, Who, own, upgraded,
   },
   views::{Skill, Views},
 };
@@ -196,15 +196,16 @@ where
     Some(tailnet) => Doors::listen(tailnet, log.as_ref()).await,
     None => None,
   };
+  let user = User::of(doors.as_ref())?;
   let door = match &settings.door {
-    Some(file) => Some(Door::open(file).await?),
+    Some(file) => Some(Door::open(file, &user.name).await?),
     None => None,
   };
   let (grace, lasting) = (settings.grace, doors.is_some());
   // A daemon that no peer reached yet waits for the first one, which the program that started it
   // sends.
   let mut met = !handed.is_empty();
-  let (daemon, mut leave, mut empty) = Daemon::spawn(settings, handed);
+  let (daemon, mut leave, mut empty) = Daemon::spawn(settings, handed, user.name.to_string());
   let mut peers = JoinSet::new();
   let mut quiet = None;
   let mut stops = heard(log.as_ref());
@@ -214,7 +215,7 @@ where
       accepted = listener.accept() => match accepted {
         Ok(stream) => {
           met = true;
-          peers.spawn(peer(daemon.clone(), identity.clone(), stream));
+          peers.spawn(peer(daemon.clone(), identity.clone(), user.clone(), stream));
         }
         Err(no) => report(log.as_ref(), &no),
       },
@@ -253,13 +254,37 @@ where
   Ok(())
 }
 
+/// The user of the machine: by the login of the system, which the local transport proves, and by
+/// its name in each life. On the tailnet that name is the login that Tailscale gives this machine,
+/// the login by which each other machine of the same person reaches the daemon, so one person is
+/// one operator from each machine. A machine that turns the tailnet on later names its user anew.
+#[derive(Clone)]
+struct User {
+  system: Arc<str>,
+  name: Arc<str>,
+}
+
+impl User {
+  fn of(doors: Option<&Doors>) -> Result<Self, TransportError> {
+    let system: Arc<str> = own()?.into();
+    let name = doors.map_or_else(|| Arc::clone(&system), |doors| Arc::clone(&doors.user));
+    Ok(Self { system, name })
+  }
+
+  /// The operator that an identity proved, under the name of the user when it is the user.
+  fn named(&self, who: Who) -> Who {
+    if *who.operator == *self.system { Who { operator: self.name.to_string(), ..who } } else { who }
+  }
+}
+
 /// One peer of the transport, identified, then served until it leaves.
 async fn peer<I: Identity<Stream = Accepted>>(
   daemon: Daemon,
   identity: I,
+  user: User,
   stream: Accepted,
 ) -> Result<(), TransportError> {
-  let who = identity.identify(&stream).await?;
+  let who = user.named(identity.identify(&stream).await?);
   let granted = fixed(who.role);
   serve(&daemon, stream, who, granted).await
 }
@@ -305,6 +330,8 @@ async fn window(daemon: Daemon, ticket: Ticket, stream: TcpStream) -> Result<(),
 /// settings give a port.
 struct Doors {
   identity: Tailscale,
+  /// The login of this machine on the tailnet, the name of its user.
+  user: Arc<str>,
   tcp: Option<TcpListener>,
   websocket: Option<TcpListener>,
 }
@@ -324,6 +351,7 @@ impl Doors {
       let mut ips = tailnet.identity.addresses().await?;
       ips.sort_by_key(IpAddr::is_ipv6);
       let ip = *ips.first().ok_or(TransportError::Tailless)?;
+      let user = tailnet.identity.login(ip).await?.into();
       let door = async |port: Option<u16>| match port {
         Some(port) => Tcp::new(SocketAddr::new(ip, port)).listen().await.map(Some),
         None => Ok(None),
@@ -334,7 +362,7 @@ impl Doors {
           report(log, &format_args!("listens on the tailnet at {at} by {name}"));
         }
       }
-      Ok::<_, TransportError>(Self { identity: tailnet.identity.clone(), tcp, websocket })
+      Ok::<_, TransportError>(Self { identity: tailnet.identity.clone(), user, tcp, websocket })
     };
     opened.await.inspect_err(|no| report(log, &format_args!("no door on the tailnet: {no}"))).ok()
   }
@@ -428,6 +456,7 @@ impl Daemon {
   fn spawn(
     settings: Settings,
     handed: Vec<Handed>,
+    user: String,
   ) -> (Self, oneshot::Receiver<Leaving>, watch::Receiver<bool>) {
     let (asks, heard) = mpsc::unbounded_channel();
     let (leave, leaving) = oneshot::channel();
@@ -443,6 +472,7 @@ impl Daemon {
       faults: HashMap::new(),
       changes,
       members: Members::default(),
+      user,
       settings,
       held: HashMap::new(),
       asks: asks.downgrade(),
@@ -698,6 +728,8 @@ struct Holder {
 /// skills of the lives serve.
 struct Lives {
   settings: Settings,
+  /// The name of the user of the machine, the first member of each life.
+  user: String,
   /// The access list of the tailnet as it changes, when there is a tailnet.
   changes: Option<watch::Receiver<Access>>,
   /// The home of the members that each life shares, which a change of the access list sets.
@@ -1007,7 +1039,7 @@ impl Lives {
   /// The operators who are members of each life, whom a model asks as `operator/<login>`: the
   /// user of the daemon, then each operator of the access list of the tailnet, each once.
   fn operators(&self) -> Vec<String> {
-    let mut all: Vec<String> = own().ok().into_iter().collect();
+    let mut all = vec![self.user.clone()];
     let listed = self.settings.tailnet.iter().flat_map(|one| one.identity.operators());
     for operator in listed {
       if !all.contains(&operator) {

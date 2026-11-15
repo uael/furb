@@ -4,6 +4,7 @@
 //! local API of Tailscale gives for its address, with the role that the access list gives it.
 
 use std::{
+  fmt::Display,
   fs, io, mem,
   net::{IpAddr, Ipv4Addr, SocketAddr},
   path::{Path, PathBuf},
@@ -386,6 +387,13 @@ impl Tailscale {
   pub async fn addresses(&self) -> Result<Vec<IpAddr>, AccessError> {
     Ok(self.api.asked::<Status>("/localapi/v0/status?peers=false").await?.ips)
   }
+
+  /// The login of the owner of the node at an address of the tailnet, this machine as any other.
+  pub async fn login(&self, addr: impl Display) -> Result<String, AccessError> {
+    let addr: String = form_urlencoded::byte_serialize(addr.to_string().as_bytes()).collect();
+    let whois: Whois = self.api.asked(&format!("/localapi/v0/whois?addr={addr}")).await?;
+    Ok(whois.profile.login)
+  }
 }
 
 impl Identity for Tailscale {
@@ -394,11 +402,9 @@ impl Identity for Tailscale {
   /// The operator of the peer at the address of the stream, the login that Tailscale gives, refused
   /// unless the access list gives it a role.
   async fn identify(&self, stream: &TcpStream) -> Result<Who, TransportError> {
-    let addr = stream.peer_addr().map_err(TransportError::Accept)?;
-    let addr: String = form_urlencoded::byte_serialize(addr.to_string().as_bytes()).collect();
-    let whois: Whois = self.api.asked(&format!("/localapi/v0/whois?addr={addr}")).await?;
-    let role = self.access.borrow().role(&whois.profile.login)?;
-    Ok(Who { operator: whois.profile.login, role })
+    let operator = self.login(stream.peer_addr().map_err(TransportError::Accept)?).await?;
+    let role = self.access.borrow().role(&operator)?;
+    Ok(Who { operator, role })
   }
 }
 
@@ -406,7 +412,8 @@ impl Identity for Tailscale {
 /// socket and no pipe. A page of any origin reaches loopback too, so the door lets in only a peer
 /// that gives the token of the daemon in its query. Only the user reads the token, in the file of
 /// the folder of the daemon that [`Door::open`] makes and writes, under the mode 0600 of Unix or
-/// the access list of Windows, and a peer that gives it is the user, who writes.
+/// the access list of Windows, and a peer that gives it is the user, who writes, under the name
+/// that the daemon gives its user.
 pub(crate) struct Door {
   listener: TcpListener,
   ticket: Ticket,
@@ -427,8 +434,8 @@ struct Said<'a> {
 
 impl Door {
   /// The door listening on a free port of loopback, with a new token, and its address written in
-  /// a file that only the user reads.
-  pub(crate) async fn open(file: &Path) -> Result<Self, TransportError> {
+  /// a file that only the user reads. Each peer that gives the token is the operator `user`.
+  pub(crate) async fn open(file: &Path, user: &str) -> Result<Self, TransportError> {
     let listener = Tcp::new(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)).listen().await?;
     let at = listener.local_addr().map_err(TransportError::Accept)?;
     let mut drawn = [0u8; 32];
@@ -441,7 +448,7 @@ impl Door {
     written(file, serde_json::to_vec(&Said { url: &url })?)
       .await
       .map_err(|source| TransportError::Door { file: file.to_owned(), source })?;
-    let ticket = Ticket { token: token.into(), login: super::local::own()?.into() };
+    let ticket = Ticket { token: token.into(), login: user.into() };
     Ok(Self { listener, ticket })
   }
 

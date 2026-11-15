@@ -256,7 +256,7 @@ async fn free() -> u16 {
 }
 
 /// A daemon on the tailnet under an identity, with its ports, which a folder holds while the
-/// test runs.
+/// test runs, with its socket in `host` and the file of its door in `door/window.json`.
 async fn tailed(identity: Tailscale) -> (Ports, Yard) {
   let ports = Ports { tcp: Some(free().await), websocket: Some(free().await) };
   let held = folder();
@@ -267,7 +267,7 @@ async fn tailed(identity: Tailscale) -> (Ports, Yard) {
     grace: Duration::from_secs(1),
     stall: STALL,
     tailnet: Some(Tailnet { identity, ports }),
-    door: None,
+    door: Some(held.join("door/window.json")),
     host: None,
   };
   let local = Local::new(held.join("host"));
@@ -310,6 +310,24 @@ async fn the_daemon_serves_the_tailnet_by_tcp_and_by_websocket() {
     ws.ask(1, Verb::List { config: None }).await,
     Some(Frame::Reply { id: 1, answer: Answer::Lives(vec![]) })
   );
+}
+
+#[tokio::test]
+async fn one_person_is_one_operator_from_the_machine_of_the_daemon_and_from_another_machine() {
+  let (api, mut heard) = tailscale("alice@github").await;
+  let (ports, held) = tailed(Tailscale::new(api, access("alice@github", Role::Write))).await;
+  let alice = Some(welcomed("alice@github", Role::Write));
+  assert_eq!(dialed(ports).await.hello().await.map(peer), alice, "from another machine");
+  let here = Local::new(held.join("host")).dial().await.unwrap();
+  let mut here = Client { lines: BufReader::new(here) };
+  assert_eq!(here.hello().await.map(peer), alice, "from the socket of this machine");
+  let url = said(&held.join("door/window.json"), None).await;
+  assert_eq!(Some(peer(welcome(&url).await)), alice, "from the door of the windows");
+  let mut asked = Vec::new();
+  while let Ok(path) = heard.try_recv() {
+    asked.push(path);
+  }
+  assert!(asked.contains(&"/localapi/v0/whois?addr=127.0.0.1".to_owned()), "{asked:?}");
 }
 
 /// A write that a life that is not open refuses for its life, and that a reader is refused for

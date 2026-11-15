@@ -15,7 +15,10 @@ are one operator.
   daemon refuses a folder that another user owns or can open, and a peer of another user.
 - On Windows, the daemon listens on a named pipe whose access list lets in the user alone, and which takes no peer of
   another machine.
-- The operator of a local peer is the login of the user, and it has the role to write.
+- The operator of a local peer is the user of the machine, and it has the role to write. The name of the user is
+  the login of the system, or, when the daemon listens on the tailnet, the login that Tailscale gives the machine:
+  one person is then one operator from each of its machines. A machine that turns the tailnet on later names its user
+  with the new login, and a record keeps the name of before.
 - A second daemon cannot listen where a daemon listens. A socket that no daemon answers is stale, and gives its place.
 
 ### The door of the windows
@@ -29,7 +32,7 @@ daemon.
 - The daemon makes the folder of that file on a new cache. On Unix the file is of mode 0600 in a folder of mode 0700; on
   Windows the file and the folder that the daemon makes hold an access list that lets in their owner alone.
 - A peer that gives no token in the query of its upgrade, or another one, gets the HTTP status 403 and no socket.
-- The operator of a peer of the door is the login of the user, and it has the role to write.
+- The operator of a peer of the door is the user of the machine, under the same name, and it has the role to write.
 - A window dials the socket first: `window.json` stays after a daemon that a kill ended, and only a daemon that
   answers on its socket holds the door that the file names.
 
