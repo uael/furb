@@ -251,9 +251,10 @@ impl Model {
     }
   }
 
-  /// His last message that still runs: the last one of the queue that is not on its way, else his
-  /// last one on the open thread while its act runs, so a take back never reaches past a message
-  /// that the thread already took to an earlier one, as the message that began the thread.
+  /// His last message that still runs: the last one of the queue that is not on its way, else the
+  /// last one that the daemon took and the page does not show yet, else his last one on the open
+  /// thread while its act runs, so a take back never reaches past a message that the thread already
+  /// took to an earlier one, as the message that began the thread.
   fn last_own(&self) -> Option<Back> {
     let flying = self.client.asked.values().any(|one| *one == Asked::Say);
     let queued = self.client.outgoing.iter().enumerate().skip(usize::from(flying)).next_back();
@@ -261,6 +262,10 @@ impl Model {
       return Some(Back::Queued(at, one.text.clone()));
     }
     let opened = self.client.thread.as_ref()?;
+    let mut taken = opened.thread.pending.iter().rev();
+    if let Some((act, text)) = taken.find_map(|one| Some((one.act.clone()?, one.text.clone()))) {
+      return Some(Back::Said(act, text));
+    }
     let login = &self.client.machines[opened.thread.key.0].login;
     let his = |by: &Maker| match by {
       Maker::Operator => true,
