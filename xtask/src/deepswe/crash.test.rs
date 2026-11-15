@@ -1,5 +1,6 @@
 //! The tests of the measures of the kills of a run, on a run of the bench of crashes that the rig
-//! kept: a life killed twice on a task of DeepSWE and opened again each time.
+//! kept: a life killed twice on a task of DeepSWE and opened again each time. They stand beside the
+//! rig, since only a run of `cargo xtask deepswe`, which asks a model, measures the kills.
 
 use std::{
   env, fs,

@@ -4,11 +4,14 @@
 #[path = "../../../tests/common/yard.rs"]
 mod yard;
 
+mod budget;
 mod catalog;
 mod clean_caches;
 mod jobs;
 mod links;
+mod loops;
 mod memwatch;
+mod opens;
 mod pack;
 mod paths;
 mod promise;

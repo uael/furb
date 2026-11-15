@@ -296,7 +296,7 @@ impl Loop {
 
 /// The tickets of a seed, in its folder, and the known labels apart: each label in turn, each
 /// filled from the seed, then shuffled.
-pub(crate) fn made(folder: &Path, seed: u64, count: usize) -> Result<(), Fault> {
+fn made(folder: &Path, seed: u64, count: usize) -> Result<(), Fault> {
   let mut rng = fastrand::Rng::with_seed(seed);
   let mut rows = Vec::new();
   for n in 0..count {
@@ -404,7 +404,7 @@ fn totals() -> Result<Value, Fault> {
 
 /// The share of right labels of each arm, and its tokens and seconds per ticket as the server
 /// counted them, also kept in score.json.
-pub(crate) fn scored(folder: &Path) -> Result<Map<String, Value>, Fault> {
+fn scored(folder: &Path) -> Result<Map<String, Value>, Fault> {
   let read = |path: &Path| -> Value {
     fs::read_to_string(path)
       .ok()
@@ -471,7 +471,3 @@ fn kept(path: &Path, value: &Value) -> Result<(), Fault> {
   fs::write(path, pretty(value) + "\n")
     .map_err(|source| Fault::Read { path: path.to_owned(), source })
 }
-
-#[cfg(test)]
-#[path = "loops.test.rs"]
-mod test;

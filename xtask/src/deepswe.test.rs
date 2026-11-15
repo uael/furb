@@ -1,5 +1,6 @@
 //! The tests of the rig of DeepSWE: the environment that it gives a checkout, and how it watches a
-//! life.
+//! life. They stand beside the rig, since its one door, `cargo xtask deepswe`, reads a task and its
+//! image from the network, asks a model, and grades in docker.
 
 #[cfg(unix)]
 use std::{collections::BTreeMap, env, os::unix::fs::symlink, path::PathBuf};

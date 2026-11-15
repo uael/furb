@@ -26,17 +26,17 @@ const NOWHERE: &str = "http://127.0.0.1:9";
 #[derive(clap::Args)]
 pub(crate) struct Opens {
   /// The program furb of the build to prove.
-  pub(crate) furb: PathBuf,
+  furb: PathBuf,
   /// The table that the run writes.
-  pub(crate) out: PathBuf,
+  out: PathBuf,
   /// The table of a run before.
-  pub(crate) before: Option<PathBuf>,
+  before: Option<PathBuf>,
   /// A file that names the records, one path on each line.
   #[arg(long, value_name = "FILE")]
-  pub(crate) list: Option<PathBuf>,
+  list: Option<PathBuf>,
   /// The most seconds of one open.
   #[arg(long, default_value_t = 1800)]
-  pub(crate) bound: u64,
+  bound: u64,
 }
 
 impl Opens {
@@ -200,7 +200,3 @@ fn resident(pid: u32) -> u64 {
     .and_then(|out| String::from_utf8_lossy(&out.stdout).trim().parse::<u64>().ok())
     .map_or(0, |kb| kb / 1024)
 }
-
-#[cfg(all(test, unix))]
-#[path = "opens.test.rs"]
-mod test;

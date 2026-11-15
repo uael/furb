@@ -25,20 +25,20 @@ use crate::Fault;
 
 /// Where and how a part runs: the limits that it reads, the load at its start, and the log of the
 /// guard of memory.
-pub(crate) struct Machine {
+struct Machine {
   /// The file of the limits.
-  pub(crate) home: PathBuf,
+  home: PathBuf,
   /// The table of the limits, `local` or `ci`.
-  pub(crate) table: &'static str,
+  table: &'static str,
   /// The load average of the last minute, and the cores of the machine.
-  pub(crate) load: f64,
-  pub(crate) cores: f64,
+  load: f64,
+  cores: f64,
   /// The log of the guard of memory: a line for each process that it ended, as its time in
   /// seconds of the epoch, its pid and its command. It is the one evidence that the guard ended a
   /// process, and not the kernel, a timeout or a crash, which end it by the same signal.
-  pub(crate) log: PathBuf,
+  log: PathBuf,
   /// The folder of the run, under which a program of the run stands.
-  pub(crate) folder: PathBuf,
+  folder: PathBuf,
 }
 
 /// The limits of a part, in seconds of wall and of CPU; none is 0.
@@ -76,9 +76,9 @@ struct Ran {
 }
 
 /// What a run came to: the code to exit with, and the lines that judge it.
-pub(crate) struct Verdict {
-  pub(crate) code: u8,
-  pub(crate) said: Vec<String>,
+struct Verdict {
+  code: u8,
+  said: Vec<String>,
 }
 
 pub(crate) fn check(root: &Path, part: &str, command: &[String]) -> Result<ExitCode, Fault> {
@@ -109,7 +109,7 @@ impl Machine {
 
   /// The run of the command of a part, judged by its limits: by its wall time, or by its CPU time
   /// when the load at its start was over the cores. A command that fails gives its own code.
-  pub(crate) fn run(&self, part: &str, command: &[String]) -> Result<Verdict, Fault> {
+  fn run(&self, part: &str, command: &[String]) -> Result<Verdict, Fault> {
     let limits = self.limits(part)?;
     let (began, start, used) = (epoch(), Instant::now(), cpu());
     let (status, lines) = streamed(command)?;
@@ -288,7 +288,3 @@ fn load() -> f64 {
   });
   text.and_then(|one| one.split_whitespace().next()?.parse().ok()).unwrap_or(0.0)
 }
-
-#[cfg(test)]
-#[path = "budget.test.rs"]
-mod test;
