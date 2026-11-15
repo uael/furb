@@ -47,7 +47,10 @@ use crate::{
   engine::ROOT,
   fact::{Fact, named},
   value::{Fault, Object, Text, entry},
-  world::{config, files},
+  world::{
+    config, files,
+    skills::{process, program},
+  },
 };
 
 mod bound;
@@ -839,7 +842,7 @@ pub fn enabled_by(a: &Fact) -> Option<Enabled> {
 /// rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
 pub fn played(given: Vec<Skill>, places: Places) -> Box<dyn Ear> {
-  telling(given, Vec::new(), places)
+  telling(given, Vec::new(), places, None)
 }
 
 /// What the ear of the extensions keeps of the facts that it heard, which the image of a life
@@ -857,8 +860,15 @@ struct Told {
 }
 
 /// The ear of [`extensions`], which tells the root once, at the first stand that this life answers,
-/// why each extension of `refused` does not play.
-pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -> Box<dyn Ear> {
+/// why each extension of `refused` does not play. In a life that no host runs processes for, which
+/// `unhosted` gives by the directory of the life, it tells the root too, once at its first play,
+/// each extension whose process does not run there.
+pub(crate) fn telling(
+  given: Vec<Skill>,
+  refused: Vec<String>,
+  places: Places,
+  unhosted: Option<PathBuf>,
+) -> Box<dyn Ear> {
   hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH], move |mut co| async move {
     let kept = co.keeps(Told { refused, ..Told::default() })?;
     loop {
@@ -950,6 +960,11 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
           }
           ENABLE if teach.is_some() => {
             if let Some(one) = Skill::of(&a) {
+              if let Some(here) = &unhosted
+                && a.by() != JOURNAL
+              {
+                tell(&mut co, &processless(&a, &[&one.name], here, &places));
+              }
               match enabled.iter().position(|two| two.name == one.name) {
                 Some(at) => enabled[at] = one,
                 None => enabled.push(one),
@@ -1024,6 +1039,13 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
             say(&mut co, one.enable());
           }
         }
+        if let Some(here) = &unhosted
+          && a.by() != JOURNAL
+        {
+          let first = new.iter().filter(|one| !enabled.iter().any(|two| two.name == one.name));
+          let names: Vec<&str> = first.map(|one| &*one.name).collect();
+          tell(&mut co, &processless(&a, &names, here, &places));
+        }
         for one in new {
           let Some(at) = enabled.iter().position(|two| two.name == one.name) else {
             for chain in chains.iter_mut() {
@@ -1049,6 +1071,27 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
       stepped?;
     }
   })
+}
+
+/// The note of each extension of these names whose process runs only where a host runs it, as the
+/// daemon of the machine does, for a life in `here` that no host runs processes for: each act that
+/// the process answers would wait there with no end. A fact enable that names a program gives it,
+/// and the folder of the skill gives it for any other fact.
+fn processless(a: &Fact, names: &[&str], here: &Path, places: &Places) -> Vec<String> {
+  let given = enabled_by(a).and_then(|one| one.program);
+  let found = |name: &str| match &given {
+    Some(one) => program(one),
+    None => process(name, here, places),
+  };
+  let line = |name: &&str| {
+    Some(format!(
+      "The extension {name} runs its process {} only in a life that the daemon of the machine \
+       holds, so each act that the process answers waits here: open the life in the window or \
+       with `furb prompt`.",
+      found(name)?.display()
+    ))
+  };
+  names.iter().filter_map(line).collect()
 }
 
 /// Tells the root why each skill of these lines does not play, in one note, when there is one.

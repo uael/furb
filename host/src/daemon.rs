@@ -1199,6 +1199,8 @@ impl Lives {
       claude: claude.or_else(|| base.claude.clone()),
       answer: answer.or_else(|| base.answer.clone()),
       members: Some(self.members.clone()),
+      // The daemon runs the process of each extension that the life plays, as `Played` says.
+      processes: Some(true),
       ..base.clone()
     };
     let places = processes::places(&opening);

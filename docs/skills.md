@@ -209,7 +209,9 @@ What the notes are for.
   the life plays a new word of the extension. Its variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` give the folder
   where the daemon listens, the record of the life and the name of the extension, so it dials the daemon and attaches
   the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
-  life that plays it does. A process that ends before its life tells the operator once, with its exit and the last
+  life that plays it does. A life that the daemon does not hold, as a life of a door, starts no process, so each act
+  that the process answers waits there: such a life tells its root once of each extension whose process does not run,
+  with the place where it runs. A process that ends before its life tells the operator once, with its exit and the last
   lines of its stderr, and starts again at the next play of the extension. A process keeps working on each later
   daemon, as [the protocol](protocol.md) says of a skill. It can be absent.
 - `furb-config` is the JSON file of the keys that the extension adds to the configs, relative to the folder, as

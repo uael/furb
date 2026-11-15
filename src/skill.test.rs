@@ -568,7 +568,7 @@ fn the_ear_tells_the_root_once_why_each_skill_that_does_not_play_does_not_play()
   let (record, store) = world::store(at.join("record.jsonl")).unwrap();
   let why = ["The skill a does not play: one", "The skill b does not play: two"];
   let ears = [
-    ("extensions", telling(vec![], why.map(str::to_owned).to_vec(), places(at))),
+    ("extensions", telling(vec![], why.map(str::to_owned).to_vec(), places(at), None)),
     ("stand", standing(at.to_owned())),
     ("files", world::files(world::Scratch::own(), at.join("user"), None)),
     ("store", store),
@@ -589,6 +589,54 @@ fn the_ear_tells_the_root_once_why_each_skill_that_does_not_play_does_not_play()
 }
 
 #[test]
+fn a_life_that_no_host_runs_processes_for_tells_the_root_once_of_each_extension_whose_process_does_not_run()
+ {
+  let notes = |hosted: bool| {
+    let yard = place(if hosted { "hosted" } else { "unhosted" });
+    let at: &Path = &yard;
+    folder(
+      &at.join(".furb").join("skills").join("note"),
+      &skill("note", &[("word", "note.py"), ("process", "run.py")]),
+      "x = 1\n",
+    );
+    let (record, store) = world::store(at.join("record.jsonl")).unwrap();
+    let unhosted = (!hosted).then(|| at.to_owned());
+    let ears = [
+      ("extensions", telling(vec![note("x = 1\n")], vec![], places(at), unhosted)),
+      ("stand", standing(at.to_owned())),
+      ("files", world::files(world::Scratch::own(), at.join("user"), None)),
+      ("store", store),
+    ];
+    let mut engine = Engine::boot(record, ears).unwrap();
+    assert!(engine.raised().is_none(), "{:?}", engine.raised());
+    engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
+    let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
+    let told: Vec<String> = engine
+      .transcript(on)
+      .unwrap()
+      .iter()
+      .filter(|one| one.kind() == "tell" && one.by() == "extensions")
+      .filter_map(|one| one.word(0).and_then(|notes| entry(&notes, 0)))
+      .filter_map(|note| note.as_str().map(str::to_owned))
+      .collect();
+    let program = at.join(".furb").join("skills").join("note").join("run.py");
+    (told, program)
+  };
+  let (told, program) = notes(false);
+  let line = format!(
+    "The extension note runs its process {} only in a life that the daemon of the machine holds, so \
+     each act that the process answers waits here: open the life in the window or with `furb prompt`.",
+    program.display()
+  );
+  assert_eq!(told, [line]);
+  assert_eq!(
+    notes(true).0,
+    Vec::<String>::new(),
+    "a life whose host runs the process tells nothing"
+  );
+}
+
+#[test]
 fn a_life_that_opens_again_on_its_record_replays_the_note_of_the_former_key_and_tells_it_no_more() {
   let yard = place("retold");
   let at: &Path = &yard;
@@ -596,7 +644,7 @@ fn a_life_that_opens_again_on_its_record_replays_the_note_of_the_former_key_and_
   let opened = || {
     let (record, store) = world::store(at.join("record.jsonl")).unwrap();
     let ears = [
-      ("extensions", telling(vec![], why.to_vec(), places(at))),
+      ("extensions", telling(vec![], why.to_vec(), places(at), None)),
       ("stand", standing(at.to_owned())),
       ("files", world::files(world::Scratch::own(), at.join("user"), None)),
       ("store", store),
