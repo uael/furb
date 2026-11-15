@@ -253,8 +253,8 @@ fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() 
   let (app, _daemon, _peer) = opened(&message, "README.md");
   shows(&app, "✓ Resolved");
   // Each agent stands in the box under the line of the block that made it, at the column of its
-  // code, with the line where it stands while it lives and else its title, then its state and its
-  // model. The card counts the agents that work.
+  // code, with the line where it stands while it lives, the value that it gave once it rests, and
+  // else its title, then its state and its model. The card counts the agents that work.
   let frame = app.text();
   let agents: Vec<String> = frame
     .lines()
@@ -270,7 +270,7 @@ fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() 
       "    2  boot = prompt(str, 'Read the boot of the host\\…+44",
       "       └ Read the boot of the host        ⠋ Working  opus",
       "    3  lines = await prompt(str, 'Count the lines of …+51",
-      "       └ Count the lines of README.md    ✓ Resolved  opus",
+      "       └ 'README.md has 3 lines.'        ✓ Resolved  opus",
       "    ◐  await wait(600, bench)",
     ]
     .map(str::to_owned),
@@ -294,7 +294,7 @@ fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() 
   // hints names.
   app.press("escape");
   shows(&app, " Resolve ");
-  shows(&app, "└ Count the lines of README.md");
+  shows(&app, "└ 'README.md has 3 lines.'");
   shows(&app, "⌃X ↓ agents");
 
   // The key steps through the agents of the thread, from the first, and from the last to the first.

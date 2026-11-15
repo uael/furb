@@ -5,8 +5,8 @@
 //! the agents that no line made.
 
 use furb::view::{
-  Agent, Block, Exchange, Line as Code, Maker, Mark, Output, Retrying, Said, Saying, Standing,
-  Thought, Work, lines, timer,
+  Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Output, Retrying, Said, Saying,
+  Standing, Thought, Work, lines, timer,
 };
 use furb_client::{Fold, Opened, Target, rests};
 use opentui::style::{Color, Style};
@@ -325,7 +325,7 @@ impl Feed<'_> {
     }
     for (line, colors) in block.lines.iter().zip(colored.iter()).skip(first) {
       rows.extend(self.code(line, colors.clone(), numbers));
-      rows.extend(self.agents(Some((line.number, numbers))));
+      rows.extend(self.agents(Some((line, numbers))));
     }
     if block.more {
       rows.push(Row::of(self.boxed(vec![run(format!("{:>gutter$}", "…"), muted)], t.raised)));
@@ -518,10 +518,24 @@ impl Feed<'_> {
   /// the dock across the thread: from the first that does not rest to the last, so an agent that
   /// ends among others that work keeps its row with its mark, and one row that counts the agents
   /// before them. A click on an agent opens its thread in place.
-  fn agents(&self, under: Option<(usize, Gutter)>) -> Vec<Row> {
-    let (done, shown) = self.opened.made(under.map(|(line, _)| line));
-    let mut rows: Vec<Row> =
-      shown.into_iter().map(|agent| self.agent(agent, under.map(|(_, gutter)| gutter))).collect();
+  fn agents(&self, under: Option<(&Code, Gutter)>) -> Vec<Row> {
+    let (done, shown) = self.opened.made(under.map(|(line, _)| line.number));
+    // A line whose acts are its agents alone says what each came to in their order.
+    let gave = under
+      .map(|(line, _)| line.made.as_slice())
+      .filter(|made| made.len() == done + shown.len())
+      .unwrap_or_default();
+    let mut rows: Vec<Row> = shown
+      .into_iter()
+      .enumerate()
+      .map(|(at, agent)| {
+        let value = match gave.get(done + at) {
+          Some(Made::Done(value)) => Some(value.as_str()),
+          _ => None,
+        };
+        self.agent(agent, under.map(|(_, gutter)| (gutter, value)))
+      })
+      .collect();
     if done > 0 {
       let noun = if done == 1 { "agent" } else { "agents" };
       let (muted, ground) = (self.style(Role::Muted), self.model.tokens.raised);
@@ -542,8 +556,9 @@ impl Feed<'_> {
   /// The row of one agent, a click that opens its thread, with its state, its time and its model
   /// at the right. In the dock its title leads, then the line where it stands while it lives. Under
   /// the line that made it, which says its prompt already, the row stands in the box at the column
-  /// of the code, and says the line where the agent stands while it has one, and else its title.
-  fn agent(&self, agent: &Agent, under: Option<Gutter>) -> Row {
+  /// of the code, and says the line where the agent stands while it has one, the value that it gave
+  /// once it rests, and else its title.
+  fn agent(&self, agent: &Agent, under: Option<(Gutter, Option<&str>)>) -> Row {
     let (muted, rest) = (self.style(Role::Muted), rests(agent));
     let (mark, right) = self.status(agent);
     // The line that its model has not begun to write says nothing that its state does not say.
@@ -552,7 +567,7 @@ impl Feed<'_> {
     let title = if rest { muted } else { self.style(Role::Prose) };
     let title = vec![run(agent.card.title.clone(), title)];
     let open = Click::Agent(agent.card.prompt.clone());
-    let Some(numbers) = under else {
+    let Some((numbers, value)) = under else {
       let room = self.wide.saturating_sub(2);
       let said = title
         .into_iter()
@@ -565,7 +580,10 @@ impl Feed<'_> {
     };
     let lead = vec![run(format!("{:>width$}  └ ", "", width = numbers.width), muted)];
     let room = numbers.inside(self.inner());
-    let text = stands.unwrap_or(title);
+    let gave = value
+      .filter(|_| rest)
+      .and_then(|value| self.model.colors.lines(value, muted).first().cloned());
+    let text = stands.or(gave).unwrap_or(title);
     let left = lead.into_iter().chain(clipped(text, room, muted)).collect();
     let line = spread(left, right.clone(), room, Style::new());
     let x = PAD + width(&line) - width(&right);
