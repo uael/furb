@@ -2452,9 +2452,17 @@ async fn a_resolve_closes_each_act_that_keeps_a_thread_open_and_a_message_opens_
   let said = Verb::Prompt { life: life.clone(), shape, message, to: None, on: None };
   let Ok(Answer::Act(count)) = window.ask(said).await else { panic!("no prompt") };
   card(&mut window, stands(&count, Standing::Asks { of: None })).await;
-  let refused = window.ask(Verb::Resolve { life, thread: count.clone() }).await;
+  // A message after it that takes a text stays open too: a resolve closes all or nothing.
+  let (shape, message) = ("str".to_owned(), "and name each".to_owned());
+  let on = Some(count.clone());
+  let said = Verb::Prompt { life: life.clone(), shape, message, to: None, on };
+  let Ok(Answer::Act(named)) = window.ask(said).await else { panic!("no message") };
+  let refused = window.ask(Verb::Resolve { life: life.clone(), thread: count.clone() }).await;
   let why = format!("{count} takes a value of the shape int, so only its model resolves it.");
   assert_eq!(refused, Err(ProtocolError::Refused { why }));
+  let why = format!("No act named {named} is done.");
+  let peek = Verb::Peek { life, act: named };
+  assert_eq!(window.ask(peek).await, Err(ProtocolError::Refused { why }));
 }
 
 /// The lines of the block of each exchange of a page, as their numbers and their texts.

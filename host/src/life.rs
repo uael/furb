@@ -1344,13 +1344,22 @@ async fn spoken(
 
 /// The resolve of a thread of the operator: a close of each act that keeps it open, the last
 /// first, with the value that its shape takes from the text `resolved`. An act whose shape takes
-/// no text refuses it.
+/// no text refuses it, before any act is closed.
 fn resolved(engine: &mut Engine, life: &Life, thread: &str) -> Result<Reply, LifeError> {
-  for (act, shape) in life.kept.held.open_in(thread).into_iter().rev() {
-    let Ok(value) = answered(&shape, RESOLVED) else {
-      let why = format!("{act} takes a value of the shape {shape}, so only its model resolves it.");
-      return Err(LifeError::Refused(why));
-    };
+  let closes: Vec<_> = life
+    .kept
+    .held
+    .open_in(thread)
+    .into_iter()
+    .rev()
+    .map(|(act, shape)| match answered(&shape, RESOLVED) {
+      Ok(value) => Ok((act, value)),
+      Err(_) => Err(LifeError::Refused(format!(
+        "{act} takes a value of the shape {shape}, so only its model resolves it."
+      ))),
+    })
+    .collect::<Result<_, _>>()?;
+  for (act, value) in closes {
     engine.close(value, verbs::Close { id: Some(act) })?;
   }
   Ok(Reply::Done)
