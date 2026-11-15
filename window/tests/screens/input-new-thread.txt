@@ -2,10 +2,10 @@
 ┃
 ┃ where does the time go (the model works on it)               Working 1
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-                                                              ▐ ● where does the time…  ⠋ Working ▌
-       opus/high                                              ▐   FT furb-try                opus ▌
-    ⠋  writes                                                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    …
+                                                opus/high     ▐ ● where does the time…  ⠋ Working ▌
+    ⠋  writes                                                 ▐   FT furb-try                opus ▌
+    …                                                         ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+
 
 
 

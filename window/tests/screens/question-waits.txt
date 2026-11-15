@@ -1,10 +1,11 @@
 ● furb · how long does an open take                Resolve     All projects ▾        This computer
-  the boot.
-                                                               Resting 1
-  • seed reads each chain once                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-  • the image skips the boot                                  ▐ ● how long does an open…  ◆ Input ▌
-                                                              ▐   FU furb                    opus ▌
-       python                                                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+  to send each entry to the ears of the host, and 104 s in
+  the boot.                                                    Resting 1
+                                                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+  • seed reads each chain once                                ▐ ● how long does an open…  ◆ Input ▌
+  • the image skips the boot                                  ▐   FU furb                    opus ▌
+                                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+       python
     1  open = boot + seed
 
   See the trace.
@@ -13,8 +14,7 @@
 ┃ and the side
 ┃ (the model asks a choice)
 ┃
-
-       opus/high
+                                                opus/high
     ◆  side = await prompt(Literal['right', 'left'], …+51
     4  close(side)
     …

@@ -2,24 +2,24 @@
 ┃
 ┃ one (the model works on it)                                  Working 1
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-                                                              ▐ ● one (the model…       ◐ Working ▌
-       opus/high                                              ▐   FT furb-try                opus ▌
-    ⠋  writes                                                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    …
+                                                opus/high     ▐ ● one (the model…       ◐ Working ▌
+    ⠋  writes                                                 ▐   FT furb-try                opus ▌
+    …                                                         ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
 
 ┃
 ┃ two (the model works on it)
 ┃
-
-       opus/high
+                                                opus/high
     …
 
 ┃
 ┃ three (the model works on it)
 ┃
-
-       opus/high
+                                                opus/high
     …
+
+
+
 
 
 ┃

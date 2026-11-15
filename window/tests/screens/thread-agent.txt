@@ -3,11 +3,11 @@
 ┃ Run the bench of the replay                                  Working 1
 ┃ (the agent waits)                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
 ┃                                                             ▐ ● measure the open on…  ◐ Working ▌
-                                                              ▐   FU furb                 opus └2 ▌
-       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    1  n = 2
+                                                opus/high     ▐   FU furb                 opus └2 ▌
+    1  n = 2                                                  ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     ◐  await wait(600, chain)
     …
+
 
 
 

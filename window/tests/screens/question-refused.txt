@@ -3,11 +3,11 @@
 ┃ how many rows                                                Needs you 1
 ┃ (the model asks a number)                                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
 ┃                                                             ▐ ● how many rows           ◆ Input ▌
-                                                              ▐   FU furb                    opus ▌
-       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    ◆  rows = await prompt(int, 'How many rows does t…+28
+                                                opus/high     ▐   FU furb                    opus ▌
+    ◆  rows = await prompt(int, 'How many rows does t…+28     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     2  close(str(rows))
     …
+
 
 
 

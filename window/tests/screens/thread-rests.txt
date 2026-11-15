@@ -3,8 +3,7 @@
 ┃ how long does an open take                                   Resolved 1 ▾
 ┃ (the model answers)
 ┃                                                             ▐ ✓ how long does an open take  now ▌
-
-       opus/high
+                                                opus/high
     1  found = 2
     2  close('The open takes **329 s**. Two stages h…+251
 
@@ -19,6 +18,7 @@
     1  open = boot + seed
 
   See the trace.
+
 
 
 

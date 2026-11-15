@@ -3,9 +3,8 @@
 ┃ measure the open on three chains                             Working 1
 ┃ (the model delegates)                                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
 ┃                                                             ▐ ● measure the open on…  ◐ Working ▌
-                                                              ▐   FU furb                 opus └2 ▌
-       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    1  bench = prompt(str, 'Run the bench of the repl…+42
+                                                opus/high     ▐   FU furb                 opus └2 ▌
+    1  bench = prompt(str, 'Run the bench of the repl…+42     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
        └ await wait(600, chain)           ◐ Working  opus
     2  boot = prompt(str, 'Read the boot of the host\…+44
        └ Read the boot of the host        ⠋ Working  opus
@@ -13,6 +12,7 @@
        └ 'README.md has 3 lines.'        ✓ Resolved  opus
     ◐  await wait(600, bench)
     …
+
 
 
 

@@ -270,7 +270,11 @@ impl Feed<'_> {
       Some(block) if exchange.python => rows.extend(self.word(&exchange.message, block)),
       block => {
         rows.extend(self.message(&exchange.text, his));
-        rows.extend(block.iter().flat_map(|block| self.block(&exchange.message, block)));
+        if let Some(block) = block {
+          // The head of the block takes the blank row under the message.
+          rows.pop();
+          rows.extend(self.block(&exchange.message, block));
+        }
       }
     }
     for said in &exchange.said {
@@ -336,14 +340,16 @@ impl Feed<'_> {
     rows
   }
 
-  /// The block of an answer, as a block of code of the markdown: the model as its head, then the
-  /// window of seven rows that rolls, or each line once the operator opened it, each with its
-  /// number in the thread, close to the left of the box. The thought stands under it.
+  /// The block of an answer, as a block of code of the markdown: the model as its head, on the
+  /// row above the box at its right, where the times of its lines end, then the window of seven
+  /// rows that rolls, or each line once the operator opened it, each with its number in the
+  /// thread, close to the left of the box. The thought stands under it.
   fn block(&self, message: &str, block: &Block) -> Vec<Row> {
-    let t = &self.model.tokens;
-    let gutter = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
-    let head = format!("{:width$}  {}", "", block.maker.shown(), width = gutter.width);
-    let mut rows = vec![Row::of(self.boxed(vec![run(head, self.style(Role::Muted))], t.raised))];
+    let numbers = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
+    let head = vec![run(block.maker.shown(), self.style(Role::Muted))];
+    let mut head = spread(Vec::new(), head, numbers.inside(self.inner()), Style::new());
+    head.insert(0, run(" ".repeat(PAD), Style::new()));
+    let mut rows = vec![Row::of(head)];
     rows.extend(self.lines(message, block));
     if let Some(thought) = &block.thought {
       rows.push(Row::default());

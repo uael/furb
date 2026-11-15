@@ -3,15 +3,15 @@
 ┃ where does the time of a resume go                           Working 1
 ┃ (the model writes a long word)                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
 ┃                                                             ▐ ● where does the time…  ◐ Working ▌
-                                                              ▐   FU furb                    opus ▌
-       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    …  4 lines
+                                                opus/high     ▐   FU furb                    opus ▌
+    …  4 lines                                                ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     5  stages = ['read', 'boot', 'seed', 'turns']
     6  for stage in stages:
     7    cost = cost + len(stage)
     8  total = cost * 2
     ◐  await wait(600, chain)
     …
+
 
 
 

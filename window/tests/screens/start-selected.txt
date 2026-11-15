@@ -3,9 +3,9 @@
 ┃ Debug stuck TUI after merge                                 ▐   FU furb                    opus ▌
 ┃ (the model works on it)                                     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
 ┃                                                              Working 2
-
-       opus/high                                                  run the…    Working as of 09:12
-    ■                                             stopped         FC furb-cloud@studio     opus ◌
+                                                opus/high
+    ■                                             stopped         run the…    Working as of 09:12
+                                                                  FC furb-cloud@studio     opus ◌
 
                                                                 ● which key sends…  ⠋ Working 11h
                                                                   PH photowroom            opus ◌

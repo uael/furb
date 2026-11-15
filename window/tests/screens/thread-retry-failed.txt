@@ -3,15 +3,15 @@
 ┃ the bench stalls on a cold build                             Needs you 1
 ┃ (the model is asked again)                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
 ┃                                                             ▐ ● the bench stalls on…   ‖ Paused ▌
-                                                              ▐   FU furb                    opus ▌
-       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    ✗  claude-cli:opus/high answered nothing:
+                                                opus/high     ▐   FU furb                    opus ▌
+    ✗  claude-cli:opus/high answered nothing:                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
        ProviderError: the request is malformed
 
   ‖ This thread is paused. Nothing is lost: a message
     resumes it.
 
      Change the model
+
 
 
 

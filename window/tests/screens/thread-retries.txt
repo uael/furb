@@ -3,11 +3,11 @@
 ┃ the bench stalls on a cold build                             Working 1
 ┃ (the model is asked again)                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
 ┃                                                             ▐ ● the bench stalls on…  ⠋ Working ▌
-                                                              ▐   FU furb                    opus ▌
-       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    ⠋  Attempt 2 of 10 in 4 s
+                                                opus/high     ▐   FU furb                    opus ▌
+    ⠋  Attempt 2 of 10 in 4 s                                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
        the provider is overloaded
     …
+
 
 
 

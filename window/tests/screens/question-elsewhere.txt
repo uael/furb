@@ -3,12 +3,11 @@
 ┃ how long does an open take                                   Needs you 1
 ┃ (the model answers)
 ┃                                                               ● which key sends the…    ◆ Input
-                                                                  FU furb                    opus
-       opus/high
-    1  found = 2                                               Resolved 1 ▸
-    2  close('The open takes **329 s**. Two stages h…+251
-                                                              ▐ ✓ how long does an open take  now ▌
-  The open takes 329 s. Two stages hold most of it: 181 s
+                                                opus/high         FU furb                    opus
+    1  found = 2
+    2  close('The open takes **329 s**. Two stages h…+251      Resolved 1 ▸
+
+  The open takes 329 s. Two stages hold most of it: 181 s     ▐ ✓ how long does an open take  now ▌
   to send each entry to the ears of the host, and 104 s in
   the boot.
 
@@ -19,6 +18,7 @@
     1  open = boot + seed
 
   See the trace.
+
 
 
 

@@ -3,11 +3,11 @@
 ┃ read the trace of the open                                   Resting 1
 ┃ (the model reads much)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
 ┃                                                             ▐ ● read the trace of the open  now ▌
-                                                              ▐   FU furb                    opus ▌
-       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-    1  close('The trace holds the open of each chain.')
+                                                opus/high     ▐   FU furb                    opus ▌
+    1  close('The trace holds the open of each chain.')       ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
 
   The trace holds the open of each chain.
+
 
 
 

@@ -3,9 +3,9 @@
 ┃ Debug stuck TUI after merge
 ┃ (the model works on it)
 ┃
-
-       opus/high
+                                                                   opus/high
     ■                                                                stopped
+
 
 
 
