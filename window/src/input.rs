@@ -414,14 +414,17 @@ impl Model {
     self.before_draft(back.join("\n\n"))
   }
 
-  /// How many rows the text of the input takes, as the editor wraps it at its columns.
+  /// How many rows the text of the input takes in its box, which grows up to a count of rows.
   pub(crate) fn grown(&self) -> usize {
+    usize::clamp(self.lines(), 1, GROWS)
+  }
+
+  /// How many lines the text of the input holds, as the editor wraps it at its columns.
+  fn lines(&self) -> usize {
     let prompt = if self.client.draft.python { PROMPT_WIDTH } else { 0 };
     let room = self.wide().saturating_sub(6 + prompt).max(1);
     // The editor wraps at a word boundary, as the box of a message does.
-    let rows =
-      self.client.draft.text.split('\n').map(|line| wrapped(line, room).len().max(1)).sum();
-    usize::clamp(rows, 1, GROWS)
+    self.client.draft.text.split('\n').map(|line| wrapped(line, room).len().max(1)).sum()
   }
 
   /// How many rows the input, the launcher and the hints take at the bottom of the left side.
@@ -516,17 +519,22 @@ impl Model {
   }
 
   /// The keys of what stands over the input: a form, the completion, or the bar of the time; else
-  /// where a walk through what he sent stands, in the form of the place in a list.
+  /// where a walk through what he sent stands, in the form of the place in a list, or how many
+  /// lines of a text longer than its box show.
   fn over_input(&self) -> Option<Line> {
+    let muted = self.tokens.style(Role::Muted);
     let walked = || {
       let (at, of) = self.client.walking()?;
-      Some(vec![run(format!("  ↑↓ history {at} / {of}"), self.tokens.style(Role::Muted))])
+      Some(vec![run(format!("  ↑↓ history {at} / {of}"), muted)])
     };
+    let lines = self.lines();
+    let long = || (lines > GROWS).then(|| vec![run(format!("  {GROWS} of {lines} lines"), muted)]);
     self
       .form_hints()
       .or_else(|| self.completion_hints())
       .or_else(|| self.time_hints())
       .or_else(walked)
+      .or_else(long)
   }
 
   /// The bar of the input: the color of his turn while it holds the form of a question, else the
