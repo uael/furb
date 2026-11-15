@@ -17,9 +17,9 @@
      A new thread, and back to the thread             ⌃N
      Jump to the latest                                ↘
      Stop the work of the thread                     ⎋ ⎋
-     Resolve the thread, or reply to open it again  ⌃X R
+     Resolve the thread                             ⌃X R
      Pause, kill or keep the session                ⌃X S
-     The context of the thread, by kind, by cache, then fol
+     The context: kinds, cache, folded              ⌃X C
      The next agent of the thread                   ⌃X ↓
 
 ┃   ↑↓ move · ⏎ run · ⎋ close

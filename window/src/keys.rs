@@ -136,19 +136,9 @@ const THREAD: &[Bound] = &[
     Some("stop"),
     &[&[plain(KeyCode::Escape), plain(KeyCode::Escape)]],
   ),
-  bound(
-    Does::Resolve,
-    "resolve the thread, or reply to open it again",
-    Some("resolve"),
-    &[&led('r')],
-  ),
+  bound(Does::Resolve, "resolve the thread", Some("resolve"), &[&led('r')]),
   bound(Does::Running, "pause, kill or keep the session", Some("running"), &[&led('s')]),
-  bound(
-    Does::Context,
-    "the context of the thread, by kind, by cache, then folded",
-    Some("context"),
-    &[&led('c')],
-  ),
+  bound(Does::Context, "the context: kinds, cache, folded", Some("context"), &[&led('c')]),
   bound(
     Does::Agent,
     "the next agent of the thread",
@@ -160,7 +150,7 @@ const THREAD: &[Bound] = &[
 /// The keys of the input.
 const INPUT: &[Bound] = &[
   bound(Does::Send, "send", None, &[&[plain(KeyCode::Enter)]]),
-  bound(Does::Empty, "empty the input, or take back your last message", None, &[&[ctrl('c')]]),
+  bound(Does::Empty, "empty the input, then take back the last", None, &[&[ctrl('c')]]),
   bound(Does::Leave, "leave, twice on an empty input", Some("quit"), &[&[ctrl('d')]]),
   bound(Does::Sessions, "the session that the input sends to", Some("session"), &[&led('o')]),
   bound(Does::Python, "a word of Python, and back to a message", Some("python"), &[&led('y')]),
