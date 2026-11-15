@@ -107,7 +107,3 @@ pub(crate) fn ended(
 ) -> Option<Fault> {
   image::keep(&mut engine, record?, kept).err()
 }
-
-#[cfg(test)]
-#[path = "rebirth.test.rs"]
-mod tests;

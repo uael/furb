@@ -160,7 +160,3 @@ fn lines(file: &Path) -> u32 {
   let text = fs::read_to_string(file).unwrap_or_default();
   u32::try_from(text.lines().count()).unwrap_or(u32::MAX)
 }
-
-#[cfg(test)]
-#[path = "git.test.rs"]
-mod test;

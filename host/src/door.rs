@@ -62,7 +62,3 @@ impl Door {
     }
   }
 }
-
-#[cfg(test)]
-#[path = "door.test.rs"]
-mod test;

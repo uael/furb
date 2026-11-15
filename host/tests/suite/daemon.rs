@@ -3050,3 +3050,68 @@ async fn the_changes_of_a_checkout_give_its_branch_its_files_with_their_counts_a
   let none = Verb::Changes { cwd: elsewhere.display().to_string(), path: None };
   assert_eq!(window.ask(none).await, Ok(Answer::Changes(Changes::default())));
 }
+
+#[tokio::test]
+async fn the_changes_name_a_branch_with_no_commit_and_none_when_detached_and_count_a_rename_and_a_binary()
+ {
+  use furb_host::protocol::{Change, Changed, Changes};
+  let at = place();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let folder = at.join("project");
+  fs::create_dir_all(folder.join(".furb/sessions")).unwrap();
+  let git = |args: &[&str]| {
+    let done = process::Command::new("git").arg("-C").arg(&folder).args(args).output();
+    assert!(done.unwrap().status.success(), "git {args:?}");
+  };
+  let cwd = folder.display().to_string();
+  let mut changes = async || {
+    let asked = window.ask(Verb::Changes { cwd: cwd.clone(), path: None }).await;
+    let Ok(Answer::Changes(changes)) = asked else { panic!("{asked:?}") };
+    changes
+  };
+  // A checkout with no commit names the branch that its first commit makes. A record of a
+  // session is no change of the project.
+  git(&["init", "-q", "-b", "trunk"]);
+  fs::write(folder.join("old.rs"), "fn a() {}\nfn b() {}\n").unwrap();
+  fs::write(folder.join("logo.png"), [0u8, 1, 2, 3]).unwrap();
+  fs::write(folder.join(".furb/sessions/a.jsonl"), "[]\n").unwrap();
+  let Changes { branch, files, .. } = changes().await;
+  assert_eq!(branch.as_deref(), Some("trunk"));
+  let paths: Vec<&str> = files.iter().map(|one| one.path.as_str()).collect();
+  assert_eq!(paths, ["logo.png", "old.rs"]);
+  fs::write(folder.join("gone.rs"), "fn gone() {}\n").unwrap();
+  git(&["add", "old.rs", "logo.png", "gone.rs"]);
+  git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a"]);
+  let remote = at.join("remote.git");
+  let bare = process::Command::new("git").args(["init", "-q", "--bare"]).arg(&remote).output();
+  assert!(bare.unwrap().status.success());
+  git(&["remote", "add", "origin", &remote.display().to_string()]);
+  git(&["push", "-q", "-u", "origin", "trunk"]);
+  // A rename counts under its new path, and a binary file counts no line.
+  git(&["mv", "old.rs", "new.rs"]);
+  fs::write(folder.join("new.rs"), "fn a() {}\nfn b() {}\nfn c() {}\n").unwrap();
+  git(&["add", "new.rs"]);
+  fs::write(folder.join("logo.png"), [9u8, 8, 7, 0]).unwrap();
+  git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-am", "b"]);
+  // A branch ahead of its upstream names itself alone.
+  assert_eq!(changes().await.branch.as_deref(), Some("trunk"));
+  git(&["checkout", "-q", "--detach"]);
+  git(&["mv", "new.rs", "newer.rs"]);
+  fs::write(folder.join("newer.rs"), "fn a() {}\nfn b() {}\nfn c() {}\nfn d() {}\n").unwrap();
+  git(&["add", "newer.rs"]);
+  fs::write(folder.join("logo.png"), [5u8, 0, 5]).unwrap();
+  fs::remove_file(folder.join("gone.rs")).unwrap();
+  let Changes { branch, files, .. } = changes().await;
+  let file =
+    |path: &str, added, removed, state| Changed { path: path.to_owned(), added, removed, state };
+  assert_eq!(branch, None);
+  assert_eq!(
+    files,
+    [
+      file("gone.rs", 0, 1, Change::Deleted),
+      file("logo.png", 0, 0, Change::Modified),
+      file("newer.rs", 1, 0, Change::Renamed)
+    ]
+  );
+}

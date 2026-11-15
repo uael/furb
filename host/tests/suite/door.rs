@@ -1,4 +1,6 @@
-use super::Door;
+//! The door of a person to a chain: the word that a model would write for each act of his.
+
+use furb_host::Door;
 
 #[test]
 fn each_door_is_the_word_that_a_model_writes_for_its_act() {

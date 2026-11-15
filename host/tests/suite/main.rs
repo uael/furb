@@ -12,6 +12,7 @@ mod counted;
 
 mod apart;
 mod daemon;
+mod door;
 mod equal;
 mod image;
 mod life;

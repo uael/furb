@@ -8,26 +8,11 @@ use std::time::Duration;
 use furb::life::Stage;
 use tokio::time::{Instant, timeout};
 
-use super::{Heard, Opens, PACE, Step, Told};
+use super::{Heard, PACE, Told};
 use crate::protocol::Frame;
 
 fn frame(stage: Stage, done: u64, of: u64) -> Frame {
   Frame::Opening { life: "a".to_owned(), stage, done, of }
-}
-
-#[test]
-fn an_open_only_goes_forward() {
-  let mut opens = Opens::default();
-  assert!(opens.at(Stage::Find, 0, 10));
-  assert!(opens.at(Stage::Find, 7, 10));
-  assert!(!opens.at(Stage::Find, 3, 10), "a number of a stage never goes back");
-  assert!(opens.at(Stage::Log, 0, 4));
-  assert!(!opens.at(Stage::Find, 10, 10), "a stage never comes again");
-  assert!(!opens.whole(), "the log did not take each event yet");
-  assert!(opens.at(Stage::Log, 6, 4), "the work done never passes the work known");
-  let step = |stage, done, of| Step { stage, done, of };
-  assert_eq!(opens.steps, [step(Stage::Find, 7, 10), step(Stage::Log, 6, 6)]);
-  assert!(opens.whole());
 }
 
 #[tokio::test]
