@@ -18,9 +18,9 @@ use serde_json::Value;
 use tokio::time;
 use tokio_util::codec::{Framed, LinesCodec};
 
-use furb::{life::Opening, skill::Places, view::Phase, world};
+use furb::{life::Opening, serve, skill::Places, view::Phase, world};
 use furb_host::{
-  DaemonError, ProtocolError, STALL, STARTING, Settings, Tailnet, TransportError,
+  DaemonError, ProtocolError, STALL, STARTING, Settings, Tailnet,
   access::Config,
   protocol::{Answer, BOUND, Frame, Hello, Kind, PROTOCOL, Request, Verb},
   run,
@@ -177,7 +177,7 @@ async fn dialed(
 ) -> Result<Option<Framed<<Local as Dialer>::Stream, LinesCodec>>, CliError> {
   let stream = match Local::new(folder()?).dial().await {
     Ok(stream) => stream,
-    Err(TransportError::Dial { .. }) => return Ok(None),
+    Err(serve::Error::Dial { .. }) => return Ok(None),
     Err(no) => return Err(DaemonError::from(no).into()),
   };
   let mut lines = Framed::new(stream, LinesCodec::new_with_max_length(BOUND));
@@ -198,11 +198,11 @@ async fn asked(
   id: u64,
   verb: Verb,
 ) -> Result<Answer, DaemonError> {
-  let request = serde_json::to_string(&Request { id, verb }).map_err(TransportError::from)?;
-  lines.send(request).await.map_err(TransportError::from)?;
+  let request = serde_json::to_string(&Request { id, verb }).map_err(serve::Error::from)?;
+  lines.send(request).await.map_err(serve::Error::from)?;
   loop {
     let heard = lines.next().await.ok_or(DaemonError::Unanswered)?;
-    match serde_json::from_str::<Frame>(&heard.map_err(TransportError::from)?) {
+    match serde_json::from_str::<Frame>(&heard.map_err(serve::Error::from)?) {
       Ok(Frame::Reply { id: got, answer }) if got == id => return Ok(answer),
       Ok(Frame::Refused { id: Some(got), error, .. }) if got == id => return Err(error.into()),
       Ok(_) => {}

@@ -85,11 +85,11 @@ use crate::{
   },
   reads::{Read, Readers},
   records,
-  serve::{Host, Outbox, fixed, serve},
+  serve::{self, Host, Outbox, fixed, serve},
   stall::{Quiet, Stall},
   stops::Stops,
   transport::{
-    Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, Who, own, upgraded,
+    Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, Who, upgraded,
   },
   views::{Skill, Views},
 };
@@ -155,7 +155,7 @@ where
 pub async fn upgrade(local: &Local, settings: Settings) -> Result<(), DaemonError> {
   let (handed, asker) = match local.dial().await {
     Ok(stream) => handover(stream).await.map(|(handed, asker)| (handed, Some(asker)))?,
-    Err(TransportError::Dial { .. }) => (Vec::new(), None),
+    Err(serve::Error::Dial { .. }) => (Vec::new(), None),
     Err(no) => return Err(no.into()),
   };
   let listener =
@@ -174,11 +174,11 @@ async fn handover(stream: <Local as Dialer>::Stream) -> Result<(Vec<Handed>, Ask
   let mut lines = Framed::new(stream, LinesCodec::new_with_max_length(BOUND));
   let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Daemon, name: None, role: None });
   for (id, verb) in [(0, hello), (1, Verb::Handover)] {
-    let request = serde_json::to_string(&Request { id, verb }).map_err(TransportError::from)?;
-    lines.send(request).await.map_err(TransportError::from)?;
+    let request = serde_json::to_string(&Request { id, verb }).map_err(serve::Error::from)?;
+    lines.send(request).await.map_err(serve::Error::from)?;
     loop {
       let heard = lines.next().await.ok_or(DaemonError::Unanswered)?;
-      let heard = heard.map_err(TransportError::from)?;
+      let heard = heard.map_err(serve::Error::from)?;
       match serde_json::from_str::<Frame>(&heard).map_err(DaemonError::Unread)? {
         Frame::Reply { answer: Answer::Handed(given), .. } => return Ok((given, lines)),
         Frame::Reply { id: got, .. } if got == id => break,
@@ -273,7 +273,7 @@ struct User {
 
 impl User {
   fn of(doors: Option<&Doors>) -> Result<Self, TransportError> {
-    let system: Arc<str> = own()?.into();
+    let system: Arc<str> = serve::own()?.into();
     let name = doors.map_or_else(|| Arc::clone(&system), |doors| Arc::clone(&doors.user));
     Ok(Self { system, name })
   }
@@ -293,7 +293,7 @@ async fn peer<I: Identity<Stream = Accepted>>(
 ) -> Result<(), TransportError> {
   let who = user.named(identity.identify(&stream).await?);
   let granted = fixed(who.role);
-  serve(&daemon, stream, who, granted).await
+  Ok(serve(&daemon, stream, who, granted).await?)
 }
 
 /// One peer of the tailnet, identified by Tailscale, upgraded when it came by WebSocket, then
@@ -307,12 +307,12 @@ async fn remote(
     Arrival::Tcp(stream) => {
       let who = identity.identify(&stream).await?;
       let granted = identity.follow(&who);
-      serve(&daemon, stream, who, granted).await
+      Ok(serve(&daemon, stream, who, granted).await?)
     }
     Arrival::WebSocket(stream) => {
       let who = identity.identify(&stream).await?;
       let granted = identity.follow(&who);
-      serve(&daemon, upgraded(stream).await?, who, granted).await
+      Ok(serve(&daemon, upgraded(stream).await?, who, granted).await?)
     }
   }
 }
@@ -330,7 +330,7 @@ async fn knock(door: Option<&Door>) -> Result<(TcpStream, Ticket), TransportErro
 async fn window(daemon: Daemon, ticket: Ticket, stream: TcpStream) -> Result<(), TransportError> {
   let (stream, who) = ticket.admitted(stream).await?;
   let granted = fixed(who.role);
-  serve(&daemon, stream, who, granted).await
+  Ok(serve(&daemon, stream, who, granted).await?)
 }
 
 /// The listeners of the daemon on the address of the machine on the tailnet, each where the
@@ -387,7 +387,7 @@ impl Doors {
 
 async fn accepted(listener: Option<&TcpListener>) -> Result<TcpStream, TransportError> {
   match listener {
-    Some(listener) => Ok(listener.accept().await.map_err(TransportError::Accept)?.0),
+    Some(listener) => Ok(listener.accept().await.map_err(serve::Error::Accept)?.0),
     None => future::pending().await,
   }
 }

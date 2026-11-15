@@ -1,5 +1,9 @@
-//! The door of the daemon to one peer: its hello, the role of each verb, and the frames of its
-//! answers and of what the daemon pushes to it.
+//! The door of a host to one peer of the protocol, and the transport of the machine that a peer
+//! dials: the daemon serves each window and each kit on it, and each life serves the processes of
+//! its kits on it, as [`crate::kits`] says, so the daemon and each door serve with one code.
+//!
+//! The transport of the machine is a Unix socket in a folder of mode 0700, or a named pipe that
+//! only the user reaches on Windows, and the identity of a peer is the login of the user.
 
 #![expect(
   clippy::too_many_arguments,
@@ -8,27 +12,130 @@
 use std::{
   env,
   future::Future,
+  io,
+  path::PathBuf,
   sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
   },
 };
 
+use furb_wire::{
+  ProtocolError,
+  protocol::{Answer, BOUND, Frame, Hello, KITS, Kind, PROTOCOL, Peer, Request, Role, Verb},
+};
 use futures::{SinkExt, StreamExt, stream::FuturesUnordered};
 #[cfg(unix)]
 use rustix::system::uname;
 use serde_json::Value;
+use thiserror::Error;
 use tokio::{
-  io::{self, AsyncRead, AsyncWrite},
+  io::{AsyncRead, AsyncWrite, split},
   sync::{Notify, mpsc, watch},
 };
 use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec, LinesCodecError};
 
-use crate::{
-  error::{ProtocolError, TransportError},
-  protocol::{Answer, BOUND, Frame, Hello, KITS, Kind, PROTOCOL, Peer, Request, Role, Verb},
-  transport::Who,
-};
+#[cfg(unix)]
+mod unix;
+#[cfg(unix)]
+use unix as local;
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+use windows as local;
+
+pub use local::{guarded, own, private};
+
+/// Why the transport of the machine gives no peer, or a peer is lost.
+#[derive(Debug, Error)]
+pub enum Error {
+  #[error("the folder {} of the socket cannot be made", folder.display())]
+  Folder { folder: PathBuf, source: io::Error },
+  /// The folder of the socket is open to another user, so the host puts no socket in it.
+  #[error("the folder {} is not of mode 0700 and of this user alone", folder.display())]
+  Exposed { folder: PathBuf },
+  #[error("a daemon already listens at {place}")]
+  Taken { place: String },
+  /// The cause is in the text and not in `source`, since the daemon reports an error by its text.
+  #[error("the daemon cannot listen at {place}: {cause}")]
+  Listen { place: String, cause: io::Error },
+  /// The path of a Unix socket is longer than the platform lets a socket address hold.
+  #[error(
+    "the socket path {place} is {length} bytes, over the bound of {bound} bytes of this platform"
+  )]
+  TooLong { place: String, length: usize, bound: usize },
+  #[error("no daemon answers at {place}")]
+  Dial { place: String, source: io::Error },
+  #[error("the transport accepts no peer")]
+  Accept(#[source] io::Error),
+  /// A peer of another user reached the socket.
+  #[error("a peer of the user {uid} is not of this user")]
+  Stranger { uid: u32 },
+  #[error("the login of the user cannot be read")]
+  Login(#[source] io::Error),
+  #[error("the stream of a peer broke")]
+  Peer(#[from] LinesCodecError),
+  #[error("a frame cannot be written as JSON")]
+  Unwritten(#[from] serde_json::Error),
+}
+
+/// Who a peer is, as its transport proved it: its operator, the login that the transport proved,
+/// and the role that it holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Who {
+  pub operator: String,
+  pub role: Role,
+}
+
+/// The transport of the machine, at a folder: the socket in it, or the pipe named after it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Local {
+  folder: PathBuf,
+}
+
+/// A stream of a peer that the local transport accepted.
+pub type Accepted = local::Accepted;
+
+/// A stream that dialed the local transport.
+pub type Dialed = local::Dialed;
+
+/// The local transport as it listens, which accepts each peer in turn.
+pub struct Listener(local::Listener);
+
+impl Local {
+  pub fn new(folder: impl Into<PathBuf>) -> Self {
+    Self { folder: folder.into() }
+  }
+
+  /// The transport listening, or refused when a daemon listens there already. A socket that no
+  /// daemon answers is stale, and gives its place.
+  pub async fn listen(&self) -> Result<Listener, Error> {
+    local::listen(&self.folder).await.map(Listener)
+  }
+
+  /// The transport listening in the place of a daemon that handed its lives over: that daemon still
+  /// holds a peer, and a pipe of Windows keeps its name while a peer of it stands, so no first
+  /// instance is asked for.
+  pub async fn listen_after_handover(&self) -> Result<Listener, Error> {
+    local::succeed(&self.folder).await.map(Listener)
+  }
+
+  /// A stream to the host that listens at the folder.
+  pub async fn dial(&self) -> Result<Dialed, Error> {
+    local::dial(&self.folder).await
+  }
+
+  /// Who the peer of a stream is: the user, who writes, since no other user reaches the transport.
+  pub fn identify(stream: &Accepted) -> Result<Who, Error> {
+    local::login(stream).map(|operator| Who { operator, role: Role::Write })
+  }
+}
+
+impl Listener {
+  pub async fn accept(&mut self) -> Result<Accepted, Error> {
+    self.0.accept().await
+  }
+}
 
 /// What the daemon pushes to one peer, as the events of a life that it attached, and how many of
 /// those frames wait for the peer to read them.
@@ -51,7 +158,7 @@ struct Waiting {
 
 impl Outbox {
   /// An outbox, and where its peer reads what it holds.
-  pub(crate) fn new() -> (Self, mpsc::UnboundedReceiver<Frame>) {
+  pub fn new() -> (Self, mpsc::UnboundedReceiver<Frame>) {
     let (frames, pushed) = mpsc::unbounded_channel();
     (Self { frames, waiting: Arc::default() }, pushed)
   }
@@ -82,7 +189,7 @@ impl Outbox {
   }
 
   /// One frame that the peer read.
-  pub(crate) fn read(&self) {
+  pub fn read(&self) {
     self.waiting.frames.fetch_sub(1, Ordering::SeqCst);
     self.waiting.read.notify_waiters();
   }
@@ -133,8 +240,8 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
   stream: S,
   who: Who,
   mut granted: Granted,
-) -> Result<(), TransportError> {
-  let (read, write) = io::split(stream);
+) -> Result<(), Error> {
+  let (read, write) = split(stream);
   let mut lines = FramedRead::new(read, LinesCodec::new_with_max_length(BOUND));
   let mut out = FramedWrite::new(write, LinesCodec::new());
   let (mut peer, asked) = match heard(&mut lines).await? {
@@ -221,7 +328,7 @@ pub fn machine() -> String {
 /// request that waits for it. A blank line is no frame.
 async fn heard<R: AsyncRead + Unpin>(
   lines: &mut FramedRead<R, LinesCodec>,
-) -> Result<Option<Result<Request, (Option<u64>, ProtocolError)>>, TransportError> {
+) -> Result<Option<Result<Request, (Option<u64>, ProtocolError)>>, Error> {
   loop {
     return match lines.next().await {
       None => Ok(None),
@@ -260,7 +367,7 @@ async fn answered<H: Host>(host: &H, peer: Peer, outbox: &Outbox, id: u64, verb:
 async fn send<W: AsyncWrite + Unpin>(
   out: &mut FramedWrite<W, LinesCodec>,
   frame: &Frame,
-) -> Result<(), TransportError> {
+) -> Result<(), Error> {
   Ok(out.send(serde_json::to_string(frame)?).await?)
 }
 
@@ -269,7 +376,7 @@ async fn closed<W: AsyncWrite + Unpin>(
   out: &mut FramedWrite<W, LinesCodec>,
   id: Option<u64>,
   error: ProtocolError,
-) -> Result<(), TransportError> {
+) -> Result<(), Error> {
   send(out, &Frame::refused(id, error)).await?;
   Ok(SinkExt::<String>::close(out).await?)
 }

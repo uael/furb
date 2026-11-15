@@ -46,22 +46,10 @@ getrandom = "0.3"
 # The walk of the files of a folder that a mention names, as ripgrep walks them, with the ignore files of git.
 ignore = "0.4"
 
-[target.'cfg(unix)'.dependencies]
-# The login of a user, from the database of the users.
-libc = "0.2"
-# The user of the daemon, read safely.
-rustix = { version = "1", features = ["process", "system"] }
-
-[target.'cfg(windows)'.dependencies]
-# The access list of the pipe, of the folder of the daemon and of the file of its door, which only the
-# user of the daemon reaches, and the login of that user.
-windows-sys = { version = "0.61", features = [
-  "Win32_Foundation",
-  "Win32_Security",
-  "Win32_Security_Authorization",
-  "Win32_Storage_FileSystem",
-  "Win32_System_WindowsProgramming",
-] }
-
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros", "time"] }
+
+[target.'cfg(unix)'.dev-dependencies]
+# The limits of a process and its signals, which the tests of a disk that refuses set.
+libc = "0.2"
+rustix = { version = "1", features = ["process"] }

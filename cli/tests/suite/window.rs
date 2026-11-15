@@ -12,7 +12,7 @@ use std::{process, time::Duration};
 
 use furb_host::{
   protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
-  transport::{Dialer, Local},
+  transport::Local,
 };
 use furb_window::{Error, Machine};
 use futures::{SinkExt, StreamExt};

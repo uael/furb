@@ -10,7 +10,7 @@ use std::{
   time::Duration,
 };
 
-use furb::world;
+use furb::{serve, world};
 use furb_host::{
   STARTING, TransportError,
   transport::{Dialer, Local},
@@ -67,8 +67,8 @@ impl Machine {
   pub async fn reach(&mut self) -> Result<Stream, Error> {
     let local = Local::new(&self.folder);
     match local.dial().await {
-      Err(TransportError::Dial { .. }) => {}
-      dialed => return Ok(dialed?),
+      Err(serve::Error::Dial { .. }) => {}
+      dialed => return Ok(dialed.map_err(TransportError::from)?),
     }
     let mut daemon = self.started().map_err(|source| self.start(source))?;
     let listens = async {
