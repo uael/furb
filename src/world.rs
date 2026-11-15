@@ -56,7 +56,7 @@ pub use provider::{
   search::Searches,
 };
 pub(crate) use provider::{Mode, Systems, search::timed};
-pub use reader::{Retold, retold, retold_live};
+pub use reader::{Retold, retold, retold_live, retold_with};
 pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::{
   After, Format, Last, STORE, goes_after, last, made_before, stood_before, stored, stored_after,

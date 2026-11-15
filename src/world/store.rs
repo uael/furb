@@ -244,10 +244,11 @@ pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
 /// one at a time, so a reader holds no more of a large record than it keeps of each entry. A
 /// checkpoint of a file of lines comes as the text of the JSON of its fact, as the record holds it,
 /// with no parse: a checkpoint holds most of the bytes of a large record, and a reader that only
-/// passes it on makes no value of it. A database gives each entry as a value.
+/// passes it on makes no value of it. A database gives each entry as a value. Each entry comes with
+/// the bytes of the file of lines that the read passed, which a database does not count.
 pub(crate) fn each_but_checkpoints(
   path: impl AsRef<Path>,
-  take: &mut dyn FnMut(Taken),
+  take: &mut dyn FnMut(Taken, u64),
 ) -> Result<(), Fault> {
   let path = path.as_ref();
   match Format::of(path) {
@@ -255,7 +256,7 @@ pub(crate) fn each_but_checkpoints(
       let head = format!("[[\"{}\",", checkpoint::CHECKPOINT);
       lines::each_but(path, head.as_bytes(), take)?;
     }
-    Format::Sqlite => sqlite::each(path, &mut |entry| take(Taken::Entry(entry)))?,
+    Format::Sqlite => sqlite::each(path, &mut |entry| take(Taken::Entry(entry), 0))?,
   }
   Ok(())
 }

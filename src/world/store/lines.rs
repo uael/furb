@@ -157,12 +157,13 @@ pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Stor
 
 /// Each entry of the file of lines at a path, as [`each`] gives them, but the fact of each line
 /// that starts with a head, which is given as the text of its JSON, with no parse into a value.
+/// Each entry comes with the bytes of the file that the read passed.
 pub(super) fn each_but(
   path: &Path,
   head: &[u8],
-  take: &mut dyn FnMut(Taken),
+  take: &mut dyn FnMut(Taken, u64),
 ) -> Result<(), StoreError> {
-  read(path, 0, Some(head), &mut |one, _| take(one)).map(drop)
+  read(path, 0, Some(head), take).map(drop)
 }
 
 /// The entries of the file of lines at a path that a life opens on: those from its last checkpoint

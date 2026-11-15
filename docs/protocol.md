@@ -293,7 +293,11 @@ daemon answers requests in any order.
   index whose tip is not the tip of the record. So the list reads the index and the end of each record, and never the past of a
   record. A record with no index that agrees with it gives one card with an empty `prompt`, under the name of its
   file. The daemon then makes its index from a fold of the record with no life, one record at a time and off the
-  path of each verb, and pushes the cards in a frame `cards` once the index stands. A record tells no time, so each
+  path of each verb, and pushes the cards in a frame `cards` once the index stands. While it reads the record, it
+  pushes at most four frames `indexing` each second, with the `life` and the thousandths of the read `done`, `of`
+  1000, which never go back: the two passes of the reader over the record make the first two thirds, and the fold
+  of the facts that it tells the last third. The frame with `done` equal to `of` comes before the frame `cards`.
+  A record tells no time, so each
   card of such an index stands since the record last changed. Nothing works in a record at rest, so a thread that
   worked when its life ended rests there, and counts no agent that works.
 - `history` gives what the peer sent in the project of the record `life` as `history`, the newest first and each text
@@ -374,7 +378,7 @@ daemon answers requests in any order.
 
     | Stage | The work | `done` of `of` |
     | --- | --- | --- |
-    | `recall` | The daemon reads what the record told before its last checkpoint, for the log of the life. | Entries of the record that the facts told stand after, of its entries as far as that checkpoint. Both are 0 until the daemon found the checkpoint. |
+    | `recall` | The daemon reads what the record told before its last checkpoint, for the log of the life. | Thousandths of the read, of 1000, counted as the frame `indexing` counts them. Both are 0 until the daemon found the checkpoint. |
     | `find` | The record is read from its last checkpoint, for the build of its last life. | Bytes passed, of the bytes of the record. |
     | `cross` | A life that another build of furb ran is replayed on the engine of that build, which writes its checkpoint and tells each chain the lines of the engine that differ. | Both are 0: the stage counts nothing. |
     | `read` | The record is read again from its last checkpoint under its lease, when it changed after `find`. | Bytes passed, of the bytes of the record. |

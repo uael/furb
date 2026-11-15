@@ -66,7 +66,7 @@ use crate::{
   ears::{ears, json_of, json_of_line},
   error::LifeError,
   event::{Event, Seq},
-  opens::{Heard, Opens, Told},
+  opens::{Heard, Opens, Told, WHOLE, thousandths},
   queue::{QUEUE, Queue},
   rebirth::{self, Imaging, Watch},
 };
@@ -719,7 +719,8 @@ impl Life {
     if marks.is_empty() && !whole {
       return false;
     }
-    let Ok(retold) = world::retold(record) else { return true };
+    let reads = &mut |done, of| (told.0)(Stage::Recall, thousandths((done, of), (0, 1)), WHOLE);
+    let Ok(retold) = world::retold_with(record, reads) else { return true };
     // A fact that the record kept after its last entry stands nowhere, so a whole read reads on to
     // the end of the facts.
     let last = if whole { retold.entries + 1 } else { marks[marks.len() - 1] };
@@ -737,7 +738,7 @@ impl Life {
         }
         return;
       }
-      (told.0)(Stage::Recall, kept as u64, last as u64);
+      (told.0)(Stage::Recall, thousandths((1, 1), (kept as u64, last as u64)), WHOLE);
       while marks.get(passed).is_some_and(|mark| kept >= *mark) {
         (passed, opening) = (passed + 1, true);
       }
@@ -753,7 +754,7 @@ impl Life {
     // A read that fails after it told a fact leaves the facts before it told, and the life is
     // born after them, as after a past that the read gave whole.
     if retold.before_kept(last, &mut take).is_ok() || self.kept.said > 0 {
-      (told.0)(Stage::Recall, last as u64, last as u64);
+      (told.0)(Stage::Recall, WHOLE, WHOLE);
       self.reborn();
     }
     true

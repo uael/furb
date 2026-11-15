@@ -503,6 +503,12 @@ export type Frame =
     }
   | {
       life: string;
+      done: number;
+      of: number;
+      frame: "indexing";
+    }
+  | {
+      life: string;
       thread: string;
       page: Page;
       frame: "thread";
@@ -1568,4 +1574,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 40;
+export const PROTOCOL = 41;

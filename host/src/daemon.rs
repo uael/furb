@@ -74,7 +74,7 @@ use crate::{
   event::{Event, Seq},
   holders::{Holders, Window},
   life::{Command, Life, LifeHandle, Reply},
-  opens::Heard,
+  opens::{self, Heard},
   processes::{self, Played},
   protocol::{
     Answer, BOUND, Card, Config, Draft, Frame, Handed, Hello, Kind, Listed, Model, Mount, Open,
@@ -435,6 +435,8 @@ enum Asked {
   Ended { life: String, born: u64, fault: Option<String> },
   /// A life that told its cards, or a record whose index of the threads the daemon made.
   Carded { life: String },
+  /// How far the index of a record stands, in thousandths.
+  Indexing { life: String, done: u64 },
   /// A life that stalled, in one of its births: each open act, and the notice.
   Stalled { life: String, born: u64, acts: Vec<Open>, notice: String },
   /// An ask of the system to stop: each life ends with its image, then the task replies.
@@ -792,23 +794,39 @@ fn model(one: &world::Model) -> Model {
 
 /// The index of the threads of each record that the daemon asks, made one at a time on a thread
 /// that may block, so the fold of a large record holds back no verb and no second fold, then the
-/// daemon told, which tells the cards of the record again.
+/// daemon told, which tells the cards of the record again. The daemon hears how far each index
+/// stands at most four times each second, and once whole before its cards.
 async fn indexed(
   mut records: mpsc::UnboundedReceiver<String>,
   asks: mpsc::WeakUnboundedSender<Asked>,
   log: Option<Log>,
 ) {
   while let Some(life) = records.recv().await {
-    let record = PathBuf::from(&life);
-    match spawn_blocking(move || cards::folded(&record)).await {
+    let (record, weak, named) = (PathBuf::from(&life), asks.clone(), life.clone());
+    let fold = move || {
+      let mut last = None::<Instant>;
+      let mut told = |done| {
+        if done >= opens::WHOLE || last.is_some_and(|at| at.elapsed() < opens::PACE) {
+          return;
+        }
+        last = Some(Instant::now());
+        if let Some(asks) = weak.upgrade() {
+          asks.send(Asked::Indexing { life: named.clone(), done }).ok();
+        }
+      };
+      cards::folded(&record, &mut told)
+    };
+    let folded = spawn_blocking(fold).await;
+    let Some(sends) = asks.upgrade() else { return };
+    sends.send(Asked::Indexing { life: life.clone(), done: opens::WHOLE }).ok();
+    match folded {
       Ok(Ok(())) => {}
       Ok(Err(no)) => {
         report(log.as_ref(), &format_args!("{life} has no index of its threads: {no}"));
       }
       Err(no) => report(log.as_ref(), &format_args!("{life} has no index of its threads: {no}")),
     }
-    let Some(asks) = asks.upgrade() else { return };
-    asks.send(Asked::Carded { life }).ok();
+    sends.send(Asked::Carded { life }).ok();
   }
 }
 
@@ -955,6 +973,11 @@ impl Lives {
         }
       }
       Asked::Carded { life } => self.carded(&life),
+      Asked::Indexing { life, done } => {
+        if self.told.watched() {
+          self.told.indexing(&life, done);
+        }
+      }
       Asked::Stop(reply) => self.stop(reply),
       Asked::History { life, site, held, reply } => {
         reply.send(self.history(&life, &site, held)).ok();

@@ -11,9 +11,10 @@ use serde::{Deserialize, Serialize};
 )]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
-  /// A host tells its readers what the record told before its last checkpoint: the entries that
-  /// the record had kept when the life said the fact told last, of its entries as far as that
-  /// checkpoint. The crate furb never tells this stage.
+  /// A host tells its readers what the record told before its last checkpoint: the thousandths of
+  /// the read done, of 1000. The two passes of the reader over the record make the first two
+  /// thirds, and the fold of the facts that it tells, as far as that checkpoint, the last third.
+  /// The crate furb never tells this stage.
   Recall,
   /// The record is read from its last checkpoint, which the read finds from the end of the record,
   /// for the build of its last life: the bytes passed, of the bytes of the record. It is the first

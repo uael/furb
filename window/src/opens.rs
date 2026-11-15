@@ -40,12 +40,14 @@ enum Unit {
   Nothing,
   Bytes,
   Entries,
+  /// Thousandths of the work, which a person reads as a percent.
+  Thousandths,
 }
 
 /// The one table of the stages of an open: the words that say each, and what it counts.
 fn said(stage: Stage) -> (&'static str, Unit) {
   match stage {
-    Stage::Recall => ("reads what the record told", Unit::Entries),
+    Stage::Recall => ("reads what the record told", Unit::Thousandths),
     Stage::Find => ("reads the record", Unit::Bytes),
     Stage::Cross => ("moves the life to this build", Unit::Nothing),
     Stage::Read => ("reads the record again", Unit::Bytes),
@@ -181,6 +183,8 @@ fn counted(unit: &Unit, done: u64, of: u64, whole: bool) -> String {
     Unit::Bytes => format!("{} of {}", size(done), size(of)),
     Unit::Entries if whole => grouped(of),
     Unit::Entries => format!("{} of {}", grouped(done), grouped(of)),
+    Unit::Thousandths if whole => String::new(),
+    Unit::Thousandths => format!("{}%", done * 100 / of.max(1)),
   }
 }
 

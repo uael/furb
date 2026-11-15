@@ -161,7 +161,18 @@ static WRITES: AtomicU64 = AtomicU64::new(0);
 /// then takes what that one wrote, so a large record is told once, as when the index of its cards
 /// and the open of its life read it at once.
 pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
+  retold_with(path, &mut |_, _| {})
+}
+
+/// What the record at a path tells, as [`retold`] gives it, with how far its read stands: the
+/// bytes of the record that its two passes passed, of twice the bytes of the record, the last when
+/// the read ends. A read that takes the file of what the record tells, or the log, passes no byte.
+pub fn retold_with(
+  path: impl AsRef<Path>,
+  passed: &mut dyn FnMut(u64, u64),
+) -> Result<Retold, Fault> {
   let path = path.as_ref();
+  let of = 2 * fs::metadata(path).map_or(0, |meta| meta.len());
   let log = beside(path, ".log");
   let cache = beside(path, ".told");
   let stamp = serde_json::json!([stamped(path), stamped(&log), BUILD]);
@@ -179,7 +190,7 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   if let Some(found) = cached(&cache, &stamp, &log) {
     return Ok(found);
   }
-  let Surveyed { maker, entries, last, makers, logged } = surveyed(path)?;
+  let Surveyed { maker, entries, last, makers, logged } = surveyed(path, &mut |at| passed(at, of))?;
   // Each retelling writes under names of its own, so a reader of an earlier build, which takes no
   // lock, never writes over the files of this one.
   let mine = WRITES.fetch_add(1, Ordering::Relaxed);
@@ -188,7 +199,8 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let write = || -> Result<(Option<String>, Option<String>), Fault> {
     let failed =
       |no: io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
-    let named = if logged { naming(&log)? } else { told_body(path, makers, &body)? };
+    let mut told = |at| passed(of / 2 + at, of);
+    let named = if logged { naming(&log)? } else { told_body(path, makers, &body, &mut told)? };
     let (said, given) = (named.said().map(str::to_owned), named.given().map(str::to_owned));
     let head = serde_json::json!({
       "stamp": stamp, "made": maker, "logged": logged, "entries": entries, "last": last, "said": said, "given": given,
@@ -209,6 +221,7 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   // A write that fails leaves no file of its own beside the record, which no later write takes.
   let gone = |_: &Fault| [&fresh, &body].iter().for_each(|one| _ = fs::remove_file(one));
   let (said, given) = write().inspect_err(gone)?;
+  passed(of, of);
   Ok(Retold {
     made: maker,
     logged,
@@ -234,12 +247,13 @@ struct Surveyed {
 }
 
 /// The first pass over the record at a path.
-fn surveyed(path: &Path) -> Result<Surveyed, Fault> {
+fn surveyed(path: &Path, passed: &mut dyn FnMut(u64)) -> Result<Surveyed, Fault> {
   let (mut maker, mut entries, mut last) = (None, 0, None);
   let (mut asked, mut makers, mut ends) = (HashSet::new(), Makers::default(), 0);
   // A checkpoint is no question and names no chain, so this pass reads only its place.
-  each_but_checkpoints(path, &mut |taken| {
+  each_but_checkpoints(path, &mut |taken, at| {
     entries += 1;
+    passed(at);
     let Taken::Entry(entry) = taken else {
       (ends, last) = (ends + 1, Some(taken));
       return;
@@ -281,7 +295,7 @@ pub fn retold_live(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let counted = counted(&log);
   let (mut entries, mut sealed) = (0, 0);
   let (mut asked, mut open) = (HashSet::new(), Vec::new());
-  each_but_checkpoints(path, &mut |taken| {
+  each_but_checkpoints(path, &mut |taken, _| {
     entries += 1;
     if entries > counted {
       return;
@@ -307,17 +321,57 @@ pub fn retold_live(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   Ok(if logged { Retold { logged, file: log, ..told } } else { told })
 }
 
-/// The facts that the reader says over the record at a path, in a file of their own, with the name
-/// that they tell. The facts go first, so the name stands in the head of the file of what the
-/// record tells, which a later read takes as it stands.
-fn told_body(path: &Path, makers: Makers, body: &Path) -> Result<Named, Fault> {
+/// The facts that the reader says over the record at a path, each on a line of its own in a file of
+/// their own, with the name that they tell. The facts go first, so the name stands in the head of
+/// the file of what the record tells, which a later read takes as it stands. The first fault of the
+/// file stops its lines but not the read.
+fn told_body(
+  path: &Path,
+  makers: Makers,
+  body: &Path,
+  passed: &mut dyn FnMut(u64),
+) -> Result<Named, Fault> {
   let made = |no: io::Error| Fault::refused(format!("{} cannot be written: {no}", body.display()));
-  let mut named = Named::default();
-  let mut file = io::BufWriter::new(fs::File::create(body).map_err(made)?);
-  if let Some(no) = retell(path, makers, &mut named, &mut file)? {
-    return Err(made(no));
+  let file = io::BufWriter::new(fs::File::create(body).map_err(made)?);
+  let sink = RefCell::new((file, Named::default(), None));
+  let write = |fact: &serde_json::Value| {
+    let (file, named, broken) = &mut *sink.borrow_mut();
+    named.hear(fact, true);
+    if broken.is_none()
+      && let Err(no) = writeln!(file, "{fact}")
+    {
+      *broken = Some(no);
+    }
+  };
+  let mut out = |fact: Object| write(&outward(fact.as_ref()));
+  let mut life = Reader::new(makers.ended(), &mut out);
+  let (mut n, mut unread) = (0, None);
+  each_but_checkpoints(path, &mut |taken, at| {
+    match taken {
+      Taken::Entry(entry) => kept(&entry).into_iter().for_each(|fact| life.hear(fact)),
+      // A checkpoint is told as it stands, which the reader hears nothing of. Its text goes to
+      // JSON once, in place of a value of the sandbox and its JSON again.
+      Taken::Fact(text) => {
+        life.flush();
+        let fact = serde_json::from_str(&text).map_err(|no| Fault::refused(no.to_string()));
+        match fact.and_then(unmarked) {
+          Ok(fact) => write(&fact),
+          Err(no) => _ = unread.get_or_insert(no),
+        }
+      }
+    }
+    n += 1;
+    life.kept(n);
+    passed(at);
+  })?;
+  if let Some(no) = unread {
+    return Err(Fault::refused(format!(
+      "{} holds a checkpoint that cannot be read: {no}",
+      path.display()
+    )));
   }
-  file.flush().map_err(made)?;
+  let (mut file, named, broken) = sink.into_inner();
+  broken.map_or(Ok(()), Err).and_then(|()| file.flush()).map_err(made)?;
   Ok(named)
 }
 
@@ -344,53 +398,6 @@ fn heard(line: &[u8], named: &mut Named, words: bool) {
   if let Ok(fact) = serde_json::from_slice::<serde_json::Value>(line) {
     named.hear(&fact, words);
   }
-}
-
-/// The facts that the reader says over the record at a path, each on a line of its own in a
-/// file, and the first fault of the file, which stops the lines but not the read.
-fn retell(
-  path: &Path,
-  makers: Makers,
-  named: &mut Named,
-  file: &mut impl Write,
-) -> Result<Option<io::Error>, Fault> {
-  let sink = RefCell::new((file, named, None));
-  let write = |fact: &serde_json::Value| {
-    let (file, named, broken) = &mut *sink.borrow_mut();
-    named.hear(fact, true);
-    if broken.is_none()
-      && let Err(no) = writeln!(file, "{fact}")
-    {
-      *broken = Some(no);
-    }
-  };
-  let mut out = |fact: Object| write(&outward(fact.as_ref()));
-  let mut life = Reader::new(makers.ended(), &mut out);
-  let (mut n, mut unread) = (0, None);
-  each_but_checkpoints(path, &mut |taken| {
-    match taken {
-      Taken::Entry(entry) => kept(&entry).into_iter().for_each(|fact| life.hear(fact)),
-      // A checkpoint is told as it stands, which the reader hears nothing of. Its text goes to
-      // JSON once, in place of a value of the sandbox and its JSON again.
-      Taken::Fact(text) => {
-        life.flush();
-        let fact = serde_json::from_str(&text).map_err(|no| Fault::refused(no.to_string()));
-        match fact.and_then(unmarked) {
-          Ok(fact) => write(&fact),
-          Err(no) => _ = unread.get_or_insert(no),
-        }
-      }
-    }
-    n += 1;
-    life.kept(n);
-  })?;
-  if let Some(no) = unread {
-    return Err(Fault::refused(format!(
-      "{} holds a checkpoint that cannot be read: {no}",
-      path.display()
-    )));
-  }
-  Ok(sink.into_inner().2)
 }
 
 /// The JSON of a value that a record kept, as [`outward`] gives the value that [`plain`] reads

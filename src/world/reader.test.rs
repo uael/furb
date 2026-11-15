@@ -2,7 +2,7 @@
 
 use std::{fs, path::PathBuf};
 
-use super::{WRITES, kept, retold, retold_live, told, unmarked};
+use super::{WRITES, kept, retold, retold_live, retold_with, told, unmarked};
 use crate::testing::Yard;
 use crate::{
   value::Object,
@@ -471,4 +471,32 @@ fn two_readers_of_one_record_at_once_tell_it_once() {
   let first = first.join().unwrap();
   assert_eq!(WRITES.load(Ordering::Relaxed) - before, 1, "one reader told the record");
   assert_eq!((first.file, first.entries), (second.file, second.entries));
+}
+
+/// A read tells how far it stands: the bytes of the record that its two passes passed, of twice the
+/// bytes of the record, which never go back and end at the whole.
+#[test]
+fn a_read_of_a_record_tells_the_bytes_that_its_two_passes_passed() {
+  let at = place("passed");
+  let record = [
+    r#"[["made","chain1","store","abc"]]"#,
+    r#"[["stand","stand1","operator","chain1"]]"#,
+    r#"[["checkpoint","chain1","store",{"chains":[]}]]"#,
+    r#"[["cd","cd1","operator","chain1","/tmp"]]"#,
+  ];
+  fs::write(&at, record.join("\n") + "\n").unwrap();
+  let size = fs::metadata(&at).unwrap().len();
+  let mut told = Vec::new();
+  retold_with(&at, &mut |done, of| told.push((done, of))).unwrap();
+  let lines: Vec<u64> = record
+    .iter()
+    .scan(0, |at, line| Some(*at + line.len() as u64 + 1).inspect(|end| *at = *end))
+    .collect();
+  let mut want: Vec<(u64, u64)> = lines.iter().map(|end| (*end, 2 * size)).collect();
+  want.extend(lines.iter().map(|end| (size + end, 2 * size)));
+  want.push((2 * size, 2 * size));
+  assert_eq!(told, want);
+  told.clear();
+  retold_with(&at, &mut |done, of| told.push((done, of))).unwrap();
+  assert_eq!(told, [], "a read that takes the file of what the record tells passes no byte");
 }

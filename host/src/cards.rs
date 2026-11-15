@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
   ears::json_of_line,
+  opens::{self, thousandths},
   protocol::{Card, Frame},
   serve::Outbox,
 };
@@ -114,13 +115,18 @@ pub(crate) enum Error {
   Write(#[from] io::Error),
 }
 
-/// The index of a record made from a fold of the record with no life, and kept. Each of its
-/// threads stands since the record last changed, since a record tells no time.
-pub(crate) fn folded(record: &Path) -> Result<(), Error> {
+/// The index of a record made from a fold of the record with no life, and kept, with how far it
+/// stands in thousandths, as [`thousandths`] counts them. Each of its threads stands since the
+/// record last changed, since a record tells no time.
+pub(crate) fn folded(record: &Path, told: &mut dyn FnMut(u64)) -> Result<(), Error> {
   let since = changed(record);
-  let retold = world::retold(record).map_err(Error::Read)?;
-  let (mut fold, mut held, mut at) = (Fold::default(), Held::default(), 0);
+  let reads = &mut |done, of| told(thousandths((done, of), (0, 1)));
+  let retold = world::retold_with(record, reads).map_err(Error::Read)?;
+  let size = fs::metadata(&retold.file).map_or(0, |meta| meta.len());
+  let (mut fold, mut held, mut at, mut read) = (Fold::default(), Held::default(), 0, 0);
   let mut take = |line: &str| {
+    read += line.len() as u64 + 1;
+    told(thousandths((1, 1), (read, size)));
     let Some(fact) = json_of_line(line) else { return };
     at += 1;
     held.noted(&fact, at);
@@ -207,6 +213,14 @@ impl Told {
   /// The project of a record whose cards the daemon told.
   pub(crate) fn project(&self, life: &str) -> Option<&Option<String>> {
     self.shown.get(life).map(|one| &one.0)
+  }
+
+  /// How far the index of a record stands, told to each peer that hears the cards.
+  pub(crate) fn indexing(&self, life: &str, done: u64) {
+    let frame = Frame::Indexing { life: life.to_owned(), done, of: opens::WHOLE };
+    for one in &self.watchers {
+      one.send(frame.clone()).ok();
+    }
   }
 
   /// The cards of a record as they stand now, told to each peer that hears them when they are not

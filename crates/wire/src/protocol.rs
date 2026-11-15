@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 40;
+pub const PROTOCOL: u32 = 41;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -588,6 +588,11 @@ pub enum Frame {
   /// A change of the cards of one record, pushed to each peer that asked the cards: each card that
   /// is new or that changed, and the prompt of each card that the record holds no more.
   Cards { life: String, changed: Vec<Card>, gone: Vec<String> },
+  /// How far the daemon stands in the index of the cards of a record that no life holds, pushed to
+  /// each peer that asked the cards while the daemon reads the record: the thousandths of the read
+  /// done, of 1000, which never go back. The frame with `done` equal to `of` comes before the frame
+  /// `cards` of the record.
+  Indexing { life: String, done: u64, of: u64 },
   /// A change of the thread that the peer reads: each exchange that is new or that changed, how
   /// many exchanges stand before the first of the page of the end now, and the agents of the
   /// thread.

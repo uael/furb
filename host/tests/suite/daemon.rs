@@ -3042,3 +3042,33 @@ async fn the_cards_of_a_record_at_rest_come_from_its_index_and_never_from_a_fold
   let folded = cards(&mut fourth).await.into_iter().map(|one| Card { since: 0, ..one });
   assert_eq!(folded.collect::<Vec<_>>(), vec![Card { since: 0, ..rests }]);
 }
+
+#[tokio::test]
+async fn the_daemon_tells_how_far_the_index_of_a_record_stands_before_its_cards() {
+  let at = place();
+  let (_, sessions) = project(&at);
+  let (local, _daemon) = started(&at, Duration::ZERO).await;
+  let mut window = Window::dialed(&local).await;
+  assert_eq!(cards(&mut window).await, Vec::new());
+  let life = held(&mut window, &sessions, "one.jsonl").await;
+  messaged(&mut window, &life, "ground the branch").await;
+  let lived = card(&mut window, |card| card.thread.standing == Standing::Resolved).await;
+  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  card(&mut window, |card| !card.held).await;
+  fs::remove_file(format!("{life}.threads.json")).unwrap();
+  let mut second = Window::dialed(&local).await;
+  assert_eq!(cards(&mut second).await, Vec::new());
+  card(&mut second, |card| card.thread.prompt == lived.thread.prompt).await;
+  let steps: Vec<(u64, u64)> = second
+    .pushed
+    .iter()
+    .filter_map(|frame| match frame {
+      Frame::Indexing { life: of_life, done, of } if *of_life == life => Some((*done, *of)),
+      _ => None,
+    })
+    .collect();
+  assert!(steps.len() >= 2, "{steps:?}");
+  assert!(steps.windows(2).all(|two| two[0].0 <= two[1].0), "{steps:?}");
+  assert!(steps.iter().all(|(_, of)| *of == 1000), "{steps:?}");
+  assert_eq!(steps.last(), Some(&(1000, 1000)));
+}

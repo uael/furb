@@ -2207,6 +2207,35 @@
             "life": {
               "type": "string"
             },
+            "done": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "of": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "frame": {
+              "type": "string",
+              "const": "indexing"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "done",
+            "of"
+          ],
+          "description": "How far the daemon stands in the index of the cards of a record that no life holds, pushed to\neach peer that asked the cards while the daemon reads the record: the thousandths of the read\ndone, of 1000, which never go back. The frame with `done` equal to `of` comes before the frame\n`cards` of the record."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "thread": {
               "type": "string"
             },
@@ -5454,7 +5483,7 @@
         {
           "type": "string",
           "const": "recall",
-          "description": "A host tells its readers what the record told before its last checkpoint: the entries that\nthe record had kept when the life said the fact told last, of its entries as far as that\ncheckpoint. The crate furb never tells this stage."
+          "description": "A host tells its readers what the record told before its last checkpoint: the thousandths of\nthe read done, of 1000. The two passes of the reader over the record make the first two\nthirds, and the fold of the facts that it tells, as far as that checkpoint, the last third.\nThe crate furb never tells this stage."
         },
         {
           "type": "string",
@@ -5510,5 +5539,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 40
+  "x-protocol": 41
 }

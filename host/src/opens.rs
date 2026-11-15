@@ -15,7 +15,18 @@ use crate::protocol::Frame;
 
 /// The least time between two frames of a stage that goes on, so a long stage tells a window at
 /// most four frames each second.
-const PACE: Duration = Duration::from_millis(250);
+pub(crate) const PACE: Duration = Duration::from_millis(250);
+
+/// The whole of a read of a record that a host tells in thousandths.
+pub(crate) const WHOLE: u64 = 1000;
+
+/// The thousandths of a read of a record that a host tells: the two passes of the reader over the
+/// record make the first two thirds, and the fold of the facts that it tells the last third, each
+/// as its work done of its work known. A part that knows no work is whole.
+pub(crate) fn thousandths(read: (u64, u64), folded: (u64, u64)) -> u64 {
+  let share = |(done, of): (u64, u64)| (done.min(of) * WHOLE).checked_div(of).unwrap_or(WHOLE);
+  (2 * share(read) + share(folded)) / 3
+}
 
 /// A stage that an open reached, with its work done and its work known.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
