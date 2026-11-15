@@ -33,7 +33,7 @@ use furb::{
     config::{Change, Layer},
   },
 };
-use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq};
+use furb_host::{Command, Door, Event, Life, LifeError, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
 use serde_json::json;
 use tokio::{task, time};
@@ -375,6 +375,59 @@ async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
   let stand = made(&life, Command::Stand).await;
   until(&mut events, done(&stand)).await;
   // The scratch directory that a command of the life made goes as the thread of the life ends.
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
+}
+
+#[tokio::test]
+async fn each_door_of_a_person_runs_as_his_word_that_the_transcript_shows() {
+  let at = place("doors");
+  fs::create_dir_all(at.join("work")).unwrap();
+  let life = Life::spawn(scripted(&at, &["x = 1\nclose('one')"])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let text = |one: &str| one.to_owned();
+  let asked = Command::Prompt { shape: text("str"), message: text("Set x."), to: None, on: None };
+  let prompt = made(&life, asked).await;
+  until(&mut events, done(&prompt)).await;
+  let doors = [
+    Door::Chain { label: text("bench") },
+    Door::Fork { label: text("rewind"), source: text("chain1"), kept: Some(vec![prompt.clone()]) },
+    Door::Cd { path: text("work") },
+    Door::Stand { actor: text("claude-cli:opus/low") },
+    Door::Edit { prompt: prompt.clone(), program: text("x = 2\nclose('two')") },
+  ];
+  let mut ran = Vec::new();
+  for door in &doors {
+    let rung = made(&life, rung(&door.word())).await;
+    until(&mut events, done(&rung)).await;
+    ran.push(rung);
+  }
+  let Reply::Values(facts) = life.send(Command::Transcript { on: None, of: None }).await.unwrap()
+  else {
+    panic!("the transcript is values")
+  };
+  // Each door is a rung of his word on the chain, as the rung of a word of a model is.
+  for (rung, door) in ran.iter().zip(&doors) {
+    let told =
+      facts.iter().any(|fact| fact[0] == "rung" && fact[1] == **rung && fact[4] == door.word());
+    assert!(told, "{rung} tells {} in {facts:?}", door.word());
+  }
+  let chains: Vec<&serde_json::Value> = facts.iter().filter(|fact| fact[0] == "chain").collect();
+  let labels: Vec<&serde_json::Value> = chains.iter().map(|fact| &fact[4]).collect();
+  assert_eq!(labels, [&json!("bench"), &json!("rewind")]);
+  assert_eq!(chains[1][5], json!("chain1"), "the rewind stands on the chain, which stays");
+  let cwd = life.send(Command::Cwd { on: None }).await.unwrap();
+  assert_eq!(cwd, Reply::Value(json!(at.join("work").display().to_string())));
+  let inspect = |name: &str| Command::Inspect { name: text(name), on: None };
+  let Reply::Inspected { repr, .. } = life.send(inspect("actor")).await.unwrap() else {
+    panic!("a name is inspected")
+  };
+  assert_eq!(repr, "'claude-cli:opus/low'");
+  let read = life.send(Command::Read { path: prompt.clone(), on: None }).await.unwrap();
+  assert!(
+    matches!(&read, Reply::Value(got) if got["content"] == json!("x = 2\nclose('two')")),
+    "{read:?}"
+  );
   life.send(Command::End).await.unwrap();
   while events.next().await.is_some() {}
 }

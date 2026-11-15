@@ -10,6 +10,8 @@
 //! [`protocol`] says each frame between a peer and the daemon, [`transport`] how a peer reaches
 //! the daemon and who it is, [`access`] the role of each login of the network, and [`serve`] the
 //! door of the daemon to one peer, which checks the role of each verb before a [`Host`] answers it.
+//! A [`Door`] is an act of a person as the word that a model writes for it, which a window runs
+//! through the verb `run`, so the transcript shows his act as it shows the act of a model.
 //!
 //! [`run`] serves the daemon of a machine, which holds each life by the path of its record for as
 //! long as a window or a pin holds it, and [`upgrade`] puts the daemon of a new build in its place.
@@ -24,6 +26,7 @@ mod backlog;
 mod cards;
 mod changes;
 mod daemon;
+mod door;
 mod ears;
 mod error;
 mod event;
@@ -44,6 +47,7 @@ pub mod transport;
 mod views;
 
 pub use daemon::{GRACE, Settings, Tailnet, run, upgrade};
+pub use door::Door;
 pub use error::{AccessError, DaemonError, LifeError, ProtocolError, TransportError};
 pub use event::{Event, Seq};
 pub use life::{Command, Life, LifeHandle, Reply};
