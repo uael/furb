@@ -296,8 +296,12 @@ fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
   });
   match (held.screen.model.moves() && !held.still, held.moves) {
     (true, None) => {
+      // The next step falls on the grid of the steps from the open of the window, so a late step
+      // never shifts the frames after it and each loader keeps its beat.
+      let late = u64::try_from(moved.as_millis() % MOVES.as_millis()).unwrap_or_default();
       let on = Rc::clone(window);
-      held.moves = Some(app.set_interval(MOVES, move |cx| tick(cx.app(), &on)));
+      let next = MOVES.saturating_sub(Duration::from_millis(late));
+      held.moves = Some(app.set_timeout(next, move |cx| tick(cx.app(), &on)));
     }
     (false, Some(timer)) => {
       app.cancel_timer(timer);
@@ -308,8 +312,10 @@ fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
   given
 }
 
-/// A moment of the clocks with no other change: the loaders and the ages move.
+/// A moment of the clocks with no other change: the loaders and the ages move, and the next step
+/// is set.
 fn tick(app: &App, window: &Shared) {
+  window.borrow_mut().moves = None;
   tell(app, window, |_| ());
 }
 
