@@ -145,6 +145,31 @@ pub(crate) async fn ended(record: &Path, cancel: bool) -> Result<(), CliError> {
   Ok(())
 }
 
+/// Each life that the daemon of this machine holds, one on each line: its record, then a window
+/// when a window watches it, and the holder of each pin, so a life that only a pin holds, as a
+/// life that an agent holds for a task, says what holds it. No daemon holds no life.
+pub(crate) async fn lives() -> Result<Vec<String>, CliError> {
+  let Some(mut lines) = dialed("furb lives").await? else { return Ok(Vec::new()) };
+  let Answer::Lives(listed) = asked(&mut lines, 1, Verb::List { config: None }).await? else {
+    return Err(DaemonError::Unanswered.into());
+  };
+  let held = listed.into_iter().filter(|one| one.held);
+  Ok(
+    held
+      .map(|one| {
+        let watched = one.watched.then(|| "a window".to_owned());
+        let pins = one.pins.into_iter().map(|pin| format!("the pin {pin:?}"));
+        let holders = watched.into_iter().chain(pins).collect::<Vec<_>>().join(", ");
+        format!(
+          "{}\t{}",
+          one.life,
+          if holders.is_empty() { "nothing, until its grace ends" } else { &holders }
+        )
+      })
+      .collect(),
+  )
+}
+
 /// A connection to the daemon of this machine, past its hello, or none when no daemon listens.
 async fn dialed(
   name: &str,

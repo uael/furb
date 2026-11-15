@@ -110,6 +110,9 @@ enum Command {
     #[command(flatten)]
     stand: Stand,
   },
+  /// Print each life that the daemon of this machine holds, one on each line: its record, then what
+  /// holds it, a window or the pin of a task, so an agent and the operator see each life that runs.
+  Lives,
   /// End the life of a record that the daemon of this machine holds, as a window ends it: it writes
   /// its image, each window hears its end, and its next open takes its open work again.
   End {
@@ -278,6 +281,7 @@ async fn command(furb: Furb) -> Result<(), CliError> {
       prompt(opening, asked).await
     }
     Some(Command::End { record, cancel }) => host::ended(&record, cancel).await,
+    Some(Command::Lives) => host::lives().await?.iter().try_for_each(say),
     Some(Command::Turns { record, cwd, stand }) => {
       let place = Place { record: Some(record), cwd };
       turns(stand.on(Opening { inspecting: Some(true), ..place.opening(false) })).await

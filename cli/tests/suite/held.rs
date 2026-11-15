@@ -61,6 +61,9 @@ async fn a_life_held_for_a_task_runs_on_in_the_daemon_with_no_window_until_furb_
   sleep(Duration::from_secs(2)).await;
   let second = said(&["prompt", "--record", &life, "Second?"]).await;
   assert_eq!(String::from_utf8_lossy(&second.stdout), "'two'\n", "a later prompt reaches it");
+  let listed = said(&["lives"]).await;
+  let held = format!("{life}\tthe pin \"a task of an agent\"\n");
+  assert_eq!(String::from_utf8_lossy(&listed.stdout), held, "furb lives says what holds it");
   assert!(
     !said(&["run", "--record", &life, "x = 1"]).await.status.success(),
     "the daemon holds it"
