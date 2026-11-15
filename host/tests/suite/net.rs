@@ -16,12 +16,15 @@ use std::{
   net::SocketAddr,
   path::Path,
   process,
-  sync::atomic::{AtomicU32, Ordering},
+  sync::{
+    Arc,
+    atomic::{AtomicU32, Ordering},
+  },
   time::Duration,
 };
 use yard::Yard;
 
-use furb::life::Opening;
+use furb::life::{Log, Opening};
 use furb_host::{
   AccessError, Host, Outbox, ProtocolError, STALL, STARTING, Settings, Tailnet, TransportError,
   access::{Access, Config, Ports},
@@ -33,7 +36,7 @@ use serde_json::json;
 use tokio::net::TcpStream;
 use tokio::{
   io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
-  net::TcpListener,
+  sync::mpsc,
   task::JoinHandle,
   time,
 };
@@ -210,18 +213,18 @@ fn host_json_gives_the_ports_of_the_tailnet_and_the_role_of_each_profile() {
   assert!(matches!(config.roles.role("carol@github"), Err(AccessError::Unlisted { .. })));
 }
 
-/// A port of loopback that no listener holds now.
-async fn free() -> u16 {
-  TcpListener::bind(loopback()).await.unwrap().local_addr().unwrap().port()
-}
-
 /// A daemon on the tailnet under an identity, with its ports, which a folder holds while the
-/// test runs, with its socket in `host` and the file of its door in `door/window.json`.
+/// test runs, with its socket in `host` and the file of its door in `door/window.json`. The daemon
+/// takes a port of each door that the system gives, as it reports, and no other test can take
+/// first: a port that a test found free and let go could be taken by the door of another test
+/// before the daemon binds it, and a peer dialing it would reach that door.
 async fn tailed(identity: Tailscale) -> (Ports, Yard) {
-  let ports = Ports { tcp: Some(free().await), websocket: Some(free().await) };
   let held = folder();
   let config = Some(held.join("config").display().to_string());
-  let opening = Opening { skills: Some(false), config, ..Opening::default() };
+  let (tell, mut reported) = mpsc::unbounded_channel();
+  let log = Log(Arc::new(move |line: &str| drop(tell.send(line.to_owned()))));
+  let opening = Opening { skills: Some(false), config, log: Some(log), ..Opening::default() };
+  let ports = Ports { tcp: Some(0), websocket: Some(0) };
   let settings = Settings {
     opening,
     grace: Duration::from_secs(1),
@@ -233,6 +236,20 @@ async fn tailed(identity: Tailscale) -> (Ports, Yard) {
   let local = Local::new(held.join("host"));
   let listener = local.listen().await.unwrap();
   tokio::spawn(async move { run(&local, listener, settings).await });
+  let mut ports = Ports { tcp: None, websocket: None };
+  while ports.tcp.is_none() || ports.websocket.is_none() {
+    let line = time::timeout(Duration::from_secs(10), reported.recv()).await;
+    let line = line.expect("the daemon never listened").expect("the daemon reports");
+    let Some(listens) = line.strip_prefix("furb host: listens on the tailnet at ") else {
+      continue;
+    };
+    let (at, by) = listens.split_once(" by ").unwrap();
+    let port = at.parse::<SocketAddr>().unwrap().port();
+    match by {
+      "TCP" => ports.tcp = Some(port),
+      _ => ports.websocket = Some(port),
+    }
+  }
   (ports, held)
 }
 
