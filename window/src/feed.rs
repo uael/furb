@@ -344,8 +344,9 @@ impl Feed<'_> {
         }
       }
     }
-    // The last answer that wrote a file that furb knew before offers to revert it, under its
-    // block, before the blank row that ends the block, to a window that may write.
+    // The last answer that wrote a file that furb knew before offers to revert it, a blank row
+    // under its block or the band of his word, before the blank row that ends the block, to a
+    // window that may write.
     let reads = self.model.client.only_reads(self.opened.thread.key.0).is_some();
     if let Some((message, writes)) = self.model.reverts()
       && message == exchange.message
@@ -363,7 +364,8 @@ impl Feed<'_> {
       let line = vec![run("  ", Style::new()), run(said, muted), run("  ", muted)];
       let key = run(self.model.key(Does::Revert), muted);
       let row = Row::clicked([line, vec![key]].concat(), Click::Key(Does::Revert));
-      rows.insert(rows.len().saturating_sub(1), row);
+      let end = rows.len().saturating_sub(1);
+      rows.splice(end..end, [Row::default(), row]);
     }
     for said in &exchange.said {
       rows.extend(self.said(said));

@@ -328,6 +328,8 @@ fn a_line_that_wrote_a_file_shows_its_path_what_it_changed_and_the_diff_under_it
   clicked(&app, "notes.md  +2", 0, 0);
   let open = app.wait_until(PATIENCE, || app.text().contains("+B"));
   assert!(open, "{}", app.text());
+  // The rows move as the block opens, so the pointer leaves them, where it would light a row.
+  app.hover(0, 0);
   let opened: Vec<String> = trimmed(rows(&app, 15));
   assert_eq!(
     opened[..13],

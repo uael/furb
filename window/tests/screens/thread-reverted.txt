@@ -17,8 +17,8 @@
 ┃   5  write(Text('notes.md', 'a\nb\nc\n'))
 ┃      └ notes.md  +1 −2
 ┃
-  ↶ Revert notes.md  ⌃X D
 
+  ↶ Revert notes.md  ⌃X D
 
 
 

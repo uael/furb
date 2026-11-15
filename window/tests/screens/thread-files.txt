@@ -1,11 +1,10 @@
 ● furb · edit the notes of the day            ✓ Resolved       All projects ▾        This computer
-┃
-┃ edit the notes of the day                                    Resting 1
-┃ (the model edits a file)                                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ ● edit the notes of the day   now ▌
-                                                opus/high     ▐   FU furb                    opus ▌
-    1  write(Text('notes.md', 'a\nb\nc\n'))                   ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-       └ notes.md  wrote 3 lines
+┃ edit the notes of the day
+┃ (the model edits a file)                                     Resting 1
+┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+                                                opus/high     ▐ ● edit the notes of the day   now ▌
+    1  write(Text('notes.md', 'a\nb\nc\n'))                   ▐   FU furb                    opus ▌
+       └ notes.md  wrote 3 lines                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
          +a
          +b
          +c
@@ -18,6 +17,7 @@
          +b2
           c
     4  close('notes.md has 4 lines.')
+
   ↶ Revert notes.md  ⌃X D
 
   notes.md has 4 lines.
