@@ -20,6 +20,7 @@ mod part;
 mod prose;
 mod question;
 mod screens;
+mod skills;
 mod system;
 mod text;
 mod thread;

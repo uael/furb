@@ -1,9 +1,11 @@
 //! The settings of a session as its configs give them, which the operator reads and changes from
 //! the window: each key with the value that wins for it, its layer, and the property that a schema
-//! gives it, from furb or from an extension.
+//! gives it, from furb or from a skill, or each skill of the session with how it plays, which he
+//! turns on or off.
 
 use furb_wire::{
-  config::{Kind, Setting},
+  card::Skill,
+  config::{Kind, SKILLS, Setting},
   protocol::{Answer, Config, Frame, Verb},
 };
 use std::mem;
@@ -13,20 +15,22 @@ use serde_json::Value;
 use crate::{Asked, Client, Target};
 
 /// The settings of a session while the operator reads them: its machine and its record, whether
-/// they changed since its machine gave them, the settings once it gave them, and the change of one
-/// that the client did not ask yet.
+/// he reads its skills in place of its keys, whether they changed since its machine gave them, the
+/// keys or the skills once it gave them, and the change of one that the client did not ask yet.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Settings {
   pub life: (usize, String),
+  pub skills: bool,
   pub stale: bool,
   pub read: Option<Vec<Setting>>,
+  pub played: Option<Vec<Skill>>,
   pub change: Option<Config>,
 }
 
 impl Client {
-  /// The settings of the session that the input sends to, read again, or why none shows: a new
-  /// session has no life to read them from yet.
-  pub fn read_settings(&mut self) -> Result<(), String> {
+  /// The settings of the session that the input sends to, or its skills, read again, or why none
+  /// shows: a new session has no life to read them from yet.
+  pub fn read_settings(&mut self, skills: bool) -> Result<(), String> {
     let life = match self.target() {
       Target::Thread(key) => (key.0, key.1),
       Target::Session(at, life) => (at, life),
@@ -34,7 +38,7 @@ impl Client {
         return Err("Send a first message: the settings are those of a session.".to_owned());
       }
     };
-    self.settings = Some(Settings { life, stale: true, ..Settings::default() });
+    self.settings = Some(Settings { life, skills, stale: true, ..Settings::default() });
     Ok(())
   }
 
@@ -48,6 +52,9 @@ impl Client {
     }
     if !mem::take(&mut settings.stale) {
       return None;
+    }
+    if settings.skills {
+      return Some((at, Verb::Plays { life }, Asked::Plays));
     }
     Some((at, Verb::Config { life, config: Config::Get }, Asked::Settings))
   }
@@ -63,10 +70,32 @@ impl Client {
         settings.read = Some(read.unwrap_or_default());
       }
       (Asked::Settings, _) => settings.read = Some(Vec::new()),
+      (Asked::Plays, Some(Frame::Reply { answer: Answer::Skills(read), .. })) => {
+        settings.played = Some(read);
+      }
+      (Asked::Plays, _) => settings.played = Some(Vec::new()),
       (_, Some(Frame::Reply { .. })) => settings.stale = true,
       (_, Some(Frame::Refused { why, .. })) => self.notice = Some(why),
       _ => {}
     }
+  }
+
+  /// The skill at a place among the skills that play, once its machine gave them.
+  pub fn skill_at(&self, at: usize) -> Option<&Skill> {
+    self.settings.as_ref()?.played.as_ref()?.get(at)
+  }
+
+  /// A skill with code turned off when the configs turn it on, else on, in the layer of the scope
+  /// of its key, by its place among the skills. Whether it turned: a skill with no code plays no
+  /// word.
+  pub fn turn_skill(&mut self, at: usize) -> bool {
+    let Some(one) = self.skill_at(at).filter(|one| !one.turned_by.is_null()) else { return false };
+    let key = vec![SKILLS.to_owned(), one.name.clone()];
+    let value = if one.on { Value::Bool(false) } else { one.turned_by.clone() };
+    if let Some(settings) = self.settings.as_mut() {
+      settings.change = Some(Config::Set { key, value: Some(value), layer: None });
+    }
+    true
   }
 
   /// The setting at a place among the settings, once its machine gave them.

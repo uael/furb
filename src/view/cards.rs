@@ -92,6 +92,7 @@ impl Held {
       let skill = |(name, description): (&str, &str)| Skill {
         name: name.to_owned(),
         description: description.to_owned(),
+        ..Skill::default()
       };
       index.map(|index| skills::indexed(index).map(skill).collect()).unwrap_or_default()
     })

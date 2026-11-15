@@ -48,6 +48,10 @@ export type Request1 =
     }
   | {
       life: string;
+      verb: "plays";
+    }
+  | {
+      life: string;
       cwd?: string | null;
       actor?: string | null;
       roster?: string[] | null;
@@ -1280,12 +1284,25 @@ export interface Sent {
   python?: boolean;
 }
 /**
- * A skill that the root of a life was told of, by the last read of `skills://` there: its name,
- * and what it is for.
+ * A skill of a life: its name, and what it is for. A skill that the root of a life was told of,
+ * by the last read of `skills://` there, says no more. A skill that the life finds on its root now
+ * says too whether it plays in the life now, whether the configs turn it on for the next life,
+ * whether it plays by default, the value of its name in `skills` of a config that turns it on,
+ * and where it comes from, `furb` for one that furb carries and else its folder. That value is
+ * `true` for an official skill, the path of its folder for another with code, and null for a
+ * skill with no code, which is prose that a chain reads and plays no word. A skill that the
+ * configs turn off plays on until its life ends.
  */
 export interface Skill {
   name: string;
   description: string;
+  plays?: boolean;
+  on?: boolean;
+  default?: boolean;
+  turned_by?: {
+    [k: string]: unknown;
+  };
+  from?: string;
 }
 /**
  * An operator whose window holds a life now: the operator, the greatest role of his windows,
@@ -1715,4 +1732,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 54;
+export const PROTOCOL = 55;

@@ -47,14 +47,12 @@ use crate::{
   engine::ROOT,
   fact::{Fact, named},
   value::{Fault, Object, Text, entry},
-  world::{config, files},
+  world::{config, files, skills},
 };
 
 mod bound;
 
-/// The key of a config that turns the skills on and off, each by its name: true, false, or the
-/// path of its folder.
-pub(crate) const KEY: &str = "skills";
+pub(crate) use furb_wire::config::SKILLS as KEY;
 
 /// The name of the ear of the skills, which a record holds as the maker of the rungs of their
 /// words.
@@ -877,7 +875,8 @@ struct Told {
 /// The ear of [`extensions`], which tells the root once, at the first stand that this life answers,
 /// why each extension of `refused` does not play.
 pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -> Box<dyn Ear> {
-  hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH], move |mut co| async move {
+  let heard = ["chain", "stand", "rung", "write", ENABLE, TEACH, config::CONFIGURED];
+  hearing(&heard, move |mut co| async move {
     let kept = co.keeps(Told { refused, ..Told::default() })?;
     loop {
       let a = hear(&mut co).await;
@@ -996,12 +995,7 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
             if !config && !file.parent().is_some_and(|one| one.join(MANIFEST).is_file()) {
               return Ok(());
             }
-            let got = co.call("standing", vec![], vec![]).await?;
-            let Some(Ok(project)) = entry(&got.as_ref(), 1)
-              .and_then(|one| one.as_str().map(|one| files::placed(Path::new(""), one)))
-            else {
-              return Ok(());
-            };
+            let Some(project) = skills::project(&mut co).await? else { return Ok(()) };
             if projected(&project).contains(&file) {
               let (found, refused) = turned(&file, &text.content, &places);
               tell(&mut co, &refused);
@@ -1018,6 +1012,27 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
               tell(&mut co, &found.1);
               found.0.into_iter().filter(|one| !enabled.contains(one)).collect()
             }
+          }
+          // A change of `skills` in the configs through the host plays at once each extension that
+          // it turns on and that the life does not run, as a write of a config of the project does,
+          // and the journal says again the enables that followed it. One that it turns off plays
+          // on until the life ends.
+          config::CONFIGURED if a.by() != JOURNAL => {
+            let key = a.word(0);
+            let part =
+              |at| key.as_ref().and_then(|key| entry(key, at)?.as_str().map(str::to_owned));
+            if part(0).as_deref() != Some(KEY) {
+              return Ok(());
+            }
+            let name = part(1);
+            let Some(project) = skills::project(&mut co).await? else { return Ok(()) };
+            let (found, refused) =
+              configured(&places, &project).unwrap_or_else(|no| (Vec::new(), vec![no.message()]));
+            if !told(&mut co, &refused.join("\n")).await? {
+              tell(&mut co, &refused);
+            }
+            let named = |one: &Skill| name.as_ref().is_none_or(|name| *name == one.name);
+            found.into_iter().filter(|one| !runs(one) && named(one)).collect()
           }
           ENABLE => Skill::of(&a).filter(|one| !enabled.contains(one)).into_iter().collect(),
           _ => return Ok(()),

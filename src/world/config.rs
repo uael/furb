@@ -72,6 +72,10 @@ fn own() -> Vec<Named> {
     },
     skill: None,
   };
+  let local = |mut named: Named| {
+    named.property.scope = Layer::Local;
+    named
+  };
   vec![
     one(
       KEY_THINKING,
@@ -92,14 +96,21 @@ fn own() -> Vec<Named> {
     ),
     one(KEY_CLASSES, Kind::Object, json!({}), "The class, cheap or dear, of each model it names."),
     one(PROVIDERS, Kind::Object, json!({}), "The providers of models, each by its name."),
-    one(
+    // A person turns an extension on or off for this machine, in the local config of the project,
+    // which git does not keep.
+    local(one(
       skill::KEY,
       Kind::Object,
       json!({}),
       "The skills that a life runs, each by its name: true, false, or the path of its folder.",
-    ),
+    )),
   ]
 }
+
+/// The kind of the fact that a life says at each change of a key of its configs through the
+/// protocol: the key, and the value that wins for it after the change. A change of `skills` that
+/// turns an extension on plays it at once, as a write of a config of the project does.
+pub const CONFIGURED: &str = "configured";
 
 /// A key of a layer set to a value, or taken out when the value is none. A change that names no
 /// layer writes the layer of the scope of its key. A true or a false on a provider whose value is
@@ -162,6 +173,12 @@ impl Layers {
   #[must_use]
   pub fn claude(self, bin: Option<PathBuf>) -> Self {
     Self { claude: bin, ..self }
+  }
+
+  /// The places of the extensions that these configs turn on: the config directory of their user,
+  /// and the home of this process.
+  pub fn places(&self) -> Places {
+    Places { config: self.user.clone(), home: Places::here().home }
   }
 
   fn file(&self, layer: Layer) -> PathBuf {
@@ -228,7 +245,7 @@ impl Layers {
   /// and the read of `settings://` and the name of that extension says why. An extension that
   /// takes the name of a key of furb plays not, as [`skill::load`] says, and names no key.
   fn schema(&self) -> Result<Vec<Named>, Error> {
-    let places = Places { config: self.user.clone(), home: Places::here().home };
+    let places = self.places();
     let mut named = own();
     for (name, text) in skill::contributed(&places, &self.project).map_err(Error::Skills)? {
       if furb_key(&name) {
@@ -270,14 +287,18 @@ impl Layers {
   /// a stand of a life configures it. A value that the property of its key does not take writes
   /// nothing. A change that the catalog refuses puts the file back as it was, and gives why.
   pub async fn set(&self, change: Change) -> Result<(), Error> {
-    let named = self.schema()?.into_iter().find(|one| one.key == change.key);
-    if let (Some(value), Some(one)) = (&change.value, &named)
+    let schema = self.schema()?;
+    let named = schema.iter().find(|one| one.key == change.key);
+    if let (Some(value), Some(one)) = (&change.value, named)
       && !one.property.takes(value)
     {
       let (key, wanted) = (change.key.join("."), one.property.wanted());
       return Err(Error::Value { key, wanted, value: value.clone() });
     }
-    let scope = named.map(|one| one.property.scope).unwrap_or_default();
+    // A name in an object of furb takes the scope of its object.
+    let scoped = schema.iter().filter(|one| change.key.starts_with(&one.key));
+    let scope = scoped.max_by_key(|one| one.key.len()).map(|one| one.property.scope);
+    let scope = scope.unwrap_or_default();
     let path = self.file(change.layer.unwrap_or(scope));
     let (mut config, before) = read(&path)?;
     changed(&mut config, &path, &change.key, change.value)?;

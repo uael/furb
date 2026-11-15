@@ -210,6 +210,23 @@
         },
         {
           "type": "object",
+          "description": "The skills of a life as its root finds them now, in the order of their names, each with how\nit plays: each skill that the folders of skills of its working directory, the configs and\nfurb give.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "plays"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
           "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the skills that the peer names, reads the\nsettings of the user in the folder `config` and runs the claude command line `claude` when\nthe peer names them, as the window of the peer reads them, and the peer answers each request\nof its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass.",
           "properties": {
             "life": {
@@ -2873,7 +2890,7 @@
             "answer",
             "data"
           ],
-          "description": "The skills of a life, each with what it is for."
+          "description": "The skills of a life, each with what it is for, and with how it plays when the verb asks."
         },
         {
           "type": "object",
@@ -3648,13 +3665,32 @@
         },
         "description": {
           "type": "string"
+        },
+        "plays": {
+          "type": "boolean",
+          "default": false
+        },
+        "on": {
+          "type": "boolean",
+          "default": false
+        },
+        "default": {
+          "type": "boolean",
+          "default": false
+        },
+        "turned_by": {
+          "default": null
+        },
+        "from": {
+          "type": "string",
+          "default": ""
         }
       },
       "required": [
         "name",
         "description"
       ],
-      "description": "A skill that the root of a life was told of, by the last read of `skills://` there: its name,\nand what it is for."
+      "description": "A skill of a life: its name, and what it is for. A skill that the root of a life was told of,\nby the last read of `skills://` there, says no more. A skill that the life finds on its root now\nsays too whether it plays in the life now, whether the configs turn it on for the next life,\nwhether it plays by default, the value of its name in `skills` of a config that turns it on,\nand where it comes from, `furb` for one that furb carries and else its folder. That value is\n`true` for an official skill, the path of its folder for another with code, and null for a\nskill with no code, which is prose that a chain reads and plays no word. A skill that the\nconfigs turn off plays on until its life ends."
     },
     "Present": {
       "type": "object",
@@ -6029,5 +6065,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 54
+  "x-protocol": 55
 }

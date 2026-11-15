@@ -36,12 +36,28 @@ pub struct Sent {
   pub python: bool,
 }
 
-/// A skill that the root of a life was told of, by the last read of `skills://` there: its name,
-/// and what it is for.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// A skill of a life: its name, and what it is for. A skill that the root of a life was told of,
+/// by the last read of `skills://` there, says no more. A skill that the life finds on its root now
+/// says too whether it plays in the life now, whether the configs turn it on for the next life,
+/// whether it plays by default, the value of its name in `skills` of a config that turns it on,
+/// and where it comes from, `furb` for one that furb carries and else its folder. That value is
+/// `true` for an official skill, the path of its folder for another with code, and null for a
+/// skill with no code, which is prose that a chain reads and plays no word. A skill that the
+/// configs turn off plays on until its life ends.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Skill {
   pub name: String,
   pub description: String,
+  #[serde(default)]
+  pub plays: bool,
+  #[serde(default)]
+  pub on: bool,
+  #[serde(default)]
+  pub default: bool,
+  #[serde(default)]
+  pub turned_by: serde_json::Value,
+  #[serde(default)]
+  pub from: String,
 }
 
 /// How the thread of a card stands. It asks one member by his login, or each operator. A pause

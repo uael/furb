@@ -10,6 +10,7 @@ use std::{
   path::{Component, Path, PathBuf},
 };
 
+use furb_wire::card::Skill as Played;
 use serde_json::{Map, Value};
 
 use crate::{
@@ -181,6 +182,39 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
   })
 }
 
+/// The skills of a life as its root finds them, in the order of their names: those that a chain
+/// finds in its working directory `cwd`, which stands in the directory of the standing, the project,
+/// each with how it plays, as [`Played`] says. The facts of the root say which skills the life
+/// runs, which play on the root.
+pub fn played(directory: &str, cwd: &str, places: &Places, root: &[Fact]) -> Vec<Played> {
+  let project = files::placed(Path::new(""), directory).unwrap_or_default();
+  let here = files::placed(&project, cwd).unwrap_or_else(|_| project.clone());
+  let on = turned_on(places, &project).map(|got| got.0).unwrap_or_default();
+  let runs = enabled(root);
+  let row = |one: Found| {
+    let folder = match &one.place {
+      Place::Folder(folder) => Some(tilded(folder, places)),
+      Place::Shipped(_) => None,
+    };
+    let official = shipped(&one.name).is_some();
+    let turned_by = match (&folder, official, &one.word) {
+      (_, _, None) => Value::Null,
+      (Some(folder), false, _) => Value::String(folder.clone()),
+      _ => Value::Bool(true),
+    };
+    Played {
+      plays: runs.iter().any(|two| two.name == one.name),
+      on: on.iter().any(|two| two.0 == one.name),
+      default: one.default,
+      from: folder.unwrap_or_else(|| "furb".to_owned()),
+      turned_by,
+      name: one.name,
+      description: one.description,
+    }
+  };
+  found(&here, &project, places).into_iter().map(row).collect()
+}
+
 /// The name of each skill of the index that a read of `skills://` gives, with what it is for, as
 /// [`Found::line`] writes it, past the first line, which says how to load a skill.
 pub(crate) fn indexed(index: &str) -> impl Iterator<Item = (&str, &str)> {
@@ -347,7 +381,7 @@ fn body(text: &str) -> &str {
 }
 
 /// The folder of the project that the standing names, or none while it names none.
-async fn project(co: &mut Co) -> Result<Option<PathBuf>, Fault> {
+pub(crate) async fn project(co: &mut Co) -> Result<Option<PathBuf>, Fault> {
   let got = co.call("standing", vec![], vec![]).await?;
   let named = entry(&got.as_ref(), 1).and_then(|one| one.as_str().map(str::to_owned));
   Ok(named.and_then(|one| files::placed(Path::new(""), &one).ok()))

@@ -87,6 +87,10 @@ fn the_skills_of_a_life_are_those_that_the_last_read_of_the_index_on_its_root_to
       held.heard(&act);
     }
   }
-  let skill = |name: &str| Skill { name: name.to_owned(), description: format!("Does {name}") };
+  let skill = |name: &str| Skill {
+    name: name.to_owned(),
+    description: format!("Does {name}"),
+    ..Skill::default()
+  };
   assert_eq!(held.skills(), [skill("memory"), skill("web")]);
 }

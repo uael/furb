@@ -123,6 +123,8 @@ pub enum Asked {
   Tracks(Key),
   /// The settings of a session that the operator reads.
   Settings,
+  /// The skills of a session, with how each plays, that the operator reads.
+  Plays,
   /// A change of a setting of a session.
   Setting,
   /// Where the operator writes, which each other window of the life shows.

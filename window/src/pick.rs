@@ -51,6 +51,8 @@ pub(crate) enum Pick {
   Settings,
   /// The value of a setting, by its place among the settings, which he writes in the filter.
   Value(usize),
+  /// The skills of the session that the input sends to, with how each plays.
+  Skills,
 }
 
 /// The list part, while it is open: what it lists, the text that filters it, and the place of the
@@ -92,6 +94,9 @@ pub(crate) enum Choice {
   Setting(usize),
   /// The value that he wrote for a setting, by its place among the settings.
   Value(usize),
+  /// A skill, by its place among the skills of the session: one with code turns on or off, and the
+  /// draft adds the mention of one with none.
+  Skill(usize),
   /// Nothing: a key that only a form or a list hears.
   #[default]
   None,
@@ -143,6 +148,7 @@ impl Pick {
       Self::Session => "The session",
       Self::Leave => "Sessions still work",
       Self::Settings | Self::Value(_) => "Settings",
+      Self::Skills => "Extensions",
     }
   }
 
@@ -158,6 +164,7 @@ impl Pick {
       Self::Session | Self::Leave => "Search a choice",
       Self::Settings => "Search a setting",
       Self::Value(_) => "Write the value",
+      Self::Skills => "Search a skill or an extension",
     }
   }
 
@@ -172,6 +179,7 @@ impl Pick {
       Self::Session | Self::Leave => "do it",
       Self::Settings => "change it",
       Self::Value(_) => "set it",
+      Self::Skills => "turn it on or off",
     }
   }
 }
@@ -190,8 +198,8 @@ impl Model {
     if of == Pick::History {
       self.client.ask_history();
     }
-    if of == Pick::Settings
-      && let Err(why) = self.client.read_settings()
+    if matches!(of, Pick::Settings | Pick::Skills)
+      && let Err(why) = self.client.read_settings(of == Pick::Skills)
     {
       self.client.notice = Some(why);
       return;
@@ -224,6 +232,7 @@ impl Model {
       Pick::Session => self.session_choices(),
       Pick::Leave => self.leave_choices(),
       Pick::Settings => self.settings(),
+      Pick::Skills => self.played(),
       // The filter is the value that he writes, so it hides no row.
       Pick::Value(place) => return self.value(place),
     };
@@ -549,6 +558,14 @@ impl Model {
       Choice::Value(place) => {
         self.client.write_setting(place, &filter);
         self.picker = Some(Picker { of: Pick::Settings, filter: String::new(), at: place });
+      }
+      Choice::Skill(place) => {
+        if self.client.turn_skill(place) {
+          self.picker = Some(Picker { of, filter, at });
+        } else if let Some(one) = self.client.skill_at(place) {
+          let mention = format!("/{}", one.name);
+          self.client.added(&mention);
+        }
       }
       Choice::None => self.picker = Some(Picker { of, filter: String::new(), at }),
     }

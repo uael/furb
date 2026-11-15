@@ -656,6 +656,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Roster { life, roster } => (life, Command::Roster(roster)),
     Verb::Config { life, config } => (life, configured(config)),
     Verb::Image { life, name, data } => (life, Command::Image { name, data }),
+    Verb::Plays { life } => (life, Command::Plays),
     Verb::Seen { life, about } => (life, Command::Seen { about }),
     Verb::Resolve { life, thread } => (life, Command::Resolve { thread }),
     Verb::Queue { life, entry, shape, message, on } => {
@@ -705,6 +706,7 @@ impl From<Reply> for Answer {
       Reply::Tracks(tracks) => Self::Tracks(tracks),
       Reply::Page(page) => Self::Page(page),
       Reply::Sent(sent) => Self::History(sent),
+      Reply::Skills(skills) => Self::Skills(skills),
     }
   }
 }

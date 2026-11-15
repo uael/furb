@@ -62,6 +62,7 @@ pub(crate) enum Does {
   Unstash,
   Picture,
   Settings,
+  Skills,
   Pause,
 }
 
@@ -172,6 +173,7 @@ const INPUT: &[Bound] = &[
   bound(Does::Effort, "the next effort of the model", Some("effort"), &[&led('e')]),
   bound(Does::Changes, "the changes of the project and their diff", Some("changes"), &[&led('g')]),
   bound(Does::Settings, "the settings of the session", Some("config"), &[&led(',')]),
+  bound(Does::Skills, "the extensions, on or off", Some("extensions"), &[&led('x')]),
   bound(
     Does::Take,
     "take the grey rest of what you sent",

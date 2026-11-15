@@ -109,6 +109,18 @@ class Request9(TypedDict):
 
 class Request10(TypedDict):
   """
+  The skills of a life as its root finds them now, in the order of their names, each with how
+  it plays: each skill that the folders of skills of its working directory, the configs and
+  furb give.
+  """
+
+  id: int
+  life: str
+  verb: Literal["plays"]
+
+
+class Request11(TypedDict):
+  """
   The life of a record opened, in a folder or in the folder of its record. A life that this
   open makes stands on the actor, the roster and the skills that the peer names, reads the
   settings of the user in the folder `config` and runs the claude command line `claude` when
@@ -131,18 +143,7 @@ class Request10(TypedDict):
   verb: Literal["open"]
 
 
-Request11 = TypedDict("Request11", {"id": int, "life": str, "from": int, "verb": Literal["attach"]})
-
-
-class Request12(TypedDict):
-  """
-  One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
-  `act`, since `id` is the key of the request.
-  """
-
-  id: int
-  life: str
-  verb: Literal["detach"]
+Request12 = TypedDict("Request12", {"id": int, "life": str, "from": int, "verb": Literal["attach"]})
 
 
 class Request13(TypedDict):
@@ -153,8 +154,7 @@ class Request13(TypedDict):
 
   id: int
   life: str
-  holder: str
-  verb: Literal["pin"]
+  verb: Literal["detach"]
 
 
 class Request14(TypedDict):
@@ -166,10 +166,22 @@ class Request14(TypedDict):
   id: int
   life: str
   holder: str
-  verb: Literal["unpin"]
+  verb: Literal["pin"]
 
 
 class Request15(TypedDict):
+  """
+  One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
+  `act`, since `id` is the key of the request.
+  """
+
+  id: int
+  life: str
+  holder: str
+  verb: Literal["unpin"]
+
+
+class Request16(TypedDict):
   """
   The end of a life now, whatever pins hold it, as the grace ends a life with no holder: it
   writes its image, each of its windows hears its end, and its record opens again at its tip,
@@ -185,7 +197,7 @@ class Request15(TypedDict):
   verb: Literal["end"]
 
 
-class Request16(TypedDict):
+class Request17(TypedDict):
   """
   Each operator whose window holds a life now.
   """
@@ -193,18 +205,6 @@ class Request16(TypedDict):
   id: int
   life: str
   verb: Literal["presence"]
-
-
-class Request18(TypedDict):
-  """
-  One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
-  `act`, since `id` is the key of the request.
-  """
-
-  id: int
-  life: str
-  act: str
-  verb: Literal["get"]
 
 
 class Request19(TypedDict):
@@ -216,10 +216,22 @@ class Request19(TypedDict):
   id: int
   life: str
   act: str
-  verb: Literal["peek"]
+  verb: Literal["get"]
 
 
 class Request20(TypedDict):
+  """
+  One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
+  `act`, since `id` is the key of the request.
+  """
+
+  id: int
+  life: str
+  act: str
+  verb: Literal["peek"]
+
+
+class Request21(TypedDict):
   """
   An act as the life folds it once it is done: at once when it is done, else when its done
   comes. The window that ran a word asks it of the rung of that word, and asks it again after a
@@ -232,7 +244,7 @@ class Request20(TypedDict):
   verb: Literal["ended"]
 
 
-class Request21(TypedDict):
+class Request22(TypedDict):
   """
   One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
   `act`, since `id` is the key of the request.
@@ -245,7 +257,7 @@ class Request21(TypedDict):
   verb: Literal["transcript"]
 
 
-class Request22(TypedDict):
+class Request23(TypedDict):
   """
   One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
   `act`, since `id` is the key of the request.
@@ -257,7 +269,7 @@ class Request22(TypedDict):
   verb: Literal["turns"]
 
 
-class Request23(TypedDict):
+class Request24(TypedDict):
   """
   One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
   `act`, since `id` is the key of the request.
@@ -269,7 +281,7 @@ class Request23(TypedDict):
   verb: Literal["program"]
 
 
-class Request24(TypedDict):
+class Request25(TypedDict):
   """
   One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
   `act`, since `id` is the key of the request.
@@ -280,7 +292,7 @@ class Request24(TypedDict):
   verb: Literal["standing"]
 
 
-class Request25(TypedDict):
+class Request26(TypedDict):
   """
   The share of the window of its model that the prompt of an answer filled, as `filled` of
   the engine gives it from the reply that took that answer, and nothing before an answer.
@@ -292,7 +304,7 @@ class Request25(TypedDict):
   verb: Literal["filled"]
 
 
-class Request26(TypedDict):
+class Request27(TypedDict):
   """
   One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
   `act`, since `id` is the key of the request.
@@ -304,7 +316,7 @@ class Request26(TypedDict):
   verb: Literal["cwd"]
 
 
-class Request27(TypedDict):
+class Request28(TypedDict):
   """
   One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
   `act`, since `id` is the key of the request.
@@ -317,7 +329,7 @@ class Request27(TypedDict):
   verb: Literal["inspect"]
 
 
-class Request28(TypedDict):
+class Request29(TypedDict):
   """
   The prompts of a life that wait for an operator.
   """
@@ -327,7 +339,7 @@ class Request28(TypedDict):
   verb: Literal["pending"]
 
 
-class Request29(TypedDict):
+class Request30(TypedDict):
   """
   One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
   `act`, since `id` is the key of the request.
@@ -342,7 +354,7 @@ class Request29(TypedDict):
   verb: Literal["prompt"]
 
 
-class Request30(TypedDict):
+class Request31(TypedDict):
   """
   The close of a prompt to the operator, with a line that the operator wrote.
   """
@@ -354,7 +366,7 @@ class Request30(TypedDict):
   verb: Literal["answer"]
 
 
-class Request31(TypedDict):
+class Request32(TypedDict):
   """
   A pause of an act or of a chain, with the cause that the operator gives.
   """
@@ -366,7 +378,7 @@ class Request31(TypedDict):
   verb: Literal["pause"]
 
 
-class Request32(TypedDict):
+class Request33(TypedDict):
   """
   One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
   `act`, since `id` is the key of the request.
@@ -378,7 +390,7 @@ class Request32(TypedDict):
   verb: Literal["wake"]
 
 
-class Request33(TypedDict):
+class Request34(TypedDict):
   """
   A cancel of an act or of a chain, with the cause that the operator gives.
   """
@@ -390,7 +402,7 @@ class Request33(TypedDict):
   verb: Literal["cancel"]
 
 
-class Request34(TypedDict):
+class Request35(TypedDict):
   """
   A word that runs on a chain as a turn of the operator: each act of a person goes this way, as
   the word that `Door` gives, so the transcript shows it as it shows the act of a model.
@@ -403,7 +415,7 @@ class Request34(TypedDict):
   verb: Literal["run"]
 
 
-class Request35(TypedDict):
+class Request36(TypedDict):
   """
   A close of an act with a value, written as the record writes a value: `2.0` stays a float,
   and `{"is": "Refused", "args": ["why"]}` is a refusal.
@@ -416,7 +428,7 @@ class Request35(TypedDict):
   verb: Literal["close"]
 
 
-class Request36(TypedDict):
+class Request37(TypedDict):
   """
   A fact that the process of a kit says of its own accord, as news that it learned: its kind,
   the chain or the act that it is about, and its words, each written as the record writes a
@@ -431,7 +443,7 @@ class Request36(TypedDict):
   verb: Literal["fact"]
 
 
-class Request37(TypedDict):
+class Request38(TypedDict):
   """
   The names that the module of a chain binds.
   """
@@ -442,7 +454,7 @@ class Request37(TypedDict):
   verb: Literal["names"]
 
 
-class Request38(TypedDict):
+class Request39(TypedDict):
   """
   The models that a life offers, in place of the roster of the life, which no word can say,
   since the roster is the World's: the life then stands on them, as after a change of its
@@ -455,7 +467,7 @@ class Request38(TypedDict):
   verb: Literal["roster"]
 
 
-class Request40(TypedDict):
+class Request41(TypedDict):
   """
   An image kept in the gallery of the life, beside its record, under the digest of its bytes:
   a PNG, a JPEG, a GIF or a WebP, in base64. It answers the text by which a message names it
@@ -469,7 +481,7 @@ class Request40(TypedDict):
   verb: Literal["image"]
 
 
-class Request41(TypedDict):
+class Request42(TypedDict):
   """
   A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config
   that asked it. It writes no config.
@@ -480,7 +492,7 @@ class Request41(TypedDict):
   verb: Literal["cancel_sign_in"]
 
 
-class Request42(TypedDict):
+class Request43(TypedDict):
   """
   The fact that the operator read a chain or a thread up to now, which each window and each
   later life reads in the record.
@@ -492,7 +504,7 @@ class Request42(TypedDict):
   verb: Literal["seen"]
 
 
-class Request43(TypedDict):
+class Request44(TypedDict):
   """
   The resolve of a thread of the operator: a close of each act that keeps it open, the last
   first, with the text `resolved` or with None, as its shape takes. A message on the thread
@@ -505,7 +517,7 @@ class Request43(TypedDict):
   verb: Literal["resolve"]
 
 
-class Request44(TypedDict):
+class Request45(TypedDict):
   """
   A follow-up that the operator queued on a chain, under an entry that the window chose. The
   life sends it as a prompt of its shape and its message once the chain rests, and a second
@@ -521,7 +533,7 @@ class Request44(TypedDict):
   verb: Literal["queue"]
 
 
-class Request45(TypedDict):
+class Request46(TypedDict):
   """
   A follow-up taken out of its queue before the life sent it.
   """
@@ -532,7 +544,7 @@ class Request45(TypedDict):
   verb: Literal["unqueue"]
 
 
-class Request46(TypedDict):
+class Request47(TypedDict):
   """
   The follow-ups that wait on a chain, in order.
   """
@@ -543,7 +555,7 @@ class Request46(TypedDict):
   verb: Literal["queued"]
 
 
-class Request47(TypedDict):
+class Request48(TypedDict):
   """
   What waits for the operator in a life, with each notice that the window still shows.
   """
@@ -554,7 +566,7 @@ class Request47(TypedDict):
   verb: Literal["desk"]
 
 
-class Request48(TypedDict):
+class Request49(TypedDict):
   """
   The threads of a chain with their meaning, now or as they stood just after a moment. `read`
   is the place up to which the window read the chain, from which the runs of notes count the
@@ -569,7 +581,7 @@ class Request48(TypedDict):
   verb: Literal["threads"]
 
 
-class Request49(TypedDict):
+class Request50(TypedDict):
   """
   The threads of every chain of a life but those it names, as one tree in the order of the
   list of the threads, now or as they stood just after a moment.
@@ -582,7 +594,7 @@ class Request49(TypedDict):
   verb: Literal["rail"]
 
 
-class Request51(TypedDict):
+class Request52(TypedDict):
   """
   The acts of a life as they stood just after a moment, each with its meaning then.
   """
@@ -593,7 +605,7 @@ class Request51(TypedDict):
   verb: Literal["as_of"]
 
 
-class Request52(TypedDict):
+class Request53(TypedDict):
   """
   A page of a thread of a life, its prompt: the exchanges before the one at `before`, or
   before the end, at most `limit` of them, the newest page first, now or as they stood just
@@ -611,7 +623,7 @@ class Request52(TypedDict):
   verb: Literal["thread"]
 
 
-class Request53(TypedDict):
+class Request54(TypedDict):
   """
   Each moment of a life at which an act began or ended, in order.
   """
@@ -626,7 +638,7 @@ class Request53(TypedDict):
   verb: Literal["moments"]
 
 
-class Request54(TypedDict):
+class Request55(TypedDict):
   """
   Each chain of a life in time, in the order the chains began.
   """
@@ -636,7 +648,7 @@ class Request54(TypedDict):
   verb: Literal["tracks"]
 
 
-class Request55(TypedDict):
+class Request56(TypedDict):
   """
   The turn that the peer gave for a request of a model of a life that it answers, written as
   the record writes a value, or why it gives none.
@@ -650,7 +662,7 @@ class Request55(TypedDict):
   verb: Literal["answered"]
 
 
-class Request56(TypedDict):
+class Request57(TypedDict):
   """
   What the peer added to the text and to the thought of the turn of a request, as it writes.
   """
@@ -663,7 +675,7 @@ class Request56(TypedDict):
   verb: Literal["wrote"]
 
 
-class Request57(TypedDict):
+class Request58(TypedDict):
   """
   The place of the daemon given to the daemon of a new build: each life written to its image
   and ended, and the lives with their pins in the answer, once the daemon stopped to
@@ -674,7 +686,7 @@ class Request57(TypedDict):
   verb: Literal["handover"]
 
 
-class Request62(TypedDict):
+class Request63(TypedDict):
   """
   The end of a view in its window.
   """
@@ -1239,14 +1251,18 @@ class Sent(TypedDict):
   python: NotRequired[bool]
 
 
-class Skill(TypedDict):
-  """
-  A skill that the root of a life was told of, by the last read of `skills://` there: its name,
-  and what it is for.
-  """
-
-  name: str
-  description: str
+Skill = TypedDict(
+  "Skill",
+  {
+    "name": str,
+    "description": str,
+    "plays": NotRequired[bool],
+    "on": NotRequired[bool],
+    "default": NotRequired[bool],
+    "turned_by": NotRequired[object],
+    "from": NotRequired[str],
+  },
+)
 
 
 class Present(TypedDict):
@@ -2046,7 +2062,7 @@ class Request1(Hello):
   verb: Literal["hello"]
 
 
-class Request17(TypedDict):
+class Request18(TypedDict):
   """
   The draft that the person of the window writes now, or none once it is empty, which each
   window of the life hears in the presence. It is no fact, and it goes with the window.
@@ -2058,7 +2074,7 @@ class Request17(TypedDict):
   verb: Literal["writes"]
 
 
-class Request50(TypedDict):
+class Request51(TypedDict):
   """
   The ladder of a chain, now or as it stood just after a moment: the steps that show and the
   folds of the others, with the folds that the window opened, the prompts that the operator
@@ -2076,7 +2092,7 @@ class Request50(TypedDict):
   verb: Literal["ladder"]
 
 
-class Request58(TypedDict):
+class Request59(TypedDict):
   """
   A view that a window mounts in a slot of a life, which the process of a skill serves.
   """
@@ -2089,7 +2105,7 @@ class Request58(TypedDict):
   verb: Literal["view.mount"]
 
 
-class Request60(TypedDict):
+class Request61(TypedDict):
   """
   What a person did to a node of a view, with the value of an input.
   """
@@ -2102,7 +2118,7 @@ class Request60(TypedDict):
   verb: Literal["view.event"]
 
 
-class Request61(TypedDict):
+class Request62(TypedDict):
   """
   What a skill asks of the one window of a view.
   """
@@ -2263,7 +2279,7 @@ class Answer9(TypedDict):
 
 class Answer10(TypedDict):
   """
-  The skills of a life, each with what it is for.
+  The skills of a life, each with what it is for, and with how it plays when the verb asks.
   """
 
   answer: Literal["skills"]
@@ -2486,7 +2502,7 @@ class Event5(TypedDict):
   data: Data4
 
 
-class Request39(TypedDict):
+class Request40(TypedDict):
   """
   The configs of the folder of the life, in their layers: what each key holds, a change of a
   key, or a stand on them as the disk holds them now.
@@ -2923,7 +2939,7 @@ class Protocol(TypedDict):
   frame: Frame
 
 
-class Request59(TypedDict):
+class Request60(TypedDict):
   """
   The tree of a view, which takes the place of each tree of a lower version.
   """
@@ -2999,6 +3015,7 @@ type Request = (
   | Request60
   | Request61
   | Request62
+  | Request63
 )
 """
 One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
@@ -3085,4 +3102,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 54
+PROTOCOL = 55

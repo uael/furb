@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 54;
+pub const PROTOCOL: u32 = 55;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -164,6 +164,12 @@ pub enum Verb {
   /// changed last first, so a new session offers the skills of the last session of its project.
   /// A record whose index does not agree with it gives none until the daemon made its index.
   Skills {
+    life: String,
+  },
+  /// The skills of a life as its root finds them now, in the order of their names, each with how
+  /// it plays: each skill that the folders of skills of its working directory, the configs and
+  /// furb give.
+  Plays {
     life: String,
   },
   /// The life of a record opened, in a folder or in the folder of its record. A life that this
@@ -546,6 +552,7 @@ impl Verb {
       | Self::Tracks { life }
       | Self::History { life }
       | Self::Skills { life }
+      | Self::Plays { life }
       | Self::Answered { life, .. }
       | Self::Wrote { life, .. }
       | Self::ViewMount(Mount { life, .. }) => Some(life),
@@ -577,6 +584,7 @@ impl Verb {
         | Self::Cards
         | Self::History { .. }
         | Self::Skills { .. }
+        | Self::Plays { .. }
         | Self::Attach { .. }
         | Self::Detach { .. }
         | Self::Presence { .. }
@@ -731,7 +739,7 @@ pub enum Answer {
   Cards(Vec<Card>),
   /// What the peer sent, the newest first.
   History(Vec<card::Sent>),
-  /// The skills of a life, each with what it is for.
+  /// The skills of a life, each with what it is for, and with how it plays when the verb asks.
   Skills(Vec<card::Skill>),
   /// The name of the act that the verb made.
   Act(String),

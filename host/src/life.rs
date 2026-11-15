@@ -30,10 +30,11 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use furb::{
-  Engine, Fault, Object, checkpoint,
+  Engine, Fact, Fault, Object, checkpoint,
   engine::ROOT,
   image,
   life::{Log, Opening, Progress, Retrying, Stage, Stream},
+  skill::ENABLE,
   verbs,
   view::{
     self, Act, Desk, Fold, Held, Named, Page, Phase, Reach, Rung, SHOWN, Sent, Shown, Streamed,
@@ -42,11 +43,11 @@ use furb::{
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
-    config::{Change, Layers},
-    images,
+    config::{CONFIGURED, Change, Layers},
+    images, skills,
   },
 };
-use furb_wire::{ChainTrack, FollowUp, act::interruption};
+use furb_wire::{ChainTrack, FollowUp, act::interruption, card::Skill};
 use futures::stream::{self, Stream as Streams};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -136,6 +137,8 @@ pub enum Command {
   /// Each key of the configs of the folder of the life, with the value that wins for it and its
   /// layer.
   Settings,
+  /// The skills of the life as its root finds them, each with how it plays.
+  Plays,
   /// A change of a key of a layer of the configs, which the World keeps only when the catalog
   /// reads it, then a stand of the life on them: the act of the stand.
   Configure(Change),
@@ -280,6 +283,8 @@ pub enum Reply {
   Page(Page),
   /// What each operator sent.
   Sent(Vec<Sent>),
+  /// The skills of the life, each with how it plays.
+  Skills(Vec<Skill>),
 }
 
 /// One event under its place in the log.
@@ -324,10 +329,6 @@ impl Read {
     }
   }
 }
-
-/// The kind of the fact that a life says at each change of a key of its configs through the
-/// protocol: the key, and the value that wins for it after the change.
-pub(crate) const CONFIGURED: &str = "configured";
 
 /// A life on its thread: what it keeps of the events that it told, the readers that hear each next
 /// one, and what the ears and the provider told that is not in the log yet.
@@ -1478,6 +1479,16 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
     Command::Settings => {
       let settings = life.configs.get()?.into_iter().map(|one| json!(one));
       Ok(Reply::Values(settings.collect()))
+    }
+    Command::Plays => {
+      let standing = outward(engine.standing()?.as_ref());
+      let directory = standing.get(1).and_then(Value::as_str).unwrap_or_default().to_owned();
+      let cwd = engine.cwd(verbs::Cwd { on: Some(root.clone()) })?;
+      let of = verbs::Transcript { on: Some(root.clone()), of: Some(ENABLE.to_owned()), at: None };
+      let facts = engine.transcript(of)?;
+      let facts: Vec<Fact> = facts.iter().filter_map(|one| Fact::of(one.0.as_ref())).collect();
+      let places = life.configs.places();
+      Ok(Reply::Skills(skills::played(&directory, &cwd, &places, &facts)))
     }
     Command::Configure(change) => configured(engine, life, change).await,
     Command::Image { name, data } => imaged(life, &name, &data),

@@ -11,7 +11,9 @@ that gives it, and changes it.
 A schema names the keys, as the settings of VS Code do. Each key has a property: its `type` (`boolean`, `integer`,
 `number`, `string`, `array` or `object`), its `default`, which holds when no config gives the key, its
 `description`, under `enum` the values that it takes when it takes only some, and under `scope` the layer that a
-change of it writes when the change names none: `user`, `project`, the default, or `local`. furb names the keys that it reads:
+change of it writes when the change names none: `user`, `project`, the default, or `local`. A name in an object of
+furb takes the scope of its object, and `skills` takes `local`, so a person turns an extension on or off for this
+machine, in the config that git ignores. furb names the keys that it reads:
 `max_thinking_tokens`, `automatic`, `classes`, `providers` and `skills`. A change of a key through
 `/config` or the protocol refuses a value that its property does not take, and writes nothing. A key that no schema
 names stays as the config gives it.

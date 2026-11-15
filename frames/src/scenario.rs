@@ -723,8 +723,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("x-thread", &[Act::Type("Where does this run?"), Act::Key("Enter")], "reply 1"),
         // The settings of the session list each key with what it does, its value and its layer.
         step("a", &[Act::Key("C-x"), Act::Key(",")], "Settings"),
-        // Enter flips a boolean in the config of the project, and the list reads it again.
-        step("b", &[Act::Type("naming"), Act::Key("Down"), Act::Key("Enter")], "true  project"),
+        // Enter flips a boolean in the local config of the project, as the key `skills` takes it,
+        // and the list reads it again.
+        step("b", &[Act::Type("naming"), Act::Key("Down"), Act::Key("Enter")], "true  local"),
         // The kit that the change turned on shows its keys under its name, each with what it does.
         step("c", &[Act::Key("Escape"), Act::Key("C-x"), Act::Key(",")], "naming.actor"),
         // A key of text takes the value that he writes, in the layer of its scope.
@@ -759,7 +760,24 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
     }),
   },
-  Scenario { name: "23-extensions", has: none("17. After the first window") },
+  Scenario {
+    name: "23-extensions",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[],
+      pace: &[],
+      steps: &[
+        step("x-thread", &[Act::Type("Which skills play here?"), Act::Key("Enter")], "reply 1"),
+        // Each skill of the session, the extensions that play first, each with how it plays and
+        // where it comes from.
+        step("a", &[Act::Key("C-x"), Act::Key("x")], "On need"),
+        // Enter turns an extension on, and it plays at once.
+        step("b", &[Act::Type("web"), Act::Key("Enter")], "on  furb"),
+        // A second enter turns it off for the next session, and it plays on until this one ends.
+        step("c", &[Act::Key("Enter")], "off at the next session"),
+      ],
+    }),
+  },
   Scenario {
     name: "24-remote",
     has: Has::Walk(Walk {

@@ -262,8 +262,8 @@ impl Daemon {
   }
 }
 
-/// The identity of a daemon whose first peer is another operator of a name, which the transport of a
-/// tailnet proves, and each later peer the login of the machine.
+/// The identity of a daemon whose first peer is another operator of a name, which the transport of
+/// a tailnet proves, and each later peer the login of the machine.
 #[derive(Clone)]
 struct Other {
   local: Local,

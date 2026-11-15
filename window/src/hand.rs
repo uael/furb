@@ -951,6 +951,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Effort => Model::effort,
     Does::Changes => |model| model.client.review(),
     Does::Settings => |model| model.pick(Pick::Settings),
+    Does::Skills => |model| model.pick(Pick::Skills),
     Does::Context => Model::context_step,
     Does::Rewind => |model| model.client.time(),
     Does::Chains => |model| model.client.chains(),

@@ -2665,7 +2665,11 @@ async fn the_skills_of_a_record_are_those_that_its_root_read_else_those_of_its_p
   assert_eq!(window.ask(Verb::Skills { life: one.clone() }).await, Ok(Answer::Skills(Vec::new())));
   let read = Verb::Run { life: one.clone(), word: "read('skills://')".to_owned(), on: None };
   assert!(matches!(window.ask(read).await, Ok(Answer::Act(_))));
-  let probe = view::Skill { name: "probe".to_owned(), description: "Probes the window".to_owned() };
+  let probe = view::Skill {
+    name: "probe".to_owned(),
+    description: "Probes the window".to_owned(),
+    ..view::Skill::default()
+  };
   let skills = read_skills(&mut window, &one).await;
   assert!(skills.contains(&probe), "{skills:?}");
   let mut names: Vec<&str> = skills.iter().map(|one| one.name.as_str()).collect();

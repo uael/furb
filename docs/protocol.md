@@ -121,6 +121,7 @@ daemon answers requests in any order.
 | `cards` | | read |
 | `history` | `life` | read |
 | `skills` | `life` | read |
+| `plays` | `life` | read |
 | `open` | `life`, `cwd`, `actor`, `roster`, `skills`, `config`, `claude`, `answers`, `attach` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
@@ -332,6 +333,12 @@ daemon answers requests in any order.
   read, else those of each other record of its project, the record that changed last first, so a new session offers
   the skills of the last session of its project. A record whose index does not agree with it gives none until the
   daemon made its index, and an index of a build before the skills reads as no index.
+- `plays` gives the skills of the life `life` as `skills`, as its root finds them now, in the order of their names:
+  each with its `name` and its `description`, `plays`, whether it plays in the life now, `on`, whether the configs
+  turn it on, `default`, whether it plays by default, `turned_by`, the value of its name in `skills` of a config
+  that turns it on, `true` for an official one, the path of its folder for another with code, and null for a skill
+  with no code, and `from`, `furb` or its folder. A change of `skills` through `config` plays at once the skill that
+  it turns on, and one that it turns off plays on until the life ends.
 - `thread` gives a page of one thread of a life as `page`: the exchanges of the thread before the one at the place
   `before`, or before its end when `before` is null, at most `limit` of them, the oldest first, as they stood just after
   the moment `at`, or now when `at` is null. The thread is named by its prompt. Nobody reads the past of a record for

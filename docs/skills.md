@@ -314,7 +314,12 @@ ear `extensions` of [`src/skill.rs`](../src/skill.rs) says the fact and plays it
 
 The extensions that a life enables at its start are those that the configs turn on. When a write of
 `.furb/config.json` or of `.furb/config.local.json` lands in the middle of a life, the life enables each extension that the config turns on by its
-path and that it does not run yet. An extension that a config turns off runs on until the life ends.
+path and that it does not run yet. A change of `skills` through `/config`, `/extensions` or the protocol enables at
+once the extension that it turns on. An extension that a config turns off runs on until the life ends.
+
+`/extensions` in the window, or ⌃X X, lists each skill of the session: the extensions that play first, then those that
+play on need, then the skills with no code, each with what it is for, how it plays and where it comes from. Enter
+turns an extension on or off in `.furb/config.local.json`, and adds `/<name>` of a skill with no code to the input.
 
 A life reloads an extension that it runs when its word changes: at its start, or at a later stand, for the word that the
 host gives, as a new build gives a new word of an official extension, and when a write of the life lands in the folder

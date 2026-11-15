@@ -321,6 +321,38 @@ async fn the_configs_of_a_life_are_read_and_changed_through_its_commands_and_a_c
 }
 
 #[tokio::test]
+async fn the_skills_of_a_life_say_how_each_plays_and_a_change_that_turns_one_on_plays_it() {
+  let at = place("plays");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let web = async || {
+    let Reply::Skills(all) = life.send(Command::Plays).await.unwrap() else {
+      panic!("the skills are skills")
+    };
+    let one = all.into_iter().find(|one| one.name == "web").unwrap();
+    (one.plays, one.on, one.from, one.turned_by)
+  };
+  let furb = || "furb".to_owned();
+  assert_eq!(web().await, (false, false, furb(), json!(true)));
+  let turned = |on: bool| Change {
+    key: vec!["skills".to_owned(), "web".to_owned()],
+    value: Some(json!(on)),
+    layer: None,
+  };
+  life.send(Command::Configure(turned(true))).await.unwrap();
+  // The change plays it at once, and a name of `skills` takes the local config.
+  assert_eq!(web().await, (true, true, furb(), json!(true)));
+  let local = fs::read_to_string(at.join(".furb/config.local.json")).unwrap();
+  assert_eq!(
+    serde_json::from_str::<serde_json::Value>(&local).unwrap(),
+    json!({"skills": {"web": true}})
+  );
+  // One turned off plays on until the life ends.
+  life.send(Command::Configure(turned(false))).await.unwrap();
+  assert_eq!(web().await, (true, false, furb(), json!(true)));
+  fs::remove_dir_all(&at).unwrap();
+}
+
+#[tokio::test]
 async fn a_life_that_does_not_open_ends_with_its_fault() {
   let at = place("fault");
   let opening = Opening { record: Some(at.display().to_string()), ..scripted(&at, &[]) };
