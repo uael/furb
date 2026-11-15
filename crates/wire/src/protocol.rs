@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 62;
+pub const PROTOCOL: u32 = 63;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -367,11 +367,21 @@ pub enum Verb {
     name: String,
     data: String,
   },
-  /// A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config
-  /// that asked it. It writes no config.
-  CancelSignIn {
-    life: String,
+  /// The sign-in of codex of the user of the machine, which the daemon answers once it ends: its
+  /// state is pushed at each change, and once it connects the user config turns codex on, checked
+  /// against the catalog of the folder `cwd`, each life stands again, so each project offers its
+  /// models, and the answer gives the models that the catalog of `cwd` offers then. A sign-in from a `device`, for a window on another machine, gives a code that the
+  /// operator enters on a page in the browser of any device; else the page of the sign-in calls
+  /// back the machine of the daemon.
+  SignIn {
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    device: bool,
   },
+  /// A cancel of the sign-in of codex that runs on the machine, which refuses the sign-in or the
+  /// config that asked it. It writes no config.
+  CancelSignIn,
   /// The fact that the operator read a chain or a thread up to now, which each window and each
   /// later life reads in the record.
   Seen {
@@ -555,7 +565,6 @@ impl Verb {
       | Self::Roster { life, .. }
       | Self::Config { life, .. }
       | Self::Image { life, .. }
-      | Self::CancelSignIn { life }
       | Self::Seen { life, .. }
       | Self::Resolve { life, .. }
       | Self::Revert { life, .. }
@@ -580,6 +589,8 @@ impl Verb {
       | Self::List { .. }
       | Self::Projects { .. }
       | Self::Models { .. }
+      | Self::SignIn { .. }
+      | Self::CancelSignIn
       | Self::Files { .. }
       | Self::Changes { .. }
       | Self::Cards
@@ -705,10 +716,17 @@ pub enum Frame {
   /// of its windows by the watch of the daemon, which no word of the life runs: each open act, and
   /// the notice that a window shows as it stands.
   Stalled { life: String, acts: Vec<Open>, notice: String },
-  /// The state of the sign-in of codex that this peer asked with a config of its provider, pushed
-  /// at each change of the state, so no window asks it again: the word of the state, the browser
-  /// address while it waits, and what to tell the operator when it needs him or failed.
-  SignIn { state: String, url: Option<String>, message: Option<String> },
+  /// The state of the sign-in of codex that this peer asked, pushed at each change of the state,
+  /// so no window asks it again: the word of the state, the browser address while it waits, the
+  /// code to enter there for a sign-in from a device, and what to tell the operator when it needs
+  /// him or failed.
+  SignIn {
+    state: String,
+    url: Option<String>,
+    #[serde(default)]
+    code: Option<String>,
+    message: Option<String>,
+  },
   /// A request of a model of a life that the peer answers: its number, and the request with the
   /// actor, the chain, the messages and the settings.
   Ask { life: String, ask: u64, request: Value },

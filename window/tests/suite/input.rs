@@ -9,7 +9,7 @@ use std::{
   path::{Path, PathBuf},
   process::Command,
   sync::Mutex,
-  time::Duration,
+  time::{Duration, UNIX_EPOCH},
 };
 
 use furb_host::protocol::{
@@ -884,17 +884,27 @@ fn port() -> File {
   lock
 }
 
-#[test]
-fn the_models_sign_in_to_codex_open_its_page_once_and_a_cancel_changes_nothing() {
-  let _port = port();
+/// A window in the launcher of a project, on a daemon whose credential of Codex serves and whose
+/// list of the models of its account is new, so a sign-in connects at once, or whose credential
+/// ended: neither sends a request out. The folder of the project.
+fn codex(serves: bool) -> (TestApp, Daemon, PathBuf) {
   let app = app();
   let mut daemon = Daemon::bound(&app);
-  // The credential of Codex in the configs of the daemon ended, so no account of this machine
-  // serves and no request goes out.
   let auth = daemon.file("config").join("auth");
   fs::create_dir_all(&auth).unwrap();
-  let ended = r#"{"access":"","refresh":null,"expires":0,"account":"none"}"#;
-  fs::write(auth.join("codex.json"), ended).unwrap();
+  // The account of a credential is a claim of its access token, which is no signed token here.
+  let access =
+    "e30.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjdCJ9fQ.s";
+  let (expires, now) = (u64::MAX / 2, UNIX_EPOCH.elapsed().unwrap().as_millis());
+  let held = if serves {
+    format!(r#"{{"access":"{access}","refresh":"r","expires":{expires},"account":"acct"}}"#)
+  } else {
+    r#"{"access":"","refresh":null,"expires":0,"account":"none"}"#.to_owned()
+  };
+  fs::write(auth.join("codex.json"), held).unwrap();
+  let model = r#"{"slug":"gpt-test","context_window":200000,"visibility":"list"}"#;
+  let listed = format!(r#"{{"account":"acct","fetched":{now},"models":[{model}]}}"#);
+  fs::write(auth.join("codex.models.json"), listed).unwrap();
   daemon.served();
   let folder = daemon.file("furb-try");
   fs::create_dir_all(&folder).unwrap();
@@ -905,15 +915,15 @@ fn the_models_sign_in_to_codex_open_its_page_once_and_a_cancel_changes_nothing()
   };
   let options = Options { folder: folder.clone(), home, browse, ..options(&daemon.file("k.json")) };
   open(&app, vec![daemon.machine("mac")], options);
-  shows(&app, "No thread yet in this project.");
-  // A new session has no project that takes Codex yet: the row says so and takes nothing.
-  app.press("ctrl+x");
-  app.press("m");
-  let frame = shows(&app, "Sign in with ChatGPT");
-  assert!(frame.contains("Sign in with ChatGPT  after a first message"), "{frame}");
-  app.press("escape");
-  sent(&app, &format!("connect codex {ANSWERS}"));
-  shows(&app, "Two stages hold most");
+  // The models of the machine came, so the rows of the list stand where they stay.
+  shows(&app, "with opus at high effort");
+  (app, daemon, folder)
+}
+
+#[test]
+fn the_models_sign_in_to_codex_before_a_session_open_its_page_once_and_a_cancel_changes_nothing() {
+  let _port = port();
+  let (app, daemon, _) = codex(false);
   app.press("ctrl+x");
   app.press("m");
   shows(&app, "Sign in with ChatGPT  your ChatGPT plan, no key");
@@ -933,6 +943,21 @@ fn the_models_sign_in_to_codex_open_its_page_once_and_a_cancel_changes_nothing()
   shows(&app, "The sign-in of Codex stopped. Nothing changed.");
   shows(&app, "Sign in with ChatGPT  your ChatGPT plan");
   assert_eq!(BROWSED.lock().unwrap().len(), 1, "the page opened once");
-  let config = folder.join(".furb").join("config.json");
-  assert!(!fs::read_to_string(config).unwrap_or_default().contains("codex"), "Codex stays off");
+  let user = fs::read_to_string(daemon.file("config").join("config.json")).unwrap_or_default();
+  assert!(!user.contains("codex"), "Codex stays off: {user}");
+}
+
+#[test]
+fn a_sign_in_to_codex_that_connects_lists_its_models_in_the_launcher_before_any_message() {
+  let (app, daemon, _) = codex(true);
+  app.press("ctrl+x");
+  app.press("m");
+  shows(&app, "Sign in with ChatGPT");
+  app.type_text("chatgpt");
+  app.press("enter");
+  let frame = shows(&app, "Codex is connected");
+  assert!(frame.contains("gpt-test"), "{frame}");
+  assert!(!frame.contains("Sign in with ChatGPT"), "the sign-in leaves the list: {frame}");
+  let user = fs::read_to_string(daemon.file("config").join("config.json")).unwrap();
+  assert!(user.contains(r#""codex": true"#), "the user config turns Codex on: {user}");
 }

@@ -666,7 +666,7 @@ pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<Code
   let path = config.map(path::PathBuf::from);
   let status = match action.as_deref().unwrap_or("status") {
     "status" => auth::status(path.as_deref()),
-    "start" => auth::begin(path.as_deref()).map_err(|no| Fault::refused(no.to_string()))?,
+    "start" => auth::begin(path.as_deref(), false).map_err(|no| Fault::refused(no.to_string()))?,
     "refresh" => auth::refresh(path.as_deref()).map_err(|no| Fault::refused(no.to_string()))?,
     "cancel" => {
       auth::cancel(path.as_deref());

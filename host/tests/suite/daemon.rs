@@ -29,6 +29,7 @@ use std::{
   time::{Duration, Instant, UNIX_EPOCH},
 };
 
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use furb::{
   Object, image,
   life::{Answer as Answered, Log, Opening},
@@ -2569,12 +2570,50 @@ async fn a_sign_in_of_codex_that_the_operator_cancels_is_pushed_and_refuses_its_
   let id = signing(&mut window).await;
   let Frame::SignIn { url, .. } = window.until(signed_in("waiting")).await else { unreachable!() };
   assert!(url.is_some_and(|one| one.starts_with("https://")), "the frame holds the address");
-  let cancel = Verb::CancelSignIn { life: window.life.clone() };
+  let cancel = Verb::CancelSignIn;
   assert_eq!(window.ask(cancel).await, Ok(Answer::Done));
   window.until(signed_in("canceled")).await;
   let answer =
     window.until(|frame| matches!(frame, Frame::Refused { id: Some(got), .. } if *got == id));
   assert!(matches!(answer.await, Frame::Refused { error: ProtocolError::Refused { .. }, .. }));
+}
+
+/// A folder of configs whose credential of codex serves and whose list of the models of its
+/// account is new, so a sign-in connects at once and no request goes out.
+fn signed_in_already(at: &Path) {
+  let folder = at.join("config").join("auth");
+  fs::create_dir_all(&folder).unwrap();
+  // The account of a credential is a claim of its access token, which is no signed token here.
+  let claims = r#"{"https://api.openai.com/auth":{"chatgpt_account_id":"acct"}}"#;
+  let access = format!("e30.{}.sig", URL_SAFE_NO_PAD.encode(claims));
+  let far = u64::MAX / 2;
+  let held = json!({ "access": access, "refresh": "r", "expires": far, "account": "acct" });
+  fs::write(folder.join("codex.json"), held.to_string()).unwrap();
+  let now = UNIX_EPOCH.elapsed().unwrap().as_millis();
+  let model = json!({ "slug": "gpt-test", "context_window": 200_000, "visibility": "list" });
+  let listed = json!({ "account": "acct", "fetched": now, "models": [model] });
+  fs::write(folder.join("codex.models.json"), listed.to_string()).unwrap();
+}
+
+#[tokio::test]
+async fn a_sign_in_of_the_machine_turns_codex_on_for_its_user_and_each_project_offers_its_models() {
+  let at = place();
+  signed_in_already(&at);
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let models = Verb::Models { cwd: None, config: None, claude: None };
+  let codex = |answer: Result<Answer, ProtocolError>| match answer {
+    Ok(Answer::Models(models)) => models.iter().any(|one| one.name == "codex:gpt-test"),
+    other => panic!("no models: {other:?}"),
+  };
+  assert!(!codex(window.ask(models.clone()).await), "codex is off before the sign-in");
+  let sign_in = Verb::SignIn { cwd: None, device: false };
+  assert!(codex(window.ask(sign_in).await), "the answer gives the models of the account");
+  window.until(signed_in("connected")).await;
+  let user = fs::read_to_string(at.join("config").join("config.json")).unwrap();
+  let user: Value = serde_json::from_str(&user).unwrap();
+  assert_eq!(user["providers"]["codex"], json!(true), "the user config turns codex on");
+  assert!(codex(window.ask(models).await), "the catalog offers the models of the account");
 }
 
 /// The welcome of a daemon to a new window: the name of its machine and its build.

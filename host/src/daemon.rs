@@ -50,9 +50,10 @@ use furb::{
   world::{
     self, Members, Roster, catalog,
     codex::{self, SignIn},
-    config::Change,
+    config::{Change, Layers},
   },
 };
+use furb_wire::Layer;
 use futures::{FutureExt, SinkExt, Stream, StreamExt, future};
 use ignore::WalkBuilder;
 use serde_json::Value;
@@ -448,6 +449,8 @@ enum Asked {
   Stalled { life: String, born: u64, acts: Vec<Open>, notice: String },
   /// An ask of the system to stop: each life ends with its image, then the task replies.
   Stop(oneshot::Sender<()>),
+  /// A change of the user config, after which each life stands again.
+  Restand,
   /// What a site sent in the project of a record, with what the life of the record holds now.
   History { life: String, site: String, held: Vec<Sent>, reply: oneshot::Sender<Vec<Sent>> },
 }
@@ -786,13 +789,17 @@ fn used(life: &str) -> Option<u64> {
 /// The models that the catalog of an opening offers, read on a thread that may block, since the
 /// catalog may ask the claude command line, then told to the peer that asked.
 async fn models(opening: Opening, reply: Replied) {
+  reply.send(offered(opening).await).ok();
+}
+
+/// The models that the catalog of an opening offers.
+async fn offered(opening: Opening) -> Result<Answer, ProtocolError> {
   let offered = spawn_blocking(move || Ok::<_, Fault>(opening.catalog()?.offered())).await;
-  let answer = match offered {
+  match offered {
     Ok(Ok(models)) => Ok(Answer::Models(models.iter().map(model).collect())),
     Ok(Err(fault)) => Err(ProtocolError::Refused { why: fault.to_string() }),
     Err(no) => Err(ProtocolError::Refused { why: format!("the catalog gave no models: {no}") }),
-  };
-  reply.send(answer).ok();
+  }
 }
 
 /// The changes of the checkout that holds a folder, with the diff of a file when the peer named
@@ -907,20 +914,53 @@ async fn signed(
   }
   match change.value {
     Some(Value::Bool(false)) => codex::cancel(config),
-    Some(Value::Bool(true)) => return signing(config, outbox).await,
+    Some(Value::Bool(true)) => return signing(config, outbox, false).await,
     _ => {}
   }
   Ok(())
 }
 
-/// A sign-in of codex, started unless one runs or the account is connected, told to the window
-/// from the state that it shows now until the state ends it.
-async fn signing(config: Option<&Path>, outbox: &Outbox) -> Result<(), ProtocolError> {
+/// The sign-in of codex of the user of the machine that a peer asked, answered once it ends: once
+/// it connects, the user config turns codex on, checked against the catalog of the folder of an
+/// opening, each life stands again, so each project offers its models, and the answer gives the
+/// models that the catalog of the opening offers now.
+async fn signed_in(
+  opening: Opening,
+  device: bool,
+  outbox: Outbox,
+  asks: mpsc::WeakUnboundedSender<Asked>,
+  reply: Replied,
+) {
+  let answer = async {
+    let config = opening.config.clone().map(PathBuf::from);
+    signing(config.as_deref(), &outbox, device).await?;
+    let key = vec!["providers".to_owned(), "codex".to_owned()];
+    let change = Change { key, value: Some(Value::Bool(true)), layer: Some(Layer::User) };
+    let layers = Layers::new(changes::homed(&opening.directory), config);
+    let refused = |no: world::config::Error| ProtocolError::Refused { why: no.to_string() };
+    layers.set(change).await.map_err(refused)?;
+    if let Some(asks) = asks.upgrade() {
+      asks.send(Asked::Restand).ok();
+    }
+    offered(opening).await
+  };
+  reply.send(answer.await).ok();
+}
+
+/// A sign-in of codex, started unless one runs or the account is connected, from a device when
+/// the person is not at this machine, told to the window from the state that it shows now until
+/// the state ends it.
+async fn signing(
+  config: Option<&Path>,
+  outbox: &Outbox,
+  device: bool,
+) -> Result<(), ProtocolError> {
   let refused = |why: &str| ProtocolError::Refused { why: why.to_owned() };
   let told = |state: &SignIn| {
     let frame = Frame::SignIn {
       state: state.state().to_owned(),
       url: state.url().map(str::to_owned),
+      code: state.code().map(str::to_owned),
       message: state.message().map(str::to_owned),
     };
     outbox.send(frame).ok();
@@ -930,7 +970,7 @@ async fn signing(config: Option<&Path>, outbox: &Outbox) -> Result<(), ProtocolE
   codex::refresh(config)
     .and_then(|state| match state {
       SignIn::Disconnected | SignIn::NeedsLogin(_) | SignIn::Failed(_) | SignIn::Canceled => {
-        codex::begin(config)
+        codex::begin(config, device)
       }
       running => Ok(running),
     })
@@ -1036,6 +1076,7 @@ impl Lives {
         }
       }
       Asked::Stop(reply) => self.stop(reply),
+      Asked::Restand => self.restand(),
       Asked::History { life, site, held, reply } => {
         reply.send(self.history(&life, &site, held)).ok();
       }
@@ -1099,13 +1140,15 @@ impl Lives {
         let wrote = |one: &Answerer| one.wrote(outbox, ask, &text, &thinking);
         self.answerer(&life).and_then(wrote).map(|()| Answer::Done)
       }
-      Verb::CancelSignIn { life } => match self.held.get(&life) {
-        Some(held) => {
-          codex::cancel(held.config.as_deref().map(Path::new));
-          Ok(Answer::Done)
-        }
-        None => Err(ProtocolError::Closed { life }),
-      },
+      Verb::SignIn { cwd, device } => {
+        let opening = self.offering(cwd, None, None);
+        tokio::spawn(signed_in(opening, device, outbox.clone(), self.asks.clone(), reply));
+        return;
+      }
+      Verb::CancelSignIn => {
+        codex::cancel(self.settings.opening.config.as_deref().map(Path::new));
+        Ok(Answer::Done)
+      }
       Verb::ViewMount(mount) => self.mount(mount, &peer, outbox),
       Verb::ViewEvent(event) => self.views.event(event, outbox).map(|()| Answer::Done),
       Verb::ViewDispose(dispose) => self.views.dispose(&dispose, outbox).map(|()| Answer::Done),

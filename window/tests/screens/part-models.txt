@@ -3,7 +3,7 @@
                                                                 No thread yet in this project.
 
     Models                                                      ⌃P  other projects and sessions
-    ▌Search a model                                 2 / 4
+    ▌Search a model                                 2 / 5
 
     Claude
      opus    1M context · images                    high
@@ -12,7 +12,7 @@
      fable   1M context · images                    high
 
     Codex
-     Sign in with ChatGPT  after a first message
+     Sign in with ChatGPT  your ChatGPT plan, no key
 
     ↑↓ move · ⏎ take it for the new session · ⎋ close
 

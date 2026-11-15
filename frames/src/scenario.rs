@@ -779,15 +779,13 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       pace: &[],
       reads: false,
       steps: &[
-        // A new session has no project that takes Codex yet: its row says so and takes nothing.
-        step("a", &[Act::Key("C-x"), Act::Key("m")], "after a first message"),
-        step(
-          "b",
-          &[Act::Key("Escape"), Act::Type("Which model writes the report?"), Act::Key("Enter")],
-          "reply 1",
-        ),
-        // In a session, the models offer the sign-in of Codex, for the models of a ChatGPT plan.
-        step("c", &[Act::Key("C-x"), Act::Key("m")], "your ChatGPT plan"),
+        // Before any session, the models offer the sign-in of Codex, for a ChatGPT plan.
+        step("a", &[Act::Key("C-x"), Act::Key("m")], "Sign in with ChatGPT"),
+        // The account of the capture connects at once, and its models join the list.
+        step("b", &[Act::Type("chatgpt"), Act::Key("Enter")], "Codex is connected"),
+        // A model of Codex taken in the list that stays open, for the new session, which its first
+        // message starts. No message goes, since the model of Codex would ask the network.
+        step("c", &[Act::Type("gpt"), Act::Key("Enter")], "gpt-5.5"),
       ],
     }),
   },

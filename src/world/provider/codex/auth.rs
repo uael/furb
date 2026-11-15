@@ -7,13 +7,13 @@ use std::{
   net::TcpListener,
   path::{Path, PathBuf},
   sync::{Mutex, MutexGuard, OnceLock, PoisonError},
-  time::{Duration, SystemTime, UNIX_EPOCH},
+  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rig_core::http_client::ReqwestClient;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use tokio::{
@@ -39,6 +39,12 @@ pub(super) const API: &str = "https://chatgpt.com/backend-api/codex";
 const AUTH: &str = "https://auth.openai.com";
 const CLIENT: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const REDIRECT: &str = "http://localhost:1455/auth/callback";
+/// The page where a person enters the code of a sign-in from a device, and the callback that the
+/// code of such a sign-in names, as the codex command line names them.
+const DEVICE: &str = "/codex/device";
+const DEVICE_REDIRECT: &str = "/deviceauth/callback";
+/// How long a code of a sign-in from a device holds.
+const DEVICE_WAIT: Duration = Duration::from_mins(15);
 const CLIENT_VERSION: &str = "0.163.0";
 const AGAIN: &str = "Sign in to Codex again from Providers.";
 
@@ -47,9 +53,11 @@ const AGAIN: &str = "Sign in to Codex again from Providers.";
 pub enum SignIn {
   #[default]
   Disconnected,
-  /// The browser address to open while the sign-in waits for its callback.
+  /// The browser address to open while the sign-in waits for its callback, and the code to enter
+  /// there for a sign-in from a device.
   Waiting {
     url: String,
+    code: Option<String>,
   },
   Connecting,
   Connected,
@@ -75,7 +83,15 @@ impl SignIn {
   /// The browser address, while the sign-in waits.
   pub fn url(&self) -> Option<&str> {
     match self {
-      Self::Waiting { url } => Some(url),
+      Self::Waiting { url, .. } => Some(url),
+      _ => None,
+    }
+  }
+
+  /// The code to enter on the page of the address, while a sign-in from a device waits.
+  pub fn code(&self) -> Option<&str> {
+    match self {
+      Self::Waiting { code, .. } => code.as_deref(),
       _ => None,
     }
   }
@@ -147,6 +163,10 @@ pub enum AuthError {
   Ended,
   #[error("OpenAI sign-in was refused")]
   Declined,
+  #[error(
+    "OpenAI offers no sign-in with a code here. Sign in from a browser on the machine of furb."
+  )]
+  NoDevice,
 }
 
 fn advice(status: u16) -> &'static str {
@@ -225,11 +245,11 @@ fn publish(path: &Path, state: SignIn) {
   flows().entry(path.to_owned()).or_insert_with(|| fresh(state.clone())).state.send_replace(state);
 }
 
-/// What a browser sign-in waits with: its port, its state and its verifier.
-struct Pending {
-  listener: TcpListener,
-  state: String,
-  verifier: String,
+/// What a sign-in waits with: in the browser of this machine, its port, its state and its
+/// verifier; from a device, nothing until `OpenAI` gives its code.
+enum Pending {
+  Browser { listener: TcpListener, state: String, verifier: String },
+  Device,
 }
 
 fn now() -> u64 {
@@ -391,7 +411,7 @@ pub fn refresh(config: Option<&Path>) -> Result<SignIn, AuthError> {
   if fresh && !matches!(status, SignIn::Failed(_)) {
     return Ok(SignIn::Connected);
   }
-  begin(config)
+  begin(config, false)
 }
 
 pub(super) async fn credential(path: &Path) -> Result<Credential, AuthError> {
@@ -491,8 +511,10 @@ async fn listed(path: &Path, credential: &Credential) -> Result<(), AuthError> {
 }
 
 /// Start a `ChatGPT` sign-in, or connect with an existing sign-in. The browser address is returned
-/// to the host.
-pub fn begin(config: Option<&Path>) -> Result<SignIn, AuthError> {
+/// to the host. A sign-in from a device, for a person who is not at this machine, needs no port
+/// here: `OpenAI` gives a code that he enters on a page in the browser of any device, which the
+/// state shows once it came.
+pub fn begin(config: Option<&Path>, device: bool) -> Result<SignIn, AuthError> {
   let path = directory(config);
   let retry;
   {
@@ -506,10 +528,12 @@ pub fn begin(config: Option<&Path>) -> Result<SignIn, AuthError> {
   let (stop, canceled) = watch::channel(false);
   let (status, pending) = if !retry && usable(&path).is_some() {
     (SignIn::Connecting, None)
+  } else if device {
+    (SignIn::Connecting, Some(Pending::Device))
   } else {
     let (url, pending) =
       authorize().inspect_err(|failure| publish(&path, SignIn::Failed(failure.to_string())))?;
-    (SignIn::Waiting { url }, Some(pending))
+    (SignIn::Waiting { url, code: None }, Some(pending))
   };
   {
     let mut all = flows();
@@ -541,7 +565,7 @@ fn authorize() -> Result<(String, Pending), AuthError> {
     ("codex_cli_simplified_flow", "true"),
     ("originator", "furb"),
   ]);
-  Ok((url.to_string(), Pending { listener, state, verifier }))
+  Ok((url.to_string(), Pending::Browser { listener, state, verifier }))
 }
 
 async fn finish(path: PathBuf, pending: Option<Pending>, canceled: watch::Receiver<bool>) {
@@ -559,14 +583,22 @@ async fn signed(
   canceled: &watch::Receiver<bool>,
 ) -> Result<(), AuthError> {
   let credential = match pending {
-    Some(Pending { listener, state, verifier }) => {
-      let code = callback_code(listener, &state, canceled.clone()).await?;
+    Some(pending) => {
+      let (code, verifier, redirect) = match pending {
+        Pending::Browser { listener, state, verifier } => {
+          (callback_code(listener, &state, canceled.clone()).await?, verifier, REDIRECT.to_owned())
+        }
+        Pending::Device => {
+          let device = device_code(AUTH, path, canceled).await?;
+          (device.authorization_code, device.code_verifier, format!("{AUTH}{DEVICE_REDIRECT}"))
+        }
+      };
       let token = token(&[
         ("grant_type", "authorization_code"),
         ("client_id", CLIENT),
         ("code", &code),
         ("code_verifier", &verifier),
-        ("redirect_uri", REDIRECT),
+        ("redirect_uri", &redirect),
       ])
       .await?;
       let credential = token.credential(None)?;
@@ -639,6 +671,81 @@ async fn callback_code(
     got = time::timeout(Duration::from_secs(600), heard) => got.unwrap_or(Err(AuthError::Ended)),
     _ = canceled.wait_for(|one| *one) => Err(AuthError::Ended),
   }
+}
+
+/// What `OpenAI` gives for a sign-in from a device: its id, the code that the person enters, and
+/// the seconds to wait between two asks of its end, which it gives as text.
+#[derive(Deserialize)]
+struct Given {
+  device_auth_id: String,
+  #[serde(alias = "usercode")]
+  user_code: String,
+  #[serde(default, deserialize_with = "seconds")]
+  interval: u64,
+}
+
+/// The code of a sign-in from a device once the person entered it, with the verifier of its
+/// exchange.
+#[derive(Deserialize)]
+struct Authorized {
+  authorization_code: String,
+  code_verifier: String,
+}
+
+fn seconds<'de, D: de::Deserializer<'de>>(deserializer: D) -> Result<u64, D::Error> {
+  String::deserialize(deserializer)?.trim().parse().map_err(de::Error::custom)
+}
+
+/// A sign-in from a device at an issuer: the code that it gives, told as the state of the sign-in
+/// of the folder, then an ask of its end at the pace that it names, until the person entered the
+/// code, the sign-in is canceled or the code ends.
+async fn device_code(
+  issuer: &str,
+  path: &Path,
+  canceled: &watch::Receiver<bool>,
+) -> Result<Authorized, AuthError> {
+  let api = format!("{issuer}/api/accounts/deviceauth");
+  let response = posted(&format!("{api}/usercode"), &json!({ "client_id": CLIENT })).await?;
+  match response.status().as_u16() {
+    404 => return Err(AuthError::NoDevice),
+    status if !response.status().is_success() => return Err(AuthError::Rejected { status }),
+    _ => {}
+  }
+  let given: Given =
+    serde_json::from_slice(&response.bytes().await?).map_err(AuthError::InvalidToken)?;
+  let code = Some(given.user_code.clone());
+  update(path, canceled, SignIn::Waiting { url: format!("{issuer}{DEVICE}"), code });
+  let asked = json!({ "device_auth_id": given.device_auth_id, "user_code": given.user_code });
+  // A server that names no pace is asked once a second, not as fast as the network goes.
+  let pace = Duration::from_secs(given.interval.max(1));
+  let start = Instant::now();
+  let mut canceled = canceled.clone();
+  loop {
+    let response = posted(&format!("{api}/token"), &asked).await?;
+    let status = response.status().as_u16();
+    if response.status().is_success() {
+      return serde_json::from_slice(&response.bytes().await?).map_err(AuthError::InvalidToken);
+    }
+    // The code waits for the person while the server answers 403 or 404.
+    if !matches!(status, 403 | 404) {
+      return Err(AuthError::Rejected { status });
+    }
+    let left = DEVICE_WAIT.saturating_sub(start.elapsed());
+    if left.is_zero() {
+      return Err(AuthError::Ended);
+    }
+    tokio::select! {
+      () = time::sleep(pace.min(left)) => {}
+      _ = canceled.wait_for(|one| *one) => return Err(AuthError::Ended),
+    }
+  }
+}
+
+/// A JSON body posted to an address of the sign-in.
+async fn posted(url: &str, body: &Value) -> Result<reqwest::Response, AuthError> {
+  let request = ReqwestClient::new().post(url).timeout(Duration::from_secs(20));
+  let request = request.header("content-type", "application/json").body(body.to_string());
+  Ok(request.send().await?)
 }
 
 #[cfg(test)]

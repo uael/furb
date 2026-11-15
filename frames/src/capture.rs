@@ -58,6 +58,11 @@ done | "$here/answers" "$@"
 /// The usage of each request of a capture: 31,840 tokens read, 24,600 of them from the cache.
 const USAGE: &str = r#"{"input_tokens":1340,"output_tokens":420,"cache_read_input_tokens":24600,"cache_creation_input_tokens":5900}"#;
 
+/// The credential of Codex of the user of a capture, whose account is a claim of its access token,
+/// which is no signed token here, and the models of its account.
+const CODEX: &str = r#"{"access":"e30.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjdCJ9fQ.s","refresh":"r","expires":4000000000000,"account":"acct"}"#;
+const CODEX_MODELS: &str = r#"[{"slug":"gpt-5.5","context_window":400000,"visibility":"list","supported_reasoning_levels":[{"effort":"medium"},{"effort":"high"}],"input_modalities":["text","image"]}]"#;
+
 /// The text of the empty input, which a window shows once it is ready for a walk.
 pub(crate) const READY: &str = "Ask for a change";
 
@@ -192,6 +197,12 @@ impl Rig {
     write(root.join("config/config.json"), r#"{"skills": {"naming": false}}"#)?;
     let listed = serde_json::json!({ "workspaces": [{ "directory": rig.project() }] });
     write(root.join("config/workspaces.json"), &listed.to_string())?;
+    // The account of Codex of the user serves, with a new list of its models, so a sign-in from
+    // the models connects at once and no request goes out. Codex stays off until a sign-in.
+    write(root.join("config/auth/codex.json"), CODEX)?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
+    let models = format!(r#"{{"account":"acct","fetched":{now},"models":{CODEX_MODELS}}}"#);
+    write(root.join("config/auth/codex.models.json"), &models)?;
     if walk.pace.is_empty() {
       write(rig.claude(), CLAUDE)?;
     } else {

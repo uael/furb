@@ -3,6 +3,7 @@ use std::{
   io::{Read, Write},
   net::{TcpListener, TcpStream},
   sync::mpsc,
+  thread,
   time::Duration,
 };
 
@@ -10,8 +11,8 @@ use indexmap::IndexMap;
 use tokio::sync::watch;
 
 use super::{
-  AuthError, Catalog as Account, Credential, Effort, Listing, SignIn, callback_code, directory,
-  now, publish, random, save, status, subscribe,
+  AuthError, Catalog as Account, Credential, Effort, Listing, SignIn, callback_code, device_code,
+  directory, now, publish, random, save, status, subscribe,
 };
 use crate::testing;
 use crate::{ear::reactor, world::Catalog};
@@ -139,7 +140,7 @@ fn a_sign_in_shows_the_words_that_the_world_shows() {
   let url = "https://auth.openai.com/oauth/authorize".to_owned();
   let states = [
     SignIn::Disconnected,
-    SignIn::Waiting { url: url.clone() },
+    SignIn::Waiting { url: url.clone(), code: None },
     SignIn::Connecting,
     SignIn::Connected,
     SignIn::NeedsLogin("again".to_owned()),
@@ -174,7 +175,7 @@ fn a_subscriber_sees_each_change_of_a_sign_in_in_order_and_a_late_one_sees_the_c
   let path = directory(Some(&scope.0));
   let mut seen = subscribe(Some(&scope.0));
   assert_eq!(*seen.borrow_and_update(), SignIn::Disconnected, "the state at once");
-  let waiting = SignIn::Waiting { url: "https://auth.example/login".to_owned() };
+  let waiting = SignIn::Waiting { url: "https://auth.example/login".to_owned(), code: None };
   publish(&path, waiting.clone());
   assert!(seen.has_changed().expect("the sign-in stands"));
   assert_eq!(*seen.borrow_and_update(), waiting);
@@ -195,5 +196,81 @@ fn a_subscriber_sees_each_change_of_a_sign_in_in_order_and_a_late_one_sees_the_c
     status(Some(&scope.0)),
     again,
     "the state that status reads is the one that the watch holds"
+  );
+}
+
+/// One request of a server of a test: its line and its body, read up to the length that its head
+/// names.
+fn request(stream: &mut TcpStream) -> (String, String) {
+  let mut bytes = Vec::new();
+  let mut chunk = [0; 4096];
+  loop {
+    let read = stream.read(&mut chunk).expect("a request");
+    bytes.extend_from_slice(&chunk[..read]);
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    if let Some((head, body)) = text.split_once("\r\n\r\n") {
+      let length = head.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("content-length").then(|| value.trim().parse().ok())?
+      });
+      if read == 0 || body.len() >= length.unwrap_or(0) {
+        return (head.lines().next().unwrap_or_default().to_owned(), body.to_owned());
+      }
+    }
+  }
+}
+
+#[test]
+fn a_sign_in_from_a_device_shows_its_code_and_asks_its_end_until_the_person_entered_it() {
+  let scope = Scope::profile("account", "account");
+  let path = directory(Some(&scope.0));
+  let issuer = TcpListener::bind("127.0.0.1:0").expect("a port");
+  let address = format!("http://{}", issuer.local_addr().expect("address"));
+  let answers = [
+    ("200 OK", r#"{"device_auth_id":"d1","usercode":"ABCD-1234","interval":"0"}"#),
+    ("403 Forbidden", r#"{"error":"authorization_pending"}"#),
+    ("200 OK", r#"{"authorization_code":"c1","code_challenge":"h","code_verifier":"v1"}"#),
+  ];
+  let served = thread::spawn(move || {
+    let mut heard = Vec::new();
+    for (status, body) in answers {
+      let (mut stream, _) = issuer.accept().expect("a request");
+      heard.push(request(&mut stream));
+      let answer = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+      );
+      stream.write_all(answer.as_bytes()).expect("an answer");
+    }
+    heard
+  });
+  let mut seen = subscribe(Some(&scope.0));
+  let (_stop, canceled) = watch::channel(false);
+  let (send, ended) = mpsc::channel();
+  let (base, at) = (address.clone(), path);
+  reactor().spawn(async move { send.send(device_code(&base, &at, &canceled).await) });
+  let authorized = ended.recv_timeout(Duration::from_secs(10)).expect("the sign-in ends");
+  let authorized = authorized.expect("the person entered the code");
+  assert_eq!(
+    (authorized.authorization_code.as_str(), authorized.code_verifier.as_str()),
+    ("c1", "v1")
+  );
+  let page = format!("{address}/codex/device");
+  let waiting = SignIn::Waiting { url: page, code: Some("ABCD-1234".to_owned()) };
+  assert_eq!(*seen.borrow_and_update(), waiting, "the state shows the page and the code");
+  assert_eq!(waiting.code(), Some("ABCD-1234"));
+  let asked = r#"{"device_auth_id":"d1","user_code":"ABCD-1234"}"#;
+  let heard = served.join().expect("the server ends");
+  let heard: Vec<_> = heard.iter().map(|(line, body)| (line.as_str(), body.as_str())).collect();
+  assert_eq!(
+    heard,
+    [
+      (
+        "POST /api/accounts/deviceauth/usercode HTTP/1.1",
+        r#"{"client_id":"app_EMoamEEZ73f0CkXaXp7hrann"}"#
+      ),
+      ("POST /api/accounts/deviceauth/token HTTP/1.1", asked),
+      ("POST /api/accounts/deviceauth/token HTTP/1.1", asked),
+    ]
   );
 }

@@ -141,7 +141,9 @@ impl Model {
       Ok(Frame::Opening { life, stage, done, of }) => {
         return self.client.opening(at, life, Step { stage, done, of, at: self.client.moved });
       }
-      Ok(Frame::SignIn { state, url, .. }) => return self.told_sign_in(at, state, url),
+      Ok(Frame::SignIn { state, url, code, .. }) => {
+        return self.told_sign_in(at, state, (url, code));
+      }
       Ok(Frame::Cards { ref life, ref changed, .. }) if changed.iter().any(|card| !card.held) => {
         self.client.let_go(at, life);
       }
@@ -199,8 +201,13 @@ impl Model {
 
   /// A state of the sign-in of Codex that a machine told: the page of the sign-in opens in the
   /// browser once, when the machine gives its address.
-  fn told_sign_in(&mut self, at: usize, state: String, url: Option<String>) -> bool {
-    if let Some(address) = self.client.told_sign_in(at, state, url)
+  fn told_sign_in(
+    &mut self,
+    at: usize,
+    state: String,
+    told: (Option<String>, Option<String>),
+  ) -> bool {
+    if let Some(address) = self.client.told_sign_in(at, state, told)
       && let Err(no) = (self.browse)(&address)
     {
       self.client.notice = Some(format!("The browser did not open the sign-in of Codex: {no}"));

@@ -130,8 +130,7 @@ pub enum Asked {
   Queued(String, String),
   /// A change of a setting of a session.
   Setting,
-  /// The change that turns Codex on in the project of a session, which its machine answers once
-  /// the sign-in of Codex ends.
+  /// The sign-in of Codex of the user of a machine, which the machine answers once it ends.
   SignIn,
   /// Where the operator writes, which each other window of the life shows.
   Writes,

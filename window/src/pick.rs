@@ -569,8 +569,9 @@ impl Model {
     entries
   }
 
-  /// The rows of the sign-in of Codex, while the machine offers no model of it: the sign-in, which
-  /// needs a session, then while it runs its page again and its cancel.
+  /// The rows of the sign-in of Codex, while the machine offers no model of it: the sign-in, then
+  /// while it runs its page again, with the code to enter there when the machine gave one, and its
+  /// cancel.
   fn sign_in_rows(&self) -> Vec<Entry> {
     let row = |left: &str, says: &str, choice| Entry {
       part: "Codex".into(),
@@ -580,18 +581,18 @@ impl Model {
       ..Entry::default()
     };
     let Some(signing) = self.client.signing.as_ref() else {
-      let plan = "your ChatGPT plan, no key";
-      return vec![match self.client.target() {
-        Target::New(..) => row("Sign in with ChatGPT", "after a first message", Choice::None),
-        _ => row("Sign in with ChatGPT", plan, Choice::SignIn),
-      }];
+      return vec![row("Sign in with ChatGPT", "your ChatGPT plan, no key", Choice::SignIn)];
     };
-    let waits = match (&signing.url, signing.state.as_deref()) {
-      (Some(url), _) => {
+    let waits = match (&signing.url, &signing.code, signing.state.as_deref()) {
+      (Some(url), Some(code), _) => {
+        let page = url.trim_start_matches("https://");
+        row(&format!("Enter the code {code}"), &format!("at {page}"), Choice::Link(url.clone()))
+      }
+      (Some(url), None, _) => {
         row("Open the sign-in page again", "sign in there", Choice::Link(url.clone()))
       }
-      (None, Some("connecting")) => row("Connecting to ChatGPT", "", Choice::None),
-      (None, _) => row("Starting the sign-in", "", Choice::None),
+      (None, _, Some("connecting")) => row("Connecting to ChatGPT", "", Choice::None),
+      (None, ..) => row("Starting the sign-in", "", Choice::None),
     };
     vec![waits, row("Cancel the sign-in", "keep the models as they are", Choice::CancelSignIn)]
   }
@@ -663,9 +664,7 @@ impl Model {
         }
       }
       Choice::SignIn => {
-        if let Err(why) = self.client.sign_in() {
-          self.client.notice = Some(why);
-        }
+        self.client.sign_in();
         self.sign_in_shown(of);
       }
       Choice::CancelSignIn => {

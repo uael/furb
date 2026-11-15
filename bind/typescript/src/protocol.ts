@@ -222,7 +222,11 @@ export type Request1 =
       verb: "image";
     }
   | {
-      life: string;
+      cwd?: string | null;
+      device?: boolean;
+      verb: "sign_in";
+    }
+  | {
       verb: "cancel_sign_in";
     }
   | {
@@ -571,6 +575,7 @@ export type Frame =
   | {
       state: string;
       url?: string | null;
+      code?: string | null;
       message?: string | null;
       frame: "sign_in";
     }
@@ -1771,4 +1776,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 62;
+export const PROTOCOL = 63;

@@ -1,90 +1,86 @@
-//! The sign-in of Codex, which the operator asks from the models of a session: the account of
-//! his `ChatGPT` plan serves the models of `OpenAI`, with no key. The machine of the session runs
-//! it and tells each change of its state, and turns Codex on in the project of the session once it
-//! ends.
+//! The sign-in of Codex, which the operator asks from the models: the account of his `ChatGPT`
+//! plan serves the models of `OpenAI`, with no key. It belongs to the user of a machine, so it
+//! needs no session. The machine runs it and tells each change of its state; once it connects,
+//! each project of the machine offers the models of Codex.
 
-use furb_wire::protocol::{Config, Frame, Verb};
-use serde_json::Value;
+use furb_wire::protocol::{Answer, Frame, Verb};
 
-use crate::{Asked, Client, Target};
+use crate::{Asked, Client};
 
-/// A sign-in of Codex while it runs: the machine and the record of the life whose project takes
-/// Codex, whether the client asked it, whether the operator canceled it and the client asked the
-/// cancel, the state that the machine told last, and the address of its page in the browser while
-/// it waits for him.
+/// A sign-in of Codex while it runs: its machine, whether the client asked it, whether the
+/// operator canceled it and the client asked the cancel, the state that the machine told last, the
+/// address of its page in the browser while it waits for him, and the code that he enters there
+/// when he is not at that machine.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SignIn {
-  pub life: (usize, String),
+  pub at: usize,
   pub asked: bool,
   pub canceled: Option<bool>,
   pub state: Option<String>,
   pub url: Option<String>,
+  pub code: Option<String>,
 }
 
 impl Client {
-  /// A sign-in of Codex for the session that the input sends to, unless one runs, or why none
-  /// starts: a new session has no project that takes Codex yet.
-  pub fn sign_in(&mut self) -> Result<(), String> {
-    let life = match self.target() {
-      Target::Thread(key) => (key.0, key.1),
-      Target::Session(at, life) => (at, life),
-      Target::New(..) => {
-        return Err("Send a first message: Codex connects in the project of a session.".to_owned());
-      }
-    };
-    self.signing.get_or_insert(SignIn { life, ..SignIn::default() });
-    Ok(())
+  /// A sign-in of Codex on the machine of the target of the input, unless one runs.
+  pub fn sign_in(&mut self) {
+    let at = self.target().machine();
+    self.signing.get_or_insert(SignIn { at, ..SignIn::default() });
   }
 
-  /// The sign-in that runs canceled: the machine refuses the change that asked it, and turns
-  /// nothing on.
+  /// The sign-in that runs canceled: the machine refuses the sign-in, and turns nothing on.
   pub fn cancel_sign_in(&mut self) {
     if let Some(signing) = self.signing.as_mut().filter(|one| one.asked) {
       signing.canceled.get_or_insert(false);
     }
   }
 
-  /// The change that turns Codex on, which the machine answers once the sign-in ends, or the
-  /// cancel of the sign-in.
+  /// The sign-in, which the machine answers once it ends, or its cancel. The page of a sign-in on
+  /// another machine calls back that machine, not the browser of the operator, so there he signs
+  /// in from a device, with a code.
   pub(crate) fn sign_in_due(&mut self) -> Option<(usize, Verb, Asked)> {
     let signing = self.signing.as_mut()?;
-    let (at, life) = (signing.life.0, signing.life.1.clone());
+    let at = signing.at;
     if !signing.asked {
       signing.asked = true;
-      let key = vec!["providers".to_owned(), "codex".to_owned()];
-      let config = Config::Set { key, value: Some(Value::Bool(true)), layer: None };
-      return Some((at, Verb::Config { life, config }, Asked::SignIn));
+      let cwd = (at == 0).then(|| self.folder.clone());
+      return Some((at, Verb::SignIn { cwd, device: at != 0 }, Asked::SignIn));
     }
     if signing.canceled == Some(false) {
       signing.canceled = Some(true);
-      return Some((at, Verb::CancelSignIn { life }, Asked::Control));
+      return Some((at, Verb::CancelSignIn, Asked::Control));
     }
     None
   }
 
   /// A state that a machine told of the sign-in that runs there, with the address of its page
-  /// while it waits: the address when it is new, which the client opens once.
-  pub fn told_sign_in(&mut self, at: usize, state: String, url: Option<String>) -> Option<String> {
-    let signing = self.signing.as_mut().filter(|one| one.life.0 == at)?;
+  /// and the code to enter there while it waits: the address when it is new, which the client
+  /// opens once.
+  pub fn told_sign_in(
+    &mut self,
+    at: usize,
+    state: String,
+    (url, code): (Option<String>, Option<String>),
+  ) -> Option<String> {
+    let signing = self.signing.as_mut().filter(|one| one.at == at)?;
     let new = url.clone().filter(|one| signing.url.as_ref() != Some(one));
-    (signing.state, signing.url) = (Some(state), url);
+    (signing.state, signing.url, signing.code) = (Some(state), url, code);
     new
   }
 
-  /// What the machine answered to the change that turned Codex on: the sign-in ended, and the
-  /// models of the machine are asked again, those of Codex among them, or the client says why
-  /// Codex did not connect.
+  /// What the machine answered to the sign-in: it connected, with the models that it offers now,
+  /// those of Codex among them, or the client says why Codex did not connect.
   pub fn signed_in(&mut self, heard: Option<Frame>) {
     let Some(signing) = self.signing.take() else { return };
     self.notice = Some(match heard {
-      Some(Frame::Reply { .. }) => {
-        if let Some(told) = self.machines.get_mut(signing.life.0) {
-          told.models = None;
+      Some(Frame::Reply { answer, .. }) => {
+        if let (Some(told), Answer::Models(models)) = (self.machines.get_mut(signing.at), answer) {
+          told.models = Some(models);
         }
         "Codex is connected: the models of your ChatGPT plan are in the list.".to_owned()
       }
-      // The machine pushes the state of the sign-in apart from its answer to the change, so the
-      // refusal can come before the state that says the cancel.
+      // The machine pushes the state of the sign-in apart from its answer, so the refusal can
+      // come before the state that says the cancel.
       Some(Frame::Refused { .. }) if signing.canceled.is_some() => {
         "The sign-in of Codex stopped. Nothing changed.".to_owned()
       }

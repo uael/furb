@@ -149,7 +149,8 @@ daemon answers requests in any order.
 | `close` | `life`, `act`, `value` (a value as the record writes it) | write |
 | `names` | `life`, `on` | read |
 | `roster` | `life`, `roster` (names of models) | write |
-| `cancel_sign_in` | `life` | write |
+| `sign_in` | `cwd`, `device` | write |
+| `cancel_sign_in` | | write |
 | `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
 | `image` | `life`, `name`, `data` (the bytes of a PNG, a JPEG, a GIF or a WebP, in base64): the life keeps it beside its record and answers the text `![name](furb-image://…)` by which a message names it | write |
 | `seen` | `life`, `about` | write |
@@ -194,11 +195,20 @@ daemon answers requests in any order.
   A set of `["providers", "codex"]` to `true` starts the sign-in of codex on the machine of the daemon, unless an
   account is connected or a sign-in runs. The daemon pushes to the peer that asked the frame `sign_in` at the current
   state and at each change of it, with the `state` (`disconnected`, `waiting`, `connecting`, `connected`,
-  `needs-login`, `failed` or `canceled`), the `url` of the browser while it waits, and the `message` that a person
-  reads when it needs login or failed. The answer of the set comes when the sign-in ends: the act of the stand when
-  it connects, and a refusal when the operator cancels it or it fails. A set to `false` cancels a sign-in that runs. A
-  window keeps no state of the sign-in beside these frames and asks for none. The verb `cancel_sign_in` cancels the
-  sign-in that the daemon runs for a life and writes no config, so the set that asked it is refused.
+  `needs-login`, `failed` or `canceled`), the `url` of the browser while it waits, the `code` to enter on that page
+  for a sign-in from a device, and the `message` that a person reads when it needs login or failed. The answer of the
+  set comes when the sign-in ends: the act of the stand when it connects, and a refusal when the operator cancels it
+  or it fails. A set to `false` cancels a sign-in that runs. A window keeps no state of the sign-in beside these
+  frames and asks for none.
+- `sign_in` signs the user of the machine in to codex, with no life, so a window signs in before its first session.
+  The daemon pushes the frame `sign_in` as for a set of the config. A sign-in from a `device`, which a window on
+  another machine asks, gives in the frame the page of `OpenAI` where the operator enters the `code` in the browser
+  of any device; else the page of the sign-in calls back port 1455 of the machine of the daemon. Once it connects,
+  the user config turns codex on, checked against the catalog of the folder `cwd`, and each life of the daemon
+  stands again, so each project offers the models of the account. The answer comes when the sign-in ends: the
+  `models` that the catalog of `cwd` offers then, as `models` gives them, or a refusal when the operator cancels it or
+  it fails. `cancel_sign_in` cancels the sign-in that runs on the machine
+  and writes no config, so the verb that asked it is refused.
 - `list` gives each record of the machine as `lives`: each record of the sessions of each project that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
   `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `project`, and each

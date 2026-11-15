@@ -989,20 +989,40 @@
         },
         {
           "type": "object",
-          "description": "A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config\nthat asked it. It writes no config.",
+          "description": "The sign-in of codex of the user of the machine, which the daemon answers once it ends: its\nstate is pushed at each change, and once it connects the user config turns codex on, checked\nagainst the catalog of the folder `cwd`, each life stands again, so each project offers its\nmodels, and the answer gives the models that the catalog of `cwd` offers then. A sign-in from a `device`, for a window on another machine, gives a code that the\noperator enters on a page in the browser of any device; else the page of the sign-in calls\nback the machine of the daemon.",
           "properties": {
-            "life": {
-              "type": "string"
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
             },
+            "device": {
+              "type": "boolean",
+              "default": false
+            },
+            "verb": {
+              "type": "string",
+              "const": "sign_in"
+            }
+          },
+          "required": [
+            "verb"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "verb": {
               "type": "string",
               "const": "cancel_sign_in"
             }
           },
           "required": [
-            "verb",
-            "life"
-          ]
+            "verb"
+          ],
+          "description": "A cancel of the sign-in of codex that runs on the machine, which refuses the sign-in or the\nconfig that asked it. It writes no config."
         },
         {
           "type": "object",
@@ -2516,6 +2536,13 @@
                 "null"
               ]
             },
+            "code": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
             "message": {
               "type": [
                 "string",
@@ -2531,7 +2558,7 @@
             "frame",
             "state"
           ],
-          "description": "The state of the sign-in of codex that this peer asked with a config of its provider, pushed\nat each change of the state, so no window asks it again: the word of the state, the browser\naddress while it waits, and what to tell the operator when it needs him or failed."
+          "description": "The state of the sign-in of codex that this peer asked, pushed at each change of the state,\nso no window asks it again: the word of the state, the browser address while it waits, the\ncode to enter there for a sign-in from a device, and what to tell the operator when it needs\nhim or failed."
         },
         {
           "type": "object",
@@ -6199,5 +6226,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 62
+  "x-protocol": 63
 }
