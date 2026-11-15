@@ -6,7 +6,7 @@
 
 use std::{borrow::Cow, cmp::Reverse, ops::Range};
 
-use furb::view::{Part, Sent, Skill};
+use furb::view::{Part, Sent, Skill, tokens};
 use furb_host::protocol::Card;
 use opentui::{
   input::{MouseButton, MouseEvent, MouseEventKind},
@@ -154,6 +154,9 @@ const RECENT: usize = 5;
 /// the blank row under it, the blank row above its foot, its foot and the blank row under it.
 const FRAME: usize = 7;
 
+/// What the row of the model that the input speaks to says at its end.
+const USED: &str = " · in use";
+
 impl Pick {
   /// Whether each entry of the list is a thing that says what it does, as a setting or an
   /// extension, so what it says stands whole under its name, as a page of settings shows it.
@@ -231,15 +234,19 @@ impl Model {
     }
     self.picker = Some(Picker { of, filter, at: 0 });
     self.chose(0);
-    if of == Pick::Sessions {
-      let now = match self.client.target() {
-        Target::Thread(key) => Target::Session(key.0, key.1),
-        other => other,
-      };
-      let at = self.entries().iter().position(|one| one.choice == Choice::Session(now.clone()));
-      if let Some(picker) = self.picker.as_mut() {
-        picker.at = at.unwrap_or_default();
-      }
+    // The sessions open on the one that the input sends to, and the models on the one in use.
+    let now = match self.client.target() {
+      Target::Thread(key) => Target::Session(key.0, key.1),
+      other => other,
+    };
+    let entries = self.entries();
+    let at = entries.iter().position(|one| match of {
+      Pick::Sessions => one.choice == Choice::Session(now.clone()),
+      Pick::Models => one.says.ends_with(USED),
+      _ => false,
+    });
+    if let (Some(at), Some(picker)) = (at, self.picker.as_mut()) {
+      picker.at = at;
     }
   }
 
@@ -518,22 +525,33 @@ impl Model {
     self.client.sent().iter().map(entry).collect()
   }
 
-  /// The models of the machine of the input, under each provider once, each with its effort, the
-  /// one that it takes when the operator names none. A model takes the effort that the input
-  /// speaks at when it offers it.
+  /// The models of the machine of the input, under each provider once, each with what it holds,
+  /// its context window and whether it sees images, and its effort, the one that it takes when the operator
+  /// names none. A model takes the effort that the input speaks at when it offers it. The model
+  /// that the input speaks to says so, in the accent.
   fn models(&self) -> Vec<Entry> {
     let at = self.client.target().machine();
     let offered = self.client.machines.get(at).and_then(|told| told.models.as_ref());
-    let effort = self.actor().and_then(|one| one.1);
+    let (using, effort) = self.actor().unzip();
+    let effort = effort.flatten();
+    // What each model holds stands in one column, past the longest name.
+    let named =
+      |model: &Offered| model.name.split_once(':').map_or(&*model.name, |one| one.1).width();
+    let wide = offered.into_iter().flatten().map(named).max().unwrap_or_default();
     let entry = |model: &Offered| {
       let (provider, name) = model.name.split_once(':').unwrap_or(("", &model.name));
       let taken =
         effort.as_ref().filter(|one| model.efforts.contains(one)).or(model.effort.as_ref());
       let actor = taken.map_or_else(|| model.name.clone(), |one| format!("{}/{one}", model.name));
+      let used = using.as_deref() == Some(model.name.as_str());
+      let images = if model.images { " · images" } else { "" };
+      let held = format!("  {} context{images}", tokens(model.window));
       Entry {
         part: provider_named(provider).into(),
-        left: name.to_owned(),
+        left: format!("{name:<wide$}"),
+        says: if used { format!("{held}{USED}") } else { held },
         right: taken.cloned().unwrap_or_default(),
+        tone: used.then_some(self.tokens.accent),
         choice: Choice::Actor(actor),
         ..Entry::default()
       }
@@ -750,10 +768,16 @@ impl Model {
     shown.into_iter().enumerate().map(row).collect()
   }
 
-  /// The keys that the foot of a list part names: to move, to take the chosen row, to close.
+  /// The keys that the foot of a list part names: to move, to take the chosen row, to close. A
+  /// model is taken for what the input sends to: its session, or the new session.
   fn foot(&self, picker: &Picker) -> String {
+    let scope = match (picker.of, self.client.target()) {
+      (Pick::Models, Target::New(..)) => " for the new session",
+      (Pick::Models, _) => " for this session",
+      _ => "",
+    };
     format!(
-      "{} move · {} {} · {} close",
+      "{} move · {} {}{scope} · {} close",
       [Does::Up, Does::Down].map(|one| self.key(one)).join(""),
       self.key(Does::Send),
       picker.of.takes(),

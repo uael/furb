@@ -824,3 +824,26 @@ fn each_command_of_a_slash_has_a_key_and_a_place_that_the_mouse_clicks() {
     app.press("escape");
   }
 }
+
+/// The models open on the one that the input speaks to, which says so, each says what it holds,
+/// and the foot says what a choice changes.
+#[test]
+fn the_models_open_on_the_model_in_use_and_say_what_each_holds_and_what_a_choice_changes() {
+  let (app, _daemon, _) = started();
+  shows(&app, "with opus at high effort");
+  app.press("ctrl+x");
+  app.press("m");
+  let frame = shows(&app, "Search a model");
+  assert!(frame.contains("▌opus    1M context · images · in use"), "{frame}");
+  assert!(frame.contains("⏎ take it for the new session"), "{frame}");
+  // Once he takes sonnet, the models open on sonnet, the model in use.
+  app.press("down");
+  app.press("enter");
+  shows(&app, "sonnet  high");
+  app.press("ctrl+x");
+  app.press("m");
+  let frame = shows(&app, "Search a model");
+  assert!(frame.contains("▌sonnet  1M context · images · in use"), "{frame}");
+  assert!(frame.contains(" opus    1M context · images "), "{frame}");
+  screen("part-models", &app);
+}
