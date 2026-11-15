@@ -476,6 +476,20 @@ impl Model {
     rows
   }
 
+  /// The keys of what stands over the input: a form, the completion, or the bar of the time; else
+  /// where a walk through what he sent stands, in the form of the place in a list.
+  fn over_input(&self) -> Option<Line> {
+    let walked = || {
+      let (at, of) = self.client.walking()?;
+      Some(vec![run(format!("  ↑↓ history {at} / {of}"), self.tokens.style(Role::Muted))])
+    };
+    self
+      .form_hints()
+      .or_else(|| self.completion_hints())
+      .or_else(|| self.time_hints())
+      .or_else(walked)
+  }
+
   /// The bar of the input: the color of his turn while it holds the form of a question, else the
   /// color of the thread that it replies to, or the accent for a new thread.
   pub(crate) fn bar(&self) -> Color {
@@ -798,12 +812,7 @@ impl Model {
     let armed = self.armed_says(wide.saturating_sub(2 + width(&key) + 2));
     let says = armed.map(|one| (one, t.attention)).or(notice);
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
-    // The keys of what stands over the input: a form, the completion, or the bar of the time.
-    let keyed = self.form_hints().or_else(|| self.completion_hints()).or_else(|| self.time_hints());
-    // A walk through what he sent says where it stands, in the form of the place in a list.
-    let walked =
-      self.client.walking().map(|(at, of)| vec![run(format!("  ↑↓ history {at} / {of}"), muted)]);
-    let keyed = keyed.or(walked);
+    let keyed = self.over_input();
     let room = wide.saturating_sub(width(&key) + 2);
     let word = Some(self.word_hints(room)).filter(|(hints, _)| !hints.is_empty());
     let python = self.python_hints().filter(|_| !works);
