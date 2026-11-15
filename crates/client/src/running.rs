@@ -2,17 +2,20 @@
 //! it, and what the operator does to one: a pause, which ends the life and keeps its open work for
 //! the next open, a kill, which cancels that work first, or a pin, which keeps it running in the
 //! background once no window holds it. The same three come when he leaves while a session that
-//! the client holds works.
+//! the client holds lives: a thread of it works or asks him.
 
-use furb_wire::protocol::{Card, Verb};
+use furb_wire::{
+  card::Standing,
+  protocol::{Card, Verb},
+};
 
 use crate::{Asked, Client};
 
 /// The holder of the pin that keeps a session running in the background.
 pub const BACKGROUND: &str = "background";
 
-/// A session that a machine holds: its machine, its record, its name, its project, whether a
-/// thread of it works, whether this client holds it, the operators whose window holds it, and
+/// A session that a machine holds: its machine, its record, its name, its project, each thread
+/// of it that lives, whether this client holds it, the operators whose window holds it, and
 /// whether a pin keeps it in the background.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Running {
@@ -20,10 +23,25 @@ pub struct Running {
   pub life: String,
   pub name: String,
   pub project: Option<String>,
-  pub works: bool,
+  pub live: Vec<Live>,
   pub here: bool,
   pub viewers: Vec<String>,
   pub background: bool,
+}
+
+/// A thread of a session that lives while the life holds it: its title, and whether it works,
+/// else it asks the operator.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Live {
+  pub title: String,
+  pub works: bool,
+}
+
+impl Running {
+  /// Whether a thread of the session works.
+  pub fn works(&self) -> bool {
+    self.live.iter().any(|one| one.works)
+  }
 }
 
 /// What the operator does to a session that runs.
@@ -43,13 +61,18 @@ impl Client {
     let mut all: Vec<Running> = Vec::new();
     for (at, told) in self.machines.iter().enumerate() {
       for card in told.cards.iter().filter(|card| card.held) {
-        match all.iter_mut().find(|one| one.at == at && one.life == card.life) {
-          Some(one) => one.works |= card.thread.works(),
-          None => all.push(self.runs(at, card)),
+        let place = all.iter().position(|one| one.at == at && one.life == card.life);
+        let place = place.unwrap_or_else(|| {
+          all.push(self.runs(at, card));
+          all.len() - 1
+        });
+        let works = card.thread.works();
+        if works || matches!(card.thread.standing, Standing::Asks { .. }) {
+          all[place].live.push(Live { title: card.thread.title.clone(), works });
         }
       }
     }
-    all.sort_by_key(|one| (one.at, !one.works));
+    all.sort_by_key(|one| (one.at, !one.works()));
     all
   }
 
@@ -60,34 +83,38 @@ impl Client {
       life: card.life.clone(),
       name: named.unwrap_or_else(|| card.thread.title.clone()),
       project: card.project.clone(),
-      works: card.thread.works(),
+      live: Vec::new(),
       here: self.holds.keys().any(|key| key.0 == at && key.1 == card.life),
       viewers: card.viewers.clone(),
       background: card.pins.iter().any(|one| one == BACKGROUND),
     }
   }
 
-  /// The sessions that this client holds whose work runs, which a leave of the client asks about,
-  /// while its window is their last view: another window that holds one keeps it as it is. The
-  /// thread that the client started works too while its machine did not tell its card yet.
+  /// The sessions that this client holds with a thread that lives, which a leave of the client
+  /// asks about, while its window is their last view: another window that holds one keeps it as
+  /// it is. The thread that the client started works too while its machine did not tell its card
+  /// yet.
   pub fn leaving(&self) -> Vec<Running> {
     let last = |at: usize, life: &str| {
       let present = self.machines.get(at).and_then(|told| told.presence.get(life));
       present.is_none_or(|all| all.iter().map(|one| one.windows).sum::<usize>() <= 1)
     };
-    let held = |one: &Running| one.here && one.works && !one.background && last(one.at, &one.life);
+    let held = |one: &Running| {
+      one.here && !one.live.is_empty() && !one.background && last(one.at, &one.life)
+    };
     let mut all: Vec<Running> = self.running().into_iter().filter(held).collect();
     let started = self.thread.as_ref().filter(|one| one.thread.started).map(|one| &one.thread.key);
     if let Some((at, life, _)) = started
       && last(*at, life)
       && !all.iter().any(|one| one.at == *at && one.life == *life)
     {
+      let title = "The thread that you started".to_owned();
       all.push(Running {
         at: *at,
         life: life.clone(),
-        name: "The thread that you started".to_owned(),
+        name: title.clone(),
         project: self.cwd(*at, life),
-        works: true,
+        live: vec![Live { title, works: true }],
         here: true,
         viewers: Vec::new(),
         background: false,

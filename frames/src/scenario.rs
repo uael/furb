@@ -308,7 +308,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           "Where does the list",
         ),
         step("c", &[Act::Key("C-x"), Act::Key("j")], "Run the bench."),
-        step("x-leave", &[Act::Key("C-d"), Act::Key("C-d")], "Sessions still work"),
+        step("x-leave", &[Act::Key("C-d"), Act::Key("C-d")], "Leave the window"),
       ],
     }),
   },

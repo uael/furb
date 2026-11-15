@@ -6,7 +6,7 @@
     ▌Search a session                               2 / 2     ▐   FT furb-try                opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
      FT + new session                           furb-try
-    ▌FT where does the time go (the model works on it)furb-
+    ▌FT where does the time go (the model…      furb-try
 
     ↑↓ move · ⏎ send there · ⎋ close
 

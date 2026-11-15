@@ -679,9 +679,27 @@ fn a_leave_while_a_session_works_asks_and_keeps_it_running_in_the_background() {
   paged(&app);
   app.press("ctrl+d");
   app.press("ctrl+d");
-  let asked = shows(&app, "Sessions still work");
+  let asked = shows(&app, "Leave the window");
   assert!(!app.app().is_quitting(), "{asked}");
   app.type_text("keep");
+  app.press("enter");
+  assert!(app.wait_until(PATIENCE, || app.app().is_quitting()), "{}", app.text());
+  let Answer::Lives(lives) = daemon.peer().ask(Verb::List { config: None }) else { unreachable!() };
+  let pinned = lives.iter().any(|one| one.held && one.pins == ["background"]);
+  assert!(pinned, "{lives:?}");
+}
+
+#[test]
+fn a_leave_names_a_thread_that_asks_him_and_keeps_its_session_in_the_background() {
+  let (app, daemon, _) = started();
+  sent(&app, &format!("which key sends the queue {ASKS}"));
+  shows(&app, "◆ Input");
+  app.press("ctrl+d");
+  app.press("ctrl+d");
+  let asked = shows(&app, "Leave the window");
+  let row = asked.lines().find(|line| line.contains("asks you"));
+  assert!(row.is_some_and(|line| line.contains("FT which key sends the queue")), "{asked}");
+  assert!(asked.contains("keep it running in the background"), "{asked}");
   app.press("enter");
   assert!(app.wait_until(PATIENCE, || app.app().is_quitting()), "{}", app.text());
   let Answer::Lives(lives) = daemon.peer().ask(Verb::List { config: None }) else { unreachable!() };

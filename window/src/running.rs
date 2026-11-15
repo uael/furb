@@ -1,5 +1,5 @@
 //! The sessions that run, as the list part shows them: a part of Go to, the choices for one
-//! session, and the choices that a leave asks while a session that the window holds works. Each
+//! session, and the choices that a leave asks while a session that the window holds lives. Each
 //! choice is a row, so each works with the keys of a list and with a click.
 
 use furb_client::{Control, Running, Target};
@@ -25,10 +25,14 @@ impl Model {
     self.client.running().into_iter().map(entry).collect()
   }
 
-  /// What a session that runs does and who holds it, as `working · here` or
+  /// What a session that runs does and who holds it, as `working · here`, `asks you · here` or
   /// `idle · in the background`.
   fn runs(&self, one: &Running) -> String {
-    let state = if one.works { "working" } else { "idle" };
+    let state = match (one.works(), one.live.is_empty()) {
+      (true, _) => "working",
+      (false, false) => "asks you",
+      (false, true) => "idle",
+    };
     let mut holders: Vec<String> = Vec::new();
     if one.here {
       holders.push("here".to_owned());
@@ -58,34 +62,33 @@ impl Model {
     all
   }
 
-  /// The choices of a leave while sessions that the window holds work: each of them, then keep
-  /// them running in the background, pause them, kill them, or stay.
+  /// The choices of a leave while sessions that the window holds live: each thread that lives
+  /// in them, with whether it works or asks him, then keep them running in the background, pause
+  /// them, kill them, or stay. The words take the number of the threads.
   pub(crate) fn leave_choices(&self) -> Vec<Entry> {
-    let session = |one: Running| Entry {
-      part: "Still working".into(),
-      project: one.project.as_deref().map(named),
-      left: one.name,
-      ..Entry::default()
-    };
-    let mut all: Vec<Entry> = self.client.leaving().into_iter().map(session).collect();
-    let row = |left: &str, choice| Entry {
+    let mut all: Vec<Entry> = Vec::new();
+    for one in self.client.leaving() {
+      let project = one.project.as_deref().map(named);
+      all.extend(one.live.into_iter().map(|thread| Entry {
+        part: "Still live".into(),
+        project: project.clone(),
+        right: (if thread.works { "works" } else { "asks you" }).to_owned(),
+        left: thread.title,
+        ..Entry::default()
+      }));
+    }
+    let (them, their) = if all.len() == 1 { ("it", "its") } else { ("them", "their") };
+    let row = |left: String, choice| Entry {
       part: "Leave and".into(),
-      left: left.to_owned(),
-      choice,
+      left,
+      choice: Choice::Leave(choice),
       ..Entry::default()
     };
-    all.push(row("keep them running in the background", Choice::Leave(Some(Control::Background))));
-    all.push(row(
-      "pause them: their work goes on at their next open",
-      Choice::Leave(Some(Control::Pause)),
-    ));
-    all.push(row("kill them: their work stops", Choice::Leave(Some(Control::Kill))));
-    all.push(Entry {
-      part: "Or".into(),
-      left: "Stay in the window".to_owned(),
-      choice: Choice::Leave(None),
-      ..Entry::default()
-    });
+    all.push(row(format!("keep {them} running in the background"), Some(Control::Background)));
+    let pause = format!("pause {them}: {their} work goes on at {their} next open");
+    all.push(row(pause, Some(Control::Pause)));
+    all.push(row(format!("kill {them}: {their} work stops"), Some(Control::Kill)));
+    all.push(Entry { part: "Or".into(), ..row("Stay in the window".to_owned(), None) });
     all
   }
 
@@ -119,16 +122,16 @@ impl Model {
     self.acts = Some(Acts::Leaving);
   }
 
-  /// A second leave: the window leaves at once while no session that it holds works, else the
-  /// list part asks what each of them does, on its first choice under the sessions, and the leave
+  /// A second leave: the window leaves at once while no session that it holds lives, else the
+  /// list part asks what each of them does, on its first choice under the threads, and the leave
   /// is armed no more. Whether it leaves now.
   pub(crate) fn leaves_now(&mut self) -> bool {
-    let working = self.client.leaving().len();
-    if working == 0 {
+    if self.client.leaving().is_empty() {
       return true;
     }
+    let first = self.leave_choices().iter().position(|one| matches!(one.choice, Choice::Leave(_)));
     self.armed = None;
-    self.picker = Some(Picker { of: Pick::Leave, filter: String::new(), at: working });
+    self.picker = Some(Picker { of: Pick::Leave, filter: String::new(), at: first.unwrap_or(0) });
     false
   }
 }

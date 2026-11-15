@@ -166,7 +166,7 @@ impl Pick {
       Self::Models => "Models",
       Self::History => "History",
       Self::Session => "The session",
-      Self::Leave => "Sessions still work",
+      Self::Leave => "Leave the window",
       Self::Settings | Self::Value(_) => "Settings",
       Self::Skills => "Extensions",
     }
@@ -758,7 +758,8 @@ impl Model {
       left.extend(badge);
       left.extend(lit(&entry.left, &entry.lit, ground(prose), ground(prose.fg(t.accent))));
       let says = entry.says.trim();
-      if !under {
+      // The last run of the left is the one that a narrow row cuts, so an empty one goes.
+      if !under && !entry.says.is_empty() {
         left.push(run(entry.says.clone(), ground(muted)));
       }
       let right = vec![run(entry.right.clone(), ground(muted)), run(" ", ground(Style::new()))];

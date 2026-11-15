@@ -44,7 +44,7 @@ pub use matched::{Matched, pathed, ranked};
 pub use opens::{Ask, Hold, Life, Step};
 pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
 pub use question::{Form, HOLD};
-pub use running::{BACKGROUND, Control, Running};
+pub use running::{BACKGROUND, Control, Live, Running};
 pub use settings::Settings;
 pub use thread::{Anchor, Fold, Opened, PAGE, Pending, Thread, rests};
 pub use time::{Chains, Time, resting};
