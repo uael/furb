@@ -515,7 +515,13 @@ fn picking(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   let taken = tell(app, window, |model| {
     let at = model.picker.as_ref().map(|one| one.at)?;
     match (key.code, text) {
-      (KeyCode::Escape, _) => model.picker = None,
+      (KeyCode::Escape, _) => model.unpicked(),
+      // A backspace on a list that a slash opened, with no text that filters it, takes the slash.
+      (KeyCode::Backspace, _)
+        if model.picker.as_ref().is_some_and(|one| one.slashed && one.filter.is_empty()) =>
+      {
+        model.picker = None;
+      }
       (KeyCode::Enter, _) => return Some(model.took(at)),
       (KeyCode::Up, _) => model.chose(-1),
       (KeyCode::Down, _) => model.chose(1),

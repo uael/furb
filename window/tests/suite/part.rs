@@ -202,3 +202,26 @@ fn a_new_session_on_the_model_of_the_last_card_of_its_project_shows_its_default_
   // The card names its model alone; the launcher names the effort that a new session takes.
   shows(&app, "FU ▾   opus  high");
 }
+
+#[test]
+fn a_slash_that_starts_the_input_lists_the_commands_and_a_close_gives_it_back() {
+  let (app, _daemon, _peer) = machine();
+  app.type_text("/");
+  shows(&app, "Search a command");
+  app.type_text("list");
+  shows(&app, "Show or hide the list");
+  // An escape closes the list and gives the slash back, so a message can start with one.
+  app.press("escape");
+  assert!(gone(&app, "Search a command"), "{}", app.text());
+  shows(&app, "┃ /");
+  app.type_text("tmp holds the logs");
+  shows(&app, "┃ /tmp holds the logs");
+  // A slash again in an empty input opens the list, and a backspace on its empty filter takes the
+  // slash with it.
+  app.press("ctrl+u");
+  app.type_text("/");
+  shows(&app, "Search a command");
+  app.press("backspace");
+  assert!(gone(&app, "Search a command"), "{}", app.text());
+  assert!(!app.text().contains("┃ /"), "{}", app.text());
+}

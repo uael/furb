@@ -47,13 +47,15 @@ pub(crate) enum Pick {
   Models,
 }
 
-/// The list part, while it is open: what it lists, the text that filters it, and the place of the
-/// chosen row among those that pass the filter.
+/// The list part, while it is open: what it lists, the text that filters it, the place of the
+/// chosen row among those that pass the filter, and whether a slash that he typed first in the
+/// input opened it, which a close gives back to the input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Picker {
   pub(crate) of: Pick,
   pub(crate) filter: String,
   pub(crate) at: usize,
+  pub(crate) slashed: bool,
 }
 
 /// What a row of a list part takes.
@@ -146,7 +148,7 @@ impl Model {
       self.picker = None;
       return;
     }
-    self.picker = Some(Picker { of, filter: String::new(), at: 0 });
+    self.picker = Some(Picker { of, filter: String::new(), at: 0, slashed: false });
     if of == Pick::Sessions {
       let now = match self.target() {
         Target::Thread(key) => Target::Session(key.0, key.1),
@@ -423,11 +425,11 @@ impl Model {
       Choice::Thread(key) => self.went(key),
       Choice::Session(target) => self.aimed(target),
       Choice::Project(name) => {
-        self.picker = Some(Picker { of, filter: name, at: 0 });
+        self.picker = Some(Picker { of, filter: name, at: 0, slashed: false });
       }
       Choice::Actor(actor) => self.took_actor(actor),
       Choice::Key(does) => return Some(does),
-      Choice::None => self.picker = Some(Picker { of, filter: String::new(), at }),
+      Choice::None => self.picker = Some(Picker { of, filter: String::new(), at, slashed: false }),
     }
     None
   }

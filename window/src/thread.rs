@@ -394,15 +394,6 @@ impl Model {
     leaves
   }
 
-  /// Whether an escape goes back from the open thread: it is the thread of an agent, it opens, its
-  /// page did not come, or a fault ended its life.
-  pub(crate) fn leaves(&self) -> bool {
-    self
-      .thread
-      .as_ref()
-      .is_some_and(|one| one.from.is_some() || self.why(one).is_some() || self.opens(one))
-  }
-
   /// Why the open thread says that it went wrong: the daemon gave no page, or a fault ended its
   /// life.
   pub(crate) fn why<'a>(&'a self, opened: &'a Opened) -> Option<&'a str> {
@@ -428,9 +419,11 @@ impl Model {
     self.opens(opened) && waited
   }
 
-  /// Whether the row of hints offers the key that goes back: from an agent, from a fault, and from
-  /// an open that the window says.
-  pub(crate) fn says_leaves(&self) -> bool {
+  /// Whether an escape goes back from the open thread, as the row of hints says: it is the thread
+  /// of an agent, a fault ended its life, or the window says that it opens. An open that the
+  /// window does not say yet takes the escape as a thread that works does, so the key does what
+  /// the row of hints shows.
+  pub(crate) fn leaves(&self) -> bool {
     let says = |one: &Opened| one.from.is_some() || self.why(one).is_some() || self.says_opens(one);
     self.thread.as_ref().is_some_and(says)
   }

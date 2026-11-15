@@ -758,7 +758,7 @@ impl Model {
     let says = self.armed_says().map(|one| (one, t.attention)).or(notice);
     let (does, name) = match (&self.aim, &self.thread) {
       _ if self.form().is_some() => (Does::Empty, "refuse"),
-      (None, Some(_)) if self.says_leaves() => (Does::Close, "back"),
+      (None, Some(_)) if self.leaves() => (Does::Close, "back"),
       (None, Some(opened)) if !opened.docked().1.is_empty() => (Does::Agent, "agents"),
       (_, Some(_)) => (Does::Commands, "commands"),
       (_, None) if self.listed() => (Does::Commands, "commands"),

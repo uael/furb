@@ -15,7 +15,7 @@ use unicode_width::UnicodeWidthStr;
 
 use furb_client::Target;
 
-use crate::{input::Draft, line::cut, model::Model};
+use crate::{input::Draft, line::cut, model::Model, pick::Pick};
 
 /// The history of the input: the target that it was asked for, whether the window asked it, and
 /// the history once the machine gave it.
@@ -102,7 +102,31 @@ impl Model {
     if self.walk.as_ref().is_some_and(|walk| self.walk_text(walk) != Some(&text)) {
       self.walk = None;
     }
+    // A slash that starts an empty input of a message opens the commands, as the key of the
+    // commands does; a close of that list gives the slash back, so a message can start with one.
+    let slash = self.draft.text.is_empty()
+      && text == "/"
+      && !self.draft.python
+      && self.form().is_none()
+      && self.picker.is_none();
     self.draft.text = text;
+    if slash {
+      self.draft.text.clear();
+      self.restore = Some(String::new());
+      self.pick(Pick::Commands);
+      if let Some(picker) = self.picker.as_mut() {
+        picker.slashed = true;
+      }
+    }
+  }
+
+  /// The list part closed: a list that a slash opened gives the slash back to the input.
+  pub(crate) fn unpicked(&mut self) {
+    if self.picker.take().is_some_and(|one| one.slashed) {
+      self.draft.text.clear();
+      self.draft.text.push('/');
+      self.restore = Some("/".to_owned());
+    }
   }
 
   /// The rest of the newest text that he sent here that starts with what he wrote, while no walk
