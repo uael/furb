@@ -344,7 +344,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
       steps: &[
         step("a", &[Act::Type("Run the slow script."), Act::Key("Enter")], "⎋ ⎋ stop"),
-        step("b", &[], "step 10 of 10"),
+        // The last line that the command writes shows while it still runs, so the step waits
+        // for the close of the thread: a message sent before it would go to the word that awaits.
+        step("b", &[], "✓ Resolved"),
         step(
           "c",
           &[Act::Type("Print three hundred lines."), Act::Key("Enter")],
