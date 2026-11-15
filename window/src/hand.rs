@@ -545,7 +545,7 @@ fn filed(app: &App, window: &Shared, text: &str) -> bool {
 /// An image put in the input at its caret as its mark, or why it does not go.
 fn pictured(app: &App, window: &Shared, bytes: &[u8]) {
   let put = match images::kind(bytes) {
-    Ok((_, extension)) => tell(app, window, |model| model.client.paste_image(bytes, extension)),
+    Ok((_, suffix)) => tell(app, window, |model| model.client.paste_image(bytes, suffix)),
     Err(why) => Err(why.to_string()),
   };
   match put {

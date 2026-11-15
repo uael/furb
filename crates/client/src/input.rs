@@ -167,15 +167,15 @@ impl Client {
     self.restore = Some(last);
   }
 
-  /// An image put in the input by its bytes and the extension of its type: the mark that the
-  /// input takes at its caret, or why it does not go. A frame of the protocol holds the image.
-  pub fn paste_image(&mut self, bytes: &[u8], extension: &str) -> Result<String, String> {
+  /// An image put in the input by its bytes and the suffix of the name of its type: the mark that
+  /// the input takes at its caret, or why it does not go. A frame of the protocol holds the image.
+  pub fn paste_image(&mut self, bytes: &[u8], suffix: &str) -> Result<String, String> {
     let data = STANDARD.encode(bytes);
     // The frame holds the data and the few names of the verb around it.
     if data.len() + 1024 > BOUND {
       return Err(format!("An image of at most {} MiB goes to a session.", (BOUND >> 20) * 3 / 4));
     }
-    let name = format!("image-{}.{extension}", self.draft.images.len() + 1);
+    let name = format!("image-{}.{suffix}", self.draft.images.len() + 1);
     let pasted = Pasted { name, data, named: None };
     let mark = pasted.mark();
     self.draft.images.push(pasted);

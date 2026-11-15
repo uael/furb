@@ -246,10 +246,10 @@ async def test_a_kit_speaks_to_its_life_on_the_stdin_and_the_stdout_of_its_proce
   assert kit.stdin is not None and kit.stdout is not None
 
   async def said() -> dict[str, object]:
-    return json.loads(await asyncio.wait_for(kit.stdout.readline(), 10))  # ty: ignore[possibly-missing-attribute]
+    return json.loads(await asyncio.wait_for(kit.stdout.readline(), 10))  # ty: ignore[unresolved-attribute]
 
   def told(frame: Mapping[str, object]) -> None:
-    kit.stdin.write(json.dumps(frame).encode() + b"\n")  # ty: ignore[possibly-missing-attribute]
+    kit.stdin.write(json.dumps(frame).encode() + b"\n")  # ty: ignore[unresolved-attribute]
 
   for _ in range(3):
     verb = await said()

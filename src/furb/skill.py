@@ -247,6 +247,9 @@ class Skill:
       why = "This life gives no config to a kit: it is older than the capability config."
       raise Refused(why)
     answer = await self.say({"verb": "config", "config": {"action": "get"}})
+    if answer["answer"] != "values":
+      why = f"The life gave {answer['answer']}, and no values."
+      raise Refused(why)
     keys = [one for one in answer["data"] if isinstance(one, dict) and one.get("skill") == self.name]
     return {one["key"][1]: one["value"] for one in keys}
 

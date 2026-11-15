@@ -629,8 +629,8 @@ pub enum Config {
   /// Each key of the configs with the value that wins for it and its layer.
   Get,
   /// A key of a layer, the layer of the scope of the key when none is named, set to a value, or
-  /// taken out with no value, then a stand of the life on the configs. A change that the catalog refuses puts its
-  /// config back as it was, and the life does not stand.
+  /// taken out with no value, then a stand of the life on the configs. A change that the catalog
+  /// refuses puts its config back as it was, and the life does not stand.
   Set { key: Vec<String>, value: Option<Value>, layer: Option<Layer> },
 }
 
