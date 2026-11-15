@@ -76,8 +76,8 @@ use crate::{
   opens::Heard,
   processes::{self, Played},
   protocol::{
-    Answer, BOUND, Card, Config, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer,
-    Request, Verb,
+    Answer, BOUND, Card, Config, Draft, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL,
+    Peer, Request, Verb,
   },
   reads::{Read, Readers},
   records,
@@ -925,19 +925,13 @@ impl Lives {
       Verb::Skills { life } => Ok(Answer::Skills(self.skills(&life))),
       Verb::Attach { life, from } => self.attach(&life, from, peer, outbox),
       Verb::Detach { life } => self.detach(&life, outbox),
-      Verb::Pin { life, holder } => living(&mut self.held, &life).map(|(_, holders)| {
-        holders.pin(holder);
-        Answer::Done
-      }),
-      Verb::Unpin { life, holder } => living(&mut self.held, &life).and_then(|(_, holders)| {
-        let unpinned = holders.unpin(&holder);
-        unpinned
-          .then_some(Answer::Done)
-          .ok_or(ProtocolError::Unpinned { life: life.clone(), holder })
-      }),
+      Verb::Pin { life, holder } => self.pin(&life, holder),
+      Verb::Unpin { life, holder } => self.unpin(&life, holder),
+      Verb::End { life } => self.end(&life, outbox),
       Verb::Presence { life } => {
         living(&mut self.held, &life).map(|(_, holders)| Answer::Presence(holders.presence()))
       }
+      Verb::Writes { life, draft } => self.writes(&life, draft, outbox),
       Verb::Answered { life, ask, turn, why } => self.answerer(&life).and_then(|one| {
         let turn = match turn {
           Some(turn) => parsed(&turn.to_string()).map_err(|fault| fault.to_string()),
@@ -1124,7 +1118,7 @@ impl Lives {
       let life = life.to_owned();
       self.views.attach(Skill { life, name, outbox: outbox.clone(), told });
     } else {
-      holders.attach(Window { peer, outbox: outbox.clone(), told });
+      holders.attach(Window { peer, outbox: outbox.clone(), told, writes: None });
       holders.present(life);
       self.carded(life);
     }
@@ -1149,6 +1143,56 @@ impl Lives {
       .ok_or(ProtocolError::Unattached { life: life.to_owned() })
   }
 
+  /// A pin that holds a life, which its cards say.
+  fn pin(&mut self, life: &str, holder: String) -> Result<Answer, ProtocolError> {
+    let pinned = living(&mut self.held, life).map(|(_, holders)| holders.pin(holder));
+    self.carded(life);
+    pinned.map(|()| Answer::Done)
+  }
+
+  /// A pin let go, which its cards say, or its refusal when no pin of that holder holds the life.
+  fn unpin(&mut self, life: &str, holder: String) -> Result<Answer, ProtocolError> {
+    let unpinned = living(&mut self.held, life).map(|(_, holders)| holders.unpin(&holder));
+    self.carded(life);
+    let gone = || ProtocolError::Unpinned { life: life.to_owned(), holder };
+    unpinned.and_then(|held| held.then_some(Answer::Done).ok_or_else(gone))
+  }
+
+  /// The draft that the person of a window writes, told to each window of the life.
+  fn writes(
+    &mut self,
+    life: &str,
+    draft: Option<Draft>,
+    outbox: &Outbox,
+  ) -> Result<Answer, ProtocolError> {
+    let (_, holders) = living(&mut self.held, life)?;
+    if !holders.writes(outbox, draft) {
+      return Err(ProtocolError::Unattached { life: life.to_owned() });
+    }
+    holders.present(life);
+    Ok(Answer::Done)
+  }
+
+  /// A life that a peer ends now, with its image, whatever pins hold it, unless a window of
+  /// another peer shows it. Its windows hear its end as at the end of its grace.
+  fn end(&mut self, life: &str, outbox: &Outbox) -> Result<Answer, ProtocolError> {
+    let closed = || ProtocolError::Closed { life: life.to_owned() };
+    let held = self.held.get_mut(life).ok_or_else(closed)?;
+    match &held.stage {
+      Stage::Living(holders) if holders.elsewhere(outbox) => {
+        Err(ProtocolError::Shown { life: life.to_owned() })
+      }
+      Stage::Living(_) => {
+        held.stage = Stage::Ending(Vec::new());
+        let handle = held.handle.clone();
+        tokio::spawn(async move { end(&handle).await });
+        self.carded(life);
+        Ok(Answer::Done)
+      }
+      Stage::Ending(_) => Err(closed()),
+    }
+  }
+
   /// A view that a window mounts in a slot of a life that it holds.
   fn mount(&mut self, mount: Mount, peer: &Peer, outbox: &Outbox) -> Result<Answer, ProtocolError> {
     let (_, holders) = living(&mut self.held, &mount.life)?;
@@ -1170,15 +1214,18 @@ impl Lives {
     for one in &found {
       for life in &one.records {
         let workspace = Some(one.workspace.clone());
-        let (held, open, watched, name) = (false, false, false, None);
-        listed.push(Listed { life: life.clone(), workspace, held, open, watched, name });
+        let (held, open, watched, pins, name) = (false, false, false, Vec::new(), None);
+        listed.push(Listed { life: life.clone(), workspace, held, open, watched, pins, name });
       }
     }
     for (life, held) in &self.held {
       let (open, name) = (matches!(held.stage, Stage::Living(_)), held.handle.name());
-      let watched = matches!(&held.stage, Stage::Living(holders) if !holders.presence().is_empty());
+      let (watched, pins) = match &held.stage {
+        Stage::Living(holders) => (!holders.presence().is_empty(), holders.pins()),
+        Stage::Ending(_) => (false, Vec::new()),
+      };
       if let Some(one) = listed.iter_mut().find(|one| &one.life == life) {
-        (one.held, one.open, one.watched, one.name) = (true, open, watched, name);
+        (one.held, one.open, one.watched, one.pins, one.name) = (true, open, watched, pins, name);
         continue;
       }
       // A record that a life opens stands in the list before the disk holds it.
@@ -1186,7 +1233,8 @@ impl Lives {
       let workspace = found.iter().find(|one| Some(one.folder.as_path()) == at);
       let workspace = workspace.map(|one| one.workspace.clone());
       let workspace = workspace.or_else(|| records::checkout(Path::new(life)));
-      listed.push(Listed { life: life.clone(), workspace, held: true, open, watched, name });
+      let held = true;
+      listed.push(Listed { life: life.clone(), workspace, held, open, watched, pins, name });
     }
     listed.sort_by(|one, other| one.life.cmp(&other.life));
     listed
@@ -1229,11 +1277,12 @@ impl Lives {
   /// index stands. So no list waits for the fold of a record, and no card comes that then goes.
   fn cards_of(&mut self, life: &str, project: Option<&String>) -> Vec<Card> {
     let record = Path::new(life);
-    let viewers = match self.held.get(life) {
+    let (viewers, pins) = match self.held.get(life) {
       Some(Held { stage: Stage::Living(holders), .. }) => {
-        holders.presence().into_iter().map(|peer| peer.login).collect()
+        let viewers = holders.presence().into_iter().map(|one| one.peer.login).collect();
+        (viewers, holders.pins())
       }
-      _ => Vec::new(),
+      _ => (Vec::new(), Vec::new()),
     };
     let held = self.held.contains_key(life);
     let card = |session: Option<String>, since, thread| Card {
@@ -1242,6 +1291,7 @@ impl Lives {
       project: project.cloned(),
       held,
       viewers: viewers.clone(),
+      pins: pins.clone(),
       since,
       thread,
     };

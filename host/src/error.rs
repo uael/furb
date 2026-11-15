@@ -89,6 +89,9 @@ pub enum ProtocolError {
   Relative { life: String },
   #[error("the peer did not attach the life on the record {life}")]
   Unattached { life: String },
+  /// A peer may not end a life that the window of another peer shows.
+  #[error("another window shows the life on the record {life}")]
+  Shown { life: String },
   #[error("no pin of the holder {holder} holds the life on the record {life}")]
   Unpinned { life: String, holder: String },
   /// A turn or a write for a request of a model that the life does not wait for.

@@ -28,6 +28,7 @@ fn card(life: &str, title: &str, standing: Standing, since: u64) -> Card {
     project: None,
     held: true,
     viewers: Vec::new(),
+    pins: Vec::new(),
     since,
     thread,
   }
@@ -104,9 +105,10 @@ fn a_loss_gives_each_message_on_its_way_back_to_the_input_and_a_new_hello_hears_
   assert!(!model.send("and the seed?".to_owned()));
   assert!(model.outgoing.is_empty());
   // A new connection says its hello, then its cards.
-  let peer = Peer { login: "ada".to_owned(), role: Role::Write, kind: Kind::Window, name: None };
+  let peer =
+    Peer { login: "ada".to_owned(), role: Role::Write, kind: Kind::Window, name: None, view: 1 };
   let (machine, build) = ("mac".to_owned(), String::new());
-  let welcome = Answer::Welcome { protocol: PROTOCOL, peer, machine, build, view: 0 };
+  let welcome = Answer::Welcome { protocol: PROTOCOL, peer, machine, build };
   assert!(model.hear(0, Ok(Frame::Reply { id: 8, answer: welcome })));
   assert_eq!(model.machines[0].link, Link::Dialing);
   assert!(model.hear(0, Ok(Frame::Reply { id: 9, answer: Answer::Cards(Vec::new()) })));

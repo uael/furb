@@ -49,6 +49,7 @@ impl Kit {
       role: Role::Write,
       kind: Kind::Skill,
       name: Some(self.name.clone()),
+      view: 0,
     };
     let attach = Verb::Attach { life: self.life.clone(), from: Seq::MAX };
     if self.inside.answer(&peer, attach, &outbox).await.is_err() {

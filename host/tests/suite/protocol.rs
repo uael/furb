@@ -22,8 +22,8 @@ use std::{
 use furb_host::{
   Host, Outbox, ProtocolError, fixed,
   protocol::{
-    Answer, Axis, BOUND, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Layer, Mount, Node,
-    PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect, ViewEvent,
+    Answer, Axis, BOUND, Config, Dispose, Draft, Effect, Frame, Gesture, Hello, Kind, Layer, Mount,
+    Node, PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect, ViewEvent,
     schema,
   },
   serve,
@@ -73,7 +73,9 @@ fn verbs() -> Vec<Verb> {
     Verb::Detach { life: life() },
     Verb::Pin { life: life(), holder: "job".to_owned() },
     Verb::Unpin { life: life(), holder: "job".to_owned() },
+    Verb::End { life: life() },
     Verb::Presence { life: life() },
+    Verb::Writes { life: life(), draft: Some(Draft { on: Some(id()) }) },
     Verb::Get { life: life(), act: id() },
     Verb::Peek { life: life(), act: id() },
     Verb::Transcript { life: life(), on: on(), of: Some("bash".to_owned()) },
@@ -301,15 +303,18 @@ async fn hello_asking(client: &mut Client<DuplexStream>, role: Role) -> Frame {
   client.ask(0, Verb::Hello(hello)).await
 }
 
-/// The peer of a window as a welcome names it.
+/// The peer of a window as a welcome names it, with no view: the daemon counts the views, and a
+/// test of the daemon holds that two peers have two views.
 fn welcomed(role: Role) -> Peer {
-  Peer { login: "uael".to_owned(), role, kind: Kind::Window, name: None }
+  Peer { login: "uael".to_owned(), role, kind: Kind::Window, name: None, view: 0 }
 }
 
-/// The peer that the welcome of a daemon of this protocol names.
+/// The peer that the welcome of a daemon of this protocol names, with no view.
 fn peer(frame: Frame) -> Peer {
   match frame {
-    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => peer,
+    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => {
+      Peer { view: 0, ..peer }
+    }
     other => panic!("no welcome: {other:?}"),
   }
 }
@@ -361,6 +366,8 @@ fn each_verb_that_writes_needs_the_role_to_write() {
     "open",
     "pin",
     "unpin",
+    "end",
+    "writes",
     "prompt",
     "answer",
     "pause",
@@ -456,6 +463,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "afa6a63760800b3bf4ef28664998d249ba7e70c74303bd276055fc9fd33f4130",
   "7d3c9dbf00b91ac7e84589fbef485f85aa2f5541ea30e82ca975b0514208d2b9",
   "ea708f4ddfeb6f4f9f9ea7d609c28e6efd38fbea622ecebf32a0c49444ce7cc4",
+  "9dfb40bcf853f5a09baf707eaf62dbd84bb296e272d15e14c6dee5d3409f147f",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

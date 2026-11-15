@@ -47,6 +47,7 @@ fn failed(system: System) -> Vec<String> {
     project: None,
     held: false,
     viewers: Vec::new(),
+    pins: Vec::new(),
     since: 0,
     thread,
   };

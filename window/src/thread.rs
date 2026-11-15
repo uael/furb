@@ -657,7 +657,16 @@ impl Model {
       readers: vec![format!("{OPERATOR}/{}", told.login)],
     };
     let (life, project, since) = (key.1.clone(), self.cwd(key.0, &key.1), self.second());
-    let card = Card { life, session, project, held: true, viewers: Vec::new(), since, thread };
+    let card = Card {
+      life,
+      session,
+      project,
+      held: true,
+      viewers: Vec::new(),
+      pins: Vec::new(),
+      since,
+      thread,
+    };
     Some((key.0, card))
   }
 

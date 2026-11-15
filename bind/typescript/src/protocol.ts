@@ -60,7 +60,16 @@ export type Request1 =
     }
   | {
       life: string;
+      verb: "end";
+    }
+  | {
+      life: string;
       verb: "presence";
+    }
+  | {
+      life: string;
+      draft?: Draft | null;
+      verb: "writes";
     }
   | {
       life: string;
@@ -472,7 +481,7 @@ export type Frame =
     }
   | {
       life: string;
-      peers: Peer[];
+      peers: Present[];
       frame: "presence";
     }
   | {
@@ -556,7 +565,6 @@ export type Answer =
         peer: Peer;
         machine: string;
         build: string;
-        view: number;
       };
     }
   | {
@@ -597,7 +605,7 @@ export type Answer =
     }
   | {
       answer: "presence";
-      data: Peer[];
+      data: Present[];
     }
   | {
       answer: "handed";
@@ -894,6 +902,10 @@ export type ProtocolError =
     }
   | {
       life: string;
+      error: "shown";
+    }
+  | {
+      life: string;
       holder: string;
       error: "unpinned";
     }
@@ -1015,6 +1027,12 @@ export interface Hello {
   role?: Role | null;
 }
 /**
+ * Where a person writes a draft: in a thread, or for a new thread when it names none.
+ */
+export interface Draft {
+  on?: string | null;
+}
+/**
  * How many of the last prompts of a thread, and of the last rungs of each ladder, show.
  */
 export interface Shown {
@@ -1030,13 +1048,15 @@ export interface Run {
 }
 /**
  * A peer as the daemon knows it after its hello: the login that its transport proved, its role,
- * its kind, and the name of a skill.
+ * its kind, the name of a skill, and the id of its view, which names this connection among those
+ * of its login, so two windows of one person are two views. The id stands in no record.
  */
 export interface Peer {
   login: string;
   role: Role;
   kind: Kind;
   name?: string | null;
+  view: number;
 }
 /**
  * A record of the machine: the main checkout of the workspace whose sessions hold it, when the
@@ -1055,6 +1075,11 @@ export interface Listed {
    * Whether a window of any connection holds the life now: a pin holds it with no window.
    */
   watched?: boolean;
+  /**
+   * The holder of each pin of the life, so a life that only a pin holds stands in the background,
+   * and a life with no holder, which ends at its grace, does not.
+   */
+  pins?: string[];
   name?: string | null;
 }
 /**
@@ -1072,6 +1097,10 @@ export interface Card {
   project?: string | null;
   held: boolean;
   viewers: string[];
+  /**
+   * The holder of each pin of the life, as `list` gives it.
+   */
+  pins: string[];
   since: number;
   prompt: string;
   title: string;
@@ -1096,6 +1125,17 @@ export interface Sent {
 export interface Skill {
   name: string;
   description: string;
+}
+/**
+ * A window on a life now: its peer, and the draft that its person writes, when he writes one.
+ */
+export interface Present {
+  login: string;
+  role: Role;
+  kind: Kind;
+  name?: string | null;
+  view: number;
+  writes?: Draft | null;
 }
 /**
  * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
@@ -1471,4 +1511,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 32;
+export const PROTOCOL = 33;

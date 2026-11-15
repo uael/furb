@@ -265,6 +265,23 @@
         },
         {
           "type": "object",
+          "description": "The end of a life now, whatever pins hold it, as the grace ends a life with no holder: it\nwrites its image, each of its windows hears its end, and its record opens again at its tip.\nIt is refused while a window of another peer holds the life, so no view ends a life that\nanother view shows.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "end"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
           "description": "Who is attached to a life now.",
           "properties": {
             "life": {
@@ -273,6 +290,33 @@
             "verb": {
               "type": "string",
               "const": "presence"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "description": "The draft that the person of the window writes now, or none once it is empty, which each\nwindow of the life hears in the presence. It is no fact, and it goes with the window.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "draft": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Draft"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "writes"
             }
           },
           "required": [
@@ -1412,6 +1456,18 @@
       ],
       "description": "The first frame of a peer: the protocol that it speaks, its kind, the name of a skill, and the\nrole that it asks. The daemon gives the peer the lesser of that role and the role that its\ntransport proved, so a peer asks `read` to be a reader on any transport. With no role, the peer\nhas the role that its transport proved."
     },
+    "Draft": {
+      "type": "object",
+      "properties": {
+        "on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "description": "Where a person writes a draft: in a thread, or for a new thread when it names none."
+    },
     "Config": {
       "oneOf": [
         {
@@ -2041,7 +2097,7 @@
             "peers": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/Peer"
+                "$ref": "#/definitions/Present"
               }
             },
             "frame": {
@@ -2401,19 +2457,13 @@
                 },
                 "build": {
                   "type": "string"
-                },
-                "view": {
-                  "type": "integer",
-                  "format": "uint64",
-                  "minimum": 0
                 }
               },
               "required": [
                 "protocol",
                 "peer",
                 "machine",
-                "build",
-                "view"
+                "build"
               ]
             }
           },
@@ -2421,7 +2471,7 @@
             "answer",
             "data"
           ],
-          "description": "The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name\nof the machine of the daemon, its build, and the id of the view of the peer, which names this\nconnection among those of its login and stands in no record."
+          "description": "The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name\nof the machine of the daemon, and its build."
         },
         {
           "type": "object",
@@ -2591,7 +2641,7 @@
             "data": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/Peer"
+                "$ref": "#/definitions/Present"
               }
             }
           },
@@ -2773,14 +2823,20 @@
             "string",
             "null"
           ]
+        },
+        "view": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
         "login",
         "role",
-        "kind"
+        "kind",
+        "view"
       ],
-      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a skill."
+      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, the name of a skill, and the id of its view, which names this connection among those\nof its login, so two windows of one person are two views. The id stands in no record."
     },
     "Listed": {
       "type": "object",
@@ -2804,6 +2860,14 @@
           "type": "boolean",
           "description": "Whether a window of any connection holds the life now: a pin holds it with no window.",
           "default": false
+        },
+        "pins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The holder of each pin of the life, so a life that only a pin holds stands in the background,\nand a life with no holder, which ends at its grace, does not.",
+          "default": []
         },
         "name": {
           "type": [
@@ -2846,6 +2910,13 @@
             "type": "string"
           }
         },
+        "pins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The holder of each pin of the life, as `list` gives it."
+        },
         "since": {
           "type": "integer",
           "format": "uint64",
@@ -2884,6 +2955,7 @@
         "life",
         "held",
         "viewers",
+        "pins",
         "since",
         "prompt",
         "title",
@@ -3049,6 +3121,48 @@
         "description"
       ],
       "description": "A skill that the root of a life was told of, by the last read of `skills://` there: its name,\nand what it is for."
+    },
+    "Present": {
+      "type": "object",
+      "properties": {
+        "login": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/definitions/Role"
+        },
+        "kind": {
+          "$ref": "#/definitions/Kind"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "view": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "writes": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Draft"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "login",
+        "role",
+        "kind",
+        "view"
+      ],
+      "description": "A window on a life now: its peer, and the draft that its person writes, when he writes one."
     },
     "Handed": {
       "type": "object",
@@ -4700,6 +4814,23 @@
             "life": {
               "type": "string"
             },
+            "error": {
+              "type": "string",
+              "const": "shown"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ],
+          "description": "A peer may not end a life that the window of another peer shows."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "holder": {
               "type": "string"
             },
@@ -5189,5 +5320,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 32
+  "x-protocol": 33
 }

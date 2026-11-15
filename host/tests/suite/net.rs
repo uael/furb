@@ -135,15 +135,18 @@ fn loopback() -> SocketAddr {
   "127.0.0.1:0".parse().unwrap()
 }
 
-/// The peer of a window as a welcome names it.
+/// The peer of a window as a welcome names it, with no view: the daemon counts the views, and a
+/// test of the daemon holds that two peers have two views.
 fn welcomed(login: &str, role: Role) -> Peer {
-  Peer { login: login.to_owned(), role, kind: Kind::Window, name: None }
+  Peer { login: login.to_owned(), role, kind: Kind::Window, name: None, view: 0 }
 }
 
-/// The peer that the welcome of a daemon of this protocol names.
+/// The peer that the welcome of a daemon of this protocol names, with no view.
 fn peer(frame: Frame) -> Peer {
   match frame {
-    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => peer,
+    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => {
+      Peer { view: 0, ..peer }
+    }
     other => panic!("no welcome: {other:?}"),
   }
 }

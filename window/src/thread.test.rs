@@ -50,6 +50,7 @@ fn opened(end: Page) -> Model {
     project: None,
     held: true,
     viewers: Vec::new(),
+    pins: Vec::new(),
     since: 0,
     thread,
   };

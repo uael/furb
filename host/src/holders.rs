@@ -7,16 +7,17 @@ use std::{collections::BTreeSet, time::Duration};
 use tokio::{task::AbortHandle, time::Instant};
 
 use crate::{
-  protocol::{Frame, Peer},
+  protocol::{Draft, Frame, Peer, Present},
   serve::Outbox,
 };
 
-/// A window that attached a life: its peer, the outbox of that peer, and the task that pushes the
-/// events of the life to it.
+/// A window that attached a life: its peer, the outbox of that peer, the task that pushes the
+/// events of the life to it, and the draft that its person writes.
 pub(crate) struct Window {
   pub(crate) peer: Peer,
   pub(crate) outbox: Outbox,
   pub(crate) told: AbortHandle,
+  pub(crate) writes: Option<Draft>,
 }
 
 /// The holders of a life, and the moment when it ends while it has none.
@@ -51,6 +52,26 @@ impl Holders {
     self.windows.iter().any(|one| one.outbox.same_channel(outbox))
   }
 
+  /// Whether a window of a peer other than the one of an outbox holds the life.
+  pub(crate) fn elsewhere(&self, outbox: &Outbox) -> bool {
+    self.windows.iter().any(|one| !one.outbox.same_channel(outbox))
+  }
+
+  /// The draft that the person of the window of an outbox writes now: whether that window holds
+  /// the life.
+  pub(crate) fn writes(&mut self, outbox: &Outbox, draft: Option<Draft>) -> bool {
+    let Some(window) = self.windows.iter_mut().find(|one| one.outbox.same_channel(outbox)) else {
+      return false;
+    };
+    window.writes = draft;
+    true
+  }
+
+  /// The holder of each pin, in the order of their names.
+  pub(crate) fn pins(&self) -> Vec<String> {
+    self.pins.iter().cloned().collect()
+  }
+
   /// The window of a peer detached, which hears no event of the life more: whether it was attached.
   pub(crate) fn detach(&mut self, outbox: &Outbox) -> bool {
     let Some(at) = self.windows.iter().position(|one| one.outbox.same_channel(outbox)) else {
@@ -73,9 +94,10 @@ impl Holders {
     held
   }
 
-  /// The peer of each window, in the order that they attached.
-  pub(crate) fn presence(&self) -> Vec<Peer> {
-    self.windows.iter().map(|one| one.peer.clone()).collect()
+  /// Each window with its draft, in the order that they attached.
+  pub(crate) fn presence(&self) -> Vec<Present> {
+    let present = |one: &Window| Present { peer: one.peer.clone(), writes: one.writes.clone() };
+    self.windows.iter().map(present).collect()
   }
 
   /// Who is attached now, pushed to each window of the life. A peer that is gone takes no frame,

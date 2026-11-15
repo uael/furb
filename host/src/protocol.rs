@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 32;
+pub const PROTOCOL: u32 = 33;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -55,13 +55,29 @@ pub struct Hello {
 }
 
 /// A peer as the daemon knows it after its hello: the login that its transport proved, its role,
-/// its kind, and the name of a skill.
+/// its kind, the name of a skill, and the id of its view, which names this connection among those
+/// of its login, so two windows of one person are two views. The id stands in no record.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Peer {
   pub login: String,
   pub role: Role,
   pub kind: Kind,
   pub name: Option<String>,
+  pub view: u64,
+}
+
+/// A window on a life now: its peer, and the draft that its person writes, when he writes one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Present {
+  #[serde(flatten)]
+  pub peer: Peer,
+  pub writes: Option<Draft>,
+}
+
+/// Where a person writes a draft: in a thread, or for a new thread when it names none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Draft {
+  pub on: Option<String>,
 }
 
 /// One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
@@ -142,9 +158,22 @@ pub enum Verb {
     life: String,
     holder: String,
   },
+  /// The end of a life now, whatever pins hold it, as the grace ends a life with no holder: it
+  /// writes its image, each of its windows hears its end, and its record opens again at its tip.
+  /// It is refused while a window of another peer holds the life, so no view ends a life that
+  /// another view shows.
+  End {
+    life: String,
+  },
   /// Who is attached to a life now.
   Presence {
     life: String,
+  },
+  /// The draft that the person of the window writes now, or none once it is empty, which each
+  /// window of the life hears in the presence. It is no fact, and it goes with the window.
+  Writes {
+    life: String,
+    draft: Option<Draft>,
   },
   Get {
     life: String,
@@ -399,7 +428,9 @@ impl Verb {
       | Self::Detach { life }
       | Self::Pin { life, .. }
       | Self::Unpin { life, .. }
+      | Self::End { life }
       | Self::Presence { life }
+      | Self::Writes { life, .. }
       | Self::Get { life, .. }
       | Self::Peek { life, .. }
       | Self::Ended { life, .. }
@@ -530,7 +561,7 @@ pub enum Frame {
   /// One event of a life that the peer attached, under its place in the log of the life.
   Event { life: String, seq: Seq, event: Event },
   /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
-  Presence { life: String, peers: Vec<Peer> },
+  Presence { life: String, peers: Vec<Present> },
   /// A change of the cards of one record, pushed to each peer that asked the cards: each card that
   /// is new or that changed, and the prompt of each card that the record holds no more.
   Cards { life: String, changed: Vec<Card>, gone: Vec<String> },
@@ -582,14 +613,12 @@ impl Frame {
 pub enum Answer {
   Done,
   /// The answer to a hello: the protocol of the daemon, the peer as the daemon knows it, the name
-  /// of the machine of the daemon, its build, and the id of the view of the peer, which names this
-  /// connection among those of its login and stands in no record.
+  /// of the machine of the daemon, and its build.
   Welcome {
     protocol: u32,
     peer: Peer,
     machine: String,
     build: String,
-    view: u64,
   },
   Lives(Vec<Listed>),
   /// The cards of the machine.
@@ -608,7 +637,7 @@ pub enum Answer {
     repr: String,
     value: Value,
   },
-  Presence(Vec<Peer>),
+  Presence(Vec<Present>),
   /// The lives that a daemon gave at its handover.
   Handed(Vec<Handed>),
   /// What waits for the operator.
@@ -659,6 +688,10 @@ pub struct Listed {
   /// Whether a window of any connection holds the life now: a pin holds it with no window.
   #[serde(default)]
   pub watched: bool,
+  /// The holder of each pin of the life, so a life that only a pin holds stands in the background,
+  /// and a life with no holder, which ends at its grace, does not.
+  #[serde(default)]
+  pub pins: Vec<String>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub name: Option<String>,
 }
@@ -677,6 +710,8 @@ pub struct Card {
   pub project: Option<String>,
   pub held: bool,
   pub viewers: Vec<String>,
+  /// The holder of each pin of the life, as `list` gives it.
+  pub pins: Vec<String>,
   pub since: u64,
   #[serde(flatten)]
   pub thread: view::Card,

@@ -76,13 +76,13 @@ The first frame of a peer is its hello:
 - `role` is optional. The daemon gives the peer the lesser of the role that it asks and the role that its transport
   proved, so a peer that asks `read` is a reader on any transport, and a peer never has more than its transport
   proved. With no `role`, the peer has the role that its transport proved.
-- The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name. The
-  answer also names the `machine` of the daemon, without its domain, the `build` of the daemon, which is its version
-  of furb, and the `view` of the peer: an id that names this connection among the connections of its login. The id
-  stands in no record.
+- The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind, its name and its
+  `view`, an id that names this connection among the connections of its login, so two windows of one person are two
+  views. The id stands in no record. The answer also names the `machine` of the daemon, without its domain, and the
+  `build` of the daemon, which is its version of furb.
 
   ```json
-  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}, "machine": "studio", "build": "0.4.2", "view": 7}}
+  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null, "view": 7}, "machine": "studio", "build": "0.4.2"}}
   ```
 
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A first frame
@@ -111,7 +111,9 @@ daemon answers requests in any order.
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
 | `pin`, `unpin` | `life`, `holder` | write |
+| `end` | `life` | write |
 | `presence` | `life` | read |
+| `writes` | `life`, `draft` (`{"on": thread or null}`, or null) | write |
 | `get`, `peek` | `life`, `act` | read |
 | `ended` | `life`, `act` | read |
 | `transcript` | `life`, `on`, `of` | read |
@@ -180,7 +182,9 @@ daemon answers requests in any order.
   record that a life of the daemon holds, whose `workspace` is the checkout whose `.furb/sessions` holds it when the
   list names no workspace for it. `held` says whether a life holds the record now, and `open` whether that
   life lives and does not end, and `watched` whether a window of any connection holds the life, which a pin
-  does not make, so a window finds the sessions that no window holds from the one list. A window lists its sessions from it, so a window on another machine lists them the
+  does not make, so a window finds the sessions that no window holds from the one list. `pins` names the holder of
+  each pin of the life: a life that a pin holds and no window holds stands in the background, and a life that
+  nothing holds is in its grace, and ends. A window lists its sessions from it, so a window on another machine lists them the
   same way.
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
@@ -260,8 +264,9 @@ daemon answers requests in any order.
   - `model`, the model that wrote its last word, and `agents`, how many threads work under it;
   - `readers`, the site of each operator who read the thread to its end: `operator` for each of them, or
     `operator/<login>` for one member;
-  - `held`, whether a life holds the record now, and `viewers`, the login of each person whose window holds that
-    life. A card that is `held` with no viewer works with no view.
+  - `held`, whether a life holds the record now, `viewers`, the login of each person whose window holds that
+    life, and `pins`, the holder of each pin of it, as `list` gives them. A card that is `held` with no viewer works
+    with no view.
 
   A frame `cards` names one `life`, each card of it that is new or that `changed`, and the `prompt` of each card
   that is `gone`. A life tells its cards once in 250 ms at most, whatever the count of its events.
@@ -330,8 +335,11 @@ daemon answers requests in any order.
   or a retry of its call, and then at most once in 33 ms. What a model thought, when each work began and when each agent
   ended are no facts of the record: the life holds them while it lives, so a life that opens again shows no thought of
   the words before it.
-- After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
-  and its `peers`, each window that is attached now. Presence is no fact of the record.
+- After each `attach`, `detach` and `writes`, the daemon pushes to each window of the life a frame `presence` with
+  the `life` and its `peers`, each window that is attached now, in the order that they attached: its peer, with its
+  `view`, and `writes`, the draft that its person writes, in the thread `on`, or for a new thread when `on` is null,
+  or null when he writes none. A window says `writes` when its draft starts and again with null when it empties, and
+  the daemon drops the draft of a window that leaves. Presence is no fact of the record.
 - While a life opens, the daemon pushes to each window of the life a frame
   `opening` with the `life`, the `stage` of the open, and two numbers: `done`, the work done of that stage, and `of`,
   the work known of it. A window draws a progress bar from them.
@@ -401,6 +409,9 @@ once it listens. A second daemon refuses to start there.
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
   otherwise, writes its image and ends, and `list` gives it as not `open` from then on. An `open` of a life
   that ends waits for its end, then opens it again from its image.
+- `end` ends a life now, as its grace would: it writes its image, each pin of it goes, each of its windows hears the
+  event `ended`, and its record opens again at its tip. It is refused with `shown` while a window of another peer
+  holds the life, so no view ends a life that another view shows.
 - The daemon of a machine ends once it holds no peer and no life for its grace, so it does not outlive the windows
   that started it; a window that dials later starts a new one. A daemon waits for its first peer before this bound
   runs, and a daemon with a door on the tailnet does not end by it.

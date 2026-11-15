@@ -145,7 +145,8 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
     Some(Ok(Request { id, verb: Verb::Hello(hello) })) if hello.protocol == PROTOCOL => {
       let asked = hello.role;
       let role = asked.map_or(who.role, |asked| asked.min(who.role));
-      let peer = Peer { login: who.login, role, kind: hello.kind, name: hello.name };
+      let view = VIEWS.fetch_add(1, Ordering::Relaxed);
+      let peer = Peer { login: who.login, role, kind: hello.kind, name: hello.name, view };
       send(&mut out, &Frame::Reply { id, answer: welcome(&peer) }).await?;
       (peer, asked)
     }
@@ -192,12 +193,10 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
 /// The count of the peers that the daemon welcomed, which gives each of them the id of its view.
 static VIEWS: AtomicU64 = AtomicU64::new(1);
 
-/// The welcome of a peer: who it is to the daemon, the machine and its build, and the id of its
-/// view.
+/// The welcome of a peer: who it is to the daemon, the machine and its build.
 fn welcome(peer: &Peer) -> Answer {
-  let view = VIEWS.fetch_add(1, Ordering::Relaxed);
   let (machine, build) = (machine(), BUILD.to_owned());
-  Answer::Welcome { protocol: PROTOCOL, peer: peer.clone(), machine, build, view }
+  Answer::Welcome { protocol: PROTOCOL, peer: peer.clone(), machine, build }
 }
 
 /// The build of the daemon: the version of furb that serves it.
