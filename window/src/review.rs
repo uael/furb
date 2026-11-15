@@ -200,8 +200,8 @@ pub(crate) const NEXT: &str = "]";
 
 /// The kind of the text of a file, by its extension, as the diff colors it.
 fn kind(path: &str) -> Option<&'static str> {
-  let extension = path.rsplit_once('.')?.1;
-  let kind = match extension {
+  let suffix = path.rsplit_once('.')?.1;
+  let kind = match suffix {
     "rs" => "rust",
     "py" | "pyi" => "python",
     "ts" | "tsx" => "typescript",
