@@ -62,15 +62,15 @@ R1, no drift on the same engine:
   random byte of a random line, of the done of the stand of the first word of the root and of the last fact made,
   from a seed that it prints
 - `tests/suite/promise.rs::a_life_that_a_replay_opens_holds_the_transcript_that_it_held_live`
-- `src/life.test.rs::a_life_that_enables_its_skills_at_an_open_opens_again_by_its_record_and_plays_each_one_on_a_new_chain`
+- `tests/suite/life.rs::a_life_that_enables_its_skills_at_an_open_opens_again_by_its_record_and_plays_each_one_on_a_new_chain`
 
 R2, the exact tip, by the image and by the record, across each crossing (resume and reopen):
 
-- `src/life.test.rs::a_record_that_another_engine_went_on_with_after_a_crossing_replays_its_tail_to_the_exact_state_at_its_tip`
-- `src/life.test.rs::a_life_goes_on_across_a_crossing_with_the_names_the_module_and_the_open_prompt_of_each_chain`
+- `tests/suite/life.rs::a_record_that_another_engine_went_on_with_after_a_crossing_replays_its_tail_to_the_exact_state_at_its_tip`
+- `tests/suite/life.rs::a_life_goes_on_across_a_crossing_with_the_names_the_module_and_the_open_prompt_of_each_chain`
 - `src/life.test.rs::a_life_that_a_fault_stopped_inside_a_cut_run_opens_at_the_exact_state_of_its_tip`
-- `src/life.test.rs::a_record_of_another_engine_crosses_to_this_build_at_its_open`
-- `src/life.test.rs::an_image_of_a_build_of_other_texts_does_not_load`
+- `tests/suite/life.rs::a_record_of_another_engine_crosses_to_this_build_at_its_open`
+- `tests/suite/life.rs::an_image_of_a_build_of_other_texts_does_not_load`
 - `src/life.test.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
 - `tests/suite/promise.rs::a_life_carried_across_three_crossings_opens_at_its_tip`
 - `host/tests/suite/daemon.rs::a_life_that_ended_opens_again_at_the_tip_of_its_record`
@@ -85,14 +85,14 @@ A fork of a life, its record up to a fact in a directory of its own:
 
 R3, no drift within a major, on the texts that each record holds:
 
-- `src/life.test.rs::each_record_of_the_corpus_opens_by_its_image_to_the_state_of_its_record`
+- `tests/suite/life.rs::each_record_of_the_corpus_opens_by_its_image_to_the_state_of_its_record`
 - `tests/suite/promise.rs::each_record_of_each_folder_of_the_corpus_opens_gives_back_its_modules_and_takes_one_more_turn`, which reads each record with the reader too
 
 The schemas (P7, P8):
 
-- `src/life.test.rs::a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keeps_nothing`
+- `tests/suite/life.rs::a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keeps_nothing`
 - `tests/suite/world/schema.rs::a_schema_from_before_the_stable_cut_opens_in_no_life`
-- `src/life.test.rs::a_record_from_before_the_stable_cut_opens_in_no_life`
+- `tests/suite/life.rs::a_record_from_before_the_stable_cut_opens_in_no_life`
 - `host/tests/suite/life.rs::a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_says_why`
 
 The protocol, the nodes of a view and the contract (P2, P5):

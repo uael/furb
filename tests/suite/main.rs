@@ -14,6 +14,7 @@ mod yard;
 mod async_open;
 mod engine;
 mod examples;
+mod life;
 mod promise;
 mod tip;
 mod view;
