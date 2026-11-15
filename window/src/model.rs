@@ -12,7 +12,7 @@ use std::{
   time::Duration,
 };
 
-use furb::view::Part;
+use furb::view::{Part, age, homed, since};
 use furb_host::{
   Event,
   protocol::{Answer, Card, Frame, Listed},
@@ -467,11 +467,10 @@ impl Model {
 
   /// A text with the home folder of the operator as `~`.
   pub(crate) fn homed(&self, text: &str) -> String {
-    let Some(home) = self.home.as_ref().map(|one| one.display().to_string()) else {
-      return text.to_owned();
-    };
-    let text = text.replace(&format!("{home}/"), "~/");
-    if text == home { "~".to_owned() } else { text }
+    self
+      .home
+      .as_ref()
+      .map_or_else(|| text.to_owned(), |home| homed(text, &home.display().to_string()))
   }
 
   /// The hour and the minute of a second, in the zone of the window.
@@ -488,17 +487,12 @@ impl Model {
   /// How many whole seconds passed since a millisecond of the epoch, from one second on: a time of
   /// a work shows only after a whole second of it.
   pub(crate) fn since(&self, began: u64) -> Option<u64> {
-    Some(self.now.saturating_sub(began) / 1000).filter(|seconds| *seconds > 0)
+    since(began, self.now)
   }
 
   /// How long ago a second was, from one minute on.
   pub(crate) fn age(&self, since: u64) -> Option<String> {
-    match self.second().saturating_sub(since) {
-      ..60 => None,
-      age @ ..3600 => Some(format!("{}m", age / 60)),
-      age @ ..86400 => Some(format!("{}h", age / 3600)),
-      age => Some(format!("{}d", age / 86400)),
-    }
+    age(since, self.second())
   }
 
   /// The rows of the list that scroll, and how many of them show.

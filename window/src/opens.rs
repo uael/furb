@@ -8,11 +8,13 @@
 
 use std::time::Duration;
 
-use furb::life::Stage;
+use furb::{
+  life::Stage,
+  view::{elapsed, grouped, size},
+};
 use opentui::style::Style;
 
 use crate::{
-  feed::timer,
   line::{Line, run, spread},
   model::Model,
   thread::Row,
@@ -310,38 +312,6 @@ fn counted(unit: &Unit, done: u64, of: u64, whole: bool) -> String {
     Unit::Bytes => format!("{} of {}", size(done), size(of)),
     Unit::Entries if whole => grouped(of),
     Unit::Entries => format!("{} of {}", grouped(done), grouped(of)),
-  }
-}
-
-/// A count of bytes, rounded, in the first unit by steps of a thousand where it stays under a
-/// thousand.
-fn size(bytes: u64) -> String {
-  let units = ["B", "KB", "MB", "GB", "TB"];
-  let rounded = |unit: u32| (bytes + 1000_u64.pow(unit) / 2) / 1000_u64.pow(unit);
-  let unit = (0..4).find(|unit| rounded(*unit) < 1000).unwrap_or(4);
-  format!("{} {}", rounded(unit), units[unit as usize])
-}
-
-/// A count with a space between each group of three digits, so the counts of a column align.
-fn grouped(count: u64) -> String {
-  let digits = count.to_string();
-  let mut out = String::new();
-  for (at, digit) in digits.chars().enumerate() {
-    if at > 0 && (digits.len() - at).is_multiple_of(3) {
-      out.push(' ');
-    }
-    out.push(digit);
-  }
-  out
-}
-
-/// A time of an open: tenths of a second under ten seconds, then as the timer of a line.
-fn elapsed(took: Duration) -> String {
-  if took < Duration::from_secs(10) {
-    let tenths = took.as_millis() / 100;
-    format!("{}.{} s", tenths / 10, tenths % 10)
-  } else {
-    timer(took.as_secs())
   }
 }
 

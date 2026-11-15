@@ -3,7 +3,7 @@
 //! answer read, and its counts, which stand in the row of the hints. A click opens one row for
 //! each part, with its size and its share, and folds it again.
 
-use furb::view::Context;
+use furb::view::{Context, tokens};
 use opentui::style::{Color, Style};
 
 use crate::{
@@ -44,7 +44,7 @@ impl Model {
     // The whole of the bar: the window, or what the answer read when no window is known.
     let whole = context.window.unwrap_or(read.tokens).max(1);
     let share = context.window.map(|_| format!("{}%", shared(read.tokens, whole, 100)));
-    let mut rows = vec![row(head, vec![run(share.unwrap_or_else(|| count(read.tokens)), prose)])];
+    let mut rows = vec![row(head, vec![run(share.unwrap_or_else(|| tokens(read.tokens)), prose)])];
     let kinds = self.kinds(context);
     rows.push(bar(&kinds, whole));
     if open {
@@ -55,11 +55,11 @@ impl Model {
           share => format!("{share:>2}%"),
         };
         let left = vec![run("■ ", Style::new().fg(kind.color)), run(kind.name, muted)];
-        row(left, vec![run(format!("{}  {share:>4}", count(kind.tokens)), muted)])
+        row(left, vec![run(format!("{}  {share:>4}", tokens(kind.tokens)), muted)])
       }));
     }
-    let of = context.window.map(|window| format!(" of {}", count(window))).unwrap_or_default();
-    let numbers = format!("{}{of} · {} cached", count(read.tokens), count(read.cached));
+    let of = context.window.map(|window| format!(" of {}", tokens(window))).unwrap_or_default();
+    let numbers = format!("{}{of} · {} cached", tokens(read.tokens), tokens(read.cached));
     rows.push(row(vec![run(numbers, muted)], vec![run(format!("${:.2}", context.dollars), prose)]));
     rows
   }
@@ -69,7 +69,7 @@ impl Model {
   pub(crate) fn ring(&self) -> Option<String> {
     let context = self.thread.as_ref().filter(|_| !self.listed())?.context.as_ref()?;
     let read = context.read.tokens;
-    let Some(window) = context.window else { return Some(count(read)) };
+    let Some(window) = context.window else { return Some(tokens(read)) };
     let share = shared(read, window.max(1), 100);
     // The glyph of the quarter nearest to the share: the default faces of the terminals hold no
     // ring that is half full.
@@ -146,22 +146,6 @@ fn row(left: Line, right: Line) -> Line {
   let mut line = vec![run(" ", Style::new())];
   line.extend(spread(left, right, INNER, Style::new()));
   line
-}
-
-/// A count of tokens as a person reads it: `840`, `8.4k`, `124k`, `1.2M`, `1M`, each cut and not
-/// rounded up, so a count never shows more than it is.
-pub(crate) fn count(tokens: u64) -> String {
-  // The decimal shows unless it is 0, as a window of `1M`.
-  let decimal = |unit: u64| match tokens / (unit / 10) % 10 {
-    0 => (tokens / unit).to_string(),
-    tenth => format!("{}.{tenth}", tokens / unit),
-  };
-  match tokens {
-    0..1_000 => tokens.to_string(),
-    1_000..10_000 => format!("{}k", decimal(1_000)),
-    10_000..1_000_000 => format!("{}k", tokens / 1_000),
-    _ => format!("{}M", decimal(1_000_000)),
-  }
 }
 
 #[cfg(test)]

@@ -10,14 +10,13 @@
 
 use std::mem;
 
-use furb::view::{Act, Maker, RunState, Standing};
+use furb::view::{Act, Maker, RunState, Standing, timer};
 use furb_host::protocol::{Answer, Card, Verb};
 use jiff::Timestamp;
 use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-  feed::timer,
   keys::Does,
   line::{Line, clipped, cut, run, spread, wrapped},
   list::project,

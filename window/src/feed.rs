@@ -5,7 +5,7 @@
 
 use furb::view::{
   Agent, Block, Exchange, Line as Code, Maker, Mark, Output, Retrying, Said, Saying, Standing,
-  Thought, Work,
+  Thought, Work, timer,
 };
 use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
@@ -537,15 +537,6 @@ fn tail(text: &str, room: usize) -> String {
     return flat;
   }
   format!("…{}", flat.chars().skip(skip + 1).collect::<String>())
-}
-
-/// A count of seconds as a person reads it.
-pub(crate) fn timer(seconds: u64) -> String {
-  match seconds {
-    ..60 => format!("{seconds} s"),
-    60..3600 => format!("{}m {:02}s", seconds / 60, seconds % 60),
-    3600.. => format!("{}h {:02}m", seconds / 3600, seconds / 60 % 60),
-  }
 }
 
 /// The model of a block as its head shows it: its name with no provider, and its effort.

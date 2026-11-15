@@ -15,6 +15,7 @@ mod quote;
 mod state;
 mod threads;
 mod time;
+mod words;
 
 pub use act::{Act, Answer, Kind, Maker, Pause, Phase, Read, RunState, Spend, WATCH, operator};
 pub use cards::{Card, Part, Sent, Skill, Standing};
@@ -39,3 +40,4 @@ pub use threads::{
   order_threads, root_of, thread_of,
 };
 pub use time::{as_of, moments_of};
+pub use words::{age, elapsed, grouped, homed, since, size, timer, tokens};
