@@ -4,9 +4,9 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import Sand, Wrapping, born, keeping, kernel, relived, said, settle, verbs, viewed
+from conftest import Sand, born, keeping, relived, said, settle, verbs, viewed
 from furb import engine
-from furb.engine import OPERATOR, Refused, idle
+from furb.engine import OPERATOR, Refused
 
 
 def ends(mark: list[tuple]) -> Generator[tuple | None, tuple | None]:
@@ -157,7 +157,7 @@ async def raises_again() -> None:
   assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
   assert live["modules"] == later["modules"]
   assert {k: later["outcomes"].get(k) for k in live["outcomes"]} == live["outcomes"]
-  cut = next(n for n, (e,) in enumerate(probe.record) if e[:2] == ("done", b))
+  cut = next(n for n, (e, *_) in enumerate(probe.record) if e[:2] == ("done", b))
   door, _, top = born()
   await engine.rung(
     "def touchy(id):\n  yield 'started', id\n  yield {'read'}\n  raise TypeError('touchy')\nt = act('touchy', '', touchy)",
@@ -177,7 +177,7 @@ async def raises_again() -> None:
   sand, _, top = born()
   with pytest.raises(Refused):
     engine.read("missing", on=top)
-  record = [((*e, "x", "y") if e[0] == "read" and e[2] == OPERATOR else e,) for (e,) in sand.record]
+  record = [((*e, "x", "y") if e[0] == "read" and e[2] == OPERATOR else e, *rest) for (e, *rest) in sand.record]
   with pytest.raises(TypeError):
     await relived(Sand(), record)
   first, second = list(probe.record)[: cut + 1], Sand()
@@ -189,13 +189,11 @@ async def raises_again() -> None:
   assert engine.module(over)["last"] == engine.module(again)["last"]
 
 
-async def test_the_journal_binds_drive_again_and_boot_binds_what_it_gives() -> None:
-  """The journal binds drive again, as boot says, to know each generator that an act brought to life, so the record keeps what such a generator says only through that act."""
-  journal = Wrapping(idle("journal"))
-  root = engine.boot(journal, **kernel(), world=Sand().hears())
-  assert engine.drive is journal.drive and engine.listening()["journal"] is journal.ear
-  sand, _, root = born()
+async def test_a_generator_that_an_act_brought_to_life_speaks_for_that_act() -> None:
+  """A generator that an act brought to life speaks for that act, so the record keeps what it says only through that act."""
+  sand, log, root = born()
   await engine.bash("echo hi", on=root)
   await settle()
-  assert [e[0] for (e,) in sand.record if e[1] == "bash1"] == ["bash", "started", "out", "done"]
-  assert [e for (e,) in sand.record if e[2] == "bash1"] == []
+  assert [e[0] for (e, *_) in sand.record if e[1] == "bash1"] == ["bash", "started", "out", "done"]
+  assert ("done", "merged1", "bash1", True) in said(log, "done")
+  assert [e for (e, *_) in sand.record if e[2] == "bash1"] == []

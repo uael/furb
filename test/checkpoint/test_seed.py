@@ -33,8 +33,8 @@ command that a value of the root names."""
 
 
 def noted(on: str) -> list[str]:
-  """The note of each birth that the journal tells in the turns of a chain."""
-  return [x[3][0] for x in engine.reading(on) if x[:3] == ("tell", on, "journal") and isinstance(x[3], list)]
+  """The note of each birth that birth tells in the turns of a chain."""
+  return [x[3][0] for x in engine.transcript(on) if x[:3] == ("tell", on, "birth") and isinstance(x[3], list)]
 
 
 def operated(log: list[tuple], on: str) -> str:
@@ -63,7 +63,7 @@ async def seeded() -> tuple[Sand, list[tuple]]:
 async def test_seed_gives_the_entries_that_a_life_boots_on_from_the_data_of_a_checkpoint_which_the_open_of_an_engine_hands_it_in_the_place_of_the_checkpoint_before_the_entries_that_follow_it_so_an_engine_opens_a_checkpoint_that_an_earlier_engine_of_its_major_wrote() -> (
   None
 ):
-  """seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine opens a checkpoint that an earlier engine of its major wrote."""
+  """seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine goes on from the life that an earlier engine of its major replayed and gathered."""
   life(sown())
   entries = checkpoint.seed(vars(engine), DATA)
   assert [*entries[0][0]] == ["chain", "chain1", OPERATOR, "", "root", ""]
@@ -109,7 +109,7 @@ async def test_each_act_of_the_data_with_a_value_stands_known_on_its_chain_with_
 async def test_the_journal_binds_the_module_of_each_chain_from_its_fact_carried_with_no_act_no_rung_and_no_run_so_a_birth_runs_no_word_of_the_chain_again() -> (
   None
 ):
-  """The journal binds the module of each chain from its fact carried as it says that fact, with no act, no rung and no run, and the chain holds as its prefix the turns of its fact carried but the question, the started and the done of each act on it that seed makes again, so a birth runs no word of the chain again."""
+  """birth binds the module of each chain from its fact carried as it hears that fact, with no act, no rung and no run, and the chain holds as its prefix the turns of its fact carried but the question, the started and the done of each act on it that seed makes again, so a birth runs no word of the chain again."""
   _, log = await seeded()
   root = engine.module("chain1")
   assert (root["f"](), root["shell"], engine.module("chain3").get("SIZE")) == (6, "bash2", None)
@@ -145,7 +145,7 @@ async def test_each_module_that_a_born_chain_makes_again_and_the_module_of_each_
 async def test_each_chain_with_an_open_prompt_opens_paused_while_the_journal_binds_it_and_wakes_after_it_unless_the_data_says_it_was_paused_so_an_open_prompt_asks_its_model_again_at_once() -> (
   None
 ):
-  """Each chain with an open prompt opens paused while the journal binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once."""
+  """Each chain with an open prompt opens paused while birth binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once."""
   life(sown())
   data = {**DATA, "chains": [chain("chain1", "", "root"), chain("chain3", "chain1", "work")]}
   entries = checkpoint.seed(vars(engine), data)
@@ -162,7 +162,7 @@ async def test_each_chain_with_an_open_prompt_opens_paused_while_the_journal_bin
 async def test_the_journal_binds_the_definitions_and_the_values_of_each_chain_before_seed_says_the_cut_so_a_value_that_raises_as_it_is_bound_leaves_the_turns_of_the_chain_whole() -> (
   None
 ):
-  """The journal binds the definitions and the values of each chain before seed says the cut of the chain, so a value that raises as it is bound leaves the turns of the chain whole."""
+  """birth binds the definitions and the values of each chain as it hears the fact carried of the chain, before its prefix, so a value that raises as it is bound leaves the turns of the chain whole."""
   life(sown())
   data = {
     **DATA,
@@ -178,13 +178,23 @@ async def test_the_journal_binds_the_definitions_and_the_values_of_each_chain_be
 async def test_the_fact_carried_of_a_chain_holds_its_turns_the_text_of_each_value_and_each_word_of_its_definitions_which_the_journal_binds_in_that_order() -> (
   None
 ):
-  """The fact carried of a chain holds its turns, the text of each value of the chain and each word of its definitions, and the journal binds each value from its text, then each word of the definitions, then each value again."""
+  """The fact carried of a chain holds its turns, the text of each value of the chain, each word of its definitions, and after its makers each name that it may lose and each act that it cut, and birth binds each value from its text, then each word of the definitions, then each value again."""
   life(sown())
   root = chain("chain1", "", "root", definitions=["def f():\n  return SIZE", "SIZE = SIZE + 1"], values={"SIZE": "6"})
   entries = checkpoint.seed(vars(engine), {**DATA, "chains": [root, chain("chain3", "chain1", "work")]})
   assert [x[0] for x in entries if x[0][0] == "carried"] == [
-    ("carried", "chain1", "journal", [], {"SIZE": "6"}, ["def f():\n  return SIZE", "SIZE = SIZE + 1"], {}),
-    ("carried", "chain3", "journal", [], {}, [], {}),
+    (
+      "carried",
+      "chain1",
+      "journal",
+      [],
+      {"SIZE": "6"},
+      ["def f():\n  return SIZE", "SIZE = SIZE + 1"],
+      {},
+      ["SIZE"],
+      [],
+    ),
+    ("carried", "chain3", "journal", [], {}, [], {}, [], []),
   ]
   life(sown(), entries)
   await settle()
@@ -252,7 +262,7 @@ async def test_seed_reads_the_definitions_that_a_checkpoint_of_an_earlier_build_
 async def test_a_value_or_a_word_of_definitions_that_raises_as_the_journal_binds_it_stops_nothing_after_it_so_it_loses_only_itself() -> (
   None
 ):
-  """A value or a word of definitions that raises as the journal binds it stops nothing after it, so a value that raises loses only itself, a word of definitions that raises loses only what follows the raise in that word, and the second pass of the values binds a value that the first could not bind, as one that names a class of the definitions, and gives a name that a definition bound again the value of the fact carried, while a value whose object the module still holds stays that object, which a definition took."""
+  """A value or a word of definitions that raises as birth binds it stops nothing after it, so a value that raises loses only itself, a word of definitions that raises loses only what follows the raise in that word, and the second pass of the values binds a value that the first could not bind, as one that names a class of the definitions, and gives a name that a definition bound again the value of the fact carried, while a value whose object the module still holds stays that object, which a definition took."""
   life(sown())
   definitions = [
     "class Custom(Exception):\n  pass\n\nLIMIT = 1\nRATE = 1\nFLAG = 1\nPAIR = [1, 0]\n\ndef f(x=size):\n  return x\n\ndef q(x=queue):\n  return x\n\ndef keep(x=held):\n  return x\n\ndef n(x=named):\n  return x",
@@ -297,7 +307,7 @@ async def test_a_value_or_a_word_of_definitions_that_raises_as_the_journal_binds
 async def test_the_cut_of_each_chain_tells_in_a_note_of_the_journal_what_the_checkpoint_lost_and_cut_and_a_birth_that_holds_each_such_name_and_cut_no_act_tells_no_note() -> (
   None
 ):
-  """The cut of each chain tells in a note of the journal each name that the checkpoint lost, each value of the fact carried that the born life does not hold and each act that the checkpoint cut, and a birth that holds each such name and cut no act tells no note."""
+  """birth tells after the prefix of each chain, in a note, each name that the checkpoint lost, each value of the fact carried that the born life does not hold and each act that the checkpoint cut, and a birth that holds each such name and cut no act tells no note."""
   life(sown())
   chains = [
     chain("chain1", "", "root", definitions=["AGAIN = [1]"], lost=["gone", "AGAIN"], values={"bad": "nan", "k": "1"}),

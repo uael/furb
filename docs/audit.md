@@ -17,11 +17,11 @@ Give the audit a record and its sha256, as the person who made the record gives 
    no model. The files, the commands, time and the web are silent in it, so it runs no command, touches no file, and
    reaches no network.
 3. Lets furb make the life again from the record, from its first entry. The engine runs each word of the record again,
-   and it stops at the first act that does not agree with the record. At each checkpoint of the record, the life is
-   born again, and the checkpoint has to hold what the life made before it.
-4. Hashes each answer of a model and each word that the life ran after the last checkpoint, as the life made them
+   and it stops at the first act that does not agree with the record. Each segment of the record replays on the
+   engine that made it, and where the record crosses to another engine, the life goes on from what that engine held.
+4. Hashes each answer of a model and each word that the life ran after the last crossing, as the life made them
    again, and compares each hash with the hash of the same answer or word in the record. It also compares each act
-   that you or the life made after the last checkpoint with the act that the record holds, where you is the operator
+   that you or the life made after the last crossing with the act that the record holds, where you is the operator
    of that life.
 
 The audit cannot make an answer of a model again, or what a command printed, since no model and no command runs. The
@@ -66,10 +66,11 @@ The audit writes its report as JSON on stdout, and in the file that `--report` n
 - `sha256`: the hash of the bytes of the record.
 - `engine`: the engine that made the record, from its fact `made`.
 - `entries` and `acts`: how many entries the record holds, and how many of them are acts.
-- `checkpoints`: how many checkpoints the record holds, each proven as the life was born again at it.
-- `answers`: for each reply of a model after the last checkpoint, the hash of its answer in the record and in the
+- `crossings`: how many times the record crosses to another engine, each proven as the open replayed the segment
+  before it on its own engine and carried it across.
+- `answers`: for each reply of a model after the last crossing, the hash of its answer in the record and in the
   replay.
-- `words`: for each word that the life ran after the last checkpoint, the hash of the word in the record, and the hash
+- `words`: for each word that the life ran after the last crossing, the hash of the word in the record, and the hash
   of the word that the replay ran.
 - `wrong`: each thing that does not agree, and `agrees`: whether that list is empty.
 

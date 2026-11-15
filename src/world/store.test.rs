@@ -3,8 +3,7 @@
 
 use std::{fs, path::Path};
 
-use super::{Lines, Sqlite, Store, checkpoints, digest, keeping, kept, last, store, texts};
-use crate::checkpoint::standing;
+use super::{Lines, Sqlite, Store, crossings, digest, keeping, kept, last, stood, store, texts};
 use crate::testing::Yard;
 use crate::value;
 use crate::{
@@ -131,7 +130,8 @@ macro_rules! conformance {
       #[test]
       fn the_standing_of_a_record_is_the_list_that_its_last_done_of_a_stand_gave() {
         let path = at("standing");
-        let stood = |path: &Path| standing(&last(path, &mut |_| {}).unwrap().entries);
+        let stood =
+          |path: &Path| last(path, &mut |_| {}).unwrap().entries.iter().rev().find_map(stood);
         assert!(stood(&path).is_none());
         let mut one = open(&path).unwrap();
         one.entries().unwrap();
@@ -152,20 +152,21 @@ macro_rules! conformance {
       }
 
       #[test]
-      fn the_places_of_the_checkpoints_of_a_record_count_each_entry_before_them() {
-        let path = at("checkpoints");
-        assert_eq!(checkpoints(&path).unwrap(), [0usize; 0]);
+      fn the_places_of_the_crossings_of_a_record_count_each_entry_before_them() {
+        let path = at("crossings");
+        assert_eq!(crossings(&path).unwrap(), [0usize; 0]);
         let mut one = open(&path).unwrap();
         one.entries().unwrap();
         for entry in [
           r#"[["stand","stand1","operator","chain1"]]"#,
-          r#"[["checkpoint","chain1","store",{}]]"#,
-          r#"[["tell","rung2","chain1",["[[\"checkpoint\", in a text"]]]"#,
-          r#"[["checkpoint","chain1","store",{"schema":"2.0"}]]"#,
+          r#"[["made","chain1","store","one"]]"#,
+          r#"[["tell","rung2","chain1",["[[\"made\", in a text"]]]"#,
+          r#"[["made","chain1","store","one"]]"#,
+          r#"[["made","chain1","store","two"]]"#,
         ] {
           one.keep(parsed(entry).unwrap().as_ref()).unwrap();
         }
-        assert_eq!(checkpoints(&path).unwrap(), [1, 3]);
+        assert_eq!(crossings(&path).unwrap(), [4]);
       }
 
       #[test]

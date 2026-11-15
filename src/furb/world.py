@@ -37,8 +37,9 @@ def kept(record: Path) -> list[tuple]:
 
 
 def entries(record: list[list[list[object]]]) -> list[tuple]:
-  """The entries of a record as the store of the crate gives them, each one fact, as the engine takes them."""
-  return [(tuple(one),) for (one,) in record]
+  """The entries of a record as the store of the crate gives them, each a fact, its place and whether the life rested,
+  as the engine takes them."""
+  return [(tuple(one), *at) for (one, *at) in record]
 
 
 def answered(entries: Sequence[tuple]) -> list[tuple]:

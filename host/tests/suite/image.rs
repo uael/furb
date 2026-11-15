@@ -20,6 +20,7 @@ use furb::{
   Object,
   life::{Answer, Opening},
   view::{Act, Kind, Reach},
+  world,
 };
 use furb_host::{Command, Event, Life, LifeHandle, Reply};
 use futures::StreamExt;
@@ -111,7 +112,7 @@ fn recorded_all(at: &Path, kind: &str) -> Vec<Value> {
 async fn a_life_opens_from_its_image_where_the_life_before_it_stood() {
   let at = place("image-stood");
   let (record, image) = (at.join("record.jsonl"), at.join("record.jsonl.image"));
-  // The first life ends with a checkpoint, so the log of the second lets go of its facts, which a
+  // The first life ends with a crossing, so the log of the second lets go of its facts, which a
   // reader then reads from the record.
   birth(&at, "x = 1\nc = chain('c')", Vec::new()).await;
   let life = Life::spawn(answering(&at, Some("close('ok')"))).expect("the second life");
@@ -471,31 +472,35 @@ async fn a_life_on_an_earlier_engine_shows_then_moves_to_this_build_before_a_wor
   let read = life.send(Command::Inspect { name: "y".to_owned(), on: None }).await;
   let Ok(Reply::Inspected { repr, .. }) = read else { panic!("y is bound: {read:?}") };
   assert_eq!(repr, "[1, None]", "the word runs on the engine of this build");
-  let checkpoints = recorded_all(&at, "checkpoint");
-  assert_eq!(checkpoints.len(), 1, "the move writes one checkpoint");
-  let turns = checkpoints[0][3]["chains"][0]["turns"].to_string();
-  assert!(turns.contains("#chain1 crossed"), "the move tells the root the engine that differs");
+  let builds = recorded_all(&at, "made");
+  assert_eq!(builds.len(), 2, "the move writes the fact made of this build alone");
+  assert_eq!(builds[1][3], Value::from(world::engine()), "the move names the engine of this build");
+  let id = made(&life, rung("t = str(turns(on='chain1'))")).await;
+  until(&mut Box::pin(life.events(0)), done(&id)).await;
+  let read = life.send(Command::Inspect { name: "t".to_owned(), on: None }).await;
+  let Ok(Reply::Inspected { repr, .. }) = read else { panic!("t is bound: {read:?}") };
+  assert!(repr.contains("#chain1 crossed"), "the move tells the root the engine that differs");
   let record = fs::read_to_string(at.join("record.jsonl")).expect("the record");
   let (moved, ran) =
-    (record.find("\"checkpoint\"").unwrap(), record.find("y = [x, globals()").unwrap());
+    (record.rfind("[[\"made\"").unwrap(), record.find("y = [x, globals()").unwrap());
   assert!(moved < ran, "no word runs before the move");
   ended(life).await;
 }
 
 #[tokio::test]
-async fn a_checkpoint_stands_in_the_record_alone_and_a_reader_of_the_past_reads_it_there() {
+async fn a_crossing_stands_in_the_record_alone_and_a_reader_of_the_past_reads_it_there() {
   let at = place("image-checkpoint-once");
   let first = Life::spawn(kept(&at)).expect("the first life");
   let mut events = Box::pin(first.events(0));
   let id = made(&first, rung("x = 1")).await;
   until(&mut events, done(&id)).await;
   ended(first).await;
-  // The life opens on an earlier engine and moves to this build, which writes a checkpoint.
+  // The life opens on an earlier engine and moves to this build, which writes its fact made.
   elsewhere(&at, "crossed = True");
   let life = Life::spawn(kept(&at)).expect("the life that moves");
   let id = made(&life, rung("y = 2")).await;
   until(&mut Box::pin(life.events(0)), done(&id)).await;
-  let keeps = |event: &Event| matches!(event, Event::Fact(fact) if fact[0] == "keep" && fact[3][0][0] == "checkpoint");
+  let keeps = |event: &Event| matches!(event, Event::Fact(fact) if fact[0] == "keep" && fact[3][0][0] == "made");
   let read = log_of(&life).await;
   assert!(read.iter().any(|one| keeps(&one.1)), "a reader of the past reads the keep of the move");
   ended(life).await;
@@ -503,5 +508,5 @@ async fn a_checkpoint_stands_in_the_record_alone_and_a_reader_of_the_past_reads_
   let (_, host) = host_part(&image);
   let copied = br#"[["checkpoint","#;
   let held = image[host..].windows(copied.len()).any(|part| part == copied);
-  assert!(!held, "the part of the host holds no copy of the checkpoint that the record holds");
+  assert!(!held, "the part of the host holds no carry, which nothing keeps");
 }

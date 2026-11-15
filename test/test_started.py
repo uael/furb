@@ -30,7 +30,7 @@ async def test_the_journal_keeps_a_started_of_the_outside() -> None:
   step = engine.rung("x = bash('sleep 9')", on=root)
   await settle()
   command = said(log, "bash")[0][1]
-  assert (("started", command, WORLD),) in sand.record
+  assert ("started", command, WORLD) in [e[0] for e in sand.record]
   later = Sand()
   heard, over = await relived(later, plain(sand.record))
   assert [a for a in said(heard, "started") if a[1] == command] == [("started", command, "journal")]

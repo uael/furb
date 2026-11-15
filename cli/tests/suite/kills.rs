@@ -608,24 +608,6 @@ async fn handed(yard: &Yard, daemon: Daemon, mut window: Window) -> Daemon {
 }
 
 #[tokio::test]
-async fn a_daemon_killed_during_the_write_of_a_checkpoint_leaves_a_life_that_opens_again() {
-  for signal in SIGNALS {
-    let (yard, lifeline, daemon, window) = begun().await;
-    handed(&yard, daemon, window).await.killed(signal).await;
-    lifeline.ended().await;
-    let mut checkpoint = yard.furb(&["checkpoint", "--record", &yard.life()]);
-    assert!(checkpoint.status().await.unwrap().success(), "furb checkpoint writes a checkpoint");
-    // A kill during the write of a checkpoint leaves a part of its line at the end of the
-    // record, which no clock reaches: the test cuts the last checkpoint so.
-    let text = fs::read_to_string(yard.life()).unwrap();
-    let at = text.rfind("[[\"checkpoint\"").expect("the record holds a checkpoint");
-    let end = text[at..].find('\n').map_or(text.len(), |one| at + one);
-    fs::write(yard.life(), &text[..at + (end - at) / 2]).unwrap();
-    reopened(&yard).await;
-  }
-}
-
-#[tokio::test]
 async fn a_daemon_killed_during_a_handover_leaves_a_life_that_opens_again() {
   for signal in SIGNALS {
     let (yard, lifeline, daemon, window) = begun().await;

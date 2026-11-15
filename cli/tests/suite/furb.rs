@@ -26,7 +26,6 @@ use std::{
   time::{Duration, Instant},
 };
 
-use furb::world::engine;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -258,8 +257,8 @@ fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   assert_eq!(fs::read(yard.record()).expect("the record"), before, "an inspection keeps nothing");
 }
 
-/// The law of a checkpoint holds for an image too: the facts after a birth come from a life born
-/// on it. A life that opens from its image is the life that the replay of the record gives, so
+/// The facts after an image come from a life that opened from it. A life that opens from its image
+/// is the life that the replay of the record gives, so
 /// the entries that it writes replay in a life that opens by the record.
 #[test]
 fn a_life_goes_on_from_its_image_and_its_record_replays_with_no_drift() {
@@ -325,13 +324,6 @@ fn a_life_opens_from_an_image_that_its_record_passed_and_says_the_entries_after_
   let keeps: Vec<&str> = log.lines().filter(|line| line.starts_with("[\"keep\",\"\",")).collect();
   assert_eq!(keeps.len(), record().lines().count());
   assert!(keeps.iter().zip(1..).all(|(line, n)| *line == format!("[\"keep\",\"\",{n}]")));
-  // A checkpoint after the image is a birth of its own: the life then opens by its record.
-  fs::write(&image, &first).expect("the image of the first life again");
-  let mut checkpoint = yard.furb(&["checkpoint", "--record"]);
-  checkpoint.arg(yard.record());
-  assert_eq!(printed(checkpoint, ""), "");
-  assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "43\n");
-  assert_eq!(stands(&record()), before + 2, "a life that opens by its record stands its root once");
 }
 
 /// The key of an image names the version of the meaning of what it holds, the python of the record
@@ -362,21 +354,6 @@ fn a_life_opens_by_its_record_when_the_version_or_the_dump_of_its_image_is_anoth
   let before = stands();
   assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "44\n");
   assert_eq!(stands(), before + 1, "the life that opens from its image stands its root once");
-}
-
-#[test]
-fn a_checkpoint_at_the_tip_of_a_record_carries_the_module_of_its_root_to_the_next_life() {
-  let yard = Yard::new("checkpoint");
-  assert_eq!(printed(yard.kept(&["run", "kept = [1, 2]\nclose(len(kept))"]), ""), "2\n");
-  printed(yard.furb(&["checkpoint", "--record", yard.record().to_str().unwrap()]), "");
-  let record = fs::read_to_string(yard.record()).unwrap();
-  let last: Vec<&str> = record.lines().rev().take(2).collect();
-  assert!(last[1].starts_with("[[\"checkpoint\",\"chain1\",\"store\","), "{record}");
-  assert!(
-    last[0].starts_with(&format!("[[\"made\",\"chain1\",\"store\",\"{}\",", engine())),
-    "the fact made of this build follows the checkpoint, so the next life runs this build: {record}"
-  );
-  assert_eq!(printed(yard.kept(&["run", "close(kept + [3])"]), ""), "[1, 2, 3]\n");
 }
 
 #[test]
@@ -842,10 +819,10 @@ fn an_audit_of_a_record_agrees_with_its_hash_and_names_a_hash_that_its_bytes_do_
 }
 
 #[test]
-fn an_audit_proves_each_checkpoint_of_a_record_and_names_an_act_that_a_changed_word_makes_again_otherwise()
+fn an_audit_proves_each_segment_of_a_record_and_names_an_act_that_a_changed_word_makes_again_otherwise()
  {
   let yard = Yard::new("audit-corpus");
-  let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/corpus/next/work.jsonl");
+  let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/corpus/next/crossed.jsonl");
   let held = fs::read_to_string(&corpus).expect("the record of the corpus");
   let audit = |text: &str| {
     let copy = yard.record();
@@ -855,15 +832,19 @@ fn an_audit_proves_each_checkpoint_of_a_record_and_names_an_act_that_a_changed_w
     serde_json::from_slice::<Value>(&ran(audit, "").stdout).expect("a report of JSON")
   };
   let report = audit(&held);
-  assert_eq!((report["agrees"].clone(), report["checkpoints"].clone()), (json!(true), json!(1)));
+  assert_eq!((report["agrees"].clone(), report["crossings"].clone()), (json!(true), json!(1)));
   let last = held.lines().rfind(|line| line.contains(r#"["done","reply"#)).expect("an answer");
   let changed = held.replacen(last, &last.replacen("close(", "close(0 or ", 1), 1);
+  // The replay stops at the first act that does not agree with the record, and names it: the run
+  // of the answer that the change made otherwise.
   let report = audit(&changed);
   assert_eq!(report["agrees"], json!(false));
+  let named =
+    |one: &str| one.starts_with("the replay stops: ") && one.contains("the life made ('run', ");
   assert!(
-    report["wrong"].as_array().is_some_and(|wrong| wrong
-      .iter()
-      .any(|one| { one.as_str().is_some_and(|one| one.starts_with("the life did not make run")) })),
+    report["wrong"]
+      .as_array()
+      .is_some_and(|wrong| wrong.iter().any(|one| one.as_str().is_some_and(named))),
     "{report}"
   );
 }

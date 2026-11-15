@@ -28,7 +28,8 @@ fn each_schema_names_itself_as_its_major_and_its_minor() {
 
 #[test]
 fn a_schema_from_before_the_stable_cut_opens_in_no_life() {
-  for held in [None, Some(Object::none()), Some(Object::string("1.1"))] {
+  for held in [None, Some(Object::none()), Some(Object::string("1.1")), Some(Object::string("2.0"))]
+  {
     assert_eq!(
       RECORD_SCHEMA.opens("record", held.as_ref().map(Object::as_ref)),
       Err(SchemaError::BeforeCut { of: "record" })

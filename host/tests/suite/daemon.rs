@@ -7,7 +7,7 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
-use crate::{life::checkpointed, yard};
+use crate::{life::crossed, yard};
 
 use std::net::TcpListener;
 use yard::Yard;
@@ -33,7 +33,7 @@ use furb::{
   Object, image,
   life::{Answer as Answered, Log, Opening},
   view::{self, Part, Phase, Standing},
-  world::{SchemaError, checkpoints},
+  world::{SchemaError, crossings},
 };
 use furb_host::{
   DaemonError, Door, Event, GRACE, ProtocolError, STALL, STARTING, Settings, Tailnet,
@@ -62,7 +62,7 @@ const PAST: Duration = Duration::from_millis(1500);
 
 /// A folder of one test, empty, and short enough for the path of a socket. It goes at the end of
 /// the test, and again once the thread of the test ends: the end of the runtime of the test ends
-/// the daemon, and each life that it held and whose grace is short then writes its checkpoint
+/// the daemon, and each life that it held and whose grace is short then writes its image
 /// there, on a thread of its own, before it lets its lease go.
 fn place() -> Place {
   static NEXT: AtomicU32 = AtomicU32::new(0);
@@ -983,8 +983,13 @@ async fn each_window_of_a_life_that_opens_hears_how_far_the_open_stands_then_its
   first.ran(&life, "x = 41 + 1").await;
   assert_eq!(first.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   first.ended(&life).await;
-  // A checkpoint at the tip of the record makes the open go by the record, through each stage.
-  checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
+  // A crossing in the record, and no image, make the open go by the record, through each stage
+  // but the crossing, which a life of this build made already.
+  crossed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
+  let crossing = Opening { record: Some(life.clone()), keeps: Some(true), ..opening(&at) };
+  let crosses = move || drop(crossing.boot::<String>([]).expect("the life that crosses"));
+  task::spawn_blocking(crosses).await.expect("the life that crosses ends");
+  fs::remove_file(format!("{life}.image")).ok();
   first.pushed.clear();
   let (claude, go) = waiting(&at);
   let open = Verb::Open {
@@ -1042,7 +1047,7 @@ async fn a_verb_that_waited_for_an_open_that_failed_hears_why() {
   window.ran(&life, "x = 1").await;
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   window.ended(&life).await;
-  checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
+  crossed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
   let (claude, go) = waiting(&at);
   let open = Verb::Open {
     life: life.clone(),
@@ -1124,7 +1129,7 @@ async fn an_open_of_a_record_that_another_process_holds_is_refused_at_once_with_
 }
 
 #[tokio::test]
-async fn a_life_that_ended_opens_again_from_its_checkpoint() {
+async fn a_life_that_ended_opens_again_at_the_tip_of_its_record() {
   let at = place();
   let (local, _daemon) = started(&at, SHORT).await;
   let mut window = Window::dialed(&local).await;
@@ -1141,7 +1146,7 @@ async fn a_life_that_ended_opens_again_from_its_checkpoint() {
 }
 
 #[tokio::test]
-async fn a_window_of_a_life_born_from_its_checkpoint_hears_each_fact_of_the_life_once() {
+async fn a_window_of_a_life_born_again_hears_each_fact_of_the_life_once() {
   let at = place();
   let (local, _daemon) = started(&at, SHORT).await;
   let mut window = Window::dialed(&local).await;
@@ -1151,7 +1156,7 @@ async fn a_window_of_a_life_born_from_its_checkpoint_hears_each_fact_of_the_life
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   time::sleep(PAST).await;
   assert!(!window.lives(&life).await);
-  // A second birth opens on the checkpoint of the first, and ends with a checkpoint of its own.
+  // A second birth opens on the image of the first, and ends with an image of its own.
   let mut between = Window::dialed(&local).await;
   opened(&mut between, &at, "a.jsonl").await;
   between.attach(&life).await;
@@ -1181,7 +1186,7 @@ async fn a_window_of_a_life_born_from_its_checkpoint_hears_each_fact_of_the_life
   let mine: Vec<&Value> = facts.iter().filter(|one| one[1] == first).collect();
   assert_eq!((about("rung"), about("done")), (1, 1), "{mine:?}");
   // The second and the third births do alike, so each adds as many occurrences of each fact of
-  // the first: a fact that a checkpoint restates told again would add more, and a fact that
+  // the first: a fact that an earlier birth restates told again would add more, and a fact that
   // repeats an earlier one, dropped, fewer.
   let times = |facts: &[Value], one: &Value| facts.iter().filter(|other| *other == one).count();
   let added = |later: &[Value], earlier: &[Value], one: &Value| {
@@ -1213,14 +1218,11 @@ async fn a_fault_of_one_life_leaves_the_daemon_and_the_other_lives() {
   assert!(!daemon.is_finished());
 }
 
-/// A record whose replay drifts at its first cd: its checkpoints dropped, so the life replays it
-/// from its first entry, and its first cd moved to a place that the word of the life does not ask
-/// for.
+/// A record whose replay drifts at its first cd, which moved to a place that the word of the life
+/// does not ask for.
 fn drifted(life: &str) -> Vec<u8> {
   let text = fs::read_to_string(life).unwrap();
-  let checkpoint = |line: &&str| line.starts_with(r#"[["checkpoint","#);
-  let mut lines: Vec<String> =
-    text.lines().filter(|line| !checkpoint(line)).map(str::to_owned).collect();
+  let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
   let moved = lines.iter().position(|line| line.starts_with(r#"[["cd","cd1","#)).unwrap();
   let mut entry: Value = serde_json::from_str(&lines[moved]).unwrap();
   let place = entry[0][4].as_str().expect("the cd names its place").to_owned();
@@ -1412,7 +1414,7 @@ async fn a_handover_keeps_each_life_its_pins_and_each_window() {
   assert!(window.closed().await);
   assert!(matches!(old.await, Ok(Ok(()))));
   let record = Path::new(&life);
-  assert_eq!(checkpoints(record).unwrap(), Vec::<usize>::new(), "a handover writes no checkpoint");
+  assert_eq!(crossings(record).unwrap(), Vec::<usize>::new(), "a handover writes no fact made");
   assert!(image::agrees(record), "a handover ends the life with its image");
   listening(&local, &mut new).await;
   let mut window = Window::dialed(&local).await;
@@ -2262,7 +2264,7 @@ async fn a_window_that_dials_again_hears_the_end_of_a_word_that_ended_while_it_w
 }
 
 #[tokio::test]
-async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_checkpoint_left_open() {
+async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_crossing_left_open() {
   let at = place();
   let local = Local::new(at.join("sock"));
   let listener = local.listen().await.unwrap();
@@ -2285,9 +2287,9 @@ async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_checkpoint_l
   let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   window.ended(&life).await;
-  // The life ended with its image, which holds the word that waits. A checkpoint at the tip of
-  // the record makes the next life open by the record, on that checkpoint.
-  checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
+  // The life ended with its image, which holds the word that waits. A crossing at the tip of the
+  // record makes the next life open by the record, across that crossing.
+  crossed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
   opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
   let stalls: Vec<Frame> = window.during(QUIET * 3).await.into_iter().filter(stall).collect();
@@ -2849,7 +2851,8 @@ async fn a_thread_gives_its_end_by_page_and_tells_each_change_to_the_peer_that_r
 }
 
 #[tokio::test]
-async fn the_cards_of_a_record_stay_the_same_through_each_birth_on_a_checkpoint_live_and_at_rest() {
+async fn the_cards_of_a_record_stay_the_same_through_each_birth_across_a_crossing_live_and_at_rest()
+{
   let at = place();
   let (_, sessions) = project(&at);
   let (local, _daemon) = started(&at, Duration::ZERO).await;
@@ -2861,9 +2864,9 @@ async fn the_cards_of_a_record_stay_the_same_through_each_birth_on_a_checkpoint_
   assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   let rests = card(&mut window, |card| !card.held).await;
   let same = |card: &Card| Card { since: 0, held: false, viewers: Vec::new(), ..card.clone() };
-  // A checkpoint at the tip of the record, then a birth on it, which says each act of the
-  // checkpoint again: the thread that he started stays his.
-  checkpointed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
+  // A crossing at the tip of the record, then a birth across it, which says each act of its
+  // carry again: the thread that he started stays his.
+  crossed(Opening { record: Some(life.clone()), ..opening(&at) }).await;
   held(&mut window, &sessions, "one.jsonl").await;
   window.ran(&life, "x = 1").await;
   // The cards that the life holds once it is born, which the index that its end writes keeps, and

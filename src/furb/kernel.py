@@ -205,17 +205,23 @@ class Running:
       self.finish(run, rung, None)
 
   def finish(self, run: str, rung: str, got: BaseException | None) -> None:
-    """The run of a word, said done with what the word gave, as that run."""
-    with self.site.set(run):
-      verb(self.names, "say")("done", run, got)
+    """The run of a word, said done with what the word gave, as that run, unless the record ended it already. A
+    TimeoutError is said as no act: the bound of a turn raises it, which a later life does not meet again, so the
+    record keeps it, and a later life says it at its place in the record."""
+    with self.site.set("" if isinstance(got, TimeoutError) else run):
+      verb(self.names, "over")(run) or verb(self.names, "say")("done", run, got)
     self.line.pop(rung, None)
     self.broke.pop(rung, None)
 
   def carry(self, run: str, given: object) -> None:
-    """The word stepped as its rung with what it waited for, and stepped again while what it waits for is done."""
+    """The word stepped as its rung with what it waited for, and stepped again while what it waits for is done. A
+    run that is over, as one whose end the record keeps, steps no more."""
     peek, rung = verb(self.names, "peek"), self.of(run)[2]
     with self.site.set(rung):
       while True:
+        if peek(run, ...) is not ...:
+          self.frames[run].close()
+          return self.ended(run, self.cancelled())
         try:
           frame = self.frames[run]
           got = frame.throw(given) if isinstance(given, BaseException) else frame.send(given)
@@ -278,11 +284,12 @@ class Running:
 
   def begin(self, run: str) -> None:
     """A job taken, put in the line of its rung: it runs when the jobs of that rung before it are over. The job of a
-    rung that is done already is done with CancelledError, since its word never begins. Once a run stands in the
-    line, each part of its rung that waits for an act with no wants waits with a wants as that run."""
-    rung = self.of(run)[2]
+    rung that is done already, or of a run that is over, as one whose end the record keeps, is done with
+    CancelledError, since its word never begins. Once a run stands in the line, each part of its rung that waits for an
+    act with no wants waits with a wants as that run."""
+    rung, peek = self.of(run)[2], verb(self.names, "peek")
     self.taken.discard(run)
-    if verb(self.names, "peek")(rung, ...) is not ...:
+    if peek(rung, ...) is not ... or peek(run, ...) is not ...:
       return self.ended(run, self.cancelled())
     self.line.setdefault(rung, []).append(run)
     for made, ones in list(self.awaits.items()):

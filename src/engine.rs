@@ -74,7 +74,7 @@ use crate::{
   world,
   world::{CHECKPOINT_SCHEMA, Systems},
 };
-use std::{fmt, mem};
+use std::{fmt, iter, mem};
 
 /// The function of the host that starts an ear of the host again after it raised, by its name.
 const AGAIN: &str = "again";
@@ -152,15 +152,17 @@ fn templated(pairs: &[(&str, Object)]) -> Object {
   value::paired(pairs.iter().map(|(expression, one)| ((*expression).to_owned(), one.clone())))
 }
 
-/// The entries of a record that the host holds, each fact alone in an entry, made in the sandbox as
-/// the record of an earlier life comes in.
+/// The entries of a record that the host holds, each its fact and the place of the fact when it
+/// has one, made in the sandbox as the record of an earlier life comes in.
 fn recorded(sand: &mut Sand, outside: &mut Outside, record: &[Object]) -> Result<Object, Fault> {
   let mut entries = Vec::new();
   for one in record {
     let one = outside.inward(sand, one)?;
-    let fact = entry(&one.as_ref(), 0).and_then(|fact| fact.items());
-    let fact = fact.ok_or_else(|| Fault::refused("a record holds each fact alone in an entry"))?;
-    entries.push(Object::tuple([Object::tuple(fact.into_iter().map(|one| one.to_owned()))]));
+    let held = one.as_ref().items().unwrap_or_default();
+    let fact = held.first().and_then(ObjectRef::items);
+    let fact = fact.ok_or_else(|| Fault::refused("a record holds a fact first in each entry"))?;
+    let fact = Object::tuple(fact.into_iter().map(|one| one.to_owned()));
+    entries.push(Object::tuple(iter::once(fact).chain(held[1..].iter().map(ObjectRef::to_owned))));
   }
   Ok(Object::list(entries))
 }
@@ -219,15 +221,13 @@ impl Host for Outside {
 }
 
 /// The inputs of the opening of a sandbox: the texts of an engine, of the rule of the record, of a
-/// Kernel and of a checkpointer, the text of the checkpointer of this build, which gathers, and the
-/// functions of the host that the opening binds.
+/// Kernel and of a checkpointer, and the functions of the host that the opening binds.
 fn inputs(source: &str, kernel: &str, checkpointer: &str) -> NamedValues {
   let mut inputs = NamedValues::new();
   inputs.push("__source", Object::string(source));
   inputs.push("__record_source", Object::string(RECORD));
   inputs.push("__kernel_source", Object::string(kernel));
   inputs.push("__checkpointer_source", Object::string(checkpointer));
-  inputs.push("__gatherer_source", Object::string(crate::CHECKPOINTER));
   inputs.push("__again", Object::function(AGAIN, None));
   inputs.push("__turn", Object::function(TURN, None));
   inputs
@@ -257,10 +257,11 @@ impl Outside {
   }
 
   /// The end of the run whose word a stop of the sandbox cut, kept as the refusal of an act that a
-  /// life ended before the act did: a later life that makes that run again finds it done in the
-  /// record, so the Kernel never runs its word into the same stop, and the prompt of its rung asks
-  /// its model again. The sandbox hears nothing after the stop, so each ear of the host hears the
-  /// keep from here.
+  /// life ended before the act did, with no place, since the keep of the run itself may not have
+  /// reached the store: a later life says it once that run stands and each entry before it was
+  /// said, and the Kernel steps no run that is over, so it never runs the word into the same stop,
+  /// and the prompt of its rung asks its model again. The sandbox hears nothing after the stop, so
+  /// each ear of the host hears the keep from here.
   fn cut(&mut self) {
     let Some(run) = self.stepping.pop().filter(|job| fact::named(job, "run")) else {
       return;
@@ -272,11 +273,12 @@ impl Outside {
       Object::string(""),
       Fault::refused(why).object(),
     ];
+    let entry = [Object::tuple(done), Object::none(), Object::bool(false)];
     let keep = Object::tuple([
       Object::string("keep"),
       Object::string(""),
       Object::string("journal"),
-      Object::tuple([Object::tuple(done)]),
+      Object::tuple(entry),
     ]);
     let Some(fact) = Fact::of(keep.as_ref()) else { return };
     let mut cx = std::task::Context::from_waker(&self.hosted.waker);
@@ -324,17 +326,20 @@ impl Outside {
   }
 
   /// A function of the checkpointer, `seed` or `gathered`, called by its name on the names of the
-  /// engine with values of the host, and what it gave, as it goes out.
+  /// engine with values of the host, and what it gave, as it goes out: the checkpointer of the
+  /// record, or the one whose text `by` holds.
   fn checkpointed(
     &mut self,
     sand: &mut Sand,
     name: &str,
     args: &[Object],
+    by: Option<&str>,
   ) -> Result<Object, Fault> {
     let (mut args, _) = self.inwards(sand, args, vec![])?;
     args.insert(0, Object::string(name));
     let call = self.opened.checkpoint.clone();
-    let got = sand.call(self, &call, args, vec![])?;
+    let by = by.map(|text| ("by", Object::string(text))).into_iter().collect();
+    let got = sand.call(self, &call, args, by)?;
     self.outward(sand, &got)
   }
 
@@ -493,12 +498,12 @@ pub struct Engine {
   /// The acts that the record parks and that this life has not retried, by name and kind, in the order of the record.
   parked: Vec<(String, String)>,
   /// The highest number that each kind took in the record that the life opened on, as a map, which
-  /// a checkpoint of the life keeps taken: the journal does not make again an act that an ear of
+  /// the carry of the life keeps taken: the journal does not make again an act that an ear of
   /// the outside made, so the transcripts of the life do not hold each of those names.
   taken: Object,
   /// The entry of the fact made of the texts that the life runs, as [`world::running`] gives it,
-  /// which its checkpoint names and writes after it. It is the build only for a life that was born
-  /// on it.
+  /// which a crossing writes at the tip of the record. It is the build only for a life that was
+  /// born on it.
   made: Object,
   /// The system prompt of each chain that read first an engine that the life does not run.
   systems: Systems,
@@ -793,7 +798,13 @@ impl Engine {
   /// A function of the checkpointer of the engine, `seed` or `gathered`, by its name, said with
   /// these words, and what it gave.
   pub fn checkpointed(&mut self, name: &str, args: Vec<Object>) -> Result<Object, Fault> {
-    self.run(|sand, outside| outside.checkpointed(sand, name, &args))
+    self.run(|sand, outside| outside.checkpointed(sand, name, &args, None))
+  }
+
+  /// The carry of the life to the texts of a fact made, as `gathered` of the checkpointer that the
+  /// fact names gives it, with these words.
+  pub(crate) fn gathered_for(&mut self, made: &str, args: Vec<Object>) -> Result<Object, Fault> {
+    self.run(|sand, outside| outside.checkpointed(sand, "gathered", &args, Some(made)))
   }
 
   /// One word run in the names of the engine with these values bound, and what it gave, as it goes out, which is how

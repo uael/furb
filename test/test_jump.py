@@ -10,15 +10,15 @@ async def test_a_jump_keeps_each_fact_that_the_chain_held_so_its_turns_never_cha
   """A jump: the chain goes on as another chain, and keeps each fact that it held, so the turns of a chain never change."""
   _, _, root = born()
   assert await engine.rung("k = 7", on=root) is None
-  before, turns = [x[:3] for x in engine.reading(root)], engine.turns(on=root)
+  before, turns = [x[:3] for x in engine.transcript(root)], engine.turns(on=root)
   await engine.jump(on=root)
   assert await engine.rung("k = 8", on=root) is None
-  assert ([x[:3] for x in engine.reading(root)][: len(before)], engine.turns(on=root)) == (before, turns)
-  assert [x for x in engine.reading(root) if x[0] == "rung" and x[4] == "k = 8"] == []
+  assert ([x[:3] for x in engine.transcript(root)][: len(before)], engine.turns(on=root)) == (before, turns)
+  assert [x for x in engine.transcript(root) if x[0] == "rung" and x[4] == "k = 8"] == []
 
 
 async def test_jump_makes_at_rest_a_chain_with_the_chain_as_its_source() -> None:
-  """jump makes, once no word of the chain runs or awaits and no reply of it is on the way, a chain with the chain as its source that keeps each act of its reading but those that drop names, runs word there first as a rung of the jump, and is done with that chain."""
+  """jump makes, once no word of the chain runs or awaits and no reply of it is on the way, a chain with the chain as its source that keeps each act of its transcript but those that drop names, runs word there first as a rung of the jump, and is done with that chain."""
   _, _, root = born()
   assert await engine.rung("k = 7", on=root) is None
   engine.read("a.txt", on=root)
@@ -87,7 +87,7 @@ async def test_each_open_thread_of_the_chain_is_asked_again_on_the_chain_that_it
 
 
 async def test_the_reading_and_the_transcript_of_a_chain_that_jumped_stay_their_own() -> None:
-  """The reading and the transcript of a chain that jumped stay its own, so a model reads by its name the turns that its model read and the facts that were on it."""
+  """The transcript of a chain that jumped stays its own, so a model reads by its name the turns that its model read and the facts that were on it."""
   _, _, root = born()
   assert await engine.rung("k = 1", on=root) is None
   turns, facts = engine.turns(on=root), [x[:3] for x in engine.transcript(root)]

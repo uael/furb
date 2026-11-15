@@ -30,10 +30,10 @@ API of its own:
   image or by its record, on the engine and the Kernel that the image or the last segment of its record holds, as
   `src/image.rs` and `src/checkpoint.rs` say. An image holds those of the build that wrote it, and a build of the same
   digest of what its session calls reads it. When those of the record are not the ones of this build and the life
-  keeps its record, the life crosses: a checkpoint, which tells each chain the lines of the engine that differ, then the
-  fact made of this build, after which the life goes on with this build. `Opening::boot` crosses before the open, by a
+  keeps its record, the life crosses: the carry of its tip, which tells each chain the lines of the engine that differ,
+  then the fact made of this build, after which the life goes on with this build. `Opening::boot` crosses before the open, by a
   life that inspects; a host opens the life on those texts first, shows it, and then moves it as an open of its own,
-  `Engine::cross`, before any word runs. A life that keeps nothing goes on with the engine that it opened on. A record from before the stable cut, the major 2
+  `Engine::cross`, before any word runs. A life that keeps nothing goes on with the engine that it opened on. A record from before the stable cut, the major 3
   of the schema of the record, opens in no life, which says why: the host tells each of its facts, and a window reads
   its threads, read only. Each chain reads as its system prompt the engine
   that it read first, and a new chain with no source the engine that the life runs. `tests/replay` holds records of
@@ -45,15 +45,13 @@ API of its own:
   fact, and `Held` keeps the acts that a host told, from which it draws the desk, the threads and the moments.
   The plain shapes that it folds into, an act with its state, and the words in which a person reads a time, a size
   and a count, stand in `crates/wire`, the crate `furb-wire`, which a client links with no engine and no daemon.
-- `src/checkpoint.rs` holds the checkpoint of a life: a fact at the tip of its record with each chain that lives, its
-  turns, its module and its open prompts, from which a later life of any build goes on: the fact, its store and the
-  boot, while `gathered` and `seed` of the checkpointer write and read its data. A life writes one through
-  `Engine::checkpoint`, which its store keeps as it keeps each fact, and
-  `furb checkpoint` writes one on a record that no life holds. Each writes after the checkpoint the fact made of the
-  texts of the next life: a life the texts that it runs, and a crossing, of `furb checkpoint` or of an open, the texts
-  of its build. A life boots on the last checkpoint of its record,
-  whatever engine wrote it, and replays the entries after it word by word, on the texts that they hold, so it opens at
-  the exact state of its tip. A tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
+- `src/checkpoint.rs` holds the carry of a life across builds: an entry with each chain that lives, its turns, its
+  module and its open prompts, from which a life on another engine goes on, and which no record keeps, while
+  `gathered` and `seed` of the checkpointer write and read its data. A record crosses where a fact made names texts
+  that differ from those before it, which a crossing writes alone. An open by the record replays each segment on the
+  texts that its fact made holds, in a life that inspects it, gathers the carry of its tip with the checkpointer that
+  the next fact made names, and boots the next engine on that carry and the entries of the next segment, up to the
+  last segment, which it replays word by word, so it opens at the exact state of its tip. A tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
   read only, and nothing forks it into a new life.
 - `src/image.rs` holds the image of a life, `<record>.image` beside its record: the session that monty dumps between
   two runs, and the half of the host, which `src/engine/image.rs` gives, with what each ear gives a fresh ear of its
@@ -66,14 +64,13 @@ API of its own:
   default, and a change of meaning raises the version. A life that keeps its record drops the image once it stands on
   the record by the record, so a read and an open that fails leave it. Only a life that keeps its record writes an image,
   since each other life says a fact that its record does not hold. A life of the command line or of the host that
-  keeps its record ends with its image, and writes no checkpoint there. The next life of a build of the same texts
+  keeps its record ends with its image. The next life of a build of the same texts
   and versions on the same ears opens from it: it runs no boot, reads no entry
   and says no stand, and each ear takes each act that the ear before it held in flight as an act that an earlier life
   took: it takes a reply, a wait or a prompt again, and closes a command as interrupted, which no view shows as a
   failure. A life that went on from the image and wrote
   no later one, as a life that crashed, kept entries after it: the next life opens from the image and says them again,
-  as `Engine::feed` says, so a crash costs its tail alone. Each other open goes by the record: from its last
-  checkpoint, or from its first entry when it holds none.
+  as `Engine::feed` says, so a crash costs its tail alone. Each other open goes by the record, from its first entry.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
   engine and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
@@ -85,12 +82,11 @@ API of its own:
   refuses each later entry with that fault, and gives it to a host as `stopped`.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The checkpointer is `src/furb/checkpoint.py`, which they load the same way, and whose contract
-  is `src/furb/checkpoint.pyi`: its `journal` gives the journal that boot takes, which keeps the record of a life and
-  says a record again, its `fed` gives that journal the entries that follow the tip of a life that stands, its
-  `gathered` gives the data of a checkpoint and its `seed` the entries that a later life boots on, each on the names
-  of its engine, and the fact made holds its text beside the texts of the engine and
-  of the Kernel. The checkpointer of the build gathers each checkpoint, a crossing on the engine of an older record
-  too, since the next life reads it, and the checkpointer that the fact made holds seeds and journals its record.
+  is `src/furb/checkpoint.pyi`: its `gathered` gives the data of a carry, its `seed` the entries that the next engine
+  boots on, and its `birth` the ear that binds a carried module, each on the names of its engine, and the fact made
+  holds its text beside the texts of the engine and of the Kernel. The checkpointer that the next fact made names
+  gathers each carry, so each later build carries a record the same. `boot` of the engine says a record again, at the
+  place of each entry.
   `src/furb/record.py` holds what stands, in the record that boot is given, for a value that no later life makes again
   as it was, and they load it the same way. No gate reads a word before it runs.
 - `src/binding.rs` holds the host API that both doors give, each function once: the ears of the crate, the store, the
@@ -110,7 +106,7 @@ API of its own:
   daemon, pinned by the name of the task, so an agent runs a life with no window and each window lists it with what
   holds it, which `end` ends, and `lives` lists each life that the daemon holds with what holds it; `facts` prints
   each fact of a record with no life,
-  `checkpoint` writes the checkpoint of a life, `catalog` shows where the models came from, and `host` serves the
+  `catalog` shows where the models came from, and `host` serves the
   daemon of the machine of `furb-host`. The package `furb`
   depends on the wheel of `furb-cli`, so `pip install furb` gives the command `furb`.
 - `host/` is `furb-host`, the third package of the workspace of the crate, on the public API of `furb` alone. Its
@@ -234,8 +230,8 @@ engine does not serve its meaning, the name is wrong, and the name changes.
   `each_run_of_a_chain_of_the_replays_has_a_turn_that_shows_its_word` in `src/life.test.rs` holds the first part.
 - The record is the one truth of a life. A cache of a life is derived from its record and checked against it, and a
   reader drops a cache that does not agree: the log of a life holds every fact that the life said, and each later
-  life writes it again from the record. A record is made again by running its words from its last checkpoint, so a
-  chain stays a function of its record.
+  life writes it again from the record. A record is made again by running its words, each segment on the texts that
+  it holds, so a chain stays a function of its record.
 
 ## The bar
 

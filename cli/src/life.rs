@@ -65,7 +65,8 @@ impl Life {
 
   /// The skills that the life runs, in the order it enabled them.
   pub(crate) fn skills(&mut self) -> Result<Vec<Skill>, CliError> {
-    let root = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None });
+    let root =
+      self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None, at: None });
     Ok(skill::enabled(&root?))
   }
 
@@ -76,7 +77,8 @@ impl Life {
   /// prompt beside the one that record stands on, and ask a model for what it was answered once.
   pub(crate) fn again(&mut self, asked: &Asked<'_>) -> Result<Option<String>, CliError> {
     let wanted = [OPERATOR, self.root.as_str(), asked.shape, asked.message, asked.to];
-    let prompts = verbs::Transcript { on: Some(self.root.clone()), of: Some("prompt".to_owned()) };
+    let prompts =
+      verbs::Transcript { on: Some(self.root.clone()), of: Some("prompt".to_owned()), at: None };
     Ok(self.engine.transcript(prompts)?.iter().find_map(|a| {
       let words =
         a.0.as_ref().items()?.iter().map(furb::ObjectRef::as_str).collect::<Option<Vec<_>>>()?;
@@ -121,7 +123,7 @@ fn paused(engine: &mut Engine, id: &str) -> Result<bool, CliError> {
 
 /// Why a reply of the root was refused last, which says why the World paused a chain.
 fn refused(engine: &mut Engine, root: &str) -> Result<Option<String>, CliError> {
-  let done = verbs::Transcript { on: Some(root.to_owned()), of: Some("done".to_owned()) };
+  let done = verbs::Transcript { on: Some(root.to_owned()), of: Some("done".to_owned()), at: None };
   let facts = engine.transcript(done)?;
   let mut why = facts.iter().rev().filter(|a| fact::named(a.about(), "reply"));
   Ok(

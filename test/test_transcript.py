@@ -36,6 +36,18 @@ async def test_transcript_on_journal_gives_each_fact_that_the_journal_said_again
   assert [a for a in held if a[1] == later] == [] and [a for a in held if a not in engine.transcript(over)] == []
 
 
+async def test_transcript_on_of_at_gives_what_transcript_on_of_gives_from_the_place_at() -> None:
+  """transcript(on, of, at) gives what transcript(on, of) gives from the place at, and copies no fact before that place."""
+  _, _, root = born()
+  assert await engine.rung("k = 1", on=root) is None
+  assert await engine.rung("k = 2", on=root) is None
+  for of in ("", "run"):
+    whole = engine.transcript(root, of)
+    assert [engine.transcript(root, of, at) for at in range(len(whole) + 2)] == [
+      whole[at:] for at in range(len(whole) + 2)
+    ]
+
+
 async def test_transcript_gives_a_new_list_at_each_call() -> None:
   """transcript gives a new list at each call, so a word that changes the list it was given changes no transcript."""
   _, _, root = born()

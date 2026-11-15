@@ -45,6 +45,19 @@ pub(crate) fn audited(record: &Path, sha256: &str, report: Option<&Path>) -> Res
   if count == 0 { Ok(()) } else { Err(CliError::Disagrees(count)) }
 }
 
+/// The place of each fact made whose engine differs from the one of the fact made before it,
+/// from the place and the engine of each fact made of a record, in order.
+fn crossings(made: impl Iterator<Item = (usize, String)>) -> Vec<usize> {
+  let mut was = None;
+  made
+    .filter_map(|(at, engine)| {
+      let crosses = was.as_ref().is_some_and(|was| *was != engine);
+      was = Some(engine);
+      crosses.then_some(at)
+    })
+    .collect()
+}
+
 /// What the record says and what a life that only inspects its copy makes again, told in the
 /// report, with each thing that does not agree.
 fn checked(
@@ -66,15 +79,13 @@ fn checked(
   told["acts"] =
     json!(facts.iter().filter(|fact| question(&word(fact, 0), &word(fact, 1))).count());
   // The life keeps nothing, enables no new extension and offers no model, and the World is silent
-  // in it, so it runs no command, touches no file and reaches no network. It opens from the first
-  // entry, and not from the last checkpoint, so it makes each act of the record again and proves
-  // each checkpoint.
+  // in it, so it runs no command, touches no file and reaches no network. It opens by the record,
+  // so each engine of the record replays the segment that it made, and makes each act of it again.
   let opening = Opening {
     directory: folder.display().to_string(),
     record: Some(copy.display().to_string()),
     keeps: Some(false),
     inspecting: Some(true),
-    whole: Some(true),
     skills: Some(false),
     roster: Some(Vec::<String>::new().into()),
     ..Opening::default()
@@ -86,11 +97,12 @@ fn checked(
       return Ok(());
     }
   };
-  // Each checkpoint of the record was proven as the life was born again at it, by a life that made
-  // the entries before it again, and the life at the tip holds the acts after the last one.
-  let reborn = facts.iter().filter(|fact| word(fact, 0) == "checkpoint").count();
-  told["checkpoints"] = json!(reborn);
-  let tip = facts.iter().rposition(|fact| word(fact, 0) == "checkpoint").map_or(0, |at| at + 1);
+  // Each segment of the record before the last one was proven as the open replayed it on its own
+  // engine and carried it across, and the life at the tip holds the acts of the last segment.
+  let made = facts.iter().enumerate().filter(|(_, fact)| word(fact, 0) == "made");
+  let crossings = crossings(made.map(|(at, fact)| (at, word(fact, 3))));
+  told["crossings"] = json!(crossings.len());
+  let tip = crossings.last().copied().unwrap_or(0);
   let (mut answers, mut words) = (Vec::new(), Vec::new());
   for fact in &facts[tip..] {
     let (kind, about, maker) = (word(fact, 0), word(fact, 1), word(fact, 2));

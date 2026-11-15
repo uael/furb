@@ -2,9 +2,9 @@
 
 from collections.abc import Generator
 
-from conftest import Sand, Wrapping, born, keeping, kernel
+from conftest import Sand, born, keeping, life, settle
 from furb import engine
-from furb.engine import OPERATOR, idle
+from furb.engine import OPERATOR
 
 
 def once() -> Generator[tuple | None, tuple | None]:
@@ -32,12 +32,12 @@ async def test_lives_carries_a_fact_into_an_ear_and_says_everything_the_ear_yiel
   assert log[mark:] == [("done", "none://one", OPERATOR, None)]
 
 
-async def test_boot_defines_lives_again_and_the_journal_binds_it_again() -> None:
-  """boot defines lives again at each life, and the journal binds it again, as boot says, so each ear that is no act hears a fact that the journal says again under the name journal."""
-  journal = Wrapping(idle("journal"))
-  engine.boot(journal, **kernel(), world=Sand().hears())
-  first = engine.lives
-  assert first is journal.lives
-  again = Wrapping(idle("journal"))
-  engine.boot(again, **kernel(), world=Sand().hears())
-  assert engine.lives is again.lives and engine.lives is not first
+async def test_boot_defines_lives_again_at_each_life() -> None:
+  """boot defines lives again at each life, so each ear of the outside hears a fact that the journal says again under the name journal."""
+  sand, _, _ = born()
+  first, heard = engine.lives, list[tuple]()
+  life(Sand(), list(sand.record), keeper=keeping(heard))
+  await settle()
+  assert engine.lives is not first
+  done = [a for a in heard if a[:2] == ("done", "stand1")]
+  assert done == [("done", "stand1", "journal", *done[0][3:])] and sand.record[2][0][:3] == ("done", "stand1", "world")

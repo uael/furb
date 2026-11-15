@@ -37,11 +37,9 @@ async fn a_process_that_opens_the_record_of_a_held_life_is_refused_and_the_life_
   let _daemon = Daemon::started(&yard).await;
   let mut window = Window::attached(&yard).await;
   let life = yard.life();
-  for words in [&["run", "--record", &life, "x = 1"][..], &["checkpoint", "--record", &life]] {
-    let opened = yard.furb(words).output();
-    let Output { status, .. } = timeout(PATIENCE, opened).await.expect("furb ends").unwrap();
-    assert!(!status.success(), "furb {} takes no record that the daemon holds", words[0]);
-  }
+  let opened = yard.furb(&["run", "--record", &life, "x = 1"]).output();
+  let Output { status, .. } = timeout(PATIENCE, opened).await.expect("furb ends").unwrap();
+  assert!(!status.success(), "furb run takes no record that the daemon holds");
   window.ran("y = 2").await;
 }
 

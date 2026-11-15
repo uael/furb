@@ -32,7 +32,7 @@ async def test_listening_gives_the_ear_of_each_act_and_of_each_outside_that_stil
   asked = engine.prompt(str, "Which?", to=OPERATOR, on=root)
   await settle()
   names = list(engine.listening())
-  assert names[0] == OPERATOR and names.index("journal") < names.index(asked)
+  assert names[0] == OPERATOR and names.index("world") < names.index(asked)
   engine.close("this one", asked)
   await settle()
   world_says("ping", root)

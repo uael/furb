@@ -95,7 +95,8 @@ pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Stor
   }
 }
 
-/// Each entry of the database, in the order of its rows, each the fact it kept in a list of one, as boot takes them.
+/// Each entry of the database, in the order of its rows, each the fact it kept, its place and
+/// whether the life rested, in a list, as boot takes them.
 fn rows(db: &Connection, path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), StoreError> {
   let mut asked =
     db.prepare("SELECT n, entry FROM entries ORDER BY n").map_err(StoreError::sqlite(path))?;
@@ -105,8 +106,7 @@ fn rows(db: &Connection, path: &Path, take: &mut dyn FnMut(Object)) -> Result<()
     let invalid = || StoreError::Invalid { path: path.to_path_buf(), at: At::Row(n) };
     let Ok(text) = row.get::<_, String>(1) else { return Err(invalid()) };
     let Ok(held) = serde_json::from_str::<Vec<&RawValue>>(&text) else { return Err(invalid()) };
-    let [fact] = held.as_slice() else { return Err(invalid()) };
-    take(entry_of(fact).ok_or_else(invalid)?);
+    take(entry_of(&held).ok_or_else(invalid)?);
   }
   Ok(())
 }

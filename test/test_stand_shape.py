@@ -138,7 +138,7 @@ async def test_at_its_tip_boot_stands_the_life_again() -> None:
   later = Sand(stands=LATER)
   again, _ = await relived(later, plain(sand.record))
   assert [(a[1], a[2]) for a in said(again, "stand")] == [("stand1", OPERATOR), ("stand2", OPERATOR)]
-  assert later.record == tip("stand2", root, LATER)
+  assert [e[0] for e in later.record] == tip("stand2", root, LATER)
   for one in (root, two, side):
     assert engine.module(one)["actor"] == "o/low"
   twin = await chained("twin", root, 300)

@@ -273,17 +273,17 @@ daemon answers requests in any order.
   passes, and its `retry`: the `attempt` that comes, the `most` attempts, the seconds that the provider `wait`s before
   that attempt and the second of the epoch `at` which it comes, and `why` the attempt before it failed; what the model
   wrote for that rung before it is void. After `reborn`, which a life tells once it told the past of its record, the
-  life goes on from its last checkpoint, and its acts come again as they stand. A peer that attaches from a place past
+  life goes on from the carry across its last crossing, and its acts come again as they stand. A peer that attaches from a place past
   the tip, as a window that reads the cards and the pages and no event, hears the event `ended` alone, so it learns
   that the life ended and why, as when its open failed. A life that a fault ended answers each view of what it told,
   as `threads` and `thread`, read only, until the window leaves it, and refuses each other verb with that fault. A
   record from before the stable cut, which `docs/promise.md` says, opens in no life: its life tells each fact of the
   record, then `ended` with why, and a window reads its threads that way.
-- The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
-  checkpoint. The log lets go of each of them once it told it, since the record holds it, and of each fact that an open
+- The log of a life that opens on a record that crossed starts with each fact that the record told before its last
+  crossing. The log lets go of each of them once it told it, since the record holds it, and of each fact that an open
   told, which the file of the log of the record holds, and a window that attaches before them reads them again from the
   record or from that file. So a window of a life that a later open, a handover or an end
-  brought back from its checkpoint hears the life whole, and hears no fact twice.
+  brought back across a crossing hears the life whole, and hears no fact twice.
 - `cards` gives the cards of the machine as `cards`, and the peer then hears a frame `cards` at each change of them,
   until it leaves. A card is one thread that an operator started: a prompt of his at the top of the threads of its
   life, with all that answers it. The answer holds the cards of each record that `list` gives with no `config`. A
@@ -405,11 +405,11 @@ daemon answers requests in any order.
 
     | Stage | The work | `done` of `of` |
     | --- | --- | --- |
-    | `recall` | The daemon reads what the record told before its last checkpoint, for the log of the life. | Thousandths of the read, of 1000, counted as the frame `indexing` counts them. Both are 0 until the daemon found the checkpoint. |
-    | `find` | The record is read from its last checkpoint, for the build of its last life. | Bytes passed, of the bytes of the record. |
-    | `cross` | A life that another build of furb ran is replayed on the engine of that build, which writes its checkpoint and tells each chain the lines of the engine that differ. | Both are 0: the stage counts nothing. |
-    | `read` | The record is read again from its last checkpoint under its lease, when it changed after `find`. | Bytes passed, of the bytes of the record. |
-    | `seed` | The sandbox loads the engine and makes the entries of the checkpoint, or it loads the image of the life. When the image does not load, the record is read from its last checkpoint in this stage. | Both are 0: the stage counts nothing. |
+    | `recall` | The daemon reads what the record told before its last crossing, for the log of the life. | Thousandths of the read, of 1000, counted as the frame `indexing` counts them. Both are 0 until the daemon found the crossings. |
+    | `find` | The record is read, for the build of its last life. | Bytes passed, of the bytes of the record. |
+    | `cross` | A life that another build of furb ran is replayed on the engine of that build, which writes the fact made of this build and tells each chain the lines of the engine that differ. | Both are 0: the stage counts nothing. |
+    | `read` | The record is read again under its lease, when it changed after `find`. | Bytes passed, of the bytes of the record. |
+    | `seed` | The sandbox loads the engine and makes the carry across each crossing of the record, or it loads the image of the life. When the image does not load, the record is read in this stage. | Both are 0: the stage counts nothing. |
     | `boot` | The life replays the entries that it boots on. | Entries that the replay passed, of those entries. |
     | `log` | The daemon puts what the open told in the log of the life, which its windows read. | Events put, of those events. |
 
@@ -486,8 +486,8 @@ once it listens. A second daemon refuses to start there.
   and answers `handed` with each life, its folder and its pins. The new daemon listens and opens each life again with
   its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
   from its image when the new build reads it, else from its record. A life that ran another engine, Kernel or
-  checkpointer reaches its tip on them, writes a checkpoint that tells each chain the lines of the engine that differ,
-  and goes on with those of the new build, at the stage `cross`. The handover waits for each life to end, however long it takes, and the log of the daemon
+  checkpointer reaches its tip on them, writes the fact made of the new build, tells each chain the lines of the
+  engine that differ, and goes on with those of the new build, at the stage `cross`. The handover waits for each life to end, however long it takes, and the log of the daemon
   names each life that it waits for: a life given up before its end would still hold its record and the facts that
   its record does not hold yet. A life that ends already ends there and goes to no daemon, and the next `open` opens
   it from its record.

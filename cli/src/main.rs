@@ -27,12 +27,7 @@ use std::{
 };
 
 use clap::{Args, Parser, Subcommand};
-use furb::{
-  checkpoint,
-  life::{Opening, Progress},
-  value::entry,
-  verbs, wire, world,
-};
+use furb::{life::Opening, value::entry, verbs, wire, world};
 use furb_host::GRACE;
 use tokio::runtime;
 use tokio::task;
@@ -158,17 +153,6 @@ enum Command {
     #[command(flatten)]
     stand: Stand,
   },
-  /// Write at the tip of a record the checkpoint of its life, from which a life of any later build
-  /// goes on: each chain that lives, with its turns, its module and its open prompts. It replays
-  /// the record and asks no model. The next life on the record runs the engine of this build.
-  Checkpoint {
-    /// The record to write the checkpoint at.
-    #[arg(long)]
-    record: PathBuf,
-    /// The directory the chains of the life start in, the current directory when unsaid.
-    #[arg(long)]
-    cwd: Option<PathBuf>,
-  },
   /// Print where the models of this machine came from: for models.dev and for pi-ai, the version, the time of the last
   /// good fetch, and the error of the last failed one. A running life uses a new catalog at its next stand.
   Catalog {
@@ -179,8 +163,8 @@ enum Command {
   /// Serve the daemon of this machine, which holds each life by its record while a window or a pin
   /// holds it, and refuses to start where a daemon serves already.
   Host {
-    /// How many seconds a life that no window and no pin holds lives before it writes its
-    /// checkpoint and ends.
+    /// How many seconds a life that no window and no pin holds lives before it writes its image
+    /// and ends.
     #[arg(long, value_name = "SECONDS", default_value_t = GRACE.as_secs_f64(), value_parser = grace)]
     grace: f64,
     #[command(subcommand)]
@@ -304,16 +288,13 @@ async fn command(furb: Furb) -> Result<(), CliError> {
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word).await,
     Some(Command::Skills { place }) => skills(place.opening(false)).await,
     Some(Command::Catalog { update }) => catalog(update).await,
-    // The life of the audit boots, which blocks the thread while it is born again at each
-    // checkpoint.
+    // The life of the audit boots, which blocks the thread while it replays each segment of the
+    // record.
     Some(Command::Audit { record, sha256, report }) => {
       task::block_in_place(|| audit::audited(&record, &sha256, report.as_deref()))
     }
     Some(Command::Host { grace, then }) => {
       host::serve(Duration::from_secs_f64(grace), matches!(then, Some(Hosting::Upgrade))).await
-    }
-    Some(Command::Checkpoint { record, cwd }) => {
-      checkpoint(Place { record: Some(record.clone()), cwd }.opening(false), &record).await
     }
     None => window::launch().map(|never| match never {}),
   }
@@ -419,15 +400,6 @@ async fn run(opening: Opening, word: String) -> Result<(), CliError> {
   say(life.settled(&id).await?.py_repr())?;
   life.ended();
   Ok(())
-}
-
-/// The checkpoint of the life of a record, made in a life that only inspects it and kept at its
-/// tip, then the fact made of this build, so the next life on the record runs this build.
-async fn checkpoint(opening: Opening, record: &Path) -> Result<(), CliError> {
-  let inspects = Opening { inspecting: Some(true), ..opening };
-  let (mut engine, _) =
-    inspects.open::<String>([], Progress::default(), &mut |_| true, None).await?;
-  Ok(checkpoint::crossed(record, &mut engine)?)
 }
 
 /// Each skill that a life on the record runs, as its name and its life word, or its name alone

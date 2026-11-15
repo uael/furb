@@ -433,8 +433,8 @@ test("a fact seen that the operator says covers what came before it, and a later
   }
 });
 
-test("a session that ends keeps the checkpoint of its life and the fact made of its texts at the tip of its record, and a later session opens on it", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-checkpoint-"));
+test("a session that ends keeps no checkpoint, and a later session opens on its record", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-ended-"));
   const record = join(cwd, "life.jsonl");
   const first = new Session({ cwd, record, skills: false });
   const engine = first.open();
@@ -442,7 +442,7 @@ test("a session that ends keeps the checkpoint of its life and the fact made of 
   await first.end();
   const second = new Session({ cwd, record, skills: false });
   try {
-    expect((await kinds(record)).slice(-2)).toEqual(["checkpoint", "made"]);
+    expect(await kinds(record)).not.toContain("checkpoint");
     second.open();
     expect(second.activity.acts.get("prompt1")?.kind).toBe("prompt");
   } finally {

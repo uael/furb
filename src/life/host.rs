@@ -332,7 +332,8 @@ impl Life {
     let mut found = Vec::new();
     let mut open = vec![self.root()];
     while let Some(on) = open.pop() {
-      let facts = self.engine.transcript(verbs::Transcript { on: Some(on.0.clone()), of: None })?;
+      let facts =
+        self.engine.transcript(verbs::Transcript { on: Some(on.0.clone()), of: None, at: None })?;
       let children =
         facts.iter().filter(|one| one.kind() == "chain" && one.question() && one.on() == on.0);
       open.extend(
@@ -364,8 +365,11 @@ impl Life {
 
   /// The words of the rungs of a thread, as python, in order.
   pub fn plan<T>(&mut self, thread: &Thread<T>) -> Result<String, Fault> {
-    let facts =
-      self.engine.transcript(verbs::Transcript { on: Some(thread.chain.0.clone()), of: None })?;
+    let facts = self.engine.transcript(verbs::Transcript {
+      on: Some(thread.chain.0.clone()),
+      of: None,
+      at: None,
+    })?;
     let mut words: Vec<(String, String)> = Vec::new();
     for one in &facts {
       let word =

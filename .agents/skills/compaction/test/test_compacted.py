@@ -91,7 +91,7 @@ async def test_the_chain_keeps_the_acts_that_the_model_chose(tmp_path: Path) -> 
   assert await engine.prompt(int, "go", on=root) == 3
   await until(lambda: compacted_on(root))
   new = engine.scope(root)
-  told = {a[1] for a in engine.reading(new) if a[0] == "tell"}
+  told = {a[1] for a in engine.transcript(new) if a[0] == "tell"}
   again = [a[1] for a in engine.transcript(new) if a[0] == "read" and a[4] == "a.txt" and a[1] != held["a.txt"]]
   assert held["c.txt"] in told and held["d.txt"] not in told and held["a.txt"] not in told
   assert again[0] in told and engine.module(new)["summary"] == "gist"
@@ -101,8 +101,8 @@ async def test_when_the_model_gives_no_tuple_it_compacts_the_chain_with_filters(
   """When the model gives no tuple of a list and a str, it compacts the chain with FILTERS and no summary of the model."""
   root, act = await wrapped(tmp_path, "FILTERS = [lambda acts: []]\nread('a.txt')", chooser="close((1, 2))")
   assert engine.peek(act) == 3 and made() == ["reground()"]
-  (one,) = [a[1] for a in engine.reading(root) if a[0] == "read" and a[4] == "a.txt"]
-  assert [a for a in engine.reading(engine.scope(root)) if a[0] == "tell" and a[1] == one] == []
+  (one,) = [a[1] for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt"]
+  assert [a for a in engine.transcript(engine.scope(root)) if a[0] == "tell" and a[1] == one] == []
 
 
 async def test_it_stops_and_pauses_nothing(tmp_path: Path) -> None:
@@ -124,7 +124,7 @@ async def test_it_stops_and_pauses_nothing(tmp_path: Path) -> None:
   assert await act == 7
   await until(lambda: compacted_on(root))
   assert made() == ["<s:summary>\ngist</s:summary>\nreground()"] and engine.over(ran)
-  assert [a for one in (root, "chain2") for a in engine.reading(one) if a[0] == "pause"] == []
+  assert [a for one in (root, "chain2") for a in engine.transcript(one) if a[0] == "pause"] == []
 
 
 async def test_after_it_compacts_it_asks_choice_again_only_past_again(tmp_path: Path) -> None:

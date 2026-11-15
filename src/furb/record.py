@@ -52,6 +52,6 @@ def recorded(engine: dict[str, object], entries: list[tuple]) -> list[tuple]:
     return word
 
   return [
-    ((*x[:4], *map(again, x[4:])),) if question(x) and re.fullmatch(r"[a-z_]+\d+", str(x[2])) else (x,)
-    for (x,) in entries
+    ((*x[:4], *map(again, x[4:])), *at) if question(x) and re.fullmatch(r"[a-z_]+\d+", str(x[2])) else (x, *at)
+    for (x, *at) in entries
   ]

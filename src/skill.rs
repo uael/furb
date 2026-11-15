@@ -1034,23 +1034,27 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
           }
           return Ok(());
         }
-        // Each enable is said before any rung plays, so the journal of a later life says them again
-        // as one burst and
-        // the rungs play in the order of the first life.
+        // Each enable is said before any rung plays. An enable that the journal says again plays
+        // nothing: the record holds each rung that it played, which the life plays again in its
+        // place, so the ear only takes again what each chain has.
         if a.kind() != ENABLE {
           for one in &new {
             say(&mut co, one.enable());
           }
         }
+        let again = a.by() == JOURNAL;
         for one in new {
           let Some(at) = enabled.iter().position(|two| two.name == one.name) else {
             for chain in chains.iter_mut() {
-              play(&mut co, &one, chain).await?;
+              let word = worded(&one, chain);
+              if !again {
+                ring(&mut co, &chain.0, &word).await?;
+              }
             }
             enabled.push(one);
             continue;
           };
-          if enabled[at].word != one.word {
+          if enabled[at].word != one.word && !again {
             let word = reloads(&one.word);
             for (chain, had) in chains.iter() {
               if had.contains(&one.name) {
@@ -1123,20 +1127,21 @@ async fn told(co: &mut Co, note: &str) -> Result<bool, Fault> {
 /// on a chain that
 /// has the extension already, and nothing on a chain other than the root that lacks an extension of
 /// the root alone.
-async fn play(
-  co: &mut Co,
-  one: &Skill,
-  (chain, had): &mut (String, Vec<String>),
-) -> Result<(), Fault> {
-  let word = if had.contains(&one.name) {
+async fn play(co: &mut Co, one: &Skill, chain: &mut (String, Vec<String>)) -> Result<(), Fault> {
+  let word = worded(one, chain);
+  ring(co, &chain.0, &word).await
+}
+
+/// The word that plays one extension on a chain, which then has it.
+fn worded(one: &Skill, (chain, had): &mut (String, Vec<String>)) -> String {
+  if had.contains(&one.name) {
     one.life.clone()
   } else if one.root && chain != ROOT {
-    return Ok(());
+    String::new()
   } else {
     had.push(one.name.clone());
     format!("{}\n\n{}", one.word, one.life).trim_matches('\n').to_owned()
-  };
-  ring(co, chain, &word).await
+  }
 }
 
 /// The default actor and the path of the doctrine that the standing names, or none while it names

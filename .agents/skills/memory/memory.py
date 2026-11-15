@@ -10,7 +10,6 @@ from furb.engine import (
   get,
   question,
   read,
-  reading,
   scope,
   span,
   standing,
@@ -94,7 +93,7 @@ def memory(path: str = ".", on: str = "") -> list[Text]:
 def minded(path: str, on: str, seen: dict[str, Text | None]) -> list[Text]:
   was: dict[str, list[str]] = {}
   held: set[str] = set()
-  for x in reading(on):
+  for x in transcript(on):
     match x:
       case ("done", about, _, Text(place, content)) if (
         (question(("read", about)) or question(("write", about))) and get(maker := get(about)[2]) and tells(maker)

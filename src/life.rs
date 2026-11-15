@@ -30,17 +30,24 @@ use crate::{
   image::{self, Image},
   minify,
   skill::{self, Places},
-  world::{self, Catalog, Mode, Retries, Scratch, Systems, Writes, mcp::mcp, skills::skills},
+  world::{self, Catalog, Mode, Retries, Scratch, Writes, mcp::mcp, skills::skills},
 };
 
 /// The ears of a life, each under the name the engine hears it by, in the order of boot.
 pub type Ears = Vec<(String, Box<dyn Ear>)>;
 
+/// The tip of a record as [`Opening::tip`] finds it: the image that agrees with it, the entries of
+/// the record when the life opens by them, and the carry across its last crossing.
+type Tip = (Option<Image>, Option<world::Last>, Option<Object>);
+
 /// What a life waits for before it boots, as [`Opening::prepared`] gives it.
 struct Prepared {
   waited: Waited,
-  /// The last entries of the record, which the boot takes, so an open reads them one time.
+  /// The entries of the record, which the boot takes, so an open reads them one time.
   last: Option<world::Last>,
+  /// The carry that the last engine of the record boots on, when the record crossed, as
+  /// [`Opening::carried`] makes it.
+  carry: Option<Object>,
   /// The image of the record, when one agrees with it: the life then opens from it, and reads no
   /// entry.
   image: Option<Image>,
@@ -80,9 +87,28 @@ enum Taken {
 enum Imaged {
   /// The life at the tip of the image.
   Life(Engine),
-  /// No image agrees with the record, or the image does not load: the ears of the host, and what
-  /// the life waited for, on which it opens by its record.
+  /// No image agrees with the record: the ears of the host, and what the life waited for, on which
+  /// it opens by its record.
   Back(Ears, Prepared),
+  /// The image does not load: the ears of the host, and what the life waited for, which holds no
+  /// record yet. The caller reads the record and its carry off the runtime of the ears, as
+  /// [`Opening::reread`] does, since a carry boots engines on the catalog, and the life then opens
+  /// by its record.
+  Unloaded(Ears, Prepared),
+}
+
+/// What `work` gives, from a blocking thread of the runtime of the ears, which may wait on the
+/// catalog. A panic of the work goes on in the task that awaits.
+async fn blocking<T: Send + 'static>(
+  work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, Fault> {
+  match task::spawn_blocking(work).await {
+    Ok(done) => Ok(done),
+    Err(no) => match no.try_into_panic() {
+      Ok(panic) => panic::resume_unwind(panic),
+      Err(no) => Err(Fault::refused(format!("the life did not open: {no}"))),
+    },
+  }
 }
 
 /// A function of the host that answers each request in place of the models: it is given the request and a function
@@ -145,14 +171,6 @@ pub struct Opening {
   /// their names, so it runs no command and touches no file.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub inspecting: Option<bool>,
-  /// Whether the life opens from the first entry of its record, born again at each checkpoint as
-  /// each life of the record was, and not from its last checkpoint alone; false when unsaid. Each
-  /// checkpoint then has to end the life that wrote it and to hold what a life born on the entries
-  /// before it gathers, or the open is refused, as [`checkpoint::reborn`] says. Both opens reach
-  /// one state at the tip, so the tests and the gates open this way to prove each checkpoint of a
-  /// record.
-  #[cfg_attr(feature = "python", pyo3(default))]
-  pub whole: Option<bool>,
   /// Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs what
   /// its record enables either way.
   #[cfg_attr(feature = "python", pyo3(default))]
@@ -279,11 +297,14 @@ impl Opening {
       (Some(path), None, None) => (world::last(Path::new(path), &mut |_| {})?, None),
       (None, ..) => (world::Last::default(), None),
     };
-    // The log takes where the last entries start, so a life after a checkpoint writes on after the
-    // log of the lives before it.
+    // The log takes the place where the last segment starts, so a life after a crossing writes on
+    // after the log of the lives before it.
+    let tip = checkpoint::crossings(&last.entries).last().copied();
     let logs = self.record.as_ref().filter(|_| keeps);
-    let logs = logs.map(|path| world::logging(path, &last.entries, last.from));
-    let record = checkpoint::booted(last.entries);
+    let logs = logs.map(|path| world::logging(path, &last.entries, tip));
+    let mut entries = last.entries;
+    let record: Vec<Object> =
+      prepared.carry.into_iter().chain(entries.drain(tip.unwrap_or(0)..)).collect();
     let mut ears = self.eared(prepared.waited, Some(&record), checkpoint::stood(&record))?;
     ears.extend(store.map(|store| (world::STORE.to_owned(), store)));
     ears.extend(logs.map(|log| ("log".to_owned(), log)));
@@ -372,17 +393,16 @@ impl Opening {
       Some(lease) => Some(lease),
       None => self.record.as_deref().filter(|_| self.keeps()).map(world::Lease::of).transpose()?,
     };
-    let (image, last) = self.tip(told, taken, lease.as_ref())?;
+    let (image, last, carry) = self.tip(told, taken, lease.as_ref())?;
     // The models of a life read the engine that the life runs: the one that its image holds, or
     // the one that the last segment of its record holds; and each chain that read another engine
-    // first reads that one, as the image or the last checkpoint says.
+    // first reads that one, as the image or the carry says.
     let source = (image.is_some() || last.is_some())
       .then(|| Self::texts(image.as_ref(), last.as_ref()).map(|texts| texts.0))
       .transpose()?;
-    let systems = match (&image, &last) {
-      (Some(image), _) => image.half.systems.clone(),
-      (None, Some(last)) => checkpoint::systems(&last.entries),
-      (None, None) => Systems::default(),
+    let systems = match &image {
+      Some(image) => image.half.systems.clone(),
+      None => checkpoint::systems(carry.as_slice()),
     };
     let unread = || Fault::refused("this build cannot minify the engine that the life runs");
     let system = source
@@ -405,15 +425,9 @@ impl Opening {
       })
       .collect();
     // A life that names no actor or no roster goes on with the ones that its record stood on last.
-    let tip = image.as_ref().map(|image| image.half.stood.clone());
-    let stood = match (&last, self.record.as_deref()) {
-      (Some(last), Some(path)) => match checkpoint::standing(&last.entries) {
-        // A checkpoint whose last stand was refused carries no standing, and the record still holds
-        // the one that the stand before it gave.
-        None => world::stood_before(Path::new(path), last.from)?,
-        stood => stood,
-      },
-      _ => tip,
+    let stood = match &last {
+      Some(last) => last.entries.iter().rev().find_map(world::stood),
+      None => image.as_ref().map(|image| image.half.stood.clone()),
     };
     let (actor, roster) = stood.as_ref().map_or((None, None), |one| offered(one.as_ref()));
     let actor = self.actor.clone().or(actor);
@@ -422,22 +436,47 @@ impl Opening {
       Some(one) => provider.system(one.into()),
       None => provider,
     };
-    Ok(Prepared { waited: Waited { places, played, refused, provider }, last, image, lease })
+    Ok(Prepared { waited: Waited { places, played, refused, provider }, last, carry, image, lease })
   }
 
-  /// The last entries of the record, from its last checkpoint, as the boot takes them, with each
-  /// byte that the read passes told to `passed`, and none for a record that is not there yet. A
-  /// record of another major of its schema is refused before any build writes on it.
+  /// The entries of the record, with each byte that the read passes told to `passed`, and none
+  /// for a record that is not there yet. A record of another major of its schema is refused before
+  /// any build writes on it.
   fn last(&self, passed: &mut dyn FnMut(u64)) -> Result<Option<world::Last>, Fault> {
     let Some(path) = self.record.as_deref().map(Path::new).filter(|one| one.exists()) else {
       return Ok(None);
     };
     let held = world::last(path, passed)?;
-    // The build that wrote the checkpoint names the schema of the record before it, and each
-    // build after it the schema of what it wrote.
-    world::readable(world::made_before(path, held.from)?.as_slice())?;
     world::readable(&held.entries)?;
     Ok(Some(held))
+  }
+
+  /// The carry that the last engine of a record boots on, and nothing when the record never
+  /// crossed. Each segment but the last replays in a life that inspects it, on the texts of its own
+  /// fact made, after the carry of the segment before it, and gives the carry to the texts that the
+  /// next fact made names, as [`checkpoint::carried`] says. So each engine replays only what it
+  /// made, nothing of the carry is kept, and the record stays the one truth of the life.
+  fn carried(&self, record: &[Object]) -> Result<Option<Object>, Fault> {
+    let crossings = checkpoint::crossings(record);
+    if crossings.is_empty() {
+      return Ok(None);
+    }
+    let inspects =
+      Self { inspecting: Some(true), keeps: Some(false), record: None, ..self.clone() };
+    let waited = inspects.prepared(&Progress::default(), Taken::Parts, None)?.waited;
+    let (mut carry, mut from) = (None, 0);
+    for at in crossings {
+      let entries: Vec<Object> =
+        carry.into_iter().chain(record[from..at].iter().cloned()).collect();
+      let ears = inspects.eared(waited.clone(), Some(&entries), checkpoint::stood(&entries))?;
+      let mut engine = Engine::boot(entries, ears)?;
+      if let Some(no) = engine.raised() {
+        return Err(no.clone());
+      }
+      carry = Some(checkpoint::carried(&mut engine, &record[at])?);
+      from = at;
+    }
+    Ok(carry)
   }
 
   /// A report of the life that no model reads, to the log of the host, or else to stderr.
@@ -448,19 +487,14 @@ impl Opening {
     }
   }
 
-  /// The image of the record when one agrees with it, else the last entries of the record, which
-  /// the open reads in the stage find. A life that keeps its record and runs another engine, Kernel
-  /// or checkpointer than this build crosses first, under the lease that it holds, as
-  /// [`Opening::crossed`] says, and then opens by its record, but for a life that is
-  /// [`Taken::Open`]: it opens on those texts, by its image or by its record, and its host moves it
-  /// to this build after, by [`Engine::cross`]. A record of a schema that this build does not open,
-  /// as one from before the stable cut, is refused, by its image too.
-  fn tip(
-    &self,
-    told: &Progress,
-    taken: Taken,
-    lease: Option<&world::Lease>,
-  ) -> Result<(Option<Image>, Option<world::Last>), Fault> {
+  /// The image of the record when one agrees with it, else the entries of the record, which the
+  /// open reads in the stage find, with the carry that its last engine boots on. A life that keeps
+  /// its record and runs another engine, Kernel or checkpointer than this build crosses first,
+  /// under the lease that it holds, as [`Opening::crossed`] says, and then opens by its record, but
+  /// for a life that is [`Taken::Open`]: it opens on those texts, by its image or by its record,
+  /// and its host moves it to this build after, by [`Engine::cross`]. A record of a schema that
+  /// this build does not open, as one from before the stable cut, is refused, by its image too.
+  fn tip(&self, told: &Progress, taken: Taken, lease: Option<&world::Lease>) -> Result<Tip, Fault> {
     // The first stage is told at once, also for a record that is not there yet, so a host never
     // waits for the first one behind the catalog.
     let bytes = self.record.as_deref().map_or(0, size);
@@ -476,13 +510,22 @@ impl Opening {
     let texts = Self::texts(image.as_ref(), last.as_ref())?;
     // Only a life that keeps its record holds its lease, so only such a life crosses.
     let crossing = lease.filter(|_| taken != Taken::Open);
-    let Some(lease) = crossing else { return Ok((image, last)) };
-    if texts == Self::texts(None, None)? {
-      return Ok((image, last));
-    }
+    let build = Self::texts(None, None)?;
+    let Some(lease) = crossing.filter(|_| texts != build) else {
+      let carry = last.as_ref().map(|last| self.carried(&last.entries)).transpose()?.flatten();
+      return Ok((image, last, carry));
+    };
     (told.0)(Stage::Cross, 0, 0);
-    self.crossed(lease)?;
-    Ok((None, self.last(&mut |_| {})?))
+    // The record crosses only when it carries to this build, so a record that does not replay
+    // stays as it was.
+    let mut read = match last {
+      Some(last) => last,
+      None => self.last(&mut |_| {})?.unwrap_or_default(),
+    };
+    read.entries.push(world::running(&[]));
+    let carry = self.carried(&read.entries)?;
+    self.crossed(lease, &read)?;
+    Ok((None, self.last(&mut |_| {})?, carry))
   }
 
   /// The texts of the engine, of the Kernel and of the checkpointer that a life runs: those that
@@ -493,32 +536,27 @@ impl Opening {
   ) -> Result<(String, String, String), Fault> {
     match (image, last) {
       (Some(image), _) => world::texts(slice::from_ref(&image.half.made)),
-      (None, Some(last)) => world::texts(checkpoint::segment(&last.entries)),
+      (None, Some(last)) => world::texts(&last.entries),
       (None, None) => world::texts(&[]),
     }
   }
 
-  /// Carries a life that ran another engine, Kernel or checkpointer of the major across to this
-  /// build, so a life never dies on a fault that this build fixed: a life that inspects the record
-  /// on those texts, by its image when one agrees and else by its record, reaches the state of its
-  /// tip, and writes after its last entry its checkpoint, which tells each chain the change, then
-  /// the fact made of this build, as [`checkpoint::crossed`] says. The image goes, since no life
-  /// goes on from it: the life then opens from that checkpoint, on this build.
-  fn crossed(&self, lease: &world::Lease) -> Result<(), Fault> {
+  /// Moves a life that ran another engine, Kernel or checkpointer of the major across to this
+  /// build, so a life never dies on a fault that this build fixed: the record takes after the last
+  /// entry that a read of it gave the fact made of this build, as [`checkpoint::crossed`] says,
+  /// and each later open carries the life across it, which tells each chain the change. The image
+  /// goes, since no life goes on from it.
+  fn crossed(&self, lease: &world::Lease, read: &world::Last) -> Result<(), Fault> {
     let Some(path) = self.record.as_deref().map(Path::new) else { return Ok(()) };
-    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
-    let (mut engine, _) = inspects.boot::<String>([])?;
-    checkpoint::crossed_under(path, lease.clone(), &mut engine)?;
-    drop(engine);
+    checkpoint::crossed(path, lease.clone(), read)?;
     image::drop_of(path);
     Ok(())
   }
 
   /// The image of the record, when the open reads images and one agrees with the record: it holds
-  /// the life at its tip, so the open then reads no entry. A life that proves each checkpoint of
-  /// its record opens by the record.
+  /// the life at its tip, so the open then reads no entry.
   fn image(&self, images: bool) -> Option<Image> {
-    let record = self.record.as_deref().filter(|_| images && self.whole != Some(true))?;
+    let record = self.record.as_deref().filter(|_| images)?;
     image::read(Path::new(record))
   }
 
@@ -596,8 +634,9 @@ impl Opening {
   }
 
   /// The life, booted on the ears of the host and then on the ears of the crate, and the record it
-  /// opened on: the entries of its last checkpoint and those after it, as [`checkpoint::booted`]
-  /// gives them. A life whose record drifted is refused, since it would keep nothing more.
+  /// opened on: the carry of its last engine, when the record crossed, and the entries of its last
+  /// segment, as [`Opening::carried`] says. A life whose record drifted is refused, since it would
+  /// keep nothing more.
   /// A life that does work then puts the work that an earlier life left to the outside again, as
   /// [`Engine::resume`] says, so no act of the record stays running with no process.
   pub fn boot<N: Into<String>>(
@@ -610,6 +649,10 @@ impl Opening {
     match self.imaged(host, prepared, &mut |_| true)? {
       Imaged::Life(engine) => Ok((engine, Vec::new())),
       Imaged::Back(host, prepared) => self.booted(host, prepared, &untold),
+      Imaged::Unloaded(host, prepared) => {
+        let prepared = self.reread(prepared)?;
+        self.booted(host, prepared, &untold)
+      }
     }
   }
 
@@ -649,6 +692,15 @@ impl Opening {
     match opening.imaged(host, prepared, stands)? {
       Imaged::Life(engine) => Ok((engine, Vec::new())),
       Imaged::Back(host, prepared) => opening.booted(host, prepared, &told),
+      // Boxed, so the future of each open holds no room for a reread that few opens take.
+      Imaged::Unloaded(host, prepared) => {
+        let (opening, prepared) = blocking(move || {
+          let prepared = opening.reread(prepared);
+          (opening, prepared)
+        })
+        .await?;
+        opening.booted(host, prepared?, &told)
+      }
     }
   }
 
@@ -660,17 +712,23 @@ impl Opening {
     lease: Option<world::Lease>,
   ) -> Result<(Self, Prepared), Fault> {
     let waits = told.clone();
-    let waited = task::spawn_blocking(move || {
+    let (opening, prepared) = blocking(move || {
       let prepared = self.prepared(&waits, Taken::Open, lease);
       (self, prepared)
-    });
-    match waited.await {
-      Ok((opening, prepared)) => Ok((opening, prepared?)),
-      Err(no) => match no.try_into_panic() {
-        Ok(panic) => panic::resume_unwind(panic),
-        Err(no) => Err(Fault::refused(format!("the life did not open: {no}"))),
-      },
-    }
+    })
+    .await?;
+    Ok((opening, prepared?))
+  }
+
+  /// What the life waited for, with the record read and the carry across its last crossing, for
+  /// a life whose image agreed with the record and did not load: the image named the engine and the
+  /// standing of the record at its tip, on which the life waited, so the open reads the record in
+  /// the stage seed.
+  fn reread(&self, mut prepared: Prepared) -> Result<Prepared, Fault> {
+    prepared.last = self.last(&mut |_| {})?;
+    let entries = prepared.last.as_ref().map(|last| last.entries.as_slice());
+    prepared.carry = self.carried(entries.unwrap_or_default())?;
+    Ok(prepared)
   }
 
   /// The life booted on the ears of the host, on what it waited for, and then on the ears of the crate.
@@ -681,9 +739,6 @@ impl Opening {
     told: &Progress,
   ) -> Result<(Engine, Vec<Object>), Fault> {
     let works = self.works();
-    if self.whole == Some(true) {
-      self.reborn()?;
-    }
     let kept = self.record.as_ref().filter(|_| self.keeps()).map(PathBuf::from);
     let (record, ears) = self.parted(prepared, told)?;
     (told.0)(Stage::Seed, 0, 0);
@@ -767,10 +822,7 @@ impl Opening {
       Ok(sand) => sand,
       Err(why) => {
         self.logged(&format!("The life opens by its record, since its image does not load: {why}"));
-        // The image agreed with the record, so it named the engine and the standing of the record
-        // at its tip, on which the life waited: the open reads the record in the stage seed.
-        prepared.last = self.last(&mut |_| {})?;
-        return Ok(Imaged::Back(host, prepared));
+        return Ok(Imaged::Unloaded(host, prepared));
       }
     };
     ears.extend(lacked.into_iter().map(|name| (name, silent())));
@@ -789,27 +841,6 @@ impl Opening {
     }
     engine.pump(Waker::noop())?;
     Ok(Imaged::Life(engine))
-  }
-
-  /// Proves each checkpoint of the record: a life that inspects the entries before it, born on them
-  /// as the life that wrote it was, gathers it again, as [`checkpoint::reborn`] says.
-  fn reborn(&self) -> Result<(), Fault> {
-    let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) else {
-      return Ok(());
-    };
-    let record = world::kept(path)?;
-    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
-    for at in checkpoint::all(&record) {
-      let before = checkpoint::booted(record[..at].to_vec());
-      let prepared = inspects.prepared(&Progress::default(), Taken::Parts, None)?;
-      let ears = inspects.eared(prepared.waited, Some(&before), checkpoint::stood(&before))?;
-      let mut engine = Engine::boot(before, ears)?;
-      if let Some(no) = engine.raised() {
-        return Err(no.clone());
-      }
-      checkpoint::reborn(&record, at, &mut engine)?;
-    }
-    Ok(())
   }
 }
 

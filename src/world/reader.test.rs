@@ -251,8 +251,8 @@ fn a_log_agrees_with_a_record_that_ends_with_a_checkpoint_that_no_life_wrote() {
   let checkpoint = "[[\"checkpoint\",\"chain1\",\"store\",{}]]\n";
   let log = "{\"entries\":0}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n[\"keep\",\"\",1]\n";
   fs::write(format!("{}.log", at.display()), log).unwrap();
-  // The record of a life, then the checkpoint that `furb checkpoint` keeps after it: the log holds
-  // no line of keep for it, and it holds each fact of the record.
+  // The record of a life, then the checkpoints that a build of the major 2 of the schema kept
+  // after it: the log holds no line of keep for them, and it holds each fact of the record.
   fs::write(&at, stand).unwrap();
   assert!(retold(&at).unwrap().logged);
   fs::write(&at, format!("{stand}{checkpoint}{checkpoint}")).unwrap();

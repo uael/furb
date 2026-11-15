@@ -31,7 +31,7 @@ async def test_so_each_name_of_the_chain_names_a_chain_with_fewer_turns(tmp_path
   assert await the == 7
   turns, new = engine.turns(on=root), engine.scope(root)
   assert new != root and len(str(engine.turns(on=new))) < len(str(turns))
-  assert [a for a in engine.reading(new) if a[0] == "tell" and "a.txt" in str(a)] == []
+  assert [a for a in engine.transcript(new) if a[0] == "tell" and "a.txt" in str(a)] == []
   assert "a.txt" in str(turns) and not engine.over(asked) and engine.scope(asked) == new
 
 
@@ -53,9 +53,9 @@ async def test_supersede_reads_no_name_that_the_module_of_the_chain_binds(tmp_pa
   """With no filter, supersede() keeps every act of the chain, and it reads no builtin from the module of the chain, which a word may bind to a str."""
   _, root, _ = compacting(tmp_path)
   assert await engine.rung("read('a.txt')", on=root) is None
-  acts = {a[1] for a in engine.reading(root) if engine.question(a)}
+  acts = {a[1] for a in engine.transcript(root) if engine.question(a)}
   assert await engine.rung("globals()['list'] = 'ls -la'\ncut = supersede()", on=root) is None
   await settle()
   new = str(engine.peek(engine.module(root)["cut"]))
-  assert acts <= {a[1] for a in engine.reading(new)}
+  assert acts <= {a[1] for a in engine.transcript(new)}
   assert engine.module(new)["list"] == "ls -la"

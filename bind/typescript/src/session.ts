@@ -339,26 +339,23 @@ export class Session extends EventEmitter {
   /** Save what the next life needs, then end the life whatever the save came to: its commands, its waits, its
    * requests and its prompts end with it, and the store lets its record go. */
   async dispose(): Promise<void> {
-    this.ended(false);
+    this.ended();
   }
 
-  /** End the life as a dispose ends it, with its checkpoint at the tip of its record, from which the next life on the
-   * record opens with no replay of what came before it. A session that only reads its record, or keeps none, ends
-   * with no checkpoint. */
+  /** End the life as a dispose ends it: the next life on the record opens by its record. */
   async end(): Promise<void> {
-    this.ended(true);
+    this.ended();
   }
 
-  /** The life ended, with its checkpoint when it keeps one. */
-  private ended(checkpoint: boolean): void {
+  /** The life ended. */
+  private ended(): void {
     if (this.stopped) return;
     this.stopped = true;
     try {
       this.save();
     } finally {
       try {
-        if (checkpoint && this.record && !this.options.readOnly) this.engine?.checkpoint();
-        else this.engine?.dispose();
+        this.engine?.dispose();
       } finally {
         this.console.dispose();
         this.removeAllListeners();
@@ -389,8 +386,8 @@ export class Session extends EventEmitter {
 /** Read pending work through the real replay path, without taking a lock or writing the record, with the state that
  * a list of records shows for it, as the engine of the crate decides it: runs when it holds work that the next open
  * resumes, and saved when it holds none. The name of the session is the one that the whole record tells, since a replay
- * boots on the last checkpoint of the record, and the names of the session that came before it are no acts of that
- * replay. */
+ * of a record that crossed boots its last engine on the carry, and the names of the session that came before it are no
+ * acts of that replay. */
 export async function inspectRecord(
   record: string,
 ): Promise<{ pending: [string, string][]; state: "runs" | "saved"; name?: string }> {

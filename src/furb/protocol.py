@@ -665,8 +665,8 @@ class Request56(TypedDict):
 
 class Request57(TypedDict):
   """
-  The place of the daemon given to the daemon of a new build: each life written to its
-  checkpoint and ended, and the lives with their pins in the answer, once the daemon stopped to
+  The place of the daemon given to the daemon of a new build: each life written to its image
+  and ended, and the lives with their pins in the answer, once the daemon stopped to
   listen.
   """
 

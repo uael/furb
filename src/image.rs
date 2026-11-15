@@ -30,8 +30,8 @@
 //! A record only grows, so an image agrees with a record that holds entries after the tip that it
 //! names: a life that went on from the image and wrote no later one, as a life that crashed, kept
 //! them. The life that opens from the image says them again, as a boot says a record again, so a
-//! crash costs its tail alone. A checkpoint or a fact that names an engine after the image is a
-//! birth of its own, which no life of the image went on to: the image agrees no more.
+//! crash costs its tail alone. A fact that names an engine after the image is a birth of its own,
+//! which no life of the image went on to: the image agrees no more.
 
 use std::{
   fmt::Display,
@@ -180,8 +180,8 @@ pub(crate) fn drop_of(record: &Path) {
 /// Whether the image of a record names the record as it stands now, as far as the tip of the life
 /// that wrote it, in a shape that this build reads, by its key alone: no byte of its body is read.
 /// A host asks it before an open, to know whether the life reads its record. An image that agrees
-/// here and does not load, as one whose body is torn, or one that a checkpoint of the record
-/// passed, makes the life open by its record.
+/// here and does not load, as one whose body is torn, or one that a crossing of the record passed,
+/// makes the life open by its record.
 pub fn agrees(record: &Path) -> bool {
   key(record).is_some_and(|key| key.stands(record))
 }

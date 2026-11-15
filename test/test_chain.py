@@ -336,17 +336,15 @@ async def test_the_transcript_of_a_chain_is_the_facts_on_it_in_the_order_it_hear
 
 
 async def test_nothing_leaves_a_transcript_once_the_transcript_holds_it() -> None:
-  """Nothing leaves a transcript once the transcript holds it: a cut said on its chain changes what its model reads, and takes no fact from the transcript."""
+  """Nothing leaves a transcript once the transcript holds it."""
   _, _, root, one = await posed()
   was = list(engine.transcript(root))
   engine.cancel(one)
   await settle()
   now = engine.transcript(root)
   assert now[: len(was)] == was and len(now) > len(was)
-  kept = [a for a in now if a[1] != one]
-  engine.say("cut", root, kept)
+  engine.say("prefix", root, [a for a in now if a[1] != one])
   assert [a[:2] for a in engine.transcript(root)][: len(now)] == [a[:2] for a in now]
-  assert [a[:2] for a in engine.reading(root)][: len(kept)] == [a[:2] for a in kept] != [a[:2] for a in now]
 
 
 async def test_an_assistant_turn_keeps_the_role_assistant_in_every_chain_made_from_the_chain() -> None:
@@ -1083,7 +1081,7 @@ async def test_every_done_it_holds_answers_a_question_it_holds() -> None:
 
 
 async def test_what_a_chain_with_a_source_holds_of_the_transcript_of_its_origin() -> None:
-  """What a chain with a source holds of the reading of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin."""
+  """What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin."""
   _, log, root = born("x = bash('echo hi')", "close(1)")
   assert await engine.prompt(int, "run it", on=root) == 1
   await settle()
@@ -1127,7 +1125,7 @@ async def test_what_a_chain_said_of_itself_it_keeps_whatever_the_filter_says() -
 
 
 async def test_the_source_of_a_chain_is_a_chain_by_its_name() -> None:
-  """The source of a chain is a chain, by its name, and means the reading of that chain as it stands."""
+  """The source of a chain is a chain, by its name, and means the transcript of that chain as it stands."""
   _, log, root = born()
   await engine.rung("k = 1", on=root)
   was = list(engine.transcript(root))
@@ -1453,7 +1451,7 @@ async def test_a_thread_is_asked_again_exactly_when_a_new_fact_for_it_came_since
 
 
 async def test_the_chain_reads_the_text_of_each_paragraph_told_on_it_since_its_last_told_rung() -> None:
-  """The chain reads the text of each paragraph told on it since its last told rung, in order, from its reading, and holds no copy of it, but a paragraph that an act tells of itself with no header of its name, and the word of a rung, which a rung tells of itself whatever its first line."""
+  """The chain reads the text of each paragraph told on it since its last told rung, in order, from its transcript, and holds no copy of it, but a paragraph that an act tells of itself with no header of its name, and the word of a rung, which a rung tells of itself whatever its first line."""
   _, log, root, first, second = await told_read()
   told = [a[5] for a in said(log, "run") if a[4] in (f"{first}_told", f"{second}_told")]
   words = ["t = read('a.txt')", "got = read1_text"]
@@ -1704,27 +1702,7 @@ async def test_the_third_barren_step_in_a_row_pauses_the_thread_or_lets_it_rest_
 async def test_a_root_that_holds_no_fact_setup_after_its_paragraph_chain_or_no_stand_before_its_fact_setup_gives_no_setup_to_such_a_chain_so_the_chain_holds_no_open_rung_of_the_root_and_its_own_rungs_run() -> (
   None
 ):
-  """A root that holds no fact setup after its paragraph chain() or no stand before its fact setup, as a root whose compaction kept no setup or that a checkpoint carried, gives no setup to such a chain, so the chain holds no open rung of the root and its own rungs run."""
-  _, _, root = born(
-    stands=[*STANDS, "/w/DOCTRINE.md", []], files={"/w/a.txt": "one\n", "/w/DOCTRINE.md": "Read first.\n"}
-  )
-  await settle()
-  engine.rung("await wait(3600, __name__)", to="m/low", on=root)
-  await settle()
-  opening = [
-    x for x in engine.transcript(root) if x[0] == "tell" and isinstance(x[3], list) and x[3][0].startswith("#chain")
-  ]
-  assert opening and [x for x in engine.transcript(root) if x[0] == "tell" and x[3] == ["chain()"]]
-  engine.say("cut", root, [x for x in engine.transcript(root) if x not in opening and x[0] != "setup"])
-  engine.pause(root)
-  engine.wake(root)
-  await settle()
-  kid = engine.chain("kid", on=root)
-  await settle()
-  assert engine.cwd(on=kid) == "/w"
-  ran = engine.rung("close(7)", on=kid)
-  await settle()
-  assert engine.peek(ran) == 7
+  """A root that holds no fact setup after its paragraph chain() or no stand before its fact setup, as a root that a checkpoint carried, gives no setup to such a chain, so the chain holds no open rung of the root and its own rungs run."""
   stands = [*TAUGHT[:4], [*TAUGHT[4], LATE]]
   born(stands=stands, files=TAUGHT_FILES)
   await settle()
@@ -1785,53 +1763,22 @@ async def test_a_thread_is_asked_again_only_for_a_fact_of_its_own() -> None:
   assert (asked.count(one), engine.peek(one, ...), engine.paused(one)) == (1, ..., False)
 
 
-async def test_each_scan_of_all_its_facts_that_the_ear_of_a_chain_makes_at_a_fact_reads_its_reading(
-  monkeypatch: pytest.MonkeyPatch,
-) -> None:
-  """Each scan of all its facts that the ear of a chain makes at a fact reads its reading, so the work of that scan does not grow with the facts that a cut dropped, where a view of one kind holds each fact of that kind."""
-  _, _, root = born()
-  scanned = [0]
-
-  def counted(view: Callable[..., list]) -> Callable[..., list]:
-    def scan(*given: str, **named: str) -> list:
-      got = view(*given, **named)
-      scanned[0] += len(got) * (not (given[1:] or named.get("of")))
-      return got
-
-    return scan
-
-  async def work(word: str) -> int:
-    engine.say("cut", root, [])
-    with monkeypatch.context() as patched:
-      patched.setattr(engine, "transcript", counted(engine.transcript))
-      patched.setattr(engine, "reading", counted(engine.reading))
-      scanned[0] = 0
-      assert await engine.rung(word, on=root) is None
-      await settle()
-      return scanned[0]
-
-  first = await work("x = 1")
-  assert await engine.rung("for i in range(300):\n  chance()", on=root) is None
-  assert len(engine.transcript(root)) > 600
-  assert await work("x = 1") <= first
-
-
 async def test_at_each_told_rung_the_chain_reads_only_the_facts_after_its_last_told_rung(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   """At each told rung the chain reads only the facts after its last told rung, so the work of a told rung does not grow with the facts before it."""
   _, _, root = born()
   read = [0]
-  whole = engine.reading
+  whole = engine.transcript
 
-  def counted(on: str = "", at: int | None = None) -> list:
-    got = whole(on, at or 0)
+  def counted(on: str = "", of: str = "", at: int | None = None) -> list:
+    got = whole(on, of, at or 0)
     read[0] += len(got) * (at is not None)
     return got
 
   async def work(word: str) -> int:
     with monkeypatch.context() as patched:
-      patched.setattr(engine, "reading", counted)
+      patched.setattr(engine, "transcript", counted)
       read[0] = 0
       assert await engine.rung(word, on=root) is None
       await settle()
@@ -1840,19 +1787,19 @@ async def test_at_each_told_rung_the_chain_reads_only_the_facts_after_its_last_t
   first = await work("x = 1")
   assert await engine.rung("for i in range(300):\n  chance()", on=root) is None
   assert await engine.rung("x = 2", on=root) is None
-  assert len(engine.reading(root)) > 600
+  assert len(engine.transcript(root)) > 600
   assert 0 < await work("x = 1") <= first
 
 
-async def test_after_a_cut_the_chain_reads_what_it_heard_after_the_last_reply_that_the_cut_kept() -> None:
-  """After a cut, the chain reads what it heard after the last reply or the last paragraph that it does not read that the cut kept, and nothing that the cut kept when the cut kept neither, so a chain born on a checkpoint tells what it heard and did not tell, and no act that its birth made again."""
+async def test_after_the_prefix_that_seed_gives_it_a_chain_reads_what_it_heard_after_the_last_reply() -> None:
+  """After the prefix that seed gives it, a chain reads what it heard after the last reply or the last paragraph that it does not read that the prefix holds, and nothing that the prefix holds when it holds neither, so a chain born on a checkpoint tells what it heard and did not tell, and no act that its birth made again."""
   heard = "#read1\nread1_path = 'a.txt'\n<s:read1_text>\none\ntwo</s:read1_text>"
   for keeps, tells in [(True, [engine.unquoted(heard)]), (False, [])]:
     _, log, root = born()
     assert await engine.rung("t = read('a.txt')", on=root) is None
-    assert [x for x in engine.reading(root) if x[0] == "run" and str(x[4]).endswith("_told")]
-    others = [x for x in engine.reading(root) if x[0] == "tell" and x[2] != x[1]]
-    engine.say("cut", root, engine.reading(root) if keeps else others)
+    assert [x for x in engine.transcript(root) if x[0] == "run" and str(x[4]).endswith("_told")]
+    others = [x for x in engine.transcript(root) if x[0] == "tell" and x[2] != x[1]]
+    engine.say("prefix", root, engine.transcript(root) if keeps else others)
     later = engine.rung("u = 1", on=root)
     assert await later is None
     assert [a[5] for a in said(log, "run") if a[4] == f"{later}_told"] == tells
@@ -1860,7 +1807,9 @@ async def test_after_a_cut_the_chain_reads_what_it_heard_after_the_last_reply_th
   assert await engine.rung("x = 1", on=root) is None
   assert await engine.prompt(int, "count", on=root) == 1
   engine.say("tell", root, ["#note\nnote_x = 2"])
-  engine.say("cut", root, [x for x in engine.reading(root) if not (x[0] == "run" and str(x[4]).endswith("_told"))])
+  engine.say(
+    "prefix", root, [x for x in engine.transcript(root) if not (x[0] == "run" and str(x[4]).endswith("_told"))]
+  )
   later = engine.rung("u = 1", on=root)
   assert await later is None
   assert [a[5] for a in said(log, "run") if a[4] == f"{later}_told"] == ["#note\nnote_x = 2"]

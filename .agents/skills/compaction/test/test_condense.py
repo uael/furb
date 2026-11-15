@@ -18,7 +18,7 @@ async def test_condense_compacts_the_chain_at_once(tmp_path: Path) -> None:
   went = await engine.prompt(str, "go", on=root)
   await settle()
   new = str(engine.peek(went))
-  told = {a[1] for a in engine.reading(new) if a[0] == "tell"}
+  told = {a[1] for a in engine.transcript(new) if a[0] == "tell"}
   assert (engine.get(went)[0], engine.scope(root)) == ("jump", new)
   assert held["c.txt"] in told and held["d.txt"] not in told
   assert engine.module(new)["summary"] == "gist"
@@ -35,7 +35,7 @@ async def test_when_the_model_gives_no_tuple_it_compacts_the_chain_with_filters(
   assert [str(a[4]) for a in engine.transcript(new) if a[0] == "rung" and str(a[4]).endswith("reground()")] == [
     "reground()"
   ]
-  assert [a for a in engine.reading(new) if a[0] == "tell" and a[1] == one] == []
+  assert [a for a in engine.transcript(new) if a[0] == "tell" and a[1] == one] == []
   assert "summary" not in engine.module(new)
 
 

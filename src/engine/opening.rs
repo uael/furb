@@ -33,9 +33,9 @@ use crate::value::Object;
 /// given those entries, which it takes once, before the entries of the record that the host hands
 /// in.
 ///
-/// Boot is given the journal that the checkpointer makes on those entries, which says them again
-/// and keeps what the life says after them, and the journal is given each entry that a host feeds
-/// a life that stands, in the same form.
+/// Boot is given those entries and the entries of the record, which it says again and keeps what
+/// the life says after them, and feed of the engine is given each entry that a host feeds a life
+/// that stands, in the same form.
 ///
 /// It gives boot, in the place of a value of a record that no later life makes again as it was,
 /// what stands for it by the rule of `furb.record`, which each build reads the same: a callable,
@@ -59,13 +59,15 @@ __kernel = {}
 exec(__kernel_source, __kernel)
 __checkpointer = {}
 exec(__checkpointer_source, __checkpointer)
-# The checkpointer of this build gathers each checkpoint, since the next life reads it, while the record replays and
-# seeds on its own: only a crossing gathers on another engine, and an older checkpointer may not gather its life.
-__gatherer = __checkpointer
-if __gatherer_source != __checkpointer_source:
-  __gatherer = {}
-  exec(__gatherer_source, __gatherer)
-__checkpointed = lambda name, /, *args: (__gatherer if name == "gathered" else __checkpointer)[name](__engine, *args)
+__checkpointers = {__checkpointer_source: __checkpointer}
+
+def __checkpointed(name, /, *args, by=__checkpointer_source):
+  # A carry is gathered by the checkpointer of the texts that it goes to, which the record names, so each later
+  # build carries a record the same, while the checkpointer of the record seeds it.
+  if by not in __checkpointers:
+    __checkpointers[by] = {}
+    exec(by, __checkpointers[by])
+  return __checkpointers[by][name](__engine, *args)
 
 def __bounding(step):
   def bounded(*args, **kwargs):
@@ -74,18 +76,7 @@ def __bounding(step):
       return step(*args, **kwargs)
     finally:
       __turn(was)
-      __bounded(args[1])
   return bounded
-
-def __bounded(job):
-  # The bound of a turn ended the word of a live run: the record keeps that end, so a later life
-  # takes it and never steps the word, whose replay holds no bound.
-  if isinstance(__engine["peek"](job), TimeoutError):
-    token = __engine["site"].set("journal")
-    try:
-      __engine["say"]("keep", "", tuple(x for x in __engine["transcript"](job, "done") if x[1] == job))
-    finally:
-      __engine["site"].reset(token)
 
 for __step in ("starts", "carry"):
   setattr(__kernel["Running"], __step, __bounding(getattr(__kernel["Running"], __step)))
@@ -119,20 +110,21 @@ def __parking(ear):
 
 __fresh = {"kernel": lambda: __kernel["kernel"](__engine)}
 __seeded = []
-__journaled = []
 
 def __seed(data):
   __seeded[:] = __checkpointed("seed", data)
   return [x[:2] for (x,) in __seeded]
 
 def __boot(entries, **ears):
-  record = __record["recorded"](__engine, __seeded + entries)
+  # The fact made of the segment after a carry stands before the wakes that end its seed, so the work that a wake
+  # starts is the life's own, past its tip, at each open.
+  woke = len(__seeded)
+  while woke and __seeded[woke - 1][0][0] == "wake":
+    woke -= 1
+  made = int(bool(entries) and entries[0][0][0] == "made")
+  record = __record["recorded"](__engine, __seeded[:woke] + entries[:made] + __seeded[woke:] + entries[made:])
   __seeded.clear()
-  __journaled[:] = [__checkpointer["journal"](__engine, record)]
-  return __engine["boot"](__journaled[0], **ears)
-
-def __journal(name, *args):
-  return __checkpointer[name](__journaled[0], *args)
+  return __engine["boot"](record, **ears, birth=__checkpointer["birth"](__engine))
 
 def __settles(got):
   # The Kernel says why an await of the operator cannot end.
@@ -188,8 +180,8 @@ def __lasting(name, ear):
   "unmade": lambda: __record["Recorded"](),
   "seed": __seed,
   "boot": __boot,
-  "fed": lambda entries: __journal("fed", __record["recorded"](__engine, entries)),
-  "held": lambda: __journal("held"),
+  "fed": lambda entries: __engine["feed"](__record["recorded"](__engine, entries)),
+  "held": lambda: __engine["flying"](),
   "settles": __settles,
 }"#;
 
@@ -238,10 +230,10 @@ pub(crate) struct Opened {
   /// each text in the words of an act that a word made, that holds the address of an object, in
   /// the place of a value equal to each text that differs from it in its addresses alone.
   pub(super) boot: Object,
-  /// The entries that follow the tip of the life, given to its journal as boot gives it a record,
-  /// which says them again at once.
+  /// The entries that follow the tip of the life, given to feed of the engine as boot is given a
+  /// record, which says them again at once.
   pub(super) fed: Object,
-  /// The names of the acts that the journal of the life holds, each that an ear of the outside
+  /// The names of the acts that the life holds from the outside, each that an ear of the outside
   /// took and that is not done.
   pub(super) held: Object,
   /// What raises the refusal of an await of the operator that cannot end, as the Kernel says it.

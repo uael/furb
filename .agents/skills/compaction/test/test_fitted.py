@@ -56,7 +56,7 @@ async def test_fitted_watches_a_chain(tmp_path: Path) -> None:
   summary = engine.module(root)["OVERFLOWED"]
   assert leaps(root) == [f"<s:summary>\n{summary}</s:summary>\nreground()"]
   new = engine.scope(root)
-  assert [a for one in (root, new) for a in engine.reading(one) if a[0] == "pause"] == []
+  assert [a for one in (root, new) for a in engine.transcript(one) if a[0] == "pause"] == []
   assert "go" in repr(engine.turns(on=new)) and "line 199" not in repr(engine.turns(on=new)[-2:])
 
 

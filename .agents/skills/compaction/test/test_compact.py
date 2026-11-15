@@ -20,7 +20,7 @@ async def test_compact_supersedes_the_chain_of_the_caller(tmp_path: Path) -> Non
   (said,) = [a[1] for a in engine.transcript(root) if a[0] == "bash"]
   new = engine.scope(root)
   assert [engine.get(one)[0] for one in went] == ["jump", "jump"] and {engine.peek(one) for one in went} == {new}
-  assert [a for a in engine.reading(new) if a[1] in (first, said)] == []
+  assert [a for a in engine.transcript(new) if a[1] in (first, said)] == []
 
 
 async def test_the_next_word_of_that_chain_binds_the_summary_and_regrounds_the_chain(tmp_path: Path) -> None:

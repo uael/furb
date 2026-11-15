@@ -9,20 +9,23 @@ it, at 0.x, each change that the page lists as a break may land, and the page sa
 Each of these acts holds on each build of the major that made the record, with no drift (R1, R3):
 
 - Resume: a life that a stop cut opens at the exact state of its tip and goes on (R2).
-- Reopen: a life that ended opens again from its checkpoint or from its first entry, at the same state (R2).
+- Reopen: a life that ended opens again from its image or from its first entry, at the same state (R2).
 - Read: a reader reads the record and shows each chain and each value, with no life.
 - Share: a person attaches to a life that a daemon holds, or forks it into a new life.
 
 A record replays on the engine that it holds, under the names that it holds. A record of another record is not
-imported. The promise holds from the stable cut, the major 2 of the schema of the record: each record of it holds the
-texts of its engine, its Kernel and its checkpointer, so each later build of the major replays it with no drift. A
-record from before the cut, of the major 1 or of no schema, opens in no life, which says why: a window reads its
+imported. The promise holds from the stable cut, the major 3 of the schema of the record, where the replay stands in
+the engine and a record keeps no checkpoint: each record of it holds the texts of its engine, its Kernel and its
+checkpointer, so each later build of the major replays it with no drift. A record from before the cut, of an earlier
+major or of no schema, opens in no life, which says why: a window reads its
 threads, read only, from the fold of its facts, and a reader of a record reads each fact of it. A drift on the same
 engine is a defect, never a known limit (R1). Within a major, a later build of the engine never makes a record drift,
 since the record replays on the texts that it holds; a build of the host that makes one drift holds a defect, which
 is fixed at its root (R3). A life that keeps its record and ran another engine, Kernel or checkpointer of the
-major first reaches the exact state of its tip on them, by its record, then crosses: it writes a checkpoint and the
-fact made of the build that opens it, and goes on with that build. Each chain keeps as its system prompt the engine
+major first reaches the exact state of its tip on them, by its record, then crosses: it writes the fact made of the
+build that opens it, and goes on with that build. A later open replays each segment of the record on the texts that
+its fact made holds, and carries the state of its tip to the next segment in memory, where nothing keeps it. Each
+chain keeps as its system prompt the engine
 that it read first, and its turns end with one paragraph that holds the lines of the engine that differ, so a chain
 only grows.
 
@@ -31,9 +34,9 @@ only grows.
 | Part | Where | Version now |
 | --- | --- | --- |
 | The contract: the engine and the interface of each official kit | `src/furb/engine.pyi`, `.agents/skills/<name>/<name>.pyi` | frozen at 1.0.0, as now with the breaks that the last section lists |
-| The schema of the record | `RECORD_SCHEMA` in `src/world/store/schema.rs` | 2.0 |
-| The schema of a checkpoint: pure data, which `seed` of `src/furb/checkpoint.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.1 |
-| The protocol of the daemon | `PROTOCOL` in `crates/wire/src/protocol.rs`, `host/protocol.schema.json` | 22 |
+| The schema of the record | `RECORD_SCHEMA` in `src/world/store/schema.rs` | 3.0 |
+| The schema of the carry of a crossing, which an open makes in memory: pure data, which `seed` of `src/furb/checkpoint.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.1 |
+| The protocol of the daemon | `PROTOCOL` in `crates/wire/src/protocol.rs`, `host/protocol.schema.json` | 49 |
 | The nodes of a view, a closed set that only grows (P5) | `host/protocol.schema.json` | with the protocol |
 
 A schema only adds within a major, and each reader skips each kind of fact and each field that it does not know. So a
@@ -55,22 +58,24 @@ R1, no drift on the same engine:
 - `test/test_boot.py::test_a_fact_that_the_journal_says_again_carries_the_speaker_that_the_record_holds`
 - `test/test_drift.py::test_an_act_whose_words_are_not_the_ones_the_record_holds_is_a_drift`
 - `src/engine.test.rs::a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift`
-- `tests/suite/promise.rs::a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entries_written_whole`, at a
-  random byte of a random line, of the done of the stand of the first word of the root and of the last checkpoint,
+- `tests/suite/promise.rs::a_record_that_a_kill_tore_in_a_write_or_at_a_crossing_opens_as_the_entries_written_whole`, at a
+  random byte of a random line, of the done of the stand of the first word of the root and of the last fact made,
   from a seed that it prints
-- `tests/suite/promise.rs::a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_held_live`
+- `tests/suite/promise.rs::a_life_that_a_replay_opens_holds_the_transcript_that_it_held_live`
+- `src/life.test.rs::a_life_that_enables_its_skills_at_an_open_opens_again_by_its_record_and_plays_each_one_on_a_new_chain`
 
-R2, the exact tip, with a checkpoint and without one (resume and reopen):
+R2, the exact tip, by the image and by the record, across each crossing (resume and reopen):
 
-- `src/life.test.rs::a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip`
-- `src/life.test.rs::a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_prompt_of_each_chain`
+- `src/life.test.rs::a_record_that_another_engine_went_on_with_after_a_crossing_replays_its_tail_to_the_exact_state_at_its_tip`
+- `src/life.test.rs::a_life_goes_on_across_a_crossing_with_the_names_the_module_and_the_open_prompt_of_each_chain`
+- `src/life.test.rs::a_life_that_a_fault_stopped_inside_a_cut_run_opens_at_the_exact_state_of_its_tip`
 - `src/life.test.rs::a_record_of_another_engine_crosses_to_this_build_at_its_open`
 - `src/life.test.rs::an_image_of_a_build_of_other_texts_does_not_load`
 - `src/life.test.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
-- `tests/suite/promise.rs::a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint`
-- `host/tests/suite/daemon.rs::a_life_that_ended_opens_again_from_its_checkpoint`
+- `tests/suite/promise.rs::a_life_carried_across_three_crossings_opens_at_its_tip`
+- `host/tests/suite/daemon.rs::a_life_that_ended_opens_again_at_the_tip_of_its_record`
 - `test/checkpoint/test_gathered.py::test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard`
-- `tests/suite/promise.rs::a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without_one_and_goes_on`, a
+- `tests/suite/promise.rs::a_life_killed_at_a_random_fact_opens_at_its_tip_across_its_crossings_and_goes_on`, a
   kill of the process of the life at or after a fact that a seed draws, which it prints with the length of
   the record at the kill, so the torn test plays that kill again as a cut
 
@@ -85,13 +90,10 @@ R3, no drift within a major, on the texts that each record holds:
 
 The schemas (P7, P8):
 
-- `src/life.test.rs::a_checkpoint_of_a_later_minor_of_its_schema_with_fields_more_opens_with_each_chain_and_its_prompts`
-- `src/life.test.rs::a_checkpoint_of_another_major_of_its_schema_is_refused_with_both_schemas`
 - `src/life.test.rs::a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keeps_nothing`
 - `src/world/store/schema.test.rs::a_schema_from_before_the_stable_cut_opens_in_no_life`
 - `src/life.test.rs::a_record_from_before_the_stable_cut_opens_in_no_life`
 - `host/tests/suite/life.rs::a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_says_why`
-- `tests/suite/promise.rs::a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens`
 
 The protocol, the nodes of a view and the contract (P2, P5):
 
@@ -112,8 +114,8 @@ What no machine proves yet, so the promise does not hold there until a proof lan
   folder of the corpus (P8).
 - A replay with random delays of the bus and of each ear, and with ears that raise (replay-chaos).
 - A replay across the builds of the major, with a count of the drifts of the corpus (drift-gate).
-- A life born from a checkpoint: its live transcript holds the facts of the word that seeds it otherwise than its open,
-  so the fork proof compares a fork with the open of its origin, not with the live origin.
+- A life that crossed: its live transcript holds the facts of the word that seeds it from the carry otherwise than its
+  open, so the fork proof compares a fork with the open of its origin, not with the live origin.
 
 ## The breaks of the contract since v0.4.2
 
@@ -121,13 +123,13 @@ Each break below came before 1.0.0, so no promise covered it (P6). A record that
 engine and on the text of each kit that the record holds, so it needs no adapter. A word of a caller that uses the old
 form must change, and so these breaks stand for the next major, 1.0.0.
 
-- `src/furb/engine.pyi Show: the alias changes from Callable[[list[str]], list[int]] to tuple | Callable[[list[str]], list[int]]`: a show of the file is plain data, so a replay tells the same; a callable show stays valid.
+- `src/furb/engine.pyi Show: the alias changes from Callable[[list[str]], list[int]] to tuple[int, int] | str | list[str] | Callable[[list[str]], list[int]]`: a show of the file is plain data, so a replay tells the same; a callable show stays valid.
 - `src/furb/engine.pyi stand: its type of return changes from Standing to Act[Standing]`: a word awaits the stand.
 - `src/furb/engine.pyi chain: the type of filter changes from Filter | None to Filter | list[str] | None`: a filter may be the ids that it kept; a callable filter stays valid.
 - `src/furb/engine.pyi gate: the def goes`: no gate reads a word before it runs; a statement that is not python, or that names what nothing binds, raises where it runs.
 - `src/furb/engine.pyi Gate: the alias goes`: as gate.
-- `src/furb/engine.pyi boot: the parameter record goes`: the journal says a record again, and it stands outside the engine; a host gives boot `journal(names, record)` of the checkpointer.
-- `src/furb/engine.pyi boot: the parameter journal is more and has no default`: as the parameter record.
+- `src/furb/engine.pyi boot: the type of record changes from Sequence[Entry] to Iterable[Entry]`: boot says each entry again as it reads it, so a host gives the lines of a record as they come.
+- `src/furb/engine.pyi Entry: the alias changes from tuple[Fact] to tuple[Fact, int, bool] | tuple[Fact]`: an entry holds the place of its fact and whether the life rested when it said it, so a replay says it at that place; a record of an earlier major opens in no life.
 - `src/furb/engine.pyi grant: the def goes`: grant is the official kit grant, off by default; a word loads it with `await skill("grant")`, and the grant of each door, and the `Grant` door of the host, load it in the word that they run.
 - `src/furb/engine.pyi Grant: the alias goes`: as grant; the contract of the kit holds it.
 - `.agents/skills/compaction/compaction.pyi carry: the def goes`: compaction keeps a chain by supersede.

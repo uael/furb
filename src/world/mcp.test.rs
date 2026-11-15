@@ -144,7 +144,8 @@ fn server(engine: &mut Engine, name: &str) -> Value {
 
 /// The facts of the changes of the servers that the root chain holds, as the name of each server.
 fn changes(engine: &mut Engine) -> Vec<String> {
-  let of = verbs::Transcript { on: Some("chain1".to_owned()), of: Some(CHANGED.to_owned()) };
+  let of =
+    verbs::Transcript { on: Some("chain1".to_owned()), of: Some(CHANGED.to_owned()), at: None };
   let facts = engine.transcript(of).unwrap();
   facts
     .iter()
@@ -502,7 +503,8 @@ fn a_later_life_that_replays_a_record_with_acts_of_mcp_asks_no_server() {
   drop(first);
   assert_eq!(starts(&at), 1);
   let (mut later, _) = opening().boot::<String>([]).unwrap();
-  let of = verbs::Transcript { on: Some("chain1".to_owned()), of: Some("mcp_call".to_owned()) };
+  let of =
+    verbs::Transcript { on: Some("chain1".to_owned()), of: Some("mcp_call".to_owned()), at: None };
   let call = later.transcript(of).unwrap().into_iter().find(Fact::question).unwrap();
   let kept = later.peek(call.about(), verbs::Peek::default()).unwrap();
   assert_eq!(valued(kept.as_ref())["text"], "echo: kept");

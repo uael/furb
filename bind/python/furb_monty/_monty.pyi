@@ -115,7 +115,6 @@ class Opening(TypedDict):
   record: NotRequired[str | None]
   keeps: NotRequired[bool | None]
   inspecting: NotRequired[bool | None]
-  whole: NotRequired[bool | None]
   skills: NotRequired[bool | None]
   config: NotRequired[str | None]
   actor: NotRequired[str | None]
@@ -228,8 +227,6 @@ class Engine:
     gave."""
   def feed(self, tail: Iterable[object]) -> None:
     """The entries that follow the tip of the life, which its journal says again at once."""
-  def checkpoint(self) -> None:
-    """The life ends with its checkpoint at the tip of its record, from which a later life on the record opens."""
 
   def dispose(self) -> None:
     """The engine is gone, and its ears with it."""

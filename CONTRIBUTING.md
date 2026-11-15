@@ -75,7 +75,7 @@ contract needs a request of the owner.
 | File | What it holds |
 | --- | --- |
 | `src/furb/kernel.py` | The Kernel, which runs the word of a rung in the module of its chain. Both engines load it. |
-| `src/furb/checkpoint.py` | The checkpointer, which gathers the data of a checkpoint and seeds a later life from it, on the names of the engine. Both engines load it, and `src/furb/checkpoint.pyi` is its contract. |
+| `src/furb/checkpoint.py` | The checkpointer, which gathers the data of the carry of a crossing and seeds the next engine from it, on the names of the engine. Both engines load it, and `src/furb/checkpoint.pyi` is its contract. |
 | `src/furb/record.py` | What stands, in the record that boot is given, for a value that no later life makes again as it was. Both engines load it. |
 | `src/furb/awaits.py` | The await of an act from outside a run, on the engine of this interpreter: the `Act` that the package binds in that engine, which the operator awaits on the loop of the life. The door of monty holds its own. |
 
@@ -93,7 +93,7 @@ contract needs a request of the owner.
 | `src/world/time.rs` | The clock, a chance, and a wait. |
 | `src/world/store.rs` | The store: the record on the disk, as a file of lines, one fact on each line with the time the store kept it, or as a database of SQLite, which one process at a time owns, and the engine and the version of the build that made it, which the record names. |
 | `src/world/log.rs` | The log of a life beside its record: every fact that the life said, which `logged` reads while it agrees with the record. |
-| `src/checkpoint.rs` | The checkpoint of a life, at the tip of its record, from which a life of any later build goes on: the fact, the store and the boot, while `gathered` of the checkpointer gives its data. |
+| `src/checkpoint.rs` | The carry of a life across builds: the places where a record crosses, the entry that an open makes in memory at each and boots the next engine on, and the fact made that a crossing writes, while `gathered` of the checkpointer gives its data. |
 | `src/world/reader.rs` | The reader of a record with no life, which `retold` gives, so a record of any engine opens to read. |
 | `src/world/operator.rs` | The rules by which every console reads what the operator answers. |
 | `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [The provider](#the-provider) gives file by file. |
@@ -157,7 +157,7 @@ and `cli/pyproject.toml` say.
 
 | File | What it holds |
 | --- | --- |
-| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `checkpoint`, `catalog` and `skills`. |
+| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `catalog` and `skills`. |
 | `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
 | `cli/src/window.rs` | How furb finds the window and hands the terminal to it. |

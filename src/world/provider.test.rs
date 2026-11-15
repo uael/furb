@@ -160,7 +160,7 @@ fn asked(engine: &mut Engine) -> String {
 fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None })
+    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
     .expect("the root has a transcript");
   let mut names: HashMap<String, String> = HashMap::new();
   let mut counts: HashMap<&str, usize> = HashMap::new();
@@ -191,7 +191,7 @@ fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
 fn taken(engine: &mut Engine) -> (String, String) {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None })
+    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
     .expect("the root has a transcript");
   let id = facts
     .iter()
@@ -639,7 +639,7 @@ impl CompletionModel for Halting {
 fn told_of(engine: &mut Engine, texts: &[&str]) -> bool {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None })
+    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
     .expect("the root has a transcript");
   facts.iter().any(|one| {
     let all = one.word(0).map(|word| word.py_repr()).unwrap_or_default();
@@ -1583,8 +1583,9 @@ fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over()
   engine.cancel(&id, verbs::Cancel::default()).expect("the prompt is cancelled");
   let over = |engine: &mut Engine| {
     let root = engine.root().to_owned();
-    let facts =
-      engine.transcript(verbs::Transcript { on: on(&root), of: None }).expect("the transcript");
+    let facts = engine
+      .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
+      .expect("the transcript");
     facts.iter().any(|one| one.kind() == "done" && one.about().starts_with("reply"))
   };
   assert!(until(&mut engine, over), "the reply is over");
@@ -1770,7 +1771,7 @@ fn serving(
 fn ran(engine: &mut Engine, text: &str) -> bool {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None })
+    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
     .expect("the root has a transcript");
   let holds = |one: &Fact| {
     (0..4)
@@ -2556,7 +2557,7 @@ fn a_claude_command_line_at_its_usage_limit_is_asked_again_at_the_reset_and_answ
 fn wrote(engine: &mut Engine, part: &str) -> bool {
   let root = engine.root().to_owned();
   let facts = engine
-    .transcript(verbs::Transcript { on: on(&root), of: None })
+    .transcript(verbs::Transcript { on: on(&root), of: None, at: None })
     .expect("the root has a transcript");
   let place = |one: &Fact| (one.about().to_owned(), one.word(1).and_then(|word| word.as_int()));
   let made: Vec<_> = facts
@@ -2640,7 +2641,7 @@ fn the_note_of_a_fault_after_the_word_that_ran_is_python_that_binds_its_why_unde
   };
   assert!(until(&mut engine, next), "the chain asks its model again after the note");
   let root = engine.root().to_owned();
-  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None, at: None }).unwrap();
   let raised: Vec<String> = facts
     .iter()
     .filter(|one| one.kind() == "done" && one.about().starts_with("run"))
@@ -3243,12 +3244,10 @@ fn answer(engine: &mut Engine, said: &str) -> Object {
     .expect("an answer")
 }
 
-/// A compaction as the skill compaction makes it: the chain reads each fact but what it was told,
-/// and a rung tells it the summary, so its next turn begins a new conversation.
+/// A compaction as the skill compaction makes it: the chain jumps to a chain that keeps each of its
+/// acts, whose first rung tells it the summary, so its next turn begins a new conversation.
 #[cfg(unix)]
-const CUT: &str = r#"here = scope(acting())
-say('cut', here, [x for x in reading(here) if x[0] != 'tell'])
-rung("<s:summary>\nThe chain asked first.</s:summary>\nsummary", on=here)"#;
+const CUT: &str = r#"jump([], "<s:summary>\nThe chain asked first.</s:summary>\nsummary")"#;
 
 /// The signed thought that the command line of the tests writes for a line that holds THINK.
 #[cfg(unix)]
@@ -3320,7 +3319,7 @@ fn a_ceiling_on_a_chain_pauses_it_at_a_reply_that_a_named_account_served() {
   let with = verbs::Prompt { message: Some("first".into()), on: on(&root), ..Default::default() };
   drop(engine.prompt(Object::string("str"), with).expect("a prompt is made"));
   let pauses = |engine: &mut Engine| {
-    let of = verbs::Transcript { on: Some(root.clone()), of: Some("pause".to_owned()) };
+    let of = verbs::Transcript { on: Some(root.clone()), of: Some("pause".to_owned()), at: None };
     engine.transcript(of).unwrap().iter().filter(|fact| fact.about() == root).count()
   };
   assert!(until(&mut engine, |engine| pauses(engine) == 1), "the ceiling paused the chain");
@@ -3333,7 +3332,7 @@ fn a_reply_of_a_named_account_has_numbers_alone_in_its_usage_and_a_fact_that_nam
   answer(&mut engine, "first");
   let root = engine.root().to_owned();
   let facts = |engine: &mut Engine, of: &str| {
-    let of = verbs::Transcript { on: Some(root.clone()), of: Some(of.to_owned()) };
+    let of = verbs::Transcript { on: Some(root.clone()), of: Some(of.to_owned()), at: None };
     engine.transcript(of).unwrap()
   };
   let named = facts(&mut engine, "account");

@@ -2,7 +2,7 @@
 //!
 //! What bounds an open after a crash is the image that a life writes as it goes: once [`TAIL`]
 //! facts of the life stand in no image of it, the life writes its image between two runs, and goes
-//! on, with no checkpoint. Those facts are the ones that it said since its last image, or each fact
+//! on. Those facts are the ones that it said since its last image, or each fact
 //! of its log when it stands on no image, as after an open by its record, since its next open would
 //! read its whole record. An image keeps each act in flight, so no act holds it. A later open goes
 //! on from that image and feeds only the entries that the record took after it.
@@ -10,9 +10,9 @@
 //! The thread of the life only takes the image, as [`image::take`] says, and a thread of the
 //! blocking pool writes it, as [`Imaging`] says, so no window waits for the write.
 //!
-//! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
-//! each fact up to the fault, and a later open goes on from the last image, or replays them. A life
-//! that ends with no fault writes its image and no checkpoint, as [`ended`] says.
+//! A fault that stops the sandbox cuts the life, and ends it: the record keeps each fact up to the
+//! fault, and a later open goes on from the last image, or replays them. A life that ends with no
+//! fault writes its image, as [`ended`] says.
 
 use std::{future, path::Path};
 
@@ -98,19 +98,14 @@ impl Imaging {
 /// image, which holds what the host keeps of the life, so the next life of the record opens from
 /// it and reads no fact of its past, and a build that reads no image of this one opens it by the
 /// record, on the texts that the record names. A life that writes no image, as one that holds a
-/// function of a host, ends with its checkpoint, from which the next life opens by the record. It
-/// gives the fault of the end, when one came.
+/// function of a host, ends with nothing more, and the next life opens by the record. It gives the
+/// fault of the end, when one came.
 pub(crate) fn ended(
   mut engine: Engine,
   record: Option<&Path>,
   kept: &impl Serialize,
 ) -> Option<Fault> {
-  let record = record?;
-  match image::keep(&mut engine, record, kept) {
-    Ok(true) => None,
-    Ok(false) => engine.checkpoint().err(),
-    Err(no) => Some(engine.checkpoint().err().unwrap_or(no)),
-  }
+  image::keep(&mut engine, record?, kept).err()
 }
 
 #[cfg(test)]

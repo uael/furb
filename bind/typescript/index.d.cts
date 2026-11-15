@@ -86,12 +86,6 @@ export declare class Engine {
   /** Every name the module of a chain binds, the root when none is given, in the order it bound them. */
   names(chain?: string | undefined | null): Array<string>
   /**
-   * The life ends with its checkpoint at the tip of its record, from which a later life on the
-   * record opens, as the engine of the crate writes it; then the engine is gone, as after a
-   * dispose. A life that keeps no record refuses it, and ends too.
-   */
-  checkpoint(): void
-  /**
    * The engine is gone, and every result JavaScript awaits of it is refused. Its ears go with it: a command of the
    * crate ends, a wait ends, and the store lets its record go.
    */
@@ -103,9 +97,7 @@ export declare class Engine {
   /** The other way to speak: a generator is brought to life under a name, and from then it hears every fact that it waits for and says its own. */
   drive(g: Generator<unknown, unknown, unknown> | NativeEar, name: string): void
   /** transcript gives the facts on a chain, each of which the life adds when it is said, so a chain reads at once what it said itself. */
-  transcript(options?: { on?: string; of?: string } | null): Array<[string, string, string, ...unknown[]]>
-  /** reading gives what the model of a chain reads: the facts that the last cut on the chain kept, then each fact said on the chain after that cut, or the whole transcript of a chain that holds no cut. */
-  reading(options?: { on?: string; at?: number } | null): Array<[string, string, string, ...unknown[]]>
+  transcript(options?: { on?: string; of?: string; at?: number } | null): Array<[string, string, string, ...unknown[]]>
   /** The way to put a question that is answered now: it makes the act, and gives back what the act came to. */
   ask(kind: string, on: string, words?: unknown[]): unknown
   /** span(lo, hi) is the show of the lines lo through hi, where a line under one is counted back from the end, so that span(1, 20) is the first twenty lines and span(-20, -1) is the last twenty. */
@@ -124,11 +116,11 @@ export declare class Engine {
   write(text: TextValue, options?: { on?: string } | null): TextValue
   /** What the act it is at came to, as the record stands where the call is made, which it gives and never raises. */
   peek(at: string, options?: { waiting?: unknown } | null): unknown
-  /** The turns of a chain, folded from its reading. */
+  /** The turns of a chain, folded from its transcript. */
   turns(options?: { on?: string } | null): Array<['user' | 'assistant', string, [number, number, number, number, number] | null, unknown]>
   /** module gives the globals of a chain: the dict that the last module of its transcript carries, in which every rung of the chain runs. */
   module(options?: { on?: string } | null): unknown
-  /** program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its reading say. */
+  /** program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its transcript say. */
   program(options?: { on?: string } | null): unknown
   /** standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first. */
   standing(): unknown
@@ -482,15 +474,6 @@ export interface Opening {
    * their names, so it runs no command and touches no file.
    */
   inspecting?: boolean
-  /**
-   * Whether the life opens from the first entry of its record, born again at each checkpoint as
-   * each life of the record was, and not from its last checkpoint alone; false when unsaid. Each
-   * checkpoint then has to end the life that wrote it and to hold what a life born on the entries
-   * before it gathers, or the open is refused, as [`checkpoint::reborn`] says. Both opens reach
-   * one state at the tip, so the tests and the gates open this way to prove each checkpoint of a
-   * record.
-   */
-  whole?: boolean
   /**
    * Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs what
    * its record enables either way.

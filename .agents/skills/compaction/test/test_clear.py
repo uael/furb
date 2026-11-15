@@ -16,7 +16,7 @@ async def test_clear_supersedes_the_chain_of_the_caller_with_a_filter_that_keeps
   (first,) = [a[1] for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt"]
   new = str(engine.peek(went))
   assert (engine.get(went)[0], engine.get(went)[5], engine.scope(root)) == ("jump", "", new)
-  assert [a for a in engine.reading(new) if a[0] == "tell" and a[1] == first] == []
+  assert [a for a in engine.transcript(new) if a[0] == "tell" and a[1] == first] == []
   assert "summary" not in engine.module(new)
 
 
@@ -46,9 +46,9 @@ async def test_the_record_keeps_each_act_of_the_chain(tmp_path: Path) -> None:
   before = engine.transcript(root)
   await engine.rung("clear()", on=root)
   after = engine.transcript(root)
-  record = [a for (a,) in sand.record]
+  record = [a for (a, *_) in sand.record]
   assert [a[:3] for a in after[: len(before)]] == [a[:3] for a in before]
-  assert [a[:3] for a in before if a[:3] not in [x[:3] for x in engine.reading(engine.scope(root))]] != []
+  assert [a[:3] for a in before if a[:3] not in [x[:3] for x in engine.transcript(engine.scope(root))]] != []
   acts = [a[1] for a in before if a[0] in ("read", "bash")]
   assert len(acts) == 2 and [one for one in acts if one not in {x[1] for x in record}] == []
   names = [a[1] for a in before if engine.question(a)]

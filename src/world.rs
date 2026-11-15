@@ -60,12 +60,12 @@ pub(crate) use provider::{Mode, Systems, search::timed};
 pub use reader::{Retold, retold, retold_live, retold_with};
 pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::{
-  After, Format, Last, STORE, goes_after, last, made_before, stood_before, stored, stored_after,
+  After, Format, Last, STORE, appended, goes_after, last, stored, stored_after,
 };
 pub use store::{
   CHECKPOINT_SCHEMA, Lease, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, Tip,
-  checkpoints, checkpoints_back, engine, keeping, kept, made, readable, release, running, stood,
-  store, texts, unopened,
+  crossings, engine, keeping, kept, made, readable, release, running, stood, store, texts,
+  unopened,
 };
 pub use time::time;
 
@@ -114,7 +114,7 @@ pub(crate) async fn here<W: 'static>(co: &mut Co<W>, on: &str) -> Result<PathBuf
 }
 
 /// An act that an earlier life took and did not end, taken and closed with a refusal that names it
-/// and says it was interrupted, as a checkpoint ends an act that it cuts, since its work may have
+/// and says it was interrupted, as a carry ends an act that it cuts, since its work may have
 /// run: the model reads that end, and asks again if it wants.
 pub(crate) async fn interrupted<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<(), Fault> {
   say(co, Fact::says("started", a.about(), []));

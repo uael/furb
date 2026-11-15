@@ -315,7 +315,7 @@ fn lived(at: &Path, given: Vec<Skill>) -> Engine {
 fn rungs(engine: &mut Engine, chains: &[&str]) -> Vec<(String, String, String)> {
   let mut out = Vec::new();
   for chain in chains {
-    let on = verbs::Transcript { on: Some((*chain).to_owned()), of: None };
+    let on = verbs::Transcript { on: Some((*chain).to_owned()), of: None, at: None };
     for one in engine.transcript(on).unwrap() {
       if one.kind() == "rung" && one.by() == "extensions" && one.on() == *chain {
         let word = one.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
@@ -336,7 +336,7 @@ fn a_chain_that_a_word_makes_takes_each_skill_before_what_the_word_says_on_it() 
   fs::write(at.join("note.txt"), "noted\n").unwrap();
   let word = "prompt(None, 'task', on=chain('w'))\nprompt(None, 'more', on=chain('s', 'chain1'))";
   let shown = |engine: &mut Engine, chain: &str| {
-    let on = verbs::Transcript { on: Some(chain.to_owned()), of: None };
+    let on = verbs::Transcript { on: Some(chain.to_owned()), of: None, at: None };
     let facts = engine.transcript(on).unwrap();
     facts
       .iter()
@@ -394,9 +394,9 @@ fn a_life_enables_at_its_tip_each_skill_it_is_given_and_plays_its_word_then_its_
     "the fact is about the root, and carries the name, the word and the life word"
   );
   assert_eq!(
-    facts[5..7],
-    [("joined".to_owned(), "journal".to_owned()), ("rung".to_owned(), "extensions".to_owned())],
-    "the rung stands after the fact, joined to it, since the ear made it as it heard that fact"
+    facts[5],
+    ("rung".to_owned(), "extensions".to_owned()),
+    "the rung stands right after the fact, since the ear made it as it heard that fact"
   );
   let full = format!("{NOTE}\n\nnote()");
   assert_eq!(rungs(&mut engine, &["chain1"]), [rung("rung1", "chain1", &full)]);
@@ -581,7 +581,7 @@ fn the_ear_tells_the_root_once_why_each_skill_that_does_not_play_does_not_play()
   let mut engine = Engine::boot(record, ears).unwrap();
   assert!(engine.raised().is_none(), "{:?}", engine.raised());
   engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
-  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
+  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None, at: None };
   let told: Vec<String> = engine
     .transcript(on)
     .unwrap()
@@ -609,7 +609,7 @@ fn a_life_that_opens_again_on_its_record_replays_the_note_of_the_former_key_and_
     let mut engine = Engine::boot(record, ears).unwrap();
     assert!(engine.raised().is_none(), "{:?}", engine.raised());
     engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
-    let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
+    let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None, at: None };
     let told: Vec<String> = engine
       .transcript(on)
       .unwrap()
@@ -659,8 +659,9 @@ fn a_skill_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_had_i
     expected,
     "a reload plays on each chain that has it alone"
   );
-  let root =
-    engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None }).unwrap();
+  let root = engine
+    .transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None, at: None })
+    .unwrap();
   assert_eq!(enabled(&root), [rooted(newer)]);
 }
 
@@ -782,7 +783,7 @@ fn the_setup_plays_no_read_and_no_run_for_a_skill_whose_word_is_blank() {
   let kept = Skill { name: "kept".to_owned(), life: String::new(), ..note("x = 1") };
   let blank = Skill { name: "blank".to_owned(), life: String::new(), ..note("\n") };
   let mut engine = set_up(&at, vec![kept, blank]);
-  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
+  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None, at: None };
   let text = |one: &Fact, at: usize| one.word(at).and_then(|one| one.as_str().map(str::to_owned));
   let mut runs = Vec::new();
   let mut reads = Vec::new();
@@ -913,8 +914,9 @@ fn a_later_life_given_a_new_word_reloads_it_and_each_chain_plays_its_definitions
     "a later life plays the same rungs again"
   );
   assert_eq!(enables(&at), [first, newer.to_owned()], "and enables nothing more");
-  let root =
-    engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None }).unwrap();
+  let root = engine
+    .transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None, at: None })
+    .unwrap();
   assert_eq!(enabled(&root), [note(newer)], "the life runs the word that it enabled last");
 }
 
@@ -1038,7 +1040,7 @@ fn a_write_of_a_config_that_gives_the_former_key_tells_the_note_at_each_write() 
       .write(&Text::new(file.clone(), text), verbs::Write { on: Some("chain1".to_owned()) })
       .unwrap();
   }
-  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
+  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None, at: None };
   let told = engine
     .transcript(on)
     .unwrap()

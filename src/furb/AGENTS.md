@@ -40,9 +40,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - World: the ears of the outside that serve the machine, one or many, which reach the disk, the machine, the actors,
   the operator and the record; they answer what is theirs to answer, take what takes time, a command, a wait, a
   prompt to the operator and a reply, and say each done when it ends, and they keep what the journal says to keep.
-- checkpointer: the module of the outside, `checkpoint.py`, that makes the journal of a life, gathers the data of a
-  checkpoint and seeds a later life from it, on the names of the engine; the sandbox loads it as it loads the Kernel,
-  and the fact made holds its text.
+- checkpointer: the module of the outside, `checkpoint.py`, that gathers the data of a carry and seeds the next engine
+  from it, on the names of the engine; the sandbox loads it as it loads the Kernel, and the fact made holds its text.
 - Kernel: the ear of the outside that runs rungs: it takes a run, makes a wants as the run while the word waits for
   an act that is not done, and says the run done with what the word gave. It refuses, where the word waited, an await
   that cannot settle: of what is no act, of a chain, of a name of no act, and of the rung or the run of the word itself.
@@ -93,7 +92,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - prefix: the fact that carries what a chain with a source holds of the reading of its origin, which the chain says at
   its birth, before its open; the transcript of the chain holds those facts where the prefix stands.
 - cut: the fact that names what the model of a chain reads from it on: the facts that it keeps, then each fact said on
-  the chain after it. It takes nothing from the transcript, so a chain only grows; the birth of a checkpoint says one.
+  the chain after it. It takes nothing from the transcript, so a chain only grows; the seed of a carry says one.
 - jump: the act by which a chain goes on as another chain, which the chain makes at rest with itself as its source,
   less the acts that each jump drops; a compaction is a jump.
 - jumped: the table of the chains that jumped, each to the chain that it went on as. scope follows it, so each name
@@ -102,7 +101,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   that cut, or the whole transcript of a chain that holds no cut; the turns, a fork and each scan at a fact read it.
   The reading of a chain that jumped is its own, as its model read it.
 - carried turn: a fact on a chain about a name that no act of the life holds, as a turn that the chain took from
-  another record or from a checkpoint; a chain with a source holds it whole.
+  another record or from a carry; a chain with a source holds it whole.
 - note: one thing a tell says: a paragraph, or the binding of an act.
 - paragraph: what one fact that tells stands as in a turn: its notes, with a blank line between two paragraphs.
 - header: the first line of a paragraph: # and, with no space, the id of the act it is of, then what happened to
@@ -194,8 +193,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   on no chain. A standing that names no doctrine, as that of the World of the suite, seeds no setup: the root tells
   its open at its first stand, the extensions play as rungs of the ear, and its chains run no cd, so the World
   resolves their paths against the directory of the standing. A later life replays the setup from the standing that
-  the record holds. A life born on a checkpoint holds the fact teach and the enables in the turns of its root, where
-  the ear of the extensions reads them, so it teaches and enables nothing again.
+  the record holds. A life that goes on from a carry holds the fact teach and the enables in the turns of its root,
+  where the ear of the extensions reads them, so it teaches and enables nothing again. An enable that the journal says
+  again plays no rung: the record holds each rung that it played, which the life plays again at its place.
 - template: a python template string, each interpolation of which carries an expression and its value.
 - debug: the verb that tells the interpolations of a template, a tell and no act.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with
@@ -204,17 +204,12 @@ meanings. The entry of such a name here gives only its form in the engine.
 - grant: the act of the official extension grant, which the engine does not hold, that puts a ceiling on a chain:
   dollars, a share of the window, or both.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
-- journal: what boot takes, whose ear hears everything, says a keep for each entry of the record, and says again the
-  record that it is given. `journal` of the checkpointer makes it. boot calls it with four names of its engine and
-  the tables of the life, and binds in their place the four that it gives, in a line that a model reads: `numbered`,
-  to give an act the name that the record holds, `offers`, to answer an act from the record before the outside hears
-  it, `drive`, to know each generator that an act brought to life, and `lives`, to give each ear that is no act a
-  fact said again under the name journal. The bus holds four things for its ear and no more: it brings that ear to
-  life last, it puts no act to the journal while the act is made, so the journal hears each act at its place in the
-  log, it gives the journal nothing to hear each time nothing is left to hear, so the journal says the next entry
-  that it owes, and it lets what the journal raises out. `fed` and `held` of the checkpointer are given the journal
-  that a boot took, which the opening of the sandbox keeps: `fed` gives it the entries that follow the tip of a life
-  that stands, as the entries after an image of the life, which it says again by the same code.
+- journal: the name under which boot says the record again and keeps each entry: `play` says each entry at its
+  place, a fact under the site of its speaker, an act that an ear of the outside or the operator made through the verb
+  that binds its kind, else through act, and each ear of the outside hears a fact said again under the name journal,
+  as `lives` gives it; `keep` says the keep of each entry that the life says past its tip. `feed` gives boot the
+  entries that follow the tip of a life that stands, as the entries after an image of the life, which it says again
+  by the same code.
 - record: the entries the journal keeps, in the order they were said.
 - scratch directory: the directory of the machine that the World keeps for a record, which every chain of the record
   shares, which a path of scratch:// names and a command reads as TMPDIR; the opening of a life takes it, and makes
@@ -246,19 +241,17 @@ meanings. The entry of such a name here gives only its form in the engine.
   a setup, and no rung on a chain.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel, the schema of the record, the release, and the texts of the engine and of the Kernel, which the store says
-  as it hears the root of a new record at its birth. After a checkpoint, only the fact made of the segment after it
-  counts: the life that writes the checkpoint writes after it the fact made of the texts that it runs, and a crossing,
-  of `furb checkpoint` or of the open of a life that ran another engine and keeps its record, the fact made of its
-  build, and the store says it at the root of the first life that goes on from a
-  checkpoint of an earlier build that has none after it. A life of any build of the major replays that segment word by
-  word on the texts that the fact holds, and goes on with them, and a drift is a defect.
-- checkpoint: the fact by which a record carries the state of its life to a later life of any build of its major, at
-  its tip: plain data with a version of its own shape, `schema`, apart from the version of the record. It holds each
+  as it hears the root of a new record at its birth. A crossing, of the open of a life that ran another engine and
+  keeps its record, writes the fact made of its build alone, which starts a segment. A life of any build of the major
+  replays each segment word by word on the texts that its fact made holds, and a drift is a defect.
+- carry: the entry `checkpoint` by which an open carries the state of a segment, at its end, to the engine of the next
+  segment, which no record keeps: plain data with a version of its own shape, `schema`, apart from the version of the
+  record. It holds each
   chain that lives with its label, its source, its turns, the definitions of each word, its plain values and whether
   it is paused, each act that a value names with its answer, each open prompt, and the names that each kind took,
-  and no word of a verb by its place. `gathered` of the checkpointer holds its shape and gives it. Its `seed` makes
-  from that data the entries that a later life boots on, before the record after the checkpoint, so the engine that
-  opens it, and not the one that wrote it, says how its own journal makes each chain again. Each name of the past
+  and no word of a verb by its place. `gathered` of the checkpointer that the next fact made names holds its shape and
+  gives it. Its `seed` makes from that data the entries that the next engine boots on, before the next segment, so the
+  engine that opens it, and not the one that ran the segment before, says how its own journal makes each chain again. Each name of the past
   stays taken, an act that a value names stands known with its answer and runs nothing, and each chain with an open
   prompt opens paused while its seed binds it, then wakes unless a pause stood over it at the tip, so an open prompt asks its model again
   at once. A name of the module whose value the record
@@ -305,8 +298,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - There is one root per record, and one process at a time owns a record.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
   record is made again by running its words. A record holds the engine and the Kernel that made each segment, and a
-  life of any build of the major replays the segment after its last checkpoint word by word on them, to the exact
-  state of its tip, and goes on with them.
+  life of any build of the major replays each segment word by word on them, to the exact state of its tip, and goes on
+  with those of its last segment.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of the prompts that it refuses, and of the done of

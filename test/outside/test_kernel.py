@@ -13,7 +13,7 @@ import furb.checkpoint
 import furb.kernel
 import furb.record
 import furb_monty.engine
-from conftest import Sand, born, journaled, kernel, plain, relived, swapped
+from conftest import Sand, born, journaled, kernel, life, plain, relived, settle, swapped
 from furb import engine
 from furb.engine import OPERATOR, WINDOW, Drift, Refused
 from outside.doubles import booted, worlds
@@ -96,6 +96,21 @@ async def test_a_word_that_awaits_an_act_already_over_is_carried_on_where_it_sta
   assert await engine.rung(word, on=root) == "cut"
 
 
+async def test_a_run_whose_end_the_record_keeps_steps_no_more_when_the_act_that_it_awaited_ends() -> None:
+  """A run that is over, as one whose end the record keeps, steps no more: the act that it awaited ends after the
+  record, and the rest of its word never runs."""
+  sand, _, root = born()
+  await engine.rung("x = await wait(0.01, __name__)\ny = 2", on=root)
+  await settle()
+  at = next(i for i, e in enumerate(sand.record) if e[0][:2] == ("done", "wait1"))
+  life(Sand(), [*sand.record[:at], (("done", "run2", "", Refused("cut")),)])
+  assert engine.over("run2") and not engine.over("wait1")
+  engine.cancel("wait1")
+  await settle()
+  assert engine.over("wait1") and str(engine.peek("run2")) == "cut"
+  assert "x" not in engine.module(root) and "y" not in engine.module(root)
+
+
 async def test_a_record_whose_acts_hold_a_callable_or_an_address_replays_on_the_engine_of_this_interpreter() -> None:
   """A record keeps a callable or an object of a word as a text that names an address of its life, which a later
   life cannot make again, so a host of this engine gives boot what recorded makes of the record: each such text
@@ -105,10 +120,10 @@ async def test_a_record_whose_acts_hold_a_callable_or_an_address_replays_on_the_
   sand, _, root = born(word)
   assert await engine.prompt(int, "go", on=root) == 1
   addressed = lambda one: re.sub(r" at 0x[0-9a-f]+", " at 0x1", one) if isinstance(one, str) else one  # noqa: E731
-  record: list = [(tuple(map(addressed, e)),) for (e,) in plain(sand.record)]
+  record: list = [(tuple(map(addressed, e)), *rest) for (e, *rest) in plain(sand.record)]
   assert any(" at 0x1" in str(e) for e in record)
   with pytest.raises(Drift, match=r"^bash1 drifts"):
-    engine.boot(furb.checkpoint.journal(vars(furb.python), record), **kernel(), world=Sand().hears())
+    engine.boot(record, **kernel(), world=Sand().hears())
   log, again = await relived(Sand(), record)
   assert again == root and [a[4][:6] for a in log if a[0] == "bash"] == ["echo <"]
   held = furb.record.Recorded("<f at 0x1>")

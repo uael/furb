@@ -8,17 +8,18 @@ Each folder here holds records. A build made them on a model that answers from a
   `next` held them there: `record-2` holds those of the stable cut (commit `26d11be15`). From its point on, each record
   of the major opens on each later build with no drift, and no file of the folder changes.
 
-The test `make_the_corpus` in `tests/suite/promise.rs` makes the records of `next`. Each record has a checkpoint and a tail:
+The test `make_the_corpus` in `tests/suite/promise.rs` makes the records of `next`. A record keeps no checkpoint:
 
 - `work.jsonl` runs each default kit. Its root writes, reads, runs a command, waits, reads the clock and chance, asks a
-  chain of its own, and defines a value and a function. A word of a model waits for an hour. That word is open when the
-  life keeps its checkpoint. A second life of the same engine goes on from the checkpoint. It takes a prompt, defines a
-  name on what the checkpoint holds, and leaves a prompt open.
-- `crossed.jsonl` is the same life with no kit. Its tail runs on another engine, whose texts its fact made holds: the
-  program of the engine of the build that made it, with a line of comment more, so a later build replays it there.
+  chain of its own, and defines a value and a function. A word of a model waits on a prompt of a chain of its own. That
+  word is open when the first life ends. A second life of the same engine opens on the record, takes a prompt, defines
+  a name on what the first life held, and leaves a prompt open.
+- `crossed.jsonl` is the same life with no kit. Its first life runs on another engine, whose texts its fact made holds:
+  the program of the engine of the build that made it, with a line of comment more. The second life crosses to the
+  build after it, so a later build replays the first segment there and carries its tip to the second.
 - `language.jsonl` holds the definitions that a word uses, with no kit: `def` and `async def`, a class and a dataclass,
-  `match`, comprehensions, f-strings and t-strings, a type alias, generics and decorators. A checkpoint holds some of
-  them, and the tail after it holds the others.
+  `match`, comprehensions, f-strings and t-strings, a type alias, generics and decorators. A first life defines some of
+  them, and a second life on its record defines the others.
 - Beside each record, `<name>.modules` shows what the module of each chain held when the build made the record. It lists
   each value, and what each definition gives, as python shows them. It has no name of a kit. A minor release may change
   a kit and its defaults.
@@ -35,7 +36,7 @@ For each record of each folder, it does these steps:
 3. It reads the record with the reader of a record, with no life, and finds each chain.
 4. It takes one more turn on the model of the script.
 
-A life can go on from a checkpoint that holds a reply of its model. That life pauses its root. The test wakes the root,
+A life can open on a record that a stop cut while a reply of its model ran. That life pauses its root. The test wakes the root,
 as an operator does.
 
 ## The rule

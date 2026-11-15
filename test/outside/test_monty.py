@@ -16,7 +16,7 @@ import gc
 import json
 import sys
 import threading
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -29,11 +29,6 @@ from conftest import OPERATOR, STANDS, Dead, Py, Sand, journaled, life, settle, 
 from furb import engine
 from furb.engine import TIMEOUT, Refused
 from furb_monty import _monty
-
-
-def journal(record: Iterable[Sequence[object]] = ()) -> Callable[..., Iterable[object]]:
-  """The journal of a life on the engine of monty, as boot of its door takes it."""
-  return furb_monty.checkpoint.journal({}, record)
 
 
 @pytest.fixture(autouse=True)
@@ -264,7 +259,7 @@ async def test_boot_refuses_a_kernel_of_this_interpreter() -> None:
 async def test_an_ear_of_the_crate_crosses_to_the_boot_of_the_door_and_what_it_says_from_a_thread_drives_it() -> None:
   """An ear of the crate crosses to the boot of the door beside the generators the contract says, and what it says
   from a thread of its own drives the life from the loop: time ends a wait from its thread."""
-  root = furb_monty.engine.boot(journal(), time=_monty.time(), world=Dead(stands=STANDS).hears())
+  root = furb_monty.engine.boot(time=_monty.time(), world=Dead(stands=STANDS).hears())
   assert await engine.wait(0.01, root, on=root) is None
 
 
@@ -275,7 +270,7 @@ async def test_an_ear_of_the_crate_that_the_host_lets_go_goes_while_the_life_it_
   crossed to lives on: the store lets its record go, so a second life on that record owns it."""
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
-  root = furb_monty.engine.boot(journal(record), time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
+  root = furb_monty.engine.boot(list(record), time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
   assert await engine.wait(0.01, root, on=root) is None
   with pytest.raises(Refused, match="Another process owns"):
     _monty.store(path)
@@ -296,13 +291,13 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
   _, store = _monty.store(path)
   ears = {"files": _monty.files(str(tmp_path / "scratch")), "time": _monty.time(), "store": store}
   world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
-  root = furb.python.boot(furb.checkpoint.journal(vars(furb.python)), kernel=Py().kernel(), **ears, world=world)
+  root = furb.python.boot((), kernel=Py().kernel(), **ears, world=world)
   furb.python.write(furb.python.Text("a.txt", "one\n"), on=root)
   assert furb.python.read("a.txt", on=root).content == "one\n"
   assert await furb.python.wait(0.01, root, on=root) is None
   for one in ears.values():
     one.dispose()
-  kept = [fact for (fact,) in _monty.kept(path)]
+  kept = [fact for (fact, *_) in _monty.kept(path)]
   assert [fact[3] for fact in kept if fact[:2] == ["done", "read1"]] == [
     furb.python.Text(tilded(tmp_path / "a.txt"), "one\n")
   ]
@@ -318,9 +313,7 @@ async def test_the_ear_of_the_log_writes_the_log_of_a_life_on_the_engine_of_this
   _, store = _monty.store(path)
   log = _monty.log(path)
   world = Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
-  root = furb.python.boot(
-    furb.checkpoint.journal(vars(furb.python)), kernel=Py().kernel(), store=store, log=log, world=world
-  )
+  root = furb.python.boot(kernel=Py().kernel(), store=store, log=log, world=world)
   assert await furb.python.rung("x = 1\nclose(x)", on=root) == 1
   store.dispose()
   log.dispose()
@@ -329,7 +322,7 @@ async def test_the_ear_of_the_log_writes_the_log_of_a_life_on_the_engine_of_this
   heads = [fact[:2] for fact in logged]
   assert heads[0] == ["chain", "chain1"]
   assert ["rung", "rung1"] in heads and ["run", "run1"] in heads
-  assert ["run", "run1"] in [fact[:2] for (fact,) in _monty.kept(path)]
+  assert ["run", "run1"] in [fact[:2] for (fact, *_) in _monty.kept(path)]
   retold = _monty.retold(path)
   assert retold["logged"] and retold["file"] == f"{path}.log"
   Path(f"{path}.log").unlink()
@@ -372,7 +365,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
     ["provider", "extensions", "skills", "kits", "mcp", "fetch", "files", "bash", "time", "store", "log"],
   )
   root = furb_monty.engine.boot(
-    journal(record), **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+    list(record), **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
   )
   await settle()
   assert [one["name"] for one in _monty.enabled(engine.transcript(on=root))] == [
@@ -391,7 +384,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
     ["provider", "extensions", "skills", "kits", "mcp", "fetch", "files", "bash", "time"],
   )
   root = furb_monty.engine.boot(
-    journal(record), **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+    list(record), **dict(ears), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
   )
   await settle()
   assert _monty.enabled(engine.transcript(on=root)) == []
@@ -400,7 +393,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
 async def test_the_door_gives_none_where_the_contract_holds_none_beside_a_default_of_its_own() -> None:
   """A verb of the door takes None as a word where its type holds None beside a default of its own, as the stdin of
   bash, and takes the default of the contract when the word is left out."""
-  root = furb_monty.engine.boot(journal(), world=Dead(stands=STANDS).hears())
+  root = furb_monty.engine.boot(world=Dead(stands=STANDS).hears())
   held = furb_monty.engine.held_engine()
   opened, shut = held.bash("cat", stdin=None, on=root), held.bash("cat", on=root)
   assert [held.get(str(one)) for one in (opened, shut)] == [
@@ -414,9 +407,9 @@ async def test_the_door_names_the_work_that_an_earlier_life_left_pending(tmp_pat
   says, as the engine of the crate finds it."""
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
-  root = furb_monty.engine.boot(journal(record), time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
+  root = furb_monty.engine.boot(list(record), time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
   engine.wait(600, root, on=root)
-  furb_monty.engine.boot(journal(_monty.kept(path)), time=_monty.time(), world=Dead(stands=STANDS).hears())
+  furb_monty.engine.boot(_monty.kept(path), time=_monty.time(), world=Dead(stands=STANDS).hears())
   assert furb_monty.engine.pending() == [("wait1", "wait")]
 
 
@@ -426,14 +419,14 @@ async def test_the_door_parks_a_reply_that_five_lives_left_and_runs_it_again_at_
   crate does."""
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
-  root = furb_monty.engine.boot(journal(record), store=store, world=Sand().hears())
+  root = furb_monty.engine.boot(list(record), store=store, world=Sand().hears())
   engine.prompt(int, "count", on=root)
   await settle()
   lines = Path(path).read_text().splitlines(keepends=True)
   started = next(i for i, line in enumerate(lines) if json.loads(line)[0][:2] == ["started", "reply1"])
   crashed = tmp_path / "crashed.jsonl"
   crashed.write_text("".join(lines[: started + 1]) + lines[started] * 4)
-  furb_monty.engine.boot(journal(_monty.kept(str(crashed))), world=Sand().hears())
+  furb_monty.engine.boot(_monty.kept(str(crashed)), world=Sand().hears())
   assert (furb_monty.engine.parked(), furb_monty.engine.pending()) == ([("reply1", "reply")], [])
 
   def started() -> list[tuple]:
@@ -455,7 +448,7 @@ async def test_the_ear_of_commands_closes_as_interrupted_a_command_that_its_reco
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
   root = furb_monty.engine.boot(
-    journal(record),
+    list(record),
     bash=_monty.bash(str(tmp_path)),
     store=store,
     world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears(),
@@ -467,7 +460,7 @@ async def test_the_ear_of_commands_closes_as_interrupted_a_command_that_its_reco
     await asyncio.sleep(0.05)
   kept = _monty.kept(path)
   furb_monty.engine.boot(
-    journal(kept), bash=_monty.bash(str(tmp_path)), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+    list(kept), bash=_monty.bash(str(tmp_path)), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
   )
   assert furb_monty.engine.pending() == [("bash1", "bash")]
   engine.wake(root)
@@ -482,11 +475,11 @@ async def test_a_key_of_the_client_makes_its_act_once_in_a_life_and_in_a_later_l
   record, and another key makes another act."""
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
-  root = furb_monty.engine.boot(journal(record), time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
+  root = furb_monty.engine.boot(list(record), time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
   first = furb_monty.engine.keyed("k1", "wait", 600, root, on=root)
   assert (first, furb_monty.engine.keyed("k1", "wait", 600, root, on=root)) == ("wait1", "wait1")
   assert furb_monty.engine.keyed("k2", "wait", 600, root) == "wait2"
-  furb_monty.engine.boot(journal(_monty.kept(path)), time=_monty.time(), world=Dead(stands=STANDS).hears())
+  furb_monty.engine.boot(_monty.kept(path), time=_monty.time(), world=Dead(stands=STANDS).hears())
   assert furb_monty.engine.keyed("k1", "wait", 600, root, on=root) == "wait1"
 
 

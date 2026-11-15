@@ -221,9 +221,8 @@ class Site:
     speaks(previous)
 
 
-def boot(journal: Callable[..., Iterable[object]], **outside: object) -> Act:
-  """A life of the engine in the sandbox, opened on the ears given and from the record of the journal given, which
-  `furb_monty.checkpoint.journal` gives, and which gives the root. The journal itself is the sandbox's own.
+def boot(record: Iterable[object] = (), **outside: object) -> Act:
+  """A life of the engine in the sandbox, opened on the ears given and from the record given, which gives the root.
 
   An ear is a generator of this interpreter or an ear of the crate. The Kernel is the crate's, so an ear under its
   name is refused as the engine refuses one under a name of its own ears. A second boot is a second life, and the
@@ -238,7 +237,7 @@ def boot(journal: Callable[..., Iterable[object]], **outside: object) -> Act:
     LIFE.end()
   LIFE = living = Living()
   ears = [(name, living.crossed(name, ear)) for name, ear in outside.items()]
-  living.engine = _monty.Engine.boot([(fact,) for fact in journal()], ears)
+  living.engine = _monty.Engine.boot(list(record), ears)
   if (no := living.engine.raised) is not None:
     raise no
   return Act(living.engine.root)

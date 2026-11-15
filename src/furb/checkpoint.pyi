@@ -1,43 +1,28 @@
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 
-from furb.engine import Entry, Journal
+from furb.engine import Ear, Entry
 
-def journal(names: dict[str, object], record: Iterable[Entry] = ()) -> Journal:
-  """journal gives what boot takes as its journal, from the names of an engine and a record, so a life that boots on it says that record again and keeps what it says after it, as boot says.
-  A journal that is given no record says nothing again, so its life is a new life, which names each act by its number alone.
-  """
-
-def fed(journal: Journal, entries: Iterable[Entry]) -> None:
-  """fed gives the journal that a boot took the entries that follow the tip of its life, which the journal says again at once as it says a record again, so a life that stood at a place of a record and is fed the entries after that place stands where a life that boots on the whole record stands.
-  The outside is asked nothing that a fed entry answers, and the journal keeps no fed entry again.
-  A fed answer of an act that the life holds and that is not over lands at its place, so a word that awaits that act goes on.
-  fed on a journal that no boot took is refused, since nothing takes a tail there.
-  """
-
-def held(journal: Journal) -> list[str]:
-  """held makes the journal that a boot took hold each act that an ear of the outside took and that is not done, as it holds each act that a record shows started and not done, and gives the name of each act that it holds, so a life that opens from an image puts each act that the ears of the life before held in flight to its fresh ear at a wake, as a life that opens by its record does.
-  A wake of an act that the journal holds puts it to the ears of the outside again, as an act that an earlier life took.
-  held on a journal that no boot took is refused, since nothing holds an act there.
-  """
+def birth(names: dict[str, object]) -> Ear:
+  """birth gives the ear of the outside that binds the module of each chain that seed makes again, which a host gives boot under the name birth, so the engine binds no module from data of its own."""
 
 def seed(names: dict[str, object], data: object) -> list[Entry]:
-  """seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine opens a checkpoint that an earlier engine of its major wrote.
+  """seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine goes on from the life that an earlier engine of its major replayed and gathered.
   Each chain of the data is made again under its name, on its parent and with its label, as the operator makes it, and each name of a kind up to the highest that the data takes, which no entry carries, stays taken.
   Each open prompt of the data is made again through prompt under its name, and each chain that the data says paused is paused.
-  Each chain with an open prompt opens paused while the journal binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
+  Each chain with an open prompt opens paused while birth binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
   Each act of the data with a value stands known on its chain with the words that made it and with that value and runs nothing.
   The prefix of a born chain holds no question, started or done of an act on that chain that seed makes again, so each act of the data stands once in the transcript of its chain: after the facts of the prefix, or in the prefix for an act that seed does not make again, whose thread the journal does not know when the act comes, as an act with a value on an open prompt and each act on such an act.
   A born chain with a source keeps in its prefix each fact that its fact carried holds of an act that it inherited, since seed makes that act again on the chain that it is on alone, so a chain whose source is the born chain reads that act.
   Each act of the data with a value is made before each open prompt, so a message that the operator sent on a done prompt while its chain was paused reads that prompt, and its model is asked once a wake comes in the later life.
-  The journal binds the module of each chain from its fact carried as it says that fact, with no act, no rung and no run, and the chain holds as its prefix the turns of its fact carried but the question, the started and the done of each act on it that seed makes again, so a birth runs no word of the chain again.
+  birth binds the module of each chain from its fact carried as it hears that fact, with no act, no rung and no run, and the chain holds as its prefix the turns of its fact carried but the question, the started and the done of each act on it that seed makes again, so a birth runs no word of the chain again.
   Each module that a born chain makes again, and the module of each chain that forks it, takes that bind before any word runs on it, so a fork of a born chain replays the bind and then the words after the birth.
-  The fact carried of a chain holds its turns, the text of each value of the chain and each word of its definitions, and the journal binds each value from its text, then each word of the definitions, then each value again.
+  The fact carried of a chain holds its turns, the text of each value of the chain, each word of its definitions, and after its makers each name that it may lose and each act that it cut, and birth binds each value from its text, then each word of the definitions, then each value again.
   seed reads the definitions that a checkpoint of an earlier build holds as one string as one word of definitions.
   The fact carried of a chain names after its definitions who made the chain and each act of the data on it, an act on no chain of the data in the fact carried of the first chain, so a later gathered gives each act that seed makes again as the operator or the journal the maker that the data says.
   A fact carried names no maker when the data names none, as the data of an earlier build, so that data seeds as it did.
-  The journal binds the definitions and the values of each chain before seed says the cut of the chain, so a value that raises as it is bound leaves the turns of the chain whole.
-  A value or a word of definitions that raises as the journal binds it stops nothing after it, so a value that raises loses only itself, a word of definitions that raises loses only what follows the raise in that word, and the second pass of the values binds a value that the first could not bind, as one that names a class of the definitions, and gives a name that a definition bound again the value of the fact carried, while a value whose object the module still holds stays that object, which a definition took.
-  The cut of each chain tells in a note of the journal each name that the checkpoint lost, each value of the fact carried that the born life does not hold and each act that the checkpoint cut, and a birth that holds each such name and cut no act tells no note.
+  birth binds the definitions and the values of each chain as it hears the fact carried of the chain, before its prefix, so a value that raises as it is bound leaves the turns of the chain whole.
+  A value or a word of definitions that raises as birth binds it stops nothing after it, so a value that raises loses only itself, a word of definitions that raises loses only what follows the raise in that word, and the second pass of the values binds a value that the first could not bind, as one that names a class of the definitions, and gives a name that a definition bound again the value of the fact carried, while a value whose object the module still holds stays that object, which a definition took.
+  birth tells after the prefix of each chain, in a note, each name that the checkpoint lost, each value of the fact carried that the born life does not hold and each act that the checkpoint cut, and a birth that holds each such name and cut no act tells no note.
   A birth leaves no name of its own in the module of a chain, whatever raised, so no object of a birth stays held.
   A birth tells no turn of its own but the turn of the rung that plays each life word again: the turns of a chain after it are its turns at the tip, then that turn, and each act that a life word made lives again under a rung whose word is that life word.
   A birth makes again each life word whose act left an act of its own open or keeps a lasting ear after its done, through a rung of the operator that awaits a rung of each such life word and tells in a debug what each raises, so each word that a birth runs shows in a turn of its chain.

@@ -6,10 +6,11 @@
 //! which goes when the life ends before that, so a life whose replay drifts leaves the log of the life before it as it
 //! was, and nothing more.
 //!
-//! A life that goes on from a checkpoint replays only what the checkpoint carries, so its log starts with the lines of
-//! the log before it that come before the checkpoint, while that log agrees with the record up to there, then a line
-//! of keep for the checkpoint and for each entry after it, and then what the life says. So a reader of the log still
-//! finds each fact of the lives before the checkpoint, and the log agrees with the record.
+//! A life on a record that crossed to another build says again only the carry of its last engine
+//! and the last segment, so its log starts with the lines of the log before it that come before
+//! that segment, while that log agrees with the record up to there, then a line of keep for each
+//! entry of the segment, and then what the life says. So a reader of the log still finds each fact
+//! of the lives before the crossing, and the log agrees with the record.
 //!
 //! Its first line is a map that holds under `entries` how many entries the record held when the life opened. Each
 //! other line is one fact, as JSON reads a value of the sandbox, but for the line `["keep", "", n]`, which says that
@@ -44,16 +45,12 @@ use std::{
 
 use serde_json::Value;
 
-use crate::checkpoint;
 use crate::{
   ear::{Co, Ear, Hooks, With, ear, hear},
   fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
-  world::{
-    beside, kept,
-    store::{MADE, asks, heads, spoken},
-  },
+  world::{beside, kept, store::MADE},
 };
 use serde::de;
 use std::fs;
@@ -113,14 +110,17 @@ impl<'a> Line<'a> {
 /// The ear of the log of the record at a path, which held a number of entries when the life opened: it hears every
 /// fact, and writes the log again from its first line.
 pub fn log(record: impl AsRef<Path>, held: &[Object]) -> Box<dyn Ear> {
-  logging(record, held, 0)
+  logging(record, held, None)
 }
 
-/// The ear of [`log`] for the last entries of a record, which start at a byte of its file of lines.
-/// The log reads the start of each line before that byte and parses none, but the lines of the
-/// acts that a new log owes.
-pub(crate) fn logging(record: impl AsRef<Path>, last: &[Object], from: u64) -> Box<dyn Ear> {
-  heard(Log::open(record.as_ref(), last, from), 0)
+/// The ear of [`log`] for the entries of a record whose last segment starts at a place, when it
+/// crossed: the life says again only the carry and that segment.
+pub(crate) fn logging(
+  record: impl AsRef<Path>,
+  held: &[Object],
+  tip: Option<usize>,
+) -> Box<dyn Ear> {
+  heard(Log::open(record.as_ref(), held, tip), 0)
 }
 
 /// The ear of [`log`] for a life that opens from its image, which reads no entry before it: the
@@ -238,10 +238,10 @@ struct Tip {
   bytes: u64,
 }
 
-/// The lines of the log at a path that come before a checkpoint, with its head, and each name that
-/// they show: nothing when the log does not agree with the entries that a record holds before that
-/// checkpoint, of which it is given the count and the questions, as [`agreed`] reads it. A log of a
-/// life that went on from an earlier checkpoint holds a line of keep for this checkpoint, where
+/// The lines of the log at a path that come before a place of the record, with its head, and each
+/// name that they show: nothing when the log does not agree with the entries that the record holds
+/// before that place, of which it is given the count and the questions, as [`agreed`] reads it. A
+/// log of a life that went on after that place holds a line of keep for the entry there, where
 /// they end.
 fn earlier(
   log: &Path,
@@ -288,34 +288,6 @@ fn outside(by: &str) -> bool {
   !named_act(by) && !matches!(by, "" | "operator" | "journal")
 }
 
-/// What the entries of a record before a byte of its file of lines tell from the start of each
-/// line, with no parse: how many they are, and the name of each question among them.
-fn before(record: &Path, to: u64) -> Result<(usize, HashSet<String>), Fault> {
-  let (mut entries, mut asked) = (0, HashSet::new());
-  let mut heard = |line: &[u8]| {
-    entries += 1;
-    asked.extend(asks(line).map(str::to_owned));
-    false
-  };
-  heads(record, to, &mut heard, &mut |_| {})?;
-  Ok((entries, asked))
-}
-
-/// The entries of a record before a byte of its file of lines about each act that an ear of the
-/// outside made, in order, which are the only lines of them that the read parses.
-fn theirs(record: &Path, to: u64) -> Result<Vec<Object>, Fault> {
-  let (mut made, mut about) = (HashSet::new(), Vec::new());
-  let mut wanted = |line: &[u8]| {
-    let Some([_, name, by]) = spoken(line) else { return false };
-    if asks(line).is_some() && outside(by) {
-      made.insert(name.to_owned());
-    }
-    made.contains(name)
-  };
-  heads(record, to, &mut wanted, &mut |entry| about.push(entry))?;
-  Ok(about)
-}
-
 /// Whether a name is the name of an act, as `bash3`, and not the name of an ear.
 fn named_act(name: &str) -> bool {
   let kind = name.trim_end_matches(|one: char| one.is_ascii_digit());
@@ -342,38 +314,30 @@ fn owed<'a>(held: impl Iterator<Item = &'a Object>) -> Vec<(String, Value)> {
 }
 
 impl Log {
-  /// The log of the record at a path, whose last entries are these and start at a byte of its file
-  /// of lines, written again from its first line, or from the lines of the log before it that come
-  /// before the checkpoint that the life boots on.
-  fn open(record: &Path, last: &[Object], from: u64) -> Self {
+  /// The log of the record at a path, which holds these entries, written again from its first
+  /// line, or, when the last segment starts at a place, from the lines of the log before it that
+  /// come before that place, while they agree with the record.
+  fn open(record: &Path, held: &[Object], tip: Option<usize>) -> Self {
     let path = beside(record, ".log");
     let fresh = beside(record, ".log.new");
-    let past = before(record, from);
-    let reads = past.is_ok();
-    let (held, mut asked) = past.unwrap_or_default();
-    let earlier = checkpoint::last(last).and_then(|at| {
-      let facts = last[..at].iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?));
-      asked.extend(facts.filter(Fact::question).map(|one| one.about().to_owned()));
-      earlier(&path, held + at, asked).map(|(text, seen)| (held + at, text, seen))
+    let earlier = tip.and_then(|at| {
+      let facts = held[..at].iter().filter_map(|entry| Fact::of(*entry.as_ref().items()?.first()?));
+      let asked = facts.filter(Fact::question).map(|one| one.about().to_owned()).collect();
+      earlier(&path, at, asked).map(|(text, seen)| (at, text, seen))
     });
-    // A log that goes on from an earlier one shows each act of the entries before the last ones.
-    let made = match &earlier {
-      None => theirs(record, from),
-      Some(_) => Ok(Vec::new()),
-    };
-    let reads = reads && made.is_ok();
-    let made = made.unwrap_or_default();
-    // A log that cannot be opened, or whose record does not read, is not written: the record holds
-    // each fact, and a later life writes the log again from it, so the life goes on with no log
-    // and loses nothing.
+    // A log that goes on from an earlier one shows each act of the entries before the last
+    // segment, and a new log each act of the record.
+    let from = earlier.as_ref().map_or(0, |one| one.0);
+    // A log that cannot be opened is not written: the record holds each fact, and a later life
+    // writes the log again from it, so the life goes on with no log and loses nothing.
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
-    let entries = held + last.len();
+    let entries = held.len();
     let mut log = Self {
       path,
-      sink: Self::sink(file.filter(|_| reads)),
+      sink: Self::sink(file),
       fresh: Some(fresh),
       tip: Rc::new(RefCell::new(Tip { entries, ..Tip::default() })),
-      owed: owed(made.iter().chain(last)),
+      owed: owed(held[from..].iter()),
     };
     match earlier {
       Some((at, mut text, seen)) => {
@@ -521,21 +485,18 @@ pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
 
 /// Whether the log of the record at a path agrees with a record of that many entries and of those
 /// questions, as [`logged`] reads it, which the caller read once. The record ends with `sealed`
-/// entries that are no facts of a life: a checkpoint, and the fact made that names the texts of the
-/// life born on it. The ones that no life wrote, as those of `furb checkpoint`, have no line of
-/// keep, so a log that lacks the lines of keep of those entries alone still holds each fact of the
-/// record.
+/// entries that are no facts of a life: the facts made that a crossing wrote, which no life wrote,
+/// so they have no line of keep, and a log that lacks the lines of keep of those entries alone
+/// still holds each fact of the record.
 pub(crate) fn agrees(path: &Path, entries: usize, asked: &HashSet<String>, sealed: usize) -> bool {
   agreed(path, entries.saturating_sub(sealed)..=entries, asked, false)
 }
 
 /// How many entries that are no facts of a life end a record, given each kept fact of it in order:
-/// the count before a fact, and after it. Such an entry is a checkpoint, or the fact made that
-/// follows one.
+/// the count before a fact, and after it. Such an entry is a fact made, which a crossing writes.
 pub(crate) fn sealed(before: usize, fact: Option<&Fact>) -> usize {
   match fact.map(Fact::kind) {
-    Some(checkpoint::CHECKPOINT) => before + 1,
-    Some(MADE) if before > 0 => before + 1,
+    Some(MADE) => before + 1,
     _ => 0,
   }
 }

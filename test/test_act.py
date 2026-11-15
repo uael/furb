@@ -145,7 +145,7 @@ async def test_an_ear_of_the_outside_that_is_not_busy_hears_each_fact_of_the_log
   await settle(200)
   # The probe hears after the Kernel, which takes each run and runs its word before the probe hears the run.
   places = {repr(a): at for at, a in enumerate(log)}
-  kept = [places[repr(x)] for (x,) in sand.record if repr(x) in places]
+  kept = [places[repr(x)] for (x, *_) in sand.record if repr(x) in places]
   assert len(kept) > 15
   assert kept == sorted(kept)
   after: list[tuple] = []

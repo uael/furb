@@ -1,5 +1,5 @@
 from asyncio import Future
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from string.templatelib import Template
@@ -61,26 +61,13 @@ The Kernel takes a run as that run, begins its word in the module of the chain w
 The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
 The Kernel holds the run of the word of a turn of a model, once that word is over, while a command that the word started and did not await is open, for 30 seconds at the most, by a wait that the run makes, so the chain tells what the command gave before it asks the next reply.
 """
-type Journal = Callable[
-  ...,
-  tuple[
-    Callable[..., str],
-    Callable[[Question], None],
-    Callable[[Ear, str], None],
-    Callable[[Ear, Fact | None], set[str] | Literal[False] | None],
-    Ear,
-  ],
-]
-"""boot calls the journal with numbered, offers, drive and lives, the four names that the journal binds again, and by name with the tables of the life: the ears of the outside, its acts by name, the names of the acts that an ear took, its facts by chain and by view, the function that holds a fact on a chain, its log, which holds each fact until each ear that waits for it heard it, and the highest number of each kind; boot binds those four names again to the first four that the journal gives, and brings the ear that the journal gives last to life last, under the name journal.
-"""
-
-type Show = tuple | Callable[[list[str]], list[int]]
+type Show = tuple[int, int] | str | list[str] | Callable[[list[str]], list[int]]
 """A show says which lines of a text to tell, and picked gives their numbers from the lines of the text.
 A show of the file is plain data, which span, grep and differs make, so it is a word of each act that it is given to and a record holds it.
 A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show to a read by writing one, which the word makes again when it runs again; no later life makes it again as it was, so bash, whose shows are words of its act, refuses one.
 """
 type Filter = Callable[[list[Question]], list[Question]]
-"""A filter is given the acts of the reading of the source of a chain that has one.
+"""A filter is given the acts of the transcript of the source of a chain that has one.
 A filter says which acts the turns of that chain keep, each with its entries.
 A filter is any callable of that shape, so a word adds a filter by writing one, and take makes the filter of the file.
 A later life runs the filter again and keeps the same acts, since the word that opened the chain opens it again with it.
@@ -126,22 +113,17 @@ def drive(g: Ear, name: str) -> None:
   A generator brought to life under a name and nothing more: it hears from the tip and runs to its first wait, and one born while a fact goes round hears from the next.
   It lives until it returns, and an act that hears nothing more returns at the first fact it hears after its own end.
   A generator that yields a saying is given the fact as the bus said it, one that yields a set of names waits for the next fact that names one of them, and one that yields nothing waits for the next fact said.
-  The journal binds drive again, as boot says, to know each generator that an act brought to life, so the record keeps what such a generator says only through that act.
+  A generator that an act brought to life speaks for that act, so the record keeps what it says only through that act.
   """
 
-def transcript(on: str = "", of: str = "") -> list[Fact]:
+def transcript(on: str = "", of: str = "", at: int = 0) -> list[Fact]:
   """transcript gives the facts on a chain, each of which the life adds when it is said, so a chain reads at once what it said itself.
   transcript(on, of) gives the facts on a chain whose kind is of or that of said, in order, and the view of pause holds the wakes too.
   transcript(on, "journal") gives each fact on a chain that the journal said again from the record, with the speaker that the record holds, so a host tells the facts of an earlier life from those of this one.
+  transcript(on, of, at) gives what transcript(on, of) gives from the place at, and copies no fact before that place.
   transcript gives a new list at each call, so a word that changes the list it was given changes no transcript.
   The transcript is the whole state of a chain: its module, its program, its working directory and its turns are read off it, and the standing is read off the transcript of the root.
   The name of an act gives the facts on its scope, and a name of no act gives no fact.
-  """
-
-def reading(on: str = "", at: int = 0) -> list[Fact]:
-  """reading gives what the model of a chain reads: the facts that the last cut on the chain kept, then each fact said on the chain after that cut, or the whole transcript of a chain that holds no cut.
-  reading(on, at) gives what reading(on) gives from the place at, and copies no fact before that place.
-  reading gives a new list at each call, and asks nothing, so no act is made and the journal keeps nothing.
   """
 
 def ask(kind: str, on: str, *words: object) -> object:
@@ -234,7 +216,7 @@ def peek(at: str, waiting: object = None) -> object:
   """
 
 def turns(on: str = "") -> list[Turn]:
-  """The turns of a chain, folded from its reading.
+  """The turns of a chain, folded from its transcript.
   The turns of what a chain has heard: every tell stands as a paragraph of its notes, and nothing else stands at all.
   The turn a model was answered with closes the turn of the operator and stands as the turn it is, and a text stands by the lines that the show of the one that tells it picks.
   turns reads the transcript of the chain and asks nothing, so no act is made and the journal keeps nothing.
@@ -255,7 +237,7 @@ def module(on: str = "") -> dict:
   """
 
 def program(on: str = "") -> dict[str, str]:
-  """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its reading say."""
+  """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its transcript say."""
 
 def standing() -> Standing:
   """standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first.
@@ -352,12 +334,12 @@ def cancel(id: str, why: object = None) -> None:
 
 def jump(drop: list[str] = [], word: str = "", on: str = "") -> Act[str]:
   """A jump: the chain goes on as another chain, and keeps each fact that it held, so the turns of a chain never change.
-  jump makes, once no word of the chain runs or awaits and no reply of it is on the way, a chain with the chain as its source that keeps each act of its reading but those that drop names, runs word there first as a rung of the jump, and is done with that chain.
+  jump makes, once no word of the chain runs or awaits and no reply of it is on the way, a chain with the chain as its source that keeps each act of its transcript but those that drop names, runs word there first as a rung of the jump, and is done with that chain.
   Each jump of a chain that comes before the chain rests makes that one chain, which keeps no act that one of them drops, and runs their words in the order of the jumps.
   The chain that a jump makes keeps each stand and each cd of the chain whatever drop names, so it stands where the chain stood and works in its directory.
   After the jump, each act and each fact that names the chain is on the chain that it jumped to, as each later jump says, so its threads, its messages and the next ask of its model are there.
   Each open thread of the chain that a model answers is asked again on the chain that it jumped to, and each rung that waited for its reply on the chain is cancelled.
-  The reading and the transcript of a chain that jumped stay its own, so a model reads by its name the turns that its model read and the facts that were on it.
+  The transcript of a chain that jumped stays its own, so a model reads by its name the turns that its model read and the facts that were on it.
   A word that jumps its own chain ends first, so no word runs across a jump.
   """
 
@@ -546,7 +528,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   A chain is an act of Never, so the chain never completes.
   The turns of a chain tell the acts of the operator.
   The transcript of a chain is the facts on it, in the order they were said.
-  Nothing leaves a transcript once the transcript holds it: a cut said on its chain changes what its model reads, and takes no fact from the transcript.
+  Nothing leaves a transcript once the transcript holds it.
   An assistant turn keeps the role assistant in every chain made from the chain.
   The engine adds the acts that caused a kept act to what the filter kept.
   The globals of a chain whose filter is a take that is not inside hold the bindings of the skipped words still.
@@ -562,7 +544,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   A life word of an extension reads the directory of the standing as the directory of the chain, since the stand and the cd of the root come before the life word of each extension, so the memory of a folder loads in the folder where the chain works.
   The chain runs no paragraph chain() as python, since that paragraph tells no call.
   A chain with no source holds first the setup of the root, each fact from the paragraph chain() of the root to its fact setup that is about the root or an act under it, so every such chain holds the turns of the setup that every chain shares with the same names, and its own open comes after them.
-  A root that holds no fact setup after its paragraph chain() or no stand before its fact setup, as a root whose compaction kept no setup or that a checkpoint carried, gives no setup to such a chain, so the chain holds no open rung of the root and its own rungs run.
+  A root that holds no fact setup after its paragraph chain() or no stand before its fact setup, as a root that a checkpoint carried, gives no setup to such a chain, so the chain holds no open rung of the root and its own rungs run.
   A chain with no source whose standing names a doctrine plays no stand of its own while it stands on the standing that the stand of the setup that it holds gave: the rung of stand() and a cd to the directory of the standing, which the root plays on itself in its setup with that word and its default actor, stands in the setup that the chain holds and runs again, so the chain stands where the root stood; when the setup that it holds plays no stand, as the setup of a root whose compaction kept none or that a checkpoint carried, it plays on itself at its birth the setup that its standing gives but the fact setup and the extensions of the root alone, as the root does; and it tells its open once no rung with a word and an actor is open on it.
   A chain that holds a setup with a stand, and whose last stand gave another standing than the one that it is born on, plays on itself the rung of stand() before its open, with a cd to the directory of the standing when that directory changed and no cd of a rung with no actor moved the chain, as each chain does at a later stand, so a chain born after a stand that moved the life stands where the life stands.
   A chain that holds a fact carried tells no open of its own and plays no stand at its birth, since the turns that the fact carried holds hold them.
@@ -601,10 +583,10 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   It holds the transcript of its origin first and tells its own open after it, and the rungs it runs again tell nothing, since every word of those stands in what it inherited.
   It hears no control that ends it, since nothing that happens to a chain ends it, and a control over a chain is over the acts on it, which end themselves.
   Every done it holds answers a question it holds, since it holds every question made on it, the ones it made itself among them.
-  What a chain with a source holds of the reading of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin.
+  What a chain with a source holds of the transcript of its origin: what its filter kept, everything that made what it kept, the reply of every rung it kept, which cuts its turns where the origin asked its model, and the open of the origin.
   The filter is given every act, what the operator asked among them, since what the operator asked of a chain no rung of it says again.
   What a chain said of itself it keeps whatever the filter says, so the open of the origin stands in the new chain.
-  The source of a chain is a chain, by its name, and means the reading of that chain as it stands.
+  The source of a chain is a chain, by its name, and means the transcript of that chain as it stands.
   A source that names no chain of the life refuses the call in the caller, and no chain is made.
   A chain with a source reads what its origin stands on, as it stands.
   The chain retells the rungs of its origin through the program of the origin, and it makes the rungs it retells itself, so they tell nothing.
@@ -638,9 +620,9 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   A new prompt on a chain is asked while a word of the chain awaits a wait that is not over, so no wait holds a prompt.
   When the fact that a word awaits comes, each chain whose rung waits with no run and no reply open asks it at once, with no timer and no message of the operator, while a paused chain and a word that awaits a prompt to the operator stay held.
   A word that only debugs tells what it debugged, which is new, so the chain asks again at once with no message of the operator.
-  The chain reads the text of each paragraph told on it since its last told rung, in order, from its reading, and holds no copy of it, but a paragraph that an act tells of itself with no header of its name, and the word of a rung, which a rung tells of itself whatever its first line.
+  The chain reads the text of each paragraph told on it since its last told rung, in order, from its transcript, and holds no copy of it, but a paragraph that an act tells of itself with no header of its name, and the word of a rung, which a rung tells of itself whatever its first line.
   At each told rung the chain reads only the facts after its last told rung, so the work of a told rung does not grow with the facts before it.
-  After a cut, the chain reads what it heard after the last reply or the last paragraph that it does not read that the cut kept, and nothing that the cut kept when the cut kept neither, so a chain born on a checkpoint tells what it heard and did not tell, and no act that its birth made again.
+  After the prefix that seed gives it, a chain reads what it heard after the last reply or the last paragraph that it does not read that the prefix holds, and nothing that the prefix holds when it holds neither, so a chain born on a checkpoint tells what it heard and did not tell, and no act that its birth made again.
   At the advance of the next rung, before it asks the reply, or at the first ready of a rung that it does not advance, the chain runs that text as the told rung of that rung, and holds nothing more.
   Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.
   The turns do not show a told rung, since the turn shows its python already.
@@ -654,7 +636,6 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   The chain asks the model of a rung for its word by a reply it makes under the site of that rung, whose one word is the actor.
   When an open act that a rung of the chain made on another chain, a prompt, a rung or an act that the outside started, is done while the word of that rung does not run and no word of the chain awaited it, the chain tells it about that rung under the header done, and binds what it came to under the word value, since its model reads no other transcript.
   When the chain of a prompt that a rung of the chain made on another chain pauses at a refused reply of that prompt, the chain tells that rung under the header paused and binds the refusal under the word why, and the thread of that rung is due, so a model sees that the prompt waits for a wake.
-  Each scan of all its facts that the ear of a chain makes at a fact reads its reading, so the work of that scan does not grow with the facts that a cut dropped, where a view of one kind holds each fact of that kind.
   """
 
 def bash(
@@ -836,8 +817,9 @@ type Standing = list[list[Actor] | str | list[list[str | bool]]]
 The roster, the directory and the actor that a model reads are in the transcript of its chain.
 A standing holds no source: the engine is one file the model imports, and a record replays only on an engine that makes each of its acts again, and else drifts.
 """
-type Entry = tuple[Fact]
-"""One entry of the record: the fact, an act among them, and the answer of an act after it, as every other fact about it.
+type Entry = tuple[Fact, int, bool] | tuple[Fact]
+"""One entry of the record: a fact, its place, which counts the facts that the life said before it, and whether the life rested as it said it, an act among them, and the answer of an act after it, as every other fact about it.
+An entry that the life said as it rested, and an entry with no place, as each entry that seed gives, the journal says only once the life rests again, so each ear heard each fact before it, as in the life that said it.
 The order of the record is what puts an entry back in its place in a later life.
 The World keeps each entry as the journal says it, plain or not.
 The record is a sequence of entries about acts.
@@ -884,7 +866,7 @@ The started names the act and says no more of it, since the ear heard the act it
 The journal keeps a started of the outside, so a later life holds the act from the outside and says its first started again, which puts the act to no ear, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none.
 """
 type Keep = tuple[Literal["keep"], str, str, Entry]
-"""One entry of the record, kept and said: the journal holds it for this life and the World for the next.
+"""One entry of the record, kept and said under the name journal, which the World keeps for the next life.
 The journal says one keep per entry, and the World keeps it as plain data if it likes.
 """
 type Reply = tuple[Literal["reply"], str, str, str, str]
@@ -983,11 +965,6 @@ type Module = tuple[Literal["module"], str, str, dict[str, object]]
 type Prefix = tuple[Literal["prefix"], str, str, list[Fact]]
 """A prefix carries what a chain with a source holds of the transcript of its origin, which the chain says at its birth, before its open.
 The transcript of the chain holds the facts of its prefix where the prefix stands, and not the prefix itself.
-"""
-type Cut = tuple[Literal["cut"], str, str, list[Fact]]
-"""A cut names what the model of a chain reads from it on: the facts that it keeps, then each fact said on the chain after it.
-A cut takes nothing from the transcript of its chain, so the chain only grows, and its module, its ladders and its acts go on.
-A cut that a prefix or a cut carries in its list cuts nothing, since only a cut said on a chain names what its model reads.
 """
 type Cd = tuple[Literal["cd"], str, str, str, str]
 """A cd is the question of the directory a path names, which the World answers and the transcript of the chain holds."""
@@ -1110,7 +1087,7 @@ def idle(id: str) -> Generator[set[str], Fact]:
 
 def lives(g: Ear, a: Fact | None) -> set[str] | Literal[False] | None:
   """lives carries a fact into an ear, says everything the ear yields, and gives what the ear waits for, or False once the ear is over.
-  boot defines lives again at each life, and the journal binds it again, as boot says, so each ear that is no act hears a fact that the journal says again under the name journal.
+  boot defines lives again at each life, so each ear of the outside hears a fact that the journal says again under the name journal.
   """
 
 def controlled(ear: Callable[[str], Ear], lasting: bool = False) -> Callable[[str], Ear]:
@@ -1128,8 +1105,8 @@ def controlled(ear: Callable[[str], Ear], lasting: bool = False) -> Callable[[st
   A lasting ear lives past the done of its act until it returns, as the ear of a command does to hear that done, whoever said it, and to tell its exit, and a cancel or a close over its act ends the act all the same.
   """
 
-def boot(journal: Journal, **outside: Ear) -> Act[Never]:
-  """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek, transcript and reading, which read the tables.
+def boot(record: Iterable[Entry] = (), **outside: Ear) -> Act[Never]:
+  """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek and transcript, which read the tables.
   A verb from a rung takes the chain of the rung when the call leaves on unsaid.
   The kind of an act is the verb that made the act, or the kind an ear made it with.
   An act says who made it, and the one that made it says its own maker in turn, which is how the life knows every ancestor of an act.
@@ -1139,7 +1116,7 @@ def boot(journal: Journal, **outside: Ear) -> Act[Never]:
   The root has no parent.
   A question goes to the living acts of the engine before it goes to the World, since the engine settles what it knows before the outside reads it, and asks the outside for nothing that the engine can answer itself.
   A later life makes a door again from the word of the rung that defined it.
-  The record that the journal is given enters nothing in the record, since the record is what the journal is given.
+  The record that boot is given enters nothing in the record, since the record is what boot is given.
   An act takes its name when the act opens, and the name says what made the act.
   The engine derives the transcripts, the turns, the globals and the working directories from the record.
   A fact that the journal says again carries the speaker that the record holds, so each view of a later life gives the facts and the names that the first life gave, and the journal and each ear of the outside hear it under the name journal, since none of them makes it again, but a refusal of the life, which it says again under no site.
@@ -1157,25 +1134,24 @@ def boot(journal: Journal, **outside: Ear) -> Act[Never]:
   In a later life the rungs of every chain run again from the record that the World kept.
   The engine serves the doors of the file itself, and asks the World for nothing.
   A later life reads the same text from a door.
-  It is given the journal, which holds what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own.
+  It is given the record, which holds what the World kept of the life before it, and the generators of the outside, the Kernel and the World among them, each under the name it is to hear by, and it brings them to life with its own.
   It opens the root, the first act of any record, which every life opens under the one name, and which a record that holds it already gives back, and that root is what it gives back.
   What the record holds of an act made again keeps that act from the outside: a done that is its first answer the journal says at once, and an act that the outside started the journal says started at once and holds, since it cannot run it, so no ear of the outside hears that act, and a chain with a source which asks again what its origin asked is answered from the record too.
   The record a life was opened from, from which the journal answers what it holds of an act, so that an act the World did once is done no more.
-  The journal: the ear of the outside that the checkpointer makes and that boot is given, which hears everything and keeps every act that the life makes, as it is made, and every fact that no act of the life said, the act it is about before it, and nothing else that a generator an act brought to life said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life.
+  The journal: the part of the life that keeps every act that the life makes, as it is made, and every fact about an act that no act of the life said, and nothing else that a generator an act brought to life said, nor anything that it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life.
   A read the operator makes is kept like any other act of the operator, since what it reads may change, and a later life makes it again at its place.
   What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given.
-  Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed.
-  An entry whose act this life has not made again when every fact said before it has been heard, as an act that an act made and that the outside never answered, or an act on a chain that this life has not made, which for an act whose maker is neither an act nor an ear that boot was given is the chain it is on, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names.
-  The journal keeps a joined mark, ("joined", "", "journal", kind, act), which names the kind and the act of the fact that it joins, before a fact, or an act of the outside, that it keeps right after the fact it kept last, with no other fact heard between them, since one ear said or made both while it heard one fact, and a later life says that fact again, or makes that act again, at once after the one before it, even when the one before it is the started of an act that the outside took, which the journal says as that act is made again and keeps from the outside, so the ears hear that burst in one burst again, as the first life did.
-  A fact that the journal keeps after a fact that it does not keep holds no mark, so a later life says it again only once every fact said before it has been heard, after the reaction that came between them, as the first life did.
+  Given at its birth what the World kept of an earlier life, the journal says each entry again at its place, once the life said as many facts as the place counts: a fact under the site of its speaker; an act whose maker is neither an act nor an ear that boot was given through its verb under the site of its maker, since that maker makes nothing again of what the record holds; an act whose maker is an ear that boot was given under the site of that ear, when that ear did not make it again by then, through the verb that binds its kind in the engine, so its ear is the verb's as when that ear made it, or else through act with no ear of its own, so a view of a later life holds it where the first life held it; and an act whose maker is an act not at all, since the word of that act makes it again there.
+
+
   The journal says the whole record again before boot returns, so no entry waits for an act that a host makes after boot.
   One said again takes the name it had, since a later life makes its acts again in the order of the record, and the life counts each kind on from there, so that no later act takes a name that is taken.
-  In a later life an act takes the name of the first question of the record with its kind, its maker, its chain and its words that no act took yet, so an act more or less that an engine makes moves the name of no other act.
-  An act that no question of the record matches takes the number after the highest of its kind in the record; before the journal said the whole record again, the outside hears it only when no question of its kind and its maker that no act took waits in the record, and one that the outside is to answer while such a question waits stands in place of the first of them and is a drift of it, so a command whose words changed drifts under the name it had and the World does nothing for it.
-  While the journal says the record again it holds what it keeps, and keeps it in its order once the record is said whole, so a life whose replay drifts keeps nothing of what it made before the drift.
-  A question of the record that no act took, on a chain that the life made again, is a drift once the journal comes to a fact that an ear of the outside said of it, so a word that makes one command less drifts.
+  In a later life an act takes the name of the question that the record holds at its place, which holds its kind, its maker, its chain and its words, or else it drifts.
+  An act that the life makes past the tip of its record takes the number after the highest of its kind in the record.
+  While the journal says the record again it keeps nothing, since the record holds what it says, so a life whose replay drifts keeps nothing of what it made before the drift.
+  A fact that the life says at the place of an entry that waits, or past it, and that is not that entry, is a drift, so a word that makes one command less or one more drifts at the first fact where it differs.
   A boot is a life; a second boot is a second life, and the first is gone.
-  The names operator and journal are the life's own, and boot refuses a generator of the outside under either name.
+  The name operator is the life's own, and boot refuses a generator of the outside under it.
   A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything.
   An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and each show and the acts that each filter kept come again with its words, since the record holds them.
   A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is refused when it is made, so no record holds one.
@@ -1186,11 +1162,16 @@ def boot(journal: Journal, **outside: Ear) -> Act[Never]:
   An act whose maker is the journal, as the seed of a checkpoint gives one, stands known in the transcript of its chain with no verb and runs nothing, and the journal says its later facts at their place.
   """
 
-def numbered(kind: str, *words: object) -> str:
-  """numbered gives a new act its name, which is its kind and the number after the highest number of that kind in the life, as act asks it with the kind, the maker, the chain and the words of the act, and the journal binds it again to give an act the name that its record holds."""
+def feed(entries: Iterable[Entry]) -> None:
+  """feed gives the journal the entries that follow the tip of a life that stands, which it says again at once as it says a record again, so a life that stood at a place of a record and is fed the entries after that place stands where a life that boots on the whole record stands.
+  The outside is asked nothing that a fed entry answers, and the journal keeps no fed entry again.
+  A fed answer of an act that the life holds and that is not over lands at its place, so a word that awaits that act goes on.
+  """
 
-def offers(a: Question) -> None:
-  """offers puts an act to each ear of the outside in the order that boot was given them, until one takes it, and a chain to each of them, as act does with each act that it makes, and the journal binds it again to answer an act from its record first."""
+def flying() -> list[str]:
+  """flying makes the journal hold each act that an ear of the outside took and that is not done, as it holds each act that a record shows started and not done, and gives the name of each act that it holds, so a life that opens from an image puts each act that the ears of the life before held in flight to its fresh ear at a wake, as a life that opens by its record does.
+  A wake of an act that the journal holds puts it to the ears of the outside again, as an act that an earlier life took.
+  """
 
 def listening() -> dict[str, Ear]:
   """listening gives the ear of each act and of each outside that still hears, by its name, in the order that boot drove them.

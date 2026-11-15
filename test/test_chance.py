@@ -31,7 +31,7 @@ async def test_chance_is_a_question_the_world_answers_and_the_journal_keeps_what
   assert await engine.prompt(float, "draw", on=root) == 1 / 7
   await settle()
   drawn = [e[0] for e in sand.record if e[0][0] == "chance"]
-  assert [a[3] for a in drawn] == [root] and (("done", drawn[0][1], "world", 1 / 7),) in sand.record
+  assert [a[3] for a in drawn] == [root] and ("done", drawn[0][1], "world", 1 / 7) in [e[0] for e in sand.record]
   later = Sand()
   _, over = await relived(later, list(sand.record))
   assert over == root and [one for one in later.calls if one[0] == "chance"] == []

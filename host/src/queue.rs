@@ -113,8 +113,8 @@ impl Queue {
 
   /// A fact: a fact of the queue of the operator changes the follow-ups of its chain, the first
   /// prompt of the operator after the fact that begins a send is the act of that send, and the end
-  /// of that prompt lets the next follow-up of its chain go. A record before its checkpoint tells
-  /// its facts alone, with no act, so the end is read from its fact.
+  /// of that prompt lets the next follow-up of its chain go. A record before its last crossing
+  /// tells its facts alone, with no act, so the end is read from its fact.
   fn fact(&mut self, fact: &Value) -> Option<Event> {
     let text = |at: usize| fact.get(at).and_then(Value::as_str);
     if text(0) == Some("done") {

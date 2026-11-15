@@ -100,7 +100,7 @@ impl Backlog {
 /// Whether the last pause or wake of a chain is the pause of the life for its record, so a pause or
 /// a wake that the operator said after it stays.
 fn last_ours(engine: &mut Engine, chain: &str) -> Result<bool, Fault> {
-  let of = verbs::Transcript { on: Some(chain.to_owned()), of: Some("pause".to_owned()) };
+  let of = verbs::Transcript { on: Some(chain.to_owned()), of: Some("pause".to_owned()), at: None };
   let facts = engine.transcript(of)?;
   let last = facts.iter().map(|one| outward(one.0.as_ref())).rfind(|fact| fact[1] == chain);
   Ok(last.is_some_and(|fact| fact[0] == "pause" && fact[3] == WHY))

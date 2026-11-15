@@ -71,8 +71,9 @@ async fn a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits
     return;
   }
   let at = yard::Yard::new(format!("furb-async-open-{}", process::id()));
+  // Boxed: the future of an open is large, and the test would hold it on the stack of its thread.
   LocalSet::new()
-    .run_until(async {
+    .run_until(Box::pin(async {
       let (mut engine, _) =
         opening(&at).open::<String>([], Progress::default(), &mut |_| true, None).await.unwrap();
       let on = || Some("chain1".to_owned());
@@ -81,7 +82,7 @@ async fn a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits
       assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), "hi\n"));
       let waited = engine.wait(&["chain1"], verbs::Wait { seconds: Some(0.05), on: on() });
       assert_eq!(waited.unwrap().await.unwrap(), None::<String>);
-    })
+    }))
     .await;
   #[cfg(target_os = "linux")]
   assert!(!threads().is_empty() && !threads().contains(&"furb-reactor".to_owned()));

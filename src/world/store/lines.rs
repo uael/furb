@@ -10,7 +10,6 @@ use memchr::{memchr, memrchr_iter};
 use serde_json::{Value, value::RawValue};
 
 use crate::{
-  checkpoint::CHECKPOINT,
   value::{Fault, Object, ObjectRef},
   wire::record,
 };
@@ -166,29 +165,17 @@ pub(super) fn each_but(
   read(path, 0, Some(head), take).map(drop)
 }
 
-/// The entries of the file of lines at a path that a life opens on: those from its last checkpoint
-/// on, or each entry of a record that holds none, with the byte where they start, the byte where
-/// the last of them ends and how the last line ends. The read finds that checkpoint from the end
-/// of the file, so it passes and parses no line before it. The bytes of the file that the read
-/// passed are told after each line.
+/// Each entry of the file of lines at a path, with the byte where the last of them ends and how the
+/// last line ends. The bytes of the file that the read passed are told after each line.
 pub(super) fn last(path: &Path, reached: &mut dyn FnMut(u64)) -> Result<Last, StoreError> {
-  let (head, mut before) = (format!("[[\"{CHECKPOINT}\","), u64::MAX);
-  loop {
-    let from = start(path, head.as_bytes(), before)?.unwrap_or(0);
-    let (mut entries, mut end) = (Vec::new(), from);
-    let mut take = |one: Taken, at| {
-      entries.extend(one.entry());
-      end = at;
-      reached(at);
-    };
-    let tail = read(path, from, None, &mut take)?;
-    // A last line that a stop tore as the store wrote a checkpoint is no entry, so the record
-    // ends at the checkpoint before it.
-    if from == 0 || !entries.is_empty() {
-      return Ok(Last { entries, from, end, tail });
-    }
-    before = from;
-  }
+  let (mut entries, mut end) = (Vec::new(), 0);
+  let mut take = |one: Taken, at| {
+    entries.extend(one.entry());
+    end = at;
+    reached(at);
+  };
+  let tail = read(path, 0, None, &mut take)?;
+  Ok(Last { entries, end, tail })
 }
 
 /// Where the last line that starts with a head starts, of the lines that start before a byte. The
@@ -230,34 +217,6 @@ fn start(path: &Path, head: &[u8], before: u64) -> Result<Option<u64>, StoreErro
 pub(super) fn before(path: &Path, head: &[u8], to: u64) -> Result<Option<Object>, StoreError> {
   let Some(at) = start(path, head, to)? else { return Ok(None) };
   Ok(parsed(&line(path, at)?))
-}
-
-/// Each entry of the file of lines at a path whose line starts with a head, from the last to the
-/// first, until `take` says to stop. The read goes from the end of the file, so it reads no line
-/// before the last entry that `take` takes.
-pub(super) fn back(
-  path: &Path,
-  head: &[u8],
-  take: &mut dyn FnMut(Object) -> bool,
-) -> Result<(), StoreError> {
-  let mut to = u64::MAX;
-  while let Some(at) = start(path, head, to)? {
-    if let Some(entry) = parsed(&line(path, at)?)
-      && !take(entry)
-    {
-      return Ok(());
-    }
-    to = at;
-  }
-  Ok(())
-}
-
-/// Whether the last line of the file of lines at a path starts with a head and is no entry: a stop
-/// tore it as the store wrote it, so it has no end and does not parse.
-pub(super) fn torn(path: &Path, head: &[u8]) -> Result<bool, StoreError> {
-  let Some(at) = start(path, head, u64::MAX)? else { return Ok(false) };
-  let line = line(path, at)?;
-  Ok(!line.ends_with(b"\n") && parsed(&line).is_none())
 }
 
 /// The line of a file that starts at a byte, with its end when it has one.
@@ -343,11 +302,27 @@ pub(crate) fn spoken(line: &[u8]) -> Option<[&str; 3]> {
 
 /// The entry of a line of a record, and nothing for a line that does not parse.
 fn parsed(line: &[u8]) -> Option<Object> {
-  serde_json::from_slice::<Vec<&RawValue>>(line).ok()?.first().and_then(|one| entry_of(one))
+  let held = serde_json::from_slice::<Vec<&RawValue>>(line).ok()?;
+  entry_of(untimed(&held)?)
 }
 
-/// The line of an entry: its fact, and after it the time at which the store kept it, in milliseconds since the start
-/// of 1970, so the fact stays as the journal said it.
+/// The entry of a line: its fact, its place and whether the life rested, less the time that ends
+/// the line, or the line itself when it holds its fact alone, as an older store kept it. A line of
+/// two holds a fact and its time, as a record of major 2 holds each, and gives the fact alone.
+/// Nothing for a line of three, or of more than four, or whose last item is no time.
+fn untimed<'a>(held: &'a [&'a RawValue]) -> Option<&'a [&'a RawValue]> {
+  match held {
+    [_] => Some(held),
+    [entry @ .., time] if held.len() != 3 && held.len() <= 4 => {
+      serde_json::from_str::<u64>(time.get()).is_ok().then_some(entry)
+    }
+    _ => None,
+  }
+}
+
+/// The line of an entry: its fact, its place and whether the life rested, and after them the time
+/// at which the store kept it, in milliseconds since the start of 1970, so the fact stays as the
+/// life said it.
 fn stamped(mut entry: Value, at: u64) -> String {
   if let Value::Array(held) = &mut entry {
     held.push(Value::from(at));
@@ -368,10 +343,10 @@ pub(super) enum Tail {
   Unended,
 }
 
-/// Each entry of a record, in order, each the fact it kept in a list of one, as boot takes them, read one line at a
-/// time and changed in nothing, and how its last line ends. The time that a line holds after its fact stays out of
-/// the entry, and a line with no time, as an older store kept it, reads the same. Each entry comes
-/// with the bytes of the file that the read passed. The read starts at a byte, where a line
+/// Each entry of a record, in order, each the fact it kept, its place and whether the life rested,
+/// in a list, as boot takes them, read one line at a time and changed in nothing, and how its last
+/// line ends. The time that ends a line stays out of the entry, as [`untimed`] says. Each entry
+/// comes with the bytes of the file that the read passed. The read starts at a byte, where a line
 /// starts. A line that starts with the head of the unparsed, when one is given, gives the text of
 /// its fact.
 fn read(
@@ -411,14 +386,11 @@ fn read(
       }
       return Err(invalid(start));
     };
-    let timed = |one: &RawValue| serde_json::from_str::<u64>(one.get()).is_ok();
-    if held.is_empty() || held.len() > 2 || !held[1..].iter().all(|one| timed(one)) {
-      return Err(invalid(start));
-    }
+    let Some(entry) = untimed(&held) else { return Err(invalid(start)) };
     if unparsed.is_some_and(|head| text.as_bytes().starts_with(head)) {
-      take(Taken::Fact(held[0].get().to_owned()), next as u64);
+      take(Taken::Fact(entry[0].get().to_owned()), next as u64);
     } else {
-      take(Taken::Entry(entry_of(held[0]).ok_or_else(|| invalid(start))?), next as u64);
+      take(Taken::Entry(entry_of(entry).ok_or_else(|| invalid(start))?), next as u64);
     }
     if !ended {
       return Ok(Tail::Unended);

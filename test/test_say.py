@@ -93,7 +93,7 @@ async def test_a_fact_said_it_says_its_kind_the_act_it_is_about_who_said_it_and_
   engine.cancel(act)
   over = said(log, "cancel")[0]
   assert over == ("cancel", "bash1", OPERATOR, None)
-  assert [entry for entry in sand.record if entry[0][0] == "bash"] == [(said(log, "bash")[0],)]
+  assert [entry[0] for entry in sand.record if entry[0][0] == "bash"] == [said(log, "bash")[0]]
 
 
 async def test_the_bus_makes_every_fact_whole_from_what_it_is_given() -> None:

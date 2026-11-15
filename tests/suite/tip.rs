@@ -39,7 +39,6 @@ fn the_state_at_the_tip() {
     record: Some(record),
     keeps: Some(false),
     inspecting: Some(true),
-    whole: env::var_os("FURB_PROBE_WHOLE").map(|_| true),
     skills: env::var("FURB_PROBE_SKILLS").map_or(Some(false), |_| None),
     config: Some(env::var("FURB_PROBE_CONFIG").unwrap_or_else(|_| config.display().to_string())),
     ..Opening::default()

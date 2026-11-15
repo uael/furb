@@ -1,7 +1,7 @@
-//! One life read three ways once it ended: by a whole replay of its record, by its image, and by a
-//! birth on a checkpoint at its tip. Each way reaches the state that the replay reaches, so a model
-//! and the owner read the same turns, the same module, the same acts, the same threads and the same
-//! pages, at the open and after it.
+//! One life read two ways once it ended: by its record, which a crossing parts, so its last engine
+//! boots on the carry across that crossing, and by its image. Each way reaches the state that the
+//! replay reaches, so a model and the owner read the same turns, the same module, the same acts,
+//! the same threads and the same pages, at the open and after it.
 
 #![expect(
   clippy::disallowed_methods,
@@ -23,7 +23,7 @@ use furb::{
 use furb_host::{Command, Event, Life, LifeHandle, Reply};
 use futures::StreamExt;
 
-use crate::life::{checkpointed, done, made, place, rung, scripted, until};
+use crate::life::{crossed, done, made, place, rung, scripted, until};
 
 /// A life that keeps its record at a place, whose model closes each request with `close('ok')`.
 fn opening(at: &Path) -> Opening {
@@ -131,13 +131,8 @@ async fn read_by(
   threads: &[String],
 ) -> (BTreeMap<String, String>, BTreeMap<String, String>) {
   let image = at.join("record.jsonl.image");
-  match way {
-    "replay" => fs::remove_file(&image).expect("the image"),
-    "checkpoint" => {
-      checkpointed(opening(at)).await;
-      fs::remove_file(&image).ok();
-    }
-    _ => {}
+  if way == "replay" {
+    fs::remove_file(&image).expect("the image");
   }
   let life = Life::spawn(opening(at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
@@ -153,7 +148,7 @@ async fn read_by(
 }
 
 #[tokio::test]
-async fn a_life_by_its_record_by_its_image_and_by_a_checkpoint_reads_the_same() {
+async fn a_life_by_its_record_across_a_crossing_and_by_its_image_reads_the_same() {
   let at = place("equal");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
@@ -182,19 +177,23 @@ async fn a_life_by_its_record_by_its_image_and_by_a_checkpoint_reads_the_same() 
   let threads = [thread, more, asked];
   ended(life).await;
   // A later life ends the command that the end of the first life cut and stands the root, so the
-  // life that only writes the checkpoint below finds no act in flight, and adds nothing.
+  // life that crosses below finds no act in flight.
   let later = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(later.events(0));
   until(&mut events, |event| matches!(event, Event::Act(act) if act.id == "stand3" && act.done()))
     .await;
   ended(later).await;
+  // The record crosses, as if another build had made its last segment, and a life of this build
+  // moves it there, so a replay of the record boots its last engine on the carry across it.
+  crossed(opening(&at)).await;
+  ended(Life::spawn(opening(&at)).expect("the life that crosses")).await;
 
   let kept = place("equal-kept");
   restored(&at, &kept);
 
   let mut found = Vec::new();
   let mut truth = None;
-  for way in ["replay", "image", "checkpoint"] {
+  for way in ["replay", "image"] {
     restored(&kept, &at);
     let (opened, went) = read_by(way, &at, &chains, &threads).await;
     // The whole replay of the record is the one truth, and each other way is read against it.

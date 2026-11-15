@@ -4,11 +4,7 @@
 //! one more turn on a model that answers from a script. `tests/corpus/README.md` says the rule of
 //! the folders.
 
-#![expect(
-  clippy::unwrap_used,
-  clippy::expect_used,
-  reason = "a helper of a test fails the test where it fails"
-)]
+#![expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
 #![expect(
   clippy::disallowed_methods,
   reason = "the test blocks on the act of a rung, as the tests of the crate do"
@@ -21,12 +17,16 @@ use std::{
   fs,
   path::{MAIN_SEPARATOR, Path, PathBuf},
   rc::Rc,
-  sync::Arc,
+  sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering::Relaxed},
+  },
 };
 
 use furb::{
   Ear, Engine, Object,
   ear::{ear, hear},
+  image,
   life::{Answer, Opening},
   verbs, world,
 };
@@ -105,14 +105,14 @@ fn modules(engine: &mut Engine) -> String {
   engine.word(MODULES, vec![]).unwrap().as_ref().py_repr()
 }
 
-/// The word of a model that waits an hour in the first life that runs it, so a checkpoint cuts it,
+/// The word of a model that waits an hour in the first life that runs it, so its end cuts it,
 /// and closes in a later life.
 const CUT: &str = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
 
 /// The script of the model of each life of the corpus. To the first message, the root writes,
 /// reads, runs a command, waits, reads the clock and chance, and asks a chain of its own. The word
-/// of the message `Corpus: wait.` is the one that the checkpoint cuts, and the message `Corpus:
-/// ask.` stays open.
+/// of the message `Corpus: wait.` is the one that the end of the first life cuts, and the message
+/// `Corpus: ask.` stays open.
 const SCRIPT: [(&str, &str); 6] = [
   (
     "Corpus: work in the directory.",
@@ -128,16 +128,20 @@ const SCRIPT: [(&str, &str); 6] = [
 ];
 
 /// The life of a record of the corpus: a first life that works, defines, and leaves a prompt open
-/// on a word that its checkpoint cuts, then a tail that takes a prompt, defines on what the
-/// checkpoint holds, and leaves a prompt open.
-fn lived(at: &Path, kits: bool) {
+/// on a word that its end cuts, then a tail that takes a prompt, defines on what the first life
+/// held, and leaves a prompt open. With `other`, the first life ran another engine, so the record
+/// crosses to this build between the two lives.
+fn lived(at: &Path, kits: bool, other: bool) {
   let mut first = scripted(at, kits, &SCRIPT).boot::<String>([]).unwrap().0;
   let asks = "close(await prompt(int, 'Corpus: work in the directory.'))";
   assert_eq!(closed(&mut first, asks).as_ref().as_int(), Some(6));
   let defines = "SIZE = 6\nqueue = [1, 'two']\ndef size():\n  return SIZE\nwork = chain('work')\n\
                  waiting = prompt(str, 'Corpus: wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
   closed(&mut first, defines);
-  first.checkpoint().unwrap();
+  drop(first);
+  if other {
+    crossed(&at.join("record.jsonl"));
+  }
   let mut later = scripted(at, kits, &SCRIPT).boot::<String>([]).unwrap().0;
   woke(&mut later);
   let goes =
@@ -148,23 +152,25 @@ fn lived(at: &Path, kits: bool) {
   closed(&mut later, leaves);
 }
 
-/// Wakes the root of a life born from a checkpoint, which pauses it when the checkpoint carries a
-/// reply of its model, as an operator wakes it.
+/// Wakes the root of a later life, which pauses it when its record holds a reply of its model that
+/// a stop cut, as an operator wakes it.
 fn woke(engine: &mut Engine) {
   engine.word("over('chain1') or wake('chain1')", vec![]).unwrap();
 }
 
-/// Makes the facts after the last checkpoint of a record run on another engine, whose texts the
-/// record holds, as a build of another engine names them: the program of this engine with a line
-/// of comment more, so its digest is another and each fact of the tail replays on it with no
-/// drift, on this build and on each later one.
+/// Makes the facts of the last segment of a record run on another engine, whose texts the record
+/// holds, as a build of another engine names them: the program of this engine with a line of
+/// comment more, which names a count of its own, so its digest is another than the one of each
+/// segment before it, as a record crosses only to texts that differ, and each fact of the segment
+/// replays on it with no drift, on this build and on each later one. The next life that keeps the
+/// record crosses to this build after it.
 fn crossed(record: &Path) {
+  static ENGINES: AtomicUsize = AtomicUsize::new(0);
   let text = fs::read_to_string(record).unwrap();
   let made = |engine: &str| format!("[\"made\",\"chain1\",\"store\",\"{engine}\",null");
   let cut = text
-    .rfind("[[\"checkpoint\"")
-    .and_then(|at| text[at..].find('\n').map(|end| at + end))
-    .expect("the record holds a checkpoint");
+    .rfind(&made(&world::engine()))
+    .map_or(0, |at| text[..at].rfind('\n').map_or(0, |end| end + 1));
   let mut named = false;
   let mut theirs = String::new();
   for line in text[cut..].split_inclusive('\n') {
@@ -175,7 +181,8 @@ fn crossed(record: &Path) {
     named = true;
     let mut entry: serde_json::Value = serde_json::from_str(line).unwrap();
     let fact = entry[0].as_array_mut().unwrap();
-    let engine = format!("{}# Another engine.\n", fact[7].as_str().unwrap());
+    let n = ENGINES.fetch_add(1, Relaxed);
+    let engine = format!("{}# Another engine, {n}.\n", fact[7].as_str().unwrap());
     let mut hash = Sha256::new();
     for one in [engine.as_str(), fact[8].as_str().unwrap(), fact[9].as_str().unwrap()] {
       hash.update(one.as_bytes());
@@ -186,13 +193,13 @@ fn crossed(record: &Path) {
     theirs.push_str(&entry.to_string());
     theirs.push_str(&line[line.trim_end_matches('\n').len()..]);
   }
-  assert!(named, "the tail names the engine of this build");
+  assert!(named, "the segment names the engine of this build");
   fs::write(record, format!("{}{theirs}", &text[..cut])).unwrap();
 }
 
 /// The words of the record of the language: each definition that a word of a model uses, with no
 /// argument to call it by, since the module is shown by calling each function of it. The first
-/// four sit in the checkpoint, and the last three in the tail after it.
+/// four sit in the first life, and the last three in the life after it.
 const LANGUAGE: [&str; 7] = [
   "def square(n: int = 3) -> int:\n  return n * n\nclass Runner:\n  async def twice(self, n: int = 21) -> int:\n    await wait(0, __name__)\n    \
    return n * 2\nasync_got = await Runner().twice()\ndef fib_list():\n  a, b, out = 0, 1, []\n  while a < 50:\n    \
@@ -227,13 +234,13 @@ const LANGUAGE: [&str; 7] = [
 ];
 
 /// The life of the record of the language: no kit, so no name of a kit is in it. The words sit in
-/// a checkpoint and in the tail after it, and the module gives back each of them.
+/// two lives, and the module gives back each of them.
 fn spoken(at: &Path) {
   let mut first = scripted(at, false, &SCRIPT).boot::<String>([]).unwrap().0;
   for word in &LANGUAGE[..4] {
     closed(&mut first, word);
   }
-  first.checkpoint().unwrap();
+  drop(first);
   let mut later = scripted(at, false, &SCRIPT).boot::<String>([]).unwrap().0;
   woke(&mut later);
   for word in &LANGUAGE[4..] {
@@ -285,14 +292,6 @@ fn kind_of(name: &str) -> Option<&str> {
   (!kind.is_empty() && kind.len() < name.len()).then_some(kind)
 }
 
-/// A life that only inspects the record of a directory from its first entry, born again at each of
-/// its checkpoints, or why it refused.
-fn inspected_whole(at: &Path) -> Result<Engine, furb::Fault> {
-  let opening =
-    Opening { inspecting: Some(true), whole: Some(true), ..scripted(at, true, &SCRIPT) };
-  Ok(opening.boot::<String>([])?.0)
-}
-
 /// What each chain of a life holds, as python shows it: each fact that its model reads, but its
 /// module, which [`MODULES`] shows with no address of the heap, and the outcome of each act among
 /// them. An engine from before the cut has no reading, and its model reads its transcript.
@@ -304,14 +303,6 @@ const STATE: &str = "[(c, [x for x in held(c) if x[0] != 'module'], [(x[1], peek
 fn state(engine: &mut Engine) -> String {
   let held = engine.word(STATE, vec![]).unwrap().as_ref().py_repr();
   format!("{held}\n{}", modules(engine))
-}
-
-/// Proves that a record opens from its last checkpoint and from its first entry to one state.
-fn whole(name: &str, at: &Path) {
-  let fast = state(&mut inspected(at).unwrap());
-  let born = inspected_whole(at)
-    .unwrap_or_else(|why| panic!("{name}: an open from the first entry is refused: {why}"));
-  assert!(state(&mut { born }) == fast, "{name}: both opens reach one state");
 }
 
 #[test]
@@ -329,19 +320,15 @@ fn make_the_corpus() {
     if name == "language" {
       spoken(&at);
     } else {
-      lived(&at, kits);
+      lived(&at, kits, other);
     }
     let record = at.join("record.jsonl");
     scrubbed(&record, &at);
     private(&record);
-    // The module is read as the test reads it: from the record alone, with no log beside it, and
-    // before the tail names another engine, which this build cannot inspect.
+    // The module is read as the test reads it: from the record alone, with no log beside it.
     let alone = place(&format!("made-{name}"));
     fs::copy(&record, alone.join("record.jsonl")).unwrap();
     let shown = modules(&mut inspected(&alone).unwrap());
-    if other {
-      crossed(&record);
-    }
     fs::copy(&record, next.join(format!("{name}.jsonl"))).unwrap();
     fs::write(next.join(format!("{name}.modules")), format!("{shown}\n")).unwrap();
   }
@@ -417,6 +404,16 @@ fn holds(name: &str, text: &str, shown: &str) {
   let at = place(name);
   let record = at.join("record.jsonl");
   fs::write(&record, text).unwrap();
+  if let Some(why) = world::unopened(&record) {
+    // A record of a major before the stable cut opens in no life, which says why, and the reader of
+    // a record reads it.
+    let refused = inspected(&at).err().map(|no| no.to_string()).unwrap_or_default();
+    assert!(refused.contains(&why.to_string()), "{name}: no life opens it: {refused}");
+    let told =
+      world::retold(&record).unwrap_or_else(|why| panic!("{name}: the reader refuses it: {why}"));
+    assert!(!told.facts().unwrap().is_empty(), "{name}: the reader tells its facts");
+    return;
+  }
   let mut engine = inspected(&at)
     .unwrap_or_else(|why| panic!("{name} is refused on this build, or drifts on it: {why}"));
   assert_eq!(
@@ -434,7 +431,6 @@ fn holds(name: &str, text: &str, shown: &str) {
     .filter_map(|one| one.as_str().map(str::to_owned))
     .collect();
   drop(engine);
-  whole(name, &at);
   assert_eq!(
     fs::read_to_string(&record).unwrap(),
     text,
@@ -478,18 +474,8 @@ fn the_record_that_furb_inert_names_replays_inert() {
   inspected(&at).unwrap_or_else(|why| panic!("{} does not replay: {why}", given.display()));
 }
 
-#[test]
-fn a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens() {
-  let next = corpus().join("next");
-  let text = fs::read_to_string(next.join("work.jsonl")).unwrap();
-  let more =
-    text.replacen("\"schema\":", "\"later\":[1,\"a field of a later build\"],\"schema\":", 1);
-  assert_ne!(more, text, "the record holds a checkpoint");
-  holds("field-more", &more, &fs::read_to_string(next.join("work.modules")).unwrap());
-}
-
-/// A life born again three times in a directory of its own, each life on the checkpoint of the one
-/// before it, and its record.
+/// A life born again three times in a directory of its own, each life across a crossing after the
+/// one before it, and its record.
 fn thrice(name: &str) -> (yard::Yard, String) {
   let at = place(name);
   for n in 0..4 {
@@ -503,43 +489,26 @@ fn thrice(name: &str) -> (yard::Yard, String) {
       Some(n + 1),
       "life {n} goes on from the one before"
     );
+    drop(life);
     if n < 3 {
-      life.checkpoint().unwrap();
+      crossed(&at.join("record.jsonl"));
     }
   }
   let text = fs::read_to_string(at.join("record.jsonl")).unwrap();
-  assert_eq!(text.matches("[[\"checkpoint\"").count(), 3, "the record holds three births");
+  assert_eq!(
+    world::crossings(at.join("record.jsonl")).unwrap().len(),
+    3,
+    "the record crossed three times"
+  );
+  assert!(!text.contains("[[\"checkpoint\""), "the record keeps no carry");
   (at, text)
 }
 
 #[test]
-fn a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint() {
+fn a_life_carried_across_three_crossings_opens_at_its_tip() {
   let (at, _) = thrice("thrice");
-  whole("thrice", &at);
-}
-
-#[test]
-fn an_open_from_the_first_entry_refuses_a_checkpoint_that_no_life_gathers_or_that_a_life_went_on_after()
- {
-  let (_, text) = thrice("thrice-made");
-  let cut = text.find("[[\"checkpoint\"").unwrap();
-  let end = cut + text[cut..].find('\n').unwrap() + 1;
-  let other = text[cut..end].replacen("\"kept\":\"[0]\"", "\"kept\":\"[9]\"", 1);
-  assert_ne!(other, text[cut..end], "the first checkpoint binds kept");
-  let went = text[..cut].lines().last().unwrap();
-  for (name, changed, why) in [
-    ("drifted", format!("{}{other}{}", &text[..cut], &text[end..]), "drifts in chains"),
-    ("went-on", format!("{}{went}\n{}", &text[..end], &text[end..]), "is no birth"),
-  ] {
-    let at = place(name);
-    fs::write(at.join("record.jsonl"), changed).unwrap();
-    inspected(&at).unwrap_or_else(|why| panic!("{name} opens from its last checkpoint: {why}"));
-    let refused = inspected_whole(&at).err().map(|no| no.to_string()).unwrap_or_default();
-    assert!(
-      refused.contains(why),
-      "{name}: the open from the first entry says {why}, and says {refused:?}"
-    );
-  }
+  let mut opened = inspected(&at).unwrap_or_else(|why| panic!("the record opens: {why}"));
+  assert_eq!(holds_kept(&mut opened), 4, "the life holds each word of each segment");
 }
 
 #[test]
@@ -634,8 +603,10 @@ fn holds_kept(engine: &mut Engine) -> i64 {
 }
 
 /// The life that the test of a kill runs in a process of its own, in the directory that
-/// `FURB_PROMISE_KILLED` names: lives of [`kept`] one after the other, each second one born again
-/// from its checkpoint, until the test kills the process.
+/// `FURB_PROMISE_KILLED` names: lives of [`kept`] one after the other, each ending with its image
+/// as a life of the host does, and each fourth one carried across a crossing, until the test kills
+/// the process. A life after a crossing opens by its whole record, so lives with no image, or a
+/// crossing at each second one, made each life open more slowly than the one before it.
 #[test]
 #[ignore = "the test of a kill runs it in a process of its own"]
 fn a_life_that_a_test_kills() {
@@ -646,8 +617,10 @@ fn a_life_that_a_test_kills() {
     let mut life = scripted(at, false, &SCRIPT).boot::<String>([]).unwrap().0;
     woke(&mut life);
     closed(&mut life, &kept(n));
-    if n % 2 == 0 {
-      life.checkpoint().unwrap();
+    image::keep(&mut life, &at.join("record.jsonl"), &()).unwrap();
+    drop(life);
+    if n % 4 == 0 {
+      crossed(&at.join("record.jsonl"));
     }
   }
 }
@@ -693,7 +666,7 @@ fn killed(Reaped(child): &mut Reaped, record: &Path, fact: usize) {
 }
 
 #[test]
-fn a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without_one_and_goes_on() {
+fn a_life_killed_at_a_random_fact_opens_at_its_tip_across_its_crossings_and_goes_on() {
   let mut points = seeded("kill");
   let at = place("killed");
   let record = at.join("record.jsonl");
@@ -720,18 +693,10 @@ fn a_life_killed_at_a_random_fact_opens_at_its_tip_with_a_checkpoint_and_without
     expected,
     "the killed life holds each word that its record holds"
   );
-  let tip = text.rfind("[[\"checkpoint\"").unwrap_or(0);
   assert_eq!(
-    missing(&mut opened, &text[tip..]),
+    missing(&mut opened, &text[segment(&record, &text)..]),
     "[]",
-    "each question of the record stands in the life"
-  );
-  let fast = placed(&mut opened, &[&at]);
-  let whole = inspected_whole(&at)
-    .unwrap_or_else(|why| panic!("the killed life opens from its first entry: {why}"));
-  assert!(
-    placed(&mut { whole }, &[&at]) == fast,
-    "it opens from its last checkpoint and from its first entry to one state"
+    "each question of the last segment stands in the life"
   );
   let mut later = scripted(&at, false, &SCRIPT).boot::<String>([]).unwrap().0;
   woke(&mut later);
@@ -759,8 +724,14 @@ fn recorded(engine: &mut Engine, text: &str, at: &[&Path]) -> String {
   placing(format!("{held}\n{}", modules(engine)), at)
 }
 
+/// The byte of the text of a record where its last segment starts: its last crossing, or 0.
+fn segment(record: &Path, text: &str) -> usize {
+  let at = world::crossings(record).unwrap().last().copied().unwrap_or(0);
+  text.split_inclusive('\n').take(at).map(str::len).sum()
+}
+
 #[test]
-fn a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_held_live() {
+fn a_life_that_a_replay_opens_holds_the_transcript_that_it_held_live() {
   let at = place("unchecked");
   for n in 0..3 {
     let mut life = scripted(&at, false, &SCRIPT).boot::<String>([]).unwrap().0;
@@ -769,7 +740,6 @@ fn a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_he
     let held = placed(&mut life, &[&at]);
     drop(life);
     let text = fs::read_to_string(at.join("record.jsonl")).unwrap();
-    assert!(!text.contains("[[\"checkpoint\""), "no life of the record wrote a checkpoint");
     let opened = recorded(&mut inspected(&at).unwrap(), &text, &[&at]);
     assert!(opened == held, "life {n}: its replay holds the transcript of the live life");
   }
@@ -827,7 +797,7 @@ fn read_entries(at: &Path) -> usize {
 }
 
 #[test]
-fn a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entries_written_whole() {
+fn a_record_that_a_kill_tore_in_a_write_or_at_a_crossing_opens_as_the_entries_written_whole() {
   let mut points = seeded("torn");
   let (_, text) = thrice("torn-made");
   let starts: Vec<usize> = [0]
@@ -839,8 +809,8 @@ fn a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entrie
   // The cut between the stand of the first word of the root and its done, which the teach of the
   // extensions before that stand orders, is cut each time.
   let stood = text.find("[[\"done\",\"stand2\"").unwrap();
-  let cuts =
-    [("line", picked), ("stand2", stood), ("checkpoint", text.rfind("[[\"checkpoint\"").unwrap())];
+  let made = format!("[[\"made\",\"chain1\",\"store\",\"{}\"", world::engine());
+  let cuts = [("line", picked), ("stand2", stood), ("crossing", text.rfind(&made).unwrap())];
   for (name, start) in cuts {
     let line = text[start..].find('\n').map_or(text.len(), |end| start + end) - start;
     // A third of the cuts fall at the end of the line, which leaves it whole and not ended, so the
@@ -867,10 +837,7 @@ fn a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entrie
       placed(&mut opened(&torn), &[&torn]) == whole,
       "{name}: a record torn at byte {cut} opens as its entries written whole"
     );
-    let born = inspected_whole(&torn)
-      .unwrap_or_else(|why| panic!("{name}: the torn record opens from its first entry: {why}"));
-    assert!(placed(&mut { born }, &[&torn]) == whole, "{name}: and from its first entry");
-    let born_at = text[..kept_at].rfind("[[\"checkpoint\"").unwrap_or(0);
+    let born_at = segment(&clean.join("record.jsonl"), &text[..kept_at]);
     assert_eq!(
       missing(&mut opened(&torn), &text[born_at..kept_at]),
       "[]",
@@ -914,21 +881,22 @@ fn kept_in(at: &Path) -> String {
   life.word("repr(module('chain1').get('kept'))", vec![]).unwrap().as_ref().py_repr()
 }
 
-/// Lives of [`kept`] in the directory of an origin, each second one ended by a checkpoint, and the
-/// length of its record and its state at the end of each.
+/// Lives of [`kept`] in the directory of an origin, each but the last followed by a crossing, and
+/// the length of its record and its state at the end of each. A crossing makes the whole segment
+/// before it run on another engine, so a life is measured after the crossing that ends its segment:
+/// a state measured before it would name the engine that the record no longer names.
 fn lived_for_a_fork(origin: &Path, lives: u64) -> Vec<(usize, String)> {
-  // shortcut: a life born from a checkpoint holds, live, the facts of the word that seeds it
-  // otherwise than its open, so the state of the origin at a fork is its open, which each later
-  // life reads. docs/promise.md names this gap under what no machine proves yet.
+  // shortcut: a life born from a carry holds, live, the facts of the word that seeds it otherwise
+  // than its open, so the state of the origin at a fork is its open, which each later life reads.
+  // docs/promise.md names this gap under what no machine proves yet.
   let mut ends = Vec::new();
   for n in 0..lives {
     let mut life = scripted(origin, false, &SCRIPT).boot::<String>([]).unwrap().0;
     woke(&mut life);
     closed(&mut life, &kept(n));
-    if n % 2 == 1 {
-      life.checkpoint().unwrap();
-    } else {
-      drop(life);
+    drop(life);
+    if n + 1 < lives {
+      crossed(&origin.join("record.jsonl"));
     }
     let text = fs::read_to_string(origin.join("record.jsonl")).unwrap();
     ends.push((text.len(), placed(&mut inspected(origin).unwrap(), &[origin])));
@@ -958,7 +926,7 @@ fn a_fork_of_a_life_opens_at_the_state_of_its_origin_at_the_fork_and_goes_on_by_
   let opened = placed(&mut on_origin.boot::<String>([]).unwrap().0, &[&origin]);
   assert!(opened == at_fork, "the fork opens at the state of its origin after life {forked}");
   // In its own directory it holds each question and each value of its origin at the fork.
-  let born_at = text[..point].rfind("[[\"checkpoint\"").unwrap_or(0);
+  let born_at = segment(&fork.join("record.jsonl"), &text[..point]);
   assert_eq!(
     missing(&mut inspected(&fork).unwrap(), &text[born_at..point]),
     "[]",

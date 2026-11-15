@@ -309,6 +309,11 @@ impl Held {
       .collect()
   }
 
+  /// Each run of a word that is not done, in the order the acts were first told.
+  pub fn running(&self) -> impl Iterator<Item = &Arc<Act>> {
+    self.live.iter().map(|at| &self.acts[*at]).filter(|act| act.kind == Kind::Run && !act.done())
+  }
+
   /// The acts as they stood just after a moment, in the order they began.
   pub fn as_of(&self, at: u64) -> Vec<Act> {
     let mut acts = as_of(self.acts.iter().map(|act| &**act), at);

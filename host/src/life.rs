@@ -30,7 +30,7 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use furb::{
-  Engine, Fact, Fault, Object, checkpoint,
+  Engine, Fault, Object, checkpoint,
   engine::ROOT,
   image,
   life::{Log, Opening, Progress, Retrying, Stage, Stream},
@@ -46,7 +46,7 @@ use furb::{
     images,
   },
 };
-use furb_wire::{ChainTrack, FollowUp};
+use furb_wire::{ChainTrack, FollowUp, act::interruption};
 use futures::stream::{self, Stream as Streams};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -65,7 +65,7 @@ use crate::{
   backlog::{self, Backlog},
   cards::{self, Session, Times},
   changes::{Journal, journal},
-  ears::{ears, json_of, json_of_line},
+  ears::{ears, json_of_line},
   error::LifeError,
   event::{Event, Seq},
   opens::{Heard, Opens, Told, WHOLE, thousandths},
@@ -427,9 +427,9 @@ struct Part<K> {
 /// must reach the past of each life: each life then opens once by its record, which folds its past
 /// again. A new field takes `#[serde(default)]`, a field that changes its name takes
 /// `#[serde(alias)]`, and no type that the part holds denies a field that it does not know.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
-/// The facts that the log of a life let go: each one before the last checkpoint of the life, which
+/// The facts that the log of a life let go: each one before the last crossing of the record, which
 /// the record holds, and each fact that an open told but a fact of keep, which the file of the log
 /// of the record holds, so a log holds the facts of one birth and not those of a whole life, and
 /// no fact that an open says again. The log keeps the place and the digest of each, and a reader
@@ -655,14 +655,17 @@ impl Life {
     }
   }
 
-  /// What an open told, less each fact of the opening of a birth on a checkpoint: that opening
-  /// says again what the checkpoint restates, which each reader already heard, and the facts by
+  /// What an open told, less each fact of the opening of a birth on a carry: that opening says
+  /// again what the carry restates, which each reader already heard, and the facts by
   /// which the life is born there, which a whole replay of the record never says, so none of them
   /// takes a place in the time of the life. The life then goes on with facts of its own, which the
   /// log tells whole.
   fn opened(&mut self, told: Vec<Event>, born: bool, progress: &Progress) {
     self.kept.births.clear();
     let start = self.kept.log.len();
+    if born {
+      self.cut();
+    }
     let (mut opening, of) = (born, told.len() as u64);
     (progress.0)(Stage::Log, 0, of);
     for (at, event) in (1..).zip(told) {
@@ -686,6 +689,22 @@ impl Life {
       }
     }
     self.kept.gone.opened.push(told);
+  }
+
+  /// Each run of a word that a reader holds open, told as ended by the end of the life that ran
+  /// it: a birth on a carry comes after a crossing, and no word of the life before it runs on, so
+  /// the carry cut each run, though no fold of this birth knows it.
+  fn cut(&mut self) {
+    let cut = |one: &Arc<Act>| {
+      let mut act = Act::clone(one);
+      act.phase = Phase::Done(json!({"is": "Refused", "args": [interruption(&act.id)]}));
+      act.ended.get_or_insert(self.kept.time);
+      act
+    };
+    let ended: Vec<Act> = self.kept.held.running().map(cut).collect();
+    for act in ended {
+      self.put(Event::Act(Arc::new(act)));
+    }
   }
 
   /// The life stands where the life of its image stood, on what that life kept: no open told a
@@ -715,25 +734,25 @@ impl Life {
     at.and_then(|one| self.kept.births.get(one)).copied().unwrap_or(clock)
   }
 
-  /// The facts of a record before its last checkpoint, told first, in order, each with the acts
-  /// that it changed, then the birth on that checkpoint: the life boots on it and replays none of
-  /// them, so each reader hears the life whole, and the watch of a stall holds
-  /// only the acts that the open tells again. No engine reads them, so no pause covers their acts.
-  /// The facts of the opening of each birth on a checkpoint before the last are told to no reader,
-  /// as [`Life::opened`] says; each other fact is told, though it equals one before it, as a
-  /// second pause of a chain. A record that the store cannot read tells nothing here, and its open
-  /// says why. It gives whether the life is born on a checkpoint of the record. With `whole`, as
-  /// for a record that no life opens, it tells each fact of the record, the facts after its last
-  /// checkpoint too, and those of a record with none.
+  /// The facts of a record before its last crossing, told first, in order, each with the acts
+  /// that it changed, then the birth on the carry across it: the life boots on the carry and
+  /// replays none of them, so each reader hears the life whole, and the watch of a stall holds
+  /// only the acts that the open tells again. No engine of the life reads them, so no pause covers
+  /// their acts. The facts of the opening of each birth on a carry before the last are told to no
+  /// reader, as [`Life::opened`] says; each other fact is told, though it equals one before it, as
+  /// a second pause of a chain. A record that the store cannot read tells nothing here, and its
+  /// open says why. It gives whether the life is born on a carry. With `whole`, as for a record
+  /// that no life opens, it tells each fact of the record, the facts after its last crossing too,
+  /// and those of a record that never crossed.
   fn recalled(&mut self, record: &str, told: &Progress, whole: bool) -> bool {
     if !Path::new(record).exists() {
       return false;
     }
     (told.0)(Stage::Recall, 0, 0);
-    // One pass over the heads of the lines gives the place of each checkpoint, and a record with
+    // One pass over the heads of the lines gives the place of each crossing, and a record with
     // none tells nothing here, but a whole one.
-    let Ok(checkpoints) = world::checkpoints(record) else { return false };
-    let marks: Vec<usize> = checkpoints.into_iter().map(|at| at + 1).collect();
+    let Ok(crossings) = world::crossings(record) else { return false };
+    let marks: Vec<usize> = crossings.into_iter().map(|at| at + 1).collect();
     if marks.is_empty() && !whole {
       return false;
     }
@@ -748,14 +767,6 @@ impl Life {
     // life holds the acts of its past, and no list of its facts.
     let mut take = |kept: usize, line: &str| {
       let Some(fact) = json_of_line(line) else { return };
-      // A checkpoint ends each run of the past, which the record holds no end of: the fold hears
-      // it, and no reader hears the fact itself.
-      if fact[0] == checkpoint::CHECKPOINT {
-        for act in fold.hear(&fact, &[], None) {
-          self.put(Event::Act(Arc::new(act)));
-        }
-        return;
-      }
       (told.0)(Stage::Recall, thousandths((1, 1), (kept as u64, last as u64)), WHOLE);
       while marks.get(passed).is_some_and(|mark| kept >= *mark) {
         (passed, opening) = (passed + 1, true);
@@ -778,22 +789,17 @@ impl Life {
     true
   }
 
-  /// Each fact of the log let go, since the record holds it: those that a checkpoint of the record
-  /// passed, and each fact that kept a checkpoint, which holds each turn of each chain, hundreds
-  /// of MB on a large life, that the log and each image of it would else hold again. The log
-  /// keeps an empty place for each, which [`Life::since`] fills from the record. A fact that kept
-  /// a fact made stays, since the log of the record holds that entry as its number alone, and the
-  /// fact made that an open says under another speaker.
+  /// Each fact of the log let go, since the record holds it: those that a crossing of the record
+  /// passed, which the log and each image of it would else hold again. The log keeps an empty
+  /// place for each, which [`Life::since`] fills from the record. A fact that kept a fact made
+  /// stays, since the log of the record holds that entry as its number alone, and the fact made
+  /// that an open says under another speaker.
   fn let_go(&mut self) {
     let opened = mem::take(&mut self.kept.gone.opened);
     let kept = |at: usize| opened.iter().any(|one| one.contains(&at));
     for (at, slot) in self.kept.log.iter_mut().enumerate().skip(self.kept.gone.scanned) {
       let fact = slot.as_ref().and_then(Slot::fact);
-      let gone = |fact: &&Value| match kept_kind(fact) {
-        Some(checkpoint::CHECKPOINT) => true,
-        Some(world::MADE) => false,
-        _ => !kept(at),
-      };
+      let gone = |fact: &&Value| kept_kind(fact) != Some(world::MADE) && !kept(at);
       let Some(fact) = fact.filter(gone) else { continue };
       self.kept.gone.places.push((at as Seq, Digest::of(fact)));
       *slot = None;
@@ -840,31 +846,26 @@ impl Life {
 }
 
 /// What a fact that the log let go was: a fact of its digest, or the fact `keep` by which the
-/// journal, or the operator for a checkpoint, told that the record kept an entry, which holds the
-/// fact of its digest, with that speaker. The file of the
+/// journal told that the record kept an entry, which holds the fact of its digest, with that
+/// speaker and the rest of the entry, its place and whether the life rested. The file of the
 /// record holds that entry as its number alone, so a reader makes the fact again from the fact
 /// that the entry holds.
-///
-/// The keep of a checkpoint is apart: the file of the log of the record holds no fact of a
-/// checkpoint, so a reader finds it among the checkpoints of the record, read from its end.
 #[derive(Clone, Serialize, Deserialize)]
 enum Digest {
   Fact(u64),
-  Keep(u64, String),
-  Checkpoint(u64, String),
+  Keep(u64, String, Vec<Value>),
 }
 
 impl Digest {
   /// What a fact of the log is.
   fn of(fact: &Value) -> Self {
     match fact.as_array().map(Vec::as_slice) {
-      Some([kind, about, by, Value::Array(entry)])
-        if kind == "keep" && about == "" && entry.len() == 1 =>
-      {
-        let by = by.as_str().unwrap_or_default().to_owned();
-        match kept_kind(fact) {
-          Some(checkpoint::CHECKPOINT) => Self::Checkpoint(digest(&entry[0]), by),
-          _ => Self::Keep(digest(&entry[0]), by),
+      Some([kind, about, by, Value::Array(entry)]) if kind == "keep" && about == "" => {
+        match entry.split_first() {
+          Some((kept, rest)) => {
+            Self::Keep(digest(kept), by.as_str().unwrap_or_default().to_owned(), rest.to_vec())
+          }
+          None => Self::Fact(digest(fact)),
         }
       }
       _ => Self::Fact(digest(fact)),
@@ -899,8 +900,8 @@ struct Retell {
 }
 
 /// The places that wait for a fact of the record, by the kind and the digest of the fact, each with
-/// the speaker of the entry that a `keep` fact says.
-type Places = HashMap<(bool, u64), VecDeque<(Seq, Option<String>)>>;
+/// the speaker of a `keep` fact and the rest of the entry that it says.
+type Places = HashMap<(bool, u64), VecDeque<(Seq, Option<(String, Vec<Value>)>)>>;
 
 /// The facts of each read, given to a reader in the order of their places, one ahead of what the
 /// reader read: a fact that is read again is a copy, and the facts that an open told are large.
@@ -945,18 +946,13 @@ impl Retell {
   fn told(self, sender: &mpsc::Sender<Logged>) {
     let mut places: Places = HashMap::new();
     for (at, one) in &self.wanted {
-      let (key, by) = match one {
+      let (key, kept) = match one {
         Digest::Fact(one) => ((false, *one), None),
-        Digest::Keep(one, by) | Digest::Checkpoint(one, by) => ((true, *one), Some(by.clone())),
+        Digest::Keep(one, by, rest) => ((true, *one), Some((by.clone(), rest.clone()))),
       };
-      places.entry(key).or_default().push_back((*at, by));
+      places.entry(key).or_default().push_back((*at, kept));
     }
     let mut order: VecDeque<Seq> = self.wanted.iter().map(|one| one.0).collect();
-    let checkpoints = self.wanted.iter().filter_map(|one| match one.1 {
-      Digest::Checkpoint(digest, _) => Some(digest),
-      _ => None,
-    });
-    let checkpoints: Vec<u64> = checkpoints.collect();
     // The facts that wait for a place before them. The journal tells the keep of each fact of a
     // run at the end of that run, so the keeps of a whole run wait here while the read passes the
     // run. No bound cuts the wait, since a place that is given up before the read reaches its
@@ -971,8 +967,10 @@ impl Retell {
     // A fact of the source by its digest, which the read makes only for a place that takes it,
     // and whether the read goes on.
     let mut take = |one: u64, fact: &dyn Fn() -> Value| {
-      if let Some((at, by)) = places.get_mut(&(true, one)).and_then(VecDeque::pop_front) {
-        ready.insert(at, json!(["keep", "", by, [fact()]]));
+      if let Some((at, kept)) = places.get_mut(&(true, one)).and_then(VecDeque::pop_front) {
+        let (by, rest) = kept.unwrap_or_default();
+        let entry: Vec<Value> = [fact()].into_iter().chain(rest).collect();
+        ready.insert(at, json!(["keep", "", by, entry]));
       }
       if let Some((at, _)) = places.get_mut(&(false, one)).and_then(VecDeque::pop_front) {
         ready.insert(at, fact());
@@ -985,7 +983,7 @@ impl Retell {
       !order.is_empty() && !sender.is_closed()
     };
     let (read, name) = match &self.from {
-      Source::Record(record) => (read_record(record, checkpoints, &mut take), record),
+      Source::Record(record) => (read_record(record, &mut take), record),
       Source::Log(log) => (read_log(log, &mut take), log),
     };
     if read.is_none()
@@ -1006,25 +1004,10 @@ impl Retell {
 /// A fact by its digest, and whether the read goes on.
 type Take<'a> = dyn FnMut(u64, &dyn Fn() -> Value) -> bool + 'a;
 
-/// Each fact of the whole record: a fact that a life said as it wrote its checkpoint may stand
-/// after that checkpoint in the record. Once each place is filled, the rest of
-/// the record is read and left. What the record tells holds no fact of a checkpoint when it is the
-/// log of the record, so each checkpoint whose digest a place wants is read first, from the end of
-/// the record, which passes no checkpoint before the first of them.
-fn read_record(record: &str, mut checkpoints: Vec<u64>, take: &mut Take<'_>) -> Option<()> {
-  let (mut goes, wanted) = (true, !checkpoints.is_empty());
-  // Each fact given to a place, and whether a checkpoint that a place wants is still to read.
-  let mut each = |one: Object| {
-    if let Some(fact) = Fact::of(one.as_ref()).map(|a| json_of(&a)).filter(|_| goes) {
-      let one = digest(&fact);
-      checkpoints.retain(|wanted| *wanted != one);
-      goes = take(one, &|| fact.clone());
-    }
-    goes && !checkpoints.is_empty()
-  };
-  if wanted {
-    world::checkpoints_back(Path::new(record), &mut each).ok()?;
-  }
+/// Each fact of the whole record. Once each place is filled, the rest of the record is read and
+/// left.
+fn read_record(record: &str, take: &mut Take<'_>) -> Option<()> {
+  let mut goes = true;
   let told = &mut |line: &str| {
     if goes && let Some(fact) = json_of_line(line) {
       let one = digest(&fact);
@@ -1046,7 +1029,7 @@ fn read_log(log: &str, take: &mut Take<'_>) -> Option<()> {
   Some(())
 }
 
-/// Whether a fact is of the opening of a birth on a checkpoint, which ends with the stand of its
+/// Whether a fact is of the opening of a birth on a carry, which ends with the stand of its
 /// boot: the facts after that stand are those of the life.
 fn birth(opening: &mut bool, fact: &Value) -> bool {
   let word = |at: usize| fact.get(at).and_then(Value::as_str);
@@ -1275,9 +1258,9 @@ async fn lives(
 }
 
 /// The life that opened on the texts of an earlier build, as its image or its record holds them,
-/// moved to this build once each reader heard it: its checkpoint, which tells each chain the
-/// lines of the engine that differ, and the fact made of this build, then the open again on that
-/// checkpoint, as an open of its own, whose stages each window shows. Each command waits in the
+/// moved to this build once each reader heard it: the fact made of this build at the tip of its
+/// record, then the open again across that crossing, which tells each chain the lines of the engine
+/// that differ, as an open of its own, whose stages each window shows. Each command waits in the
 /// inbox meanwhile, so no word runs on the texts that the life leaves.
 async fn moved(
   engine: Engine,
@@ -1297,7 +1280,7 @@ async fn moved(
   while let Ok(event) = life.heard.try_recv() {
     life.told(Some(event));
   }
-  // The checkpoint of the move passed each fact of the log, so the record holds each of them.
+  // The move passed each fact of the log, so the record holds each of them.
   life.let_go();
   let ears = ears(told.clone(), journal);
   let (engine, _) = opening.open(ears, progress.clone(), &mut |_| false, lease).await?;
@@ -1412,7 +1395,7 @@ async fn ended(engine: Engine, life: &mut Life, mut imaging: Imaging) -> Option<
 }
 
 /// The image of a life that keeps its record and passed its tail, as [`rebirth::TAIL`] says,
-/// taken once the record holds each fact, and written as the life goes on, with no checkpoint: a
+/// taken once the record holds each fact, and written as the life goes on: a
 /// later open goes on from the image and feeds what the record took after it. A life that cannot
 /// take or write an image tries again past its next tail, and one whose last image is still being
 /// written takes none.
@@ -1686,7 +1669,7 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
       Reply::Values(turns.iter().map(|one| outward(one.as_ref())).collect())
     }
     Command::Transcript { on: chain, of } => {
-      let facts = engine.transcript(verbs::Transcript { on: Some(on(chain)), of })?;
+      let facts = engine.transcript(verbs::Transcript { on: Some(on(chain)), of, at: None })?;
       Reply::Values(facts.iter().map(|one| outward(one.0.as_ref())).collect())
     }
     Command::Program { on: chain } => {

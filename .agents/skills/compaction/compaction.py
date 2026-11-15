@@ -19,7 +19,6 @@ from furb.engine import (
   prompt,
   question,
   read,
-  reading,
   scope,
   take,
   told,
@@ -113,9 +112,9 @@ FILTERS: list[Filter] = [latest(), recent(8)]
 
 def reground(on: str = "") -> None:
   here = on or scope(acting())
-  voiced = {x[1] for x in reading(here) if x[0] == "tell"}
+  voiced = {x[1] for x in transcript(here) if x[0] == "tell"}
   held: dict[str, tuple[Text, bool]] = {}
-  for a in reading(here):
+  for a in transcript(here):
     if (
       a[0] in ("read", "write")
       and a[1] in voiced
@@ -124,7 +123,7 @@ def reground(on: str = "") -> None:
       and get(t.path.split("/")[0]) is None
     ):
       whole = t.content.removesuffix("\n")
-      held[t.path] = (t, all(whole not in "".join(map(str, x[3])) for x in reading(here) if x[:2] == ("tell", a[1])))
+      held[t.path] = (t, all(whole not in "".join(map(str, x[3])) for x in transcript(here) if x[:2] == ("tell", a[1])))
   for path, (text, again) in held.items():
     try:
       read(path, HEAD if again else differs(text.lines), on=on)
@@ -134,7 +133,7 @@ def reground(on: str = "") -> None:
 
 def supersede(keep: Filter | None = None, on: str = "", word: str = "") -> Act[str]:
   here = on or scope(acting())
-  acts = [(x[0], x[1], x[2], str(x[3]), *x[4:]) for x in reading(here) if question(x)]
+  acts = [(x[0], x[1], x[2], str(x[3]), *x[4:]) for x in transcript(here) if question(x)]
   kept = {x[1] for x in (keep(acts) if keep else acts)}
   return jump([x[1] for x in acts if x[1] not in kept], word, here)
 

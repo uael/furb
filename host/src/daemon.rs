@@ -9,7 +9,7 @@
 //!
 //! One task owns the lives and their holders, and each peer asks it through a [`Daemon`]. A daemon
 //! of a new build takes the place of the one that runs only through [`upgrade`], never by a
-//! takeover: the daemon that runs writes the checkpoint of each life, stops to listen, and gives
+//! takeover: the daemon that runs writes the image of each life, stops to listen, and gives
 //! its lives and their pins, which the new one opens again. Each window then dials again and
 //! attaches, with no loss. The handover waits for each life to end, however long it takes: a life
 //! given up before its end would still hold the lease of its record and the facts that its record
@@ -148,7 +148,7 @@ where
 }
 
 /// This daemon in the place of the daemon that runs on the transport: that one writes the
-/// checkpoint of each life, stops to listen and gives its lives and their pins, which this one
+/// image of each life, stops to listen and gives its lives and their pins, which this one
 /// opens again. When no daemon answers, this one starts as [`run`] does.
 pub async fn upgrade(local: &Local, settings: Settings) -> Result<(), DaemonError> {
   let (handed, asker) = match local.dial().await {

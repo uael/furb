@@ -24,19 +24,19 @@ use std::{
 };
 
 use furb::{
-  Ear, Object, checkpoint,
-  ear::{ear, hear},
-  life::{Answer, Opening, Progress},
+  Object,
+  life::{Answer, Opening},
   view,
   view::{Act, Kind, Line, Mark, Phase, Reach, Retrying, RunState, State},
   world::{
-    self, CONSOLE, SchemaError, Scratch,
+    self, SchemaError, Scratch,
     config::{Change, Layer},
   },
 };
 use furb_host::{Command, Door, Event, Life, LifeError, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use tokio::{task, time};
 
 /// The events of a life, each under its place in the log.
@@ -819,33 +819,40 @@ pub(crate) fn facts_of(log: &[Logged]) -> Vec<serde_json::Value> {
   facts.collect()
 }
 
-/// The checkpoint of the life of a record whose life ended with its image, written at its tip by
-/// a life that opens from that image and only inspects it, on ears with the names of the ears of a
-/// host that hear and say nothing: it says no fact, so the record takes the checkpoint alone, as
-/// `furb checkpoint` writes one. The image then names the tip before it, so the next life opens by
-/// the record, on this checkpoint.
-pub(crate) async fn checkpointed(opening: Opening) {
-  let Some(record) = opening.record.clone() else { panic!("the life keeps no record") };
-  let opening = Opening { inspecting: Some(true), ..opening };
-  let idle = || -> Box<dyn Ear> {
-    ear(|mut co| async move {
-      loop {
-        hear(&mut co).await;
-      }
-    })
+/// The record of a life that ended, as if another build had made its last segment: its last fact
+/// made of this build names the engine of this build with a line of comment more, so the next life
+/// that keeps it crosses there and each later open carries the life across that place. The image
+/// no longer names the tip of the record, so the next life opens by the record. The `opening`
+/// names the record.
+pub(crate) async fn crossed(opening: Opening) {
+  static ENGINES: AtomicUsize = AtomicUsize::new(0);
+  let Some(record) = opening.record else { panic!("the life keeps no record") };
+  let Ok(text) = fs::read_to_string(&record) else { panic!("the record reads") };
+  let head = format!("[[\"made\",\"chain1\",\"store\",\"{}\"", world::engine());
+  let Some(at) = text.rfind(&head) else { panic!("the record names this build") };
+  let end = text[at..].find('\n').map_or(text.len(), |end| at + end);
+  let Ok(mut entry) = serde_json::from_str::<serde_json::Value>(&text[at..end]) else {
+    panic!("the fact made parses")
   };
-  let ears = [(CONSOLE, idle()), ("events", idle()), ("changes", idle())];
-  let mut engine = match opening.open(ears, Progress::default(), &mut |_| true, None).await {
-    Ok((engine, _)) => engine,
-    Err(no) => panic!("no life opens on the image of the record: {no}"),
-  };
-  if let Err(no) = checkpoint::crossed(Path::new(&record), &mut engine) {
-    panic!("the life writes no checkpoint: {no}");
+  let Some(fact) = entry[0].as_array_mut() else { panic!("an entry holds its fact first") };
+  let texts: Vec<String> =
+    (7..10).map(|at| fact[at].as_str().unwrap_or_default().to_owned()).collect();
+  // Each crossing names an engine of its own, as a record crosses only to texts that differ.
+  let n = ENGINES.fetch_add(1, Ordering::Relaxed);
+  let engine = format!("{}# Another engine, {n}.\n", texts[0]);
+  let mut hash = Sha256::new();
+  for one in [engine.as_str(), &texts[1], &texts[2]] {
+    hash.update(one.as_bytes());
+    hash.update([0]);
   }
+  fact[3] = json!(format!("{:x}", hash.finalize()));
+  fact[7] = json!(engine);
+  let written = fs::write(&record, format!("{}{entry}{}", &text[..at], &text[end..]));
+  assert!(written.is_ok(), "the record takes the fact made of another engine");
 }
 
 /// The facts of one birth of a life on a record: a word on its root, then each command, then its
-/// end, and the checkpoint of the record, on which the next birth opens.
+/// end, and the crossing of the record, across which the next birth opens.
 pub(crate) async fn birth(at: &Path, word: &str, commands: Vec<Command>) -> Vec<serde_json::Value> {
   let Ok(life) = Life::spawn(kept(at)) else { panic!("the life has no thread") };
   let mut events = Box::pin(life.events(0));
@@ -857,7 +864,7 @@ pub(crate) async fn birth(at: &Path, word: &str, commands: Vec<Command>) -> Vec<
   }
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
   log.extend(until(&mut events, |event| matches!(event, Event::Ended(_))).await);
-  checkpointed(kept(at)).await;
+  crossed(kept(at)).await;
   facts_of(&log)
 }
 
@@ -881,23 +888,29 @@ fn retells(later: &[serde_json::Value], earlier: &[serde_json::Value], what: &st
 }
 
 #[tokio::test]
-async fn a_life_on_its_checkpoints_tells_each_repeated_fact_of_its_history_in_order() {
+async fn a_life_across_its_crossings_tells_each_repeated_fact_of_its_history_in_order() {
   let at = place("repeated");
   let (pause, wake) = (
     || Command::Pause { id: "chain2".to_owned(), why: Some("hold".to_owned()) },
     || Command::Wake { id: "chain2".to_owned() },
   );
   let word = "w = chain('w')\npause(w, 'hold'); wake(w); pause(w, 'hold'); wake(w)";
-  let first = birth(&at, word, vec![pause(), wake()]).await;
-  let second = birth(&at, "z = 0", vec![pause(), wake()]).await;
-  let third = birth(&at, "y = 1", vec![pause(), wake()]).await;
-  // The pause and the wake that a birth says again at its seed, as the journal, belong to the
-  // birth, not to the history that it retells.
+  // A birth tells the past that its replay says again under the speaker journal, and the past
+  // before a crossing under the speaker that the record holds: a fact is the same fact under
+  // either. The fact made of each birth names the engine that the test wrote in its place.
+  let unsaid = |facts: Vec<serde_json::Value>| -> Vec<serde_json::Value> {
+    let unsaid = facts.into_iter().filter(|one| one[0] != "made").map(|mut one| {
+      one.as_array_mut().filter(|one| one.len() > 2).map(|one| one.remove(2));
+      one
+    });
+    unsaid.collect()
+  };
+  let first = unsaid(birth(&at, word, vec![pause(), wake()]).await);
+  let second = unsaid(birth(&at, "z = 0", vec![pause(), wake()]).await);
+  let third = unsaid(birth(&at, "y = 1", vec![pause(), wake()]).await);
   let controls = |facts: &[serde_json::Value]| -> Vec<(String, String)> {
     let controls = facts.iter().filter(|one| {
-      one[1] == "chain2"
-        && one[2] != "journal"
-        && ["pause", "wake"].contains(&one[0].as_str().unwrap_or_default())
+      one[1] == "chain2" && ["pause", "wake"].contains(&one[0].as_str().unwrap_or_default())
     });
     controls.map(|one| (one[0].to_string(), one[2].to_string())).collect()
   };
@@ -905,7 +918,7 @@ async fn a_life_on_its_checkpoints_tells_each_repeated_fact_of_its_history_in_or
     |facts: &[serde_json::Value]| controls(facts).iter().filter(|one| one.0 == "\"pause\"").count();
   assert_eq!(pauses(&first), 3, "{:?}", controls(&first));
   // Each later birth tells first the whole history of the births before it, with each fact that
-  // repeats an earlier one, as it was told, and no fact that only a checkpoint restates.
+  // repeats an earlier one, as it was told, and no fact that only a carry restates.
   retells(&second, &first, "the second birth retells the first whole");
   assert_eq!(third[..first.len()], second[..first.len()], "each birth retells the first alike");
   let times = |facts: &[serde_json::Value], one: &serde_json::Value| {
@@ -930,7 +943,7 @@ async fn a_life_on_its_checkpoints_tells_each_repeated_fact_of_its_history_in_or
 }
 
 #[tokio::test]
-async fn a_life_on_its_checkpoint_tells_the_acts_of_its_history_each_at_the_place_of_its_fact() {
+async fn a_life_across_a_crossing_tells_the_acts_of_its_history_each_at_the_place_of_its_fact() {
   let at = place("history");
   birth(&at, "x = 1", vec![]).await;
   let Ok(life) = Life::spawn(kept(&at)) else { panic!("the life has no thread") };
