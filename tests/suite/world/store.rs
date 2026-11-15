@@ -1,5 +1,6 @@
-//! The suite that each store of a record passes, run on each store of the crate. A store of a host passes the same
-//! laws: the macro `conformance` holds them, on the function that opens the store and on the name of its record.
+//! The suite that each store of a record passes, run on each store of the crate. A store of a host
+//! passes the same laws: the macro `conformance` holds them, on the function that opens the store
+//! and on the name of its record.
 
 use std::{fs, path::Path};
 
@@ -19,8 +20,8 @@ fn place(name: &str, file: &str) -> Yard {
   Yard::new(format!("furb-store-{name}-{}", process::id())).within(file)
 }
 
-/// The entries that the suite keeps: facts that hold text on many lines and past ASCII, numbers, nothing, and lists
-/// in lists.
+/// The entries that the suite keeps: facts that hold text on many lines and past ASCII, numbers,
+/// nothing, and lists in lists.
 fn facts() -> Vec<Object> {
   [
     r#"[["stand","stand1","operator","chain1"]]"#,
@@ -46,7 +47,8 @@ fn filled(open: impl Fn(&Path) -> Result<Box<dyn Store>, Fault>, path: &Path) {
   }
 }
 
-/// The laws of the suite, each a test, on a store that `$open` opens at a path whose name ends in `$file`.
+/// The laws of the suite, each a test, on a store that `$open` opens at a path whose name ends in
+/// `$file`.
 macro_rules! conformance {
   ($name:ident, $file:literal, $open:expr) => {
     mod $name {

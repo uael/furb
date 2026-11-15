@@ -69,6 +69,7 @@ fn life(at: &Path, host: impl IntoIterator<Item = (&'static str, Box<dyn Ear>)>)
 }
 
 /// The fact enable of the kit `note` whose process is a program.
+#[cfg(unix)]
 fn enable(engine: &mut Engine, program: &Path) {
   let words = ["note", "", "", "", "", "", &program.display().to_string()].map(Object::string);
   engine.say("enable", "chain1", words.into()).unwrap_or_else(|no| panic!("{no}"));
