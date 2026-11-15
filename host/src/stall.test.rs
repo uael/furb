@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, time, time::Duration};
 
 use furb::view::{Act, Kind, Maker, Pause, Phase, State};
 use serde_json::{Value, json};
@@ -244,4 +244,34 @@ fn the_watch_lets_go_of_a_chain_that_ends_and_of_each_chain_at_a_rebirth() {
   assert!(quiet.stalled(after(3600)).is_empty(), "a rebirth keeps no stall");
   // The watch of a long life must not grow, which no stall shows: a narrow check of its memory.
   assert!(quiet.chains.is_empty() && quiet.ours.is_empty(), "a rebirth lets go of each chain");
+}
+
+/// The least time of a few looks of the watch for when its next stall comes, on a life of `n`
+/// chains, each with a rung that has a word and a reply.
+fn looked(n: usize) -> Duration {
+  let mut quiet = quiet();
+  for one in 0..n {
+    let chain = format!("chain{one}");
+    heard(
+      &mut quiet,
+      act("rung", &format!("rung{one}"), &chain, &[json!("x"), json!(""), json!("")]),
+    );
+    heard(&mut quiet, act("reply", &format!("reply{one}"), &chain, &[]));
+  }
+  (0..5)
+    .map(|_| {
+      let at = time::Instant::now();
+      assert!(quiet.due().is_some());
+      at.elapsed()
+    })
+    .min()
+    .unwrap()
+}
+
+#[test]
+fn the_watch_reads_its_acts_once_for_each_look_so_a_large_life_keeps_its_thread() {
+  let (small, large) = (looked(500), looked(4000));
+  // Eight times the acts cost about eight times the time; a pass over each act for each act cost
+  // about sixty four times.
+  assert!(large < small * 24, "500 chains: {small:?}, 4000 chains: {large:?}");
 }

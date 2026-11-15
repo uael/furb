@@ -176,11 +176,22 @@ impl Quiet {
     }
   }
 
-  /// Whether something else lives on a chain: a run, a reply, a command or a wait, each of which
-  /// ends with a fact.
-  fn working(&self, chain: &str) -> bool {
+  /// What the watch reads of its acts at one look, with one pass over them.
+  fn look(&self) -> Look<'_> {
+    let mut look = Look::default();
     let kinds = [Kind::Run, Kind::Reply, Kind::Bash, Kind::Wait];
-    self.acts.iter().any(|one| one.chain == chain && kinds.contains(&one.kind))
+    for one in &self.acts {
+      if kinds.contains(&one.kind) {
+        look.working.insert(&one.chain);
+      }
+      if self.asks(one) {
+        look.asking.insert(&one.id);
+        if one.kind == Kind::Prompt {
+          look.asked_by.insert(&one.by);
+        }
+      }
+    }
+    look
   }
 
   /// Whether an act asks the operator or waits for him: a pause holds it, the operator owes it, it
@@ -194,50 +205,37 @@ impl Quiet {
       || matches!(chain, Some(State::Asks | State::Paused))
   }
 
-  /// Whether an act waits on purpose: it asks the operator, or it is a rung or a run whose word
-  /// awaits an act that asks him, the act that the rung retells or a prompt that the word made.
-  fn waits(&self, one: &Act) -> bool {
-    let (rung, retells) = match one.kind {
-      Kind::Rung => (Some(one.id.as_str()), one.words.get(1).and_then(Value::as_str)),
-      Kind::Run => (one.words.first().and_then(Value::as_str), None),
-      _ => (None, None),
-    };
-    let awaited = |other: &Act| {
-      Some(other.id.as_str()) == retells
-        || other.kind == Kind::Prompt && Some(other.by.as_str()) == rung
-    };
-    self.asks(one) || self.acts.iter().any(|other| awaited(other) && self.asks(other))
-  }
-
   /// How long the chain of an act stays with no change before the act stalls it, or none for an
   /// act that never stalls its chain: a rung with a word that nothing else lives beside on its
   /// chain stalls it after [`HUNG`], and a reply after [`THINK`], each capped by the bound of the
   /// life. A rung with no word rests, and work that waits on purpose never stalls.
-  fn hung(&self, one: &Act) -> Option<Duration> {
+  fn hung(&self, one: &Act, look: &Look<'_>) -> Option<Duration> {
     let worded = one.words.first().and_then(Value::as_str).is_some_and(|word| !word.is_empty());
     let bound = match one.kind {
-      Kind::Rung if worded && !self.working(&one.chain) => HUNG,
+      Kind::Rung if worded && !look.working.contains(one.chain.as_str()) => HUNG,
       Kind::Reply => THINK,
       _ => return None,
     };
-    (!self.waits(one)).then(|| bound.min(self.bound))
+    (!look.waits(one)).then(|| bound.min(self.bound))
   }
 
   /// Whether an act stays open with no fact to come only when the life is lost: a run, a reply or a
   /// command that does not wait on purpose, which the bound of the life holds.
-  fn lasting(&self, one: &Act) -> bool {
-    matches!(one.kind, Kind::Run | Kind::Reply | Kind::Bash) && !self.waits(one)
+  fn lasting(one: &Act, look: &Look<'_>) -> bool {
+    matches!(one.kind, Kind::Run | Kind::Reply | Kind::Bash) && !look.waits(one)
   }
 
   /// When the next stall comes: the stall of the life, while it holds a run, a reply or a command
   /// and the watch did not tell it, or the stall of a chain, while it holds an act that stalls it
   /// and the watch did not tell it.
   pub(crate) fn due(&self) -> Option<Instant> {
-    let armed = matches!(self.told, Told::No) && self.acts.iter().any(|one| self.lasting(one));
+    let look = self.look();
+    let armed =
+      matches!(self.told, Told::No) && self.acts.iter().any(|one| Self::lasting(one, &look));
     let life = armed.then(|| self.last + self.bound);
     let stalls = |one: &Act| {
       let chain = self.chains.get(&one.chain).filter(|chain| matches!(chain.told, Told::No))?;
-      Some(chain.last + self.hung(one)?)
+      Some(chain.last + self.hung(one, &look)?)
     };
     life.into_iter().chain(self.acts.iter().filter_map(stalls)).min()
   }
@@ -247,7 +245,11 @@ impl Quiet {
   /// fact.
   pub(crate) fn stalled(&mut self, now: Instant) -> Vec<Stall> {
     let mut stalls = Vec::new();
-    let lasting: Vec<Open> = self.acts.iter().filter(|one| self.lasting(one)).map(open).collect();
+    let look = self.look();
+    let lasting: Vec<Open> =
+      self.acts.iter().filter(|one| Self::lasting(one, &look)).map(open).collect();
+    let mut hung: Vec<(Open, Duration)> =
+      self.acts.iter().filter_map(|one| Some((open(one), self.hung(one, &look)?))).collect();
     if matches!(self.told, Told::No) && self.last + self.bound <= now && !lasting.is_empty() {
       let notice = format!(
         "The life said no fact for {}, and these acts stay open: {}. The watch of the daemon, \
@@ -258,8 +260,6 @@ impl Quiet {
       self.told = Told::Sent(notice.clone());
       stalls.push(Stall { acts: lasting, notice, chain: None });
     }
-    let mut hung: Vec<(Open, Duration)> =
-      self.acts.iter().filter_map(|one| Some((open(one), self.hung(one)?))).collect();
     while let Some((first, _)) = hung.first() {
       let name = first.chain.clone();
       let mine: Vec<(Open, Duration)>;
@@ -283,6 +283,32 @@ impl Quiet {
       stalls.push(Stall { acts, notice, chain: Some(name) });
     }
     stalls
+  }
+}
+
+/// What the watch reads of its acts at one look: each chain that holds a run, a reply, a command
+/// or a wait, each act that asks the operator, and the rung of each prompt that asks him, so that
+/// no question of an act passes over each other act, which on a life of thousands of acts held its
+/// thread at each event.
+#[derive(Default)]
+struct Look<'a> {
+  working: HashSet<&'a str>,
+  asking: HashSet<&'a str>,
+  asked_by: HashSet<&'a str>,
+}
+
+impl Look<'_> {
+  /// Whether an act waits on purpose: it asks the operator, or it is a rung or a run whose word
+  /// awaits an act that asks him, the act that the rung retells or a prompt that the word made.
+  fn waits(&self, one: &Act) -> bool {
+    let (rung, retells) = match one.kind {
+      Kind::Rung => (Some(one.id.as_str()), one.words.get(1).and_then(Value::as_str)),
+      Kind::Run => (one.words.first().and_then(Value::as_str), None),
+      _ => (None, None),
+    };
+    self.asking.contains(one.id.as_str())
+      || retells.is_some_and(|id| self.asking.contains(id))
+      || rung.is_some_and(|id| self.asked_by.contains(id))
   }
 }
 
