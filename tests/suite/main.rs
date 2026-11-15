@@ -6,6 +6,10 @@
 #[expect(clippy::expect_used, reason = "a test fails by a panic where its process fails")]
 mod pipes;
 
+#[cfg(unix)]
+#[path = "../common/claude.rs"]
+#[expect(clippy::expect_used, reason = "the fake fails the test where it is not made")]
+mod claude;
 #[path = "../common/drive.rs"]
 mod drive;
 #[path = "../common/opened.rs"]
@@ -16,7 +20,11 @@ mod opened;
 #[path = "../common/yard.rs"]
 mod yard;
 
+#[cfg(unix)]
+use drive::pause;
 use yard::Yard;
+#[cfg(unix)]
+use yard::Yard as Base;
 
 /// The script of a life of the suite takes each word under the bound of a turn of the engine.
 fn answered(_nth: usize) {}
