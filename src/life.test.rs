@@ -1305,9 +1305,25 @@ fn replayed(by: &str) -> Engine {
   Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]).unwrap().0
 }
 
+/// The record of the life of `WORK`, and that record once a life ended it with a checkpoint,
+/// which a later life opens from, so the rung by which a birth plays each life word again shows
+/// in a turn too (R094). A record of the corpus replays on the checkpointer that made it, which
+/// may hide it.
 #[test]
 fn each_run_of_a_chain_of_the_replays_has_a_turn_that_shows_its_word() {
   let unshown = replayed("unshown").word(UNSHOWN, vec![]).unwrap();
+  assert_eq!(unshown.as_ref().items().unwrap().len(), 0, "{}", unshown.as_ref().py_repr());
+  let at = yard("shown-born");
+  fs::copy(worked("shown-born-made"), at.join("record.jsonl")).unwrap();
+  opening(&at, true).boot::<String>([]).unwrap().0.checkpoint().unwrap();
+  let mut born = Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]);
+  let born = &mut born.as_mut().unwrap().0;
+  let rungs = born.word("[x[4] for x in transcript('chain1', 'rung') if x[2] == OPERATOR]", vec![]);
+  assert!(
+    rungs.unwrap().as_ref().py_repr().contains("for __part in"),
+    "the birth plays its life words"
+  );
+  let unshown = born.word(UNSHOWN, vec![]).unwrap();
   assert_eq!(unshown.as_ref().items().unwrap().len(), 0, "{}", unshown.as_ref().py_repr());
 }
 

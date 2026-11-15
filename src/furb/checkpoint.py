@@ -345,8 +345,6 @@ def seed(names, data):
     word = (
       f"if not get(acting())[5]:\n for __part in {c.get('lives', [])!r}:\n"
       "  try: await rung(__part)\n  except Exception as __raised: debug(t'{__raised!r}')\n"
-      " say('cut', scope(acting()), "
-      "[x for x in reading() if x[0] != 'tell' or not under(x[1], acting()) or x[3][0].startswith(f'#{acting()} debugged')])\n"
       " del __part"
     )
     c.get("lives") and put("rung", f"rung{numbers['rung'] + 1}", operator, i, word, "", "")

@@ -359,7 +359,7 @@ def defined(word: str) -> str:
 async def test_a_birth_tells_no_turn_of_its_own_and_each_act_that_a_life_word_made_lives_again_under_a_rung_whose_word_is_that_life_word() -> (
   None
 ):
-  """A birth tells no turn of its own: the turns of a chain after it are its turns at the tip, and each act that a life word made lives again under a rung whose word is that life word."""
+  """A birth tells no turn of its own but the turn of the rung that plays each life word again: the turns of a chain after it are its turns at the tip, then that turn, and each act that a life word made lives again under a rung whose word is that life word."""
   stands = [*STANDS, "/w/DOCTRINE.md", HELD]
   born(stands=stands, files=HELD_FILES)
   await settle()
@@ -372,7 +372,9 @@ async def test_a_birth_tells_no_turn_of_its_own_and_each_act_that_a_life_word_ma
     await settle()
     held = [a for a in engine.transcript("chain1") if a[0] == "held" and not engine.over(a[1])]
     assert "__kept" not in engine.module("chain1")
-    assert (engine.turns(on="chain1"), [engine.get(a[2])[4] for a in held]) == (before, ["held()"])
+    now = engine.turns(on="chain1")
+    assert (now[: len(before) - 1], [engine.get(a[2])[4] for a in held]) == (before[:-1], ["held()"])
+    assert now[-1][1].startswith(before[-1][1]) and "for __part in ['held()']" in now[-1][1]
 
 
 TICKED = [["ticked", "/w/ticked.py", "ticked()", False], ["tocked", "/w/ticked.py", "tocked()", False]]
@@ -398,12 +400,14 @@ async def test_a_birth_makes_again_each_life_word_that_asks_the_clock_and_a_life
   before = engine.turns(on="chain1")
   data = checkpoint.gathered(vars(engine), defined, {})
   assert [x["lives"] for x in data["chains"]] == [["ticked()", "tocked()"]]
+  after = []
   for quiet, ends in ((frozenset(), float), (frozenset({"clock"}), Refused)):
     life(sown(stands=stands, files=TICKED_FILES, quiet=quiet), checkpoint.seed(vars(engine), data))
     await settle()
     clocks = [engine.peek(a[1], None) for a in engine.transcript("chain1") if a[0] == "clock" and a[2] != "journal"]
     assert len(clocks) == 2 and all(isinstance(x, ends) for x in clocks), clocks
-    assert engine.turns(on="chain1") == before
+    after.append(engine.turns(on="chain1"))
+  assert after[0] == after[1] and after[0][: len(before) - 1] == before[:-1]
 
 
 DEEP = [["deep", "/w/deep.py", "deep()", False], ["pinged", "/w/pinged.py", "pinged()", False]]
@@ -423,7 +427,7 @@ DEEP_FILES = {
 async def test_a_birth_makes_again_each_life_word_whose_act_left_an_act_of_its_own_open_or_keeps_a_lasting_ear_after_its_done() -> (
   None
 ):
-  """A birth makes again each life word whose act left an act of its own open or keeps a lasting ear after its done, through a rung of the operator that awaits a rung of each such life word, tells in a debug what each raises, and says a cut that keeps each fact that the chain reads but what that rung told and did not debug, so a life word that raises nothing shows in no turn."""
+  """A birth makes again each life word whose act left an act of its own open or keeps a lasting ear after its done, through a rung of the operator that awaits a rung of each such life word and tells in a debug what each raises, so each word that a birth runs shows in a turn of its chain."""
   stands = [*STANDS, "/w/DOCTRINE.md", DEEP]
   born(stands=stands, files=DEEP_FILES)
   await settle()
