@@ -723,6 +723,9 @@ impl Opening {
     let loaded = match (goes, known && (lacked.is_empty() || !self.works())) {
       (false, _) => Err("a later birth of its record passed it".to_owned()),
       (true, false) => Err("its ears are not the ears of this life".to_owned()),
+      (true, true) if self.works() && !image.half.flies() => {
+        Err("its checkpointer puts no act in flight again".to_owned())
+      }
       (true, true) => image
         .session()
         .map_err(|no| no.to_string())

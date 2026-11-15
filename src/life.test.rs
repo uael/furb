@@ -744,6 +744,24 @@ fn an_image_of_another_engine_crosses_to_this_build_at_its_open() {
   assert_eq!(builds(&record).last(), Some(&world::engine()));
 }
 
+/// An image of a life whose last segment runs a checkpointer of the major that holds no `held`, as
+/// each one before it did, opens a life that works and keeps nothing by its record, at its tip,
+/// since that image cannot put its acts in flight; it never ends the life.
+#[test]
+fn an_image_of_a_checkpointer_with_no_held_opens_a_life_that_works_by_its_record() {
+  let at = yard("image-unheld");
+  let unheld = crate::CHECKPOINTER.replace("def held(", "def unheld(");
+  let (record, _) = made_elsewhere(&at, &named(&[crate::ENGINE, crate::KERNEL, &unheld]).0);
+  let open = || Opening { skills: Some(false), ..opening(&at, false) }.boot::<String>([]).unwrap();
+  let (mut first, replayed) = open();
+  assert!(!replayed.is_empty(), "a record with no image opens by its entries");
+  assert!(image::keep(&mut first, &record, &()).unwrap(), "the life writes its image");
+  drop(first);
+  let (mut later, replayed) = open();
+  assert!(!replayed.is_empty(), "the life opens by its record");
+  assert_eq!(closed(&mut later, "close(x)").as_ref().py_repr(), "1");
+}
+
 /// A chain that crossed reads in its turns the lines of the minified engine that differ, as one
 /// paragraph headed crossed, and a chain with the crossed chain as its source holds the same turns
 /// first.

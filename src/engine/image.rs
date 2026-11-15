@@ -17,7 +17,7 @@ use super::{
 use crate::{
   ear::Ear,
   sand::Sand,
-  value::{Fault, Object},
+  value::{Fault, Given, Object},
   world::Systems,
 };
 
@@ -44,6 +44,14 @@ pub(crate) struct Half {
   ears: Vec<(String, Value)>,
   pub(crate) stood: Object,
   pub(crate) systems: Systems,
+}
+
+impl Half {
+  /// Whether the checkpointer of the life of the image puts its acts in flight again at an open, as
+  /// [`Engine::flight`] does, so a life that works can open from it.
+  pub(crate) fn flies(&self) -> bool {
+    !self.opened.held.as_ref().is_none()
+  }
 }
 
 impl Engine {
