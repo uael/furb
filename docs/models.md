@@ -56,10 +56,11 @@ else the first cheap model of the roster.
 For a ChatGPT subscription, open the models (`/model`, or ⌃X M) and choose `Sign in with ChatGPT` under Codex, in a
 session or before the first one: the sign-in belongs to the user of the machine. furb uses an existing ChatGPT sign-in
 when one is available. Otherwise, it opens the sign-in page in the browser, and the list offers that page again and a
-cancel while it waits. A window on another machine of the tailnet signs in with a code: the list shows the code and
-opens the page of OpenAI where you enter it, in the browser of any device. When it connects, Codex turns on in the
-config of the user, and the models of Codex show in the same list for each project. Choose a model there. No API key,
-server, model id or context size is needed.
+cancel while it waits. `Sign in with a code` serves when that browser is not yours, as over SSH: the list shows the
+page of OpenAI and the code that you enter there, in the browser of any device. A window on another machine of the
+tailnet offers only the code, since the page of the browser calls back the machine that signs in. When it connects,
+Codex turns on in the config of the user, and the models of Codex show in the same list for each project. Choose a
+model there. No API key, server, model id or context size is needed.
 
 `codex` uses the limits of the ChatGPT subscription. `openai` remains the provider for an OpenAI API key.
 Connecting Codex does not change a running model call.

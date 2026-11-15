@@ -9,6 +9,7 @@ mod compare;
 mod error;
 mod frame;
 mod motion;
+mod openai;
 mod probe;
 mod raster;
 mod replay;

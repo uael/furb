@@ -60,7 +60,7 @@ impl CompletionModel for Codex {
       .insert("user-agent", HeaderValue::from_static(concat!("furb/", env!("CARGO_PKG_VERSION"))));
     let client = openai::Client::builder()
       .api_key(credential.access)
-      .base_url(auth::API)
+      .base_url(auth::api())
       .http_client(Amended::new(CodexHttp(self.config.clone())))
       .http_headers(headers)
       .build()

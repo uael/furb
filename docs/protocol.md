@@ -201,9 +201,9 @@ daemon answers requests in any order.
   or it fails. A set to `false` cancels a sign-in that runs. A window keeps no state of the sign-in beside these
   frames and asks for none.
 - `sign_in` signs the user of the machine in to codex, with no life, so a window signs in before its first session.
-  The daemon pushes the frame `sign_in` as for a set of the config. A sign-in from a `device`, which a window on
-  another machine asks, gives in the frame the page of `OpenAI` where the operator enters the `code` in the browser
-  of any device; else the page of the sign-in calls back port 1455 of the machine of the daemon. Once it connects,
+  The daemon pushes the frame `sign_in` as for a set of the config. A sign-in from a `device` gives in the frame the page
+  of `OpenAI` where the operator enters the `code` in the browser of any device; else the page of the sign-in calls
+  back port 1455 of the machine of the daemon, so a window on another machine asks a sign-in from a device. Once it connects,
   the user config turns codex on, checked against the catalog of the folder `cwd`, and each life of the daemon
   stands again, so each project offers the models of the account. The answer comes when the sign-in ends: the
   `models` that the catalog of `cwd` offers then, as `models` gives them, or a refusal when the operator cancels it or

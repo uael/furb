@@ -779,13 +779,16 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       pace: &[],
       reads: false,
       steps: &[
-        // Before any session, the models offer the sign-in of Codex, for a ChatGPT plan.
-        step("a", &[Act::Key("C-x"), Act::Key("m")], "Sign in with ChatGPT"),
-        // The account of the capture connects at once, and its models join the list.
-        step("b", &[Act::Type("chatgpt"), Act::Key("Enter")], "Codex is connected"),
+        // Before any session, the models offer the sign-in of Codex, for a ChatGPT plan: in the
+        // browser of this computer, or from any device with a code.
+        step("a", &[Act::Key("C-x"), Act::Key("m")], "Sign in with a code"),
+        // The sign-in with a code shows the code and the page where he enters it.
+        step("b", &[Act::Type("with a code"), Act::Key("Enter")], "Enter the code there"),
+        // The page opens, he enters the code there, and the models of his account join the list.
+        step("c", &[Act::Key("Enter")], "Codex is connected"),
         // A model of Codex taken in the list that stays open, for the new session, which its first
-        // message starts. No message goes, since the model of Codex would ask the network.
-        step("c", &[Act::Type("gpt"), Act::Key("Enter")], "gpt-5.5"),
+        // message starts. No message goes.
+        step("d", &[Act::Type("gpt"), Act::Key("Enter")], "gpt-5.5"),
       ],
     }),
   },

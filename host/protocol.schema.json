@@ -989,7 +989,7 @@
         },
         {
           "type": "object",
-          "description": "The sign-in of codex of the user of the machine, which the daemon answers once it ends: its\nstate is pushed at each change, and once it connects the user config turns codex on, checked\nagainst the catalog of the folder `cwd`, each life stands again, so each project offers its\nmodels, and the answer gives the models that the catalog of `cwd` offers then. A sign-in from a `device`, for a window on another machine, gives a code that the\noperator enters on a page in the browser of any device; else the page of the sign-in calls\nback the machine of the daemon.",
+          "description": "The sign-in of codex of the user of the machine, which the daemon answers once it ends: its\nstate is pushed at each change, and once it connects the user config turns codex on, checked\nagainst the catalog of the folder `cwd`, each life stands again, so each project offers its\nmodels, and the answer gives the models that the catalog of `cwd` offers then. A sign-in from\na `device` gives a code that the operator enters on a page in the browser of any device; else\nthe page of the sign-in calls back the machine of the daemon, so a window on another machine\nasks a sign-in from a device.",
           "properties": {
             "cwd": {
               "type": [

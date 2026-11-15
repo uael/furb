@@ -486,9 +486,10 @@ class Request42(TypedDict):
   The sign-in of codex of the user of the machine, which the daemon answers once it ends: its
   state is pushed at each change, and once it connects the user config turns codex on, checked
   against the catalog of the folder `cwd`, each life stands again, so each project offers its
-  models, and the answer gives the models that the catalog of `cwd` offers then. A sign-in from a `device`, for a window on another machine, gives a code that the
-  operator enters on a page in the browser of any device; else the page of the sign-in calls
-  back the machine of the daemon.
+  models, and the answer gives the models that the catalog of `cwd` offers then. A sign-in from
+  a `device` gives a code that the operator enters on a page in the browser of any device; else
+  the page of the sign-in calls back the machine of the daemon, so a window on another machine
+  asks a sign-in from a device.
   """
 
   id: int

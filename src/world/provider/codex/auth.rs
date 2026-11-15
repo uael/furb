@@ -35,8 +35,11 @@ use tokio::time;
 
 /// The provider of models paid for by a `ChatGPT` subscription.
 pub const NAME: &str = "codex";
-pub(super) const API: &str = "https://chatgpt.com/backend-api/codex";
+const API: &str = "https://chatgpt.com/backend-api/codex";
 const AUTH: &str = "https://auth.openai.com";
+/// The address of a host that stands in for `OpenAI`, as one that a capture of the window serves:
+/// the sign-in at its root and the API of Codex under `/backend-api/codex`.
+const STAND_IN: &str = "FURB_OPENAI_URL";
 const CLIENT: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const REDIRECT: &str = "http://localhost:1455/auth/callback";
 /// The page where a person enters the code of a sign-in from a device, and the callback that the
@@ -467,7 +470,7 @@ async fn token(fields: &[(&str, &str)]) -> Result<Token, AuthError> {
     .extend_pairs(fields.iter().copied())
     .finish();
   let response = ReqwestClient::new()
-    .post(format!("{AUTH}/oauth/token"))
+    .post(format!("{}/oauth/token", issuer()))
     .timeout(Duration::from_secs(20))
     .header("content-type", "application/x-www-form-urlencoded")
     .body(body)
@@ -481,7 +484,7 @@ async fn token(fields: &[(&str, &str)]) -> Result<Token, AuthError> {
 
 async fn listed(path: &Path, credential: &Credential) -> Result<(), AuthError> {
   let response = ReqwestClient::new()
-    .get(format!("{API}/models?client_version={CLIENT_VERSION}"))
+    .get(format!("{}/models?client_version={CLIENT_VERSION}", api()))
     .bearer_auth(&credential.access)
     .header("chatgpt-account-id", &credential.account)
     .header("originator", "furb")
@@ -552,7 +555,7 @@ fn authorize() -> Result<(String, Pending), AuthError> {
   let verifier = random()?;
   let state = random()?;
   let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-  let mut url = url::Url::parse(&format!("{AUTH}/oauth/authorize"))?;
+  let mut url = url::Url::parse(&format!("{}/oauth/authorize", issuer()))?;
   url.query_pairs_mut().extend_pairs([
     ("response_type", "code"),
     ("client_id", CLIENT),
@@ -589,8 +592,9 @@ async fn signed(
           (callback_code(listener, &state, canceled.clone()).await?, verifier, REDIRECT.to_owned())
         }
         Pending::Device => {
-          let device = device_code(AUTH, path, canceled).await?;
-          (device.authorization_code, device.code_verifier, format!("{AUTH}{DEVICE_REDIRECT}"))
+          let issuer = issuer();
+          let device = device_code(&issuer, path, canceled).await?;
+          (device.authorization_code, device.code_verifier, format!("{issuer}{DEVICE_REDIRECT}"))
         }
       };
       let token = token(&[
@@ -739,6 +743,16 @@ async fn device_code(
       _ = canceled.wait_for(|one| *one) => return Err(AuthError::Ended),
     }
   }
+}
+
+/// The issuer of the sign-in: `OpenAI`, or the host that stands in for it.
+fn issuer() -> String {
+  env::var(STAND_IN).unwrap_or_else(|_| AUTH.to_owned())
+}
+
+/// The API of Codex: that of `OpenAI`, or that of the host that stands in for it.
+pub(super) fn api() -> String {
+  env::var(STAND_IN).map_or_else(|_| API.to_owned(), |one| format!("{one}/backend-api/codex"))
 }
 
 /// A JSON body posted to an address of the sign-in.

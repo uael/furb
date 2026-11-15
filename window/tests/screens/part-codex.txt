@@ -15,7 +15,7 @@
     ▌Open the sign-in page again  sign in there
      Cancel the sign-in  keep the models as they are
 
-    ↑↓ move · ⏎ take it · ⎋ close
+    ↑↓ move · ⏎ open the page · ⎋ close
 
   with opus at high effort.
 

@@ -100,8 +100,9 @@ pub(crate) enum Choice {
   /// A skill, by its place among the skills of the session: one with code turns on or off, and the
   /// draft adds the mention of one with none.
   Skill(usize),
-  /// The sign-in of Codex, which starts for the session that the input sends to.
-  SignIn,
+  /// The sign-in of Codex on the machine that the input sends to, in the browser of this computer
+  /// or from any device with a code.
+  SignIn(bool),
   /// The sign-in of Codex that runs, canceled.
   CancelSignIn,
   /// An address, which opens in the browser.
@@ -569,32 +570,46 @@ impl Model {
     entries
   }
 
-  /// The rows of the sign-in of Codex, while the machine offers no model of it: the sign-in, then
-  /// while it runs its page again, with the code to enter there when the machine gave one, and its
-  /// cancel.
+  /// The rows of the sign-in of Codex, while the machine offers no model of it: the sign-in in the
+  /// browser of this computer and the one from any device with a code, then while one runs its
+  /// page, the code to enter there in the hue of the choices when the machine gave one, and its
+  /// cancel. The page of a sign-in in the browser calls back the machine that runs it, so another
+  /// machine offers only the code.
   fn sign_in_rows(&self) -> Vec<Entry> {
     let row = |left: &str, says: &str, choice| Entry {
       part: "Codex".into(),
       left: left.to_owned(),
-      says: format!("  {says}"),
+      says: if says.is_empty() { String::new() } else { format!("  {says}") },
       choice,
       ..Entry::default()
     };
     let Some(signing) = self.client.signing.as_ref() else {
-      return vec![row("Sign in with ChatGPT", "your ChatGPT plan, no key", Choice::SignIn)];
+      // What each sign-in says stands in one column, as what each model holds.
+      let code = row("Sign in with a code ", "from any device", Choice::SignIn(true));
+      if self.client.target().machine() != 0 {
+        return vec![code];
+      }
+      let browser = row("Sign in with ChatGPT", "your ChatGPT plan, no key", Choice::SignIn(false));
+      return vec![browser, code];
     };
-    let waits = match (&signing.url, &signing.code, signing.state.as_deref()) {
+    let mut rows = match (&signing.url, &signing.code, signing.state.as_deref()) {
       (Some(url), Some(code), _) => {
-        let page = url.trim_start_matches("https://");
-        row(&format!("Enter the code {code}"), &format!("at {page}"), Choice::Link(url.clone()))
+        let page = url.split_once("://").map_or(url.as_str(), |(_, page)| page);
+        let entered = Entry {
+          right: code.clone(),
+          tone: Some(self.tokens.accent),
+          ..row("Enter the code there", "", Choice::None)
+        };
+        vec![row(&format!("Open {page}"), "", Choice::Link(url.clone())), entered]
       }
       (Some(url), None, _) => {
-        row("Open the sign-in page again", "sign in there", Choice::Link(url.clone()))
+        vec![row("Open the sign-in page again", "sign in there", Choice::Link(url.clone()))]
       }
-      (None, _, Some("connecting")) => row("Connecting to ChatGPT", "", Choice::None),
-      (None, ..) => row("Starting the sign-in", "", Choice::None),
+      (None, _, Some("connecting")) => vec![row("Connecting to ChatGPT", "", Choice::None)],
+      (None, ..) => vec![row("Starting the sign-in", "", Choice::None)],
     };
-    vec![waits, row("Cancel the sign-in", "keep the models as they are", Choice::CancelSignIn)]
+    rows.push(row("Cancel the sign-in", "keep the models as they are", Choice::CancelSignIn));
+    rows
   }
 
   /// The chosen row moved by a count of rows on the screen, within the rows that pass the filter.
@@ -663,8 +678,8 @@ impl Model {
           self.client.added(&mention);
         }
       }
-      Choice::SignIn => {
-        self.client.sign_in();
+      Choice::SignIn(device) => {
+        self.client.sign_in(device);
         self.sign_in_shown(of);
       }
       Choice::CancelSignIn => {
@@ -837,6 +852,7 @@ impl Model {
   /// model is taken for what the input sends to: its session, or the new session.
   fn foot(&self, picker: &Picker, chosen: Option<&Entry>) -> String {
     let model = chosen.is_some_and(|one| matches!(one.choice, Choice::Actor(_)));
+    let link = chosen.is_some_and(|one| matches!(one.choice, Choice::Link(_)));
     let scope = match self.client.target() {
       _ if !model => "",
       Target::New(..) => " for the new session",
@@ -846,7 +862,7 @@ impl Model {
       "{} move · {} {}{scope} · {} close",
       [Does::Up, Does::Down].map(|one| self.key(one)).join(""),
       self.key(Does::Send),
-      picker.of.takes(),
+      if link { "open the page" } else { picker.of.takes() },
       self.key(Does::Close),
     )
   }

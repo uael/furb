@@ -30,6 +30,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::{
   cast::{Cast, Event, What},
   error::Error,
+  openai,
   replay::put,
   scenario::{Act, Size, Step, Walk},
 };
@@ -58,10 +59,11 @@ done | "$here/answers" "$@"
 /// The usage of each request of a capture: 31,840 tokens read, 24,600 of them from the cache.
 const USAGE: &str = r#"{"input_tokens":1340,"output_tokens":420,"cache_read_input_tokens":24600,"cache_creation_input_tokens":5900}"#;
 
-/// The credential of Codex of the user of a capture, whose account is a claim of its access token,
-/// which is no signed token here, and the models of its account.
-const CODEX: &str = r#"{"access":"e30.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjdCJ9fQ.s","refresh":"r","expires":4000000000000,"account":"acct"}"#;
-const CODEX_MODELS: &str = r#"[{"slug":"gpt-5.5","context_window":400000,"visibility":"list","supported_reasoning_levels":[{"effort":"medium"},{"effort":"high"}],"input_modalities":["text","image"]}]"#;
+/// The browser of a capture, which opens a page of the stand-in of `OpenAI` as a person who signs
+/// in there, and no other page.
+const BROWSER: &str = r#"#!/bin/sh
+case $1 in "$FURB_OPENAI_URL"/*) exec curl -s -o /dev/null "$1" ;; esac
+"#;
 
 /// The text of the empty input, which a window shows once it is ready for a walk.
 pub(crate) const READY: &str = "Ask for a change";
@@ -103,7 +105,8 @@ pub(crate) async fn capture(
   root: &Path,
 ) -> Result<Captured, Error> {
   let _turn = turn(root).await?;
-  let rig = Rig::made(walk, programs, root)?;
+  let openai = openai::served().await?;
+  let rig = Rig::made(walk, programs, root, &openai.url)?;
   let captured = rig.captured(walk, size).await;
   let removed = fs::remove_dir_all(&rig.root);
   let captured = captured?;
@@ -170,12 +173,13 @@ struct Rig {
   root: PathBuf,
   bin: PathBuf,
   moving: bool,
+  openai: String,
 }
 
 impl Rig {
   /// The rig in a new folder. Its path is the real one, as the window reads its own folder, so the
   /// window finds its project under the home and writes it `~/demo`.
-  fn made(walk: &Walk, programs: &Programs, root: &Path) -> Result<Self, Error> {
+  fn made(walk: &Walk, programs: &Programs, root: &Path, openai: &str) -> Result<Self, Error> {
     let made = |source| Error::Write { path: root.to_owned(), source };
     // A capture that was killed leaves its root.
     if root.exists() {
@@ -183,7 +187,12 @@ impl Rig {
     }
     fs::create_dir_all(root).map_err(made)?;
     let root = &fs::canonicalize(root).map_err(made)?;
-    let rig = Self { root: root.clone(), bin: programs.bin.clone(), moving: programs.moving };
+    let rig = Self {
+      root: root.clone(),
+      bin: programs.bin.clone(),
+      moving: programs.moving,
+      openai: openai.to_owned(),
+    };
     let write = |path: PathBuf, text: &str| -> Result<(), Error> {
       fs::create_dir_all(path.parent().unwrap_or(root))
         .map_err(|source| Error::Write { path: path.clone(), source })?;
@@ -197,12 +206,8 @@ impl Rig {
     write(root.join("config/config.json"), r#"{"skills": {"naming": false}}"#)?;
     let listed = serde_json::json!({ "workspaces": [{ "directory": rig.project() }] });
     write(root.join("config/workspaces.json"), &listed.to_string())?;
-    // The account of Codex of the user serves, with a new list of its models, so a sign-in from
-    // the models connects at once and no request goes out. Codex stays off until a sign-in.
-    write(root.join("config/auth/codex.json"), CODEX)?;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
-    let models = format!(r#"{{"account":"acct","fetched":{now},"models":{CODEX_MODELS}}}"#);
-    write(root.join("config/auth/codex.models.json"), &models)?;
+    write(root.join("fake/browser"), BROWSER)?;
+    executable(&root.join("fake/browser"))?;
     if walk.pace.is_empty() {
       write(rig.claude(), CLAUDE)?;
     } else {
@@ -316,7 +321,8 @@ impl Rig {
       ("FURB_CONFIG_DIR", at("config")),
       ("FURB_CLAUDE_BIN", self.claude().display().to_string()),
       // A click on a link opens no page in front of the person at this machine.
-      ("BROWSER", "true".to_owned()),
+      ("BROWSER", at("fake/browser")),
+      ("FURB_OPENAI_URL", self.openai.clone()),
     ];
     environment.extend(still);
     environment
