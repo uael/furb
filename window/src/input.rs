@@ -711,22 +711,18 @@ impl Model {
   /// of the last session of its project, as it reads its skills, and a project with no session on
   /// the default actor of the catalog of its machine.
   pub(crate) fn actor(&self) -> Option<(String, Option<String>)> {
-    // An actor names its effort after its last slash.
-    let leveled = |actor: &str| {
-      let (name, effort) =
-        actor.rsplit_once('/').map_or((actor, None), |(one, two)| (one, Some(two)));
-      (name.to_owned(), effort.map(str::to_owned))
-    };
     let target = self.client.target();
     if let Some(chosen) = self.client.chosen.as_ref().filter(|one| one.aims(&target)) {
       return Some(leveled(&chosen.actor));
     }
     let (at, life) = match target {
       Target::Thread(key) => {
-        let opened = self.client.thread.as_ref()?;
         // A word of Python that the operator ran on the thread asked no model, so the model of the
-        // thread is the one of the last block that a model wrote.
-        let blocks = opened.thread.exchanges.values().rev().filter_map(|one| one.block.as_ref());
+        // thread is the one of the last block that a model wrote. A thread whose page has not come
+        // yet stands on the model of its session.
+        let opened = self.client.thread.iter().filter(|one| one.thread.key == key);
+        let exchanges = opened.flat_map(|one| one.thread.exchanges.values().rev());
+        let blocks = exchanges.filter_map(|one| one.block.as_ref());
         let model = blocks.map(|one| &one.maker).find_map(|maker| match maker {
           Maker::Model { model, effort } => Some((model.clone(), effort.clone())),
           _ => None,
@@ -737,29 +733,56 @@ impl Model {
         (key.0, key.1)
       }
       Target::Session(at, life) => (at, life),
-      Target::New(at, folder) => {
-        let told = self.client.machines.get(at)?;
-        let here = named(&folder);
-        let mut ours = told.cards.iter().rev().filter(|card| project(card) == here);
-        let offered = told.models.as_deref().unwrap_or_default();
-        // A card names the model of its thread with no effort, and a new session on that model
-        // stands on its default effort, which the catalog of the machine gives.
-        let effort = |model: &str| {
-          let same =
-            |one: &&Offered| one.name == model || one.name.rsplit(':').next() == Some(model);
-          offered.iter().find(same).and_then(|one| one.effort.clone())
-        };
-        let last = ours.find_map(|card| card.thread.model.as_deref()).map(leveled);
-        let last = last.map(|(model, chosen)| {
-          let effort = chosen.or_else(|| effort(&model));
-          (model, effort)
-        });
-        return last.or_else(|| offered.first().map(|one| (one.name.clone(), one.effort.clone())));
-      }
+      Target::New(at, folder) => return self.opens_on(at, &folder),
     };
     let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     let mut ours = cards.iter().rev().filter(|card| card.life == life);
-    ours.find_map(|card| card.thread.model.as_deref()).map(leveled)
+    let named = ours.find_map(|card| card.thread.model.as_deref()).map(leveled);
+    // A life that the window opens names no model before its first answer: it stands on the actor
+    // that he chose for it, else on the one that a new session of its folder takes.
+    let hold = self.client.holds.get(&(at, life));
+    let opened_on = || {
+      let hold = hold?;
+      hold.actor.as_deref().map(leveled).or_else(|| self.opens_on(at, hold.cwd.as_deref()?))
+    };
+    // A card names the model of its thread with no effort: the life stands on the effort that it
+    // opened on, else on the default effort of that model.
+    let effort = |model: &str| {
+      let opened = opened_on().filter(|one| one.0 == model).and_then(|one| one.1);
+      opened.or_else(|| self.default_effort(at, model))
+    };
+    match named {
+      Some((model, None)) => {
+        let effort = effort(&model);
+        Some((model, effort))
+      }
+      Some(named) => Some(named),
+      None => opened_on(),
+    }
+  }
+
+  /// The effort that a model of the catalog of a machine takes when none is named.
+  fn default_effort(&self, at: usize, model: &str) -> Option<String> {
+    let offered = self.client.machines.get(at)?.models.as_deref().unwrap_or_default();
+    let same = |one: &&Offered| one.name == model || one.name.rsplit(':').next() == Some(model);
+    offered.iter().find(same).and_then(|one| one.effort.clone())
+  }
+
+  /// The actor that a new session of a folder of a machine opens on: the model of the last
+  /// session of its project, else the default actor of the catalog of the machine.
+  fn opens_on(&self, at: usize, folder: &str) -> Option<(String, Option<String>)> {
+    let told = self.client.machines.get(at)?;
+    let here = named(folder);
+    let mut ours = told.cards.iter().rev().filter(|card| project(card) == here);
+    let offered = told.models.as_deref().unwrap_or_default();
+    // A card names the model of its thread with no effort, and a new session on that model
+    // stands on its default effort, which the catalog of the machine gives.
+    let last = ours.find_map(|card| card.thread.model.as_deref()).map(leveled);
+    let last = last.map(|(model, chosen)| {
+      let effort = chosen.or_else(|| self.default_effort(at, &model));
+      (model, effort)
+    });
+    last.or_else(|| offered.first().map(|one| (one.name.clone(), one.effort.clone())))
   }
 
   /// The model of the target of the input at its next effort, from the least again after the
@@ -992,4 +1015,10 @@ fn branched(line: &Line) -> Option<Hot> {
   let at = line.iter().position(|one| one.content.contains(BRANCH))?;
   let at = &columns(line)[at];
   Some((at.start + " · ".width()..at.end, Some(Click::Key(Does::Changes))))
+}
+
+/// An actor as its model and its effort, which it names after its last slash.
+fn leveled(actor: &str) -> (String, Option<String>) {
+  let (name, effort) = actor.rsplit_once('/').map_or((actor, None), |(one, two)| (one, Some(two)));
+  (name.to_owned(), effort.map(str::to_owned))
 }
