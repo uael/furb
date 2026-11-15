@@ -41,7 +41,8 @@ pub(crate) fn clean(
 }
 
 /// The folder of the scratch directories of the records, where the crate puts it: `scratch` in the
-/// cache of furb that `cache` of `src/world.rs` names.
+/// cache of furb. The other home of this path is `cache` of `src/world.rs`: xtask does not build
+/// the crate furb, so a change of one changes the other.
 fn machine() -> Option<PathBuf> {
   let named = |name: &str| env::var_os(name).filter(|one| !one.is_empty()).map(PathBuf::from);
   let base = named("XDG_CACHE_HOME").or_else(|| {

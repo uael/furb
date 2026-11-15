@@ -139,8 +139,10 @@ pub(crate) fn resolved(directory: &Path, path: &str) -> PathBuf {
   out
 }
 
-/// The cache of furb on this machine: under `XDG_CACHE_HOME`, `LOCALAPPDATA` on Windows, `Library/Caches` of the
-/// home on macOS, and `.cache` of the home elsewhere.
+/// The cache of furb on this machine: under `XDG_CACHE_HOME`, `LOCALAPPDATA` on Windows,
+/// `Library/Caches` of the home on macOS, and `.cache` of the home elsewhere. `machine` of
+/// `xtask/src/caches.rs` holds the same path, since xtask does not build this crate: a change of
+/// one changes the other.
 pub fn cache() -> Option<PathBuf> {
   let named = |name: &str| env::var_os(name).filter(|one| !one.is_empty()).map(PathBuf::from);
   let base = named("XDG_CACHE_HOME").or_else(|| {

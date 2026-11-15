@@ -107,6 +107,8 @@ enum Fault {
     "this machine has no folder of caches: name the folder of the scratch directories with --scratch"
   )]
   NoCache,
+  #[error("{} has the name of the task {name}: move it into the task, or rename it", path.display())]
+  Clash { name: String, path: PathBuf },
 }
 
 /// A script of `script/` that runs on its own, as a task.
@@ -131,7 +133,12 @@ fn main() -> ExitCode {
 fn run() -> Result<ExitCode, Fault> {
   let root = root();
   let scripts = scripts(&root)?;
-  let command = scripts.iter().fold(Xtask::command(), |command, script| {
+  let tasks = Xtask::command();
+  if let Some(script) = scripts.iter().find(|script| tasks.find_subcommand(&script.name).is_some())
+  {
+    return Err(Fault::Clash { name: script.name.clone(), path: script.path.clone() });
+  }
+  let command = scripts.iter().fold(tasks, |command, script| {
     command.subcommand(
       Command::new(script.name.clone())
         .about(script.about.clone())
