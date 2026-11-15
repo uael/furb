@@ -54,6 +54,7 @@ pub(crate) enum Does {
   History,
   Model,
   Effort,
+  Changes,
 }
 
 /// One stroke of a key: whether it holds control and alt, and its key.
@@ -159,6 +160,7 @@ const INPUT: &[Bound] = &[
   bound(Does::History, "search what you sent here", Some("history"), &[&[ctrl('r')]]),
   bound(Does::Model, "the model of the input", Some("model"), &[&led('m')]),
   bound(Does::Effort, "the next effort of the model", Some("effort"), &[&led('e')]),
+  bound(Does::Changes, "the changes of the project and their diff", Some("changes"), &[&led('g')]),
   bound(
     Does::Take,
     "take the grey rest of what you sent",

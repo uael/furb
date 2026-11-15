@@ -74,6 +74,7 @@ use crate::{
   changes,
   error::{DaemonError, LifeError, ProtocolError, TransportError},
   event::{Event, Seq},
+  git,
   holders::{Holders, Window},
   life::{Command, Life, LifeHandle, Reply},
   opens::{self, Heard},
@@ -786,6 +787,13 @@ async fn models(opening: Opening, reply: Replied) {
   reply.send(answer).ok();
 }
 
+/// The changes of the checkout that holds a folder, with the diff of a file when the peer named
+/// one, told to the peer that asked, with why git did not give them.
+async fn git_changes(folder: PathBuf, path: Option<String>, reply: Replied) {
+  let changes = git::changes(&folder, path.as_deref()).await;
+  reply.send(changes.map(Answer::Changes).map_err(|why| ProtocolError::Refused { why })).ok();
+}
+
 /// How many files of a folder the daemon gives at most, so the walk of a folder as large as a disk
 /// ends in a moment.
 const FILES: usize = 20_000;
@@ -1032,6 +1040,7 @@ impl Lives {
     }
   }
 
+  #[expect(clippy::too_many_lines, reason = "the match gives each verb of the daemon its arm")]
   fn verb(&mut self, peer: Peer, verb: Verb, outbox: &Outbox, reply: Replied) {
     let answer = match verb {
       Verb::Open { life, cwd, actor, roster, skills, config, claude, answers, attach } => {
@@ -1049,6 +1058,10 @@ impl Lives {
       }
       Verb::Files { cwd } => {
         tokio::spawn(files(changes::homed(&cwd), reply));
+        return;
+      }
+      Verb::Changes { cwd, path } => {
+        tokio::spawn(git_changes(changes::homed(&cwd), path, reply));
         return;
       }
       Verb::Cards => Ok(Answer::Cards(self.cards(outbox))),

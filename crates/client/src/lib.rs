@@ -6,6 +6,7 @@
 //! thread that the operator reads and the input, with its target and its history, so each client
 //! maps the same state.
 
+mod changes;
 mod complete;
 mod history;
 mod input;
@@ -23,6 +24,7 @@ use std::{
 
 use furb_wire::{Part, protocol::Card};
 
+pub use changes::{Review, Seen};
 pub use complete::{Completed, Completes, Completion, Kind, Offer};
 pub use history::{History, Walk};
 pub use input::Draft;
@@ -64,6 +66,8 @@ pub struct Client {
   pub completion: Option<Completion>,
   /// The commands that a slash at the start of a message offers, which a client gives.
   pub commands: Vec<Offer>,
+  /// The review of the changes of a project, while the operator reads it.
+  pub review: Option<Review>,
   /// What the last thing that the operator did did not do, and why, until the next one.
   pub notice: Option<String>,
   /// The millisecond of the clock of the machine of the client.

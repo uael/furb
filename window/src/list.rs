@@ -237,7 +237,9 @@ impl Model {
     let named =
       card.session.as_ref().filter(|name| **name != card.thread.title && !name.is_empty());
     let session = named.map(|name| format!(" · {name}")).unwrap_or_default();
-    let place = format!("{project}{machine}{session}");
+    let changes = card.project.as_deref().and_then(|folder| self.client.changes(key.0, folder));
+    let branch = changes.and_then(|one| one.branch.as_deref()).map(|one| format!(" · ⎇ {one}"));
+    let place = format!("{project}{machine}{}{session}", branch.unwrap_or_default());
     let badge = self.badge(&project);
     let badge = run(badge.content, on(badge.style));
     let left = vec![badge, run(" ", on(Style::new())), run(place, on(t.style(Role::Muted)))];
@@ -247,7 +249,8 @@ impl Model {
     let model = card.thread.model.as_deref().and_then(|model| model.rsplit(':').next());
     let agents = (card.thread.agents > 0).then(|| format!("└{}", card.thread.agents));
     let alone = self.unheld(key.0, card).then(|| "◌".to_owned());
-    let marks = [model.map(str::to_owned), agents, alone];
+    let files = changes.map(|one| one.files.len()).filter(|count| *count > 0);
+    let marks = [files.map(|count| format!("±{count}")), model.map(str::to_owned), agents, alone];
     let marks = marks.into_iter().flatten().collect::<Vec<_>>().join(" ");
     let right =
       [initials.join(" "), marks].into_iter().filter(|one| !one.is_empty()).collect::<Vec<_>>();

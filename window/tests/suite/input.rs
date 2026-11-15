@@ -6,6 +6,7 @@
 use std::{
   fs,
   path::{Path, PathBuf},
+  process::Command,
   time::Duration,
 };
 
@@ -478,6 +479,33 @@ fn a_mention_offers_the_files_of_the_project_and_takes_one_by_its_path() {
   app.press("tab");
   shows(&app, "look at @src/deep/storage.py");
   assert!(!app.text().contains("Files of furb-try"), "{}", app.text());
+}
+
+#[test]
+fn the_review_lists_the_changed_files_of_the_project_and_shows_the_diff_of_each() {
+  let (app, daemon, _) = started();
+  let project = daemon.file("furb-try");
+  let git = |args: &[&str]| {
+    let done = Command::new("git").arg("-C").arg(&project).args(args).status().unwrap();
+    assert!(done.success(), "git {args:?}");
+  };
+  fs::write(project.join("a.py"), "one = 1\n").unwrap();
+  git(&["init", "-q", "-b", "trunk"]);
+  git(&["add", "a.py"]);
+  git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a"]);
+  fs::write(project.join("a.py"), "one = 2\n").unwrap();
+  fs::write(project.join("b.py"), "two = 2\n").unwrap();
+  app.press("ctrl+x");
+  app.press("g");
+  let shown = shows(&app, "one = 2");
+  assert!(shown.contains("Changes of furb-try · ⎇ trunk  2 files"), "{shown}");
+  assert!(shown.contains("M a.py"), "{shown}");
+  assert!(shown.contains("? b.py"), "{shown}");
+  app.press("down");
+  shows(&app, "two = 2");
+  app.press("escape");
+  let gone = app.wait_until(PATIENCE, || !app.text().contains("Changes of furb-try"));
+  assert!(gone, "{}", app.text());
 }
 
 #[test]

@@ -754,7 +754,8 @@ impl Model {
     (vec![run(working, Style::new().fg(t.accent)), run(stop, t.style(Role::Muted))], loader)
   }
 
-  /// Where the input runs: the machine and the folder, or the folder alone.
+  /// Where the input runs: the machine and the folder, or the folder alone, and the branch of its
+  /// checkout with the count of the files that differ from its last commit.
   fn place(&self, machine: bool) -> Line {
     let at = match self.client.target() {
       Target::Thread(key) => key.0,
@@ -766,7 +767,12 @@ impl Model {
     } else {
       format!("  {}", self.folder_shown())
     };
-    vec![run(text, self.tokens.style(Role::Muted))]
+    let branch = self.client.target_folder().and_then(|(at, folder)| {
+      let changes = self.client.changes(at, &folder)?;
+      let count = (!changes.files.is_empty()).then(|| format!(" ±{}", changes.files.len()));
+      Some(format!(" · ⎇ {}{}", changes.branch.as_deref()?, count.unwrap_or_default()))
+    });
+    vec![run(format!("{text}{}", branch.unwrap_or_default()), self.tokens.style(Role::Muted))]
   }
 
   /// The hints of the word that the window ran, in a room of columns: a mark that moves while it

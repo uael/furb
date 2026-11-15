@@ -15,8 +15,8 @@ use opentui::{
   App,
   input::KeyEventKind,
   prelude::{
-    Container, Edge, EditorAction, ExtmarkOptions, KeyCode, KeyEvent, Modifiers, MouseButton,
-    MouseEvent, MouseEventKind, Span, Text, Textarea, TimerId, View, Widget, WrapMode,
+    Container, Diff, Edge, EditorAction, ExtmarkOptions, KeyCode, KeyEvent, Modifiers, MouseButton,
+    MouseEvent, MouseEventKind, ScrollBox, Span, Text, Textarea, TimerId, View, Widget, WrapMode,
   },
 };
 
@@ -34,6 +34,7 @@ use crate::{
   model::{Model, Told},
   pick::Pick,
   question::Keyed,
+  review::FILES,
   thread::Spot,
   tokens::{AWAY, Role, SIDE, Tokens},
 };
@@ -83,6 +84,8 @@ struct Window {
   moves: Option<TimerId>,
   /// What asks each machine a verb, in the order of the machines.
   askers: Vec<Asker>,
+  /// The box of the diff of the review of the changes, which the keys of a page scroll.
+  scroll: ScrollBox,
 }
 
 type Shared = Rc<RefCell<Window>>;
@@ -104,8 +107,9 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   model.client.now = (options.clock)();
   model.settle();
   let area = edited(app, &tokens);
+  let scroll = ScrollBox::new(app);
   let window = Window {
-    screen: drawn(app, model, &area),
+    screen: drawn(app, model, &area, &scroll),
     clock: options.clock,
     still: options.still,
     kept: options.kept,
@@ -117,6 +121,7 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
     keeps: false,
     moves: None,
     askers: Vec::new(),
+    scroll,
   };
   let window = Rc::new(RefCell::new(window));
 
@@ -179,7 +184,7 @@ fn edited(app: &App, tokens: &Tokens) -> Textarea {
 
 /// The widgets of the window on a model: the left side, the editor of the input over it, and the
 /// list at its right. Each side is one text, which is written only when a row of it changes.
-fn drawn(app: &App, model: Model, area: &Textarea) -> Screen<Model> {
+fn drawn(app: &App, model: Model, area: &Textarea, scroll: &ScrollBox) -> Screen<Model> {
   let tokens = model.tokens;
   let column = || Text::new(app, "").wrap(WrapMode::None);
   let (home, list) = (column(), column());
@@ -236,7 +241,36 @@ fn drawn(app: &App, model: Model, area: &Textarea) -> Screen<Model> {
   });
   completion(app, &mut screen, &tokens);
   veiled(app, &mut screen, &tokens);
+  reviewed(app, &mut screen, &tokens, scroll);
   screen
+}
+
+/// The review of the changes of a project over the whole window, while one stands: its head, its
+/// files at the left, the diff of the file that he reads at the right in a box that scrolls, and
+/// its foot.
+fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, scroll: &ScrollBox) {
+  let text = || Text::new(app, "").wrap(WrapMode::None);
+  let (head, files, foot) = (text(), text(), text());
+  let diff = Diff::new(app).line_numbers(true);
+  let scroll = scroll.child(&diff);
+  let page = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Left, 0);
+  let page = page.position(Edge::Right, 0).position(Edge::Bottom, 0).bg(tokens.base);
+  let head = head.absolute().position(Edge::Top, 0).position(Edge::Left, 2);
+  let files = files.absolute().position(Edge::Top, 2).position(Edge::Left, 0).width(FILES);
+  let scroll = scroll.absolute().position(Edge::Top, 2).position(Edge::Left, FILES + 1);
+  let scroll = scroll.position(Edge::Right, 1).position(Edge::Bottom, 2);
+  let foot = foot.absolute().position(Edge::Bottom, 0).position(Edge::Left, 2);
+  let page = page.child(&head).child(&files).child(&scroll).child(&foot);
+  app.root().child(&page.z_index(3).visible(false));
+  screen.part(Model::reviewing, move |shown| {
+    page.visible(shown.is_some());
+    if let Some(shown) = shown {
+      head.set_text(shown.head.clone());
+      files.set_text(written(&shown.files));
+      foot.set_text(shown.foot.clone());
+      diff.set_diff(shown.diff.clone()).filetype(shown.kind);
+    }
+  });
 }
 
 /// The panel of the completion of the input, over the feed on the top of the box of the input,
@@ -432,6 +466,11 @@ fn pump(window: &Shared) {
   {
     model.client.asked.insert((at, id), Asked::Say);
   }
+  for (at, verb, asked) in model.client.changes_due() {
+    if let Some(id) = ask(askers, model, at, verb) {
+      model.client.asked.insert((at, id), asked);
+    }
+  }
   if let Some((at, verb, asked)) = model.client.completion_due()
     && let Some(id) = ask(askers, model, at, verb)
   {
@@ -498,7 +537,7 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   if window.borrow().screen.model.picker.is_some() && picking(app, window, key) {
     return true;
   }
-  if completing(app, window, key) {
+  if completing(app, window, key) || looked(app, window, key) {
     return true;
   }
   let does = keys::pressed(key, led);
@@ -598,6 +637,30 @@ fn completing(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   true
 }
 
+/// A key while the review of the changes stands: the arrows read another file, the keys of a page
+/// scroll its diff, escape and the key of the review close it, and it takes each other key, so no
+/// letter goes to the input under it. Whether the review took the key.
+fn looked(app: &App, window: &Shared, key: &KeyEvent) -> bool {
+  if window.borrow().screen.model.client.review.is_none() {
+    return false;
+  }
+  match key.code {
+    KeyCode::Up => tell(app, window, |model| model.client.review_by(-1)),
+    KeyCode::Down => tell(app, window, |model| model.client.review_by(1)),
+    KeyCode::Escape => tell(app, window, |model| model.client.review = None),
+    KeyCode::PageUp | KeyCode::PageDown => {
+      let rows = f64::from(window.borrow().screen.model.size.1.saturating_sub(6));
+      let by = if key.code == KeyCode::PageUp { -rows } else { rows };
+      window.borrow().scroll.scroll_by(0.0, by);
+    }
+    _ if keys::pressed(key, false) == Some(Does::Changes) => {
+      tell(app, window, |model| model.client.review = None);
+    }
+    _ => {}
+  }
+  true
+}
+
 /// A row of the completion taken, at a place or the chosen one: the editor takes the text with
 /// its name and the caret after it, and a command runs. Whether a row was taken.
 fn completed(app: &App, window: &Shared, place: Option<usize>) -> bool {
@@ -663,6 +726,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::History => |model| model.pick(Pick::History),
     Does::Model => |model| model.pick(Pick::Models),
     Does::Effort => Model::effort,
+    Does::Changes => |model| model.client.review(),
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,
     Does::Agent => Model::next_agent,
@@ -833,6 +897,17 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
     });
     if let Some(does) = does {
       act(app, window, does);
+    }
+    return;
+  }
+  if window.borrow().screen.model.client.review.is_some() {
+    let file = window.borrow().screen.model.review_at(event.x, event.y);
+    if let (Some(file), MouseEventKind::Down(MouseButton::Left)) = (file, event.kind) {
+      tell(app, window, |model| {
+        if let Some(review) = model.client.review.as_mut() {
+          review.chosen = file;
+        }
+      });
     }
     return;
   }

@@ -3102,3 +3102,38 @@ async fn the_daemon_tells_how_far_the_index_of_a_record_stands_before_its_cards(
   assert!(steps.iter().all(|(_, of)| *of == 1000), "{steps:?}");
   assert_eq!(steps.last(), Some(&(1000, 1000)));
 }
+
+#[tokio::test]
+async fn the_changes_of_a_checkout_give_its_branch_its_files_with_their_counts_and_a_diff() {
+  use furb_host::protocol::{Change, Changed, Changes};
+  let at = place();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let folder = at.join("project");
+  fs::create_dir_all(&folder).unwrap();
+  let git = |args: &[&str]| {
+    let done = process::Command::new("git").arg("-C").arg(&folder).args(args).output();
+    assert!(done.unwrap().status.success(), "git {args:?}");
+  };
+  git(&["init", "-q", "-b", "trunk"]);
+  fs::write(folder.join("a.txt"), "one\ntwo\n").unwrap();
+  git(&["add", "a.txt"]);
+  git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a"]);
+  fs::write(folder.join("a.txt"), "one\n2\nthree\n").unwrap();
+  fs::write(folder.join("b.txt"), "new\n").unwrap();
+  let cwd = folder.display().to_string();
+  let asked = window.ask(Verb::Changes { cwd: cwd.clone(), path: Some("b.txt".to_owned()) }).await;
+  let Ok(Answer::Changes(Changes { branch, files, diff })) = asked else { panic!("{asked:?}") };
+  let file =
+    |path: &str, added, removed, state| Changed { path: path.to_owned(), added, removed, state };
+  assert_eq!(branch.as_deref(), Some("trunk"));
+  assert_eq!(
+    files,
+    [file("a.txt", 2, 1, Change::Modified), file("b.txt", 1, 0, Change::Untracked)]
+  );
+  assert!(diff.is_some_and(|one| one.contains("+new")), "the diff adds the new file whole");
+  let elsewhere = at.join("nowhere");
+  fs::create_dir_all(&elsewhere).unwrap();
+  let none = Verb::Changes { cwd: elsewhere.display().to_string(), path: None };
+  assert_eq!(window.ask(none).await, Ok(Answer::Changes(Changes::default())));
+}

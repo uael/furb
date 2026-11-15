@@ -111,6 +111,26 @@ const PROJECT: [(&str, &str); 8] = [
   ("tests/test_storage.py", "def test_save():\n  pass\n"),
 ];
 
+/// The project made a checkout of git on the branch `main`, whose files stand in its first commit,
+/// so the window names its branch and a change of the model shows as a change of the checkout.
+fn committed(project: &Path) -> Result<(), Error> {
+  let user = ["-c", "user.name=furb", "-c", "user.email=frames@furb.local"];
+  let steps: [&[&str]; 3] = [
+    &["init", "-q", "-b", "main"],
+    &["add", "-A"],
+    &[&user[..], &["commit", "-q", "-m", "demo"]].concat(),
+  ];
+  for args in steps {
+    let done = process::Command::new("git").arg("-C").arg(project).args(args).status();
+    let fine = done.map_err(|source| Error::Process { what: "git", source })?.success();
+    if !fine {
+      let source = io::Error::other(format!("git {} failed", args.join(" ")));
+      return Err(Error::Process { what: "git", source });
+    }
+  }
+  Ok(())
+}
+
 /// The folders of a capture: the home of the operator with the project of the window, the cache
 /// of furb, its config, and the claude command line with its words.
 struct Rig {
@@ -139,6 +159,7 @@ impl Rig {
     for (path, text) in PROJECT {
       write(rig.project().join(path), text)?;
     }
+    committed(&rig.project())?;
     write(root.join("config/config.json"), r#"{"skills": {"naming": false}}"#)?;
     let listed = serde_json::json!({ "workspaces": [{ "directory": rig.project() }] });
     write(root.join("config/workspaces.json"), &listed.to_string())?;

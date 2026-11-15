@@ -194,7 +194,8 @@ impl Model {
         | Asked::Back(_)
         | Asked::History(_)
         | Asked::Skills(_)
-        | Asked::Files(_),
+        | Asked::Files(_)
+        | Asked::Changes(..),
         Ok(Frame::Refused { why, .. }),
       ) => self.fault = Some(why),
       (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {
@@ -213,7 +214,10 @@ impl Model {
       (Asked::History(target), Ok(Frame::Reply { answer: Answer::History(sent), .. })) => {
         self.client.historied(&target, sent);
       }
-      (asked @ (Asked::Skills(_) | Asked::Files(_)), Ok(Frame::Reply { answer, .. })) => {
+      (
+        asked @ (Asked::Skills(_) | Asked::Files(_) | Asked::Changes(..)),
+        Ok(Frame::Reply { answer, .. }),
+      ) => {
         self.client.listed_for(at, asked, answer);
       }
       (Asked::Answer, _) => {}

@@ -25,6 +25,11 @@ export type Request1 =
       verb: "files";
     }
   | {
+      cwd: string;
+      path?: string | null;
+      verb: "changes";
+    }
+  | {
       cwd?: string | null;
       config?: string | null;
       claude?: string | null;
@@ -605,6 +610,10 @@ export type Answer =
       data: Files;
     }
   | {
+      answer: "changes";
+      data: Changes;
+    }
+  | {
       answer: "cards";
       data: Card[];
     }
@@ -672,6 +681,10 @@ export type Answer =
       answer: "page";
       data: Page;
     };
+/**
+ * How a file differs from the last commit.
+ */
+export type Change = ("added" | "modified" | "deleted" | "renamed") | "untracked";
 /**
  * How the thread of a card stands. It asks one member by his login, or each operator. A pause
  * names who said it. A thread whose model closed its prompt is resolved, and one that a cancel
@@ -1147,6 +1160,26 @@ export interface Files {
   more: boolean;
 }
 /**
+ * The changes of a checkout of git against its last commit: its branch, none when its head names
+ * no branch, each file that differs, and the diff of the file that the peer named, as git writes
+ * a unified diff, a file that git does not track yet added whole.
+ */
+export interface Changes {
+  branch?: string | null;
+  files: Changed[];
+  diff?: string | null;
+}
+/**
+ * A file of a checkout that differs from the last commit: its path from the top of the checkout,
+ * the lines that it adds and removes, and how it differs.
+ */
+export interface Changed {
+  path: string;
+  added: number;
+  removed: number;
+  state: Change;
+}
+/**
  * A card of the machine: one thread that an operator started, in the record of its session. It
  * holds the name of the session when it has one, the main checkout of the project whose sessions
  * hold the record, when the list of the machine names one, else the checkout whose
@@ -1592,4 +1625,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 43;
+export const PROTOCOL = 44;

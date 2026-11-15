@@ -185,13 +185,14 @@ impl Client {
     })
   }
 
-  /// The answer of a machine to the ask of a list of the completion: the client keeps it, and the
-  /// word matches it again. A refusal keeps nothing.
+  /// The answer of a machine to the ask of a list: the client keeps it, and the word of the
+  /// completion matches it again, or the changes of a folder. A refusal keeps nothing.
   pub fn listed_for(&mut self, at: usize, asked: Asked, answer: Answer) {
     let Some(told) = self.machines.get_mut(at) else { return };
     match (asked, answer) {
       (Asked::Skills(key), Answer::Skills(skills)) => drop(told.skills.insert(key, skills)),
       (Asked::Files(folder), Answer::Files(files)) => drop(told.files.insert(folder, files)),
+      (asked @ Asked::Changes(..), answer) => return self.changed(at, asked, answer),
       _ => return,
     }
     self.refound();

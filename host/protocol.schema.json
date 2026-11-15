@@ -105,6 +105,30 @@
         },
         {
           "type": "object",
+          "description": "The changes of the checkout of git that holds the folder `cwd`, against its last commit: its\nbranch, each file that differs, by its path from the top of the checkout, with the lines that\nit adds and removes, and the diff of the file at `path` when the peer names one. A folder in\nno checkout has no branch and no change.",
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "verb": {
+              "type": "string",
+              "const": "changes"
+            }
+          },
+          "required": [
+            "verb",
+            "cwd"
+          ]
+        },
+        {
+          "type": "object",
           "description": "The models that the catalog of the machine offers to a life in the folder `cwd`, with the\nsettings of the folder `config` and the claude command line at `claude`, each as `open`\ntakes it, with no life: the ones of the daemon when the peer names none.",
           "properties": {
             "cwd": {
@@ -2655,6 +2679,22 @@
           "properties": {
             "answer": {
               "type": "string",
+              "const": "changes"
+            },
+            "data": {
+              "$ref": "#/definitions/Changes"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
               "const": "cards"
             },
             "data": {
@@ -3123,6 +3163,81 @@
         "more"
       ],
       "description": "The closed set of the nodes of a view, which each window draws in its own way.\nThe files of a folder: the path of each from the folder, in the order of a walk by name, and\nwhether more files stand there than the daemon gives."
+    },
+    "Changes": {
+      "type": "object",
+      "properties": {
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Changed"
+          }
+        },
+        "diff": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "description": "The changes of a checkout of git against its last commit: its branch, none when its head names\nno branch, each file that differs, and the diff of the file that the peer named, as git writes\na unified diff, a file that git does not track yet added whole."
+    },
+    "Changed": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "added": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "removed": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "state": {
+          "$ref": "#/definitions/Change"
+        }
+      },
+      "required": [
+        "path",
+        "added",
+        "removed",
+        "state"
+      ],
+      "description": "A file of a checkout that differs from the last commit: its path from the top of the checkout,\nthe lines that it adds and removes, and how it differs."
+    },
+    "Change": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "added",
+            "modified",
+            "deleted",
+            "renamed"
+          ]
+        },
+        {
+          "type": "string",
+          "const": "untracked",
+          "description": "A file that git does not track yet."
+        }
+      ],
+      "description": "How a file differs from the last commit."
     },
     "Card": {
       "type": "object",
@@ -5595,5 +5710,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 43
+  "x-protocol": 44
 }

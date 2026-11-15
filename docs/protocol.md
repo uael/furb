@@ -111,6 +111,7 @@ daemon answers requests in any order.
 | `projects` | `config` | read |
 | `models` | `cwd`, `config`, `claude` | read |
 | `files` | `cwd` | write |
+| `changes` | `cwd`, `path` | read |
 | `cards` | | read |
 | `history` | `life` | read |
 | `skills` | `life` | read |
@@ -205,10 +206,16 @@ daemon answers requests in any order.
 - `files` gives the files of the folder `cwd`, where a `~` at the start names the home of the user of the machine, and of each folder in it, which a mention of the input names: each
   path from `cwd`, with `/` between its parts, dot files too, less what an ignore file of git leaves out, the
   folder `.git` and the records of the sessions of furb in `.furb/sessions`, in the order of a walk by name, at most 20000 of them, and `more` when the folder holds more. It needs no life, and its walk holds back no other verb.
+- `changes` gives the changes of the checkout of git that holds the folder `cwd` against its last commit: its `branch`,
+  none when its head names no branch, each file that differs, by its `path` from the top of the checkout, with the
+  lines that it has `added` and `removed` and its `state` (`added`, `modified`, `deleted`, `renamed`, or `untracked`
+  for a file that git does not track yet), and, when the peer names a `path`, the `diff` of that file as git writes a
+  unified diff, an untracked file added whole. A folder in no checkout has no branch and no change. It needs no life
+  and runs git on the machine.
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
 - An answer is a frame `reply` with the `id`, an `answer` that names its kind, and its `data`: `done`, `welcome`,
-  `lives`, `projects`, `models`, `files`, `act` (the name of the act that the verb made), `value`, `values`, `inspected` or
+  `lives`, `projects`, `models`, `files`, `changes`, `act` (the name of the act that the verb made), `value`, `values`, `inspected` or
   `presence`.
 - A refusal is a frame `refused` with the `id`, or none for a frame that could not be read, the `error` as data, and
   `why`, the text that a person reads.

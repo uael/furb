@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 43;
+pub const PROTOCOL: u32 = 44;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -111,6 +111,15 @@ pub enum Verb {
   /// home of the user of the machine.
   Files {
     cwd: String,
+  },
+  /// The changes of the checkout of git that holds the folder `cwd`, against its last commit: its
+  /// branch, each file that differs, by its path from the top of the checkout, with the lines that
+  /// it adds and removes, and the diff of the file at `path` when the peer names one. A folder in
+  /// no checkout has no branch and no change.
+  Changes {
+    cwd: String,
+    #[serde(default)]
+    path: Option<String>,
   },
   /// The models that the catalog of the machine offers to a life in the folder `cwd`, with the
   /// settings of the folder `config` and the claude command line at `claude`, each as `open`
@@ -446,6 +455,7 @@ pub enum Verb {
 impl Verb {
   /// The record of the life that the verb names, which the daemon reads as its one key. Each verb
   /// is named here, so a new verb says whether it names a record.
+  #[expect(clippy::too_many_lines, reason = "the match names each verb, one on each line")]
   pub fn life_mut(&mut self) -> Option<&mut String> {
     match self {
       Self::Open { life, .. }
@@ -500,6 +510,7 @@ impl Verb {
       | Self::Projects { .. }
       | Self::Models { .. }
       | Self::Files { .. }
+      | Self::Changes { .. }
       | Self::Cards
       | Self::Handover
       | Self::ViewTree(_)
@@ -518,6 +529,7 @@ impl Verb {
         | Self::List { .. }
         | Self::Projects { .. }
         | Self::Models { .. }
+        | Self::Changes { .. }
         | Self::Cards
         | Self::History { .. }
         | Self::Skills { .. }
@@ -660,6 +672,7 @@ pub enum Answer {
   Projects(Vec<Project>),
   Models(Vec<Model>),
   Files(Files),
+  Changes(Changes),
   /// The cards of the machine.
   Cards(Vec<Card>),
   /// What the peer sent, the newest first.
@@ -912,6 +925,39 @@ fn inerts(nodes: Vec<Node>) -> Vec<Node> {
 pub struct Files {
   pub paths: Vec<String>,
   pub more: bool,
+}
+
+/// The changes of a checkout of git against its last commit: its branch, none when its head names
+/// no branch, each file that differs, and the diff of the file that the peer named, as git writes
+/// a unified diff, a file that git does not track yet added whole.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Changes {
+  pub branch: Option<String>,
+  pub files: Vec<Changed>,
+  #[serde(default)]
+  pub diff: Option<String>,
+}
+
+/// A file of a checkout that differs from the last commit: its path from the top of the checkout,
+/// the lines that it adds and removes, and how it differs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Changed {
+  pub path: String,
+  pub added: u32,
+  pub removed: u32,
+  pub state: Change,
+}
+
+/// How a file differs from the last commit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Change {
+  Added,
+  Modified,
+  Deleted,
+  Renamed,
+  /// A file that git does not track yet.
+  Untracked,
 }
 
 /// A project of the machine: its main checkout, the count of the records of its sessions, and the

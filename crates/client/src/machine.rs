@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::Client;
+use crate::{Client, Seen};
 
 /// What a client hears of a machine: a frame of its daemon, or why the connection ended.
 pub type Heard = Result<Frame, String>;
@@ -58,6 +58,9 @@ pub struct Told {
   /// The skills of each life, or of the folder of a new session, as the machine last gave them.
   #[serde(skip)]
   pub skills: HashMap<String, Vec<Skill>>,
+  /// The changes of the checkout of git of each folder that the client asked, by that folder.
+  #[serde(skip)]
+  pub changes: HashMap<String, Seen>,
 }
 
 /// What a frame changed of what a machine told: its cards or its login, nothing that the list
@@ -81,6 +84,9 @@ impl Client {
   /// at the second `now`. A machine whose connection ended hears nothing until its daemon welcomes
   /// the client again, so the first cause of a loss stays.
   pub fn listed(&mut self, at: usize, heard: Heard, now: u64) -> Listing {
+    if let Ok(frame) = &heard {
+      self.staled(at, frame);
+    }
     let told = &mut self.machines[at];
     let welcome = matches!(heard, Ok(Frame::Reply { answer: Answer::Welcome { .. }, .. }));
     if matches!(told.link, Link::Lost(_)) && !welcome {

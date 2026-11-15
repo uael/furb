@@ -29,6 +29,7 @@ mod daemon;
 mod door;
 mod ears;
 mod error;
+mod git;
 mod holders;
 mod kits;
 mod life;

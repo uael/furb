@@ -90,7 +90,8 @@ pub struct Outgoing {
 /// thread, as a stop or a resolve, the take back of a message with its text, the answer to a
 /// question, what the operator saw, the records of the machine, the models of its catalog, its
 /// projects, the end of the rung of a word, the history of the input, or a list that the
-/// completion of the input needs: the skills of a life, or the files of a folder.
+/// completion of the input needs: the skills of a life, or the files of a folder, or the changes
+/// of the checkout of a folder, with the diff of a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Asked {
   Open,
@@ -106,6 +107,7 @@ pub enum Asked {
   History(Target),
   Skills(String),
   Files(String),
+  Changes(String, Option<String>),
 }
 
 impl Client {
