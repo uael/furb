@@ -10,7 +10,7 @@
   window dials it again.
                                                                Working 2
   ⌃O          go to a project or a session
-  ⌃P          commands                                          run the bench of…      as of 09:12
+  ⌃P          commands                                          run the…       Working as of 09:12
   ⌃X ?        each key                                          FC furb-cloud@studio        opus ◌
 
                                                                 which key sends…     ⠋ Working 11h

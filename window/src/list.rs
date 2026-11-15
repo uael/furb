@@ -226,46 +226,52 @@ impl Model {
     self.edged(at, ground.bg, line)
   }
 
-  /// The state of a card: a word with its mark, and its time. A card that its machine did not
-  /// confirm says the hour at which the window last heard of it.
+  /// The state of a card: its mark and its word in the color of the state, then its time. A card
+  /// that its machine did not confirm keeps its word, muted and with no mark, since the mark says
+  /// how it stands now, and says the hour at which the window last heard of it.
   fn state(&self, key: &Key, card: &Card, ground: Ground) -> Line {
     let t = &self.tokens;
     let on = |style: Style| ground.on(style);
     let (muted, colored) = (on(t.style(Role::Muted)), |color| on(Style::new().fg(color)));
-    if !self.confirmed(key) {
-      return vec![run(format!("as of {}", self.hour(self.machines[key.0].heard)), muted)];
-    }
-    if let Some(hold) = self.shown_open(key.0, &card.life) {
+    let confirmed = self.confirmed(key);
+    if let Some(hold) = self.shown_open(key.0, &card.life).filter(|_| confirmed) {
       let share = hold.share().map(|share| format!(" {share}%")).unwrap_or_default();
       let opens = format!("{} Opening{share}", Loader::Model.frame(self.moved));
       return vec![run(opens, colored(t.accent))];
     }
     let (needs, age) = (self.needs(key, card), self.age(card.since));
-    let aged =
-      |word: &str| age.as_ref().map_or_else(|| word.to_owned(), |age| format!("{word} {age}"));
-    let since = || age.clone().unwrap_or_else(|| "now".to_owned());
-    let state = match &card.thread.standing {
-      Standing::Asks { .. } if needs => run("◆ Input", colored(t.attention)),
+    let since = || Some(age.clone().unwrap_or_else(|| "now".to_owned()));
+    let working =
+      |loader: Loader| (loader.frame(self.moved), "Working".into(), Some(t.accent), age.clone());
+    // The mark, the word, the color of both, and the time of the state.
+    let (mark, word, color, time) = match &card.thread.standing {
+      Standing::Asks { .. } if needs => ("◆", "Input".into(), Some(t.attention), None),
       Standing::Asks { of } => {
-        run(format!("Waits for {}", of.as_deref().unwrap_or_default()), muted)
+        ("", format!("Waits for {}", of.as_deref().unwrap_or_default()), None, None)
       }
-      Standing::Failed => run("✗ Failed", colored(t.danger)),
-      Standing::Paused { .. } if needs => run("‖ Paused", colored(t.attention)),
-      Standing::Paused { .. } => run(aged("‖ Paused"), muted),
-      Standing::Thinks => {
-        run(aged(&format!("{} Working", Loader::Model.frame(self.moved))), colored(t.accent))
-      }
-      Standing::Runs => {
-        run(aged(&format!("{} Working", Loader::Command.frame(self.moved))), colored(t.accent))
-      }
-      Standing::Delegates => run(aged("↳ Working"), colored(t.accent)),
-      Standing::Stopped => run(aged("Stopped"), muted),
+      Standing::Failed => ("✗", "Failed".into(), Some(t.danger), None),
+      Standing::Paused { .. } if needs => ("‖", "Paused".into(), Some(t.attention), None),
+      Standing::Paused { .. } => ("‖", "Paused".into(), None, age.clone()),
+      Standing::Thinks => working(Loader::Model),
+      Standing::Runs => working(Loader::Command),
+      Standing::Delegates => working(Loader::Agent),
+      Standing::Stopped => ("", "Stopped".into(), None, age.clone()),
       Standing::Resolved if card.thread.unread(&self.machines[key.0].login) => {
-        return vec![run("● ", colored(t.accent)), run(since(), muted)];
+        ("●", String::new(), Some(t.accent), since())
       }
-      Standing::Rests | Standing::Resolved => run(since(), muted),
+      Standing::Rests | Standing::Resolved => ("", String::new(), None, since()),
     };
-    vec![state]
+    if !confirmed {
+      let heard = format!("as of {}", self.hour(self.machines[key.0].heard));
+      return vec![run([word, heard].join(" ").trim_start().to_owned(), muted)];
+    }
+    let style = color.map_or(muted, colored);
+    if word.is_empty() {
+      let mark = (!mark.is_empty()).then(|| run(format!("{mark} "), style));
+      return mark.into_iter().chain(time.map(|time| run(time, muted))).collect();
+    }
+    let parts = [mark.to_owned(), word].into_iter().chain(time);
+    vec![run(parts.filter(|one| !one.is_empty()).collect::<Vec<_>>().join(" "), style)]
   }
 }
 
