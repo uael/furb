@@ -162,3 +162,28 @@ async def test_remember_tells_the_memory_of_the_folder_of_a_text_after_a_write_o
   assert recalled(root, tmp_path) == [memorized(top, "one\n")]
   await engine.rung('write(Text("deep/b.txt", "b\\n"))', on=root)
   assert recalled(root, tmp_path)[1:] == [memorized(deep, "three\n")]
+
+
+async def test_between_two_stands_remember_asks_once_for_each_memory_file_that_the_world_refused(
+  tmp_path: Path,
+) -> None:
+  """Between two stands from outside an act, remember asks the World at most once for each memory file and each folder whose read the World refused on the chain, so a word that reads many files under one working directory makes the reads of the folders above it once, and a memory file that appears enters the chain at the next stand."""
+  for name in ("a.txt", "b.txt"):
+    (tmp_path / "work" / name).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "work" / name).write_text("x\n", encoding="utf-8", newline="")
+  _, root = extended("memory", tmp_path)
+  watcher = await engine.rung("close(remember())", on=root)
+  assert isinstance(watcher, str)
+  await engine.rung('read("a.txt")\nread("b.txt")\nread("a.txt")', on=root)
+  refused = [
+    str(a[4])
+    for a in engine.transcript(root)
+    if a[0] == "read" and a[2] == watcher and isinstance(engine.peek(a[1]), engine.Refused)
+  ]
+  assert refused
+  assert len(refused) == len(set(refused))
+  up = noted(tmp_path, "up\n")
+  await engine.rung('read("b.txt")', on=root)
+  assert recalled(root, tmp_path) == []
+  engine.stand(engine.ROOT)
+  assert recalled(root, tmp_path) == [memorized(up, "up\n")]

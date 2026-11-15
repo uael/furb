@@ -22,6 +22,7 @@ from furb.engine import (
 NAMES = ("AGENTS.md", "CLAUDE.md")
 LOCAL = ("AGENTS.local.md", "CLAUDE.local.md")
 HOME = 5
+absent: dict[str, set[str]] = {}
 
 
 def lacking(known: set[str]) -> Show:
@@ -37,9 +38,13 @@ def joined(folder: str, name: str) -> str:
 
 
 def looked(path: str, on: str = "") -> Text | None:
+  gone = absent.setdefault(on, set())
+  if path in gone:
+    return None
   try:
     return read(path, HIDDEN, on)
   except Refused:
+    gone.add(path)
     return None
 
 
@@ -140,6 +145,7 @@ def remember(on: str = "") -> Act:
         case ("done", about, _, got) if path := visited(id, before, about, got):
           memory(path, on)
         case ("done", about, *_) if question(("stand", about)) and not question(("rung", get(about)[2])):
+          absent.pop(on, None)
           memory(on=on)
 
   return act("remember", on, controlled(ear))

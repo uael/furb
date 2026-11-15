@@ -30,4 +30,5 @@ def remember(on: str = "") -> Act:
   It tells the memory that changed at each stand from outside an act, as the stand that boot makes at the tip of a life, and at no stand that a word makes, as the one that each new chain plays on itself.
   A later life tells what the record holds, since the journal answers each read that the record holds, and a memory file that changed since enters the chain at the stand at the tip of that life.
   At a stand the catch-up that the extension catchup makes before remember tells what changed in each memory file that a read on the chain gave, the reads of memory among them, so remember tells at a stand only a memory file that is new to the chain, since memory leaves out the content that the catch-up read.
+  Between two stands from outside an act, remember asks the World at most once for each memory file and each folder whose read the World refused on the chain, so a word that reads many files under one working directory makes the reads of the folders above it once, and a memory file that appears enters the chain at the next stand.
   """
