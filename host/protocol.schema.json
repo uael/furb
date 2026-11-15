@@ -4183,6 +4183,23 @@
           ]
         },
         {
+          "required": [
+            "is"
+          ],
+          "type": "object",
+          "properties": {
+            "is": {
+              "type": "string",
+              "const": "retries"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Retrying"
+            }
+          ]
+        },
+        {
           "type": "object",
           "properties": {
             "why": {
@@ -4199,7 +4216,7 @@
           ]
         }
       ],
-      "description": "How a line stands: it ran, or will not run; it runs, with the work that it waits for and the\nsecond of the epoch since which it does when the host saw it begin; it asks the operator; or it\nfailed, with the reason that a person reads."
+      "description": "How a line stands: it ran, or will not run; it runs, with the work that it waits for and the\nsecond of the epoch since which it does when the host saw it begin; it asks the operator; its\nmodel is asked again after a call that failed; or it failed, with the reason that a person\nreads."
     },
     "Work": {
       "type": "string",
@@ -4209,6 +4226,42 @@
         "agent"
       ],
       "description": "What a line that runs waits for: its model that writes it, a command or a wait, or an agent."
+    },
+    "Retrying": {
+      "type": "object",
+      "properties": {
+        "attempt": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "most": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "wait": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "why": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attempt",
+        "most",
+        "wait",
+        "at",
+        "why"
+      ],
+      "description": "A call of a model that failed for a cause that passes, so its provider asks the model again:\nthe attempt that comes, the most attempts of the call, the seconds that the provider waits\nbefore that attempt and the second of the epoch at which it comes, and why the attempt before\nit failed. What the model wrote before is void."
     },
     "Thought": {
       "type": "object",
@@ -4839,6 +4892,39 @@
           "properties": {
             "event": {
               "type": "string",
+              "const": "retried"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "rung": {
+                  "type": "string"
+                },
+                "chain": {
+                  "type": "string"
+                },
+                "retry": {
+                  "$ref": "#/definitions/Retrying"
+                }
+              },
+              "required": [
+                "rung",
+                "chain",
+                "retry"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "A call of a model that failed for a cause that passes, as it writes the reply of a rung on a\nchain, and the retry of its provider after a wait. What the model wrote for the rung before\nit is void. It is no fact."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
               "const": "queued"
             },
             "data": {
@@ -5034,5 +5120,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 23
+  "x-protocol": 24
 }

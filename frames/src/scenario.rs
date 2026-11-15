@@ -353,7 +353,20 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
       steps: &[
         step("a", &[Act::Type("Run the check."), Act::Key("Enter")], "failed with exit 2"),
-        step("b", &[Act::Type("Run it again. ERROR"), Act::Key("Enter")], "Run it again."),
+        // The provider says it is overloaded, so the window says when it asks the model again.
+        step("b", &[Act::Type("Run it again. ERROR"), Act::Key("Enter")], "Attempt 2 of 10"),
+        // He stops the retries, then the command line of the model fails for a cause that does
+        // not pass, so the thread shows why.
+        step(
+          "c",
+          &[
+            Act::Key("Escape"),
+            Act::Key("Escape"),
+            Act::Type("Check the build. FAIL"),
+            Act::Key("Enter"),
+          ],
+          "answered nothing",
+        ),
       ],
     }),
   },

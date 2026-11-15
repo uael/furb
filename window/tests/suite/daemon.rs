@@ -315,7 +315,7 @@ impl Peer {
       on: None,
     };
     let Answer::Act(prompt) = self.ask(verb) else { panic!("no prompt") };
-    let stands = if message.contains(WORKS) || message.contains(THINKS) {
+    let stands = if [WORKS, THINKS, RETRIES].iter().any(|one| message.contains(one)) {
       "thinks"
     } else if message.contains(LONG) {
       "runs"
@@ -408,6 +408,10 @@ pub(crate) const LONG: &str = "(the model writes a long word)";
 pub(crate) const ANSWERS: &str = "(the model answers)";
 pub(crate) const FAILS: &str = "(the model fails)";
 
+/// The words of a message of a test whose model the provider asks again once, after a cause that
+/// passes, and which then fails for good.
+pub(crate) const RETRIES: &str = "(the model is asked again)";
+
 /// The long word of a model of a test, which waits ten minutes on its chain at its end: a wait
 /// needs an act, and a chain is over only at its end.
 const WORD: &str = "birth = 'async def boot(): return await seed()'
@@ -426,16 +430,21 @@ close('The open takes **329 s**. Two stages hold most of it: 181 s to send each 
 
 /// The opening of each life of the daemon of a test: the config of the test, no skill, a claude
 /// command line of the test, and a model that answers from the message that it reads, once the test
-/// holds its answers no more. It closes the prompt of a message, asks the operator, or never
-/// answers.
+/// holds its answers no more. It closes the prompt of a message, asks the operator, never answers,
+/// or fails.
 fn scripted(at: &Path, claude: &Path) -> Opening {
   let held = at.join("held");
+  let failed = Arc::new(AtomicU32::new(0));
   let answer = Answered(Arc::new(move |request, told| {
     let request = request.to_string();
     let held = held.clone();
+    let failed = Arc::clone(&failed);
     Box::pin(async move {
       while held.exists() {
         sleep(Duration::from_millis(10)).await;
+      }
+      if request.contains(RETRIES) {
+        return Err(failing(&failed));
       }
       if request.contains(WORKS) {
         future::pending::<()>().await;
@@ -484,4 +493,11 @@ fn scripted(at: &Path, claude: &Path) -> Opening {
     answer: Some(answer),
     ..Opening::default()
   }
+}
+
+/// Why the model of a test fails: for a cause that passes the first time, and for good after.
+fn failing(failed: &AtomicU32) -> String {
+  let once = failed.fetch_add(1, Ordering::SeqCst) == 0;
+  let why = if once { "the provider is overloaded" } else { "the request is malformed" };
+  why.to_owned()
 }
