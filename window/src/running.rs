@@ -81,8 +81,8 @@ impl Model {
     ));
     all.push(row("kill them: their work stops", Choice::Leave(Some(Control::Kill))));
     all.push(Entry {
-      part: "".into(),
-      left: "Stay".to_owned(),
+      part: "Or".into(),
+      left: "Stay in the window".to_owned(),
       choice: Choice::Leave(None),
       ..Entry::default()
     });
@@ -120,12 +120,15 @@ impl Model {
   }
 
   /// A second leave: the window leaves at once while no session that it holds works, else the
-  /// list part asks what each of them does. Whether it leaves now.
+  /// list part asks what each of them does, on its first choice under the sessions, and the leave
+  /// is armed no more. Whether it leaves now.
   pub(crate) fn leaves_now(&mut self) -> bool {
-    if self.client.leaving().is_empty() {
+    let working = self.client.leaving().len();
+    if working == 0 {
       return true;
     }
-    self.picker = Some(Picker { of: Pick::Leave, filter: String::new(), at: 0 });
+    self.armed = None;
+    self.picker = Some(Picker { of: Pick::Leave, filter: String::new(), at: working });
     false
   }
 }
