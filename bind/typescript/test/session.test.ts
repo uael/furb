@@ -233,24 +233,17 @@ test("what a model writes streams into the session under its rung until its repl
         actor: "claude-cli:sonnet/high",
         chain: engine.root,
         // The setup of the root as turns of the default actor whose words furb writes: the bare paragraph chain(), the
-        // debug of the extensions of the standing, whose user turn holds them, the read of the doctrine, for each official extension the word rung(read('<file>', HIDDEN).content) and the turn
-        // of the rung that it made, which holds the code alone, then each life word in a turn of its own, the user turn
-        // after the word that reads holding what it read, then the stand and the cd, whose user turn holds what they
-        // tell, then the open of the root and the prompt.
+        // debug of the extensions of the standing, whose user turn holds them, the read of the doctrine, for each
+        // official extension the word rung(read('<file>', HIDDEN).content) and the turn of the rung that it made, which
+        // holds the code alone, then the stand and the cd, whose user turn holds what they tell, then each life word in
+        // a turn of its own, the user turn after the word that reads holding what it read, then the open of the root
+        // and the prompt.
         messages: [
           turn("user", "chain()"),
-          // The stand and the cd come first, a turn of their own, whose user turn holds what they tell.
-          turn("assistant", expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/)),
-          turn(
-            "user",
-            expect.stringMatching(
-              /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1\ncd1_path = '.*'$/,
-            ),
-          ),
           turn("assistant", 'debug(t"{standing()[4]=}")'),
           turn(
             "user",
-            expect.stringMatching(/^#rung2 debugged\nrung2_debug = "standing\(\)\[4\]=\[\['catchup', /),
+            expect.stringMatching(/^#rung1 debugged\nrung1_debug = "standing\(\)\[4\]=\[\['catchup', /),
           ),
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           turn("assistant", expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/)),
@@ -267,6 +260,14 @@ test("what a model writes streams into the session under its rung until its repl
             // The turn of the rung that the word made holds the code of the file alone, which that rung ran.
             turn("user", expect.stringMatching(/^(?!#)[\s\S]*\ndef \w+\(/)),
           ]),
+          // The stand and the cd come after the words, a turn of their own, whose user turn holds what they tell.
+          turn("assistant", expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/)),
+          turn(
+            "user",
+            expect.stringMatching(
+              /^#stand2\nstand2_roster = \[.*\]\nstand2_actor = 'claude-cli:sonnet\/high'\n\n#cd1\ncd1_path = '.*'$/,
+            ),
+          ),
           turn("assistant", "catchup()"),
           turn("assistant", "await recall()"),
           turn("assistant", "await listed()"),
@@ -1098,13 +1099,13 @@ test("a session enables the skills of the configs, and a later session on its re
     );
     const read = found?.[1];
     expect(read).toMatch(/^read\d+$/);
-    // The stand and the cd come first, a turn of their own, and the extension naming, which plays on
-    // the root alone, comes after the others with its life word.
+    // The stand and the cd come after the words of the extensions, a turn of their own just before the life words,
+    // and the extension naming, which plays on the root alone, comes after the others with its life word.
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
     expect(
       turns.filter((turn) => /^(catchup\(\)|await recall\(\)|await listed\(\)|compacted\()/.test(turn)),
     ).toEqual(["catchup()", "await recall()", "await listed()", "compacted(); fitted()"]);
-    expect(turns[1]).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+    expect(turns[turns.indexOf("catchup()") - 2]).toMatch(/^stand\(\)\ncd\('.*'\)$/);
     expect(turns.at(-2)).toBe("name_session()");
     // The turn writes the path with the separators of the platform, and the transcript keeps its last one as `/`.
     expect(turns.find((turn) => turn.startsWith(`#${read}\n`))?.replaceAll("\\\\", "/")).toContain(
