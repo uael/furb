@@ -1294,7 +1294,9 @@ fn each_record_of_the_corpus_opens_by_its_image_to_the_state_of_its_record() {
 /// An image that an earlier build wrote opens on each later build by the image, to the state of its
 /// record, as monty loads a dump that an earlier monty wrote: `tests/image` holds a record and its
 /// image, which no build makes again but the one that raises the version of an image. That build
-/// writes both again with `FURB_IMAGE_AGAIN=1`, from `language.jsonl` of the corpus.
+/// writes both again with `FURB_IMAGE_AGAIN=1`, from `language.jsonl` of the corpus, with `HOME`
+/// and `TMPDIR` set to folders that name no person, since the stand of the life says the home, the
+/// folder and the doctrine, and `script/private.py` fails on a trace of a person in either file.
 #[test]
 fn an_image_that_an_earlier_build_wrote_opens_by_the_image_to_the_state_of_its_record() {
   let frozen = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("image");
@@ -1303,6 +1305,10 @@ fn an_image_that_an_earlier_build_wrote_opens_by_the_image_to_the_state_of_its_r
   if env::var_os("FURB_IMAGE_AGAIN").is_some() {
     let corpus = corpus().into_iter().find(|one| one.ends_with("next/language.jsonl")).unwrap();
     fs::copy(corpus, &record).unwrap();
+    // The doctrine of the project wins over the checkout of dev mode, whose path names its owner.
+    let doctrine = at.join(".furb").join("DOCTRINE.md");
+    fs::create_dir_all(doctrine.parent().unwrap()).unwrap();
+    fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("DOCTRINE.md"), doctrine).unwrap();
     let mut life = opening(&at, true).boot::<String>([]).unwrap().0;
     assert!(image::keep(&mut life, &record, &()).unwrap(), "the life writes its image");
     drop(life);

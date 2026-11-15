@@ -1,13 +1,14 @@
 """The words and the traces of a person stay private: no record of the repository holds a prompt of the owner, his
 name or account, a session id or a path of his home, so each proof of a replay runs on scripted words.
 
-`uv run python script/private.py` reads each record that git tracks, and names each line that holds a trace: a path of the
-home of a person, a checkout under ~/src of an account, the handle of the owner (the public repositories uael/furb and
-uael/monty stand), the id of a session or of its scratch folder, and a prompt of the operator that is not scripted. It
-exits 1 when one does. test/outside/test_private_script.py runs it on each build, in CI.
+`uv run python script/private.py` reads each record that git tracks, and the image beside it, and names each line that
+holds a trace: a path of the home of a person, a checkout under ~/src of an account, the handle of the owner (the public
+repositories uael/furb and uael/monty stand), the id of a session or of its scratch folder, and a prompt of the operator
+that is not scripted. It exits 1 when one does. test/outside/test_private_script.py runs it on each build, in CI.
 
 `uv run python script/private.py --scrub <record>...` writes each record again with each trace put to its stand-in, the same
-in each place that it stands, so that a replay of it reads the same life.
+in each place that it stands, so that a replay of it reads the same life. It refuses an image, whose dump a scrub breaks:
+an image is made again from the record that a scrub wrote.
 """
 
 from __future__ import annotations
@@ -19,8 +20,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-# The files that hold the record of a life, its log, or what its modules held.
-KINDS = ("*.jsonl", "*.jsonl.zst", "*.modules", "*.log")
+# The files that hold the record of a life, its log, what its modules held, or its image.
+KINDS = ("*.jsonl", "*.jsonl.zst", "*.modules", "*.log", "*.image")
 # Each trace of a person, with the stand-in that a scrub writes in its place, in the order of the scrub. A stand-in with
 # {n} is numbered by the order in which each distinct trace comes first, so two sessions of a record stay two.
 TRACES: list[tuple[str, re.Pattern[str], str]] = [
@@ -109,6 +110,9 @@ def operator_prompts(line: str) -> list[str]:
 
 
 def text_of(path: Path) -> str:
+  # An image holds the dump of its session in binary between texts, which are read as they stand.
+  if path.suffix == ".image":
+    return path.read_bytes().decode("utf-8", errors="replace")
   if path.suffix == ".zst":
     from compression import zstd  # noqa: PLC0415  # python 3.14, which the venv of the repository holds
 
@@ -144,6 +148,9 @@ def scrubbed(text: str) -> str:
 
 def main(argv: list[str]) -> int:
   if argv[:1] == ["--scrub"]:
+    if images := [one for one in argv[1:] if one.endswith(".image")]:
+      sys.stderr.write(f"private: an image holds a dump that a scrub breaks; make it again from its record: {images}\n")
+      return 2
     for one in map(Path, argv[1:]):
       made = scrubbed(text_of(one)).encode("utf-8")
       if one.suffix == ".zst":

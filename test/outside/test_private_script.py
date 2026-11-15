@@ -60,6 +60,15 @@ def test_each_trace_of_a_person_in_a_record_is_named(tmp_path: Path) -> None:
   assert "a path of a home: /Users/first.last\n" in got.stdout
 
 
+def test_an_image_of_a_record_that_holds_a_trace_of_a_person_is_named(tmp_path: Path) -> None:
+  image = tmp_path / "record.jsonl.image"
+  image.write_bytes(b"\x00\xa5furb\x01" + json.dumps(TRACED[0]).encode() + b"\xff\x00 /Users/someone \x02")
+  got = run(str(image))
+  assert got.returncode == 1
+  named = {line.split(": ")[1] for line in got.stdout.splitlines() if line.startswith(str(image))}
+  assert named == {"a path of a home"}
+
+
 def test_a_scrub_puts_each_trace_to_its_stand_in_and_keeps_the_public_repositories(tmp_path: Path) -> None:
   record = tmp_path / "record.jsonl"
   public = ["tell", "rung2", "chain1", ["see https://github.com/uael/furb and uael/monty"]]
