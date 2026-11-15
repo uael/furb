@@ -259,8 +259,9 @@ fn insets(cells: &[Vec<Cell>], one: &Boxed) -> Option<[usize; 4]> {
 
 /// The rows that repeat one part: rows of the same looks in the same order, in the same box or on
 /// the base. Each slot of such rows starts in one column or ends in one column, else it is a
-/// finding. Two slots split where the look changes, or at a blank that a glyph of another look
-/// follows. A bar is the border of a part, and no slot.
+/// finding, but a slot that follows the slot before it with no blank in each row. Two slots split
+/// where the look changes, or at a blank that a glyph of another look follows. A bar is the border
+/// of a part, and no slot.
 fn slots(cells: &[Vec<Cell>]) -> Vec<Finding> {
   let mut parts: BTreeMap<Vec<Look>, Rows> = BTreeMap::new();
   for (row, line) in cells.iter().enumerate() {
@@ -276,6 +277,13 @@ fn slots(cells: &[Vec<Cell>]) -> Vec<Finding> {
   let mut findings = Vec::new();
   for rows in parts.values().filter(|rows| rows.len() >= 2) {
     for slot in 0..rows[0].1.len() {
+      // A slot that follows the slot before it with no blank flows with it, as code and prose do.
+      let glued = |(_, pieces): &(usize, Vec<(usize, usize)>)| {
+        slot > 0 && pieces[slot].0 == pieces[slot - 1].1 + 1
+      };
+      if rows.iter().all(glued) {
+        continue;
+      }
       let starts: Vec<usize> = rows.iter().map(|(_, pieces)| pieces[slot].0).collect();
       let ends: Vec<usize> = rows.iter().map(|(_, pieces)| pieces[slot].1).collect();
       if starts.iter().all(|start| *start == starts[0]) || ends.iter().all(|end| *end == ends[0]) {
