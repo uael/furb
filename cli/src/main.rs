@@ -2,10 +2,11 @@
 //!
 //! With no command, furb hands the terminal to the window. `prompt`, `turns`, `run` and
 //! `skills` each open one life and print what it came to, and `facts` prints a record as
-//! it is. Every life runs on the engine of the crate, on the ears of the World that the
-//! crate writes, the extensions among them, and on the provider of the model of its default
-//! actor and of the models that `--roster` names, or of every model that the
-//! catalog of the crate offers when `--roster` names none.
+//! it is. `prompt` on the record of a life that the daemon of the machine holds says its
+//! message through the daemon, as a window says it, and opens no life. Every life runs on the
+//! engine of the crate, on the ears of the World that the crate writes, the extensions among
+//! them, and on the provider of the model of its default actor and of the models that `--roster`
+//! names, or of every model that the catalog of the crate offers when `--roster` names none.
 
 mod console;
 mod error;
@@ -27,7 +28,7 @@ use furb::{
   checkpoint,
   life::{Opening, Progress},
   value::entry,
-  verbs, world,
+  verbs, wire, world,
 };
 use furb_host::GRACE;
 use tokio::runtime;
@@ -79,7 +80,9 @@ struct Stand {
 /// One command of the operator, on one life.
 #[derive(Subcommand)]
 enum Command {
-  /// Prompt an actor on the root chain and print what the prompt gave.
+  /// Prompt an actor on the root chain and print what the prompt gave. When the daemon of this
+  /// machine holds the life of the record, the message goes through it, as a window says it, so the
+  /// life hears it at once while it loops or waits.
   Prompt {
     /// The message, which the actor reads.
     message: String,
@@ -289,13 +292,19 @@ async fn catalog(update: bool) -> Result<(), CliError> {
 }
 
 /// A prompt of the operator on the root of a life, awaited for the shape it asks for, and what it came to, as python
-/// shows it.
+/// shows it. A life that the daemon of this machine holds takes it through the daemon, and no
+/// life opens here.
 ///
 /// A prompt the record already holds is taken up and never asked twice, so a command said again on a kept record
 /// reads the answer of the life before it and asks no model for it. A prompt it holds that is not
 /// done goes on: the open resumes it, and the command wakes it only when a pause holds it, so it
 /// is woken once.
 async fn prompt(opening: Opening, shape: &str, message: String, to: &str) -> Result<(), CliError> {
+  if let Some(record) = opening.record.as_deref()
+    && let Some(value) = host::said(Path::new(record), shape, message.clone(), to).await?
+  {
+    return say(wire::parsed(&value.to_string())?.as_ref().py_repr());
+  }
   let mut life = Life::lived(opening).await?;
   let to = life::actor(to).await.name;
   let id = if let Some(id) = life.again(shape, &message, &to)? {

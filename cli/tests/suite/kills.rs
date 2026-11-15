@@ -45,7 +45,7 @@ use tokio::{
 use tokio_util::codec::{Framed, LinesCodec};
 
 /// How long a test waits for a frame, a line or the end of a process before it fails.
-const PATIENCE: Duration = Duration::from_secs(60);
+pub(crate) const PATIENCE: Duration = Duration::from_secs(60);
 
 /// The fake claude of the tests of the crate.
 const FAKE: &str = include_str!("../../../src/world/provider/claude/fake-claude.sh");
@@ -64,14 +64,14 @@ const PAST: &str = "for i in range(2600):\n  chance()";
 
 /// A folder of one test, short enough for the path of a socket: the work of the life, the fake
 /// claude and its FIFO, the config of the user and the cache of furb, where the daemon listens.
-struct Yard {
+pub(crate) struct Yard {
   root: PathBuf,
   /// The folder of the yard, which goes with it.
   _base: yard::Yard,
 }
 
 impl Yard {
-  fn new() -> Self {
+  pub(crate) fn new() -> Self {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let base = yard::Yard::new(format!("fk{}-{n}", process::id()));
@@ -86,7 +86,7 @@ impl Yard {
     Self { root, _base: base }
   }
 
-  fn life(&self) -> String {
+  pub(crate) fn life(&self) -> String {
     self.root.join("work/record.jsonl").display().to_string()
   }
 
@@ -101,7 +101,7 @@ impl Yard {
   }
 
   /// The words that the fake answers with, from its next turn on.
-  fn words(&self, words: &[&str]) {
+  pub(crate) fn words(&self, words: &[&str]) {
     let count = fs::read_to_string(self.fake("count")).unwrap_or_default();
     let done: usize = count.trim().parse().unwrap_or_default();
     for (at, word) in words.iter().enumerate() {
@@ -123,7 +123,7 @@ impl Yard {
   }
 
   /// The program furb with the env of the yard.
-  fn furb(&self, words: &[&str]) -> Command {
+  pub(crate) fn furb(&self, words: &[&str]) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_furb"));
     command.args(words).current_dir(self.root.join("work")).kill_on_drop(true);
     command.env("FURB_CLAUDE_BIN", self.fake("claude")).env_remove("FURB_WINDOW");
@@ -195,13 +195,13 @@ impl Lifeline {
 }
 
 /// A daemon of the yard, as a process.
-struct Daemon {
+pub(crate) struct Daemon {
   child: Child,
 }
 
 impl Daemon {
   /// `furb host`, once it listens.
-  async fn started(yard: &Yard) -> Self {
+  pub(crate) async fn started(yard: &Yard) -> Self {
     Self::spawned(yard.furb(&["host"]), true).await
   }
 
@@ -231,7 +231,7 @@ impl Daemon {
 
 /// A window: its stream, the id of its next request, and each frame that it read while it
 /// waited for another.
-struct Window {
+pub(crate) struct Window {
   lines: Framed<<Local as Dialer>::Stream, LinesCodec>,
   next: u64,
   pushed: Vec<Frame>,
@@ -240,7 +240,7 @@ struct Window {
 
 impl Window {
   /// A window that said its hello, opened the life of the yard and attached it from its start.
-  async fn attached(yard: &Yard) -> Self {
+  pub(crate) async fn attached(yard: &Yard) -> Self {
     let mut window = Self::dialed(yard).await;
     window.hello().await;
     let open = Verb::Open {
@@ -306,7 +306,7 @@ impl Window {
   }
 
   /// The first event of the life that the test waits for.
-  async fn until(&mut self, wanted: impl Fn(&Event) -> bool) -> Event {
+  pub(crate) async fn until(&mut self, wanted: impl Fn(&Event) -> bool) -> Event {
     let at = self
       .pushed
       .iter()

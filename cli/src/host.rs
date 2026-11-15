@@ -7,16 +7,23 @@
 //! and an operator that the file adds is let in at its next connection. A file that does not parse
 //! keeps the list before.
 
-use std::{path::Path, time::Duration};
+use std::{
+  path::{self, Path, PathBuf},
+  time::Duration,
+};
 
+use futures::{SinkExt, StreamExt};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher, recommended_watcher};
+use serde_json::Value;
+use tokio_util::codec::{Framed, LinesCodec};
 
-use furb::{life::Opening, skill::Places, world};
+use furb::{life::Opening, skill::Places, view::Phase, world};
 use furb_host::{
-  DaemonError, STALL, Settings, Tailnet,
+  DaemonError, ProtocolError, STALL, Settings, Tailnet, TransportError,
   access::Config,
+  protocol::{Answer, BOUND, Frame, Hello, Kind, PROTOCOL, Request, Verb},
   run,
-  transport::{Local, LocalApi, Tailscale},
+  transport::{Dialer, Local, LocalApi, Tailscale},
   upgrade,
 };
 
@@ -27,8 +34,7 @@ use crate::error::CliError;
 /// for `grace`. It says where it listens once it listens, so a program that starts it knows when
 /// to dial it.
 pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliError> {
-  let cache = world::cache().ok_or(CliError::NoCache)?;
-  let folder = cache.join("host");
+  let folder = folder()?;
   let door = Some(folder.join(DOOR));
   let host = Some(folder.clone());
   let path = Places::here().config.join("host.json");
@@ -49,6 +55,66 @@ pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliErr
   let listener = local.listen().await.map_err(DaemonError::from)?;
   println!("furb host listens in {}", folder.display());
   Ok(run(&local, listener, settings).await?)
+}
+
+/// The folder of the daemon of this machine in the cache of furb, where it listens.
+fn folder() -> Result<PathBuf, CliError> {
+  Ok(world::cache().ok_or(CliError::NoCache)?.join("host"))
+}
+
+/// What a message to the root of the life of a record came to, said through the daemon of this
+/// machine as a window says it, so the life hears it at once, while it loops or waits, and the
+/// daemon tells its end. None when no daemon listens, or when it holds no life of the record.
+pub(crate) async fn said(
+  record: &Path,
+  shape: &str,
+  message: String,
+  to: &str,
+) -> Result<Option<Value>, CliError> {
+  let stream = match Local::new(folder()?).dial().await {
+    Ok(stream) => stream,
+    Err(TransportError::Dial { .. }) => return Ok(None),
+    Err(no) => return Err(DaemonError::from(no).into()),
+  };
+  let mut lines = Framed::new(stream, LinesCodec::new_with_max_length(BOUND));
+  let life = path::absolute(record).unwrap_or_else(|_| record.to_owned()).display().to_string();
+  let name = Some("furb prompt".to_owned());
+  let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name, role: None });
+  asked(&mut lines, 0, hello).await?;
+  let to = (!to.is_empty()).then(|| to.to_owned());
+  let prompt = Verb::Prompt { life: life.clone(), shape: shape.to_owned(), message, to, on: None };
+  let id = match asked(&mut lines, 1, prompt).await {
+    Ok(Answer::Act(id)) => id,
+    Err(DaemonError::Refused(ProtocolError::Closed { .. })) => return Ok(None),
+    Ok(_) => return Err(DaemonError::Unanswered.into()),
+    Err(no) => return Err(no.into()),
+  };
+  let Answer::Acts(acts) = asked(&mut lines, 2, Verb::Ended { life, act: id.clone() }).await?
+  else {
+    return Err(DaemonError::Unanswered.into());
+  };
+  let done = acts.into_iter().find(|one| one.id == id).map(|one| one.phase);
+  let Some(Phase::Done(value)) = done else { return Err(DaemonError::Unanswered.into()) };
+  Ok(Some(value))
+}
+
+/// The answer of the daemon to one request of a peer, past each frame that it pushes meanwhile.
+async fn asked(
+  lines: &mut Framed<<Local as Dialer>::Stream, LinesCodec>,
+  id: u64,
+  verb: Verb,
+) -> Result<Answer, DaemonError> {
+  let request = serde_json::to_string(&Request { id, verb }).map_err(TransportError::from)?;
+  lines.send(request).await.map_err(TransportError::from)?;
+  loop {
+    let heard = lines.next().await.ok_or(DaemonError::Unanswered)?;
+    match serde_json::from_str::<Frame>(&heard.map_err(TransportError::from)?) {
+      Ok(Frame::Reply { id: got, answer }) if got == id => return Ok(answer),
+      Ok(Frame::Refused { id: Some(got), error, .. }) if got == id => return Err(error.into()),
+      Ok(_) => {}
+      Err(no) => return Err(DaemonError::Unread(no)),
+    }
+  }
 }
 
 /// The file of the folder of the daemon that holds the address of its door of the windows, with

@@ -32,12 +32,13 @@ thiserror = "2"
 notify = "8"
 # The protocol: one command or one event per line, as JSON, whose value is read before anything rounds it.
 serde_json = { version = "1", features = ["raw_value"] }
+# The lines of the protocol on the socket of the daemon, to which `furb prompt` says a message of a life it holds.
+tokio-util = { version = "0.7", features = ["codec"] }
 
 [dev-dependencies]
 # The daemon of the kill matrix as a process, its windows on its socket, and the FIFO that its
 # processes hold.
 tokio = { version = "1", features = ["process", "net", "time", "io-util", "macros", "rt-multi-thread"] }
-tokio-util = { version = "0.7", features = ["codec"] }
 # The window, which starts the daemon of its machine as the program of this package serves it.
 furb-window = { path = "../window" }
 
