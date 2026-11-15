@@ -12,6 +12,7 @@ mod deepswe;
 mod jobs;
 mod links;
 mod lives;
+mod opens;
 mod paths;
 mod promise;
 mod tree;
@@ -286,6 +287,29 @@ enum Task {
   /// sources beside it only when the snapshot or the version of pi-ai changed, so a run with no
   /// change in the data makes no change in the tree.
   Catalog,
+  /// Open a copy of each record on a build of furb, with no model and no network, and say whether
+  /// each opens.
+  ///
+  /// It opens each copy with `furb turns`, which makes the life again from the record and only
+  /// inspects it, one record at a time: the records that --list names, one path on each line, or
+  /// else those of tests/corpus and tests/replay. A line for each goes to the table: its path, its
+  /// verdict (opens, refused:<code>, bound past --bound seconds, memory past 8 GB), its seconds,
+  /// its most MB, and the first line of furb that it wrote. Given the table of a run before, it
+  /// fails when a record that opened then does not open now.
+  Opens {
+    /// The program furb of the build to prove.
+    furb: PathBuf,
+    /// The table that the run writes.
+    out: PathBuf,
+    /// The table of a run before.
+    before: Option<PathBuf>,
+    /// A file that names the records, one path on each line.
+    #[arg(long, value_name = "FILE")]
+    list: Option<PathBuf>,
+    /// The most seconds of one open.
+    #[arg(long, default_value_t = 1800)]
+    bound: u64,
+  },
   /// Make, land and close a worktree of this clone.
   Tree {
     #[command(subcommand)]
@@ -401,6 +425,9 @@ fn run() -> Result<ExitCode, Fault> {
     Task::Paths => paths::check(),
     Task::Tree { verb } => tree::run(&root, verb),
     Task::Links { fix } => links::check(&root, fix),
+    Task::Opens { furb, out, before, list, bound } => {
+      opens::Opens { furb, out, before, list, bound: Duration::from_secs(bound) }.run(&root)
+    }
     Task::Catalog => catalog::refresh(&root),
     Task::Budget { part, command } => budget::check(&root, &part, &command),
     Task::JobBudgets { runs } => jobs::set(&root, runs),
