@@ -28,6 +28,7 @@ use furb::{
   verbs, world,
 };
 use futures::executor;
+use sha2::{Digest, Sha256};
 use std::{
   env, process,
   process::{Child, Command, Stdio},
@@ -150,8 +151,10 @@ fn woke(engine: &mut Engine) {
   engine.word("over('chain1') or wake('chain1')", vec![]).unwrap();
 }
 
-/// Makes the facts after the last checkpoint of a record name another engine, as a build of another
-/// engine names them.
+/// Makes the facts after the last checkpoint of a record run on another engine, whose texts the
+/// record holds, as a build of another engine names them: the program of this engine with a line
+/// of comment more, so its digest is another and each fact of the tail replays on it with no
+/// drift, on this build and on each later one.
 fn crossed(record: &Path) {
   let text = fs::read_to_string(record).unwrap();
   let made = |engine: &str| format!("[\"made\",\"chain1\",\"store\",\"{engine}\",null");
@@ -167,12 +170,16 @@ fn crossed(record: &Path) {
       continue;
     }
     named = true;
-    // The tail names another engine and holds none of its texts, so it goes on on the engine of
-    // this build, as a build of another engine whose texts the record never held.
     let mut entry: serde_json::Value = serde_json::from_str(line).unwrap();
     let fact = entry[0].as_array_mut().unwrap();
-    fact[3] = serde_json::Value::String("0".repeat(64));
-    fact.truncate(7);
+    let engine = format!("{}# Another engine.\n", fact[7].as_str().unwrap());
+    let mut hash = Sha256::new();
+    for one in [engine.as_str(), fact[8].as_str().unwrap(), fact[9].as_str().unwrap()] {
+      hash.update(one.as_bytes());
+      hash.update([0]);
+    }
+    fact[3] = serde_json::Value::String(format!("{:x}", hash.finalize()));
+    fact[7] = serde_json::Value::String(engine);
     theirs.push_str(&entry.to_string());
     theirs.push_str(&line[line.trim_end_matches('\n').len()..]);
   }
@@ -356,6 +363,14 @@ fn records() -> Vec<(String, PathBuf)> {
 
 /// Opens a record in a directory of its own, from its text, and proves the promise on it.
 fn holds(name: &str, text: &str, shown: &str) {
+  for line in text.lines() {
+    let entry: serde_json::Value = serde_json::from_str(line).unwrap();
+    let fact = entry[0].as_array().unwrap();
+    assert!(
+      fact[0] != "made" || fact.len() > 7,
+      "{name}: each fact made holds the texts of its engine, so no build replays it on another"
+    );
+  }
   let at = place(name);
   let record = at.join("record.jsonl");
   fs::write(&record, text).unwrap();

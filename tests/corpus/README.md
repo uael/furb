@@ -11,7 +11,8 @@ The test `make_the_corpus` in `tests/suite/promise.rs` makes the records of `nex
   chain of its own, and defines a value and a function. A word of a model waits for an hour. That word is open when the
   life keeps its checkpoint. A second life of the same engine goes on from the checkpoint. It takes a prompt, defines a
   name on what the checkpoint holds, and leaves a prompt open.
-- `crossed.jsonl` is the same life with no kit. Its tail names another engine.
+- `crossed.jsonl` is the same life with no kit. Its tail runs on another engine, whose texts its fact made holds: the
+  program of the engine of the build that made it, with a line of comment more, so a later build replays it there.
 - `language.jsonl` holds the definitions that a word uses, with no kit: `def` and `async def`, a class and a dataclass,
   `match`, comprehensions, f-strings and t-strings, a type alias, generics and decorators. A checkpoint holds some of
   them, and the tail after it holds the others.
