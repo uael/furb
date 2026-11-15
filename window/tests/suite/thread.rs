@@ -338,18 +338,15 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
   // row for each kind of content that the answer read, with its size and its share.
   clicked(&app, "Context", LEFT, 0);
   shows(&app, "Engine");
-  // The script reads 124k at its one answer: so the engine holds what its few turns do not.
-  let kinds = [
-    "Context ▾                       12%",
-    &bar,
-    "■ Engine                 122k   12%",
-    "■ Doctrine               1.1k   <1%",
-    "■ Turns                   226   <1%",
-    "■ Free                   876k   88%",
-    counts,
-  ];
-  assert_eq!(boxed(&app), kinds);
-  screen("thread-context", &app);
+  // The script reads 124k at its one answer: so the engine holds what its few turns do not. The
+  // turns name the folders of the test, whose length changes from run to run, so only the name of
+  // each kind and the free room are the same at each run.
+  let named: Vec<String> = boxed(&app)[2..6]
+    .iter()
+    .map(|row| row.split("  ").next().unwrap_or_default().to_owned())
+    .collect();
+  assert_eq!(named, ["■ Engine", "■ Doctrine", "■ Turns", "■ Free"]);
+  assert_eq!(boxed(&app)[5], "■ Free                   876k   88%");
   // A click on the bar, whose cells keep their colors under the pointer, shows what came from the
   // cache, and a click on the head folds the box.
   let (x, y) = at(&app, &bar, LEFT);
@@ -365,6 +362,7 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
     counts,
   ];
   assert_eq!(boxed(&app), parts);
+  screen("thread-context", &app);
   clicked(&app, "Context", LEFT, 0);
   let folded = app.wait_until(PATIENCE, || !app.text().contains("From the cache"));
   assert!(folded, "{}", app.text());
