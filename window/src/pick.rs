@@ -763,7 +763,9 @@ impl Model {
       let clicked = at
         .filter(|at| entries[*at].choice != Choice::None)
         .map(|at| (2..2 + room, Some(Click::Pick(at))));
-      Row { hot: clicked.into_iter().collect(), ..Row::of(row) }
+      // The bar of the chosen row and the badge of a project keep their hues under the pointer.
+      let keeps = Some(2..if badged(entries) { 5 } else { 3 });
+      Row { hot: clicked.into_iter().collect(), keeps, ..Row::of(row) }
     };
     shown.into_iter().enumerate().map(row).collect()
   }

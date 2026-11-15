@@ -9,7 +9,7 @@ use std::fs;
 use std::time::Duration;
 
 use furb_window::{Options, open};
-use opentui::testing::TestApp;
+use opentui::{style::Color, testing::TestApp};
 
 use crate::{
   cards::{app, options, shows},
@@ -251,4 +251,26 @@ fn a_slash_that_starts_the_input_offers_the_commands_and_an_escape_hides_them() 
   app.type_text("st holds the logs");
   shows(&app, "┃ /list holds the logs");
   assert!(!app.text().contains("Commands and skills"), "{}", app.text());
+}
+
+#[test]
+fn the_bar_of_the_chosen_row_and_the_badge_of_its_project_keep_their_hues_under_the_pointer() {
+  let (app, _daemon, _peer) = machine();
+  app.press("ctrl+o");
+  let frame = shows(&app, "Search a thread, session, project");
+  let chosen =
+    frame.lines().enumerate().find(|(_, line)| line.contains('▌') && !line.contains("Search"));
+  let (y, line) = chosen.unwrap_or_else(|| panic!("no row is chosen:\n{frame}"));
+  let x = line.chars().position(|one| one == '▌').unwrap();
+  let before = app.render();
+  app.hover(u16::try_from(x + 6).unwrap(), u16::try_from(y).unwrap());
+  let lit = app.render();
+  let width = usize::try_from(lit.width).unwrap();
+  // The cell under the pointer lights, and the bar and the two letters of the badge keep their hues.
+  assert_eq!(lit.cells[y * width + x + 6].fg, Color::hex(0xff_ffff), "{}", app.text());
+  let (lit, before): (Vec<_>, Vec<_>) = (
+    (x..x + 3).map(|at| lit.cells[y * width + at].fg).collect(),
+    (x..x + 3).map(|at| before.cells[y * width + at].fg).collect(),
+  );
+  assert_eq!(lit, before, "{}", app.text());
 }
