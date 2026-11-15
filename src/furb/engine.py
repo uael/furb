@@ -310,7 +310,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         wrote.pop(of, 0)
 
     def heard(x):
-      return x[0] == "tell" and (x[2] != x[1] or x[3][0].startswith("#" + x[1]))
+      return x[0] == "tell" and (x[2] != x[1] or (x[3][0].startswith("#" + x[1]) and x[3] != [*(get(x[1]) or ())[4:5]]))
 
     def bind(whose):
       nonlocal bound

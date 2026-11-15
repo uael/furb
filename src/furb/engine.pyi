@@ -612,7 +612,7 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   A new prompt on a chain is asked while a word of the chain awaits a wait that is not over, so no wait holds a prompt.
   When the fact that a word awaits comes, each chain whose rung waits with no run and no reply open asks it at once, with no timer and no message of the operator, while a paused chain and a word that awaits a prompt to the operator stay held.
   A word that only debugs tells what it debugged, which is new, so the chain asks again at once with no message of the operator.
-  The chain reads the text of each paragraph told on it since its last told rung, in order, from its reading, and holds no copy of it, but a paragraph that an act tells of itself with no header of its name, as the word of a rung.
+  The chain reads the text of each paragraph told on it since its last told rung, in order, from its reading, and holds no copy of it, but a paragraph that an act tells of itself with no header of its name, and the word of a rung, which a rung tells of itself whatever its first line.
   At each told rung the chain reads only the facts after its last told rung, so the work of a told rung does not grow with the facts before it.
   After a cut, the chain reads what it heard after the last told rung or the last paragraph that it does not read that the cut kept, and nothing that the cut kept when the cut kept neither, so a chain born on a checkpoint tells what it heard and did not tell, and no act that its birth made again.
   At the advance of the next rung, before it asks the reply, or at the first ready of a rung that it does not advance, the chain runs that text as the told rung of that rung, and holds nothing more.

@@ -1438,13 +1438,18 @@ async def test_a_thread_is_asked_again_exactly_when_a_new_fact_for_it_came_since
 
 
 async def test_the_chain_reads_the_text_of_each_paragraph_told_on_it_since_its_last_told_rung() -> None:
-  """The chain reads the text of each paragraph told on it since its last told rung, in order, from its reading, and holds no copy of it, but a paragraph that an act tells of itself with no header of its name, as the word of a rung."""
+  """The chain reads the text of each paragraph told on it since its last told rung, in order, from its reading, and holds no copy of it, but a paragraph that an act tells of itself with no header of its name, and the word of a rung, which a rung tells of itself whatever its first line."""
   _, log, root, first, second = await told_read()
   told = [a[5] for a in said(log, "run") if a[4] in (f"{first}_told", f"{second}_told")]
   words = ["t = read('a.txt')", "got = read1_text"]
   held = paragraphs(engine.turns(on=root))
   assert [one for one in held if one in words] == words
   assert "\n\n".join(told) == engine.unquoted("\n\n".join(one for one in held if one not in words))
+  word = f"#rung{len(said(log, 'rung')) + 1} reads its own name\nz = 1"
+  await engine.rung(word, on=root)
+  await engine.rung("y = z", on=root)
+  assert [a for a in said(log, "run") if a[4].endswith("_told") and word in a[5]] == []
+  assert paragraphs(engine.turns(on=root)).count(word) == 1
 
 
 async def test_at_the_advance_of_the_next_rung_the_chain_runs_that_text() -> None:
