@@ -227,7 +227,3 @@ impl<'a> StatementVisitor<'a> for Globals<'a> {
     walk_stmt(self, stmt);
   }
 }
-
-#[cfg(test)]
-#[path = "bound.test.rs"]
-mod test;

@@ -5,16 +5,10 @@
 #![expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
 #![expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
 
-#[path = "../common/opened.rs"]
-mod opened;
-
-use opened::{
+use crate::opened::{
   changed, closed, corpus, crossed, crossing, elsewhere, made_of, named, names, opening, ours,
   replayed, scripted, segment, worked, yard,
 };
-
-/// The script of a life of the suite takes each word under the bound of a turn of the engine.
-fn answered(_nth: usize) {}
 
 /// The image of a record dropped: it stands beside the record, as `<record>.image`.
 fn drop_image(record: &Path) {

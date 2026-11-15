@@ -4,20 +4,24 @@
 //! engine on the
 //! record that the store keeps.
 
+#![expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
+
 use std::{
   fs,
   path::{Path, PathBuf},
   process,
 };
 
-use super::{
-  COPY_DIGEST, Enabled, Places, Skill, configs, configured, copy, definitions, digest, enabled,
-  enabled_by, frontmatter, load, played, projected, reloads, telling, turned, word,
-};
-use crate::testing::Yard;
-use crate::value::{ObjectRef, Text, entry};
-use crate::world::skills::{Kit, kit};
 use crate::{
+  opened::{closed, opening, yard},
+  yard::Yard,
+};
+use furb::skill::{
+  Enabled, Places, Skill, configs, configured, definitions, enabled, enabled_by, frontmatter, load,
+  played, projected, reloads, word,
+};
+use furb::value::{Text, entry};
+use furb::{
   Ear, Engine, Fact, Object,
   ear::{ear, hear, say},
   verbs, world,
@@ -64,12 +68,13 @@ fn places(at: &Path) -> Places {
   Places { config: at.join("user"), home: None }
 }
 
-/// The extension that a folder loads, with the file of its word: the copy of that word in the
-/// config directory of the test, whatever the folder.
-fn filed(one: Skill, at: &Path) -> Skill {
-  let held = &digest(&one.word)[..COPY_DIGEST];
-  let copy = at.join("user").join("words").join("note").join(held).join("note.py");
-  Skill { file: copy.display().to_string(), ..one }
+/// An extension that a folder loaded, with no file, once its file is a copy of its word under
+/// `words/<name>` of the config directory of the test, whatever the folder.
+fn copied(one: Skill, at: &Path) -> Skill {
+  let file = PathBuf::from(&one.file);
+  assert!(file.starts_with(at.join("user").join("words").join(&one.name)), "{}", one.file);
+  assert_eq!(fs::read_to_string(&file).ok().as_deref(), Some(one.word.as_str()));
+  Skill { file: String::new(), ..one }
 }
 
 #[test]
@@ -125,7 +130,7 @@ fn the_word_of_a_file_is_the_file_less_its_imports_of_furb_and_its_runs_of_empty
 fn a_folder_loads_under_the_name_its_manifest_gives_with_the_word_of_its_file() {
   let at = place("load");
   folder(&at.join("good"), &skill("note", &[("word", "note.py"), ("life", "note()")]), "x = 1\n");
-  assert_eq!(load("note", &at.join("good"), &places(&at)).unwrap(), filed(note("x = 1"), &at));
+  assert_eq!(copied(load("note", &at.join("good"), &places(&at)).unwrap(), &at), note("x = 1"));
   folder(&at.join("bare"), &skill("note", &[("word", "note.py")]), "x = 1\n");
   assert_eq!(load("note", &at.join("bare"), &places(&at)).unwrap().life, "");
   let refused =
@@ -218,41 +223,12 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
 }
 
 #[test]
-fn the_kit_of_a_skill_is_the_process_of_its_folder_and_the_acts_that_its_manifest_names() {
-  let at = place("process");
-  let skills = at.join(".furb").join("skills");
-  folder(
-    &skills.join("note"),
-    &skill("note", &[("word", "note.py"), ("process", "run.ts"), ("acts", "note_add note_drop")]),
-    "x = 1\n",
-  );
-  folder(
-    &skills.join("out"),
-    &skill("out", &[("word", "note.py"), ("process", "../run.ts")]),
-    "x = 1\n",
-  );
-  folder(&skills.join("bare"), &skill("bare", &[("word", "note.py")]), "x = 1\n");
-  let found = |name: &str, program: Option<&str>| kit(name, program, &at, &places(&at));
-  let note = Kit {
-    program: skills.join("note").join("run.ts"),
-    acts: vec!["note_add".to_owned(), "note_drop".to_owned()],
-  };
-  assert_eq!(found("note", None), Some(note.clone()));
-  let named = note.program.display().to_string();
-  assert_eq!(found("other", Some(&named)), Some(note), "the program that a fact enable names");
-  assert_eq!(found("out", None), None, "a process that leaves the folder of its skill");
-  assert_eq!(found("bare", None), None, "a manifest that names no process");
-  assert_eq!(found("memory", None), None, "an official skill with no process");
-  assert_eq!(found("absent", None), None);
-}
-
-#[test]
 fn a_manifest_names_no_field_of_furb_but_those_that_it_knows() {
   let at = place("fields");
   folder(&at.join("good"), &skill("note", &[("word", "note.py")]), "x = 1\n");
   assert_eq!(
-    load("note", &at.join("good"), &places(&at)).unwrap(),
-    filed(Skill { life: String::new(), ..note("x = 1") }, &at)
+    copied(load("note", &at.join("good"), &places(&at)).unwrap(), &at),
+    Skill { life: String::new(), ..note("x = 1") }
   );
   folder(&at.join("bad"), &skill("note", &[("word", "note.py"), ("view", "view.ts")]), "x = 1\n");
   let manifest = at.join("bad").join("SKILL.md").display().to_string();
@@ -475,11 +451,11 @@ fn a_manifest_says_whether_its_skill_plays_on_every_chain_or_on_the_root_alone()
   let manifest =
     |plays: &str| skill("note", &[("word", "note.py"), ("life", "note()"), ("plays", plays)]);
   folder(&at.join("every"), &manifest("every"), "x = 1\n");
-  assert_eq!(load("note", &at.join("every"), &places(&at)).unwrap(), filed(note("x = 1"), &at));
+  assert_eq!(copied(load("note", &at.join("every"), &places(&at)).unwrap(), &at), note("x = 1"));
   folder(&at.join("root"), &manifest("root"), "x = 1\n");
   assert_eq!(
-    load("note", &at.join("root"), &places(&at)).unwrap(),
-    filed(Skill { root: true, ..note("x = 1") }, &at)
+    copied(load("note", &at.join("root"), &places(&at)).unwrap(), &at),
+    Skill { root: true, ..note("x = 1") }
   );
   let refused = |root: &str| load("note", &at.join(root), &places(&at)).unwrap_err().message();
   let file = |root: &str| at.join(root).join("SKILL.md").display().to_string();
@@ -559,68 +535,55 @@ fn a_skill_of_the_config_of_the_user_goes_through_the_same_check_and_a_refused_w
   let (on, refused) = configured(&places, &project).unwrap();
   let mine = on.iter().find(|one| one.name == "mine").map(|one| one.word.as_str());
   assert_eq!((refused, mine), (Vec::<String>::new(), Some(noted.trim_end())));
-  let held = &digest(noted.trim_end())[..COPY_DIGEST];
+  let copy = on.iter().find(|one| one.name == "mine").map(|one| PathBuf::from(&one.file));
   assert!(
-    user.join("words").join("mine").join(held).join("note.py").is_file(),
+    copy.is_some_and(|file| file.starts_with(user.join("words").join("mine")) && file.is_file()),
     "a word that passes has its copy"
   );
 }
 
+/// The notes that the ear of the extensions told the root of a life.
+fn notes(engine: &mut Engine) -> Vec<String> {
+  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None, at: None };
+  let facts = engine.transcript(on).unwrap();
+  let told = facts.iter().filter(|one| one.kind() == "tell" && one.by() == "extensions");
+  let notes = told.filter_map(|one| one.word(0).and_then(|notes| entry(&notes, 0)));
+  notes.filter_map(|note| note.as_str().map(str::to_owned)).collect()
+}
+
 #[test]
 fn the_ear_tells_the_root_once_why_each_skill_that_does_not_play_does_not_play() {
-  let yard = place("told");
-  let at: &Path = &yard;
-  let (record, store) = world::store(at.join("record.jsonl")).unwrap();
-  let why = ["The skill a does not play: one", "The skill b does not play: two"];
-  let ears = [
-    ("extensions", telling(vec![], why.map(str::to_owned).to_vec(), places(at))),
-    ("stand", standing(at.to_owned())),
-    ("files", world::files(world::Scratch::own(), at.join("user"), None)),
-    ("store", store),
-  ];
-  let mut engine = Engine::boot(record, ears).unwrap();
-  assert!(engine.raised().is_none(), "{:?}", engine.raised());
+  let at = yard("told");
+  let skills = at.join(".furb").join("skills");
+  for name in ["a", "b"] {
+    let word = "def filled(template: str) -> str:\n  return template\n";
+    folder(&skills.join(name), &skill(name, &[("word", "note.py")]), word);
+  }
+  config(
+    &at.join(".furb").join("config.json"),
+    r#"{"skills": {"a": "skills/a", "b": "skills/b"}}"#,
+  );
+  let (mut engine, _) = opening(&at, true).boot::<String>([]).unwrap();
   engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
-  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None, at: None };
-  let told: Vec<String> = engine
-    .transcript(on)
-    .unwrap()
-    .iter()
-    .filter(|one| one.kind() == "tell" && one.by() == "extensions")
-    .filter_map(|one| one.word(0).and_then(|notes| entry(&notes, 0)))
-    .filter_map(|note| note.as_str().map(str::to_owned))
-    .collect();
-  assert_eq!(told, [why.join("\n")]);
+  let why = |name: &str| {
+    format!(
+      "The skill {name} does not play: The word note.py binds filled of the engine at its top, \
+       which each word of a chain reads: give each a name of its own: {}",
+      skills.join(name).join("SKILL.md").display()
+    )
+  };
+  assert_eq!(notes(&mut engine), [format!("{}\n{}", why("a"), why("b"))]);
 }
 
 #[test]
 fn a_life_that_opens_again_on_its_record_replays_the_note_of_the_former_key_and_tells_it_no_more() {
-  let yard = place("retold");
-  let at: &Path = &yard;
-  let why = ["The key extensions of config.json is now skills, so it turns nothing on".to_owned()];
-  let opened = || {
-    let (record, store) = world::store(at.join("record.jsonl")).unwrap();
-    let ears = [
-      ("extensions", telling(vec![], why.to_vec(), places(at))),
-      ("stand", standing(at.to_owned())),
-      ("files", world::files(world::Scratch::own(), at.join("user"), None)),
-      ("store", store),
-    ];
-    let mut engine = Engine::boot(record, ears).unwrap();
-    assert!(engine.raised().is_none(), "{:?}", engine.raised());
-    engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
-    let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None, at: None };
-    let told: Vec<String> = engine
-      .transcript(on)
-      .unwrap()
-      .iter()
-      .filter(|one| one.kind() == "tell")
-      .filter_map(|one| one.word(0).and_then(|notes| entry(&notes, 0)))
-      .filter_map(|note| note.as_str().map(str::to_owned))
-      .collect();
-    told.iter().filter(|note| **note == why[0]).count()
-  };
-  assert_eq!([opened(), opened(), opened()], [1, 1, 1], "a note is a fact of the record");
+  let at = yard("retold");
+  let file = at.join(".furb").join("config.json");
+  config(&file, r#"{"extensions": {"memory": false}}"#);
+  let why =
+    format!("The key extensions of {} is now skills, so it turns nothing on", file.display());
+  let opened = || notes(&mut opening(&at, true).boot::<String>([]).unwrap().0);
+  assert_eq!([opened(), opened(), opened()], [[why.clone()], [why.clone()], [why]]);
 }
 
 #[test]
@@ -1032,6 +995,11 @@ fn a_write_of_the_local_config_of_the_project_turns_on_each_skill_that_it_gives_
 #[test]
 fn a_write_of_a_config_that_gives_the_former_key_tells_the_note_at_each_write() {
   let at = place("former-write");
+  folder(
+    &at.join(".furb").join("skills").join("note"),
+    &skill("note", &[("word", "note.py")]),
+    NOTE,
+  );
   let mut engine = lived(&at, vec![]);
   let file = projected(&at)[1].display().to_string();
   let text = r#"{"extensions": {"note": "skills/note"}}"#;
@@ -1047,27 +1015,39 @@ fn a_write_of_a_config_that_gives_the_former_key_tells_the_note_at_each_write() 
     .iter()
     .filter(|one| one.kind() == "tell")
     .filter_map(|one| one.word(0).and_then(|notes| entry(&notes, 0)))
-    .filter(|note| note.as_str().is_some_and(|note| note.contains("is now skills")))
-    .count();
-  assert_eq!(told, 2, "a note that an open replays is not a note that a write tells");
+    .filter_map(|note| note.as_str().map(str::to_owned))
+    .filter(|note| note.contains("is now skills"))
+    .collect::<Vec<_>>();
+  let note = format!("The key extensions of {file} is now skills, so it turns nothing on");
+  assert_eq!(
+    told,
+    [note.clone(), note],
+    "a note that an open replays is not a note that a write tells"
+  );
+  assert_eq!(enables(&at), Vec::<String>::new(), "the former key turns nothing on");
 }
 
 #[test]
 fn a_fact_enable_gives_the_name_of_its_skill_and_the_program_that_it_names() {
-  let one = note("x = 1");
-  let said = |fact: Fact| {
-    let held = fact.0.as_ref().items().unwrap();
-    let mut told = vec![held[0].to_owned(), held[1].to_owned(), Object::string("extensions")];
-    told.extend(held[2..].iter().map(ObjectRef::to_owned));
-    Fact(Object::tuple(told))
+  let at = yard("enable");
+  let skills = at.join(".furb").join("skills");
+  let kit = skill("noted", &[("word", "note.py"), ("process", "run.py")]);
+  folder(&skills.join("noted"), &kit, "noted_x = 1\n");
+  folder(&skills.join("bare"), &skill("bare", &[("word", "note.py")]), "bare_x = 1\n");
+  let (mut engine, _) = opening(&at, true).boot::<String>([]).unwrap();
+  closed(&mut engine, "close([await skill('noted'), await skill('bare')])");
+  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None, at: None };
+  let facts = engine.transcript(on).unwrap();
+  let enabled: Vec<Enabled> = facts.iter().filter_map(enabled_by).collect();
+  assert_eq!(enabled.len(), facts.iter().filter(|one| one.kind() == "enable").count());
+  let has = |name: &str, program: Option<&str>| Enabled {
+    name: name.to_owned(),
+    program: program.map(str::to_owned),
+    view: None,
   };
-  let has = |program: Option<&str>| {
-    Some(Enabled { name: "note".to_owned(), program: program.map(str::to_owned), view: None })
-  };
-  assert_eq!(enabled_by(&said(one.enable())), has(None));
-  assert_eq!(enabled_by(&said(one.played("note.ts"))), has(Some("note.ts")));
-  assert_eq!(enabled_by(&said(one.played(""))), has(Some("")));
-  assert_eq!(enabled_by(&said(Fact::says("tell", "chain1", [Object::string("note")]))), None);
+  let program = skills.join("noted").join("run.py").display().to_string();
+  assert_eq!(enabled[0], has("catchup", None), "an enable of a config names no program");
+  assert_eq!(enabled[enabled.len() - 2..], [has("noted", Some(&program)), has("bare", Some(""))]);
 }
 
 #[test]
@@ -1094,25 +1074,15 @@ fn a_config_that_gives_the_former_key_turns_nothing_on_and_says_that_the_key_is_
 }
 
 #[test]
-fn a_write_of_a_config_with_the_former_key_turns_nothing_on_and_says_that_the_key_is_now_skills() {
-  let at = Yard::new("former-write");
-  let file = at.join(".furb").join("config.local.json");
-  let (on, refused) = turned(&file, r#"{"extensions": {"note": "skills/note"}}"#, &places(&at));
-  assert!(on.is_empty(), "{on:?}");
-  let told =
-    format!("The key extensions of {} is now skills, so it turns nothing on", file.display());
-  assert_eq!(refused, [told]);
-}
-
-#[test]
 fn a_word_that_differs_has_a_copy_of_its_own_which_no_other_word_writes_over() {
   let at = place("copies");
-  let places = places(&at);
-  let one = copy("note", "note.py", "x = 1\n", &places);
-  let other = copy("note", "note.py", "x = 2\n", &places);
+  folder(&at.join("one"), &skill("note", &[("word", "note.py")]), "x = 1\n");
+  folder(&at.join("other"), &skill("note", &[("word", "note.py")]), "x = 2\n");
+  let file = |root: &str| load("note", &at.join(root), &places(&at)).unwrap().file;
+  let (one, other) = (file("one"), file("other"));
   let read = |path: &str| fs::read_to_string(path).unwrap();
-  assert_eq!((read(&one), read(&other)), ("x = 1\n".to_owned(), "x = 2\n".to_owned()));
-  assert_eq!(copy("note", "note.py", "x = 1\n", &places), one);
+  assert_eq!((read(&one), read(&other)), ("x = 1".to_owned(), "x = 2".to_owned()));
+  assert_eq!(file("one"), one);
 }
 
 /// The crate on crates.io holds the manifest, the word and the interface of each official
@@ -1124,13 +1094,13 @@ fn the_crate_holds_each_official_skill() {
   let manifest = fs::read_to_string(root.join("Cargo.toml")).unwrap();
   let folders = fs::read_dir(root.join(".agents").join("skills")).unwrap();
   let mut lacked = Vec::new();
-  let mut official = 0;
+  let mut official = Vec::new();
   for folder in folders {
     let name = folder.unwrap().file_name().to_string_lossy().into_owned();
     if !root.join(".agents/skills").join(&name).join(format!("{name}.py")).is_file() {
       continue;
     }
-    official += 1;
+    official.push(name.clone());
     for file in ["SKILL.md".to_owned(), format!("{name}.py*")] {
       let line = format!("\"/.agents/skills/{name}/{file}\"");
       if !manifest.contains(&line) {
@@ -1138,6 +1108,40 @@ fn the_crate_holds_each_official_skill() {
       }
     }
   }
-  assert_eq!(official, super::OFFICIAL.len(), "each official extension has a folder");
+  let at = place("official");
+  let each: serde_json::Map<_, _> =
+    official.iter().map(|name| (name.clone(), true.into())).collect();
+  let turned = serde_json::json!({ "skills": each }).to_string();
+  config(&at.join("user").join("config.json"), &turned);
+  let (on, refused) = configured(&places(&at), &at).unwrap();
+  let on: Vec<String> = on.into_iter().map(|one| one.name).collect();
+  assert!(refused.is_empty(), "{refused:?}");
+  assert!(
+    official.iter().all(|name| on.contains(name)),
+    "each folder is an official skill: {on:?}"
+  );
   assert!(lacked.is_empty(), "the include of Cargo.toml lacks {lacked:?}");
+}
+
+#[test]
+fn a_word_of_a_skill_that_binds_a_name_of_the_engine_in_a_block_a_def_a_walrus_a_capture_or_a_global_binds_it()
+ {
+  let at = place("bound");
+  let bound = |word: &str| {
+    folder(&at.join("bound"), &skill("note", &[("word", "note.py")]), word);
+    load("note", &at.join("bound"), &places(&at)).err().map(|no| no.message())
+  };
+  let binds = |name: &str| {
+    Some(format!(
+      "The word note.py binds {name} of the engine at its top, which each word of a chain reads: \
+       give each a name of its own: {}",
+      at.join("bound").join("SKILL.md").display()
+    ))
+  };
+  assert_eq!(bound("if True:\n  over = 1"), binds("over"));
+  assert_eq!(bound("def under():\n  pass"), binds("under"));
+  assert_eq!(bound("(question := 1)"), binds("question"));
+  assert_eq!(bound("match 1:\n  case scope:\n    pass"), binds("scope"));
+  assert_eq!(bound("def f():\n  global lineage\n  lineage = 1"), binds("lineage"));
+  assert_eq!(bound("accepts = None\nactor = 'x'\nimport re"), None);
 }

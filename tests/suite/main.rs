@@ -8,14 +8,25 @@ mod pipes;
 
 #[path = "../common/drive.rs"]
 mod drive;
+#[path = "../common/opened.rs"]
+#[expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
+#[expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
+#[expect(clippy::expect_used, reason = "a helper of a test fails the test where it fails")]
+mod opened;
 #[path = "../common/yard.rs"]
 mod yard;
+
+use yard::Yard;
+
+/// The script of a life of the suite takes each word under the bound of a turn of the engine.
+fn answered(_nth: usize) {}
 
 mod async_open;
 mod engine;
 mod examples;
 mod life;
 mod promise;
+mod skill;
 mod tip;
 mod view;
 mod world;

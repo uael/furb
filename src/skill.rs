@@ -1183,7 +1183,3 @@ async fn ring(co: &mut Co, chain: &str, word: &str) -> Result<(), Fault> {
   }
   Ok(())
 }
-
-#[cfg(test)]
-#[path = "skill.test.rs"]
-mod test;
