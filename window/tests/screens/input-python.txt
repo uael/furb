@@ -23,7 +23,7 @@
 
 
 ┃
-┃ answer = 41 + 1
+┃ >>> answer = 41 + 1
 ┃
 ┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

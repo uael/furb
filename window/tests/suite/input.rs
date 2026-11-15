@@ -409,7 +409,7 @@ fn the_python_switch_runs_a_word_of_the_operator() {
   // he read its end.
   shows(&app, "Resolved 1");
   clicked(&app, " Python ", 0, 1);
-  shows(&app, "┃ A word of Python to run");
+  shows(&app, "┃ >>> A word of Python to run");
   app.paste("answer = 41 + 1");
   screen("input-python", &app);
   app.press("enter");
@@ -424,7 +424,7 @@ fn the_python_switch_runs_a_word_of_the_operator() {
     || matches!(peer.tried(inspect()), Ok(Answer::Inspected { repr, .. }) if repr == "42"),
   );
   assert!(ran, "{:?}", peer.tried(inspect()));
-  shows(&app, "┃ A word of Python to run");
+  shows(&app, "┃ >>> A word of Python to run");
 }
 
 #[test]
@@ -433,7 +433,7 @@ fn a_word_of_python_shows_in_its_thread_as_his_code_and_a_line_that_raised_says_
   sent(&app, &format!("how long does an open take {ANSWERS}"));
   shows(&app, "Resolved 1");
   clicked(&app, " Python ", 0, 1);
-  shows(&app, "┃ A word of Python to run");
+  shows(&app, "┃ >>> A word of Python to run");
   // The word is a box of his code in the thread, on the bar of his messages, line by line.
   sent(&app, "await wait(1, __name__)\nanswer = 41 + 1");
   let ran = shows(&app, "  answer = 41 + 1");

@@ -80,6 +80,9 @@ pub(crate) struct Area {
   pub(crate) shown: bool,
 }
 
+/// The columns of a prompt of the interpreter before a line of a word of Python: `>>> ` or `... `.
+const PROMPT_WIDTH: usize = 4;
+
 impl Model {
   /// The text of the input sent to its target, as the client sends it: whether it went, and else
   /// why the window says.
@@ -358,7 +361,8 @@ impl Model {
 
   /// How many rows the text of the input takes, as the editor wraps it at its columns.
   pub(crate) fn grown(&self) -> usize {
-    let room = self.wide().saturating_sub(6).max(1);
+    let prompt = if self.client.draft.python { PROMPT_WIDTH } else { 0 };
+    let room = self.wide().saturating_sub(6 + prompt).max(1);
     // The editor wraps at a word boundary, as the box of a message does.
     let rows =
       self.client.draft.text.split('\n').map(|line| wrapped(line, room).len().max(1)).sum();
@@ -405,9 +409,11 @@ impl Model {
           Target::Session(..) => "Ask in a new thread",
           Target::New(..) => "Ask for a change, a review or an answer",
         };
-        // The text stands under the blank row that opens the box, as in the box of a message.
+        // The text stands under the blank row that opens the box, as in the box of a message, and
+        // after the prompt of the interpreter while it is a word of Python.
         let waits = usize::from(self.waiting_row().is_some());
-        (2, waits + 1, self.grown(), says.to_owned())
+        let x = if self.client.draft.python { 2 + PROMPT_WIDTH } else { 2 };
+        (x, waits + 1, self.grown(), says.to_owned())
       }
     };
     let shown = self.form().is_none() || self.form_rows(self.grown()).1.is_some();
@@ -440,7 +446,14 @@ impl Model {
           self.tokens.style(Role::Muted).bg(self.tokens.raised),
         )]
       });
-      let band = |at| self.band(Vec::new(), if at == 0 { walking.clone() } else { None });
+      // A word of Python takes the prompts of the interpreter: `>>>` before its first line and
+      // `...` before each other line, as the REPL of Python writes them.
+      let prompt = |at: usize| {
+        let mark = if at == 1 { ">>> " } else { "... " };
+        let python = self.client.draft.python && (1..=self.grown()).contains(&at);
+        python.then(|| run(mark, self.tokens.style(Role::Muted).bg(self.tokens.raised))).into_iter()
+      };
+      let band = |at| self.band(prompt(at).collect(), if at == 0 { walking.clone() } else { None });
       let bands = (0..self.grown() + 2).map(band);
       let mut rows: Vec<Row> = self.waiting_row().into_iter().chain(bands).collect();
       rows.extend([self.launcher(), self.band(Vec::new(), None)]);

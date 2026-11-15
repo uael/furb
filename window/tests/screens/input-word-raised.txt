@@ -23,7 +23,7 @@
 ┃
 
 ┃
-┃ A word of Python to run
+┃ >>> A word of Python to run
 ┃
 ┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
