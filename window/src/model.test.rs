@@ -1,17 +1,12 @@
 use std::path::PathBuf;
 
 use furb::view::{self, Part, Standing};
-use furb_client::Ask;
+use furb_client::{Ask, Asked};
 use furb_host::protocol::{Answer, Card, Frame, Kind, PROTOCOL, Peer, Role, Verb};
 use jiff::tz::TimeZone;
 
 use super::{Link, Model, Told};
-use crate::{
-  Options, System,
-  input::{Asked, Word},
-  list::Row,
-  tokens::Tokens,
-};
+use crate::{Options, System, input::Word, list::Row, tokens::Tokens};
 
 fn card(life: &str, title: &str, standing: Standing, since: u64) -> Card {
   let thread = view::Card {
@@ -96,17 +91,17 @@ fn a_loss_gives_each_message_on_its_way_back_to_the_input_and_a_new_hello_hears_
   model.open_thread();
   model.client.holds.values_mut().for_each(|hold| hold.ask = Ask::Answered);
   assert!(model.send("and the seed?".to_owned()));
-  let (at, _) = model.due().unwrap();
-  model.asked.insert((at, 7), Asked::Say);
+  let (at, _) = model.client.due().unwrap();
+  model.client.asked.insert((at, 7), Asked::Say);
   assert!(model.hear(0, Err(crate::Error::Closed)));
   assert_eq!(model.restore.as_deref(), Some("and the seed?"));
   let why = "mac went away before it took your message. If the thread shows it, it went.";
-  assert_eq!((model.fault.as_deref(), model.asked.len()), (Some(why), 0));
+  assert_eq!((model.fault.as_deref(), model.client.asked.len()), (Some(why), 0));
   assert!(model.client.holds.values().all(|hold| hold.ask == Ask::Due));
   // Nothing goes while the machine is away: the text stays in the input.
   model.draft.text = "and the seed?".to_owned();
   assert!(!model.send("and the seed?".to_owned()));
-  assert!(model.outgoing.is_empty());
+  assert!(model.client.outgoing.is_empty());
   // A new connection says its hello, then its cards.
   let peer = Peer { operator: "ada".to_owned(), role: Role::Write, kind: Kind::Window, name: None };
   let (machine, build) = ("mac".to_owned(), String::new());
@@ -130,7 +125,7 @@ fn the_end_of_a_word_is_asked_again_once_its_life_stands_after_a_loss() {
   let ended = Verb::Ended { life, act: "rung3".to_owned() };
   assert_eq!(model.ended_due(), Some((0, ended.clone())));
   model.word.as_mut().unwrap().asked = true;
-  model.asked.insert((0, 7), Asked::Ended);
+  model.client.asked.insert((0, 7), Asked::Ended);
   assert_eq!(model.ended_due(), None);
   assert!(model.hear(0, Err(crate::Error::Closed)));
   assert_eq!(model.ended_due(), None, "nothing goes until its life stands again");

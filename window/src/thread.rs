@@ -22,10 +22,10 @@ use furb_host::protocol::{Card, Verb};
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::Hold;
+use furb_client::{Asked, Hold};
 
 use crate::{
-  input::{Asked, Pending},
+  input::Pending,
   keys::Does,
   line::Line,
   list::hash,
@@ -625,7 +625,8 @@ impl Model {
     let key = opened.key.clone();
     let login = self.client.machines[key.0].login.clone();
     // A card that the daemon told before it read the last Seen says unread once more.
-    let saying = self.asked.iter().any(|(asked, what)| asked.0 == key.0 && *what == Asked::Seen);
+    let saying =
+      self.client.asked.iter().any(|(asked, what)| asked.0 == key.0 && *what == Asked::Seen);
     if saying || !self.client.card(&key)?.thread.unread(&login) {
       return None;
     }

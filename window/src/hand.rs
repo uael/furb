@@ -22,9 +22,11 @@ use opentui::{
 
 use furb_host::protocol::Verb;
 
+use furb_client::Asked;
+
 use crate::{
   Machine, Options, Screen,
-  input::{Armed, Asked},
+  input::Armed,
   kept,
   keys::{self, Does},
   line::Line,
@@ -370,10 +372,10 @@ fn pump(window: &Shared) {
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
   let model = &mut screen.model;
-  for (life, verb) in model.opens_due() {
+  for (life, verb) in model.client.opens_due() {
     let id = asker(askers, model, life.0).map(|asker| asker.ask(verb));
     model.client.asked_open(&life, id);
-    model.asked.extend(id.map(|id| ((life.0, id), Asked::Open)));
+    model.client.asked.extend(id.map(|id| ((life.0, id), Asked::Open)));
   }
   if let Some(verb) = model.page_due()
     && let Some(at) = model.thread.as_ref().map(|one| one.key.0)
@@ -383,27 +385,27 @@ fn pump(window: &Shared) {
     opened.asked.insert(asker.ask(verb), None);
     opened.again = false;
   }
-  if let Some((at, verb)) = model.due()
+  if let Some((at, verb)) = model.client.due()
     && let Some(asker) = asker(askers, model, at)
   {
-    model.asked.insert((at, asker.ask(verb)), Asked::Say);
+    model.client.asked.insert((at, asker.ask(verb)), Asked::Say);
   }
   if let Some((at, verb, target)) = model.history_due()
     && let Some(asker) = asker(askers, model, at)
   {
-    model.asked.insert((at, asker.ask(verb)), Asked::History(target));
+    model.client.asked.insert((at, asker.ask(verb)), Asked::History(target));
   }
   if let Some((at, verb)) = model.seen_due()
     && let Some(asker) = asker(askers, model, at)
   {
-    model.asked.insert((at, asker.ask(verb)), Asked::Seen);
+    model.client.asked.insert((at, asker.ask(verb)), Asked::Seen);
   }
   if let Some((at, verb)) = model.ended_due()
     && let Some(asker) = asker(askers, model, at)
     && let Some(word) = model.word.as_mut()
   {
     word.asked = true;
-    model.asked.insert((at, asker.ask(verb)), Asked::Ended);
+    model.client.asked.insert((at, asker.ask(verb)), Asked::Ended);
   }
 }
 
@@ -536,7 +538,7 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
       let mut held = window.borrow_mut();
       let Window { askers, screen, .. } = &mut *held;
       match asker(askers, &screen.model, at) {
-        Some(asker) => drop(screen.model.asked.insert((at, asker.ask(verb)), Asked::Answer)),
+        Some(asker) => drop(screen.model.client.asked.insert((at, asker.ask(verb)), Asked::Answer)),
         None => screen.model.unanswered(screen.model.away(at).unwrap_or_default()),
       }
       drop(held);
@@ -615,7 +617,7 @@ fn listed(window: &Shared) {
   for at in 0..askers.len() {
     if let Some(asker) = asker(askers, &screen.model, at) {
       let id = asker.ask(Verb::List { config: None });
-      screen.model.asked.insert((at, id), Asked::List);
+      screen.model.client.asked.insert((at, id), Asked::List);
     }
   }
 }
@@ -667,7 +669,7 @@ fn controlled(
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
   match asker(askers, &screen.model, at) {
-    Some(asker) => drop(screen.model.asked.insert((at, asker.ask(verb)), waits)),
+    Some(asker) => drop(screen.model.client.asked.insert((at, asker.ask(verb)), waits)),
     None => screen.model.fault = screen.model.away(at),
   }
   drop(held);

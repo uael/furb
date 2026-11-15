@@ -17,8 +17,9 @@ use furb::view::{
 use furb_host::protocol::{Card, Verb};
 use opentui::style::Style;
 
+use furb_client::Asked;
+
 use crate::{
-  input::Asked,
   keys::Does,
   line::{Line, run, spread, wrapped},
   model::{Key, Model},
@@ -253,7 +254,7 @@ impl Model {
 
   /// Whether an answer of a form waits for its machine, so no second one goes.
   fn answering(&self) -> bool {
-    self.asked.values().any(|one| *one == Asked::Answer)
+    self.client.asked.values().any(|one| *one == Asked::Answer)
   }
 
   /// The refusal of the daemon of the last answer of the form, and why: the form stays as it was,

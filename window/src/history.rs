@@ -13,11 +13,9 @@ use furb::view::Sent;
 use furb_host::protocol::Verb;
 use unicode_width::UnicodeWidthStr;
 
-use crate::{
-  input::{Draft, Target},
-  line::cut,
-  model::Model,
-};
+use furb_client::Target;
+
+use crate::{input::Draft, line::cut, model::Model};
 
 /// The history of the input: the target that it was asked for, whether the window asked it, and
 /// the history once the machine gave it.

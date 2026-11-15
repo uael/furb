@@ -6,14 +6,10 @@
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
 
-use std::{
-  collections::{HashMap, VecDeque},
-  path::PathBuf,
-  time::Duration,
-};
+use std::{path::PathBuf, time::Duration};
 
 use furb::view::{Part, age, homed, since};
-use furb_client::{Ask, Client, Hold, Listing, Step};
+use furb_client::{Ask, Asked, Client, Hold, Listing, Step, Target};
 pub(crate) use furb_client::{Key, Link, Told};
 use furb_host::{
   Event,
@@ -25,7 +21,7 @@ use crate::{
   Options,
   code::Colors,
   history::{History, Walk},
-  input::{Armed, Asked, Draft, Outgoing, Target, Word},
+  input::{Armed, Draft, Word},
   keys::{self, Does, System},
   link::Heard,
   list::Row,
@@ -75,10 +71,6 @@ pub(crate) struct Model {
   pub(crate) aim: Option<Target>,
   /// The text of the input, as its editor holds it, and whether it is a word of python that runs.
   pub(crate) draft: Draft,
-  /// The messages that wait to be sent, the first one first.
-  pub(crate) outgoing: VecDeque<Outgoing>,
-  /// Each request of the input that waits for its answer, by its machine and its id.
-  pub(crate) asked: HashMap<(usize, u64), Asked>,
   /// The text that comes back to the input after a refusal or a take back, until the editor takes
   /// it.
   pub(crate) restore: Option<String>,
@@ -125,8 +117,6 @@ impl Model {
       colors: Colors::new(),
       aim: None,
       draft: Draft::default(),
-      outgoing: VecDeque::new(),
-      asked: HashMap::new(),
       restore: None,
       armed: None,
       notice: None,
@@ -141,7 +131,7 @@ impl Model {
   /// told changed. The first cause of a loss stays.
   pub(crate) fn hear(&mut self, at: usize, heard: Heard) -> bool {
     if let Ok(Frame::Reply { id, .. } | Frame::Refused { id: Some(id), .. }) = &heard
-      && let Some(asked) = self.asked.remove(&(at, *id))
+      && let Some(asked) = self.client.asked.remove(&(at, *id))
     {
       self.answered_input(at, (*id, asked), heard);
       return true;
@@ -178,7 +168,8 @@ impl Model {
   /// and each life of the machine opens again, with the page of the open thread, once it answers.
   fn lost(&mut self, at: usize) -> bool {
     let name = self.client.machines[at].name.clone();
-    let gone: Vec<Asked> = self.asked.extract_if(|key, _| key.0 == at).map(|one| one.1).collect();
+    let gone: Vec<Asked> =
+      self.client.asked.extract_if(|key, _| key.0 == at).map(|one| one.1).collect();
     // A take back that the machine may not have done gives its text back all the same: the input
     // never loses a word, and the thread shows whether the message still runs.
     for one in &gone {
@@ -189,7 +180,7 @@ impl Model {
     if gone.contains(&Asked::Answer) {
       self.unanswered(format!("{name} went away before it took the answer. Send it again."));
     }
-    if self.outgoing.iter().any(|one| one.at == at) {
+    if self.client.outgoing.iter().any(|one| one.at == at) {
       let why =
         format!("{name} went away before it took your message. If the thread shows it, it went.");
       self.restore = Some(self.refused(why));

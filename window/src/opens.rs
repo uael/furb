@@ -74,7 +74,7 @@ impl Model {
     {
       opened.fault = Some(why.clone());
     }
-    (!self.outgoing.is_empty()).then(|| self.refused(why))
+    (!self.client.outgoing.is_empty()).then(|| self.refused(why))
   }
 
   /// The end of a life that a fault ended, which its machine tells a window that attached: the
@@ -92,7 +92,7 @@ impl Model {
     let since = self.moved;
     let gone = || Hold { cwd: None, ask: Ask::Due, since, stood: true, steps: Vec::new() };
     self.client.holds.entry(key).or_insert_with(gone).ask = Ask::Failed(fault.clone());
-    if !self.outgoing.is_empty() {
+    if !self.client.outgoing.is_empty() {
       self.restore = Some(self.refused(fault));
     }
     true

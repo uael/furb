@@ -12,8 +12,9 @@ use nucleo_matcher::{
 };
 use opentui::style::Style;
 
+use furb_client::Target;
+
 use crate::{
-  input::Target,
   keys::{self, Bound, Does},
   line::{Line, capital, run, spread},
   list::project,

@@ -99,7 +99,7 @@ contract needs a request of the owner.
 | `src/life.rs` | The opening of a life, which every host shares: the record, the ears of the crate, and the extensions. |
 | `src/view.rs`, `src/view/` | The meaning of a life, folded from its facts, which every window shows the same way: the state of each act and chain, the desk, the threads, the spend, and the acts at a moment. The host tells each act with it, and `host/tests/suite/view.rs` proves it. |
 | `crates/wire/` | The crate `furb-wire`: the plain shapes of the meaning of a life, an act with its state, the words in which a person reads a time, a size and a count, and the protocol of the daemon with its events. A client links it with no engine and no daemon; `furb::view` and `furb-host` give each of its names again. |
-| `crates/client/` | The crate `furb-client`: the client of furb with no drawing, which each window maps: what each machine told, from each frame of its daemon, the order of the cards of all of them, and each life that the client holds with how far its open stands. |
+| `crates/client/` | The crate `furb-client`: the client of furb with no drawing, which each window maps: what each machine told, from each frame of its daemon, the order of the cards of all of them, each life that the client holds with how far its open stands, and the queue of what it sends with each verb that is due. |
 | `src/furb/world.py` | The World of Python: the ears of the crate, and the operator at its terminal. The scripts open a life on it. |
 
 ### The provider
