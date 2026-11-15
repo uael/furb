@@ -51,8 +51,8 @@ pub struct Outgoing {
 
 /// What a request of the client asked of a daemon: the open of a life, a message, a control of a
 /// thread, as a stop or a resolve, the take back of a message with its text, the answer to a
-/// question, what the operator saw, the records of the machine, the end of the rung of a word, or
-/// the history of the input.
+/// question, what the operator saw, the records of the machine, the models of its catalog, the end
+/// of the rung of a word, or the history of the input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Asked {
   Open,
@@ -62,6 +62,7 @@ pub enum Asked {
   Answer,
   Seen,
   List,
+  Models,
   Ended,
   History(Target),
 }
@@ -158,5 +159,23 @@ impl Client {
       (key.clone(), open)
     };
     due.map(open).collect()
+  }
+
+  /// The ask of the models of each machine that lists its cards and gave none yet, for a life in
+  /// the folder of the client on this machine: the launcher shows the model and the effort that a
+  /// new session takes before any session stands.
+  pub fn models_due(&self, folder: &str) -> Vec<(usize, Verb)> {
+    let asking =
+      |at: usize| self.asked.iter().any(|(key, one)| key.0 == at && *one == Asked::Models);
+    let due = self
+      .machines
+      .iter()
+      .enumerate()
+      .filter(|(at, told)| told.link == Link::Listed && told.models.is_none() && !asking(*at));
+    let ask = |(at, _)| {
+      let cwd = (at == 0).then(|| folder.to_owned());
+      (at, Verb::Models { cwd, config: None, claude: None })
+    };
+    due.map(ask).collect()
   }
 }

@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 38;
+pub const PROTOCOL: u32 = 39;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -909,11 +909,14 @@ impl Project {
 }
 
 /// A model that the catalog of a machine offers: the name that a stand takes, the levels of effort
-/// that it takes, the tokens of its window, and whether it sees images.
+/// that it takes, the level that a life takes when its actor names none, the tokens of its window,
+/// and whether it sees images.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Model {
   pub name: String,
   pub efforts: Vec<String>,
+  #[serde(default)]
+  pub effort: Option<String>,
   pub window: u64,
   pub images: bool,
 }

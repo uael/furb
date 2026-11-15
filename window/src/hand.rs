@@ -365,9 +365,9 @@ fn keep(app: &App, window: &Shared) {
 }
 
 /// Each request that is due asked of its machine: the open of each life that the window holds,
-/// the page of the end of the open thread, the next message of the queue of the input, what the
-/// operator saw of the open thread, and the end of the word that the window ran, each with its id
-/// kept until its answer comes.
+/// the models of each machine, the page of the end of the open thread, the next message of the
+/// queue of the input, what the operator saw of the open thread, and the end of the word that the
+/// window ran, each with its id kept until its answer comes.
 fn pump(window: &Shared) {
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
@@ -376,6 +376,12 @@ fn pump(window: &Shared) {
     let id = ask(askers, model, life.0, verb);
     model.client.asked_open(&life, id);
     model.client.asked.extend(id.map(|id| ((life.0, id), Asked::Open)));
+  }
+  let folder = model.folder.display().to_string();
+  for (at, verb) in model.client.models_due(&folder) {
+    if let Some(id) = ask(askers, model, at, verb) {
+      model.client.asked.insert((at, id), Asked::Models);
+    }
   }
   if let Some(verb) = model.page_due()
     && let Some(at) = model.thread.as_ref().map(|one| one.thread.key.0)

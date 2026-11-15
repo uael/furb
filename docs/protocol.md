@@ -198,8 +198,9 @@ daemon answers requests in any order.
   last first. A record of no project stands in none.
 - `models` gives the models that the catalog of the machine offers to a life in the folder `cwd`, with the settings
   of the folder `config` and the claude command line at `claude`, each as `open` takes it, the ones of the daemon
-  when the peer names none. It needs no life. Each model has its `name`, which `actor` of `open` takes, its
-  `efforts`, the tokens of its `window`, and whether it sees `images`.
+  when the peer names none. It needs no life. The first is the default actor. Each model has its `name`, which
+  `actor` of `open` takes, its `efforts`, the `effort` that a life takes when its actor names none, the tokens of
+  its `window`, and whether it sees `images`.
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
 - An answer is a frame `reply` with the `id`, an `answer` that names its kind, and its `data`: `done`, `welcome`,

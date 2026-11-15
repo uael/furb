@@ -3019,6 +3019,13 @@
             "type": "string"
           }
         },
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "window": {
           "type": "integer",
           "format": "uint64",
@@ -3034,7 +3041,7 @@
         "window",
         "images"
       ],
-      "description": "A model that the catalog of a machine offers: the name that a stand takes, the levels of effort\nthat it takes, the tokens of its window, and whether it sees images."
+      "description": "A model that the catalog of a machine offers: the name that a stand takes, the levels of effort\nthat it takes, the level that a life takes when its actor names none, the tokens of its window,\nand whether it sees images."
     },
     "Card": {
       "type": "object",
@@ -5496,5 +5503,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 38
+  "x-protocol": 39
 }

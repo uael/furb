@@ -1,26 +1,26 @@
  furb                                                          broken ▾               this machine
 
-  No thread yet.                                                No thread yet in this project.
+                                                                No thread yet in this project.
 
-  Write below to start one. It runs in a new session of the     Other projects and sessions:
-  project broken, on this machine.                              ⌃O
+                                                                Other projects and sessions:
+                                                                ⌃O
+
+
+
+
+
+
+
+
+
+
+
+  Write below to start a thread.
+  It runs in a new session of broken on this computer.
 
   ⌃O          go to a project or a session
   ⌃P          commands
   ⌃X ?        each key
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ┃
 ┃ how long does an open take

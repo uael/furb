@@ -755,7 +755,9 @@ async fn the_models_are_those_that_the_catalog_offers_with_no_life() {
   let models = Verb::Models { cwd: Some(at.display().to_string()), config: None, claude };
   let Ok(Answer::Models(models)) = window.ask(models).await else { panic!("no models") };
   let efforts = ["low", "medium", "high", "xhigh", "max"].map(str::to_owned).to_vec();
-  let opus = Model { name: "claude-cli:opus".to_owned(), efforts, window: 1_000_000, images: true };
+  let effort = Some("high".to_owned());
+  let opus =
+    Model { name: "claude-cli:opus".to_owned(), efforts, effort, window: 1_000_000, images: true };
   assert!(models.contains(&opus), "{models:?}");
   assert_eq!(window.listed().await, Vec::new(), "the daemon holds no life to list them");
 }

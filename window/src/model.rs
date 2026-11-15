@@ -216,6 +216,13 @@ impl Model {
       (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {
         self.client.machines[at].lives = lives;
       }
+      (Asked::Models, Ok(Frame::Reply { answer: Answer::Models(models), .. })) => {
+        self.client.machines[at].models = Some(models);
+      }
+      // A catalog that gave no models leaves the launcher with none, and says why once.
+      (Asked::Models, Ok(Frame::Refused { why, .. })) => {
+        (self.client.machines[at].models, self.fault) = (Some(Vec::new()), Some(why));
+      }
       (Asked::History(target), Ok(Frame::Reply { answer: Answer::History(sent), .. })) => {
         self.historied(&target, sent);
       }

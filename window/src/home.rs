@@ -1,6 +1,8 @@
 //! The home, at the left of the list while no thread is open: what waits for the operator, and
 //! what worked while no window was open.
 
+use std::iter;
+
 use furb::view::Standing;
 use opentui::style::Style;
 use unicode_width::UnicodeWidthStr;
@@ -17,7 +19,14 @@ use crate::{
 impl Model {
   /// The rows of the home, above the input.
   pub(crate) fn home(&self) -> Vec<Row> {
-    self.says().into_iter().map(Row::of).collect()
+    let mut rows = self.says();
+    // With no thread, what the home says stands just above the input, where the eye goes next.
+    if self.client.settled.is_empty() && self.known() {
+      let room = usize::from(self.size.1).saturating_sub(self.input_rows() + 1);
+      let pad = room.saturating_sub(rows.len());
+      rows.splice(2..2, iter::repeat_n(Vec::new(), pad));
+    }
+    rows.into_iter().map(Row::of).collect()
   }
 
   /// The name of the project of the folder of the window.
@@ -68,10 +77,15 @@ impl Model {
         rows.push(Vec::new());
       }
     } else if self.known() {
-      rows.extend(wrapped("No thread yet.", prose));
+      rows.extend(wrapped("Write below to start a thread.", prose));
+      rows.pop();
+      let actor = self.maker().map(|(model, effort)| match effort {
+        Some(effort) => format!(", with {model} at {effort} effort"),
+        None => format!(", with {model}"),
+      });
       let project = self.project();
-      let how = "Write below to start one. It runs in a new session of the project";
-      rows.extend(wrapped(&format!("{how} {project}, on this machine."), prose));
+      let place = format!("It runs in a new session of {project} on this computer");
+      rows.extend(wrapped(&format!("{place}{}.", actor.unwrap_or_default()), muted));
     }
     for told in &self.client.machines {
       if let Link::Lost(why) = &told.link {

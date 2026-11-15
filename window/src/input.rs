@@ -635,7 +635,7 @@ impl Model {
   /// The model that the target of the input speaks to: the one of the last block of the open
   /// thread with its effort, else the one that its card or the last card of its session names. A
   /// new session names none until its life stands.
-  fn maker(&self) -> Option<(String, Option<String>)> {
+  pub(crate) fn maker(&self) -> Option<(String, Option<String>)> {
     // An actor names its model after its provider, and its effort after a slash.
     let short = |model: &str| {
       let model = model.rsplit(':').next().unwrap_or(model);
@@ -655,11 +655,14 @@ impl Model {
       Target::Session(at, life) => (at, life),
       // A new session stands on the model of the last session of its project, as it reads its
       // skills.
+      // A project with no session stands on the default actor of the catalog of its machine.
       Target::New(at) => {
-        let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
+        let told = self.client.machines.get(at)?;
         let here = self.project();
-        let mut ours = cards.iter().rev().filter(|card| project(card) == here);
-        return ours.find_map(|card| card.thread.model.as_deref()).map(short);
+        let mut ours = told.cards.iter().rev().filter(|card| project(card) == here);
+        let last = ours.find_map(|card| card.thread.model.as_deref()).map(short);
+        let first = || told.models.as_ref()?.first();
+        return last.or_else(|| first().map(|one| (short(&one.name).0, one.effort.clone())));
       }
     };
     let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();

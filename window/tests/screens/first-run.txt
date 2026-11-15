@@ -1,26 +1,26 @@
  furb                                                          furb-try ▾             this machine
 
-  No thread yet.                                                No thread yet in this project.
+                                                                No thread yet in this project.
 
-  Write below to start one. It runs in a new session of the     Other projects and sessions:
-  project furb-try, on this machine.                            ⌃O
+                                                                Other projects and sessions:
+                                                                ⌃O
+
+
+
+
+
+
+
+
+
+
+
+  Write below to start a thread.
+  It runs in a new session of furb-try on this computer.
 
   ⌃O          go to a project or a session
   ⌃P          commands
   ⌃X ?        each key
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ┃
 ┃ Ask for a change, a review or an answer

@@ -47,7 +47,7 @@ use furb::{
   view::{self, Reach, Sent, WATCH},
   wire::parsed,
   world::{
-    self, Members, Roster,
+    self, Members, Roster, catalog,
     codex::{self, SignIn},
     config::Change,
   },
@@ -784,8 +784,10 @@ async fn models(opening: Opening, reply: Replied) {
 
 /// A model of the catalog, as the protocol says it.
 fn model(one: &world::Model) -> Model {
-  let efforts = one.efforts().into_iter().map(str::to_owned).collect();
-  Model { name: one.name().to_owned(), efforts, window: one.window(), images: one.sees() }
+  let efforts = one.efforts();
+  let effort = catalog::clamp(&efforts, catalog::LEVEL).map(str::to_owned);
+  let efforts = efforts.into_iter().map(str::to_owned).collect();
+  Model { name: one.name().to_owned(), efforts, effort, window: one.window(), images: one.sees() }
 }
 
 /// The index of the threads of each record that the daemon asks, made one at a time on a thread

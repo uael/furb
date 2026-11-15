@@ -1114,11 +1114,13 @@ export interface Project {
 }
 /**
  * A model that the catalog of a machine offers: the name that a stand takes, the levels of effort
- * that it takes, the tokens of its window, and whether it sees images.
+ * that it takes, the level that a life takes when its actor names none, the tokens of its window,
+ * and whether it sees images.
  */
 export interface Model {
   name: string;
   efforts: string[];
+  effort?: string | null;
   window: number;
   images: boolean;
 }
@@ -1562,4 +1564,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 38;
+export const PROTOCOL = 39;
