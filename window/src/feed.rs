@@ -4,6 +4,8 @@
 //! thread does not show yet, each agent under the line of the block that made it, then the dock of
 //! the agents that no line made.
 
+use std::path::Path;
+
 use furb::view::{
   Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Output, Retrying, Said, Saying,
   Standing, Thought, Work, lines, operator, timer,
@@ -600,10 +602,12 @@ impl Feed<'_> {
   /// wrote. A block that rolls keeps a row for each file, so a diff never takes its rows.
   fn writes(&self, line: &Code, numbers: Gutter, (fold, open): (&Fold, bool)) -> Vec<Row> {
     let (gutter, inner) = (numbers.width, numbers.inside(self.inner()));
-    let room = inner.saturating_sub(gutter + 2);
+    // A file stands under the line as each other row under a line, after its lead, and its diff
+    // under the file, in the column of its path.
+    let room = inner.saturating_sub(gutter + 4);
     let t = &self.model.tokens;
     let muted = self.style(Role::Muted);
-    let pad = || run(format!("{:gutter$}  ", ""), muted);
+    let pad = |lead: &str| run(format!("{:gutter$}  {lead}", ""), muted);
     let key = &self.opened.thread.key;
     // A record writes a path under the home of its machine from `~`, so both sides compare so.
     let folder = self.model.client.cwd(key.0, &key.1).map(|one| self.model.homed(&one));
@@ -619,12 +623,25 @@ impl Feed<'_> {
       } else {
         vec![run(format!("wrote {}", lines(one.added as usize)), muted)]
       };
-      let mut shown = vec![pad(), run(format!("{path}  "), self.style(Role::Prose))];
+      let mut shown = vec![run(format!("{path}  "), muted)];
       shown.extend(counts);
-      let shown = [vec![shown[0].clone()], clipped(shown[1..].to_vec(), room, muted)].concat();
+      let shown = [vec![pad("└ ")], clipped(shown, room, muted)].concat();
       rows.push(Row::clicked(self.boxed(shown, t.raised), Click::Fold(fold.clone())));
     }
     let Some(last) = line.writes.last().filter(|_| open) else { return rows };
+    // The code of a file of python takes the colors of its grammar, read on the whole of what
+    // the diff shows, as the code of a block.
+    let python =
+      Path::new(&last.path).extension().is_some_and(|one| one.eq_ignore_ascii_case("py"));
+    let code: Vec<&str> = last
+      .diff
+      .iter()
+      .filter(|one| !one.starts_with("@@"))
+      .map(|one| one.get(1..).unwrap_or_default())
+      .collect();
+    let prose = self.style(Role::Prose);
+    let colored = python.then(|| self.model.colors.lines(&code.join("\n"), prose));
+    let mut at = 0;
     for text in &last.diff {
       let (sign, ground) = match text.as_bytes().first() {
         Some(b'+') => (Style::new().fg(t.added), t.added_ground),
@@ -633,16 +650,18 @@ impl Feed<'_> {
       };
       // The header of a hunk says that lines stand between it and the one before.
       let shown = if text.starts_with("@@") {
-        vec![pad(), run("…", muted)]
+        vec![pad("  "), run("…", muted)]
       } else {
-        let (mark, code) = text.split_at(text.chars().next().map_or(0, char::len_utf8));
-        let code = run(code.to_owned(), self.style(Role::Prose));
-        [vec![pad(), run(mark.to_owned(), sign)], clipped(vec![code], room - 1, muted)].concat()
+        let (mark, plain) = text.split_at(text.chars().next().map_or(0, char::len_utf8));
+        let runs = colored.as_ref().and_then(|all| all.get(at)).cloned();
+        let runs = runs.unwrap_or_else(|| vec![run(plain.to_owned(), prose)]);
+        at += 1;
+        [vec![pad("  "), run(mark.to_owned(), sign)], clipped(runs, room - 1, muted)].concat()
       };
       rows.push(Row::of(self.boxed(shown, ground)));
     }
     if last.more > 0 {
-      let more = vec![pad(), run(format!("… {} in the review", lines(last.more)), muted)];
+      let more = vec![pad("  "), run(format!("… {} in the review", lines(last.more)), muted)];
       rows.push(Row::clicked(self.boxed(more, t.raised), Click::Key(Does::Changes)));
     }
     rows

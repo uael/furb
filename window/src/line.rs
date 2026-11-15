@@ -121,6 +121,12 @@ pub(crate) fn clipped(line: Line, room: usize, muted: Style) -> Line {
       break;
     }
   }
+  // A cut never ends on blanks, so its mark stands right after what it kept.
+  if let Some(last) = out.pop() {
+    let trimmed = last.content.trim_end();
+    kept -= last.content.chars().count() - trimmed.chars().count();
+    out.push(run(trimmed.to_owned(), last.style));
+  }
   out.push(run(format!("…+{}", chars - kept), muted));
   out
 }

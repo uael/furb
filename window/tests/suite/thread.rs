@@ -315,10 +315,10 @@ fn a_line_that_wrote_a_file_shows_its_path_what_it_changed_and_the_diff_under_it
     rolled,
     [
       "    1  write(Text('notes.md', 'a\\nb\\nc\\n'))",
-      "       notes.md  wrote 3 lines",
+      "       └ notes.md  wrote 3 lines",
       "    2  m = read('notes.md')",
       "    3  write(m.replace('b\\n', 'B\\nb2\\n'))",
-      "       notes.md  +2 −1",
+      "       └ notes.md  +2 −1",
       "    4  close('notes.md has 4 lines.')",
     ]
   );
@@ -331,18 +331,18 @@ fn a_line_that_wrote_a_file_shows_its_path_what_it_changed_and_the_diff_under_it
     opened[..13],
     [
       "    1  write(Text('notes.md', 'a\\nb\\nc\\n'))",
-      "       notes.md  wrote 3 lines",
-      "       +a",
-      "       +b",
-      "       +c",
+      "       └ notes.md  wrote 3 lines",
+      "         +a",
+      "         +b",
+      "         +c",
       "    2  m = read('notes.md')",
       "    3  write(m.replace('b\\n', 'B\\nb2\\n'))",
-      "       notes.md  +2 −1",
-      "        a",
-      "       -b",
-      "       +B",
-      "       +b2",
-      "        c",
+      "       └ notes.md  +2 −1",
+      "          a",
+      "         -b",
+      "         +B",
+      "         +b2",
+      "          c",
     ]
   );
   screen("thread-files", &app);
@@ -370,7 +370,7 @@ fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() 
       "       └ await wait(600, chain)           ◐ Working  opus",
       "    2  boot = prompt(str, 'Read the boot of the host\\…+44",
       "       └ Read the boot of the host        ⠋ Working  opus",
-      "    3  lines = await prompt(str, 'Count the lines of …+51",
+      "    3  lines = await prompt(str, 'Count the lines of…+52",
       "       └ 'README.md has 3 lines.'        ✓ Resolved  opus",
       "    ◐  await wait(600, bench)",
     ]

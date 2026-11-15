@@ -5,18 +5,18 @@
 ┃                                                             ▐ ● edit the notes of the day   now ▌
                                                 opus/high     ▐   FU furb                    opus ▌
     1  write(Text('notes.md', 'a\nb\nc\n'))                   ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-       notes.md  wrote 3 lines
-       +a
-       +b
-       +c
+       └ notes.md  wrote 3 lines
+         +a
+         +b
+         +c
     2  m = read('notes.md')
     3  write(m.replace('b\n', 'B\nb2\n'))
-       notes.md  +2 −1
-        a
-       -b
-       +B
-       +b2
-        c
+       └ notes.md  +2 −1
+          a
+         -b
+         +B
+         +b2
+          c
     4  close('notes.md has 4 lines.')
 
   notes.md has 4 lines.
