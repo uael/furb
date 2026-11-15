@@ -1,0 +1,15 @@
+[package]
+name = "xtask"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+description = "The tasks of a developer of furb, as `cargo xtask`."
+license = "AGPL-3.0-only"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+clap = { version = "4.6", features = ["derive", "string"] }
+thiserror = "2"

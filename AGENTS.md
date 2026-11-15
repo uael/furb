@@ -316,6 +316,10 @@ beside it as its suite.
 
 ## Commands
 
+`cargo xtask` lists each task of a developer, and runs it from any folder of the tree: `check` runs the checks that
+the changed files reach, `test` runs a suite, `frames` the frames of the window, and each script of `script/` that
+runs on its own is a task of its name, whose help is its docstring. The commands below are the ones it routes to.
+
 Run every command from the root of the repository. Before it runs a command, `uv run` syncs the environment. The
 sync builds a package of the workspace again when the environment does not hold it, as in a new checkout, or when a
 file that its build reads changed, which the `cache-keys` of its `pyproject.toml` name: the crate, the engine and the
