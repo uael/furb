@@ -59,7 +59,7 @@ use super::{
   search::Searches,
   thinking::{Thinking, budgeted, thinking},
 };
-use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, skill, verbs, world};
+use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 
 #[cfg(unix)]
 use crate::testing::on_reactor;
@@ -3169,6 +3169,7 @@ fn a_signed_thought_written_after_a_compaction_reaches_the_next_turn_whole() {
 #[cfg(unix)]
 #[test]
 fn a_ceiling_on_a_chain_pauses_it_at_a_reply_that_a_named_account_served() {
+  use crate::skill;
   let (mut engine, _yard) = on_claude("ceiling");
   let root = engine.root().to_owned();
   // The engine holds no grant: the rung plays the word of the official extension, then makes one.
