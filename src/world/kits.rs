@@ -144,8 +144,9 @@ pub(crate) fn kits(
     }
     loop {
       match co.next().await {
-        Next::Resumed(a) => interrupted(&mut co, &a).await?,
-        Next::Heard(a) => {
+        // An act that an earlier life took and that no kit answers is another ear's to take again.
+        Next::Resumed(a) if kits.answering(a.kind()).is_some() => interrupted(&mut co, &a).await?,
+        Next::Heard(a) | Next::Resumed(a) => {
           if let Some(one) = enabled_by(&a) {
             let mut known = kept.borrow_mut();
             known.retain(|(name, _)| *name != one.name);
@@ -185,18 +186,24 @@ impl Kits {
     }
   }
 
+  /// The place in the list of the first kit whose process answers acts of a kind.
+  fn answering(&self, kind: &str) -> Option<usize> {
+    self
+      .played
+      .iter()
+      .position(|one| one.kit.as_ref().is_some_and(|kit| kit.acts.iter().any(|act| act == kind)))
+  }
+
   /// A fact heard: an act that a kit answers is taken, and each process that attached hears it.
   fn heard(&mut self, co: &mut Co<Worked>, a: &Fact) {
-    if a.question() && a.by() != JOURNAL {
-      let at = self.played.iter().position(|one| {
-        one.kit.as_ref().is_some_and(|kit| kit.acts.iter().any(|kind| kind == a.kind()))
-      });
-      if let Some(at) = at {
-        say(co, Fact::says("started", a.about(), []));
-        self.held.insert(a.about().to_owned(), self.played[at].name.clone());
-        if self.played[at].running.is_none() {
-          self.played[at].running = Some(self.started(co, at));
-        }
+    if a.question()
+      && a.by() != JOURNAL
+      && let Some(at) = self.answering(a.kind())
+    {
+      say(co, Fact::says("started", a.about(), []));
+      self.held.insert(a.about().to_owned(), self.played[at].name.clone());
+      if self.played[at].running.is_none() {
+        self.played[at].running = Some(self.started(co, at));
       }
     }
     if a.kind() == "done" {

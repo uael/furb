@@ -2245,3 +2245,19 @@ fn a_life_opens_on_the_image_of_another_engine_and_then_moves_to_this_build() {
   assert_eq!(kept.as_ref().py_repr(), "True", "the move appends the engine that differs");
   assert_eq!(read(&mut moved), "[1, None]", "the next word runs on this build");
 }
+
+/// A wait that a life left open takes its time again in the life that resumes its record: the ear
+/// of the kits hears it first, answers no such act and leaves it to the ear of the time.
+#[test]
+fn a_wait_that_a_life_left_open_goes_on_in_the_life_that_resumes_its_record() {
+  let at = yard("wait-left-open");
+  let (mut first, _) = opening(&at, true).boot::<String>([]).unwrap();
+  let on = Some("chain1".to_owned());
+  let wait =
+    first.wait(&["chain1"], verbs::Wait { seconds: Some(0.05), on }).unwrap().id().to_owned();
+  drop(first);
+  let (mut later, _) = opening(&at, true).boot::<String>([]).unwrap();
+  later.resume().unwrap();
+  let came = executor::block_on(Act::<Object>::of(&mut later, &wait));
+  assert_eq!(came.map(|one| one.py_repr()).map_err(|no| no.to_string()), Ok("None".to_owned()));
+}
