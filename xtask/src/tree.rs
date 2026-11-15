@@ -336,8 +336,12 @@ pub(crate) fn close(root: &Path, path: &Path, into: &str, own: bool) -> Result<(
   Ok(())
 }
 
-/// The processes whose folder stands in the tree, as lsof names them.
+/// The processes whose folder stands in the tree, as lsof names them. Windows has no lsof, and it
+/// refuses to remove a folder that a process stands in, so there the removal of the tree fails.
 fn used(path: &Path) -> Result<Option<String>, Fault> {
+  if cfg!(windows) {
+    return Ok(None);
+  }
   // lsof ends with 1 when it cannot read a process of another user, and still names the others.
   let listed = Process::new("lsof")
     .args(["-d", "cwd", "-Fpn"])
