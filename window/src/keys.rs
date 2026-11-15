@@ -67,24 +67,30 @@ pub(crate) enum Does {
   Pause,
 }
 
-/// One stroke of a key: whether it holds control and alt, and its key.
+/// One stroke of a key: whether it holds control, alt and command, and its key. Command is the
+/// key of macOS, super elsewhere, which a terminal tells when it gives the keys of Kitty.
 #[derive(Debug, Clone, Copy)]
 struct Stroke {
   ctrl: bool,
   alt: bool,
+  cmd: bool,
   code: KeyCode,
 }
 
 const fn plain(code: KeyCode) -> Stroke {
-  Stroke { ctrl: false, alt: false, code }
+  Stroke { ctrl: false, alt: false, cmd: false, code }
 }
 
 const fn ctrl(letter: char) -> Stroke {
-  Stroke { ctrl: true, alt: false, code: KeyCode::Char(letter) }
+  Stroke { ctrl: true, ..plain(KeyCode::Char(letter)) }
 }
 
 const fn alt(code: KeyCode) -> Stroke {
-  Stroke { ctrl: false, alt: true, code }
+  Stroke { alt: true, ..plain(code) }
+}
+
+const fn cmd(letter: char) -> Stroke {
+  Stroke { cmd: true, ..plain(KeyCode::Char(letter)) }
 }
 
 /// The key that the keys of the window that need no chord follow, for two seconds.
@@ -118,7 +124,12 @@ const fn bound(
 /// The keys that go from one place of the window to another. A key with `alt` has a twin after the
 /// leader, since `alt` needs a setting of the terminal on macOS.
 const GO: &[Bound] = &[
-  bound(Does::GoTo, "go to anything, or run a command", Some("go"), &[&[ctrl('p')], &[ctrl('o')]]),
+  bound(
+    Does::GoTo,
+    "go to anything, or run a command",
+    Some("go"),
+    &[&[ctrl('p')], &[cmd('p')], &[ctrl('o')]],
+  ),
   bound(Does::Keys, "each key", Some("keys"), &[&led('?')]),
   bound(
     Does::Needed,
@@ -217,7 +228,10 @@ fn keys() -> impl Iterator<Item = &'static Bound> {
 impl Stroke {
   fn matches(self, key: &KeyEvent) -> bool {
     let held = |one| key.modifiers.contains(one);
-    key.code == self.code && held(Modifiers::CTRL) == self.ctrl && held(Modifiers::ALT) == self.alt
+    key.code == self.code
+      && held(Modifiers::CTRL) == self.ctrl
+      && held(Modifiers::ALT) == self.alt
+      && held(Modifiers::SUPER) == self.cmd
   }
 
   /// The stroke as a system writes it: on macOS the signs in the order of Apple, then the key in
@@ -244,7 +258,7 @@ impl Stroke {
       (KeyCode::Tab, false) => "Tab".to_owned(),
       (code, _) => format!("{code:?}"),
     };
-    let held = [(self.ctrl, "⌃", "Ctrl+"), (self.alt, "⌥", "Alt+")];
+    let held = [(self.ctrl, "⌃", "Ctrl+"), (self.alt, "⌥", "Alt+"), (self.cmd, "⌘", "Super+")];
     let signs = held.iter().filter(|one| one.0).map(|one| if mac { one.1 } else { one.2 });
     signs.chain([name.as_str()]).collect()
   }
@@ -270,12 +284,16 @@ pub(crate) fn says(does: Does) -> &'static str {
 }
 
 /// Each key of the table, in its order, with the name of its group and each of its forms as a
-/// system writes them.
+/// system writes them. Only macOS shows a form with command: elsewhere the desktop most often
+/// takes super for itself, so the window still hears it but does not offer it.
 pub(crate) fn each(
   system: System,
 ) -> impl Iterator<Item = (&'static str, &'static Bound, Vec<String>)> {
-  let forms =
-    move |one: &'static Bound| one.forms.iter().map(|strokes| form(strokes, system)).collect();
+  let offered =
+    move |strokes: &&&[Stroke]| system == System::MacOs || !strokes.iter().any(|one| one.cmd);
+  let forms = move |one: &'static Bound| {
+    one.forms.iter().filter(offered).map(|strokes| form(strokes, system)).collect()
+  };
   TABLE.iter().flat_map(move |(group, keys)| keys.iter().map(move |one| (*group, one, forms(one))))
 }
 

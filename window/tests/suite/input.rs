@@ -737,6 +737,16 @@ fn a_slash_offers_the_commands_and_runs_the_one_that_he_takes() {
 }
 
 #[test]
+fn go_to_opens_on_the_command_key_too_and_runs_a_command_as_its_slash_does() {
+  let (app, _daemon, _) = started();
+  app.press("super+p");
+  shows(&app, "Search a thread, a session");
+  app.type_text("the model of the input");
+  app.press("enter");
+  shows(&app, "Search a model");
+}
+
+#[test]
 fn a_click_on_the_list_keeps_the_keys_with_the_input() {
   let (app, _daemon, _) = started();
   sent(&app, &format!("how long does an open take {ANSWERS}"));

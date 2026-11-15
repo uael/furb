@@ -1,29 +1,29 @@
  furb
 
   Nothing needs you.
-  ● 1 session ru
-                  Each key
-  ⌃P          go  ▌Search a key                                             1 / 30
-  ⌃X ?        ea
-                  Go                                                               ┃
-                  ▌⌃P or ⌃O    go to anything, or run a command                    ┃
-                   ⌃X ?        each key                                            ┃
-                   ⌥A or ⌃X A  the next thread that needs you                      ┃
-                   ⌥↓ or ⌃X J  the next card                                       ┃
-                   ⌥↑ or ⌃X K  the card before                                     ┃
-                   ⌃X L        show or hide the list
+  ● 1 session
+                Each key
+  ⌃P            ▌Search a key                                                 1 / 30
+  ⌃X ?
+                Go                                                                   ┃
+                ▌⌃P or ⌘P or ⌃O  go to anything, or run a command                    ┃
+                 ⌃X ?            each key                                            ┃
+                 ⌥A or ⌃X A      the next thread that needs you                      ┃
+                 ⌥↓ or ⌃X J      the next card                                       ┃
+                 ⌥↑ or ⌃X K      the card before                                     ┃
+                 ⌃X L            show or hide the list
 
-                  The thread
-                   ⌃N          a new thread, and back to the thread
-                   ↘           jump to the latest
-                   ⇞           a page up
-                   ⇟           a page down
-                   ⎋ ⎋         stop the work of the thread
-                   ⌃X R        resolve the thread
-                   ⌃X Z        pause the thread, or resume it
-                   ⌃X S        pause, kill or keep the session
+                The thread
+                 ⌃N              a new thread, and back to the thread
+                 ↘               jump to the latest
+                 ⇞               a page up
+                 ⇟               a page down
+                 ⎋ ⎋             stop the work of the thread
+                 ⌃X R            resolve the thread
+                 ⌃X Z            pause the thread, or resume it
+                 ⌃X S            pause, kill or keep the session
 ┃
-┃ Ask for a chan  ↑↓ move · ⏎ run · ⎋ close
+┃ Ask for a ch  ↑↓ move · ⏎ run · ⎋ close
 ┃
 ┃  Message  Python    This computer ▾   FT furb-try ▾                                 opus  high
 ┃
