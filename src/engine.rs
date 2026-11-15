@@ -219,13 +219,15 @@ impl Host for Outside {
 }
 
 /// The inputs of the opening of a sandbox: the texts of an engine, of the rule of the record, of a
-/// Kernel and of a checkpointer, and the functions of the host that the opening binds.
+/// Kernel and of a checkpointer, the text of the checkpointer of this build, which gathers, and the
+/// functions of the host that the opening binds.
 fn inputs(source: &str, kernel: &str, checkpointer: &str) -> NamedValues {
   let mut inputs = NamedValues::new();
   inputs.push("__source", Object::string(source));
   inputs.push("__record_source", Object::string(RECORD));
   inputs.push("__kernel_source", Object::string(kernel));
   inputs.push("__checkpointer_source", Object::string(checkpointer));
+  inputs.push("__gatherer_source", Object::string(crate::CHECKPOINTER));
   inputs.push("__again", Object::function(AGAIN, None));
   inputs.push("__turn", Object::function(TURN, None));
   inputs

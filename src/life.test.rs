@@ -687,6 +687,24 @@ fn the_tail_after_a_checkpoint_replays_on_the_checkpointer_that_seeded_it() {
   );
 }
 
+/// A record whose checkpointer cannot gather the life of its engine, as an older one whose
+/// `literal` gave a bool for a lost value, crosses all the same: the crossing replays the record
+/// on its engine and gathers it with the checkpointer of this build, which reads the next life.
+#[test]
+fn a_record_whose_checkpointer_cannot_gather_crosses_with_the_checkpointer_of_this_build() {
+  let at = yard("gathers");
+  let raising = "def gathered(names, define, floor):\n  \
+                 raise TypeError('sequence item 3: expected str instance, bool found')\n";
+  let checkpointer = format!("{}\n{raising}", crate::CHECKPOINTER);
+  let (made, named) = named(&[crate::ENGINE, crate::KERNEL, &checkpointer]);
+  let (record, _) = made_elsewhere(&at, &made);
+  let open = || Opening { skills: Some(false), ..opening(&at, true) };
+  let mut later = open().boot::<String>([]).unwrap().0;
+  assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
+  drop(later);
+  assert_eq!(builds(&record), [named, world::engine()], "the record crossed to this build");
+}
+
 /// A life that keeps its record and opens on a record of another engine crosses to this build at
 /// its open: it reaches the tip of the record on that engine, writes its checkpoint and the fact
 /// made of this build, and goes on with this build, and a later open crosses no more. The crossing

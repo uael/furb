@@ -61,7 +61,13 @@ exec(__kernel_source, __kernel)
 if __checkpointer_source:
   __checkpointer = {}
   exec(__checkpointer_source, __checkpointer)
-  __checkpointed = lambda name, /, *args: __checkpointer[name](__engine, *args)
+  # The checkpointer of this build gathers each checkpoint, since the next life reads it, while the record replays and
+  # seeds on its own: only a crossing gathers on another engine, and an older checkpointer may not gather its life.
+  __gatherer = __checkpointer
+  if __gatherer_source != __checkpointer_source:
+    __gatherer = {}
+    exec(__gatherer_source, __gatherer)
+  __checkpointed = lambda name, /, *args: (__gatherer if name == "gathered" else __checkpointer)[name](__engine, *args)
 else:
   # The fact made of a build before the checkpointer holds no text of it: the engine of that build gathers and
   # seeds its own checkpoints, and a record of it replays and goes on on that engine alone.
