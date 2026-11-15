@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use furb::view::{self, Part, Standing};
 use furb_client::{Ask, Asked};
@@ -248,4 +248,32 @@ fn a_folder_of_the_home_shows_as_a_path_of_the_home_with_a_slash_on_each_system(
   assert_eq!(shown(r"C:\Users\ada", r"C:\Users\ada"), "~");
   assert_eq!(shown(r"C:\Users\adam\furb", r"C:\Users\ada"), r"C:\Users\adam\furb");
   assert_eq!(shown("/srv/furb", "/home/ada"), "/srv/furb");
+}
+
+#[test]
+fn a_card_that_begins_to_call_its_operator_pulses_in_its_hue_once_and_settles() {
+  let cards = vec![card("a", "one", Standing::Rests, 5), card("b", "two", Standing::Rests, 9)];
+  let mut model = model(cards, 30);
+  let asks = || card("b", "two", Standing::Asks { of: None }, 12);
+  let heard = |model: &mut Model, moved: u64| {
+    model.client.moved = Duration::from_millis(moved);
+    let frame = Frame::Cards { life: "b".to_owned(), changed: vec![asks()], gone: Vec::new() };
+    assert!(model.hear(0, Ok(frame)));
+  };
+  // The bar of the card at the left of its title, at a moment of the clock of the loaders.
+  let bar = |model: &mut Model, moved: u64| {
+    model.client.moved = Duration::from_millis(moved);
+    let lines = model.list();
+    let line = lines.iter().find(|line| line.iter().any(|one| one.content.contains("two")));
+    line.and_then(|line| line.first()).map(|one| one.content.to_string())
+  };
+  heard(&mut model, 1000);
+  assert_eq!(bar(&mut model, 1000 + 300).as_deref(), Some("▐"));
+  assert!(model.moves());
+  assert_eq!(bar(&mut model, 1000 + 1400).as_deref(), Some("  "));
+  assert!(!model.moves());
+  // A card that keeps asking does not pulse again.
+  heard(&mut model, 3000);
+  assert_eq!(bar(&mut model, 3000 + 300).as_deref(), Some("  "));
+  assert_eq!(model.client.called.len(), 1);
 }

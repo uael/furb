@@ -194,7 +194,7 @@ impl Tokens {
 }
 
 /// A color mixed toward another by a share of 100.
-fn mixed(from: Color, to: Color, share: u16) -> Color {
+pub(crate) fn mixed(from: Color, to: Color, share: u16) -> Color {
   let channel = |from: u8, to: u8| {
     let (from, to) = (u16::from(from), u16::from(to));
     let mixed = (from * (100 - share) + to * share) / 100;
@@ -247,6 +247,22 @@ pub enum Loader {
   /// `writes`: a light coasts over it from its left with a soft tail, the word goes white whole for
   /// a moment, then fades back.
   Light(&'static str),
+}
+
+/// How long the pulse of a card that begins to call its operator takes, and how far of it goes to
+/// rise: it rises fast, then settles over the rest, as a tab of `OpenCode` v2 pulses.
+pub(crate) const CALL: Duration = Duration::from_millis(1400);
+const RISE: i64 = 150;
+
+/// How far the pulse of a card stands `after` the card began to call, in hundredths: none once the
+/// pulse is over.
+pub(crate) fn called(after: Duration) -> u16 {
+  let at = i64::try_from(after.as_millis() * 1000 / CALL.as_millis()).unwrap_or(1000);
+  let share = match at {
+    at if at < RISE => smoother(at * 1000 / RISE),
+    at => 1000 - smoother((at - RISE) * 1000 / (1000 - RISE)),
+  };
+  u16::try_from(share / 10).unwrap_or(0)
 }
 
 /// How long one pulse of the arrow of an agent takes.

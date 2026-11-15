@@ -25,7 +25,7 @@ use crate::{
   link::Heard,
   list::Row,
   pick::Picker,
-  tokens::{BESIDE, LIST, MEASURE, SIDE, Tokens},
+  tokens::{BESIDE, CALL, LIST, MEASURE, SIDE, Tokens},
 };
 
 /// The rows at the top of the list that never scroll.
@@ -409,7 +409,9 @@ impl Model {
         && self.client.fault_of(one.1.0, &one.1.1).is_none()
     };
     let opens = self.client.holds.values().any(Hold::runs);
-    self.slow && !self.known() || opens || self.client.settled.iter().any(works)
+    let pulses =
+      self.client.called.values().any(|since| self.client.moved.saturating_sub(*since) < CALL);
+    self.slow && !self.known() || opens || pulses || self.client.settled.iter().any(works)
   }
 
   pub(crate) fn needs(&self, key: &Key, card: &Card) -> bool {

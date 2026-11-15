@@ -11,7 +11,7 @@ use crate::{
   keys::Does,
   line::{Line, edged, run, spread},
   model::{Key, Link, Model},
-  tokens::{LIST, Loader, Role, WORKS},
+  tokens::{CALL, LIST, Loader, Role, WORKS, called, mixed},
 };
 
 /// The columns of a card between its two edges. The edges of a card stand in the columns where the
@@ -131,7 +131,9 @@ impl Model {
   /// The ground of a card: the selected card is lifted, and the text of the card under the
   /// pointer goes bright, with no other change.
   fn ground(&self, at: usize, pointed: Option<usize>) -> Ground {
-    let bg = self.chosen(at).then_some(self.tokens.lifted);
+    let hue = || self.hue(&self.client.settled[at].1);
+    let pulse = self.pulse(at).map(|share| mixed(self.tokens.panel, hue(), share / 5));
+    let bg = self.chosen(at).then_some(self.tokens.lifted).or(pulse);
     Ground { bg, hover: (pointed == Some(at)).then_some(self.tokens.hover) }
   }
 
@@ -208,7 +210,21 @@ impl Model {
 
   /// A line of a card between its two edges, with the bar in the hue of its thread.
   fn edged(&self, at: usize, ground: Option<Color>, line: Line) -> Line {
-    edged(self.hue(&self.client.settled[at].1), ground, line)
+    let hue = self.hue(&self.client.settled[at].1);
+    let bar = match self.pulse(at) {
+      Some(share) if !self.chosen(at) => mixed(self.tokens.panel, hue, share),
+      _ => hue,
+    };
+    edged(bar, ground, line)
+  }
+
+  /// How far the pulse of a card stands while it runs: a card that began to call its operator
+  /// rises in the hue of its thread and settles back, unless he reads it.
+  fn pulse(&self, at: usize) -> Option<u16> {
+    let since = self.client.called.get(&self.client.settled[at].1)?;
+    let after = self.client.moved.saturating_sub(*since);
+    // A pulse at its first instant, as on a still clock, shows nothing.
+    (after < CALL && !self.chosen(at)).then(|| called(after)).filter(|share| *share > 0)
   }
 
   /// The two lines of a card: its title and its state, then where it is and who works on it.

@@ -89,6 +89,9 @@ pub struct Client {
   pub now: u64,
   /// How long the client ran, on the clock of its loaders.
   pub moved: Duration,
+  /// When each card last began to call its operator, on the clock of the loaders: a question or a
+  /// failure for him, or an end that he did not read. A client draws a pulse on the card there.
+  pub called: HashMap<Key, Duration>,
   pub outgoing: VecDeque<Outgoing>,
   /// The actor that the operator chose last, for its target.
   pub chosen: Option<Chosen>,

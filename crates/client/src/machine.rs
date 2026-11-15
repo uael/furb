@@ -106,6 +106,16 @@ impl Client {
         (told.cards, told.heard, told.link) = (cards, now, Link::Listed);
       }
       Ok(Frame::Cards { life, changed, gone }) => {
+        let calls = |one: &Card| one.thread.needs(&told.login) || one.thread.unread(&told.login);
+        for new in changed.iter().filter(|new| calls(new)) {
+          let was = told
+            .cards
+            .iter()
+            .find(|one| one.life == life && one.thread.prompt == new.thread.prompt);
+          if !was.is_some_and(calls) {
+            self.called.insert((at, life.clone(), new.thread.prompt.clone()), self.moved);
+          }
+        }
         let stays = |one: &Card| {
           let told = |prompt: &String| *prompt == one.thread.prompt;
           one.life != life
