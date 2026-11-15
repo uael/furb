@@ -82,10 +82,18 @@ impl Feed<'_> {
       let said = "This thread is paused. Nothing is lost: a message resumes it.";
       (t.attention, said, (" Change the model ", Does::Model))
     };
-    let says = vec![run("  ‖ ", Style::new().fg(mark)), run(said, self.style(Role::Prose))];
+    let mut rows: Vec<Row> = wrapped(said, self.wide.saturating_sub(6))
+      .into_iter()
+      .enumerate()
+      .map(|(at, text)| {
+        let lead = run(if at == 0 { "  ‖ " } else { "    " }, Style::new().fg(mark));
+        Row::of(vec![lead, run(text, self.style(Role::Prose))])
+      })
+      .collect();
     let line = vec![run("    ", Style::new()), run(chip.0, self.style(Role::Button))];
     let hot = vec![(4..width(&line), Some(Click::Key(chip.1)))];
-    vec![Row::of(says), Row::default(), Row { hot, ..Row::of(line) }, Row::default()]
+    rows.extend([Row::default(), Row { hot, ..Row::of(line) }, Row::default()]);
+    rows
   }
 
   fn style(&self, role: Role) -> Style {

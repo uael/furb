@@ -8,10 +8,10 @@
     ✗  claude-cli:opus/high answered nothing:
        ProviderError: the request is malformed
 
-  ‖ This thread is paused. Nothing is lost: a message resumes
+  ‖ This thread is paused. Nothing is lost: a message
+    resumes it.
 
      Change the model
-
 
 
 
