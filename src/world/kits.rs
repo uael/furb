@@ -60,6 +60,9 @@ const SKILL: &str = "FURB_SKILL";
 /// of its record, which each frame of the ear names.
 const LIFE: &str = "FURB_LIFE";
 
+/// The variable of the environment that names the Python that runs a module of a kit.
+const PYTHON: &str = "FURB_PYTHON";
+
 /// The extensions of a module that bun runs, where a module of Python runs on [`python`] and any
 /// other program runs as it stands.
 const SCRIPTS: [&str; 6] = ["ts", "tsx", "mts", "js", "mjs", "cjs"];
@@ -454,15 +457,19 @@ async fn tail(stderr: Option<ChildStderr>) -> VecDeque<String> {
   lines
 }
 
-/// The Python that runs a module of a kit: the one beside the program of this process, which the
-/// environment that installed furb holds, so the module imports `furb.skill`; else the one on PATH.
+/// The Python that runs a module of a kit: the one that [`PYTHON`] names, which the door of Python
+/// names as its own; else the one beside the program of this process, which the environment that
+/// installed furb holds, so the module imports `furb.skill`; else the one on PATH.
 fn python() -> PathBuf {
   let name = if cfg!(windows) { "python.exe" } else { "python3" };
-  let beside = env::current_exe()
-    .and_then(fs::canonicalize)
-    .ok()
-    .and_then(|program| Some(program.parent()?.join(name)).filter(|one| one.is_file()));
-  beside.unwrap_or_else(|| PathBuf::from(name))
+  let beside = || {
+    env::current_exe()
+      .and_then(fs::canonicalize)
+      .ok()
+      .and_then(|program| Some(program.parent()?.join(name)).filter(|one| one.is_file()))
+  };
+  let named = env::var_os(PYTHON).filter(|one| !one.is_empty()).map(PathBuf::from);
+  named.or_else(beside).unwrap_or_else(|| PathBuf::from(name))
 }
 
 #[cfg(test)]

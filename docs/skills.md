@@ -204,10 +204,10 @@ What the notes are for.
   work of the root needs, as a loop that conducts workers: each other chain then reads none of its words, and a model
   there is free to bind each name that it defines.
 - `furb-process` is the file of the process of the extension, its World part, relative to the folder: a module of
-  Python, which the Python beside the program of the life runs, else `python3`, a module of TypeScript or of
-  JavaScript, which bun runs, or any other program. The life starts it in the folder of the skill at the first act of a
-  kind that `furb-acts` names, never at the open, so a replay starts no process: the record answers each act before
-  its tip. The life speaks to it on its stdin and its stdout, one frame of JSON for each line, and gives it the
+  Python, which the Python that `FURB_PYTHON` names runs (the door of Python names its own), else the one beside the
+  program of the life, else `python3`, a module of TypeScript or of JavaScript, which bun runs, or any other program.
+  The life starts it in the folder of the skill at the first act of a kind that `furb-acts` names, never at the open,
+  so a replay starts no process: the record answers each act before its tip. The life speaks to it on its stdin and its stdout, one frame of JSON for each line, and gives it the
   variables `FURB_LIFE` and `FURB_SKILL`, the record of the life and the name of the extension. Each life does so, the
   daemon of the machine, a door and the rig alike. The life ends the process with each process that it started when the
   life ends, and when a new fact `enable` of the extension reloads it, so the next act starts the new process. A
