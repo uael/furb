@@ -55,7 +55,7 @@ use crate::{
   access::Access,
   error::{AccessError, TransportError},
   protocol::{BOUND, Role},
-  serve::{self, Granted},
+  serve::Granted,
 };
 
 /// The transport of TCP at an address on loopback or on the tailnet. A listener of WebSocket is a
@@ -83,7 +83,7 @@ impl Tcp {
       return Err(TransportError::Open { addr: self.addr });
     }
     let place = self.addr.to_string();
-    TcpListener::bind(self.addr).await.map_err(|cause| serve::Error::Listen { place, cause }.into())
+    TcpListener::bind(self.addr).await.map_err(|cause| TransportError::Listen { place, cause })
   }
 }
 
@@ -125,7 +125,7 @@ fn config() -> WebSocketConfig {
 
 async fn reached(addr: SocketAddr) -> Result<TcpStream, TransportError> {
   let place = addr.to_string();
-  TcpStream::connect(addr).await.map_err(|source| serve::Error::Dial { place, source }.into())
+  TcpStream::connect(addr).await.map_err(|source| TransportError::Dial { place, source })
 }
 
 /// Whether an address is on loopback or on the tailnet: `100.64.0.0/10` or `fd7a:115c:a1e0::/48`.
@@ -402,7 +402,7 @@ impl Identity for Tailscale {
   /// The operator of the peer at the address of the stream, the login that Tailscale gives, refused
   /// unless the access list gives it a role.
   async fn identify(&self, stream: &TcpStream) -> Result<Who, TransportError> {
-    let operator = self.login(stream.peer_addr().map_err(serve::Error::Accept)?).await?;
+    let operator = self.login(stream.peer_addr().map_err(TransportError::Accept)?).await?;
     let role = self.access.borrow().role(&operator)?;
     Ok(Who { operator, role })
   }
@@ -437,15 +437,15 @@ impl Door {
   /// a file that only the user reads. Each peer that gives the token is the operator `user`.
   pub(crate) async fn open(file: &Path, user: &str) -> Result<Self, TransportError> {
     let listener = Tcp::new(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)).listen().await?;
-    let at = listener.local_addr().map_err(serve::Error::Accept)?;
+    let at = listener.local_addr().map_err(TransportError::Accept)?;
     let mut drawn = [0u8; 32];
     getrandom::fill(&mut drawn).map_err(TransportError::Random)?;
     let token = URL_SAFE_NO_PAD.encode(drawn);
     let url = format!("ws://{at}/?token={token}");
     if let Some(folder) = file.parent().filter(|folder| !folder.as_os_str().is_empty()) {
-      serve::guarded(folder)?;
+      super::local::guarded(folder)?;
     }
-    written(file, serde_json::to_vec(&Said { url: &url }).map_err(serve::Error::from)?)
+    written(file, serde_json::to_vec(&Said { url: &url })?)
       .await
       .map_err(|source| TransportError::Door { file: file.to_owned(), source })?;
     let ticket = Ticket { token: token.into(), login: user.into() };
@@ -454,7 +454,7 @@ impl Door {
 
   /// The next peer of the door, and what it must give.
   pub(crate) async fn accept(&self) -> Result<(TcpStream, Ticket), TransportError> {
-    let (stream, _) = self.listener.accept().await.map_err(serve::Error::Accept)?;
+    let (stream, _) = self.listener.accept().await.map_err(TransportError::Accept)?;
     Ok((stream, self.ticket.clone()))
   }
 }
@@ -500,7 +500,7 @@ async fn written(file: &Path, bytes: Vec<u8>) -> io::Result<()> {
   let file = file.to_owned();
   let draft = file.with_extension("draft");
   let wrote = spawn_blocking(move || {
-    serve::private(&draft, &bytes)?;
+    super::local::private(&draft, &bytes)?;
     fs::rename(&draft, &file)
   });
   wrote.await.map_err(io::Error::other)?

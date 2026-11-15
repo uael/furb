@@ -29,7 +29,7 @@ use windows_sys::Win32::{
   System::WindowsProgramming::GetUserNameW,
 };
 
-use super::Error;
+use crate::error::TransportError;
 
 pub(crate) type Accepted = NamedPipeServer;
 pub(crate) type Dialed = NamedPipeClient;
@@ -44,7 +44,9 @@ pub(crate) struct Listener {
 /// another.
 const OWNER_ALONE: &str = "D:P(A;;GA;;;OW)";
 
-pub(crate) fn listen(folder: &Path) -> impl Future<Output = Result<Listener, Error>> + use<> {
+pub(crate) fn listen(
+  folder: &Path,
+) -> impl Future<Output = Result<Listener, TransportError>> + use<> {
   let place = piped(folder);
   let next = guarded(folder).and_then(|()| instance(&place, true));
   future::ready(next.map(|next| Listener { place, next }))
@@ -52,34 +54,36 @@ pub(crate) fn listen(folder: &Path) -> impl Future<Output = Result<Listener, Err
 
 /// The pipe after a handover: the daemon that gave its lives holds a peer of the pipe, so the name
 /// stands, and the first instance of it cannot be asked for.
-pub(crate) fn succeed(folder: &Path) -> impl Future<Output = Result<Listener, Error>> + use<> {
+pub(crate) fn succeed(
+  folder: &Path,
+) -> impl Future<Output = Result<Listener, TransportError>> + use<> {
   let place = piped(folder);
   future::ready(instance(&place, false).map(|next| Listener { place, next }))
 }
 
 impl Listener {
-  pub(crate) async fn accept(&mut self) -> Result<Accepted, Error> {
-    self.next.connect().await.map_err(Error::Accept)?;
+  pub(crate) async fn accept(&mut self) -> Result<Accepted, TransportError> {
+    self.next.connect().await.map_err(TransportError::Accept)?;
     let next = instance(&self.place, false)?;
     Ok(mem::replace(&mut self.next, next))
   }
 }
 
 /// A client of the pipe. Each instance of the pipe may be busy for a moment between two peers.
-pub(crate) async fn dial(folder: &Path) -> Result<Dialed, Error> {
+pub(crate) async fn dial(folder: &Path) -> Result<Dialed, TransportError> {
   let place = piped(folder);
   loop {
     match ClientOptions::new().open(&place) {
       Err(no) if no.raw_os_error() == Some(ERROR_PIPE_BUSY.cast_signed()) => {
         sleep(Duration::from_millis(20)).await;
       }
-      opened => return opened.map_err(|source| Error::Dial { place, source }),
+      opened => return opened.map_err(|source| TransportError::Dial { place, source }),
     }
   }
 }
 
 /// The login of the user of the daemon, the one user whom the access list of the pipe lets in.
-pub(crate) fn login(_: &Accepted) -> Result<String, Error> {
+pub(crate) fn login(_: &Accepted) -> Result<String, TransportError> {
   own()
 }
 
@@ -88,12 +92,12 @@ pub(crate) fn login(_: &Accepted) -> Result<String, Error> {
   unsafe_code,
   reason = "the login of the user is a call of Windows that no safe crate of the lock makes"
 )]
-pub fn own() -> Result<String, Error> {
+pub(crate) fn own() -> Result<String, TransportError> {
   let mut name = [0u16; 257];
   let mut size: u32 = 257;
   // SAFETY: name holds size units, and the call writes at most that many.
   if unsafe { GetUserNameW(name.as_mut_ptr(), &raw mut size) } == 0 {
-    return Err(Error::Login(io::Error::last_os_error()));
+    return Err(TransportError::Login(io::Error::last_os_error()));
   }
   let size = usize::try_from(size).unwrap_or(name.len()).min(name.len());
   Ok(String::from_utf16_lossy(&name[..size.saturating_sub(1)]))
@@ -143,8 +147,8 @@ fn owner_alone<T>(made: impl FnOnce(*mut SECURITY_ATTRIBUTES) -> T) -> io::Resul
   unsafe_code,
   reason = "tokio makes a pipe under an access list only through an unsafe call"
 )]
-fn instance(place: &str, first: bool) -> Result<NamedPipeServer, Error> {
-  let listening = |cause| Error::Listen { place: place.to_owned(), cause };
+fn instance(place: &str, first: bool) -> Result<NamedPipeServer, TransportError> {
+  let listening = |cause| TransportError::Listen { place: place.to_owned(), cause };
   let mut options = ServerOptions::new();
   options.first_pipe_instance(first).reject_remote_clients(true);
   // SAFETY: the attributes, and the descriptor that they point at, live until the call returns.
@@ -154,7 +158,7 @@ fn instance(place: &str, first: bool) -> Result<NamedPipeServer, Error> {
   .map_err(listening)?;
   server.map_err(|source| match source.raw_os_error() {
     Some(code) if first && code == ERROR_ACCESS_DENIED.cast_signed() => {
-      Error::Taken { place: place.to_owned() }
+      TransportError::Taken { place: place.to_owned() }
     }
     _ => listening(source),
   })
@@ -166,8 +170,8 @@ fn instance(place: &str, first: bool) -> Result<NamedPipeServer, Error> {
   unsafe_code,
   reason = "std makes no folder under an access list, which only a call of Windows does"
 )]
-pub fn guarded(folder: &Path) -> Result<(), Error> {
-  let made = |source| Error::Folder { folder: folder.to_owned(), source };
+pub(crate) fn guarded(folder: &Path) -> Result<(), TransportError> {
+  let made = |source| TransportError::Folder { folder: folder.to_owned(), source };
   if let Some(parent) = folder.parent().filter(|parent| !parent.as_os_str().is_empty()) {
     fs::create_dir_all(parent).map_err(made)?;
   }
@@ -183,7 +187,7 @@ pub fn guarded(folder: &Path) -> Result<(), Error> {
   }
   let held = fs::symlink_metadata(folder).map_err(made)?;
   if !held.is_dir() || held.file_type().is_symlink() {
-    return Err(Error::Exposed { folder: folder.to_owned() });
+    return Err(TransportError::Exposed { folder: folder.to_owned() });
   }
   Ok(())
 }
@@ -194,7 +198,7 @@ pub fn guarded(folder: &Path) -> Result<(), Error> {
   unsafe_code,
   reason = "std makes no file under an access list, which only a call of Windows does"
 )]
-pub fn private(file: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(crate) fn private(file: &Path, bytes: &[u8]) -> io::Result<()> {
   match fs::remove_file(file) {
     Err(no) if no.kind() != io::ErrorKind::NotFound => return Err(no),
     _ => {}

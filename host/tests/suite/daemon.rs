@@ -32,7 +32,6 @@ use std::{
 use furb::{
   Object, image,
   life::{Answer as Answered, Log, Opening},
-  serve,
   view::{self, Part, Phase, Standing},
   world::{SchemaError, checkpoints},
 };
@@ -1926,7 +1925,7 @@ async fn a_second_daemon_of_the_machine_refuses_to_start() {
   let at = place();
   let (local, _daemon) = started(&at, GRACE).await;
   let refused = local.listen().await;
-  assert!(matches!(refused, Err(serve::Error::Taken { .. })));
+  assert!(matches!(refused, Err(TransportError::Taken { .. })));
 }
 
 #[tokio::test]

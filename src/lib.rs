@@ -18,7 +18,6 @@ pub mod image;
 pub mod life;
 mod minify;
 mod sand;
-pub mod serve;
 pub mod skill;
 #[cfg(test)]
 mod testing;

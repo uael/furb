@@ -1490,7 +1490,6 @@ dependencies = [
  "indexmap 2.14.2",
  "jiff",
  "jsonschema",
- "libc",
  "memchr",
  "monty",
  "monty-types",
@@ -1514,7 +1513,6 @@ dependencies = [
  "similar",
  "thiserror 2.0.20",
  "tokio",
- "tokio-util",
  "unsync",
  "url",
  "win32job",
@@ -1594,6 +1592,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

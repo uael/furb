@@ -21,7 +21,7 @@ use std::{
 };
 use yard::Yard;
 
-use furb::{life::Opening, serve::own};
+use furb::life::Opening;
 use furb_host::{
   AccessError, Host, Outbox, ProtocolError, STALL, STARTING, Settings, Tailnet, TransportError,
   access::{Access, Config, Ports},
@@ -379,8 +379,25 @@ async fn a_peer_of_the_tailnet_whose_profile_the_list_drops_is_refused_and_close
   assert_eq!(ended, None);
 }
 /// The login of the user of this test, from the same call of the system as the daemon makes.
+#[cfg_attr(
+  windows,
+  expect(unsafe_code, reason = "the login is a call of Windows, as the daemon makes it")
+)]
 fn me() -> String {
-  own().expect("the login of the user of this test reads")
+  #[cfg(unix)]
+  {
+    use std::env;
+    env::var("USER").unwrap()
+  }
+  #[cfg(windows)]
+  {
+    use windows_sys::Win32::System::WindowsProgramming::GetUserNameW;
+    let mut name = [0u16; 257];
+    let mut size: u32 = 257;
+    // SAFETY: name holds size units, and the call writes at most that many.
+    assert_ne!(unsafe { GetUserNameW(name.as_mut_ptr(), &raw mut size) }, 0);
+    String::from_utf16_lossy(&name[..usize::try_from(size).unwrap() - 1])
+  }
 }
 
 /// A daemon with no tailnet, which opens its door in `file`.

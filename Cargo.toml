@@ -170,8 +170,6 @@ base64 = "0.22"
 tokio = { version = "1", features = ["rt", "process", "io-util", "time", "sync", "macros", "net"] }
 # The futures an ear holds and selects over, and the streams of a model.
 futures = "0.3"
-# The lines of the protocol that a peer of a host says, each one frame, under a bound.
-tokio-util = { version = "0.7", features = ["codec"] }
 # The channels between an ear and its work, which stay on the thread of the life.
 unsync = "0.2"
 # The zones in which the usage limit of the claude command line names the moment it ends.
@@ -188,23 +186,16 @@ ruff_python_ast = "0.0.9"
 ruff_text_size = "0.0.9"
 
 [target.'cfg(unix)'.dependencies]
-# The process group of a command, which the World ends whole, and the user and the machine of a
-# host, read safely.
-rustix = { version = "1", features = ["fs", "process", "system"] }
-# The login of a user, from the database of the users.
-libc = "0.2"
+# The process group of a command, which the World ends whole.
+rustix = { version = "1", features = ["fs", "process"] }
 
 [target.'cfg(windows)'.dependencies]
-# The console of Windows, whose end a host hears through a door, the share of a part file that a
-# write holds, the access list of the pipe of a host and of its folder, which only its user
-# reaches, and the login of that user.
+# The console of Windows, whose end a host hears through a door, and the share of a part file that
+# a write holds.
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
-  "Win32_Security",
-  "Win32_Security_Authorization",
   "Win32_Storage_FileSystem",
   "Win32_System_Console",
-  "Win32_System_WindowsProgramming",
 ] }
 # The job that holds every process of a command, and ends them when it closes.
 win32job = "2"

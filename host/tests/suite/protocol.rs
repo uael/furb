@@ -19,7 +19,6 @@ use std::{
   sync::atomic::{AtomicU32, Ordering},
 };
 
-use furb::serve::Error as ServeError;
 use furb_host::{
   Host, Outbox, ProtocolError, fixed,
   protocol::{
@@ -28,7 +27,7 @@ use furb_host::{
     ViewEvent, schema,
   },
   serve,
-  transport::{Identity, Local, Who},
+  transport::{Dialer, Identity, Local, Who},
 };
 use serde_json::{Value, json};
 use tokio::io::{
@@ -650,7 +649,7 @@ async fn a_second_daemon_cannot_listen_where_one_listens() {
   let place = folder();
   let local = Local::new(place.to_path_buf());
   let _first = local.listen().await.unwrap();
-  assert!(matches!(local.listen().await, Err(ServeError::Taken { .. })));
+  assert!(matches!(local.listen().await, Err(furb_host::TransportError::Taken { .. })));
 }
 
 #[cfg(unix)]
@@ -661,7 +660,7 @@ async fn a_folder_open_to_others_holds_no_socket() {
   fs::create_dir_all(&place).unwrap();
   fs::set_permissions(&place, fs::Permissions::from_mode(0o755)).unwrap();
   let refused = Local::new(&place).listen().await;
-  assert!(matches!(refused, Err(ServeError::Exposed { .. })));
+  assert!(matches!(refused, Err(furb_host::TransportError::Exposed { .. })));
 }
 
 #[test]
