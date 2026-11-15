@@ -140,6 +140,12 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   let on = Rc::clone(&window);
   app.on_mouse(move |cx, event| mouse(cx.app(), &on, *event));
   let on = Rc::clone(&window);
+  app.on_terminal_focus(move |cx, focused| {
+    if focused {
+      tell(cx.app(), &on, |model| model.client.focused());
+    }
+  });
+  let on = Rc::clone(&window);
   app.on_resize(move |cx, width, height| {
     tell(cx.app(), &on, |model| model.resized((width, height)));
   });

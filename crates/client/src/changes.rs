@@ -1,7 +1,8 @@
 //! The changes of the checkouts of git where the operator works: the branch and the changed files
 //! of the project of each card and of the target of the input, which the client asks of the
-//! machine of each and asks again once a life of that project told a change, and the review of
-//! the changes of one project, file by file, with the diff of the file that he reads.
+//! machine of each and asks again once a life of that project told a change, or once the terminal
+//! of the client took the focus again, since the operator may have changed files with no life; and
+//! the review of the changes of one project, file by file, with the diff of the file that he reads.
 
 use furb_wire::protocol::{Answer, Changed, Changes, Frame, Verb};
 
@@ -115,6 +116,17 @@ impl Client {
       if let Some(seen) = told.changes.get_mut(folder) {
         seen.fresh = false;
       }
+    }
+  }
+
+  /// The terminal of the client took the focus again: the operator may have changed files with no
+  /// life, as in an editor or with git, so the client asks the changes of each folder again.
+  pub fn focused(&mut self) {
+    // An answer on its way read the folder before the focus came back, so the client forgets its
+    // ask and takes no such answer.
+    self.asked.retain(|_, one| !matches!(one, Asked::Changes(_, None)));
+    for seen in self.machines.iter_mut().flat_map(|told| told.changes.values_mut()) {
+      seen.fresh = false;
     }
   }
 

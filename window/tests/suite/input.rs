@@ -14,7 +14,7 @@ use furb_host::protocol::{
   Answer, Axis, Frame, Gesture, Mount, Node, Run, Shape, Tone, Tree, Verb, ViewEvent,
 };
 use furb_window::{Options, open};
-use opentui::{style::Color, testing::TestApp};
+use opentui::{input::Event, style::Color, testing::TestApp};
 
 use crate::{
   cards::{app, options, shows},
@@ -521,6 +521,29 @@ fn the_review_lists_the_changed_files_of_the_project_and_the_diff_of_each_and_th
   let (x, y) = at(&app, "⎇ trunk ±2", 0);
   app.click(x, y);
   shows(&app, "Changes  2 files");
+}
+
+#[test]
+fn a_file_changed_with_no_life_counts_once_the_window_takes_the_focus_again() {
+  let (app, daemon, _) = started();
+  let project = daemon.file("furb-try");
+  let git = |args: &[&str]| {
+    let done = Command::new("git").arg("-C").arg(&project).args(args).status().unwrap();
+    assert!(done.success(), "git {args:?}");
+  };
+  fs::write(project.join("a.py"), "one = 1\n").unwrap();
+  git(&["init", "-q", "-b", "trunk"]);
+  git(&["add", "a.py"]);
+  git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a"]);
+  fs::write(project.join("a.py"), "one = 2\n").unwrap();
+  // The window asked the changes of its folder at its start, before the folder was a checkout.
+  app.event(Event::Focus(true));
+  shows(&app, "⎇ trunk ±1");
+  // The operator leaves for an editor, writes a file there, and comes back to the window.
+  app.event(Event::Focus(false));
+  fs::write(project.join("b.py"), "two = 2\n").unwrap();
+  app.event(Event::Focus(true));
+  shows(&app, "⎇ trunk ±2");
 }
 
 #[test]
