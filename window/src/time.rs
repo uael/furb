@@ -99,24 +99,32 @@ impl Model {
     let pointed = self.pointed().filter(|(_, y)| usize::from(*y) == row);
     let under = pointed
       .and_then(|(x, _)| usize::from(x).checked_sub(BEFORE).filter(|one| *one < room))
-      .and_then(|one| time.message(axis.place(one)))
-      .map(|text| Row::of(vec![run(format!("{}{}", " ".repeat(BEFORE), cut(text, room)), muted)]));
-    let mut rows = vec![Row { line, hot, ..Row::default() }, under.unwrap_or_default()];
+      .and_then(|one| time.message(axis.place(one)));
+    // The chains stand right under the bar, so a column reads as one moment down each row, and one
+    // row under them says the message under the pointer, else what finds a chain.
+    let mut rows = vec![Row { line, hot, ..Row::default() }];
     rows.extend(self.chain_rows(time, &axis, mark));
+    let said = under.map(|text| cut(text, room)).or_else(|| found(time));
+    rows.push(Row::of(vec![run(
+      format!("{}{}", " ".repeat(BEFORE), said.unwrap_or_default()),
+      muted,
+    )]));
     rows
   }
 
   /// A row for each chain that shows under the bar, on the columns of its track: a heavy cell where
   /// an act of the chain began or ended, a diamond where a thread of it began, the column of the
   /// moment that the thread shows across each row, and the label of the chain at its end. A chain
-  /// that works takes its hue, and one that rests is grey. Then the text that finds a chain.
+  /// that works takes its hue, and one that rests is grey. A chain that acted before the first
+  /// moment of the thread says so at the start of its row.
   fn chain_rows(&self, time: &Time, axis: &Axis, mark: usize) -> Vec<Row> {
     let Some(chains) = time.chains.as_ref() else { return Vec::new() };
     let (t, record) = (&self.tokens, self.client.thread.as_ref().map(|one| &one.thread.key.1));
     let muted = t.style(Role::Muted);
     let shown = chains.shown();
     let column = |moment: &u64| axis.column(time.moments.partition_point(|one| one < moment));
-    let mut rows: Vec<Row> = shown
+    let first = time.moments.first().copied().unwrap_or_default();
+    shown
       .iter()
       .enumerate()
       .map(|(row, track)| {
@@ -124,10 +132,12 @@ impl Model {
         let ink = Style::new().fg(if resting(track.state) { t.muted } else { hue });
         let acted: Vec<usize> = track.moments.iter().map(column).collect();
         let began: Vec<usize> = track.threads.iter().map(|one| column(&one.at)).collect();
+        let before = track.moments.iter().any(|moment| *moment < first);
         let mut line: Line = vec![run("  ", muted), run("▪", ink), run("  ", muted)];
         let mut hot: Vec<Hot> = Vec::new();
         for one in 0..axis.room {
           let (sign, style) = match (began.contains(&one), acted.contains(&one), one == mark) {
+            _ if one == 0 && before => ("‹", ink),
             (true, ..) => ("◆", ink),
             (false, true, _) => ("━", ink),
             (false, false, true) => ("│", Style::new().fg(t.text)),
@@ -145,18 +155,7 @@ impl Model {
         line.push(run(label, ink));
         Row { line, hot, ..Row::default() }
       })
-      .collect();
-    let find = match (chains.find.is_empty(), shown.is_empty()) {
-      (false, true) => format!("no chain matches {}", chains.find),
-      (false, false) => format!("find {}", chains.find),
-      (true, true) if chains.stale => "reading the chains".to_owned(),
-      (true, true) => "no chain works now · type to find one".to_owned(),
-      (true, false) => String::new(),
-    };
-    if !find.is_empty() {
-      rows.push(Row::of(vec![run(format!("{}{find}", " ".repeat(BEFORE)), muted)]));
-    }
-    rows
+      .collect()
   }
 
   /// The keys of the bar of the time while it shows, for the row of hints.
@@ -214,5 +213,17 @@ fn back(moments: usize) -> String {
     0 => " now".to_owned(),
     1 => " 1 moment back".to_owned(),
     count => format!(" {count} moments back"),
+  }
+}
+
+/// What finds a chain under the bar while the chains show: the text typed, or why no row shows.
+fn found(time: &Time) -> Option<String> {
+  let chains = time.chains.as_ref()?;
+  match (chains.find.is_empty(), chains.shown().is_empty()) {
+    (false, true) => Some(format!("no chain matches {}", chains.find)),
+    (false, false) => Some(format!("find {}", chains.find)),
+    (true, true) if chains.stale => Some("reading the chains".to_owned()),
+    (true, true) => Some("no chain works now · type to find one".to_owned()),
+    (true, false) => None,
   }
 }
