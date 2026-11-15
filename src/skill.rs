@@ -896,15 +896,12 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
           // standing names a doctrine: the ear says the fact teach, with the count of the enables
           // that follow it, then each enable, and it plays the setup once it heard them, as the
           // journal of a later life says them again.
-          "done" if named(a.about(), "stand") && a.by() != JOURNAL => {
-            // An open replays the note that the record holds, and makes no new one.
-            if !told(&mut co, &refused.join("\n")).await? {
-              tell(&mut co, refused);
-            }
-            refused.clear();
+          "done" if named(a.about(), "stand") => {
             // A life born on a checkpoint holds the teach and the enables of its root in the
             // turns that the checkpoint carries, which no journal says again: the ear reads them
-            // there, as a whole replay of the record hears them, and teaches nothing again.
+            // there, as a whole replay of the record hears them, and teaches nothing again. It
+            // reads them at a stand that the journal says again too, so a later life plays the
+            // enables of that stand as the life that said them did.
             if !*taught && teach.is_none() {
               let (taught_root, enables) =
                 (rooted(&mut co, TEACH).await?, rooted(&mut co, ENABLE).await?);
@@ -913,6 +910,14 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
                 *taught = true;
               }
             }
+            if a.by() == JOURNAL {
+              return Ok(());
+            }
+            // An open replays the note that the record holds, and makes no new one.
+            if !told(&mut co, &refused.join("\n")).await? {
+              tell(&mut co, refused);
+            }
+            refused.clear();
             let new: Vec<Skill> =
               given.iter().filter(|one| !enabled.contains(one)).cloned().collect();
             if !*taught
