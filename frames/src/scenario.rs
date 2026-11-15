@@ -136,7 +136,7 @@ See [the trace](https://github.com/uael/furb/issues/988).''')";
 const ASKS: &str = "side = await prompt(Literal['right', 'left'], 'Where does the list of cards stand?', to=OPERATOR)\nclose(side)";
 
 /// The words of a model that changes two places of a file of the project and adds a file.
-const CHANGES: &str = "m = read('src/inventory/models.py')\nwrite(m.replace('self.name = name', 'self.name = name\\n    self.count = 0'))\nwrite(Text('src/inventory/report.py', 'def total(items):\\n  return sum(one.count for one in items)\\n'))\nclose('Each item has a count, and report.py sums them.')";
+const CHANGES: &str = "m = read('src/inventory/models.py')\nwrite(m.replace('self.name = name', 'self.name = name.strip()\\n    self.count = 0'))\nwrite(Text('src/inventory/report.py', 'def total(items):\\n  return sum(one.count for one in items)\\n'))\nclose('Each item has a count, and report.py sums them.')";
 
 /// The words of a long thread: an answer to each message.
 const LONG: [&str; 15] = [
@@ -421,7 +421,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Type("Count the items, and add a report."), Act::Key("Enter")],
           "Each item",
         ),
-        step("b", &[Act::Key("C-x"), Act::Key("g")], "Changes of demo"),
+        step("b", &[Act::Key("C-x"), Act::Key("g")], "main · src/inventory/models.py"),
         step("c", &[Act::Key("Down")], "return sum"),
         step("d", &[Act::Key("Escape")], "Each item"),
       ],

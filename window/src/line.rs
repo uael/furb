@@ -134,3 +134,20 @@ pub(crate) fn capital(text: &str) -> String {
 #[cfg(test)]
 #[path = "line.test.rs"]
 mod test;
+
+/// A row of a list between its two edges. The chosen row stands on a ground with a bar at its left,
+/// in the right half of a column: the ground takes one column on each side of its text and the
+/// left half of the column after it, so the row stands as far from each side of the list, and its
+/// text as far from each side of the row. A row on no ground stands two columns in.
+pub(crate) fn edged(bar: Color, ground: Option<Color>, line: Line) -> Line {
+  let Some(ground) = ground else {
+    let mut row = vec![run("  ", Style::new())];
+    row.extend(line);
+    return row;
+  };
+  let edge = || run(" ", Style::new().bg(ground));
+  let mut row = vec![run("▐", Style::new().fg(bar)), edge()];
+  row.extend(line);
+  row.extend([edge(), run("▌", Style::new().fg(ground))]);
+  row
+}

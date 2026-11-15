@@ -30,8 +30,9 @@ furb-client = { path = "../crates/client" }
 # The protocol of the daemon and the transport of the machine.
 furb-host = { path = "../host" }
 # The terminal: the widgets, the event loop and the headless app of the tests. One commit, since the crates are not
-# published, and the native library is the one that build.rs makes from the same commit. Its tasks run on tokio.
-opentui = { git = "https://github.com/anomalyco/opentui", rev = "4d578d86fea1ea2626eadf7229fa9e8ccc207f72", features = ["tokio"] }
+# published, and the native library is the one that build.rs makes from the same commit. Its tasks run on tokio, and
+# tree-sitter colors the code of its widgets.
+opentui = { git = "https://github.com/anomalyco/opentui", rev = "4d578d86fea1ea2626eadf7229fa9e8ccc207f72", features = ["tokio", "tree-sitter"] }
 # The connection to the daemon, on the runtime of the tasks of the app, and the process of the daemon that it starts.
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "process", "fs"] }
 # The frames of the protocol, one line of JSON each.
@@ -44,8 +45,7 @@ thiserror = "2"
 jiff = "0.2"
 # How many columns a text takes.
 unicode-width = "0.2"
-# The colors of the code of a thread, from the grammar of python, on each whole statement.
-tree-sitter-highlight = "0.25"
+# The grammar of python, which colors the code of a thread on each whole statement and the diff of a review.
 tree-sitter-python = "0.25"
 # The prose of a model, which is markdown.
 pulldown-cmark = { version = "0.13", default-features = false }

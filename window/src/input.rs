@@ -31,6 +31,9 @@ const SESSION: usize = 10;
 /// way to its badge alone.
 const SHORTEST: usize = 4;
 
+/// The mark of the branch of the place of the input, after a dot.
+const BRANCH: &str = "⎇ ";
+
 /// A word of python that the window ran on the root of a life, until the next word goes or an
 /// escape forgets it: its machine, its record, its text, its rung, whether the window asked the end
 /// of that rung since it last dialed the machine, and how its run ended.
@@ -728,8 +731,8 @@ impl Model {
     let fits = width(&left) + 2 + width(&right) <= self.wide().saturating_sub(2);
     let left = if place && !fits { self.place(false) } else { left };
     let line = spread(left, right.clone(), self.wide().saturating_sub(2), Style::new());
-    let end = width(&line);
-    let start = end - width(&right);
+    hot.extend(branched(&line).filter(|_| place));
+    let (end, start) = (width(&line), width(&line) - width(&right));
     if !others.is_empty() {
       hot.push((start..start + width(&others) - 3, Some(Click::Key(Does::Needed))));
     }
@@ -770,9 +773,12 @@ impl Model {
     let branch = self.client.target_folder().and_then(|(at, folder)| {
       let changes = self.client.changes(at, &folder)?;
       let count = (!changes.files.is_empty()).then(|| format!(" ±{}", changes.files.len()));
-      Some(format!(" · ⎇ {}{}", changes.branch.as_deref()?, count.unwrap_or_default()))
+      Some(format!(" · {BRANCH}{}{}", changes.branch.as_deref()?, count.unwrap_or_default()))
     });
-    vec![run(format!("{text}{}", branch.unwrap_or_default()), self.tokens.style(Role::Muted))]
+    let muted = self.tokens.style(Role::Muted);
+    let mut line = vec![run(text, muted)];
+    line.extend(branch.map(|one| run(one, muted)));
+    line
   }
 
   /// The hints of the word that the window ran, in a room of columns: a mark that moves while it
@@ -812,4 +818,12 @@ fn clicked(at: &[Range<usize>], clicks: Vec<Option<Click>>) -> Vec<Hot> {
 /// The name of a project, from its folder.
 pub(crate) fn named(folder: &str) -> String {
   Path::new(folder).file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+/// The columns of the branch and the count of the changes in the place of the input, which open
+/// the review.
+fn branched(line: &Line) -> Option<Hot> {
+  let at = line.iter().position(|one| one.content.contains(BRANCH))?;
+  let at = &columns(line)[at];
+  Some((at.start + " · ".width()..at.end, Some(Click::Key(Does::Changes))))
 }

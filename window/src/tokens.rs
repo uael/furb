@@ -6,6 +6,7 @@ use std::time::Duration;
 use opentui::{
   style::{Color, Style},
   theme::{Theme, ThemeMode},
+  widget::DiffColors,
 };
 
 /// The background when the terminal says none, or says a light one: the window has no light set
@@ -81,8 +82,15 @@ pub struct Tokens {
   /// A thread that waits for the operator, the form of a question, a pause that furb made, an
   /// open past its bound.
   pub attention: Color,
-  /// A failure, and the cross of a line that failed.
+  /// A failure, the cross of a line that failed, and a line that a change removes.
   pub danger: Color,
+  /// A line that a change adds.
+  pub added: Color,
+  /// The ground of a line that a change adds, of its hue, so its code keeps the colors of its
+  /// grammar.
+  pub added_ground: Color,
+  /// The ground of a line that a change removes.
+  pub removed_ground: Color,
   /// The veil over the window while a list part stands over it, which dims each cell under it.
   pub veil: Color,
   /// The bar of a thread and the badge of a project, each far from the others and from the colors
@@ -103,6 +111,7 @@ impl Tokens {
     let [panel, raised, lifted, border] = STEPS.map(|share| mixed(base, WHITE, share));
     let blue = Color::hex(0x76_99fe);
     let hues = [0xa3_83e2, 0xe8_89a8, 0x4f_c1c9, 0x79_d4a2].map(Color::hex);
+    let (added, danger) = (Color::hex(0x6f_cf8f), Color::hex(0xef_6c6c));
     Self {
       base,
       panel,
@@ -114,7 +123,10 @@ impl Tokens {
       muted: Color::hex(0x94_9494),
       accent: blue,
       attention: Color::hex(0xf5_a742),
-      danger: Color::hex(0xef_6c6c),
+      danger,
+      added,
+      added_ground: mixed(base, added, 18),
+      removed_ground: mixed(base, danger, 18),
       veil: Color::rgba(base.r, base.g, base.b, 160),
       hues,
     }
@@ -127,6 +139,26 @@ impl Tokens {
       Role::Prose => Style::new().fg(self.text),
       Role::Muted => Style::new().fg(self.muted),
       Role::Button => Style::new().fg(self.text).bg(self.lifted),
+    }
+  }
+
+  /// The colors of a diff: a line that a change adds or removes on its ground, and the numbers
+  /// muted.
+  pub(crate) fn diff(&self) -> DiffColors {
+    let (added, removed) = (self.added_ground, self.removed_ground);
+    DiffColors {
+      line_number: self.muted,
+      line_number_bg: Color::TRANSPARENT,
+      added_bg: added,
+      removed_bg: removed,
+      context_bg: Color::TRANSPARENT,
+      added_content_bg: None,
+      removed_content_bg: None,
+      context_content_bg: None,
+      added_sign: self.added,
+      removed_sign: self.danger,
+      added_line_number_bg: added,
+      removed_line_number_bg: removed,
     }
   }
 

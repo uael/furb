@@ -482,7 +482,8 @@ fn a_mention_offers_the_files_of_the_project_and_takes_one_by_its_path() {
 }
 
 #[test]
-fn the_review_lists_the_changed_files_of_the_project_and_shows_the_diff_of_each() {
+fn the_review_lists_the_changed_files_of_the_project_and_the_diff_of_each_and_the_branch_opens_it()
+{
   let (app, daemon, _) = started();
   let project = daemon.file("furb-try");
   let git = |args: &[&str]| {
@@ -498,14 +499,20 @@ fn the_review_lists_the_changed_files_of_the_project_and_shows_the_diff_of_each(
   app.press("ctrl+x");
   app.press("g");
   let shown = shows(&app, "one = 2");
-  assert!(shown.contains("Changes of furb-try · ⎇ trunk  2 files"), "{shown}");
+  assert!(shown.contains(" furb-try · ⎇ trunk · a.py"), "{shown}");
+  assert!(shown.contains("Changes  2 files"), "{shown}");
   assert!(shown.contains("M a.py"), "{shown}");
-  assert!(shown.contains("? b.py"), "{shown}");
+  assert!(shown.contains("U b.py"), "{shown}");
   app.press("down");
   shows(&app, "two = 2");
   app.press("escape");
-  let gone = app.wait_until(PATIENCE, || !app.text().contains("Changes of furb-try"));
+  let gone = app.wait_until(PATIENCE, || !app.text().contains("Changes  2 files"));
   assert!(gone, "{}", app.text());
+  // The branch of the row of hints opens the review, as its key does.
+  shows(&app, "⎇ trunk ±2");
+  let (x, y) = at(&app, "⎇ trunk ±2", 0);
+  app.click(x, y);
+  shows(&app, "Changes  2 files");
 }
 
 #[test]

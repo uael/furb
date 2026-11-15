@@ -9,7 +9,7 @@ use opentui::style::{Color, Span, Style};
 
 use crate::{
   keys::Does,
-  line::{Line, run, spread},
+  line::{Line, edged, run, spread},
   model::{Key, Link, Model},
   tokens::{LIST, Loader, Role, WORKS},
 };
@@ -206,21 +206,9 @@ impl Model {
     vec![run(bar, Style::new().fg(hue)), run(fill.repeat(CARD + 2), ground), run(end, ground)]
   }
 
-  /// A line of a card between its two edges. The selected card stands on a ground with its bar at
-  /// its left, in the right half of a column: the ground takes one column on each side of its text
-  /// and the left half of the column after it, so the card stands as far from each side of the
-  /// list, and its text as far from each side of the card.
+  /// A line of a card between its two edges, with the bar in the hue of its thread.
   fn edged(&self, at: usize, ground: Option<Color>, line: Line) -> Line {
-    let Some(ground) = ground else {
-      let mut row = vec![run("  ", Style::new())];
-      row.extend(line);
-      return row;
-    };
-    let edge = || run(" ", Style::new().bg(ground));
-    let mut row = vec![run("▐", Style::new().fg(self.hue(&self.client.settled[at].1))), edge()];
-    row.extend(line);
-    row.extend([edge(), run("▌", Style::new().fg(ground))]);
-    row
+    edged(self.hue(&self.client.settled[at].1), ground, line)
   }
 
   /// The two lines of a card: its title and its state, then where it is and who works on it.

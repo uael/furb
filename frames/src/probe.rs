@@ -89,6 +89,9 @@ fn palette(tokens: &Tokens) -> Vec<Rgb> {
     tokens.accent,
     tokens.attention,
     tokens.danger,
+    tokens.added,
+    tokens.added_ground,
+    tokens.removed_ground,
   ];
   let named = named.into_iter().chain(tokens.hues).map(|color| Rgb([color.r, color.g, color.b]));
   let mut colors: Vec<Rgb> = named.chain(SYNTAX.map(|(_, value)| Rgb::hex(value))).collect();

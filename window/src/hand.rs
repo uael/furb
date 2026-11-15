@@ -15,8 +15,9 @@ use opentui::{
   App,
   input::KeyEventKind,
   prelude::{
-    Container, Diff, Edge, EditorAction, ExtmarkOptions, KeyCode, KeyEvent, Modifiers, MouseButton,
-    MouseEvent, MouseEventKind, ScrollBox, Span, Text, Textarea, TimerId, View, Widget, WrapMode,
+    Container, Diff, DiffView, Edge, EditorAction, ExtmarkOptions, KeyCode, KeyEvent, Modifiers,
+    MouseButton, MouseEvent, MouseEventKind, ScrollBox, Span, Text, Textarea, TimerId, View,
+    Widget, WrapMode,
   },
 };
 
@@ -26,6 +27,7 @@ use furb_client::Asked;
 
 use crate::{
   Machine, Options, Screen,
+  code::syntax,
   input::Armed,
   kept,
   keys::{self, Does},
@@ -34,7 +36,7 @@ use crate::{
   model::{Model, Told},
   pick::Pick,
   question::Keyed,
-  review::FILES,
+  review::{NEXT, PREVIOUS},
   thread::Spot,
   tokens::{AWAY, Role, SIDE, Tokens},
 };
@@ -59,8 +61,8 @@ const AGES: Duration = Duration::from_secs(20);
 /// row of hints.
 const LOADERS: usize = 8;
 
-/// How many rows one step of the wheel moves the list.
-const WHEEL: isize = 3;
+/// How many rows one step of the wheel moves the list, the feed or a diff.
+const WHEEL: u8 = 3;
 
 struct Window {
   screen: Screen<Model>,
@@ -86,6 +88,8 @@ struct Window {
   askers: Vec<Asker>,
   /// The box of the diff of the review of the changes, which the keys of a page scroll.
   scroll: ScrollBox,
+  /// The diff of the review, whose changes the keys of a change scroll to.
+  diff: Diff,
 }
 
 type Shared = Rc<RefCell<Window>>;
@@ -107,9 +111,9 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   model.client.now = (options.clock)();
   model.settle();
   let area = edited(app, &tokens);
-  let scroll = ScrollBox::new(app);
+  let (scroll, diff) = (ScrollBox::new(app), Diff::new(app));
   let window = Window {
-    screen: drawn(app, model, &area, &scroll),
+    screen: drawn(app, model, &area, (&scroll, &diff)),
     clock: options.clock,
     still: options.still,
     kept: options.kept,
@@ -122,6 +126,7 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
     moves: None,
     askers: Vec::new(),
     scroll,
+    diff,
   };
   let window = Rc::new(RefCell::new(window));
 
@@ -184,11 +189,11 @@ fn edited(app: &App, tokens: &Tokens) -> Textarea {
 
 /// The widgets of the window on a model: the left side, the editor of the input over it, and the
 /// list at its right. Each side is one text, which is written only when a row of it changes.
-fn drawn(app: &App, model: Model, area: &Textarea, scroll: &ScrollBox) -> Screen<Model> {
+fn drawn(app: &App, model: Model, area: &Textarea, review: (&ScrollBox, &Diff)) -> Screen<Model> {
+  let (scroll, diff) = review;
   let tokens = model.tokens;
   let column = || Text::new(app, "").wrap(WrapMode::None);
   let (home, list) = (column(), column());
-  // Each widget of the left side stands on one stage, so the margin that centers it is one place.
   let stage = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Bottom, 0);
   // The list stands on a panel, so a change of ground parts it from the home, with no line.
   let side = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Right, 0);
@@ -199,13 +204,7 @@ fn drawn(app: &App, model: Model, area: &Textarea, scroll: &ScrollBox) -> Screen
   app.focus(area);
 
   let mut screen = Screen::new(model);
-  let placing = stage.clone();
-  screen.part(
-    |model: &Model| (model.margin(), model.wide()),
-    move |(margin, wide)| {
-      placing.position(Edge::Left, *margin).width(u16::try_from(*wide).unwrap_or(u16::MAX));
-    },
-  );
+  staged(&mut screen, &stage);
   screen.part(
     |model: &Model| model.left().rows,
     move |lines| {
@@ -250,34 +249,53 @@ fn drawn(app: &App, model: Model, area: &Textarea, scroll: &ScrollBox) -> Screen
   });
   completion(app, &stage, &mut screen, &tokens);
   veiled(app, &mut screen, &tokens);
-  reviewed(app, &mut screen, &tokens, scroll);
+  reviewed(app, &mut screen, &tokens, (scroll, diff));
   screen
 }
 
-/// The review of the changes of a project over the whole window, while one stands: its head, its
-/// files at the left, the diff of the file that he reads at the right in a box that scrolls, and
-/// its foot.
-fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, scroll: &ScrollBox) {
+/// The stage of each widget of the left side at its margin and its width, so the margin that
+/// centers the left side is one place.
+fn staged(screen: &mut Screen<Model>, stage: &View) {
+  let stage = stage.clone();
+  screen.part(
+    |model: &Model| (model.margin(), model.wide()),
+    move |(margin, wide)| {
+      stage.position(Edge::Left, *margin).width(u16::try_from(*wide).unwrap_or(u16::MAX));
+    },
+  );
+}
+
+/// The review of the changes of a project over the whole window, while one stands, in the frame of
+/// a thread: the head, the diff of the file that he reads in a box that scrolls, and the foot at
+/// the left, and the changed files on the panel of the list at the right.
+fn reviewed(app: &App, screen: &mut Screen<Model>, tokens: &Tokens, shown: (&ScrollBox, &Diff)) {
+  let (scroll, diff) = shown;
   let text = || Text::new(app, "").wrap(WrapMode::None);
-  let (head, files, foot) = (text(), text(), text());
-  let diff = Diff::new(app).line_numbers(true);
+  let (head, side, foot) = (text(), text(), text());
+  let diff = diff.line_numbers(true).colors(tokens.diff()).syntax_theme(syntax());
   let scroll = scroll.child(&diff);
   let page = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Left, 0);
   let page = page.position(Edge::Right, 0).position(Edge::Bottom, 0).bg(tokens.base);
-  let head = head.absolute().position(Edge::Top, 0).position(Edge::Left, 2);
-  let files = files.absolute().position(Edge::Top, 2).position(Edge::Left, 0).width(FILES);
-  let scroll = scroll.absolute().position(Edge::Top, 2).position(Edge::Left, FILES + 1);
-  let scroll = scroll.position(Edge::Right, 1).position(Edge::Bottom, 2);
-  let foot = foot.absolute().position(Edge::Bottom, 0).position(Edge::Left, 2);
-  let page = page.child(&head).child(&files).child(&scroll).child(&foot);
+  let panel = View::new(app).absolute().position(Edge::Top, 0).position(Edge::Right, 0);
+  let panel =
+    panel.position(Edge::Bottom, 0).width(SIDE).bg(tokens.panel).padding_edge(Edge::Left, 1);
+  let panel = panel.child(&side);
+  let head = head.absolute().position(Edge::Top, 0).position(Edge::Left, 0);
+  let scroll = scroll.absolute().position(Edge::Top, 2).position(Edge::Left, 1);
+  let scroll = scroll.position(Edge::Bottom, 2);
+  let foot = foot.absolute().position(Edge::Bottom, 0).position(Edge::Left, 0);
+  let page = page.child(&head).child(&scroll).child(&foot).child(&panel);
   app.root().child(&page.z_index(3).visible(false));
   screen.part(Model::reviewing, move |shown| {
     page.visible(shown.is_some());
     if let Some(shown) = shown {
       head.set_text(shown.head.clone());
-      files.set_text(written(&shown.files));
+      panel.visible(shown.side.is_some());
+      side.set_text(written(shown.side.as_deref().unwrap_or_default()));
+      scroll.position(Edge::Right, if shown.side.is_some() { SIDE + 1 } else { 1 });
       foot.set_text(shown.foot.clone());
-      diff.set_diff(shown.diff.clone()).filetype(shown.kind);
+      let view = if shown.split { DiffView::Split } else { DiffView::Unified };
+      diff.set_diff(shown.diff.clone()).filetype(shown.kind).view(view);
     }
   });
 }
@@ -662,12 +680,46 @@ fn looked(app: &App, window: &Shared, key: &KeyEvent) -> bool {
       let by = if key.code == KeyCode::PageUp { -rows } else { rows };
       window.borrow().scroll.scroll_by(0.0, by);
     }
+    KeyCode::Char(sign) if [PREVIOUS, NEXT].contains(&sign.to_string().as_str()) => {
+      let shown = window.borrow();
+      let top = shown.scroll.scroll_position().1;
+      let hunks = shown.diff.hunk_lines().into_iter().map(f64::from);
+      let to = if sign.to_string() == NEXT {
+        hunks.filter(|one| *one > top).reduce(f64::min)
+      } else {
+        hunks.filter(|one| *one < top).reduce(f64::max)
+      };
+      if let Some(to) = to {
+        shown.scroll.scroll_to(0.0, to);
+      }
+    }
     _ if keys::pressed(key, false) == Some(Does::Changes) => {
       tell(app, window, |model| model.client.review = None);
     }
     _ => {}
   }
   true
+}
+
+/// The pointer while the review of the changes stands: a click on a file reads it, the name of the
+/// file under it goes bright, and the wheel scrolls the diff.
+fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
+  let file = window.borrow().screen.model.review_at(event.x, event.y);
+  tell(app, window, |model| {
+    model.pointer = Some((event.x, event.y));
+    if let (Some(file), MouseEventKind::Down(MouseButton::Left)) = (file, event.kind)
+      && let Some(review) = model.client.review.as_mut()
+    {
+      review.chosen = file;
+    }
+  });
+  let rows = f64::from(WHEEL);
+  let by = match event.kind {
+    MouseEventKind::ScrollUp => -rows,
+    MouseEventKind::ScrollDown => rows,
+    _ => return,
+  };
+  window.borrow().scroll.scroll_by(0.0, by);
 }
 
 /// A row of the completion taken, at a place or the chosen one: the editor takes the text with
@@ -910,14 +962,7 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
     return;
   }
   if window.borrow().screen.model.client.review.is_some() {
-    let file = window.borrow().screen.model.review_at(event.x, event.y);
-    if let (Some(file), MouseEventKind::Down(MouseButton::Left)) = (file, event.kind) {
-      tell(app, window, |model| {
-        if let Some(review) = model.client.review.as_mut() {
-          review.chosen = file;
-        }
-      });
-    }
+    looked_at(app, window, event);
     return;
   }
   let place = window.borrow().screen.model.completion_at(event.x, event.y);
@@ -936,15 +981,15 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
       (MouseEventKind::Down(MouseButton::Left), true) => (model.clicked(y), None),
       (MouseEventKind::Down(MouseButton::Left), false) => (model.clicked_left(event.x, y), None),
       (MouseEventKind::ScrollUp, true) => {
-        model.scrolled(-WHEEL);
+        model.scrolled(-isize::from(WHEEL));
         (None, None)
       }
       (MouseEventKind::ScrollDown, true) => {
-        model.scrolled(WHEEL);
+        model.scrolled(isize::from(WHEEL));
         (None, None)
       }
-      (MouseEventKind::ScrollUp, false) => (None, model.scroll_feed(-WHEEL)),
-      (MouseEventKind::ScrollDown, false) => (None, model.scroll_feed(WHEEL)),
+      (MouseEventKind::ScrollUp, false) => (None, model.scroll_feed(-isize::from(WHEEL))),
+      (MouseEventKind::ScrollDown, false) => (None, model.scroll_feed(isize::from(WHEEL))),
       _ => (None, None),
     };
     (on, does, verb)
