@@ -61,7 +61,8 @@ impl Model {
     let (changes, read) = (self.client.changes(review.at, &review.folder), self.client.reviewed());
     let muted = self.tokens.style(Role::Muted);
     let branch = changes.and_then(|one| one.branch.as_deref()).map(|one| format!(" · ⑂ {one}"));
-    let project = format!(" {}{} · ", named(&review.folder), branch.unwrap_or_default());
+    // The project stands over the numbers of the diff, as the project of a thread over its text.
+    let project = format!("  {}{} · ", named(&review.folder), branch.unwrap_or_default());
     let mut left = vec![run(project, muted)];
     left.extend(read.map(|one| run(one.path.clone(), self.tokens.style(Role::Title))));
     let count = changes.map_or(0, |one| one.files.len());
