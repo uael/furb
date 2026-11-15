@@ -28,7 +28,7 @@ fn a_glyph_that_the_face_lacks_is_drawn_from_a_face_of_the_system_and_not_as_a_b
 fn an_image_is_ten_pixels_wide_a_cell_and_the_same_each_time() {
   let (image, _) = png(&frame("ab")).unwrap();
   let head = png::Decoder::new(Cursor::new(&image)).read_info().unwrap().info().clone();
-  assert_eq!((head.width, head.height), (20, u32::try_from(rows().0).unwrap()));
+  assert_eq!((head.width, head.height), (20, u32::try_from(rows(1).0).unwrap()));
   assert_eq!(png(&frame("ab")).unwrap().0, image);
 }
 
@@ -44,7 +44,7 @@ fn a_block_of_quarters_fills_its_quarters_of_the_cell_to_their_edges() {
   let mut decoder = png::Decoder::new(Cursor::new(&image)).read_info().unwrap();
   let mut pixels = vec![0; decoder.output_buffer_size().unwrap()];
   decoder.next_frame(&mut pixels).unwrap();
-  let height = rows().0;
+  let height = rows(1).0;
   let lit = |x: usize, y: usize| pixels[(y * 20 + x) * 3] == 0xe4;
   // The upper half of the first cell to its last row, and the lower right quarter of the second
   // from its first row.

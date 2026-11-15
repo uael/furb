@@ -8,9 +8,10 @@ use fontdue::{Font, FontSettings, Metrics};
 
 use crate::frame::{BOLD, Cell, Frame, ITALIC, Rgb, STRIKE, UNDERLINE};
 
-/// The size of the font, at which its advance is 10 pixels: the face advances 0.6 of it.
-const PX: f32 = 10.0 / 0.6;
+/// The width of a cell in pixels at a density of one, and the size of the font at which its advance
+/// is that width: the face advances 0.6 of it. An image at a density of two takes twice each.
 const WIDTH: usize = 10;
+const PX: f32 = 10.0 / 0.6;
 
 /// The three faces, which the program carries, under the license that `fonts/OFL.txt` holds.
 #[expect(clippy::expect_used, reason = "the faces that the program carries parse")]
@@ -48,40 +49,52 @@ static FALLBACKS: LazyLock<Vec<Font>> = LazyLock::new(|| {
 /// The height of a cell and the row of its base line, from the face: a line of box drawing then
 /// meets the line above and the line below.
 #[expect(clippy::expect_used, reason = "the regular face that the program carries has its metrics")]
-fn rows() -> (usize, usize) {
-  let line = FACES[0].horizontal_line_metrics(PX).expect("the regular face has horizontal metrics");
+fn rows(density: usize) -> (usize, usize) {
+  let line = FACES[0].horizontal_line_metrics(px(density));
+  let line = line.expect("the regular face has horizontal metrics");
   (to_pixels(line.ascent - line.descent), to_pixels(line.ascent))
 }
 
-/// The pixels of an image, three bytes each, row by row.
+/// The size of the font at a density.
+fn px(density: usize) -> f32 {
+  #[expect(clippy::cast_precision_loss, reason = "a density is one or two")]
+  let density = density as f32;
+  PX * density
+}
+
+/// The pixels of an image, three bytes each, row by row, and how many pixels of it stand for one
+/// pixel of an image at a density of one.
 pub(crate) struct Image {
   pub(crate) width: usize,
   pub(crate) height: usize,
   pub(crate) pixels: Vec<u8>,
+  pub(crate) density: usize,
 }
 
 /// The image of a frame as a PNG, and each glyph that the face lacks, once, in its order.
 pub(crate) fn png(frame: &Frame) -> Result<(Vec<u8>, Vec<char>), png::EncodingError> {
-  let (image, missing) = image(frame);
+  let (image, missing) = image(frame, 1);
   Ok((image.png()?, missing))
 }
 
-/// The image of a frame, and each glyph that the face lacks, once, in its order.
-pub(crate) fn image(frame: &Frame) -> (Image, Vec<char>) {
-  let (height, base) = rows();
+/// The image of a frame at a density, and each glyph that the face lacks, once, in its order.
+pub(crate) fn image(frame: &Frame, density: usize) -> (Image, Vec<char>) {
+  let (height, base) = rows(density);
+  let side = WIDTH * density;
   let mut canvas = Canvas {
-    width: frame.cols * WIDTH,
-    pixels: vec![0; frame.cols * WIDTH * frame.rows * height * 3],
+    width: frame.cols * side,
+    pixels: vec![0; frame.cols * side * frame.rows * height * 3],
+    density,
   };
   let mut glyphs: HashMap<(char, usize), (Metrics, Vec<u8>)> = HashMap::new();
   let mut missing = Vec::new();
   for (row, cells) in frame.cells().iter().enumerate() {
     for (col, cell) in cells.iter().enumerate() {
-      let (x, y) = (col * WIDTH, row * height);
-      canvas.fill(Area { x, y, width: WIDTH, height }, cell.bg);
+      let (x, y, width) = (col * side, row * height, side);
+      canvas.fill(Area { x, y, width, height }, cell.bg);
       let wide = cells.get(col + 1).is_some_and(|next| next.glyph.is_empty());
       let place =
-        Place { area: Area { x, y, width: if wide { 2 * WIDTH } else { WIDTH }, height }, base };
+        Place { area: Area { x, y, width: if wide { 2 * width } else { width }, height }, base };
       let Some(glyph) = cell.glyph.chars().next().filter(|glyph| !glyph.is_whitespace()) else {
         canvas.lines(cell, place);
         continue;
@@ -97,7 +110,7 @@ pub(crate) fn image(frame: &Frame) -> (Image, Vec<char>) {
       match face {
         Some(face) => {
           let rasterized =
-            glyphs.entry((glyph, face)).or_insert_with(|| font(face).rasterize(glyph, PX));
+            glyphs.entry((glyph, face)).or_insert_with(|| font(face).rasterize(glyph, px(density)));
           canvas.glyph(rasterized, cell, place);
         }
         None => canvas.outline(cell.fg, place),
@@ -105,7 +118,8 @@ pub(crate) fn image(frame: &Frame) -> (Image, Vec<char>) {
       canvas.lines(cell, place);
     }
   }
-  let image = Image { width: canvas.width, height: frame.rows * height, pixels: canvas.pixels };
+  let image =
+    Image { width: canvas.width, height: frame.rows * height, pixels: canvas.pixels, density };
   (image, missing)
 }
 
@@ -165,10 +179,11 @@ struct Place {
   base: usize,
 }
 
-/// The pixels of an image, three bytes each.
+/// The pixels of an image, three bytes each, at a density.
 struct Canvas {
   width: usize,
   pixels: Vec<u8>,
+  density: usize,
 }
 
 impl Canvas {
@@ -212,11 +227,13 @@ impl Canvas {
   /// pattern of braille as its dots and a circle with one half filled. False for each other glyph.
   fn shape(&mut self, glyph: char, color: Rgb, place: Place) -> bool {
     let Area { x, y, height, .. } = place.area;
+    let k = self.density;
+    let cell = WIDTH * k;
     if let Some(quarters) = BLOCKS.iter().find(|one| one.0 == glyph).map(|one| one.1) {
-      let (left, top) = (WIDTH / 2, height / 2);
-      let parts = [(0, 0, left, top), (left, 0, WIDTH - left, top)];
+      let (left, top) = (cell / 2, height / 2);
+      let parts = [(0, 0, left, top), (left, 0, cell - left, top)];
       let parts = parts.into_iter().chain([(0, top, left, height - top)]);
-      let parts = parts.chain([(left, top, WIDTH - left, height - top)]);
+      let parts = parts.chain([(left, top, cell - left, height - top)]);
       for (at, (dx, dy, width, height)) in parts.enumerate() {
         if quarters >> at & 1 == 1 {
           self.fill(Area { x: x + dx, y: y + dy, width, height }, color);
@@ -229,19 +246,21 @@ impl Canvas {
       let places = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (0, 3), (1, 3)];
       let lit = places.into_iter().enumerate().filter(|(bit, _)| dots >> bit & 1 == 1);
       for (col, row) in lit.map(|(_, at)| at) {
-        let top = y + height * (row + 1) / 5 - 1;
-        self.fill(Area { x: x + 2 + col * 4, y: top, width: 2, height: 2 }, color);
+        let top = y + height * (row + 1) / 5 - k;
+        self.fill(Area { x: x + 2 * k + col * 4 * k, y: top, width: 2 * k, height: 2 * k }, color);
       }
       return true;
     }
     let Some(half) = "◐◓◑◒".chars().position(|one| one == glyph) else { return false };
-    let (middle, center) = (to_i64(x) * 2 + 9, to_i64(y) * 2 + to_i64(height));
+    // In half pixels: a circle of a radius of 4 pixels of a density of one, and its ring of 1.
+    let (middle, center) = (to_i64(x) * 2 + to_i64(cell) - 1, to_i64(y) * 2 + to_i64(height));
+    let (outer, inner) = (to_i64(8 * k).pow(2), to_i64(6 * k).pow(2));
     for row in y..y + height {
-      for col in x..x + 10 {
+      for col in x..x + cell {
         let (dx, dy) = (to_i64(col) * 2 + 1 - middle, to_i64(row) * 2 + 1 - center);
-        let inside = dx * dx + dy * dy <= 64;
+        let inside = dx * dx + dy * dy <= outer;
         let filled = [dx < 0, dy < 0, dx > 0, dy > 0][half];
-        if inside && (filled || dx * dx + dy * dy >= 36) {
+        if inside && (filled || dx * dx + dy * dy >= inner) {
           self.blend((col, row), color, 255);
         }
       }
@@ -252,22 +271,24 @@ impl Canvas {
   /// The box that stands for a glyph that no face holds.
   fn outline(&mut self, color: Rgb, place: Place) {
     let Area { x, y, width, height } = place.area;
-    let (across, down) = (width - 2, height - 6);
-    self.fill(Area { x: x + 1, y: y + 3, width: across, height: 1 }, color);
-    self.fill(Area { x: x + 1, y: y + height - 4, width: across, height: 1 }, color);
-    self.fill(Area { x: x + 1, y: y + 3, width: 1, height: down }, color);
-    self.fill(Area { x: x + width - 2, y: y + 3, width: 1, height: down }, color);
+    let k = self.density;
+    let (across, down) = (width - 2 * k, height - 6 * k);
+    self.fill(Area { x: x + k, y: y + 3 * k, width: across, height: k }, color);
+    self.fill(Area { x: x + k, y: y + height - 4 * k, width: across, height: k }, color);
+    self.fill(Area { x: x + k, y: y + 3 * k, width: k, height: down }, color);
+    self.fill(Area { x: x + width - 2 * k, y: y + 3 * k, width: k, height: down }, color);
   }
 
   /// The line under a text, or through it.
   fn lines(&mut self, cell: &Cell, place: Place) {
     let Place { area, base } = place;
-    let line = |row: usize| Area { y: area.y + row, height: 1, ..area };
+    let k = self.density;
+    let line = |row: usize| Area { y: area.y + row, height: k, ..area };
     if cell.attributes & UNDERLINE != 0 {
-      self.fill(line(base + 2), cell.fg);
+      self.fill(line(base + 2 * k), cell.fg);
     }
     if cell.attributes & STRIKE != 0 {
-      self.fill(line(base - 5), cell.fg);
+      self.fill(line(base - 5 * k), cell.fg);
     }
   }
 }
@@ -295,7 +316,8 @@ pub(crate) struct Framed {
 }
 
 /// The margin around the frame of a window, the height of its bar of title, the radius of its
-/// corners, and the colors of its bar, of its dots and of its edge, in the greys of the window.
+/// corners, at a density of one, and the colors of its bar, of its dots and of its edge, in the
+/// greys of the window.
 const MARGIN: usize = 24;
 const BAR: usize = 30;
 const RADIUS: usize = 10;
@@ -305,15 +327,17 @@ const EDGE: Rgb = Rgb::hex(0x2a_2a2a);
 
 impl Image {
   /// The image as a terminal window shows it: in a frame with round corners and a bar of title
-  /// with three dots, on a ground that shows through, as a README shows a program.
+  /// with three dots, on a ground that shows through, as a README shows a program, each part of
+  /// the frame at the density of the image.
   pub(crate) fn framed(&self) -> Framed {
-    let (inner, tall) = (self.width + 2, self.height + BAR + 1);
-    let (width, height) = (inner + 2 * MARGIN, tall + 2 * MARGIN);
+    let (k, margin) = (self.density, MARGIN * self.density);
+    let (inner, tall) = (self.width + 2 * k, self.height + (BAR + 1) * k);
+    let (width, height) = (inner + 2 * margin, tall + 2 * margin);
     let mut pixels = vec![0; width * height * 4];
     for y in 0..tall {
       for x in 0..inner {
         let Some(color) = self.framed_at(x, y) else { continue };
-        let at = ((y + MARGIN) * width + x + MARGIN) * 4;
+        let at = ((y + margin) * width + x + margin) * 4;
         pixels[at..at + 4].copy_from_slice(&[color.0[0], color.0[1], color.0[2], 255]);
       }
     }
@@ -323,26 +347,28 @@ impl Image {
   /// The color of a pixel of the frame, none outside its round corners: its edge, its bar with its
   /// dots, or the image under the bar.
   fn framed_at(&self, x: usize, y: usize) -> Option<Rgb> {
-    let (inner, tall) = (self.width + 2, self.height + BAR + 1);
-    let away = |at: usize, size: usize| RADIUS.saturating_sub(at.min(size - 1 - at));
+    let k = self.density;
+    let (inner, tall) = (self.width + 2 * k, self.height + (BAR + 1) * k);
+    let (radius, bar) = (RADIUS * k, BAR * k);
+    let away = |at: usize, size: usize| radius.saturating_sub(at.min(size - 1 - at));
     let (dx, dy) = (away(x, inner), away(y, tall));
-    if dx * dx + dy * dy > RADIUS * RADIUS {
+    if dx * dx + dy * dy > radius * radius {
       return None;
     }
-    let edge = x == 0 || y == 0 || x == inner - 1 || y == tall - 1;
-    let ring = (dx + 1) * (dx + 1) + (dy + 1) * (dy + 1) > RADIUS * RADIUS && dx > 0 && dy > 0;
+    let edge = x < k || y < k || x >= inner - k || y >= tall - k;
+    let ring = (dx + k) * (dx + k) + (dy + k) * (dy + k) > radius * radius && dx > 0 && dy > 0;
     if edge || ring {
       return Some(EDGE);
     }
-    if y < BAR {
+    if y < bar {
       let dot = (0..3).any(|n| {
-        let (cx, cy) = (18 + 20 * n, BAR / 2);
+        let (cx, cy) = ((18 + 20 * n) * k, bar / 2);
         let (ex, ey) = (x.abs_diff(cx), y.abs_diff(cy));
-        ex * ex + ey * ey <= 36
+        ex * ex + ey * ey <= 36 * k * k
       });
       return Some(if dot { DOT } else { TITLE });
     }
-    let (ix, iy) = (x - 1, y - BAR);
+    let (ix, iy) = (x - k, y - bar);
     let at = (iy.min(self.height - 1) * self.width + ix.min(self.width - 1)) * 3;
     Some(Rgb([self.pixels[at], self.pixels[at + 1], self.pixels[at + 2]]))
   }

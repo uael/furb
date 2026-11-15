@@ -240,3 +240,8 @@ opt-level = 2
 
 [profile.dev.package.furb-wire]
 opt-level = 2
+
+# The frames draw each screen of a recording as an image, and the images of the README at a density of two, thousands
+# of screens for one GIF, which take minutes at opt-level 0.
+[profile.dev.package.furb-frames]
+opt-level = 2

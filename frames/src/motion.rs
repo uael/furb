@@ -112,8 +112,8 @@ pub(crate) fn motion(cast: &Cast, span: Span, out: &Path) -> Result<String, Erro
     fs::create_dir_all(folder)
       .map_err(|source| Error::Write { path: folder.to_owned(), source })?;
   }
-  put(&path("sheet.png"), &raster::image(&sheet).0.png()?)?;
-  animated(&screens, span, &path("gif"), false)?;
+  put(&path("sheet.png"), &raster::image(&sheet, 1).0.png()?)?;
+  animated(&screens, span, &path("gif"), None)?;
   put(&path("motion.txt"), measures.as_bytes())?;
   Ok(measures)
 }
@@ -401,38 +401,47 @@ fn label_row(label: &str, width: usize, ground: &impl Fn(&str, Rgb) -> Cell) -> 
   row
 }
 
+/// The density of the images of a README: two pixels for each pixel of a capture, as a screen of
+/// high density shows a terminal, so its text stays sharp.
+const DENSE: usize = 2;
+
 /// The window at work over a span, as a README shows it: the GIF of each screen in the frame of a
-/// window on a ground that shows through, at the speed of the walk.
+/// window on a ground that shows through, at the speed of the walk and at [`DENSE`].
 pub(crate) fn hero(cast: &Cast, span: Span, path: &Path) -> Result<(), Error> {
-  animated(&shown(cast, span)?.0, span, path, true)
+  animated(&shown(cast, span)?.0, span, path, Some(DENSE))
 }
 
-/// The screen at a moment of a recording in the frame of a window, as a PNG.
+/// The screen at a moment of a recording in the frame of a window, as a PNG at [`DENSE`].
 pub(crate) fn still(cast: &Cast, at: Duration, path: &Path) -> Result<(), Error> {
   let span = Span { from: at, until: at, every: Duration::ZERO, rows: None };
   let screens = shown(cast, span)?.0;
-  put(path, &raster::image(&screens[0].frame).0.framed().png()?)
+  put(path, &raster::image(&screens[0].frame, DENSE).0.framed().png()?)
 }
 
-/// The least delay of a frame of a GIF, in hundredths of a second: 25 frames a second, as smooth as
-/// a light that passes needs, and few enough that a walk of seconds stays a small file.
-const FRAME: u16 = 4;
+/// The least delay of a frame of a GIF, in hundredths of a second: 50 frames a second, the most
+/// that a browser plays, since it plays a shorter delay as a tenth of a second.
+const FRAME: u16 = 2;
 
-/// The GIF of the whole screen over the span, bare or in the frame of a window: each screen for
-/// as long as it showed, at most [`FRAME`] apart. Each frame after the first holds only the rectangle that
+/// The GIF of the whole screen over the span, bare at a density of one, or in the frame of a
+/// window at a density: each screen for as long as it showed, at most [`FRAME`] apart. Each frame after the first holds only the rectangle that
 /// changed, and a screen that changes nothing lengthens the frame before it: a light that passes
 /// over one word then costs that word, and not the whole screen.
-fn animated(screens: &[Shown], span: Span, path: &Path, framed: bool) -> Result<(), Error> {
+fn animated(
+  screens: &[Shown],
+  span: Span,
+  path: &Path,
+  framed: Option<usize>,
+) -> Result<(), Error> {
   let wrote = |source| Error::Write { path: path.to_owned(), source };
   let file = File::create(path).map_err(wrote)?;
   // The pixels of a screen with an alpha after each color.
   let pixels = |frame: &Frame| {
-    let image = raster::image(frame).0;
-    if framed {
+    let image = raster::image(frame, framed.unwrap_or(1)).0;
+    if framed.is_some() {
       let Framed { width, height, pixels } = image.framed();
       return (width, height, pixels);
     }
-    let Image { width, height, pixels } = image;
+    let Image { width, height, pixels, .. } = image;
     let opaque = pixels.chunks(3).flat_map(|one| [one[0], one[1], one[2], 255]).collect();
     (width, height, opaque)
   };
@@ -440,46 +449,40 @@ fn animated(screens: &[Shown], span: Span, path: &Path, framed: bool) -> Result<
   let size = |pixels: usize| u16::try_from(pixels).unwrap_or(u16::MAX);
   let mut encoder = Encoder::new(BufWriter::new(file), size(width), size(height), &[])?;
   encoder.set_repeat(Repeat::Infinite)?;
-  let mut before: Option<Vec<u8>> = None;
+  // What a player shows after the frames written so far, which starts clear.
+  let mut shown = vec![0; width * height * 4];
   let mut held: Option<gif::Frame<'_>> = None;
   for (at, screen) in screens.iter().enumerate() {
     let next = screens.get(at + 1).map_or(span.until, |next| next.at);
     let hundredths = (next.saturating_sub(screen.at).as_millis() + 5) / 10;
-    let hundredths = u16::try_from(hundredths).unwrap_or(u16::MAX);
-    // A frame that has not shown for a frame of 25 a second yet takes the screens after it, and
-    // the next frame shows what changed in them.
+    let mut left = u16::try_from(hundredths).unwrap_or(u16::MAX);
+    // A frame that has not shown for [`FRAME`] yet takes the screens after it, and the next frame
+    // shows what changed in them.
     if let Some(frame) = held.as_mut().filter(|frame| frame.delay < FRAME) {
-      frame.delay = frame.delay.saturating_add(hundredths);
+      frame.delay = frame.delay.saturating_add(left);
       continue;
     }
     let now = pixels(&screen.frame).2;
-    let whole = Changed { left: 0, top: 0, width, height };
-    let changed = before.as_deref().map_or(Some(whole), |before| changed(before, &now, width));
-    let Some(Changed { left, top, width: wide, height: high }) = changed else {
-      if let Some(frame) = held.as_mut() {
-        frame.delay = frame.delay.saturating_add(hundredths);
+    // A screen with more colors than a frame holds shows in a few frames: each draws again the
+    // pixels that the one before it left wrong, until the player shows the screen exactly.
+    while left > 0 {
+      let Some(rect) = changed(&shown, &now, width) else {
+        if let Some(frame) = held.as_mut() {
+          frame.delay = frame.delay.saturating_add(left);
+        }
+        break;
+      };
+      if let Some(frame) = held.take() {
+        encoder.write_frame(&frame)?;
       }
-      continue;
-    };
-    if let Some(frame) = held.take() {
-      encoder.write_frame(&frame)?;
+      let (mut frame, whole) = framed_part(&shown, &now, width, &rect);
+      (frame.left, frame.top) = (size(rect.left), size(rect.top));
+      frame.delay = if whole { left } else { left.min(FRAME) };
+      frame.dispose = DisposalMethod::Keep;
+      draw(&mut shown, width, &rect, &frame);
+      left -= frame.delay;
+      held = Some(frame);
     }
-    // A pixel that the frame before shows already stands clear, so the frame keeps it, and the
-    // runs of clear pixels between two places that change cost next to nothing.
-    let mut part: Vec<u8> = Vec::with_capacity(wide * high * 4);
-    for row in top..top + high {
-      let span = (row * width + left) * 4..(row * width + left + wide) * 4;
-      let was = before.as_deref().map(|before| &before[span.clone()]);
-      for (at, pixel) in now[span].chunks(4).enumerate() {
-        let kept = was.is_some_and(|was| was[at * 4..at * 4 + 4] == *pixel);
-        part.extend(if kept { [0; 4] } else { [pixel[0], pixel[1], pixel[2], pixel[3]] });
-      }
-    }
-    let mut frame = gif::Frame::from_rgba_speed(size(wide), size(high), &mut part, 10);
-    (frame.left, frame.top, frame.delay) = (size(left), size(top), hundredths);
-    frame.dispose = DisposalMethod::Keep;
-    held = Some(frame);
-    before = Some(now);
   }
   if let Some(frame) = held {
     encoder.write_frame(&frame)?;
@@ -487,7 +490,87 @@ fn animated(screens: &[Shown], span: Span, path: &Path, framed: bool) -> Result<
   Ok(())
 }
 
+/// The frame of the pixels of a rectangle that the player shows wrong, each other pixel clear so
+/// the frame keeps it, and whether its colors are exact: a rectangle with more colors than a frame
+/// holds takes the nearest of 256.
+fn framed_part(
+  shown: &[u8],
+  now: &[u8],
+  width: usize,
+  rect: &Changed,
+) -> (gif::Frame<'static>, bool) {
+  let Changed { left, top, width: wide, height: high } = *rect;
+  let mut part: Vec<u8> = Vec::with_capacity(wide * high * 4);
+  for row in top..top + high {
+    let span = (row * width + left) * 4..(row * width + left + wide) * 4;
+    for (was, pixel) in shown[span.clone()].chunks(4).zip(now[span].chunks(4)) {
+      part.extend(if was == pixel { [0; 4] } else { [pixel[0], pixel[1], pixel[2], pixel[3]] });
+    }
+  }
+  let size = |pixels: usize| u16::try_from(pixels).unwrap_or(u16::MAX);
+  match exact(size(wide), size(high), &part) {
+    Some(frame) => (frame, true),
+    None => (gif::Frame::from_rgba_speed(size(wide), size(high), &mut part, 1), false),
+  }
+}
+
+/// What a player shows once it drew a frame over what it showed: each pixel of the frame that is
+/// not clear, in the color of its palette.
+fn draw(shown: &mut [u8], width: usize, rect: &Changed, frame: &gif::Frame<'_>) {
+  let palette = frame.palette.as_deref().unwrap_or_default();
+  for (at, index) in frame.buffer.iter().enumerate() {
+    if Some(*index) == frame.transparent {
+      continue;
+    }
+    let (x, y) = (rect.left + at % rect.width, rect.top + at / rect.width);
+    let color = usize::from(*index) * 3;
+    let pixel = (y * width + x) * 4;
+    shown[pixel..pixel + 3].copy_from_slice(&palette[color..color + 3]);
+    shown[pixel + 3] = 255;
+  }
+}
+
+/// A frame of a GIF with the exact colors of its pixels, four bytes each, when they hold at most
+/// 256 colors with the clear one: a frame of a terminal that changes a few cells holds that few,
+/// so its text keeps the edges that the face gave it. None for more colors, which a palette of a
+/// GIF cannot hold.
+fn exact(width: u16, height: u16, pixels: &[u8]) -> Option<gif::Frame<'static>> {
+  let mut palette: Vec<[u8; 3]> = Vec::new();
+  let mut clear = None;
+  let mut indices = Vec::with_capacity(pixels.len() / 4);
+  let mut seen: HashMap<[u8; 3], u8> = HashMap::new();
+  for pixel in pixels.chunks(4) {
+    let index = if pixel[3] == 0 {
+      *clear.get_or_insert_with(|| {
+        palette.push([0; 3]);
+        palette.len() - 1
+      })
+    } else {
+      let color = [pixel[0], pixel[1], pixel[2]];
+      let next = palette.len();
+      let index = *seen.entry(color).or_insert_with(|| u8::try_from(next).unwrap_or(u8::MAX));
+      if usize::from(index) == next {
+        palette.push(color);
+      }
+      usize::from(index)
+    };
+    if palette.len() > 256 {
+      return None;
+    }
+    indices.push(u8::try_from(index).ok()?);
+  }
+  Some(gif::Frame {
+    width,
+    height,
+    buffer: indices.into(),
+    palette: Some(palette.concat()),
+    transparent: clear.and_then(|index| u8::try_from(index).ok()),
+    ..gif::Frame::default()
+  })
+}
+
 /// The rectangle of pixels in which two images of one size differ.
+#[derive(Clone, Copy)]
 struct Changed {
   left: usize,
   top: usize,
