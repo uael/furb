@@ -589,7 +589,7 @@ fn the_ear_tells_the_root_once_why_each_skill_that_does_not_play_does_not_play()
 }
 
 #[test]
-fn a_life_that_no_host_runs_processes_for_tells_the_root_once_of_each_extension_whose_process_does_not_run()
+fn a_life_that_no_host_runs_processes_for_tells_the_root_once_of_each_skill_whose_process_does_not_run()
  {
   let notes = |hosted: bool| {
     let yard = place(if hosted { "hosted" } else { "unhosted" });
