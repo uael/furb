@@ -83,6 +83,43 @@ fn a_part_file_passes_each_name_that_a_crash_left() {
   assert_eq!(made, part(3));
 }
 
+/// A pid that no process holds: past the largest pid of each system.
+const GONE: u32 = 2_147_483_646;
+
+#[test]
+fn the_first_write_of_a_process_into_a_folder_removes_each_part_file_that_a_writer_that_runs_no_more_left()
+ {
+  let at = yard("left");
+  let left = [format!(".a.txt.{GONE}.0.part"), format!(".b.txt.{GONE}.3.part")];
+  let others = [".a.txt.x.part", ".part", "a.txt.part"];
+  for name in left.iter().map(String::as_str).chain(others) {
+    fs::write(at.join(name), "left by a kill").unwrap();
+  }
+  write(&at.join("a.txt"), b"new", Access::Shared).expect("the write");
+  let mut stays = vec!["a.txt"];
+  stays.extend(others);
+  stays.sort_unstable();
+  assert_eq!(names(&at), stays, "each part that its writer left goes, and no other file");
+  fs::write(at.join(&left[0]), "left by a later kill").unwrap();
+  write(&at.join("a.txt"), b"again", Access::Shared).expect("the second write");
+  assert!(names(&at).contains(&left[0]), "a second write into the folder reads no listing of it");
+}
+
+#[test]
+fn a_write_leaves_the_part_file_of_a_write_of_the_same_target_that_goes_on() {
+  let at = yard("goes-on");
+  let file = at.join("a.txt");
+  filled(&file, Access::Shared, |part| {
+    write(&file, b"second", Access::Shared).expect("a second write lands");
+    let seen = names(&at);
+    assert_eq!(seen.len(), 2, "the part of the first write stays beside the target: {seen:?}");
+    part.write_all(b"first")
+  })
+  .expect("the first write lands");
+  assert_eq!(fs::read_to_string(&file).unwrap(), "first");
+  assert_eq!(names(&at), ["a.txt"]);
+}
+
 #[cfg(unix)]
 #[test]
 fn a_reader_that_holds_a_file_open_during_a_write_reads_the_old_bytes_whole() {
