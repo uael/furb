@@ -1,0 +1,30 @@
+● furb-try · connect codex (the model answers)     Resolve     All projects ▾        This computer
+┃
+┃ connect codex (the model answers)                            Working 1
+┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+    Models                                                    ▐ ● connect codex (the…   ⠋ Working ▌
+    ▌Search a model                                 5 / 6     ▐   FT furb-try                     ▌
+                                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    Claude
+     opus    1M context · images · in use           high
+     sonnet  1M context · images                    high
+     haiku   200k context · images                  high
+     fable   1M context · images                    high
+
+    Codex
+    ▌Open the sign-in page again  sign in there
+     Cancel the sign-in  keep the models as they are
+
+    ↑↓ move · ⏎ take it · ⎋ close
+
+
+
+
+
+
+┃
+┃ Reply to this thread
+┃
+┃  Message  Python    → connect… ▾      opus  high   + ⌃N      Context               No answer yet
+┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This computer · ~/furb-try                      ⌃P find

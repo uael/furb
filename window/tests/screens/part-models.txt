@@ -11,11 +11,11 @@
      haiku   200k context · images                  high
      fable   1M context · images                    high
 
+    Codex
+     Sign in with ChatGPT  after a first message
+
     ↑↓ move · ⏎ take it for the new session · ⎋ close
 
-
-
-  Write below to start a thread.
   It runs in a new session of furb-try on this computer,
   with sonnet at high effort.
 

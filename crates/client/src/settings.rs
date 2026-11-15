@@ -61,8 +61,11 @@ impl Client {
 
   /// What a machine said to the ask of the settings, or of a change of one: the settings that it
   /// gave, or none for a refusal; a change that it took reads them again, and the client says why
-  /// it refused one.
+  /// it refused one. The change that turns Codex on ends its sign-in.
   pub fn configured(&mut self, asked: &Asked, heard: Option<Frame>) {
+    if *asked == Asked::SignIn {
+      return self.signed_in(heard);
+    }
     let Some(settings) = self.settings.as_mut() else { return };
     match (asked, heard) {
       (Asked::Settings, Some(Frame::Reply { answer: Answer::Values(values), .. })) => {

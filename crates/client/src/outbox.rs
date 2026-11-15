@@ -130,6 +130,9 @@ pub enum Asked {
   Queued(String, String),
   /// A change of a setting of a session.
   Setting,
+  /// The change that turns Codex on in the project of a session, which its machine answers once
+  /// the sign-in of Codex ends.
+  SignIn,
   /// Where the operator writes, which each other window of the life shows.
   Writes,
 }
@@ -151,7 +154,7 @@ impl Client {
 
   /// Each ask of a list that is due, with its machine and what it asks: a verb of a view, a
   /// control of a session, the changes of a folder, the turns of the box of the context, the
-  /// moments of the bar of the time of the open thread, and,
+  /// moments of the bar of the time of the open thread, the sign-in of Codex, and,
   /// while the client lists everything that the operator can go to, the files and the skills of
   /// the target of the input.
   pub fn asks_due(&mut self, listing: bool) -> Vec<(usize, Verb, Asked)> {
@@ -162,6 +165,7 @@ impl Client {
     due.extend(self.moments_due());
     due.extend(self.tracks_due());
     due.extend(self.settings_due());
+    due.extend(self.sign_in_due());
     due.extend(self.follows_due());
     due.extend(self.writes_due());
     if listing {

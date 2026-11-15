@@ -141,6 +141,7 @@ impl Model {
       Ok(Frame::Opening { life, stage, done, of }) => {
         return self.client.opening(at, life, Step { stage, done, of, at: self.client.moved });
       }
+      Ok(Frame::SignIn { state, url, .. }) => return self.told_sign_in(at, state, url),
       Ok(Frame::Cards { ref life, ref changed, .. }) if changed.iter().any(|card| !card.held) => {
         self.client.let_go(at, life);
       }
@@ -171,6 +172,9 @@ impl Model {
         self.client.restore = Some(self.before_draft(text.clone()));
       }
     }
+    if gone.contains(&Asked::SignIn) {
+      self.client.signed_in(None);
+    }
     if gone.contains(&Asked::Answer) {
       self.unanswered(format!("{name} went away before it took the answer. Send it again."));
     }
@@ -193,6 +197,17 @@ impl Model {
     true
   }
 
+  /// A state of the sign-in of Codex that a machine told: the page of the sign-in opens in the
+  /// browser once, when the machine gives its address.
+  fn told_sign_in(&mut self, at: usize, state: String, url: Option<String>) -> bool {
+    if let Some(address) = self.client.told_sign_in(at, state, url)
+      && let Err(no) = (self.browse)(&address)
+    {
+      self.client.notice = Some(format!("The browser did not open the sign-in of Codex: {no}"));
+    }
+    true
+  }
+
   /// The answer of a daemon to a request of the input, with its id and what it asked.
   fn answered_input(&mut self, at: usize, (id, asked): (u64, Asked), heard: Heard) {
     match (asked, heard) {
@@ -205,7 +220,7 @@ impl Model {
       (Asked::Moments(key), heard) => self.client.timed(&key, heard.ok()),
       (Asked::Tracks(key), heard) => self.client.tracked(&key, heard.ok()),
       (Asked::Queued(life, thread), heard) => self.client.followed(at, (life, thread), heard.ok()),
-      (asked @ (Asked::Settings | Asked::Setting | Asked::Plays), heard) => {
+      (asked @ (Asked::Settings | Asked::Setting | Asked::Plays | Asked::SignIn), heard) => {
         self.client.configured(&asked, heard.ok());
       }
       (Asked::Back(text), Ok(Frame::Reply { .. })) => {

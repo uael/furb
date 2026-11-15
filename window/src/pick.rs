@@ -100,6 +100,12 @@ pub(crate) enum Choice {
   /// A skill, by its place among the skills of the session: one with code turns on or off, and the
   /// draft adds the mention of one with none.
   Skill(usize),
+  /// The sign-in of Codex, which starts for the session that the input sends to.
+  SignIn,
+  /// The sign-in of Codex that runs, canceled.
+  CancelSignIn,
+  /// An address, which opens in the browser.
+  Link(String),
   /// Nothing: a key that only a form or a list hears.
   #[default]
   None,
@@ -556,7 +562,38 @@ impl Model {
         ..Entry::default()
       }
     };
-    offered.into_iter().flatten().map(entry).collect()
+    let mut entries: Vec<Entry> = offered.into_iter().flatten().map(entry).collect();
+    if !entries.iter().any(|one| one.part == "Codex") {
+      entries.extend(self.sign_in_rows());
+    }
+    entries
+  }
+
+  /// The rows of the sign-in of Codex, while the machine offers no model of it: the sign-in, which
+  /// needs a session, then while it runs its page again and its cancel.
+  fn sign_in_rows(&self) -> Vec<Entry> {
+    let row = |left: &str, says: &str, choice| Entry {
+      part: "Codex".into(),
+      left: left.to_owned(),
+      says: format!("  {says}"),
+      choice,
+      ..Entry::default()
+    };
+    let Some(signing) = self.client.signing.as_ref() else {
+      let plan = "your ChatGPT plan, no key";
+      return vec![match self.client.target() {
+        Target::New(..) => row("Sign in with ChatGPT", "after a first message", Choice::None),
+        _ => row("Sign in with ChatGPT", plan, Choice::SignIn),
+      }];
+    };
+    let waits = match (&signing.url, signing.state.as_deref()) {
+      (Some(url), _) => {
+        row("Open the sign-in page again", "sign in there", Choice::Link(url.clone()))
+      }
+      (None, Some("connecting")) => row("Connecting to ChatGPT", "", Choice::None),
+      (None, _) => row("Starting the sign-in", "", Choice::None),
+    };
+    vec![waits, row("Cancel the sign-in", "keep the models as they are", Choice::CancelSignIn)]
   }
 
   /// The chosen row moved by a count of rows on the screen, within the rows that pass the filter.
@@ -625,9 +662,34 @@ impl Model {
           self.client.added(&mention);
         }
       }
+      Choice::SignIn => {
+        if let Err(why) = self.client.sign_in() {
+          self.client.notice = Some(why);
+        }
+        self.sign_in_shown(of);
+      }
+      Choice::CancelSignIn => {
+        self.client.cancel_sign_in();
+        self.sign_in_shown(of);
+      }
+      Choice::Link(address) => {
+        if let Err(no) = (self.browse)(&address) {
+          self.client.notice = Some(format!("The browser did not open {address}: {no}"));
+        }
+        self.sign_in_shown(of);
+      }
       Choice::None => self.picker = Some(Picker { of, filter: String::new(), at }),
     }
     None
+  }
+
+  /// The part open again on the rows of the sign-in of Codex, which change as it goes, so no
+  /// filter hides them, with its first row chosen: the page of the sign-in once the machine gives
+  /// it, and never its cancel, which an enter would take.
+  fn sign_in_shown(&mut self, of: Pick) {
+    self.picker = Some(Picker { of, filter: String::new(), at: 0 });
+    let at = self.entries().iter().position(|one| one.part == "Codex").unwrap_or_default();
+    self.picker = Some(Picker { of, filter: String::new(), at });
   }
 
   /// The thread of a card opened in the window.
@@ -729,7 +791,8 @@ impl Model {
     if rises {
       rows.extend([filter, Row::default()]);
     }
-    rows.push(Row::of(padded(vec![run(self.foot(picker), muted)])));
+    let chosen = entries.get(picker.at);
+    rows.push(Row::of(padded(vec![run(self.foot(picker, chosen), muted)])));
     rows.push(Row::default());
     if rises {
       // Its foot stands on the last row of the input, over the row of hints.
@@ -773,11 +836,12 @@ impl Model {
 
   /// The keys that the foot of a list part names: to move, to take the chosen row, to close. A
   /// model is taken for what the input sends to: its session, or the new session.
-  fn foot(&self, picker: &Picker) -> String {
-    let scope = match (picker.of, self.client.target()) {
-      (Pick::Models, Target::New(..)) => " for the new session",
-      (Pick::Models, _) => " for this session",
-      _ => "",
+  fn foot(&self, picker: &Picker, chosen: Option<&Entry>) -> String {
+    let model = chosen.is_some_and(|one| matches!(one.choice, Choice::Actor(_)));
+    let scope = match self.client.target() {
+      _ if !model => "",
+      Target::New(..) => " for the new session",
+      _ => " for this session",
     };
     format!(
       "{} move · {} {}{scope} · {} close",

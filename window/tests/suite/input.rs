@@ -4,9 +4,11 @@
 #![cfg(test)]
 
 use std::{
-  fs,
+  env,
+  fs::{self, File},
   path::{Path, PathBuf},
   process::Command,
+  sync::Mutex,
   time::Duration,
 };
 
@@ -846,4 +848,69 @@ fn the_models_open_on_the_model_in_use_and_say_what_each_holds_and_what_a_choice
   assert!(frame.contains("▌sonnet  1M context · images · in use"), "{frame}");
   assert!(frame.contains(" opus    1M context · images "), "{frame}");
   screen("part-models", &app);
+}
+
+/// Each address that a window of a test opened in the browser, the first first.
+static BROWSED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// The lock of the port of the browser callback of a sign-in of Codex, which one test of the
+/// machine holds at a time, the tests of the daemon among them: a sign-in that finds the port busy
+/// fails.
+fn port() -> File {
+  let lock = File::create(env::temp_dir().join("furb-sign-in-port.lock")).unwrap();
+  lock.lock().unwrap();
+  lock
+}
+
+#[test]
+fn the_models_sign_in_to_codex_open_its_page_once_and_a_cancel_changes_nothing() {
+  let _port = port();
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  // The credential of Codex in the configs of the daemon ended, so no account of this machine
+  // serves and no request goes out.
+  let auth = daemon.file("config").join("auth");
+  fs::create_dir_all(&auth).unwrap();
+  let ended = r#"{"access":"","refresh":null,"expires":0,"account":"none"}"#;
+  fs::write(auth.join("codex.json"), ended).unwrap();
+  daemon.served();
+  let folder = daemon.file("furb-try");
+  fs::create_dir_all(&folder).unwrap();
+  let home = folder.parent().map(PathBuf::from);
+  let browse = |address: &str| {
+    BROWSED.lock().unwrap().push(address.to_owned());
+    Ok(())
+  };
+  let options = Options { folder: folder.clone(), home, browse, ..options(&daemon.file("k.json")) };
+  open(&app, vec![daemon.machine("mac")], options);
+  shows(&app, "No thread yet in this project.");
+  // A new session has no project that takes Codex yet: the row says so and takes nothing.
+  app.press("ctrl+x");
+  app.press("m");
+  let frame = shows(&app, "Sign in with ChatGPT");
+  assert!(frame.contains("Sign in with ChatGPT  after a first message"), "{frame}");
+  app.press("escape");
+  sent(&app, &format!("connect codex {ANSWERS}"));
+  shows(&app, "Two stages hold most");
+  app.press("ctrl+x");
+  app.press("m");
+  shows(&app, "Sign in with ChatGPT  your ChatGPT plan, no key");
+  app.type_text("chatgpt");
+  app.press("enter");
+  // The page of the sign-in opens once, and the part offers it again and the cancel.
+  let frame = shows(&app, "Open the sign-in page again");
+  assert!(frame.contains("Cancel the sign-in"), "{frame}");
+  let browsed = BROWSED.lock().unwrap().clone();
+  assert!(
+    matches!(&browsed[..], [one] if one.starts_with("https://auth.openai.com/")),
+    "{browsed:?}"
+  );
+  screen("part-codex", &app);
+  let (x, y) = at(&app, "Cancel the sign-in", 0);
+  app.click(x, y);
+  shows(&app, "The sign-in of Codex stopped. Nothing changed.");
+  shows(&app, "Sign in with ChatGPT  your ChatGPT plan");
+  assert_eq!(BROWSED.lock().unwrap().len(), 1, "the page opened once");
+  let config = folder.join(".furb").join("config.json");
+  assert!(!fs::read_to_string(config).unwrap_or_default().contains("codex"), "Codex stays off");
 }

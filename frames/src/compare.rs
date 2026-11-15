@@ -57,9 +57,6 @@ pub(crate) fn compare(
   let mut text = format!("# {}\n\n", scenario.name);
   let best = rivals.and_then(|folder| fs::read_to_string(folder.join("BEST.md")).ok());
   let winners = best.as_deref().map(|best| winners(best, scenario.name)).unwrap_or_default();
-  if let Has::None(gap) = &scenario.has {
-    write!(text, "furb has none: the gap {gap:?} of BEST.md\n\n")?;
-  }
   let mut theirs = Vec::new();
   for winner in &winners {
     if let Some(drawn) =
@@ -123,7 +120,6 @@ fn window(scenario: &Scenario, winners: &[Winner]) -> Vec<(Size, String, String)
     Has::Sized(size, steps) => {
       steps.iter().map(|(name, step)| (*size, (*name).to_owned(), (*step).to_owned())).collect()
     }
-    Has::None(_) => Vec::new(),
   }
 }
 

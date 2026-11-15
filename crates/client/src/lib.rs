@@ -20,6 +20,7 @@ mod presence;
 mod question;
 mod running;
 mod settings;
+mod sign_in;
 mod thread;
 mod time;
 mod views;
@@ -46,6 +47,7 @@ pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
 pub use question::{Form, HOLD};
 pub use running::{BACKGROUND, Control, Live, Running};
 pub use settings::Settings;
+pub use sign_in::SignIn;
 pub use thread::{Anchor, Fold, Opened, PAGE, Pending, Thread, rests};
 pub use time::{Chains, Flow, Time, resting};
 pub use views::{Filled, View};
@@ -95,6 +97,8 @@ pub struct Client {
   pub filled: Option<Filled>,
   /// The settings of a session, while the operator reads them.
   pub settings: Option<Settings>,
+  /// The sign-in of Codex, while it runs.
+  pub signing: Option<SignIn>,
   /// The thread whose follow-ups the client asks next, after a change of its queue: its machine,
   /// its life and its prompt.
   following: Option<(usize, String, String)>,

@@ -115,8 +115,6 @@ pub(crate) enum Has {
   Walk(Walk),
   /// Steps of other scenarios at one size: each the name of a scenario and of its step.
   Sized(Size, &'static [(&'static str, &'static str)]),
-  /// No such thing: the gap of the judge that says what the window lacks.
-  None(&'static str),
 }
 
 /// A scenario: its number and its name, as `05-prompt-box`, and what the window has of it.
@@ -130,7 +128,7 @@ impl Scenario {
   pub(crate) fn walk(&self) -> Option<&Walk> {
     match &self.has {
       Has::Walk(walk) => Some(walk),
-      Has::Sized(..) | Has::None(_) => None,
+      Has::Sized(..) => None,
     }
   }
 }
@@ -147,10 +145,6 @@ const WHEEL_DOWN: Act = Act::Pointer { on: "Search a", button: 65 };
 
 const fn step(name: &'static str, acts: &'static [Act], until: &'static str) -> Step {
   Step { name, acts, until }
-}
-
-const fn none(gap: &'static str) -> Has {
-  Has::None(gap)
 }
 
 /// The prose of a model with each mark of markdown: a heading, a list, a fence with its language,
@@ -773,7 +767,26 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
     }),
   },
-  Scenario { name: "20-models", has: none("9. The launcher picks the model and its effort") },
+  Scenario {
+    name: "20-models",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[],
+      pace: &[],
+      reads: false,
+      steps: &[
+        // A new session has no project that takes Codex yet: its row says so and takes nothing.
+        step("a", &[Act::Key("C-x"), Act::Key("m")], "after a first message"),
+        step(
+          "b",
+          &[Act::Key("Escape"), Act::Type("Which model writes the report?"), Act::Key("Enter")],
+          "reply 1",
+        ),
+        // In a session, the models offer the sign-in of Codex, for the models of a ChatGPT plan.
+        step("c", &[Act::Key("C-x"), Act::Key("m")], "your ChatGPT plan"),
+      ],
+    }),
+  },
   Scenario {
     name: "21-config",
     has: Has::Walk(Walk {

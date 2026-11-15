@@ -53,9 +53,11 @@ else the first cheap model of the roster.
 
 ## Provider settings
 
-For a ChatGPT subscription, open `/providers` and choose `codex`. furb uses an existing ChatGPT sign-in when
-one is available. Otherwise, it opens the browser for sign-in. When it connects, the Codex model picker opens.
-Choose a model there. No API key, server, model id or context size is needed.
+For a ChatGPT subscription, open the models of a session (`/model`, or ⌃X M) and choose `Sign in with ChatGPT`
+under Codex. furb uses an existing ChatGPT sign-in when one is available. Otherwise, it opens the sign-in page in
+the browser, and the list offers that page again and a cancel while it waits. When it connects, the models of Codex
+show in the same list. Choose a model there. No API key, server, model id or context size is needed. A new session
+connects after its first message, since Codex turns on in the project of a session.
 
 `codex` uses the limits of the ChatGPT subscription. `openai` remains the provider for an OpenAI API key.
 Connecting Codex does not change a running model call.
