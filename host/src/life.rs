@@ -179,12 +179,13 @@ pub enum Command {
   AsOf { at: u64 },
   /// The act of a name as the life folds it now.
   Folded { id: String },
-  /// A page of a thread, as [`furb::view::Held::page`] gives it.
-  Thread { thread: String, reach: Reach },
+  /// A page of a thread, as [`furb::view::Held::page`] gives it, now or as it stood just after
+  /// a moment.
+  Thread { thread: String, reach: Reach, at: Option<u64> },
   /// What each operator sent to the life, as the life holds it now.
   Sent,
-  /// Each moment at which an act began or ended, in order, of the life or of the acts of one
-  /// chain.
+  /// Each moment at which an act began or ended, in order, of the life, of the acts of one chain,
+  /// or of the acts that the page of one thread shows.
   Moments { on: Option<String> },
   /// The end of the life, which replies and then ends the life. A life whose record does not hold
   /// each fact that it said yet, as on a full disk, keeps the end, tells why in a notice, and ends
@@ -1554,8 +1555,11 @@ fn viewed(life: &Life, root: &str, command: Command) -> Result<Reply, LifeError>
       None => Err(LifeError::Refused(format!("No act named {id} stands in this life."))),
     },
     Command::Moments { on } => Ok(Reply::Moments(life.kept.held.moments(on.as_deref()))),
-    Command::Thread { thread, reach } => {
+    Command::Thread { thread, reach, at: None } => {
       Ok(Reply::Page(life.kept.held.page(&life.kept.streams, &thread, reach)))
+    }
+    Command::Thread { thread, reach, at: Some(at) } => {
+      Ok(Reply::Page(life.kept.held.past(at).page(&life.kept.streams, &thread, reach)))
     }
     Command::Sent => Ok(Reply::Sent(life.kept.held.sent())),
     other => Err(LifeError::Refused(format!("{other:?} is no view"))),

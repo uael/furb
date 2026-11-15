@@ -115,6 +115,8 @@ pub enum Asked {
   /// The turns of the chain of a thread, for the kinds of what its answer of a count of tokens
   /// read.
   Parts(Key, u64),
+  /// The moments of a thread, for the bar of its time.
+  Moments(Key),
 }
 
 impl Client {
@@ -131,7 +133,8 @@ impl Client {
   }
 
   /// Each ask of a list that is due, with its machine and what it asks: a verb of a view, a
-  /// control of a session, the changes of a folder, the turns of the box of the context, and,
+  /// control of a session, the changes of a folder, the turns of the box of the context, the
+  /// moments of the bar of the time of the open thread, and,
   /// while the client lists everything that the operator can go to, the files and the skills of
   /// the target of the input.
   pub fn asks_due(&mut self, listing: bool) -> Vec<(usize, Verb, Asked)> {
@@ -139,6 +142,7 @@ impl Client {
     due.extend(self.controls_due());
     due.extend(self.changes_due());
     due.extend(self.parts_due());
+    due.extend(self.moments_due());
     if listing {
       due.extend(self.lists_due());
     }

@@ -421,7 +421,8 @@ async fn a_life_that_opens_from_its_image_shows_each_thread_as_the_life_before_i
     Command::Prompt { shape: "str".to_owned(), message: "Wait.".to_owned(), to: None, on: None };
   let thread = made(&life, prompt).await;
   until(&mut events, |event| matches!(event, Event::Fact(fact) if fact[0] == "due")).await;
-  let page = |thread: String| Command::Thread { thread, reach: Reach { before: None, limit: 20 } };
+  let page =
+    |thread: String| Command::Thread { thread, reach: Reach { before: None, limit: 20 }, at: None };
   let before = life.send(page(thread.clone())).await.expect("the page of the thread");
   ended(life).await;
   let life = Life::spawn(answering(&at, None)).expect("the second life");

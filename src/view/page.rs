@@ -30,6 +30,7 @@ use super::{
   ladder::lives,
   quote::{quotes, writing},
   threads::{Lookup, message_of, noted},
+  time::moments_of,
 };
 
 /// How many lines of what a command wrote a tail shows.
@@ -239,6 +240,18 @@ impl Held {
   /// A page of a thread, its prompt. A prompt that is no thread gives an empty page.
   pub fn page(&self, streams: &Streamed, thread: &str, reach: Reach) -> Page {
     Reader { held: self, streams }.page(thread, reach)
+  }
+
+  /// Each moment at which an act that the pages of a thread show began or ended: its prompts, the
+  /// rungs that answer them, and each act that a rung made. A prompt that is no thread has none.
+  pub(super) fn thread_moments(&self, thread: &str) -> Vec<u64> {
+    let streams = Streamed::default();
+    let Some(Told { prompts, rungs, .. }) = (Reader { held: self, streams: &streams }).told(thread)
+    else {
+      return Vec::new();
+    };
+    let made = rungs.iter().flat_map(|rung| self.made_by(&rung.id));
+    moments_of(prompts.iter().chain(&rungs).copied().chain(made))
   }
 }
 

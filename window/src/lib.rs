@@ -36,6 +36,7 @@ mod review;
 mod running;
 mod screen;
 mod thread;
+mod time;
 pub mod tokens;
 
 use std::{

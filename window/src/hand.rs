@@ -402,6 +402,7 @@ fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
   let given = held.screen.tell(|model| {
     (model.client.now, model.client.moved) = (now, moved);
     let given = change(model);
+    model.client.played();
     model.questioned();
     given
   });
@@ -584,7 +585,7 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   if window.borrow().screen.model.picker.is_some() && picking(app, window, key) {
     return true;
   }
-  if completing(app, window, key) || looked(app, window, key) {
+  if completing(app, window, key) || looked(app, window, key) || timed(app, window, key) {
     return true;
   }
   let does = keys::pressed(key, led);
@@ -721,6 +722,28 @@ fn looked(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   true
 }
 
+/// A key while the bar of the time of the open thread shows: escape closes it back to now, and on
+/// an empty input the arrows step one moment back or on, and space plays or stops. Whether the
+/// bar took the key.
+fn timed(app: &App, window: &Shared, key: &KeyEvent) -> bool {
+  let shows = {
+    let model = &window.borrow().screen.model;
+    model.client.thread.as_ref().is_some_and(|one| one.thread.time.is_some())
+  };
+  let empty = window.borrow().area.text().is_empty();
+  if !shows || !key.modifiers.is_empty() {
+    return false;
+  }
+  match key.code {
+    KeyCode::Escape => tell(app, window, |model| model.client.time()),
+    KeyCode::Left if empty => tell(app, window, |model| model.client.step(-1)),
+    KeyCode::Right if empty => tell(app, window, |model| model.client.step(1)),
+    KeyCode::Char(' ') if empty => tell(app, window, |model| model.client.play()),
+    _ => return false,
+  }
+  true
+}
+
 /// The pointer while the review of the changes stands: a click on a file reads it, the name of the
 /// file under it goes bright, and the wheel scrolls the diff.
 fn looked_at(app: &App, window: &Shared, event: MouseEvent) {
@@ -808,6 +831,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Effort => Model::effort,
     Does::Changes => |model| model.client.review(),
     Does::Context => Model::context_step,
+    Does::Rewind => |model| model.client.time(),
     Does::Running => Model::act_on_open,
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,
@@ -1007,6 +1031,10 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
     let (does, verb) = match (event.kind, on) {
       (MouseEventKind::Down(MouseButton::Left), true) => (model.clicked(y), None),
       (MouseEventKind::Down(MouseButton::Left), false) => (model.clicked_left(event.x, y), None),
+      (MouseEventKind::Drag(MouseButton::Left), false) => {
+        model.dragged_left(event.x, y);
+        (None, None)
+      }
       (MouseEventKind::ScrollUp, true) => {
         model.scrolled(-isize::from(WHEEL));
         (None, None)

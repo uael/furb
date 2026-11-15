@@ -77,7 +77,7 @@ impl Read {
         return;
       }
       let reach = Reach { before: None, limit: self.limit };
-      let command = Command::Thread { thread: self.thread.clone(), reach };
+      let command = Command::Thread { thread: self.thread.clone(), reach, at: None };
       let Ok(Reply::Page(page)) = self.handle.send(command).await else { return };
       let changed: Vec<_> =
         page.exchanges.iter().filter(|one| !told.exchanges.contains(one)).cloned().collect();

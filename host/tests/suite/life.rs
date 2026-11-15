@@ -357,7 +357,7 @@ async fn a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_s
   let prompts: Vec<&str> = threads.threads.iter().map(|one| one.thread.prompt.as_str()).collect();
   assert_eq!(prompts, ["prompt1", "prompt3"], "a window reads the threads of the record");
   let reach = Reach { before: None, limit: 10 };
-  let page = life.send(Command::Thread { thread: "prompt1".to_owned(), reach }).await;
+  let page = life.send(Command::Thread { thread: "prompt1".to_owned(), reach, at: None }).await;
   let Ok(Reply::Page(page)) = page else { panic!("a page of the thread: {page:?}") };
   let lines: Vec<&str> = page.exchanges[0]
     .block
@@ -1027,7 +1027,7 @@ async fn a_retry_of_a_model_shows_on_the_line_that_it_writes_and_its_failure_onc
   let page = || async {
     let reach = Reach { before: None, limit: 10 };
     let Reply::Page(page) =
-      life.send(Command::Thread { thread: prompt.clone(), reach }).await.unwrap()
+      life.send(Command::Thread { thread: prompt.clone(), reach, at: None }).await.unwrap()
     else {
       panic!("the page of a thread")
     };

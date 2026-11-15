@@ -373,6 +373,18 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Key("PageUp"), Act::Key("PageUp"), Act::Key("PageUp"), Act::Key("PageUp")],
           "Message 1 of",
         ),
+        // The bar of the time: the thread steps back moment by moment, a click on the track takes
+        // it to a moment, a play steps it on, which the clocks that stand still hold, and an
+        // escape goes back to now.
+        step("x-time", &[Act::Key("End"), Act::Key("C-x"), Act::Key("b")], " now"),
+        step(
+          "x-back",
+          &[Act::Key("Left"), Act::Key("Left"), Act::Key("Left"), Act::Key("Left")],
+          " of ",
+        ),
+        step("x-click", &[Act::Pointer { on: "━", button: 0 }], " 1 of "),
+        step("x-play", &[Act::Key("Space")], "❚❚"),
+        step("x-now", &[Act::Key("Escape")], "Answer 15 of the long thread."),
       ],
     }),
   },

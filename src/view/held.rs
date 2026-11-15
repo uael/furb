@@ -166,12 +166,18 @@ impl Held {
         Index { acts: &self.acts, at: &self.at, made: &self.made, on: &self.on, live: &self.live };
       return folded(&index, chain, opened, owed, taken, shown);
     };
-    // A moment of the past folds the acts as they stood then, in the order they began.
+    self.past(at).ladder(chain, None, opened, owed, taken, shown)
+  }
+
+  /// The acts as they stood just after a moment, held in the order they began, so each read of
+  /// now reads that moment.
+  #[must_use]
+  pub fn past(&self, at: u64) -> Self {
     let mut then = Self::default();
     for act in self.as_of(at) {
       then.took(act);
     }
-    then.ladder(chain, None, opened, owed, taken, shown)
+    then
   }
 
   /// The acts now, or as they stood just after a moment, in the order they began, as `read` takes
@@ -304,10 +310,14 @@ impl Held {
     acts
   }
 
-  /// Each moment at which an act began or ended, of the life or of the acts of one chain.
+  /// Each moment at which an act began or ended, of the life, of the acts of one chain, or of the
+  /// acts that the page of one thread shows.
   pub fn moments(&self, on: Option<&str>) -> Vec<u64> {
-    moments_of(
-      self.acts.iter().map(|act| &**act).filter(|act| on.is_none_or(|chain| act.chain == chain)),
-    )
+    match on.and_then(|id| self.act(id)) {
+      Some(thread) if thread.kind == Kind::Prompt => self.thread_moments(&thread.id),
+      _ => moments_of(
+        self.acts.iter().map(|act| &**act).filter(|act| on.is_none_or(|chain| act.chain == chain)),
+      ),
+    }
   }
 }

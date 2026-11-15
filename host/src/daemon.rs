@@ -555,7 +555,7 @@ impl Host for Daemon {
           None => command,
         };
         let reads = match &command {
-          Command::Thread { thread, reach: Reach { before: None, limit } } => {
+          Command::Thread { thread, reach: Reach { before: None, limit }, at: None } => {
             Some((thread.clone(), *limit))
           }
           _ => None,
@@ -668,8 +668,8 @@ fn routed(verb: Verb) -> Routed {
       (life, Command::Ladder { on, at, opened, owed, taken, shown })
     }
     Verb::AsOf { life, at } => (life, Command::AsOf { at }),
-    Verb::Thread { life, thread, before, limit } => {
-      (life, Command::Thread { thread, reach: Reach { before, limit } })
+    Verb::Thread { life, thread, before, limit, at } => {
+      (life, Command::Thread { thread, reach: Reach { before, limit }, at })
     }
     Verb::Moments { life, on } => (life, Command::Moments { on }),
     other => return Routed::Daemon(other),

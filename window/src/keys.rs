@@ -56,6 +56,7 @@ pub(crate) enum Does {
   Changes,
   Context,
   Running,
+  Rewind,
 }
 
 /// One stroke of a key: whether it holds control and alt, and its key.
@@ -137,6 +138,7 @@ const THREAD: &[Bound] = &[
   bound(Does::Resolve, "resolve the thread", Some("resolve"), &[&led('r')]),
   bound(Does::Running, "pause, kill or keep the session", Some("running"), &[&led('s')]),
   bound(Does::Context, "the context: kinds, cache, folded", Some("context"), &[&led('c')]),
+  bound(Does::Rewind, "back in the time of the thread, and to now", Some("rewind"), &[&led('b')]),
   bound(
     Does::Agent,
     "the next agent of the thread",

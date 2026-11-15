@@ -18,6 +18,7 @@ mod outbox;
 mod question;
 mod running;
 mod thread;
+mod time;
 mod views;
 
 use std::{
@@ -42,6 +43,7 @@ pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
 pub use question::{Form, HOLD};
 pub use running::{BACKGROUND, Control, Running};
 pub use thread::{Anchor, Fold, Opened, PAGE, Pending, Thread, rests};
+pub use time::Time;
 pub use views::{Filled, View};
 
 /// What each machine told, the cards of all of them in the order of the list as it last settled,

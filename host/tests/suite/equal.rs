@@ -98,7 +98,7 @@ async fn read(
   seen.insert("threads".to_owned(), format!("{:?}", life.send(all).await));
   for thread in threads {
     let reach = Reach { before: None, limit: 1000 };
-    let page = life.send(Command::Thread { thread: thread.clone(), reach }).await;
+    let page = life.send(Command::Thread { thread: thread.clone(), reach, at: None }).await;
     seen.insert(format!("page of {thread}"), format!("{page:?}"));
   }
   seen

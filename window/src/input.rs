@@ -667,11 +667,11 @@ impl Model {
     self.client.chosen = Some(Chosen::of(&self.client.target(), actor));
   }
 
-  /// The row of hints: why the daemon refused the last message, else the keys of a form, else the
-  /// word of python that the window ran, as it runs and what it came to, else the state of the open
-  /// thread while it works, with the key that stops it, else the folder of the
-  /// window; and at its right how many other threads ask the operator, and the key that turns the
-  /// input, or that refuses the question of a form.
+  /// The row of hints: why the daemon refused the last message, else the keys of a form, of the
+  /// completion or of the bar of the time, else the word of python that the window ran, as it runs
+  /// and what it came to, else the state of the open thread while it works, with the key that stops
+  /// it, else the folder of the window; and at its right how many other threads ask the operator,
+  /// and the key that turns the input, or that refuses the question of a form.
   fn hints(&self) -> Row {
     let t = &self.tokens;
     let muted = t.style(Role::Muted);
@@ -697,16 +697,16 @@ impl Model {
     };
     let key = vec![run(format!("{} {name}", self.key(does)), muted)];
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
-    let place = fault.is_none() && says.is_none() && self.form().is_none() && self.word.is_none();
-    let place = place && !works && self.completion_hints().is_none();
+    // The keys of what stands over the input: a form, the completion, or the bar of the time.
+    let keyed = self.form_hints().or_else(|| self.completion_hints()).or_else(|| self.time_hints());
+    let place =
+      fault.is_none() && says.is_none() && keyed.is_none() && self.word.is_none() && !works;
     let (left, loaders) = match (fault, says) {
       (Some(fault), _) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], vec![]),
       (None, Some((says, color))) => {
         (vec![run(format!("  {says}"), Style::new().fg(color))], vec![])
       }
-      (None, None) if self.form().is_some() || self.completion_hints().is_some() => {
-        (self.form_hints().or_else(|| self.completion_hints()).unwrap_or_default(), vec![])
-      }
+      (None, None) if keyed.is_some() => (keyed.unwrap_or_default(), vec![]),
       (None, None) if self.word.is_some() => {
         let (hints, loader) =
           self.word_hints(self.wide().saturating_sub(2).saturating_sub(width(&key) + 2));

@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 47;
+pub const PROTOCOL: u32 = 48;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -411,20 +411,24 @@ pub enum Verb {
     at: u64,
   },
   /// A page of a thread of a life, its prompt: the exchanges before the one at `before`, or
-  /// before the end, at most `limit` of them, the newest page first. The page of the end also
-  /// makes the peer hear a frame `thread` at each change of that thread, until it reads the end
-  /// of another thread or leaves: a peer reads one thread at a time.
+  /// before the end, at most `limit` of them, the newest page first, now or as they stood just
+  /// after the moment `at`. The page of the end of now also makes the peer hear a frame `thread`
+  /// at each change of that thread, until it reads the end of another thread or leaves: a peer
+  /// reads one thread at a time.
   Thread {
     life: String,
     thread: String,
     #[serde(default)]
     before: Option<usize>,
     limit: usize,
+    #[serde(default)]
+    at: Option<u64>,
   },
   /// Each moment of a life at which an act began or ended, in order.
   Moments {
     life: String,
-    /// The chain whose acts give the moments; none gives those of the whole life.
+    /// The chain whose acts give the moments, or the thread whose page shows the acts that give
+    /// them; none gives those of the whole life.
     #[serde(default)]
     on: Option<String>,
   },

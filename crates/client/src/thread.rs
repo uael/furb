@@ -3,6 +3,7 @@
 
 use std::{
   collections::{BTreeMap, HashMap, HashSet},
+  mem,
   time::Duration,
 };
 
@@ -11,7 +12,7 @@ use furb_wire::{
   protocol::{Card, Verb},
 };
 
-use crate::{Asked, Client, Form, Key, Parts};
+use crate::{Asked, Client, Form, Key, Parts, Time};
 
 /// How many exchanges a page holds.
 pub const PAGE: usize = 20;
@@ -125,6 +126,10 @@ pub struct Thread {
   pub context: Option<Context>,
   /// The kinds of what an answer of the chain read, once the client parted its turns.
   pub parts: Option<Parts>,
+  /// The bar of its time, while the operator holds it.
+  pub time: Option<Time>,
+  /// Whether the next page takes the place of each exchange held, since the thread moved in time.
+  pub replaces: bool,
 }
 
 /// A message of the operator that the thread shows before the daemon tells it: its text, and the
@@ -139,6 +144,9 @@ impl Thread {
   /// A page that the daemon gave, or a change of the thread that it told: each exchange takes the
   /// place of the one before it, and the agents and the context are those of the thread now.
   pub fn took(&mut self, page: Page) {
+    if mem::take(&mut self.replaces) {
+      (self.exchanges, self.above) = (BTreeMap::new(), None);
+    }
     self.above = Some(self.above.map_or(page.above, |above| above.min(page.above)));
     (self.agents, self.context) = (page.agents, page.context);
     self.fault = None;
@@ -155,7 +163,19 @@ impl Thread {
   /// The page of the thread before the exchange at a place, or the page of its end.
   pub fn page(&self, before: Option<usize>) -> Verb {
     let (life, thread) = (self.key.1.clone(), self.key.2.clone());
-    Verb::Thread { life, thread, before, limit: PAGE }
+    let at = self.time.as_ref().and_then(Time::moment);
+    Verb::Thread { life, thread, before, limit: PAGE, at }
+  }
+
+  /// The thread moved in time: it asks its page again, and no page asked before counts.
+  pub fn moved(&mut self) {
+    (self.again, self.replaces) = (true, true);
+    self.asked.clear();
+  }
+
+  /// Whether the thread shows a moment of the past, where no change of now reaches it.
+  pub fn past(&self) -> bool {
+    self.time.as_ref().is_some_and(|time| time.at.is_some())
   }
 }
 

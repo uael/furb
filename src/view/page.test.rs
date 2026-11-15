@@ -776,3 +776,32 @@ fn each_act_of_a_comprehension_marks_its_line_and_a_later_call_its_own() {
   let at: Vec<Option<usize>> = page.agents.iter().map(|agent| agent.at).collect();
   assert_eq!(at, [Some(1), Some(1), Some(3)]);
 }
+
+#[test]
+fn a_thread_shows_at_each_moment_of_its_acts_what_it_was_just_after_it() {
+  let mut streams = Streamed::default();
+  let held = held(thread(), &mut streams);
+  let moments = held.moments(Some("prompt1"));
+  let began = |id: &str| held.shared(id).unwrap().began;
+  // The moments are those of the acts of the thread: its messages, its rungs and what they made,
+  // and no act of another thread or chain.
+  assert_eq!(moments.first(), Some(&began("prompt1")));
+  assert!(moments.contains(&began("bash1")));
+  let page = |at: u64| held.past(at).page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  assert_eq!(
+    page(*moments.last().unwrap()),
+    held.page(&streams, "prompt1", Reach { before: None, limit: 10 })
+  );
+  // Just before his second message, the thread holds the first, answered and closed.
+  let before = moments[moments.iter().position(|one| *one == began("prompt3")).unwrap() - 1];
+  let then = page(before);
+  let [first] = then.exchanges.as_slice() else { panic!("{then:?}") };
+  assert_eq!(
+    texts(first.block.as_ref().unwrap()),
+    [(1, "x = 1", &Mark::Ran), (2, "close('In the boot.')", &Mark::Ran)]
+  );
+  // At its first moment, the thread is his message alone.
+  let first = page(moments[0]);
+  let [first] = first.exchanges.as_slice() else { panic!("{first:?}") };
+  assert_eq!((first.text.as_str(), &first.block), ("where does the time go", &None));
+}

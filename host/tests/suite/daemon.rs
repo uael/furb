@@ -1273,8 +1273,13 @@ async fn a_record_from_before_the_stable_cut_shows_its_threads_to_its_window_unt
   let why = SchemaError::BeforeCut { of: "record" }.to_string();
   let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(no)), .. } if *one == life && *no == why);
   window.until(ended).await;
-  let page =
-    || Verb::Thread { life: life.clone(), thread: "prompt1".to_owned(), before: None, limit: 10 };
+  let page = || Verb::Thread {
+    life: life.clone(),
+    thread: "prompt1".to_owned(),
+    before: None,
+    limit: 10,
+    at: None,
+  };
   let read = window.ask(page()).await;
   assert!(matches!(&read, Ok(Answer::Page(one)) if one.exchanges.len() == 1), "{read:?}");
   let refused = window.ask(Verb::Standing { life: life.clone() }).await;
@@ -3080,8 +3085,13 @@ async fn a_thread_gives_its_end_by_page_and_tells_each_change_to_the_peer_that_r
   let life = held(&mut window, &sessions, "one.jsonl").await;
   let prompt = messaged(&mut window, &life, "ground the branch").await;
   card(&mut window, |card| card.thread.standing == Standing::Resolved).await;
-  let read =
-    |before, limit| Verb::Thread { life: life.clone(), thread: prompt.clone(), before, limit };
+  let read = |before, limit| Verb::Thread {
+    life: life.clone(),
+    thread: prompt.clone(),
+    before,
+    limit,
+    at: None,
+  };
   let Ok(Answer::Page(page)) = window.ask(read(None, 10)).await else { panic!("no page") };
   assert_eq!((page.above, page.exchanges[0].text.as_str()), (0, "ground the branch"));
   assert_eq!(numbered(&page), [(0, vec![(1, "close(None)".to_owned())])]);

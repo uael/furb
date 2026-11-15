@@ -183,8 +183,13 @@ fn while_the_machine_is_away_the_input_keeps_his_words_until_it_answers() {
   let said = || {
     let Answer::Cards(cards) = peer.ask(Verb::Cards) else { return false };
     let Some(card) = cards.into_iter().find(|card| card.life == life) else { return false };
-    let page =
-      Verb::Thread { life: life.clone(), thread: card.thread.prompt, before: None, limit: 5 };
+    let page = Verb::Thread {
+      life: life.clone(),
+      thread: card.thread.prompt,
+      before: None,
+      limit: 5,
+      at: None,
+    };
     // The card can stand before the life that the window opens again lives, which refuses a page.
     matches!(peer.tried(page), Ok(Answer::Page(page)) if page.exchanges.iter().any(|one| one.text == "and the seed?"))
   };

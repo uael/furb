@@ -567,9 +567,10 @@ class Request49(TypedDict):
 class Request50(TypedDict):
   """
   A page of a thread of a life, its prompt: the exchanges before the one at `before`, or
-  before the end, at most `limit` of them, the newest page first. The page of the end also
-  makes the peer hear a frame `thread` at each change of that thread, until it reads the end
-  of another thread or leaves: a peer reads one thread at a time.
+  before the end, at most `limit` of them, the newest page first, now or as they stood just
+  after the moment `at`. The page of the end of now also makes the peer hear a frame `thread`
+  at each change of that thread, until it reads the end of another thread or leaves: a peer
+  reads one thread at a time.
   """
 
   id: int
@@ -577,6 +578,7 @@ class Request50(TypedDict):
   thread: str
   before: NotRequired[int | None]
   limit: int
+  at: NotRequired[int | None]
   verb: Literal["thread"]
 
 
@@ -589,7 +591,8 @@ class Request51(TypedDict):
   life: str
   on: NotRequired[str | None]
   """
-    The chain whose acts give the moments; none gives those of the whole life.
+    The chain whose acts give the moments, or the thread whose page shows the acts that give
+    them; none gives those of the whole life.
     """
   verb: Literal["moments"]
 
@@ -2982,4 +2985,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 47
+PROTOCOL = 48

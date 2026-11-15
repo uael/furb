@@ -195,6 +195,7 @@ impl Model {
         self.client.parted(&key, read, Some(answer));
       }
       (Asked::Parts(key, read), _) => self.client.parted(&key, read, None),
+      (Asked::Moments(key), heard) => self.client.timed(&key, heard.ok()),
       (Asked::Back(text), Ok(Frame::Reply { .. })) => {
         self.client.restore = Some(self.before_draft(text));
       }
@@ -417,7 +418,8 @@ impl Model {
     let opens = self.client.holds.values().any(Hold::runs);
     let pulses =
       self.client.called.values().any(|since| self.client.moved.saturating_sub(*since) < CALL);
-    self.slow && !self.known() || opens || pulses || self.client.settled.iter().any(works)
+    let plays = self.client.plays();
+    self.slow && !self.known() || opens || pulses || plays || self.client.settled.iter().any(works)
   }
 
   pub(crate) fn needs(&self, key: &Key, card: &Card) -> bool {

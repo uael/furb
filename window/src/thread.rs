@@ -43,6 +43,10 @@ pub(crate) enum Click {
   Answer(usize),
   Agent(String),
   Context,
+  /// The thread taken to a moment of its time, by its place among the moments.
+  Time(usize),
+  /// The play of the time of the thread started or stopped.
+  Play,
   Link(String),
   /// A press of a button of a view, by its viewer and its node.
   Press {
@@ -430,6 +434,13 @@ impl Model {
       one.thread.key.0 == at && one.thread.key.1 == life && one.thread.key.2 == thread
     };
     let Some(opened) = self.client.thread.as_mut().filter(open) else { return false };
+    // A change of now gives the bar of the time new moments, and reaches no moment of the past.
+    if let Some(time) = opened.thread.time.as_mut() {
+      time.stale = true;
+    }
+    if opened.thread.past() {
+      return false;
+    }
     opened.thread.took(page);
     true
   }
@@ -480,6 +491,14 @@ impl Model {
         self.context_step();
         None
       }
+      Click::Time(at) => {
+        self.client.reach(at);
+        None
+      }
+      Click::Play => {
+        self.client.play();
+        None
+      }
       Click::Press { viewer, node } => {
         self.client.gesture(ViewEvent { viewer, node, kind: Gesture::Press, value: None });
         None
@@ -519,7 +538,7 @@ impl Model {
 
   /// Each row of the left side: the home, or the head of the open thread, the feed in its room and
   /// the dock; then the input.
-  fn left_rows(&self) -> Vec<Row> {
+  pub(crate) fn left_rows(&self) -> Vec<Row> {
     let mut rows = match self.feed() {
       None => self.home(),
       Some(feed) => {
@@ -527,6 +546,7 @@ impl Model {
         let shown = feed.items().shown(feed.opened.top, room, |item| feed.rows(item));
         let mut rows = vec![feed.head()];
         rows.extend(self.open_rows());
+        rows.extend(self.time_rows());
         let above = rows.len();
         rows.extend(shown.rows);
         rows.resize(above + room, Row::default());
@@ -549,7 +569,7 @@ impl Model {
   /// input.
   pub(crate) fn feed_room(&self) -> usize {
     let docked = self.feed().map_or(0, |feed| feed.dock().len() + self.kit_rows().len());
-    let taken = 1 + self.open_rows().len() + docked + self.input_rows();
+    let taken = 1 + self.open_rows().len() + self.time_rows().len() + docked + self.input_rows();
     usize::from(self.size.1).saturating_sub(taken)
   }
 

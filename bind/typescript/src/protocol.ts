@@ -274,12 +274,14 @@ export type Request1 =
       thread: string;
       before?: number | null;
       limit: number;
+      at?: number | null;
       verb: "thread";
     }
   | {
       life: string;
       /**
-       * The chain whose acts give the moments; none gives those of the whole life.
+       * The chain whose acts give the moments, or the thread whose page shows the acts that give
+       * them; none gives those of the whole life.
        */
       on?: string | null;
       verb: "moments";
@@ -1650,4 +1652,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 47;
+export const PROTOCOL = 48;
