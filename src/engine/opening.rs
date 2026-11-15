@@ -35,8 +35,7 @@ use crate::value::Object;
 ///
 /// Boot is given the journal that the checkpointer makes on those entries, which says them again
 /// and keeps what the life says after them, and the journal is given each entry that a host feeds
-/// a life that stands, in the same form. The engine of a build whose checkpointer holds no journal
-/// takes the entries itself.
+/// a life that stands, in the same form.
 ///
 /// It gives boot, in the place of a value of a record that no later life makes again as it was,
 /// what stands for it by the rule of `furb.record`, which each build reads the same: a callable,
@@ -58,20 +57,15 @@ __record = {}
 exec(__record_source, __record)
 __kernel = {}
 exec(__kernel_source, __kernel)
-if __checkpointer_source:
-  __checkpointer = {}
-  exec(__checkpointer_source, __checkpointer)
-  # The checkpointer of this build gathers each checkpoint, since the next life reads it, while the record replays and
-  # seeds on its own: only a crossing gathers on another engine, and an older checkpointer may not gather its life.
-  __gatherer = __checkpointer
-  if __gatherer_source != __checkpointer_source:
-    __gatherer = {}
-    exec(__gatherer_source, __gatherer)
-  __checkpointed = lambda name, /, *args: (__gatherer if name == "gathered" else __checkpointer)[name](__engine, *args)
-else:
-  # The fact made of a build before the checkpointer holds no text of it: the engine of that build gathers and
-  # seeds its own checkpoints, and a record of it replays and goes on on that engine alone.
-  __checkpointed = lambda name, /, *args: __engine[name](*args)
+__checkpointer = {}
+exec(__checkpointer_source, __checkpointer)
+# The checkpointer of this build gathers each checkpoint, since the next life reads it, while the record replays and
+# seeds on its own: only a crossing gathers on another engine, and an older checkpointer may not gather its life.
+__gatherer = __checkpointer
+if __gatherer_source != __checkpointer_source:
+  __gatherer = {}
+  exec(__gatherer_source, __gatherer)
+__checkpointed = lambda name, /, *args: (__gatherer if name == "gathered" else __checkpointer)[name](__engine, *args)
 
 def __bounding(step):
   def bounded(*args, **kwargs):
@@ -134,38 +128,16 @@ def __seed(data):
 def __boot(entries, **ears):
   record = __record["recorded"](__engine, __seeded + entries)
   __seeded.clear()
-  # The checkpointer of a build before the journal left the engine holds no journal: the boot of that engine takes the
-  # record and says it again itself.
-  if __checkpointer_source and "journal" in __checkpointer:
-    __journaled[:] = [__checkpointer["journal"](__engine, record)]
-    return __engine["boot"](__journaled[0], **ears)
-  return __engine["boot"](record, **ears)
+  __journaled[:] = [__checkpointer["journal"](__engine, record)]
+  return __engine["boot"](__journaled[0], **ears)
 
 def __journal(name, *args):
-  if not __journaled:
-    raise __engine["Refused"]("the engine of this record says its record again itself, and holds no journal")
   return __checkpointer[name](__journaled[0], *args)
 
 def __settles(got):
-  # The Kernel says why an await of the operator cannot end. A Kernel of a build before that rule refuses a name of no
-  # act alone, as the door of that build did.
-  if "unsettled" in __kernel:
-    no = __kernel["unsettled"](__engine, "", got)
-  elif not __engine["get"](got):
-    no = __engine["Refused"](got + " never settles")
-  else:
-    no = None
-  if no is not None:
+  # The Kernel says why an await of the operator cannot end.
+  if (no := __kernel["unsettled"](__engine, "", got)) is not None:
     raise no
-
-def __gate():
-  # A record of an earlier build holds gate acts. Its engine makes each again in a replay, reads who answered it by
-  # the name of this ear, and takes its answer from the record. An act that the record does not answer, at the tip of
-  # a life that ended before the answer, needs an owner: this ear answers it with no finding, so its word runs.
-  while True:
-    heard = yield {"gate"}
-    if heard and heard[0] == "gate":
-      yield "done", heard[1], []
 
 def __lasting(name, ear):
   told = False
@@ -202,7 +174,6 @@ def __lasting(name, ear):
   "call": lambda name, /, *args, **kwargs: __engine[name](*args, **kwargs),
   "checkpoint": __checkpointed,
   "kernel": __fresh["kernel"](),
-  "gate": __gate() if "gate" in __engine else None,
   "site": lambda: __engine["site"].get(),
   "speaks": lambda by: __engine["site"].set(by),
   "spoke": lambda token: __engine["site"].reset(token),
@@ -236,9 +207,6 @@ pub(crate) struct Opened {
   pub(super) checkpoint: Object,
   /// The Kernel of the crate, which boot is given as an ear.
   pub(super) kernel: Object,
-  /// The ear that owns each gate act of an engine of an earlier build, which boot is given as an
-  /// ear, and nothing for an engine that binds no verb gate, as the engine of this build.
-  pub(super) gate: Object,
   /// Who speaks: `site`, read.
   pub(super) site: Object,
   /// Who speaks from now on: `site`, set, which gives the token that resets it.
@@ -296,7 +264,6 @@ impl Opened {
       call: at("call")?,
       checkpoint: at("checkpoint")?,
       kernel: at("kernel")?,
-      gate: at("gate")?,
       site: at("site")?,
       speaks: at("speaks")?,
       spoke: at("spoke")?,

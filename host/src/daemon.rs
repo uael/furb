@@ -728,7 +728,15 @@ struct Lives {
   /// The fault that ended the last life of each record, until its next open: a peer that heard
   /// the answer to its open cannot know when the open failed, so each verb that it says after
   /// hears why, as a verb that waited for the open does.
-  faults: HashMap<String, String>,
+  faults: HashMap<String, Faulted>,
+}
+
+/// The end of a life that a fault ended: the fault, and the life itself until a window detaches
+/// it, which answers each view of what it told, read only, as a record that no life opens shows
+/// its facts, and refuses each other verb with the fault.
+struct Faulted {
+  why: String,
+  life: Option<LifeHandle>,
 }
 
 /// The index of the threads of each record that the daemon asks, made one at a time on a thread
@@ -882,7 +890,8 @@ impl Lives {
       Asked::Reads { outbox, task } => self.readers.read(outbox, task),
       Asked::Life { life, reply } => {
         let found = self.held.get(&life).map(|held| (held.handle.clone(), held.config.clone()));
-        let fault = self.faults.get(&life).map(|why| LifeError::Refused(why.clone()).into());
+        let found = found.or_else(|| Some((self.faults.get(&life)?.life.clone()?, None)));
+        let fault = self.faults.get(&life).map(|one| LifeError::Refused(one.why.clone()).into());
         reply.send(found.ok_or_else(|| fault.unwrap_or(ProtocolError::Closed { life }))).ok();
       }
       Asked::Left { life, outbox } => {
@@ -1132,6 +1141,10 @@ impl Lives {
 
   /// A peer that let go of a life: a window of its hold and of its views, and a skill of its views.
   fn detach(&mut self, life: &str, outbox: &Outbox) -> Result<Answer, ProtocolError> {
+    if let Some(Faulted { life: shown @ Some(_), .. }) = self.faults.get_mut(life) {
+      *shown = None;
+      return Ok(Answer::Done);
+    }
     let (_, holders) = living(&mut self.held, life)?;
     let was = holders.detach(outbox);
     if was {
@@ -1333,11 +1346,12 @@ impl Lives {
     if self.held.get(life).is_none_or(|held| held.born != born) {
       return;
     }
-    if let Some(fault) = fault {
-      self.faults.insert(life.to_owned(), fault);
-    }
     self.views.ended(life);
     let gone = self.held.remove(life);
+    if let Some(why) = fault {
+      let life_of = gone.as_ref().map(|held| held.handle.clone());
+      self.faults.insert(life.to_owned(), Faulted { why, life: life_of });
+    }
     self.carded(life);
     let Some(Held { stage: Stage::Ending(waiting), .. }) = gone else { return };
     let Some((first, _)) = waiting.first() else { return };

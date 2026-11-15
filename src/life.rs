@@ -250,11 +250,6 @@ pub struct Opening {
   pub log: Option<Log>,
 }
 
-/// Why no life works on a record from before the stable cut of the schema of the record.
-pub const BEFORE_CUT: &str = "the record comes from a build before the stable cut of the schema of \
-  the record, which the promise does not hold: a life that inspects it reads it, and no life works \
-  on it or keeps it";
-
 impl Opening {
   /// Whether the life does work, which a life that inspects does not.
   fn works(&self) -> bool {
@@ -467,8 +462,8 @@ impl Opening {
   /// The image of the record when one agrees with it, else the last entries of the record, which
   /// the open reads in the stage find. A life that keeps its record and runs another engine, Kernel
   /// or checkpointer than this build crosses first, as [`Opening::crossed`] says, and then opens by
-  /// its record. A life that works on a record from before the stable cut is refused, as
-  /// [`BEFORE_CUT`] says.
+  /// its record. A record of a schema that this build does not open, as one from before the stable
+  /// cut, is refused, by its image too.
   fn tip(
     &self,
     told: &Progress,
@@ -480,13 +475,8 @@ impl Opening {
       Some(_) => None,
       None => self.last(&mut |at| (told.0)(Stage::Find, at, bytes))?,
     };
-    let before = match (image.as_ref(), last.as_ref()) {
-      (Some(image), _) => world::before_cut(slice::from_ref(&image.half.made)),
-      (None, Some(last)) => world::before_cut(&last.entries),
-      (None, None) => false,
-    };
-    if before && self.works() {
-      return Err(Fault::refused(BEFORE_CUT));
+    if let Some(image) = &image {
+      world::readable(slice::from_ref(&image.half.made))?;
     }
     let texts = Self::texts(image.as_ref(), last.as_ref())?;
     if !self.keeps() || texts == Self::texts(None, None)? {

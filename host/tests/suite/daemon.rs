@@ -33,7 +33,7 @@ use furb::{
   Object, image,
   life::{Answer as Answered, Log, Opening},
   view::{self, Phase, Standing},
-  world::checkpoints,
+  world::{SchemaError, checkpoints},
 };
 use furb_host::{
   DaemonError, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
@@ -987,6 +987,30 @@ async fn folded(index: &str, bytes: usize) -> (Value, Vec<Value>) {
     assert!(start.elapsed() < PATIENCE, "the daemon makes no index of the record at rest");
     time::sleep(SHORT).await;
   }
+}
+
+/// A record from before the stable cut opens in no life: its window hears why, reads its threads,
+/// read only, until it detaches the life, and hears why for each other verb.
+#[tokio::test]
+async fn a_record_from_before_the_stable_cut_shows_its_threads_to_its_window_until_it_detaches_it()
+{
+  let at = place();
+  let (local, _daemon) = started_with(&at, SHORT, opening(&at)).await;
+  let mut window = Window::dialed(&local).await;
+  let before = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/replay/speaker.jsonl");
+  fs::copy(before, at.join("before.jsonl")).unwrap();
+  let life = open(&mut window, &at, "before.jsonl", Some(0)).await;
+  let why = SchemaError::BeforeCut { of: "record" }.to_string();
+  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(no)), .. } if *one == life && *no == why);
+  window.until(ended).await;
+  let page =
+    || Verb::Thread { life: life.clone(), thread: "prompt1".to_owned(), before: None, limit: 10 };
+  let read = window.ask(page()).await;
+  assert!(matches!(&read, Ok(Answer::Page(one)) if one.exchanges.len() == 1), "{read:?}");
+  let refused = window.ask(Verb::Standing { life: life.clone() }).await;
+  assert_eq!(refused, Err(ProtocolError::Refused { why: why.clone() }));
+  assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+  assert_eq!(window.ask(page()).await, Err(ProtocolError::Refused { why }), "a detach lets it go");
 }
 
 #[tokio::test]

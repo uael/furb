@@ -3,7 +3,7 @@
 
 use std::{fs, path::Path};
 
-use super::{Lines, Sqlite, Store, checkpoints, digest, keeping, kept, last, store, texts, unheld};
+use super::{Lines, Sqlite, Store, checkpoints, digest, keeping, kept, last, store, texts};
 use crate::checkpoint::standing;
 use crate::testing::Yard;
 use crate::value;
@@ -416,47 +416,18 @@ fn made_of(engine: &str, held: &[&str]) -> Object {
 #[test]
 fn the_texts_of_a_segment_are_those_of_its_last_fact_made_and_must_be_the_engine_that_it_names() {
   let (source, kernel, checkpointer) = ("x = 1\n", "y = 2\n", "z = 3\n");
-  let (named, other) = (digest(&[source, kernel]), "0".repeat(64));
+  let other = "0".repeat(64);
   let ours = (crate::ENGINE.to_owned(), crate::KERNEL.to_owned(), crate::CHECKPOINTER.to_owned());
   assert_eq!(
     texts(&[made_of(&other, &[])]).unwrap(),
     ours,
     "a fact made with no texts runs this build"
   );
-  let segment = [made_of(&other, &[]), made_of(&named, &[source, kernel])];
-  assert_eq!(
-    texts(&segment).unwrap(),
-    (source.to_owned(), kernel.to_owned(), String::new()),
-    "the last one counts, and a fact made before the checkpointer holds no text of it"
-  );
   let all = [source, kernel, checkpointer];
   assert_eq!(
-    texts(&[made_of(&digest(&all), &all)]).unwrap(),
+    texts(&[made_of(&other, &[]), made_of(&digest(&all), &all)]).unwrap(),
     (source.to_owned(), kernel.to_owned(), checkpointer.to_owned()),
-    "a fact made names the digest of the three texts that it holds"
+    "the last one counts, and it names the digest of the three texts that it holds"
   );
-  assert!(
-    texts(&[made_of(&other, &[source, kernel])]).is_err(),
-    "texts of another engine refuse it"
-  );
-}
-
-#[test]
-fn a_segment_names_the_engine_of_its_last_fact_made_as_unheld_when_it_holds_no_texts_of_another_engine()
- {
-  let (source, kernel) = ("x = 1\n", "y = 2\n");
-  let (named, other) = (digest(&[source, kernel]), "0".repeat(64));
-  assert_eq!(unheld(&[made_of(&other, &[])]), Some(other.clone()), "no texts of another engine");
-  assert_eq!(unheld(&[made_of(&named, &[source, kernel])]), None, "the texts are held");
-  assert_eq!(
-    unheld(&[made_of(&digest(&[crate::ENGINE, crate::KERNEL, crate::CHECKPOINTER]), &[])]),
-    None,
-    "the engine of this build"
-  );
-  assert_eq!(
-    unheld(&[made_of(&other, &[]), made_of(&named, &[source, kernel])]),
-    None,
-    "the last one counts"
-  );
-  assert_eq!(unheld(&[]), None, "a record of a build before the fact made");
+  assert!(texts(&[made_of(&other, &all)]).is_err(), "texts of another engine refuse it");
 }

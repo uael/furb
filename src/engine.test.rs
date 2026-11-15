@@ -1896,25 +1896,6 @@ fn a_kernel_that_raises_ends_each_run_whose_word_it_lost_so_a_later_message_gets
   lost_runs_end(Lived::new("lost", &LOST, true).unwrap());
 }
 
-#[test]
-fn a_kernel_of_the_major_from_before_it_ended_its_lost_runs_ends_them_through_its_adapter() {
-  // The root and the fact made of a record of 0.4.2, whose Kernel has no lost, as a record that a
-  // life of that build began.
-  let old = include_str!("../tests/replay/language.jsonl");
-  let head: Vec<&str> = old.lines().take(2).collect();
-  assert!(
-    head[1].contains("\"made\"") && !head[1].contains("def lost("),
-    "the record holds an older Kernel"
-  );
-  let name = format!("furb-engine-lost-old-{}", process::id());
-  let yard = Yard::new(&name);
-  fs::create_dir_all(env::temp_dir().join(&name)).unwrap();
-  fs::write(env::temp_dir().join(&name).join("record.jsonl"), head.join("\n") + "\n").unwrap();
-  let mut lived = Lived::new("lost-old", &LOST, false).unwrap();
-  lived.yard = Some(yard);
-  lost_runs_end(lived);
-}
-
 /// The words of the model in a life whose Kernel raises while two runs await.
 const LOST: [&str; 5] = [
   "await wait(600, __name__)\nclose(1)",
@@ -2193,32 +2174,4 @@ fn a_run_of_the_record_that_goes_on_live_after_the_replay_is_bounded() {
   }
   let read = second.read.borrow();
   assert!(refused(&read), "the word that spins after its wait is refused by the bound: {read:?}");
-}
-
-#[test]
-fn a_record_of_an_older_engine_opens_through_its_adapter_and_keeps_no_fact_of_its_record_again() {
-  // The adapter of c63db8af says each fact of the outside again under its speaker, which the
-  // journal of that engine hears as a new fact unless it knows that it said it.
-  let at = Yard::new(format!("furb-engine-c63db8af-{}", process::id()));
-  let path = at.join("record.jsonl");
-  fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/replay/speaker.jsonl"), &path).unwrap();
-  let before = fs::read_to_string(&path).unwrap().lines().count();
-  let (record, store) = world::store(path.clone()).unwrap();
-  let scratch = world::Scratch::own();
-  let ears = [
-    ("provider", provider(at.to_path_buf(), Rc::default(), Rc::default())),
-    ("files", world::files(scratch.clone(), at.join("config"), None)),
-    ("bash", world::bash(scratch)),
-    ("time", world::time()),
-    ("store", store),
-  ];
-  let engine = Engine::boot(record, ears).unwrap();
-  assert!(engine.raised().is_none(), "{:?}", engine.raised());
-  drop(engine);
-  let text = fs::read_to_string(&path).unwrap();
-  let added: Vec<&str> = text.lines().skip(before).collect();
-  assert!(
-    added.iter().all(|one| one.contains(r#""stand2""#)),
-    "only the stand of this life is new: {added:?}"
-  );
 }

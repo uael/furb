@@ -30,26 +30,13 @@
 //! only. Each checkpoint is a birth: the life that writes it ends there, so the facts after it come
 //! from a life born on it. An open from the first entry is born again at each checkpoint in the
 //! same way, as [`reborn`] proves, and reaches the state of the open from the last one.
-//!
-//! The checkpoint of the build before the schema holds `entries` in the place of the data: facts
-//! that the journal of any engine replays, and `("reserve", kind, "store", n)`, which stands for
-//! each name of that kind up to n that no entry carries. A later life boots on them as they stand,
-//! so a life that a build of that form handed over goes on.
 
 #![expect(
   clippy::needless_pass_by_value,
   reason = "debt: an argument taken by value and only borrowed"
 )]
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
 
-use std::{
-  collections::{HashMap, HashSet},
-  path::Path,
-  slice,
-};
+use std::{path::Path, slice};
 
 use similar::TextDiff;
 
@@ -57,7 +44,6 @@ use crate::{
   Engine,
   engine::{OPERATOR, ROOT, callable},
   fact::Fact,
-  life::BEFORE_CUT,
   minify::minified,
   skill::definitions,
   value::{Fault, Object, ObjectRef, entry, field},
@@ -67,23 +53,6 @@ use crate::{
 
 /// The kind of the fact of a checkpoint.
 pub const CHECKPOINT: &str = "checkpoint";
-
-/// The kind of an entry of a checkpoint of the form before [`CHECKPOINT_SCHEMA`] that stands for
-/// the names of a kind that no entry carries.
-const RESERVE: &str = "reserve";
-
-/// The kind of an entry of a checkpoint of the form before [`CHECKPOINT_SCHEMA`] that holds the
-/// turns of a chain.
-const CARRIED: &str = "carried";
-
-/// The prefix of a chain that the fact carried of a checkpoint of the form before
-/// [`CHECKPOINT_SCHEMA`] holds the turns of, as the engine of that form said it: the chain holds
-/// those turns, so its model reads them as it did.
-fn prefix(carried: &Fact) -> Object {
-  let turns = carried.word(0).map_or_else(|| Object::list([]), |one| one.to_owned());
-  let words = ["prefix", carried.about(), carried.about()].map(Object::string);
-  Object::tuple(words.into_iter().chain([turns]))
-}
 
 /// The entry of the checkpoint of a life at its tip, as the store keeps it, before the fact made of
 /// the texts that the life runs, so the life born on it runs them too, as [`written_before`] says.
@@ -234,9 +203,6 @@ impl Engine {
 /// read and is told the lines of the engine that differ. This is the one place where a record
 /// crosses to the texts of a build.
 pub fn crossed(path: &Path, engine: &mut Engine) -> Result<(), Fault> {
-  if world::before_cut(slice::from_ref(engine.running())) {
-    return Err(Fault::refused(BEFORE_CUT));
-  }
   let build = world::running(&[]);
   keep(path, written_before(engine, &build)?)?;
   keep(path, build)
@@ -246,8 +212,7 @@ pub fn crossed(path: &Path, engine: &mut Engine) -> Result<(), Fault> {
 /// that wrote it ended there, so the entry after it is the fact made of the next life, and a life
 /// born on the entries before it, as the engine given gathers it, holds each field of the
 /// checkpoint as the checkpoint holds it. Only this build gathers as this build wrote, so a
-/// checkpoint that another engine wrote is held to the first rule alone, as a checkpoint of the
-/// form before [`CHECKPOINT_SCHEMA`] is. The refusal names the checkpoint and the first field that
+/// checkpoint that another engine wrote is held to the first rule alone. The refusal names the checkpoint and the first field that
 /// parts, with both of its values where they part.
 pub fn reborn(record: &[Object], at: usize, engine: &mut Engine) -> Result<(), Fault> {
   let place = at + 1;
@@ -300,18 +265,6 @@ fn fields(one: &Object) -> Option<Vec<(String, serde_json::Value)>> {
 /// for a record that no life holds.
 pub(crate) fn keep(path: &Path, one: Object) -> Result<(), Fault> {
   world::Format::of(path).open(path)?.keep(one.as_ref())
-}
-
-/// An entry of a checkpoint as the record reads it: a fact, which the record holds as the mark of a
-/// tuple.
-fn unmarked(one: ObjectRef<'_>) -> Option<Object> {
-  let Some(pairs) = one.pairs() else { return Some(one.to_owned()) };
-  let field =
-    |name: &str| pairs.iter().find(|(key, _)| key.as_str() == Some(name)).map(|(_, value)| *value);
-  match field("is").and_then(|is| is.as_str()) {
-    Some("tuple") => field("args")?.items()?.first().map(|args| args.to_owned()),
-    _ => Some(one.to_owned()),
-  }
 }
 
 /// The highest number that each kind took in a record, its checkpoints among them, as a map. A
@@ -372,20 +325,16 @@ pub fn stood(record: &[Object]) -> bool {
 }
 
 /// The standing that the last answered stand gave in the last entries of a record: the done of a
-/// stand after its last checkpoint, or else the stand that the checkpoint carries, when it was
+/// stand after its last checkpoint, or else the stand that the checkpoint holds, when it was
 /// answered.
 pub(crate) fn standing(record: &[Object]) -> Option<Object> {
-  let said = |entries: &[Object]| entries.iter().rev().find_map(world::stood);
-  said(segment(record)).or_else(|| {
-    let checkpoint = &record[last(record)?];
-    said(&carried(checkpoint)).or_else(|| {
-      let data = fact(checkpoint)?.word(0)?.to_owned();
-      let acts = field(&data.as_ref(), "acts")?.items()?;
-      let stand =
-        |act: &&ObjectRef<'_>| field(act, "kind").is_some_and(|one| one.as_str() == Some("stand"));
-      let stood = acts.iter().rev().find(stand)?;
-      field(stood, "value").filter(|value| value.items().is_some()).map(|value| value.to_owned())
-    })
+  segment(record).iter().rev().find_map(world::stood).or_else(|| {
+    let data = fact(&record[last(record)?])?.word(0)?.to_owned();
+    let acts = field(&data.as_ref(), "acts")?.items()?;
+    let stand =
+      |act: &&ObjectRef<'_>| field(act, "kind").is_some_and(|one| one.as_str() == Some("stand"));
+    let stood = acts.iter().rev().find(stand)?;
+    field(stood, "value").filter(|value| value.items().is_some()).map(|value| value.to_owned())
   })
 }
 
@@ -395,55 +344,10 @@ pub fn segment(record: &[Object]) -> &[Object] {
   &record[last(record).map_or(0, |at| at + 1)..]
 }
 
-/// The record as a life boots on it: the entries of its last checkpoint, whatever engine wrote it,
-/// each reserve as the questions of the root that it stands for, then the entries after it; or the
-/// record as it stands when it holds no checkpoint.
-pub fn booted(record: Vec<Object>) -> Vec<Object> {
+/// The record as a life boots on it: its last checkpoint, whatever engine wrote it, which boot gives
+/// `seed` of the checkpointer, then the entries after it; or the record as it stands when it holds
+/// no checkpoint.
+pub fn booted(mut record: Vec<Object>) -> Vec<Object> {
   let Some(at) = last(&record) else { return record };
-  let mut out = carried(&record[at]);
-  out.extend(record.into_iter().skip(at + 1));
-  out
-}
-
-/// The entries that a checkpoint carries: the fact itself when it holds data, which boot gives
-/// `seed` of the checkpointer, or, for the form before [`CHECKPOINT_SCHEMA`], its entries, each
-/// reserve as the questions of the root that it stands for, and the turns of each chain just after
-/// that chain, with the prefix that holds them.
-fn carried(checkpoint: &Object) -> Vec<Object> {
-  let Some(a) = fact(checkpoint) else { return Vec::new() };
-  let pairs = a.word(0).and_then(|one| one.pairs()).unwrap_or_default();
-  let field =
-    |name: &str| pairs.iter().find(|(key, _)| key.as_str() == Some(name)).map(|one| one.1);
-  let Some(held) = field("entries").and_then(|one| one.items()) else {
-    return vec![checkpoint.clone()];
-  };
-  let held: Vec<Object> = held.into_iter().filter_map(unmarked).collect();
-  let facts: Vec<Fact> = held.iter().filter_map(|one| Fact::of(one.as_ref())).collect();
-  let carried: HashSet<String> = facts
-    .iter()
-    .filter(|a| a.kind() != RESERVE && a.question())
-    .map(|a| a.about().to_owned())
-    .collect();
-  let (mut out, mut reserved) = (Vec::new(), HashMap::<String, i64>::new());
-  // A later life of that form wrote the turns of a chain after the stand of the root, and the
-  // root seeds itself at its first stand unless it holds its turns, so it ran its seed again and
-  // drifted: the turns of each chain come at once after the chain.
-  for a in facts.iter().filter(|a| a.kind() != CARRIED) {
-    if a.kind() != RESERVE {
-      out.push(Object::list([a.0.clone()]));
-      let turns = facts
-        .iter()
-        .filter(|b| a.kind() == "chain" && b.kind() == CARRIED && b.about() == a.about());
-      out.extend(turns.flat_map(|b| [Object::list([b.0.clone()]), Object::list([prefix(b)])]));
-      continue;
-    }
-    let (kind, n) = (a.about(), a.word(0).and_then(|one| one.as_int()).unwrap_or_default());
-    let from = reserved.get(kind).copied().unwrap_or_default();
-    for name in (from + 1..=n).map(|i| format!("{kind}{i}")).filter(|name| !carried.contains(name))
-    {
-      out.push(Object::list([Object::list([kind, &name, ROOT, ""].map(Object::string))]));
-    }
-    reserved.insert(kind.to_owned(), from.max(n));
-  }
-  out
+  record.split_off(at)
 }

@@ -4,7 +4,7 @@
 
 use std::{
   collections::VecDeque,
-  env, fs, future, io,
+  env, fs, future,
   io::Write,
   path::{Path, PathBuf},
   process,
@@ -19,7 +19,7 @@ use futures::{channel::mpsc::unbounded, executor, future::select};
 use sha2::{Digest, Sha256};
 use tokio::runtime;
 
-use super::{Answer, BEFORE_CUT, Opening, Progress, Stage};
+use super::{Answer, Opening, Progress, Stage};
 use crate::{
   Act, Ear, Engine, Fact, Object, Text, checkpoint,
   checkpoint::CHECKPOINT,
@@ -573,27 +573,6 @@ fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_datab
   }
 }
 
-#[test]
-fn a_record_that_names_no_engine_replays_as_before_and_names_none() {
-  let at = yard("unnamed");
-  let record = at.join("record.jsonl");
-  let open = || Opening { skills: Some(false), ..opening(&at, true) };
-  let mut first = open().boot::<String>([]).unwrap().0;
-  closed(&mut first, "x = 1\nclose(x)");
-  drop(first);
-  let text = fs::read_to_string(&record).unwrap();
-  let old: String = text
-    .lines()
-    .filter(|one| !one.contains("[\"made\""))
-    .map(|one| one.to_owned() + "\n")
-    .collect();
-  fs::write(&record, &old).unwrap();
-  let mut later = open().boot::<String>([]).unwrap().0;
-  assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
-  drop(later);
-  assert_eq!(builds(&record), Vec::<String>::new(), "this engine did not make it");
-}
-
 /// The fact made of a build of an engine, with no version, the schema of the record and the release
 /// of this build, as a line of the record holds it.
 fn made_of(engine: &str) -> String {
@@ -629,18 +608,6 @@ fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
   let text = text.replace(&ours, made);
   fs::write(&record, &text).unwrap();
   (record, text)
-}
-
-#[test]
-fn a_record_of_another_engine_that_holds_no_texts_replays_and_goes_on() {
-  let at = yard("same-version");
-  let made = made_of(&"0".repeat(64));
-  let (record, _) = made_elsewhere(&at, &made);
-  let open = || Opening { skills: Some(false), ..opening(&at, true) };
-  let mut later = open().boot::<String>([]).unwrap().0;
-  assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
-  drop(later);
-  assert_eq!(builds(&record), ["0".repeat(64)], "the build that made it stays named");
 }
 
 /// The fact made of the engine of this build with one more line, as a line of the record holds it,
@@ -925,36 +892,18 @@ fn a_life_born_on_a_checkpoint_teaches_and_enables_nothing_again() {
   assert_eq!(closed(&mut open(), said).as_ref().py_repr(), was);
 }
 
-#[test]
-fn a_record_whose_fact_made_holds_no_checkpointer_seeds_and_gathers_with_the_engine_that_it_holds()
-{
-  let at = yard("checkpointer");
-  laid(&replays().join("language.jsonl"), &at.join("record.jsonl"));
-  let kept = world::kept(at.join("record.jsonl")).unwrap();
-  let made = kept
-    .iter()
-    .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
-    .rfind(|a| a.kind() == world::MADE)
-    .unwrap();
-  assert!(
-    made.word(5).is_some() && made.word(6).is_none(),
-    "the segment after the checkpoint holds an engine and a Kernel, and no checkpointer"
-  );
-  let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-  let mut life = inspects
-    .boot::<String>([])
-    .unwrap_or_else(|why| panic!("the seed of its own engine opens its checkpoint: {why}"))
-    .0;
-  let written = checkpoint::written(&mut life)
-    .unwrap_or_else(|why| panic!("the gathered of its own engine writes a checkpoint: {why}"));
-  assert!(written.as_ref().py_repr().contains("'id': 'chain1'"), "the checkpoint holds the root");
-}
-
-/// The records that each build of this version replays word by word: the records in `tests/replay`,
-/// which `tests/replay/README.md` says. The records of the promise of a release are in
-/// `tests/corpus`, which `tests/suite/promise.rs` opens.
-fn replays() -> PathBuf {
-  Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("replay")
+/// The records of the promise: those of each folder of `tests/corpus`, which each later build of
+/// the major opens, as `tests/corpus/README.md` says.
+fn corpus() -> Vec<PathBuf> {
+  let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus");
+  let folders =
+    fs::read_dir(corpus).unwrap().map(|one| one.unwrap().path()).filter(|one| one.is_dir());
+  let mut records: Vec<PathBuf> = folders
+    .flat_map(|folder| fs::read_dir(folder).unwrap().map(|one| one.unwrap().path()))
+    .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
+    .collect();
+  records.sort();
+  records
 }
 
 /// A life of a test whose model answers each request with the next word of a script, and with close(None) once the
@@ -1249,24 +1198,22 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   assert_eq!(held("record.jsonl.log"), log, "the log stays as it was");
 }
 
-/// A record from before the stable cut of the schema of the record, as each record of the replays
-/// is, opens in no life that works on it or keeps it, and no crossing carries it to this build, so
-/// nothing forks it into a new life; each says why, and a life that inspects reads it.
+/// A record from before the stable cut of the schema of the record opens in no life, not even one
+/// that inspects it, which says why, and nothing writes on it.
 #[test]
-fn a_record_from_before_the_stable_cut_opens_to_inspect_alone() {
+fn a_record_from_before_the_stable_cut_opens_in_no_life() {
   let at = yard("before-cut");
   let record = at.join("record.jsonl");
-  laid(&replays().join("speaker.jsonl"), &record);
+  let before = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/replay/speaker.jsonl");
+  fs::copy(before, &record).unwrap();
   let text = fs::read_to_string(&record).unwrap();
-  for keeps in [true, false] {
-    let refused = opening(&at, keeps).boot::<String>([]).map(|_| ()).unwrap_err().to_string();
-    assert!(refused.ends_with(BEFORE_CUT), "keeps {keeps}: {refused}");
+  let why = world::SchemaError::BeforeCut { of: "record" }.to_string();
+  for (inspecting, keeps) in [(true, false), (false, false), (false, true)] {
+    let open = Opening { inspecting: Some(inspecting), ..opening(&at, keeps) };
+    let refused = open.boot::<String>([]).map(|_| ()).unwrap_err().to_string();
+    assert!(refused.ends_with(&why), "inspecting {inspecting}, keeps {keeps}: {refused}");
   }
-  let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-  let mut inspected = inspects.boot::<String>([]).unwrap().0;
-  let refused = checkpoint::crossed(&record, &mut inspected).unwrap_err().to_string();
-  assert!(refused.ends_with(BEFORE_CUT), "{refused}");
-  assert_eq!(fs::read_to_string(&record).unwrap(), text, "nothing forks it");
+  assert_eq!(fs::read_to_string(&record).unwrap(), text, "nothing writes on it");
 }
 
 /// The operator is no model of the catalog, so a later life whose standing names the operator as
@@ -1293,32 +1240,16 @@ fn a_life_never_tells_that_the_operator_left_the_catalog() {
   }
 }
 
-/// Each record of the replays and of each folder of the corpus opens from the image that a life
-/// that keeps it wrote at its tip to the state that its record gives, in a life that inspects, in
-/// one that works and keeps nothing, and in one that keeps the record. An image is a cache of its
-/// record, so a record that a build cannot open by its image is a defect of that build. A record
-/// from before the stable cut opens in no life that works on it, so it has no image.
+/// Each record of each folder of the corpus opens from the image that a life that keeps it wrote at
+/// its tip to the state that its record gives, in a life that inspects, in one that works and keeps
+/// nothing, and in one that keeps the record. An image is a cache of its record, so a record that a
+/// build cannot open by its image is a defect of that build.
 #[test]
-fn each_record_of_the_replays_and_of_the_corpus_opens_by_its_image_to_the_state_of_its_record() {
-  let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus");
-  let folders =
-    fs::read_dir(corpus).unwrap().map(|one| one.unwrap().path()).filter(|one| one.is_dir());
-  let mut records: Vec<PathBuf> = folders
-    .chain([replays()])
-    .flat_map(|folder| fs::read_dir(folder).unwrap().map(|one| one.unwrap().path()))
-    .filter(|one| one.extension().is_some_and(|named| named == "jsonl" || named == "zst"))
-    .collect();
-  records.sort();
+fn each_record_of_the_corpus_opens_by_its_image_to_the_state_of_its_record() {
   let word = "[[c, turns(on=c), sorted(k for k in module(c) if not k.startswith('__'))] \
               for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')]]";
-  for one in records {
-    let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
-    let at = yard(&format!("imaged-{name}"));
-    laid(&one, &at.join("record.jsonl"));
-    if let Err(no) = opening(&at, true).boot::<String>([]) {
-      assert!(no.to_string().ends_with(BEFORE_CUT), "{name}: {no}");
-      continue;
-    }
+  for one in corpus() {
+    let name = one.file_stem().unwrap().to_string_lossy().into_owned();
     for (how, inspecting, keeps) in
       [("inspects", true, false), ("works", false, false), ("keeps", false, true)]
     {
@@ -1327,7 +1258,7 @@ fn each_record_of_the_replays_and_of_the_corpus_opens_by_its_image_to_the_state_
       let read = |imaged: bool| {
         let at = yard(&format!("imaged-{name}-{how}"));
         let record = at.join("record.jsonl");
-        laid(&one, &record);
+        fs::copy(&one, &record).unwrap();
         let open = |inspecting, keeps| {
           Opening { inspecting: Some(inspecting), ..opening(&at, keeps) }.boot::<String>([])
         };
@@ -1354,54 +1285,6 @@ fn each_record_of_the_replays_and_of_the_corpus_opens_by_its_image_to_the_state_
   }
 }
 
-#[test]
-fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
-  for (record, first) in [("ranks.jsonl", "bash2"), ("speaker.jsonl", "reply4")] {
-    let at = yard(&format!("unadapted-{first}"));
-    laid(&replays().join(record), &at.join("record.jsonl"));
-    let mut lines: Vec<String> =
-      fs::read_to_string(at.join("record.jsonl")).unwrap().lines().map(str::to_owned).collect();
-    let made = lines.iter().position(|one| one.starts_with(r#"[["made""#)).unwrap();
-    let mut entry: serde_json::Value = serde_json::from_str(&lines[made]).unwrap();
-    let fact = entry[0].as_array_mut().unwrap();
-    // The same engine with one more line at its end, which no adapter names.
-    let engine = format!("{}\n", fact[7].as_str().unwrap());
-    let mut hash = Sha256::new();
-    for one in [engine.as_str(), fact[8].as_str().unwrap()] {
-      hash.update(one.as_bytes());
-      hash.update([0]);
-    }
-    fact[3] = format!("{:x}", hash.finalize()).into();
-    fact[7] = engine.into();
-    lines[made] = entry.to_string();
-    fs::write(at.join("record.jsonl"), lines.join("\n") + "\n").unwrap();
-    let drift =
-      Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]).unwrap_err();
-    assert!(format!("{drift:?}").contains(&format!("{first} drifts")), "{record}: {drift:?}");
-  }
-}
-
-#[test]
-fn a_life_of_an_engine_whose_gathered_raised_on_an_act_that_no_rung_made_writes_its_checkpoint_through_its_adapter()
- {
-  let at = yard("lives");
-  laid(&replays().join("lives.jsonl.zst"), &at.join("record.jsonl"));
-  let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-  let mut inspected = inspects.boot::<String>([]).unwrap().0;
-  let written = checkpoint::written(&mut inspected)
-    .expect("the adapter gives the engine lives that raise nothing");
-  drop(inspected);
-  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
-  let kept = fs::read_to_string(at.join("record.jsonl")).unwrap();
-  let tip: serde_json::Value = serde_json::from_str(kept.lines().last().unwrap()).unwrap();
-  assert_eq!(tip[0][0], "checkpoint");
-  let lives = tip[0][3]["chains"][0]["lives"].as_array().unwrap();
-  assert!(
-    lives.iter().any(|one| one == "compacted(); fitted()"),
-    "the checkpoint carries the life word of compaction, whose act holds the act of its own ear open: {lives:?}"
-  );
-}
-
 /// Each run of each chain whose word no turn of that chain shows, as a python expression in the names of the engine.
 const UNSHOWN: &str = "[(c, x[1], x[4]) for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')] \
                        for x in transcript(c, 'run') if x[3] == c \
@@ -1414,57 +1297,23 @@ const UNSEEDED: &str = "[e[3] for e in transcript('chain1', 'enable') if e[4].st
                         ('user', e[4]) for n, t in enumerate(turns(on='chain1'))) or not all(m in \
                         module('chain1') for m in re.findall(r'^(?:def|class) (\\w+)', e[4], re.M)))]";
 
-/// A record of the replays, written whole at `to`: one that is too large to keep plain is kept
-/// by zstd with a long window, and read through it.
-fn laid(from: &Path, to: &Path) {
-  if from.extension().is_some_and(|named| named == "zst") {
-    let mut plain = zstd::Decoder::new(fs::File::open(from).unwrap()).unwrap();
-    plain.window_log_max(27).unwrap();
-    io::copy(&mut plain, &mut fs::File::create(to).unwrap()).unwrap();
-  } else {
-    fs::copy(from, to).unwrap();
-  }
-}
-
-/// Each record of `tests/replay`, and the record of the life of `WORK`, replayed in a life that
-/// only inspects it, by its name.
-fn replayed(by: &str) -> Vec<(String, Engine)> {
-  let mut records: Vec<PathBuf> = fs::read_dir(replays())
-    .unwrap()
-    .map(|one| one.unwrap().path())
-    .filter(|one| one.extension().is_some_and(|named| named == "jsonl" || named == "zst"))
-    .collect();
-  records.sort();
-  let made = worked(&format!("shown-{by}-made"));
-  let work = made.with_file_name("work.jsonl");
-  fs::rename(work.with_file_name("record.jsonl"), &work).unwrap();
-  records.push(work);
-  let open = |one: PathBuf| {
-    let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
-    let at = yard(&format!("shown-{by}-{name}"));
-    laid(&one, &at.join("record.jsonl"));
-    let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-    (name, inspects.boot::<String>([]).unwrap().0)
-  };
-  records.into_iter().map(open).collect()
+/// The record of the life of `WORK`, which holds no checkpoint, replayed in a life that only
+/// inspects it.
+fn replayed(by: &str) -> Engine {
+  let at = yard(&format!("shown-{by}"));
+  fs::copy(worked(&format!("shown-{by}-made")), at.join("record.jsonl")).unwrap();
+  Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]).unwrap().0
 }
 
 #[test]
 fn each_run_of_a_chain_of_the_replays_has_a_turn_that_shows_its_word() {
-  for (name, mut engine) in replayed("unshown") {
-    let unshown = engine.word(UNSHOWN, vec![]).unwrap();
-    assert_eq!(
-      unshown.as_ref().items().unwrap().len(),
-      0,
-      "{name}: {}",
-      unshown.as_ref().py_repr()
-    );
-  }
+  let unshown = replayed("unshown").word(UNSHOWN, vec![]).unwrap();
+  assert_eq!(unshown.as_ref().items().unwrap().len(), 0, "{}", unshown.as_ref().py_repr());
 }
 
 #[test]
 fn a_replay_of_work_shows_each_file_of_a_skill_as_the_rung_of_its_read_then_its_code_alone() {
-  let (_, mut engine) = replayed("seeded").into_iter().find(|one| one.0 == "work").unwrap();
+  let mut engine = replayed("seeded");
   let enables = engine.word("len(transcript('chain1', 'enable'))", vec![]).unwrap();
   assert_eq!(
     enables.as_ref().as_int(),
@@ -1892,47 +1741,6 @@ fn a_checkpoint_of_another_major_of_its_schema_is_refused_with_both_schemas() {
       world::CHECKPOINT_SCHEMA,
       world::CHECKPOINT_SCHEMA.major + 1
     )
-  );
-}
-
-#[test]
-fn a_checkpoint_of_the_form_before_its_schema_that_a_later_life_wrote_opens_and_seeds_no_root_again()
- {
-  let at = yard("checkpoint-1034-relife");
-  fs::copy(replays().join("handover").join("relife.jsonl"), at.join("record.jsonl")).unwrap();
-  for n in 3..=4 {
-    let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
-    let word = format!("queue.append({n})\nclose([f(), queue])");
-    assert_eq!(
-      closed(&mut later, &word).as_ref().py_repr(),
-      format!("[6, {:?}]", (1..=n).collect::<Vec<_>>()),
-      "a life that a later life of that form handed over goes on with its module"
-    );
-    assert_eq!(
-      seeds(&at),
-      0,
-      "a life that goes on from a checkpoint of that form runs no seed of the root"
-    );
-    later.checkpoint().unwrap();
-  }
-}
-
-#[test]
-fn a_checkpoint_of_the_form_before_its_schema_opens_on_this_build() {
-  let at = yard("checkpoint-1034");
-  fs::copy(replays().join("handover").join("checkpoint.jsonl"), at.join("record.jsonl")).unwrap();
-  let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
-  assert_eq!(
-    closed(&mut later, "close([f(), len(queue), get(waiting)[:2], over(waiting)])")
-      .as_ref()
-      .py_repr(),
-    "[6, 1, ('prompt', 'prompt1'), False]",
-    "a life that a build of that form handed over goes on with its module and its open prompt"
-  );
-  assert_eq!(
-    seeds(&at),
-    0,
-    "a life that goes on from a checkpoint of that form runs no seed of the root"
   );
 }
 

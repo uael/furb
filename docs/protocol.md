@@ -236,7 +236,10 @@ daemon answers requests in any order.
   wrote for that rung before it is void. After `reborn`, which a life tells once it told the past of its record, the
   life goes on from its last checkpoint, and its acts come again as they stand. A peer that attaches from a place past
   the tip, as a window that reads the cards and the pages and no event, hears the event `ended` alone, so it learns
-  that the life ended and why, as when its open failed.
+  that the life ended and why, as when its open failed. A life that a fault ended answers each view of what it told,
+  as `threads` and `thread`, read only, until the window leaves it, and refuses each other verb with that fault. A
+  record from before the stable cut, which `docs/promise.md` says, opens in no life: its life tells each fact of the
+  record, then `ended` with why, and a window reads its threads that way.
 - The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
   checkpoint. The log lets go of each of them once it told it, since the record holds it, and of each fact that an open
   told, which the file of the log of the record holds, and a window that attaches before them reads them again from the

@@ -340,8 +340,8 @@ def seed(names, data):
   for kind, most in data["taken"].items():
     put(kind, f"{kind}{most + 1}")
   for c in data["chains"]:
-    i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
-    entries.append((("cut", i, "journal", c["turns"], c["lost"] + [*c["values"]], cut),))
+    i = c["id"]
+    entries.append((("cut", i, "journal", c["turns"], c["lost"] + [*c["values"]], c["cut"]),))
     word = (
       f"if not get(acting())[5]:\n for __part in {c.get('lives', [])!r}:\n"
       "  try: await rung(__part)\n  except Exception as __raised: debug(t'{__raised!r}')\n"

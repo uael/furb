@@ -32,12 +32,10 @@ API of its own:
   When those of the record are not the ones of this build and the life keeps its record, the open crosses first: a life that inspects reaches the tip on them and writes a checkpoint, which tells each chain
   the lines of the engine that differ, then the fact made of this build, and the life goes on with this build. A
   life that keeps nothing goes on with the engine that it opened on. A record from before the stable cut, the major 2
-  of the schema of the record, opens only in a life that inspects it, which says why, and nothing forks it into a new
-  life. Each chain reads as its system prompt the engine
-  that it read first, and a new chain with no source the engine that the life runs. `script/engines.py` gives a copy
-  of a record of a build before the
-  texts of its engine from git. `tests/replay` holds records of builds before the stable cut, which a life that
-  inspects reads on their own engines. `tests/corpus` holds the records of each release, which each later build must open, as
+  of the schema of the record, opens in no life, which says why: the host tells each of its facts, and a window reads
+  its threads, read only. Each chain reads as its system prompt the engine
+  that it read first, and a new chain with no source the engine that the life runs. `tests/replay` holds records of
+  builds before the stable cut, which no life opens. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as `opened` and as `Engine.open`.
 - `src/view.rs` and `src/view/` fold the facts of a life into its meaning, which every window shows the same way: the
   state of each act and of each chain, the desk of the operator, the threads of a chain, the spend, and the acts as
@@ -87,13 +85,9 @@ API of its own:
   `gathered` gives the data of a checkpoint and its `seed` the entries that a later life boots on, each on the names
   of its engine, and the fact made holds its text beside the texts of the engine and
   of the Kernel. The checkpointer of the build gathers each checkpoint, a crossing on the engine of an older record
-  too, since the next life reads it, and the checkpointer that the fact made holds seeds and journals its record. A fact made of a build before it holds no such text, and the engine of that build gathers and seeds, and the engine
-  of a build whose checkpointer holds no journal takes the record and says it again itself.
+  too, since the next life reads it, and the checkpointer that the fact made holds seeds and journals its record.
   `src/furb/record.py` holds what stands, in the record that boot is given, for a value that no later life makes again
-  as it was, and they load it the same way. No gate reads a word before it runs. A record of an earlier build holds
-  gate acts, which its own engine makes again in a replay and its record answers, and the opening of the sandbox,
-  `src/engine/opening.rs`, gives that engine alone an ear that answers a gate act that the record does not answer
-  with no finding.
+  as it was, and they load it the same way. No gate reads a word before it runs.
 - `src/binding.rs` holds the host API that both doors give, each function once: the ears of the crate, the store, the
   opening of a life, the catalog, the extensions and the images. A door holds only how a value of its
   language crosses, its `Engine` and its `Act`, and the loop that drives them. The `Engine` of each door has the same

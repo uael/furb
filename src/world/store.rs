@@ -24,10 +24,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 
-use monty_types::{
-  NamedValues,
-  unstable::{MontyGraph, MontyNode},
-};
+use monty_types::unstable::{MontyGraph, MontyNode};
 
 use self::error::StoreError;
 use super::{beside, free};
@@ -36,8 +33,7 @@ use crate::{
   ear::{Co, Ear, Hooks, Next, With, hearing, say},
   engine::ROOT,
   fact::Fact,
-  sand::{Nobody, Sand},
-  value::{Fault, Object, ObjectRef, entry},
+  value::{Fault, Object, ObjectRef},
   wire::{built, whole},
 };
 
@@ -361,7 +357,7 @@ fn digest(texts: &[&str]) -> String {
   format!("{:x}", hash.finalize())
 }
 
-/// The engine that a record names, and nothing when it names none, as a record of a build before the fact made.
+/// The engine that a record names, and nothing when it names none, as a new record.
 pub fn made(record: &[Object]) -> Option<String> {
   record.iter().find_map(|entry| {
     let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
@@ -370,22 +366,17 @@ pub fn made(record: &[Object]) -> Option<String> {
 }
 
 /// The texts of the engine, of the Kernel and of the checkpointer that a segment of a record runs
-/// on: those that its last fact made holds, or this build's own when it holds none. A fact made of
-/// a build before the checkpointer holds no text of it, which stands as an empty text, since the
-/// engine of that build gathers and seeds its checkpoints itself. Texts that are not the engine
-/// that their fact names refuse the record.
+/// on: those that its last fact made holds, or this build's own when it holds none, as a new
+/// record. Texts that are not the engine that their fact names refuse the record.
 pub fn texts(record: &[Object]) -> Result<(String, String, String), Fault> {
-  let Some([Some(named), Some(source), Some(kernel), checkpointer]) = held(record) else {
+  let Some([Some(named), Some(source), Some(kernel), Some(checkpointer)]) = held(record) else {
     return Ok((ENGINE.to_owned(), KERNEL.to_owned(), CHECKPOINTER.to_owned()));
   };
-  let checkpointer = checkpointer.unwrap_or_default();
-  let all = [source.as_str(), kernel.as_str(), checkpointer.as_str()];
-  if digest(if checkpointer.is_empty() { &all[..2] } else { &all }) != named {
+  if digest(&[&source, &kernel, &checkpointer]) != named {
     return Err(Fault::refused(format!(
       "the record names the engine {named}, and the texts that it holds are another engine"
     )));
   }
-  let (source, kernel) = adapted(&named, source, &kernel)?;
   Ok((source, kernel, checkpointer))
 }
 
@@ -422,43 +413,6 @@ fn held(record: &[Object]) -> Option<[Option<String>; 4]> {
   })
 }
 
-/// The engine that the last fact made of a segment names when it holds no texts of it and it is not
-/// the engine of this build, which [`texts`] then gives in its place.
-pub fn unheld(record: &[Object]) -> Option<String> {
-  match held(record)? {
-    [_, Some(_), Some(_), _] => None,
-    [named, ..] => named.filter(|one| !one.is_empty() && *one != engine()),
-  }
-}
-
-/// The adapters of the engines of this major, by the digest of an engine, as `src/furb/adapters.py`
-/// says.
-const ADAPTERS: &str = include_str!("../furb/adapters.py");
-
-/// The texts of the engine that a digest names and of its Kernel: the engine with each change of
-/// its adapter made, or as it is when no adapter names it, and the Kernel as `kernel` of the
-/// adapters gives it. A change whose text the engine does not hold is refused, since the adapter
-/// is then of another engine.
-fn adapted(named: &str, mut source: String, kernel: &str) -> Result<(String, String), Fault> {
-  let mut inputs = NamedValues::new();
-  inputs.push("__named", Object::string(named));
-  inputs.push("__kernel", Object::string(kernel));
-  inputs.push("__ours", Object::string(KERNEL));
-  let word = format!("{ADAPTERS}\n(ADAPTERS.get(__named, []), kernel(__kernel, __ours))");
-  let got = Sand::new().run(&word, inputs, &mut Nobody("the adapters"))?;
-  let got = got.as_ref();
-  let kernel = entry(&got, 1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
-  for change in entry(&got, 0).and_then(|one| one.items()).unwrap_or_default() {
-    let text = |at| entry(&change, at).and_then(|one| one.as_str().map(str::to_owned));
-    let (Some(old), Some(new)) = (text(0), text(1)) else { continue };
-    if !source.contains(&old) {
-      return Err(Fault::refused(format!("the adapter of the engine {named} finds no {old:?}")));
-    }
-    source = source.replacen(&old, &new, 1);
-  }
-  Ok((source, kernel))
-}
-
 /// The release of furb that a record names, as `0.4.2`, and nothing when it names none, as a record
 /// of a build before the release was in the fact made.
 pub fn release(record: &[Object]) -> Option<String> {
@@ -468,23 +422,21 @@ pub fn release(record: &[Object]) -> Option<String> {
   })
 }
 
-/// Whether this build reads a record from its facts made: each names the schema of the record that
-/// its build wrote, and a record that names a schema of another major is refused, with both
-/// schemas, but one from before the stable cut, which a life that inspects reads.
+/// Why no life opens the record at a path, read from its last fact made alone, as a record from
+/// before the stable cut, and nothing when a life may open it: a host reads it before an open, to
+/// show the facts of such a record with no life.
+pub fn unopened(path: &Path) -> Option<SchemaError> {
+  let made = made_before(path, fs::metadata(path).ok()?.len()).ok()??;
+  readable(slice::from_ref(&made)).err()
+}
+
+/// Whether a life opens a record from its facts made: each names the schema of the record that its
+/// build wrote, and a record that names a schema of another major, or one from before the stable
+/// cut, is refused, as [`Schema::opens`] says.
 pub fn readable(record: &[Object]) -> Result<(), SchemaError> {
-  made_facts(record).try_for_each(|fact| Schema::opens_record(fact.word(2)))
-}
-
-/// Whether the last fact made among the entries of a record names a schema from before the stable
-/// cut, so no life works on the record or keeps it.
-pub fn before_cut(record: &[Object]) -> bool {
-  made_facts(record).last().is_some_and(|fact| Schema::before_cut(fact.word(2)))
-}
-
-/// Each fact made among the entries of a record, in order.
-fn made_facts(record: &[Object]) -> impl Iterator<Item = Fact> {
   let fact = |entry: &Object| entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-  record.iter().filter_map(fact).filter(|one| one.kind() == MADE)
+  let made = record.iter().filter_map(fact).filter(|one| one.kind() == MADE);
+  made.into_iter().try_for_each(|fact| RECORD_SCHEMA.opens("record", fact.word(2)))
 }
 
 /// The kind of the fact by which a provider says a part of the word of a rung that its model finished.
@@ -556,8 +508,7 @@ enum Told {
 ///
 /// A new record names the engine and the version of this build: the ear says them as it hears the
 /// root at its birth, so a later life says them again at the same place, and so does the first life
-/// after a checkpoint of an earlier build that holds no fact made after it. A record of a build
-/// before the fact made names no engine, and stays so, since this engine did not make it.
+/// after a checkpoint that holds no fact made after it.
 ///
 /// The ear tells the operator once of the bytes of a torn last line that the open passed over.
 /// It tells the operator once when the disk of the record holds less than [`LOW`] free, with
@@ -638,11 +589,10 @@ fn kept_by(store: impl Store + 'static, read: Option<Vec<Object>>) -> (Vec<Objec
   (entries, With::ear(kept, store))
 }
 
-/// Whether a record names no engine for the build that goes on from it: it holds no entry, or its
-/// last checkpoint has no fact made after it.
+/// Whether a record names no engine for the build that goes on from it: no fact made stands after
+/// its last checkpoint, or in it when it holds none.
 fn unnamed(entries: &[Object]) -> bool {
-  entries.is_empty()
-    || checkpoint::last(entries).is_some_and(|at| made(&entries[at + 1..]).is_none())
+  made(checkpoint::segment(entries)).is_none()
 }
 
 /// The message that the record stopped growing, with the fault of the store.

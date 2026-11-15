@@ -30,7 +30,9 @@ use std::{
 };
 
 use furb::{
-  Engine, Fact, Fault, Object, Text, checkpoint, image,
+  Engine, Fact, Fault, Object, Text, checkpoint,
+  engine::ROOT,
+  image,
   life::{Log, Opening, Progress, Retrying, Stage, Stream},
   skill::granted,
   verbs,
@@ -229,6 +231,23 @@ impl Command {
       other => other,
     }
   }
+
+  /// Whether the command reads the meaning of the acts that the life told, which the life answers
+  /// with no engine, so after its end too, as [`viewed`] says.
+  fn views(&self) -> bool {
+    matches!(
+      self,
+      Self::Desk { .. }
+        | Self::Threads { .. }
+        | Self::Rail { .. }
+        | Self::Ladder { .. }
+        | Self::AsOf { .. }
+        | Self::Folded { .. }
+        | Self::Moments { .. }
+        | Self::Thread { .. }
+        | Self::Sent
+    )
+  }
 }
 
 /// What a life replies to a command.
@@ -288,7 +307,7 @@ enum Read {
 
 impl Read {
   /// The reply, once the log took each event that the ears told, so each fact that the life said
-  /// before it stands before the place that it gives. A life that ended answers no command.
+  /// before it stands before the place that it gives. A life that ended answers only a view.
   async fn answered(self, engine: Option<&mut Engine>, life: &mut Life) {
     match self {
       Self::Since(from, reply) => {
@@ -298,6 +317,7 @@ impl Read {
       Self::After(command, reply) => {
         let replied = match engine {
           Some(engine) => commanded(engine, life, command).await,
+          None if command.views() => viewed(life, ROOT, command),
           None => Err(LifeError::Ended),
         };
         life.told(None);
@@ -683,18 +703,25 @@ impl Life {
   /// The facts of the opening of each birth on a checkpoint before the last are told to no reader,
   /// as [`Life::opened`] says; each other fact is told, though it equals one before it, as a
   /// second pause of a chain. A record that the store cannot read tells nothing here, and its open
-  /// says why. It gives whether the life is born on a checkpoint of the record.
-  fn recalled(&mut self, record: &str, told: &Progress) -> bool {
+  /// says why. It gives whether the life is born on a checkpoint of the record. With `whole`, as
+  /// for a record that no life opens, it tells each fact of the record, the facts after its last
+  /// checkpoint too, and those of a record with none.
+  fn recalled(&mut self, record: &str, told: &Progress, whole: bool) -> bool {
     if !Path::new(record).exists() {
       return false;
     }
     (told.0)(Stage::Recall, 0, 0);
     // One pass over the heads of the lines gives the place of each checkpoint, and a record with
-    // none tells nothing here.
+    // none tells nothing here, but a whole one.
     let Ok(checkpoints) = world::checkpoints(record) else { return false };
     let marks: Vec<usize> = checkpoints.into_iter().map(|at| at + 1).collect();
-    let Some(&last) = marks.last() else { return false };
+    if marks.is_empty() && !whole {
+      return false;
+    }
     let Ok(retold) = world::retold(record) else { return true };
+    // A fact that the record kept after its last entry stands nowhere, so a whole read reads on to
+    // the end of the facts.
+    let last = if whole { retold.entries + 1 } else { marks[marks.len() - 1] };
     let (mut passed, mut opening) = (0, false);
     let mut fold = Fold::default();
     // Each fact is folded as the read gives it and let go at once, since the record holds it: the
@@ -1055,10 +1082,14 @@ async fn run(mut opening: Opening, mut received: UnboundedReceiver<Message>, tel
     life.indexed();
   }
   life.put(Event::Ended(fault.clone()));
-  // A verb that waited for an open that failed hears why, and not only that the life ended.
+  // A verb that waited for an open that failed hears why, and not only that the life ended, and a
+  // view reads what the life told, read only.
   while let Some(message) = received.recv().await {
     match message {
       Message::Read(read) => read.answered(None, &mut life).await,
+      Message::Command(command, reply) if command.views() => {
+        reply.send(viewed(&life, ROOT, command)).ok();
+      }
       Message::Command(_, reply) => {
         drop(reply.send(Err(fault.clone().map_or(LifeError::Ended, LifeError::Refused))));
       }
@@ -1111,6 +1142,7 @@ struct End {
 }
 
 /// The life opened and driven until it ends, on the one journal of its changes, and how it ended.
+/// A record that no life opens ends with no life, once it told its facts.
 ///
 /// A life whose image agrees with its record opens from it: the host stands on what the life of
 /// the image kept, reads no fact of the record before the image, and hears what the engine says
@@ -1127,9 +1159,17 @@ async fn lives(
   let record = opening.record.clone().filter(|_| opening.keeps());
   let progress = life.opens.progress();
   life.opens.born();
+  // A record that no life opens, as one from before the stable cut, tells each of its facts, which
+  // each window reads, read only, and the life ends with why.
+  if let Some((one, no)) =
+    record.as_deref().and_then(|one| Some((one, world::unopened(Path::new(one))?)))
+  {
+    life.recalled(one, &progress, true);
+    return End { fault: Some(no.to_string()), asked: Vec::new(), stood: false };
+  }
   let images = record.as_deref().is_some_and(|one| image::agrees(Path::new(one)));
   let mut born =
-    record.as_deref().filter(|_| !images).is_some_and(|one| life.recalled(one, &progress));
+    record.as_deref().filter(|_| !images).is_some_and(|one| life.recalled(one, &progress, false));
   let ears = ears(told.clone(), journal);
   let mut kept = None::<Kept>;
   // A life that told its past stands on it, and on no image that came after.
@@ -1150,7 +1190,7 @@ async fn lives(
       // the life opened by its record before it told its past: it tells its past, then the
       // birth that its record already keeps.
       if let (true, Some(one)) = (images, record) {
-        born = life.recalled(one, &progress);
+        born = life.recalled(one, &progress, false);
       }
       life.opened(birth, born, &progress);
     }
@@ -1338,15 +1378,7 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
       let waiting = waiting.iter().map(serde_json::to_value).collect::<Result<_, _>>();
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
-    command @ (Command::Desk { .. }
-    | Command::Threads { .. }
-    | Command::Rail { .. }
-    | Command::Ladder { .. }
-    | Command::AsOf { .. }
-    | Command::Folded { .. }
-    | Command::Moments { .. }
-    | Command::Thread { .. }
-    | Command::Sent) => viewed(life, &root, command),
+    command if command.views() => viewed(life, &root, command),
     Command::Settings => {
       let settings = life.configs.get()?.into_iter().map(|one| json!(one));
       Ok(Reply::Values(settings.collect()))

@@ -15,12 +15,12 @@ Each of these acts holds on each build of the major that made the record, with n
 
 A record replays on the engine that it holds, under the names that it holds. A record of another record is not
 imported. The promise holds from the stable cut, the major 2 of the schema of the record: each record of it holds the
-texts of its engine, so each later build of the major replays it with no drift. A record from before the cut, of the
-major 1 or of no schema, opens only in a life that inspects it: a life that works on it or keeps it is refused with
-that reason, and nothing forks it into a new life. A drift on the same engine is a defect, never a known limit (R1).
-Within a major, a later build of the engine never makes a record drift. Where a later build fixes a defect of replay
-at its root, an adapter of the old engine holds the record, in the one home of adapters, `src/furb/adapters.py`, keyed
-by the digest of the engine (R3). A life that keeps its record and ran another engine, Kernel or checkpointer of the
+texts of its engine, its Kernel and its checkpointer, so each later build of the major replays it with no drift. A
+record from before the cut, of the major 1 or of no schema, opens in no life, which says why: a window reads its
+threads, read only, from the fold of its facts, and a reader of a record reads each fact of it. A drift on the same
+engine is a defect, never a known limit (R1). Within a major, a later build of the engine never makes a record drift,
+since the record replays on the texts that it holds; a build of the host that makes one drift holds a defect, which
+is fixed at its root (R3). A life that keeps its record and ran another engine, Kernel or checkpointer of the
 major first reaches the exact state of its tip on them, by its record, then crosses: it writes a checkpoint and the
 fact made of the build that opens it, and goes on with that build. Each chain keeps as its system prompt the engine
 that it read first, and its turns end with one paragraph that holds the lines of the engine that differ, so a chain
@@ -78,12 +78,9 @@ A fork of a life, its record up to a fact in a directory of its own:
 
 - `tests/suite/promise.rs::a_fork_of_a_life_opens_at_the_state_of_its_origin_at_the_fork_and_goes_on_by_its_own_facts`
 
-R3, no drift within a major, through the one home of adapters:
+R3, no drift within a major, on the texts that each record holds:
 
-- `src/engine.test.rs::a_record_of_an_older_engine_opens_through_its_adapter_and_keeps_no_fact_of_its_record_again`
-- `src/engine.test.rs::a_kernel_of_the_major_from_before_it_ended_its_lost_runs_ends_them_through_its_adapter`
-- `src/life.test.rs::a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter`
-- `src/life.test.rs::a_record_that_names_no_engine_replays_as_before_and_names_none`
+- `src/life.test.rs::each_record_of_the_corpus_opens_by_its_image_to_the_state_of_its_record`
 - `tests/suite/promise.rs::each_record_of_each_folder_of_the_corpus_opens_gives_back_its_modules_and_takes_one_more_turn`, which reads each record with the reader too
 
 The schemas (P7, P8):
@@ -91,7 +88,9 @@ The schemas (P7, P8):
 - `src/life.test.rs::a_checkpoint_of_a_later_minor_of_its_schema_with_fields_more_opens_with_each_chain_and_its_prompts`
 - `src/life.test.rs::a_checkpoint_of_another_major_of_its_schema_is_refused_with_both_schemas`
 - `src/life.test.rs::a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keeps_nothing`
-- `src/life.test.rs::a_record_from_before_the_stable_cut_opens_to_inspect_alone`
+- `src/world/store/schema.test.rs::a_schema_from_before_the_stable_cut_opens_in_no_life`
+- `src/life.test.rs::a_record_from_before_the_stable_cut_opens_in_no_life`
+- `host/tests/suite/life.rs::a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_says_why`
 - `tests/suite/promise.rs::a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens`
 
 The protocol, the nodes of a view and the contract (P2, P5):

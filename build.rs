@@ -37,7 +37,7 @@ mod verbs;
 /// that the session calls, the python that the build puts in a session beside the engine, the
 /// Kernel and the checkpointer of its life, and the view, whose acts a host keeps in its part of an
 /// image. A folder stands for each file in it but the tests.
-const IMAGED: [&str; 10] = [
+const IMAGED: [&str; 9] = [
   "src/engine.rs",
   "src/engine",
   "src/sand.rs",
@@ -47,7 +47,6 @@ const IMAGED: [&str; 10] = [
   "src/view.rs",
   "src/view",
   "src/furb/record.py",
-  "src/furb/adapters.py",
 ];
 
 /// The digest of what an image depends on in the build: each file of [`IMAGED`] under its path,

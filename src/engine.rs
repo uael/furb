@@ -72,7 +72,7 @@ use crate::{
   value,
   value::{Exit, Fault, Given, Object, ObjectRef, Text, entry},
   world,
-  world::{Schema, Systems},
+  world::{CHECKPOINT_SCHEMA, Systems},
 };
 use std::{fmt, mem};
 
@@ -128,7 +128,7 @@ fn seeded(
   };
   let pairs = data.as_ref().pairs().unwrap_or_default();
   let schema = pairs.iter().find(|(key, _)| key.as_str() == Some("schema")).map(|one| one.1);
-  Schema::opens_checkpoint(schema)?;
+  CHECKPOINT_SCHEMA.opens("checkpoint", schema)?;
   let heads = sand.enter(outside, |sand, outside| {
     outside.bound(sand)?;
     let data = outside.inward(sand, &data)?;
@@ -619,7 +619,6 @@ impl Engine {
     let record: Vec<Object> = record.into_iter().collect();
     // A record replays on the engine that the fact made of its last segment holds.
     let (source, kernel, checkpointer) = world::texts(checkpoint::segment(&record))?;
-    let unheld = world::unheld(checkpoint::segment(&record));
     let mut sand = Sand::new();
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
     // they run again.
@@ -627,7 +626,7 @@ impl Engine {
     let opened =
       sand.run(OPENING, inputs(&source, &kernel, &checkpointer), &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
-    let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
+    let Opened { kernel, lasting, parking, park, .. } = outside.opened.clone();
     let (record, born) = seeded(&mut sand, &mut outside, record)?;
     outside.settled = settled(&record);
     outside.hosted.replay = Some(Replay::of(&record, replayed));
@@ -641,9 +640,6 @@ impl Engine {
       let entries = recorded(sand, outside, &record[born..]);
       outside.crossing.recorded = false;
       let mut given = vec![("kernel".to_owned(), kernel)];
-      if !gate.as_ref().is_none() {
-        given.push(("gate".to_owned(), gate));
-      }
       for name in names {
         let on = outside.fresh();
         outside.hosted.standing.insert(on, (name.clone(), At::Unborn));
@@ -669,7 +665,7 @@ impl Engine {
         Err(fault) => {
           let root = outside.named_call(sand, "get", vec![Object::string("chain1")], vec![])?;
           let root = if root.as_ref().is_none() { "" } else { "chain1" };
-          (root.to_owned(), Some(lacking(fault, unheld.as_deref())))
+          (root.to_owned(), Some(fault))
         }
       };
       // Boot binds the verbs of a life in place of those that stand before it.
@@ -689,8 +685,7 @@ impl Engine {
   /// Gives the journal of the life the entries that follow its tip, as the record of a life that
   /// went on from this state holds them, and the journal says them again at once, as boot says a
   /// record again: each word runs again with no bound of a turn, each act takes the answer that
-  /// the entries hold, and no ear of the World is asked for one. The engine of a build whose
-  /// checkpointer holds no journal refuses it.
+  /// the entries hold, and no ear of the World is asked for one.
   pub fn feed(&mut self, tail: &[Object]) -> Result<(), Fault> {
     self.outside.settled = settled(tail);
     let fed = self.unbounded(|engine| {
@@ -706,8 +701,7 @@ impl Engine {
   }
 
   /// The names of the acts that the journal of the life holds, each that an ear of the outside
-  /// took and that is not done, as `held` of the checkpointer gives them. The engine of a build
-  /// whose checkpointer holds no journal refuses it.
+  /// took and that is not done, as `held` of the checkpointer gives them.
   pub fn held(&mut self) -> Result<Object, Fault> {
     self.run(|sand, outside| {
       let got = sand.call(outside, &outside.opened.held.clone(), vec![], vec![])?;
@@ -1065,19 +1059,6 @@ impl fmt::Debug for Engine {
 /// the default of the engine.
 pub mod verbs {
   include!(concat!(env!("OUT_DIR"), "/verbs.rs"));
-}
-
-/// A fault that boot raised, with its cause when it is a drift of a record that names an
-/// engine whose texts it does not hold, since the record then replayed on this build's engine.
-fn lacking(mut fault: Fault, unheld: Option<&str>) -> Fault {
-  if let Some(named) = unheld.filter(|_| fault.name == "Drift") {
-    fault.args = vec![Object::string(format!(
-      "{} The record names the engine {named}, whose texts it does not hold, so it replayed on the \
-       engine of this build: python3 script/engines.py on a copy of the record gives them.",
-      fault.message()
-    ))];
-  }
-  fault
 }
 
 #[cfg(test)]

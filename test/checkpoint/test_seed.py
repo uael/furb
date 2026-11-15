@@ -12,7 +12,7 @@ SHELL = Exit(0, Text("bash2/stdout", "one\n"), Text("bash2/stderr", ""))
 
 def chain(i: str, on: str, label: str, **fields: object) -> dict[str, object]:
   """One chain of the data of a checkpoint, with nothing in it but what the test gives."""
-  held = {"turns": [], "definitions": [], "values": {}, "lost": [], "cut": [], "again": [], "paused": False}
+  held = {"turns": [], "definitions": [], "values": {}, "lost": [], "cut": [], "paused": False}
   return {"id": i, "on": on, "label": label, "source": "", **held, **fields}
 
 
@@ -20,14 +20,7 @@ DATA = {
   "taken": {"chain": 3, "bash": 2, "prompt": 1, "stand": 1},
   "chains": [
     chain("chain1", "", "root", definitions=["def f():\n  return SIZE"], values={"SIZE": "6", "shell": "Act('bash2')"}),
-    chain(
-      "chain3",
-      "chain1",
-      "work",
-      paused=True,
-      lost=["gone"],
-      again=[{"rung": "rung9", "by": "prompt1", "word": "late = 1"}],
-    ),
+    chain("chain3", "chain1", "work", paused=True, lost=["gone"], cut=["rung9"]),
   ],
   "acts": [
     {"kind": "prompt", "id": "prompt1", "on": "chain3", "shape": "str", "message": "Wait.", "to": "", "held": ""},

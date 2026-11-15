@@ -29,7 +29,7 @@ use furb::{
   view,
   view::{Act, Kind, Line, Mark, Phase, Reach, Retrying, RunState, State},
   world::{
-    CONSOLE, Scratch,
+    self, CONSOLE, SchemaError, Scratch,
     config::{Change, Layer},
   },
 };
@@ -308,6 +308,44 @@ async fn a_life_that_does_not_open_ends_with_its_fault() {
   let refused = life.send(Command::Standing).await;
   assert!(matches!(&refused, Err(LifeError::Refused(why)) if why == fault), "{refused:?}");
 }
+/// A record from before the stable cut opens in no life: the life tells each of its facts and
+/// ends with why, and a window reads its threads from the fold of those facts, read only, while
+/// each other verb hears why; nothing writes on the record.
+#[tokio::test]
+async fn a_record_from_before_the_stable_cut_shows_its_threads_to_a_window_and_says_why() {
+  let at = place("before-cut");
+  let record = at.join("record.jsonl");
+  let before = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/replay/speaker.jsonl");
+  fs::copy(before, &record).unwrap();
+  let text = fs::read_to_string(&record).unwrap();
+  let opening = Opening { record: Some(record.display().to_string()), ..scripted(&at, &[]) };
+  let life = Life::spawn(opening).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let got = until(&mut events, |event| matches!(event, Event::Ended(_))).await;
+  let Event::Ended(Some(why)) = &*got.last().unwrap().1 else { panic!("the end says why") };
+  assert_eq!(*why, SchemaError::BeforeCut { of: "record" }.to_string());
+  let told = got.iter().filter(|one| matches!(&*one.1, Event::Fact(_))).count();
+  let facts = world::retold(&record).unwrap().facts().unwrap().len();
+  assert_eq!(told, facts, "the life tells each fact of the record");
+  let threads = life.send(Command::Threads { on: None, at: None, read: None, site: None }).await;
+  let Ok(Reply::Threads(threads)) = threads else { panic!("the threads: {threads:?}") };
+  let prompts: Vec<&str> = threads.threads.iter().map(|one| one.thread.prompt.as_str()).collect();
+  assert_eq!(prompts, ["prompt1", "prompt3"], "a window reads the threads of the record");
+  let reach = Reach { before: None, limit: 10 };
+  let page = life.send(Command::Thread { thread: "prompt1".to_owned(), reach }).await;
+  let Ok(Reply::Page(page)) = page else { panic!("a page of the thread: {page:?}") };
+  let lines: Vec<&str> = page.exchanges[0]
+    .block
+    .iter()
+    .flat_map(|one| &one.lines)
+    .map(|one| one.text.as_str())
+    .collect();
+  assert_eq!(lines[0], "b = await bash('echo a')", "a window reads the word of the thread");
+  let refused = life.send(Command::Standing).await;
+  assert!(matches!(&refused, Err(LifeError::Refused(no)) if no == why), "{refused:?}");
+  assert_eq!(fs::read_to_string(&record).unwrap(), text, "nothing writes on the record");
+}
+
 #[tokio::test]
 async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_work() {
   let at = place("meaning");
