@@ -9,8 +9,7 @@
 
 use std::{
   collections::HashMap,
-  fs::{self, File},
-  io::{self, Read, Seek, SeekFrom},
+  fs, io,
   path::{Path, PathBuf},
   time::{SystemTime, UNIX_EPOCH},
 };
@@ -18,19 +17,15 @@ use std::{
 use furb::{
   Fact, Fault, Object,
   view::{self, Fold, Held, Standing},
-  world,
+  world::{self, Tip},
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::{
   ears::json_of,
   protocol::{Card, Frame},
   serve::Outbox,
 };
-
-/// How many bytes of the end of a record its tip reads.
-const TAIL: u64 = 4096;
 
 /// The cards of one session, and the name of the session.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,26 +50,6 @@ struct Indexed {
   tip: Tip,
   #[serde(flatten)]
   session: Session,
-}
-
-/// The tip of a record: its length, and the sha256 of its last bytes. A record only grows, so
-/// each entry that it takes changes both.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-struct Tip {
-  bytes: u64,
-  tail: String,
-}
-
-impl Tip {
-  fn of(record: &Path) -> io::Result<Self> {
-    let mut file = File::open(record)?;
-    let bytes = file.metadata()?.len();
-    file.seek(SeekFrom::Start(bytes.saturating_sub(TAIL)))?;
-    let mut tail = Vec::new();
-    file.take(TAIL).read_to_end(&mut tail)?;
-    let tail = format!("{:x}", Sha256::digest(&tail));
-    Ok(Self { bytes, tail })
-  }
 }
 
 /// The second of the epoch now.
@@ -110,13 +85,13 @@ fn index(record: &Path) -> PathBuf {
 /// more of the record.
 pub(crate) fn kept(record: &Path) -> Option<Session> {
   let indexed: Indexed = serde_json::from_slice(&fs::read(index(record)).ok()?).ok()?;
-  (Tip::of(record).ok()? == indexed.tip).then_some(indexed.session)
+  (Tip::of(record, None).ok()? == indexed.tip).then_some(indexed.session)
 }
 
 /// The index of a record written from a session, at the tip of the record now. It is written
 /// whole under another name and then moved, so no reader reads a part of it.
 pub(crate) fn keep(record: &Path, session: &Session) -> io::Result<()> {
-  let indexed = Indexed { tip: Tip::of(record)?, session: session.clone() };
+  let indexed = Indexed { tip: Tip::of(record, None)?, session: session.clone() };
   let fresh = index(record).with_extension("json.new");
   fs::write(&fresh, serde_json::to_vec(&indexed)?)?;
   fs::rename(fresh, index(record))

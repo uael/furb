@@ -20,6 +20,7 @@ use std::{
 
 use futures::stream;
 
+use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 
@@ -165,6 +166,30 @@ pub(crate) fn stored_after(path: &Path, bytes: u64, keeps: bool) -> Result<Optio
 /// fact that names an engine.
 fn born(kind: &str) -> bool {
   matches!(kind, checkpoint::CHECKPOINT | MADE)
+}
+
+/// How many of the last bytes of a record its tip names by their digest.
+const TAIL: u64 = 4096;
+
+/// The tip of a record: its length, and the sha256 of its last bytes. A record only grows, so each
+/// entry that it takes changes both, and a cache of a record names the tip that it was made from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Tip {
+  pub bytes: u64,
+  pub tail: String,
+}
+
+impl Tip {
+  /// The tip of the file of a record at its first `bytes` bytes, or at its end now.
+  pub fn of(record: &Path, bytes: Option<u64>) -> io::Result<Self> {
+    let mut file = File::open(record)?;
+    let held = file.metadata()?.len();
+    let bytes = bytes.unwrap_or(held).min(held);
+    let mut last = Vec::new();
+    file.seek(SeekFrom::Start(bytes.saturating_sub(TAIL)))?;
+    file.take(bytes.min(TAIL)).read_to_end(&mut last)?;
+    Ok(Self { bytes, tail: format!("{:x}", Sha256::digest(&last)) })
+  }
 }
 
 /// Whether a life of the image that stands at the first `bytes` bytes of the file of lines at a

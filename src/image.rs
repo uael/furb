@@ -46,24 +46,21 @@ use crate::{
   Engine,
   engine::Half,
   value::Fault,
-  world::{self, Format, Scratch, beside, disk},
+  world::{self, Format, Scratch, Tip, beside, disk},
 };
 
 /// What an image depends on in this build beside the texts of its life, as the build digests it:
 /// a build reads no image of another digest.
 const BUILD: &str = env!("FURB_IMAGED");
 
-/// How many of the last bytes of a record its tip names by their digest.
-const TAIL: u64 = 4096;
-
 /// What an image names, by which a reader checks it before it trusts a byte of its body.
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 struct Key {
   build: String,
   dump: u16,
-  /// The tip of the record that the life stood at: its bytes, and the digest of the last of them.
-  bytes: u64,
-  tail: String,
+  /// The tip of the record that the life stood at.
+  #[serde(flatten)]
+  tip: Tip,
   /// Whether the scratch directory of the record holds a file. A life that opens from its image
   /// makes no file of it again, so an image agrees only while the directory holds its files.
   scratch: bool,
@@ -84,17 +81,10 @@ impl Key {
   /// The key that this build writes for a body of these parts, at the first `bytes` bytes of a
   /// record, or at its tip now.
   fn of(record: &Path, bytes: Option<u64>, parts: Parts) -> io::Result<Self> {
-    let mut file = File::open(record)?;
-    let held = file.metadata()?.len();
-    let bytes = bytes.unwrap_or(held).min(held);
-    let mut last = vec![0; usize::try_from(bytes.min(TAIL)).unwrap_or_default()];
-    file.seek(SeekFrom::Start(bytes - last.len() as u64))?;
-    file.read_exact(&mut last)?;
     Ok(Self {
       build: BUILD.to_owned(),
       dump: monty::DUMP_VERSION,
-      bytes,
-      tail: format!("{:x}", Sha256::digest(&last)),
+      tip: Tip::of(record, bytes)?,
       scratch: Scratch::of(record).ok().flatten().is_some_and(|one| one.holds()),
       parts,
     })
@@ -107,10 +97,10 @@ impl Key {
   /// while none of them is a birth of its own.
   fn stands(&self, record: &Path) -> bool {
     let read = (monty::MIN_SUPPORTED_DUMP_VERSION..=monty::DUMP_VERSION).contains(&self.dump);
-    let ours = Self::of(record, Some(self.bytes), self.parts.clone());
+    let ours = Self::of(record, Some(self.tip.bytes), self.parts.clone());
     read
       && ours.is_ok_and(|now| Self { dump: self.dump, ..now } == *self)
-      && world::goes_after(record, self.bytes)
+      && world::goes_after(record, self.tip.bytes)
   }
 }
 
@@ -210,7 +200,7 @@ fn agreed(record: &Path, file: File) -> io::Result<Option<Image>> {
   file.seek(SeekFrom::Start(session.end))?;
   let half = BufReader::new((&file).take(host.start - session.end));
   let Ok(half) = serde_json::from_reader(half) else { return Ok(None) };
-  Ok(Some(Image { half, bytes: key.bytes, file, session, host }))
+  Ok(Some(Image { half, bytes: key.tip.bytes, file, session, host }))
 }
 
 /// The image of the life of an engine, written beside its record, which stands at its tip: each
