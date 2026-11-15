@@ -484,7 +484,7 @@ fix what your change broke, and report what was broken before.
   pi-ai in the cache of furb once a day, and the newer of the cache and the snapshot holds for each provider.
   `furb catalog [--update]` shows where the models came from and updates them at once; a source that fails leaves the
   last valid copy, and a life that stands again reads the caches again.
-- `python3 script/clean-caches.py [--scratch DIR] [--uv DIR]`: remove what earlier runs left in the caches of the machine,
+- `cargo xtask clean-caches [--scratch DIR] [--uv DIR]`: remove what earlier runs left in the caches of the machine,
   and nothing else: each scratch directory of a record that holds only its mark file and that no life holds, and, by
   `uv cache prune`, each copy of a wheel and each editable build of uv that no entry uses.
 - `uv run python script/links.py`: check that each link in a README that a package carries works on the page of the

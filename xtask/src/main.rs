@@ -3,9 +3,12 @@
 //! Each script of `script/` that runs on its own is a task too: its name is the name of its file,
 //! and its help is the first sentence of its docstring, so a script says what it does in one place.
 //! The tasks route to the tools that do the work (cargo, pre-commit, uv, bun), and hold no copy of
-//! their commands.
+//! their commands; a task that no tool does, as `clean-caches`, does its work here.
+
+mod caches;
 
 use std::{
+  ffi::OsStr,
   fs, io,
   path::{Path, PathBuf},
   process::{Command as Process, ExitCode},
@@ -59,6 +62,21 @@ enum Task {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     words: Vec<String>,
   },
+  /// Remove what earlier runs left in the caches of the machine, and nothing else.
+  ///
+  /// A scratch directory of a record that holds nothing but its mark, and that no life holds by a
+  /// lock on its mark, goes: a life makes it again from its record. The cache of uv is pruned,
+  /// which removes each unpacked wheel and each editable build that no entry points to. The prune
+  /// reads no config, since the project sets no-cache for uv, and a prune with it prunes an empty
+  /// cache.
+  CleanCaches {
+    /// The folder of the scratch directories of the records, by default the one of this machine.
+    #[arg(long, value_name = "DIR")]
+    scratch: Option<PathBuf>,
+    /// The cache of uv to prune, by default the one of this machine.
+    #[arg(long, value_name = "DIR")]
+    uv: Option<PathBuf>,
+  },
   /// Print each task and each option whose name or help holds each of the words, in any case.
   Search {
     #[arg(required = true)]
@@ -85,6 +103,10 @@ enum Fault {
   Read { path: PathBuf, source: io::Error },
   #[error("git {args} failed: {stderr}")]
   Git { args: String, stderr: String },
+  #[error(
+    "this machine has no folder of caches: name the folder of the scratch directories with --scratch"
+  )]
+  NoCache,
 }
 
 /// A script of `script/` that runs on its own, as a task.
@@ -136,6 +158,7 @@ fn run() -> Result<ExitCode, Fault> {
       }
       Ok(ExitCode::SUCCESS)
     }
+    Task::CleanCaches { scratch, uv } => caches::clean(&root, scratch, uv.as_deref()),
     Task::Search { words } => {
       search(&command, &words);
       Ok(ExitCode::SUCCESS)
@@ -303,7 +326,7 @@ fn git(root: &Path, args: &[&str]) -> Result<String, Fault> {
 
 /// Run a program in the root of the tree and give its exit code, so the task fails as the program
 /// fails.
-fn spawn(root: &Path, program: &str, args: &[&str]) -> Result<ExitCode, Fault> {
+fn spawn(root: &Path, program: &str, args: &[impl AsRef<OsStr>]) -> Result<ExitCode, Fault> {
   let status = Process::new(program)
     .args(args)
     .current_dir(root)
