@@ -284,21 +284,24 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     step = reply = note = to = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
+    def crafts(code):
+      return rung(code, to=stood)
+
     def placed(went):
-      return rung("stand()" + (went and "\ncd(" + repr(went) + ")"), to=stood)
+      return crafts("stand()" + (went and f"\ncd({went!r})"))
 
     def seeded():
-      went = placed(last[1])
+      placed(last[1])
       if last[4:]:
-        rung('debug(t"{standing()[4]=}")', to=stood)
-        rung(f"read({last[3]!r})", to=stood)
+        crafts('debug(t"{standing()[4]=}")')
+        crafts(f"read({last[3]!r})")
         for k in range(1 + (id == ROOT)):
           k and (yield "setup", id)
           for x in last[4]:
-            x[1] and x[3] == k and rung(f"rung(read({x[1]!r}, HIDDEN).content)", to=stood)
+            x[1] and x[3] == k and crafts(f"rung(read({x[1]!r}, HIDDEN).content)")
           for y in last[4]:
-            y[3] == k and y[2] and rung(y[2], to=stood)
-      return went
+            y[3] == k and y[2] and crafts(y[2])
+      return True
 
     def thread(of):
       return next((g for g in lineage(of) if prompted(g)), "")
@@ -447,7 +450,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             not waited
             and (
               word in written
-              or (kinds <= {"started", "ready", "done", "reply", "tell", "ran"} and seen.get(a[1]) == module())
+              or (kinds <= {"started", "ready", "done", "reply", "tell", "ran"} and seen.get(p) == module())
             )
           )
         )
@@ -494,7 +497,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           if (p := get(step)[2]) in barren:
             due.discard(p)
             took[step] = [*inbox.get(p, [])]
-          seen[step] = {**module()}
+            seen[p] = {**module()}
           with site.set(step):
             waiting[step] = reply = act("reply", id, controlled(idle), to)
         case ("ready", rid, _, word):
@@ -509,7 +512,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           pause(id, why)
         case ("done", about, *_) if about in barren:
           due.discard(about)
-          for fold in (barren, owed, wrote):
+          for fold in (barren, owed, wrote, seen):
             fold.pop(about, None)
           for message in inbox.pop(about, []):
             with site.set(message):
@@ -521,7 +524,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           awaited[rid] = r[4]
       elif a[0] == "done":
         running.discard(a[1])
-        for fold in (took, awaited, did, seen):
+        for fold in (took, awaited, did):
           fold.pop(a[1], None)
       if running:
         continue
