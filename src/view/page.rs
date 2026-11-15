@@ -637,9 +637,11 @@ fn line_of(why: &str) -> Option<usize> {
   })
 }
 
-/// The line of a word that made each act, in order: each act takes the next line that calls its
-/// kind by name. An act whose kind no later line calls takes the line of the act of its kind
-/// before it, as a loop makes many acts from one line, and the first of its kind takes none.
+/// The line of a word that made each act, in order: each act takes the first call of its kind by
+/// name that no act took, from the line of the act before it on, since a call in the arguments of
+/// another, as the chain of a prompt, makes its act first. An act whose kind no later line calls
+/// takes the line of the act of its kind before it, as a loop makes many acts from one line, and
+/// the first of its kind takes none.
 fn placed(word: &str, made: &[&Act]) -> Vec<Option<usize>> {
   let mut slots: Vec<(usize, &str)> = Vec::new();
   for (at, line) in word.split('\n').enumerate() {
@@ -649,18 +651,22 @@ fn placed(word: &str, made: &[&Act]) -> Vec<Option<usize>> {
       slots.extend(name.filter(|name| !name.is_empty()).map(|name| (at, name)));
     }
   }
-  let mut next = 0;
+  let mut taken = vec![false; slots.len()];
+  let mut from = 0;
   let mut last: HashMap<&str, usize> = HashMap::new();
   made
     .iter()
     .map(|act| {
       let kind = act.kind.as_str();
-      let Some(found) = slots[next..].iter().position(|slot| slot.1 == kind) else {
+      let free = |at: &usize| !taken[*at] && slots[*at].1 == kind;
+      let Some(found) = (from..slots.len()).find(free) else {
         return last.get(kind).copied();
       };
-      next += found + 1;
-      last.insert(kind, slots[next - 1].0);
-      Some(slots[next - 1].0)
+      let line = slots[found].0;
+      taken[found] = true;
+      from = slots.iter().position(|slot| slot.0 == line).unwrap_or(found);
+      last.insert(kind, line);
+      Some(line)
     })
     .collect()
 }

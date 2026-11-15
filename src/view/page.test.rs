@@ -634,3 +634,32 @@ fn a_retry_says_its_attempt_and_the_time_left_never_more_than_its_wait() {
   let opus = Maker::Model { model: "claude-cli:opus".to_owned(), effort: Some("high".to_owned()) };
   assert_eq!([opus.shown(), Maker::Engine.shown()], ["opus/high", "furb"]);
 }
+
+#[test]
+fn an_act_made_inside_a_call_on_its_line_marks_that_line_and_not_a_later_one() {
+  // Each prompt names its chain in its arguments, so the word makes the chain before the prompt
+  // of the same line.
+  let word = "bench = prompt(str, 'a', on=chain('bench'))\nboot = prompt(str, 'b', on=chain('boot'))\nawait wait(5, bench)\nlines = await prompt(str, 'c', on=chain('count'))\nawait wait(600, bench)";
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "measure", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
+    json!(["chain", "chain2", "rung1", "", "bench", ""]),
+    json!(["prompt", "prompt2", "rung1", "chain2", "str", "a", ""]),
+    json!(["chain", "chain3", "rung1", "", "boot", ""]),
+    json!(["prompt", "prompt3", "rung1", "chain3", "str", "b", ""]),
+    json!(["wait", "wait1", "rung1", "chain1", 5.0, "prompt2"]),
+  ];
+  let mut streams = Streamed::default();
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let runs: Vec<usize> = block
+    .lines
+    .iter()
+    .filter(|line| matches!(line.mark, Mark::Runs { .. }))
+    .map(|line| line.number)
+    .collect();
+  assert_eq!(runs, [3]);
+}

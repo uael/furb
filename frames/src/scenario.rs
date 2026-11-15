@@ -496,7 +496,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           "Where does the list",
         ),
         step("a", &[Act::Pointer { on: "Resolve", button: 35 }], "Resolve"),
-        step("b", &[Act::Pointer { on: "Resolve", button: 0 }], "Reopen"),
+        step("b", &[Act::Pointer { on: "Resolve", button: 0 }], "✓ Resolved"),
         step("c", &[Act::Pointer { on: "opus/high", button: 64 }], "Place the list"),
       ],
     }),

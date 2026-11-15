@@ -222,6 +222,8 @@ impl Rig {
       ("XDG_CACHE_HOME", at("cache")),
       ("FURB_CONFIG_DIR", at("config")),
       ("FURB_CLAUDE_BIN", self.claude().display().to_string()),
+      // A click on a link opens no page in front of the person at this machine.
+      ("BROWSER", "true".to_owned()),
     ];
     environment.extend(still);
     environment

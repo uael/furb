@@ -155,10 +155,14 @@ pub fn cache() -> Option<PathBuf> {
   base.map(|base| base.join("furb"))
 }
 
-/// An address opened in the default browser of this machine, by the opener of its system, which
-/// runs apart: the call ends once the opener started.
+/// An address opened in the default browser of this machine, by the program that `BROWSER` names
+/// when it names one, as the tools of a terminal agree, else by the opener of its system. The
+/// opener runs apart: the call ends once it started.
 pub fn browse(address: &str) -> io::Result<()> {
-  let mut command = if cfg!(target_os = "macos") {
+  let named = env::var_os("BROWSER").filter(|one| !one.is_empty());
+  let mut command = if let Some(program) = named {
+    Command::new(program)
+  } else if cfg!(target_os = "macos") {
     Command::new("open")
   } else if cfg!(windows) {
     let mut command = Command::new("rundll32");
