@@ -2,7 +2,15 @@
 
 use serde_json::{Value, json};
 
-use super::{Named, said, word};
+use furb::view::{Named, said};
+
+/// The word by which the operator names a session, as the skill naming says it.
+fn word(name: &str) -> String {
+  format!(
+    "act(\"rename_session\", \"\", lambda id: (yield \"done\", id, {}))",
+    Value::String(name.to_owned())
+  )
+}
 
 /// The name that facts fold, with the words of the rungs of the operator or not.
 fn folded(facts: &[Value], words: bool) -> Named {

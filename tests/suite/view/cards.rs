@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::view::{Card, Fold, Held, Part, Skill, Standing};
+use furb::view::{Card, Fold, Held, Part, Skill, Standing};
 
 fn card(standing: Standing, readers: &[&str]) -> Card {
   Card {

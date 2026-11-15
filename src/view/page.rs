@@ -797,7 +797,3 @@ fn placed(word: &str, made: &[&Act]) -> Vec<Option<usize>> {
 fn comprehends(code: &str) -> bool {
   !code.trim_start().starts_with("for ") && code.contains(" for ") && code.contains(" in ")
 }
-
-#[cfg(test)]
-#[path = "page.test.rs"]
-mod tests;

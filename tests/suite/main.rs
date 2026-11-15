@@ -13,3 +13,4 @@ mod async_open;
 mod examples;
 mod promise;
 mod tip;
+mod view;

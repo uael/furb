@@ -254,7 +254,3 @@ pub(super) fn folded(
   walk.level(&top, 0, &key, "");
   walk.out
 }
-
-#[cfg(test)]
-#[path = "ladder.test.rs"]
-mod tests;

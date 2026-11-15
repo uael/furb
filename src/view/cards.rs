@@ -141,7 +141,3 @@ fn asked(node: &ThreadNode, rows: &Rows<'_>) -> Option<String> {
     }
   }
 }
-
-#[cfg(test)]
-#[path = "cards.test.rs"]
-mod test;

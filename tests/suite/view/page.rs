@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 
-use crate::view::{
-  Answered, Block, Context, Fold, Held, Line, Made, Maker, Mark, Output, Portion, Reach, Read,
-  Reply, Retrying, Said, Saying, Standing, Streamed, Thought, Work, declined,
+use furb::view::{
+  Answered, Block, Context, Fold, Held, Line, Made, Maker, Mark, Output, Page, Portion, Reach,
+  Read, Reply, Retrying, Said, Saying, Standing, Streamed, Thought, Work, declined,
 };
 
 /// The acts of a list of facts as a host holds them, with what the host heard at the second 100.
@@ -86,10 +86,7 @@ fn an_older_page_holds_the_exchanges_before_the_one_that_it_names_with_their_num
   assert_eq!(tip.exchanges[0].block.as_ref().unwrap().lines[0].number, 3);
   let older = held.page(&streams, "prompt1", Reach { before: Some(1), limit: 1 });
   assert_eq!((older.above, older.exchanges.len(), older.exchanges[0].at), (0, 1, 0));
-  assert_eq!(
-    held.page(&streams, "reply9", Reach { before: None, limit: 1 }),
-    super::Page::default()
-  );
+  assert_eq!(held.page(&streams, "reply9", Reach { before: None, limit: 1 }), Page::default());
 }
 
 #[test]
@@ -128,7 +125,7 @@ fn a_word_that_came_whole_waits_from_its_first_line_and_no_line_is_written() {
   streams.wrote("rung3", ["d = 4\ne = 5", ""], 101_000);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.clone().unwrap();
-  let runs = Mark::Runs { work: Work::Command, began: streams.began.get("rung3").copied() };
+  let runs = Mark::Runs { work: Work::Command, began: Some(100_000) };
   assert_eq!(&texts(&block)[3..], [(6, "d = 4", &runs), (7, "e = 5", &Mark::Ran)]);
 }
 
@@ -319,9 +316,20 @@ fn an_agent_says_when_it_began_when_it_ended_and_the_line_where_it_stands() {
 #[test]
 fn a_quote_stands_as_its_binding_and_a_string_of_many_lines_as_one_line() {
   let word = "<s:plan>\nread it\n</s:plan>\nx = \"\"\"a\nb\"\"\"\ny = 1";
-  let shown = super::shown(word);
-  let lines: Vec<(usize, &str)> = shown.iter().map(|(at, text)| (*at, text.as_str())).collect();
-  assert_eq!(lines, [(0, "plan = 'read it\\n'"), (3, "x = \"\"\"a\\nb\"\"\""), (5, "y = 1")]);
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "plan it", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
+    json!(["done", "run1", "chain1", null]),
+    json!(["done", "rung1", "chain1", null]),
+  ];
+  let mut streams = Streamed::default();
+  let page = held(facts, &mut streams).page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.clone().unwrap_or_else(|| panic!("{page:?}"));
+  let lines: Vec<(usize, &str)> =
+    texts(&block).into_iter().map(|(at, text, _)| (at, text)).collect();
+  assert_eq!(lines, [(1, "plan = 'read it\\n'"), (4, "x = \"\"\"a\\nb\"\"\""), (6, "y = 1")]);
 }
 
 #[test]
@@ -645,7 +653,10 @@ fn a_host_keeps_only_the_thoughts_that_a_page_shows() {
   let before = page(&streams);
   held.shown(&mut streams);
   assert_eq!(page(&streams), before, "the page is the same");
-  let mut kept: Vec<&str> = streams.wrote.keys().map(String::as_str).collect();
+  // The host keeps the streams in the image of the life, whose form names the rung of each thought.
+  let image = serde_json::to_value(&streams).unwrap_or_default();
+  let mut kept: Vec<&str> =
+    image["wrote"].as_object().into_iter().flatten().map(|(rung, _)| rung.as_str()).collect();
   kept.sort_unstable();
   assert_eq!(kept, ["rung3", "rung4"]);
 }

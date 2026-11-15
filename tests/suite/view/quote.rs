@@ -1,6 +1,6 @@
 //! The quotes of a word, as each window reads them.
 
-use super::{quotes, writing};
+use furb::view::{quotes, writing};
 
 #[test]
 fn a_text_gives_each_quote_that_closes_with_the_binding_that_it_makes() {

@@ -119,7 +119,3 @@ pub fn writing(text: &str, thinking: &str) -> Writing {
   let last = said.trim_end_matches('\n').split('\n').next_back().unwrap_or_default();
   Writing { lines, tail: last.trim().to_owned(), numbers, count }
 }
-
-#[cfg(test)]
-#[path = "quote.test.rs"]
-mod tests;

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use serde_json::{Value, json};
 
-use crate::view::{Act, Fold, Held, Rung, SHOWN, Shown};
+use furb::view::{Act, Fold, Held, Rung, SHOWN, Shown};
 
 fn folded(facts: impl IntoIterator<Item = Value>) -> Vec<Act> {
   let mut fold = Fold::default();
@@ -19,21 +19,13 @@ fn folded(facts: impl IntoIterator<Item = Value>) -> Vec<Act> {
   all
 }
 
-/// The ladder of a chain from acts that the held meaning hears in the order they began, as a host
-/// tells them.
-fn ladder(
-  acts: &[Act],
-  chain: &str,
-  opened: &[String],
-  owed: &[String],
-  taken: Option<&[String]>,
-  shown: Shown,
-) -> Vec<Rung> {
+/// The held meaning of acts that it hears in the order they began, as a host tells them.
+fn held(acts: &[Act]) -> Held {
   let mut held = Held::default();
   for act in acts {
     held.heard(act);
   }
-  held.ladder(chain, None, opened, owed, taken, shown)
+  held
 }
 
 /// Each line of a ladder as a short text: a step as its id, an ear as its rungs, and a fold as
@@ -85,12 +77,12 @@ fn eight() -> Vec<Value> {
 fn the_ladder_shows_the_last_prompts_and_folds_the_earlier_ones_until_the_window_opens_them() {
   let acts = folded(eight());
   let none: Vec<String> = Vec::new();
-  let got = lines(&ladder(&acts, "chain1", &none, &none, None, SHOWN));
+  let got = lines(&held(&acts).ladder("chain1", None, &none, &none, None, SHOWN));
   assert_eq!(got[0], "0 more 2 prompts:chain1 prompt");
   assert_eq!(&got[1..3], ["0 prompt3", "1 rung3"]);
   assert_eq!(got.len(), 13);
   let opened = vec!["prompts:chain1".to_owned()];
-  let all = lines(&ladder(&acts, "chain1", &opened, &none, None, SHOWN));
+  let all = lines(&held(&acts).ladder("chain1", None, &opened, &none, None, SHOWN));
   assert_eq!(all.len(), 16);
   assert_eq!(&all[..2], ["0 prompt1", "1 rung1"]);
 }
@@ -103,7 +95,7 @@ fn a_step_under_which_the_operator_is_asked_stays_shown_and_a_fold_holds_two_ste
   let acts = folded(facts);
   let owed = vec!["prompt20".to_owned()];
   let shown = Shown { prompts: 5, rungs: 4 };
-  let got = lines(&ladder(&acts, "chain1", &[], &owed, None, shown));
+  let got = lines(&held(&acts).ladder("chain1", None, &[], &owed, None, shown));
   // The prompt over the question shows with its rung and the question, and the lone prompts
   // around it show too, since a fold holds two steps in a row at least.
   assert_eq!(&got[..4], ["0 prompt1", "1 rung1", "0 prompt2", "1 rung2"]);
@@ -113,7 +105,8 @@ fn a_step_under_which_the_operator_is_asked_stays_shown_and_a_fold_holds_two_ste
   assert!(got.iter().all(|line| !line.contains("more")));
   // A branch shows only the messages that it took.
   let taken = vec!["prompt7".to_owned()];
-  let branch = lines(&ladder(&acts, "chain1", &[], &owed, Some(taken.as_slice()), shown));
+  let branch =
+    lines(&held(&acts).ladder("chain1", None, &[], &owed, Some(taken.as_slice()), shown));
   assert_eq!(branch, ["0 prompt7", "1 rung7"]);
 }
 
@@ -129,6 +122,6 @@ fn an_act_told_before_the_act_that_made_it_stands_under_its_maker() {
   let last = told.len() - 1;
   told.swap(at + 1, last);
   let none: Vec<String> = Vec::new();
-  let got = lines(&ladder(&told, "chain1", &none, &none, None, SHOWN));
+  let got = lines(&held(&told).ladder("chain1", None, &none, &none, None, SHOWN));
   assert_eq!(&got[got.len() - 2..], ["0 prompt8", "1 rung8"]);
 }

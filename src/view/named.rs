@@ -104,7 +104,3 @@ pub fn said(word: &str) -> Option<String> {
 pub fn word(name: &str) -> String {
   format!("{}{}{}", WORD.0, Value::String(name.to_owned()), WORD.1)
 }
-
-#[cfg(test)]
-#[path = "named.test.rs"]
-mod tests;
