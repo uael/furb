@@ -11,11 +11,11 @@ use std::{
 };
 
 use furb_host::protocol::{Answer, Verb};
-use furb_window::{Options, open};
+use furb_window::{Options, open, tokens::AWAY};
 use opentui::testing::TestApp;
 
 use crate::{
-  cards::{AWAY, app, options, row, shows},
+  cards::{app, options, row, shows},
   daemon::{ANSWERS, Daemon, PATIENCE},
   screens::screen,
 };

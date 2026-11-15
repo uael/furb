@@ -201,7 +201,9 @@ read each capture that changed.
 
 `cargo build -p furb-cli -p furb-window -p furb-frames`, then `target/debug/furb-frames capture`, captures the real
 window in tmux at three sizes and writes the recording, the key frames, the probes and the compare of each scenario
-in `target/frames`; `target/debug/furb-frames capture 16` does one scenario and prints its compare.
+in `target/frames`; `target/debug/furb-frames capture 16` does one scenario and prints its compare. The window of a
+capture stands on a still clock, `FURB_STILL_CLOCK`, so no mark moves and no time passes in it, and two captures of
+one commit write the same frame at each step.
 
 | File | What it holds |
 | --- | --- |

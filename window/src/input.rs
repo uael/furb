@@ -176,12 +176,23 @@ impl Model {
   }
 
   /// The record of a new session, in the sessions of the project of the folder of the window,
-  /// named by the second and the moment of the window, so no two sessions share it.
+  /// named by the second and the moment of the window, so no two windows share it, and past each
+  /// record that the window knows, so no two sessions of one window share it when its clocks stand
+  /// still.
   fn record(&self) -> String {
     let second = Timestamp::from_second(i64::try_from(self.now).unwrap_or_default());
     let stamp = second.unwrap_or_default().strftime("%Y-%m-%dT%H-%M-%S");
-    let name = format!("{stamp}-{:04x}.jsonl", self.moved.as_nanos() % 0x1_0000);
-    self.folder.join(".furb").join("sessions").join(name).display().to_string()
+    let sessions = self.folder.join(".furb").join("sessions");
+    let named = |n: u128| sessions.join(format!("{stamp}-{:04x}.jsonl", n % 0x1_0000));
+    let known = |life: &str| {
+      self.holds.keys().any(|held| held.1 == life)
+        || self.machines.iter().any(|one| one.cards.iter().any(|card| card.life == life))
+    };
+    let mut n = self.moved.as_nanos();
+    while known(&named(n).display().to_string()) {
+      n += 1;
+    }
+    named(n).display().to_string()
   }
 
   /// The first message of the queue of the input, once no message waits for its answer and the

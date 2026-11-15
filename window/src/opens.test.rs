@@ -64,6 +64,7 @@ fn failed(system: System) -> Vec<String> {
     kept: PathBuf::new(),
     zone: TimeZone::UTC,
     clock: || 0,
+    still: false,
     system,
   };
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);
@@ -96,6 +97,7 @@ fn a_page_refused_while_its_life_opens_ends_the_open_on_its_card_too() {
     kept: PathBuf::new(),
     zone: TimeZone::UTC,
     clock: || 0,
+    still: false,
     system: System::MacOs,
   };
   let told = Told { name: "mac".to_owned(), link: Link::Listed, ..Told::default() };

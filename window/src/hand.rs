@@ -32,11 +32,8 @@ use crate::{
   model::{Link, Model, Told},
   pick::Pick,
   question::Keyed,
-  tokens::{Role, SIDE, Tokens},
+  tokens::{AWAY, Role, SIDE, Tokens},
 };
-
-/// How long the hand stays away from the list before a card changes its place.
-const AWAY: Duration = Duration::from_millis(1500);
 
 /// How long the window waits for a machine before it says that it waits.
 const PATIENCE: Duration = Duration::from_millis(400);
@@ -64,6 +61,8 @@ const WHEEL: isize = 3;
 struct Window {
   screen: Screen<Model>,
   clock: fn() -> u64,
+  /// Whether the clocks of the window stand still.
+  still: bool,
   kept: PathBuf,
   /// When the window opened, on the clock of the app.
   born: Instant,
@@ -104,6 +103,7 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   let window = Window {
     screen: drawn(app, model, &area),
     clock: options.clock,
+    still: options.still,
     kept: options.kept,
     born: app.now(),
     touched: None,
@@ -272,14 +272,16 @@ fn tell<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
 /// A change of the model, which each part then shows, and the timer of the loaders.
 fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> T {
   let mut held = window.borrow_mut();
-  let (now, moved) = ((held.clock)(), app.now().saturating_duration_since(held.born));
+  let moved =
+    if held.still { Duration::ZERO } else { app.now().saturating_duration_since(held.born) };
+  let now = (held.clock)();
   let given = held.screen.tell(|model| {
     (model.now, model.moved) = (now, moved);
     let given = change(model);
     model.questioned();
     given
   });
-  match (held.screen.model.moves(), held.moves) {
+  match (held.screen.model.moves() && !held.still, held.moves) {
     (true, None) => {
       let on = Rc::clone(window);
       held.moves = Some(app.set_interval(MOVES, move |cx| tick(cx.app(), &on)));

@@ -34,6 +34,10 @@ const CLAUDE: &str = include_str!("../../src/world/provider/claude/fake-claude.s
 /// The text of the empty input, which a window shows once it is ready for a walk.
 pub(crate) const READY: &str = "Ask for a change";
 
+/// The second at which the clocks of the window stand still, 09:12 of the first day of 2026, so two
+/// captures of one walk are equal: no mark of the window moves, and no time passes in it.
+const STILL: &str = "1767258720";
+
 /// How long a step waits for its screen, which a loaded machine does not pass.
 const PATIENCE: Duration = Duration::from_secs(30);
 
@@ -112,6 +116,10 @@ impl Rig {
   async fn captured(&self, walk: &Walk, size: Size) -> Result<Captured, Error> {
     for (n, message) in walk.sessions.iter().enumerate() {
       self.seeded(n, message).await?;
+      // A card stands by the second of its last fact, so each session takes a second of its own,
+      // and the list orders them the same way at each capture.
+      let into = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().subsec_nanos();
+      sleep(Duration::from_secs(1).saturating_sub(Duration::from_nanos(u64::from(into)))).await;
     }
     let mut daemon = self.daemon().await?;
     let name =
@@ -179,6 +187,7 @@ impl Rig {
       ("XDG_CACHE_HOME", at("cache")),
       ("FURB_CONFIG_DIR", at("config")),
       ("FURB_CLAUDE_BIN", self.claude().display().to_string()),
+      ("FURB_STILL_CLOCK", STILL.to_owned()),
     ]
   }
 
@@ -386,6 +395,7 @@ impl Tmux {
         let both = if *button < 32 { format!("{press}\x1b[<{button};{col};{row}m") } else { press };
         self.run(&["send-keys", "-t", "w", "-l", &both]).await.map(drop)
       }
+      Act::Until(text) => self.shows("until", text).await,
     }
   }
 

@@ -42,6 +42,10 @@ pub(crate) const APART: usize = 3;
 /// of the list of each key.
 pub(crate) const KEYS: usize = 12;
 
+/// How long the hand stays away from the list before a card changes its place: a change that the
+/// list hears while the hand is on it waits until then, so the list moves under no pointer.
+pub const AWAY: Duration = Duration::from_millis(1500);
+
 /// The columns of a list part over the window, as Go to, the commands and each key.
 pub(crate) const PART: u16 = 60;
 

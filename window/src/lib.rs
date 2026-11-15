@@ -64,6 +64,10 @@ pub struct Options {
   pub zone: TimeZone,
   /// The second of the clock, from the epoch of unix.
   pub clock: fn() -> u64,
+  /// Whether the clocks of the window stand still, as a capture of its frames asks with
+  /// `FURB_STILL_CLOCK`, the second of its clock: no mark moves and no time passes, so two
+  /// captures of one walk are equal.
+  pub still: bool,
   /// The system of the client, which says how a text of the window writes a key.
   pub system: System,
 }
@@ -76,12 +80,20 @@ impl Options {
     // The daemon names a record by its path with no link, so a new record of the folder takes it.
     let folder = dunce::canonicalize(&folder).unwrap_or(folder);
     let kept = world::cache().ok_or(Error::NoCache)?.join("window").join("cards.json");
-    let clock = || SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs());
+    let clock = || {
+      let wall = || SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs());
+      still().unwrap_or_else(wall)
+    };
     let (zone, system) = (TimeZone::system(), System::here());
     // The home holds no link either, so a path of the folder shows its home as `~`.
     let home = env::home_dir().map(|home| dunce::canonicalize(&home).unwrap_or(home));
-    Ok(Self { folder, home, kept, zone, clock, system })
+    Ok(Self { folder, home, kept, zone, clock, still: still().is_some(), system })
   }
+}
+
+/// The second at which the clocks of the window stand still, from `FURB_STILL_CLOCK`.
+fn still() -> Option<u64> {
+  env::var("FURB_STILL_CLOCK").ok()?.parse().ok()
 }
 
 /// The window on the terminal of the program, on the daemon of this machine, until the operator

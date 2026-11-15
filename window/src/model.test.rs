@@ -43,6 +43,7 @@ fn model(cards: Vec<Card>, rows: u16) -> Model {
     kept: PathBuf::new(),
     zone: TimeZone::UTC,
     clock: || 0,
+    still: false,
     system: System::MacOs,
   };
   let mut model = Model::new(vec![told], (100, rows), Tokens::on(None), &options);
@@ -184,6 +185,7 @@ fn shown(folder: &str, home: &str) -> String {
     kept: PathBuf::new(),
     zone: TimeZone::UTC,
     clock: || 0,
+    still: false,
     system: System::MacOs,
   };
   Model::new(Vec::new(), (100, 30), Tokens::on(None), &options).folder_shown()

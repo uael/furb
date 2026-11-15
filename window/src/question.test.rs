@@ -43,6 +43,7 @@ fn asked(shape: &str, system: System) -> Model {
     kept: PathBuf::new(),
     zone: TimeZone::UTC,
     clock: || 0,
+    still: false,
     system,
   };
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);

@@ -7,11 +7,11 @@
 use std::time::Duration;
 
 use furb_host::protocol::{Answer, Verb};
-use furb_window::open;
+use furb_window::{open, tokens::AWAY};
 use opentui::testing::TestApp;
 
 use crate::{
-  cards::{AWAY, app, options, row, shows},
+  cards::{app, options, row, shows},
   daemon::{
     ANSWERS, ASKS, CHOOSES, CONFIRMS, COUNTS, Daemon, PATIENCE, Peer, READ, TELLS, TICKS, TWICE,
   },

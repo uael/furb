@@ -68,6 +68,7 @@ fn opened(end: Page) -> Model {
     kept: PathBuf::new(),
     zone: TimeZone::UTC,
     clock: || 0,
+    still: false,
     system: System::MacOs,
   };
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);

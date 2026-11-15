@@ -3,11 +3,14 @@
 #![cfg(test)]
 
 use furb_host::protocol::{Answer, Verb};
-use furb_window::{open, tokens::Loader};
+use furb_window::{
+  open,
+  tokens::{AWAY, Loader},
+};
 use opentui::{native::Capture, style::Color, testing::TestApp};
 
 use crate::{
-  cards::{AWAY, app, options, row, shows},
+  cards::{app, options, row, shows},
   daemon::{ANSWERS, Daemon, FAILS, LONG, PATIENCE, Peer, THINKS},
   screens::screen,
 };
