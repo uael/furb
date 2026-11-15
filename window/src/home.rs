@@ -35,7 +35,8 @@ impl Model {
   }
 
   /// What the home says: what waits for the operator, what worked with no view, each machine that
-  /// is lost with its cause, and the keys that lead out.
+  /// is lost with its cause, and the keys that lead out. It says nothing before it knows what
+  /// stands, or before the patience of a dial passed, so no row moves when the machine answers.
   fn says(&self) -> Vec<Line> {
     let t = &self.tokens;
     let (prose, muted) = (t.style(Role::Prose), t.style(Role::Muted));
@@ -45,6 +46,9 @@ impl Model {
       lines.iter().map(|line| self.said(line, style, "")).chain([Vec::new()]).collect::<Vec<_>>()
     };
     let mut rows = vec![vec![run(" furb", t.style(Role::Title))], Vec::new()];
+    if self.settled.is_empty() && !self.known() && !self.slow {
+      return rows;
+    }
     if !self.settled.is_empty() {
       let needs = self.settled.iter().filter(|one| self.needs(&one.1, &one.2)).count();
       let needed = self.key(Does::Needed);
