@@ -21,7 +21,7 @@ class Request2(TypedDict):
 class Request3(TypedDict):
   """
   The projects of the records that `list` gives with the same config, as [`Project::of`] folds
-  them.
+  them, then the folder of the sessions with no project, `sessions` in that config folder.
   """
 
   id: int
@@ -121,11 +121,12 @@ class Request10(TypedDict):
 
 class Request11(TypedDict):
   """
-  The life of a record opened, in a folder or in the folder of its record. A life that this
-  open makes stands on the actor, the roster and the skills that the peer names, reads the
-  settings of the user in the folder `config` and runs the claude command line `claude` when
-  the peer names them, as the window of the peer reads them, and the peer answers each request
-  of its models in their place when it asks to, as a demo does.
+  The life of a record opened, in a folder, else in the checkout whose `.furb/sessions` holds
+  it, else in the folder of its record. A life that this open makes stands on the actor, the
+  roster and the skills that the peer names, reads the settings of the user in the folder
+  `config` and runs the claude command line `claude` when the peer names them, as the window
+  of the peer reads them, and the peer answers each request of its models in their place when
+  it asks to, as a demo does.
   With `attach`, the peer attaches the life in the same step, from that place in its log, so
   the life has a holder before its grace can pass.
   """
@@ -1208,13 +1209,15 @@ class Listed(TypedDict):
 
 class Project(TypedDict):
   """
-  A project of the machine: its main checkout, the count of the records of its sessions, and the
-  second of the epoch of the last write of one of them.
+  A project of the machine: its main checkout, the count of the records of its sessions, the
+  second of the epoch of the last write of one of them, and whether the folder holds instead the
+  sessions that stand in no project, each in a folder of its own that a window names in it.
   """
 
   folder: str
   sessions: int
   used: NotRequired[int | None]
+  detached: NotRequired[bool]
 
 
 class Model(TypedDict):
@@ -3181,4 +3184,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 63
+PROTOCOL = 64

@@ -771,7 +771,51 @@ async fn the_projects_are_those_of_the_list_with_their_sessions_and_their_last_u
   let folder = at.join("main").display().to_string();
   let used = Some(2_000_000);
   let projects = window.ask(Verb::Projects { config: None }).await;
-  assert_eq!(projects, Ok(Answer::Projects(vec![Project { folder, sessions: 2, used }])));
+  let alone = at.join("config").join("sessions").display().to_string();
+  let wanted = vec![
+    Project { folder, sessions: 2, used, detached: false },
+    Project { folder: alone, sessions: 0, used: None, detached: true },
+  ];
+  assert_eq!(projects, Ok(Answer::Projects(wanted)));
+}
+
+#[tokio::test]
+async fn a_session_with_no_project_opens_in_a_folder_of_its_own_and_stands_in_no_project() {
+  let at = place();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let alone = at.join("config").join("sessions");
+  let folder = alone.join("2026-01-01T09-00-00-0000");
+  let record = folder.join(".furb").join("sessions").join("one.jsonl");
+  let life = record.display().to_string();
+  let verb = Verb::Open {
+    life: life.clone(),
+    cwd: None,
+    actor: None,
+    roster: None,
+    skills: None,
+    config: None,
+    claude: None,
+    answers: false,
+    attach: None,
+  };
+  assert_eq!(window.ask(verb).await, Ok(Answer::Done));
+  let cwd = window.ask(Verb::Cwd { life: life.clone(), on: None }).await;
+  assert_eq!(cwd, Ok(Answer::Value(json!(folder.display().to_string()))));
+  let listed = window.listed().await;
+  assert_eq!(
+    listed.iter().map(|one| (&*one.life, one.project.as_deref())).collect::<Vec<_>>(),
+    [(&*life, None)]
+  );
+  let projects = window.ask(Verb::Projects { config: None }).await;
+  let Ok(Answer::Projects(projects)) = projects else { panic!("{projects:?}") };
+  let wanted = Project {
+    folder: alone.display().to_string(),
+    sessions: 1,
+    used: projects[0].used,
+    detached: true,
+  };
+  assert_eq!(projects, [wanted]);
 }
 
 #[cfg(unix)]

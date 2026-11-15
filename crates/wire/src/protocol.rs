@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 63;
+pub const PROTOCOL: u32 = 64;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -124,7 +124,7 @@ pub enum Verb {
     config: Option<String>,
   },
   /// The projects of the records that `list` gives with the same config, as [`Project::of`] folds
-  /// them.
+  /// them, then the folder of the sessions with no project, `sessions` in that config folder.
   Projects {
     #[serde(default)]
     config: Option<String>,
@@ -180,11 +180,12 @@ pub enum Verb {
   Plays {
     life: String,
   },
-  /// The life of a record opened, in a folder or in the folder of its record. A life that this
-  /// open makes stands on the actor, the roster and the skills that the peer names, reads the
-  /// settings of the user in the folder `config` and runs the claude command line `claude` when
-  /// the peer names them, as the window of the peer reads them, and the peer answers each request
-  /// of its models in their place when it asks to, as a demo does.
+  /// The life of a record opened, in a folder, else in the checkout whose `.furb/sessions` holds
+  /// it, else in the folder of its record. A life that this open makes stands on the actor, the
+  /// roster and the skills that the peer names, reads the settings of the user in the folder
+  /// `config` and runs the claude command line `claude` when the peer names them, as the window
+  /// of the peer reads them, and the peer answers each request of its models in their place when
+  /// it asks to, as a demo does.
   /// With `attach`, the peer attaches the life in the same step, from that place in its log, so
   /// the life has a holder before its grace can pass.
   Open {
@@ -1066,13 +1067,16 @@ pub enum Change {
   Untracked,
 }
 
-/// A project of the machine: its main checkout, the count of the records of its sessions, and the
-/// second of the epoch of the last write of one of them.
+/// A project of the machine: its main checkout, the count of the records of its sessions, the
+/// second of the epoch of the last write of one of them, and whether the folder holds instead the
+/// sessions that stand in no project, each in a folder of its own that a window names in it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Project {
   pub folder: String,
   pub sessions: usize,
   pub used: Option<u64>,
+  #[serde(default)]
+  pub detached: bool,
 }
 
 impl Project {
@@ -1084,7 +1088,12 @@ impl Project {
       let Some(folder) = &listed.project else { continue };
       match projects.iter_mut().find(|one| &one.folder == folder) {
         Some(one) => (one.sessions, one.used) = (one.sessions + 1, one.used.max(listed.used)),
-        None => projects.push(Self { folder: folder.clone(), sessions: 1, used: listed.used }),
+        None => projects.push(Self {
+          folder: folder.clone(),
+          sessions: 1,
+          used: listed.used,
+          detached: false,
+        }),
       }
     }
     projects.sort_by(|one, other| other.used.cmp(&one.used).then(one.folder.cmp(&other.folder)));

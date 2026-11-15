@@ -15,8 +15,8 @@ use furb_client::{Asked, Chosen, Outgoing, Target};
 use crate::{
   keys::Does,
   line::{Line, clipped, cut, run, spread, wrapped},
-  list::project,
-  model::{Key, Model},
+  list::{NO_PROJECT, project},
+  model::{Key, Model, Told},
   thread::{Click, Hot, Row, columns, width},
   tokens::{APART, Loader, Role, WORKS},
 };
@@ -632,7 +632,7 @@ impl Model {
     let raised = Style::new().bg(t.raised);
     let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
     let machine = if at == 0 { "This computer" } else { &self.client.machines[at].name };
-    let project = named(folder);
+    let project = self.folder_named(at, folder);
     let badge = self.badge(&project);
     let gap = || run(" ".repeat(APART), raised);
     let mut left: Line = switch.into();
@@ -720,7 +720,9 @@ impl Model {
     let (at, life, open) = match self.client.target() {
       Target::Thread(key) => (key.0, key.1, true),
       Target::Session(at, life) => (at, life, false),
-      Target::New(_, folder) => return format!("{} · new session", named(&folder)),
+      Target::New(at, folder) => {
+        return format!("{} · new session", self.folder_named(at, &folder));
+      }
     };
     let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     let card = cards.iter().find(|card| card.life == life);
@@ -806,6 +808,13 @@ impl Model {
     }
   }
 
+  /// The name of the project of a folder of a machine where a new session runs: the last part of
+  /// the folder, or that it has none for a folder in that of the sessions with no project.
+  pub(crate) fn folder_named(&self, at: usize, folder: &str) -> String {
+    let alone = self.client.machines.get(at).and_then(Told::detached).map(Path::new);
+    if Path::new(folder).parent() == alone { NO_PROJECT.to_owned() } else { named(folder) }
+  }
+
   /// The effort that a model of the catalog of a machine takes when none is named.
   fn default_effort(&self, at: usize, model: &str) -> Option<String> {
     let offered = self.client.machines.get(at)?.models.as_deref().unwrap_or_default();
@@ -817,7 +826,7 @@ impl Model {
   /// session of its project, else the default actor of the catalog of the machine.
   fn opens_on(&self, at: usize, folder: &str) -> Option<(String, Option<String>)> {
     let told = self.client.machines.get(at)?;
-    let here = named(folder);
+    let here = self.folder_named(at, folder);
     let mut ours = told.cards.iter().rev().filter(|card| project(card) == here);
     let offered = told.models.as_deref().unwrap_or_default();
     // A card names the model of its thread with no effort, and a new session on that model
@@ -992,11 +1001,11 @@ impl Model {
       Target::Session(at, _) | Target::New(at, _) => at,
     };
     let name = if at == 0 { "This computer" } else { &self.client.machines[at].name };
-    let text = if machine {
-      format!("  {name} · {}", self.folder_shown())
-    } else {
-      format!("  {}", self.folder_shown())
-    };
+    // A session with no project runs in a folder of its own, not in the folder of the window.
+    let alone =
+      self.client.target_folder().filter(|(at, one)| self.folder_named(*at, one) == NO_PROJECT);
+    let folder = alone.map_or_else(|| self.folder_shown(), |(_, one)| self.homed(&one));
+    let text = if machine { format!("  {name} · {folder}") } else { format!("  {folder}") };
     let branch = self.client.target_folder().and_then(|(at, folder)| {
       let changes = self.client.changes(at, &folder)?;
       let count = (!changes.files.is_empty()).then(|| format!(" ±{}", changes.files.len()));

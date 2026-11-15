@@ -961,3 +961,32 @@ fn a_sign_in_to_codex_that_connects_lists_its_models_in_the_launcher_before_any_
   let user = fs::read_to_string(daemon.file("config").join("config.json")).unwrap();
   assert!(user.contains(r#""codex": true"#), "the user config turns Codex on: {user}");
 }
+
+#[test]
+fn a_session_with_no_project_runs_in_a_folder_of_its_own_and_its_card_says_so() {
+  let (app, daemon, sessions) = started();
+  app.press("ctrl+x");
+  app.press("p");
+  shows(&app, "No project");
+  app.type_text("no project");
+  app.press("enter");
+  // The launcher and the home say where the new session runs before it starts.
+  let frame = shows(&app, "·· No project ▾");
+  assert!(frame.contains("It runs in a new session with no project on this"), "{frame}");
+  sent(&app, &format!("plan the week {ANSWERS}"));
+  // The head of the thread names no project, and the input runs in the folder of the session.
+  let frame = shows(&app, "No project · plan the week");
+  assert!(frame.contains("Two stages hold most"), "{frame}");
+  // The record stands in a folder of its own, in the folder of the sessions with no project, and
+  // none in the project of the window.
+  let alone = daemon.file("config").join("sessions");
+  let folders: Vec<PathBuf> =
+    fs::read_dir(&alone).unwrap().flatten().map(|one| one.path()).collect();
+  let [folder] = &folders[..] else { panic!("{folders:?}") };
+  assert_eq!(
+    told(&daemon, &folder.join(".furb").join("sessions")),
+    [format!("plan the week {ANSWERS}")]
+  );
+  assert!(!sessions.exists());
+  screen("input-no-project", &app);
+}

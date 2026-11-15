@@ -68,7 +68,7 @@
         },
         {
           "type": "object",
-          "description": "The projects of the records that `list` gives with the same config, as [`Project::of`] folds\nthem.",
+          "description": "The projects of the records that `list` gives with the same config, as [`Project::of`] folds\nthem, then the folder of the sessions with no project, `sessions` in that config folder.",
           "properties": {
             "config": {
               "type": [
@@ -227,7 +227,7 @@
         },
         {
           "type": "object",
-          "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the skills that the peer names, reads the\nsettings of the user in the folder `config` and runs the claude command line `claude` when\nthe peer names them, as the window of the peer reads them, and the peer answers each request\nof its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass.",
+          "description": "The life of a record opened, in a folder, else in the checkout whose `.furb/sessions` holds\nit, else in the folder of its record. A life that this open makes stands on the actor, the\nroster and the skills that the peer names, reads the settings of the user in the folder\n`config` and runs the claude command line `claude` when the peer names them, as the window\nof the peer reads them, and the peer answers each request of its models in their place when\nit asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass.",
           "properties": {
             "life": {
               "type": "string"
@@ -3359,13 +3359,17 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "detached": {
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
         "folder",
         "sessions"
       ],
-      "description": "A project of the machine: its main checkout, the count of the records of its sessions, and the\nsecond of the epoch of the last write of one of them."
+      "description": "A project of the machine: its main checkout, the count of the records of its sessions, the\nsecond of the epoch of the last write of one of them, and whether the folder holds instead the\nsessions that stand in no project, each in a folder of its own that a window names in it."
     },
     "Model": {
       "type": "object",
@@ -6226,5 +6230,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 63
+  "x-protocol": 64
 }

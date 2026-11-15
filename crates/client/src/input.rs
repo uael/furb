@@ -201,12 +201,14 @@ impl Client {
   }
 
   /// The folder that the life of a record opens in when no life holds the record: the folder of
-  /// the client for a new record, else the project of its cards.
+  /// the client for a new record, else the project of its cards, else the folder whose sessions
+  /// hold it, as for a session with no project.
   pub fn cwd(&self, at: usize, life: &str) -> Option<String> {
     let cards = self.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
+    let held = || Path::new(life).ancestors().nth(3).map(|one| one.display().to_string());
     match cards.iter().find(|card| card.life == life) {
       None => Some(self.folder.clone()),
-      Some(card) => card.project.clone(),
+      Some(card) => card.project.clone().or_else(held),
     }
   }
 
@@ -214,8 +216,7 @@ impl Client {
   /// and the moment of the client, so no two clients share it, and past each record that the
   /// client knows, so no two sessions of one client share it when its clocks stand still.
   pub fn record(&self, folder: &str) -> String {
-    let second = Timestamp::from_second(i64::try_from(self.second()).unwrap_or_default());
-    let stamp = second.unwrap_or_default().strftime("%Y-%m-%dT%H-%M-%S");
+    let stamp = self.stamp();
     let sessions = Path::new(folder).join(".furb").join("sessions");
     let named = |n: u128| sessions.join(format!("{stamp}-{:04x}.jsonl", n % 0x1_0000));
     let known = |life: &str| {
@@ -227,6 +228,20 @@ impl Client {
       n += 1;
     }
     named(n).display().to_string()
+  }
+
+  /// A new folder of a session with no project on a machine, in the folder of those sessions that
+  /// the machine gave, named as a record is.
+  pub fn detached(&self, at: usize) -> Option<String> {
+    let folder = self.machines.get(at)?.detached()?;
+    let name = format!("{}-{:04x}", self.stamp(), self.moved.as_nanos() % 0x1_0000);
+    Some(Path::new(folder).join(name).display().to_string())
+  }
+
+  /// The second of the clock of the client as a name of a file.
+  fn stamp(&self) -> String {
+    let second = Timestamp::from_second(i64::try_from(self.second()).unwrap_or_default());
+    second.unwrap_or_default().strftime("%Y-%m-%dT%H-%M-%S").to_string()
   }
 
   /// The second of the clock of the machine of the client.

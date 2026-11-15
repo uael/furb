@@ -211,9 +211,10 @@ daemon answers requests in any order.
   and writes no config, so the verb that asked it is refused.
 - `list` gives each record of the machine as `lives`: each record of the sessions of each project that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
-  `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `project`, and each
-  record that a life of the daemon holds, whose `project` is the checkout whose `.furb/sessions` holds it when the
-  list names no project for it. `used` is the second of the epoch of the last write of the record, when the disk
+  `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `project`, each
+  record of a session with no project, in the `.furb/sessions` of a folder of its own in `sessions` of the folder
+  `config`, with no `project`, and each record that a life of the daemon holds, whose `project` is the checkout
+  whose `.furb/sessions` holds it when the list names no project for it and it stands in no such folder. `used` is the second of the epoch of the last write of the record, when the disk
   holds it. `held` says whether a life holds the record now, and `open` whether that
   life lives and does not end, and `watched` whether a window of any connection holds the life, which a pin
   does not make, so a window finds the sessions that no window holds from the one list. `pins` names the holder of
@@ -222,7 +223,9 @@ daemon answers requests in any order.
   same way.
 - `projects` gives the projects of the records that `list` gives with the same `config`: each `folder`, the main
   checkout of a project, once, with the count of its records as `sessions` and the latest `used` of them, the one used
-  last first. A record of no project stands in none.
+  last first. A record of no project stands in none. Last comes `sessions` of the folder `config`, with `detached`,
+  which holds the sessions with no project and counts them: a window makes the record of a new one in a new folder
+  there, and its life runs in that folder.
 - `models` gives the models that the catalog of the machine offers to a life in the folder `cwd`, with the settings
   of the folder `config` and the claude command line at `claude`, each as `open` takes it, the ones of the daemon
   when the peer names none. It needs no life. The first is the default actor. Each model has its `name`, which
@@ -315,7 +318,8 @@ daemon answers requests in any order.
   card holds:
   - `life`, the record of its session, `session`, the name of the session when it has one, and `project`, the main
     checkout of the project whose sessions hold the record, when the list of the machine names one, else for a
-    record that a life of the daemon holds, the checkout whose `.furb/sessions` holds it;
+    record that a life of the daemon holds, the checkout whose `.furb/sessions` holds it, and none for a session
+    with no project;
   - `prompt`, the name of the prompt of the thread, and `title`, the first line of its message;
   - `standing`, how the thread stands, as `{"is": ...}`: `asks` with `of`, the login of the one operator that its
     question waits for, or null when it waits for each operator; `failed`; `paused` with `by`, who said the pause;
@@ -486,8 +490,8 @@ daemon answers requests in any order.
 `furb host` serves the daemon of the machine in the folder `host` of the cache of furb, and says where it listens
 once it listens. A second daemon refuses to start there.
 
-- `open` gives the life of a record, by its absolute path, in the folder `cwd`, the folder of the record when it is
-  not given. Each life opens on a thread of its own, so the daemon answers each verb while a life opens, and a fault
+- `open` gives the life of a record, by its absolute path, in the folder `cwd`, when it is not given in the
+  checkout whose `.furb/sessions` holds the record, else in the folder of the record. Each life opens on a thread of its own, so the daemon answers each verb while a life opens, and a fault
   of one life ends that life alone. Each verb of a life refuses with `closed` when no life lives on its record.
   The daemon answers an `open` only once its life holds the lease of the record, before the life reads it, so a
   process that opens the record after that answer, as `furb run` or another daemon, is refused with the reason, and

@@ -1,6 +1,6 @@
 //! The records of the sessions of the workspaces that `workspaces.json` in a config folder names,
 //! which the verb `list` gives: the `.furb/sessions` of the main checkout of each workspace and of
-//! each worktree of it, as a window lists them.
+//! each worktree of it, as a window lists them, and those of each session with no project.
 
 use std::{
   fs,
@@ -9,16 +9,16 @@ use std::{
 
 use serde_json::Value;
 
-/// A folder of the sessions of a checkout of a project of the list: its path, the main checkout
-/// of its project, and each record that it holds.
+/// A folder of the sessions of a checkout: its path, the main checkout of its project, none for a
+/// session with no project, and each record that it holds.
 pub(crate) struct Sessions {
   pub(crate) folder: PathBuf,
-  pub(crate) project: String,
+  pub(crate) project: Option<String>,
   pub(crate) records: Vec<String>,
 }
 
-/// Each folder of the sessions of each workspace of the list in a config folder. A list that
-/// cannot be read names no workspace.
+/// Each folder of the sessions of each workspace of the list in a config folder, then of each
+/// session with no project. A list that cannot be read names no workspace.
 pub(crate) fn recorded(config: &Path) -> Vec<Sessions> {
   let text = fs::read_to_string(config.join("workspaces.json")).unwrap_or_default();
   let list = serde_json::from_str::<Value>(&text).unwrap_or_default();
@@ -26,16 +26,29 @@ pub(crate) fn recorded(config: &Path) -> Vec<Sessions> {
   let mut found = Vec::new();
   for main in saved.filter_map(|one| one["directory"].as_str()) {
     for checkout in checkouts(Path::new(main)) {
-      // The folder with no link in it, so each record has the one key that a life of it has.
-      let folder = checkout.join(".furb").join("sessions");
-      let folder = dunce::canonicalize(&folder).unwrap_or(folder);
-      let entries = fs::read_dir(&folder).into_iter().flatten().flatten();
-      let records = entries.map(|entry| entry.path()).filter(|path| record(path));
-      let records = records.map(|path| path.display().to_string()).collect();
-      found.push(Sessions { folder, project: main.to_owned(), records });
+      found.push(sessions(&checkout, Some(main.to_owned())));
     }
   }
+  let alone = fs::read_dir(detached(config)).into_iter().flatten().flatten();
+  found.extend(alone.map(|entry| sessions(&entry.path(), None)));
   found
+}
+
+/// The folder of the sessions with no project in a config folder: each stands in a folder of its
+/// own there, which a window names, so a session of work with no code has a folder to run in.
+pub(crate) fn detached(config: &Path) -> PathBuf {
+  PathBuf::from(key(&config.join("sessions").display().to_string()))
+}
+
+/// The folder of the sessions of a checkout, of a project or of none.
+fn sessions(checkout: &Path, project: Option<String>) -> Sessions {
+  // The folder with no link in it, so each record has the one key that a life of it has.
+  let folder = checkout.join(".furb").join("sessions");
+  let folder = dunce::canonicalize(&folder).unwrap_or(folder);
+  let entries = fs::read_dir(&folder).into_iter().flatten().flatten();
+  let records = entries.map(|entry| entry.path()).filter(|path| record(path));
+  let records = records.map(|path| path.display().to_string()).collect();
+  Sessions { folder, project, records }
 }
 
 /// The one name of a record: its path with no link in it, as the system resolves it, so that each

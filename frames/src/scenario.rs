@@ -929,4 +929,21 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
     }),
   },
+  Scenario {
+    name: "30-no-project",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[ASKS],
+      pace: &[],
+      reads: false,
+      steps: &[
+        // The projects of a new session end with no project, for work with no code.
+        step("a", &[Act::Key("C-x"), Act::Key("p")], "No project"),
+        // The launcher and the home say that the session runs with no project.
+        step("b", &[Act::Type("no project"), Act::Key("Enter")], "with no project"),
+        // The session runs in a folder of its own, and its card has no badge of a project.
+        step("c", &[Act::Type("Plan the week."), Act::Key("Enter")], "Where does the list"),
+      ],
+    }),
+  },
 ];

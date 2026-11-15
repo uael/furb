@@ -1,13 +1,14 @@
 //! The list of cards: its rows, and the runs of each row. It is a function of the model, and only
 //! the rows that show are written.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use furb::view::{Part, Standing};
 use furb_host::protocol::Card;
 use opentui::style::{Color, Span, Style};
 
 use crate::{
+  input::named,
   keys::Does,
   line::{Line, edged, run, spread},
   model::{Key, Link, Model},
@@ -370,8 +371,12 @@ impl Model {
     usize::from(self.list_width()) - 5
   }
 
-  /// The badge of a project, as each row that stands in it draws it: its two letters, bold.
+  /// The badge of a project, as each row that stands in it draws it: its two letters, bold, or a
+  /// muted slot of the same width for a session with no project.
   pub(crate) fn badge(&self, project: &str) -> Span<'static> {
+    if project == NO_PROJECT {
+      return run("··", self.tokens.style(Role::Muted).bg(self.tokens.base));
+    }
     let projects = &self.tokens.projects;
     let one = projects[hash(project) % projects.len()];
     run(badge(project), Style::new().fg(one.letters).bg(one.ground).bold())
@@ -405,15 +410,12 @@ impl Ground {
   }
 }
 
-/// The name of the project of a card: the last part of its main checkout, or of the folder of its
-/// record when its machine names no project for it.
+/// What a session that stands in no project names as its project.
+pub(crate) const NO_PROJECT: &str = "No project";
+
+/// The name of the project of a card: the last part of its main checkout, or that it has none.
 pub(crate) fn project(card: &Card) -> String {
-  let record = PathBuf::from(&card.life);
-  let folder =
-    card.project.as_deref().map(PathBuf::from).or_else(|| record.parent().map(PathBuf::from));
-  folder
-    .and_then(|one| one.file_name().map(|name| name.to_string_lossy().into_owned()))
-    .unwrap_or_default()
+  card.project.as_deref().map_or_else(|| NO_PROJECT.to_owned(), named)
 }
 
 /// The two letters of a project: the first letter of its two first words, or its two first

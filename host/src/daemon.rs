@@ -1102,7 +1102,7 @@ impl Lives {
         return self.open(life, birth, reply);
       }
       Verb::List { config } => Ok(Answer::Lives(self.listed(config))),
-      Verb::Projects { config } => Ok(Answer::Projects(Project::of(&self.listed(config)))),
+      Verb::Projects { config } => Ok(Answer::Projects(self.projects(config))),
       Verb::Models { cwd, config, claude } => {
         tokio::spawn(models(self.offering(cwd, config, claude), reply));
         return;
@@ -1160,8 +1160,9 @@ impl Lives {
     reply.send(answer).ok();
   }
 
-  /// The life of a record opened in a folder, the folder of its record when none is given, unless
-  /// it lives. An open of a life that ends waits for its end, then opens it again.
+  /// The life of a record opened in a folder, when none is given the checkout whose sessions hold
+  /// the record, else the folder of the record, unless it lives. An open of a life that ends waits
+  /// for its end, then opens it again.
   fn open(&mut self, life: String, mut birth: Birth, reply: Replied) {
     let record = Path::new(&life);
     if !record.is_absolute() {
@@ -1169,7 +1170,8 @@ impl Lives {
       return;
     }
     if birth.cwd.is_empty() {
-      birth.cwd = record.parent().map_or_else(String::new, |one| one.display().to_string());
+      let parent = || record.parent().map_or_else(String::new, |one| one.display().to_string());
+      birth.cwd = records::checkout(record).unwrap_or_else(parent);
     }
     let holder = birth.holder.clone();
     let opened = match self.held.get_mut(&life).map(|held| &mut held.stage) {
@@ -1441,6 +1443,25 @@ impl Lives {
     self.views.mount(mount, peer, outbox).map(|()| Answer::Done)
   }
 
+  /// The projects of the records that [`Self::listed`] gives, then the folder of the sessions with
+  /// no project, with the count of those sessions and the second of the last write of one.
+  fn projects(&self, config: Option<String>) -> Vec<Project> {
+    let config = config.or_else(|| self.settings.opening.config.clone());
+    let folder =
+      records::detached(&config.clone().map_or_else(|| Places::here().config, PathBuf::from));
+    let listed = self.listed(config);
+    let alone: Vec<&Listed> =
+      listed.iter().filter(|one| Path::new(&one.life).starts_with(&folder)).collect();
+    let mut projects = Project::of(&listed);
+    projects.push(Project {
+      folder: folder.display().to_string(),
+      sessions: alone.len(),
+      used: alone.iter().filter_map(|one| one.used).max(),
+      detached: true,
+    });
+    projects
+  }
+
   /// Each record of the workspaces of the list in a config folder, the config folder of the
   /// daemon when none is given, and each life of the daemon, by the path of its record, with
   /// whether a life holds it, whether that life lives or ends, whether a window holds it, and the
@@ -1452,7 +1473,7 @@ impl Lives {
     let mut listed: Vec<Listed> = Vec::new();
     for one in &found {
       for life in &one.records {
-        let (project, used) = (Some(one.project.clone()), used(life));
+        let (project, used) = (one.project.clone(), used(life));
         let (held, open, watched, pins, name) = (false, false, false, Vec::new(), None);
         let life = life.clone();
         listed.push(Listed { life, project, used, held, open, watched, pins, name });
@@ -1468,11 +1489,14 @@ impl Lives {
         (one.held, one.open, one.watched, one.pins, one.name) = (true, open, watched, pins, name);
         continue;
       }
-      // A record that a life opens stands in the list before the disk holds it.
+      // A record that a life opens stands in the list before the disk holds it, and a session with
+      // no project stands in none.
       let at = Path::new(life).parent();
-      let project = found.iter().find(|one| Some(one.folder.as_path()) == at);
-      let project = project.map(|one| one.project.clone());
-      let project = project.or_else(|| records::checkout(Path::new(life)));
+      let alone = Path::new(life).starts_with(records::detached(&folder));
+      let project = match found.iter().find(|one| Some(one.folder.as_path()) == at) {
+        Some(one) => one.project.clone(),
+        None => records::checkout(Path::new(life)).filter(|_| !alone),
+      };
       let (held, used) = (true, used(life));
       listed.push(Listed { life: life.clone(), project, used, held, open, watched, pins, name });
     }

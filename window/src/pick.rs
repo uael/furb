@@ -21,7 +21,7 @@ use crate::{
   input::named,
   keys::{self, Bound, Does},
   line::{Line, capital, run, spread, wrapped},
-  list::project,
+  list::{NO_PROJECT, project},
   model::{Key, Model},
   thread::{Click, Row, hued},
   tokens::{BESIDE, OVER, PART, PARTS, Role},
@@ -478,12 +478,12 @@ impl Model {
     let here = self.client.folder.clone();
     let entry = |(at, told): (usize, &Told)| {
       let name = if at == 0 { "This computer".to_owned() } else { told.name.clone() };
-      let folder = told.projects.first().map(|one| one.folder.clone());
+      let folder = told.projects.iter().find(|one| !one.detached).map(|one| one.folder.clone());
       let folder = if at == 0 { Some(here.clone()) } else { folder };
       let state = match (&told.link, &folder) {
         (Link::Lost(_), _) => "offline".to_owned(),
         (Link::Dialing, _) => "dialing".to_owned(),
-        (Link::Listed, Some(folder)) => named(folder),
+        (Link::Listed, Some(folder)) => self.folder_named(at, folder),
         (Link::Listed, None) => "no project yet".to_owned(),
       };
       let choice = folder.map_or(Choice::None, |folder| Choice::Session(Target::New(at, folder)));
@@ -494,26 +494,32 @@ impl Model {
 
   /// The projects of the machine of the input, where a new session runs: the project of the
   /// folder of the window first on this computer, then each that the machine gave, the one used
-  /// last first, with its count of sessions.
+  /// last first, with its count of sessions, and last no project, whose new session runs in a new
+  /// folder of its own.
   fn projects(&self) -> Vec<Entry> {
     let at = self.client.target().machine();
     let Some(told) = self.client.machines.get(at) else { return Vec::new() };
     let here = self.client.folder.clone();
     let first = (at == 0 && !told.projects.iter().any(|one| one.folder == here)).then_some(&here);
-    let counted = told.projects.iter().map(|one| (&one.folder, Some(one.sessions)));
-    let all = first.map(|one| (one, None)).into_iter().chain(counted);
-    let entry = |(folder, sessions): (&String, Option<usize>)| {
+    let counted = told.projects.iter().map(|one| (&one.folder, Some(one.sessions), one.detached));
+    let all = first.map(|one| (one, None, false)).into_iter().chain(counted);
+    let entry = |(folder, sessions, alone): (&String, Option<usize>, bool)| {
       let count = match sessions {
         None | Some(0) => "no session yet".to_owned(),
         Some(1) => "1 session".to_owned(),
         Some(many) => format!("{many} sessions"),
       };
+      let (name, new) = if alone {
+        (NO_PROJECT.to_owned(), self.client.detached(at).unwrap_or_else(|| folder.clone()))
+      } else {
+        (named(folder), folder.clone())
+      };
       Entry {
-        project: Some(named(folder)),
-        left: named(folder),
+        project: Some(name.clone()),
+        left: name,
         says: format!("  {}", self.homed(folder)),
         right: count,
-        choice: Choice::Session(Target::New(at, folder.clone())),
+        choice: Choice::Session(Target::New(at, new)),
         ..Entry::default()
       }
     };

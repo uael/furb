@@ -78,6 +78,13 @@ pub struct Told {
   pub queued: HashMap<String, HashMap<String, Vec<FollowUp>>>,
 }
 
+impl Told {
+  /// The folder of the sessions with no project of the machine, once it gave its projects.
+  pub fn detached(&self) -> Option<&str> {
+    self.projects.iter().find(|one| one.detached).map(|one| one.folder.as_str())
+  }
+}
+
 /// What a frame changed of what a machine told: its cards or its login, nothing that the list
 /// shows, or the connection, which ended, with why.
 #[derive(Debug, Clone, PartialEq, Eq)]

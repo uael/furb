@@ -119,8 +119,9 @@ On Windows the window also needs the library of OpenTUI beside it, as
 [the window](https://github.com/uael/furb/blob/main/CONTRIBUTING.md#the-window) says.
 
 Type a message and press Enter: it starts a new session in the project of the folder, and its thread shows each word
-that the model writes and runs. The list at the right holds each thread of the machine, and what waits for you
-first. `furb` with no command starts the same window.
+that the model writes and runs. ⌃X P chooses another project, or no project for work with no code: that session runs
+in a folder of its own that furb makes. The list at the right holds each thread of the machine, and what waits for
+you first. `furb` with no command starts the same window.
 
 <img src="https://raw.githubusercontent.com/uael/furb/main/docs/window-cards.png" alt="The list of the threads of the machine, which says the thread that waits for an input, the one that failed, those that work and those that rest" width="880">
 

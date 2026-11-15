@@ -1209,13 +1209,15 @@ export interface Listed {
   name?: string | null;
 }
 /**
- * A project of the machine: its main checkout, the count of the records of its sessions, and the
- * second of the epoch of the last write of one of them.
+ * A project of the machine: its main checkout, the count of the records of its sessions, the
+ * second of the epoch of the last write of one of them, and whether the folder holds instead the
+ * sessions that stand in no project, each in a folder of its own that a window names in it.
  */
 export interface Project {
   folder: string;
   sessions: number;
   used?: number | null;
+  detached?: boolean;
 }
 /**
  * A model that the catalog of a machine offers: the name that a stand takes, the levels of effort
@@ -1776,4 +1778,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 63;
+export const PROTOCOL = 64;

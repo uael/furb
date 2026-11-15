@@ -4,13 +4,14 @@
 use std::{iter, path::Path};
 
 use furb::view::Standing;
+use furb_client::Target;
 use opentui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
   keys::{self, Does},
   line::{self, Line, run, spread},
-  list::project,
+  list::{NO_PROJECT, project},
   model::{Link, Model},
   thread::{Click, Row, width},
   tokens::{KEYS, Role},
@@ -104,8 +105,17 @@ impl Model {
         Some(effort) => format!(", with {model} at {effort} effort"),
         None => format!(", with {model}"),
       });
-      let project = self.project();
-      let place = format!("It runs in a new session of {project} on this computer");
+      let (project, at) = match self.client.target() {
+        Target::New(at, folder) => (self.folder_named(at, &folder), at),
+        _ => (self.project(), 0),
+      };
+      let machine = if at == 0 { "this computer" } else { &self.client.machines[at].name };
+      let session = if project == NO_PROJECT {
+        "a new session with no project".to_owned()
+      } else {
+        format!("a new session of {project}")
+      };
+      let place = format!("It runs in {session} on {machine}");
       rows.extend(wrapped(&format!("{place}{}.", actor.unwrap_or_default()), muted));
     }
     for told in &self.client.machines {
