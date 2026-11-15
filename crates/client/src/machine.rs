@@ -7,6 +7,8 @@ use furb_wire::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::Client;
+
 /// What a client hears of a machine: a frame of its daemon, or why the connection ended.
 pub type Heard = Result<Frame, String>;
 
@@ -51,20 +53,7 @@ pub enum Listing {
   Lost(String),
 }
 
-/// What each machine told, and the cards of all of them in the order of the list as it last
-/// settled, each with the part that it had then and with its state as its machine last told it.
-#[derive(Debug, Default)]
-pub struct Client {
-  pub machines: Vec<Told>,
-  pub settled: Vec<(Part, Key, Card)>,
-}
-
 impl Client {
-  /// A client of the machines, with what each told before.
-  pub fn new(machines: Vec<Told>) -> Self {
-    Self { machines, settled: Vec::new() }
-  }
-
   /// What one frame of a machine, or the end of its connection, changed of what the machine told,
   /// at the second `now`. A machine whose connection ended hears nothing until its daemon welcomes
   /// the client again, so the first cause of a loss stays.

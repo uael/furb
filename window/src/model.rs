@@ -13,7 +13,7 @@ use std::{
 };
 
 use furb::view::{Part, age, homed, since};
-use furb_client::{Client, Listing};
+use furb_client::{Ask, Client, Hold, Listing, Step};
 pub(crate) use furb_client::{Key, Link, Told};
 use furb_host::{
   Event,
@@ -29,7 +29,6 @@ use crate::{
   keys::{self, Does, System},
   link::Heard,
   list::Row,
-  opens::{Ask, Hold, Life, Step},
   pick::Picker,
   thread::{Fold, Opened},
   tokens::{BESIDE, LIST, SIDE, Tokens},
@@ -89,8 +88,6 @@ pub(crate) struct Model {
   pub(crate) notice: Option<String>,
   /// The list part, while it is open.
   pub(crate) picker: Option<Picker>,
-  /// Each life that the window holds, and how far its open stands.
-  pub(crate) holds: HashMap<Life, Hold>,
   /// The word of python that the window ran last, until the next one goes or an escape.
   pub(crate) word: Option<Word>,
   /// The history of the input, for its target.
@@ -134,7 +131,6 @@ impl Model {
       armed: None,
       notice: None,
       picker: None,
-      holds: HashMap::new(),
       word: None,
       history: None,
       walk: None,
@@ -159,10 +155,10 @@ impl Model {
       }
       Ok(Frame::Thread { life, thread, page }) => return self.changed(at, (&life, &thread), page),
       Ok(Frame::Opening { life, stage, done, of }) => {
-        return self.opening(at, life, Step { stage, done, of, at: self.moved });
+        return self.client.opening(at, life, Step { stage, done, of, at: self.moved });
       }
       Ok(Frame::Cards { ref life, ref changed, .. }) if changed.iter().any(|card| !card.held) => {
-        self.ended(at, life);
+        self.client.let_go(at, life);
       }
       Ok(Frame::Event { life, event: Event::Ended(Some(fault)), .. }) => {
         return self.failed(at, &life, fault);
@@ -198,7 +194,7 @@ impl Model {
         format!("{name} went away before it took your message. If the thread shows it, it went.");
       self.restore = Some(self.refused(why));
     }
-    for (_, hold) in self.holds.iter_mut().filter(|one| one.0.0 == at) {
+    for (_, hold) in self.client.holds.iter_mut().filter(|one| one.0.0 == at) {
       hold.ask = Ask::Due;
     }
     if let Some(opened) = self.thread.as_mut().filter(|one| one.key.0 == at) {
@@ -223,7 +219,7 @@ impl Model {
   /// The answer of a daemon to a request of the input, with its id and what it asked.
   fn answered_input(&mut self, at: usize, (id, asked): (u64, Asked), heard: Heard) {
     match (asked, heard) {
-      (Asked::Open, Ok(Frame::Reply { .. })) => self.answered_open(at, id),
+      (Asked::Open, Ok(Frame::Reply { .. })) => self.client.answered_open(at, id),
       (Asked::Open, Ok(Frame::Refused { why, .. })) => self.restore = self.unopened(at, id, why),
       (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
       (Asked::Back(text), Ok(Frame::Reply { .. })) => self.restore = Some(self.before_draft(text)),
@@ -384,9 +380,11 @@ impl Model {
   /// Whether a mark of the window moves, or an open runs, whose time counts.
   pub(crate) fn moves(&self) -> bool {
     let works = |one: &(Part, Key, Card)| {
-      one.2.thread.works() && self.confirmed(&one.1) && self.fault_of(one.1.0, &one.1.1).is_none()
+      one.2.thread.works()
+        && self.confirmed(&one.1)
+        && self.client.fault_of(one.1.0, &one.1.1).is_none()
     };
-    let opens = self.holds.values().any(Hold::runs);
+    let opens = self.client.holds.values().any(Hold::runs);
     self.slow && !self.known() || opens || self.client.settled.iter().any(works)
   }
 

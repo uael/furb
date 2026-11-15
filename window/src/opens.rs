@@ -14,6 +14,8 @@ use furb::{
 };
 use opentui::style::Style;
 
+use furb_client::{Ask, Hold, Life, Step};
+
 use crate::{
   line::{Line, run, spread},
   model::Model,
@@ -32,42 +34,6 @@ const BOUND: Duration = Duration::from_secs(15);
 
 /// The cells of the bar of the share of a stage.
 const BAR: usize = 12;
-
-/// A life of the window: its machine and its record.
-pub(crate) type Life = (usize, String);
-
-/// Where the open of a life that the window holds stands with the daemon: to be asked, asked
-/// under the id of its request, answered, so each verb of the life may go, or ended by a fault,
-/// with why, so only its views answer: the window reads its threads and sends it nothing.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Ask {
-  Due,
-  Sent(u64),
-  Answered,
-  Failed(String),
-}
-
-/// A life that the window holds: the folder that it opens in when no life holds its record, where
-/// its open stands with the daemon, when the window asked it, whether its life stood then, and
-/// each stage that its open reached.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Hold {
-  pub(crate) cwd: Option<String>,
-  pub(crate) ask: Ask,
-  pub(crate) since: Duration,
-  pub(crate) stood: bool,
-  pub(crate) steps: Vec<Step>,
-}
-
-/// A stage that an open reached: its work done and its work known, in the unit of the stage, and
-/// when it started, as the window heard it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Step {
-  pub(crate) stage: Stage,
-  pub(crate) done: u64,
-  pub(crate) of: u64,
-  pub(crate) at: Duration,
-}
 
 /// What a stage counts.
 enum Unit {
@@ -89,102 +55,11 @@ fn said(stage: Stage) -> (&'static str, Unit) {
   }
 }
 
-impl Hold {
-  /// When the open ended: the moment of its last stage once that stage is whole.
-  pub(crate) fn ended(&self) -> Option<Duration> {
-    let last = self.steps.last()?;
-    (last.stage == Stage::Log && last.done == last.of).then_some(last.at)
-  }
-
-  /// Whether the open of the life runs: a life that a fault ended opens no more.
-  pub(crate) fn runs(&self) -> bool {
-    !self.stood && self.ended().is_none() && self.failed().is_none()
-  }
-
-  /// Why a fault ended the life, which then only reads.
-  pub(crate) fn failed(&self) -> Option<&str> {
-    match &self.ask {
-      Ask::Failed(why) => Some(why),
-      _ => None,
-    }
-  }
-
-  /// The share of the stage that runs, while it counts work that is not done: a stage whose work
-  /// is done waits for the next one, and has no share to show.
-  pub(crate) fn share(&self) -> Option<u64> {
-    self.steps.last().filter(|one| one.done < one.of).map(|one| one.done * 100 / one.of)
-  }
-
-  /// A stage that the open reached, or the next numbers of the stage that runs. A stage that comes
-  /// before the last one starts a new open, as at a rebirth of the life.
-  fn heard(&mut self, mut step: Step) {
-    let again =
-      self.ended().is_some() || self.steps.last().is_some_and(|last| step.stage < last.stage);
-    if again {
-      (self.steps, self.since, self.stood) = (Vec::new(), step.at, false);
-    }
-    // The first stage starts with the open, whatever the time that its frame took to come.
-    if self.steps.is_empty() {
-      step.at = self.since;
-    }
-    match self.steps.last_mut() {
-      Some(last) if last.stage == step.stage => (last.done, last.of) = (step.done, step.of),
-      _ => self.steps.push(step),
-    }
-  }
-}
-
 impl Model {
-  /// The life of a record held by the window from now on: the window asks to open it, in a folder
-  /// when no life holds the record. A life that the window holds stays as it is.
-  pub(crate) fn hold(&mut self, at: usize, life: &str, cwd: Option<String>) {
-    let key = (at, life.to_owned());
-    if self.holds.contains_key(&key) {
-      return;
-    }
-    let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
-    let stood = cards.iter().any(|card| card.life == life && card.held);
-    let hold = Hold { cwd, ask: Ask::Due, since: self.moved, stood, steps: Vec::new() };
-    self.holds.insert(key, hold);
-  }
-
-  /// The open of a life asked of its machine under the id of its request. A life of a machine that
-  /// the window does not dial stays as it is.
-  pub(crate) fn asked_open(&mut self, life: &Life, id: Option<u64>) {
-    if let (Some(hold), Some(id)) = (self.holds.get_mut(life), id) {
-      hold.ask = Ask::Sent(id);
-    }
-  }
-
-  /// Whether the daemon answered the open of a life, so each verb of the life may go.
-  pub(crate) fn stands(&self, at: usize, life: &str) -> bool {
-    self.holds.get(&(at, life.to_owned())).is_some_and(|hold| hold.ask == Ask::Answered)
-  }
-
-  /// Whether the views of a life answer: it stands, or a fault ended it and it still shows.
-  pub(crate) fn reads(&self, at: usize, life: &str) -> bool {
-    let hold = self.holds.get(&(at, life.to_owned()));
-    hold.is_some_and(|hold| hold.ask == Ask::Answered || hold.failed().is_some())
-  }
-
-  /// Why a fault ended a life that the window holds, which then only reads.
-  pub(crate) fn fault_of(&self, at: usize, life: &str) -> Option<&str> {
-    self.holds.get(&(at, life.to_owned()))?.failed()
-  }
-
   /// The open of a life that runs and that the window says, from [`QUIET`] on.
   pub(crate) fn shown_open(&self, at: usize, life: &str) -> Option<&Hold> {
-    let hold = self.holds.get(&(at, life.to_owned()))?;
+    let hold = self.client.holds.get(&(at, life.to_owned()))?;
     (hold.runs() && self.moved.saturating_sub(hold.since) >= QUIET).then_some(hold)
-  }
-
-  /// The answer of the daemon to the open of a life under the id of its request: each verb of the
-  /// life may go.
-  pub(crate) fn answered_open(&mut self, at: usize, id: u64) {
-    let asked = |(key, hold): &(&Life, &mut Hold)| key.0 == at && hold.ask == Ask::Sent(id);
-    if let Some((_, hold)) = self.holds.iter_mut().find(asked) {
-      hold.ask = Ask::Answered;
-    }
   }
 
   /// The refusal of the daemon to open a life under the id of its request, and why: the window
@@ -192,8 +67,8 @@ impl Model {
   /// input with why. The text that the input holds then, when it changed.
   pub(crate) fn unopened(&mut self, at: usize, id: u64, why: String) -> Option<String> {
     let asked = |(key, hold): &(&Life, &Hold)| key.0 == at && hold.ask == Ask::Sent(id);
-    let life = self.holds.iter().find(asked).map(|(key, _)| key.clone())?;
-    self.holds.remove(&life);
+    let life = self.client.holds.iter().find(asked).map(|(key, _)| key.clone())?;
+    self.client.holds.remove(&life);
     if let Some(opened) =
       self.thread.as_mut().filter(|one| (one.key.0, &one.key.1) == (at, &life.1))
     {
@@ -211,33 +86,16 @@ impl Model {
   pub(crate) fn failed(&mut self, at: usize, life: &str, fault: String) -> bool {
     let key = (at, life.to_owned());
     let open = self.thread.as_ref().is_some_and(|one| (one.key.0, &one.key.1) == (at, &key.1));
-    if !open && !self.holds.contains_key(&key) {
+    if !open && !self.client.holds.contains_key(&key) {
       return false;
     }
     let since = self.moved;
     let gone = || Hold { cwd: None, ask: Ask::Due, since, stood: true, steps: Vec::new() };
-    self.holds.entry(key).or_insert_with(gone).ask = Ask::Failed(fault.clone());
+    self.client.holds.entry(key).or_insert_with(gone).ask = Ask::Failed(fault.clone());
     if !self.outgoing.is_empty() {
       self.restore = Some(self.refused(fault));
     }
     true
-  }
-
-  /// A stage of the open of a life that a machine told, as the window hears it now: whether the
-  /// window holds that life.
-  pub(crate) fn opening(&mut self, at: usize, life: String, step: Step) -> bool {
-    let Some(hold) = self.holds.get_mut(&(at, life)) else { return false };
-    hold.heard(step);
-    true
-  }
-
-  /// The life of a record let go, once its machine says that no life holds it: its life ended, and
-  /// a later verb opens it again.
-  pub(crate) fn ended(&mut self, at: usize, life: &str) {
-    let key = (at, life.to_owned());
-    if self.holds.get(&key).is_some_and(|hold| hold.ask == Ask::Answered) {
-      self.holds.remove(&key);
-    }
   }
 
   /// The open that the head of the open thread shows: one that runs, from [`QUIET`] on, until the
@@ -245,7 +103,7 @@ impl Model {
   /// the head and the page change in one frame.
   pub(crate) fn open_shown(&self) -> Option<&Hold> {
     let opened = self.thread.as_ref().filter(|one| one.above.is_none() && one.fault.is_none())?;
-    let hold = self.holds.get(&(opened.key.0, opened.key.1.clone()))?;
+    let hold = self.client.holds.get(&(opened.key.0, opened.key.1.clone()))?;
     let after = hold.ended().is_none_or(|ended| ended > opened.since);
     let waited = self.moved.saturating_sub(hold.since) >= QUIET;
     (!hold.stood && after && waited).then_some(hold)

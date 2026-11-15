@@ -22,13 +22,15 @@ use furb_host::protocol::{Card, Verb};
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
+use furb_client::Hold;
+
 use crate::{
   input::{Asked, Pending},
   keys::Does,
   line::Line,
   list::hash,
   model::{Key, Model},
-  opens::{Hold, QUIET},
+  opens::QUIET,
   question::Form,
   tokens::Loader,
 };
@@ -373,7 +375,7 @@ impl Model {
     if key.2.is_empty() || self.thread.as_ref().is_some_and(|one| one.root().key == key) {
       return;
     }
-    self.hold(key.0, &key.1, self.cwd(key.0, &key.1));
+    self.client.hold((key.0, key.1.clone()), self.cwd(key.0, &key.1), self.moved);
     self.thread = Some(Opened { key, since: self.moved, ..Opened::default() });
     self.aim = None;
   }
@@ -437,20 +439,20 @@ impl Model {
   /// Why the open thread says that it went wrong: the daemon gave no page, or a fault ended its
   /// life.
   pub(crate) fn why<'a>(&'a self, opened: &'a Opened) -> Option<&'a str> {
-    opened.fault.as_deref().or_else(|| self.fault_of(opened.key.0, &opened.key.1))
+    opened.fault.as_deref().or_else(|| self.client.fault_of(opened.key.0, &opened.key.1))
   }
 
   /// Whether the life of an open thread opens and its page did not come. A life that a fault
   /// ended opens no more.
   pub(crate) fn opens(&self, opened: &Opened) -> bool {
-    let hold = self.holds.get(&(opened.key.0, opened.key.1.clone()));
+    let hold = self.client.holds.get(&(opened.key.0, opened.key.1.clone()));
     opened.above.is_none() && hold.is_some_and(|hold| !hold.stood && hold.failed().is_none())
   }
 
   /// Whether the window says that the open thread opens: from [`QUIET`] on, as the bar of the open,
   /// so an open that takes less than that shows no text that comes and goes.
   pub(crate) fn says_opens(&self, opened: &Opened) -> bool {
-    let hold = self.holds.get(&(opened.key.0, opened.key.1.clone()));
+    let hold = self.client.holds.get(&(opened.key.0, opened.key.1.clone()));
     let waited = hold.is_some_and(|hold| self.moved.saturating_sub(hold.since) >= QUIET);
     self.opens(opened) && waited
   }
@@ -468,7 +470,7 @@ impl Model {
     let opened = self.thread.as_ref()?;
     let held =
       opened.above.is_some() && !opened.again || !opened.asked.is_empty() || opened.fault.is_some();
-    let reads = self.reads(opened.key.0, &opened.key.1);
+    let reads = self.client.reads(opened.key.0, &opened.key.1);
     (!opened.key.2.is_empty() && !held && reads).then(|| opened.page(None))
   }
 
@@ -490,8 +492,8 @@ impl Model {
       Ok(page) => opened.took(page),
       Err(why) => {
         opened.fault = Some(why);
-        if self.holds.get(&life).is_some_and(Hold::runs) {
-          self.holds.remove(&life);
+        if self.client.holds.get(&life).is_some_and(Hold::runs) {
+          self.client.holds.remove(&life);
         }
       }
     }
@@ -617,7 +619,7 @@ impl Model {
     let shows =
       |one: &&Opened| one.top.is_none() && one.above.is_some() && !one.exchanges.is_empty();
     let opened = self.thread.as_ref().filter(shows)?;
-    if self.fault_of(opened.key.0, &opened.key.1).is_some() {
+    if self.client.fault_of(opened.key.0, &opened.key.1).is_some() {
       return None;
     }
     let key = opened.key.clone();

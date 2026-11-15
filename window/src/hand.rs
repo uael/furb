@@ -372,7 +372,7 @@ fn pump(window: &Shared) {
   let model = &mut screen.model;
   for (life, verb) in model.opens_due() {
     let id = asker(askers, model, life.0).map(|asker| asker.ask(verb));
-    model.asked_open(&life, id);
+    model.client.asked_open(&life, id);
     model.asked.extend(id.map(|id| ((life.0, id), Asked::Open)));
   }
   if let Some(verb) = model.page_due()

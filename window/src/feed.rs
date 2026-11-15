@@ -63,7 +63,7 @@ impl Feed<'_> {
 
   /// Why a fault ended the life of the thread, which then only reads.
   fn fault(&self) -> Option<&str> {
-    self.model.fault_of(self.opened.key.0, &self.opened.key.1)
+    self.model.client.fault_of(self.opened.key.0, &self.opened.key.1)
   }
 
   /// Whether a fault ended the life of the thread.

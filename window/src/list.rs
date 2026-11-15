@@ -264,7 +264,7 @@ impl Model {
       return vec![run(opens, colored(t.accent))];
     }
     // A life that a fault ended works no more, whatever the record left at work.
-    if card.thread.works() && self.fault_of(key.0, &card.life).is_some() {
+    if card.thread.works() && self.client.fault_of(key.0, &card.life).is_some() {
       return vec![run("Ended", muted)];
     }
     let (needs, age) = (self.needs(key, card), self.age(card.since));
@@ -314,7 +314,7 @@ impl Model {
   /// Whether a life holds the record of a card and no view holds that life. The window is a view of
   /// each life that it holds, before its machine says so.
   pub(crate) fn unheld(&self, at: usize, card: &Card) -> bool {
-    let held = self.holds.contains_key(&(at, card.life.clone()));
+    let held = self.client.holds.contains_key(&(at, card.life.clone()));
     card.held && card.viewers.is_empty() && !held
   }
 }

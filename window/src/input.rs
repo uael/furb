@@ -16,12 +16,13 @@ use jiff::Timestamp;
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
+use furb_client::{Ask, Hold, Life};
+
 use crate::{
   keys::Does,
   line::{Line, clipped, cut, run, spread, wrapped},
   list::project,
   model::{Key, Model},
-  opens::{Ask, Hold, Life},
   thread::{Click, Opened, Row, columns, width},
   tokens::{APART, Loader, Role},
 };
@@ -164,13 +165,13 @@ impl Model {
       Target::New(at) => (at, self.record(), None),
     };
     self.fault = self.away(at).or_else(|| {
-      let why = self.fault_of(at, &life)?;
+      let why = self.client.fault_of(at, &life)?;
       Some(format!("Nothing went: {why}"))
     });
     if self.fault.is_some() {
       return false;
     }
-    self.hold(at, &life, self.cwd(at, &life));
+    self.client.hold((at, life.clone()), self.cwd(at, &life), self.moved);
     let made = thread.is_none() && !python;
     if made {
       let key = (at, life.clone(), String::new());
@@ -206,7 +207,7 @@ impl Model {
     let sessions = self.folder.join(".furb").join("sessions");
     let named = |n: u128| sessions.join(format!("{stamp}-{:04x}.jsonl", n % 0x1_0000));
     let known = |life: &str| {
-      self.holds.keys().any(|held| held.1 == life)
+      self.client.holds.keys().any(|held| held.1 == life)
         || self.client.machines.iter().any(|one| one.cards.iter().any(|card| card.life == life))
     };
     let mut n = self.moved.as_nanos();
@@ -222,7 +223,7 @@ impl Model {
     if self.asked.values().any(|asked| *asked == Asked::Say) {
       return None;
     }
-    let next = self.outgoing.front().filter(|next| self.stands(next.at, &next.life))?;
+    let next = self.outgoing.front().filter(|next| self.client.stands(next.at, &next.life))?;
     let life = next.life.clone();
     let message = next.text.clone();
     let verb = match &next.thread {
@@ -241,7 +242,7 @@ impl Model {
   /// opens it, in its folder when no life holds its record, and attaches the window past each
   /// event, since the window reads the cards and the pages of the threads, and no event.
   pub(crate) fn opens_due(&self) -> Vec<(Life, Verb)> {
-    let due = self.holds.iter().filter(|(_, hold)| hold.ask == Ask::Due);
+    let due = self.client.holds.iter().filter(|(_, hold)| hold.ask == Ask::Due);
     let open = |(key, hold): (&Life, &Hold)| {
       let open = Verb::Open {
         life: key.1.clone(),
@@ -427,7 +428,7 @@ impl Model {
   pub(crate) fn ended_due(&self) -> Option<(usize, Verb)> {
     let word = self.word.as_ref().filter(|one| !one.asked && one.ran.is_none())?;
     let verb = Verb::Ended { life: word.life.clone(), act: word.rung.clone() };
-    self.stands(word.at, &word.life).then_some((word.at, verb))
+    self.client.stands(word.at, &word.life).then_some((word.at, verb))
   }
 
   /// What the rung of the word that the window ran came to, as its life folds it. A rung of another
@@ -496,7 +497,7 @@ impl Model {
   pub(crate) fn area(&self) -> Area {
     let opens = self.thread.as_ref().is_some_and(|one| self.says_opens(one));
     let reads =
-      self.thread.as_ref().is_some_and(|one| self.fault_of(one.key.0, &one.key.1).is_some());
+      self.thread.as_ref().is_some_and(|one| self.client.fault_of(one.key.0, &one.key.1).is_some());
     let ended = self.thread.as_ref().and_then(|one| self.client.card(&one.key));
     let ended = ended.is_some_and(|card| card.thread.ended());
     let top = usize::from(self.size.1).saturating_sub(self.input_rows());
@@ -768,7 +769,7 @@ impl Model {
     let muted = t.style(Role::Muted);
     let card = self.thread.as_ref().and_then(|one| self.client.card(&one.key));
     let ended =
-      self.thread.as_ref().is_some_and(|one| self.fault_of(one.key.0, &one.key.1).is_some());
+      self.thread.as_ref().is_some_and(|one| self.client.fault_of(one.key.0, &one.key.1).is_some());
     let works = card.is_some_and(|card| card.thread.works()) && !ended;
     let mut hot = Vec::new();
     // The thread says why it has no page, so the row says it once more only for another fault.

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use furb::view::{self, Part, Standing};
+use furb_client::Ask;
 use furb_host::protocol::{Answer, Card, Frame, Kind, PROTOCOL, Peer, Role, Verb};
 use jiff::tz::TimeZone;
 
@@ -9,7 +10,6 @@ use crate::{
   Options, System,
   input::{Asked, Word},
   list::Row,
-  opens::Ask,
   tokens::Tokens,
 };
 
@@ -94,7 +94,7 @@ fn a_loss_gives_each_message_on_its_way_back_to_the_input_and_a_new_hello_hears_
   let mut model = model(vec![card("a", "one", Standing::Rests, 5)], 30);
   model.selected = model.client.settled.first().map(|one| one.1.clone());
   model.open_thread();
-  model.holds.values_mut().for_each(|hold| hold.ask = Ask::Answered);
+  model.client.holds.values_mut().for_each(|hold| hold.ask = Ask::Answered);
   assert!(model.send("and the seed?".to_owned()));
   let (at, _) = model.due().unwrap();
   model.asked.insert((at, 7), Asked::Say);
@@ -102,7 +102,7 @@ fn a_loss_gives_each_message_on_its_way_back_to_the_input_and_a_new_hello_hears_
   assert_eq!(model.restore.as_deref(), Some("and the seed?"));
   let why = "mac went away before it took your message. If the thread shows it, it went.";
   assert_eq!((model.fault.as_deref(), model.asked.len()), (Some(why), 0));
-  assert!(model.holds.values().all(|hold| hold.ask == Ask::Due));
+  assert!(model.client.holds.values().all(|hold| hold.ask == Ask::Due));
   // Nothing goes while the machine is away: the text stays in the input.
   model.draft.text = "and the seed?".to_owned();
   assert!(!model.send("and the seed?".to_owned()));
@@ -122,7 +122,7 @@ fn the_end_of_a_word_is_asked_again_once_its_life_stands_after_a_loss() {
   let mut model = model(vec![card("a", "one", Standing::Rests, 5)], 30);
   model.selected = model.client.settled.first().map(|one| one.1.clone());
   model.open_thread();
-  model.holds.values_mut().for_each(|hold| hold.ask = Ask::Answered);
+  model.client.holds.values_mut().for_each(|hold| hold.ask = Ask::Answered);
   let (life, rung) = ("a".to_owned(), "rung3".to_owned());
   let word =
     Word { at: 0, life: life.clone(), text: "x = 1".to_owned(), rung, asked: false, ran: None };
@@ -134,7 +134,7 @@ fn the_end_of_a_word_is_asked_again_once_its_life_stands_after_a_loss() {
   assert_eq!(model.ended_due(), None);
   assert!(model.hear(0, Err(crate::Error::Closed)));
   assert_eq!(model.ended_due(), None, "nothing goes until its life stands again");
-  model.holds.values_mut().for_each(|hold| hold.ask = Ask::Answered);
+  model.client.holds.values_mut().for_each(|hold| hold.ask = Ask::Answered);
   assert_eq!(model.ended_due(), Some((0, ended)));
 }
 
