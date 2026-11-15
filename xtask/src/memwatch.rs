@@ -190,12 +190,18 @@ fn census(trees: &[String]) -> Result<Census, Fault> {
     .args(["-axo", "uid=,pid=,rss=,command="])
     .output()
     .map_err(|source| Fault::Spawn { program: "ps".to_owned(), source })?;
+  counted(&me, &String::from_utf8_lossy(&ps.stdout), trees)
+}
+
+/// The census of the processes of a table of ps, as `uid pid rss command` on each line, that the
+/// user `me` runs: the memory of the work, and the largest test process.
+fn counted(me: &str, table: &str, trees: &[String]) -> Result<Census, Fault> {
   let binary = Regex::new(r"/target/.*/deps/[^/]+-[0-9a-f]+$")?;
   let python = Regex::new(r"(^|/)python[0-9.]*$")?;
   let host = Regex::new(r"[ /]furb host( |$)")?;
   let base = |word: &str, name: &str| word == name || word.ends_with(&format!("/{name}"));
   let mut census = Census { work: 0, largest: None };
-  for line in String::from_utf8_lossy(&ps.stdout).lines() {
+  for line in table.lines() {
     let mut fields = line.split_whitespace();
     let (Some(uid), Some(pid), Some(rss)) = (fields.next(), fields.next(), fields.next()) else {
       continue;
@@ -234,3 +240,7 @@ fn names(command: &str, trees: &[String]) -> bool {
       .any(|(at, _)| matches!(command[at + tree.len()..].chars().next(), None | Some('/' | ' ')))
   })
 }
+
+#[cfg(test)]
+#[path = "memwatch.test.rs"]
+mod test;
