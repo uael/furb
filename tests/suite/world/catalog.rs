@@ -32,7 +32,7 @@ use crate::{
 };
 
 /// The yard of a test, with these providers in the config of its project.
-fn configured(name: &str, providers: &Value) -> Yard {
+pub(super) fn configured(name: &str, providers: &Value) -> Yard {
   let at = yard(name);
   fs::create_dir_all(at.join(".furb")).expect("the folder of the project");
   let config = json!({"providers": providers}).to_string();
@@ -42,13 +42,13 @@ fn configured(name: &str, providers: &Value) -> Yard {
 
 /// The opening of a life of the child in its yard, which enables no extension, since an extension
 /// as naming asks a model of its own.
-fn opened(at: &Path) -> Opening {
+pub(super) fn opened(at: &Path) -> Opening {
   Opening { skills: Some(false), ..opened::opening(at, false) }
 }
 
 /// The life of the child in its yard, whose root prompts the actor for an int, and whom it tells
 /// what a model writes; and what the prompt came to.
-fn prompted(at: &Path, actor: &str, writes: Option<Writes>) -> (Engine, Object) {
+pub(super) fn prompted(at: &Path, actor: &str, writes: Option<Writes>) -> (Engine, Object) {
   let opening = Opening { actor: Some(actor.to_owned()), stream: writes.map(Stream), ..opened(at) };
   let mut engine = opening.boot::<String>([]).expect("the life opens").0;
   let id = asked(&mut engine);
@@ -58,7 +58,7 @@ fn prompted(at: &Path, actor: &str, writes: Option<Writes>) -> (Engine, Object) 
 
 /// A provider on a port of this machine, which answers each request with the next of these
 /// streams, and the requests that it read, each its head and its body.
-fn served(answers: Vec<String>) -> (u16, thread::JoinHandle<Vec<String>>) {
+pub(super) fn served(answers: Vec<String>) -> (u16, thread::JoinHandle<Vec<String>>) {
   let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = listener.local_addr().expect("the port").port();
   let asked = thread::spawn(move || answers.iter().map(|one| exchanged(&listener, one)).collect());
@@ -94,7 +94,7 @@ fn exchanged(listener: &TcpListener, events: &str) -> String {
 }
 
 /// The value of a header of a request, by its name in lower case.
-fn header<'a>(request: &'a str, name: &str) -> Option<&'a str> {
+pub(super) fn header<'a>(request: &'a str, name: &str) -> Option<&'a str> {
   let head = request.split("\r\n\r\n").next().unwrap_or_default();
   head.lines().find_map(|line| {
     let (key, value) = line.split_once(':')?;
@@ -103,7 +103,7 @@ fn header<'a>(request: &'a str, name: &str) -> Option<&'a str> {
 }
 
 /// The body of a request, as JSON.
-fn body(request: &str) -> Value {
+pub(super) fn body(request: &str) -> Value {
   serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body")
 }
 
@@ -295,7 +295,7 @@ fn azure_is_asked_for_the_deployment_of_a_model_at_the_address_and_the_version_o
 }
 
 /// One part of a stream of chat completions.
-fn chunk(delta: &Value, finish: &Value) -> String {
+pub(super) fn chunk(delta: &Value, finish: &Value) -> String {
   let one = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen",
     "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]});
   format!("data: {one}\n\n")
@@ -303,7 +303,7 @@ fn chunk(delta: &Value, finish: &Value) -> String {
 
 /// The end of a stream of chat completions, with the usage of the turn and the tokens that it read
 /// from the cache when it names them.
-fn ended(completion: u64, cached: Option<u64>) -> String {
+pub(super) fn ended(completion: u64, cached: Option<u64>) -> String {
   let mut usage = json!({"prompt_tokens": 100, "completion_tokens": completion,
     "total_tokens": 100 + completion});
   if let Some(cached) = cached {
@@ -348,7 +348,7 @@ fn on_local(at: &Path, effort: &str) -> (Engine, String) {
 }
 
 /// The turn that the first reply of the root was done with.
-fn replied(engine: &mut Engine) -> String {
+pub(super) fn replied(engine: &mut Engine) -> String {
   let done = |engine: &mut Engine| {
     let facts = said(engine).into_iter();
     facts.into_iter().find(|(kind, about, _)| kind == "done" && about == "reply1").map(|one| one.2)
@@ -381,13 +381,13 @@ fn chat_of(messages: &[Value]) -> &[Value] {
 }
 
 /// The last message of a request.
-fn last(request: &str) -> Value {
+pub(super) fn last(request: &str) -> Value {
   let body = body(request);
   body["messages"].as_array().and_then(|messages| messages.last()).cloned().unwrap_or_default()
 }
 
 /// What the prompt of the child came to, once it is answered.
-fn answered(engine: &mut Engine, id: &str) -> Option<i64> {
+pub(super) fn answered(engine: &mut Engine, id: &str) -> Option<i64> {
   block_on(Act::<Object>::of(engine, id)).expect("the prompt is answered").as_ref().as_int()
 }
 
@@ -816,7 +816,7 @@ fn a_reply_comes_to_the_turn_of_the_model_with_its_usage_its_dollars_and_its_blo
 }
 
 /// The parts of a thought of six parts, then the word `close(3)`, as a local server streams them.
-fn six(word: bool) -> String {
+pub(super) fn six(word: bool) -> String {
   let parts = ["a", "b", "c", "d", "e", "f"]
     .map(|one| chunk(&json!({"reasoning_content": one}), &Value::Null));
   if word { [parts.concat(), worded("close(3)")].concat() } else { parts.concat() }

@@ -215,6 +215,7 @@ impl ProviderConfig {
     if let Some(url) = self.url {
       checked_url(name, &url)?;
       listed.api = Some(url);
+      listed.named = true;
       for own in listed.models.values_mut().filter_map(|model| model.provider.as_mut()) {
         own.api = None;
       }
@@ -250,6 +251,7 @@ fn blank() -> Listed {
     aliases: HashMap::new(),
     models: IndexMap::new(),
     key: Some(String::new()),
+    named: false,
   }
 }
 

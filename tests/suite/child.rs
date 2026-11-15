@@ -10,6 +10,11 @@ use std::{
   process::Command,
 };
 
+use serde_json::Value;
+
+/// The snapshot of the catalog that the crate carries.
+const SNAPSHOT: &str = include_str!("../../src/world/provider/catalog.json");
+
 /// The variable that names the yard of a test to the child that runs it again.
 const CHILD: &str = "FURB_TEST_YARD";
 
@@ -29,14 +34,13 @@ pub(crate) fn child() -> Option<PathBuf> {
 }
 
 /// The test at this path run again as a child of this process, in the yard, with these variables,
-/// and nothing of the catalog of this machine: no cache, no local server and no most thought. The
-/// child fails the test when it fails.
+/// and nothing of the catalog of this machine: no cache, no credential, no place of an address, no
+/// local server and no most thought. The child fails the test when it fails.
 pub(crate) fn ran(test: &str, at: &Path, vars: &[(&str, &str)]) {
   let mut command = Command::new(env::current_exe().expect("the program of the tests"));
   command.args([test, "--exact", "--nocapture"]).env(CHILD, at);
   command.env("XDG_CACHE_HOME", at.join("cache"));
-  let names = ["FURB_LOCAL_URL", "FURB_LOCAL_KEY", "FURB_LOCAL_WINDOW", "FURB_LOCAL_TOKENS"];
-  for name in names.into_iter().chain(["MAX_THINKING_TOKENS"]) {
+  for name in catalogued() {
     command.env_remove(name);
   }
   command.envs(vars.iter().copied());
@@ -48,6 +52,43 @@ pub(crate) fn ran(test: &str, at: &Path, vars: &[(&str, &str)]) {
     said(&output.stdout),
     said(&output.stderr)
   );
+}
+
+/// Each variable that the catalog reads: the credentials and the places of the providers of the
+/// snapshot, what Azure and Google read beside them, the local server and the most thought.
+fn catalogued() -> Vec<String> {
+  let snapshot: Value = serde_json::from_str(SNAPSHOT).expect("the snapshot is JSON");
+  let mut names: Vec<String> = [
+    "AZURE_OPENAI_BASE_URL",
+    "AZURE_OPENAI_DEPLOYMENT_NAME_MAP",
+    "AZURE_OPENAI_API_VERSION",
+    "GOOGLE_CLOUD_PROJECT",
+    "GCLOUD_PROJECT",
+    "GOOGLE_CLOUD_LOCATION",
+    "FURB_LOCAL_URL",
+    "FURB_LOCAL_KEY",
+    "FURB_LOCAL_WINDOW",
+    "FURB_LOCAL_TOKENS",
+    "MAX_THINKING_TOKENS",
+  ]
+  .map(str::to_owned)
+  .to_vec();
+  for provider in snapshot.as_object().into_iter().flat_map(|all| all.values()) {
+    let strings = |key: &str| {
+      let held = provider[key].as_array().into_iter().flatten().filter_map(Value::as_str);
+      held.map(str::to_owned).collect::<Vec<_>>()
+    };
+    names.extend(strings("env"));
+    for (place, alias) in provider["aliases"].as_object().into_iter().flatten() {
+      names.extend([place.clone()].into_iter().chain(alias.as_str().map(str::to_owned)));
+    }
+    let text = provider.to_string();
+    names
+      .extend(text.split("${").skip(1).filter_map(|one| Some(one.split_once('}')?.0.to_owned())));
+  }
+  names.sort();
+  names.dedup();
+  names
 }
 
 pub(crate) use here;

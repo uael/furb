@@ -155,6 +155,9 @@ pub(super) struct Listed {
   models: IndexMap<String, Listing>,
   #[serde(skip)]
   key: Option<String>,
+  /// Whether a config named the address, which then reaches each client in place of its own.
+  #[serde(skip)]
+  named: bool,
 }
 
 /// One provider as the cache holds it, which is the catalog of models.dev whole: its models alone count.
@@ -882,7 +885,8 @@ impl Listed {
     };
     let version = env("AZURE_OPENAI_API_VERSION").filter(|_| client == Client::Azure);
     let id = deployed.unwrap_or_else(|| id.to_owned());
-    Ok(Reach { key: credential.key, bearer: credential.bearer, api, id, version, project })
+    let named = self.named;
+    Ok(Reach { key: credential.key, bearer: credential.bearer, api, named, id, version, project })
   }
 
   /// An address with each place `${NAME}` filled from the environment, which reads the name of pi-ai for the place

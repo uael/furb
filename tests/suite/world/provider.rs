@@ -1869,7 +1869,7 @@ fn found_by_native() -> Searches {
 }
 
 /// What a word that a rung runs on the root of a life closes with, or why it raised.
-fn closed(engine: &mut Engine, word: &str) -> Result<Object, String> {
+pub(super) fn closed(engine: &mut Engine, word: &str) -> Result<Object, String> {
   let root = engine.root().to_owned();
   let rung = verbs::Rung { word: Some(word.to_owned()), on: Some(root), ..Default::default() };
   block_on(engine.rung(rung).expect("a rung is made")).map_err(|no| format!("{no:?}"))

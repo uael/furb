@@ -67,6 +67,10 @@ pub(super) struct Reach {
   pub(super) key: String,
   pub(super) bearer: bool,
   pub(super) api: Option<String>,
+  /// Whether a config named the address. A client of rig that holds an address of its own takes
+  /// the address only then, since one of the snapshot may differ from the form that the client adds
+  /// its paths to.
+  pub(super) named: bool,
   pub(super) id: String,
   pub(super) version: Option<String>,
   pub(super) project: Option<(String, String)>,
@@ -105,9 +109,13 @@ impl Client {
   pub(super) fn streams(self, reach: &Reach) -> Result<Streams, Error> {
     let (key, id) = (reach.key.clone(), reach.id.clone());
     macro_rules! asked {
-      ($client:ty) => {
-        <$client>::builder().api_key(key).build()?.completion_model(id)
-      };
+      ($client:ty) => {{
+        let mut built = <$client>::builder().api_key(key);
+        if let Some(api) = reach.api.as_ref().filter(|_| reach.named) {
+          built = built.base_url(api);
+        }
+        built.build()?.completion_model(id)
+      }};
     }
     let api = || reach.api.clone().ok_or(Error::NoAddress);
     Ok(match self {
