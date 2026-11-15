@@ -219,8 +219,9 @@ impl Model {
     }
   }
 
-  /// His last message that still runs: the last one of the queue that is not on its way, else the
-  /// last one of his on the open thread whose act runs.
+  /// His last message that still runs: the last one of the queue that is not on its way, else his
+  /// last one on the open thread while its act runs, so a take back never reaches past a message
+  /// that the thread already took to an earlier one, as the message that began the thread.
   fn last_own(&self) -> Option<Back> {
     let flying = self.client.asked.values().any(|one| *one == Asked::Say);
     let queued = self.client.outgoing.iter().enumerate().skip(usize::from(flying)).next_back();
@@ -234,7 +235,8 @@ impl Model {
       Maker::Member { operator: one } => one == login,
       _ => false,
     };
-    let said = opened.thread.exchanges.values().rev().find(|one| one.runs && his(&one.by))?;
+    let said =
+      opened.thread.exchanges.values().rev().find(|one| his(&one.by)).filter(|one| one.runs)?;
     Some(Back::Said(said.message.clone(), said.text.clone()))
   }
 

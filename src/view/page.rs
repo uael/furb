@@ -337,8 +337,10 @@ impl<'a> Reader<'a> {
       act.kind == Kind::Rung && operator(&act.by) && prompts.iter().any(|one| one.id == act.on)
     };
     let words: Vec<&Act> = self.held.on_chain(&prompt.chain).filter(word).collect();
-    let mut messages: Vec<&Act> =
-      prompts.iter().copied().filter(|one| one.id == thread || operator(&one.by)).collect();
+    // A message that the operator took back is no message of the thread: its text went back to
+    // his input, and the message that he sends in its place stands there.
+    let said = |one: &&Act| one.id == thread || operator(&one.by) && !one.cancelled();
+    let mut messages: Vec<&Act> = prompts.iter().copied().filter(said).collect();
     messages.extend(&words);
     messages.sort_by_key(|one| one.began);
     // What answers a message is what came after it and before the next one, whichever prompt of
