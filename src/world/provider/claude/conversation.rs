@@ -94,8 +94,8 @@ pub(super) struct Conversation {
   again: bool,
   pub(super) process: Option<Process>,
   pub(super) used: Instant,
-  /// Whether a block of this conversation holds the mark of the cache that ends the turns before the
-  /// stand of its chain, as a fork holds each block of the conversation it forks.
+  /// Whether a block of this conversation holds the mark of the cache that ends the turns before
+  /// the stand of its chain, as a fork holds each block of the conversation it forks.
   pub(super) marked: bool,
   /// What the command line holds of this conversation, entry by entry, which the first process of
   /// a conversation that replaces this one resumes as far as the two share their turns.
@@ -745,12 +745,13 @@ fn pinned(command: &mut process::Command) {
   command.env_remove("CLAUDE_CODE_MESSAGES_PROMPT_CACHE_TTL");
 }
 
-/// The blocks of a message with the block before the turn `stand()` in a conversation marked for the
-/// cache: the turns before the stand hold no directory, roster or actor, so every chain of every
-/// record on the same engine, doctrine and extensions shares them, and the first turn of each later
-/// chain and each later record reads them. The mark lives as long as the marks of the command line,
-/// as [`lasting`] says, and a conversation marks one block at most, as the command line marks three
-/// of the four that a request takes: its own prompt, the system prompt and the end of the request.
+/// The blocks of a message with the block before the turn `stand()` in a conversation marked for
+/// the cache: the turns before the stand hold no directory, roster or actor, so every chain of
+/// every record on the same engine, doctrine and extensions shares them, and the first turn of each
+/// later chain and each later record reads them. The mark lives as long as the marks of the command
+/// line, as [`lasting`] says, and a conversation marks one block at most, as the command line marks
+/// three of the four that a request takes: its own prompt, the system prompt and the end of the
+/// request.
 pub(super) fn cached(blocks: &mut [Value], marked: &mut bool) {
   let stand = |one: &Value| one["text"].as_str().is_some_and(stands);
   if let Some(at) = (2..blocks.len()).find(|&at| !*marked && stand(&blocks[at])) {

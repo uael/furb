@@ -153,9 +153,10 @@ fn asked(engine: &mut Engine) -> String {
   engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned()
 }
 
-/// The facts of the root that the provider said about replies and chains: each kind, what it is about, and the
-/// representation of its first word. A reply and a rung are named by their order among those facts, as `reply1` for
-/// the first reply that the provider took, since the setup of a chain crafts replies and rungs of its own before them.
+/// The facts of the root that the provider said about replies and chains: each kind, what it is
+/// about, and the representation of its first word. A reply and a rung are named by their order
+/// among those facts, as `reply1` for the first reply that the provider took, since the setup of a
+/// chain crafts replies and rungs of its own before them.
 fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
   let root = engine.root().to_owned();
   let facts = engine
@@ -937,7 +938,8 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
     verbs::Prompt { message: Some("first task".into()), on: on(&root), ..Default::default() };
   block_on(other.prompt(Object::string("str"), with).expect("a prompt is made"))
     .expect("an answer");
-  // The first process of a conversation starts it, or resumes the turns of the setup of its chain that furb wrote.
+  // The first process of a conversation starts it, or resumes the turns of the setup of its chain
+  // that furb wrote.
   let session = |pid: &str| {
     let args = yard.args(pid);
     super::claude::test::after(&args, "--session-id")

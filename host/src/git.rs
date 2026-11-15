@@ -1,7 +1,7 @@
 //! The changes of a checkout of git as a window shows them: its branch, the files that differ from
-//! the last commit with the lines that each adds and removes, and the diff of one of them. Each asks
-//! the program git of the machine, which knows each form of a checkout, a worktree among them, and
-//! runs off the loop of the daemon under a bound of time, so a slow disk holds back no verb.
+//! the last commit with the lines that each adds and removes, and the diff of one of them. Each
+//! asks the program git of the machine, which knows each form of a checkout, a worktree among them,
+//! and runs off the loop of the daemon under a bound of time, so a slow disk holds back no verb.
 
 use std::{
   fs,
