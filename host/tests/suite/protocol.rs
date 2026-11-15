@@ -22,9 +22,9 @@ use std::{
 use furb_host::{
   Host, Outbox, ProtocolError, fixed,
   protocol::{
-    Answer, Axis, BOUND, Config, Dispose, Draft, Effect, Frame, Gesture, Hello, Kind, Layer, Mount,
-    Node, PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect, ViewEvent,
-    schema,
+    Answer, Axis, BOUND, Config, Dispose, Draft, Effect, Frame, Gesture, Hello, KITS, Kind, Layer,
+    Mount, Node, PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect,
+    ViewEvent, schema,
   },
   serve,
   transport::{Dialer, Identity, Local, Who},
@@ -402,6 +402,32 @@ async fn a_frame_of_a_view_is_refused_to_the_kind_of_peer_that_does_not_say_it()
         }
         other => panic!("{verb:?} said by {kind:?} gave {other:?}"),
       }
+    }
+  }
+}
+
+#[tokio::test]
+async fn a_skill_of_each_version_that_kits_keep_is_welcome_and_says_what_it_said() {
+  let kits = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/kits");
+  let mut versions: Vec<u32> = fs::read_dir(&kits)
+    .unwrap()
+    .flatten()
+    .filter_map(|one| one.path().file_stem()?.to_str()?.parse().ok())
+    .collect();
+  versions.sort_unstable();
+  assert_eq!(
+    versions.first(),
+    Some(&KITS),
+    "{} holds what a skill of the first version says",
+    kits.display()
+  );
+  for version in versions {
+    let said = fs::read_to_string(kits.join(format!("{version}.jsonl"))).unwrap();
+    let mut client = served(Role::Write);
+    for line in said.lines() {
+      client.say(line).await;
+      let heard = client.heard().await.expect("the daemon answers each line");
+      assert!(matches!(heard, Frame::Reply { .. }), "{version}: {line} gave {heard:?}");
     }
   }
 }

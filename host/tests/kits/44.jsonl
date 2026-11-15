@@ -1,0 +1,11 @@
+{"id":0,"verb":"hello","protocol":44,"kind":"skill","name":"k"}
+{"id":1,"verb":"attach","life":"a.jsonl","from":0}
+{"id":2,"verb":"run","life":"a.jsonl","word":"x = 1"}
+{"id":3,"verb":"run","life":"a.jsonl","word":"y = 2","on":"chain2"}
+{"id":4,"verb":"prompt","life":"a.jsonl","shape":"str","message":"hi"}
+{"id":5,"verb":"prompt","life":"a.jsonl","shape":"str","message":"hi","to":"claude-cli:opus/high","on":"chain2"}
+{"id":6,"verb":"view.tree","viewer":"w","slot":{"slot":"dock","on":"chain1"},"version":1,"tree":{"id":"t","node":"box","axis":"column","gap":0,"border":false,"children":[{"id":"a","node":"text","runs":[{"text":"served"},{"text":"!","tone":"muted"}]},{"id":"b","node":"button","label":"go"},{"id":"c","node":"input","value":"","hint":"say"},{"id":"d","node":"markdown","text":"**b**"},{"id":"e","node":"code","text":"x = 1","language":"python"},{"id":"f","node":"diff","text":"-a\n+b"},{"id":"g","node":"progress","done":0.5},{"id":"h","node":"list","items":[]},{"id":"i","node":"table","header":["a"],"rows":[]}]}}
+{"id":7,"verb":"view.tree","viewer":"w","slot":{"slot":"sidebar"},"version":2,"tree":{"id":"t","node":"text","runs":[{"text":"served"}]}}
+{"id":8,"verb":"view.effect","viewer":"w","effect":{"effect":"notice","text":"done"}}
+{"id":9,"verb":"view.effect","viewer":"w","effect":{"effect":"open","url":"https://example.com"}}
+{"id":10,"verb":"view.effect","viewer":"w","effect":{"effect":"draft","text":"hello"}}

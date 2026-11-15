@@ -26,7 +26,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec, LinesCodecError};
 
 use crate::{
   error::{ProtocolError, TransportError},
-  protocol::{Answer, BOUND, Frame, Hello, Kind, PROTOCOL, Peer, Request, Role, Verb},
+  protocol::{Answer, BOUND, Frame, Hello, KITS, Kind, PROTOCOL, Peer, Request, Role, Verb},
   transport::Who,
 };
 
@@ -142,7 +142,7 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
     Some(Ok(Request { id, verb: Verb::Hello(Hello { kind: Kind::Skill, name: None, .. }) })) => {
       return closed(&mut out, Some(id), ProtocolError::Nameless).await;
     }
-    Some(Ok(Request { id, verb: Verb::Hello(hello) })) if hello.protocol == PROTOCOL => {
+    Some(Ok(Request { id, verb: Verb::Hello(hello) })) if spoken(&hello) => {
       let asked = hello.role;
       let role = asked.map_or(who.role, |asked| asked.min(who.role));
       let peer = Peer { operator: who.operator, role, kind: hello.kind, name: hello.name };
@@ -186,6 +186,15 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
       }
       Some(frame) = answers.next() => send(&mut out, &frame).await?,
     }
+  }
+}
+
+/// Whether the daemon speaks the protocol of a hello: its own, or for a skill each version from
+/// [`KITS`].
+fn spoken(hello: &Hello) -> bool {
+  match hello.kind {
+    Kind::Skill => (KITS..=PROTOCOL).contains(&hello.protocol),
+    _ => hello.protocol == PROTOCOL,
   }
 }
 

@@ -209,7 +209,8 @@ What the notes are for.
   where the daemon listens, the record of the life and the name of the extension, so it dials the daemon and attaches
   the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
   life that plays it does. A process that ends before its life tells the operator once, with its exit and the last
-  lines of its stderr, and starts again at the next play of the extension. It can be absent.
+  lines of its stderr, and starts again at the next play of the extension. A process keeps working on each later
+  daemon, as [the protocol](protocol.md) says of a skill. It can be absent.
 - `furb-config` is the JSON file of the keys that the extension adds to the configs, relative to the folder, as
   [the schema](config.md#the-schema) says. `/config` shows them under the name of the extension, and its word reads
   them as `json.loads(read("settings://<name>", HIDDEN).content)`. It can be absent.
