@@ -656,7 +656,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Type("Measure the open on three chains."), Act::Key("Enter")],
           "✓ Resolved  opus",
         ),
-        step("d", &[Act::Pointer { on: "└ Run the bench", button: 0 }], "· agent · "),
+        step("d", &[Act::Pointer { on: "└ report = await", button: 0 }], "· agent · "),
         step("c", &[Act::Key("Escape")], "demo · Measure"),
       ],
     }),

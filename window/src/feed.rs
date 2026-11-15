@@ -357,16 +357,6 @@ impl Feed<'_> {
       Mark::Runs { .. } | Mark::Retries(_) if self.ended() => &Mark::Ran,
       mark => mark,
     };
-    // What stands at the right of the line: the time of its work, or how long ago a stop ended it,
-    // from one minute on, as the age of a card.
-    let right = match *mark {
-      Mark::Runs { began: Some(began), .. } => self.model.since(began).map(timer),
-      Mark::Stopped { at } => {
-        let age = at.and_then(|at| self.model.age(at / 1000));
-        Some(age.map_or_else(|| "stopped".to_owned(), |age| format!("stopped {age} ago")))
-      }
-      _ => line.output.as_ref().and_then(|one| one.took).filter(|took| *took > 0).map(timer),
-    };
     let (number, color, loader) = match mark {
       Mark::Runs { work, .. } => (" ".to_owned(), t.accent, Some(loader(*work))),
       Mark::Retries(_) => (" ".to_owned(), t.accent, Some(Loader::Model)),
@@ -393,30 +383,63 @@ impl Feed<'_> {
       _ => colors,
     };
     let ground = if loader.is_some() { t.lifted } else { t.raised };
-    let timer = right.map(|right| vec![run(right, self.style(Role::Muted))]).unwrap_or_default();
+    let muted = self.style(Role::Muted);
+    let timer = self.right(line, mark).map(|right| vec![run(right, muted)]).unwrap_or_default();
     let room = room.saturating_sub(width(&timer) + 2 * usize::from(!timer.is_empty()));
-    let mut text = vec![run(format!("{number:>gutter$}  "), Style::new().fg(color))];
-    text.extend(clipped(colors, room, self.style(Role::Muted)));
+    let head = run(format!("{number:>gutter$}  "), Style::new().fg(color));
+    let lined = |colors: Line| {
+      let text = [head.clone()].into_iter().chain(clipped(colors, room, muted)).collect();
+      self.boxed(spread(text, timer.clone(), inner, Style::new()), ground)
+    };
+    let pointed =
+      self.gave(line, matches!(mark, Mark::Ran)).map(|gave| lined([colors.clone(), gave].concat()));
     // The light passes over the word that says that the model writes, as over each word of work,
     // and over the call of `prompt` that the line awaits while its agent works: the one call that
     // makes code and value in furb.
     let code = PAD + gutter + 2;
     let writes = (writes && loader.is_some()).then_some((code, Loader::Light(WRITES)));
     let shines = matches!(mark, Mark::Runs { work: Work::Agent, .. }).then(|| {
-      let shown: String = text[1..].iter().map(|one| one.content.as_ref()).collect();
+      let shown: String =
+        clipped(colors.clone(), room, muted).iter().map(|one| one.content.as_ref()).collect();
       let at = shown.find(&format!("{PROMPT}("))?;
       Some((code + shown[..at].width(), Loader::Light(PROMPT)))
     });
-    let shown = self.boxed(spread(text, timer, inner, Style::new()), ground);
     let loaders = loader.map(|one| (PAD + gutter - 1, one));
     let loaders = loaders.into_iter().chain(writes).chain(shines.flatten()).collect();
-    let mut rows = vec![Row { loaders, ..Row::of(shown) }];
+    let mut rows = vec![Row { loaders, pointed, ..Row::of(lined(colors)) }];
     rows.extend(output.into_iter().flatten());
     let under = under
       .iter()
       .map(|one| self.boxed(vec![run(format!("{:gutter$}  {one}", ""), look)], t.raised));
     rows.extend(under.map(Row::of));
     rows
+  }
+
+  /// What stands at the right of a line: the time of its work, or how long ago a stop ended it,
+  /// from one minute on, as the age of a card, or the time that its command took.
+  fn right(&self, line: &Code, mark: &Mark) -> Option<String> {
+    match *mark {
+      Mark::Runs { began: Some(began), .. } => self.model.since(began).map(timer),
+      Mark::Stopped { at } => {
+        let age = at.and_then(|at| self.model.age(at / 1000));
+        Some(age.map_or_else(|| "stopped".to_owned(), |age| format!("stopped {age} ago")))
+      }
+      _ => line.output.as_ref().and_then(|one| one.took).filter(|took| *took > 0).map(timer),
+    }
+  }
+
+  /// The value that the last act of a line that ran came to, as a debugger shows it beside the
+  /// code while the pointer is on the line, when no row under the line says it already, as what a
+  /// command wrote or an agent.
+  fn gave(&self, line: &Code, ran: bool) -> Option<Line> {
+    let (done, agents) = self.opened.made(Some(line.number));
+    let said = done + agents.len() > 0 || line.output.is_some();
+    let value = match line.made.last() {
+      Some(Made::Done(value)) if ran && !said && value != "None" => value,
+      _ => return None,
+    };
+    let muted = self.style(Role::Muted);
+    Some(vec![run("  → ", muted), run(self.model.homed(value), muted)])
   }
 
   /// What the command of a line wrote, under it at the column of the code: how many lines came

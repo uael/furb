@@ -462,14 +462,21 @@ boot = prompt(str, 'Read the boot of the host\\n(the model works on it)', on=cha
 lines = await prompt(str, 'Count the lines of README.md\\n(the agent answers)', on=chain('count'))
 await wait(600, bench)";
 
-/// The words of [`DELEGATES`] and those that its agents read in their prompts, and [`READS`], each
-/// with the word that answers it: the first agent answers at once, and the second waits on its
-/// chain.
-const ANSWERED: [(&str, &str); 4] = [
+/// The words of a message of a test that make the model write a file, read it and close.
+pub(crate) const OPENS: &str = "(the model opens a file)";
+
+/// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`] and
+/// [`OPENS`], each with the word that answers it: the first agent answers at once, and the second
+/// waits on its chain.
+const ANSWERED: [(&str, &str); 5] = [
   (DELEGATES, DELEGATE),
   ("(the agent answers)", "close('README.md has 3 lines.')"),
   ("(the agent waits)", "n = 2\nawait wait(600, chain)"),
   (READS, "close('The trace holds the open of each chain.')"),
+  (
+    OPENS,
+    "write(Text('notes.md', 'a\\nb\\nc\\n'))\nfound = read('notes.md')\nclose('It holds 3 lines.')",
+  ),
 ];
 
 /// The long word of a model of a test, which waits ten minutes on its chain at its end: a wait

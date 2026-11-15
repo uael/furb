@@ -472,12 +472,12 @@ fn each_act_that_a_loop_makes_marks_the_line_that_makes_it() {
 #[test]
 fn a_line_says_what_each_act_that_it_made_came_to_one_for_each_pass_of_a_loop() {
   let mut streams = Streamed::default();
-  let done = json!(["done", "bash2", "chain1", {"code": 0, "out": "b"}]);
+  let done = json!(["done", "bash2", "chain1", {"is": "Bash", "code": 0, "out": "b"}]);
   let held = held(looped([done]), &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.as_ref().unwrap();
   let made: Vec<&[Made]> = block.lines.iter().map(|line| line.made.as_slice()).collect();
-  let passes = [Made::Done("''".to_owned()), Made::Done("{'code': 0, 'out': 'b'}".to_owned())];
+  let passes = [Made::Done("''".to_owned()), Made::Done("Bash(code=0, out='b')".to_owned())];
   assert_eq!(made, [&[][..], &passes[..], &[][..]]);
 }
 

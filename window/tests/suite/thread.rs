@@ -11,7 +11,9 @@ use opentui::{native::Capture, style::Color, testing::TestApp};
 
 use crate::{
   cards::{app, options, row, shows},
-  daemon::{ANSWERS, DELEGATES, Daemon, FAILS, LONG, PATIENCE, Peer, READS, RETRIES, THINKS},
+  daemon::{
+    ANSWERS, DELEGATES, Daemon, FAILS, LONG, OPENS, PATIENCE, Peer, READS, RETRIES, THINKS,
+  },
   screens::screen,
 };
 
@@ -245,6 +247,25 @@ fn an_older_page_keeps_the_rows_that_the_operator_reads() {
   assert!(came, "the older page never came:\n{}", app.text());
   assert!(up_until(&app, |text| text.contains(first)), "{}", app.text());
   screen("thread-older", &app);
+}
+
+#[test]
+fn the_pointer_on_a_line_that_ran_shows_what_it_gave_beside_its_code() {
+  let message = format!("open the readme\n{OPENS}");
+  let (app, _daemon, _peer) = opened(&message, "It holds 3 lines.");
+  let line = |app: &TestApp| {
+    let frame = app.text();
+    let found = frame.lines().find(|one| one.contains("2  found = read("));
+    found.map(|one| one.chars().take(LEFT).collect::<String>().trim_end().to_owned())
+  };
+  assert_eq!(line(&app).as_deref(), Some("    2  found = read('notes.md')"));
+  // As a debugger shows a value, the line says what its read gave while the pointer is on it.
+  app.hover(20, row(&app, "2  found = read("));
+  let shown = app.wait_until(PATIENCE, || line(&app).is_some_and(|one| one.contains("→ Text(")));
+  assert!(shown, "{}", app.text());
+  app.hover(0, 0);
+  let gone = app.wait_until(PATIENCE, || line(&app).is_some_and(|one| !one.contains("→")));
+  assert!(gone, "{}", app.text());
 }
 
 #[test]

@@ -65,14 +65,16 @@ pub(crate) enum Click {
 pub(crate) type Hot = (Range<usize>, Option<Click>);
 
 /// A row of the left side: its runs, the parts that go bright under the pointer, the columns among
-/// them that keep their color, as the word of a state, and the column of each of its loaders,
-/// which a widget of its own draws over the cells of the row.
+/// them that keep their color, as the word of a state, the column of each of its loaders, which a
+/// widget of its own draws over the cells of the row, and the runs that it shows in place of its
+/// own while the pointer is on it, as the value beside a line of code that ran.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct Row {
   pub(crate) line: Line,
   pub(crate) hot: Vec<Hot>,
   pub(crate) keeps: Option<Range<usize>>,
   pub(crate) loaders: Vec<(usize, Loader)>,
+  pub(crate) pointed: Option<Line>,
 }
 
 impl Row {
@@ -101,9 +103,13 @@ impl Row {
     self.line[at].link.as_deref()
   }
 
-  /// The row with its text bright where the pointer is on a thing that takes a click: its hot
-  /// columns but those that keep their color, or each word of the link there.
+  /// The row as it stands under the pointer: the runs that it shows there, with its text bright
+  /// where the pointer is on a thing that takes a click: its hot columns but those that keep their
+  /// color, or each word of the link there.
   pub(crate) fn lit(mut self, x: usize, hover: Color) -> Self {
+    if let Some(pointed) = self.pointed.take() {
+      self.line = pointed;
+    }
     let hot = self.hot.iter().map(|hot| hot.0.clone()).find(|hot| hot.contains(&x));
     let link = self.link(x).map(str::to_owned);
     let mut start = 0;
@@ -518,7 +524,7 @@ impl Model {
   }
 
   /// The rows of the left side and the cell of each loader. The text of a thing under the pointer
-  /// that takes a click goes bright, and nothing else changes.
+  /// that takes a click goes bright, and a row that shows more under the pointer shows it.
   pub(crate) fn left(&self) -> Left {
     let mut rows = self.left_rows();
     if let Some((x, y)) = self.pointed()

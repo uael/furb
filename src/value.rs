@@ -45,11 +45,19 @@ impl Given for ObjectRef<'_> {
   }
 }
 
-/// A value of JSON as python writes it: a text as its repr, `True`, `False` and `None`, and a list
-/// and a dict of such values.
+/// A value of JSON as python writes it: a text as its repr, `True`, `False` and `None`, a list and
+/// a dict of such values, and an instance of a class of the engine as the call that makes it with
+/// its fields.
 pub(crate) fn literal(value: &Value) -> String {
   let all = |items: Vec<String>| items.join(", ");
   match value {
+    Value::Object(map) if let Some(Value::String(class)) = map.get(IS) => {
+      let fields = map.iter().filter(|(key, _)| *key != IS);
+      format!(
+        "{class}({})",
+        all(fields.map(|(key, one)| format!("{key}={}", literal(one))).collect())
+      )
+    }
     Value::String(text) => repr(text),
     Value::Bool(true) => "True".to_owned(),
     Value::Bool(false) => "False".to_owned(),
