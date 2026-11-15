@@ -16,7 +16,9 @@ Each of these acts holds on each build of the major that made the record, with n
 A record replays on the engine that it holds, under the names that it holds. A record of another record is not
 imported. From #1290 on, each record holds the texts of its engine, so each later build of the major replays it with
 no drift. A record that a build before #1290 made holds no such texts and may drift on a later build: a life on it is
-refused with the act that drifts, and a reader still reads each fact of it. A drift on the same engine is a defect, never a known limit (R1). Within a major, a later build of the
+refused with the act that drifts, and a reader still reads each fact of it. An engine from before #1290 can also
+gather no checkpoint, so a life that keeps such a record cannot cross it to a later build and is refused with that
+reason, and a life that inspects still reads it. A drift on the same engine is a defect, never a known limit (R1). Within a major, a later build of the
 engine never makes a record drift. Where a later build fixes a defect of replay at its root, an adapter of the old
 engine holds the record, in the one home of adapters, `src/furb/adapters.py`, keyed by the digest of the engine (R3).
 A life that keeps its record and ran another engine, Kernel or checkpointer of the major first reaches the exact
@@ -68,6 +70,7 @@ R2, the exact tip, with a checkpoint and without one (resume and reopen):
 - `src/life.test.rs::a_record_of_another_engine_crosses_to_this_build_at_its_open`
 - `src/life.test.rs::an_image_of_another_engine_crosses_to_this_build_at_its_open`
 - `src/life.test.rs::a_crossing_by_the_image_and_by_the_record_reach_the_same_state`
+- `src/life.test.rs::a_record_of_an_engine_that_gathers_no_checkpoint_opens_to_inspect_alone`
 - `src/life.test.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
 - `tests/suite/promise.rs::a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint`
 - `host/tests/suite/daemon.rs::a_life_that_ended_opens_again_from_its_checkpoint`

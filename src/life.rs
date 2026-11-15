@@ -250,6 +250,13 @@ pub struct Opening {
   pub log: Option<Log>,
 }
 
+/// Whether texts of an engine, a Kernel and a checkpointer gather a checkpoint: a checkpointer
+/// does, and before it an engine that defines `gathered`, as each engine of the stable cut of #1290
+/// and after it does.
+fn gathers((engine, _, checkpointer): &(String, String, String)) -> bool {
+  !checkpointer.is_empty() || engine.contains("\ndef gathered(")
+}
+
 impl Opening {
   /// Whether the life does work, which a life that inspects does not.
   fn works(&self) -> bool {
@@ -462,7 +469,8 @@ impl Opening {
   /// The image of the record when one agrees with it, else the last entries of the record, which
   /// the open reads in the stage find. A life that keeps its record and runs another engine, Kernel
   /// or checkpointer than this build crosses first, as [`Opening::crossed`] says, and then opens by
-  /// its record.
+  /// its record. A crossing writes a checkpoint, so a life whose texts gather none is refused: each
+  /// such engine is from before the stable cut, which the promise does not hold.
   fn tip(
     &self,
     told: &Progress,
@@ -474,8 +482,15 @@ impl Opening {
       Some(_) => None,
       None => self.last(&mut |at| (told.0)(Stage::Find, at, bytes))?,
     };
-    if !self.keeps() || Self::texts(image.as_ref(), last.as_ref())? == Self::texts(None, None)? {
+    let texts = Self::texts(image.as_ref(), last.as_ref())?;
+    if !self.keeps() || texts == Self::texts(None, None)? {
       return Ok((image, last));
+    }
+    if !gathers(&texts) {
+      return Err(Fault::refused(
+        "the record runs an engine from before the stable cut of #1290, which gathers no \
+         checkpoint, so no life crosses it to this build to keep it: a life that inspects reads it",
+      ));
     }
     (told.0)(Stage::Cross, 0, 0);
     self.crossed()?;

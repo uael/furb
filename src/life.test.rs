@@ -1338,6 +1338,20 @@ fn a_record_whose_root_reloaded_its_extensions_on_a_checkpoint_opens_again_with_
   assert!(again.is_ok(), "the record opens again: {:?}", again.err());
 }
 
+/// A record whose engine gathers no checkpoint, which each engine before the stable cut of #1290
+/// is, opens in no life that keeps it, since no checkpoint carries it to this build, and says
+/// why; a life that inspects reads it.
+#[test]
+fn a_record_of_an_engine_that_gathers_no_checkpoint_opens_to_inspect_alone() {
+  let at = yard("ungathered");
+  laid(&replays().join("speaker.jsonl"), &at.join("record.jsonl"));
+  let kept = opening(&at, true).boot::<String>([]).map(|_| ()).unwrap_err().to_string();
+  assert!(kept.contains("before the stable cut of #1290"), "{kept}");
+  assert!(world::checkpoints(at.join("record.jsonl")).unwrap().is_empty(), "no crossing");
+  let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
+  assert!(inspects.boot::<String>([]).is_ok(), "a life that inspects reads it");
+}
+
 #[test]
 fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
   for (record, first) in [("ranks.jsonl", "bash2"), ("speaker.jsonl", "reply4")] {
