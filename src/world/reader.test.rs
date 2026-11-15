@@ -2,7 +2,7 @@
 
 use std::{fs, path::PathBuf};
 
-use super::{kept, retold, retold_live, told, unmarked};
+use super::{WRITES, kept, retold, retold_live, told, unmarked};
 use crate::testing::Yard;
 use crate::{
   value::Object,
@@ -11,7 +11,7 @@ use crate::{
   world::store::Taken,
 };
 use serde_json::{Value, value::RawValue};
-use std::process;
+use std::{process, sync::atomic::Ordering, thread};
 
 /// The facts of lines of JSON, as a record keeps them.
 fn facts(lines: &[&str]) -> Vec<Object> {
@@ -442,4 +442,33 @@ fn a_checkpoint_is_told_as_the_same_json_from_its_text_as_from_its_value() {
     let parsed = outward(kept(&entry).unwrap().0.as_ref());
     assert_eq!(unmarked(serde_json::from_str(&text).unwrap()).unwrap(), parsed, "{text}");
   }
+}
+
+/// Two readers that read one record at once tell it once: the second waits for the first, then
+/// takes the file that the first wrote.
+#[test]
+fn two_readers_of_one_record_at_once_tell_it_once() {
+  let at = place("once");
+  let mut record = vec![r#"[["made","chain1","store","abc"]]"#.to_owned()];
+  record.extend((1..200_000).map(|n| format!(r#"[["stand","stand{n}","operator","chain1"]]"#)));
+  fs::write(&at, record.join("\n") + "\n").unwrap();
+  let before = WRITES.load(Ordering::Relaxed);
+  let first = thread::spawn({
+    let at = at.to_path_buf();
+    move || retold(at).unwrap()
+  });
+  let folder = at.parent().unwrap();
+  let telling = || {
+    fs::read_dir(folder)
+      .unwrap()
+      .any(|one| one.unwrap().file_name().to_string_lossy().contains(".told.body."))
+  };
+  while !telling() {
+    assert!(!first.is_finished(), "the first reader is still telling when the second comes");
+    thread::yield_now();
+  }
+  let second = retold(&at).unwrap();
+  let first = first.join().unwrap();
+  assert_eq!(WRITES.load(Ordering::Relaxed) - before, 1, "one reader told the record");
+  assert_eq!((first.file, first.entries), (second.file, second.entries));
 }

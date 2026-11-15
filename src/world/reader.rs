@@ -156,7 +156,10 @@ static WRITES: AtomicU64 = AtomicU64::new(0);
 ///
 /// The file of what the record tells is a cache: its first line names the size and the time of change of the record
 /// and of its log, and the build that wrote it. While all agree, a later read takes it as it stands and reads no
-/// record. Else the reader writes it again from the record.
+/// record. Else the reader writes it again from the record. One reader at a time writes it, under
+/// the lock of the file `<record>.told.lock`: a reader that comes while another writes it waits,
+/// then takes what that one wrote, so a large record is told once, as when the index of its cards
+/// and the open of its life read it at once.
 pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let path = path.as_ref();
   let log = beside(path, ".log");
@@ -165,9 +168,20 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   if let Some(found) = cached(&cache, &stamp, &log) {
     return Ok(found);
   }
+  // A folder that takes no lock file takes no file of what the record tells either, and the read
+  // then fails at its write.
+  let lock = fs::OpenOptions::new()
+    .write(true)
+    .create(true)
+    .truncate(false)
+    .open(beside(path, ".told.lock"));
+  let _held = lock.and_then(|file| file.lock().map(|()| file));
+  if let Some(found) = cached(&cache, &stamp, &log) {
+    return Ok(found);
+  }
   let Surveyed { maker, entries, last, makers, logged } = surveyed(path)?;
-  // Each retelling writes under names of its own, so two readers that retell one record at once,
-  // as two windows of a life whose log let go of its facts, never write over each other.
+  // Each retelling writes under names of its own, so a reader of an earlier build, which takes no
+  // lock, never writes over the files of this one.
   let mine = WRITES.fetch_add(1, Ordering::Relaxed);
   let fresh = beside(path, &format!(".told.new.{}.{mine}", process::id()));
   let body = beside(path, &format!(".told.body.{}.{mine}", process::id()));
