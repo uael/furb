@@ -53,6 +53,7 @@ use std::{
 };
 
 use clap::{Args, Subcommand};
+use serde::Serialize;
 use serde_json::{Value, json};
 use toml::de;
 use wait_timeout::ChildExt;
@@ -409,8 +410,9 @@ impl Rig {
       numbers.writes,
       numbers.usd
     );
-    let mut kept = json!({"value": value, "wall_seconds": seconds, "root": run.task});
-    numbers.into(&mut kept);
+    let mut kept = serde_json::to_value(&numbers)
+      .map_err(|source| Fault::Json { what: "the numbers of a run".to_owned(), source })?;
+    (kept["value"], kept["wall_seconds"], kept["root"]) = (value, json!(seconds), json!(run.task));
     written(&life.runs.join("numbers.json"), pretty(&kept)?.as_bytes())?;
     let patch = life.runs.join("model.patch");
     self.frozen(&life.app, &seeded.syn, &patch)?;
@@ -642,8 +644,9 @@ impl Mark {
 }
 
 /// What a life did and what it cost, read off the record that it kept: a file of lines, each a
-/// fact of the record and its time, as the store of furb writes it.
-#[derive(Default)]
+/// fact of the record and its time, as the store of furb writes it. Its names are the keys of the
+/// file of the numbers of a run.
+#[derive(Default, Serialize)]
 struct Numbers {
   facts: u64,
   answers: u64,
@@ -701,26 +704,6 @@ impl Numbers {
     (self.input, self.output, self.cache_read) =
       (self.input + tokens(0), self.output + tokens(1), self.cache_read + tokens(2));
     self.usd += count(4);
-  }
-
-  /// The numbers as the keys of the file of the numbers of a run.
-  fn into(self, kept: &mut Value) {
-    let counts = [
-      ("facts", self.facts),
-      ("answers", self.answers),
-      ("rungs", self.rungs),
-      ("prompts", self.prompts),
-      ("commands", self.commands),
-      ("reads", self.reads),
-      ("writes", self.writes),
-      ("input", self.input),
-      ("output", self.output),
-      ("cache_read", self.cache_read),
-    ];
-    for (name, count) in counts {
-      kept[name] = Value::from(count);
-    }
-    kept["usd"] = Value::from(self.usd);
   }
 }
 

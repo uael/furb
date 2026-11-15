@@ -133,8 +133,7 @@ fn the_watch_ends_a_run_when_its_record_numbers_fall_below_an_earlier_mark() {
 fn the_numbers_of_a_run_count_each_answer_of_a_model_and_its_cost_off_the_record() {
   let yard = Yard::new(format!("xtask-deepswe-numbers-{}", process::id()));
   fs::write(yard.join("record.jsonl"), RECORD).unwrap();
-  let mut kept = json!({});
-  Numbers::of(&yard.join("record.jsonl")).unwrap().into(&mut kept);
+  let kept = serde_json::to_value(Numbers::of(&yard.join("record.jsonl")).unwrap()).unwrap();
   let counted = json!({
     "facts": 5, "answers": 1, "rungs": 2, "prompts": 1, "commands": 0, "reads": 0, "writes": 0,
     "input": 100, "output": 20, "cache_read": 300, "usd": 0.5,

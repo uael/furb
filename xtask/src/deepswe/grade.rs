@@ -32,7 +32,7 @@ exec bash /tests/test.sh
 "#;
 
 /// Each reporter that the verifier of a task opens by an absolute path, with what it installs.
-pub(super) const REPORTERS: [(&str, &[&str]); 3] = [
+const REPORTERS: [(&str, &[&str]); 3] = [
   ("/opt/ctrf", &["mocha-ctrf-json-reporter@0.0.11"]),
   ("/opt/jest-ctrf", &["jest-ctrf-json-reporter@0.0.11", "jest-environment-node@29.7.0"]),
   ("/opt/nextest", &[]),
@@ -65,7 +65,7 @@ impl Rig {
 
   /// Where a reporter that a frame opens by an absolute path stands on this host: there when its
   /// folder takes a file, and else in the homes of the rig.
-  pub(super) fn reporter(&self, at: &str) -> PathBuf {
+  fn reporter(&self, at: &str) -> PathBuf {
     let path = Path::new(at);
     let probe = path.parent().map(|one| one.join(format!(".furb-deepswe-{}", process::id())));
     let writable =

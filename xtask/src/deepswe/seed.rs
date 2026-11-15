@@ -482,7 +482,7 @@ fn symlink(target: &Path, path: &Path) -> io::Result<()> {
 
 /// The bytes with each name of the base moved, where the name ends a path, and none when they
 /// name no base.
-pub(super) fn moved(said: &[u8], was: &[u8], now: &[u8]) -> Option<Vec<u8>> {
+fn moved(said: &[u8], was: &[u8], now: &[u8]) -> Option<Vec<u8>> {
   let (mut out, mut at, mut hit) = (Vec::new(), 0, false);
   while let Some(found) = said[at..].windows(was.len()).position(|one| one == was) {
     let end = at + found + was.len();
