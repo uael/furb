@@ -58,7 +58,7 @@ fn the_end_of_a_word_is_asked_again_once_its_life_stands_after_a_loss() {
   card(&app, title);
   shows(&app, "Two stages hold most");
   clicked(&app, " Python ", 0, 1);
-  shows(&app, "┃ A word of Python to run");
+  shows(&app, "┃ >>> A word of Python to run");
   // A wait that the next life of the record takes again, and that ends a moment after it.
   sent(&app, "await wait(3, __name__)");
   shows(&app, "  await wait(3, __name__)");

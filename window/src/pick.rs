@@ -9,6 +9,7 @@ use std::{borrow::Cow, cmp::Reverse};
 use furb::view::{Part, Sent, Skill};
 use furb_host::protocol::Card;
 use opentui::style::Style;
+use unicode_width::UnicodeWidthStr;
 
 use furb_client::{Client, Control, Link, Matched, Target, Told, ranked};
 use furb_host::protocol::Model as Offered;
@@ -20,7 +21,7 @@ use crate::{
   list::project,
   model::{Key, Model},
   thread::{Click, Row, hued},
-  tokens::{BESIDE, KEYS, OVER, PART, Role, SIDE},
+  tokens::{BESIDE, OVER, PART, Role, SIDE},
 };
 
 /// What a list part lists.
@@ -367,11 +368,16 @@ impl Model {
   /// Each key of the table of the keys, with each of its forms, by its group: the forms in the
   /// column of the keys, then what it does, as the home names a key. A command runs from it.
   fn each_key(&self) -> Vec<Entry> {
+    // The column of the keys is as wide as the widest of them on this system, where a key in words
+    // takes far more columns than its signs, and two columns part it from what the key does.
+    let joined = |forms: Vec<String>| forms.join(" or ");
+    let column = keys::each(self.system).map(|(_, _, forms)| joined(forms).width()).max();
+    let column = column.unwrap_or_default() + 2;
     let entry = |(group, key, forms): (&'static str, &Bound, Vec<String>)| {
-      let forms = forms.join(" or ");
+      let forms = joined(forms);
       Entry {
         part: group.into(),
-        left: format!("{forms:<KEYS$}"),
+        left: format!("{forms}{}", " ".repeat(column.saturating_sub(forms.width()))),
         says: key.says.to_owned(),
         choice: if key.command.is_some() { Choice::Key(key.does) } else { Choice::None },
         ..Entry::default()
