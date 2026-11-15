@@ -251,6 +251,29 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+A kit can also own acts of its own, which its process answers. Its word makes each act with an ear that says started
+and waits, under a kind that starts with the name of the kit, so no other kit answers it:
+
+```python
+def add(item: str) -> Act[str]:
+  def taken(id):
+    yield "started", id
+    yield from idle(id)
+
+  return act("notes.add", "", controlled(taken), item)
+```
+
+Its process answers each act of that kind, whatever kinds it hears:
+
+```python
+skill.answers("notes.add", lambda fact: f"added {fact[4]}")
+```
+
+The process closes the act with what its function gives, awaited when it is awaitable, or with a refusal that names
+what it raised. It first checks that the act is not done, so an act of the past that it reads at its attach gets no
+second answer. A word that awaits `add("milk")` waits until the process answers, and a later life takes the answer
+from the record. `skill.answers(kind, answer)` of TypeScript does the same.
+
 A field of furb that the manifest does not know is refused with its path, so a typo does not pass.
 
 A word reaches the machine only through the acts that furb has already: a read, a write, a command, a wait, the

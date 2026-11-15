@@ -355,11 +355,12 @@ export interface SkillOptions {
 
 /** The process of a skill as a peer of the daemon: it attaches the life that the daemon started it for, under the name
  * of its skill, hears the facts of the kinds that it asked, says verbs to the life, which the life takes under that
- * name, and serves a view to each window that mounts one. */
+ * name, answers the acts that its word takes, and serves a view to each window that mounts one. */
 export class Skill {
   readonly views = new Map<string, View>();
   private readonly facts = new Set<(fact: Fact, seq: number) => void>();
   private readonly mounts = new Set<(view: View) => void>();
+  private readonly answering = new Map<string, (fact: Fact) => unknown>();
   private constructor(
     readonly connection: Connection,
     readonly name: string,
@@ -391,6 +392,31 @@ export class Skill {
   heard(listener: (fact: Fact, seq: number) => void): () => void {
     this.facts.add(listener);
     return () => this.facts.delete(listener);
+  }
+
+  /** Each act of a kind that the word of the skill took with a started, and that is not done, answered from now on,
+   * whatever kinds the skill hears: the skill closes it with what `answer` gives for its fact, awaited when it is a
+   * promise, or with a refusal that names what it threw. An act that is done already, as one of the past that an
+   * attach reads, gets no answer. */
+  answers(kind: string, answer: (fact: Fact) => unknown): () => void {
+    this.answering.set(kind, answer);
+    return () => this.answering.delete(kind);
+  }
+
+  private async answered(fact: Fact, answer: (fact: Fact) => unknown): Promise<void> {
+    const act = fact[1];
+    const open = await this.say({ verb: "peek", act }).then(
+      () => false,
+      (no: unknown) => no instanceof Refused,
+    );
+    if (!open) return;
+    let value: string;
+    try {
+      value = JSON.stringify(await answer(fact));
+    } catch (no) {
+      value = JSON.stringify({ is: "Refused", args: [no instanceof Error ? no.message : String(no)] });
+    }
+    await this.say({ verb: "close", act, value });
   }
 
   /** Each view that a window mounts from now on. */
@@ -425,6 +451,8 @@ export class Skill {
   private pushed(frame: Frame): void {
     if (frame.frame === "event" && frame.life === this.life && frame.event.event === "fact") {
       const fact = frame.event.data as Fact;
+      const answer = this.answering.get(fact[0]);
+      if (answer) void this.answered(fact, answer);
       if (this.kinds && !this.kinds.has(fact[0])) return;
       for (const listener of this.facts) listener(fact, frame.seq);
     } else if (frame.frame === "view.mount" && frame.life === this.life) {

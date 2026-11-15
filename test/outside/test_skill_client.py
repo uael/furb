@@ -141,6 +141,47 @@ async def test_a_skill_hears_the_facts_of_its_kinds_and_the_gestures_and_end_of_
   assert (views[0].viewer, views[0].slot, skill.views) == ("w", {"slot": "sidebar"}, {})
 
 
+async def test_a_skill_answers_each_open_act_of_its_kind_with_a_close_and_skips_one_that_is_done(
+  daemon: Daemon,
+) -> None:
+  skill = await client.Skill.attach(kinds=["prompt"], env=env(daemon))
+  done = {"k.add1"}
+
+  def answering(verb: dict[str, object]) -> dict[str, object]:
+    if verb["verb"] == "peek" and verb["act"] not in done:
+      return {"frame": "refused", "error": {"error": "refused"}, "why": f"No act named {verb['act']} is done."}
+    return answered(verb)
+
+  daemon.answers = answering
+
+  async def added(fact: list[object]) -> str:
+    await asyncio.sleep(0)
+    return f"added {fact[4]}"
+
+  def failed(_fact: list[object]) -> object:
+    raise ValueError("no room")
+
+  skill.answers("k.add", added)
+  skill.answers("k.drop", failed)
+  skill.answers("k.count", lambda _fact: 2)
+  skill.answers("k.gone", added)()
+  for seq, (kind, act) in enumerate(
+    [("k.add", "k.add1"), ("k.add", "k.add2"), ("k.drop", "k.drop1"), ("k.count", "k.count1"), ("k.gone", "x")]
+  ):
+    fact = [kind, act, "rung4", "chain1", "milk"]
+    daemon.push({"frame": "event", "life": "a.jsonl", "seq": seq, "event": {"event": "fact", "data": fact}})
+  await until(lambda: sum(verb["verb"] == "close" for verb in daemon.said) == 3)
+  closes = sorted((str(verb["act"]), str(verb["value"])) for verb in daemon.said if verb["verb"] == "close")
+  refusal = json.dumps({"is": "Refused", "args": ["no room"]})
+  assert closes == [("k.add2", json.dumps("added milk")), ("k.count1", "2"), ("k.drop1", refusal)]
+  assert sorted(str(verb["act"]) for verb in daemon.said if verb["verb"] == "peek") == [
+    "k.add1",
+    "k.add2",
+    "k.count1",
+    "k.drop1",
+  ]
+
+
 async def test_a_refusal_names_its_kind_and_a_close_ends_each_verb_that_waits(daemon: Daemon) -> None:
   skill = await client.Skill.attach(env=env(daemon))
   daemon.answers = lambda _verb: {"frame": "refused", "error": {"error": "role"}, "why": "No role."}

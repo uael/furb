@@ -2,7 +2,8 @@
 
 The daemon of the machine starts the process of a skill with `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL`. `Skill.attach`
 dials the daemon from them and attaches the life as a peer of the kind skill. The skill then hears the facts of the
-kinds that it asks, says verbs that the life takes under its name, and serves a tree to each view that a window mounts.
+kinds that it asks, says verbs that the life takes under its name, answers the acts that its word takes, and serves a
+tree to each view that a window mounts.
 
     skill = await Skill.attach(kinds=["prompt"])
     skill.heard(lambda fact, seq: fact[5] == "ping" and asyncio.ensure_future(skill.run("pong = 1")))
@@ -14,6 +15,7 @@ The types of the protocol stand in `furb.protocol`, which the schema of the daem
 
 import asyncio
 import contextlib
+import inspect
 import json
 import os
 import re
@@ -177,6 +179,8 @@ class Skill:
     self.connection, self.name, self.life, self.kinds = connection, name, life, kinds
     self.views: dict[str, View] = {}
     self.facts: list[Callable[[Fact, int], object]] = []
+    self.answering: dict[str, Callable[[Fact], object]] = {}
+    self.answers_running: set[asyncio.Task[None]] = set()
     self.mounts: list[Callable[[View], object]] = []
     connection.pushed(self.pushed)
 
@@ -205,6 +209,30 @@ class Skill:
     self.facts.append(listener)
     return lambda: self.facts.remove(listener)
 
+  def answers(self, kind: str, answer: Callable[[Fact], object]) -> Callable[[], None]:
+    """Each act of a kind that the word of the skill took with a started, and that is not done, answered from now on,
+    whatever kinds the skill hears: the skill closes it with what `answer` gives for its fact, awaited when it is
+    awaitable, or with a refusal that names what it raised. An act that is done already, as one of the past that an
+    attach reads, gets no answer."""
+    self.answering[kind] = answer
+
+    def unanswered() -> None:
+      self.answering.pop(kind, None)
+
+    return unanswered
+
+  async def answered(self, fact: Fact, answer: Callable[[Fact], object]) -> None:
+    act = str(fact[1])
+    try:
+      await self.say({"verb": "peek", "act": act})
+    except Refused:
+      try:
+        got = answer(fact)
+        value = json.dumps(await got if inspect.isawaitable(got) else got)
+      except Exception as no:
+        value = json.dumps({"is": "Refused", "args": [str(no) or type(no).__name__]})
+      await self.say({"verb": "close", "act": act, "value": value})
+
   def served(self, listener: Callable[[View], object]) -> Callable[[], None]:
     """Each view that a window mounts from now on."""
     self.mounts.append(listener)
@@ -228,6 +256,10 @@ class Skill:
   def pushed(self, frame: Frame) -> None:
     match frame:
       case {"frame": "event", "life": self.life, "seq": int(seq), "event": {"event": "fact", "data": list(fact)}}:
+        if (answer := self.answering.get(str(fact[0]))) is not None:
+          task = asyncio.ensure_future(self.answered(fact, answer))
+          self.answers_running.add(task)
+          task.add_done_callback(self.answers_running.discard)
         if self.kinds is None or fact[0] in self.kinds:
           for listener in list(self.facts):
             listener(fact, seq)
