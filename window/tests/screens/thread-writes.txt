@@ -8,8 +8,8 @@
     1  cost = tokens(word)
     ⠋  proof = await bash('pytest -q test/outside
     …
-  I read the stages from the frames and sum them, so the…
 
+  thought · I read the stages from the frames and sum…
 
 
 

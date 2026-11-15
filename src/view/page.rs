@@ -132,10 +132,12 @@ pub enum Work {
   Agent,
 }
 
-/// What a model thought before it wrote, and in how many seconds, which is none while it thinks.
+/// What a model thought before it wrote: the second of the epoch since which it thinks, as the
+/// host saw it begin, and in how many seconds it thought, which is none while it thinks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Thought {
   pub text: String,
+  pub since: u64,
   pub took: Option<u64>,
 }
 
@@ -472,7 +474,8 @@ impl<'a> Reader<'a> {
     let streamed = self.thinker(answers).and_then(|rung| self.streams.wrote.get(&rung.id));
     let thought = streamed.and_then(|wrote| {
       let took = wrote.thought.map(|ended| ended.saturating_sub(wrote.began) / 1000);
-      (!wrote.thinking.trim().is_empty()).then(|| Thought { text: wrote.thinking.clone(), took })
+      let since = wrote.began / 1000;
+      (!wrote.thinking.trim().is_empty()).then(|| Thought { text: wrote.thinking.clone(), since, took })
     });
     let block = answers.rungs.last().map(|last| Block {
       maker: last.maker.clone(),

@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 28;
+pub const PROTOCOL: u32 = 29;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;

@@ -66,8 +66,9 @@ impl Prose<'_> {
         None => self.text(&text, self.style()),
       },
       Event::Code(text) => self.text(&text, self.style().bg(self.tokens.raised)),
-      Event::SoftBreak => self.text(" ", self.style()),
-      Event::HardBreak => self.flush(),
+      // A single newline breaks the line, as a comment of GitHub keeps it, so an answer that gives
+      // the lines of a command keeps them.
+      Event::SoftBreak | Event::HardBreak => self.flush(),
       Event::Rule => {
         self.flush();
         self.out.push(vec![run("─".repeat(self.room), self.tokens.style(Role::Muted))]);

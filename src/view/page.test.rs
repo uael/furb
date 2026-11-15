@@ -98,7 +98,8 @@ fn a_model_that_writes_shows_the_lines_that_came_the_line_that_comes_and_its_tho
   facts.push(json!(["reply", "reply1", "rung3", "chain1", "claude-cli:opus/high"]));
   let held = held(facts, &mut streams);
   streams.wrote("rung3", ["", "The seed is read once. Then"], 101_000);
-  let thought = |took| Some(Thought { text: "The seed is read once. Then".to_owned(), took });
+  let text = "The seed is read once. Then".to_owned();
+  let thought = |took| Some(Thought { text: text.clone(), since: 101, took });
   let block = |streams: &Streamed| {
     held.page(streams, "prompt1", Reach { before: None, limit: 1 }).exchanges[0]
       .block

@@ -1421,10 +1421,12 @@ export interface Retrying {
   why: string;
 }
 /**
- * What a model thought before it wrote, and in how many seconds, which is none while it thinks.
+ * What a model thought before it wrote: the second of the epoch since which it thinks, as the
+ * host saw it begin, and in how many seconds it thought, which is none while it thinks.
  */
 export interface Thought {
   text: string;
+  since: number;
   took?: number | null;
 }
 /**
@@ -1499,4 +1501,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 28;
+export const PROTOCOL = 29;

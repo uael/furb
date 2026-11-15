@@ -4427,6 +4427,11 @@
         "text": {
           "type": "string"
         },
+        "since": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
         "took": {
           "type": [
             "integer",
@@ -4437,9 +4442,10 @@
         }
       },
       "required": [
-        "text"
+        "text",
+        "since"
       ],
-      "description": "What a model thought before it wrote, and in how many seconds, which is none while it thinks."
+      "description": "What a model thought before it wrote: the second of the epoch since which it thinks, as the\nhost saw it begin, and in how many seconds it thought, which is none while it thinks."
     },
     "Said": {
       "type": "object",
@@ -5332,5 +5338,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 28
+  "x-protocol": 29
 }

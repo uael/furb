@@ -237,6 +237,7 @@ impl Feed<'_> {
       rows.push(Row::of(self.boxed(vec![run(format!("{:>gutter$}", "…"), muted)], t.raised)));
     }
     if let Some(thought) = &block.thought {
+      rows.push(Row::default());
       rows.extend(self.thought(message, thought));
     }
     rows.push(Row::default());
@@ -319,15 +320,21 @@ impl Feed<'_> {
       };
       return lines.iter().map(row).collect();
     }
-    let line = match thought.took {
-      None => vec![run(format!("  {}", tail(&thought.text, room)), style)],
-      Some(took) => {
-        let first = vec![run("  ", style), run(thought.first(), style)];
-        // A time shows from one second on, as the time of a line that runs.
-        let took = (took > 0).then(|| run(timer(took), self.style(Role::Muted)));
-        spread(first, took.into_iter().collect(), room + 2, Style::new())
+    // The word says what the row is, and the time stands at the right, in the column of the time of
+    // a line that runs: it counts while the model thinks, and stays as the time that it took.
+    let muted = self.style(Role::Muted);
+    let (word, text, seconds) = match thought.took {
+      // The last words keep room for the word before them and a time of eight columns after.
+      None => {
+        let words = tail(&thought.text, room.saturating_sub(" thinks · ".len() + 2 + 8));
+        ("thinks", words, self.model.now.saturating_sub(thought.since))
       }
+      Some(took) => ("thought", thought.first().to_owned(), took),
     };
+    // A time shows from one second on, as the time of a line that runs.
+    let time = (seconds > 0).then(|| run(timer(seconds), muted));
+    let said = vec![run(format!("  {word} · "), muted), run(text, style)];
+    let line = spread(said, time.into_iter().collect(), room + 2, Style::new());
     vec![Row::clicked(line, Click::Fold(fold))]
   }
 
