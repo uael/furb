@@ -644,6 +644,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("b", &[Act::Key("C-x"), Act::Key("g")], "main · src/inventory/models.py"),
         step("c", &[Act::Key("Down")], "return sum"),
         step("d", &[Act::Key("Escape")], "Each item"),
+        // A click on a file that a line wrote opens the block, with the diff under the line.
+        step("x-diff", &[Act::Pointer { on: "models.py  +2", button: 0 }], "+    self.count = 0"),
       ],
     }),
   },

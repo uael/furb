@@ -18,7 +18,7 @@ use serde_json::Value;
 use crate::engine::OPERATOR;
 
 use furb_wire::{
-  act::{Act, Kind},
+  act::{Act, Kind, Phase},
   desk::Desk,
   ladder::{Rung, Shown},
   state::State,
@@ -221,6 +221,26 @@ impl Held {
   /// The acts that an act or a person made, in the order they were first told.
   pub(super) fn made_by<'a>(&'a self, id: &str) -> impl Iterator<Item = &'a Act> + use<'a> {
     self.made.get(id).into_iter().flatten().map(|at| &*self.acts[*at])
+  }
+
+  /// The text that the life knew at the path of a file before an act: what the last read or write
+  /// of that path that was told before the act came to. A read gives the whole file, whatever
+  /// lines it tells, so its text is what stood there.
+  pub(super) fn text_before(&self, path: &str, act: &str) -> Option<&str> {
+    let place = *self.at.get(act)?;
+    let mut texts = self.acts[..place].iter().rev().filter_map(|one| self.filed(one));
+    texts.find(|(at, _)| *at == path).map(|(_, content)| content)
+  }
+
+  /// The path and the content of the file that a read or a write came to, once it is done: a text
+  /// of a path that is no door of an act, whose first part is the name of that act.
+  pub(super) fn filed<'a>(&self, act: &'a Act) -> Option<(&'a str, &'a str)> {
+    let (Kind::Other(kind), Phase::Done(value)) = (&act.kind, &act.phase) else { return None };
+    let text = (kind == "read" || kind == "write").then_some(value)?;
+    let field = |name: &str| text.get(name).and_then(Value::as_str);
+    let door = |path: &str| path.split('/').next().is_some_and(|first| self.at.contains_key(first));
+    let path = field("path").filter(|path| !door(path))?;
+    (field("is") == Some("Text")).then_some((path, field("content")?))
   }
 
   /// The acts of a chain, in the order they were first told.

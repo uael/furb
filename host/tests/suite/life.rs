@@ -1178,6 +1178,7 @@ async fn a_retry_of_a_model_shows_on_the_line_that_it_writes_and_its_failure_onc
     mark: Mark::Retries(retries),
     output: None,
     made: Vec::new(),
+    writes: Vec::new(),
   };
   assert_eq!(page().await, [waits]);
   // The model is asked again once the call fails for good, and that call fails too, so the
@@ -1194,6 +1195,7 @@ async fn a_retry_of_a_model_shows_on_the_line_that_it_writes_and_its_failure_onc
     mark: Mark::Failed { why },
     output: None,
     made: Vec::new(),
+    writes: Vec::new(),
   };
   assert_eq!(page().await, [failed]);
   life.send(Command::End).await.unwrap();

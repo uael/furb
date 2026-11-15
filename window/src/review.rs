@@ -158,7 +158,7 @@ impl Model {
   }
 
   /// The lines that a change adds and removes, each in its color, and none of a count of zero.
-  fn counts(&self, added: u32, removed: u32) -> Line {
+  pub(crate) fn counts(&self, added: u32, removed: u32) -> Line {
     let t = &self.tokens;
     let added = (added > 0).then(|| run(format!("+{added}"), Style::new().fg(t.added)));
     let removed = (removed > 0).then(|| run(format!("−{removed}"), Style::new().fg(t.danger)));

@@ -4381,7 +4381,7 @@
               "type": "null"
             }
           ],
-          "description": "Who closed the act, as a window names who made an act, once a close of it was said."
+          "description": "Who closed or cancelled the act, as a window names who made an act, once a close or a cancel\nof it was said."
         },
         "state": {
           "description": "The state of the act, or of the work of a chain for a chain.",
@@ -4911,6 +4911,12 @@
           "items": {
             "$ref": "#/definitions/Made"
           }
+        },
+        "writes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Written"
+          }
         }
       },
       "required": [
@@ -4918,7 +4924,7 @@
         "text",
         "mark"
       ],
-      "description": "One line of a block: its number in the thread, its text, in which each quote stands as the\nbinding that it makes and a string of many lines as one line with its escapes, its mark, what\nthe last command that it awaited wrote, and what each act that it made came to but a chain, in\nthe order it made them: one for each pass of a loop, the last of which is the value that it\nbound."
+      "description": "One line of a block: its number in the thread, its text, in which each quote stands as the\nbinding that it makes and a string of many lines as one line with its escapes, its mark, what\nthe last command that it awaited wrote, what each act that it made came to but a chain, in\nthe order it made them: one for each pass of a loop, the last of which is the value that it\nbound, and what each write of a file that it made changed, in the same order."
     },
     "Mark": {
       "oneOf": [
@@ -5144,6 +5150,47 @@
         }
       ],
       "description": "What an act that a line made came to: it works, it failed, or it is done with a value, as a\nliteral of python cut to `LITERAL` characters."
+    },
+    "Written": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "added": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "removed": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "known": {
+          "type": "boolean"
+        },
+        "diff": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "more": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "path",
+        "added",
+        "removed",
+        "known",
+        "diff",
+        "more"
+      ],
+      "description": "What a write of a file that a line made changed: the path of the file, the lines that it added\nand removed against the text of the path that the life knew before it, from a read or a write\nof the path, and the first `DIFF` lines of their diff, as git writes a unified diff with one\nline around each change but the header of its first hunk, with the count of the lines past them. A write of a path that the life\ndid not know before counts each of its lines as added, and is not `known`, since the life does\nnot know what stood there."
     },
     "Thought": {
       "type": "object",
@@ -6118,5 +6165,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 60
+  "x-protocol": 61
 }

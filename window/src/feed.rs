@@ -465,6 +465,7 @@ impl Feed<'_> {
         _ => colors.clone(),
       };
       rows.extend(self.code(line, colors, numbers));
+      rows.extend(self.writes(line, numbers, (&fold, open)));
       rows.extend(self.agents(Some((line, numbers))));
     }
     if follow > 0 {
@@ -588,6 +589,62 @@ impl Feed<'_> {
       Row::of(self.boxed(shown, self.model.tokens.raised))
     };
     lines.map(row).collect()
+  }
+
+  /// What each write of a file of a line changed, under it at the column of the code: a row for
+  /// each file, with its path from the folder of the thread and the lines that it added and
+  /// removed, which a click opens or folds with the block; and while the block stands open, the
+  /// diff of the last file, each line in the color of what it does on the ground of its change,
+  /// and how many lines follow. A write of a file that the life did not know says how many lines it
+  /// wrote. A block that rolls keeps a row for each file, so a diff never takes its rows.
+  fn writes(&self, line: &Code, numbers: Gutter, (fold, open): (&Fold, bool)) -> Vec<Row> {
+    let (gutter, inner) = (numbers.width, numbers.inside(self.inner()));
+    let room = inner.saturating_sub(gutter + 2);
+    let t = &self.model.tokens;
+    let muted = self.style(Role::Muted);
+    let pad = || run(format!("{:gutter$}  ", ""), muted);
+    let key = &self.opened.thread.key;
+    // A record writes a path under the home of its machine from `~`, so both sides compare so.
+    let folder = self.model.client.cwd(key.0, &key.1).map(|one| self.model.homed(&one));
+    let mut rows = Vec::new();
+    for one in &line.writes {
+      let path = self.model.homed(&one.path);
+      let path = folder
+        .as_deref()
+        .and_then(|folder| path.strip_prefix(folder)?.strip_prefix('/'))
+        .map_or_else(|| path.clone(), str::to_owned);
+      let counts = if one.known {
+        self.model.counts(one.added, one.removed)
+      } else {
+        vec![run(format!("wrote {}", lines(one.added as usize)), muted)]
+      };
+      let mut shown = vec![pad(), run(format!("{path}  "), self.style(Role::Prose))];
+      shown.extend(counts);
+      let shown = [vec![shown[0].clone()], clipped(shown[1..].to_vec(), room, muted)].concat();
+      rows.push(Row::clicked(self.boxed(shown, t.raised), Click::Fold(fold.clone())));
+    }
+    let Some(last) = line.writes.last().filter(|_| open) else { return rows };
+    for text in &last.diff {
+      let (sign, ground) = match text.as_bytes().first() {
+        Some(b'+') => (Style::new().fg(t.added), t.added_ground),
+        Some(b'-') => (Style::new().fg(t.danger), t.removed_ground),
+        _ => (muted, t.raised),
+      };
+      // The header of a hunk says that lines stand between it and the one before.
+      let shown = if text.starts_with("@@") {
+        vec![pad(), run("…", muted)]
+      } else {
+        let (mark, code) = text.split_at(text.chars().next().map_or(0, char::len_utf8));
+        let code = run(code.to_owned(), self.style(Role::Prose));
+        [vec![pad(), run(mark.to_owned(), sign)], clipped(vec![code], room - 1, muted)].concat()
+      };
+      rows.push(Row::of(self.boxed(shown, ground)));
+    }
+    if last.more > 0 {
+      let more = vec![pad(), run(format!("… {} in the review", lines(last.more)), muted)];
+      rows.push(Row::clicked(self.boxed(more, t.raised), Click::Key(Does::Changes)));
+    }
+    rows
   }
 
   /// What a line whose model is asked again says, in the accent: furb works.

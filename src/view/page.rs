@@ -11,13 +11,14 @@ use std::{
 use anstream::adapter::strip_str;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use similar::{ChangeTag, TextDiff};
 
 use furb_wire::{
   act::{Act, Kind, Maker, Phase, RunState, fault, operator, reason},
   card::{Card, Standing},
   page::{
-    Agent, Answered, Block, Context, Exchange, LITERAL, Line, Made, Mark, Output, Page, Reach,
-    Retrying, Said, Saying, Thought, Work, stands, wrote,
+    Agent, Answered, Block, Context, DIFF, Exchange, LITERAL, Line, Made, Mark, Output, Page,
+    Reach, Retrying, Said, Saying, Thought, Work, Written, stands, wrote,
   },
   state::{State, working},
 };
@@ -463,6 +464,11 @@ impl<'a> Reader<'a> {
       if let Some(output) = self.output(act) {
         lines[at].output = Some(output);
       }
+      if act.kind == Kind::Other("write".to_owned())
+        && let Some((path, after)) = self.held.filed(act)
+      {
+        lines[at].writes.push(changed(path, self.held.text_before(path, &act.id), after));
+      }
     }
     lines
   }
@@ -474,13 +480,7 @@ impl<'a> Reader<'a> {
     let began = |id: &str| self.streams.began.get(id).copied();
     let mut lines: Vec<Line> = shown(word)
       .into_iter()
-      .map(|(at, text)| Line {
-        number: before + at + 1,
-        text,
-        mark: Mark::Ran,
-        output: None,
-        made: Vec::new(),
-      })
+      .map(|(at, text)| Line::of(before + at + 1, text, Mark::Ran))
       .collect();
     let Some(run @ (RunState::Failed(_) | RunState::Cancelled(_) | RunState::Running)) = &rung.run
     else {
@@ -582,28 +582,15 @@ impl<'a> Reader<'a> {
     }
     let came = writing(text, "");
     let ran = came.lines.split('\n').zip(&came.numbers).filter(|_| !came.lines.is_empty());
-    let mut lines: Vec<Line> = ran
-      .map(|(text, at)| Line {
-        number: before + at,
-        text: text.to_owned(),
-        mark: Mark::Ran,
-        output: None,
-        made: Vec::new(),
-      })
-      .collect();
+    let mut lines: Vec<Line> =
+      ran.map(|(text, at)| Line::of(before + at, text.to_owned(), Mark::Ran)).collect();
     // A model whose reply is done writes no line: its word waits to run, from its first line.
     let whole = mark.is_none() && reply.is_some_and(Act::done);
     let mark = match mark {
       _ if whole => Mark::Ran,
       mark => mark.unwrap_or(Mark::Runs { work: Work::Writes, began }),
     };
-    lines.push(Line {
-      number: before + came.count + 1,
-      text: came.tail,
-      mark,
-      output: None,
-      made: Vec::new(),
-    });
+    lines.push(Line::of(before + came.count + 1, came.tail, mark));
     if whole {
       lines[0].mark =
         Mark::Runs { work: Work::Command, began: self.streams.began.get(&rung.id).copied() };
@@ -728,6 +715,30 @@ fn outcome(act: &Act) -> Made {
     }
     Phase::Asked | Phase::Started => Made::Works,
   }
+}
+
+/// What a write changed in a file, from the text that the life knew there before it, if any, to the
+/// text that the disk holds after it.
+fn changed(path: &str, before: Option<&str>, after: &str) -> Written {
+  let diff = TextDiff::from_lines(before.unwrap_or_default(), after);
+  let (mut added, mut removed, mut lines) = (0, 0, Vec::new());
+  for (at, hunk) in diff.unified_diff().context_radius(1).iter_hunks().enumerate() {
+    if at > 0 {
+      lines.push(hunk.header().to_string());
+    }
+    for change in hunk.iter_changes() {
+      match change.tag() {
+        ChangeTag::Insert => added += 1,
+        ChangeTag::Delete => removed += 1,
+        ChangeTag::Equal => {}
+      }
+      let text = change.as_str().unwrap_or_default().trim_end_matches(['\n', '\r']);
+      lines.push(format!("{}{text}", change.tag()));
+    }
+  }
+  let more = lines.len().saturating_sub(DIFF);
+  lines.truncate(DIFF);
+  Written { path: path.to_owned(), added, removed, known: before.is_some(), diff: lines, more }
 }
 
 /// The line of a word, numbered from the count of the lines of the thread before it, that shows

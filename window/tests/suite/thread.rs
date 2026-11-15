@@ -12,7 +12,8 @@ use opentui::{native::Capture, style::Color, testing::TestApp};
 use crate::{
   cards::{app, options, row, shows},
   daemon::{
-    ANSWERS, DELEGATES, Daemon, FAILS, LONG, OPENS, PATIENCE, Peer, READS, RETRIES, THINKS, WORKS,
+    ANSWERS, DELEGATES, Daemon, EDITS, FAILS, LONG, OPENS, PATIENCE, Peer, READS, RETRIES, THINKS,
+    WORKS,
   },
   screens::screen,
 };
@@ -295,6 +296,56 @@ fn the_pointer_on_a_line_that_ran_shows_what_it_gave_beside_its_code() {
   app.hover(0, 0);
   let gone = app.wait_until(PATIENCE, || line(&app).is_some_and(|one| !one.contains("→")));
   assert!(gone, "{}", app.text());
+}
+
+#[test]
+fn a_line_that_wrote_a_file_shows_its_path_what_it_changed_and_the_diff_under_it() {
+  let message = format!("edit the notes of the day\n{EDITS}");
+  let (app, _daemon, _peer) = opened(&message, "notes.md has 4 lines.");
+  let rows = |app: &TestApp, count: usize| -> Vec<String> {
+    let frame = app.text();
+    let block = frame.lines().skip_while(|line| !line.contains("1  write(Text("));
+    block.take(count).map(|line| line.chars().take(LEFT).collect::<String>()).collect()
+  };
+  let trimmed = |rows: Vec<String>| rows.iter().map(|one| one.trim_end().to_owned()).collect();
+  // Each file that a line wrote stands under it with what changed: the life read no notes.md
+  // before the first write, so that write says how many lines it wrote.
+  let rolled: Vec<String> = trimmed(rows(&app, 6));
+  assert_eq!(
+    rolled,
+    [
+      "    1  write(Text('notes.md', 'a\\nb\\nc\\n'))",
+      "       notes.md  wrote 3 lines",
+      "    2  m = read('notes.md')",
+      "    3  write(m.replace('b\\n', 'B\\nb2\\n'))",
+      "       notes.md  +2 −1",
+      "    4  close('notes.md has 4 lines.')",
+    ]
+  );
+  // A click on a file opens the block, which shows the diff of each file under its line.
+  clicked(&app, "notes.md  +2", 0, 0);
+  let open = app.wait_until(PATIENCE, || app.text().contains("+B"));
+  assert!(open, "{}", app.text());
+  let opened: Vec<String> = trimmed(rows(&app, 15));
+  assert_eq!(
+    opened[..13],
+    [
+      "    1  write(Text('notes.md', 'a\\nb\\nc\\n'))",
+      "       notes.md  wrote 3 lines",
+      "       +a",
+      "       +b",
+      "       +c",
+      "    2  m = read('notes.md')",
+      "    3  write(m.replace('b\\n', 'B\\nb2\\n'))",
+      "       notes.md  +2 −1",
+      "        a",
+      "       -b",
+      "       +B",
+      "       +b2",
+      "        c",
+    ]
+  );
+  screen("thread-files", &app);
 }
 
 #[test]

@@ -1684,6 +1684,24 @@ literal of python cut to `LITERAL` characters.
 """
 
 
+class Written(TypedDict):
+  """
+  What a write of a file that a line made changed: the path of the file, the lines that it added
+  and removed against the text of the path that the life knew before it, from a read or a write
+  of the path, and the first `DIFF` lines of their diff, as git writes a unified diff with one
+  line around each change but the header of its first hunk, with the count of the lines past them. A write of a path that the life
+  did not know before counts each of its lines as added, and is not `known`, since the life does
+  not know what stood there.
+  """
+
+  path: str
+  added: int
+  removed: int
+  known: bool
+  diff: list[str]
+  more: int
+
+
 class Thought(TypedDict):
   """
   What a model thought before it wrote: the millisecond of the epoch at which it began to think,
@@ -2675,7 +2693,8 @@ class Act(TypedDict):
     """
   closer: NotRequired[Maker | None]
   """
-    Who closed the act, as a window names who made an act, once a close of it was said.
+    Who closed or cancelled the act, as a window names who made an act, once a close or a cancel
+    of it was said.
     """
   state: State
   """
@@ -2687,9 +2706,9 @@ class Line(TypedDict):
   """
   One line of a block: its number in the thread, its text, in which each quote stands as the
   binding that it makes and a string of many lines as one line with its escapes, its mark, what
-  the last command that it awaited wrote, and what each act that it made came to but a chain, in
+  the last command that it awaited wrote, what each act that it made came to but a chain, in
   the order it made them: one for each pass of a loop, the last of which is the value that it
-  bound.
+  bound, and what each write of a file that it made changed, in the same order.
   """
 
   number: int
@@ -2697,6 +2716,7 @@ class Line(TypedDict):
   mark: Mark
   output: NotRequired[Output | None]
   made: NotRequired[list[Made]]
+  writes: NotRequired[list[Written]]
 
 
 class Question(TypedDict):
@@ -3124,4 +3144,4 @@ type Mount = Frame14
 type ViewEvent = Frame16
 type Dispose = Frame18
 
-PROTOCOL = 60
+PROTOCOL = 61

@@ -382,7 +382,12 @@ daemon answers requests in any order.
     opened the life after it began. The tail moves as the command writes. A line that made acts has `made`, which is
     absent on each other line: what each act but a chain came to, in the order the line made them, one for each pass
     of a loop: `works`, `failed`, or `done` with its value as a literal of python of at most 80 characters, the last
-    of which is the value that the line bound;
+    of which is the value that the line bound. A line that wrote files has `writes`, which is absent on each other
+    line: for each write of a file, in the order the line made them, its `path`, the lines that it `added` and
+    `removed` against the text of the path that the life knew before it, from a read or a write, whether the life
+    `known` that text, and the first 8 lines of the `diff`, as git writes a unified diff with one line around each
+    change but the header of its first hunk, with `more`, the count of the lines past them. A write of a path that the life did not know counts each
+    of its lines as added;
   - `agents`, each thread that a word of the thread started on another chain, in the order the thread made them, as
     a card without its life, with `began`, the millisecond of the epoch at which the daemon saw it begin, `took`, the
     seconds that it took once it ended, `line`, the line of its last word where it stands: the line that runs or

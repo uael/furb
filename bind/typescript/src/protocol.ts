@@ -1511,7 +1511,8 @@ export interface Act {
    */
   spend?: Spend | null;
   /**
-   * Who closed the act, as a window names who made an act, once a close of it was said.
+   * Who closed or cancelled the act, as a window names who made an act, once a close or a cancel
+   * of it was said.
    */
   closer?: Maker | null;
   /**
@@ -1624,9 +1625,9 @@ export interface Block {
 /**
  * One line of a block: its number in the thread, its text, in which each quote stands as the
  * binding that it makes and a string of many lines as one line with its escapes, its mark, what
- * the last command that it awaited wrote, and what each act that it made came to but a chain, in
+ * the last command that it awaited wrote, what each act that it made came to but a chain, in
  * the order it made them: one for each pass of a loop, the last of which is the value that it
- * bound.
+ * bound, and what each write of a file that it made changed, in the same order.
  */
 export interface Line {
   number: number;
@@ -1634,6 +1635,7 @@ export interface Line {
   mark: Mark;
   output?: Output | null;
   made?: Made[];
+  writes?: Written[];
 }
 /**
  * A call of a model that failed for a cause that passes, so its provider asks the model again:
@@ -1658,6 +1660,22 @@ export interface Output {
   tail: string[];
   more: number;
   took?: number | null;
+}
+/**
+ * What a write of a file that a line made changed: the path of the file, the lines that it added
+ * and removed against the text of the path that the life knew before it, from a read or a write
+ * of the path, and the first `DIFF` lines of their diff, as git writes a unified diff with one
+ * line around each change but the header of its first hunk, with the count of the lines past them. A write of a path that the life
+ * did not know before counts each of its lines as added, and is not `known`, since the life does
+ * not know what stood there.
+ */
+export interface Written {
+  path: string;
+  added: number;
+  removed: number;
+  known: boolean;
+  diff: string[];
+  more: number;
 }
 /**
  * What a model thought before it wrote: the millisecond of the epoch at which it began to think,
@@ -1746,4 +1764,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 60;
+export const PROTOCOL = 61;

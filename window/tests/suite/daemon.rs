@@ -511,10 +511,14 @@ pub(crate) const TABLES: &str = "(the model answers a table)";
 /// The words of a message of a test that make the model write a file, read it and close.
 pub(crate) const OPENS: &str = "(the model opens a file)";
 
-/// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`] and
-/// [`OPENS`], each with the word that answers it: the first agent answers at once, and the second
-/// waits on its chain.
-const ANSWERED: [(&str, &str); 7] = [
+/// The words of a message of a test that make the model write a new file, then change one of its
+/// lines into two, and close.
+pub(crate) const EDITS: &str = "(the model edits a file)";
+
+/// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`],
+/// [`OPENS`] and [`EDITS`], each with the word that answers it: the first agent answers at once,
+/// and the second waits on its chain.
+const ANSWERED: [(&str, &str); 8] = [
   (DELEGATES, DELEGATE),
   (
     TABLES,
@@ -530,6 +534,10 @@ const ANSWERED: [(&str, &str); 7] = [
   (
     OPENS,
     "write(Text('notes.md', 'a\\nb\\nc\\n'))\nfound = read('notes.md')\nclose('It holds 3 lines.')",
+  ),
+  (
+    EDITS,
+    "write(Text('notes.md', 'a\\nb\\nc\\n'))\nm = read('notes.md')\nwrite(m.replace('b\\n', 'B\\nb2\\n'))\nclose('notes.md has 4 lines.')",
   ),
 ];
 

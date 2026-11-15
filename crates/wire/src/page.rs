@@ -124,9 +124,9 @@ pub struct Block {
 
 /// One line of a block: its number in the thread, its text, in which each quote stands as the
 /// binding that it makes and a string of many lines as one line with its escapes, its mark, what
-/// the last command that it awaited wrote, and what each act that it made came to but a chain, in
+/// the last command that it awaited wrote, what each act that it made came to but a chain, in
 /// the order it made them: one for each pass of a loop, the last of which is the value that it
-/// bound.
+/// bound, and what each write of a file that it made changed, in the same order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Line {
   pub number: usize,
@@ -136,7 +136,28 @@ pub struct Line {
   pub output: Option<Output>,
   #[serde(default, skip_serializing_if = "Vec::is_empty")]
   pub made: Vec<Made>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub writes: Vec<Written>,
 }
+
+/// What a write of a file that a line made changed: the path of the file, the lines that it added
+/// and removed against the text of the path that the life knew before it, from a read or a write
+/// of the path, and the first `DIFF` lines of their diff, as git writes a unified diff with one
+/// line around each change but the header of its first hunk, with the count of the lines past them. A write of a path that the life
+/// did not know before counts each of its lines as added, and is not `known`, since the life does
+/// not know what stood there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Written {
+  pub path: String,
+  pub added: u32,
+  pub removed: u32,
+  pub known: bool,
+  pub diff: Vec<String>,
+  pub more: usize,
+}
+
+/// The most lines of the diff of a write that a line holds, which a block shows under it.
+pub const DIFF: usize = 8;
 
 /// What an act that a line made came to: it works, it failed, or it is done with a value, as a
 /// literal of python cut to `LITERAL` characters.
@@ -269,9 +290,16 @@ pub fn stands(lines: &[Line]) -> Option<usize> {
 }
 
 impl Line {
-  /// How many rows a line of a block takes: its own, and those of what its command wrote.
+  /// A line of a number and a text, with a mark, which made no act yet.
+  pub fn of(number: usize, text: String, mark: Mark) -> Self {
+    Self { number, text, mark, output: None, made: Vec::new(), writes: Vec::new() }
+  }
+
+  /// How many rows a line of a block that rolls takes: its own, those of what its command wrote,
+  /// and one for each file that it wrote, whose diff shows only in a block that stands open.
   pub fn rows(&self) -> usize {
-    1 + self.output.as_ref().map_or(0, |one| one.tail.len() + usize::from(one.more > 0))
+    let output = self.output.as_ref().map_or(0, |one| one.tail.len() + usize::from(one.more > 0));
+    1 + output + self.writes.len()
   }
 }
 

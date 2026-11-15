@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use furb::view::{
   Answered, Block, Context, Fold, Held, Line, Made, Maker, Mark, Output, Page, Portion, Reach,
-  Read, Reply, Retrying, Said, Saying, Standing, Streamed, Thought, Work, declined,
+  Read, Reply, Retrying, Said, Saying, Standing, Streamed, Thought, Work, Written, declined,
 };
 
 /// The acts of a list of facts as a host holds them, with what the host heard at the second 100.
@@ -830,6 +830,7 @@ fn a_block_rolls_by_rows_and_keeps_its_last_line_with_what_its_command_wrote() {
     mark: Mark::Ran,
     output: (tail > 0).then(|| Output { tail: vec![String::new(); tail], more: 9, took: None }),
     made: Vec::new(),
+    writes: Vec::new(),
   };
   let block = |lines| Block { maker: Maker::Operator, lines, more: false, thought: None };
   let small = block((1..=7).map(|at| line(at, 0)).collect());
@@ -849,6 +850,7 @@ fn a_block_whose_word_came_whole_rolls_to_the_line_that_runs_and_says_the_lines_
     mark: if number == 9 { runs.clone() } else { Mark::Ran },
     output: None,
     made: Vec::new(),
+    writes: Vec::new(),
   };
   let block = Block {
     maker: Maker::Operator,
@@ -967,4 +969,46 @@ fn a_thread_shows_at_each_moment_of_its_acts_what_it_was_just_after_it() {
   let first = page(moments[0]);
   let [first] = first.exchanges.as_slice() else { panic!("{first:?}") };
   assert_eq!((first.text.as_str(), &first.block), ("where does the time go", &None));
+}
+
+#[test]
+fn a_line_that_wrote_a_file_says_what_it_changed_against_the_text_that_the_life_knew_there() {
+  let text = |path: &str, content: &str| json!({"is": "Text", "path": path, "content": content});
+  let word = "m = read('a.py')\nwrite(m.replace('two', '2'))\nwrite(Text('b.py', 'one\\n'))";
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "fix a.py, add b.py", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
+    json!(["read", "read1", "rung1", "chain1", "a.py"]),
+    json!(["done", "read1", "files", text("~/w/a.py", "one\ntwo\nthree\n")]),
+    json!(["write", "write1", "rung1", "chain1", text("~/w/a.py", "one\n2\nthree\n")]),
+    json!(["done", "write1", "files", text("~/w/a.py", "one\n2\nthree\n")]),
+    json!(["write", "write2", "rung1", "chain1", text("b.py", "one\n")]),
+    json!(["done", "write2", "files", text("/w/b.py", "one\n")]),
+  ];
+  let mut streams = Streamed::default();
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let writes: Vec<&[Written]> = block.lines.iter().map(|line| line.writes.as_slice()).collect();
+  let diff = |lines: &[&str]| lines.iter().map(|one| (*one).to_owned()).collect();
+  let changed = Written {
+    path: "~/w/a.py".to_owned(),
+    added: 1,
+    removed: 1,
+    known: true,
+    diff: diff(&[" one", "-two", "+2", " three"]),
+    more: 0,
+  };
+  // The life never read b.py, so it does not know what stood there: each line counts as added.
+  let added = Written {
+    path: "/w/b.py".to_owned(),
+    added: 1,
+    removed: 0,
+    known: false,
+    diff: diff(&["+one"]),
+    more: 0,
+  };
+  assert_eq!(writes, [&[][..], &[changed][..], &[added][..]]);
 }
