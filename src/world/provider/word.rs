@@ -52,10 +52,9 @@ pub(super) async fn kept(
   if why.is_empty() {
     return Some(got);
   }
-  // A turn that came pays its request, and a call that failed leaves it to the next turn of the
-  // provider that comes to a result.
+  // A turn that came pays its request, and so does a call that failed, as far as its stream told.
   let usage = got.as_ref().ok().and_then(|turn| entry(&turn.as_ref(), 2)).map(|one| one.to_owned());
-  let turn = cut(ran, usage.unwrap_or_else(|| Bill::usage(None))).ok()?;
+  let turn = cut(ran, usage.unwrap_or_else(|| Bill::usage(reply.call.bill.as_ref()))).ok()?;
   let (what, fields) = match &got {
     Err(no) => (STOPPED, [("why", failure(no)), ("ran", ending(ran))]),
     Ok(_) => (AFTER, [("why", why), ("ran", ending(ran))]),

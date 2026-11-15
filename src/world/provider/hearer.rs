@@ -20,7 +20,7 @@ use tokio::{
 use super::{
   Advertised, Mode, Provider, Refresh, Retries, Search, Settings, Systems, Told, Unrefreshed,
   Writes,
-  answer::{Answering, Bill, answered, cut},
+  answer::{Answering, Bill, answered, cut, paying},
   images::Images,
   model::{Ask, Model, Tells, requested, standing},
   retry::{Backoff, Retry, failure, overflows, recoverable},
@@ -383,16 +383,17 @@ impl Hearer {
     let Some(reply) = self.replies.taken.get_mut(&id) else { return };
     // A model asked again writes another word, and a part of this one ran, so the reply ends with
     // the word that ran, and the model is not asked again. The call failed, so the provider gives
-    // what its request read to the next turn that comes to a result, and the reply pays nothing of
-    // it.
-    reply.call.bill = None;
+    // The reply pays the request of the call that failed.
     if let Some(ran) = reply.call.watch.as_ref().and_then(Watch::ran).map(str::to_owned)
-      && let Ok(turn) = cut(&ran, Bill::usage(None))
+      && let Ok(turn) = cut(&ran, Bill::usage(reply.call.bill.as_ref()))
     {
       let note = Some((STOPPED, [("why", retry.why.clone()), ("ran", ending(&ran))]));
       return self.replies.end(co, &id, Ending { turn, note }).await;
     }
     reply.waits = true;
+    // The next turn of the chain pays the request of the call that failed.
+    let failed = reply.call.bill.take().map_or(0.0, |bill| bill.dollars);
+    *self.replies.owed.entry(reply.chain.clone()).or_default() += failed;
     if let Some(watch) = reply.call.watch.as_mut() {
       watch.forget();
     }
@@ -459,6 +460,7 @@ impl Hearer {
     let recoverable = got.as_ref().is_err_and(recoverable);
     let overflow = got.as_ref().err().is_some_and(overflows);
     let got = got.map_err(|no| format!("{} answered nothing: {}", reply.actor, failure(&no)));
+    let chain = reply.chain.clone();
     if let (Err(why), true) = (&got, reply.again)
       && !recoverable
     {
@@ -482,7 +484,7 @@ impl Hearer {
           Fault::refused(why)
         }
       })
-      .unwrap_or_else(|fault| fault.object());
+      .map_or_else(|fault| fault.object(), |turn| self.replies.paying(&chain, turn));
     say(co, Fact::says("done", &id, [got]));
   }
 
@@ -506,7 +508,15 @@ impl Hearer {
   /// refusals on the chain with a turn, or adds to it with a refusal, which is what the ear says
   /// when it says no turn; a done that a control said leaves the row as it is.
   fn done(&mut self, a: &Fact) {
-    let Some(Reply { chain, actor, .. }) = self.replies.taken.remove(a.about()) else { return };
+    let Some(Reply { chain, actor, call, .. }) = self.replies.taken.remove(a.about()) else {
+      return;
+    };
+    // A reply that comes to no turn of the ear leaves what its call read to the next turn of its
+    // chain.
+    if a.by() != a.about() || !turned(a) {
+      let read = call.bill.map_or(0.0, |bill| bill.dollars);
+      *self.replies.owed.entry(chain.clone()).or_default() += read;
+    }
     if a.by() == a.about() {
       return;
     }
@@ -589,6 +599,10 @@ async fn owed(co: &mut Co<Replied>, chain: &str) -> Option<u32> {
 struct Replies {
   taken: HashMap<String, Reply>,
   mute: HashMap<String, String>,
+  /// What the requests of each chain read that no turn paid: each call of a reply that failed and
+  /// was made again, and each reply that came to no turn of the ear, as one that a cancel ended.
+  /// The next turn of the chain pays it.
+  owed: HashMap<String, f64>,
 }
 
 impl Replies {
@@ -604,7 +618,13 @@ impl Replies {
     if let Some((what, fields)) = ending.note {
       noted(co, &rung, what, &fields).await;
     }
-    say(co, Fact::says("done", id, [ending.turn]));
+    let turn = self.paying(&chain, ending.turn);
+    say(co, Fact::says("done", id, [turn]));
+  }
+
+  /// This turn of a chain, which pays what the chain owes.
+  fn paying(&mut self, chain: &str, turn: Object) -> Object {
+    paying(turn, self.owed.remove(chain).unwrap_or_default())
   }
 }
 
@@ -647,7 +667,7 @@ pub(super) struct Call {
   hold: holding::Sender<bool>,
   /// What the request of the call read as far as its stream told, which the reply pays when it
   /// ends before its stream does.
-  bill: Option<Bill>,
+  pub(super) bill: Option<Bill>,
 }
 
 /// What a search came to: its text, or why it gives none.

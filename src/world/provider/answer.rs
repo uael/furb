@@ -432,6 +432,23 @@ pub(super) fn cut(word: &str, usage: Object) -> Result<Object, CompletionError> 
   Ok(Object::tuple([Object::string("assistant"), Object::string(word), usage, blocks]))
 }
 
+/// This turn with these dollars more in its usage, which it pays for requests that came to no turn
+/// of their own.
+pub(super) fn paying(turn: Object, owed: f64) -> Object {
+  let said = turn.as_ref();
+  let (Some(items), true) = (said.items(), owed > 0.0) else { return turn };
+  let usage = items.get(2).and_then(ObjectRef::items).map(|usage| {
+    let each = usage.iter().enumerate().map(|(at, one)| match (at, one.as_float()) {
+      (4, Some(dollars)) => Object::float(dollars + owed),
+      _ => one.to_owned(),
+    });
+    Object::tuple(each)
+  });
+  let Some(usage) = usage else { return turn };
+  let at = |at: usize| items.get(at).map_or_else(Object::none, ObjectRef::to_owned);
+  Object::tuple([at(0), at(1), usage, at(3)])
+}
+
 /// What a request read and wrote as far as its stream told, and its dollars, in the form of the
 /// usage of a turn: what it read is every token of its input, the cache among them. A provider
 /// tells it as a part of its stream that rig carries as is, so the reader of a stream that it

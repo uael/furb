@@ -101,8 +101,8 @@ pub(super) struct Conversation {
   /// a conversation that replaces this one resumes as far as the two share their turns.
   pub(super) said: Vec<Said>,
   /// What the request of each turn that failed read, which the next turn that comes to a result
-  /// pays. A turn that its reader drops settles nothing, so it leaves none here: its stream told the
-  /// reader what its request read, as [`Reply::billed`] says, and the reader pays it.
+  /// pays. A turn that streams leaves none here: its stream told the reader what its request read,
+  /// as [`Reply::billed`] says, and the reader pays it.
   unpaid: Vec<Unpaid>,
 }
 

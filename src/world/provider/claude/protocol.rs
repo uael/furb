@@ -317,19 +317,22 @@ impl<'a> Reply<'a> {
   }
 
   /// What the request of the reply read so far, told to whoever streams the turn each time it
-  /// grows, as a [`Bill`] in the form of the usage of a turn: a reader that drops the turn before
-  /// its result pays that request, since the turn then settles nothing.
+  /// grows, as a [`Bill`] in the form of the usage of a turn, so the reader pays that request
+  /// whatever the turn comes to. A turn that no one streams gives it back, unpaid.
   pub(super) fn billed(&mut self) -> Option<Unpaid> {
     let spent = self.spent.clone()?;
     let unpaid = Unpaid { model: self.model.clone(), spent };
+    if self.deltas.is_none() {
+      return Some(unpaid);
+    }
     if self.billed.as_ref() != Some(&unpaid.spent) {
       let Spent { input, output, cache_read: read, cache_creation: wrote } = unpaid.spent;
       let input = input + read + wrote;
       let bill = Bill { input, output, read, wrote, dollars: unpaid.cost() };
       self.told(RawStreamingChoice::Unknown(bill.part()));
-      self.billed = Some(unpaid.spent.clone());
+      self.billed = Some(unpaid.spent);
     }
-    Some(unpaid)
+    None
   }
 
   /// One event of a message as it streams.

@@ -505,6 +505,42 @@ impl Halting {
   }
 }
 
+/// A model whose first call is this halting one, and whose later calls this mock answers.
+#[derive(Clone)]
+struct First {
+  halting: Halting,
+  then: MockCompletionModel,
+  called: Arc<AtomicBool>,
+}
+
+impl CompletionModel for First {
+  fn completion(
+    &self,
+    request: CompletionRequest,
+  ) -> impl Future<Output = Result<CompletionResponse, CompletionError>> {
+    self.then.completion(request)
+  }
+
+  async fn stream(
+    &self,
+    request: CompletionRequest,
+  ) -> Result<StreamingCompletionResponse, CompletionError> {
+    if self.called.swap(true, Ordering::SeqCst) {
+      self.then.stream(request).await
+    } else {
+      self.halting.stream(request).await
+    }
+  }
+}
+
+/// The turns that the provider said each reply was done with, in order.
+fn turns_done(engine: &mut Engine) -> Vec<String> {
+  let dones = said(engine).into_iter().filter(|(kind, about, word)| {
+    kind == "done" && about.starts_with("reply") && word.starts_with("('assistant'")
+  });
+  dones.map(|(_, _, word)| word).collect()
+}
+
 impl CompletionModel for Halting {
   fn completion(
     &self,
@@ -583,7 +619,37 @@ fn a_reply_that_ends_before_its_stream_pays_what_its_request_read_as_far_as_its_
   let (mut engine, _) = life("billed", vec![Model::new("m", 1000, model)]);
   asked(&mut engine);
   let turn = "('assistant', 'Here is the code:', (3000, 7, 0, 2000, 0.25), [{'type': 'text', 'text': 'Here is the code:'}])";
-  assert_eq!(replied(&mut engine), turn);
+  assert!(until(&mut engine, |engine| !turns_done(engine).is_empty()), "the reply is done");
+  assert_eq!(turns_done(&mut engine), [turn]);
+}
+
+#[test]
+fn the_next_turn_of_a_chain_pays_what_a_reply_that_a_cancel_ended_read() {
+  let bill = Bill { input: 3000, output: 7, read: 0, wrote: 2000, dollars: 0.25 };
+  let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
+  let halting = Halting::bills(bill, &["x = 1\n", "y = (\n"]);
+  let model = First { halting, then: streaming(&[("close(3)", usage)]), called: Arc::default() };
+  let (mut engine, _) = life("gone", vec![Model::new("m", 1000, model)]);
+  let id = asked(&mut engine);
+  assert!(until(&mut engine, |engine| wrote(engine, "x = 1\n")), "a part of the word ran");
+  engine.cancel(&id, verbs::Cancel::default()).expect("the prompt is cancelled");
+  asked(&mut engine);
+  let turn =
+    "('assistant', 'close(3)', (10, 5, 0, 0, 0.25), [{'type': 'text', 'text': 'close(3)'}])";
+  assert!(until(&mut engine, |engine| !turns_done(engine).is_empty()), "the next reply is done");
+  assert_eq!(turns_done(&mut engine), [turn]);
+}
+
+#[test]
+fn a_reply_whose_call_failed_after_a_part_of_its_word_ran_pays_the_request_of_that_call() {
+  let bill = Bill { input: 3000, output: 7, read: 0, wrote: 2000, dollars: 0.25 };
+  let model = Halting { bill: Some(bill), ..Halting::breaks(&["x = 3\n", "y = x"]) };
+  let (mut engine, _) = life("failed", vec![Model::new("m", 1000, model)]);
+  asked(&mut engine);
+  let turn =
+    "('assistant', 'x = 3', (3000, 7, 0, 2000, 0.25), [{'type': 'text', 'text': 'x = 3'}])";
+  assert!(until(&mut engine, |engine| !turns_done(engine).is_empty()), "the reply is done");
+  assert_eq!(turns_done(&mut engine), [turn]);
 }
 
 #[test]
