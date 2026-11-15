@@ -845,7 +845,7 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace, 
   args.to = args.to or str(engine.standing()[2])
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")
   if args.ceiling:
-    engine.grant(usd=args.ceiling, on=root)
+    engine.rung(f"await skill('grant')\nrung('grant(usd={args.ceiling!r})')", on=root)
   stopped, got, looks, message = "", None, 0, told + ASKED
   empty = False
   mark: dict[str, float] = {"did": 0, "answers": 0}

@@ -21,6 +21,7 @@ from conftest import (
   chained,
   definitions,
   fresh,
+  granting,
   heads,
   ids,
   journaled,
@@ -1636,14 +1637,14 @@ async def test_the_third_barren_step_in_a_row_pauses_the_thread_or_lets_it_rest_
   assert await looped("debug(t'a')", "debug(t'b')") == (3, True, ["made nothing"])
   assert await looped("x = read('a.txt')", "y = read('a.txt')") == (5, True, ["made nothing"])
   assert await looped("await bash('ls')") == (13, False, [])
-  sand, log, root = born("g = grant(usd=1000)\nx = bash('slow')", *["pass"] * 6, auto=False)
+  sand, log, root = granting("g = grant(usd=1000)\nx = bash('slow')", *["pass"] * 6, auto=False)
   one = engine.prompt(int, "count", on=root)
   await lingered(log)
   sand.exits(said(log, "bash")[0][1], 0)
   for _ in range(8):
     await settle()
   assert (len(said(log, "reply")), engine.paused(one), said(log, "pause")[-1][3]) == (4, True, "made nothing")
-  _, log, root = born("await wait(600, __name__)", "pass", "pass", "pass", "close(2)", auto=False)
+  _, log, root = granting("await wait(600, __name__)", "pass", "pass", "pass", "close(2)", auto=False)
   one = engine.prompt(int, "count", on=root)
   await settle()
   note = engine.prompt(None, "go on", on=one)
@@ -1652,7 +1653,7 @@ async def test_the_third_barren_step_in_a_row_pauses_the_thread_or_lets_it_rest_
   assert (len(said(log, "reply")), engine.paused(one), said(log, "pause")[-1][3]) == (4, True, [note])
   engine.wake(one)
   assert await one == 2
-  sand, log, root = born("x = bash('slow')\nawait wait(600, __name__)", *["raise ValueError('x')"] * 6, auto=False)
+  sand, log, root = granting("x = bash('slow')\nawait wait(600, __name__)", *["raise ValueError('x')"] * 6, auto=False)
   one = engine.prompt(int, "count", on=root)
   for _ in range(3):
     await settle()
@@ -1660,7 +1661,7 @@ async def test_the_third_barren_step_in_a_row_pauses_the_thread_or_lets_it_rest_
   for _ in range(8):
     await settle()
   assert (len(said(log, "reply")), engine.paused(one), said(log, "pause")) == (4, False, [])
-  sand, log, root = born(
+  sand, log, root = granting(
     "made = [bash('slow') for _ in range(3)]\nawait wait(600, __name__)", *["pass"] * 4, auto=False
   )
   one = engine.prompt(int, "count", on=root)
@@ -1974,12 +1975,12 @@ async def test_an_open_act_of_a_thread_is_an_act_that_the_outside_started_or_a_p
     await settle()
   assert (len(said(log, "reply")), engine.peek(one, ...), engine.over(said(log, "fetch")[0][1])) == (1, ..., False)
   for word in ("q = prompt(int, 'ask', to=OPERATOR)", "r = rung('await wait(600, __name__)')"):
-    _, log, root = born(word, "close(1)", auto=False)
+    _, log, root = granting(word, "close(1)", auto=False)
     one = engine.prompt(int, "count", on=root)
     for _ in range(6):
       await settle()
     assert (word, len(said(log, "reply")), engine.peek(one, ...)) == (word, 1, ...)
-  _, log, root = born("g = grant(usd=1000)\nc = chain('side')", "pass", "pass", "pass", "close(1)", auto=False)
+  _, log, root = granting("g = grant(usd=1000)\nc = chain('side')", "pass", "pass", "pass", "close(1)", auto=False)
   one = engine.prompt(int, "count", on=root)
   for _ in range(8):
     await settle()
@@ -2192,14 +2193,19 @@ async def test_when_a_step_ends_its_thread_is_due_again_at_once_or_rests_on_its_
 
 async def test_what_the_chain_or_an_ear_says_of_a_reply_of_a_thread_makes_no_thread_due() -> None:
   """What the chain or an ear says of a reply of a thread, as the advance and the ledger of a grant, makes no thread due, and neither does a reply that is cancelled."""
-  sand, log, root = born("g = grant(usd=1000)\nx = bash('slow')\nawait wait(600, __name__)", "pass", "pass", auto=False)
+  sand, log, root = granting(
+    "g = grant(usd=1000)\nx = bash('slow')\nawait wait(600, __name__)", "pass", "pass", auto=False
+  )
   engine.prompt(int, "count", on=root)
   for _ in range(3):
     await settle()
   sand.exits(said(log, "bash")[0][1], 0)
   for _ in range(8):
     await settle()
-  assert (len(said(log, "reply")), len([a for a in log if a[0] == "tell" and "ledger" in a[3][0]])) == (2, 1)
+  assert (len(said(log, "reply")), len([a for a in log if a[0] == "tell" and " ledger" in a[3][0].split("\n")[0]])) == (
+    2,
+    1,
+  )
   sand, log, root, act, _, reply = await waiting()
   engine.cancel(reply)
   for _ in range(6):

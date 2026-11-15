@@ -572,6 +572,22 @@ def born(*script: str, **world: object) -> tuple[Sand, list[tuple], str]:
   return sand, log, root
 
 
+def granting(*script: str, **world: object) -> tuple[Sand, list[tuple], str]:
+  """A life on the World of the suite that runs the extension grant, whose models answer the root with the words of
+  the script: the World, what was said in the life, and the root."""
+  sand = sown(**world)
+  kit = next(one for one in _monty.official() if one["name"] == "grant")
+  kit["life"] = ""
+  log, root = life(sand, (), **{"extensions": _monty.played([kit])})
+  sand.script[root] = [*script]
+  return sand, log, root
+
+
+def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
+  """A grant that the operator makes on a chain, through the verb that the extension grant defines in its module."""
+  return engine.Act(engine.module(on)["grant"](usd=usd, share=share, on=on))
+
+
 async def waiting(**world: object) -> tuple[Sand, list[tuple], str, Act[int], str, str]:
   """A life whose prompt waits on the reply of its rung, which no model answers until the test does: the World, what
   was said, the root, the prompt, the rung of the prompt and its reply."""

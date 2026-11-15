@@ -121,6 +121,8 @@ form must change, and so these breaks stand for the next major, 1.0.0.
 - `src/furb/engine.pyi Gate: the alias goes`: as gate.
 - `src/furb/engine.pyi boot: the parameter record goes`: the journal says a record again, and it stands outside the engine; a host gives boot `journal(names, record)` of the checkpointer.
 - `src/furb/engine.pyi boot: the parameter journal is more and has no default`: as the parameter record.
+- `src/furb/engine.pyi grant: the def goes`: grant is the official kit grant, off by default; a word loads it with `await skill("grant")`, and the grant of each door and of the protocol loads it in the word that it runs.
+- `src/furb/engine.pyi Grant: the alias goes`: as grant; the contract of the kit holds it.
 - `.agents/skills/compaction/compaction.pyi carry: the def goes`: compaction keeps a chain by supersede.
 - `.agents/skills/compaction/compaction.pyi inherit: the def goes`: as carry.
 - `.agents/skills/compaction/compaction.pyi imported: the def goes`: as carry.

@@ -195,7 +195,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - control: a pause, a wake, a cancel or a close; a close is a cancel with a value, and a cancel a close with
   CancelledError.
 - paused: the state of an act while a pause over it stands with no wake after it.
-- grant: an act that puts a ceiling on a chain: dollars, a share of the window, or both.
+- grant: the act of the official extension grant, which the engine does not hold, that puts a ceiling on a chain:
+  dollars, a share of the window, or both.
 - ledger: what the grant holds: the dollars of the answers since it was made and the share the last one filled.
 - journal: the ear of the life that hears everything, says a keep for each entry of the record, and says again the
   record that it is given. `journal` of the checkpointer makes it, and boot gives it the tables of the life. The bus

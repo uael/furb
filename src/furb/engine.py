@@ -544,28 +544,6 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
   return act("chain", on, ear, label, source, *[kept] * (kept is not None))
 
 
-def grant(usd: float | None = None, share: float | None = None, on="") -> Act[None]:
-  def ear(id):
-    here = scope(id)
-    if not ((usd or share) and (usd or 0) >= 0 <= (share or 0) <= 1):
-      yield "done", id, Refused(f"{usd}/{share} no ceiling")
-      return
-    yield "started", id
-    spent = 0
-    for x in transcript(here, "grant"):
-      x[3] != here or x[1] == id or close(None, x[1])
-    yield opened(id, "None", usd=usd, share=share)
-    while True:
-      match (yield {id, here}):
-        case ("done", about, _, (_, _, (*_, cost), _)) if question(("reply", about)):
-          spent += cost
-          yield told(id, "ledger", spent=spent)
-          if (usd and spent >= usd) or (share and (filled(about) or 0) >= share):
-            pause(here, "ceiling")
-
-  return act("grant", on, controlled(ear), usd, share)
-
-
 def bash(
   command: str, stdin: str | None = "", timeout=TIMEOUT, ok=None, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
@@ -891,15 +869,16 @@ def boot(journal, **outside):
     a = (kind, name := born[key], by, on, *words)
     if known.setdefault(name, a) is a:
       holds(scope(on), [a])
-      log.append((a, heard := set(outside) - busy, k := heeding(a)))
+      log.append((a, heard := set(), k := heeding(a)))
       busy.add(id(a))
       try:
         for n, g in ears(k):
-          ear or n in heard or n == "journal" or n in busy or name in taken or hear(n, g, a) or heard.add(n)
+          ear or n in outside or n == "journal" or n in busy or name in taken or hear(n, g, a) or heard.add(n)
         if ear:
           heard.add(name)
           drive(ear(name), name)
         offers(a)
+        heard.update(set(outside) - busy)
         if name not in taken and not busy & set(outside) & set(dict(ears(k))):
           with site.set(""):
             say("done", name, Refused("nothing takes " + kind))
@@ -910,16 +889,20 @@ def boot(journal, **outside):
 
   def offers(a):
     for n, g in outside.items():
-      if (a[1] not in taken or a[0] == "chain") and n not in busy:
+      if free(a) and n not in busy:
         at = len(log)
         while at and log[at - 1][0] is not upto.get(n):
           at -= 1
         upto[n] = a
         for b, heard, k in log[at:]:
+          n in heard or not (free(b) if id(b) in busy else waits(n, k)) or heard.add(n) or hear(n, g, b)
           if b is a:
             break
-          n in heard or not waits(n, k) or heard.add(n) or hear(n, g, b)
-        hear(n, g, a)
+        else:
+          id(a) in busy or hear(n, g, a)
+
+  def free(a):
+    return a[1] not in taken or a[0] == "chain"
 
   def heeding(a):
     q = get(a[1]) or a[:1] * 4

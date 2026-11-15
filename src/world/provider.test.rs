@@ -59,7 +59,7 @@ use super::{
   search::Searches,
   thinking::{Thinking, budgeted, thinking},
 };
-use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
+use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, skill, verbs, world};
 
 #[cfg(unix)]
 use crate::testing::on_reactor;
@@ -3171,8 +3171,11 @@ fn a_signed_thought_written_after_a_compaction_reaches_the_next_turn_whole() {
 fn a_ceiling_on_a_chain_pauses_it_at_a_reply_that_a_named_account_served() {
   let (mut engine, _yard) = on_claude("ceiling");
   let root = engine.root().to_owned();
-  let ceiling = verbs::Grant { usd: Some(0.005), on: on(&root), ..Default::default() };
-  engine.grant(ceiling).expect("a grant is made");
+  // The engine holds no grant: the rung plays the word of the official extension, then makes one.
+  let kit =
+    skill::official().into_iter().find(|one| one.name == "grant").expect("the extension grant");
+  let word = Some(format!("{}\ngrant(usd=0.005)", kit.word));
+  engine.rung(verbs::Rung { word, on: on(&root), ..Default::default() }).expect("a grant is made");
   // The answer of the prompt never comes: the ceiling pauses the chain at the first reply.
   let with = verbs::Prompt { message: Some("first".into()), on: on(&root), ..Default::default() };
   drop(engine.prompt(Object::string("str"), with).expect("a prompt is made"));

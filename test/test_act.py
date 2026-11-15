@@ -48,6 +48,14 @@ def taking(kind: str) -> Generator[tuple | None, tuple]:
         yield "started", about
 
 
+def making(kind: str, then: str, on: str) -> Generator[tuple | None, tuple]:
+  """An ear of the outside that makes an act of a second kind each time it is put an act of one kind, and takes none."""
+  while True:
+    match a := (yield):
+      case (str(one), about, *_) if one == kind and engine.get(about) == a:
+        engine.act(then, on, None)
+
+
 async def test_the_way_to_make_a_question() -> None:
   """The way to make a question: it takes a name when it is made, it is put to the ears, its ear, when it has one, is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it."""
   _, log, root = born()
@@ -131,7 +139,7 @@ async def test_an_ear_of_the_outside_that_is_busy_when_its_turn_comes_and_waits_
 
 
 async def test_an_ear_of_the_outside_that_is_not_busy_hears_each_fact_of_the_log_before_the_act_first() -> None:
-  """An ear of the outside that is not busy hears each fact of the log before the act that it did not hear yet, in the order of the log, before its turn comes, so each ear of the outside hears the facts and the acts in the order of the record."""
+  """An ear of the outside that is not busy hears each fact of the log before the act that it did not hear yet, and each act before it whose turn did not come to that ear yet, in the order of the log, before its turn comes, so each ear of the outside hears the facts and the acts in the order of the record."""
   sand, log, root = born("c = chain('c')\nb = bash('echo hi')\nclose('ok')")
   engine.prompt(str, "go", on=root)
   await settle(200)
@@ -140,6 +148,13 @@ async def test_an_ear_of_the_outside_that_is_not_busy_hears_each_fact_of_the_log
   kept = [places[repr(x)] for (x,) in sand.record if repr(x) in places]
   assert len(kept) > 15
   assert kept == sorted(kept)
+  after: list[tuple] = []
+  root = engine.boot(
+    journaled(), **kernel(), maker=making("note", "seen", root), after=keeping(after), taker=taking("seen")
+  )
+  await verbs(root, "note", "seen")
+  note = engine.act("note", root, None)
+  assert [a[1] for a in after if a[0] in ("note", "seen")] == [note, "seen1"]
 
 
 async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes_it() -> None:

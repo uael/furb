@@ -5,7 +5,7 @@ import { Session } from "./session.js";
 import { type Fact, isQuestion, standingOf } from "./types.js";
 
 /** The kinds of the acts that a program makes, which a later run of it finds again in the record. */
-const MADE = ["chain", "prompt", "grant", "rung"];
+const MADE = ["chain", "prompt", "rung"];
 
 export interface LifeOptions {
   /** The model a prompt goes to when it names none, as the catalog of the crate names it. */
@@ -93,9 +93,10 @@ export class Chain {
 
   /** A ceiling on this chain, in dollars or in a share of the window, which pauses the chain when it reaches it. */
   grant(options: { usd?: number; share?: number }): void {
-    const { usd, share } = options;
-    if (!this.life.again("grant", this.id, [usd ?? null, share ?? null]))
-      this.engine.grant({ usd, share, on: this.id });
+    // The extension defines grant in a rung that it plays after this word, so the grant runs in a later rung.
+    const python = (one?: number) => (one === undefined ? "None" : String(one));
+    const word = `await skill('grant')\nrung('grant(usd=${python(options.usd)}, share=${python(options.share)})')`;
+    if (!this.life.again("rung", this.id, [word, "", ""])) this.engine.rung({ word, on: this.id });
   }
 
   /** Whether a pause holds this chain. */

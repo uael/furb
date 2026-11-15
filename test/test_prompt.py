@@ -14,6 +14,8 @@ from conftest import (
   chained,
   dones,
   fresh,
+  grant,
+  granting,
   heads,
   paragraphs,
   plain,
@@ -607,8 +609,8 @@ async def test_a_prompt_that_a_rung_of_a_thread_makes_is_a_thread_under_it() -> 
 
 async def test_a_pause_stands_over_the_close_that_answers_a_prompt_too() -> None:
   """A pause stands over the close that answers a prompt too, so what a word gave waits for the wake."""
-  sand, log, root = born(cost=COST)
-  engine.grant(usd=1.0, on=root)
+  sand, log, root = granting(cost=COST)
+  grant(usd=1.0, on=root)
   sand.script[root] = ["close(5)"]
   act = engine.prompt(int, "spend", on=root)
   await settle()

@@ -15,8 +15,8 @@ caches of the chain stays valid.
 
 ## The official extensions
 
-Eight extensions come with furb, each a skill with code. `catchup`, `memory`, `skills`, `compaction` and `naming` play
-by default, as their manifests say, and `ouroboros`, `web` and `mcp` play on need, as the rule below says.
+Nine extensions come with furb, each a skill with code. `catchup`, `memory`, `skills`, `compaction` and `naming` play
+by default, as their manifests say, and `ouroboros`, `web`, `mcp` and `grant` play on need, as the rule below says.
 
 ### Which skill plays on which chain
 
@@ -117,6 +117,10 @@ reads it.
   resource, `mcp_prompt(server, name, arguments)` expands a prompt, and `mcp_control(action, server)` reconnects,
   enables, disables, approves, logs in or logs out. Each answer of a server stays in the record, so a later life asks no
   server again.
+- **`grant`** puts a ceiling on a chain. `grant(usd, share)` holds the ledger of the chain: at each answer of a model
+  it tells the dollars since the grant, and it pauses the chain when they reach `usd`, or when the answer read more than
+  `share` of the window. A later grant on the chain closes the one before it, and a wake lets the chain go on. A word
+  loads it with `await skill("grant")`, and the `grant` of each door and of the protocol runs that word on the chain.
 
 `compaction`, `naming`, `web` and `mcp` each hold a short guide for the model, a quote named after the extension, which
 the model reads on each chain where the extension plays.

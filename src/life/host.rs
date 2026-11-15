@@ -24,12 +24,13 @@ use crate::{
   Act, Engine, Fact, Fault, Object,
   ear::{ear, hear, say},
   engine::Plain,
+  skill::granted,
   value::entry,
   verbs, world,
 };
 
 /// The kinds of the acts that a program makes, which a later run of it finds again in the record.
-const MADE: [&str; 4] = ["chain", "prompt", "grant", "rung"];
+const MADE: [&str; 3] = ["chain", "prompt", "rung"];
 
 /// A shape that a prompt wants, by the name that the prompt carries.
 pub trait Shape: Plain + Unpin {
@@ -280,12 +281,13 @@ impl Life {
 
   /// A ceiling in dollars on a chain, which pauses the chain when it reaches it.
   pub fn grant(&mut self, chain: &Chain, usd: f64) -> Result<(), Fault> {
-    if self.again("grant", chain, &[Object::float(usd), Object::none()]).is_none() {
-      drop(self.engine.grant(verbs::Grant {
-        usd: Some(usd),
-        on: Some(chain.0.clone()),
-        ..Default::default()
-      })?);
+    let word = granted(Some(usd), None);
+    if self
+      .again("rung", chain, &[Object::string(&word), Object::string(""), Object::string("")])
+      .is_none()
+    {
+      let with = verbs::Rung { word: Some(word), on: Some(chain.0.clone()), ..Default::default() };
+      drop(self.engine.rung(with)?);
     }
     Ok(())
   }

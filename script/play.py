@@ -100,7 +100,7 @@ async def first(yard: Path, record: Path) -> list[object]:
   """The life that does the work, and everything the play holds it to when the work is done."""
   world, root, held = lived(record, yard, None, keeps=True)
   assert held == [], "the first life is opened on no record"
-  engine.grant(usd=CEILING, on=root)
+  engine.rung(f"await skill('grant')\nrung('grant(usd={CEILING!r})')", on=root)
   waits = engine.prompt(list, MESSAGE, on=root)
   watched = asyncio.ensure_future(watching(root, record, waits))
   try:

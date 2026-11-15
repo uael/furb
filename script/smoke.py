@@ -53,6 +53,8 @@ def main() -> int:
   record = yard / "record.jsonl"
   (yard / "a.txt").write_text(HELD, encoding="utf-8")
   say(f"the directory of the smoke is {yard}")
+  # A run ends with its own rung, so the grant goes in a second life, which plays the extension that the first loaded.
+  furb(yard, "run", "await skill('grant')", *stand)
   furb(yard, "run", f"grant({CEILING}, {SHARE})", *stand)
   for life in ("first", "second"):
     got = furb(yard, "prompt", MESSAGE, "--shape", "int", *stand)

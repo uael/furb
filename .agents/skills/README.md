@@ -14,6 +14,7 @@ write your own.
 | [`ouroboros`](ouroboros) | How a model extends furb, in the text of its skill, and `extend()`, which writes an extension of the project. |
 | [`web`](web) | `web_search(query)` and `web_fetch(url)`. |
 | [`mcp`](mcp) | The tools, resources and prompts of the servers of MCP, as `await github.create_issue(...)`. |
+| [`grant`](grant) | `grant(usd, share)`, a ceiling on a chain in dollars or in a share of the window. |
 
 Each folder holds these parts:
 

@@ -17,6 +17,8 @@ from conftest import (
   counted,
   dones,
   fresh,
+  grant,
+  granting,
   heads,
   journaled,
   keeping,
@@ -116,8 +118,8 @@ async def test_a_rung_with_no_word_tells_nothing_where_it_is_made() -> None:
 
 async def test_a_rung_with_no_word_and_no_actor_takes_the_default_actor_of_its_chain_when_it_is_made() -> None:
   """A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its reply and its ledger read the one actor."""
-  _, log, root = born(cost=(80000, 0, 0, 0, 0.0))
-  engine.grant(usd=10.0, on=root)
+  _, log, root = granting(cost=(80000, 0, 0, 0, 0.0))
+  grant(usd=10.0, on=root)
   bare = engine.rung(on=root)
   await settle()
   await engine.rung("actor = 'n/low'", on=root)
@@ -635,9 +637,9 @@ async def test_a_rung_with_a_word_waits_to_run_it_while_the_first_such_rung_is_n
 
 async def test_its_turn_holds_no_usage_so_a_grant_counts_no_cost_of_it() -> None:
   """Its turn holds no usage, so a grant counts no cost of it and no share of the window."""
-  _, log, root = born("close(1)")
+  _, log, root = granting("close(1)")
   assert await engine.prompt(int, "go", on=root) == 1
-  engine.grant(usd=10.0, on=root)
+  grant(usd=10.0, on=root)
   made = engine.rung("k = 2", to="m/low", on=root)
   await settle()
   (reply,) = [a for a in said(log, "reply") if a[2] == made]

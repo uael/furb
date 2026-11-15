@@ -15,6 +15,8 @@ from conftest import (
   born,
   chained,
   fresh,
+  grant,
+  granting,
   heads,
   ids,
   journaled,
@@ -568,12 +570,12 @@ async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> No
 
 async def test_an_entry_whose_act_this_life_has_not_made_again_the_journal_steps_over() -> None:
   """An entry whose act this life has not made again when every fact said before it has been heard, as an act that an act made and that the outside never answered, or an act on a chain that this life has not made, which for an act whose maker is neither an act nor an ear that boot was given is the chain it is on, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names."""
-  first, _, root = born()
+  first, _, root = granting()
   sub = engine.rung("sub = chain('sub')", on=root)
   await sub
   gone = str(engine.module(root)["sub"])
-  lost = engine.grant(1.0, on=gone)
-  kept = engine.grant(2.0, on=root)
+  lost = grant(1.0, on=gone)
+  kept = grant(2.0, on=root)
   after = engine.bash("echo after", on=root)
   await settle()
   second = sown()
@@ -588,16 +590,16 @@ async def test_an_entry_whose_act_this_life_has_not_made_again_the_journal_steps
 
 async def test_the_journal_says_the_whole_record_again_before_boot_returns() -> None:
   """The journal says the whole record again before boot returns, so no entry waits for an act that a host makes after boot."""
-  first, _, root = born()
+  first, _, root = granting()
   child = outside()
-  ceiling = engine.grant(1.0, on=child)
+  ceiling = grant(1.0, on=child)
   command = engine.bash("echo one", on=root)
   await settle()
   second = sown()
   heard, over = life(second, list(first.record))
   assert [(a[1], a[3]) for a in said(heard, "grant")] == [(ceiling, child)]
   assert isinstance(engine.peek(command), Exit)
-  mine = engine.grant(2.0, on=over)
+  mine = grant(2.0, on=over)
   await settle()
   assert mine not in (ceiling, command) and second.record[2:] == [(("grant", mine, OPERATOR, root, 2.0, None),)]
   assert second.record[:2] == tip("stand2")
@@ -630,7 +632,7 @@ def renamed(record: list, names: dict[str, str]) -> list:
 
 async def granted() -> tuple[list, str]:
   """The record of a word that makes two grants and a command, as a later life is given it, and its rung."""
-  sand, _, root = born()
+  sand, _, root = granting()
   step = engine.rung("g = grant(1.0)\nh = grant(2.0)\nx = bash('echo x')", on=root)
   assert await step is None
   await settle()
@@ -666,7 +668,7 @@ async def test_an_act_that_no_question_of_the_record_matches_takes_the_number_af
   assert (
     str(raised.value) == f"bash1 drifts: the life made {(made[0], 'bash2', *made[2:])!r}, the record holds {held!r}"
   )
-  assert [a for a in later.calls if a[0] == "bash"] == [] and step == "rung1"
+  assert [a for a in later.calls if a[0] == "bash"] == [] and step == "rung2"
 
 
 async def test_while_the_journal_says_the_record_again_it_holds_what_it_keeps() -> None:
@@ -841,11 +843,11 @@ async def test_the_journal_says_again_the_first_answer_of_an_act_when_the_act_is
 
 async def test_what_the_record_shows_started_and_not_done_when_boot_returns_is_pending() -> None:
   """What the record shows started and not done when boot returns is pending: the journal holds it from the outside until a wake that this life says."""
-  first, log, root = born("a = 1\ndebug(t'{a}')")
+  first, log, root = granting("a = 1\ndebug(t'{a}')")
   engine.prompt(int, "count", on=root)
   await settle()
   child = outside()
-  engine.grant(1.0, on=child)
+  grant(1.0, on=child)
   engine.bash("echo one", on=root)
   await settle()
   second = sown()

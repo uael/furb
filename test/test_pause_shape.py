@@ -2,7 +2,7 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, acts, born, heads, said, settle, slow, stalled
+from conftest import COST, acts, grant, granting, heads, said, settle, slow, stalled
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -78,13 +78,13 @@ async def test_it_reaches_by_the_chain_as_well_as_by_the_name() -> None:
 
 async def test_a_control_carries_the_header_it_tells() -> None:
   """A control from outside a chain tells its header by a tell that its call says just before it, so a model reads what another did to its work, and nothing else writes that header, so a pause of a grant at its ceiling and a close of a prompt that its chain will not serve, which come from inside it, tell none."""
-  sand, log, root = born(cost=COST)
+  sand, log, root = granting(cost=COST)
   ghost = engine.prompt(int, "hi", to="ghost", on=root)
   await settle()
   shut = said(log, "close")[0]
   assert shut[:3] == ("close", ghost, root) and len(shut) == 4
   assert isinstance(shut[3], Refused) and str(shut[3]) == "ghost no actor"
-  ceiling = engine.grant(usd=1.0, on=root)
+  ceiling = grant(usd=1.0, on=root)
   sand.script[root] = ["a = 1", "close(2)"]
   engine.prompt(int, "count", on=root)
   await settle()

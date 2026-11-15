@@ -29,7 +29,7 @@ EVERY = (
   "await x\n"
   "close(1)\n"
 )
-EVENTS = {"closed", "done", "exited", "timed", "raised", "debugged", "ledger", "advance", "paused", "woke", "cancelled"}
+EVENTS = {"closed", "done", "exited", "timed", "raised", "debugged", "advance", "paused", "woke", "cancelled"}
 """The words a header of an act says after its id, when it says what happened and no open of the act."""
 
 
@@ -101,16 +101,16 @@ async def test_the_header_of_a_paragraph_names_the_act_it_is_of_by_its_id() -> N
 
 
 async def test_the_headers_of_the_file() -> None:
-  """The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, ledger, advance, paused, woke and cancelled."""
+  """The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, advance, paused, woke and cancelled."""
   sand, _, root = born()
-  ceiling = engine.grant(usd=10.0, on=root)
+  held = engine.prompt(int, "later", to=OPERATOR, on=root)
   await settle()
   sand.script[root] = ["raise ValueError('boom')", EVERY]
   assert await engine.prompt(int, "everything", on=root) == 1
   await settle()
   engine.pause(root)
   engine.wake(root)
-  engine.cancel(ceiling)
+  engine.cancel(held)
   sand.auto = False
   await engine.bash("forever", timeout=0, on=root)
   step = engine.rung("k = 1", on=root)

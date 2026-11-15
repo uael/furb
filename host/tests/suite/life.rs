@@ -339,7 +339,8 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
 #[tokio::test]
 async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
   let at = place("operator");
-  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  // A grant loads the official extension that defines it, so this life runs the skills.
+  let life = Life::spawn(Opening { skills: Some(true), ..scripted(&at, &[]) }).unwrap();
   let mut events = Box::pin(life.events(0));
   let text = |path: &str| path.to_owned();
   let write = Command::Write { path: text("note.txt"), content: text("hi\n"), on: None };
@@ -359,8 +360,10 @@ async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
     panic!("the names are values")
   };
   assert!(names.contains(&json!("x")), "{names:?}");
-  let grant = Command::Grant { usd: Some(2.0), share: None, on: None };
-  assert!(made(&life, grant).await.starts_with("grant"));
+  let grant = made(&life, Command::Grant { usd: Some(2.0), share: None, on: None }).await;
+  until(&mut events, done(&grant)).await;
+  let other = Kind::Other("grant".to_owned());
+  until(&mut events, |event| matches!(event, Event::Act(act) if act.kind == other)).await;
   let stand = made(&life, Command::Stand).await;
   until(&mut events, done(&stand)).await;
   // The scratch directory that a command of the life made goes as the thread of the life ends.

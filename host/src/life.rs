@@ -32,6 +32,7 @@ use std::{
 use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint, image,
   life::{Log, Opening, Progress, Stage, Stream},
+  skill::granted,
   verbs,
   view::{
     self, Act, Desk, Fold, Held, Named, Page, Phase, Reach, Rung, SHOWN, Shown, Streamed,
@@ -1401,7 +1402,8 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
       Reply::Done
     }
     Command::Grant { usd, share, on: chain } => {
-      id(engine.grant(verbs::Grant { usd, share, on: on(chain) })?.id())
+      let word = Some(granted(usd, share));
+      id(engine.rung(verbs::Rung { word, on: on(chain), ..verbs::Rung::default() })?.id())
     }
     Command::Bash { command, stdin, on: chain } => {
       let with = verbs::Bash { stdin, on: on(chain), ..verbs::Bash::default() };

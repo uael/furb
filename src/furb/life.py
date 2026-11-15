@@ -26,7 +26,7 @@ OPERATOR = "operator"
 """OPERATOR is the actor of a prompt that the operator answers, and the site of every act of the program."""
 ENDED = "The life ended."
 """ENDED is what a wait of a program on a life raises once the life ended."""
-MADE = ("chain", "prompt", "grant", "rung")
+MADE = ("chain", "prompt", "rung")
 """MADE are the kinds of the acts that a program makes, which a later run of it finds again in the record."""
 
 
@@ -105,7 +105,9 @@ class Chain:
 
   def grant(self, *, usd: float | None = None, share: float | None = None) -> None:
     """A ceiling on this chain, in dollars or in a share of the window, which pauses the chain when it reaches it."""
-    self.life.again("grant", self.id, (usd, share)) or engine.grant(usd=usd, share=share, on=self.id)
+    # The extension defines grant in a rung that it plays after this word, so the grant runs in a later rung.
+    word = f"await skill('grant')\nrung('grant(usd={usd!r}, share={share!r})')"
+    self.life.again("rung", self.id, (word, "", "")) or engine.rung(word, on=self.id)
 
   def is_paused(self) -> bool:
     """Whether a pause holds this chain."""

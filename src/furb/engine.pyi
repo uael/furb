@@ -95,7 +95,7 @@ def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) ->
   Its own ear is born after the ears of the engine heard it, so the acts that ear makes stand after it.
   It is then put to the ears of the outside in turn, until one takes it, and no ear of the outside after that one hears it, a chain apart, which every ear of the outside hears at its birth after its own ear took it, so an ear of the outside plays on a chain before the call that made it returns.
   An ear of the outside that is busy when its turn comes and waits for the act hears it once it is done speaking, and the act is refused only when no ear of the outside took it by then.
-  An ear of the outside that is not busy hears each fact of the log before the act that it did not hear yet, in the order of the log, before its turn comes, so each ear of the outside hears the facts and the acts in the order of the record.
+  An ear of the outside that is not busy hears each fact of the log before the act that it did not hear yet, and each act before it whose turn did not come to that ear yet, in the order of the log, before its turn comes, so each ear of the outside hears the facts and the acts in the order of the record.
   To take an act is to say a started or a done about it: a done settles it now, and a started says that its done comes later.
   An act that no ear takes and that the record does not hold is refused: the life says it done with a refusal that names its kind.
   An act said: it is begun, and what the call gives is its name, which is awaited for what the act comes to.
@@ -631,24 +631,6 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   Each scan of all its facts that the ear of a chain makes at a fact reads its reading, so the work of that scan does not grow with the facts that a cut dropped, where a view of one kind holds each fact of that kind.
   """
 
-def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
-  """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells the dollars of that ledger at each answer of a model, since the advance binds the share before the next reply, so no turn a reply has sent grows a line after it.
-  grant on a chain puts a ceiling on it: dollars, a share of the window, or both.
-  The engine enters a pause on the chain when a response carries the ledger to its ceiling, whose cause is ceiling.
-  The word of the response that crossed the ceiling runs.
-  No reply follows the response that carried the ledger to the ceiling, until a wake.
-  The model continues after a later grant and a wake.
-  An answer that carries the ledger past the ceiling pauses the chain, so the word that answer brought runs and what it gave waits, and no rung of the chain asks until the wake.
-  Lifting a ceiling wakes nothing: the pause stands until a wake, ceiling or no ceiling.
-  It stands until it is lifted, as the chain it is on does, so what it comes to is what lifted it: nothing for a later grant that closes it, and a CancelledError for a cancel.
-  A grant of nothing, of a ceiling under zero, or of a share past one is no ceiling: it is done with the refusal, which whoever made it takes by awaiting it, and it tells nothing, since it never stood; a prompt to no actor of the roster is closed the same way after it has told its open.
-  A later grant that stands closes every grant of the chain before it that stands, and none that is over, so the ledger counts from the new one alone; one that is no ceiling closes nothing, and the ceiling that stands stands on.
-  A cancel of it lifts the ceiling, since it is an act like any other.
-  A reply that a cancel ended fills no share of the window, so an answer that its model gives after the cancel counts its dollars alone.
-  A grant is any caller's, on any chain.
-  A grant finds the grants of its chain among the acts of the life, so a grant on a chain with a source closes no grant of its origin.
-  """
-
 def bash(
   command: str,
   stdin: str | None = "",
@@ -793,7 +775,7 @@ A paragraph is what one fact that tells stands as in a turn: its notes, one afte
 The first line of a paragraph is its header: # and, with no space, the id of the act it is of, then what happened to the act, as #bash1 exited 0 or #prompt1, and no text that the act tells.
 Every other line of a paragraph is python: a binding of each value that the act tells, and the binding of the act on its open.
 The header of a paragraph names the act it is of by its id, what the act tells and a control over it alike, and the paragraph of a read, a write, a stand or a cd stands at the place in the run where it was asked.
-The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, ledger, advance, paused, woke and cancelled.
+The headers of the file are the open of an act, closed, done, exited, timed out, raised, debugged, advance, paused, woke and cancelled.
 A statement or a quote that a paragraph shows binds its name in the chain, and a comment binds nothing.
 A paragraph binds each value that it tells under a name: the id of the act, an underscore, and the word that holds the value, as prompt2_message, bash1_command, read3_text or prompt2_value.
 A paragraph binds a string of more than one line as a quote, and any other value as a statement of its repr.
@@ -995,8 +977,6 @@ type Prompt = tuple[Literal["prompt"], str, str, str, str, str, str]
 """A prompt carries the name of the shape, the message and the actor of a prompt."""
 type Chain = tuple[Literal["chain"], str, str, str, str, str]
 """A chain carries the label and the source of a chain, and every chain is chainN whether boot or chain opened it."""
-type Grant = tuple[Literal["grant"], str, str, str, float | None, float | None]
-"""A grant carries the ceiling in dollars and the ceiling in share of the window."""
 type Bash = tuple[Literal["bash"], str, str, str, str, str | None, float, tuple[int | None, ...] | bool | None]
 """A bash carries the command, the stdin, the timeout, the codes that it accepts and a show for each stream, and no working directory."""
 

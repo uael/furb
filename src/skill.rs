@@ -150,7 +150,7 @@ const ROOTED: &str = "root";
 
 /// The official extensions, each as its manifest, the file of its word and the file of its
 /// interface, in the order a life runs them.
-const OFFICIAL: [(&str, &str, &str); 8] = [
+const OFFICIAL: [(&str, &str, &str); 9] = [
   (
     include_str!("../.agents/skills/catchup/SKILL.md"),
     include_str!("../.agents/skills/catchup/catchup.py"),
@@ -191,7 +191,22 @@ const OFFICIAL: [(&str, &str, &str); 8] = [
     include_str!("../.agents/skills/mcp/mcp.py"),
     include_str!("../.agents/skills/mcp/mcp.pyi"),
   ),
+  (
+    include_str!("../.agents/skills/grant/SKILL.md"),
+    include_str!("../.agents/skills/grant/grant.py"),
+    include_str!("../.agents/skills/grant/grant.pyi"),
+  ),
 ];
+
+/// The word by which a door puts a ceiling on a chain: it loads the official extension `grant`,
+/// which the engine does not hold, then makes the grant, in dollars, in a share of the window, or
+/// both. The extension defines `grant` in a rung that it plays after this word, so the word makes
+/// the grant in a rung of its own, which runs after that one. A life that runs no extension
+/// `skills` cannot load it, so the word raises there.
+pub fn granted(usd: Option<f64>, share: Option<f64>) -> String {
+  let python = |one: Option<f64>| one.map_or_else(|| "None".to_owned(), |one| format!("{one:?}"));
+  format!("await skill('grant')\nrung('grant(usd={}, share={})')", python(usd), python(share))
+}
 
 /// The frontmatter of a `SKILL.md` file: each field at its top, and each field of the map under
 /// `metadata`, in their order, each value on one line. A file that opens with no `---` has none.

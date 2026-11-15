@@ -2,7 +2,7 @@
 
 from collections.abc import Generator
 
-from conftest import STANDS, Sand, born, journaled, kernel, paragraphs, relived, settle
+from conftest import STANDS, Sand, born, grant, granting, journaled, kernel, paragraphs, relived, settle
 from furb import engine
 
 
@@ -30,8 +30,8 @@ async def test_standing_gives_what_the_chains_stand_on() -> None:
 
 async def test_it_reads_the_transcript_of_the_root_as_it_stands_where_the_call_is_made() -> None:
   """It reads the transcript of the root as it stands where the call is made, so a grant reads the window of an actor off the standing where the answer of its reply lands, and a later life reads at each place of the record the standing that the record held there."""
-  sand, _, root = born("close(1)", cost=(200000, 0, 0, 0, 0.0))
-  engine.grant(share=0.9, on=root)
+  sand, _, root = granting("close(1)", cost=(200000, 0, 0, 0, 0.0))
+  grant(share=0.9, on=root)
   one = engine.prompt(int, "count", on=root)
   assert await one == 1
   await settle()
