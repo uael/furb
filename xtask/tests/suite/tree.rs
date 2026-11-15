@@ -113,6 +113,27 @@ fn two_heads_land_on_the_branch_that_they_name_and_a_conflict_leaves_its_tree_as
 }
 
 #[test]
+fn a_land_that_git_refuses_for_another_cause_than_a_conflict_says_that_cause() {
+  let yard = Yard::new(format!("xtask-tree-refused-{}", process::id()));
+  let main = cloned(&yard);
+  git(&main, &["branch", "carrier"]);
+  committed(&main, "landed");
+  git(&main, &["update-ref", "refs/heads/carrier", "HEAD"]);
+  let tree = yard.join("tree");
+  git(&main, &["worktree", "add", "-q", "--detach", &tree.to_string_lossy(), "HEAD~1"]);
+  committed(&tree, "mine");
+  let before = git(&tree, &["rev-parse", "HEAD"]);
+  // git takes no commit from a person with no name, so the rebase stops before its first step.
+  let unnamed =
+    [("GIT_CONFIG_COUNT", "1"), ("GIT_CONFIG_KEY_0", "user.name"), ("GIT_CONFIG_VALUE_0", "")];
+  let (code, out, err) = ended(xtask(&tree, ["tree", "land", "carrier"]).envs(unnamed));
+  assert_eq!((code, out.as_str()), (Some(1), ""));
+  assert!(err.starts_with("cargo xtask: git rebase -q ") && !err.contains("conflicts"), "{err}");
+  assert_eq!(git(&tree, &["rev-parse", "HEAD"]), before);
+  assert_eq!(git(&tree, &["status", "--porcelain"]), "");
+}
+
+#[test]
 fn a_tree_closes_only_once_clean_landed_and_unused_or_when_its_caller_closes_its_own() {
   let yard = Yard::new(format!("xtask-tree-close-{}", process::id()));
   let main = cloned(&yard);

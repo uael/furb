@@ -284,9 +284,16 @@ fn land(tree: &Path, branch: &str) -> Result<(), Fault> {
   let named = format!("refs/heads/{branch}");
   for _ in 0..5 {
     let carrier = git(tree, &["rev-parse", &named])?.trim().to_owned();
-    if said(tree, &["rebase", "-q", &carrier]).is_none() {
-      git(tree, &["rebase", "--abort"])?;
-      return Err(Fault::Conflict(branch.to_owned()));
+    if let Err(failed) = git(tree, &["rebase", "-q", &carrier]) {
+      let unmerged = git(tree, &["diff", "--name-only", "--diff-filter=U"])?;
+      // A rebase that git refused before its first step left nothing to abort, so the abort fails
+      // there and the tree stands as it was.
+      said(tree, &["rebase", "--abort"]);
+      return Err(if unmerged.trim().is_empty() {
+        failed
+      } else {
+        Fault::Conflict(branch.to_owned())
+      });
     }
     let head = git(tree, &["rev-parse", "HEAD"])?.trim().to_owned();
     if head == carrier {

@@ -7,8 +7,8 @@
 #![expect(clippy::unwrap_used, reason = "a helper of a test fails the test where it fails")]
 
 use std::{
-  fs,
-  path::{Path, PathBuf},
+  env, fs,
+  path::{self, Path, PathBuf},
   process,
 };
 
@@ -1045,7 +1045,14 @@ fn a_fact_enable_gives_the_name_of_its_skill_and_the_program_that_it_names() {
     program: program.map(str::to_owned),
     view: None,
   };
-  let program = skills.join("noted").join("run.py").display().to_string();
+  // The World writes a path under the home of the user with `~`, as a yard in the temporary folder
+  // of Windows, which stands in the home.
+  let program = skills.join("noted").join("run.py");
+  let program =
+    match env::home_dir().and_then(|home| Some(program.strip_prefix(home).ok()?.to_owned())) {
+      Some(rest) => format!("~{}{}", path::MAIN_SEPARATOR, rest.display()),
+      None => program.display().to_string(),
+    };
   assert_eq!(enabled[0], has("catchup", None), "an enable of a config names no program");
   assert_eq!(enabled[enabled.len() - 2..], [has("noted", Some(&program)), has("bare", Some(""))]);
 }
