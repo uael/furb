@@ -43,6 +43,8 @@ base64 = "0.22"
 form_urlencoded = "1"
 # The token of the door of the windows, drawn by the system.
 getrandom = "0.3"
+# The walk of the files of a folder that a mention names, as ripgrep walks them, with the ignore files of git.
+ignore = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 # The login of a user, from the database of the users.

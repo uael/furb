@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 41;
+pub const PROTOCOL: u32 = 42;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -104,6 +104,11 @@ pub enum Verb {
   Projects {
     #[serde(default)]
     config: Option<String>,
+  },
+  /// The files of the folder `cwd` and of each folder in it, which a mention of the input names:
+  /// dot files too, less what an ignore file of git leaves out and the folder `.git`.
+  Files {
+    cwd: String,
   },
   /// The models that the catalog of the machine offers to a life in the folder `cwd`, with the
   /// settings of the folder `config` and the claude command line at `claude`, each as `open`
@@ -492,6 +497,7 @@ impl Verb {
       | Self::List { .. }
       | Self::Projects { .. }
       | Self::Models { .. }
+      | Self::Files { .. }
       | Self::Cards
       | Self::Handover
       | Self::ViewTree(_)
@@ -651,6 +657,7 @@ pub enum Answer {
   Lives(Vec<Listed>),
   Projects(Vec<Project>),
   Models(Vec<Model>),
+  Files(Files),
   /// The cards of the machine.
   Cards(Vec<Card>),
   /// What the peer sent, the newest first.
@@ -897,6 +904,14 @@ fn inerts(nodes: Vec<Node>) -> Vec<Node> {
 }
 
 /// The closed set of the nodes of a view, which each window draws in its own way.
+/// The files of a folder: the path of each from the folder, in the order of a walk by name, and
+/// whether more files stand there than the daemon gives.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Files {
+  pub paths: Vec<String>,
+  pub more: bool,
+}
+
 /// A project of the machine: its main checkout, the count of the records of its sessions, and the
 /// second of the epoch of the last write of one of them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

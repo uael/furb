@@ -53,6 +53,7 @@ use furb::{
   },
 };
 use futures::{FutureExt, SinkExt, Stream, StreamExt, future};
+use ignore::WalkBuilder;
 use serde_json::Value;
 use tokio::{
   net::{TcpListener, TcpStream},
@@ -77,8 +78,8 @@ use crate::{
   opens::{self, Heard},
   processes::{self, Played},
   protocol::{
-    Answer, BOUND, Card, Config, Draft, Frame, Handed, Hello, Kind, Listed, Model, Mount, Open,
-    PROTOCOL, Peer, Project, Request, Verb,
+    Answer, BOUND, Card, Config, Draft, Files, Frame, Handed, Hello, Kind, Listed, Model, Mount,
+    Open, PROTOCOL, Peer, Project, Request, Verb,
   },
   reads::{Read, Readers},
   records,
@@ -784,6 +785,42 @@ async fn models(opening: Opening, reply: Replied) {
   reply.send(answer).ok();
 }
 
+/// How many files of a folder the daemon gives at most, so the walk of a folder as large as a disk
+/// ends in a moment.
+const FILES: usize = 20_000;
+
+/// The files of a folder, walked on a thread that may block, then told to the peer that asked.
+async fn files(folder: PathBuf, reply: Replied) {
+  let walked = spawn_blocking(move || walked(&folder)).await;
+  let answer = walked.map(Answer::Files).map_err(|no| ProtocolError::Refused {
+    why: format!("the files of the folder were not walked: {no}"),
+  });
+  reply.send(answer).ok();
+}
+
+/// The files of a folder and of each folder in it, by name, dot files too, less what an ignore
+/// file of git leaves out and the folder `.git`, at most [`FILES`] of them.
+fn walked(folder: &Path) -> Files {
+  let walk = WalkBuilder::new(folder)
+    .hidden(false)
+    .require_git(false)
+    .sort_by_file_name(Ord::cmp)
+    .filter_entry(|one| one.file_name() != ".git")
+    .build();
+  let mut paths = Vec::new();
+  // An entry that cannot be read names no file that a mention can take.
+  for entry in walk.flatten().filter(|one| one.file_type().is_some_and(|kind| kind.is_file())) {
+    if paths.len() == FILES {
+      return Files { paths, more: true };
+    }
+    if let Ok(path) = entry.path().strip_prefix(folder) {
+      let parts = path.components().map(|one| one.as_os_str().to_string_lossy());
+      paths.push(parts.collect::<Vec<_>>().join("/"));
+    }
+  }
+  Files { paths, more: false }
+}
+
 /// A model of the catalog, as the protocol says it.
 fn model(one: &world::Model) -> Model {
   let efforts = one.efforts();
@@ -1006,6 +1043,10 @@ impl Lives {
       Verb::Projects { config } => Ok(Answer::Projects(Project::of(&self.listed(config)))),
       Verb::Models { cwd, config, claude } => {
         tokio::spawn(models(self.offering(cwd, config, claude), reply));
+        return;
+      }
+      Verb::Files { cwd } => {
+        tokio::spawn(files(PathBuf::from(cwd), reply));
         return;
       }
       Verb::Cards => Ok(Answer::Cards(self.cards(outbox))),

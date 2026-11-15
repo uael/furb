@@ -21,6 +21,10 @@ export type Request1 =
       verb: "projects";
     }
   | {
+      cwd: string;
+      verb: "files";
+    }
+  | {
       cwd?: string | null;
       config?: string | null;
       claude?: string | null;
@@ -597,6 +601,10 @@ export type Answer =
       data: Model[];
     }
   | {
+      answer: "files";
+      data: Files;
+    }
+  | {
       answer: "cards";
       data: Card[];
     }
@@ -1109,7 +1117,6 @@ export interface Listed {
   name?: string | null;
 }
 /**
- * The closed set of the nodes of a view, which each window draws in its own way.
  * A project of the machine: its main checkout, the count of the records of its sessions, and the
  * second of the epoch of the last write of one of them.
  */
@@ -1129,6 +1136,15 @@ export interface Model {
   effort?: string | null;
   window: number;
   images: boolean;
+}
+/**
+ * The closed set of the nodes of a view, which each window draws in its own way.
+ * The files of a folder: the path of each from the folder, in the order of a walk by name, and
+ * whether more files stand there than the daemon gives.
+ */
+export interface Files {
+  paths: string[];
+  more: boolean;
 }
 /**
  * A card of the machine: one thread that an operator started, in the record of its session. It
@@ -1574,4 +1590,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 41;
+export const PROTOCOL = 42;

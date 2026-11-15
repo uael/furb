@@ -88,6 +88,23 @@
         },
         {
           "type": "object",
+          "description": "The files of the folder `cwd` and of each folder in it, which a mention of the input names:\ndot files too, less what an ignore file of git leaves out and the folder `.git`.",
+          "properties": {
+            "cwd": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "files"
+            }
+          },
+          "required": [
+            "verb",
+            "cwd"
+          ]
+        },
+        {
+          "type": "object",
           "description": "The models that the catalog of the machine offers to a life in the folder `cwd`, with the\nsettings of the folder `config` and the claude command line at `claude`, each as `open`\ntakes it, with no life: the ones of the daemon when the peer names none.",
           "properties": {
             "cwd": {
@@ -2622,6 +2639,22 @@
           "properties": {
             "answer": {
               "type": "string",
+              "const": "files"
+            },
+            "data": {
+              "$ref": "#/definitions/Files"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
               "const": "cards"
             },
             "data": {
@@ -3034,7 +3067,7 @@
         "folder",
         "sessions"
       ],
-      "description": "The closed set of the nodes of a view, which each window draws in its own way.\nA project of the machine: its main checkout, the count of the records of its sessions, and the\nsecond of the epoch of the last write of one of them."
+      "description": "A project of the machine: its main checkout, the count of the records of its sessions, and the\nsecond of the epoch of the last write of one of them."
     },
     "Model": {
       "type": "object",
@@ -3071,6 +3104,25 @@
         "images"
       ],
       "description": "A model that the catalog of a machine offers: the name that a stand takes, the levels of effort\nthat it takes, the level that a life takes when its actor names none, the tokens of its window,\nand whether it sees images."
+    },
+    "Files": {
+      "type": "object",
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "more": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "paths",
+        "more"
+      ],
+      "description": "The closed set of the nodes of a view, which each window draws in its own way.\nThe files of a folder: the path of each from the folder, in the order of a walk by name, and\nwhether more files stand there than the daemon gives."
     },
     "Card": {
       "type": "object",
@@ -5539,5 +5591,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 41
+  "x-protocol": 42
 }

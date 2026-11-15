@@ -110,6 +110,7 @@ daemon answers requests in any order.
 | `list` | `config` | read |
 | `projects` | `config` | read |
 | `models` | `cwd`, `config`, `claude` | read |
+| `files` | `cwd` | write |
 | `cards` | | read |
 | `history` | `life` | read |
 | `skills` | `life` | read |
@@ -201,10 +202,13 @@ daemon answers requests in any order.
   when the peer names none. It needs no life. The first is the default actor. Each model has its `name`, which
   `actor` of `open` takes, its `efforts`, the `effort` that a life takes when its actor names none, the tokens of
   its `window`, and whether it sees `images`.
+- `files` gives the files of the folder `cwd` and of each folder in it, which a mention of the input names: each
+  path from `cwd`, with `/` between its parts, dot files too, less what an ignore file of git leaves out and the
+  folder `.git`, in the order of a walk by name, at most 20000 of them, and `more` when the folder holds more. It needs no life, and its walk holds back no other verb.
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
 - An answer is a frame `reply` with the `id`, an `answer` that names its kind, and its `data`: `done`, `welcome`,
-  `lives`, `projects`, `models`, `act` (the name of the act that the verb made), `value`, `values`, `inspected` or
+  `lives`, `projects`, `models`, `files`, `act` (the name of the act that the verb made), `value`, `values`, `inspected` or
   `presence`.
 - A refusal is a frame `refused` with the `id`, or none for a frame that could not be read, the `error` as data, and
   `why`, the text that a person reads.

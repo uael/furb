@@ -764,6 +764,31 @@ async fn the_models_are_those_that_the_catalog_offers_with_no_life() {
 }
 
 #[tokio::test]
+async fn the_files_of_a_folder_hold_its_dot_files_and_leave_out_what_git_ignores() {
+  use furb_host::protocol::Files;
+  let at = place();
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  let folder = at.join("project");
+  for (path, text) in [
+    ("a.txt", ""),
+    (".env", ""),
+    (".gitignore", "target/\n"),
+    ("sub/b.rs", ""),
+    ("target/x.o", ""),
+    (".git/HEAD", ""),
+  ] {
+    let file = folder.join(path);
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(file, text).unwrap();
+  }
+  let files = Verb::Files { cwd: folder.display().to_string() };
+  let paths = [".env", ".gitignore", "a.txt", "sub/b.rs"].map(str::to_owned).to_vec();
+  assert_eq!(window.ask(files).await, Ok(Answer::Files(Files { paths, more: false })));
+  assert_eq!(window.listed().await, Vec::new(), "the daemon holds no life to walk them");
+}
+
+#[tokio::test]
 async fn the_list_says_whether_a_window_holds_each_life_and_a_pin_is_no_window() {
   let at = place();
   let (local, _daemon) = started(&at, GRACE).await;
