@@ -403,7 +403,12 @@ fn placed(app: &App, stage: &View, screen: &mut Screen<Model>, area: &Textarea) 
 /// move on one timer, which runs only while a mark moves.
 fn tell<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> T {
   let given = told(app, window, change);
-  pump(window);
+  // What the operator saw marks the card of his thread read at once, which the parts then show:
+  // a card of a login that only reads, which records no Seen, would else show the unread mark that
+  // the last cards of its machine gave it.
+  if pump(window) {
+    told(app, window, |_| ());
+  }
   let back = window.borrow_mut().screen.model.client.restore.take();
   if let Some(text) = back {
     window.borrow().area.set_text(text);
@@ -569,8 +574,9 @@ fn pictured(app: &App, window: &Shared, bytes: &[u8]) {
 /// Each request that is due asked of its machine: the open of each life that the window holds,
 /// the models of each machine, the page of the end of the open thread, the next message of the
 /// queue of the input, what the operator saw of the open thread, and the end of the word that the
-/// window ran, each with its id kept until its answer comes.
-fn pump(window: &Shared) {
+/// window ran, each with its id kept until its answer comes. Whether the operator saw the open
+/// thread, which marks its card read.
+fn pump(window: &Shared) -> bool {
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
   let model = &mut screen.model;
@@ -609,7 +615,9 @@ fn pump(window: &Shared) {
   {
     model.client.asked.insert((at, id), Asked::History(target));
   }
-  if let Some((at, verb)) = model.client.seen_due()
+  let seen = model.client.seen_due();
+  let saw = seen.is_some();
+  if let Some((at, verb)) = seen
     && let Some(id) = ask(askers, model, at, verb)
   {
     model.client.asked.insert((at, id), Asked::Seen);
@@ -626,6 +634,7 @@ fn pump(window: &Shared) {
     word.asked = true;
     model.client.asked.insert((at, id), Asked::Ended);
   }
+  saw
 }
 
 /// The first message of the queue of the input, then the wake of its thread when a pause holds

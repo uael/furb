@@ -593,6 +593,29 @@ fn a_login_that_only_reads_sees_the_session_live_and_sends_nothing() {
 }
 
 #[test]
+fn a_thread_that_a_login_that_only_reads_opens_shows_read_from_its_first_frame() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served_as("rex", Role::Read);
+  let mut rex = daemon.peer();
+  let life = rex.opened(&sessions.join("time.jsonl"), true);
+  rex.said(&life, "where does the time of a resume go");
+  open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
+  app.click(80, row(&app, "where does the t"));
+  // The first frame that shows the page of the thread shows its card read: a login that only
+  // reads records no Seen, so the cards of the machine say it unread for him.
+  let mut frame = String::new();
+  let paged = app.wait_until(PATIENCE, || {
+    frame = app.text();
+    frame.contains("close(None)")
+  });
+  assert!(paged, "the page never showed:\n{frame}");
+  let card = frame.lines().find(|line| line.contains("▐ ● where")).unwrap_or_default();
+  assert!(!card.contains("● now"), "the thread that he reads shows unread:\n{frame}");
+}
+
+#[test]
 fn a_window_that_asks_to_read_only_reads_a_session_its_login_may_write() {
   let app = app();
   let mut daemon = Daemon::bound(&app);
