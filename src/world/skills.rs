@@ -183,9 +183,9 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
 }
 
 /// The skills of a life as its root finds them, in the order of their names: those that a chain
-/// finds in its working directory `cwd`, which stands in the directory of the standing, the project,
-/// each with how it plays, as [`Played`] says. The facts of the root say which skills the life
-/// runs, which play on the root.
+/// finds in its working directory `cwd`, which stands in the directory of the standing, the
+/// project, each with how it plays, as [`Played`] says. The facts of the root say which skills the
+/// life runs, which play on the root.
 pub fn played(directory: &str, cwd: &str, places: &Places, root: &[Fact]) -> Vec<Played> {
   let project = files::placed(Path::new(""), directory).unwrap_or_default();
   let here = files::placed(&project, cwd).unwrap_or_else(|_| project.clone());

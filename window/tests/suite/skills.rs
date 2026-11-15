@@ -32,7 +32,7 @@ fn plays(app: &TestApp, name: &str, stands: &str) -> String {
 }
 
 #[test]
-fn the_extensions_of_a_session_say_how_each_plays_and_enter_turns_one_on_at_once() {
+fn the_skills_of_a_session_say_how_each_plays_and_enter_turns_one_on_at_once() {
   let app = app();
   let mut daemon = Daemon::bound(&app);
   let sessions = daemon.project("furb");

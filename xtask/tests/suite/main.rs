@@ -79,7 +79,7 @@ fn held(folder: &Path, files: &[(&str, &str)]) {
 /// program of the machine of that name by the PATH of [`shimmed`]: it prints the file of the first
 /// word of its command that `answers` names.
 fn stand_in(yard: &Path, name: &str, answers: &[(&str, &Path)]) {
-  let program = yard.join("shim").join(name).with_extension(env::consts::EXE_EXTENSION);
+  let program = yard.join("shim").join(format!("{name}{}", env::consts::EXE_SUFFIX));
   let answers: serde_json::Map<String, serde_json::Value> = answers
     .iter()
     .map(|(word, file)| ((*word).to_owned(), file.to_string_lossy().into()))
