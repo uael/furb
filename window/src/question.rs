@@ -251,10 +251,10 @@ impl Model {
     }
   }
 
-  /// The rows of the form above the launcher, in the box of the input with its padding: who asks and
-  /// how many questions wait, the whole
-  /// question, then each value and the row of his own words, or the rows of the line, and why the
-  /// daemon refused his last answer. The row where the editor of the input shows, when it shows.
+  /// The rows of the form above the launcher, in the box of the input with its padding: who asks
+  /// and how many questions wait, the whole question, then each value and the row of his own
+  /// words, or the rows of the line, and why the daemon refused his last answer. The row where the
+  /// editor of the input shows, when it shows.
   pub(crate) fn form_rows(&self, grown: usize) -> (Vec<Row>, Option<usize>) {
     let Some((form, question)) = self.form() else { return (Vec::new(), None) };
     let t = &self.tokens;
@@ -405,6 +405,8 @@ pub(crate) fn closed(answered: &Answered, login: &str) -> String {
     Reply::Value(text) => text.clone(),
     Reply::Refused(why) if why == REFUSED => "refused".to_owned(),
     Reply::Refused(why) => format!("refused: {why}"),
+    Reply::Withdrawn(None) => "withdrawn".to_owned(),
+    Reply::Withdrawn(Some(why)) => format!("withdrawn: {why}"),
   };
   format!("{reply} · {who}")
 }

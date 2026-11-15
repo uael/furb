@@ -13,7 +13,8 @@ use crate::world::catalog::leveled;
 /// A paused prompt, a rung born under its pause, and a later wake, with what the engine of the live
 /// life finds for each fact: the acts that it covers, and the pause that holds a new act.
 fn facts() -> Vec<(Value, Vec<&'static str>, Option<Pause>)> {
-  let paused = Pause { of: "p".to_owned(), by: "operator".to_owned(), why: Some(json!("held")) };
+  let paused =
+    Pause { of: "prompt1".to_owned(), by: "operator".to_owned(), why: Some(json!("held")) };
   vec![
     (json!(["chain", "chain1", "operator", "", "root", ""]), vec![], None),
     (json!(["prompt", "prompt1", "operator", "chain1", "int", "count", ""]), vec![], None),
