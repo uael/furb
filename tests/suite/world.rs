@@ -5,5 +5,6 @@ mod claude;
 mod config;
 mod kits;
 mod operator;
+mod provider;
 mod schema;
 mod store;

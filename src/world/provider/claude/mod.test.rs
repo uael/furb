@@ -21,7 +21,7 @@ use crate::testing::{Yard as Base, on_reactor, pause};
 mod fake;
 
 // The other tests of the provider beside their modules run the same fake.
-pub(crate) use fake::{FAKE, Yard, after, gone};
+pub(crate) use fake::{FAKE, Yard, after};
 
 /// A message of the user.
 fn user(text: &str) -> Message {

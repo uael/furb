@@ -56,11 +56,12 @@ use self::answer::{ended, numbers, uuid};
 use self::hearer::{Hearer, Replied, searched};
 use self::model::{Class, Streams, streams};
 use self::retry::{LIMIT_POLL, resets};
-use self::thinking::{ENV_THINKING, Thinking, Thought, thinking};
+use self::thinking::{ENV_THINKING, Thought, thinking};
 use self::word::RAN;
 pub use self::{
   model::Model,
   retry::{BACKOFF, Backoff, Retry},
+  thinking::Thinking,
 };
 
 /// What a turn of a model tells as it streams: what it added to its text, and what it added to its
