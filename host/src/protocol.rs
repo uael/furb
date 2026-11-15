@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 34;
+pub const PROTOCOL: u32 = 35;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -159,11 +159,15 @@ pub enum Verb {
     holder: String,
   },
   /// The end of a life now, whatever pins hold it, as the grace ends a life with no holder: it
-  /// writes its image, each of its windows hears its end, and its record opens again at its tip.
+  /// writes its image, each of its windows hears its end, and its record opens again at its tip,
+  /// where the life takes its open work again, so an end is a pause. With `cancel`, the end is a
+  /// kill: the operator first cancels each open work of the life, so the next life takes none.
   /// It is refused while a window of another peer holds the life, so no view ends a life that
   /// another view shows.
   End {
     life: String,
+    #[serde(default)]
+    cancel: bool,
   },
   /// Each profile that a window of a life holds now.
   Presence {
@@ -428,7 +432,7 @@ impl Verb {
       | Self::Detach { life }
       | Self::Pin { life, .. }
       | Self::Unpin { life, .. }
-      | Self::End { life }
+      | Self::End { life, .. }
       | Self::Presence { life }
       | Self::Writes { life, .. }
       | Self::Get { life, .. }

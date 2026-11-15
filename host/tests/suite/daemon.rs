@@ -555,7 +555,7 @@ async fn a_window_ends_its_life_now_whatever_pins_hold_it_and_never_one_that_ano
   let life = opened(&mut first, &at, "a.jsonl").await;
   first.attach(&life).await;
   second.attach(&life).await;
-  let end = || Verb::End { life: life.clone() };
+  let end = || Verb::End { life: life.clone(), cancel: false };
   assert_eq!(first.ask(end()).await, Err(ProtocolError::Shown { life: life.clone() }));
   assert_eq!(second.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
   let pin = Verb::Pin { life: life.clone(), holder: "background".to_owned() };
@@ -563,6 +563,29 @@ async fn a_window_ends_its_life_now_whatever_pins_hold_it_and_never_one_that_ano
   assert_eq!(first.ask(end()).await, Ok(Answer::Done));
   first.until(|frame| matches!(frame, Frame::Event { event: Event::Ended(None), .. })).await;
   assert!(!first.lives(&life).await, "the life ends before its grace");
+}
+
+#[tokio::test]
+async fn an_end_is_a_pause_whose_next_life_takes_its_open_work_and_a_kill_cancels_it_first() {
+  for (cancel, after) in [(false, view::State::Done), (true, view::State::Cancelled)] {
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    let life = open(&mut window, &at, "a.jsonl", Some(0)).await;
+    let word = "await wait(2, __name__)".to_owned();
+    let run = Verb::Run { life: life.clone(), word, on: None };
+    assert!(matches!(window.ask(run).await, Ok(Answer::Act(_))));
+    let waits = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Act(act), .. } if act.kind == view::Kind::Wait);
+    let Frame::Event { event: Event::Act(wait), .. } = window.until(waits).await else { panic!() };
+    let end = Verb::End { life: life.clone(), cancel };
+    assert_eq!(window.ask(end).await, Ok(Answer::Done));
+    window.until(|frame| matches!(frame, Frame::Event { event: Event::Ended(None), .. })).await;
+    open(&mut window, &at, "a.jsonl", None).await;
+    let ended = Verb::Ended { life, act: wait.id.clone() };
+    let Ok(Answer::Acts(acts)) = window.ask(ended).await else { panic!("no end of the wait") };
+    let states: Vec<view::State> = acts.iter().map(|act| act.state).collect();
+    assert_eq!(states, [after], "an end with cancel {cancel}");
+  }
 }
 
 #[tokio::test]

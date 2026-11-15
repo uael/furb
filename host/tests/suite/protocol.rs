@@ -73,7 +73,7 @@ fn verbs() -> Vec<Verb> {
     Verb::Detach { life: life() },
     Verb::Pin { life: life(), holder: "job".to_owned() },
     Verb::Unpin { life: life(), holder: "job".to_owned() },
-    Verb::End { life: life() },
+    Verb::End { life: life(), cancel: true },
     Verb::Presence { life: life() },
     Verb::Writes { life: life(), draft: Some(Draft { on: Some(id()) }) },
     Verb::Get { life: life(), act: id() },
@@ -462,6 +462,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "ea708f4ddfeb6f4f9f9ea7d609c28e6efd38fbea622ecebf32a0c49444ce7cc4",
   "9dfb40bcf853f5a09baf707eaf62dbd84bb296e272d15e14c6dee5d3409f147f",
   "9ae47cfaaabc1ce821ce560227303a7fc4d613e2b4862ad2707e8d39df1eaab1",
+  "62b1ed170f89f2c4c615cd82afbd37d02a5451522be0a0477e558667c338927f",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

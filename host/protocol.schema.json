@@ -265,10 +265,14 @@
         },
         {
           "type": "object",
-          "description": "The end of a life now, whatever pins hold it, as the grace ends a life with no holder: it\nwrites its image, each of its windows hears its end, and its record opens again at its tip.\nIt is refused while a window of another peer holds the life, so no view ends a life that\nanother view shows.",
+          "description": "The end of a life now, whatever pins hold it, as the grace ends a life with no holder: it\nwrites its image, each of its windows hears its end, and its record opens again at its tip,\nwhere the life takes its open work again, so an end is a pause. With `cancel`, the end is a\nkill: the operator first cancels each open work of the life, so the next life takes none.\nIt is refused while a window of another peer holds the life, so no view ends a life that\nanother view shows.",
           "properties": {
             "life": {
               "type": "string"
+            },
+            "cancel": {
+              "type": "boolean",
+              "default": false
             },
             "verb": {
               "type": "string",
@@ -5298,5 +5302,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 34
+  "x-protocol": 35
 }

@@ -288,6 +288,21 @@ impl Held {
     })
   }
 
+  /// The open work of the life: each act that is not done and is no chain, that no other open work
+  /// made, in the order the acts were first told. A cancel of each ends what each made too.
+  pub fn open_work(&self) -> Vec<String> {
+    let open = |act: &Act| !act.done() && act.kind != Kind::Chain;
+    let work = |at: &usize| Some(&*self.acts[*at]).filter(|act| open(act));
+    let made_by_work = |act: &Act| self.act(&act.by).is_some_and(open);
+    self
+      .live
+      .iter()
+      .filter_map(work)
+      .filter(|act| !made_by_work(act))
+      .map(|act| act.id.clone())
+      .collect()
+  }
+
   /// The acts as they stood just after a moment, in the order they began.
   pub fn as_of(&self, at: u64) -> Vec<Act> {
     let mut acts = as_of(self.acts.iter().map(|act| &**act), at);

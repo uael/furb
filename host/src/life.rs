@@ -99,6 +99,9 @@ pub enum Command {
   Wake { id: String },
   /// A cancel of an act or of a chain, with a cause.
   Cancel { id: String, why: Option<String> },
+  /// A cancel of each open work of the life, as a kill asks before the end: each act that is not
+  /// done and is no chain, that no other open work made, so the next life does not take it again.
+  Halt,
   /// The turns of a chain, each as JSON.
   Turns { on: Option<String> },
   /// The words of a chain that run, by the rung that gave each one.
@@ -205,6 +208,7 @@ impl Command {
       | Self::Pause { .. }
       | Self::Wake { .. }
       | Self::Cancel { .. }
+      | Self::Halt
       | Self::Close { .. }
       | Self::Seen { .. }
       | Self::Resolve { .. } => Self::By { speaker, command: Box::new(self) },
@@ -1340,6 +1344,12 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
   match command {
     Command::By { speaker, command } => spoken(engine, life, &speaker, *command).await,
     Command::Resolve { thread } => resolved(engine, life, &thread),
+    Command::Halt => {
+      for id in life.kept.held.open_work() {
+        engine.cancel(&id, verbs::Cancel { why: None })?;
+      }
+      Ok(Reply::Done)
+    }
     Command::Queue { entry, shape, message, on } => {
       let chain = chain(on);
       if !life.kept.queue.holds(&entry) {

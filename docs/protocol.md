@@ -112,7 +112,7 @@ daemon answers requests in any order.
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
 | `pin`, `unpin` | `life`, `holder` | write |
-| `end` | `life` | write |
+| `end` | `life`, `cancel` | write |
 | `presence` | `life` | read |
 | `writes` | `life`, `draft` (`{"on": thread or null}`, or null) | write |
 | `get`, `peek` | `life`, `act` | read |
@@ -413,8 +413,11 @@ once it listens. A second daemon refuses to start there.
   otherwise, writes its image and ends, and `list` gives it as not `open` from then on. An `open` of a life
   that ends waits for its end, then opens it again from its image.
 - `end` ends a life now, as its grace would: it writes its image, each pin of it goes, each of its windows hears the
-  event `ended`, and its record opens again at its tip. It is refused with `shown` while a window of another peer
-  holds the life, so no view ends a life that another view shows.
+  event `ended`, and its record opens again at its tip, where the next life takes its open work again, so an end is
+  a pause. With `cancel` true, the end is a kill: the operator first cancels each open work of the life, each act
+  that is not done and is no chain and that no other open work made, so the next life takes none of it. It is
+  refused with `shown` while a window of another peer holds the life, so no view ends a life that another view
+  shows.
 - The daemon of a machine ends once it holds no peer and no life for its grace, so it does not outlive the windows
   that started it; a window that dials later starts a new one. A daemon waits for its first peer before this bound
   runs, and a daemon with a door on the tailnet does not end by it.

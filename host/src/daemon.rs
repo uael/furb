@@ -927,7 +927,10 @@ impl Lives {
       Verb::Detach { life } => self.detach(&life, outbox),
       Verb::Pin { life, holder } => self.pin(&life, holder),
       Verb::Unpin { life, holder } => self.unpin(&life, holder),
-      Verb::End { life } => self.end(&life, outbox),
+      Verb::End { life, cancel } => {
+        let halt = cancel.then(|| site(&peer).map_or(Command::Halt, |one| Command::Halt.by(one)));
+        self.end(&life, halt, outbox)
+      }
       Verb::Presence { life } => {
         living(&mut self.held, &life).map(|(_, holders)| Answer::Presence(holders.presence()))
       }
@@ -1184,8 +1187,14 @@ impl Lives {
   }
 
   /// A life that a peer ends now, with its image, whatever pins hold it, unless a window of
-  /// another peer shows it. Its windows hear its end as at the end of its grace.
-  fn end(&mut self, life: &str, outbox: &Outbox) -> Result<Answer, ProtocolError> {
+  /// another peer shows it, after the halt of its open work that a kill asks. Its windows hear its
+  /// end as at the end of its grace.
+  fn end(
+    &mut self,
+    life: &str,
+    halt: Option<Command>,
+    outbox: &Outbox,
+  ) -> Result<Answer, ProtocolError> {
     let closed = || ProtocolError::Closed { life: life.to_owned() };
     let held = self.held.get_mut(life).ok_or_else(closed)?;
     match &held.stage {
@@ -1195,7 +1204,13 @@ impl Lives {
       Stage::Living(_) => {
         held.stage = Stage::Ending(Vec::new());
         let handle = held.handle.clone();
-        tokio::spawn(async move { end(&handle).await });
+        tokio::spawn(async move {
+          // A halt that the life refuses leaves its work for the next life, which a pause keeps.
+          if let Some(halt) = halt {
+            handle.send(halt).await.ok();
+          }
+          end(&handle).await;
+        });
         self.carded(life);
         Ok(Answer::Done)
       }

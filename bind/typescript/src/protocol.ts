@@ -60,6 +60,7 @@ export type Request1 =
     }
   | {
       life: string;
+      cancel?: boolean;
       verb: "end";
     }
   | {
@@ -1508,4 +1509,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 34;
+export const PROTOCOL = 35;
