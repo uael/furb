@@ -63,7 +63,7 @@ use tokio::{
     mpsc::{self, error::SendError},
     oneshot, watch,
   },
-  task::{AbortHandle, JoinSet, spawn_blocking},
+  task::{self, AbortHandle, JoinSet, spawn_blocking},
   time::{Instant, sleep_until},
 };
 use tokio_util::codec::{Framed, LinesCodec};
@@ -252,6 +252,9 @@ where
     quiet = if idle { quiet.or_else(|| Some(Instant::now() + grace)) } else { None };
   };
   drop((listener, doors, door));
+  // A pipe of Windows keeps its name until the runtime hears the cancel of the connect that the
+  // listener left pending, so the daemon turns the runtime once: its end frees its place.
+  task::yield_now().await;
   if let Some(Leaving { handed, asker, reply }) = leaving {
     reply.send(Ok(Answer::Handed(handed))).ok();
     asker.closed().await;
