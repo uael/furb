@@ -1,23 +1,18 @@
 //! The kits of a life that a host opens, whose process is a module of Python that speaks the
 //! frames of a kit on its stdin and its stdout.
 
+#[cfg(unix)]
+use std::time::Duration;
 use std::{
-  fs, future,
+  fs,
   path::{Path, PathBuf},
   process,
-  time::{Duration, Instant},
 };
-
-use futures::stream;
 
 #[cfg(unix)]
 use crate::drive::pause;
 use crate::{drive::block_on, opened::opening, yard::Yard};
-use furb::{
-  Ear, Engine, Fact, Object,
-  ear::{Co, Next, ear, say},
-  verbs,
-};
+use furb::{Engine, Object, verbs};
 
 /// A project of its own for one test, whose config turns on the kit `note` of its folder
 /// `.furb/skills/note`, and the folder of the kit.
@@ -63,9 +58,9 @@ for line in sys.stdin:
     n += 1
 "#;
 
-/// A life that a host opens on a project, with the ears of the host given.
-fn life(at: &Path, host: impl IntoIterator<Item = (&'static str, Box<dyn Ear>)>) -> Engine {
-  opening(at, true).boot(host).unwrap_or_else(|no| panic!("the life did not open: {no}")).0
+/// A life that a host opens on a project.
+fn life(at: &Path) -> Engine {
+  opening(at, true).boot::<String>([]).unwrap_or_else(|no| panic!("the life did not open: {no}")).0
 }
 
 /// The fact enable of the kit `note` whose process is a program.
@@ -111,7 +106,7 @@ const ADD: &str = "close(await act('note_add', '', None, 'milk'))";
 fn a_kit_starts_at_the_first_act_of_its_kinds_and_its_process_answers_each_one() {
   let (at, folder) = place("adds");
   noted(&folder, ADDS);
-  let mut engine = life(&at, []);
+  let mut engine = life(&at);
   assert!(!folder.join("started").exists(), "a kit starts at its first act, not at its enable");
   for _ in 0..2 {
     let got = closed(&mut engine, ADD).unwrap_or_else(|no| panic!("{no}"));
@@ -125,7 +120,7 @@ fn the_kit_of_a_fact_enable_is_the_process_that_it_names_with_the_acts_of_the_ma
   let (at, folder) = place("named");
   let program = noted(&folder, ADDS);
   fs::write(at.join(".furb").join("config.json"), "{}").unwrap_or_else(|no| panic!("{no}"));
-  let mut engine = life(&at, []);
+  let mut engine = life(&at);
   let words = ["other", "", "", "", "", "", &program.display().to_string()].map(Object::string);
   engine.say("enable", "chain1", words.into()).unwrap_or_else(|no| panic!("{no}"));
   let got = closed(&mut engine, ADD).unwrap_or_else(|no| panic!("{no}"));
@@ -144,7 +139,7 @@ fn a_manifest_whose_process_leaves_its_folder_or_that_names_none_gives_no_kit() 
     fs::write(folder.join("SKILL.md"), manifest).unwrap_or_else(|no| panic!("{no}"));
     fs::copy(folder.join("kit.py"), at.join(".furb").join("skills").join("kit.py"))
       .unwrap_or_else(|no| panic!("{no}"));
-    let mut engine = life(&at, []);
+    let mut engine = life(&at);
     let no = closed(&mut engine, ADD).expect_err("no process answers the act");
     assert!(no.contains("note_add"), "{name}: {no}");
     let outside = at.join(".furb").join("skills");
@@ -186,7 +181,7 @@ fn a_kit_reads_the_value_of_each_of_its_keys_by_the_verb_config() {
   .and_then(|()| fs::write(folder.join("keys.json"), keys))
   .and_then(|()| fs::write(at.join(".furb").join("config.json"), config));
   written.unwrap_or_else(|no| panic!("{no}"));
-  let mut engine = life(&at, []);
+  let mut engine = life(&at);
   let got = closed(&mut engine, ADD).unwrap_or_else(|no| panic!("{no}"));
   assert_eq!(got.as_ref().as_str(), Some("journal"));
 }
@@ -196,7 +191,7 @@ fn a_kit_reads_the_value_of_each_of_its_keys_by_the_verb_config() {
 fn a_new_enable_ends_the_process_of_its_kit_and_the_end_of_the_life_ends_each_process() {
   let (at, folder) = place("ends-all");
   let program = noted(&folder, ADDS);
-  let mut engine = life(&at, []);
+  let mut engine = life(&at);
   closed(&mut engine, ADD).unwrap_or_else(|no| panic!("{no}"));
   enable(&mut engine, &program);
   closed(&mut engine, ADD).unwrap_or_else(|no| panic!("{no}"));
@@ -214,75 +209,9 @@ fn a_new_enable_ends_the_process_of_its_kit_and_the_end_of_the_life_ends_each_pr
 fn a_process_that_ends_before_its_life_refuses_the_act_that_it_held_with_why() {
   let (at, folder) = place("ends");
   let program = noted(&folder, "import sys\nsys.stderr.write('boom\\n')\nsys.exit(3)\n");
-  let mut engine = life(&at, []);
+  let mut engine = life(&at);
   let no = closed(&mut engine, ADD).expect_err("the act is refused");
   let why = format!("The process {} of the kit note ended with ", program.display());
   assert!(no.contains(&why), "{no}");
   assert!(no.contains("The last lines of its stderr:\nboom"), "{no}");
-}
-
-/// The acts that a run awaits, so a hop is a part of the difference of two runs: the acts of a
-/// kit and the acts of an ear of this process, which each answer later through the same facts.
-const HOPS: u32 = 10;
-
-/// The least time of each of `runs` runs of a step.
-fn least(runs: usize, mut step: impl FnMut()) -> Duration {
-  let times = (0..runs).map(|_| {
-    let at = Instant::now();
-    step();
-    at.elapsed()
-  });
-  times.min().unwrap_or_default()
-}
-
-/// The least program of the system: `true`, or an exit of `cmd` on Windows.
-fn least_program() -> process::Command {
-  #[cfg(unix)]
-  let program = process::Command::new("true");
-  #[cfg(windows)]
-  let program = {
-    let mut program = process::Command::new("cmd");
-    program.args(["/c", "exit"]);
-    program
-  };
-  program
-}
-
-/// The ear that answers each act `note_later` in this process as a kit answers its acts: it says
-/// that it started, and its work says the done.
-fn later() -> Box<dyn Ear> {
-  ear(move |mut co: Co<String>| async move {
-    loop {
-      match co.next().await {
-        Next::Heard(a) if a.kind() == "note_later" && a.question() => {
-          say(&mut co, Fact::says("started", a.about(), []));
-          co.work(stream::once(future::ready(a.about().to_owned())));
-        }
-        Next::Worked(id) => say(&mut co, Fact::says("done", &id, [Object::string("added")])),
-        _ => {}
-      }
-    }
-  })
-}
-
-#[test]
-fn the_hop_to_the_process_of_a_kit_costs_less_than_the_start_of_the_least_program() {
-  let (at, folder) = place("speed");
-  noted(&folder, ADDS);
-  let mut engine = life(&at, [("later", later())]);
-  let mut ran = |kind: &str| {
-    let word =
-      format!("for _ in range({HOPS}):\n  await act('{kind}', '', None, 'milk')\nclose(None)");
-    least(10, || drop(closed(&mut engine, &word).unwrap_or_else(|no| panic!("{no}"))))
-  };
-  ran("note_add");
-  let (kit, here) = (ran("note_add"), ran("note_later"));
-  let start = least(10, || {
-    least_program().status().unwrap_or_else(|no| panic!("{no}"));
-  });
-  let hop = kit.saturating_sub(here) / HOPS;
-  assert!(
-    hop < start,
-    "the hop took {hop:?} ({kit:?} less {here:?}, over {HOPS}), and the start of the least program {start:?}"
-  );
 }

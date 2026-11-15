@@ -487,3 +487,7 @@ fn python() -> PathBuf {
   let named = env::var_os(PYTHON).filter(|one| !one.is_empty()).map(PathBuf::from);
   named.or_else(beside).unwrap_or_else(|| PathBuf::from(name))
 }
+
+#[cfg(test)]
+#[path = "kits.test.rs"]
+mod test;
