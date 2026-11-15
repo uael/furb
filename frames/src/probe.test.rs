@@ -58,6 +58,20 @@ fn a_bar_on_the_edge_of_a_box_is_its_border() {
 }
 
 #[test]
+fn a_half_block_of_the_ground_of_a_box_carries_its_side() {
+  // A card with a bar on its left and a half block of its ground on its right: the text stands
+  // one cell inside each.
+  let shown = frame(&[&[
+    (" ", TEXT, BASE),
+    ("▌", 0xec_b081, RAISED),
+    ("text", TEXT, RAISED),
+    ("▌", RAISED, BASE),
+    (" ", TEXT, BASE),
+  ]]);
+  assert_eq!(says(&shown), Vec::<String>::new());
+}
+
+#[test]
 fn a_padding_that_the_scale_does_not_name_is_named() {
   let shown = frame(&[&[("   text   ", TEXT, RAISED)]]);
   assert_eq!(

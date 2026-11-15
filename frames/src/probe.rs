@@ -31,6 +31,9 @@ const PAD: usize = 3;
 /// The glyphs of a bar or a border, which stand on the edge of a box and are not its content.
 const BARS: &str = "┃│▌▐▍▎▏█▕";
 
+/// The half blocks that carry a box by half a cell on one side.
+const HALVES: [&str; 4] = ["▐", "▌", "▄", "▀"];
+
 /// The look of a cell: its color, its ground and its attributes.
 type Look = (Rgb, Rgb, u8);
 
@@ -188,12 +191,46 @@ pub(crate) fn boxes(cells: &[Vec<Cell>], base: Rgb) -> Vec<Boxed> {
       let (left, right) = bounds(area.iter().map(|at| at.1));
       if right - left >= 2 && area.len() * 10 >= (bottom - top + 1) * (right - left + 1) * 9 {
         let mut one = Boxed { ground, top, left, bottom, right, insets: None };
+        one.halves(cells);
         one.insets = insets(cells, &one);
         found.push(one);
       }
     }
   }
   found
+}
+
+impl Boxed {
+  /// The box with each side that a row or a column of half blocks of its ground carries on: such a
+  /// side, as the round edge of a card, stands in the cell of the half block.
+  fn halves(&mut self, cells: &[Vec<Cell>]) {
+    let Self { ground, top, left, bottom, right, .. } = *self;
+    let half = |row: usize, col: usize, glyph: &str| {
+      cells
+        .get(row)
+        .and_then(|line| line.get(col))
+        .is_some_and(|cell| cell.glyph == glyph && cell.fg == ground)
+    };
+    let column = |col: usize, glyph| (top..=bottom).all(|row| half(row, col, glyph));
+    let row = |at: usize, glyph| (left..=right).all(|col| half(at, col, glyph));
+    if left > 0 && column(left - 1, "▐") {
+      self.left -= 1;
+    }
+    if column(right + 1, "▌") {
+      self.right += 1;
+    }
+    if top > 0 && row(top - 1, "▄") {
+      self.top -= 1;
+    }
+    if row(bottom + 1, "▀") {
+      self.bottom += 1;
+    }
+  }
+}
+
+/// A half block of the ground of a box, which is the box and not its content.
+fn grounds(cell: &Cell, ground: Rgb) -> bool {
+  HALVES.contains(&cell.glyph.as_str()) && cell.fg == ground
 }
 
 fn bounds(values: impl Iterator<Item = usize> + Clone) -> (usize, usize) {
@@ -208,7 +245,7 @@ fn insets(cells: &[Vec<Cell>], one: &Boxed) -> Option<[usize; 4]> {
     (one.left..=one.right).filter_map(move |col| {
       let cell = &cells[row][col];
       let shows = !cell.glyph.trim().is_empty() || cell.bg != one.ground;
-      (shows && !edge(col, cell)).then_some((row, col))
+      (shows && !edge(col, cell) && !grounds(cell, one.ground)).then_some((row, col))
     })
   });
   let content: Vec<(usize, usize)> = content.collect();
