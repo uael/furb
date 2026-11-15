@@ -196,6 +196,7 @@ impl Model {
       }
       (Asked::Parts(key, read), _) => self.client.parted(&key, read, None),
       (Asked::Moments(key), heard) => self.client.timed(&key, heard.ok()),
+      (Asked::Tracks(key), heard) => self.client.tracked(&key, heard.ok()),
       (Asked::Back(text), Ok(Frame::Reply { .. })) => {
         self.client.restore = Some(self.before_draft(text));
       }

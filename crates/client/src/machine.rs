@@ -89,6 +89,7 @@ impl Client {
   pub fn listed(&mut self, at: usize, heard: Heard, now: u64) -> Listing {
     if let Ok(frame) = &heard {
       self.staled(at, frame);
+      self.retracked(at, frame);
       if self.viewed(at, frame) {
         return Listing::Changed;
       }

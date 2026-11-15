@@ -288,6 +288,10 @@ export type Request1 =
     }
   | {
       life: string;
+      verb: "tracks";
+    }
+  | {
+      life: string;
       ask: number;
       turn?: unknown;
       why?: string | null;
@@ -683,6 +687,10 @@ export type Answer =
   | {
       answer: "moments";
       data: number[];
+    }
+  | {
+      answer: "tracks";
+      data: ChainTrack[];
     }
   | {
       answer: "page";
@@ -1492,6 +1500,25 @@ export interface Read {
   written: number;
 }
 /**
+ * A chain of a life in time: its name, its label, the state of its work now, each moment at which
+ * an act of it began or ended, and each thread that it holds with the moment that thread began,
+ * in order.
+ */
+export interface ChainTrack {
+  chain: string;
+  label: string;
+  state: State;
+  moments: number[];
+  threads: Began[];
+}
+/**
+ * A thread of a chain and the moment its prompt began.
+ */
+export interface Began {
+  prompt: string;
+  at: number;
+}
+/**
  * Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the
  * agents of the whole thread, in the order the thread made them, and the context of its chain.
  */
@@ -1653,4 +1680,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 49;
+export const PROTOCOL = 50;

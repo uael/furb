@@ -47,6 +47,12 @@ pub(crate) enum Click {
   Time(usize),
   /// The play of the time of the thread started or stopped.
   Play,
+  /// The thread of a chain under the bar of the time opened, by the row of the chain and a place
+  /// among the moments of the bar.
+  Chain {
+    row: usize,
+    at: usize,
+  },
   Link(String),
   /// A press of a button of a view, by its viewer and its node.
   Press {
@@ -319,7 +325,7 @@ impl Model {
   /// The thread of an agent of the open thread opened in its place, and the input turned to it.
   /// The thread that it came from waits as the operator read it, and asks its end again when it
   /// opens again, since the daemon tells a window the changes of one thread at a time.
-  fn open_agent(&mut self, prompt: String) {
+  pub(crate) fn open_agent(&mut self, prompt: String) {
     let Some(mut from) = self.client.thread.take() else { return };
     let key = (from.thread.key.0, from.thread.key.1.clone(), prompt);
     (from.thread.asked, from.thread.again) = (HashMap::new(), true);
@@ -443,6 +449,9 @@ impl Model {
     // A change of now gives the bar of the time new moments, and reaches no moment of the past.
     if let Some(time) = opened.thread.time.as_mut() {
       time.stale = true;
+      if let Some(chains) = time.chains.as_mut() {
+        chains.stale = true;
+      }
     }
     if opened.thread.past() {
       return false;
@@ -503,6 +512,10 @@ impl Model {
       }
       Click::Play => {
         self.client.play();
+        None
+      }
+      Click::Chain { row, at } => {
+        self.open_chain(row, at);
         None
       }
       Click::Press { viewer, node } => {

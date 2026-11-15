@@ -22,7 +22,7 @@ use furb_wire::{
   desk::Desk,
   ladder::{Rung, Shown},
   state::State,
-  threads::{ThreadNode, Threads},
+  threads::{Began, ChainTrack, ThreadNode, Threads},
 };
 
 use super::{
@@ -314,6 +314,37 @@ impl Held {
     let mut acts = as_of(self.acts.iter().map(|act| &**act), at);
     acts.sort_by_key(|act| act.began);
     acts
+  }
+
+  /// Each chain of the life in time, in the order the chains began: its label, the state of its
+  /// work now, the moments of its acts, and the moment each of its threads began.
+  pub fn tracks(&self) -> Vec<ChainTrack> {
+    self.then(None, |acts| {
+      let chains = acts.iter().filter(|act| act.kind == Kind::Chain);
+      chains
+        .map(|chain| {
+          let on: Vec<&Act> = self.on_chain(&chain.id).filter(|act| act.id != chain.id).collect();
+          // A prompt on the chain itself starts a thread; one on a prompt is a message of it.
+          let starts = on.iter().filter(|act| act.kind == Kind::Prompt && act.on == chain.id);
+          let mut threads: Vec<Began> =
+            starts.map(|act| Began { prompt: act.id.clone(), at: act.began }).collect();
+          threads.sort_by_key(|one| one.at);
+          ChainTrack {
+            chain: chain.id.clone(),
+            label: chain
+              .words
+              .first()
+              .and_then(Value::as_str)
+              .unwrap_or_default()
+              .trim()
+              .to_owned(),
+            state: chain.state,
+            moments: moments_of(on.iter().copied()),
+            threads,
+          }
+        })
+        .collect()
+    })
   }
 
   /// Each moment at which an act began or ended, of the life, of the acts of one chain, or of the

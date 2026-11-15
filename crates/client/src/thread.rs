@@ -166,7 +166,7 @@ impl Thread {
   /// The page of the thread before the exchange at a place, or the page of its end.
   pub fn page(&self, before: Option<usize>) -> Verb {
     let (life, thread) = (self.key.1.clone(), self.key.2.clone());
-    let at = self.time.as_ref().and_then(Time::moment);
+    let at = self.time.as_ref().and_then(|time| time.at);
     Verb::Thread { life, thread, before, limit: PAGE, at }
   }
 

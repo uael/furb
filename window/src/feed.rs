@@ -143,8 +143,8 @@ impl Feed<'_> {
   /// ended shows how, and while the input sends elsewhere its button turns the input to it, since a
   /// reply opens it again. A resolve
   /// of a thread that works waits for a confirm on the button, which says that it stops the work.
-  /// The thread of an agent says that it is one, and its button goes back to the thread that it
-  /// came from.
+  /// The thread of an agent says that it is one, and the button of a thread that the operator
+  /// opened from another, an agent or a thread of a chain, goes back to that one.
   pub(crate) fn head(&self) -> Row {
     let t = &self.model.tokens;
     let root = self.opened.root();
@@ -155,9 +155,10 @@ impl Feed<'_> {
     let (button, muted) = (self.style(Role::Button), self.style(Role::Muted));
     let title = self.model.title().unwrap_or_default();
     // The selected card names the thread that an agent came from, so the head names the agent.
-    let (mark, title) = match &self.opened.from {
-      Some(_) => ("agent · ", title),
-      None => ("", named.unwrap_or(title)),
+    let (mark, title) = match (&self.opened.from, self.opened.agent()) {
+      (Some(_), Some(_)) => ("agent · ", title),
+      (Some(_), None) => ("", title),
+      (None, _) => ("", named.unwrap_or(title)),
     };
     // The head marks a session whose life runs as its card does, in the column of the bars of the
     // messages, so its project stands over their text.

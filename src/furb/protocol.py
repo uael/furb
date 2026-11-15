@@ -599,6 +599,16 @@ class Request51(TypedDict):
 
 class Request52(TypedDict):
   """
+  Each chain of a life in time, in the order the chains began.
+  """
+
+  id: int
+  life: str
+  verb: Literal["tracks"]
+
+
+class Request53(TypedDict):
+  """
   The turn that the peer gave for a request of a model of a life that it answers, written as
   the record writes a value, or why it gives none.
   """
@@ -611,7 +621,7 @@ class Request52(TypedDict):
   verb: Literal["answered"]
 
 
-class Request53(TypedDict):
+class Request54(TypedDict):
   """
   What the peer added to the text and to the thought of the turn of a request, as it writes.
   """
@@ -624,7 +634,7 @@ class Request53(TypedDict):
   verb: Literal["wrote"]
 
 
-class Request54(TypedDict):
+class Request55(TypedDict):
   """
   The place of the daemon given to the daemon of a new build: each life written to its
   checkpoint and ended, and the lives with their pins in the answer, once the daemon stopped to
@@ -635,7 +645,7 @@ class Request54(TypedDict):
   verb: Literal["handover"]
 
 
-class Request59(TypedDict):
+class Request60(TypedDict):
   """
   The end of a view in its window.
   """
@@ -1508,6 +1518,15 @@ class Read(TypedDict):
   written: int
 
 
+class Began(TypedDict):
+  """
+  A thread of a chain and the moment its prompt began.
+  """
+
+  prompt: str
+  at: int
+
+
 Mark1 = TypedDict("Mark1", {"is": Literal["ran"]})
 
 
@@ -2011,7 +2030,7 @@ class Request48(TypedDict):
   verb: Literal["ladder"]
 
 
-class Request55(TypedDict):
+class Request56(TypedDict):
   """
   A view that a window mounts in a slot of a life, which the process of a skill serves.
   """
@@ -2024,7 +2043,7 @@ class Request55(TypedDict):
   verb: Literal["view.mount"]
 
 
-class Request57(TypedDict):
+class Request58(TypedDict):
   """
   What a person did to a node of a view, with the value of an input.
   """
@@ -2037,7 +2056,7 @@ class Request57(TypedDict):
   verb: Literal["view.event"]
 
 
-class Request58(TypedDict):
+class Request59(TypedDict):
   """
   What a skill asks of the one window of a view.
   """
@@ -2363,6 +2382,20 @@ class Spend(TypedDict):
     """
 
 
+class ChainTrack(TypedDict):
+  """
+  A chain of a life in time: its name, its label, the state of its work now, each moment at which
+  an act of it began or ended, and each thread that it holds with the moment that thread began,
+  in order.
+  """
+
+  chain: str
+  label: str
+  state: State
+  moments: list[int]
+  threads: list[Began]
+
+
 Mark2 = TypedDict("Mark2", {"work": Work, "began": NotRequired[int | None], "is": Literal["runs"]})
 
 
@@ -2444,6 +2477,15 @@ class Answer8(TypedDict):
 
   answer: Literal["cards"]
   data: list[Card]
+
+
+class Answer23(TypedDict):
+  """
+  Each chain of a life in time.
+  """
+
+  answer: Literal["tracks"]
+  data: list[ChainTrack]
 
 
 class Changes(TypedDict):
@@ -2769,7 +2811,7 @@ class Frame7(TypedDict):
   frame: Literal["thread"]
 
 
-class Answer23(TypedDict):
+class Answer24(TypedDict):
   """
   A page of a thread.
   """
@@ -2802,6 +2844,7 @@ type Answer = (
   | Answer21
   | Answer22
   | Answer23
+  | Answer24
 )
 """
 What a verb comes to.
@@ -2827,7 +2870,7 @@ class Protocol(TypedDict):
   frame: Frame
 
 
-class Request56(TypedDict):
+class Request57(TypedDict):
   """
   The tree of a view, which takes the place of each tree of a lower version.
   """
@@ -2900,6 +2943,7 @@ type Request = (
   | Request57
   | Request58
   | Request59
+  | Request60
 )
 """
 One request of a peer: an id that the reply gives back, and the verb. A verb names an act as
@@ -2986,4 +3030,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 49
+PROTOCOL = 50

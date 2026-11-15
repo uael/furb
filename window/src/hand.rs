@@ -585,7 +585,8 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
   if window.borrow().screen.model.picker.is_some() && picking(app, window, key) {
     return true;
   }
-  if completing(app, window, key) || looked(app, window, key) || timed(app, window, key) {
+  // A key after the leader is a key of the window, which no text that finds a chain takes.
+  if completing(app, window, key) || looked(app, window, key) || !led && timed(app, window, key) {
     return true;
   }
   let does = keys::pressed(key, led);
@@ -730,6 +731,17 @@ fn timed(app: &App, window: &Shared, key: &KeyEvent) -> bool {
     let model = &window.borrow().screen.model;
     model.client.thread.as_ref().is_some_and(|one| one.thread.time.is_some())
   };
+  let finds = window
+    .borrow()
+    .screen
+    .model
+    .client
+    .thread
+    .as_ref()
+    .is_some_and(|one| one.thread.time.as_ref().is_some_and(|time| time.chains.is_some()));
+  if finds {
+    return found(app, window, key);
+  }
   let empty = window.borrow().area.text().is_empty();
   if !shows || !key.modifiers.is_empty() {
     return false;
@@ -739,6 +751,29 @@ fn timed(app: &App, window: &Shared, key: &KeyEvent) -> bool {
     KeyCode::Left if empty => tell(app, window, |model| model.client.step(-1)),
     KeyCode::Right if empty => tell(app, window, |model| model.client.step(1)),
     KeyCode::Char(' ') if empty => tell(app, window, |model| model.client.play()),
+    _ => return false,
+  }
+  true
+}
+
+/// A key while the chains show under the bar of the time: a letter finds a chain by its label,
+/// enter opens the first chain that shows at the moment that the thread shows, and escape hides
+/// the chains. Whether the chains took the key.
+fn found(app: &App, window: &Shared, key: &KeyEvent) -> bool {
+  let text = key.text().filter(|_| key.modifiers.is_empty() || key.modifiers == Modifiers::SHIFT);
+  match (key.code, text) {
+    (KeyCode::Escape, _) => tell(app, window, |model| model.client.chains()),
+    (KeyCode::Backspace, _) => tell(app, window, |model| {
+      model.client.find(|find| {
+        find.pop();
+      });
+    }),
+    (KeyCode::Enter, _) => tell(app, window, |model| {
+      let at = model.client.thread.as_ref().and_then(|one| one.thread.time.as_ref());
+      let at = at.map(furb_client::Time::place).unwrap_or_default();
+      model.open_chain(0, at);
+    }),
+    (_, Some(one)) => tell(app, window, |model| model.client.find(|find| find.push(one))),
     _ => return false,
   }
   true
@@ -832,6 +867,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Changes => |model| model.client.review(),
     Does::Context => Model::context_step,
     Does::Rewind => |model| model.client.time(),
+    Does::Chains => |model| model.client.chains(),
     Does::Running => Model::act_on_open,
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,

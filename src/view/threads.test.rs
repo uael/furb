@@ -10,6 +10,7 @@ use super::{
   chain_tree, open,
 };
 use crate::view::{Act, Fold, Held, State};
+use furb_wire::Began;
 use std::{fs, hint::black_box, iter, slice, time::Instant};
 
 /// The acts of the record of a conductor, a life of 23 chains made from scripted words, with after
@@ -613,4 +614,29 @@ fn the_seen_of_one_operator_does_not_clear_the_unread_mark_of_another() {
     assert_eq!(unread("operator/ann"), 0);
     assert_eq!(unread("operator/bob"), 1);
   }
+}
+
+#[test]
+fn each_chain_stands_in_time_with_its_label_its_state_its_moments_and_the_start_of_each_thread() {
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "Fix the setup.", ""]),
+    json!(["rung", "rung5", "operator", "chain1", "w = prompt(list, on=chain('worker'))", "", ""]),
+    json!(["chain", "chain2", "rung5", "chain1", " worker ", ""]),
+    json!(["prompt", "prompt2", "rung5", "chain2", "list[str]", "Choose what stays.", ""]),
+    json!(["prompt", "prompt3", "operator", "prompt1", "str", "More.", ""]),
+    json!(["done", "prompt1", "", "ok"]),
+  ];
+  let life = held(facts);
+  let tracks = life.tracks();
+  let began = |id: &str| life.shared(id).map_or(0, |act| act.began);
+  let named: Vec<(&str, &str)> =
+    tracks.iter().map(|one| (one.chain.as_str(), one.label.as_str())).collect();
+  assert_eq!(named, [("chain1", "root"), ("chain2", "worker")]);
+  // A message to a thread starts no thread of its own.
+  let starts = |id: &str| vec![Began { prompt: id.to_owned(), at: began(id) }];
+  let threads: Vec<Vec<Began>> = tracks.iter().map(|one| one.threads.clone()).collect();
+  assert_eq!(threads, [starts("prompt1"), starts("prompt2")]);
+  assert_eq!(tracks[1].moments, [began("prompt2")]);
+  assert_eq!((tracks[0].state, tracks[1].state), (State::Delegates, State::Runs));
 }

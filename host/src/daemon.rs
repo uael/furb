@@ -670,6 +670,7 @@ fn routed(verb: Verb) -> Routed {
       (life, Command::Thread { thread, reach: Reach { before, limit }, at })
     }
     Verb::Moments { life, on } => (life, Command::Moments { on }),
+    Verb::Tracks { life } => (life, Command::Tracks),
     other => return Routed::Daemon(other),
   };
   Routed::Life(life, command)
@@ -699,6 +700,7 @@ impl From<Reply> for Answer {
       Reply::Ladder(rungs) => Self::Ladder(rungs),
       Reply::Acts(acts) => Self::Acts(acts),
       Reply::Moments(moments) => Self::Moments(moments),
+      Reply::Tracks(tracks) => Self::Tracks(tracks),
       Reply::Page(page) => Self::Page(page),
       Reply::Sent(sent) => Self::History(sent),
     }

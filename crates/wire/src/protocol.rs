@@ -7,14 +7,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-  Act, Desk, Page, Rung, Shown, Stage, ThreadNode, Threads, card,
+  Act, ChainTrack, Desk, Page, Rung, Shown, Stage, ThreadNode, Threads, card,
   error::ProtocolError,
   event::{Event, Seq},
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 49;
+pub const PROTOCOL: u32 = 50;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -432,6 +432,10 @@ pub enum Verb {
     #[serde(default)]
     on: Option<String>,
   },
+  /// Each chain of a life in time, in the order the chains began.
+  Tracks {
+    life: String,
+  },
   /// The turn that the peer gave for a request of a model of a life that it answers, written as
   /// the record writes a value, or why it gives none.
   Answered {
@@ -511,6 +515,7 @@ impl Verb {
       | Self::AsOf { life, .. }
       | Self::Thread { life, .. }
       | Self::Moments { life, .. }
+      | Self::Tracks { life }
       | Self::History { life }
       | Self::Skills { life }
       | Self::Answered { life, .. }
@@ -566,6 +571,7 @@ impl Verb {
         | Self::AsOf { .. }
         | Self::Thread { .. }
         | Self::Moments { .. }
+        | Self::Tracks { .. }
         | Self::Names { .. }
         | Self::Config { config: Config::Get, .. }
         | Self::ViewMount(_)
@@ -718,6 +724,8 @@ pub enum Answer {
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.
   Moments(Vec<u64>),
+  /// Each chain of a life in time.
+  Tracks(Vec<ChainTrack>),
   /// A page of a thread.
   Page(Page),
 }

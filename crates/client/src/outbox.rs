@@ -117,6 +117,8 @@ pub enum Asked {
   Parts(Key, u64),
   /// The moments of a thread, for the bar of its time.
   Moments(Key),
+  /// The chains of the life of a thread, under the bar of its time.
+  Tracks(Key),
 }
 
 impl Client {
@@ -143,6 +145,7 @@ impl Client {
     due.extend(self.changes_due());
     due.extend(self.parts_due());
     due.extend(self.moments_due());
+    due.extend(self.tracks_due());
     if listing {
       due.extend(self.lists_due());
     }

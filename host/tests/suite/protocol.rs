@@ -139,6 +139,7 @@ fn acts() -> Vec<Verb> {
     Verb::Threads { life: life(), on: on(), at: Some(3), read: Some(2) },
     Verb::AsOf { life: life(), at: 3 },
     Verb::Moments { life: life(), on: None },
+    Verb::Tracks { life: life() },
     Verb::Answered {
       life: life(),
       ask: 1,
@@ -503,6 +504,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "c20655145422c1da586ff8389dbd794952089fc4d6ec6033a7999514d50e3523",
   "bb8b24ccdbb83a68b96b4ddb95b63f83c76b1ec40c64f92ceb40b80822ef3ac7",
   "4bee8ef6def645cda7faede10e4f6a2eaf49556496019f1e61c4558bf4e3757e",
+  "37466866cc8d5984a376d0e1ca0f5b65e6d721e4f6ae5d1029f7cd21661d4e54",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

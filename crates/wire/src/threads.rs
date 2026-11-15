@@ -45,6 +45,25 @@ pub struct ThreadNode {
   pub state: State,
 }
 
+/// A chain of a life in time: its name, its label, the state of its work now, each moment at which
+/// an act of it began or ended, and each thread that it holds with the moment that thread began,
+/// in order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ChainTrack {
+  pub chain: String,
+  pub label: String,
+  pub state: State,
+  pub moments: Vec<u64>,
+  pub threads: Vec<Began>,
+}
+
+/// A thread of a chain and the moment its prompt began.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Began {
+  pub prompt: String,
+  pub at: u64,
+}
+
 /// How a thread concerns the operator: a question waits for him in it, or he started it and it
 /// failed or a pause holds it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

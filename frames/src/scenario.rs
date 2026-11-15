@@ -406,6 +406,11 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           "Answer of the rewind",
         ),
         step("x-branch", &[Act::Pointer { on: "└ 'Answer of the rewind", button: 0 }], "agent · "),
+        // The chains of the life stand under the bar on its moments: none works once the rewind
+        // answered, a text finds the root in grey, and enter opens its thread.
+        step("x-chains", &[Act::Key("C-x"), Act::Key("t")], "no chain works now"),
+        step("x-find", &[Act::Type("ro")], "find ro"),
+        step("x-chain", &[Act::Key("Enter")], "Answer 15 of"),
       ],
     }),
   },

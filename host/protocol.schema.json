@@ -1308,6 +1308,23 @@
         },
         {
           "type": "object",
+          "description": "Each chain of a life in time, in the order the chains began.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "tracks"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
           "description": "The turn that the peer gave for a request of a model of a life that it answers, written as\nthe record writes a value, or why it gives none.",
           "properties": {
             "life": {
@@ -3022,6 +3039,26 @@
           "properties": {
             "answer": {
               "type": "string",
+              "const": "tracks"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ChainTrack"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "Each chain of a life in time."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
               "const": "page"
             },
             "data": {
@@ -4474,6 +4511,60 @@
       ],
       "description": "What an answer of a model read: the tokens of its whole prompt, and of them those that it read\nfrom the cache and those that it wrote to it."
     },
+    "ChainTrack": {
+      "type": "object",
+      "properties": {
+        "chain": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/State"
+        },
+        "moments": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Began"
+          }
+        }
+      },
+      "required": [
+        "chain",
+        "label",
+        "state",
+        "moments",
+        "threads"
+      ],
+      "description": "A chain of a life in time: its name, its label, the state of its work now, each moment at which\nan act of it began or ended, and each thread that it holds with the moment that thread began,\nin order."
+    },
+    "Began": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "at": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "prompt",
+        "at"
+      ],
+      "description": "A thread of a chain and the moment its prompt began."
+    },
     "Page": {
       "type": "object",
       "properties": {
@@ -5808,5 +5899,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 49
+  "x-protocol": 50
 }

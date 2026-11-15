@@ -1,38 +1,66 @@
 //! The time of the open thread: while the operator holds its bar, he steps through each moment at
 //! which an act that its page shows began or ended, and the thread shows what it was just after
 //! that moment, page by page, as the daemon folds it. A play steps forward on its own until now.
+//! Under the bar, the chains of the life stand on the same moments: each that works, and each
+//! that a text that he types finds.
 
 use std::{collections::BTreeMap, time::Duration};
 
 use furb_wire::{
-  Exchange,
+  Began, ChainTrack, Exchange, State,
   protocol::{Answer, Frame, Verb},
 };
 use serde_json::Value;
 
-use crate::{Asked, Client, Key};
+use crate::{Asked, Client, Key, ranked};
 
 /// How long a play shows each moment.
 const STEP: Duration = Duration::from_millis(120);
 
-/// The bar of the time of a thread: the moments that its machine gave, the one that the thread
+/// The bar of the time of a thread: the moments that its machine gave, the moment that the thread
 /// shows, none for now, whether they changed since the machine gave them, when the play last
-/// stepped while it plays, and the first line of each message that a page of the thread gave, by
-/// the moment that it was said, which the track marks.
+/// stepped while it plays, the first line of each message that a page of the thread gave, by the
+/// moment that it was said, which the track marks, and the chains of the life while they show.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Time {
   pub moments: Vec<u64>,
-  pub at: Option<usize>,
+  pub at: Option<u64>,
   pub stale: bool,
   pub played: Option<Duration>,
   pub messages: BTreeMap<u64, String>,
+  pub chains: Option<Chains>,
+}
+
+/// The chains of a life under the bar of the time of a thread: what its machine gave, whether the
+/// life changed since, and the text that finds a chain by its label.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Chains {
+  pub tracks: Vec<ChainTrack>,
+  pub stale: bool,
+  pub find: String,
+}
+
+impl Chains {
+  /// The chains that show: each that works or waits, while no text finds; else each whose label
+  /// the text finds, the best first. A chain that rests shows only when a text finds it.
+  pub fn shown(&self) -> Vec<&ChainTrack> {
+    let labels = self.tracks.iter().map(|one| one.label.as_str());
+    let found = ranked(&self.find, labels).into_iter().map(|one| &self.tracks[one.at]);
+    found.filter(|one| !self.find.is_empty() || !resting(one.state)).collect()
+  }
+}
+
+/// Whether a chain rests: its work ended, or never began.
+pub fn resting(state: State) -> bool {
+  matches!(state, State::Done | State::Idle | State::Cancelled)
 }
 
 impl Time {
-  /// The moment that the thread shows, none for now. The last moment is now: nothing changed
-  /// after it.
-  pub fn moment(&self) -> Option<u64> {
-    self.at.and_then(|at| self.moments.get(at).copied())
+  /// The place among the moments of the moment that the thread shows: the last for now, and for a
+  /// moment between two of them, as a chain opens it, the next one.
+  pub fn place(&self) -> usize {
+    let last = self.moments.len().saturating_sub(1);
+    self.at.map_or(last, |at| self.moments.partition_point(|one| *one < at).min(last))
   }
 
   /// The messages of exchanges that a page gave: a word of Python by the first line of its code.
@@ -50,16 +78,17 @@ impl Time {
     self.messages.range(..=moment).next_back().map(|(_, text)| text.as_str())
   }
 
-  /// The place of a moment by its place among them: the last is now.
-  fn placed(&self, at: usize) -> Option<usize> {
-    (at + 1 < self.moments.len()).then_some(at)
+  /// The moment at a place among them: none for the last, which is now.
+  fn placed(&self, at: usize) -> Option<u64> {
+    self.moments.get(at).copied().filter(|_| at + 1 < self.moments.len())
   }
 
-  /// The place a count of moments later, back for a negative count: never before the first, and
-  /// now past the last.
-  fn stepped(&self, by: isize) -> Option<usize> {
-    let last = self.moments.len().saturating_sub(1);
-    let from = self.at.unwrap_or(last);
+  /// The moment a count of moments later, back for a negative count: never before the first, and
+  /// now past the last. A moment between two of them steps to the next one first.
+  fn stepped(&self, by: isize) -> Option<u64> {
+    let (last, from) = (self.moments.len().saturating_sub(1), self.place());
+    let between = self.at.is_some_and(|at| self.moments.get(from) != Some(&at));
+    let by = if between && by > 0 { by - 1 } else { by };
     self.placed(from.saturating_add_signed(by).min(last))
   }
 }
@@ -89,7 +118,7 @@ impl Client {
     self.move_to(|time| time.placed(at));
   }
 
-  fn move_to(&mut self, to: impl FnOnce(&Time) -> Option<usize>) {
+  fn move_to(&mut self, to: impl FnOnce(&Time) -> Option<u64>) {
     let Some(thread) = self.thread.as_mut().map(|one| &mut one.thread) else { return };
     let Some(time) = thread.time.as_mut() else { return };
     let at = to(time);
@@ -111,7 +140,7 @@ impl Client {
     }
     time.played = Some(moved);
     if time.at.is_none() && time.moments.len() > 1 {
-      time.at = Some(0);
+      time.at = time.placed(0);
       thread.moved();
     }
   }
@@ -180,6 +209,77 @@ impl Client {
       _ => Vec::new(),
     };
     time.stale = false;
-    time.at = time.at.and_then(|at| time.placed(at));
+    let last = time.moments.last().copied();
+    // A moment at or past the last of the thread is now, where the page follows each change.
+    if time.at.take_if(|at| last.is_none_or(|last| *at >= last)).is_some() {
+      opened.thread.moved();
+    }
+  }
+
+  /// The chains of the life under the bar of the time of the open thread shown, with the bar,
+  /// or hidden. The text that finds a chain starts empty.
+  pub fn chains(&mut self) {
+    if self.thread.as_ref().is_some_and(|one| one.thread.time.is_none()) {
+      self.time();
+    }
+    let Some(time) = self.thread.as_mut().and_then(|one| one.thread.time.as_mut()) else { return };
+    time.chains = match time.chains.take() {
+      Some(_) => None,
+      None => Some(Chains { stale: true, ..Chains::default() }),
+    };
+  }
+
+  /// The text that finds a chain under the bar, changed, while the chains show.
+  pub fn find(&mut self, change: impl FnOnce(&mut String)) {
+    let time = self.thread.as_mut().and_then(|one| one.thread.time.as_mut());
+    if let Some(chains) = time.and_then(|time| time.chains.as_mut()) {
+      change(&mut chains.find);
+    }
+  }
+
+  /// The thread to open from a row of the chains under the bar at a place among the moments of
+  /// the bar: the last thread of that chain that began by that moment, else its first, and that
+  /// moment, none for now.
+  pub fn chain_thread(&self, row: usize, at: usize) -> Option<(String, Option<u64>)> {
+    let time = self.thread.as_ref()?.thread.time.as_ref()?;
+    let track = *time.chains.as_ref()?.shown().get(row)?;
+    let moment = time.placed(at);
+    let began = |one: &&Began| moment.is_none_or(|moment| one.at <= moment);
+    let thread = track.threads.iter().rev().find(began).or(track.threads.first())?;
+    Some((thread.prompt.clone(), moment))
+  }
+
+  /// The ask of the chains of the life of the open thread, while they show under its bar and the
+  /// life changed since its machine gave them.
+  pub(crate) fn tracks_due(&self) -> Option<(usize, Verb, Asked)> {
+    let thread = &self.thread.as_ref()?.thread;
+    let chains = thread.time.as_ref()?.chains.as_ref()?;
+    let asked = Asked::Tracks(thread.key.clone());
+    let asking = self.asked.values().any(|one| *one == asked);
+    let life = thread.key.1.clone();
+    (chains.stale && !asking).then(|| (thread.key.0, Verb::Tracks { life }, asked))
+  }
+
+  /// The chains under the bar asked again when a frame changed the cards of their life.
+  pub(crate) fn retracked(&mut self, at: usize, frame: &Frame) {
+    let Frame::Cards { life, .. } = frame else { return };
+    let thread = self.thread.as_mut().map(|one| &mut one.thread).filter(|one| one.key.0 == at);
+    let time = thread.filter(|one| one.key.1 == *life).and_then(|one| one.time.as_mut());
+    if let Some(chains) = time.and_then(|time| time.chains.as_mut()) {
+      chains.stale = true;
+    }
+  }
+
+  /// What a machine said to the ask of the chains of a life. A refusal or a lost machine gives
+  /// none, so no chain shows.
+  pub fn tracked(&mut self, key: &Key, heard: Option<Frame>) {
+    let Some(opened) = self.thread.as_mut().filter(|one| one.thread.key == *key) else { return };
+    let time = opened.thread.time.as_mut();
+    let Some(chains) = time.and_then(|time| time.chains.as_mut()) else { return };
+    chains.tracks = match heard {
+      Some(Frame::Reply { answer: Answer::Tracks(tracks), .. }) => tracks,
+      _ => Vec::new(),
+    };
+    chains.stale = false;
   }
 }

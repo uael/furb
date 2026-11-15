@@ -44,7 +44,7 @@ use furb::{
     config::{Change, Layers},
   },
 };
-use furb_wire::FollowUp;
+use furb_wire::{ChainTrack, FollowUp};
 use futures::stream::{self, Stream as Streams};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -187,6 +187,8 @@ pub enum Command {
   /// Each moment at which an act began or ended, in order, of the life, of the acts of one chain,
   /// or of the acts that the page of one thread shows.
   Moments { on: Option<String> },
+  /// Each chain of the life in time, as [`furb::view::Held::tracks`] gives it.
+  Tracks,
   /// The end of the life, which replies and then ends the life. A life whose record does not hold
   /// each fact that it said yet, as on a full disk, keeps the end, tells why in a notice, and ends
   /// once the record holds them: the reply comes then.
@@ -231,6 +233,7 @@ impl Command {
         | Self::AsOf { .. }
         | Self::Folded { .. }
         | Self::Moments { .. }
+        | Self::Tracks
         | Self::Thread { .. }
         | Self::Sent
     )
@@ -265,6 +268,8 @@ pub enum Reply {
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.
   Moments(Vec<u64>),
+  /// Each chain of the life in time.
+  Tracks(Vec<ChainTrack>),
   /// A page of a thread.
   Page(Page),
   /// What each operator sent.
@@ -1555,6 +1560,7 @@ fn viewed(life: &Life, root: &str, command: Command) -> Result<Reply, LifeError>
       None => Err(LifeError::Refused(format!("No act named {id} stands in this life."))),
     },
     Command::Moments { on } => Ok(Reply::Moments(life.kept.held.moments(on.as_deref()))),
+    Command::Tracks => Ok(Reply::Tracks(life.kept.held.tracks())),
     Command::Thread { thread, reach, at: None } => {
       Ok(Reply::Page(life.kept.held.page(&life.kept.streams, &thread, reach)))
     }
