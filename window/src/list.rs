@@ -206,7 +206,7 @@ impl Model {
     let initials: Vec<String> =
       others.map(|login| login.chars().take(2).collect::<String>().to_lowercase()).collect();
     let model = card.thread.model.as_deref().and_then(|model| model.rsplit(':').next());
-    let agents = (card.thread.agents > 0).then(|| format!("↳{}", card.thread.agents));
+    let agents = (card.thread.agents > 0).then(|| format!("└{}", card.thread.agents));
     let alone = self.unheld(key.0, card).then(|| "◌".to_owned());
     let marks = [model.map(str::to_owned), agents, alone];
     let marks = marks.into_iter().flatten().collect::<Vec<_>>().join(" ");
