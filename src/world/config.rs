@@ -383,7 +383,3 @@ fn restored(path: &Path, before: Option<&str>) -> Result<(), disk::Error> {
     None => fs::remove_file(path).map_err(|source| disk::Error { path: path.to_owned(), source }),
   }
 }
-
-#[cfg(test)]
-#[path = "config.test.rs"]
-mod test;

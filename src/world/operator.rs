@@ -388,7 +388,3 @@ fn written(raw: &RawValue) -> Result<Object, Fault> {
     _ => inward(&serde_json::from_str(raw.get()).map_err(invalid)?),
   }
 }
-
-#[cfg(test)]
-#[path = "operator.test.rs"]
-mod test;

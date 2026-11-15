@@ -1,6 +1,6 @@
 //! The operator: a line it writes back, read as a value of the shape a prompt wants.
 
-use super::{Shape, answered, answers};
+use furb::world::{Shape, answered, answers};
 
 /// What a line comes to, as python shows it, or why it is none.
 fn read(shape: &str, line: &str) -> String {

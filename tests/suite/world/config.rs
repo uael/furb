@@ -1,21 +1,20 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path, path::PathBuf, process};
 
 use serde_json::{Value, json};
 
-use super::{Change, Error, Kind, Layer, Layers, Property, Setting};
-use crate::skill::{Places, load};
-use crate::world::catalog::blocking;
-use std::env;
-use std::path;
-use std::process;
+use crate::yard::Yard;
+use furb::{
+  ear,
+  skill::{Places, load},
+  world::config::{Change, Error, Kind, Layer, Layers, Property, Setting},
+};
 
 /// A project and a config directory of a user, each empty, in a folder of the test alone, checked
 /// against no claude command line, since the one of this machine answers in seconds.
-fn place(name: &str) -> (PathBuf, Layers) {
-  let at = env::temp_dir().join(format!("furb-config-{name}-{}", process::id()));
-  drop(fs::remove_dir_all(&at));
-  fs::create_dir_all(at.join("project/.furb")).unwrap();
-  fs::create_dir_all(at.join("user")).unwrap();
+fn place(name: &str) -> (Yard, Layers) {
+  let at = Yard::new(format!("furb-config-{name}-{}", process::id()));
+  fs::create_dir_all(at.join("project/.furb")).unwrap_or_else(|no| panic!("{no}"));
+  fs::create_dir_all(at.join("user")).unwrap_or_else(|no| panic!("{no}"));
   let layers =
     Layers::new(at.join("project"), Some(at.join("user"))).claude(Some(at.join("no-claude")));
   (at, layers)
@@ -36,7 +35,7 @@ fn setting(key: &[&str], value: Value, layer: Layer) -> Setting {
 
 /// The key, the value and the layer of each setting, which the tests of the order read.
 fn won(layers: &Layers) -> Vec<(String, Value, Option<Layer>)> {
-  let settings = layers.get().unwrap().into_iter();
+  let settings = layers.get().unwrap_or_else(|no| panic!("{no}")).into_iter();
   settings.map(|one| (one.key.join("."), one.value, one.layer)).collect()
 }
 
@@ -44,24 +43,27 @@ fn won(layers: &Layers) -> Vec<(String, Value, Option<Layer>)> {
 /// names the file of its keys.
 fn keyed(at: &path::Path, name: &str, keys: &Value) {
   let root = at.join("project/.furb").join(name);
-  fs::create_dir_all(&root).unwrap();
+  fs::create_dir_all(&root).unwrap_or_else(|no| panic!("{no}"));
   let manifest = format!(
     "---\nname: {name}\ndescription: A test.\nmetadata:\n  furb-word: {name}.py\n  furb-config: keys.json\n---\n"
   );
-  fs::write(root.join("SKILL.md"), manifest).unwrap();
-  fs::write(root.join(format!("{name}.py")), "").unwrap();
-  fs::write(root.join("keys.json"), keys.to_string()).unwrap();
+  fs::write(root.join("SKILL.md"), manifest).unwrap_or_else(|no| panic!("{no}"));
+  fs::write(root.join(format!("{name}.py")), "").unwrap_or_else(|no| panic!("{no}"));
+  fs::write(root.join("keys.json"), keys.to_string()).unwrap_or_else(|no| panic!("{no}"));
   let config = at.join("project/.furb/config.json");
-  fs::write(config, json!({"skills": {name: name}}).to_string()).unwrap();
+  fs::write(config, json!({"skills": {name: name}}).to_string())
+    .unwrap_or_else(|no| panic!("{no}"));
 }
 
 /// A change kept as a life keeps it, which a test of no runtime waits for.
+#[expect(clippy::disallowed_methods, reason = "a test of no runtime waits for the change")]
 fn set(layers: &Layers, change: Change) -> Result<(), Error> {
-  blocking(layers.set(change))
+  ear::runtime().block_on(layers.set(change))
 }
 
 fn text(file: &PathBuf) -> Value {
-  serde_json::from_str(&fs::read_to_string(file).unwrap()).unwrap()
+  serde_json::from_str(&fs::read_to_string(file).unwrap_or_else(|no| panic!("{no}")))
+    .unwrap_or_else(|no| panic!("{no}"))
 }
 
 #[test]
