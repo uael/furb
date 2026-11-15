@@ -272,6 +272,9 @@ fn an_older_page_keeps_the_rows_that_the_operator_reads() {
   let came = app.wait_until(PATIENCE, || !app.text().contains("earlier messages"));
   assert!(came, "the older page never came:\n{}", app.text());
   assert!(up_until(&app, |text| text.contains(first)), "{}", app.text());
+  // The first message came in view at a row that the arrival of the older page moved, so one more
+  // page stands the feed at its head.
+  app.press("pageup");
   screen("thread-older", &app);
 }
 
