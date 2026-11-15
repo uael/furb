@@ -5,9 +5,9 @@
 # of the packs, uael-furb-<version>.tgz and uael-furb-<system>-<version>.tgz, as npm pack names them. npm installs
 # the package under the name furb, as its README says, which the examples import. The fake claude is
 # bind/typescript/test/programs/claude.ts, which bun compiles to a program, since Windows runs no script by its shebang.
-# It stays a shell script, and not a task of the crate xtask: it proves the package as a user of npm installs it, with
-# no cargo, and its job in .github/workflows/publish.yml sets up bun and node alone. A toolchain of Rust in that job would
-# make the proof false.
+# It stays a shell script, and not a task of the crate xtask: it proves the package as a user of npm installs it,
+# with no cargo, and its job in .github/workflows/publish.yml sets up bun and node alone. A toolchain of Rust in that
+# job would make the proof false.
 set -eu
 packs=$(cd "$1" && pwd)
 root=$(cd "$(dirname "$0")/.." && pwd)
