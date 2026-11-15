@@ -338,8 +338,9 @@ impl<'a> Reader<'a> {
     };
     let words: Vec<&Act> = self.held.on_chain(&prompt.chain).filter(word).collect();
     // A message that the operator took back is no message of the thread: its text went back to
-    // his input, and the message that he sends in its place stands there.
-    let said = |one: &&Act| one.id == thread || operator(&one.by) && !one.cancelled();
+    // his input, and the message that he sends in its place stands there. A message that a stop
+    // of its thread cancelled was said all the same.
+    let said = |one: &&Act| one.id == thread || operator(&one.by) && !one.taken_back();
     let mut messages: Vec<&Act> = prompts.iter().copied().filter(said).collect();
     messages.extend(&words);
     messages.sort_by_key(|one| one.began);

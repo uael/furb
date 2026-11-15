@@ -670,3 +670,27 @@ fn each_chain_stands_in_time_with_its_label_its_state_its_moments_and_who_asked_
   assert_eq!(tracks[1].moments, [began("prompt2")]);
   assert_eq!((tracks[0].state, tracks[1].state), (State::Delegates, State::Runs));
 }
+
+#[test]
+fn a_thread_ends_as_its_last_message_ended_and_a_message_that_he_took_back_says_nothing_of_it() {
+  let cancelled = json!({"is": "CancelledError", "args": []});
+  let state = |after: &[Value]| {
+    let facts = [
+      json!(["chain", "chain1", "operator", "", "root", ""]),
+      asked("prompt1"),
+      json!(["cancel", "prompt1", "operator", null]),
+      json!(["done", "prompt1", "operator", cancelled.clone()]),
+    ];
+    let got = held(facts.into_iter().chain(after.iter().cloned())).threads("chain1", None, 0);
+    got.threads[0].state
+  };
+  let more = json!(["prompt", "prompt2", "operator", "prompt1", "str", "Then rebase.", ""]);
+  // A stop ends the thread.
+  assert_eq!(state(&[]), State::Cancelled);
+  // A message that the model closed after the stop ends it as done.
+  assert_eq!(state(&[more.clone(), json!(["done", "prompt2", "rung1", "rebased"])]), State::Done);
+  // A message that he took back leaves the thread as the stop left it.
+  let back = [more, json!(["cancel", "prompt2", "operator", null])];
+  let back = [&back[..], &[json!(["done", "prompt2", "operator", cancelled.clone()])]].concat();
+  assert_eq!(state(&back), State::Cancelled);
+}

@@ -370,8 +370,10 @@ impl Fold {
         }
       }
       "done" => self.done(about, fact.get(3).cloned().unwrap_or_default()),
-      // The done that a close makes tells the act with its closer, so the close moves nothing.
-      "close" => {
+      // The done that a close or a cancel makes tells the act with its closer, so the close moves
+      // nothing. A cancel that names a prompt under the act, as a stop of its thread, names no
+      // closer of the act.
+      "close" | "cancel" => {
         let closer = self.acts.get(about).map(|act| self.maker(&act.kind, by, &[]));
         if let Some((act, closer)) = self.acts.get_mut(about).zip(closer) {
           act.closer = Some(closer);

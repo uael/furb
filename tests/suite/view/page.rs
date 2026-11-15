@@ -473,6 +473,20 @@ fn a_message_that_the_operator_took_back_is_no_message_of_the_thread() {
 }
 
 #[test]
+fn a_message_that_a_stop_of_its_thread_cancelled_stays_a_message_of_the_thread() {
+  let mut streams = Streamed::default();
+  let stopped = json!({"is": "CancelledError", "args": []});
+  let facts = thread().into_iter().chain([
+    json!(["cancel", "prompt1", "operator", null]),
+    json!(["done", "prompt3", "operator", stopped]),
+  ]);
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let messages: Vec<&str> = page.exchanges.iter().map(|one| one.message.as_str()).collect();
+  assert_eq!(messages, ["prompt1", "prompt3"]);
+}
+
+#[test]
 fn a_notice_stands_after_the_message_that_came_before_it_though_its_rung_began_before() {
   let mut streams = Streamed::default();
   let facts = vec![

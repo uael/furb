@@ -177,7 +177,8 @@ pub struct Act {
   pub ended: Option<u64>,
   /// What the models cost: the answers that wrote the word of a rung, or each answer on a chain.
   pub spend: Option<Spend>,
-  /// Who closed the act, as a window names who made an act, once a close of it was said.
+  /// Who closed or cancelled the act, as a window names who made an act, once a close or a cancel
+  /// of it was said.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub closer: Option<Maker>,
   /// The state of the act, or of the work of a chain for a chain.
@@ -366,5 +367,11 @@ impl Act {
       Some(run) => matches!(run, RunState::Cancelled(_)),
       None => self.value().and_then(fault).is_some_and(|(is, _)| is == "CancelledError"),
     }
+  }
+
+  /// Whether an operator took the act back: a cancel that he said of the act itself ended it, and
+  /// not a cancel of a prompt above it, as the stop of its thread.
+  pub fn taken_back(&self) -> bool {
+    self.cancelled() && matches!(self.closer, Some(Maker::Operator | Maker::Member { .. }))
   }
 }

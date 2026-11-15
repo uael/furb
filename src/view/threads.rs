@@ -280,9 +280,13 @@ fn sorted<'a>(on: &[&'a Act], rows: &Rows<'a>) -> (Vec<ChainThread>, Vec<ChainAs
   named(&mut out, rows);
   for thread in &mut out {
     let acts = iter::once(&thread.prompt).chain(&thread.messages);
-    let open = acts.filter_map(|id| rows.get(id.as_str())).rfind(|act| !act.done());
+    let acts: Vec<&Act> = acts.filter_map(|id| rows.get(id.as_str())).copied().collect();
+    let open = acts.iter().rfind(|act| !act.done());
     thread.over = open.is_none();
-    thread.state = match open.or_else(|| rows.get(thread.prompt.as_str())) {
+    // With none open, the last message that he did not take back says how the thread ended: one
+    // that the model closed after a stop of the thread resolves it. Else its prompt says it.
+    let last = || acts.iter().rfind(|act| act.id == thread.prompt || !act.taken_back());
+    thread.state = match open.or_else(last).copied() {
       _ if !thread.asks.is_empty() => State::Asks,
       Some(act) => match State::of(act) {
         // A model that writes a word for the thread thinks, as the chain and the session say.
