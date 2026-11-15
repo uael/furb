@@ -3,7 +3,8 @@
 //! The check runs in a tree of its own, detached at the head that it checks, so no edit of a
 //! person or of an agent changes the revision under it, and it runs at a low priority, so it slows
 //! no other work. It blocks nothing: a green writes one line in its table, a red one entry in its
-//! inbox, with the tests that failed, the owner of each, and the commits since the last green.
+//! inbox, with the tests that failed, the owner of each, and the commits since the last green, or
+//! since the head checked before.
 
 use std::{
   fmt::Write as _,
@@ -106,7 +107,8 @@ impl Watch {
     git(tree, &["checkout", "--quiet", "--detach", head])?;
     let began = Instant::now();
     let mut failed = Vec::new();
-    for (name, words) in parts(last(&self.table).as_deref(), head) {
+    let before = last(&self.table);
+    for (name, words) in parts(before.as_deref(), head) {
       calm(moves)?;
       let log = tree.join("target").join("xtask").join(format!("watch-{name}.log"));
       if !part(tree, &words, &log)? {
@@ -123,10 +125,11 @@ impl Watch {
     if failed.is_empty() {
       return Ok(());
     }
-    let since = green(&self.table, head);
-    // With no green before it, the range is the last commits up to the head.
+    // The range starts at the last green, or at the head checked before when none was green, or
+    // 20 commits back at the first check.
+    let since = green(&self.table, head).or(before);
     let range =
-      since.map_or_else(|| format!("{head}~20..{head}"), |green| format!("{green}..{head}"));
+      since.map_or_else(|| format!("{head}~20..{head}"), |since| format!("{since}..{head}"));
     let commits = git(root, &["log", "--oneline", "--no-decorate", &range]).unwrap_or_default();
     let owners = self.owners.as_deref().map(owners).unwrap_or_default();
     let mut entry = format!("RED of the carrier at {head}, {seconds} s, commits {range}:\n");

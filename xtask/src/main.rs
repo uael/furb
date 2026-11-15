@@ -89,7 +89,8 @@ enum Task {
   ///
   /// The check runs in a tree of its own, detached at the head, at a low priority, and blocks
   /// nothing. A green writes one line in the table; a red writes one entry in the inbox, with the
-  /// tests that failed, the owner of each, and the commits since the last green.
+  /// tests that failed, the owner of each, and the commits since the last green, or since the
+  /// head checked before.
   Watch {
     /// The branch whose head is checked.
     #[arg(long, default_value = "w/integrate")]

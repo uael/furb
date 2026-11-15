@@ -499,7 +499,8 @@ fix what your change broke, and report what was broken before.
   under its count of cores, which it reads each minute while it waits, and runs at the lowest priority with a quarter of
   the cores for each runner and each build, so the check adds about that to the load. A green writes one line in the
   table; a red writes one entry in the inbox, with each test or file that failed, its owner from the file of owners, and
-  the commits since the last green. It blocks nothing, and it wakes on the write of the ref.
+  the commits since the last green, or since the head checked before. It blocks nothing, and it wakes on the write of
+  the ref.
 - `uv run python script/links.py`: check that each link in a README that a package carries works on the page of the
   package on PyPI, npm or crates.io, which read no relative link. It lists each package and its README from the
   manifests, and fails on a relative link, which `--fix` writes as absolute, at `main` on GitHub. The hooks run it.
