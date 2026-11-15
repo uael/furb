@@ -380,3 +380,28 @@ fn a_reason_that_names_a_line_only_inside_a_word_marks_the_line_of_the_act_that_
     block.lines.iter().map(|line| matches!(line.mark, Mark::Failed { .. })).collect();
   assert_eq!(marks, [false, true, false], "{block:?}");
 }
+
+#[test]
+fn a_word_that_raises_at_a_command_that_failed_marks_the_line_of_that_command() {
+  // The reason of the refusal names no line, and the command is done with its exit, no fault.
+  let mut streams = Streamed::default();
+  let word = "await bash('exit 3')\nclose('done')";
+  let fault = json!({"is": "Refused", "args": ["bash1 exited 3"]});
+  let exit = json!({"is": "Exit", "code": 3});
+  let facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "run it", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
+    json!(["bash", "bash1", "rung1", "chain1", "exit 3", "", 120.0, null]),
+    json!(["done", "bash1", "bash", exit]),
+    json!(["done", "run1", "chain1", fault]),
+    json!(["done", "rung1", "chain1", fault]),
+  ];
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let marks: Vec<bool> =
+    block.lines.iter().map(|line| matches!(line.mark, Mark::Failed { .. })).collect();
+  assert_eq!(marks, [true, false], "{block:?}");
+}

@@ -387,8 +387,11 @@ impl<'a> Reader<'a> {
     let places = placed(word, &made);
     if let RunState::Failed(why) = run {
       // A reason that names no line came from an act that the word awaited, as a refused
-      // question: the line that made that act raised it.
-      let raised = made.iter().rposition(|act| act.failed());
+      // question or a command that exited with a code that the word refuses: the line that made
+      // that act raised it: the act that failed, or else the last act that the word made. The
+      // last line of the word is the line where its model stood when it raised, so it would hang
+      // on the time of the fault.
+      let raised = made.iter().rposition(|act| act.failed()).or(made.len().checked_sub(1));
       let source = line_of(why)
         .map(|at| at.saturating_sub(1))
         .or_else(|| raised.and_then(|at| places[at]))
