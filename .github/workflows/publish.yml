@@ -34,6 +34,9 @@ on:
       - cli/pyproject.toml
       - bind/typescript/package.json
       - bind/typescript/build.ts
+      - bind/typescript/Cargo.toml
+      - bind/typescript/build.rs
+      - bind/typescript/lib.rs
       - bind/typescript/npm/**
       - script/prove-crate.sh
       - script/prove-npm.sh
@@ -50,6 +53,9 @@ on:
       - cli/pyproject.toml
       - bind/typescript/package.json
       - bind/typescript/build.ts
+      - bind/typescript/Cargo.toml
+      - bind/typescript/build.rs
+      - bind/typescript/lib.rs
       - bind/typescript/npm/**
       - script/prove-crate.sh
       - script/prove-npm.sh
