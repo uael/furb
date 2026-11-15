@@ -337,7 +337,14 @@ impl Model {
       all.extend(kept);
       all.extend(self.lists());
     } else {
+      // The sessions past those that he used last say how many wait for his search.
+      let more = kept.len().saturating_sub(RECENT);
       all.extend(kept.into_iter().take(RECENT));
+      all.extend((more > 0).then(|| Entry {
+        part: "Sessions".into(),
+        left: format!("Type to find {more} more"),
+        ..Entry::default()
+      }));
     }
     all.extend(projects(&sessions));
     // A project that holds no session yet takes a new thread there, as the launcher picks it.
