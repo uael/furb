@@ -1,4 +1,4 @@
- furb · remove the gate from the…     ✓ Resolved    Reopen     All projects ▾         this machine
+ furb · remove the gate from the engine       ✓ Resolved       All projects ▾         this machine
 ┃
 ┃ remove the gate from the engine                              Resolved 1 ▾
 ┃ (the model answers)

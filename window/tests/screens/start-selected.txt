@@ -1,4 +1,4 @@
- furb · Debug stuck TUI after merge     ✗ Failed    Reopen     All projects ▾       studio offline
+ furb · Debug stuck TUI after merge             ✗ Failed       All projects ▾       studio offline
 ┃
 ┃ Debug stuck TUI after merge                                 ▐ FU furb                      opus ▌
 ┃ (the model works on it)                                     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘

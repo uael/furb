@@ -1,4 +1,4 @@
- furb-try · fix the build (the…       ✓ Resolved    Reopen     All projects ▾         this machine
+ furb-try · fix the build (the model…         ✓ Resolved       All projects ▾         this machine
 
   See the trace.                                               Resolved 1 ▸
 

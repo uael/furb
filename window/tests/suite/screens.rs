@@ -14,6 +14,8 @@ use opentui::{
 };
 use serde_json::json;
 
+use crate::daemon::PATIENCE;
+
 /// The frame of an app held against its capture, or written as its capture when `FURB_DRAW` is
 /// set. A capture holds no blank row after the last row that shows something, as the hooks keep a
 /// file. A test runs in the folder of its package.
@@ -24,13 +26,37 @@ pub(crate) fn screen(name: &str, app: &TestApp) {
   let capture = Path::new("tests/screens").join(name).with_extension("txt");
   let frame = app.text().trim_end().to_owned() + "\n";
   if env::var_os("FURB_DRAW").is_some() {
-    fs::write(&capture, frame).unwrap();
+    fs::write(&capture, still(app)).unwrap();
     return;
   }
   let kept = fs::read_to_string(&capture).unwrap_or_default();
+  // A frame of the daemon that the test does not wait for, as the models of a machine, may come
+  // after the frame that the test read: the capture holds the frame where the window settles.
+  let settled = |frame: &mut String| {
+    *frame = app.text().trim_end().to_owned() + "\n";
+    *frame == kept
+  };
+  let mut frame = frame;
+  app.wait_until(PATIENCE, || settled(&mut frame));
   let how = "`FURB_DRAW=1 cargo test -p furb-window` draws it again";
   assert_eq!(frame, kept, "the frame is not the capture {}: {how}", capture.display());
 }
+
+/// The frame of an app once it stays the same over many polls of a wait, between which a daemon
+/// of the test answers what the window asked.
+fn still(app: &TestApp) -> String {
+  let (mut frame, mut same) = (app.text(), 0);
+  app.wait_until(PATIENCE, || {
+    let again = app.text();
+    same = if again == frame { same + 1 } else { 0 };
+    frame = again;
+    same >= STILL
+  });
+  frame.trim_end().to_owned() + "\n"
+}
+
+/// How many polls of a wait show the same frame before a capture takes it.
+const STILL: u32 = 50;
 
 /// The cells of a frame as JSON: each row as its runs, and each run as its text, its color, the
 /// color of its ground and its attributes.

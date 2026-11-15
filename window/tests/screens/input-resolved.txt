@@ -1,4 +1,4 @@
- furb-try · how long does an open…    ✓ Resolved    Reopen     All projects ▾         this machine
+ furb-try · how long does an open take (the…  ✓ Resolved       All projects ▾         this machine
 ┃
 ┃ how long does an open take (the model answers)               Resolved 1 ▸
 ┃

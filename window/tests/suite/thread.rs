@@ -166,8 +166,8 @@ fn a_thread_at_rest_shows_its_answer_as_prose_and_a_hover_lights_only_the_text()
   app.click(80, row(&app, "Resolved 1"));
   shows(&app, "Resolved 1 ▾");
   screen("thread-rests", &app);
-  // The card, the button that opens it again, and the link of the answer.
-  for (text, from) in [("how long does an open", LEFT), (" Reopen ", 0), ("the trace", 0)] {
+  // The card and the link of the answer.
+  for (text, from) in [("how long does an open", LEFT), ("the trace", 0)] {
     lights(&app, text, from, 2);
   }
 }

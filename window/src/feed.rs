@@ -7,6 +7,7 @@ use furb::view::{
   Agent, Block, Exchange, Line as Code, Maker, Mark, Output, Retrying, Said, Saying, Standing,
   Thought, Work, lines, timer,
 };
+use furb_client::Target;
 use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
 
@@ -131,7 +132,8 @@ impl Feed<'_> {
 
   /// The head of the thread, which never scrolls: its project, its session or its title, and the
   /// button that resolves it, once the daemon made the thread and gave its page. A thread that
-  /// ended shows how, and its button turns the input to it, since a reply opens it again. A resolve
+  /// ended shows how, and while the input sends elsewhere its button turns the input to it, since a
+  /// reply opens it again. A resolve
   /// of a thread that works waits for a confirm on the button, which says that it stops the work.
   /// The thread of an agent says that it is one, and its button goes back to the thread that it
   /// came from.
@@ -162,7 +164,11 @@ impl Feed<'_> {
           Standing::Failed => run("✗ Failed", Style::new().fg(t.danger)),
           _ => run("Stopped", muted),
         };
-        (Some(mark), Some((run(" Reopen ", button), Does::Resolve)))
+        // The button turns the input to the thread, so it stands only while the input sends
+        // elsewhere or runs a word: a button that would change nothing does not show.
+        let replies = self.model.target() == Target::Thread(self.opened.thread.key.clone())
+          && !self.model.draft.python;
+        (Some(mark), (!replies).then(|| (run(" Reopen ", button), Does::Resolve)))
       }
       Some(thread)
         if thread.works()

@@ -1,4 +1,4 @@
- furb · Debug…      ✗ Failed    Reopen     All projects ▾       studio offline
+ furb · Debug stuck TUI…    ✗ Failed       All projects ▾       studio offline
 ┃
 ┃ Debug stuck TUI after merge               TUI scope for the new…    ◆ Input
 ┃ (the model works on it)                   FU furb                      opus

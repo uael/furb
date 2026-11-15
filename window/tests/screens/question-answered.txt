@@ -1,4 +1,4 @@
- furb · where does the list stand     ✓ Resolved    Reopen     All projects ▾         this machine
+ furb · where does the list stand             ✓ Resolved       All projects ▾         this machine
 ┃
 ┃ where does the list stand                                    Resolved 1 ▸
 ┃ (the model asks a choice)

@@ -1,4 +1,4 @@
- furb · ground the branch, message…   ✓ Resolved    Reopen     All projects ▾         this machine
+ furb · ground the branch, message by…        ✓ Resolved       All projects ▾         this machine
 ┃
 ┃ ground the branch, message by message                        Resolved 1 ▸
 ┃

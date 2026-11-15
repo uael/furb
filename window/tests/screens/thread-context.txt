@@ -1,4 +1,4 @@
- furb · read the trace of the open    ✓ Resolved    Reopen     All projects ▾         this machine
+ furb · read the trace of the open            ✓ Resolved       All projects ▾         this machine
 ┃
 ┃ read the trace of the open                                   Resting 1
 ┃ (the model reads much)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
