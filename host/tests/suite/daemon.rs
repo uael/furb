@@ -434,6 +434,19 @@ impl Window {
   async fn ended(&mut self, life: &str) {
     card(self, |card| card.life == life && !card.held).await;
   }
+
+  /// Detaches from a life and waits until the daemon holds it no more, so a test leaves no life
+  /// that runs past its end: the process of a test can end at once, and a life cut in its middle
+  /// leaves its scratch directory in the cache of the machine.
+  async fn left(&mut self, life: &str) {
+    assert_eq!(self.ask(Verb::Detach { life: life.to_owned() }).await, Ok(Answer::Done));
+    let gone = async {
+      while self.listed().await.iter().any(|one| one.life == life && one.held) {
+        time::sleep(Duration::from_millis(50)).await;
+      }
+    };
+    timeout(PATIENCE, gone).await.expect("the life ends after its grace");
+  }
 }
 
 /// Whether a frame is the act of a name, done.
@@ -1830,7 +1843,7 @@ async fn a_second_writer_cannot_answer_the_request_of_the_peer_that_answers_the_
 #[tokio::test]
 async fn a_command_that_a_window_feeds_reads_each_line_that_it_writes() {
   let at = place();
-  let (local, _daemon) = started(&at, GRACE).await;
+  let (local, _daemon) = started(&at, SHORT).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
@@ -1854,6 +1867,7 @@ async fn a_command_that_a_window_feeds_reads_each_line_that_it_writes() {
     panic!("no act")
   };
   assert!(act.value().is_some_and(|exit| exit.to_string().contains("fed")), "{act:?}");
+  window.left(&life).await;
 }
 
 /// The manifest of a skill of a test whose process says where it stands, then waits for its end.
@@ -1987,7 +2001,7 @@ async fn a_life_that_holds_an_open_act_and_says_no_fact_is_told_once_to_its_wind
   let listener = local.listen().await.unwrap();
   let settings = Settings {
     opening: opening(&at),
-    grace: GRACE,
+    grace: SHORT,
     stall: QUIET,
     tailnet: None,
     door: None,
@@ -2023,10 +2037,11 @@ async fn a_life_that_holds_an_open_act_and_says_no_fact_is_told_once_to_its_wind
   let heard = window.heard_until(stall).await;
   assert!(heard.iter().any(done(&rung)), "a new stall comes after a new fact");
   window.until(message).await;
-  let prompts = Verb::Transcript { life, on: None, of: Some("prompt".to_owned()) };
+  let prompts = Verb::Transcript { life: life.clone(), on: None, of: Some("prompt".to_owned()) };
   let Ok(Answer::Values(prompts)) = window.ask(prompts).await else { panic!("no prompts") };
   let messages = prompts.iter().filter(|one| one[4] == "None").count();
   assert_eq!(messages, 2, "a new fact and a new stall send a new message: {prompts:?}");
+  window.left(&life).await;
 }
 
 /// The rung of a word that a window ran on the root, as the daemon answers it once its life folds
@@ -2123,7 +2138,7 @@ async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() 
   let listener = local.listen().await.unwrap();
   let settings = Settings {
     opening: opening(&at),
-    grace: GRACE,
+    grace: SHORT,
     stall: QUIET,
     tailnet: None,
     door: None,
@@ -2147,6 +2162,7 @@ async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() 
     unreachable!()
   };
   assert_eq!(sent[5], notice.as_str(), "the root takes the notice as its message");
+  window.left(&life).await;
 }
 
 #[tokio::test]
@@ -2156,7 +2172,7 @@ async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_not
   let listener = local.listen().await.unwrap();
   let settings = Settings {
     opening: opening(&at),
-    grace: GRACE,
+    grace: SHORT,
     stall: QUIET,
     tailnet: None,
     door: None,
@@ -2185,6 +2201,7 @@ async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_not
     unreachable!()
   };
   assert_eq!(sent[5], notice.as_str(), "the stuck chain takes the notice as its message");
+  window.left(&life).await;
 }
 
 /// The skill probe in a folder of skills, whose process writes the file `started` of its folder,
