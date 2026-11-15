@@ -1,10 +1,10 @@
  furb · which keys does the form take           [ Resolve ]    All projects ▾         this machine
 ┃
 ┃ which keys does the form take                                Needs you 1
-┃ (the model asks ticks)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-┃                                                             ▐ which keys does the…      ◆ Input
-                                                              ▐ FU furb                      opus
-       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+┃ (the model asks ticks)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+┃                                                             ▐ which keys does the…      ◆ Input ▌
+                                                              ▐ FU furb                      opus ▌
+       opus/high                                              ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     ◆  keys = await prompt(list[Literal['up', 'down'…+57
     2  close(' '.join(keys))
     …

@@ -2,7 +2,7 @@
 ┃
 ┃ how long does an open take                                   Resolved 1 ▾
 ┃ (the model answers)
-┃                                                             ▐ ✓ how long does an open take  now
+┃                                                             ▐ ✓ how long does an open take  now ▌
 
        opus/high
     1  found = 2
