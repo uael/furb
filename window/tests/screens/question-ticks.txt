@@ -9,7 +9,7 @@
     2  close(' '.join(keys))
     …
 
-  ◆ Which keys does the form take?
+
 
 
 

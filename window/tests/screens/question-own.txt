@@ -9,7 +9,7 @@
     2  close(side)
     …
 
-  ◆ Where does the list of cards stand?
+
 
 
 

@@ -463,10 +463,15 @@ impl Feed<'_> {
   }
 
   /// What an answer said, as markdown from the column of the text. A question is one line with its
-  /// mark: its first line while it waits, since its form shows it whole, then what closed it.
+  /// mark: its first line while it waits, then what closed it. While its form shows it whole, the
+  /// form is its one place, and the feed shows none of it.
   fn said(&self, said: &Said) -> Vec<Row> {
     let t = &self.model.tokens;
     if let Saying::Question { answered, .. } = &said.kind {
+      let formed = self.opened.form.as_ref().is_some_and(|form| form.act == said.act);
+      if answered.is_none() && formed {
+        return Vec::new();
+      }
       let first = said.text.lines().find(|line| !line.trim().is_empty()).unwrap_or_default();
       let (mark, text) = match answered {
         None => (Style::new().fg(t.attention), self.style(Role::Prose)),

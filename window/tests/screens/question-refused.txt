@@ -9,7 +9,7 @@
     2  close(str(rows))
     …
 
-  ◆ How many rows does the form take?
+
 
 
 

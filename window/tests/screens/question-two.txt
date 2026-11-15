@@ -10,9 +10,9 @@
     3  close(f'{await one} {await two}')
     …
 
-  ◆ Does the head count the questions?
-
   ◆ What does the head say?
+
+
 
 
 
