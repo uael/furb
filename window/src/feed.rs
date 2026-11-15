@@ -589,14 +589,17 @@ impl Feed<'_> {
   /// The row of one agent, a click that opens its thread, with its state, its time and its model
   /// at the right. In the dock its title leads, then the line where it stands while it lives. Under
   /// the line that made it, which says its prompt already, the row stands in the box at the column
-  /// of the code, and says the line where the agent stands while it has one, the value that it gave
-  /// once it rests, and else its title.
+  /// of the code, and says the line where the agent stands while it has one, the last line of its
+  /// thought while its model only thinks, the value that it gave once it rests, and else its title.
   fn agent(&self, agent: &Agent, under: Option<(Gutter, Option<&str>)>) -> Row {
     let (muted, rest) = (self.style(Role::Muted), rests(agent));
     let (mark, right) = self.status(agent);
     // The line that its model has not begun to write says nothing that its state does not say.
     let stands = agent.line.as_ref().filter(|one| !rest && !one.text.is_empty());
     let stands = stands.map(|one| vec![run(self.model.homed(&one.text), muted)]);
+    // While its model only thinks, the row peeks at the last line of the thought.
+    let thinks = agent.thought.as_ref().filter(|_| !rest).map(|one| vec![run(one.clone(), muted)]);
+    let stands = stands.or(thinks);
     let title = if rest { muted } else { self.style(Role::Prose) };
     let title = vec![run(agent.card.title.clone(), title)];
     let open = Click::Agent(agent.card.prompt.clone());

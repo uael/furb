@@ -2669,8 +2669,9 @@ class Agent(TypedDict):
   with the millisecond of the epoch at which the host saw it begin, the seconds that it took once
   it ended, counted from milliseconds as the time of a thought, and the line of its last word
   where it stands: the line that runs or asks, else the last one, and the number in the thread
-  of the line of the word that made it, none when no line of a word of the thread made it. A host
-  that opened the life after the agent began saw it begin at that open.
+  of the line of the word that made it, none when no line of a word of the thread made it, and
+  the last line of the thought of its model while it thinks and writes no word yet. A host that
+  opened the life after the agent began saw it begin at that open.
   """
 
   prompt: str
@@ -2683,6 +2684,7 @@ class Agent(TypedDict):
   took: NotRequired[int | None]
   line: NotRequired[Line | None]
   at: NotRequired[int | None]
+  thought: NotRequired[str | None]
 
 
 class Event2(TypedDict):
@@ -3060,4 +3062,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 50
+PROTOCOL = 51

@@ -648,9 +648,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       sessions: &[],
       // The claude command line of the tests answers its turns in the order that it reads them, so
       // the word starts the agent that takes a turn, waits until it took it, then starts the one
-      // that takes the next; the agent that reads the boot gets no answer, and writes for ever.
+      // that takes the next; the agent that reads the boot only thinks, for ever.
       words: &[
-        "bench = prompt(str, 'Run the bench of the replay', on=chain('bench'))\nboot = prompt(str, 'Read the boot of the host\\nWAIT', on=chain('boot'))\nawait wait(5, bench)\nlines = await prompt(str, 'Count the lines of README.md', on=chain('count'))\nawait wait(600, bench)",
+        "bench = prompt(str, 'Run the bench of the replay', on=chain('bench'))\nboot = prompt(str, 'Read the boot of the host\\nPONDER', on=chain('boot'))\nawait wait(5, bench)\nlines = await prompt(str, 'Count the lines of README.md', on=chain('count'))\nawait wait(600, bench)",
         "report = await bash('sleep 30; echo the bench ran')\nclose(report.stdout.content)",
         "close('README.md has 3 lines.')",
       ],

@@ -634,6 +634,10 @@ impl<'a> Reader<'a> {
       readers: Vec::new(),
     };
     let lines = rungs.last().map(|last| self.lines(last, 0)).unwrap_or_default();
+    // A rung with no word yet is what its model thinks and writes now.
+    let thinks = rungs.last().filter(|last| last.word.is_none());
+    let wrote = thinks.and_then(|last| self.streams.wrote.get(&last.id));
+    let thought = wrote.and_then(|one| one.thinking.lines().rfind(|line| !line.trim().is_empty()));
     let began = self.streams.began.get(&prompt.id);
     let ended = self.streams.ended.get(&prompt.id);
     Agent {
@@ -642,6 +646,7 @@ impl<'a> Reader<'a> {
       took: began.zip(ended).map(|(began, ended)| ended.saturating_sub(*began) / 1000),
       line: stands(&lines).map(|at| lines[at].clone()),
       at: None,
+      thought: thought.map(|line| line.trim().to_owned()),
     }
   }
 }

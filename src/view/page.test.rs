@@ -240,6 +240,26 @@ fn the_agents_of_a_thread_stand_as_cards() {
 }
 
 #[test]
+fn an_agent_whose_model_only_thinks_peeks_at_the_last_line_of_its_thought() {
+  let peek = |more: Vec<Value>| {
+    let mut streams = Streamed::default();
+    let mut facts = thread();
+    facts.push(json!(["chain", "chain2", "rung2", "chain1", "worker", ""]));
+    facts.push(json!(["prompt", "prompt4", "rung2", "chain2", "str", "study the boot", ""]));
+    facts.push(json!(["rung", "rung4", "prompt4", "chain2", "", "", "claude-cli:sonnet"]));
+    facts.extend(more);
+    let held = held(facts, &mut streams);
+    streams.wrote("rung4", ["", "The boot reads the record.\nThen it stands \n\n"], 101_000);
+    let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+    page.agents.first().map(|one| one.thought.clone())
+  };
+  assert_eq!(peek(Vec::new()), Some(Some("Then it stands".to_owned())));
+  // Once the rung has its word, the line of the word says where the agent stands.
+  let word = json!(["run", "run4", "chain2", "chain2", "rung4", "x = 1", ""]);
+  assert_eq!(peek(vec![word]), Some(None));
+}
+
+#[test]
 fn a_note_to_a_chain_where_no_agent_works_is_an_agent_and_a_note_to_the_operator_is_none() {
   let mut streams = Streamed::default();
   let mut facts = thread();

@@ -6,7 +6,7 @@
 # "reply n", for the nth turn of its process. A line that holds FAIL ends it with a failure, a line that holds WAIT
 # gets no answer, a line that holds LONG gets a line longer than a reader takes, a line that holds ERROR gets a result
 # that says an error, a line that holds LIMIT gets, once, a result that says the usage limit ends a second from now, a line that holds BARE gets a result with no block before it, a line that holds DEEP gets a long signed thought, a signed thought with no text and a redacted thought before its text, a line that holds THINK gets a
-# thought before the text, and a line that holds LOUD closes the stdout, writes more on the stderr than its pipe holds,
+# thought before the text, a line that holds PONDER gets a thought that never ends, and a line that holds LOUD closes the stdout, writes more on the stderr than its pipe holds,
 # and ends it with a failure, and a line that holds GAP streams its text with its first part left out, and settles the
 # text whole. A line that holds LOOP gets a message that calls a tool before the last one, as a turn of many
 # requests does, and a result whose usage is the sum of the two. A line that holds MUTE closes the stdout and lives
@@ -117,6 +117,13 @@ while IFS= read -r line; do
   case $line in
     *FAIL*) echo "deliberate failure" >&2; exit 2 ;;
     *WAIT*) continue ;;
+    # A line that holds PONDER gets a thought that never ends, so its model only thinks, and it
+    # takes no turn of the count, as WAIT.
+    *PONDER*)
+      say '{"type":"message_start"}'
+      say '{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}'
+      say '{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The boot reads the record.\nThen it stands the image of the life."}}'
+      continue ;;
     *LOUD*) exec 1>&-; head -c 262144 /dev/zero | tr '\0' e >&2; exit 3 ;;
     *MUTE*) exec 1>&-; exec sleep 60 ;;
     *ORPHAN*) sleep 60 & echo $! > "$here/orphan"; echo "orphan left" >&2; exit 4 ;;
