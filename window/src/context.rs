@@ -3,7 +3,7 @@
 //! answer read, and its counts, which stand in the row of the hints. A click opens one row for
 //! each part, with its size and its share, and folds it again.
 
-use furb::view::{Context, tokens};
+use furb::view::{Context, Portion, percent, share, tokens};
 use opentui::style::{Color, Style};
 
 use crate::{
@@ -41,19 +41,14 @@ impl Model {
     let fold = if open { " ▾" } else { " ▸" };
     let head = vec![run("Context", prose), run(fold, muted)];
     let read = &context.read;
-    // The whole of the bar: the window, or what the answer read when no window is known.
-    let whole = context.window.unwrap_or(read.tokens).max(1);
-    let share = context.window.map(|_| format!("{}%", shared(read.tokens, whole, 100)));
-    let mut rows = vec![row(head, vec![run(share.unwrap_or_else(|| tokens(read.tokens)), prose)])];
+    let whole = context.whole();
+    let used = context.window.map(|_| share(read.tokens, whole));
+    let mut rows = vec![row(head, vec![run(used.unwrap_or_else(|| tokens(read.tokens)), prose)])];
     let kinds = self.kinds(context);
     rows.push(bar(&kinds, whole));
     if open {
       rows.extend(kinds.iter().map(|kind| {
-        // A part that holds tokens never reads as none of the window.
-        let share = match shared(kind.tokens, whole, 100) {
-          0 if kind.tokens > 0 => "<1%".to_owned(),
-          share => format!("{share:>2}%"),
-        };
+        let share = share(kind.tokens, whole);
         let left = vec![run("■ ", Style::new().fg(kind.color)), run(kind.name, muted)];
         row(left, vec![run(format!("{}  {share:>4}", tokens(kind.tokens)), muted)])
       }));
@@ -70,7 +65,7 @@ impl Model {
     let context = self.thread.as_ref().filter(|_| !self.listed())?.context.as_ref()?;
     let read = context.read.tokens;
     let Some(window) = context.window else { return Some(tokens(read)) };
-    let share = shared(read, window.max(1), 100);
+    let share = percent(read, window);
     // The glyph of the quarter nearest to the share: the default faces of the terminals hold no
     // ring that is half full.
     let ring = match share {
@@ -90,26 +85,21 @@ impl Model {
     }
   }
 
-  /// The parts of what the last answer read, in the order of the bar: what came from the cache,
-  /// what it wrote to the cache, what was new, and the room that it left in the window.
+  /// The parts of what the last answer read, in the order of the bar, each with its name and its
+  /// color.
   fn kinds(&self, context: &Context) -> Vec<Kind> {
     let t = &self.tokens;
     let [purple, rose, teal, _] = t.hues;
-    let read = &context.read;
-    let new = read.tokens.saturating_sub(read.cached + read.written);
-    let mut kinds = vec![
-      Kind { name: "From the cache", tokens: read.cached, color: teal },
-      Kind { name: "Written to the cache", tokens: read.written, color: purple },
-      Kind { name: "New", tokens: new, color: rose },
-    ];
-    if let Some(window) = context.window {
-      kinds.push(Kind {
-        name: "Free",
-        tokens: window.saturating_sub(read.tokens),
-        color: t.border,
-      });
-    }
-    kinds
+    let kind = |(portion, tokens)| {
+      let (name, color) = match portion {
+        Portion::Cached => ("From the cache", teal),
+        Portion::Written => ("Written to the cache", purple),
+        Portion::New => ("New", rose),
+        Portion::Free => ("Free", t.border),
+      };
+      Kind { name, tokens, color }
+    };
+    context.portions().into_iter().map(kind).collect()
   }
 }
 

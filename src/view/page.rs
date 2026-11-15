@@ -22,6 +22,7 @@ use super::{
   quote::{quotes, writing},
   state::{State, working},
   threads::{Lookup, message_of, noted},
+  words::timer,
 };
 
 /// Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the
@@ -43,6 +44,35 @@ pub struct Context {
   pub read: Read,
   pub window: Option<u64>,
   pub dollars: f64,
+}
+
+/// A part of what an answer read, or the room that it left in the window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Portion {
+  Cached,
+  Written,
+  New,
+  Free,
+}
+
+impl Context {
+  /// The whole that a share of the context counts from: the window, or what the answer read when
+  /// no window is known.
+  pub fn whole(&self) -> u64 {
+    self.window.unwrap_or(self.read.tokens).max(1)
+  }
+
+  /// The parts of what the last answer read, in the order of a bar, each with its tokens: what came
+  /// from the cache, what it wrote to the cache, what was new, then the room that it left in the
+  /// window when the window is known.
+  pub fn portions(&self) -> Vec<(Portion, u64)> {
+    let read = &self.read;
+    let new = read.tokens.saturating_sub(read.cached + read.written);
+    let mut all =
+      vec![(Portion::Cached, read.cached), (Portion::Written, read.written), (Portion::New, new)];
+    all.extend(self.window.map(|window| (Portion::Free, window.saturating_sub(read.tokens))));
+    all
+  }
 }
 
 /// An agent of a thread: the thread that a word of the thread started on another chain, as a card,
@@ -197,6 +227,17 @@ pub enum Mark {
   Stopped { at: Option<u64> },
 }
 
+impl Retrying {
+  /// What a line whose model is asked again says at a second of the epoch: the attempt that comes
+  /// of the most, and the time left before it while it waits. The time left is never more than the
+  /// wait, so a clock that stands behind the host shows the wait.
+  pub fn said(&self, now: u64) -> String {
+    let left = self.at.saturating_sub(now).min(self.wait);
+    let wait = if left > 0 { format!(" in {}", timer(left)) } else { String::new() };
+    format!("Attempt {} of {}{wait}", self.attempt, self.most)
+  }
+}
+
 /// A call of a model that failed for a cause that passes, so its provider asks the model again:
 /// the attempt that comes, the most attempts of the call, the seconds that the provider waits
 /// before that attempt and the second of the epoch at which it comes, and why the attempt before
@@ -226,6 +267,43 @@ pub struct Thought {
   pub text: String,
   pub began: u64,
   pub took: Option<u64>,
+}
+
+/// How many rows of a block roll while it is folded: the window of the lines of a program.
+pub const ROLLS: usize = 7;
+
+impl Block {
+  /// Whether the block takes more rows than roll, so it folds.
+  pub fn rolls(&self) -> bool {
+    self.lines.iter().map(Line::rows).sum::<usize>() + usize::from(self.more) > ROLLS
+  }
+
+  /// The first line of the block that shows: the first while it is open or while all fits, else
+  /// the first of the last lines that fill the rows that roll, beside one row that says how many
+  /// lines stand above and, while more comes, one row that says so. The last line shows whatever
+  /// rows it takes.
+  pub fn first(&self, open: bool) -> usize {
+    if open || !self.rolls() {
+      return 0;
+    }
+    let taken: Vec<usize> = self.lines.iter().map(Line::rows).collect();
+    let more = usize::from(self.more);
+    let rows = ROLLS - 1 - more;
+    let mut first = taken.len().saturating_sub(1);
+    let mut used = taken.get(first).copied().unwrap_or_default();
+    while first > 0 && used + taken[first - 1] <= rows {
+      first -= 1;
+      used += taken[first];
+    }
+    first
+  }
+}
+
+impl Line {
+  /// How many rows a line of a block takes: its own, and those of what its command wrote.
+  pub fn rows(&self) -> usize {
+    1 + self.output.as_ref().map_or(0, |one| one.tail.len() + usize::from(one.more > 0))
+  }
 }
 
 impl Thought {

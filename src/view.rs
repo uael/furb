@@ -29,8 +29,8 @@ pub use ladder::{Rung, SHOWN, Shown};
 pub use named::word;
 pub use named::{NAME, Named, said};
 pub use page::{
-  Agent, Answered, Block, Context, Exchange, Line, Mark, Output, Page, Reach, Reply, Retrying,
-  Said, Saying, Streamed, Thought, Work, wrote,
+  Agent, Answered, Block, Context, Exchange, Line, Mark, Output, Page, Portion, ROLLS, Reach,
+  Reply, Retrying, Said, Saying, Streamed, Thought, Work, wrote,
 };
 pub use quote::{Quote, Writing, quotes, writing};
 pub use state::{State, chain_state, restate, working};
@@ -40,4 +40,4 @@ pub use threads::{
   order_threads, root_of, thread_of,
 };
 pub use time::{as_of, moments_of};
-pub use words::{age, elapsed, grouped, homed, since, size, timer, tokens};
+pub use words::{age, elapsed, grouped, homed, lines, percent, share, since, size, timer, tokens};

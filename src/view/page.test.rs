@@ -1,7 +1,8 @@
 use serde_json::{Value, json};
 
 use super::{
-  Answered, Block, Context, Mark, Output, Reach, Reply, Said, Saying, Streamed, Thought, Work,
+  Answered, Block, Context, Line, Mark, Output, Portion, Reach, Reply, Retrying, Said, Saying,
+  Streamed, Thought, Work,
 };
 use crate::view::{Fold, Held, Maker, Read, Standing, declined};
 
@@ -597,4 +598,40 @@ fn last(facts: &[Value]) -> Option<(usize, String, Mark)> {
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.clone()?;
   block.lines.last().map(|one| (one.number, one.text.clone(), one.mark.clone()))
+}
+
+#[test]
+fn a_block_rolls_by_rows_and_keeps_its_last_line_with_what_its_command_wrote() {
+  let line = |number, tail: usize| Line {
+    number,
+    text: String::new(),
+    mark: Mark::Ran,
+    output: (tail > 0).then(|| Output { tail: vec![String::new(); tail], more: 9, took: None }),
+  };
+  let block = |lines| Block { maker: Maker::Operator, lines, more: false, thought: None };
+  let small = block((1..=7).map(|at| line(at, 0)).collect());
+  assert_eq!((small.rolls(), small.first(false)), (false, 0));
+  // Six rows roll beside the row that counts the lines above: the last line and its four rows of
+  // output, and one line before it.
+  let tall = block((1..=9).map(|at| line(at, if at == 9 { 3 } else { 0 })).collect());
+  assert_eq!((tall.rolls(), tall.first(false), tall.first(true)), (true, 7, 0));
+}
+
+#[test]
+fn a_context_parts_its_read_in_the_order_of_a_bar_and_leaves_the_rest_of_its_window() {
+  let read = Read { tokens: 1_000, cached: 600, written: 100 };
+  let context = Context { read, window: Some(10_000), dollars: 0.0 };
+  let parts =
+    [(Portion::Cached, 600), (Portion::Written, 100), (Portion::New, 300), (Portion::Free, 9_000)];
+  assert_eq!((context.portions(), context.whole()), (parts.to_vec(), 10_000));
+}
+
+#[test]
+fn a_retry_says_its_attempt_and_the_time_left_never_more_than_its_wait() {
+  let why = String::new();
+  let retry = Retrying { attempt: 2, most: 3, wait: 4, at: 100, why };
+  let said = [90, 98, 100].map(|now| retry.said(now));
+  assert_eq!(said, ["Attempt 2 of 3 in 4 s", "Attempt 2 of 3 in 2 s", "Attempt 2 of 3"]);
+  let opus = Maker::Model { model: "claude-cli:opus".to_owned(), effort: Some("high".to_owned()) };
+  assert_eq!([opus.shown(), Maker::Engine.shown()], ["opus/high", "furb"]);
 }

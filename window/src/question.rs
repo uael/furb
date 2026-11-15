@@ -18,7 +18,6 @@ use furb_host::protocol::{Card, Verb};
 use opentui::style::Style;
 
 use crate::{
-  feed::maker,
   input::Asked,
   keys::Does,
   line::{Line, run, spread, wrapped},
@@ -275,7 +274,7 @@ impl Model {
     let room = self.wide().saturating_sub(4);
     let questions = self.questions();
     let at = questions.iter().position(|one| one.act == form.act).unwrap_or_default();
-    let asks = question.by.map_or_else(|| "furb".to_owned(), maker);
+    let asks = question.by.map_or_else(|| "furb".to_owned(), Maker::shown);
     let head = vec![run("◆ ", Style::new().fg(t.attention)), run(format!("{asks} asks"), muted)];
     let of = match questions.len() {
       1 => Vec::new(),
@@ -408,7 +407,7 @@ pub(crate) fn closed(answered: &Answered, login: &str) -> String {
   let who = match &answered.by {
     Maker::Member { operator: member } if member != login => member.clone(),
     Maker::Operator | Maker::Member { .. } => "you".to_owned(),
-    other => maker(other),
+    other => other.shown(),
   };
   let reply = match &answered.reply {
     Reply::Value(text) => text.clone(),

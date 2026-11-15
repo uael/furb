@@ -117,6 +117,20 @@ pub enum Maker {
 }
 
 impl Maker {
+  /// The maker as a person reads it at the head of a block: a model by its name with no provider
+  /// and its effort, as `opus/high`, else its role.
+  pub fn shown(&self) -> String {
+    match self {
+      Self::Model { model, effort } => {
+        let name = model.rsplit(':').next().unwrap_or(model);
+        effort.as_ref().map_or_else(|| name.to_owned(), |effort| format!("{name}/{effort}"))
+      }
+      Self::Operator | Self::Member { .. } => "operator".to_owned(),
+      Self::Skill => "skill".to_owned(),
+      Self::Engine => "furb".to_owned(),
+    }
+  }
+
   /// The maker that an actor names, as a chain or a reply names it: the operator, a member when
   /// the operator after `operator/` is one of these members, else the operator in one of his
   /// sessions; a model else, read as [`leveled`] reads it, unless the models hold the whole

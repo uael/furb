@@ -77,6 +77,25 @@ pub fn tokens(count: u64) -> String {
   }
 }
 
+/// A count of lines: `1 line`, `297 lines`.
+pub fn lines(count: usize) -> String {
+  format!("{count} line{}", if count == 1 { "" } else { "s" })
+}
+
+/// A part of a whole as a share in percent, rounded to the nearest, where a part that holds
+/// something never reads as none: `<1%`, `12%`.
+pub fn share(part: u64, whole: u64) -> String {
+  match percent(part, whole) {
+    0 if part > 0 => "<1%".to_owned(),
+    share => format!("{share}%"),
+  }
+}
+
+/// A part of a whole in percent, rounded to the nearest.
+pub fn percent(part: u64, whole: u64) -> u64 {
+  (part.saturating_mul(100) + whole.max(1) / 2) / whole.max(1)
+}
+
 /// A text with a home folder as `~`, as a person reads a path of his own machine.
 pub fn homed(text: &str, home: &str) -> String {
   let text = text.replace(&format!("{home}/"), "~/");

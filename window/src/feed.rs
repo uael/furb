@@ -5,7 +5,7 @@
 
 use furb::view::{
   Agent, Block, Exchange, Line as Code, Maker, Mark, Output, Retrying, Said, Saying, Standing,
-  Thought, Work, timer,
+  Thought, Work, lines, timer,
 };
 use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
@@ -22,9 +22,6 @@ use crate::{
   thread::{Click, Fold, Item, Items, Opened, Row, rests, width},
   tokens::{APART, Loader, Role},
 };
-
-/// How many rows a block shows while it is folded.
-const ROLLS: usize = 7;
 
 /// The columns of the left padding of a block, and of its ground before its text.
 const PAD: usize = 3;
@@ -253,7 +250,7 @@ impl Feed<'_> {
     let muted = self.style(Role::Muted);
     let numbers = Gutter::of(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
     let gutter = numbers.width;
-    let head = vec![run(format!("{:gutter$}  {}", "", maker(&block.maker)), muted)];
+    let head = vec![run(format!("{:gutter$}  {}", "", block.maker.shown()), muted)];
     let mut rows = vec![Row::of(self.boxed(head, t.raised))];
     let code = self.style(Role::Prose).bg(t.raised);
     let text = self
@@ -263,14 +260,10 @@ impl Feed<'_> {
     let all = block.lines.len();
     let fold = Fold::Block(message.to_owned());
     let open = self.opened.unfolded.contains(&fold);
-    let taken: Vec<usize> = block.lines.iter().map(taken).collect();
-    let rolls = taken.iter().sum::<usize>() + usize::from(block.more) > ROLLS;
-    let first =
-      if open || !rolls { 0 } else { rolled(&taken, ROLLS - 1 - usize::from(block.more)) };
+    let (first, rolls) = (block.first(open), block.rolls());
     if rolls {
       let (mark, count) = if open { ("▴", all) } else { ("…", first) };
-      let noun = if count == 1 { "line" } else { "lines" };
-      let line = vec![run(format!("{mark:>gutter$}  {count} {noun}"), muted)];
+      let line = vec![run(format!("{mark:>gutter$}  {}", lines(count)), muted)];
       rows.push(Row::clicked(self.boxed(line, t.raised), Click::Fold(fold)));
     }
     for (line, colors) in block.lines.iter().zip(colored.iter()).skip(first) {
@@ -354,8 +347,7 @@ impl Feed<'_> {
   /// before its last ones, as the block says the lines above it, then those, muted, cut to the box.
   fn output(&self, output: &Output, gutter: usize, room: usize) -> Vec<Row> {
     let muted = self.style(Role::Muted);
-    let noun = if output.more == 1 { "line" } else { "lines" };
-    let more = (output.more > 0).then(|| format!("… {} {noun}", output.more));
+    let more = (output.more > 0).then(|| format!("… {}", lines(output.more)));
     let lines = more.into_iter().chain(output.tail.iter().cloned());
     let row = |text: String| {
       let mut shown = vec![run(format!("{:gutter$}  ", ""), muted)];
@@ -365,17 +357,9 @@ impl Feed<'_> {
     lines.map(row).collect()
   }
 
-  /// What a line whose model is asked again says: the attempt that comes of the most, and the time
-  /// left before it while it waits. The time left is never more than the wait, so a clock of the
-  /// window that stands behind the host shows the wait.
+  /// What a line whose model is asked again says, in the accent: furb works.
   fn retry(&self, retry: &Retrying) -> Line {
-    let Retrying { attempt, most, wait, at, .. } = retry;
-    let left = at.saturating_sub(self.model.second()).min(*wait);
-    let wait = if left > 0 { format!(" in {}", timer(left)) } else { String::new() };
-    vec![run(
-      format!("Attempt {attempt} of {most}{wait}"),
-      Style::new().fg(self.model.tokens.accent),
-    )]
+    vec![run(retry.said(self.model.second()), Style::new().fg(self.model.tokens.accent))]
   }
 
   /// The thought of a model as one muted row through its whole life: its last words while it
@@ -512,23 +496,6 @@ fn says(text: &str, style: Style) -> Row {
   Row::of(vec![run(format!("  {text}"), style)])
 }
 
-/// How many rows a line of a block takes: its own, and those of what its command wrote.
-fn taken(line: &Code) -> usize {
-  1 + line.output.as_ref().map_or(0, |one| one.tail.len() + usize::from(one.more > 0))
-}
-
-/// The first line of a block that rolls, so its last lines fill a count of rows. The last line
-/// shows whatever rows it takes.
-fn rolled(taken: &[usize], rows: usize) -> usize {
-  let mut first = taken.len().saturating_sub(1);
-  let mut used = taken.get(first).copied().unwrap_or_default();
-  while first > 0 && used + taken[first - 1] <= rows {
-    first -= 1;
-    used += taken[first];
-  }
-  first
-}
-
 /// The last words of a text that fit a count of columns.
 fn tail(text: &str, room: usize) -> String {
   let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -537,19 +504,6 @@ fn tail(text: &str, room: usize) -> String {
     return flat;
   }
   format!("…{}", flat.chars().skip(skip + 1).collect::<String>())
-}
-
-/// The model of a block as its head shows it: its name with no provider, and its effort.
-pub(crate) fn maker(maker: &Maker) -> String {
-  match maker {
-    Maker::Model { model, effort } => {
-      let name = model.rsplit(':').next().unwrap_or(model);
-      effort.as_ref().map_or_else(|| name.to_owned(), |effort| format!("{name}/{effort}"))
-    }
-    Maker::Operator | Maker::Member { .. } => "operator".to_owned(),
-    Maker::Skill => "skill".to_owned(),
-    Maker::Engine => "furb".to_owned(),
-  }
 }
 
 /// The loader of what a line that runs waits for: a model that writes, a command, or an agent.
