@@ -24,6 +24,7 @@
 )]
 
 use std::{
+  collections::HashMap,
   fs,
   io::{BufRead, BufReader, Read, Write},
   net::TcpListener,
@@ -59,7 +60,7 @@ use super::{
   search::Searches,
   thinking::{Thinking, budgeted, thinking},
 };
-use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
+use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, fact, verbs, world};
 
 #[cfg(unix)]
 use crate::testing::on_reactor;
@@ -153,20 +154,76 @@ fn asked(engine: &mut Engine) -> String {
 }
 
 /// The facts of the root that the provider said about replies and chains: each kind, what it is about, and the
-/// representation of its first word.
+/// representation of its first word. A reply and a rung are named by their order among those facts, as `reply1` for
+/// the first reply that the provider took, since the setup of a chain crafts replies and rungs of its own before them.
 fn said(engine: &mut Engine) -> Vec<(String, String, String)> {
   let root = engine.root().to_owned();
   let facts = engine
     .transcript(verbs::Transcript { on: on(&root), of: None })
     .expect("the root has a transcript");
+  let mut names: HashMap<String, String> = HashMap::new();
+  let mut counts: HashMap<&str, usize> = HashMap::new();
   facts
     .iter()
     .filter(|one| one.by() == "provider" && !one.about().starts_with("stand"))
     .map(|one| {
       let word = one.word(0).map(|one| one.py_repr()).unwrap_or_default();
-      (one.kind().to_owned(), one.about().to_owned(), word)
+      let about = one.about().to_owned();
+      let kind = ["reply", "rung"].into_iter().find(|kind| fact::named(&about, kind));
+      let about = match kind {
+        Some(kind) => names
+          .entry(about)
+          .or_insert_with(|| {
+            let count = counts.entry(kind).or_default();
+            *count += 1;
+            format!("{kind}{count}")
+          })
+          .clone(),
+        None => about,
+      };
+      (one.kind().to_owned(), about, word)
     })
     .collect()
+}
+
+/// The id of the first reply that the provider took, and the rung that asked it.
+fn taken(engine: &mut Engine) -> (String, String) {
+  let root = engine.root().to_owned();
+  let facts = engine
+    .transcript(verbs::Transcript { on: on(&root), of: None })
+    .expect("the root has a transcript");
+  let id = facts
+    .iter()
+    .find(|one| {
+      one.by() == "provider" && one.kind() == "started" && fact::named(one.about(), "reply")
+    })
+    .map(|one| one.about().to_owned())
+    .expect("the provider took a reply");
+  let rung = facts
+    .iter()
+    .find(|one| one.kind() == "reply" && one.about() == id)
+    .map(|one| one.by().to_owned());
+  (id, rung.expect("a rung asked the reply"))
+}
+
+/// The turns of a chain after its setup, which ends at the turn `stand()` that the setup crafts.
+fn chat(history: &[Message]) -> &[Message] {
+  let stands = |one: &Message| match one {
+    Message::Assistant { content, .. } => content.iter().any(
+      |block| matches!(block, AssistantContent::Text(text) if text.text.starts_with("stand()")),
+    ),
+    Message::User { .. } | Message::System { .. } => false,
+  };
+  &history[history.iter().position(stands).map_or(0, |at| at + 1)..]
+}
+
+/// The messages of a request of the network after the setup of its chain, as [`chat`] says.
+fn chat_of(messages: &[Value]) -> &[Value] {
+  let stands = |one: &Value| {
+    one["role"] == "assistant"
+      && serde_json::to_string(&one["content"]).is_ok_and(|text| text.contains("stand()"))
+  };
+  &messages[messages.iter().position(stands).map_or(0, |at| at + 1)..]
 }
 
 /// The engine driven until a condition of it holds, or ten seconds are up.
@@ -262,7 +319,7 @@ fn a_reply_comes_to_the_turn_of_the_model_with_its_usage_its_dollars_and_its_blo
   let request = model.requests().remove(0);
   assert_eq!(request.preamble.as_deref(), Some(SYSTEM));
   assert_eq!(request.additional_params, Some(json!({"thinking": 8192})));
-  let [Message::User { content }] = &request.chat_history[..] else {
+  let [Message::User { content }] = chat(&request.chat_history) else {
     panic!("one user turn: {:?}", request.chat_history)
   };
   assert!(format!("{content:?}").contains("count"), "the turn holds the message of the prompt");
@@ -290,7 +347,7 @@ fn an_assistant_turn_goes_again_as_the_blocks_its_provider_gave() {
   assert_eq!(got.as_ref().as_int(), Some(1));
   let requests = model.requests();
   assert_eq!(requests.len(), 2);
-  let assistant = requests[1].chat_history.iter().find_map(|one| match one {
+  let assistant = chat(&requests[1].chat_history).iter().find_map(|one| match one {
     Message::Assistant { content, .. } => Some(content.clone()),
     _ => None,
   });
@@ -311,7 +368,7 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
   let expected = [
     ("started", "reply1", String::new()),
     ("done", "reply1", refused("boom")),
-    ("started", "reply3", String::new()),
+    ("started", "reply2", String::new()),
     (
       "tell",
       root.as_str(),
@@ -320,7 +377,7 @@ fn a_second_refusal_in_a_row_of_an_actor_on_a_chain_pauses_the_chain_before_its_
       ),
     ),
     ("pause", root.as_str(), "'m/high answered nothing: ProviderError: boom again'".into()),
-    ("done", "reply3", refused("boom again")),
+    ("done", "reply2", refused("boom again")),
   ];
   let expected: Vec<_> =
     expected.into_iter().map(|(kind, about, word)| (kind.into(), about.into(), word)).collect();
@@ -397,14 +454,13 @@ fn a_function_of_the_host_that_refuses_later_twice_in_a_row_pauses_the_chain_and
   asked(&mut engine);
   assert!(until(&mut engine, |engine| said(engine).len() == 6), "{:?}", said(&mut engine));
   let kinds: Vec<_> = said(&mut engine).into_iter().map(|(kind, about, _)| (kind, about)).collect();
-  // reply2 is the reply of the stand that the root plays on itself, which its crafted rung answers.
   let expected = [
     ("started", "reply1"),
     ("done", "reply1"),
-    ("started", "reply3"),
+    ("started", "reply2"),
     ("tell", root.as_str()),
     ("pause", root.as_str()),
-    ("done", "reply3"),
+    ("done", "reply2"),
   ];
   assert_eq!(kinds, expected.map(|(kind, about)| (kind.to_owned(), about.to_owned())));
   assert_eq!(calls.load(Ordering::SeqCst), 2, "the paused chain asks the function no more");
@@ -470,7 +526,8 @@ fn a_cancel_over_a_reply_ends_the_call_of_its_model_and_the_ear_says_nothing_mor
   let id = asked(&mut engine);
   assert!(until(&mut engine, |_| model.asked.load(Ordering::SeqCst)), "the model is asked");
   engine.cancel(&id, verbs::Cancel::default()).expect("the prompt is cancelled");
-  let no = block_on(Act::<Object>::of(&mut engine, "reply1")).expect_err("the reply ends");
+  let (reply, _) = taken(&mut engine);
+  let no = block_on(Act::<Object>::of(&mut engine, &reply)).expect_err("the reply ends");
   assert_eq!(no.name, "CancelledError");
   assert!(
     until(&mut engine, |_| model.dropped.load(Ordering::SeqCst)),
@@ -880,7 +937,12 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
     verbs::Prompt { message: Some("first task".into()), on: on(&root), ..Default::default() };
   block_on(other.prompt(Object::string("str"), with).expect("a prompt is made"))
     .expect("an answer");
-  let session = |pid: &str| super::claude::test::after(&yard.args(pid), "--session-id");
+  // The first process of a conversation starts it, or resumes the turns of the setup of its chain that furb wrote.
+  let session = |pid: &str| {
+    let args = yard.args(pid);
+    super::claude::test::after(&args, "--session-id")
+      .or_else(|| super::claude::test::after(&args, "--resume"))
+  };
   let both = yard.pids();
   assert_eq!(both.len(), 2);
   assert_ne!(session(&both[0]), session(&both[1]));
@@ -987,7 +1049,8 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
   let mut engine = lived(provider);
   let id = prompted(&mut engine);
   block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
-  let [Message::User { content }] = &model.requests()[0].chat_history[..] else {
+  let requests = model.requests();
+  let [Message::User { content }] = chat(&requests[0].chat_history) else {
     panic!("one user turn")
   };
   let named = images::reference("a.png", &kept.uri);
@@ -1045,7 +1108,7 @@ fn a_turn_that_names_an_image_whose_file_is_lost_gets_its_answer_and_the_life_te
       assert_eq!(got.py_repr(), want, "{name}");
     }
     let first = &model.requests()[0].chat_history;
-    let [Message::User { content }] = &first[..] else { panic!("one user turn: {first:?}") };
+    let [Message::User { content }] = chat(first) else { panic!("one user turn: {first:?}") };
     assert!(content.iter().all(|one| matches!(one, UserContent::Text(_))), "no image: {name}");
     assert!(format!("{content:?}").contains(&uri), "the text names the image: {name}");
     let tells: Vec<_> = said(&mut engine).into_iter().filter(|one| one.0 == "tell").collect();
@@ -1140,11 +1203,17 @@ fn a_function_of_the_host_answers_a_request_with_a_turn_in_place_of_the_model() 
   let request = requests.lock().expect("the requests")[0].clone();
   assert_eq!((&request["actor"], &request["chain"]), (&json!("m/high"), &json!(root)));
   assert_eq!(request["settings"], json!({"thinking": 8192}));
-  assert_eq!(request["messages"][0]["role"], "user");
+  let last = request["messages"]
+    .as_array()
+    .and_then(|messages| messages.last())
+    .cloned()
+    .unwrap_or_default();
+  assert_eq!(last["role"], "user");
+  let texts = last["content"].as_array().cloned().unwrap_or_default();
+  let texts = texts.iter().filter_map(|one| one["text"].as_str());
   assert!(
-    request["messages"][0]["content"][0]["text"]
-      .as_str()
-      .is_some_and(|text| text.contains("#prompt1\nprompt1_message = 'count'\n"))
+    texts.into_iter().any(|text| text.contains("#prompt1\nprompt1_message = 'count'\n")),
+    "{last}"
   );
   let expected = "('assistant', 'close(7)', (10, 2, 0, 0, 1.0), None)";
   assert_eq!(said(&mut engine)[1], ("done".into(), "reply1".into(), expected.into()));
@@ -1196,14 +1265,6 @@ fn retried() -> (Retries, Told) {
   (retries, heard)
 }
 
-/// The rung that the first reply of the root answers.
-fn replying(engine: &mut Engine) -> String {
-  let root = engine.root().to_owned();
-  let facts =
-    engine.transcript(verbs::Transcript { on: on(&root), of: None }).expect("a transcript");
-  facts.iter().find(|one| one.kind() == "reply").map(|one| one.by().to_owned()).expect("a reply")
-}
-
 #[test]
 fn a_call_that_fails_twice_for_a_cause_that_passes_is_made_again_after_its_backoff_and_the_host_is_told_each_retry()
  {
@@ -1220,7 +1281,7 @@ fn a_call_that_fails_twice_for_a_cause_that_passes_is_made_again_after_its_backo
   let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
   assert_eq!(got.as_ref().as_int(), Some(7));
   assert_eq!(calls.load(Ordering::SeqCst), 3);
-  let (rung, root) = (replying(&mut engine), engine.root().to_owned());
+  let (rung, root) = (taken(&mut engine).1, engine.root().to_owned());
   let retry = |attempt, millis, why: &str| {
     let wait = Duration::from_millis(millis);
     (rung.clone(), root.clone(), Retry { attempt, most: 10, wait, why: why.to_owned() })
@@ -1306,7 +1367,7 @@ fn an_exhausted_recoverable_provider_error_gives_the_model_another_turn_without_
     asked(&mut engine);
     assert!(
       until(&mut engine, |engine| calls.load(Ordering::SeqCst) >= 3
-        && said(engine).iter().any(|(kind, about, _)| kind == "started" && about == "reply3")),
+        && said(engine).iter().any(|(kind, about, _)| kind == "started" && about == "reply2")),
       "{label}: {:?}",
       said(&mut engine)
     );
@@ -1488,8 +1549,9 @@ fn a_provider_of_the_network_is_asked_with_its_credential_and_streams_its_turn()
   let expected = "('assistant', 'close(3)', (100, 5, 40, 0, 0.7), [{'type': 'reasoning', ";
   assert!(said(&mut engine)[1].2.starts_with(expected), "{:?}", said(&mut engine)[1]);
   let root = engine.root().to_owned();
+  let (_, rung) = taken(&mut engine);
   let parts = [["", "hm"], ["close(", ""], ["3)", ""]]
-    .map(|[text, thinking]| ["rung1", root.as_str(), text, thinking].map(str::to_owned));
+    .map(|[text, thinking]| [rung.as_str(), root.as_str(), text, thinking].map(str::to_owned));
   assert_eq!(told.lock().expect("the parts told").clone(), parts);
 }
 
@@ -1945,7 +2007,7 @@ fn a_local_model_reads_its_earlier_turn_with_no_thought() {
     serde_json::from_str(second.split("\r\n\r\n").nth(1).unwrap_or_default()).expect("a JSON body");
   let earlier = body["messages"]
     .as_array()
-    .and_then(|messages| messages.iter().find(|one| one["role"] == "assistant"))
+    .and_then(|messages| chat_of(messages).iter().find(|one| one["role"] == "assistant"))
     .cloned()
     .unwrap_or_default();
   assert_eq!(
@@ -2571,7 +2633,7 @@ fn the_note_of_a_fault_after_the_word_that_ran_is_python_that_binds_its_why_unde
     &["is the word that ran", "_why = 'line 2: the statement there cannot be python'"]
   )));
   let next = |engine: &mut Engine| {
-    said(engine).iter().any(|(kind, about, _)| kind == "done" && about == "reply3")
+    said(engine).iter().any(|(kind, about, _)| kind == "done" && about == "reply2")
   };
   assert!(until(&mut engine, next), "the chain asks its model again after the note");
   let root = engine.root().to_owned();
@@ -2942,7 +3004,7 @@ fn a_local_model_reads_the_end_of_a_thought_that_the_provider_cut_the_same_in_ea
     let body: Value = serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap_or_default())
       .expect("a JSON body");
     let messages = body["messages"].as_array().cloned().unwrap_or_default();
-    messages
+    chat_of(&messages)
       .iter()
       .filter(|one| one["role"] == "assistant")
       .map(|one| one.get("reasoning_content").cloned().unwrap_or_default())
@@ -3199,8 +3261,11 @@ fn a_signed_thought_of_a_reply_after_a_compaction_reaches_the_next_conversation_
   closed(&mut engine, CUT).expect("the cut runs");
   answer(&mut engine, "second");
   let entries = resumed(&yard);
+  let stand =
+    entries.iter().position(|one| one["message"]["content"].to_string().contains("stand()"));
+  let after = &entries[stand.map_or(0, |at| at + 1)..];
   let said =
-    entries.iter().find(|one| one["type"] == "assistant").map(|one| &one["message"]["content"]);
+    after.iter().find(|one| one["type"] == "assistant").map(|one| &one["message"]["content"]);
   // The first turn of the model is the reply before the cut; the chain wrote the turns after it.
   assert_eq!(said, Some(&json!([signed(), {"type": "text", "text": "close(\"reply 1\")"}])));
 }
@@ -3274,8 +3339,8 @@ fn a_reply_of_a_named_account_has_numbers_alone_in_its_usage_and_a_fact_that_nam
     named[0].word(0).and_then(|one| one.as_str().map(str::to_owned)).as_deref(),
     Some("a")
   );
-  let replies = facts(&mut engine, "reply");
-  let turn = engine.peek(replies[0].about(), verbs::Peek::default()).unwrap();
+  let (reply, _) = taken(&mut engine);
+  let turn = engine.peek(&reply, verbs::Peek::default()).unwrap();
   let usage = entry(&turn.as_ref(), 2).and_then(|one| one.items()).unwrap();
   assert_eq!(usage.len(), 5, "the usage holds the five counts");
   assert!(usage.iter().all(|one| one.as_str().is_none()), "the usage holds numbers alone");
