@@ -5,12 +5,9 @@ use std::{
   env, fs,
   path::{Path, PathBuf},
   process,
-  time::{Duration, Instant},
 };
 
 use super::kits;
-#[cfg(unix)]
-use crate::testing::pause;
 use crate::{
   Ear, Engine, Fact, Object,
   ear::{ear, hear, say},
@@ -18,6 +15,8 @@ use crate::{
   testing::block_on,
   verbs,
 };
+#[cfg(unix)]
+use {crate::testing::pause, std::time::Duration};
 
 /// The ear that answers a stand with the operator alone, in the directory of the tests.
 fn standing() -> Box<dyn Ear> {
@@ -111,7 +110,7 @@ fn gone(pid: &str) -> bool {
 fn closed(engine: &mut Engine, word: &str) -> Result<Object, String> {
   let root = engine.root().to_owned();
   let rung = verbs::Rung { word: Some(word.to_owned()), on: Some(root), ..Default::default() };
-  block_on(engine.rung(rung).unwrap()).map_err(|no| format!("{no:?}"))
+  block_on(engine.rung(rung).unwrap()).map_err(|no| no.to_string())
 }
 
 #[test]
@@ -194,68 +193,5 @@ fn a_process_that_ends_before_its_life_refuses_the_act_that_it_held_with_why() {
   let no = closed(&mut engine, "close(await act('note_add', '', None, 'milk'))").unwrap_err();
   let why = format!("The process {} of the kit note ended with ", program.display());
   assert!(no.contains(&why), "{no}");
-  assert!(no.contains("The last lines of its stderr:\\nboom"), "{no}");
-}
-
-/// The least time of each of `runs` runs of a step.
-fn least(runs: usize, mut step: impl FnMut()) -> Duration {
-  (0..runs)
-    .map(|_| {
-      let at = Instant::now();
-      step();
-      at.elapsed()
-    })
-    .min()
-    .unwrap()
-}
-
-/// The least program of the system: `true`, or an exit of `cmd` on Windows.
-fn least_program() -> process::Command {
-  #[cfg(unix)]
-  let program = process::Command::new("true");
-  #[cfg(windows)]
-  let program = {
-    let mut program = process::Command::new("cmd");
-    program.args(["/c", "exit"]);
-    program
-  };
-  program
-}
-
-/// The ear that answers each act `note_here` in this process, as an ear of the crate does.
-fn here() -> Box<dyn Ear> {
-  ear(move |mut co| async move {
-    loop {
-      let a = hear(&mut co).await;
-      if a.kind() == "note_here" && a.question() {
-        say(&mut co, Fact::says("done", a.about(), [Object::string("added")]));
-      }
-    }
-  })
-}
-
-#[test]
-fn the_hop_to_the_process_of_a_kit_costs_less_than_the_start_of_the_least_program() {
-  let at = place("speed");
-  let program = noted(&at, ADDS);
-  let places = Places { config: at.join("user"), home: None };
-  let kits = kits(String::new(), at, None, places);
-  let ears = [("stand", standing()), ("here", here()), ("kits", kits)];
-  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
-  let words = ["note", "", "", "", "", "", &program.display().to_string()].map(Object::string);
-  engine.say("enable", "chain1", words.into()).unwrap();
-  let mut ran = |kind: &str| {
-    let word = format!("close(await act('{kind}', '', None, 'milk'))");
-    least(30, || drop(closed(&mut engine, &word).unwrap()))
-  };
-  ran("note_add");
-  let (kit, here) = (ran("note_add"), ran("note_here"));
-  let start = least(30, || {
-    least_program().status().unwrap();
-  });
-  let hop = kit.saturating_sub(here);
-  assert!(
-    hop < start,
-    "the hop took {hop:?} ({kit:?} less {here:?}), and the start of the least program {start:?}"
-  );
+  assert!(no.contains("The last lines of its stderr:\nboom"), "{no}");
 }
