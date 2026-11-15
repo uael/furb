@@ -291,7 +291,3 @@ impl Prose<'_> {
     self.gap();
   }
 }
-
-#[cfg(test)]
-#[path = "prose.test.rs"]
-mod test;

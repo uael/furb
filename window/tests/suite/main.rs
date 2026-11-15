@@ -6,6 +6,7 @@
 mod yard;
 
 mod cards;
+mod context;
 mod daemon;
 mod image;
 mod input;
@@ -16,8 +17,10 @@ mod motion;
 mod open;
 mod palette;
 mod part;
+mod prose;
 mod question;
 mod screens;
 mod system;
+mod text;
 mod thread;
 mod walk;

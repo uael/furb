@@ -18,7 +18,7 @@ use crate::{
 
 /// A card of a thread that the operator read, which stood since a count of seconds before the
 /// clock of the window.
-fn card(title: &str, standing: Standing, before: u64) -> Card {
+pub(crate) fn card(title: &str, standing: Standing, before: u64) -> Card {
   let thread = view::Card {
     prompt: "prompt1".to_owned(),
     title: title.to_owned(),
@@ -41,7 +41,7 @@ fn card(title: &str, standing: Standing, before: u64) -> Card {
 }
 
 /// A window whose machine does not answer, on the cards that the window before it kept.
-fn kept(cards: Vec<Card>) -> (TestApp, Daemon) {
+pub(crate) fn kept(cards: Vec<Card>) -> (TestApp, Daemon) {
   let app = app();
   let daemon = Daemon::bound(&app);
   let file = daemon.file("cards.json");

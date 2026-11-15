@@ -131,10 +131,6 @@ pub(crate) fn capital(text: &str) -> String {
   chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
 }
 
-#[cfg(test)]
-#[path = "line.test.rs"]
-mod test;
-
 /// A row of a list between its two edges. The chosen row stands on a ground with a bar at its left,
 /// in the right half of a column: the ground takes one column on each side of its text and the
 /// left half of the column after it, so the row stands as far from each side of the list, and its

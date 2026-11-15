@@ -187,7 +187,3 @@ fn row(left: Line, right: Line) -> Line {
   line.extend(spread(left, right, INNER, Style::new()));
   line
 }
-
-#[cfg(test)]
-#[path = "context.test.rs"]
-mod test;

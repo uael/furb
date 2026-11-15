@@ -500,14 +500,21 @@ await wait(600, bench)";
 /// The words of a message of a test that make the model await an agent that works for ever.
 pub(crate) const AWAITS: &str = "(the model awaits an agent)";
 
+/// The words of a message of a test that make the model answer with a table and a block of code.
+pub(crate) const TABLES: &str = "(the model answers a table)";
+
 /// The words of a message of a test that make the model write a file, read it and close.
 pub(crate) const OPENS: &str = "(the model opens a file)";
 
 /// The words of [`DELEGATES`] and those that its agents read in their prompts, [`READS`] and
 /// [`OPENS`], each with the word that answers it: the first agent answers at once, and the second
 /// waits on its chain.
-const ANSWERED: [(&str, &str); 6] = [
+const ANSWERED: [(&str, &str); 7] = [
   (DELEGATES, DELEGATE),
+  (
+    TABLES,
+    "close('| Stage | Time | Share |\\n| --- | ---: | :---: |\\n| seed | 181 s | 55% |\\n| boot | 104 s | 3% |\\n\\n| Stage of the open of a life | Where its time goes in the record | Share |\\n| --- | --- | --- |\\n| the seed of each chain | each entry sent to the ears of the host | 55% |\\n\\n```\\nprint(\\'a line of code wider than the box of the block of the answer\\')\\n```')",
+  ),
   (
     AWAITS,
     "lines = await prompt(str, 'Count the lines\\n(the model works on it)', on=chain('count'))",

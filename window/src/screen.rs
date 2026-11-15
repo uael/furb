@@ -50,7 +50,3 @@ impl<M: 'static> Screen<M> {
     given
   }
 }
-
-#[cfg(test)]
-#[path = "screen.test.rs"]
-mod test;

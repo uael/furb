@@ -101,7 +101,3 @@ pub fn homed(text: &str, home: &str) -> String {
   let text = text.replace(&format!("{home}/"), "~/");
   if text == home { "~".to_owned() } else { text }
 }
-
-#[cfg(test)]
-#[path = "words.test.rs"]
-mod tests;

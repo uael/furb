@@ -197,7 +197,3 @@ fn count(text: &str) -> f64 {
 fn tokens(count: f64) -> u64 {
   count.max(0.0).round() as u64
 }
-
-#[cfg(test)]
-#[path = "context.test.rs"]
-mod test;

@@ -1,6 +1,9 @@
+//! The words in which a person reads a time, a size, a count and a path, as each client of
+//! furb-wire shows them.
+
 use std::time::Duration;
 
-use super::{age, elapsed, grouped, homed, since, size, timer, tokens};
+use furb_wire::words::{age, elapsed, grouped, homed, since, size, timer, tokens};
 
 #[test]
 fn a_count_groups_its_digits_by_three_so_the_counts_of_a_column_align() {
