@@ -15,7 +15,7 @@ use crate::{
 /// filter above the rows may hold the name too.
 fn line(frame: &str, name: &str) -> String {
   let head = format!("{name}  ");
-  let at = frame.lines().filter_map(|line| line.find(&head).map(|at| &line[at..])).last();
+  let at = frame.lines().rev().find_map(|line| line.find(&head).map(|at| &line[at..]));
   at.unwrap_or_default().to_owned()
 }
 

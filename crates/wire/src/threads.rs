@@ -45,13 +45,15 @@ pub struct ThreadNode {
   pub state: State,
 }
 
-/// A chain of a life in time: its name, its label, the state of its work now, each moment at which
-/// an act of it began or ended, and each thread that it holds with the moment that thread began,
-/// in order.
+/// A chain of a life in time: its name, its label, the chain whose word made it, none for the
+/// root, the state of its work now, each moment at which an act of it began or ended, and each
+/// thread that it holds with the moment that thread began, in order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ChainTrack {
   pub chain: String,
   pub label: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub parent: Option<String>,
   pub state: State,
   pub moments: Vec<u64>,
   pub threads: Vec<Began>,

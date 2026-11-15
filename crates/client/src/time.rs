@@ -4,7 +4,11 @@
 //! Under the bar, the chains of the life stand on the same moments: each that works, and each
 //! that a text that he types finds.
 
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+  collections::{BTreeMap, HashMap},
+  mem,
+  time::Duration,
+};
 
 use furb_wire::{
   Began, ChainTrack, Exchange, State,
@@ -41,12 +45,51 @@ pub struct Chains {
 }
 
 impl Chains {
-  /// The chains that show: each that works or waits, while no text finds; else each whose label
-  /// the text finds, the best first. A chain that rests shows only when a text finds it.
-  pub fn shown(&self) -> Vec<&ChainTrack> {
-    let labels = self.tracks.iter().map(|one| one.label.as_str());
-    let found = ranked(&self.find, labels).into_iter().map(|one| &self.tracks[one.at]);
-    found.filter(|one| !self.find.is_empty() || !resting(one.state)).collect()
+  /// The chains that show, each with how deep it stands: each that works or waits, as a tree
+  /// while no text finds, each chain under the chain whose word made it, which shows too, in the
+  /// order the chains began; else each whose label the text finds, the best first. A chain that
+  /// rests and made no chain that shows shows only when a text finds it.
+  pub fn shown(&self) -> Vec<(&ChainTrack, usize)> {
+    if !self.find.is_empty() {
+      let labels = self.tracks.iter().map(|one| one.label.as_str());
+      let found = ranked(&self.find, labels).into_iter();
+      return found.map(|one| (&self.tracks[one.at], 0)).collect();
+    }
+    let count = self.tracks.len();
+    let places: HashMap<&str, usize> =
+      self.tracks.iter().enumerate().map(|(at, one)| (one.chain.as_str(), at)).collect();
+    let parent = |at: usize| {
+      let made = self.tracks[at].parent.as_deref().and_then(|one| places.get(one).copied());
+      made.filter(|one| *one != at)
+    };
+    // Each chain that works shows, and each chain whose word made it, up the tree.
+    let mut keep = vec![false; count];
+    for start in (0..count).filter(|at| !resting(self.tracks[*at].state)) {
+      let mut at = Some(start);
+      while let Some(one) = at.filter(|one| !keep[*one]) {
+        keep[one] = true;
+        at = parent(one);
+      }
+    }
+    let mut under = vec![Vec::new(); count];
+    let mut stack = Vec::new();
+    for at in 0..count {
+      match parent(at) {
+        Some(made) => under[made].push(at),
+        None => stack.push((at, 0)),
+      }
+    }
+    stack.reverse();
+    let mut seen = vec![false; count];
+    let mut out = Vec::new();
+    while let Some((at, depth)) = stack.pop() {
+      if mem::replace(&mut seen[at], true) || !keep[at] {
+        continue;
+      }
+      out.push((&self.tracks[at], depth));
+      stack.extend(under[at].iter().rev().map(|one| (*one, depth + 1)));
+    }
+    out
   }
 }
 
@@ -242,7 +285,7 @@ impl Client {
   /// moment, none for now.
   pub fn chain_thread(&self, row: usize, at: usize) -> Option<(String, Option<u64>)> {
     let time = self.thread.as_ref()?.thread.time.as_ref()?;
-    let track = *time.chains.as_ref()?.shown().get(row)?;
+    let track = time.chains.as_ref()?.shown().get(row)?.0;
     let moment = time.placed(at);
     let began = |one: &&Began| moment.is_none_or(|moment| one.at <= moment);
     let thread = track.threads.iter().rev().find(began).or(track.threads.first())?;

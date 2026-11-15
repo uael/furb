@@ -436,3 +436,23 @@ fn another_operator_on_the_session_shows_in_the_head_of_the_thread_and_where_he_
   };
   rex.heard(&app, writes);
 }
+
+#[test]
+fn the_chains_under_the_bar_of_the_time_stand_as_a_tree_under_the_chain_that_made_each() {
+  let message = format!("measure the open on three chains\n{DELEGATES}");
+  let (app, _daemon, _peer) = opened(&message, "README.md");
+  app.press("ctrl+x");
+  app.press("t");
+  let labels = |frame: &str| -> Vec<String> {
+    let rows = frame.lines().filter(|line| line.contains('▪'));
+    let marks = ['─', '━', '│', '◆', '‹'];
+    let left = rows.map(|line| line.chars().take(LEFT).collect::<String>());
+    left.map(|line| line.rsplit(marks).next().unwrap_or_default().trim_end().to_owned()).collect()
+  };
+  let told = app.wait_until(PATIENCE, || labels(&app.text()).len() > 1);
+  let frame = app.text();
+  assert!(told, "the chains never showed:\n{frame}");
+  let labels = labels(&frame);
+  // The chain that rests shows no more, and each agent that works stands under the root.
+  assert_eq!(labels, [" root", "   bench", "   boot"].map(str::to_owned), "{frame}");
+}

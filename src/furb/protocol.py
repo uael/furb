@@ -2450,13 +2450,14 @@ class Spend(TypedDict):
 
 class ChainTrack(TypedDict):
   """
-  A chain of a life in time: its name, its label, the state of its work now, each moment at which
-  an act of it began or ended, and each thread that it holds with the moment that thread began,
-  in order.
+  A chain of a life in time: its name, its label, the chain whose word made it, none for the
+  root, the state of its work now, each moment at which an act of it began or ended, and each
+  thread that it holds with the moment that thread began, in order.
   """
 
   chain: str
   label: str
+  parent: NotRequired[str | None]
   state: State
   moments: list[int]
   threads: list[Began]
@@ -3102,4 +3103,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 55
+PROTOCOL = 56

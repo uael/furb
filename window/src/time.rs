@@ -127,7 +127,7 @@ impl Model {
     shown
       .iter()
       .enumerate()
-      .map(|(row, track)| {
+      .map(|(row, (track, depth))| {
         let hue = t.hues[hued(record.map_or("", String::as_str), &track.label) % t.hues.len()];
         let ink = Style::new().fg(if resting(track.state) { t.muted } else { hue });
         let acted: Vec<usize> = track.moments.iter().map(column).collect();
@@ -149,7 +149,9 @@ impl Model {
         }
         let label = if track.label.is_empty() { &track.chain } else { &track.label };
         let room = self.wide().saturating_sub(BEFORE + axis.room + 1);
-        let label = format!(" {}", cut(label, room));
+        // A chain stands under the chain whose word made it.
+        let label =
+          format!(" {}{}", "  ".repeat(*depth), cut(label, room.saturating_sub(2 * depth)));
         let end = BEFORE + axis.room;
         hot.push((end..end + label.width(), Some(Click::Chain { row, at: time.place() })));
         line.push(run(label, ink));

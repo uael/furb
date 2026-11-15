@@ -4661,6 +4661,12 @@
         "label": {
           "type": "string"
         },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "state": {
           "$ref": "#/definitions/State"
         },
@@ -4686,7 +4692,7 @@
         "moments",
         "threads"
       ],
-      "description": "A chain of a life in time: its name, its label, the state of its work now, each moment at which\nan act of it began or ended, and each thread that it holds with the moment that thread began,\nin order."
+      "description": "A chain of a life in time: its name, its label, the chain whose word made it, none for the\nroot, the state of its work now, each moment at which an act of it began or ended, and each\nthread that it holds with the moment that thread began, in order."
     },
     "Began": {
       "type": "object",
@@ -6065,5 +6071,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 55
+  "x-protocol": 56
 }

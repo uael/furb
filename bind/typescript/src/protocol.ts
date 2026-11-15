@@ -1549,13 +1549,14 @@ export interface Read {
   written: number;
 }
 /**
- * A chain of a life in time: its name, its label, the state of its work now, each moment at which
- * an act of it began or ended, and each thread that it holds with the moment that thread began,
- * in order.
+ * A chain of a life in time: its name, its label, the chain whose word made it, none for the
+ * root, the state of its work now, each moment at which an act of it began or ended, and each
+ * thread that it holds with the moment that thread began, in order.
  */
 export interface ChainTrack {
   chain: string;
   label: string;
+  parent?: string | null;
   state: State;
   moments: number[];
   threads: Began[];
@@ -1732,4 +1733,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 55;
+export const PROTOCOL = 56;

@@ -321,8 +321,9 @@ impl Held {
     acts
   }
 
-  /// Each chain of the life in time, in the order the chains began: its label, the state of its
-  /// work now, the moments of its acts, and the moment each of its threads began.
+  /// Each chain of the life in time, in the order the chains began: its label, the chain whose word
+  /// made it, the state of its work now, the moments of its acts, and the moment each of its
+  /// threads began.
   pub fn tracks(&self) -> Vec<ChainTrack> {
     self.then(None, |acts| {
       let chains = acts.iter().filter(|act| act.kind == Kind::Chain);
@@ -343,6 +344,7 @@ impl Held {
               .unwrap_or_default()
               .trim()
               .to_owned(),
+            parent: (&self).act(&chain.by).map(|maker| maker.chain.clone()),
             state: chain.state,
             moments: moments_of(on.iter().copied()),
             threads,

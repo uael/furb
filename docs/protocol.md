@@ -264,7 +264,7 @@ daemon answers requests in any order.
   asides, its runs of notes, what the tree says to the operator and the state of the chain, now or just after the moment
   `at`; `as_of` the acts as they stood just after a moment; `moments` each moment at which an act began or ended, of the
   life, of the chain `on`, or of the acts that the pages of the thread `on` show; `tracks` each chain of the life in the
-  order it began, with its label, the state of its work, the moments of its acts and the moment each of its threads
+  order it began, with its label, the `parent` chain whose word made it, the state of its work, the moments of its acts and the moment each of its threads
   began. A run of notes is the asides that are no question and follow one another in the feed of the chain, with its
   `count` and its `unread` count: the notes that began or ended after the place `read`, which the window says since only
   it knows what the operator saw. A `threads` with no `read` reads nothing, so each note is unread.
