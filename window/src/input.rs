@@ -172,8 +172,9 @@ impl Model {
     let made = thread.is_none() && !python;
     if made {
       let key = (at, life.clone(), String::new());
-      self.thread = Some(Opened { key, above: Some(0), ..Opened::default() });
-      self.aim = None;
+      self.thread =
+        Some(Opened { key: key.clone(), above: Some(0), started: true, ..Opened::default() });
+      (self.selected, self.aim) = (Some(key), None);
     }
     if !python && let Some(opened) = self.thread.as_mut() {
       opened.pending.push(Pending { act: None, text: text.clone() });
@@ -675,14 +676,15 @@ impl Model {
     named.or_else(first).map_or_else(|| project.clone(), |name| format!("{project} · {name}"))
   }
 
-  /// The title of the open thread: the one of its card, else the first line of its first message.
+  /// The title of the open thread: the one of its card, else the first line of its first message
+  /// that says something, as the daemon titles a card.
   pub(crate) fn title(&self) -> Option<String> {
     let opened = self.thread.as_ref()?;
     let card = self.told_card(&opened.key).map(|card| card.thread.title.clone());
     let first = || opened.exchanges.get(&0).map(|one| one.text.clone());
     let pending = || opened.pending.first().map(|one| one.text.clone());
     let title = card.or_else(first).or_else(pending)?;
-    title.lines().next().map(str::to_owned)
+    title.lines().find(|line| !line.trim().is_empty()).map(str::to_owned)
   }
 
   /// The model that the target of the input speaks to: the one of the last block of the open

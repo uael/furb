@@ -102,7 +102,8 @@ impl Feed<'_> {
   pub(crate) fn head(&self) -> Row {
     let t = &self.model.tokens;
     let root = self.opened.root();
-    let card = self.model.told_card(&root.key);
+    let untold = self.model.untold();
+    let card = self.model.told_card(&root.key).or(untold.as_ref().map(|one| &one.1));
     let project = card.map(project).unwrap_or_default();
     let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
     let (button, muted) = (self.style(Role::Button), self.style(Role::Muted));

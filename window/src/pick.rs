@@ -172,7 +172,7 @@ impl Model {
       project: Some(project(card)),
       left: card.thread.title.clone(),
       right: place(card),
-      hue: Some(hued(key)),
+      hue: Some(hued(&key.1, &card.thread.title)),
       choice: Choice::Thread(key.clone()),
       ..Entry::default()
     };

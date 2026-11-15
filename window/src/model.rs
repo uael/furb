@@ -312,9 +312,18 @@ impl Model {
 
   /// The list settled: each card of each machine at its place.
   pub(crate) fn settle(&mut self) {
-    let cards = self.machines.iter().enumerate().flat_map(|(at, told)| {
-      told.cards.iter().map(move |card| (card.place(&told.login), &card.thread.title, at, card))
-    });
+    // Once its machine told the card of a thread that the window started, the machine says how it
+    // stands, also when the card goes.
+    let told = self.thread.as_ref().is_some_and(|one| self.told_card(&one.key).is_some());
+    if let Some(opened) = self.thread.as_mut().filter(|_| told) {
+      opened.started = false;
+    }
+    let untold = self.untold();
+    let told = self.machines.iter().enumerate();
+    let told = told.flat_map(|(at, told)| told.cards.iter().map(move |card| (at, card)));
+    let cards = told
+      .chain(untold.iter().map(|(at, card)| (*at, card)))
+      .map(|(at, card)| (card.place(&self.machines[at].login), &card.thread.title, at, card));
     let mut cards: Vec<_> = cards.collect();
     cards.sort_by(|one, other| (&one.0, one.1, one.2).cmp(&(&other.0, other.1, other.2)));
     let keyed = |((part, ..), _, at, card): ((Part, u8, i64), _, usize, &Card)| {

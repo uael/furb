@@ -16,7 +16,7 @@ use std::{
 
 use furb::{
   engine::OPERATOR,
-  view::{Agent, Context, Exchange, Page, Standing},
+  view::{self, Agent, Context, Exchange, Page, Standing},
 };
 use furb_host::protocol::{Card, Verb};
 use opentui::style::{Color, Span, Style};
@@ -58,6 +58,8 @@ pub(crate) struct Opened {
   pub(crate) fault: Option<String>,
   /// The messages of the operator that the thread does not show yet, in their order.
   pub(crate) pending: Vec<Pending>,
+  /// Whether the window started the thread with a message of the operator.
+  pub(crate) started: bool,
   /// When the window opened the thread, on the clock of its loaders.
   pub(crate) since: Duration,
   /// The form of the question of the thread that the input answers.
@@ -635,9 +637,36 @@ impl Model {
     self.machines.get(key.0)?.cards.iter().find(told)
   }
 
-  /// The hue of a thread, from its id.
+  /// The card of the thread that the window started, while its machine told none: the daemon
+  /// tells it only once the life stands and made its prompt, so until then the window shows the
+  /// thread as it knows it from his first message, at work, with its machine.
+  pub(crate) fn untold(&self) -> Option<(usize, Card)> {
+    let key = self.thread.as_ref().filter(|one| one.started)?.key.clone();
+    if self.told_card(&key).is_some() {
+      return None;
+    }
+    let told = &self.machines[key.0];
+    let session =
+      told.cards.iter().find(|card| card.life == key.1).and_then(|card| card.session.clone());
+    let thread = view::Card {
+      prompt: key.2.clone(),
+      title: self.title()?,
+      standing: Standing::Thinks,
+      model: None,
+      agents: 0,
+      readers: vec![format!("{OPERATOR}/{}", told.login)],
+    };
+    let (life, project, since) = (key.1.clone(), self.cwd(key.0, &key.1), self.second());
+    let card = Card { life, session, project, held: true, viewers: Vec::new(), since, thread };
+    Some((key.0, card))
+  }
+
+  /// The hue of a thread, from its record and its title, which the window knows from the send of
+  /// its first message, so the hue stays when the daemon names the prompt of a new thread.
   pub(crate) fn hue(&self, key: &Key) -> Color {
-    self.tokens.hues[hued(key) % self.tokens.hues.len()]
+    let open = || self.thread.as_ref().filter(|one| one.key == *key).and_then(|_| self.title());
+    let title = self.told_card(key).map(|card| card.thread.title.clone()).or_else(open);
+    self.tokens.hues[hued(&key.1, &title.unwrap_or_default()) % self.tokens.hues.len()]
   }
 }
 
@@ -646,9 +675,9 @@ pub(crate) fn rests(agent: &Agent) -> bool {
   matches!(agent.card.standing, Standing::Resolved | Standing::Rests | Standing::Stopped)
 }
 
-/// The number of a thread that picks its hue, from its record and its prompt.
-pub(crate) fn hued(key: &Key) -> usize {
-  hash(&format!("{}{}", key.1, key.2))
+/// The number of a thread that picks its hue, from its record and its title.
+pub(crate) fn hued(life: &str, title: &str) -> usize {
+  hash(&format!("{life}{title}"))
 }
 
 /// The look of the run of a line that stands at a column.

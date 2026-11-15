@@ -622,6 +622,8 @@ fn sent(app: &App, window: &Shared) {
   }
   window.borrow().area.set_text("");
   tell(app, window, |model| model.draft.text.clear());
+  // A thread that the message starts shows in the list at once.
+  rest(app, window);
 }
 
 /// An escape: it forgets what a first press of another key named, goes back from a thread that
