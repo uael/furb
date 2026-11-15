@@ -8,20 +8,20 @@
 //! the rows of the exchanges that show and of no other.
 
 use std::{
-  collections::{BTreeMap, HashMap, HashSet},
+  collections::{BTreeMap, HashMap},
   mem,
   ops::Range,
 };
 
 use furb::{
   engine::OPERATOR,
-  view::{self, Agent, Page, Standing},
+  view::{self, Page, Standing},
 };
 use furb_host::protocol::{Card, Verb};
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Hold, Thread};
+use furb_client::{Anchor, Fold, Hold, Opened, Thread};
 
 use crate::{
   keys::Does,
@@ -29,44 +29,8 @@ use crate::{
   list::hash,
   model::{Key, Model},
   opens::QUIET,
-  question::Form,
   tokens::Loader,
 };
-
-/// The thread that the operator reads: what the client holds of it, where the operator reads it,
-/// what he opened, the form of its question that the input answers, and the thread whose agent it
-/// is.
-#[derive(Debug, Default)]
-pub(crate) struct Opened {
-  pub(crate) thread: Thread,
-  /// The row at the top of the feed while the operator reads away from its end, and none while
-  /// the feed follows its end.
-  pub(crate) top: Option<Anchor>,
-  /// The blocks and the thoughts that the operator opened.
-  pub(crate) unfolded: HashSet<Fold>,
-  /// The form of the question of the thread that the input answers.
-  pub(crate) form: Option<Form>,
-  /// The thread whose agent this thread is, which an escape opens again where he read it.
-  pub(crate) from: Option<Box<Self>>,
-}
-
-/// A row of the feed as a place that holds when rows come above it: a count of rows from the
-/// first row of an exchange, which is negative for a row above that exchange.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Anchor {
-  pub(crate) at: usize,
-  pub(crate) row: isize,
-}
-
-/// What a click opens or folds in a thread: the block or the thought of the answer to a message,
-/// or the parts of the box of its context.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum Fold {
-  Block(String),
-  Thought(String),
-  /// The parts of the box of the context.
-  Context,
-}
 
 /// What a click on a row does: it opens or folds a part of the feed, it does what a key does, it
 /// picks an entry of the picker of the sessions, it answers a question with a value of its form,
@@ -311,65 +275,45 @@ impl<V> Items<'_, V> {
   }
 }
 
-impl Opened {
-  /// A part opened when it was folded, and folded when it was open.
-  pub(crate) fn fold(&mut self, fold: Fold) {
-    if !self.unfolded.remove(&fold) {
-      self.unfolded.insert(fold);
-    }
-  }
-
-  /// The agents that the dock shows, from the first that does not rest to the last, and how many
-  /// stand before them.
-  pub(crate) fn docked(&self) -> (usize, &[Agent]) {
-    let first =
-      self.thread.agents.iter().position(|agent| !rests(agent)).unwrap_or(self.thread.agents.len());
-    (first, &self.thread.agents[first..])
-  }
-
-  /// The thread that the operator opened from the list, whose agent this thread is, or this one.
-  pub(crate) fn root(&self) -> &Self {
-    self.from.as_deref().map_or(self, Self::root)
-  }
-}
-
 impl Model {
   /// The thread of the selected card opened, and the input turned to it. The window holds its
   /// life, which opens when no life holds its record.
   pub(crate) fn open_thread(&mut self) {
-    let Some(key) = self.selected.clone() else { return };
-    if key.2.is_empty() || self.thread.as_ref().is_some_and(|one| one.root().thread.key == key) {
+    let Some(key) = self.client.selected.clone() else { return };
+    if key.2.is_empty()
+      || self.client.thread.as_ref().is_some_and(|one| one.root().thread.key == key)
+    {
       return;
     }
-    self.client.hold((key.0, key.1.clone()), self.cwd(key.0, &key.1), self.moved);
-    let thread = Thread { key, since: self.moved, ..Thread::default() };
-    self.thread = Some(Opened { thread, ..Opened::default() });
-    self.aim = None;
+    self.client.hold((key.0, key.1.clone()), self.client.cwd(key.0, &key.1), self.client.moved);
+    let thread = Thread { key, since: self.client.moved, ..Thread::default() };
+    self.client.thread = Some(Opened { thread, ..Opened::default() });
+    self.client.aim = None;
   }
 
   /// The thread of an agent of the open thread opened in its place, and the input turned to it.
   /// The thread that it came from waits as the operator read it, and asks its end again when it
   /// opens again, since the daemon tells a window the changes of one thread at a time.
   fn open_agent(&mut self, prompt: String) {
-    let Some(mut from) = self.thread.take() else { return };
+    let Some(mut from) = self.client.thread.take() else { return };
     let key = (from.thread.key.0, from.thread.key.1.clone(), prompt);
     (from.thread.asked, from.thread.again) = (HashMap::new(), true);
-    let thread = Thread { key, since: self.moved, ..Thread::default() };
-    self.thread = Some(Opened { thread, from: Some(Box::new(from)), ..Opened::default() });
-    (self.aim, self.armed) = (None, None);
+    let thread = Thread { key, since: self.client.moved, ..Thread::default() };
+    self.client.thread = Some(Opened { thread, from: Some(Box::new(from)), ..Opened::default() });
+    (self.client.aim, self.armed) = (None, None);
   }
 
   /// The thread of the next agent of the dock opened in place: the first from the thread that
   /// they came from, the one after it from the thread of an agent, and the first again after the
   /// last.
   pub(crate) fn next_agent(&mut self) {
-    let Some(opened) = self.thread.as_ref() else { return };
+    let Some(opened) = self.client.thread.as_ref() else { return };
     let (from, at) =
       opened.from.as_deref().map_or((opened, None), |from| (from, Some(&opened.thread.key.2)));
     let shown = from.docked().1;
     let after = at.and_then(|at| shown.iter().position(|one| one.card.prompt == *at));
     let Some(next) = shown.get(after.map_or(0, |at| at + 1)).or(shown.first()) else {
-      self.notice = Some("No agent of this thread works now.".to_owned());
+      self.client.notice = Some("No agent of this thread works now.".to_owned());
       return;
     };
     let prompt = next.card.prompt.clone();
@@ -383,13 +327,13 @@ impl Model {
   /// from; from a thread that opens or whose open failed, back to the list, while the open goes on.
   /// Whether it went back.
   pub(crate) fn back(&mut self) -> bool {
-    if let Some(from) = self.thread.as_mut().and_then(|one| one.from.take()) {
-      (self.thread, self.aim) = (Some(*from), None);
+    if let Some(from) = self.client.thread.as_mut().and_then(|one| one.from.take()) {
+      (self.client.thread, self.client.aim) = (Some(*from), None);
       return true;
     }
     let leaves = self.leaves();
     if leaves {
-      (self.thread, self.selected, self.aim) = (None, None, None);
+      (self.client.thread, self.client.selected, self.client.aim) = (None, None, None);
     }
     leaves
   }
@@ -415,7 +359,7 @@ impl Model {
   /// so an open that takes less than that shows no text that comes and goes.
   pub(crate) fn says_opens(&self, opened: &Opened) -> bool {
     let hold = self.client.holds.get(&(opened.thread.key.0, opened.thread.key.1.clone()));
-    let waited = hold.is_some_and(|hold| self.moved.saturating_sub(hold.since) >= QUIET);
+    let waited = hold.is_some_and(|hold| self.client.moved.saturating_sub(hold.since) >= QUIET);
     self.opens(opened) && waited
   }
 
@@ -425,17 +369,13 @@ impl Model {
   /// the row of hints shows.
   pub(crate) fn leaves(&self) -> bool {
     let says = |one: &Opened| one.from.is_some() || self.why(one).is_some() || self.says_opens(one);
-    self.thread.as_ref().is_some_and(says)
-  }
-
-  /// The page of the end of the open thread, as the core asks it.
-  pub(crate) fn page_due(&self) -> Option<Verb> {
-    self.client.page_due(&self.thread.as_ref()?.thread)
+    self.client.thread.as_ref().is_some_and(says)
   }
 
   /// The open thread on a machine, while it waits for the page of a request.
   pub(crate) fn waits(&self, at: usize, id: u64) -> bool {
     self
+      .client
       .thread
       .as_ref()
       .is_some_and(|one| one.thread.key.0 == at && one.thread.asked.contains_key(&id))
@@ -445,7 +385,7 @@ impl Model {
   /// page refused while the open of its life runs says why the open failed, as the refusal of the
   /// open says it, so the window holds that life no more. Whether the open thread changed.
   pub(crate) fn answered(&mut self, at: usize, id: u64, page: Result<Page, String>) -> bool {
-    let Some(opened) = self.thread.as_mut().filter(|one| one.thread.key.0 == at) else {
+    let Some(opened) = self.client.thread.as_mut().filter(|one| one.thread.key.0 == at) else {
       return false;
     };
     if opened.thread.asked.remove(&id).is_none() {
@@ -469,7 +409,7 @@ impl Model {
     let open = |one: &&mut Opened| {
       one.thread.key.0 == at && one.thread.key.1 == life && one.thread.key.2 == thread
     };
-    let Some(opened) = self.thread.as_mut().filter(open) else { return false };
+    let Some(opened) = self.client.thread.as_mut().filter(open) else { return false };
     opened.thread.took(page);
     true
   }
@@ -484,7 +424,7 @@ impl Model {
     let moved = now.top.map(|top| Anchor { at: top.at, row: top.row + by });
     let then = items.shown(moved, room, |item| feed.rows(item));
     let near = then.top.is_none_or(|top| items.above(top, room, |item| feed.rows(item)) < room);
-    let opened = self.thread.as_mut()?;
+    let opened = self.client.thread.as_mut()?;
     opened.top = then.top.filter(|_| !then.end);
     let older = opened.thread.asked.values().any(Option::is_some);
     let first = opened.thread.exchanges.keys().next().copied();
@@ -494,7 +434,7 @@ impl Model {
 
   /// The feed at its end, which it follows from now on.
   pub(crate) fn jump(&mut self) {
-    if let Some(opened) = self.thread.as_mut() {
+    if let Some(opened) = self.client.thread.as_mut() {
       opened.top = None;
     }
   }
@@ -505,7 +445,7 @@ impl Model {
     let click = self.left_rows().into_iter().nth(y).and_then(|row| row.click(x));
     match click? {
       Click::Fold(fold) => {
-        self.thread.as_mut()?.fold(fold);
+        self.client.thread.as_mut()?.fold(fold);
         None
       }
       Click::Pick(at) => self.took(at),
@@ -520,7 +460,7 @@ impl Model {
         None
       }
       Click::Link(address) => {
-        self.notice = Some(match (self.browse)(&address) {
+        self.client.notice = Some(match (self.browse)(&address) {
           Ok(()) => format!("Opened {address} in the browser."),
           Err(no) => format!("The browser did not open {address}: {no}"),
         });
@@ -583,17 +523,11 @@ impl Model {
     usize::from(self.size.1).saturating_sub(taken)
   }
 
-  /// What the operator saw, once the feed of the open thread follows its end, as the core says it.
-  pub(crate) fn seen_due(&mut self) -> Option<(usize, Verb)> {
-    let opened = self.thread.as_ref().filter(|one| one.top.is_none())?;
-    self.client.seen_due(&opened.thread)
-  }
-
   /// The card of the thread that the window started, while its machine told none: the daemon
   /// tells it only once the life stands and made its prompt, so until then the window shows the
   /// thread as it knows it from his first message, at work, with its machine.
   pub(crate) fn untold(&self) -> Option<(usize, Card)> {
-    let key = self.thread.as_ref().filter(|one| one.thread.started)?.thread.key.clone();
+    let key = self.client.thread.as_ref().filter(|one| one.thread.started)?.thread.key.clone();
     if self.client.card(&key).is_some() {
       return None;
     }
@@ -608,7 +542,7 @@ impl Model {
       agents: 0,
       readers: vec![format!("{OPERATOR}/{}", told.login)],
     };
-    let (life, project, since) = (key.1.clone(), self.cwd(key.0, &key.1), self.second());
+    let (life, project, since) = (key.1.clone(), self.client.cwd(key.0, &key.1), self.second());
     let card = Card {
       life,
       session,
@@ -626,16 +560,12 @@ impl Model {
   /// The hue of a thread, from its record and its title, which the window knows from the send of
   /// its first message, so the hue stays when the daemon names the prompt of a new thread.
   pub(crate) fn hue(&self, key: &Key) -> Color {
-    let open =
-      || self.thread.as_ref().filter(|one| one.thread.key == *key).and_then(|_| self.title());
+    let open = || {
+      self.client.thread.as_ref().filter(|one| one.thread.key == *key).and_then(|_| self.title())
+    };
     let title = self.client.card(key).map(|card| card.thread.title.clone()).or_else(open);
     self.tokens.hues[hued(&key.1, &title.unwrap_or_default()) % self.tokens.hues.len()]
   }
-}
-
-/// Whether an agent rests: it ended and asks nothing more. A failure waits for a person.
-pub(crate) fn rests(agent: &Agent) -> bool {
-  matches!(agent.card.standing, Standing::Resolved | Standing::Rests | Standing::Stopped)
 }
 
 /// The number of a thread that picks its hue, from its record and its title.

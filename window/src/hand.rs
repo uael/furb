@@ -99,7 +99,7 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
   };
   let told = machines.iter().map(told).collect();
   let mut model = Model::new(told, app.size(), tokens, &options);
-  model.now = (options.clock)();
+  model.client.now = (options.clock)();
   model.settle();
   let area = edited(app, &tokens);
   let window = Window {
@@ -192,7 +192,7 @@ fn drawn(app: &App, model: Model, area: &Textarea) -> Screen<Model> {
   }
   let frames = |model: &Model| {
     let spots = model.left().loaders;
-    spots.into_iter().map(|spot| (spot, spot.loader.frame(model.moved))).collect::<Vec<_>>()
+    spots.into_iter().map(|spot| (spot, spot.loader.frame(model.client.moved))).collect::<Vec<_>>()
   };
   screen.part(frames, move |shown| {
     for (at, cell) in cells.iter().enumerate() {
@@ -276,7 +276,7 @@ fn placed(app: &App, screen: &mut Screen<Model>, area: &Textarea) {
 fn tell<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> T {
   let given = told(app, window, change);
   pump(window);
-  let back = window.borrow_mut().screen.model.restore.take();
+  let back = window.borrow_mut().screen.model.client.restore.take();
   if let Some(text) = back {
     window.borrow().area.set_text(text);
     colored(window);
@@ -291,7 +291,7 @@ fn told<T>(app: &App, window: &Shared, change: impl FnOnce(&mut Model) -> T) -> 
     if held.still { Duration::ZERO } else { app.now().saturating_duration_since(held.born) };
   let now = (held.clock)();
   let given = held.screen.tell(|model| {
-    (model.now, model.moved) = (now, moved);
+    (model.client.now, model.client.moved) = (now, moved);
     let given = change(model);
     model.questioned();
     given
@@ -377,16 +377,15 @@ fn pump(window: &Shared) {
     model.client.asked_open(&life, id);
     model.client.asked.extend(id.map(|id| ((life.0, id), Asked::Open)));
   }
-  let folder = model.folder.display().to_string();
-  for (at, verb) in model.client.models_due(&folder) {
+  for (at, verb) in model.client.models_due() {
     if let Some(id) = ask(askers, model, at, verb) {
       model.client.asked.insert((at, id), Asked::Models);
     }
   }
-  if let Some(verb) = model.page_due()
-    && let Some(at) = model.thread.as_ref().map(|one| one.thread.key.0)
+  if let Some(verb) = model.client.page_due()
+    && let Some(at) = model.client.thread.as_ref().map(|one| one.thread.key.0)
     && let Some(id) = ask(askers, model, at, verb)
-    && let Some(opened) = model.thread.as_mut()
+    && let Some(opened) = model.client.thread.as_mut()
   {
     opened.thread.asked.insert(id, None);
     opened.thread.again = false;
@@ -396,12 +395,12 @@ fn pump(window: &Shared) {
   {
     model.client.asked.insert((at, id), Asked::Say);
   }
-  if let Some((at, verb, target)) = model.history_due()
+  if let Some((at, verb, target)) = model.client.history_due()
     && let Some(id) = ask(askers, model, at, verb)
   {
     model.client.asked.insert((at, id), Asked::History(target));
   }
-  if let Some((at, verb)) = model.seen_due()
+  if let Some((at, verb)) = model.client.seen_due()
     && let Some(id) = ask(askers, model, at, verb)
   {
     model.client.asked.insert((at, id), Asked::Seen);
@@ -436,9 +435,9 @@ fn older(window: &Shared, verb: Option<Verb>) {
   let Some(verb @ Verb::Thread { before, .. }) = verb else { return };
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
-  let Some(at) = screen.model.thread.as_ref().map(|one| one.thread.key.0) else { return };
+  let Some(at) = screen.model.client.thread.as_ref().map(|one| one.thread.key.0) else { return };
   let Some(id) = ask(askers, &mut screen.model, at, verb) else { return };
-  let Some(opened) = screen.model.thread.as_mut() else { return };
+  let Some(opened) = screen.model.client.thread.as_mut() else { return };
   opened.thread.asked.insert(id, before);
 }
 
@@ -487,7 +486,7 @@ fn walked(app: &App, window: &Shared, up: bool) -> bool {
     (area.cursor().0, area.text().split('\n').count())
   };
   let edge = if up { row == 0 } else { usize::try_from(row).is_ok_and(|row| row + 1 >= rows) };
-  edge && tell(app, window, |model| model.walked(up))
+  edge && tell(app, window, |model| model.client.walked(up))
 }
 
 /// The grey rest of the input taken whole, or its first word, at the end of the text: whether a
@@ -496,7 +495,7 @@ fn took(window: &Shared, word: bool) -> bool {
   let held = window.borrow();
   let area = &held.area;
   let end = usize::try_from(area.cursor_offset()).is_ok_and(|at| at == area.text().chars().count());
-  let Some(rest) = held.screen.model.suggested().filter(|_| end) else { return false };
+  let Some(rest) = held.screen.model.client.suggested().filter(|_| end) else { return false };
   // A word is the blanks before it and its letters, as the editor moves by words.
   let start = rest.len() - rest.trim_start().len();
   let word_end = rest[start..].find(char::is_whitespace).map_or(rest.len(), |at| start + at);
@@ -552,7 +551,7 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
     Keyed::Taken => true,
     Keyed::Empties => {
       window.borrow().area.set_text("");
-      tell(app, window, |model| model.draft.text.clear());
+      tell(app, window, |model| model.client.draft.text.clear());
       true
     }
     Keyed::Says(at, verb) => {
@@ -580,7 +579,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Needed => Model::needed,
     Does::List => Model::toggle,
     Does::Jump => Model::jump,
-    Does::NewThread => Model::turn,
+    Does::NewThread => |model| model.client.turn(),
     Does::Sessions => |model| model.pick(Pick::Sessions),
     Does::GoTo => |model| model.pick(Pick::GoTo),
     Does::Commands => |model| model.pick(Pick::Commands),
@@ -589,7 +588,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Model => |model| model.pick(Pick::Models),
     Does::Effort => Model::effort,
     Does::Keys => |model| model.pick(Pick::Keys),
-    Does::Python => |model| model.draft.python = !model.draft.python,
+    Does::Python => |model| model.client.draft.python = !model.client.draft.python,
     Does::Agent => Model::next_agent,
     Does::Close => return escaped(app, window, forgot),
     Does::Stop => return controlled(app, window, |model| Some((model.stop()?, Asked::Control))),
@@ -599,7 +598,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Send => return sent(app, window),
     Does::Empty if !window.borrow().area.text().is_empty() => {
       window.borrow().area.set_text("");
-      return tell(app, window, |model| model.draft.text.clear());
+      return tell(app, window, |model| model.client.draft.text.clear());
     }
     Does::Empty => {
       return controlled(app, window, |model| {
@@ -640,7 +639,7 @@ fn asked(window: &Shared, does: Does) {
     Does::GoTo => listed(window),
     Does::Machines => projected(window, None),
     Does::Projects => {
-      let at = window.borrow().screen.model.target().machine();
+      let at = window.borrow().screen.model.client.target().machine();
       projected(window, Some(at));
     }
     _ => {}
@@ -677,7 +676,7 @@ fn sent(app: &App, window: &Shared) {
     return;
   }
   window.borrow().area.set_text("");
-  tell(app, window, |model| model.draft.text.clear());
+  tell(app, window, |model| model.client.draft.text.clear());
   // A thread that the message starts shows in the list at once.
   rest(app, window);
 }
@@ -729,12 +728,12 @@ fn colored(window: &Shared) {
   let held = window.borrow();
   let (area, model) = (&held.area, &held.screen.model);
   area.clear_extmarks();
-  if !model.draft.python {
+  if !model.client.draft.python {
     return;
   }
   let plain = model.tokens.style(Role::Prose);
   let mut offset = 0;
-  for (row, line) in model.colors.lines(&model.draft.text, plain).iter().enumerate() {
+  for (row, line) in model.colors.lines(&model.client.draft.text, plain).iter().enumerate() {
     offset += u32::from(row > 0);
     for one in line {
       let wide = u32::try_from(one.content.width()).unwrap_or_default();

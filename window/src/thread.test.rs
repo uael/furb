@@ -84,7 +84,7 @@ fn opened(end: Page) -> Model {
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);
   model.settle();
   let thread = Thread { key, asked: [(1, None)].into(), ..Thread::default() };
-  model.thread = Some(Opened { thread, ..Opened::default() });
+  model.client.thread = Some(Opened { thread, ..Opened::default() });
   assert!(model.answered(0, 1, Ok(end)));
   model
 }
@@ -109,7 +109,7 @@ fn a_page_of_older_exchanges_keeps_each_row_that_the_operator_reads_where_it_sta
   let read = texts(&model);
   assert!(!read.iter().any(|row| row.contains("earlier messages")), "{read:#?}");
 
-  model.thread.as_mut().expect("a thread is open").thread.asked.insert(2, Some(10));
+  model.client.thread.as_mut().expect("a thread is open").thread.asked.insert(2, Some(10));
   assert!(model.answered(0, 2, Ok(page(0..10))));
   assert_eq!(texts(&model), read);
 }
@@ -144,14 +144,14 @@ fn a_thread_that_ends_twice_in_one_second_is_said_seen_at_each_end_and_reads_at_
   };
   for _ in 0..2 {
     standing(&mut model, Standing::Resolved);
-    let said = model.seen_due();
+    let said = model.client.seen_due();
     assert!(matches!(said, Some((0, Verb::Seen { .. }))), "{said:?}");
     // The card shows him as a reader before the daemon says so, and says nothing twice.
     assert!(!model.client.machines[0].cards[0].thread.unread("ada"));
-    assert_eq!(model.seen_due(), None);
+    assert_eq!(model.client.seen_due(), None);
     // A reply makes the thread work again, and its next end falls in the same second.
     standing(&mut model, Standing::Thinks);
     model.client.machines[0].cards[0].thread.readers.clear();
-    assert_eq!(model.seen_due(), None);
+    assert_eq!(model.client.seen_due(), None);
   }
 }

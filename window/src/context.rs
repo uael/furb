@@ -6,10 +6,11 @@
 use furb::view::{Context, Portion, percent, share, tokens};
 use opentui::style::{Color, Style};
 
+use furb_client::Fold;
+
 use crate::{
   line::{Line, run, spread},
   model::Model,
-  thread::Fold,
   tokens::{LIST, Role},
 };
 
@@ -28,7 +29,9 @@ impl Model {
   /// The rows of the box of the context: none while no thread is open, else its head, its bar,
   /// each part while it is open, and its counts.
   pub(crate) fn context_rows(&self) -> Vec<Line> {
-    let Some(opened) = self.thread.as_ref().filter(|_| self.listed()) else { return Vec::new() };
+    let Some(opened) = self.client.thread.as_ref().filter(|_| self.listed()) else {
+      return Vec::new();
+    };
     let t = &self.tokens;
     let (prose, muted) = (t.style(Role::Prose), t.style(Role::Muted));
     let Some(context) = &opened.thread.context else {
@@ -62,7 +65,8 @@ impl Model {
   /// The ring of the context in the launcher, while the list and its box hide: how full the window
   /// of the chain of the open thread is, or what its last answer read when no window is known.
   pub(crate) fn ring(&self) -> Option<String> {
-    let context = self.thread.as_ref().filter(|_| !self.listed())?.thread.context.as_ref()?;
+    let context =
+      self.client.thread.as_ref().filter(|_| !self.listed())?.thread.context.as_ref()?;
     let read = context.read.tokens;
     let Some(window) = context.window else { return Some(tokens(read)) };
     let share = percent(read, window);
@@ -80,7 +84,7 @@ impl Model {
   /// The ring taken: the list shows, with each part of the box of the context.
   pub(crate) fn ringed(&mut self) {
     self.toggle();
-    if let Some(opened) = self.thread.as_mut() {
+    if let Some(opened) = self.client.thread.as_mut() {
       opened.unfolded.insert(Fold::Context);
     }
   }

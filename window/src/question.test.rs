@@ -4,14 +4,13 @@ use furb::view::{self, Block, Exchange, Maker, Page, Said, Saying, Standing, dec
 use furb_host::protocol::{Card, Verb};
 use jiff::tz::TimeZone;
 
-use super::{HOLD, Keyed};
-use furb_client::Thread;
+use super::Keyed;
+use furb_client::{HOLD, Opened, Thread};
 
 use crate::{
   Options, System,
   keys::Does,
   model::{Link, Model, Told},
-  thread::Opened,
   tokens::Tokens,
 };
 
@@ -68,7 +67,7 @@ fn asked(shape: &str, system: System) -> Model {
   };
   let key = (0, LIFE.to_owned(), "prompt0".to_owned());
   let thread = Thread { key, asked: [(1, None)].into(), ..Thread::default() };
-  model.thread = Some(Opened { thread, ..Opened::default() });
+  model.client.thread = Some(Opened { thread, ..Opened::default() });
   let page = Page { exchanges: vec![exchange], ..Page::default() };
   assert!(model.answered(0, 1, Ok(page)));
   model.questioned();
@@ -77,7 +76,7 @@ fn asked(shape: &str, system: System) -> Model {
 
 /// The window once the form takes keys.
 fn held(mut model: Model) -> Model {
-  model.moved += HOLD;
+  model.client.moved += HOLD;
   model
 }
 
@@ -89,7 +88,7 @@ fn answer(text: &str) -> Keyed {
 #[test]
 fn a_form_takes_no_key_in_its_first_moments() {
   let mut model = asked("Literal['right', 'left']", System::MacOs);
-  model.moved += HOLD.saturating_sub(Duration::from_millis(1));
+  model.client.moved += HOLD.saturating_sub(Duration::from_millis(1));
   assert_eq!(model.keyed(Some(Does::Down), false), Keyed::Taken);
   assert_eq!(model.keyed(Some(Does::Send), false), Keyed::Taken);
   assert_eq!(model.choose(1), None);
@@ -108,7 +107,7 @@ fn a_choice_answers_the_value_of_its_row_and_his_own_words_close_it_as_a_refusal
   assert_eq!(model.keyed(Some(Does::Down), false), Keyed::Taken);
   assert_eq!(model.keyed(None, true), Keyed::Passed);
   assert_eq!(model.keyed(Some(Does::Send), false), Keyed::Taken);
-  model.draft.text = "at the top".to_owned();
+  model.client.draft.text = "at the top".to_owned();
   let close =
     Verb::Close { life: LIFE.to_owned(), act: "prompt2".to_owned(), value: declined("at the top") };
   assert_eq!(model.keyed(Some(Does::Send), false), Keyed::Says(0, close));
@@ -127,9 +126,9 @@ fn values_to_tick_answer_the_list_of_those_ticked() {
 #[test]
 fn ctrl_c_empties_the_words_of_a_form_then_refuses_its_question() {
   let mut model = held(asked("int", System::MacOs));
-  model.draft.text = "12".to_owned();
+  model.client.draft.text = "12".to_owned();
   assert_eq!(model.keyed(Some(Does::Empty), false), Keyed::Empties);
-  model.draft.text.clear();
+  model.client.draft.text.clear();
   let value = declined(view::REFUSED);
   let close = Verb::Close { life: LIFE.to_owned(), act: "prompt2".to_owned(), value };
   assert_eq!(model.keyed(Some(Does::Empty), false), Keyed::Says(0, close));
@@ -138,11 +137,11 @@ fn ctrl_c_empties_the_words_of_a_form_then_refuses_its_question() {
 #[test]
 fn a_question_that_comes_while_he_writes_shows_no_form_until_the_input_is_empty() {
   let mut model = asked("bool", System::MacOs);
-  model.thread.as_mut().unwrap().form = None;
-  model.draft.text = "a draft".to_owned();
+  model.client.thread.as_mut().unwrap().form = None;
+  model.client.draft.text = "a draft".to_owned();
   model.questioned();
   assert!(model.form().is_none() && model.waiting_row().is_some());
-  model.draft.text.clear();
+  model.client.draft.text.clear();
   model.questioned();
   assert!(model.form().is_some() && model.waiting_row().is_none());
 }

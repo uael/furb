@@ -5,13 +5,11 @@
 //! message goes after the one before it, and a message that goes to the thread that the message
 //! before it made knows that thread when it goes.
 
-use std::time::Duration;
-
 use furb_wire::protocol::{Hello, Kind, PROTOCOL, Request, Verb};
 use serde_json::Value;
 
 use crate::{
-  Client, Key, Life, Link, Pending, Thread,
+  Client, Key, Life, Link,
   opens::{Ask, Hold},
 };
 
@@ -120,44 +118,6 @@ impl Client {
     })
   }
 
-  /// A message of the operator sent: it waits in the queue, the client holds its life, opened in
-  /// the folder `cwd` when no life holds its record, and the thread that it goes to shows it at
-  /// once. A message to no thread starts one, which the client gives back, and a message to a
-  /// thread shows in `open`, the thread that the operator reads. A word of python shows in no
-  /// thread. A machine that the client dials again, or a life that a fault ended, takes nothing,
-  /// and the client says why.
-  #[expect(clippy::too_many_arguments, reason = "a message takes where its life opens, and when")]
-  pub fn send(
-    &mut self,
-    sent: Outgoing,
-    cwd: Option<String>,
-    since: Duration,
-    open: Option<&mut Thread>,
-  ) -> Result<Option<Thread>, String> {
-    if let Some(away) = self.away(sent.at) {
-      return Err(away);
-    }
-    if let Some(why) = self.fault_of(sent.at, &sent.life) {
-      return Err(format!("Nothing went: {why}"));
-    }
-    self.hold((sent.at, sent.life.clone()), cwd, since);
-    let pending = Pending { act: None, text: sent.text.clone() };
-    let made = match (&sent.thread, sent.python, open) {
-      (_, true, _) | (Some(_), false, None) => None,
-      (None, false, _) => {
-        let key = (sent.at, sent.life.clone(), String::new());
-        let pending = vec![pending];
-        Some(Thread { key, above: Some(0), started: true, pending, ..Thread::default() })
-      }
-      (Some(_), false, Some(open)) => {
-        open.pending.push(pending);
-        None
-      }
-    };
-    self.outgoing.push_back(sent);
-    Ok(made)
-  }
-
   /// The first message of the queue of the input, once no message waits for its answer and the
   /// daemon answered the open of its life. The daemon holds it until that life stands.
   pub fn due(&self) -> Option<(usize, Verb)> {
@@ -201,7 +161,7 @@ impl Client {
   /// The ask of the models of each machine that lists its cards and gave none yet, for a life in
   /// the folder of the client on this machine: the launcher shows the model and the effort that a
   /// new session takes before any session stands.
-  pub fn models_due(&self, folder: &str) -> Vec<(usize, Verb)> {
+  pub fn models_due(&self) -> Vec<(usize, Verb)> {
     let asking =
       |at: usize| self.asked.iter().any(|(key, one)| key.0 == at && *one == Asked::Models);
     let due = self
@@ -210,7 +170,7 @@ impl Client {
       .enumerate()
       .filter(|(at, told)| told.link == Link::Listed && told.models.is_none() && !asking(*at));
     let ask = |(at, _)| {
-      let cwd = (at == 0).then(|| folder.to_owned());
+      let cwd = (at == 0).then(|| self.folder.clone());
       (at, Verb::Models { cwd, config: None, claude: None })
     };
     due.map(ask).collect()

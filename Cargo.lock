@@ -1518,6 +1518,7 @@ name = "furb-client"
 version = "0.4.2"
 dependencies = [
  "furb-wire",
+ "jiff",
  "serde",
  "serde_json",
 ]

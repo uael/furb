@@ -1,7 +1,7 @@
 //! The home, at the left of the list while no thread is open: what waits for the operator, and
 //! what worked while no window was open.
 
-use std::iter;
+use std::{iter, path::Path};
 
 use furb::view::Standing;
 use opentui::style::Style;
@@ -31,7 +31,10 @@ impl Model {
 
   /// The name of the project of the folder of the window.
   pub(crate) fn project(&self) -> String {
-    self.folder.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
+    Path::new(&self.client.folder)
+      .file_name()
+      .map(|name| name.to_string_lossy().into_owned())
+      .unwrap_or_default()
   }
 
   /// A row of the home under its head: a text, and a hint at its end.
@@ -106,7 +109,7 @@ impl Model {
   /// on each system, so a folder of Windows shows as `~/furb` too. A folder outside the home shows
   /// as it is.
   pub(crate) fn folder_shown(&self) -> String {
-    let shown = self.folder.display().to_string();
+    let shown = self.client.folder.clone();
     let home = self.home.as_ref().map(|one| one.display().to_string());
     match home.as_deref().and_then(|home| shown.strip_prefix(home)) {
       Some("") => "~".to_owned(),

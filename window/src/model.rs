@@ -6,10 +6,10 @@
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
 
-use std::{io, path::PathBuf, time::Duration};
+use std::{io, path::PathBuf};
 
 use furb::view::{Part, age, homed, since};
-use furb_client::{Ask, Asked, Client, Hold, Listing, Step, Target};
+use furb_client::{Ask, Asked, Client, Fold, Hold, Listing, Step};
 pub(crate) use furb_client::{Key, Link, Told};
 use furb_host::{
   Event,
@@ -20,13 +20,11 @@ use jiff::{Timestamp, tz::TimeZone};
 use crate::{
   Options,
   code::Colors,
-  history::{History, Walk},
-  input::{Armed, Draft, Word},
+  input::{Armed, Word},
   keys::{self, Does, System},
   link::Heard,
   list::Row,
   pick::Picker,
-  thread::{Fold, Opened},
   tokens::{BESIDE, LIST, SIDE, Tokens},
 };
 
@@ -36,7 +34,6 @@ const PINNED: usize = 2;
 pub(crate) struct Model {
   /// What each machine told, and the cards of all of them in the order of the list.
   pub(crate) client: Client,
-  pub(crate) selected: Option<Key>,
   /// Whether the resolved threads show their rows.
   pub(crate) open: bool,
   /// Whether the operator changed what the width of the window does with the list: he hid the
@@ -48,13 +45,7 @@ pub(crate) struct Model {
   pub(crate) pointer: Option<(u16, u16)>,
   /// How many rows of the list stand above the first row that shows.
   pub(crate) scroll: usize,
-  /// The millisecond of the clock of the machine.
-  pub(crate) now: u64,
-  /// For how long the loaders moved.
-  pub(crate) moved: Duration,
   pub(crate) size: (u16, u16),
-  /// The folder of the window, whose project a new session starts in.
-  pub(crate) folder: PathBuf,
   /// The home folder of the operator, which a path shows as `~`.
   pub(crate) home: Option<PathBuf>,
   pub(crate) zone: TimeZone,
@@ -65,29 +56,14 @@ pub(crate) struct Model {
   pub(crate) tokens: Tokens,
   /// Why the window could not keep its cards.
   pub(crate) fault: Option<String>,
-  /// The thread that the operator opened.
-  pub(crate) thread: Option<Opened>,
   /// The colors of each text of python that the window drew.
   pub(crate) colors: Colors,
-  /// Where the operator turned the input, away from the open thread.
-  pub(crate) aim: Option<Target>,
-  /// The text of the input, as its editor holds it, and whether it is a word of python that runs.
-  pub(crate) draft: Draft,
-  /// The text that comes back to the input after a refusal or a take back, until the editor takes
-  /// it.
-  pub(crate) restore: Option<String>,
   /// What a first press of a key named, which a second press does.
   pub(crate) armed: Option<Armed>,
-  /// What the last key did not do, and why, until the next key.
-  pub(crate) notice: Option<String>,
   /// The list part, while it is open.
   pub(crate) picker: Option<Picker>,
   /// The word of python that the window ran last, until the next one goes or an escape.
   pub(crate) word: Option<Word>,
-  /// The history of the input, for its target.
-  pub(crate) history: Option<History>,
-  /// The walk through the history of the input, from its first up arrow until he writes or sends.
-  pub(crate) walk: Option<Walk>,
 }
 
 impl Model {
@@ -99,34 +75,23 @@ impl Model {
     options: &Options,
   ) -> Self {
     Self {
-      client: Client::new(machines),
-      selected: None,
+      client: Client::new(machines, options.folder.display().to_string()),
       open: false,
       toggled: false,
       slow: false,
       pointer: None,
       scroll: 0,
-      now: 0,
-      moved: Duration::ZERO,
       size,
-      folder: options.folder.clone(),
       home: options.home.clone(),
       zone: options.zone.clone(),
       system: options.system,
       browse: options.browse,
       tokens,
       fault: None,
-      thread: None,
       colors: Colors::new(),
-      aim: None,
-      draft: Draft::default(),
-      restore: None,
       armed: None,
-      notice: None,
       picker: None,
       word: None,
-      history: None,
-      walk: None,
     }
   }
 
@@ -148,7 +113,7 @@ impl Model {
       }
       Ok(Frame::Thread { life, thread, page }) => return self.changed(at, (&life, &thread), page),
       Ok(Frame::Opening { life, stage, done, of }) => {
-        return self.client.opening(at, life, Step { stage, done, of, at: self.moved });
+        return self.client.opening(at, life, Step { stage, done, of, at: self.client.moved });
       }
       Ok(Frame::Cards { ref life, ref changed, .. }) if changed.iter().any(|card| !card.held) => {
         self.client.let_go(at, life);
@@ -177,7 +142,7 @@ impl Model {
     // never loses a word, and the thread shows whether the message still runs.
     for one in &gone {
       if let Asked::Back(text) = one {
-        self.restore = Some(self.before_draft(text.clone()));
+        self.client.restore = Some(self.before_draft(text.clone()));
       }
     }
     if gone.contains(&Asked::Answer) {
@@ -186,12 +151,12 @@ impl Model {
     if self.client.outgoing.iter().any(|one| one.at == at) {
       let why =
         format!("{name} went away before it took your message. If the thread shows it, it went.");
-      self.restore = Some(self.refused(why));
+      self.client.restore = Some(self.refused(why));
     }
     for (_, hold) in self.client.holds.iter_mut().filter(|one| one.0.0 == at) {
       hold.ask = Ask::Due;
     }
-    if let Some(opened) = self.thread.as_mut().filter(|one| one.thread.key.0 == at) {
+    if let Some(opened) = self.client.thread.as_mut().filter(|one| one.thread.key.0 == at) {
       opened.thread.asked.clear();
       opened.thread.again = true;
     }
@@ -206,9 +171,13 @@ impl Model {
   fn answered_input(&mut self, at: usize, (id, asked): (u64, Asked), heard: Heard) {
     match (asked, heard) {
       (Asked::Open, Ok(Frame::Reply { .. })) => self.client.answered_open(at, id),
-      (Asked::Open, Ok(Frame::Refused { why, .. })) => self.restore = self.unopened(at, id, why),
+      (Asked::Open, Ok(Frame::Refused { why, .. })) => {
+        self.client.restore = self.unopened(at, id, why);
+      }
       (Asked::Say, Ok(Frame::Reply { answer, .. })) => self.replied(answer),
-      (Asked::Back(text), Ok(Frame::Reply { .. })) => self.restore = Some(self.before_draft(text)),
+      (Asked::Back(text), Ok(Frame::Reply { .. })) => {
+        self.client.restore = Some(self.before_draft(text));
+      }
       (Asked::Answer, Ok(Frame::Refused { why, .. })) => self.unanswered(why),
       (Asked::Ended, Ok(Frame::Reply { answer: Answer::Acts(acts), .. })) => self.ran(acts),
       (Asked::Ended, Ok(Frame::Refused { why, .. })) => (self.word, self.fault) = (None, Some(why)),
@@ -235,10 +204,10 @@ impl Model {
         (self.client.machines[at].models, self.fault) = (Some(Vec::new()), Some(why));
       }
       (Asked::History(target), Ok(Frame::Reply { answer: Answer::History(sent), .. })) => {
-        self.historied(&target, sent);
+        self.client.historied(&target, sent);
       }
       (Asked::Answer, _) => {}
-      (_, Ok(Frame::Refused { why, .. })) => self.restore = Some(self.refused(why)),
+      (_, Ok(Frame::Refused { why, .. })) => self.client.restore = Some(self.refused(why)),
       _ => {}
     }
   }
@@ -247,17 +216,18 @@ impl Model {
   pub(crate) fn settle(&mut self) {
     // Once its machine told the card of a thread that the window started, the machine says how it
     // stands, also when the card goes.
-    let told = self.thread.as_ref().is_some_and(|one| self.client.card(&one.thread.key).is_some());
-    if let Some(opened) = self.thread.as_mut().filter(|_| told) {
+    let told =
+      self.client.thread.as_ref().is_some_and(|one| self.client.card(&one.thread.key).is_some());
+    if let Some(opened) = self.client.thread.as_mut().filter(|_| told) {
       opened.thread.started = false;
     }
     let untold = self.untold();
     self.client.settle(untold.as_ref());
     // The thread that the window opened stays selected while its card is not told yet.
-    let open = self.thread.as_ref().map(|one| &one.thread.key);
+    let open = self.client.thread.as_ref().map(|one| &one.thread.key);
     let stands =
       |key: &Key| open == Some(key) || self.client.settled.iter().any(|one| one.1 == *key);
-    self.selected = self.selected.take().filter(stands);
+    self.client.selected = self.client.selected.take().filter(stands);
     self.scrolled(0);
   }
 
@@ -268,6 +238,7 @@ impl Model {
     // head does, so the keys reach each row that the pointer reaches.
     let above = self.client.settled.iter().filter(|one| one.0 != Part::Resolved).count();
     let at = self
+      .client
       .selected
       .as_ref()
       .and_then(|key| self.client.settled.iter().position(|one| one.1 == *key));
@@ -277,13 +248,13 @@ impl Model {
     }
     let shown = |(part, ..): &&(Part, Key, Card)| self.open || *part != Part::Resolved;
     let keys: Vec<&Key> = self.client.settled.iter().filter(shown).map(|one| &one.1).collect();
-    let at = self.selected.as_ref().and_then(|key| keys.iter().position(|one| *one == key));
+    let at = self.client.selected.as_ref().and_then(|key| keys.iter().position(|one| *one == key));
     let next = match at {
       Some(at) => at.saturating_add_signed(by).min(keys.len().saturating_sub(1)),
       None if by > 0 => 0,
       None => keys.len().saturating_sub(1),
     };
-    self.selected = keys.get(next).map(|key| (*key).clone());
+    self.client.selected = keys.get(next).map(|key| (*key).clone());
     self.reveal();
   }
 
@@ -297,10 +268,10 @@ impl Model {
       .filter(|one| self.needs(&one.1, &one.2))
       .map(|one| &one.1)
       .collect();
-    let at = self.selected.as_ref().and_then(|key| needs.iter().position(|one| *one == key));
+    let at = self.client.selected.as_ref().and_then(|key| needs.iter().position(|one| *one == key));
     let next = at.map_or(0, |at| (at + 1) % needs.len().max(1));
     if let Some(key) = needs.get(next) {
-      self.selected = Some((*key).clone());
+      self.client.selected = Some((*key).clone());
       self.reveal();
     }
   }
@@ -313,13 +284,13 @@ impl Model {
       Some(Row::Scope) => return Some(Does::GoTo),
       Some(Row::Key(does)) => return Some(does),
       Some(Row::Card(at, _) | Row::Resolved(at)) => {
-        self.selected = self.client.settled.get(at).map(|one| one.1.clone());
+        self.client.selected = self.client.settled.get(at).map(|one| one.1.clone());
         self.open_thread();
         // A click on a thread shows its end, also when it is open already.
         self.jump();
       }
       Some(Row::Context(_)) => {
-        if let Some(opened) = self.thread.as_mut() {
+        if let Some(opened) = self.client.thread.as_mut() {
           opened.fold(Fold::Context);
         }
       }
@@ -420,13 +391,13 @@ impl Model {
 
   /// The second of the clock of the machine.
   pub(crate) fn second(&self) -> u64 {
-    self.now / 1000
+    self.client.now / 1000
   }
 
   /// How many whole seconds passed since a millisecond of the epoch, from one second on: a time of
   /// a work shows only after a whole second of it.
   pub(crate) fn since(&self, began: u64) -> Option<u64> {
-    since(began, self.now)
+    since(began, self.client.now)
   }
 
   /// How long ago a second was, from one minute on.
@@ -475,7 +446,7 @@ impl Model {
   /// The list moved as far as the selected card needs to show, with the row above it and the row
   /// under it.
   fn reveal(&mut self) {
-    let Some(key) = &self.selected else { return };
+    let Some(key) = &self.client.selected else { return };
     let card = |row: &Row| match row {
       Row::Card(at, _) | Row::Resolved(at) => self.client.settled[*at].1 == *key,
       _ => false,

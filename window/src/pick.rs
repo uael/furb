@@ -4,8 +4,6 @@
 //! closes it and gives the focus back to the input. The pointer does the same: a click takes a row,
 //! and a click beside the part closes it.
 
-use std::path::Path;
-
 use furb::view::Part;
 use furb_host::protocol::Card;
 use nucleo_matcher::{
@@ -150,7 +148,7 @@ impl Model {
     }
     self.picker = Some(Picker { of, filter: String::new(), at: 0, slashed: false });
     if of == Pick::Sessions {
-      let now = match self.target() {
+      let now = match self.client.target() {
         Target::Thread(key) => Target::Session(key.0, key.1),
         other => other,
       };
@@ -298,7 +296,7 @@ impl Model {
   /// The sessions that the input can send to: a new session on this machine, then each session
   /// of the cards once, by its machine and its record, with its name and its project.
   fn sessions(&self) -> Vec<Entry> {
-    let new = Choice::Session(Target::New(0, self.folder.display().to_string()));
+    let new = Choice::Session(Target::New(0, self.client.folder.clone()));
     let left = "+ new session".to_owned();
     let here = self.project();
     let mut all = vec![Entry {
@@ -331,7 +329,7 @@ impl Model {
   /// The machines that a new session runs on: this computer first, each with its state, and a new
   /// session on each runs in the project that it used last, or in the folder of the window here.
   fn machines(&self) -> Vec<Entry> {
-    let here = self.folder.display().to_string();
+    let here = self.client.folder.clone();
     let entry = |(at, told): (usize, &Told)| {
       let name = if at == 0 { "This computer".to_owned() } else { told.name.clone() };
       let folder = told.projects.first().map(|one| one.folder.clone());
@@ -352,9 +350,9 @@ impl Model {
   /// folder of the window first on this computer, then each that the machine gave, the one used
   /// last first, with its count of sessions.
   fn projects(&self) -> Vec<Entry> {
-    let at = self.target().machine();
+    let at = self.client.target().machine();
     let Some(told) = self.client.machines.get(at) else { return Vec::new() };
-    let here = self.folder.display().to_string();
+    let here = self.client.folder.clone();
     let first = (at == 0 && !told.projects.iter().any(|one| one.folder == here)).then_some(&here);
     let counted = told.projects.iter().map(|one| (&one.folder, Some(one.sessions)));
     let all = first.map(|one| (one, None)).into_iter().chain(counted);
@@ -380,7 +378,7 @@ impl Model {
   /// one that it takes when the operator names none. A model takes the effort that the input
   /// speaks at when it offers it.
   fn models(&self) -> Vec<Entry> {
-    let at = self.target().machine();
+    let at = self.client.target().machine();
     let offered = self.client.machines.get(at).and_then(|told| told.models.as_ref());
     let effort = self.actor().and_then(|one| one.1);
     let entry = |model: &Offered| {
@@ -436,17 +434,19 @@ impl Model {
 
   /// The thread of a card opened in the window.
   fn went(&mut self, key: Key) {
-    self.selected = Some(key);
+    self.client.selected = Some(key);
     self.open_thread();
   }
 
   /// The input turned to a target: none for the thread that is open, or for a new session when no
   /// thread is.
   fn aimed(&mut self, target: Target) {
-    let open = self.thread.as_ref().map(|one| (one.thread.key.0, one.thread.key.1.clone()));
-    self.aim = match target {
+    let open = self.client.thread.as_ref().map(|one| (one.thread.key.0, one.thread.key.1.clone()));
+    self.client.aim = match target {
       Target::Session(at, life) if open == Some((at, life.clone())) => None,
-      Target::New(0, ref folder) if self.thread.is_none() && Path::new(folder) == self.folder => {
+      Target::New(0, ref folder)
+        if self.client.thread.is_none() && *folder == self.client.folder =>
+      {
         None
       }
       other => Some(other),

@@ -4,8 +4,7 @@
 
 #![cfg(test)]
 
-use std::time::Duration;
-
+use furb_client::HOLD;
 use furb_host::protocol::{Answer, Verb};
 use furb_window::{open, tokens::AWAY};
 use opentui::testing::TestApp;
@@ -18,9 +17,6 @@ use crate::{
   screens::screen,
   thread::clicked,
 };
-
-/// How long a form takes no key after it shows.
-const HOLD: Duration = Duration::from_millis(400);
 
 /// The head of each form, which names who asks: the model of the test.
 const ASKER: &str = "◆ opus/high asks";

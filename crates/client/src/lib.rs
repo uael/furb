@@ -2,31 +2,66 @@
 //! stand, each life that the client holds with how far its open stands, and what it sends: each
 //! message in one queue, each verb that is due, and the thread that it reads, page by page. It does
 //! no input and no output: a client gives it each frame that a machine sends and sends each verb
-//! that is due, so a window, a phone or a test drives the machines the same way.
+//! that is due, so a window, a phone or a test drives the machines the same way. It holds the
+//! thread that the operator reads and the input, with its target and its history, so each client
+//! maps the same state.
 
+mod history;
+mod input;
 mod machine;
 mod opens;
 mod outbox;
+mod question;
 mod thread;
 
-use std::collections::{HashMap, VecDeque};
+use std::{
+  collections::{HashMap, VecDeque},
+  time::Duration,
+};
 
 use furb_wire::{Part, protocol::Card};
 
+pub use history::{History, Walk};
+pub use input::Draft;
 pub use machine::{Heard, Key, Link, Listing, Told};
 pub use opens::{Ask, Hold, Life, Step};
 pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
-pub use thread::{PAGE, Pending, Thread};
+pub use question::{Form, HOLD};
+pub use thread::{Anchor, Fold, Opened, PAGE, Pending, Thread, rests};
 
 /// What each machine told, the cards of all of them in the order of the list as it last settled,
 /// each with the part that it had then and with its state as its machine last told it, each life
-/// that the client holds, the messages that wait to be sent, the first one first, and each request
-/// that waits for its answer, by its machine and its id.
+/// that the client holds, the thread that the operator reads, the input, the messages that wait to
+/// be sent, the first one first, and each request that waits for its answer, by its machine and
+/// its id.
 #[derive(Debug, Default)]
 pub struct Client {
   pub machines: Vec<Told>,
   pub settled: Vec<(Part, Key, Card)>,
+  /// The card that the operator selected, whose thread he reads.
+  pub selected: Option<Key>,
   pub holds: HashMap<Life, Hold>,
+  /// The thread that the operator reads.
+  pub thread: Option<Opened>,
+  /// The folder of the client, whose project a new session on its own machine starts in.
+  pub folder: String,
+  /// Where the operator turned the input, away from the open thread.
+  pub aim: Option<Target>,
+  /// The text of the input, and whether it is a word of python that runs.
+  pub draft: Draft,
+  /// The text that the input takes after a refusal, a take back or a step of the history, until
+  /// the client gives it to the editor of its input.
+  pub restore: Option<String>,
+  /// The history of the input, for its target.
+  pub history: Option<History>,
+  /// The walk through the history of the input, from its first step until he writes or sends.
+  pub walk: Option<Walk>,
+  /// What the last thing that the operator did did not do, and why, until the next one.
+  pub notice: Option<String>,
+  /// The millisecond of the clock of the machine of the client.
+  pub now: u64,
+  /// How long the client ran, on the clock of its loaders.
+  pub moved: Duration,
   pub outgoing: VecDeque<Outgoing>,
   /// The actor that the operator chose last, for its target.
   pub chosen: Option<Chosen>,
@@ -36,8 +71,8 @@ pub struct Client {
 }
 
 impl Client {
-  /// A client of the machines, with what each told before.
-  pub fn new(machines: Vec<Told>) -> Self {
-    Self { machines, next: outbox::FIRST, ..Self::default() }
+  /// A client of the machines, with what each told before, in a folder.
+  pub fn new(machines: Vec<Told>, folder: String) -> Self {
+    Self { machines, folder, next: outbox::FIRST, ..Self::default() }
   }
 }

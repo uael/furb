@@ -9,7 +9,7 @@
 //! that the question waits. Which question is open, and what its shape offers and takes, comes
 //! from the crate: the form only draws it and says his answer.
 
-use std::{collections::BTreeSet, time::Duration};
+use std::collections::BTreeSet;
 
 use furb::view::{
   Answered, Maker, Part, REFUSED, Reply, Saying, Standing, Tick, choices, declined, hint, ticks,
@@ -17,7 +17,7 @@ use furb::view::{
 use furb_host::protocol::{Card, Verb};
 use opentui::style::Style;
 
-use furb_client::Asked;
+use furb_client::{Asked, Form, HOLD};
 
 use crate::{
   keys::Does,
@@ -26,21 +26,6 @@ use crate::{
   thread::{Click, Row, width},
   tokens::Role,
 };
-
-/// How long a form takes no key after it shows, so a key that the operator pressed for another
-/// thing answers nothing.
-pub(crate) const HOLD: Duration = Duration::from_millis(400);
-
-/// The form of the open thread: the act of the question that it shows, the row that the operator
-/// chose, the values that he ticked, when it showed, and why the daemon refused his last answer.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Form {
-  pub(crate) act: String,
-  pub(crate) at: usize,
-  pub(crate) ticked: BTreeSet<usize>,
-  pub(crate) since: Duration,
-  pub(crate) why: Option<String>,
-}
 
 /// A question of the open thread that waits for the operator: its act, who asks, its text and the
 /// shape of its answer.
@@ -104,7 +89,7 @@ pub(crate) enum Keyed {
 impl Model {
   /// Each question of the open thread that waits for the operator, in the order of the thread.
   pub(crate) fn questions(&self) -> Vec<Question<'_>> {
-    let Some(opened) = &self.thread else { return Vec::new() };
+    let Some(opened) = &self.client.thread else { return Vec::new() };
     let open = opened.thread.exchanges.values().flat_map(|exchange| {
       let by = exchange.block.as_ref().map(|block| &block.maker);
       exchange.said.iter().filter_map(move |said| match &said.kind {
@@ -122,14 +107,15 @@ impl Model {
   /// the thread is empty. The text of a form that goes leaves the input.
   pub(crate) fn questioned(&mut self) {
     let questions: Vec<String> = self.questions().iter().map(|one| one.act.to_owned()).collect();
-    let free = self.aim.is_none() && self.picker.is_none() && self.draft.text.is_empty();
-    let moved = self.moved;
-    let Some(opened) = self.thread.as_mut() else { return };
+    let free =
+      self.client.aim.is_none() && self.picker.is_none() && self.client.draft.text.is_empty();
+    let moved = self.client.moved;
+    let Some(opened) = self.client.thread.as_mut() else { return };
     let waits = |form: &Form| questions.contains(&form.act);
     if opened.form.as_ref().is_some_and(|form| !waits(form)) {
       opened.form = None;
-      if !self.draft.text.is_empty() {
-        self.restore = Some(String::new());
+      if !self.client.draft.text.is_empty() {
+        self.client.restore = Some(String::new());
       }
     }
     if opened.form.is_none()
@@ -143,7 +129,7 @@ impl Model {
 
   /// The form that shows, with its question.
   pub(crate) fn form(&self) -> Option<(&Form, Question<'_>)> {
-    let form = self.thread.as_ref()?.form.as_ref()?;
+    let form = self.client.thread.as_ref()?.form.as_ref()?;
     let question = self.questions().into_iter().find(|one| one.act == form.act)?;
     Some((form, question))
   }
@@ -162,14 +148,14 @@ impl Model {
     let mine = typed
       || matches!(does, Some(Does::Send | Does::Empty | Does::NextQuestion | Does::Tick))
       || (values > 0 && matches!(does, Some(Does::Up | Does::Down)));
-    if mine && self.moved.saturating_sub(form.since) < HOLD {
+    if mine && self.client.moved.saturating_sub(form.since) < HOLD {
       return Keyed::Taken;
     }
     let says =
       |asked: Option<(usize, Verb)>| asked.map_or(Keyed::Taken, |(at, verb)| Keyed::Says(at, verb));
     match does {
       Some(Does::Send) => says(self.answer()),
-      Some(Does::Empty) if !self.draft.text.is_empty() => Keyed::Empties,
+      Some(Does::Empty) if !self.client.draft.text.is_empty() => Keyed::Empties,
       Some(Does::Empty) => says(self.refuse()),
       Some(Does::NextQuestion) => match self.next_question() {
         Some(act) => {
@@ -196,7 +182,7 @@ impl Model {
 
   /// A change of the form, which takes the key.
   fn formed(&mut self, change: impl FnOnce(&mut Form)) -> Keyed {
-    if let Some(form) = self.thread.as_mut().and_then(|one| one.form.as_mut()) {
+    if let Some(form) = self.client.thread.as_mut().and_then(|one| one.form.as_mut()) {
       change(form);
     }
     Keyed::Taken
@@ -215,10 +201,10 @@ impl Model {
   /// there. Within [`HOLD`] the click does nothing.
   pub(crate) fn choose(&mut self, at: usize) -> Option<Does> {
     let (form, _) = self.form()?;
-    if self.moved.saturating_sub(form.since) < HOLD {
+    if self.client.moved.saturating_sub(form.since) < HOLD {
       return None;
     }
-    self.thread.as_mut()?.form.as_mut()?.at = at;
+    self.client.thread.as_mut()?.form.as_mut()?.at = at;
     Some(Does::Send)
   }
 
@@ -227,10 +213,10 @@ impl Model {
   /// the line that he wrote.
   fn answer(&self) -> Option<(usize, Verb)> {
     let (form, question) = self.form().filter(|_| !self.answering())?;
-    let opened = self.thread.as_ref()?;
+    let opened = self.client.thread.as_ref()?;
     let (at, life, act) = (opened.thread.key.0, opened.thread.key.1.clone(), form.act.clone());
     let answer = |line: String| Verb::Answer { life: life.clone(), act: act.clone(), line };
-    let words = self.draft.text.clone();
+    let words = self.client.draft.text.clone();
     let verb = match Offers::of(question.shape) {
       Offers::Choices(all) if form.at < all.len() => answer(all[form.at].clone()),
       Offers::Ticks(all) if form.at < all.len() => {
@@ -247,7 +233,7 @@ impl Model {
   /// The refusal of the question of the form, with no words.
   fn refuse(&self) -> Option<(usize, Verb)> {
     let (form, _) = self.form().filter(|_| !self.answering())?;
-    let opened = self.thread.as_ref()?;
+    let opened = self.client.thread.as_ref()?;
     let (at, life, act) = (opened.thread.key.0, opened.thread.key.1.clone(), form.act.clone());
     Some((at, Verb::Close { life, act, value: declined(REFUSED) }))
   }
@@ -260,7 +246,7 @@ impl Model {
   /// The refusal of the daemon of the last answer of the form, and why: the form stays as it was,
   /// with his words, and says why.
   pub(crate) fn unanswered(&mut self, why: String) {
-    if let Some(form) = self.thread.as_mut().and_then(|one| one.form.as_mut()) {
+    if let Some(form) = self.client.thread.as_mut().and_then(|one| one.form.as_mut()) {
       form.why = Some(why);
     }
   }
@@ -351,7 +337,7 @@ impl Model {
 
   /// The row that says that a question of the open thread waits while the operator writes.
   pub(crate) fn waiting_row(&self) -> Option<Row> {
-    let shows = self.form().is_some() || self.aim.is_some() || self.questions().is_empty();
+    let shows = self.form().is_some() || self.client.aim.is_some() || self.questions().is_empty();
     if shows {
       return None;
     }
@@ -384,7 +370,9 @@ impl Model {
   /// How many threads but the open one ask the operator, as the row of hints of a thread says it
   /// in a count of columns: whole, then shorter. The home says what needs him.
   pub(crate) fn others_ask(&self, room: usize) -> Line {
-    let Some(open) = self.thread.as_ref().map(|one| &one.thread.key) else { return Vec::new() };
+    let Some(open) = self.client.thread.as_ref().map(|one| &one.thread.key) else {
+      return Vec::new();
+    };
     let asks = |one: &&(Part, Key, Card)| {
       one.1 != *open
         && matches!(one.2.thread.standing, Standing::Asks { .. })

@@ -7,7 +7,7 @@ use furb::view::{
   Agent, Block, Exchange, Line as Code, Maker, Mark, Output, Retrying, Said, Saying, Standing,
   Thought, Work, lines, timer,
 };
-use furb_client::Target;
+use furb_client::{Fold, Opened, Target, rests};
 use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
 
@@ -20,7 +20,7 @@ use crate::{
   model::Model,
   prose,
   question::closed,
-  thread::{Click, Fold, Item, Items, Opened, Row, rests, width},
+  thread::{Click, Item, Items, Row, width},
   tokens::{APART, Loader, Role},
 };
 
@@ -37,7 +37,7 @@ pub(crate) struct Feed<'a> {
 impl Model {
   /// The rows of the open thread.
   pub(crate) fn feed(&self) -> Option<Feed<'_>> {
-    let opened = self.thread.as_ref()?;
+    let opened = self.client.thread.as_ref()?;
     Some(Feed { model: self, opened, wide: self.wide() })
   }
 }
@@ -166,8 +166,8 @@ impl Feed<'_> {
         };
         // The button turns the input to the thread, so it stands only while the input sends
         // elsewhere or runs a word: a button that would change nothing does not show.
-        let replies = self.model.target() == Target::Thread(self.opened.thread.key.clone())
-          && !self.model.draft.python;
+        let replies = self.model.client.target() == Target::Thread(self.opened.thread.key.clone())
+          && !self.model.client.draft.python;
         (Some(mark), (!replies).then(|| (run(" Reopen ", button), Does::Resolve)))
       }
       Some(thread)

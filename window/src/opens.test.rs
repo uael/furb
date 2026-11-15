@@ -54,7 +54,7 @@ fn carded(system: System, refused: Option<&str>) -> Model {
   };
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);
   model.settle();
-  model.selected = Some((0, life, "prompt0".to_owned()));
+  model.client.selected = Some((0, life, "prompt0".to_owned()));
   model.open_thread();
   model
 }
@@ -63,7 +63,7 @@ fn carded(system: System, refused: Option<&str>) -> Model {
 /// session.
 fn failed(system: System) -> Vec<String> {
   let mut model = carded(system, None);
-  let opened = model.thread.as_mut().expect("the thread opens");
+  let opened = model.client.thread.as_mut().expect("the thread opens");
   opened.thread.fault =
     Some(format!("Refused: Another process owns {}.", "/home/ada/furb/x.jsonl"));
   let left = model.left();
@@ -96,11 +96,11 @@ fn a_page_refused_while_its_life_opens_ends_the_open_on_its_card_too() {
   };
   let told = Told { name: "mac".to_owned(), link: Link::Listed, ..Told::default() };
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);
-  model.selected = Some((0, life.clone(), "prompt0".to_owned()));
+  model.client.selected = Some((0, life.clone(), "prompt0".to_owned()));
   model.open_thread();
-  model.moved = Duration::from_secs(1);
+  model.client.moved = Duration::from_secs(1);
   assert!(model.shown_open(0, &life).is_some(), "the card says that the life opens");
-  model.thread.as_mut().expect("the thread opens").thread.asked.insert(7, None);
+  model.client.thread.as_mut().expect("the thread opens").thread.asked.insert(7, None);
   let why = "Refused: Another process owns the record.".to_owned();
   assert!(model.answered(0, 7, Err(why)));
   assert!(model.shown_open(0, &life).is_none(), "the card says no open once the open failed");
@@ -124,7 +124,7 @@ fn a_thread_whose_card_only_reads_says_so_before_its_machine_answers() {
 fn a_thread_whose_card_only_reads_needs_no_one_on_the_home_as_in_the_list() {
   let mut model =
     carded(System::MacOs, Some("the record comes from a build before the stable cut"));
-  model.thread = None;
+  model.client.thread = None;
   model.client.machines[0].cards[0].thread.standing = Standing::Asks { of: None };
   model.settle();
   let home: Vec<String> = model

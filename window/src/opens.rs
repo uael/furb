@@ -61,7 +61,7 @@ impl Model {
   /// The open of a life that runs and that the window says, from [`QUIET`] on.
   pub(crate) fn shown_open(&self, at: usize, life: &str) -> Option<&Hold> {
     let hold = self.client.holds.get(&(at, life.to_owned()))?;
-    (hold.runs() && self.moved.saturating_sub(hold.since) >= QUIET).then_some(hold)
+    (hold.runs() && self.client.moved.saturating_sub(hold.since) >= QUIET).then_some(hold)
   }
 
   /// The refusal of the daemon to open a life under the id of its request, and why: the window
@@ -71,8 +71,11 @@ impl Model {
     let asked = |(key, hold): &(&Life, &Hold)| key.0 == at && hold.ask == Ask::Sent(id);
     let life = self.client.holds.iter().find(asked).map(|(key, _)| key.clone())?;
     self.client.holds.remove(&life);
-    if let Some(opened) =
-      self.thread.as_mut().filter(|one| (one.thread.key.0, &one.thread.key.1) == (at, &life.1))
+    if let Some(opened) = self
+      .client
+      .thread
+      .as_mut()
+      .filter(|one| (one.thread.key.0, &one.thread.key.1) == (at, &life.1))
     {
       opened.thread.fault = Some(why.clone());
     }
@@ -87,19 +90,22 @@ impl Model {
   /// so the thread shows the same whatever came first.
   pub(crate) fn failed(&mut self, at: usize, life: &str, fault: String) -> bool {
     let key = (at, life.to_owned());
-    let open =
-      self.thread.as_ref().is_some_and(|one| (one.thread.key.0, &one.thread.key.1) == (at, &key.1));
+    let open = self
+      .client
+      .thread
+      .as_ref()
+      .is_some_and(|one| (one.thread.key.0, &one.thread.key.1) == (at, &key.1));
     if !open && !self.client.holds.contains_key(&key) {
       return false;
     }
-    let since = self.moved;
+    let since = self.client.moved;
     let gone =
       || Hold { cwd: None, actor: None, ask: Ask::Due, since, stood: true, steps: Vec::new() };
     let hold = self.client.holds.entry(key).or_insert_with(gone);
     hold.ask = Ask::Failed(fault.clone());
     let actor = hold.actor.clone();
     if !self.client.outgoing.is_empty() {
-      self.restore = Some(self.refused(fault));
+      self.client.restore = Some(self.refused(fault));
       // The model that he chose for the session that did not open stays his choice.
       if let Some(actor) = actor {
         self.took_actor(actor);
@@ -113,12 +119,13 @@ impl Model {
   /// the head and the page change in one frame.
   pub(crate) fn open_shown(&self) -> Option<&Hold> {
     let opened = self
+      .client
       .thread
       .as_ref()
       .filter(|one| one.thread.above.is_none() && one.thread.fault.is_none())?;
     let hold = self.client.holds.get(&(opened.thread.key.0, opened.thread.key.1.clone()))?;
     let after = hold.ended().is_none_or(|ended| ended > opened.thread.since);
-    let waited = self.moved.saturating_sub(hold.since) >= QUIET;
+    let waited = self.client.moved.saturating_sub(hold.since) >= QUIET;
     (!hold.stood && after && waited).then_some(hold)
   }
 
@@ -127,7 +134,7 @@ impl Model {
   pub(crate) fn open_rows(&self) -> Vec<Row> {
     let Some(hold) = self.open_shown() else { return Vec::new() };
     let t = &self.tokens;
-    let took = hold.ended().unwrap_or(self.moved).saturating_sub(hold.since);
+    let took = hold.ended().unwrap_or(self.client.moved).saturating_sub(hold.since);
     let over = took > BOUND;
     let color = if over { t.attention } else { t.accent };
     let words = hold.steps.last().map_or("starts", |one| said(one.stage).0);
@@ -162,7 +169,7 @@ impl Model {
   fn stage_row(&self, hold: &Hold, at: usize, step: &Step) -> Row {
     let next = hold.steps.get(at + 1).map(|one| one.at);
     let done = next.is_some() || hold.ended().is_some();
-    let took = next.unwrap_or(self.moved).saturating_sub(step.at);
+    let took = next.unwrap_or(self.client.moved).saturating_sub(step.at);
     let (words, unit) = said(step.stage);
     let style = self.tokens.style(if done { Role::Muted } else { Role::Prose });
     let mark = if done { "✓" } else { " " };

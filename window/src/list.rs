@@ -1,7 +1,7 @@
 //! The list of cards: its rows, and the runs of each row. It is a function of the model, and only
 //! the rows that show are written.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use furb::view::{Part, Standing};
 use furb_host::protocol::Card;
@@ -111,7 +111,7 @@ impl Model {
           run(one.content, style)
         };
         // The box takes a click once an answer told the context, which its parts then show.
-        let told = self.thread.as_ref().is_some_and(|one| one.thread.context.is_some());
+        let told = self.client.thread.as_ref().is_some_and(|one| one.thread.context.is_some());
         if told && matches!(pointed, Some(Row::Context(_))) {
           line.into_iter().map(lit).collect()
         } else {
@@ -122,7 +122,7 @@ impl Model {
   }
 
   fn chosen(&self, at: usize) -> bool {
-    self.selected.as_ref() == Some(&self.client.settled[at].1)
+    self.client.selected.as_ref() == Some(&self.client.settled[at].1)
   }
 
   /// The ground of a card: the selected card is lifted, and the text of the card under the
@@ -136,7 +136,8 @@ impl Model {
   /// and how the machines stand.
   fn scope(&self, pointed: bool) -> Line {
     let t = &self.tokens;
-    let project = self.folder.file_name().map(|name| name.to_string_lossy().into_owned());
+    let project =
+      Path::new(&self.client.folder).file_name().map(|name| name.to_string_lossy().into_owned());
     let scope = if self.client.settled.is_empty() {
       project.unwrap_or_default()
     } else {
@@ -148,9 +149,13 @@ impl Model {
     let machines = match (lost().count(), dials, self.client.machines.len()) {
       (1, ..) => format!("{} offline", lost().next().map_or("", |one| &one.name)),
       (2.., ..) => format!("{} machines offline", lost().count()),
-      (0, Some(0), _) => format!("{} Dialing", Loader::Model.frame(self.moved)),
+      (0, Some(0), _) => format!("{} Dialing", Loader::Model.frame(self.client.moved)),
       (0, Some(at), _) => {
-        format!("{} Dialing {}", Loader::Model.frame(self.moved), self.client.machines[at].name)
+        format!(
+          "{} Dialing {}",
+          Loader::Model.frame(self.client.moved),
+          self.client.machines[at].name
+        )
       }
       (0, None, 1) => "this machine".to_owned(),
       (0, None, count) => format!("{count} machines"),
@@ -275,7 +280,7 @@ impl Model {
     let confirmed = self.confirmed(key);
     if let Some(hold) = self.shown_open(key.0, &card.life).filter(|_| confirmed) {
       let share = hold.share().map(|share| format!(" {share}%")).unwrap_or_default();
-      let opens = format!("{} Opening{share}", Loader::Model.frame(self.moved));
+      let opens = format!("{} Opening{share}", Loader::Model.frame(self.client.moved));
       return vec![run(opens, colored(t.accent))];
     }
     // A life that a fault ended works no more, whatever the record left at work.
@@ -284,8 +289,9 @@ impl Model {
     }
     let (needs, age) = (self.needs(key, card), self.age(card.since));
     let since = || Some(age.clone().unwrap_or_else(|| "now".to_owned()));
-    let working =
-      |loader: Loader| (loader.frame(self.moved), "Working".into(), Some(t.accent), age.clone());
+    let working = |loader: Loader| {
+      (loader.frame(self.client.moved), "Working".into(), Some(t.accent), age.clone())
+    };
     // The mark, the word, the color of both, and the time of the state.
     let (mark, word, color, time) = match &card.thread.standing {
       Standing::Asks { .. } if needs => ("◆", "Input".into(), Some(t.attention), None),

@@ -1,18 +1,11 @@
-//! The input: where it sends, what waits to be sent, and its rows, with the line of the launcher
-//! under it.
-//!
-//! The input sends to its target: the open thread, a new thread of a session, or a new session in
-//! the project of the folder of the window. Each message waits in one queue, and only one request
-//! of the queue is asked at a time, so each message goes after the one before it, and a message
-//! that goes to the thread that the message before it made knows that thread when it goes. His
-//! message shows in the thread at once, and a message that the daemon refuses comes back to the
-//! input with the message after it.
+//! The input as the window draws it: its rows and the line of the launcher under it, and what a
+//! key of the operator does to it. Where it sends and what it sends stand in the input of
+//! `furb-client`.
 
 use std::{mem, ops::Range, path::Path};
 
 use furb::view::{Act, Maker, RunState, Standing, timer};
 use furb_host::protocol::{Answer, Card, Model as Offered, Verb};
-use jiff::Timestamp;
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
@@ -23,7 +16,7 @@ use crate::{
   line::{Line, clipped, cut, run, spread, wrapped},
   list::project,
   model::{Key, Model},
-  thread::{Click, Hot, Opened, Row, columns, width},
+  thread::{Click, Hot, Row, columns, width},
   tokens::{APART, Loader, Role},
 };
 
@@ -37,13 +30,6 @@ const SESSION: usize = 10;
 /// The fewest columns of the name of a project in the launcher of a new session before it gives
 /// way to its badge alone.
 const SHORTEST: usize = 4;
-
-/// The text of the input, as its editor holds it, and whether it is a word of python that runs.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct Draft {
-  pub(crate) text: String,
-  pub(crate) python: bool,
-}
 
 /// A word of python that the window ran on the root of a life, until the next word goes or an
 /// escape forgets it: its machine, its record, its text, its rung, whether the window asked the end
@@ -91,90 +77,19 @@ pub(crate) struct Area {
 }
 
 impl Model {
-  /// Where the input sends now: where the operator turned it, else the open thread, else a new
-  /// session on this machine.
-  pub(crate) fn target(&self) -> Target {
-    match (&self.aim, &self.thread) {
-      (Some(target), _) => target.clone(),
-      (None, Some(opened)) => Target::Thread(opened.thread.key.clone()),
-      (None, None) => Target::New(0, self.folder.display().to_string()),
-    }
-  }
-
-  /// The input turned to a new thread of the session of the open thread, and back.
-  pub(crate) fn turn(&mut self) {
-    self.aim = match (&self.aim, &self.thread) {
-      (None, Some(opened)) => {
-        Some(Target::Session(opened.thread.key.0, opened.thread.key.1.clone()))
-      }
-      _ => None,
-    };
-  }
-
-  /// The text of the input sent to its target: it waits in the queue, and the thread that it goes
-  /// to shows it at once. A new thread or a new session opens in the window, so the next message
-  /// goes to it. A machine that the window dials again takes nothing, and the text stays in the
-  /// input. Whether the text went.
+  /// The text of the input sent to its target, as the client sends it: whether it went, and else
+  /// why the window says.
   pub(crate) fn send(&mut self, text: String) -> bool {
-    let (at, life, thread, cwd) = match self.target() {
-      Target::Thread(key) => (key.0, key.1.clone(), Some(key.2), self.cwd(key.0, &key.1)),
-      Target::Session(at, life) => (at, life.clone(), None, self.cwd(at, &life)),
-      Target::New(at, folder) => (at, self.record(&folder), None, Some(folder)),
-    };
-    let sent = Outgoing { at, life: life.clone(), thread, text, python: self.draft.python };
-    let open = self.thread.as_mut().map(|one| &mut one.thread);
-    let made = match self.client.send(sent, cwd, self.moved, open) {
-      Ok(made) => made,
-      Err(why) => {
-        self.fault = Some(why);
-        return false;
-      }
-    };
-    // A new session opens on the actor that the operator chose for it.
-    let chosen = self.client.chosen.take_if(|one| one.life.is_none() && one.at == at);
-    if let (Some(chosen), Some(hold)) = (chosen, self.client.holds.get_mut(&(at, life))) {
-      hold.actor = Some(chosen.actor);
+    match self.client.send(text) {
+      Ok(()) => self.fault = None,
+      Err(why) => self.fault = Some(why),
     }
-    if let Some(thread) = made {
-      (self.selected, self.aim) = (Some(thread.key.clone()), None);
-      self.thread = Some(Opened { thread, ..Opened::default() });
-    }
-    (self.fault, self.walk) = (None, None);
-    true
-  }
-
-  /// The folder that the life of a record opens in when no life holds the record: the folder of
-  /// the window for a new record, else the project of its cards.
-  pub(crate) fn cwd(&self, at: usize, life: &str) -> Option<String> {
-    let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
-    match cards.iter().find(|card| card.life == life) {
-      None => Some(self.folder.display().to_string()),
-      Some(card) => card.project.clone(),
-    }
-  }
-
-  /// The record of a new session, in the sessions of the project of a folder, named by the second
-  /// and the moment of the window, so no two windows share it, and past each record that the
-  /// window knows, so no two sessions of one window share it when its clocks stand still.
-  pub(crate) fn record(&self, folder: &str) -> String {
-    let second = Timestamp::from_second(i64::try_from(self.second()).unwrap_or_default());
-    let stamp = second.unwrap_or_default().strftime("%Y-%m-%dT%H-%M-%S");
-    let sessions = Path::new(folder).join(".furb").join("sessions");
-    let named = |n: u128| sessions.join(format!("{stamp}-{:04x}.jsonl", n % 0x1_0000));
-    let known = |life: &str| {
-      self.client.holds.keys().any(|held| held.1 == life)
-        || self.client.machines.iter().any(|one| one.cards.iter().any(|card| card.life == life))
-    };
-    let mut n = self.moved.as_nanos();
-    while known(&named(n).display().to_string()) {
-      n += 1;
-    }
-    named(n).display().to_string()
+    self.fault.is_none()
   }
 
   /// The stop of the work of the open thread: the cancel of its prompt.
   pub(crate) fn stop(&self) -> Option<(usize, Verb)> {
-    let opened = self.thread.as_ref().filter(|one| !one.thread.key.2.is_empty())?;
+    let opened = self.client.thread.as_ref().filter(|one| !one.thread.key.2.is_empty())?;
     let (at, life, act) = opened.thread.key.clone();
     Some((at, Verb::Cancel { life, act, why: None }))
   }
@@ -183,13 +98,13 @@ impl Model {
   /// asks a confirm first, since a resolve stops its work. A thread that ended takes no resolve: a
   /// reply opens it again, so the input turns to it, as a message, at the end of its feed.
   pub(crate) fn resolve(&mut self) -> Option<(usize, Verb)> {
-    let opened = self.thread.as_ref().filter(|one| !one.thread.key.2.is_empty())?;
+    let opened = self.client.thread.as_ref().filter(|one| !one.thread.key.2.is_empty())?;
     let card =
       self.client.card(&opened.thread.key).map(|one| (one.thread.ended(), one.thread.works()));
     let (ended, works) = card.unwrap_or_default();
-    let opened = self.thread.as_mut()?;
+    let opened = self.client.thread.as_mut()?;
     if ended {
-      (self.aim, self.draft.python, opened.top) = (None, false, None);
+      (self.client.aim, self.client.draft.python, opened.top) = (None, false, None);
       return None;
     }
     let armed = Armed::Resolve(opened.thread.key.clone());
@@ -211,7 +126,7 @@ impl Model {
         | (Some(Armed::Back(_)), Does::Empty)
         | (Some(Armed::Leave), Does::Leave)
     );
-    self.notice = None;
+    self.client.notice = None;
     if again {
       return false;
     }
@@ -223,7 +138,7 @@ impl Model {
   /// A first escape that nothing else takes, while the open thread works: the next escape stops its
   /// work.
   pub(crate) fn arm_stop(&mut self) {
-    let card = self.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
+    let card = self.client.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
     if card.is_some_and(|card| card.thread.works()) {
       self.armed = Some(Armed::Stop);
     }
@@ -236,7 +151,7 @@ impl Model {
   /// text.
   pub(crate) fn take_back(&mut self) -> Option<((usize, Verb), String)> {
     let Some(last) = self.last_own() else {
-      self.notice = Some("Nothing that you sent still runs here.".to_owned());
+      self.client.notice = Some("Nothing that you sent still runs here.".to_owned());
       return None;
     };
     let armed = Armed::Back(last.clone());
@@ -247,11 +162,11 @@ impl Model {
     match last {
       Back::Queued(at, text) => {
         self.unqueued(at, &text);
-        self.restore = Some(self.before_draft(text));
+        self.client.restore = Some(self.before_draft(text));
         None
       }
       Back::Said(act, text) => {
-        let (at, life, _) = self.thread.as_ref()?.thread.key.clone();
+        let (at, life, _) = self.client.thread.as_ref()?.thread.key.clone();
         Some(((at, Verb::Cancel { life, act, why: None }), text))
       }
     }
@@ -265,7 +180,7 @@ impl Model {
     if let Some((at, one)) = queued {
       return Some(Back::Queued(at, one.text.clone()));
     }
-    let opened = self.thread.as_ref()?;
+    let opened = self.client.thread.as_ref()?;
     let login = &self.client.machines[opened.thread.key.0].login;
     let his = |by: &Maker| match by {
       Maker::Operator => true,
@@ -280,22 +195,22 @@ impl Model {
   /// new thread that it alone made goes with it.
   fn unqueued(&mut self, at: usize, text: &str) {
     self.client.outgoing.remove(at);
-    let Some(opened) = self.thread.as_mut() else { return };
+    let Some(opened) = self.client.thread.as_mut() else { return };
     if let Some(shown) =
       opened.thread.pending.iter().rposition(|one| one.act.is_none() && one.text == text)
     {
       opened.thread.pending.remove(shown);
     }
     if opened.thread.key.2.is_empty() && opened.thread.pending.is_empty() {
-      self.thread = None;
+      self.client.thread = None;
     }
   }
 
   /// A text that comes back to the input, before what the operator wrote since.
   pub(crate) fn before_draft(&mut self, text: String) -> String {
-    let back = [text, self.draft.text.clone()].into_iter().filter(|one| !one.is_empty());
+    let back = [text, self.client.draft.text.clone()].into_iter().filter(|one| !one.is_empty());
     let text = back.collect::<Vec<_>>().join("\n\n");
-    self.draft.text.clone_from(&text);
+    self.client.draft.text.clone_from(&text);
     text
   }
 
@@ -321,7 +236,7 @@ impl Model {
   pub(crate) fn replied(&mut self, answer: Answer) {
     let Answer::Act(act) = answer else { return };
     let Some(sent) = self.client.outgoing.pop_front() else { return };
-    self.ask_history();
+    self.client.ask_history();
     if sent.python {
       let (at, life, text) = (sent.at, sent.life, sent.text);
       self.word = Some(Word { at, life, text, rung: act, asked: false, ran: None });
@@ -360,14 +275,14 @@ impl Model {
   /// The thread that a message went to, with the act of the message: the open thread takes the
   /// prompt of a thread that it made, and the message stays until the thread shows it.
   fn made(&mut self, sent: &Outgoing, thread: &str, act: String) {
-    let Some(opened) = self.thread.as_mut() else { return };
+    let Some(opened) = self.client.thread.as_mut() else { return };
     if opened.thread.key.0 != sent.at || opened.thread.key.1 != sent.life {
       return;
     }
     if opened.thread.key.2.is_empty() {
       thread.clone_into(&mut opened.thread.key.2);
       opened.thread.above = None;
-      self.selected = Some(opened.thread.key.clone());
+      self.client.selected = Some(opened.thread.key.clone());
     }
     if opened.thread.key.2 == thread
       && let Some(pending) = opened.thread.pending.iter_mut().find(|one| one.act.is_none())
@@ -384,10 +299,10 @@ impl Model {
     self.fault = Some(why);
     let back: Vec<String> =
       mem::take(&mut self.client.outgoing).into_iter().map(|one| one.text).collect();
-    if let Some(opened) = self.thread.as_mut() {
+    if let Some(opened) = self.client.thread.as_mut() {
       opened.thread.pending.retain(|one| one.act.is_some());
       if opened.thread.key.2.is_empty() {
-        self.thread = None;
+        self.client.thread = None;
       }
     }
     self.before_draft(back.join("\n\n"))
@@ -397,7 +312,8 @@ impl Model {
   pub(crate) fn grown(&self) -> usize {
     let room = self.wide().saturating_sub(6).max(1);
     // The editor wraps at a word boundary, as the box of a message does.
-    let rows = self.draft.text.split('\n').map(|line| wrapped(line, room).len().max(1)).sum();
+    let rows =
+      self.client.draft.text.split('\n').map(|line| wrapped(line, room).len().max(1)).sum();
     usize::clamp(rows, 1, GROWS)
   }
 
@@ -409,12 +325,13 @@ impl Model {
   /// The box of the text of the input: over its bands, or over the row of a form where the
   /// operator writes.
   pub(crate) fn area(&self) -> Area {
-    let opens = self.thread.as_ref().is_some_and(|one| self.says_opens(one));
+    let opens = self.client.thread.as_ref().is_some_and(|one| self.says_opens(one));
     let reads = self
+      .client
       .thread
       .as_ref()
       .is_some_and(|one| self.client.fault_of(one.thread.key.0, &one.thread.key.1).is_some());
-    let ended = self.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
+    let ended = self.client.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
     let ended = ended.is_some_and(|card| card.thread.ended());
     let top = usize::from(self.size.1).saturating_sub(self.input_rows());
     let (x, row, height, placeholder) = match (self.form(), self.form_rows(self.grown()).1) {
@@ -426,12 +343,14 @@ impl Model {
       }
       (Some(_), Some(at)) => (4, at, 1, "type another answer".to_owned()),
       (None, _) => {
-        let says = match self.target() {
-          _ if self.draft.python => "A word of Python to run",
+        let says = match self.client.target() {
+          _ if self.client.draft.python => "A word of Python to run",
           Target::Thread(_) if reads => "The window sends nothing to this session",
           Target::Thread(_) if opens => "Your message goes once the session is open",
           Target::Thread(_) if ended => "A reply opens this thread again",
-          Target::Thread(_) if self.thread.as_ref().is_some_and(|one| one.from.is_some()) => {
+          Target::Thread(_)
+            if self.client.thread.as_ref().is_some_and(|one| one.from.is_some()) =>
+          {
             "Write to this agent"
           }
           Target::Thread(_) => "Reply to this thread",
@@ -478,7 +397,7 @@ impl Model {
   /// The bar of the input: the color of the thread that it replies to, or the accent for a new
   /// thread.
   fn bar(&self) -> Color {
-    match self.target() {
+    match self.client.target() {
       Target::Thread(key) => self.hue(&key),
       Target::Session(..) | Target::New(..) => self.tokens.accent,
     }
@@ -503,10 +422,10 @@ impl Model {
     let raised = Style::new().bg(t.raised);
     let muted = t.style(Role::Muted).bg(t.raised);
     let on = t.style(Role::Button);
-    let (message, python) = if self.draft.python { (muted, on) } else { (on, muted) };
+    let (message, python) = if self.client.draft.python { (muted, on) } else { (on, muted) };
     let switch = [run(" Message ", message), run(" Python ", python)];
     let gap = || run(" ".repeat(APART), raised);
-    let (mark, target, color) = match self.target() {
+    let (mark, target, color) = match self.client.target() {
       Target::Thread(key) => ("→ ", self.title().unwrap_or_default(), self.hue(&key)),
       Target::Session(..) => ("+ ", format!("new thread in {}", self.session()), t.accent),
       Target::New(at, folder) => return self.launch(at, &folder, switch),
@@ -596,7 +515,7 @@ impl Model {
 
   /// The words of the control that turns the input to a new thread and back, and its mark alone.
   fn turned(&self) -> Option<(&'static str, &'static str)> {
-    match (&self.aim, &self.thread) {
+    match (&self.client.aim, &self.client.thread) {
       (None, Some(_)) => Some(("+ New thread", "+")),
       (Some(_), Some(_)) => Some(("↩ Back to the thread", "↩")),
       (_, None) => None,
@@ -632,7 +551,7 @@ impl Model {
 
   /// The project and the session that the input sends to.
   fn session(&self) -> String {
-    let (at, life, open) = match self.target() {
+    let (at, life, open) = match self.client.target() {
       Target::Thread(key) => (key.0, key.1, true),
       Target::Session(at, life) => (at, life, false),
       Target::New(_, folder) => return format!("{} · new session", named(&folder)),
@@ -650,7 +569,7 @@ impl Model {
   /// The title of the open thread: the one of its card, else the first line of its first message
   /// that says something, as the daemon titles a card.
   pub(crate) fn title(&self) -> Option<String> {
-    let opened = self.thread.as_ref()?;
+    let opened = self.client.thread.as_ref()?;
     let card = self.client.card(&opened.thread.key).map(|card| card.thread.title.clone());
     let first = || opened.thread.exchanges.get(&0).map(|one| one.text.clone());
     let pending = || opened.thread.pending.first().map(|one| one.text.clone());
@@ -676,13 +595,13 @@ impl Model {
         actor.rsplit_once('/').map_or((actor, None), |(one, two)| (one, Some(two)));
       (name.to_owned(), effort.map(str::to_owned))
     };
-    let target = self.target();
+    let target = self.client.target();
     if let Some(chosen) = self.client.chosen.as_ref().filter(|one| one.aims(&target)) {
       return Some(leveled(&chosen.actor));
     }
     let (at, life) = match target {
       Target::Thread(key) => {
-        let opened = self.thread.as_ref()?;
+        let opened = self.client.thread.as_ref()?;
         let block = opened.thread.exchanges.values().rev().find_map(|one| one.block.as_ref());
         if let Some(Maker::Model { model, effort }) = block.map(|one| &one.maker) {
           return Some((model.clone(), effort.clone()));
@@ -718,12 +637,12 @@ impl Model {
   /// The model of the target of the input at its next effort, from the least again after the
   /// most, as the catalog of its machine gives its efforts.
   pub(crate) fn effort(&mut self) {
-    let at = self.target().machine();
+    let at = self.client.target().machine();
     let Some((model, effort)) = self.actor() else { return };
     let offered = self.client.machines.get(at).and_then(|told| told.models.as_ref());
     let efforts = offered.and_then(|all| all.iter().find(|one| one.name == model));
     let Some(efforts) = efforts.map(|one| &one.efforts).filter(|all| !all.is_empty()) else {
-      self.notice = Some("This model takes no effort.".to_owned());
+      self.client.notice = Some("This model takes no effort.".to_owned());
       return;
     };
     let now = effort.and_then(|effort| efforts.iter().position(|one| *one == effort));
@@ -734,7 +653,7 @@ impl Model {
   /// An actor that the operator chose for the target of the input: a new session opens on it, and
   /// a life that stands takes it on its root, as a word of the operator.
   pub(crate) fn took_actor(&mut self, actor: String) {
-    self.client.chosen = Some(Chosen::of(&self.target(), actor));
+    self.client.chosen = Some(Chosen::of(&self.client.target(), actor));
   }
 
   /// The row of hints: why the daemon refused the last message, else the keys of a form, else the
@@ -745,18 +664,19 @@ impl Model {
   fn hints(&self) -> Row {
     let t = &self.tokens;
     let muted = t.style(Role::Muted);
-    let card = self.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
+    let card = self.client.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
     let ended = self
+      .client
       .thread
       .as_ref()
       .is_some_and(|one| self.client.fault_of(one.thread.key.0, &one.thread.key.1).is_some());
     let works = card.is_some_and(|card| card.thread.works()) && !ended;
     let mut hot = Vec::new();
     // The thread says why it has no page, so the row says it once more only for another fault.
-    let shown = self.thread.as_ref().and_then(|one| self.why(one));
-    let notice = self.notice.clone().map(|one| (one, t.muted));
+    let shown = self.client.thread.as_ref().and_then(|one| self.why(one));
+    let notice = self.client.notice.clone().map(|one| (one, t.muted));
     let says = self.armed_says().map(|one| (one, t.attention)).or(notice);
-    let (does, name) = match (&self.aim, &self.thread) {
+    let (does, name) = match (&self.client.aim, &self.client.thread) {
       _ if self.form().is_some() => (Does::Empty, "refuse"),
       (None, Some(_)) if self.leaves() => (Does::Close, "back"),
       (None, Some(opened)) if !opened.docked().1.is_empty() => (Does::Agent, "agents"),
@@ -782,7 +702,7 @@ impl Model {
         (working, Some((2, loader)))
       }
       // The launcher of a new session names its machine, so the row says the folder alone.
-      (None, None) => (self.place(!matches!(self.target(), Target::New(..))), None),
+      (None, None) => (self.place(!matches!(self.client.target(), Target::New(..))), None),
     };
     // The machine and the folder of a thread that rests give way to the threads that ask him, which
     // the row never hides.
@@ -822,7 +742,7 @@ impl Model {
 
   /// Where the input runs: the machine and the folder, or the folder alone.
   fn place(&self, machine: bool) -> Line {
-    let at = match self.target() {
+    let at = match self.client.target() {
       Target::Thread(key) => key.0,
       Target::Session(at, _) | Target::New(at, _) => at,
     };
