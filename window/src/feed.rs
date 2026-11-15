@@ -568,6 +568,7 @@ impl Feed<'_> {
       .collect();
     if let Some(first) = rows.first_mut() {
       (first.loaders, first.pointed) = (loaders, pointed.filter(|_| !whole));
+      first.awaits.clone_from(&line.awaits);
     }
     rows.extend(output.into_iter().flatten());
     let under = under

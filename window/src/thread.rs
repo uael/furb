@@ -83,6 +83,7 @@ pub(crate) struct Row {
   pub(crate) keeps: Option<Range<usize>>,
   pub(crate) loaders: Vec<(usize, Loader)>,
   pub(crate) pointed: Option<Line>,
+  pub(crate) awaits: Vec<String>,
 }
 
 impl Row {
@@ -546,13 +547,28 @@ impl Model {
   }
 
   /// The rows of the left side and the cell of each loader. The text of a thing under the pointer
-  /// that takes a click goes bright, and a row that shows more under the pointer shows it.
+  /// that takes a click goes bright, and a row that shows more under the pointer shows it. A line
+  /// under the pointer that awaits agents lights the row of each, so the eye goes from the await to
+  /// what it waits for.
   pub(crate) fn left(&self) -> Left {
     let mut rows = self.left_rows();
     if let Some((x, y)) = self.pointed()
       && let Some(row) = rows.get_mut(usize::from(y))
     {
+      let awaits = mem::take(&mut row.awaits);
       *row = mem::take(row).lit(usize::from(x), self.tokens.hover);
+      let awaited = |row: &Row| {
+        let agent = row.hot.iter().find_map(|hot| match &hot.1 {
+          Some(Click::Agent(prompt)) => Some((hot.0.start, prompt)),
+          _ => None,
+        });
+        agent.filter(|(_, prompt)| awaits.contains(prompt)).map(|(x, _)| x)
+      };
+      for row in &mut rows {
+        if let Some(x) = awaited(row) {
+          *row = mem::take(row).lit(x, self.tokens.hover);
+        }
+      }
     }
     let loaders = rows.iter().enumerate().flat_map(|(y, row)| {
       row.loaders.iter().filter_map(move |&(x, loader)| {

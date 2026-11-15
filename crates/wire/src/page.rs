@@ -126,7 +126,9 @@ pub struct Block {
 /// binding that it makes and a string of many lines as one line with its escapes, its mark, what
 /// the last command that it awaited wrote, what each act that it made came to but a chain, in
 /// the order it made them: one for each pass of a loop, the last of which is the value that it
-/// bound, and what each write of a file that it made changed, in the same order.
+/// bound, what each write of a file that it made changed, in the same order, and the name of each
+/// act that the line awaits while it runs: the act that it made last, or each act that its wait
+/// names.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Line {
   pub number: usize,
@@ -138,6 +140,8 @@ pub struct Line {
   pub made: Vec<Made>,
   #[serde(default, skip_serializing_if = "Vec::is_empty")]
   pub writes: Vec<Written>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub awaits: Vec<String>,
 }
 
 /// What a write of a file that a line made changed: the name of its act, the path of the file, the lines that it added
@@ -293,7 +297,15 @@ pub fn stands(lines: &[Line]) -> Option<usize> {
 impl Line {
   /// A line of a number and a text, with a mark, which made no act yet.
   pub fn of(number: usize, text: String, mark: Mark) -> Self {
-    Self { number, text, mark, output: None, made: Vec::new(), writes: Vec::new() }
+    Self {
+      number,
+      text,
+      mark,
+      output: None,
+      made: Vec::new(),
+      writes: Vec::new(),
+      awaits: Vec::new(),
+    }
   }
 
   /// How many rows a line of a block that rolls takes: its own, those of what its command wrote,

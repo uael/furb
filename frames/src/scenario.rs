@@ -742,6 +742,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           &[Act::Type("Measure the open on three chains."), Act::Key("Enter")],
           "✓ Resolved  opus",
         ),
+        // The pointer on the line that awaits the bench lights the row of the bench, where it
+        // stands under the line that made it.
+        step("x-awaits", &[Act::Pointer { on: "await wait(600, bench)", button: 35 }], "wait(600"),
         step("d", &[Act::Pointer { on: "└ report = await", button: 0 }], "· agent · "),
         step("c", &[Act::Key("Escape")], "demo · Measure"),
         // The chains of the life stand as a tree under the bar of the time: the agents that work,

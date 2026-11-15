@@ -444,6 +444,26 @@ fn each_agent_stands_under_the_line_that_made_it_and_a_click_opens_its_thread() 
   shows(&app, " Resolve ");
 }
 
+#[test]
+fn the_pointer_on_a_line_that_awaits_an_agent_lights_the_row_of_that_agent() {
+  let message = format!("measure the open on three chains\n{DELEGATES}");
+  let (app, _daemon, _peer) = opened(&message, "README.md");
+  shows(&app, "└ await wait(600, chain)");
+  // The color of the first letter of the row of the agent that the last line awaits.
+  let agent = |app: &TestApp| {
+    let frame = app.render();
+    let (x, y) = place(&frame.text(), "└ await wait(600, chain)", 0);
+    frame.cells[usize::from(y) * usize::try_from(frame.width).unwrap() + usize::from(x) + 2].fg
+  };
+  let white = Color::hex(0xff_ffff);
+  assert_ne!(agent(&app), white);
+  app.hover(30, row(&app, "await wait(600, bench)"));
+  assert!(app.wait_until(PATIENCE, || agent(&app) == white), "{}", app.text());
+  // A line that awaits no agent lights none.
+  app.hover(20, row(&app, "2  boot = prompt("));
+  assert!(app.wait_until(PATIENCE, || agent(&app) != white), "{}", app.text());
+}
+
 /// The rows of the box of the context, from its head to the foot of the window, each cut to the
 /// columns of the box and trimmed.
 fn boxed(app: &TestApp) -> Vec<String> {

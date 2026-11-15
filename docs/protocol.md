@@ -408,7 +408,9 @@ daemon answers requests in any order.
     that it `added` and `removed` against the text of the path that the life knew before it, from a read or a write,
     whether the life `known` that text, and the first 8 lines of the `diff`, as git writes a unified diff with one
     line around each change but the header of its first hunk, with `more`, the count of the lines past them. A write
-    of a path that the life did not know counts each of its lines as added;
+    of a path that the life did not know counts each of its lines as added. The line that runs has `awaits`, which is
+    absent on each other line: the name of the act that it made last, or of each act that its `wait` names, so a
+    window links the line to each agent that it waits for;
   - `agents`, each thread that a word of the thread started on another chain, in the order the thread made them, as
     a card without its life, with `began`, the millisecond of the epoch at which the daemon saw it begin, `took`, the
     seconds that it took once it ended, `line`, the line of its last word where it stands: the line that runs or

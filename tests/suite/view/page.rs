@@ -850,6 +850,7 @@ fn a_block_rolls_by_rows_and_keeps_its_last_line_with_what_its_command_wrote() {
     output: (tail > 0).then(|| Output { tail: vec![String::new(); tail], more: 9, took: None }),
     made: Vec::new(),
     writes: Vec::new(),
+    awaits: Vec::new(),
   };
   let block = |lines| Block { maker: Maker::Operator, lines, more: false, thought: None };
   let small = block((1..=7).map(|at| line(at, 0)).collect());
@@ -870,6 +871,7 @@ fn a_block_whose_word_came_whole_rolls_to_the_line_that_runs_and_says_the_lines_
     output: None,
     made: Vec::new(),
     writes: Vec::new(),
+    awaits: Vec::new(),
   };
   let block = Block {
     maker: Maker::Operator,

@@ -548,9 +548,10 @@ impl<'a> Reader<'a> {
         .filter(|(act, _)| act.asks_operator() && !act.done())
         .filter_map(|(_, place)| place.and_then(|source| at_line(&lines, before, source)))
         .collect();
+      let awaits = open.map(|at| awaited(made[at].0)).unwrap_or_default();
       let source = open.map_or(Some(next.unwrap_or_default()), |at| made[at].1);
       if let Some(at) = line(&lines, source) {
-        lines[at].mark = mark;
+        (lines[at].mark, lines[at].awaits) = (mark, awaits);
       }
       for at in asking {
         lines[at].mark = Mark::Asks;
@@ -831,4 +832,13 @@ fn placed(word: &str, made: &[&Act]) -> Vec<Option<usize>> {
 /// Whether a line of a word holds a comprehension, which makes as many acts as it has items.
 fn comprehends(code: &str) -> bool {
   !code.trim_start().starts_with("for ") && code.contains(" for ") && code.contains(" in ")
+}
+
+/// What a line awaits while an act that it made is open: each act that its wait names, else that
+/// act.
+fn awaited(act: &Act) -> Vec<String> {
+  if act.kind != Kind::Wait {
+    return vec![act.id.clone()];
+  }
+  act.words.iter().skip(1).filter_map(Value::as_str).map(str::to_owned).collect()
 }
