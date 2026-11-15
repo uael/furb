@@ -81,6 +81,23 @@
         },
         {
           "type": "object",
+          "description": "What the peer sent in the project of a record, the newest first and each text once: what it\nsent to that record, then to each other record of the project, the record that changed last\nfirst. A record whose index does not agree with it gives nothing until the daemon made its\nindex.",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "history"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
           "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the skills that the peer names, reads the\nsettings of the user in the folder `config` and runs the claude command line `claude` when\nthe peer names them, as the window of the peer reads them, and the peer answers each request\nof its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass.",
           "properties": {
             "life": {
@@ -2602,6 +2619,26 @@
           "properties": {
             "answer": {
               "type": "string",
+              "const": "history"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Sent"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "What the peer sent, the newest first."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
               "const": "act"
             },
             "data": {
@@ -3108,6 +3145,26 @@
         }
       ],
       "description": "How the thread of a card stands. It asks one member by his login, or each operator. A pause\nnames who said it. A thread whose model closed its prompt is resolved, and one that a cancel\nended is stopped."
+    },
+    "Sent": {
+      "type": "object",
+      "properties": {
+        "by": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "python": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "by",
+        "text"
+      ],
+      "description": "What an operator sent to a life: a message, or a word of Python, with the site that sent it,\n`operator` or `operator/<login>`."
     },
     "Handed": {
       "type": "object",
@@ -5149,5 +5206,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 25
+  "x-protocol": 26
 }

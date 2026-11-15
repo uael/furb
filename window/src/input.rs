@@ -78,7 +78,8 @@ pub(crate) struct Word {
 
 /// What a request of the window asked of a daemon: the open of a life, a message, a control of a
 /// thread, as a stop or a resolve, the take back of a message with its text, the answer to a
-/// question, what the operator saw, the records of the machine, or the end of the rung of a word.
+/// question, what the operator saw, the records of the machine, the end of the rung of a word, or
+/// the history of the input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Asked {
   Open,
@@ -89,6 +90,7 @@ pub(crate) enum Asked {
   Seen,
   List,
   Ended,
+  History,
 }
 
 /// What a first press of a key named, which a second press of that key does: the resolve of the
@@ -176,6 +178,7 @@ impl Model {
       opened.pending.push(Pending { act: None, text: text.clone() });
     }
     self.outgoing.push_back(Outgoing { at, life, thread, text, python });
+    self.walk = None;
     true
   }
 
@@ -193,7 +196,7 @@ impl Model {
   /// named by the second and the moment of the window, so no two windows share it, and past each
   /// record that the window knows, so no two sessions of one window share it when its clocks stand
   /// still.
-  fn record(&self) -> String {
+  pub(crate) fn record(&self) -> String {
     let second = Timestamp::from_second(i64::try_from(self.now).unwrap_or_default());
     let stamp = second.unwrap_or_default().strftime("%Y-%m-%dT%H-%M-%S");
     let sessions = self.folder.join(".furb").join("sessions");

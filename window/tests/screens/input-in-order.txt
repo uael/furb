@@ -27,4 +27,4 @@
 
 ┃ a draft
   This computer   furb-try ▾           opus/high   ○ Python
-  ⠋ Working · ⎋ ⎋ stop                        ⌃N new thread
+  Nothing that you sent here starts so.       ⌃N new thread

@@ -119,6 +119,53 @@ fn three_enters_in_a_row_send_three_messages_in_order_and_the_up_arrow_cancels_n
   screen("input-in-order", &app);
 }
 
+/// The text of an input of one row, which stands above the launcher and the hints, once it shows
+/// a text: the window draws the text that the editor takes at its next frame.
+fn typed(app: &TestApp, text: &str) -> String {
+  let row = || {
+    let frame = app.text();
+    let lines: Vec<&str> = frame.lines().collect();
+    lines[lines.len() - 3].trim_start_matches(['┃', ' ']).trim_end().to_owned()
+  };
+  let shown = app.wait_until(PATIENCE, || row() == text);
+  assert!(shown, "the input never held {text:?}:\n{}", app.text());
+  row()
+}
+
+#[test]
+fn the_up_arrow_walks_what_he_sent_in_the_project_from_the_newest_and_from_what_he_wrote() {
+  let (app, daemon, sessions) = started();
+  let (first, second) = (format!("fix the build {ANSWERS}"), format!("say what moved {ANSWERS}"));
+  sent(&app, &first);
+  shows(&app, "Two stages hold most");
+  sent(&app, &second);
+  assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions).len() == 2));
+  // From an empty input, the newest first, and the oldest stays.
+  app.press("up");
+  typed(&app, &second);
+  app.press("up");
+  typed(&app, &first);
+  app.press("up");
+  typed(&app, &first);
+  app.press("down");
+  typed(&app, &second);
+  app.press("down");
+  typed(&app, "A reply opens this thread again");
+  // From what he wrote, only what starts with it, and down gives it back.
+  app.paste("say");
+  app.press("up");
+  typed(&app, &second);
+  app.press("up");
+  typed(&app, &second);
+  app.press("down");
+  typed(&app, "say");
+  // A text that starts no message stays, and the row of hints says why.
+  app.paste(" nothing");
+  app.press("up");
+  typed(&app, "say nothing");
+  shows(&app, "Nothing that you sent here starts so.");
+}
+
 #[test]
 fn the_key_of_a_new_thread_turns_the_input_and_its_bar_and_a_reply_reaches_a_thread_that_works() {
   let (app, daemon, sessions) = started();

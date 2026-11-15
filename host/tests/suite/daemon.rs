@@ -2407,6 +2407,43 @@ async fn the_cards_tell_each_thread_of_the_operator_as_its_life_changes_it() {
   assert_eq!(cards(&mut late).await, vec![read]);
 }
 
+#[tokio::test]
+async fn the_history_gives_what_the_window_sent_in_the_project_its_record_first_and_newest_first() {
+  let at = place();
+  let (_, sessions) = project(&at);
+  let (local, _daemon) = started(&at, SHORT).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let told = |life: &str, title: &str| {
+    let (life, title) = (life.to_owned(), title.to_owned());
+    move |card: &Card| card.life == life && card.thread.title == title
+  };
+  let one = held(&mut window, &sessions, "one.jsonl").await;
+  messaged(&mut window, &one, "say what moved").await;
+  messaged(&mut window, &one, "fix the build").await;
+  card(&mut window, told(&one, "fix the build")).await;
+  // The first life ends, so what was sent to it comes from the index beside its record.
+  assert_eq!(window.ask(Verb::Detach { life: one.clone() }).await, Ok(Answer::Done));
+  time::sleep(PAST).await;
+  assert!(!window.lives(&one).await);
+  let two = held(&mut window, &sessions, "two.jsonl").await;
+  messaged(&mut window, &two, "fix the build").await;
+  let verb = Verb::Run { life: two.clone(), word: "print('moved')".to_owned(), on: None };
+  assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
+  messaged(&mut window, &two, "ground the branch").await;
+  let last = card(&mut window, told(&two, "ground the branch")).await;
+  let login = format!("operator/{}", last.viewers.first().expect("the window holds the life"));
+  let sent =
+    |text: &str, python: bool| view::Sent { by: login.clone(), text: text.to_owned(), python };
+  let wanted = vec![
+    sent("ground the branch", false),
+    sent("print('moved')", true),
+    sent("fix the build", false),
+    sent("say what moved", false),
+  ];
+  assert_eq!(window.ask(Verb::History { life: two }).await, Ok(Answer::History(wanted)));
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn a_record_that_a_link_names_has_one_key_in_the_daemon() {

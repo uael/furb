@@ -29,6 +29,7 @@
   reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
 )]
 use std::{
+  cmp::Reverse,
   collections::{HashMap, HashSet},
   fmt::Display,
   mem,
@@ -42,7 +43,7 @@ use std::{
 use furb::{
   engine::OPERATOR,
   life::{Answer as Answered, Log, Opening},
-  view::{self, Reach, WATCH},
+  view::{self, Reach, Sent, WATCH},
   wire::parsed,
   world::{
     Members, Roster,
@@ -67,7 +68,7 @@ use tokio_util::codec::{Framed, LinesCodec};
 use crate::{
   access::{Access, Ports},
   answers::Answerer,
-  cards::{self, Told},
+  cards::{self, Session, Told},
   error::{DaemonError, LifeError, ProtocolError, TransportError},
   event::{Event, Seq},
   holders::{Holders, Window},
@@ -491,10 +492,9 @@ impl Host for Daemon {
     }
     match routed(verb) {
       Routed::Life(life, command) => {
-        let command = match (peer.kind, &peer.name) {
-          (Kind::Skill, Some(name)) => command.by(processes::speaker(name)),
-          (Kind::Window, _) => command.by(format!("{OPERATOR}/{}", peer.login)),
-          _ => command,
+        let command = match site(peer) {
+          Some(site) => command.by(site),
+          None => command,
         };
         let reads = match &command {
           Command::Thread { thread, reach: Reach { before: None, limit } } => {
@@ -553,6 +553,16 @@ async fn awaited(handle: &LifeHandle, life: String, act: String) -> Result<Answe
         Err(RecvError::Closed) => return Err(ProtocolError::Closed { life }),
       }
     }
+  }
+}
+
+/// The site that a peer speaks as: a skill by its name, a window as the operator under its login,
+/// and none for any other peer, which speaks as the life itself.
+fn site(peer: &Peer) -> Option<String> {
+  match (peer.kind, &peer.name) {
+    (Kind::Skill, Some(name)) => Some(processes::speaker(name)),
+    (Kind::Window, _) => Some(format!("{OPERATOR}/{}", peer.login)),
+    _ => None,
   }
 }
 
@@ -888,6 +898,9 @@ impl Lives {
       }
       Verb::List { config } => Ok(Answer::Lives(self.listed(config))),
       Verb::Cards => Ok(Answer::Cards(self.cards(outbox))),
+      Verb::History { life } => Ok(Answer::History(
+        self.history(&life, &site(&peer).unwrap_or_else(|| OPERATOR.to_owned())),
+      )),
       Verb::Attach { life, from } => self.attach(&life, from, peer, outbox),
       Verb::Detach { life } => self.detach(&life, outbox),
       Verb::Pin { life, holder } => living(&mut self.held, &life).map(|(_, holders)| {
@@ -1190,11 +1203,11 @@ impl Lives {
   /// index stands. So no list waits for the fold of a record, and no card comes that then goes.
   fn cards_of(&mut self, life: &str, project: Option<&String>) -> Vec<Card> {
     let record = Path::new(life);
-    let (session, viewers) = match self.held.get(life) {
-      Some(Held { handle, stage: Stage::Living(holders), .. }) => {
-        (handle.session(), holders.presence().into_iter().map(|peer| peer.login).collect())
+    let viewers = match self.held.get(life) {
+      Some(Held { stage: Stage::Living(holders), .. }) => {
+        holders.presence().into_iter().map(|peer| peer.login).collect()
       }
-      _ => (None, Vec::new()),
+      _ => Vec::new(),
     };
     let held = self.held.contains_key(life);
     let card = |session: Option<String>, since, thread| Card {
@@ -1206,7 +1219,7 @@ impl Lives {
       since,
       thread,
     };
-    if let Some(session) = session.or_else(|| cards::kept(record).map(Arc::new)) {
+    if let Some(session) = self.session(life) {
       let stands = |thread: view::Card| if held { thread } else { thread.at_rest() };
       let threads = session.threads.iter().cloned();
       return threads
@@ -1218,6 +1231,42 @@ impl Lives {
       self.index.send(life.to_owned()).ok();
     }
     Vec::new()
+  }
+
+  /// The session of a record now: the one that its life told, when one lives and told one, else
+  /// the one of the index beside it, when the index agrees with the record.
+  fn session(&self, life: &str) -> Option<Arc<Session>> {
+    let told = match self.held.get(life) {
+      Some(Held { handle, stage: Stage::Living(_), .. }) => handle.session(),
+      _ => None,
+    };
+    told.or_else(|| cards::kept(Path::new(life)).map(Arc::new))
+  }
+
+  /// What a site sent in the project of a record, the newest first and each text once: what it
+  /// sent to that record, then to each other record of the project, the record that changed last
+  /// first.
+  fn history(&self, life: &str, site: &str) -> Vec<Sent> {
+    let listed = self.listed(None);
+    let project = |one: &str| {
+      let listed = listed.iter().find(|listed| listed.life == one);
+      listed.and_then(|one| one.workspace.clone()).or_else(|| records::checkout(Path::new(one)))
+    };
+    let ours = project(life);
+    let mut others: Vec<(u64, &str)> = listed
+      .iter()
+      .filter(|one| one.life != life && ours.is_some() && one.workspace == ours)
+      .map(|one| (cards::changed(Path::new(&one.life)), one.life.as_str()))
+      .collect();
+    others.sort_by_key(|one| Reverse(one.0));
+    let mut seen = HashSet::new();
+    let mut history = Vec::new();
+    for record in [life].into_iter().chain(others.into_iter().map(|one| one.1)) {
+      let Some(session) = self.session(record) else { continue };
+      let his = session.sent.iter().rev().filter(|one| one.by == site);
+      history.extend(his.filter(|one| seen.insert(one.text.clone())).cloned());
+    }
+    history
   }
 
   /// When the first life with no holder ends.

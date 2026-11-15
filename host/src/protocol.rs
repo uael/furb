@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 25;
+pub const PROTOCOL: u32 = 26;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -90,6 +90,13 @@ pub enum Verb {
   /// gives with no config. The peer then hears a frame `cards` at each change of them, until it
   /// leaves.
   Cards,
+  /// What the peer sent in the project of a record, the newest first and each text once: what it
+  /// sent to that record, then to each other record of the project, the record that changed last
+  /// first. A record whose index does not agree with it gives nothing until the daemon made its
+  /// index.
+  History {
+    life: String,
+  },
   /// The life of a record opened, in a folder or in the folder of its record. A life that this
   /// open makes stands on the actor, the roster and the skills that the peer names, reads the
   /// settings of the user in the folder `config` and runs the claude command line `claude` when
@@ -462,6 +469,7 @@ impl Verb {
       | Self::AsOf { life, .. }
       | Self::Thread { life, .. }
       | Self::Moments { life, .. }
+      | Self::History { life }
       | Self::Answered { life, .. }
       | Self::Wrote { life, .. }
       | Self::ViewMount(Mount { life, .. }) => Some(life),
@@ -484,6 +492,7 @@ impl Verb {
       Self::Hello(_)
         | Self::List { .. }
         | Self::Cards
+        | Self::History { .. }
         | Self::Attach { .. }
         | Self::Detach { .. }
         | Self::Presence { .. }
@@ -618,6 +627,8 @@ pub enum Answer {
   Lives(Vec<Listed>),
   /// The cards of the machine.
   Cards(Vec<Card>),
+  /// What the peer sent, the newest first.
+  History(Vec<view::Sent>),
   /// The name of the act that the verb made.
   Act(String),
   Value(Value),

@@ -21,6 +21,10 @@ export type Request1 =
     }
   | {
       life: string;
+      verb: "history";
+    }
+  | {
+      life: string;
       cwd?: string | null;
       actor?: string | null;
       roster?: string[] | null;
@@ -595,6 +599,10 @@ export type Answer =
       data: Card[];
     }
   | {
+      answer: "history";
+      data: Sent[];
+    }
+  | {
       answer: "act";
       data: string;
     }
@@ -1095,6 +1103,15 @@ export interface Card {
   readers?: string[];
 }
 /**
+ * What an operator sent to a life: a message, or a word of Python, with the site that sent it,
+ * `operator` or `operator/<login>`.
+ */
+export interface Sent {
+  by: string;
+  text: string;
+  python?: boolean;
+}
+/**
  * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
  */
 export interface Handed {
@@ -1441,4 +1458,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 25;
+export const PROTOCOL = 26;

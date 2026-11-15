@@ -105,6 +105,7 @@ daemon answers requests in any order.
 | --- | --- | --- |
 | `list` | `config` | read |
 | `cards` | | read |
+| `history` | `life` | read |
 | `open` | `life`, `cwd`, `actor`, `roster`, `skills`, `config`, `claude`, `answers`, `attach` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
@@ -270,6 +271,12 @@ daemon answers requests in any order.
   path of each verb, and pushes the cards in a frame `cards` once the index stands. A record tells no time, so each
   card of such an index stands since the record last changed. Nothing works in a record at rest, so a thread that
   worked when its life ended rests there, and counts no agent that works.
+- `history` gives what the peer sent in the project of the record `life` as `history`, the newest first and each text
+  once: what it sent to that record, then to each other record of the project, the record that changed last first.
+  Each entry holds `by`, the site of the peer, `text`, and `python`, whether it is a word of Python that ran or a
+  message. The record is the one truth of what was sent: a live life gives what it holds, and a record at rest gives
+  what the index of its threads keeps, so a record whose index does not agree with it gives nothing until the daemon
+  made its index. An index of a build before this list reads as no index.
 - `thread` gives a page of one thread of a life as `page`: the exchanges of the thread before the one at the place
   `before`, or before its end when `before` is null, at most `limit` of them, the oldest first. The thread is named
   by its prompt. Nobody reads the past of a record for it: the life holds each act, and a page reads only the acts

@@ -130,7 +130,7 @@ pub(crate) fn opened(app: &App, machines: Vec<Machine>, options: Options) {
       if !text.is_empty() {
         model.armed = None;
       }
-      model.draft.text = text;
+      model.edited(text);
     });
     colored(&on);
   });
@@ -369,6 +369,11 @@ fn pump(window: &Shared) {
   {
     model.asked.insert((at, asker.ask(verb)), Asked::Say);
   }
+  if let Some((at, verb)) = model.history_due()
+    && let Some(asker) = asker(askers, model, at)
+  {
+    model.asked.insert((at, asker.ask(verb)), Asked::History);
+  }
   if let Some((at, verb)) = model.seen_due()
     && let Some(asker) = asker(askers, model, at)
   {
@@ -424,6 +429,7 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
     return true;
   }
   match does {
+    Some(Does::Up | Does::Down) if walked(app, window, does == Some(Does::Up)) => true,
     // The keys of a form, which the editor hears when no form takes them.
     Some(Does::Up | Does::Down | Does::Tick | Does::NextQuestion) => false,
     Some(Does::Leave) if !window.borrow().area.text().is_empty() => false,
@@ -433,6 +439,17 @@ fn key(app: &App, window: &Shared, key: &KeyEvent) -> bool {
     }
     None => led,
   }
+}
+
+/// An arrow up on the first row of the input, or down on its last row, which walks the history of
+/// the input: whether the walk took it. An arrow on another row moves in the input.
+fn walked(app: &App, window: &Shared, up: bool) -> bool {
+  let (row, rows) = {
+    let area = &window.borrow().area;
+    (area.cursor().0, area.text().split('\n').count())
+  };
+  let edge = if up { row == 0 } else { usize::try_from(row).is_ok_and(|row| row + 1 >= rows) };
+  edge && tell(app, window, |model| model.walked(up))
 }
 
 /// A key while a list part is open: it filters the part, moves its chosen row, takes it or closes
