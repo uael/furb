@@ -51,6 +51,7 @@ pub(crate) enum Does {
   TakeWord,
   Machines,
   Projects,
+  History,
   Model,
   Effort,
 }
@@ -144,6 +145,7 @@ const INPUT: &[Bound] = &[
   bound(Does::Python, "a word of Python, and back to a message", true, &[&led('y')]),
   bound(Does::Machines, "the machine of a new session", true, &[&led('h')]),
   bound(Does::Projects, "the project of a new session", true, &[&led('p')]),
+  bound(Does::History, "search what you sent here", true, &[&[ctrl('r')]]),
   bound(Does::Model, "the model of the input", true, &[&led('m')]),
   bound(Does::Effort, "the next effort of the model", true, &[&led('e')]),
   bound(

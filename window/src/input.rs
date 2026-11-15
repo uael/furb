@@ -384,10 +384,17 @@ impl Model {
       rows.push(self.launcher());
       rows
     } else {
-      let band = |_| self.band(Vec::new());
+      // The row above the text says where a walk through what he sent stands.
+      let walking = self.client.walking().map(|(at, of)| {
+        vec![run(
+          format!("history {at} of {of}"),
+          self.tokens.style(Role::Muted).bg(self.tokens.raised),
+        )]
+      });
+      let band = |at| self.band(Vec::new(), if at == 0 { walking.clone() } else { None });
       let bands = (0..self.grown() + 2).map(band);
       let mut rows: Vec<Row> = self.waiting_row().into_iter().chain(bands).collect();
-      rows.extend([self.launcher(), self.band(Vec::new())]);
+      rows.extend([self.launcher(), self.band(Vec::new(), None)]);
       rows
     };
     rows.push(self.hints());
@@ -404,12 +411,12 @@ impl Model {
   }
 
   /// A row of the box of the input: its bar, then a line of the columns of the box with one blank
-  /// column on each side, as wide as the box of a message of the feed.
-  fn band(&self, line: Line) -> Row {
+  /// column on each side, as wide as the box of a message of the feed, with what its right says.
+  fn band(&self, line: Line, right: Option<Line>) -> Row {
     let raised = Style::new().bg(self.tokens.raised);
     let room = self.wide().saturating_sub(6);
     let mut row = vec![run("┃", raised.fg(self.bar())), run(" ", raised)];
-    row.extend(spread(line, Vec::new(), room, raised));
+    row.extend(spread(line, right.unwrap_or_default(), room, raised));
     row.push(run("  ", raised));
     Row::of(row)
   }
@@ -455,7 +462,7 @@ impl Model {
       (at[3].start + 2..at[5].end + 2, Some(Click::Key(Does::Sessions))),
     ];
     hot.extend(clicked(&at, clicks));
-    let Row { line, .. } = self.band(line);
+    let Row { line, .. } = self.band(line, None);
     Row { hot, ..Row::of(line) }
   }
 
@@ -509,7 +516,7 @@ impl Model {
       (at[6].start + 2..at[8].end + 2, Some(Click::Key(Does::Projects))),
     ];
     hot.extend(clicked(&at, clicks));
-    let Row { line, .. } = self.band(line);
+    let Row { line, .. } = self.band(line, None);
     Row { hot, ..Row::of(line) }
   }
 

@@ -3,7 +3,7 @@
   Nothing needs you.
 
   ⌃O          go to   Each key                                               ⎋
-  ⌃P          comman  ▌Search a key                                     1 / 30
+  ⌃P          comman  ▌Search a key                                     1 / 31
   ⌃X ?        each k
                       Go
                       ▌⌃O          go to a project or a session

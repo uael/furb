@@ -1520,6 +1520,7 @@ version = "0.4.2"
 dependencies = [
  "furb-wire",
  "jiff",
+ "nucleo-matcher",
  "serde",
  "serde_json",
 ]
@@ -1587,7 +1588,6 @@ dependencies = [
  "furb-host",
  "futures",
  "jiff",
- "nucleo-matcher",
  "opentui",
  "pulldown-cmark",
  "serde",

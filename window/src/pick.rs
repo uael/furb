@@ -4,15 +4,11 @@
 //! closes it and gives the focus back to the input. The pointer does the same: a click takes a row,
 //! and a click beside the part closes it.
 
-use furb::view::Part;
+use furb::view::{Part, Sent};
 use furb_host::protocol::Card;
-use nucleo_matcher::{
-  Config, Matcher,
-  pattern::{CaseMatching, Normalization, Pattern},
-};
 use opentui::style::Style;
 
-use furb_client::{Link, Target, Told};
+use furb_client::{Link, Matched, Target, Told, ranked};
 use furb_host::protocol::Model as Offered;
 
 use crate::{
@@ -43,6 +39,8 @@ pub(crate) enum Pick {
   Projects,
   /// The models of the machine of the input, each provider once.
   Models,
+  /// What he sent where the input sends, the newest first.
+  History,
 }
 
 /// The list part, while it is open: what it lists, the text that filters it, the place of the
@@ -67,6 +65,8 @@ pub(crate) enum Choice {
   Project(String),
   /// An actor of a model, which the target of the input takes.
   Actor(String),
+  /// A text that he sent, which the input takes.
+  Sent(Sent),
   /// What a key does.
   Key(Does),
   /// Nothing: a key that only a form or a list hears.
@@ -75,13 +75,15 @@ pub(crate) enum Choice {
 }
 
 /// A row of a list part: the part of the list that it stands in, the project that it stands in,
-/// whose badge leads it as it leads a card, its text, what follows its text in the column after it,
-/// what its right says, the hue of its bar while it is chosen, and what it takes.
+/// whose badge leads it as it leads a card, its text, the places of the letters of its text that
+/// the filter matched, what follows its text in the column after it, what its right says, the hue
+/// of its bar while it is chosen, and what it takes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Entry {
   pub(crate) part: &'static str,
   pub(crate) project: Option<String>,
   pub(crate) left: String,
+  pub(crate) lit: Vec<usize>,
   pub(crate) says: String,
   pub(crate) right: String,
   pub(crate) hue: Option<usize>,
@@ -112,6 +114,7 @@ impl Pick {
       Self::Machines => "Machines",
       Self::Projects => "Projects",
       Self::Models => "Models",
+      Self::History => "History",
     }
   }
 
@@ -124,6 +127,7 @@ impl Pick {
       Self::Machines => "Search a machine",
       Self::Projects => "Search a project",
       Self::Models => "Search a model",
+      Self::History => "Search what you sent here",
     }
   }
 
@@ -134,6 +138,7 @@ impl Pick {
       Self::Commands | Self::Keys => "run",
       Self::Sessions | Self::Machines | Self::Projects => "send there",
       Self::Models => "take it",
+      Self::History => "write it",
     }
   }
 }
@@ -146,7 +151,13 @@ impl Model {
       self.picker = None;
       return;
     }
-    self.picker = Some(Picker { of, filter: String::new(), at: 0, slashed: false });
+    // The history opens on what he wrote, as the search of a shell does, and asks what he sent
+    // again.
+    let filter = if of == Pick::History { self.client.draft.text.clone() } else { String::new() };
+    if of == Pick::History {
+      self.client.ask_history();
+    }
+    self.picker = Some(Picker { of, filter, at: 0, slashed: false });
     if of == Pick::Sessions {
       let now = match self.client.target() {
         Target::Thread(key) => Target::Session(key.0, key.1),
@@ -171,18 +182,18 @@ impl Model {
       Pick::Machines => self.machines(),
       Pick::Projects => self.projects(),
       Pick::Models => self.models(),
+      Pick::History => self.sent(),
     };
-    if picker.filter.is_empty() {
-      return all;
-    }
-    let pattern = Pattern::parse(&picker.filter, CaseMatching::Ignore, Normalization::Smart);
-    let mut matcher = Matcher::new(Config::DEFAULT);
-    let texts = all.iter().enumerate().map(|(at, one)| (at, format!("{} {}", one.left, one.right)));
-    let texts: Vec<(usize, String)> = texts.collect();
-    let haystacks = texts.iter().map(|(at, text)| Haystack(*at, text));
-    let ranked = pattern.match_list(haystacks, &mut matcher);
+    // The filter matches the text of a row and its right, and lights the letters of its text.
+    let texts: Vec<String> = all.iter().map(|one| format!("{} {}", one.left, one.right)).collect();
     let mut all: Vec<Option<Entry>> = all.into_iter().map(Some).collect();
-    ranked.into_iter().filter_map(|(one, _)| all[one.0].take()).collect()
+    let taken = |one: Matched| {
+      let mut entry = all[one.at].take()?;
+      let letters = entry.left.chars().count();
+      entry.lit = one.lit.into_iter().filter(|at| *at < letters).collect();
+      Some(entry)
+    };
+    ranked(&picker.filter, texts.iter().map(String::as_str)).into_iter().filter_map(taken).collect()
   }
 
   /// The places of Go to: each thread that needs the operator, each thread that works, then each
@@ -374,6 +385,18 @@ impl Model {
     all.map(entry).collect()
   }
 
+  /// What he sent where the input sends, the newest first: a text of many lines on one row, and a
+  /// word of python marked so.
+  fn sent(&self) -> Vec<Entry> {
+    let entry = |sent: &Sent| Entry {
+      left: sent.text.replace('\n', "↵"),
+      right: if sent.python { "python".to_owned() } else { String::new() },
+      choice: Choice::Sent(sent.clone()),
+      ..Entry::default()
+    };
+    self.client.sent().iter().map(entry).collect()
+  }
+
   /// The models of the machine of the input, under each provider once, each with its effort, the
   /// one that it takes when the operator names none. A model takes the effort that the input
   /// speaks at when it offers it.
@@ -426,6 +449,7 @@ impl Model {
         self.picker = Some(Picker { of, filter: name, at: 0, slashed: false });
       }
       Choice::Actor(actor) => self.took_actor(actor),
+      Choice::Sent(sent) => self.client.recall(&sent),
       Choice::Key(does) => return Some(does),
       Choice::None => self.picker = Some(Picker { of, filter: String::new(), at, slashed: false }),
     }
@@ -559,7 +583,8 @@ impl Model {
       };
       let mut left = vec![bar];
       left.extend(badge);
-      left.extend([run(entry.left.clone(), ground(prose)), run(entry.says.clone(), ground(muted))]);
+      left.extend(lit(&entry.left, &entry.lit, ground(prose), ground(prose.fg(t.accent))));
+      left.push(run(entry.says.clone(), ground(muted)));
       let right = vec![run(entry.right.clone(), ground(muted)), run(" ", ground(Style::new()))];
       all.push((Some(at), spread(left, right, room, ground(Style::new()))));
     }
@@ -612,13 +637,19 @@ struct Session {
   project: String,
 }
 
-/// The text that a matcher reads of an entry, with its place.
-struct Haystack<'a>(usize, &'a String);
-
-impl AsRef<str> for Haystack<'_> {
-  fn as_ref(&self) -> &str {
-    self.1
+/// A text with the letters at some places in the bright style, and the rest in the plain one.
+fn lit(text: &str, places: &[usize], plain: Style, bright: Style) -> Line {
+  let mut line: Line = Vec::new();
+  let mut chars = text.chars().enumerate().peekable();
+  while let Some((at, first)) = chars.next() {
+    let on = places.contains(&at);
+    let mut content = first.to_string();
+    while let Some((_, next)) = chars.next_if(|(at, _)| places.contains(at) == on) {
+      content.push(next);
+    }
+    line.push(run(content, if on { bright } else { plain }));
   }
+  line
 }
 
 /// Where a card stands: its project, and its session when it has a name.

@@ -9,6 +9,7 @@
 mod history;
 mod input;
 mod machine;
+mod matched;
 mod opens;
 mod outbox;
 mod question;
@@ -24,6 +25,7 @@ use furb_wire::{Part, protocol::Card};
 pub use history::{History, Walk};
 pub use input::Draft;
 pub use machine::{Heard, Key, Link, Listing, Told};
+pub use matched::{Matched, ranked};
 pub use opens::{Ask, Hold, Life, Step};
 pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
 pub use question::{Form, HOLD};

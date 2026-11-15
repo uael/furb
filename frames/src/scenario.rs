@@ -285,7 +285,29 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
     }),
   },
-  Scenario { name: "06-prompt-history", has: none("10. The input: history, paste, image, mode") },
+  Scenario {
+    name: "06-prompt-history",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &[],
+      steps: &[
+        step("x-first", &[Act::Type("Read the boot of the host."), Act::Key("Enter")], "reply 1"),
+        step(
+          "x-second",
+          &[Act::Type("Measure the seed of the open."), Act::Key("Enter")],
+          "reply 2",
+        ),
+        step(
+          "x-third",
+          &[Act::Type("Say why the boot replays twice."), Act::Key("Enter")],
+          "reply 3",
+        ),
+        step("a", &[Act::Key("Up")], "history 1 of"),
+        step("b", &[Act::Key("Up"), Act::Key("Up")], "history 3 of"),
+        step("c", &[Act::Key("C-c"), Act::Type("boot"), Act::Key("C-r")], "▌boot"),
+      ],
+    }),
+  },
   Scenario { name: "07-prompt-complete", has: none("17. After the first window") },
   Scenario { name: "08-file-picker", has: none("17. After the first window") },
   Scenario { name: "09-image", has: none("10. The input: history, paste, image, mode") },

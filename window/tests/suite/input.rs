@@ -144,11 +144,14 @@ fn the_up_arrow_walks_what_he_sent_in_the_project_from_the_newest_and_from_what_
   shows(&app, "Two stages hold most");
   sent(&app, &second);
   assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions).len() == 2));
-  // From an empty input, the newest first, and the oldest stays.
+  // From an empty input, the newest first, and the oldest stays. The box says where the walk
+  // stands.
   app.press("up");
   typed(&app, &second);
+  shows(&app, "history 1 of 2");
   app.press("up");
   typed(&app, &first);
+  shows(&app, "history 2 of 2");
   app.press("up");
   typed(&app, &first);
   app.press("down");
@@ -168,6 +171,30 @@ fn the_up_arrow_walks_what_he_sent_in_the_project_from_the_newest_and_from_what_
   app.press("up");
   typed(&app, "say nothing");
   shows(&app, "Nothing that you sent here starts so.");
+}
+
+#[test]
+fn ctrl_r_searches_what_he_sent_here_from_what_he_wrote_and_writes_the_text_that_he_takes() {
+  let (app, daemon, sessions) = started();
+  let (first, second) = (format!("fix the build {ANSWERS}"), format!("say what moved {ANSWERS}"));
+  sent(&app, &first);
+  shows(&app, "Two stages hold most");
+  sent(&app, &second);
+  assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions).len() == 2));
+  // The search starts from what he wrote, and lists only what matches it, its letters lit.
+  app.paste("mvd");
+  app.press("ctrl+r");
+  let frame = shows(&app, "History");
+  assert!(frame.contains("say what moved") && frame.contains("1 / 1"), "{frame}");
+  let (x, y) = at(&app, "moved", 0);
+  let frame = app.render();
+  let cell = |x: u16| frame.cells[usize::from(y) * frame.width as usize + usize::from(x)].fg;
+  let lit: Vec<bool> = (x..x + 5).map(|x| cell(x) == BLUE).collect();
+  assert_eq!(lit, [true, false, true, false, true], "the letters m, v and d are lit");
+  // Enter writes the text into the input, and closes the list.
+  app.press("enter");
+  typed(&app, &second);
+  assert!(!app.text().contains("Search what you sent here"), "{}", app.text());
 }
 
 #[test]

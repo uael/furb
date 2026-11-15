@@ -585,6 +585,7 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Commands => |model| model.pick(Pick::Commands),
     Does::Machines => |model| model.pick(Pick::Machines),
     Does::Projects => |model| model.pick(Pick::Projects),
+    Does::History => |model| model.pick(Pick::History),
     Does::Model => |model| model.pick(Pick::Models),
     Does::Effort => Model::effort,
     Does::Keys => |model| model.pick(Pick::Keys),

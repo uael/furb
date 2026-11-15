@@ -115,6 +115,27 @@ impl Client {
     newest.text.get(typed.len()..)
   }
 
+  /// What he sent where the input sends, the newest first, once the machine gave it.
+  pub fn sent(&self) -> &[Sent] {
+    self.history.as_ref().and_then(|one| one.sent.as_deref()).unwrap_or_default()
+  }
+
+  /// A text that he sent, which the input takes in the place of its draft, as a step of a walk
+  /// does.
+  pub fn recall(&mut self, sent: &Sent) {
+    self.walk = None;
+    self.restore = Some(sent.text.clone());
+    self.draft = Draft { text: sent.text.clone(), python: sent.python };
+  }
+
+  /// Where the walk stands: the place of the text that the input shows, from one, among the texts
+  /// that start with the draft that the walk began from, and how many they are.
+  pub fn walking(&self) -> Option<(usize, usize)> {
+    let walk = self.walk.as_ref()?;
+    let found = self.found(walk)?.len();
+    walk.place.map(|place| (place + 1, found))
+  }
+
   /// The text at the place of the walk given to the input, with its kind: the oldest one that
   /// starts with the draft when the walk went past it, and the draft at no place. A walk that
   /// finds none says so, and shows the draft.
