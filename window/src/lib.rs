@@ -15,6 +15,7 @@ mod code;
 mod error;
 mod feed;
 mod hand;
+mod history;
 mod home;
 mod input;
 mod kept;

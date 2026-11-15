@@ -32,6 +32,16 @@ pub struct Card {
   pub readers: Vec<String>,
 }
 
+/// What an operator sent to a life: a message, or a word of Python, with the site that sent it,
+/// `operator` or `operator/<login>`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Sent {
+  pub by: String,
+  pub text: String,
+  #[serde(default)]
+  pub python: bool,
+}
+
 /// How the thread of a card stands. It asks one member by his login, or each operator. A pause
 /// names who said it. A thread whose model closed its prompt is resolved, and one that a cancel
 /// ended is stopped.
@@ -185,6 +195,24 @@ impl Held {
 }
 
 impl Held {
+  /// What each operator sent to the life, in the order that he sent it: the message of each
+  /// prompt that he made, and the word of each rung that he ran.
+  pub fn sent(&self) -> Vec<Sent> {
+    self.then(None, |acts| {
+      let sent = |act: &&Act| {
+        let text = match act.kind {
+          Kind::Prompt => act.words.get(1),
+          Kind::Rung => act.words.first(),
+          _ => None,
+        };
+        let text = text.and_then(Value::as_str).filter(|_| operator(&act.by))?;
+        let python = act.kind == Kind::Rung;
+        Some(Sent { by: act.by.clone(), text: text.to_owned(), python })
+      };
+      acts.iter().filter_map(sent).collect()
+    })
+  }
+
   /// The acts that keep a thread of the operator open, each with its shape, in the order that they
   /// began: its prompt and each message on it that is not done. A close of each, the last first,
   /// resolves the thread, since a close of a prompt cancels each prompt under it.

@@ -17,7 +17,7 @@ mod threads;
 mod time;
 
 pub use act::{Act, Answer, Kind, Maker, Pause, Phase, RunState, Spend, WATCH, operator};
-pub use cards::{Card, Part, Standing};
+pub use cards::{Card, Part, Sent, Standing};
 pub use desk::{
   Ask, Desk, REFUSED, Tick, choices, declined, desk, hint, takes_nothing, ticks, wants,
 };
