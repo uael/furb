@@ -16,6 +16,7 @@ mod lives;
 mod loops;
 mod memwatch;
 mod opens;
+mod pack;
 mod paths;
 mod promise;
 mod prove;
@@ -108,7 +109,7 @@ enum Task {
     uv: Option<PathBuf>,
   },
   /// Check the head of a branch whole when it moved: the hooks of a commit on the files that
-  /// changed, then each suite, then clippy and biome.
+  /// changed, then each suite and the packs of the published crates, then clippy and biome.
   ///
   /// The check runs in a tree of its own, detached at the head, at a low priority, and blocks
   /// nothing. A green writes one line in the table; a red writes one entry in the inbox, with the
@@ -217,6 +218,13 @@ enum Task {
   /// ignores it as what a build makes. A path with a variable or a pattern in it is not checked,
   /// and a path after `$root/` is a path of the repository.
   Paths,
+  /// Fail on each file that the build of a published crate reads and that its pack leaves out.
+  ///
+  /// It builds each crate whose manifest lets it be published, then reads the files that cargo
+  /// says each library and program read, each source, each file of `include_str!` and each file
+  /// that a build script watches, against the files of its pack, as `cargo package --list` names
+  /// them. A file left out builds here and fails in the crate that a user adds.
+  Pack,
   /// Lint the workspace on Linux and Windows, which this machine does not build, so code under a
   /// cfg of those systems shows its warnings before the gates of CI fail on it. It lints what the
   /// clippy of the gates lints, but the addon of N-API on Windows.
@@ -394,6 +402,8 @@ enum Fault {
   Read { path: PathBuf, source: io::Error },
   #[error("git {args} failed: {stderr}")]
   Git { args: String, stderr: String },
+  #[error("cargo {args} failed: {stderr}")]
+  Cargo { args: String, stderr: String },
   #[error(
     "this machine has no folder of caches: name the folder of the scratch directories with --scratch"
   )]
@@ -496,6 +506,7 @@ impl Task {
       }
       Self::CleanCaches { scratch, uv } => caches::clean(root, scratch, uv.as_deref()),
       Self::Paths => paths::check(),
+      Self::Pack => pack::check(),
       Self::Tree { verb } => tree::run(root, verb),
       Self::Links { fix } => links::check(root, fix),
       Self::BenchLoop(bench) => bench.run(root),

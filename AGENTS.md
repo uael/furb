@@ -511,7 +511,8 @@ fix what your change broke, and report what was broken before.
 - `cargo xtask watch --tree DIR --table FILE --inbox FILE [--branch B] [--every MIN] [--owners FILE] [--pid FILE]`:
   check the head of a branch whole each time it moves, at most once in each interval, in a worktree of its own that it
   detaches at that head. It runs the hooks of a commit on the files that changed since the head that it checked
-  before, then each suite, then clippy and biome, then `cargo xtask targets`, one part after the other. A part starts
+  before, then each suite, then `cargo xtask pack`, which fails on a file that the build of a published crate reads
+  and its pack leaves out, then clippy and biome, then `cargo xtask targets`, one part after the other. A part starts
   only while the load of the machine is under its count of cores, which it reads each minute while it waits, and runs
   at the lowest priority, as each task does. A green writes one line in the table; a red writes one entry in the
   inbox, with each test or file that failed, its owner from the file of owners, and the commits since the last green,

@@ -36,7 +36,8 @@ pub(crate) struct Watch {
 
 /// The parts of a check, cheap first: the hooks of a commit on the files that changed since the
 /// head checked before, which take seconds and which a commit with --no-verify skipped, then each
-/// suite, then the two hooks of the manual stage that are no suite, then clippy on Linux and
+/// suite, with the files that the published crates read against their packs once rust built
+/// them, then the two hooks of the manual stage that are no suite, then clippy on Linux and
 /// Windows, which this machine does not build. They run one after the other,
 /// since the suites at once took 137 processes and moved the load of 14 cores from 5 to 18.
 fn parts(before: Option<&str>, head: &str) -> Vec<(&'static str, Vec<String>)> {
@@ -49,6 +50,7 @@ fn parts(before: Option<&str>, head: &str) -> Vec<(&'static str, Vec<String>)> {
   vec![
     ("commit", [words(&hook), changed].concat()),
     ("rust", words(&["cargo", "xtask", "test", "rust"])),
+    ("pack", words(&["cargo", "xtask", "pack"])),
     ("python", words(&["cargo", "xtask", "test", "python"])),
     ("typescript", words(&["cargo", "xtask", "test", "typescript"])),
     ("clippy", words(&[&hook[..], &["clippy", "--hook-stage", "manual", "--all-files"]].concat())),
