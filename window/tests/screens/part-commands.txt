@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    This… ▾   FT furb-try ▾  opus  high
 ┃
-  ~/src/furb-try                                   ⌃P go to
+  ~/src/furb-try                                 ⌃P go to

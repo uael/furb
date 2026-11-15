@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → which keys… ▾     opus   + Ctrl+N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ↑↓ choose · Space tick · Enter answer       Ctrl+C refuse
+  ↑↓ choose · Space tick · Enter answer     Ctrl+C refuse

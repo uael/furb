@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → Run the… ▾      opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/src/furb-try                     ⎋ back
+  This computer · ~/src/furb-try                   ⎋ back

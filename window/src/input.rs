@@ -33,7 +33,7 @@ const SESSION: usize = 10;
 const SHORTEST: usize = 4;
 
 /// The mark of the branch of the place of the input, after a dot.
-const BRANCH: &str = "⎇ ";
+const BRANCH: &str = "⑂ ";
 
 /// A word of python that the window ran on the root of a life, until the next word goes or an
 /// escape forgets it: its machine, its record, its text, its rung, whether the window asked the end
@@ -263,16 +263,19 @@ impl Model {
     text
   }
 
-  /// What a second press of the key that a first press armed does, as the row of hints says it.
-  /// The button of the head says the resolve of a thread that works.
-  fn armed_says(&self) -> Option<String> {
+  /// What a second press of the key that a first press armed does, as the row of hints says it in
+  /// a count of columns: a message that it takes back is cut inside its quotes. The button of the
+  /// head says the resolve of a thread that works.
+  fn armed_says(&self, room: usize) -> Option<String> {
     match self.armed.as_ref()? {
       Armed::Back(back) => {
         let text = match back {
           Back::Queued(_, text) | Back::Said(_, text) => text,
         };
-        let first = text.lines().next().unwrap_or_default();
-        Some(format!("{} again takes back “{first}”", self.key(Does::Empty)))
+        let said = format!("{} again takes back “", self.key(Does::Empty));
+        let first =
+          cut(text.lines().next().unwrap_or_default(), room.saturating_sub(said.width() + 1));
+        Some(format!("{said}{first}”"))
       }
       Armed::Stop => Some(format!("{} again stops the work", self.key(Does::Close))),
       Armed::Leave => Some(format!("{} again leaves the window", self.key(Does::Leave))),
@@ -752,6 +755,8 @@ impl Model {
   /// operator, and the key that turns the input, or that refuses the question of a form.
   fn hints(&self) -> Row {
     let t = &self.tokens;
+    // The row keeps two blank columns at each side, as the text of the box of the input above it.
+    let wide = self.wide().saturating_sub(4);
     let muted = t.style(Role::Muted);
     let card = self.client.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
     let ended = self
@@ -765,7 +770,6 @@ impl Model {
     // The thread says why it has no page, so the row says it once more only for another fault.
     let shown = self.client.thread.as_ref().and_then(|one| self.why(one));
     let notice = self.client.notice.clone().map(|one| (one, t.muted));
-    let says = self.armed_says().map(|one| (one, t.attention)).or(notice);
     let (does, name) = match (&self.client.aim, &self.client.thread) {
       _ if self.form().is_some() => (Does::Empty, "refuse"),
       (None, Some(_)) if self.leaves() => (Does::Close, "back"),
@@ -775,10 +779,13 @@ impl Model {
       (_, None) => (Does::List, "the list"),
     };
     let key = vec![run(format!("{} {name}", self.key(does)), muted)];
+    // A second press says what it does in the room that the key at the right leaves.
+    let armed = self.armed_says(wide.saturating_sub(2 + width(&key) + 2));
+    let says = armed.map(|one| (one, t.attention)).or(notice);
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
     // The keys of what stands over the input: a form, the completion, or the bar of the time.
     let keyed = self.form_hints().or_else(|| self.completion_hints()).or_else(|| self.time_hints());
-    let room = self.wide().saturating_sub(2).saturating_sub(width(&key) + 2);
+    let room = wide.saturating_sub(width(&key) + 2);
     let word = Some(self.word_hints(room)).filter(|(hints, _)| !hints.is_empty());
     let python = self.python_hints().filter(|_| !works);
     let place = fault.is_none() && says.is_none() && keyed.is_none() && word.is_none();
@@ -801,13 +808,13 @@ impl Model {
     // The machine and the folder of a thread that rests give way to the threads that ask him, which
     // the row never hides.
     let kept = if place { 2 } else { width(&left) };
-    let room = self.wide().saturating_sub(2).saturating_sub(kept + width(&key) + 2);
+    let room = wide.saturating_sub(kept + width(&key) + 2);
     let others = self.others_ask(room);
     let right: Line = others.iter().chain(&key).cloned().collect();
     // A place that does not fit says its folder alone, which tells more than the machine.
-    let fits = width(&left) + 2 + width(&right) <= self.wide().saturating_sub(2);
+    let fits = width(&left) + 2 + width(&right) <= wide;
     let left = if place && !fits { self.place(false) } else { left };
-    let line = spread(left, right.clone(), self.wide().saturating_sub(2), Style::new());
+    let line = spread(left, right.clone(), wide, Style::new());
     hot.extend(branched(&line).filter(|_| place));
     let (end, start) = (width(&line), width(&line) - width(&right));
     if !others.is_empty() {

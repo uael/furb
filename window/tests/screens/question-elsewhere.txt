@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/src/furb-try           ◆ 1 other thread asks   ⌃P go to
+  ~/src/furb-try         ◆ 1 other thread asks   ⌃P go to

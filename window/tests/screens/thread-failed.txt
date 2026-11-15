@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → why is the… ▾   opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/src/furb-try                   ⌃P go to
+  This computer · ~/src/furb-try                 ⌃P go to

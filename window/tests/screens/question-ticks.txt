@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → which keys… ▾   opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ↑↓ choose · Space tick · ⏎ answer               ⌃C refuse
+  ↑↓ choose · Space tick · ⏎ answer             ⌃C refuse

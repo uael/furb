@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    This… ▾   BR broken ▾    opus  high
 ┃
-  Refused: Could not use…                          ⌃P go to
+  Refused: Could not use…                        ⌃P go to

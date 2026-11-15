@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → Debug stuck TUI… ▾      opus  high   + New thread ⌃N
 ┃
-  This computer · ~/src/furb-try              ◆ 1 other thread asks   ⌃P go to
+  This computer · ~/src/furb-try            ◆ 1 other thread asks   ⌃P go to

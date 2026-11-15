@@ -60,7 +60,7 @@ impl Model {
   fn review_head(&self, review: &Review) -> Line {
     let (changes, read) = (self.client.changes(review.at, &review.folder), self.client.reviewed());
     let muted = self.tokens.style(Role::Muted);
-    let branch = changes.and_then(|one| one.branch.as_deref()).map(|one| format!(" · ⎇ {one}"));
+    let branch = changes.and_then(|one| one.branch.as_deref()).map(|one| format!(" · ⑂ {one}"));
     let project = format!(" {}{} · ", named(&review.folder), branch.unwrap_or_default());
     let mut left = vec![run(project, muted)];
     left.extend(read.map(|one| run(one.path.clone(), self.tokens.style(Role::Title))));

@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → how many… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⏎ answer                                        ⌃C refuse
+  ⏎ answer                                      ⌃C refuse

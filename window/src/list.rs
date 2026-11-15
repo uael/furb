@@ -248,7 +248,7 @@ impl Model {
       card.session.as_ref().filter(|name| **name != card.thread.title && !name.is_empty());
     let session = named.map(|name| format!(" · {name}")).unwrap_or_default();
     let changes = card.project.as_deref().and_then(|folder| self.client.changes(key.0, folder));
-    let branch = changes.and_then(|one| one.branch.as_deref()).map(|one| format!(" · ⎇ {one}"));
+    let branch = changes.and_then(|one| one.branch.as_deref()).map(|one| format!(" · ⑂ {one}"));
     let place = format!("{project}{machine}{}{session}", branch.unwrap_or_default());
     let badge = self.badge(&project);
     let badge = run(badge.content, on(badge.style));

@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → remove the gate… ▾    opus   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/furb                             ⎋ back
+  This computer · ~/furb                           ⎋ back

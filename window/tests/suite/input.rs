@@ -359,7 +359,7 @@ fn ctrl_c_empties_the_input_then_names_his_last_message_that_runs_and_takes_it_b
   assert!(app.wait_until(PATIENCE, || told(&daemon, &sessions).len() == 3));
   paged(&app);
   app.press("ctrl+c");
-  shows(&app, "⌃C again takes back “three (the model works on…");
+  shows(&app, "⌃C again takes back “three (the model works");
   screen("input-take-back", &app);
   app.press("ctrl+c");
   // The question of the message stops, and its text comes back to the input.
@@ -527,7 +527,7 @@ fn the_review_lists_the_changed_files_of_the_project_and_the_diff_of_each_and_th
   app.press("ctrl+x");
   app.press("g");
   let shown = shows(&app, "one = 2");
-  assert!(shown.contains(" furb-try · ⎇ trunk · a.py"), "{shown}");
+  assert!(shown.contains(" furb-try · ⑂ trunk · a.py"), "{shown}");
   assert!(shown.contains("Changes  2 files"), "{shown}");
   assert!(shown.contains("M a.py"), "{shown}");
   assert!(shown.contains("U b.py"), "{shown}");
@@ -537,8 +537,8 @@ fn the_review_lists_the_changed_files_of_the_project_and_the_diff_of_each_and_th
   let gone = app.wait_until(PATIENCE, || !app.text().contains("Changes  2 files"));
   assert!(gone, "{}", app.text());
   // The branch of the row of hints opens the review, as its key does.
-  shows(&app, "⎇ trunk ±2");
-  let (x, y) = at(&app, "⎇ trunk ±2", 0);
+  shows(&app, "⑂ trunk ±2");
+  let (x, y) = at(&app, "⑂ trunk ±2", 0);
   app.click(x, y);
   shows(&app, "Changes  2 files");
 }
@@ -558,12 +558,12 @@ fn a_file_changed_with_no_life_counts_once_the_window_takes_the_focus_again() {
   fs::write(project.join("a.py"), "one = 2\n").unwrap();
   // The window asked the changes of its folder at its start, before the folder was a checkout.
   app.event(Event::Focus(true));
-  shows(&app, "⎇ trunk ±1");
+  shows(&app, "⑂ trunk ±1");
   // The operator leaves for an editor, writes a file there, and comes back to the window.
   app.event(Event::Focus(false));
   fs::write(project.join("b.py"), "two = 2\n").unwrap();
   app.event(Event::Focus(true));
-  shows(&app, "⎇ trunk ±2");
+  shows(&app, "⑂ trunk ±2");
 }
 
 #[test]

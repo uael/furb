@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → why is the… ▾   opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⠋ Working · ⎋ stop                               ⌃P go to
+  ⠋ Working · ⎋ stop                             ⌃P go to

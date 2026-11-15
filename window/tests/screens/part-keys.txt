@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    This computer ▾   FT furb-try ▾                                 opus  high
 ┃
-  ~/src/furb-try                                                                     ⌃X L the list
+  ~/src/furb-try                                                                   ⌃X L the list

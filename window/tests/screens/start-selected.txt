@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → Debug stuck… ▾  opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ~/src/furb-try           ◆ 1 other thread asks   ⌃P go to
+  ~/src/furb-try         ◆ 1 other thread asks   ⌃P go to
