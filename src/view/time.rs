@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use super::{
+use furb_wire::{
   act::{Act, Phase, RunState},
   state::restate,
 };

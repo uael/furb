@@ -1,10 +1,9 @@
 use serde_json::{Value, json};
 
-use super::{
-  Answered, Block, Context, Line, Mark, Output, Portion, Reach, Reply, Retrying, Said, Saying,
-  Streamed, Thought, Work,
+use crate::view::{
+  Answered, Block, Context, Fold, Held, Line, Maker, Mark, Output, Portion, Reach, Read, Reply,
+  Retrying, Said, Saying, Standing, Streamed, Thought, Work, declined,
 };
-use crate::view::{Fold, Held, Maker, Read, Standing, declined};
 
 /// The acts of a list of facts as a host holds them, with what the host heard at the second 100.
 fn held(facts: impl IntoIterator<Item = Value>, streams: &mut Streamed) -> Held {

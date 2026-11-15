@@ -19,11 +19,12 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{
+use furb_wire::{
   act::{Act, Kind, RunState, operator},
-  fold::followed,
   state::State,
 };
+
+use super::fold::followed;
 
 /// How many of the last prompts of a thread, and of the last rungs of each ladder, show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

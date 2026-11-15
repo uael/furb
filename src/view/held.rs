@@ -18,11 +18,14 @@ use serde_json::Value;
 
 use crate::engine::OPERATOR;
 
-use super::{
+use furb_wire::{
   act::{Act, Kind},
+  state::State,
+};
+
+use super::{
   desk::{Desk, desk},
   ladder::{Index, Rung, Shown, folded, lives},
-  state::State,
   threads::{
     Attention, ChainAside, Lookup, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
     chain_threads, chain_tree, nest_threads, order_threads,

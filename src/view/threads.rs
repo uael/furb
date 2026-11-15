@@ -10,12 +10,12 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{
+use furb_wire::{
   act::{Act, Kind, WATCH, operator},
-  fold::followed,
-  named::NAME,
   state::{State, working},
 };
+
+use super::{fold::followed, named::NAME};
 use std::{iter, mem};
 
 /// The acts of a life by their names.
