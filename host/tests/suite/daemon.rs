@@ -1072,6 +1072,23 @@ async fn folded(index: &str, bytes: usize) -> (Value, Vec<Value>) {
   }
 }
 
+/// A window that attaches a life after a fault ended it hears its events and its end, with why.
+#[tokio::test]
+async fn a_window_that_attaches_a_life_that_a_fault_ended_hears_why() {
+  let at = place();
+  let (local, _daemon) = started_with(&at, SHORT, opening(&at)).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let before = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/replay/speaker.jsonl");
+  fs::copy(before, at.join("before.jsonl")).unwrap();
+  let life = open(&mut window, &at, "before.jsonl", None).await;
+  window.ended(&life).await;
+  assert_eq!(window.ask(Verb::Attach { life: life.clone(), from: 0 }).await, Ok(Answer::Done));
+  let why = SchemaError::BeforeCut { of: "record" }.to_string();
+  let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(no)), .. } if *one == life && *no == why);
+  window.until(ended).await;
+}
+
 /// A record from before the stable cut opens in no life: its window hears why, reads its threads,
 /// read only, until it detaches the life, and hears why for each other verb.
 #[tokio::test]

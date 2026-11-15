@@ -1110,7 +1110,17 @@ impl Lives {
       Kind::Skill => Some(peer.name.clone().ok_or(ProtocolError::Nameless)?),
       Kind::Window | Kind::Daemon => None,
     };
-    let (handle, holders) = living(&mut self.held, life)?;
+    let Ok((handle, holders)) = living(&mut self.held, life) else {
+      // A life that a fault ended before the peer attached it tells its events and its end all the
+      // same, so the peer learns why, or the refusal says why once a window let it go.
+      let faulted =
+        self.faults.get(life).ok_or_else(|| ProtocolError::Closed { life: life.to_owned() })?;
+      let handle =
+        faulted.life.as_ref().ok_or_else(|| ProtocolError::Refused { why: faulted.why.clone() })?;
+      let teller = Teller { life: life.to_owned(), opens: None, outbox: outbox.clone() };
+      tokio::spawn(teller.told(handle.events(from), self.asks.clone()));
+      return Ok(Answer::Done);
+    };
     let opens = skill.is_none().then(|| handle.opens());
     let teller = Teller { life: life.to_owned(), opens, outbox: outbox.clone() };
     let told = tokio::spawn(teller.told(handle.events(from), self.asks.clone())).abort_handle();
