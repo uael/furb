@@ -2936,12 +2936,11 @@ async fn the_cards_of_a_record_stay_the_same_through_each_birth_on_a_checkpoint_
   let ended = card(&mut window, |card| !card.held && card.thread.prompt == prompt).await;
   assert_eq!(same(&ended), same(&rests));
   let index = format!("{life}.threads.json");
-  let mut kept: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
+  let kept: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
   let prompts: Vec<_> =
     kept["threads"].as_array().unwrap().iter().map(|one| &one["prompt"]).collect();
   assert_eq!(prompts, [&json!(prompt)]);
-  kept["tip"]["bytes"] = json!(1);
-  fs::write(&index, kept.to_string()).unwrap();
+  fs::remove_file(&index).unwrap();
   let mut later = Window::dialed(&local).await;
   cards(&mut later).await;
   let folded = card(&mut later, |card| card.thread.prompt == prompt).await;
@@ -3025,15 +3024,21 @@ async fn the_cards_of_a_record_at_rest_come_from_its_index_and_never_from_a_fold
   let mut second = Window::dialed(&local).await;
   assert_eq!(cards(&mut second).await, vec![rests.clone()]);
   assert!(!Path::new(&retold).exists(), "the list read the past of a record");
-  // An index that does not name the tip of its record is dropped: the list gives no card of the
-  // record, which comes once the daemon made the index from the record, so no card comes and goes.
+  // An index that names an older tip of its record gives its cards, since a record only grows,
+  // until the daemon made the index again from the record: no card comes and goes.
   let mut kept: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
   kept["tip"]["bytes"] = json!(1);
   fs::write(&index, kept.to_string()).unwrap();
   let mut third = Window::dialed(&local).await;
-  assert_eq!(cards(&mut third).await, Vec::new());
-  let folded = card(&mut third, |card| card.thread.prompt == rests.thread.prompt).await;
-  assert_eq!(Card { since: 0, ..folded }, Card { since: 0, ..rests });
-  let again: Value = serde_json::from_slice(&fs::read(&index).unwrap()).unwrap();
-  assert_ne!(again["tip"], kept["tip"]);
+  assert_eq!(cards(&mut third).await, vec![rests.clone()]);
+  let tip = || serde_json::from_slice::<Value>(&fs::read(&index).unwrap()).unwrap()["tip"].clone();
+  let made = async {
+    while tip() == kept["tip"] {
+      time::sleep(Duration::from_millis(10)).await;
+    }
+  };
+  timeout(PATIENCE, made).await.expect("the daemon makes the index again");
+  let mut fourth = Window::dialed(&local).await;
+  let folded = cards(&mut fourth).await.into_iter().map(|one| Card { since: 0, ..one });
+  assert_eq!(folded.collect::<Vec<_>>(), vec![Card { since: 0, ..rests }]);
 }

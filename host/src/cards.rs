@@ -87,22 +87,13 @@ fn index(record: &Path) -> PathBuf {
   PathBuf::from(name)
 }
 
-/// The session that the index of a record keeps, or none when the record has no index or its tip
-/// is not the tip that the index names. It reads the index and the end of the record, and no
-/// more of the record.
-pub(crate) fn kept(record: &Path) -> Option<Session> {
-  let indexed = indexed(record)?;
-  (Tip::of(record, None).ok()? == indexed.tip).then_some(indexed.session)
-}
-
-/// The session that the index of a record keeps, at the tip that it names, which may be an older
-/// tip of the record.
-pub(crate) fn older(record: &Path) -> Option<Session> {
-  indexed(record).map(|one| one.session)
-}
-
-fn indexed(record: &Path) -> Option<Indexed> {
-  serde_json::from_slice(&fs::read(index(record)).ok()?).ok()
+/// The session that the index of a record keeps, and whether the index names the tip of the record
+/// now. An index of an older tip says threads that the record still holds, since a record only
+/// grows. It reads the index and the end of the record, and no more of the record.
+pub(crate) fn kept(record: &Path) -> Option<(Session, bool)> {
+  let indexed: Indexed = serde_json::from_slice(&fs::read(index(record)).ok()?).ok()?;
+  let fresh = Tip::of(record, None).is_ok_and(|tip| tip == indexed.tip);
+  Some((indexed.session, fresh))
 }
 
 /// The index of a record written from a session, at the tip of the record now. It is written
@@ -153,11 +144,12 @@ pub(crate) struct Times {
 }
 
 impl Times {
-  /// The times that the index of a record keeps, and none for a record with no index.
+  /// The times that the index of a record keeps, at whatever tip it names, and none for a record
+  /// with no index: a thread whose standing changed since takes a new time.
   pub(crate) fn kept(record: Option<&str>) -> Self {
     let kept = record.and_then(|one| kept(Path::new(one)));
     let timed = |one: &Timed| (one.thread.prompt.clone(), (kind(&one.thread), one.since));
-    Self { since: kept.iter().flat_map(|kept| &kept.threads).map(timed).collect() }
+    Self { since: kept.iter().flat_map(|(kept, _)| &kept.threads).map(timed).collect() }
   }
 
   /// Each card with its time: the time that it had while the kind of its standing stays, and else

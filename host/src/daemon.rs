@@ -1378,11 +1378,10 @@ impl Lives {
   }
 
   /// The cards of one record of a project now: those that its life told, when one lives and
-  /// told some, else those of the index beside it. A record with no index that agrees with it
-  /// gives no card yet, since the daemon does not know its threads, and goes once to the task that
-  /// makes its index, unless a life holds it, which tells its cards itself: until it tells them, an
-  /// index of an older tip says them. So no list waits for the fold of a record, and no card comes
-  /// that then goes.
+  /// told some, else those of the index beside it, which may name an older tip of the record. A
+  /// record that no life holds and whose index does not name its tip goes once to the task that
+  /// makes its index again, and a record with no index gives no card until that task ends. So no
+  /// list waits for the fold of a record, and no card comes that then goes.
   fn cards_of(&mut self, life: &str, project: Option<&String>) -> Vec<Card> {
     let record = Path::new(life);
     let (viewers, pins) = match self.held.get(life) {
@@ -1404,28 +1403,26 @@ impl Lives {
       since,
       thread,
     };
-    if let Some(session) = self.session(life) {
-      let stands = |thread: view::Card| if held { thread } else { thread.at_rest() };
-      let threads = session.threads.iter().cloned();
-      return threads.map(|one| card(&session, one.since, stands(one.thread))).collect();
-    }
-    if !held && record.is_file() && self.indexing.insert(life.to_owned()) {
+    let told = self.session(life);
+    let stale = told.as_ref().is_none_or(|(_, fresh)| !fresh);
+    if !held && stale && record.is_file() && self.indexing.insert(life.to_owned()) {
       // The task ends with the daemon, and then no peer hears a card.
       self.index.send(life.to_owned()).ok();
     }
-    Vec::new()
+    let Some((session, _)) = told else { return Vec::new() };
+    let stands = |thread: view::Card| if held { thread } else { thread.at_rest() };
+    let threads = session.threads.iter().cloned();
+    threads.map(|one| card(&session, one.since, stands(one.thread))).collect()
   }
 
-  /// The session of a record now: the one that its life told, when the daemon holds one that told
-  /// one, else the one of the index beside it, when the index agrees with the record.
-  fn session(&self, life: &str) -> Option<Arc<Session>> {
-    let record = Path::new(life);
-    match self.held.get(life) {
-      // A life that opens tells no session until its fold stands, and its open can write to its
-      // record first. Until it tells one, the index says the threads of an older tip, which the
-      // record holds still, since a record only grows.
-      Some(Held { handle, .. }) => handle.session().or_else(|| cards::older(record).map(Arc::new)),
-      None => cards::kept(record).map(Arc::new),
+  /// The session of a record now, and whether it stands at the tip of the record: the one that
+  /// its life told, when the daemon holds one that told one, else the one of the index beside it.
+  /// A life that opens tells no session until its fold stands, and its open can write to its
+  /// record first, so its index says its threads until then.
+  fn session(&self, life: &str) -> Option<(Arc<Session>, bool)> {
+    match self.held.get(life).and_then(|one| one.handle.session()) {
+      Some(told) => Some((told, true)),
+      None => cards::kept(Path::new(life)).map(|(kept, fresh)| (Arc::new(kept), fresh)),
     }
   }
 
@@ -1438,7 +1435,7 @@ impl Lives {
     let held = held.into_iter().rev().filter(|one| one.by == site);
     history.extend(held.filter(|one| seen.insert(one.text.clone())));
     for record in self.project(life) {
-      let Some(session) = self.session(&record) else { continue };
+      let Some((session, _)) = self.session(&record) else { continue };
       let his = session.sent.iter().rev().filter(|one| one.by == site);
       history.extend(his.filter(|one| seen.insert(one.text.clone())).cloned());
     }
@@ -1448,7 +1445,7 @@ impl Lives {
   /// The skills of the first record of the project of a record, as [`Self::project`] orders them,
   /// whose life read them, so a new session of a project offers the skills of its last one.
   fn skills(&self, life: &str) -> Vec<view::Skill> {
-    let read = |record: String| self.session(&record).map(|one| one.skills.clone());
+    let read = |record: String| self.session(&record).map(|(one, _)| one.skills.clone());
     self.project(life).into_iter().filter_map(read).find(|one| !one.is_empty()).unwrap_or_default()
   }
 

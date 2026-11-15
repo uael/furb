@@ -603,7 +603,7 @@ impl Life {
     self.carded();
     let told = self.cards.borrow().clone();
     if let (Some(record), Some(session)) = (&self.record, told)
-      && cards::kept(Path::new(record)).as_ref() != Some(&*session)
+      && cards::kept(Path::new(record)).is_none_or(|(kept, fresh)| !fresh || kept != *session)
       && let Err(no) = cards::keep(Path::new(record), &session)
     {
       self.put(Event::Notice(format!("The index of the threads of {record} is not written: {no}")));
