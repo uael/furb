@@ -18,6 +18,9 @@ use crate::{
   tokens::Role,
 };
 
+/// The rows of the panel of the completion above its first offer: a blank row and its head.
+const HEAD: usize = 2;
+
 /// The most rows of a completion that the panel shows at once.
 const ROWS: usize = 8;
 
@@ -37,8 +40,8 @@ impl Model {
     keys::commands().find(|one| one.command == Some(name)).map(|one| one.does)
   }
 
-  /// The rows of the panel of the completion: its head, then each row that it shows, or one row
-  /// that says why none shows. None while no completion shows.
+  /// The rows of the panel of the completion: a blank row and its head, then each row that it
+  /// shows, or one row that says why none shows. None while no completion shows.
   pub(crate) fn completion_rows(&self) -> Vec<Line> {
     let Some(completion) = self.client.completion.as_ref().filter(|one| !one.hidden) else {
       return Vec::new();
@@ -54,7 +57,10 @@ impl Model {
       Completes::Mention => format!("Files of {}", self.mentioned_in()),
       Completes::Emoji => "Emoji".to_owned(),
     };
-    let mut rows = vec![self.panel_row(vec![run(head, muted)], vec![run(count, muted)], false)];
+    // A blank row stands above the head, as the box of the input keeps one above its text.
+    let blank = self.panel_row(Vec::new(), Vec::new(), false);
+    let mut rows =
+      vec![blank, self.panel_row(vec![run(head, muted)], vec![run(count, muted)], false)];
     let shown = self.client.completing(ROWS);
     // A mention may match thousands of files, so only a slash reads every row for its column.
     let commands = match completion.completes {
@@ -105,7 +111,13 @@ impl Model {
         (left, Vec::new())
       }
       Kind::Emoji => {
-        let mut left = vec![run(format!("{}  :", offer.says), prose)];
+        // The selector that asks a symbol of text to draw as an emoji takes two columns in some
+        // terminals and one in others, as tmux, so the list draws the symbol without it, and a
+        // symbol of one column takes a slot of two: each name starts on one column. What he
+        // takes keeps the selector.
+        let glyph: String = offer.says.chars().filter(|one| *one != '\u{fe0f}').collect();
+        let pad = " ".repeat(2usize.saturating_sub(glyph.width()) + 2);
+        let mut left = vec![run(format!("{glyph}{pad}:"), prose)];
         left.extend(lit(&offer.name, letters, prose, bright));
         (left, Vec::new())
       }
@@ -137,7 +149,7 @@ impl Model {
     let width = u16::try_from(self.wide().saturating_sub(2)).ok()?;
     let pointed = self.pointed().and_then(|(x, at)| at.checked_sub(y).map(|row| (x, row)));
     let lines = rows.into_iter().enumerate().map(|(row, line)| match pointed {
-      Some((x, at)) if usize::from(at) == row && row > 0 && usize::from(x) < self.wide() => {
+      Some((x, at)) if usize::from(at) == row && row >= HEAD && usize::from(x) < self.wide() => {
         line.into_iter().map(|one| run(one.content, one.style.fg(self.tokens.hover))).collect()
       }
       _ => line,
@@ -150,12 +162,12 @@ impl Model {
     let (_, top, width, lines) = self.drawn_completion()?;
     let x = x.checked_sub(self.margin())?;
     let row = usize::from(y.checked_sub(top)?);
-    if x >= width || row == 0 || row >= lines.len() {
+    if x >= width || row < HEAD || row >= lines.len() {
       return None;
     }
     let completion = self.client.completion.as_ref()?;
     let first = (completion.chosen + 1).saturating_sub(ROWS);
-    let place = first + row - 1;
+    let place = first + row - HEAD;
     (place < completion.found.len()).then_some(place)
   }
 
