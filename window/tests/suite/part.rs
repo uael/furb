@@ -182,3 +182,23 @@ fn cell(app: &TestApp, text: &str, beside: &str) -> (u16, u16) {
   let (x, y) = found.unwrap_or_else(|| panic!("no row holds {text:?} beside {beside:?}:\n{frame}"));
   (u16::try_from(x).unwrap(), u16::try_from(y).unwrap())
 }
+
+#[test]
+fn a_new_session_on_the_model_of_the_last_card_of_its_project_shows_its_default_effort() {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  let sessions = daemon.project("furb");
+  daemon.served();
+  let mut peer = daemon.peer();
+  peer.rested(
+    &sessions.join("gate.jsonl"),
+    &format!("remove the gate\n{ANSWERS}"),
+    Some(Hold::Seen),
+  );
+  let folder = daemon.file("furb");
+  let options = Options { folder, ..options(&daemon.file("cards.json")) };
+  open(&app, vec![daemon.machine("mac")], options);
+  shows(&app, "Resolved 1");
+  // The card names its model alone; the launcher names the effort that a new session takes.
+  shows(&app, "FU ▾   opus  high");
+}

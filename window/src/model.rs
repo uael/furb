@@ -396,7 +396,7 @@ impl Model {
   }
 
   pub(crate) fn needs(&self, key: &Key, card: &Card) -> bool {
-    card.thread.needs(&self.client.machines[key.0].login)
+    card.needs(&self.client.machines[key.0].login)
   }
 
   /// Whether the machine of a card told the card in this connection.

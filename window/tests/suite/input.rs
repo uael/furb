@@ -427,7 +427,8 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   assert!(!frame.contains("where does the time go     "), "{frame}");
   app.press("enter");
   shows(&app, "┃ Ask for a change, a review or an answer");
-  shows(&app, "This computer ▾");
+  // The launcher names the project of the new session, and the machine gives way to the effort.
+  shows(&app, "This… ▾   FT ▾");
   // The key opens it too, and an escape closes it with no choice.
   app.press("ctrl+x");
   app.press("o");
@@ -435,5 +436,5 @@ fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends
   app.press("escape");
   let closed = app.wait_until(PATIENCE, || !app.text().contains("Search a session"));
   assert!(closed, "{}", app.text());
-  assert!(app.text().contains("This computer ▾"), "{}", app.text());
+  assert!(app.text().contains("This… ▾   FT ▾"), "{}", app.text());
 }

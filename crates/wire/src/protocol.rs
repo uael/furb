@@ -757,6 +757,11 @@ impl Card {
     let since = i64::try_from(self.since).unwrap_or(i64::MAX);
     (part, rank, if part == card::Part::NeedsYou { since } else { -since })
   }
+
+  /// Whether the card waits for a member: it stands in the part that needs him.
+  pub fn needs(&self, operator: &str) -> bool {
+    self.place(operator).0 == card::Part::NeedsYou
+  }
 }
 
 /// A view that a window mounts in a slot of a life, which the process of a skill serves.

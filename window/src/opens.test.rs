@@ -10,9 +10,10 @@ use crate::{
   tokens::Tokens,
 };
 
-/// A window of 100 columns and 30 rows on one machine, on the system of a client, whose open
-/// thread could not open its session, and the text of each row of its left side.
-fn failed(system: System) -> Vec<String> {
+/// A window of 100 columns and 30 rows on one machine, on the system of a client, whose card of a
+/// thread says why its record only reads, when it says it, once the thread opened and before any
+/// answer of its machine.
+fn carded(system: System, refused: Option<&str>) -> Model {
   let thread = view::Card {
     prompt: "prompt0".to_owned(),
     title: "remove the gate".to_owned(),
@@ -26,7 +27,7 @@ fn failed(system: System) -> Vec<String> {
     life: life.clone(),
     session: None,
     project: None,
-    refused: None,
+    refused: refused.map(str::to_owned),
     held: false,
     viewers: Vec::new(),
     pins: Vec::new(),
@@ -55,6 +56,13 @@ fn failed(system: System) -> Vec<String> {
   model.settle();
   model.selected = Some((0, life, "prompt0".to_owned()));
   model.open_thread();
+  model
+}
+
+/// The text of each row of the left side of a window whose open thread could not open its
+/// session.
+fn failed(system: System) -> Vec<String> {
+  let mut model = carded(system, None);
   let opened = model.thread.as_mut().expect("the thread opens");
   opened.thread.fault =
     Some(format!("Refused: Another process owns {}.", "/home/ada/furb/x.jsonl"));
@@ -96,4 +104,33 @@ fn a_page_refused_while_its_life_opens_ends_the_open_on_its_card_too() {
   let why = "Refused: Another process owns the record.".to_owned();
   assert!(model.answered(0, 7, Err(why)));
   assert!(model.shown_open(0, &life).is_none(), "the card says no open once the open failed");
+}
+
+#[test]
+fn a_thread_whose_card_only_reads_says_so_before_its_machine_answers() {
+  let model = carded(System::MacOs, Some("the record comes from a build before the stable cut"));
+  let left = model.left();
+  let rows: Vec<String> =
+    left.rows.iter().map(|row| row.iter().map(|one| one.content.as_ref()).collect()).collect();
+  assert_eq!(
+    rows[1].trim_end(),
+    "  The record comes from a build before the stable cut",
+    "{rows:#?}"
+  );
+  assert_eq!(model.area().placeholder, "The window sends nothing to this session");
+}
+
+#[test]
+fn a_thread_whose_card_only_reads_needs_no_one_on_the_home_as_in_the_list() {
+  let mut model =
+    carded(System::MacOs, Some("the record comes from a build before the stable cut"));
+  model.thread = None;
+  model.client.machines[0].cards[0].thread.standing = Standing::Asks { of: None };
+  model.settle();
+  let home: Vec<String> = model
+    .home()
+    .iter()
+    .map(|row| row.line.iter().map(|one| one.content.as_ref()).collect())
+    .collect();
+  assert!(home.iter().any(|row| row.trim() == "Nothing needs you."), "{home:#?}");
 }

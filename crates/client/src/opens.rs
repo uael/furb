@@ -124,9 +124,12 @@ impl Client {
     hold.is_some_and(|hold| hold.ask == Ask::Answered || hold.failed().is_some())
   }
 
-  /// Why a fault ended a life that the client holds, which then only reads.
+  /// Why a life only reads: a fault ended it, or its card says why no life opens its record,
+  /// which the client knows before any open.
   pub fn fault_of(&self, at: usize, life: &str) -> Option<&str> {
-    self.holds.get(&(at, life.to_owned()))?.failed()
+    let held = self.holds.get(&(at, life.to_owned())).and_then(Hold::failed);
+    let card = || self.machines.get(at)?.cards.iter().find(|card| card.life == life);
+    held.or_else(|| card()?.refused.as_deref())
   }
 
   /// The answer of the daemon to the open of a life under the id of its request: each verb of the

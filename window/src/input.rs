@@ -11,7 +11,7 @@
 use std::{mem, ops::Range, path::Path};
 
 use furb::view::{Act, Maker, RunState, Standing, timer};
-use furb_host::protocol::{Answer, Card, Verb};
+use furb_host::protocol::{Answer, Card, Model as Offered, Verb};
 use jiff::Timestamp;
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
@@ -428,8 +428,8 @@ impl Model {
       (None, _) => {
         let says = match self.target() {
           _ if self.draft.python => "A word of Python to run",
-          Target::Thread(_) if opens => "Your message goes once the session is open",
           Target::Thread(_) if reads => "The window sends nothing to this session",
+          Target::Thread(_) if opens => "Your message goes once the session is open",
           Target::Thread(_) if ended => "A reply opens this thread again",
           Target::Thread(_) if self.thread.as_ref().is_some_and(|one| one.from.is_some()) => {
             "Write to this agent"
@@ -694,9 +694,20 @@ impl Model {
         let told = self.client.machines.get(at)?;
         let here = named(&folder);
         let mut ours = told.cards.iter().rev().filter(|card| project(card) == here);
+        let offered = told.models.as_deref().unwrap_or_default();
+        // A card names the model of its thread with no effort, and a new session on that model
+        // stands on its default effort, which the catalog of the machine gives.
+        let effort = |model: &str| {
+          let same =
+            |one: &&Offered| one.name == model || one.name.rsplit(':').next() == Some(model);
+          offered.iter().find(same).and_then(|one| one.effort.clone())
+        };
         let last = ours.find_map(|card| card.thread.model.as_deref()).map(leveled);
-        let first = || told.models.as_ref()?.first();
-        return last.or_else(|| first().map(|one| (one.name.clone(), one.effort.clone())));
+        let last = last.map(|(model, chosen)| {
+          let effort = chosen.or_else(|| effort(&model));
+          (model, effort)
+        });
+        return last.or_else(|| offered.first().map(|one| (one.name.clone(), one.effort.clone())));
       }
     };
     let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
