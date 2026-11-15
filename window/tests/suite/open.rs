@@ -321,8 +321,9 @@ fn an_open_that_fails_says_why_and_how_to_go_back_and_loses_no_draft() {
   shows(&app, "┃ and the replay");
   app.paste("a draft");
   File::create(&go).unwrap();
-  let frame = shows(&app, "Another process owns");
-  assert!(frame.contains("The window reads this session and sends it nothing."), "{frame}");
+  // The refused message can say the fault before the end of the life comes: wait for the end.
+  let frame = shows(&app, "The window reads this session and sends it nothing.");
+  assert!(frame.contains("Another process owns"), "{frame}");
   assert!(!frame.contains("Opening"), "{frame}");
   let frame = shows(&app, "┃ and the replay");
   assert!(frame.contains("┃ a draft"), "{frame}");
