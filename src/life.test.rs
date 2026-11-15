@@ -1306,7 +1306,7 @@ fn a_life_never_tells_that_the_operator_left_the_catalog() {
 /// later life reads those enables at that stand too, which the journal says again, so it plays what
 /// the life played.
 #[test]
-fn a_record_whose_root_reloaded_its_extensions_on_a_checkpoint_opens_again_with_no_drift() {
+fn a_record_whose_root_reloaded_its_skills_on_a_checkpoint_opens_again_with_no_drift() {
   let at = yard("reloaded");
   laid(&replays().join("lives.jsonl.zst"), &at.join("record.jsonl"));
   drop(opening(&at, true).boot::<String>([]).unwrap());
