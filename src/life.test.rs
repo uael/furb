@@ -723,40 +723,49 @@ fn a_record_of_another_engine_crosses_to_this_build_at_its_open() {
   );
 }
 
-/// A life that keeps its record and opens from an image of another engine crosses at its open as
-/// it does by its record, from the image: the image goes, and the life goes on with this build.
+/// Only a life that keeps its record writes an image: each other life says facts that its record
+/// does not hold, as the stand of its boot, so no image of it is a cache of its record.
 #[test]
-fn an_image_of_another_engine_crosses_to_this_build_at_its_open() {
-  let at = yard("image-crosses");
-  let open = || Opening { skills: Some(false), ..opening(&at, false) }.boot::<String>([]).unwrap();
-  drop(imaged_elsewhere(&at, open));
+fn only_a_life_that_keeps_its_record_writes_an_image() {
+  let at = yard("image-unkept");
+  let open = |inspecting, keeps| {
+    let opening =
+      Opening { inspecting: Some(inspecting), skills: Some(false), ..opening(&at, keeps) };
+    opening.boot::<String>([]).unwrap().0
+  };
+  closed(&mut open(false, true), "x = 1\nclose(x)");
   let record = at.join("record.jsonl");
-  let keeps = Opening { skills: Some(false), ..opening(&at, true) };
-  let (mut later, replayed) = keeps.boot::<String>([]).unwrap();
-  assert!(!replayed.is_empty(), "the life opens by the checkpoint of the crossing");
-  assert_eq!(
-    closed(&mut later, "close([x, globals().get('elsewhere')])").as_ref().py_repr(),
-    "[1, None]",
-    "the life goes on with this build"
+  assert!(
+    !image::keep(&mut open(false, false), &record, &()).unwrap(),
+    "a life that works writes none"
   );
-  drop(later);
-  assert_eq!(world::checkpoints(&record).unwrap().len(), 1, "the crossing writes one checkpoint");
-  assert_eq!(builds(&record).last(), Some(&world::engine()));
+  assert!(
+    !image::keep(&mut open(true, false), &record, &()).unwrap(),
+    "a life that inspects writes none"
+  );
+  assert!(
+    image::keep(&mut open(false, true), &record, &()).unwrap(),
+    "a life that keeps writes one"
+  );
 }
 
-/// An image of a life whose last segment runs a checkpointer of the major that holds no `held`, as
-/// each one before it did, opens a life that works and keeps nothing by its record, at its tip,
-/// since that image cannot put its acts in flight; it never ends the life.
+/// An image names the texts of the engine of the build that wrote it, so a build of other texts
+/// reads none, and the life opens by its record.
 #[test]
-fn an_image_of_a_checkpointer_with_no_held_opens_a_life_that_works_by_its_record() {
-  let at = yard("image-unheld");
-  let unheld = crate::CHECKPOINTER.replace("def held(", "def unheld(");
-  let (record, _) = made_elsewhere(&at, &named(&[crate::ENGINE, crate::KERNEL, &unheld]).0);
-  let open = || Opening { skills: Some(false), ..opening(&at, false) }.boot::<String>([]).unwrap();
-  let (mut first, replayed) = open();
-  assert!(!replayed.is_empty(), "a record with no image opens by its entries");
-  assert!(image::keep(&mut first, &record, &()).unwrap(), "the life writes its image");
+fn an_image_of_a_build_of_other_texts_does_not_load() {
+  let at = yard("image-texts");
+  let open = || Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap();
+  let (mut first, _) = open();
+  closed(&mut first, "x = 1\nclose(x)");
+  assert!(
+    image::keep(&mut first, &at.join("record.jsonl"), &()).unwrap(),
+    "the life writes its image"
+  );
   drop(first);
+  let path = at.join("record.jsonl.image");
+  let held = fs::read(&path).unwrap();
+  let other = String::from_utf8_lossy(&held).replacen(&world::engine(), &"0".repeat(64), 1);
+  fs::write(&path, other.as_bytes()).unwrap();
   let (mut later, replayed) = open();
   assert!(!replayed.is_empty(), "the life opens by its record");
   assert_eq!(closed(&mut later, "close(x)").as_ref().py_repr(), "1");
@@ -793,36 +802,6 @@ fn a_chain_that_crossed_reads_the_lines_of_the_engine_that_differ() {
   closed(&mut later, "close(chain('fork', 'chain1'))");
   let fork = turns(&mut later, "chain2");
   assert!(fork[0].starts_with(root[0].as_str()), "the fork holds the turns of its source first");
-}
-
-/// A crossing by the image of a life and a crossing by its record reach the same state: the same
-/// turns and the same module of each chain, the record after them the same.
-#[test]
-fn a_crossing_by_the_image_and_by_the_record_reach_the_same_state() {
-  let read = |by_image: bool| {
-    let at = yard("crossing-ways");
-    let open = |keeps| Opening { skills: Some(false), ..opening(&at, keeps) }.boot::<String>([]);
-    closed(&mut open(true).unwrap().0, "x = 1\nc = chain('c')\nclose(c)");
-    let record = at.join("record.jsonl");
-    let text = fs::read_to_string(&record).unwrap();
-    fs::write(&record, text.replace(&ours(), &elsewhere("elsewhere = True").0)).unwrap();
-    let inspects = Opening { skills: Some(false), inspecting: Some(true), ..opening(&at, false) };
-    let mut inspected = inspects.boot::<String>([]).unwrap().0;
-    assert!(image::keep(&mut inspected, &record, &()).unwrap(), "the life writes its image");
-    drop(inspected);
-    if !by_image {
-      image::drop_of(&record);
-    }
-    let (mut later, replayed) = open(true).unwrap();
-    assert!(!replayed.is_empty(), "the life opens by the checkpoint of the crossing");
-    let word = "close([[c, turns(on=c), sorted(k for k in module(c) if not k.startswith('__'))] \
-                for c in ['chain1', 'chain2']])";
-    // The yard shows as its path, or home-relative and escaped on Windows: its name is in each
-    // form.
-    let name = at.file_name().and_then(|one| one.to_str()).expect("a yard with a name");
-    closed(&mut later, word).as_ref().py_repr().replace(name, "<at>")
-  };
-  assert_eq!(read(true), read(false));
 }
 
 /// The system prompt of each process of the claude command line of a test, in the order that they
@@ -872,21 +851,6 @@ fn after_a_crossing_each_chain_reads_the_system_prompt_that_it_read_first() {
   assert_eq!(read[2], crate::SYSTEM, "a new chain reads this build whole");
 }
 
-/// An image holds the engine that its life runs, so a life that keeps nothing goes on with that
-/// engine on a build that holds another one, as a life on a build of that engine does, and its
-/// image stands in for an image that such a build wrote.
-#[test]
-fn a_life_that_opens_from_its_image_goes_on_with_the_engine_that_the_image_holds() {
-  let at = yard("image-texts");
-  let open = || Opening { skills: Some(false), ..opening(&at, false) }.boot::<String>([]).unwrap();
-  let mut later = imaged_elsewhere(&at, open);
-  assert_eq!(
-    closed(&mut later, "close([x, globals().get('elsewhere')])").as_ref().py_repr(),
-    "[1, True]",
-    "the life goes on with the engine that its image holds, not with the engine of this build"
-  );
-}
-
 /// The opening of a life whose model is the claude command line of a test, which writes the words
 /// that it was given beside the folder.
 #[cfg(unix)]
@@ -917,17 +881,6 @@ fn system(at: &Path, life: &mut Engine) -> String {
   fs::read_to_string(file.expect("a file of the system prompt")).unwrap()
 }
 
-/// The model of a life that opens from its image reads the engine that the image holds, which the
-/// command line takes as the file of its system prompt.
-#[cfg(unix)]
-#[test]
-fn the_model_of_a_life_that_opens_from_its_image_reads_the_engine_that_the_image_holds() {
-  let at = yard("image-system");
-  let mut later = imaged_elsewhere(&at, || faked(&at).boot::<String>([]).unwrap());
-  let system = system(&at, &mut later);
-  assert!(system.contains("elsewhere"), "the model reads the engine of the life: {system:.200}");
-}
-
 /// The model of a life that opens by a record of another engine reads that engine.
 #[cfg(unix)]
 #[test]
@@ -937,20 +890,6 @@ fn the_model_of_a_life_that_opens_by_its_record_reads_the_engine_that_the_record
   let mut later = faked(&at).boot::<String>([]).unwrap().0;
   let system = system(&at, &mut later);
   assert!(system.contains("elsewhere"), "the model reads the engine of the life: {system:.200}");
-}
-
-/// The life that opens from the image of a record of an engine that this build does not hold, its
-/// engine with one more line, `elsewhere = True`: a first life opens by the record and writes its
-/// image, and the life given opens from that image.
-fn imaged_elsewhere(at: &Path, open: impl Fn() -> (Engine, Vec<Object>)) -> Engine {
-  let (record, _) = made_elsewhere(at, &elsewhere("elsewhere = True").0);
-  let (mut first, replayed) = open();
-  assert!(!replayed.is_empty(), "a record with no image opens by its entries");
-  assert!(image::keep(&mut first, &record, &()).unwrap(), "the life writes its image");
-  drop(first);
-  let (later, replayed) = open();
-  assert!(replayed.is_empty(), "a life that opens from its image reads no entry");
-  later
 }
 
 /// A life born on a checkpoint holds the teach and the enables of its root in the turns that the
@@ -1323,19 +1262,6 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
       panic!("{name} drifts from its first entry, born again at each checkpoint: {drift}");
     }
   }
-}
-
-/// A record whose checkpoint carries the enables of its root, on which a life that keeps it
-/// reloaded the words of the extensions that changed at its stand, opens again with no drift: a
-/// later life reads those enables at that stand too, which the journal says again, so it plays what
-/// the life played.
-#[test]
-fn a_record_whose_root_reloaded_its_extensions_on_a_checkpoint_opens_again_with_no_drift() {
-  let at = yard("reloaded");
-  laid(&replays().join("lives.jsonl.zst"), &at.join("record.jsonl"));
-  drop(opening(&at, true).boot::<String>([]).unwrap());
-  let again = Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]);
-  assert!(again.is_ok(), "the record opens again: {:?}", again.err());
 }
 
 /// A record whose engine gathers no checkpoint, which each engine before the stable cut of #1290

@@ -28,10 +28,11 @@ API of its own:
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
   A host adds only its own ears, as the console of its operator. A life opens at the exact state of its tip, from its
   image or by its record, on the engine and the Kernel that the image or the last segment of its record holds, as
-  `src/image.rs` and `src/checkpoint.rs` say. When those are not the ones of this build and the life keeps its record,
-  the open crosses first: a life that inspects reaches the tip on them and writes a checkpoint, which tells each chain
+  `src/image.rs` and `src/checkpoint.rs` say. An image holds those of the build that wrote it, which alone reads it.
+  When those of the record are not the ones of this build and the life keeps its record, the open crosses first: a life that inspects reaches the tip on them and writes a checkpoint, which tells each chain
   the lines of the engine that differ, then the fact made of this build, and the life goes on with this build. A
-  life that keeps nothing goes on with the engine that it opened on. Each chain reads as its system prompt the engine
+  life that keeps nothing goes on with the engine that it opened on. A record of an engine that gathers no checkpoint,
+  as each engine before the stable cut of #1290, opens only in a life that inspects it. Each chain reads as its system prompt the engine
   that it read first, and a new chain with no source the engine that the life runs. `script/engines.py` gives a copy
   of a record of a build before the
   texts of its engine from git. `tests/replay` holds the records that each build must replay on their own engines with
@@ -55,12 +56,14 @@ API of its own:
   two runs, and the half of the host, which `src/engine/image.rs` gives, with what each ear gives a fresh ear of its
   make, as `Ear::image` and `Ear::imaged` say, and the part of the host of the life, which that host gives and takes
   back before the life loads the image. It is a cache: its key names the tip of the record, the dump version of
-  monty, a digest that the build computes of what an image depends on in the build beside the texts of its life,
+  monty, the texts of the engine, of the Kernel and of the checkpointer of the build, a digest that the build computes
+  of what else an image depends on in the build,
   whether the scratch directory of the record holds a file, and the digest of its body, and the part of the host
   names the digest of the files that give it its shape. A life that keeps its record drops the image once it stands on
-  the record by the record, so a read and an open that fails leave it. A life of the command line or of the host that
-  keeps its record ends with its image, and writes no checkpoint there. The next life of a build of the same digests
-  on the same ears opens from it, with the engine and the Kernel that the image holds: it runs no boot, reads no entry
+  the record by the record, so a read and an open that fails leave it. Only a life that keeps its record writes an image,
+  since each other life says a fact that its record does not hold. A life of the command line or of the host that
+  keeps its record ends with its image, and writes no checkpoint there. The next life of a build of the same texts
+  and digests on the same ears opens from it: it runs no boot, reads no entry
   and says no stand, and each ear takes each act that the ear before it held in flight as an act that an earlier life
   took: it takes a reply, a wait or a prompt again, and closes a command as interrupted, which no view shows as a
   failure. A life that went on from the image and wrote

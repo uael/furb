@@ -340,6 +340,9 @@ pub fn stood(entry: &Object) -> Option<Object> {
 /// shape.
 pub const MADE: &str = "made";
 
+/// The name that a life hears the ear of its store by: a life that hears it keeps its record.
+pub(crate) const STORE: &str = "store";
+
 /// The engine of this build, which a record names: a digest of the engine, of the Kernel and of the
 /// checkpointer, which make each act of a replay and each birth. Another engine can make other acts
 /// from the same record, so a record replays only on the engine that made it.

@@ -22,7 +22,7 @@ reason, and a life that inspects still reads it. A drift on the same engine is a
 engine never makes a record drift. Where a later build fixes a defect of replay at its root, an adapter of the old
 engine holds the record, in the one home of adapters, `src/furb/adapters.py`, keyed by the digest of the engine (R3).
 A life that keeps its record and ran another engine, Kernel or checkpointer of the major first reaches the exact
-state of its tip on them, by its image or by its record, then crosses: it writes a checkpoint and the fact made of
+state of its tip on them, by its record, then crosses: it writes a checkpoint and the fact made of
 the build that opens it, and goes on with that build. Each chain keeps as its system prompt the engine that it read
 first, and its turns end with one paragraph that holds the lines of the engine that differ, so a chain only grows. A
 build of the major from before the field `systems` of the checkpoint still opens such a record exactly, since no
@@ -68,8 +68,7 @@ R2, the exact tip, with a checkpoint and without one (resume and reopen):
 - `src/life.test.rs::a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip`
 - `src/life.test.rs::a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_prompt_of_each_chain`
 - `src/life.test.rs::a_record_of_another_engine_crosses_to_this_build_at_its_open`
-- `src/life.test.rs::an_image_of_another_engine_crosses_to_this_build_at_its_open`
-- `src/life.test.rs::a_crossing_by_the_image_and_by_the_record_reach_the_same_state`
+- `src/life.test.rs::an_image_of_a_build_of_other_texts_does_not_load`
 - `src/life.test.rs::a_record_of_an_engine_that_gathers_no_checkpoint_opens_to_inspect_alone`
 - `src/life.test.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
 - `tests/suite/promise.rs::a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint`

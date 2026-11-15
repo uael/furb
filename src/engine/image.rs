@@ -17,8 +17,8 @@ use super::{
 use crate::{
   ear::Ear,
   sand::Sand,
-  value::{Fault, Given, Object},
-  world::Systems,
+  value::{Fault, Object},
+  world::{self, Systems},
 };
 
 /// The half of the host in the image of a life: what [`Outside`] and [`Engine`] hold of the
@@ -46,22 +46,20 @@ pub(crate) struct Half {
   pub(crate) systems: Systems,
 }
 
-impl Half {
-  /// Whether the checkpointer of the life of the image puts its acts in flight again at an open, as
-  /// [`Engine::flight`] does, so a life that works can open from it.
-  pub(crate) fn flies(&self) -> bool {
-    !self.opened.held.as_ref().is_none()
-  }
-}
-
 impl Engine {
   /// The image of the life between two entries: the half of the host and the session. Nothing
   /// when the life cannot stand again from an image: an ear cannot say what a fresh ear needs, as
-  /// a generator of a host, the life holds a function of a host, which no later process holds, or
-  /// the life stopped or drifted.
+  /// a generator of a host, the life holds a function of a host, which no later process holds, the
+  /// life keeps no record, or the life stopped or drifted. Only a life that keeps its record has
+  /// each fact that it said in it: each other life says at least the stand of its boot, so no image
+  /// of it is a cache of its record.
   pub(crate) fn image(&mut self) -> Result<Option<(Half, Vec<u8>)>, Fault> {
     let handed = &self.outside.hosted.handed;
-    if self.stopped.is_some() || self.raised.is_some() || !handed.calls.is_empty() {
+    if !self.hears(world::STORE)
+      || self.stopped.is_some()
+      || self.raised.is_some()
+      || !handed.calls.is_empty()
+    {
       return Ok(None);
     }
     let parts = handed.ears.iter().map(|(name, ear)| Some((name.clone(), ear.image()?)));

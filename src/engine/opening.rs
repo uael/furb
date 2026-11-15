@@ -200,8 +200,7 @@ def __lasting(name, ear):
   "seed": __seed,
   "boot": __boot,
   "fed": lambda entries: __journal("fed", __record["recorded"](__engine, entries)),
-  # A checkpointer of the major before held holds no act in flight, so an image of it opens no life that works.
-  "held": (lambda: __journal("held")) if __checkpointer_source and "held" in __checkpointer else None,
+  "held": lambda: __journal("held"),
 }"#;
 
 /// What the opening gave, by name: the callables of the sandbox that the host calls it by, each
@@ -256,7 +255,7 @@ pub(crate) struct Opened {
   /// which says them again at once.
   pub(super) fed: Object,
   /// The names of the acts that the journal of the life holds, each that an ear of the outside
-  /// took and that is not done, and nothing for a checkpointer that holds no `held`.
+  /// took and that is not done.
   pub(super) held: Object,
 }
 

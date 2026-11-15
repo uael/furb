@@ -312,7 +312,7 @@ impl Opening {
     let logs = logs.map(|path| world::logging(path, &last.entries, last.from));
     let record = checkpoint::booted(last.entries);
     let mut ears = self.eared(prepared.waited, Some(&record), checkpoint::stood(&record))?;
-    ears.extend(store.map(|store| ("store".to_owned(), store)));
+    ears.extend(store.map(|store| (world::STORE.to_owned(), store)));
     ears.extend(logs.map(|log| ("log".to_owned(), log)));
     Ok((record, ears))
   }
@@ -729,7 +729,7 @@ impl Opening {
     let mut ears = self.eared(prepared.waited.clone(), None, true)?;
     if let (Some(store), Some(path)) = (store, path) {
       let log = world::logging_on(path, tail.len());
-      ears.extend([("store".to_owned(), store), ("log".to_owned(), log)]);
+      ears.extend([(world::STORE.to_owned(), store), ("log".to_owned(), log)]);
     }
     let given = |name: &str| host.iter().chain(&ears).any(|one| one.0 == name);
     let lacked: Vec<String> =
@@ -738,9 +738,6 @@ impl Opening {
     let loaded = match (goes, known && (lacked.is_empty() || !self.works())) {
       (false, _) => Err("a later birth of its record passed it".to_owned()),
       (true, false) => Err("its ears are not the ears of this life".to_owned()),
-      (true, true) if self.works() && !image.half.flies() => {
-        Err("its checkpointer puts no act in flight again".to_owned())
-      }
       (true, true) => image
         .session()
         .map_err(|no| no.to_string())
