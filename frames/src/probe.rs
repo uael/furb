@@ -31,8 +31,10 @@ const PAD: usize = 3;
 /// The glyphs of a bar or a border, which stand on the edge of a box and are not its content.
 const BARS: &str = "┃│▌▐▍▎▏█▕";
 
-/// The half blocks that carry a box by half a cell on one side.
-const HALVES: [&str; 4] = ["▐", "▌", "▄", "▀"];
+/// The half and the quarter blocks that carry a box by half a cell on a side, each by the side that
+/// it carries: the left, the right, the top and the bottom. A quarter block is a corner, and the
+/// bar of a card in half a column is its border, so their color may be another than the ground.
+const HALVES: [&str; 4] = ["▐▗▝", "▌▖▘", "▄▗▖", "▀▝▘"];
 
 /// The look of a cell: its color, its ground and its attributes.
 type Look = (Rgb, Rgb, u8);
@@ -201,36 +203,36 @@ pub(crate) fn boxes(cells: &[Vec<Cell>], base: Rgb) -> Vec<Boxed> {
 }
 
 impl Boxed {
-  /// The box with each side that a row or a column of half blocks of its ground carries on: such a
-  /// side, as the round edge of a card, stands in the cell of the half block.
+  /// The box with each side that a row or a column of half blocks carries on: such a side, as the
+  /// round edge or the bar of a card, stands in the cell of the half block. The sides of a column
+  /// come first, so a row of half blocks reaches the corners of the box.
   fn halves(&mut self, cells: &[Vec<Cell>]) {
-    let Self { ground, top, left, bottom, right, .. } = *self;
-    let half = |row: usize, col: usize, glyph: &str| {
-      cells
-        .get(row)
-        .and_then(|line| line.get(col))
-        .is_some_and(|cell| cell.glyph == glyph && cell.fg == ground)
+    let half = |row: usize, col: usize, side: usize| {
+      let cell = cells.get(row).and_then(|line| line.get(col));
+      cell.is_some_and(|cell| !cell.glyph.is_empty() && HALVES[side].contains(&cell.glyph))
     };
-    let column = |col: usize, glyph| (top..=bottom).all(|row| half(row, col, glyph));
-    let row = |at: usize, glyph| (left..=right).all(|col| half(at, col, glyph));
-    if left > 0 && column(left - 1, "▐") {
+    let Self { top, bottom, .. } = *self;
+    let column = |col: usize, side| (top..=bottom).all(|row| half(row, col, side));
+    if self.left > 0 && column(self.left - 1, 0) {
       self.left -= 1;
     }
-    if column(right + 1, "▌") {
+    if column(self.right + 1, 1) {
       self.right += 1;
     }
-    if top > 0 && row(top - 1, "▄") {
+    let Self { left, right, .. } = *self;
+    let row = |at: usize, side| (left..=right).all(|col| half(at, col, side));
+    if top > 0 && row(top - 1, 2) {
       self.top -= 1;
     }
-    if row(bottom + 1, "▀") {
+    if row(bottom + 1, 3) {
       self.bottom += 1;
     }
   }
 }
 
-/// A half block of the ground of a box, which is the box and not its content.
-fn grounds(cell: &Cell, ground: Rgb) -> bool {
-  HALVES.contains(&cell.glyph.as_str()) && cell.fg == ground
+/// A half or a quarter block on the edge of a box, which is the box and not its content.
+fn grounds(cell: &Cell) -> bool {
+  !cell.glyph.is_empty() && HALVES.iter().any(|side| side.contains(&cell.glyph))
 }
 
 fn bounds(values: impl Iterator<Item = usize> + Clone) -> (usize, usize) {
@@ -245,7 +247,7 @@ fn insets(cells: &[Vec<Cell>], one: &Boxed) -> Option<[usize; 4]> {
     (one.left..=one.right).filter_map(move |col| {
       let cell = &cells[row][col];
       let shows = !cell.glyph.trim().is_empty() || cell.bg != one.ground;
-      (shows && !edge(col, cell) && !grounds(cell, one.ground)).then_some((row, col))
+      (shows && !edge(col, cell) && !grounds(cell)).then_some((row, col))
     })
   });
   let content: Vec<(usize, usize)> = content.collect();

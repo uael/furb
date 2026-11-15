@@ -72,6 +72,31 @@ fn a_half_block_of_the_ground_of_a_box_carries_its_side() {
 }
 
 #[test]
+fn a_card_on_half_rows_with_its_bar_in_half_a_column_is_one_box_with_its_corners() {
+  // The selected card of the list: half a row of its ground above and under its text, its bar in
+  // the right half of the column before it, and its ground in the left half of the column after.
+  let hue = 0xec_b081;
+  let band = |[bar, fill, end]: [&'static str; 3]| -> [(&'static str, u32, u32); 5] {
+    [
+      (" ", TEXT, BASE),
+      (bar, hue, BASE),
+      (fill, RAISED, BASE),
+      (end, RAISED, BASE),
+      (" ", TEXT, BASE),
+    ]
+  };
+  let line = [
+    (" ", TEXT, BASE),
+    ("▐", hue, BASE),
+    (" text ", TEXT, RAISED),
+    ("▌", RAISED, BASE),
+    (" ", TEXT, BASE),
+  ];
+  let shown = frame(&[&band(["▗", "▄▄▄▄▄▄", "▖"]), &line, &line, &band(["▝", "▀▀▀▀▀▀", "▘"])]);
+  assert_eq!(says(&shown), Vec::<String>::new());
+}
+
+#[test]
 fn a_padding_that_the_scale_does_not_name_is_named() {
   let shown = frame(&[&[("   text   ", TEXT, RAISED)]]);
   assert_eq!(

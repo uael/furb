@@ -97,6 +97,26 @@ struct Area {
   height: usize,
 }
 
+/// The blocks of quarters of a cell, each with its quarters lit: the upper left, the upper right,
+/// the lower left and the lower right, from the lowest bit.
+const BLOCKS: [(char, u8); 15] = [
+  ('▘', 0b0001),
+  ('▝', 0b0010),
+  ('▀', 0b0011),
+  ('▖', 0b0100),
+  ('▌', 0b0101),
+  ('▞', 0b0110),
+  ('▛', 0b0111),
+  ('▗', 0b1000),
+  ('▚', 0b1001),
+  ('▐', 0b1010),
+  ('▜', 0b1011),
+  ('▄', 0b1100),
+  ('▙', 0b1101),
+  ('▟', 0b1110),
+  ('█', 0b1111),
+];
+
 /// The pixels of a cell, or of the two cells of a wide glyph, and the row of its base line in it.
 #[derive(Clone, Copy)]
 struct Place {
@@ -145,10 +165,24 @@ impl Canvas {
     }
   }
 
-  /// A glyph of a loader that the face lacks, drawn as its shape: a pattern of braille as its dots,
-  /// and a circle with one half filled. False for each other glyph.
+  /// A glyph drawn as its shape and not from the face: a block of quarters of the cell, as a
+  /// terminal draws it from the cell and not from its font, so a block meets the block of the cell
+  /// beside it, above it and under it with no seam; and a glyph of a loader that the face lacks, a
+  /// pattern of braille as its dots and a circle with one half filled. False for each other glyph.
   fn shape(&mut self, glyph: char, color: Rgb, place: Place) -> bool {
     let Area { x, y, height, .. } = place.area;
+    if let Some(quarters) = BLOCKS.iter().find(|one| one.0 == glyph).map(|one| one.1) {
+      let (left, top) = (WIDTH / 2, height / 2);
+      let parts = [(0, 0, left, top), (left, 0, WIDTH - left, top)];
+      let parts = parts.into_iter().chain([(0, top, left, height - top)]);
+      let parts = parts.chain([(left, top, WIDTH - left, height - top)]);
+      for (at, (dx, dy, width, height)) in parts.enumerate() {
+        if quarters >> at & 1 == 1 {
+          self.fill(Area { x: x + dx, y: y + dy, width, height }, color);
+        }
+      }
+      return true;
+    }
     if let Some(dots) = u32::from(glyph).checked_sub(0x2800).filter(|dots| *dots < 0x100) {
       // The bits of a pattern, by the column and the row of their dot.
       let places = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (0, 3), (1, 3)];
