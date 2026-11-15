@@ -10,9 +10,18 @@ fn frame(text: &str) -> Frame {
 }
 
 #[test]
-fn a_glyph_that_no_face_holds_is_named_once() {
+fn a_glyph_that_the_face_lacks_is_named_once() {
   let (_, missing) = png(&frame("a⏺b⏺")).unwrap();
   assert_eq!(missing, ['⏺']);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_glyph_that_the_face_lacks_is_drawn_from_a_face_of_the_system_and_not_as_a_box() {
+  let (none, _) = png(&frame("\u{10fffd}")).unwrap();
+  for glyph in ["⏺", "⬝", "⎿", "✻"] {
+    assert_ne!(png(&frame(glyph)).unwrap().0, none, "{glyph}");
+  }
 }
 
 #[test]

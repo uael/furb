@@ -1,7 +1,8 @@
 //! The image of a frame: each cell drawn on its ground with the face `JetBrains Mono`, at the size
-//! where a cell is 10 pixels wide. A glyph that the font lacks is drawn as a box, and named.
+//! where a cell is 10 pixels wide. A glyph that the face lacks is named, and drawn from a face of
+//! the system that holds it, as a terminal falls back to one, or as a box when none does.
 
-use std::{collections::HashMap, sync::LazyLock};
+use std::{collections::HashMap, fs, sync::LazyLock};
 
 use fontdue::{Font, FontSettings, Metrics};
 
@@ -25,6 +26,25 @@ static FACES: LazyLock<[Font; 3]> = LazyLock::new(|| {
   ]
 });
 
+/// The faces of macOS that hold each glyph of the rivals that `JetBrains Mono` lacks, a face of a
+/// terminal first: the frame then shows each mark that a terminal shows, in a face near to its own.
+const SYSTEM: [&str; 3] = [
+  "/System/Library/Fonts/Menlo.ttc",
+  "/System/Library/Fonts/Apple Symbols.ttf",
+  "/System/Library/Fonts/Supplemental/STIXTwoMath.otf",
+];
+
+/// Each face of `SYSTEM` that stands and parses, read once. A system with none of them draws each
+/// glyph that the face lacks as a box, which says so.
+static FALLBACKS: LazyLock<Vec<Font>> = LazyLock::new(|| {
+  let settings = FontSettings { scale: PX, ..FontSettings::default() };
+  SYSTEM
+    .iter()
+    .filter_map(|path| fs::read(path).ok())
+    .filter_map(|bytes| Font::from_bytes(bytes, settings).ok())
+    .collect()
+});
+
 /// The height of a cell and the row of its base line, from the face: a line of box drawing then
 /// meets the line above and the line below.
 #[expect(clippy::expect_used, reason = "the regular face that the program carries has its metrics")]
@@ -40,13 +60,13 @@ pub(crate) struct Image {
   pub(crate) pixels: Vec<u8>,
 }
 
-/// The image of a frame as a PNG, and each glyph that no face holds, once, in its order.
+/// The image of a frame as a PNG, and each glyph that the face lacks, once, in its order.
 pub(crate) fn png(frame: &Frame) -> Result<(Vec<u8>, Vec<char>), png::EncodingError> {
   let (image, missing) = image(frame);
   Ok((image.png()?, missing))
 }
 
-/// The image of a frame, and each glyph that no face holds, once, in its order.
+/// The image of a frame, and each glyph that the face lacks, once, in its order.
 pub(crate) fn image(frame: &Frame) -> (Image, Vec<char>) {
   let (height, base) = rows();
   let mut canvas = Canvas {
@@ -71,13 +91,13 @@ pub(crate) fn image(frame: &Frame) -> (Image, Vec<char>) {
         continue;
       }
       let face = face(cell.attributes, glyph);
-      if face.is_none() && !missing.contains(&glyph) {
+      if face.is_none_or(|face| face >= FACES.len()) && !missing.contains(&glyph) {
         missing.push(glyph);
       }
       match face {
         Some(face) => {
           let rasterized =
-            glyphs.entry((glyph, face)).or_insert_with(|| FACES[face].rasterize(glyph, PX));
+            glyphs.entry((glyph, face)).or_insert_with(|| font(face).rasterize(glyph, PX));
           canvas.glyph(rasterized, cell, place);
         }
         None => canvas.outline(cell.fg, place),
@@ -89,8 +109,9 @@ pub(crate) fn image(frame: &Frame) -> (Image, Vec<char>) {
   (image, missing)
 }
 
-/// The face of a glyph in a look: bold, italic or regular, or the regular one when the face of the
-/// look lacks it. None when no face holds it.
+/// The face of a glyph in a look: bold, italic or regular, the regular one when the face of the
+/// look lacks it, then the first of `FALLBACKS` that holds it, after the three faces. None when no
+/// face holds it.
 fn face(attributes: u8, glyph: char) -> Option<usize> {
   let wanted = if attributes & BOLD != 0 {
     1
@@ -99,7 +120,13 @@ fn face(attributes: u8, glyph: char) -> Option<usize> {
   } else {
     0
   };
-  [wanted, 0].into_iter().find(|&face| FACES[face].lookup_glyph_index(glyph) != 0)
+  let system = (0..FALLBACKS.len()).map(|fallback| FACES.len() + fallback);
+  [wanted, 0].into_iter().chain(system).find(|&face| font(face).lookup_glyph_index(glyph) != 0)
+}
+
+/// A face by its place: the three faces, then `FALLBACKS`.
+fn font(face: usize) -> &'static Font {
+  FACES.get(face).unwrap_or_else(|| &FALLBACKS[face - FACES.len()])
 }
 
 /// A rectangle of pixels.

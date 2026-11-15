@@ -266,7 +266,7 @@ async fn walked(job: &Job, setup: &Setup) -> Result<String, Error> {
   let lacks = if missing.is_empty() {
     String::new()
   } else {
-    format!(", no glyph for {}", String::from_iter(missing))
+    format!(", the face lacks {}", String::from_iter(missing))
   };
   let proof = if differ.is_empty() {
     "each marker as tmux shows it, or a frame of it within 0.5 s".to_owned()
@@ -388,7 +388,7 @@ fn replayed(path: &Path, out: Option<&Path>, every: Option<Duration>) -> Result<
   let lacks = if missing.is_empty() {
     String::new()
   } else {
-    format!(", no glyph for {}", String::from_iter(missing))
+    format!(", the face lacks {}", String::from_iter(missing))
   };
   println!(
     "{}: {markers} markers, {} steps of time in {}{lacks}",
