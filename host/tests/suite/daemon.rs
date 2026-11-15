@@ -2154,14 +2154,17 @@ async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() 
   let verb = Verb::Run { life: life.clone(), word: waits.to_owned(), on: None };
   let began = Instant::now();
   let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
-  let Frame::Stalled { acts, notice, .. } = window.until(stall).await else { unreachable!() };
+  // A command that writes nothing for the bound, as one that a loaded machine starts late, also
+  // stalls the life, with a notice that names the command alone, beside the stall of the chain.
+  let rung = |frame: &Frame| matches!(frame, Frame::Stalled { acts, .. } if acts.iter().any(|one| one.kind == "rung" && one.chain == "chain1"));
+  let Frame::Stalled { acts, notice, .. } = window.until(rung).await else { unreachable!() };
   assert!(began.elapsed() >= QUIET, "the daemon tells a stall after its bound alone");
-  assert!(acts.iter().any(|one| one.kind == "rung" && one.chain == "chain1"), "{acts:?}");
   assert!(!acts.iter().any(|one| one.kind == "run"), "no run is open: {acts:?}");
-  let Frame::Event { event: Event::Fact(sent), .. } = window.until(message).await else {
-    unreachable!()
+  let told = |frame: &Frame| {
+    message(frame)
+      && matches!(frame, Frame::Event { event: Event::Fact(sent), .. } if sent[5] == notice.as_str())
   };
-  assert_eq!(sent[5], notice.as_str(), "the root takes the notice as its message");
+  window.until(told).await;
   window.left(&life).await;
 }
 
