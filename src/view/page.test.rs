@@ -330,3 +330,53 @@ fn a_notice_stands_after_the_message_that_came_before_it_though_its_rung_began_b
     Said { act: "prompt3".to_owned(), kind: Saying::Notice, text: "Yes: stable.".to_owned() };
   assert_eq!(second.said, [yes]);
 }
+
+/// A thread whose word runs a loop that makes a command at each turn, then a line after the loop.
+fn looped(more: impl IntoIterator<Item = Value>) -> Vec<Value> {
+  let word = "for c in ['a', 'b']:\n  await bash(c)\nprint('done')";
+  let mut facts = vec![
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "run both", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus"]),
+    json!(["run", "run1", "chain1", "chain1", "rung1", word, ""]),
+    json!(["bash", "bash1", "rung1", "chain1", "a", "", 120.0, null]),
+    json!(["done", "bash1", "chain1", ""]),
+    json!(["bash", "bash2", "rung1", "chain1", "b", "", 120.0, null]),
+  ];
+  facts.extend(more);
+  facts
+}
+
+#[test]
+fn each_act_that_a_loop_makes_marks_the_line_that_makes_it() {
+  let mut streams = Streamed::default();
+  let held = held(looped([]), &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let runs = Mark::Runs { work: Work::Command, since: Some(100) };
+  assert_eq!(
+    texts(block),
+    [
+      (1, "for c in ['a', 'b']:", &Mark::Ran),
+      (2, "  await bash(c)", &runs),
+      (3, "print('done')", &Mark::Ran)
+    ]
+  );
+}
+
+#[test]
+fn a_reason_that_names_a_line_only_inside_a_word_marks_the_line_of_the_act_that_failed() {
+  let mut streams = Streamed::default();
+  let fault = json!({"is": "RuntimeError", "args": ["the deadline 3 passed"]});
+  let facts = looped([
+    json!(["done", "bash2", "chain1", fault]),
+    json!(["done", "run1", "chain1", fault]),
+    json!(["done", "rung1", "chain1", fault]),
+  ]);
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.as_ref().unwrap();
+  let marks: Vec<bool> =
+    block.lines.iter().map(|line| matches!(line.mark, Mark::Failed { .. })).collect();
+  assert_eq!(marks, [false, true, false], "{block:?}");
+}

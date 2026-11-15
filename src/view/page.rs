@@ -505,14 +505,19 @@ fn shown(word: &str) -> Vec<(usize, String)> {
   out
 }
 
-/// The line that the reason of a fault names, counted from 1.
+/// The line that the reason of a fault names, counted from 1: the last word `line` with a number
+/// after it, which the interpreter puts at the end of the reason.
 fn line_of(why: &str) -> Option<usize> {
-  let (_, after) = why.split_once("line ")?;
-  after.split(|one: char| !one.is_ascii_digit()).next()?.parse().ok()
+  why.rmatch_indices("line ").find_map(|(at, mark)| {
+    let starts = why[..at].chars().next_back().is_none_or(|one| !one.is_alphanumeric());
+    let number = why[at + mark.len()..].split(|one: char| !one.is_ascii_digit()).next()?;
+    starts.then(|| number.parse().ok()).flatten()
+  })
 }
 
 /// The line of a word that made each act, in order: each act takes the next line that calls its
-/// kind by name, and an act whose kind no later line calls takes none.
+/// kind by name. An act whose kind no later line calls takes the line of the act of its kind
+/// before it, as a loop makes many acts from one line, and the first of its kind takes none.
 fn placed(word: &str, made: &[&Act]) -> Vec<Option<usize>> {
   let mut slots: Vec<(usize, &str)> = Vec::new();
   for (at, line) in word.split('\n').enumerate() {
@@ -523,11 +528,16 @@ fn placed(word: &str, made: &[&Act]) -> Vec<Option<usize>> {
     }
   }
   let mut next = 0;
+  let mut last: HashMap<&str, usize> = HashMap::new();
   made
     .iter()
     .map(|act| {
-      let found = slots[next..].iter().position(|slot| slot.1 == act.kind.as_str())?;
+      let kind = act.kind.as_str();
+      let Some(found) = slots[next..].iter().position(|slot| slot.1 == kind) else {
+        return last.get(kind).copied();
+      };
       next += found + 1;
+      last.insert(kind, slots[next - 1].0);
       Some(slots[next - 1].0)
     })
     .collect()
