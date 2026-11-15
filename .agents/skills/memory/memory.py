@@ -22,7 +22,7 @@ from furb.engine import (
 NAMES = ("AGENTS.md", "CLAUDE.md")
 LOCAL = ("AGENTS.local.md", "CLAUDE.local.md")
 HOME = 5
-absent: dict[str, set[str]] = {}
+looks: dict[str, dict[str, Text | None]] = {}
 
 
 def lacking(known: set[str]) -> Show:
@@ -37,15 +37,17 @@ def joined(folder: str, name: str) -> str:
   return folder + name if folder.endswith(("/", "\\")) else folder + "/" + name
 
 
-def looked(path: str, on: str = "") -> Text | None:
-  gone = absent.setdefault(on, set())
-  if path in gone:
-    return None
-  try:
-    return read(path, HIDDEN, on)
-  except Refused:
-    gone.add(path)
-    return None
+def looked(path: str, on: str, held: dict[str, Text | None]) -> Text | None:
+  if path not in held:
+    try:
+      held[path] = read(path, HIDDEN, on)
+    except Refused:
+      held[path] = None
+  return held[path]
+
+
+def unlooked(on: str = "") -> None:
+  looks[on] = {path: got for path, got in looks.get(on, {}).items() if not path.endswith(("/", "\\"))}
 
 
 def pieces(path: str) -> list[str]:
@@ -63,9 +65,9 @@ def above_home() -> list[tuple[str, set[str] | None]]:
   return [("/".join(home[:k]) or "/", None) for k in range(1, len(home))]
 
 
-def folders(path: str = ".", on: str = "") -> list[tuple[str, set[str] | None]]:
+def folders(path: str, on: str, seen: dict[str, Text | None]) -> list[tuple[str, set[str] | None]]:
   found: list[tuple[str, set[str] | None]] = []
-  here = looked("./", on)
+  here = looked("./", on, seen)
   if here is not None:
     parts = pieces(here.path)
     if parts[0] == "~":
@@ -77,15 +79,19 @@ def folders(path: str = ".", on: str = "") -> list[tuple[str, set[str] | None]]:
       full = pieces(path if absolute else joined(here.path, path))
       held = here
       for one in full[len(parts) :] if full[: len(parts)] == parts else []:
-        if one + "/" not in held.lines or (deeper := looked(joined(held.path, one + "/"), on)) is None:
+        if one + "/" not in held.lines or (deeper := looked(joined(held.path, one + "/"), on, seen)) is None:
           break
         found.append((deeper.path, set(deeper.lines)))
         held = deeper
-  user = looked("config://", on)
+  user = looked("config://", on, seen)
   return [*([(user.path, set(user.lines))] if user else []), *found]
 
 
 def memory(path: str = ".", on: str = "") -> list[Text]:
+  return minded(path, on, {})
+
+
+def minded(path: str, on: str, seen: dict[str, Text | None]) -> list[Text]:
   was: dict[str, list[str]] = {}
   held: set[str] = set()
   for x in reading(on):
@@ -97,11 +103,11 @@ def memory(path: str = ".", on: str = "") -> list[Text]:
         if remembered(place):
           held.add(content)
   got: list[Text] = []
-  for folder, names in folders(path, on):
+  for folder, names in folders(path, on, seen):
     for group in NAMES, LOCAL:
       found = None
       for entry in group:
-        if (names is None or entry in names) and (found := looked(joined(folder, entry), on)) is not None:
+        if (names is None or entry in names) and (found := looked(joined(folder, entry), on, seen)) is not None:
           break
       if found is None:
         continue
@@ -139,13 +145,15 @@ def remember(on: str = "") -> Act:
   def ear(id):
     yield "started", id
     before = {x[1] for kind in ("read", "write", "cd") for x in transcript(on, kind)}
-    memory(on=on)
+    minded(".", on, looks.setdefault(on, {}))
     while True:
       match (yield {id, "read", "write", "cd", "stand"}):
         case ("done", about, _, got) if path := visited(id, before, about, got):
-          memory(path, on)
+          if get(about)[0] != "read":
+            unlooked(on)
+          minded(path, on, looks.setdefault(on, {}))
         case ("done", about, *_) if question(("stand", about)) and not question(("rung", get(about)[2])):
-          absent.pop(on, None)
-          memory(on=on)
+          looks[on] = {}
+          minded(".", on, looks[on])
 
   return act("remember", on, controlled(ear))
