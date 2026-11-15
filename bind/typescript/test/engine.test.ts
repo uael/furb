@@ -133,7 +133,8 @@ test("a function of JavaScript crosses as a filter, and what it throws is raised
 
 test("dispose rejects pending native results and further operations", async () => {
   const { engine } = open();
-  const result = engine.result(engine.root).then(
+  const pending = engine.wait([engine.root], { seconds: 60, on: engine.root }).id;
+  const result = engine.result(pending).then(
     () => "resolved",
     (error: Error) => error.message,
   );

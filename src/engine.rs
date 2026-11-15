@@ -1023,12 +1023,15 @@ impl Engine {
     Plain::plain(self.word("[str(x) for x in module(__chain)]", vec![("__chain", chain)])?)
   }
 
-  /// What to do when an act is done, given what it came to: told at once for an act that is done already, and once
-  /// when it is, after the entry in which it was. This is how a door that drives the engine itself awaits. A chain and a
-  /// name of no act are refused, since no done can settle them, as `Act.__await__` refuses them.
+  /// What to do when an act is done, given what it came to: told at once for an act that is done
+  /// already, and once when it is, after the entry in which it was. This is how a door that drives
+  /// the engine itself awaits. A chain and a name of no act are refused, since no done can settle
+  /// them, as `Act.__await__` refuses them.
   pub fn watch(&mut self, id: &str, then: impl FnMut(&Object) + 'static) -> Result<(), Fault> {
     self.run(|sand, outside| {
-      sand.call(outside, &outside.opened.settles.clone(), vec![Object::string(id)], vec![]).map(drop)
+      sand
+        .call(outside, &outside.opened.settles.clone(), vec![Object::string(id)], vec![])
+        .map(drop)
     })?;
     self.watchers.entry(id.to_owned()).or_default().push(Box::new(then));
     self.told()
