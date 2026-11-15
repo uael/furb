@@ -584,11 +584,7 @@ fn pump(window: &Shared) {
     opened.thread.asked.insert(id, None);
     opened.thread.again = false;
   }
-  if let Some((at, verb)) = model.client.due()
-    && let Some(id) = ask(askers, model, at, verb)
-  {
-    model.client.asked.insert((at, id), Asked::Say);
-  }
+  said(askers, model);
   let listing = model.picker.as_ref().is_some_and(|one| one.of == Pick::GoTo);
   for (at, verb, asked) in model.client.asks_due(listing) {
     if let Some(id) = ask(askers, model, at, verb) {
@@ -621,6 +617,17 @@ fn pump(window: &Shared) {
   {
     word.asked = true;
     model.client.asked.insert((at, id), Asked::Ended);
+  }
+}
+
+/// The first message of the queue of the input, then the wake of its thread when a pause holds
+/// that thread, on the same connection, so the daemon takes the message first.
+fn said(askers: &mut [Asker], model: &mut Model) {
+  let Some((at, verb)) = model.client.due() else { return };
+  let Some(id) = ask(askers, model, at, verb) else { return };
+  model.client.asked.insert((at, id), Asked::Say);
+  if let Some(id) = model.client.wake_due().and_then(|wake| ask(askers, model, at, wake)) {
+    model.client.asked.insert((at, id), Asked::Control);
   }
 }
 
@@ -953,9 +960,8 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Python => |model| model.client.draft.python = !model.client.draft.python,
     Does::Agent => Model::next_agent,
     Does::Close => return escaped(app, window, forgot),
-    Does::Stop => return controlled(app, window, |model| Some((model.stop()?, Asked::Control))),
-    Does::Resolve => {
-      return controlled(app, window, |model| Some((model.resolve()?, Asked::Control)));
+    Does::Stop | Does::Resolve | Does::Pause => {
+      return controlled(app, window, |model| Some((model.control(does)?, Asked::Control)));
     }
     Does::Send => return sent(app, window),
     Does::Empty if !window.borrow().area.text().is_empty() => return stashed(app, window, does),

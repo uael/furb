@@ -6,7 +6,7 @@
 
 use furb::view::{
   Agent, Block, Exchange, Line as Code, Made, Maker, Mark, Output, Retrying, Said, Saying,
-  Standing, Thought, Work, lines, timer,
+  Standing, Thought, Work, lines, operator, timer,
 };
 use furb_client::{Fold, Opened, Target, rests};
 use opentui::style::{Color, Style};
@@ -50,8 +50,8 @@ impl Model {
 }
 
 impl Feed<'_> {
-  /// The rows of one part of the feed. The last part holds each message of the operator that the
-  /// thread does not show yet.
+  /// The rows of one part of the feed. The last part holds the way out of a pause that holds the
+  /// thread, then each message of the operator that the thread does not show yet.
   pub(crate) fn rows(&self, item: Item) -> Vec<Row> {
     let mut rows = match item {
       Item::Head => self.before(),
@@ -60,9 +60,32 @@ impl Feed<'_> {
       }
     };
     if self.items().last() == Some(item) {
+      rows.extend(self.paused());
       rows.extend(self.opened.thread.pending.iter().flat_map(|one| self.message(&one.text, true)));
     }
     rows
+  }
+
+  /// What a pause that holds the thread leaves him: that it holds, and the way out as a button. A
+  /// pause that he said takes his resume, which lets the work that it held go on. One that furb
+  /// said after a failure, which the line above shows, ends with a message, which asks the model
+  /// again, on the model that he chose, and nothing is lost.
+  fn paused(&self) -> Vec<Row> {
+    let card = self.model.client.card(&self.opened.thread.key);
+    let Some(Standing::Paused { by, .. }) = card.map(|one| &one.thread.standing) else {
+      return Vec::new();
+    };
+    let (t, his) = (&self.model.tokens, operator(by));
+    let (mark, said, chip) = if his {
+      (t.muted, "You paused this thread.", (" Resume ", Does::Pause))
+    } else {
+      let said = "This thread is paused. Nothing is lost: a message resumes it.";
+      (t.attention, said, (" Change the model ", Does::Model))
+    };
+    let says = vec![run("  ‖ ", Style::new().fg(mark)), run(said, self.style(Role::Prose))];
+    let line = vec![run("    ", Style::new()), run(chip.0, self.style(Role::Button))];
+    let hot = vec![(4..width(&line), Some(Click::Key(chip.1)))];
+    vec![Row::of(says), Row::default(), Row { hot, ..Row::of(line) }, Row::default()]
   }
 
   fn style(&self, role: Role) -> Style {

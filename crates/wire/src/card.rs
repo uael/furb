@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  act::{OPERATOR, operator},
+  act::{OPERATOR, Pause, operator},
   state::State,
 };
 
@@ -45,14 +45,20 @@ pub struct Skill {
 }
 
 /// How the thread of a card stands. It asks one member by his login, or each operator. A pause
-/// names who said it. A thread whose model closed its prompt is resolved, and one that a cancel
-/// ended is stopped.
+/// names who said it and the act or the chain that it holds, which a wake names. A thread whose
+/// model closed its prompt is resolved, and one that a cancel ended is stopped.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "is", rename_all = "snake_case")]
 pub enum Standing {
-  Asks { of: Option<String> },
+  Asks {
+    of: Option<String>,
+  },
   Failed,
-  Paused { by: String },
+  Paused {
+    by: String,
+    #[serde(default)]
+    of: String,
+  },
   Thinks,
   Runs,
   Delegates,
@@ -71,13 +77,16 @@ pub enum Part {
 }
 
 impl Standing {
-  /// How a thread stands from its state, whether it is over, and who said the pause that holds
-  /// it. A question asks each operator.
-  pub fn of(state: State, over: bool, paused_by: String) -> Self {
+  /// How a thread stands from its state, whether it is over, and the pause that holds it. A
+  /// question asks each operator.
+  pub fn of(state: State, over: bool, pause: Option<&Pause>) -> Self {
     match state {
       State::Asks => Self::Asks { of: None },
       State::Failed => Self::Failed,
-      State::Paused => Self::Paused { by: paused_by },
+      State::Paused => {
+        let (by, of) = pause.map(|one| (one.by.clone(), one.of.clone())).unwrap_or_default();
+        Self::Paused { by, of }
+      }
       State::Thinks => Self::Thinks,
       State::Runs => Self::Runs,
       State::Delegates => Self::Delegates,
@@ -131,7 +140,7 @@ impl Card {
   pub fn needs(&self, member: &str) -> bool {
     match &self.standing {
       Standing::Asks { of } => of.as_deref().is_none_or(|of| of == member),
-      Standing::Paused { by } => !operator(by),
+      Standing::Paused { by, .. } => !operator(by),
       Standing::Failed => self.unread(member),
       _ => false,
     }

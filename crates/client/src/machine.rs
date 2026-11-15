@@ -2,9 +2,9 @@
 //! order of the cards of every machine in one list.
 
 use furb_wire::{
-  Part,
+  Part, Standing,
   card::Skill,
-  protocol::{Answer, Card, Files, Frame, Listed, Model, Project},
+  protocol::{Answer, Card, Files, Frame, Listed, Model, Project, Verb},
 };
 use std::collections::HashMap;
 
@@ -146,6 +146,13 @@ impl Client {
   pub fn card(&self, key: &Key) -> Option<&Card> {
     let told = |one: &&Card| one.life == key.1 && one.thread.prompt == key.2;
     self.machines.get(key.0)?.cards.iter().find(told)
+  }
+
+  /// The wake of the pause that holds a thread, with its machine: it names what the pause named,
+  /// the prompt or its whole chain. None while no pause holds the thread.
+  pub fn wake(&self, key: &Key) -> Option<(usize, Verb)> {
+    let Standing::Paused { of, .. } = &self.card(key)?.thread.standing else { return None };
+    Some((key.0, Verb::Wake { life: key.1.clone(), act: of.clone() }))
   }
 
   /// The list settled: each card of each machine at its place, and the card of a thread that the

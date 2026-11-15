@@ -121,7 +121,7 @@ fn each_act_takes_one_state_of_the_one_set() {
     ..act("bash2", "bash", "chain1", "rung1", 1, Some(2))
   };
   let paused = Act {
-    pause: Some(Pause { by: "operator".to_owned(), why: None }),
+    pause: Some(Pause { of: "p".to_owned(), by: "operator".to_owned(), why: None }),
     ..act("bash1", "bash", "chain1", "rung1", 1, None)
   };
   let table = [
@@ -224,7 +224,8 @@ fn a_chain_asks_while_the_operator_owes_a_prompt_of_it() {
 #[test]
 fn a_pause_holds_a_chain_over_its_work_and_its_last_act_of_work_says_a_cancel_or_a_failure() {
   let chain = act("chain1", "chain", "", "operator", 1, None);
-  let pause = Some(Pause { by: "operator".to_owned(), why: Some(json!("ceiling")) });
+  let pause =
+    Some(Pause { of: "p".to_owned(), by: "operator".to_owned(), why: Some(json!("ceiling")) });
   let held = stated(Act { pause, ..act("bash1", "bash", "chain1", "rung1", 3, None) });
   let running = act("bash2", "bash", "chain1", "rung1", 4, None);
   assert_eq!(state_of(&[chain.clone(), held, running], "chain1"), State::Paused);
@@ -583,7 +584,10 @@ fn a_question_concerns_the_operator_in_any_thread_and_a_failure_or_a_pause_only_
   assert_eq!(read(vec![made("rung2"), step, ask]), (Origin::Rung, false, true));
   let ended = |by: &str| stated(Act { phase: error.clone(), ended: Some(5), ..made(by) });
   let held = |by: &str| {
-    stated(Act { pause: Some(Pause { by: "operator".to_owned(), why: None }), ..made(by) })
+    stated(Act {
+      pause: Some(Pause { of: "p".to_owned(), by: "operator".to_owned(), why: None }),
+      ..made(by)
+    })
   };
   assert_eq!(read(vec![ended("rung2")]), (Origin::Rung, false, false));
   assert_eq!(read(vec![ended("rung1")]), (Origin::Rung, true, true));

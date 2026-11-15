@@ -16,7 +16,7 @@ fn card(standing: Standing, readers: &[&str]) -> Card {
 #[test]
 fn a_card_stands_in_the_part_that_its_standing_and_its_reader_give() {
   let asks = |of: Option<&str>| Standing::Asks { of: of.map(str::to_owned) };
-  let paused = |by: &str| Standing::Paused { by: by.to_owned() };
+  let paused = |by: &str| Standing::Paused { by: by.to_owned(), of: "p".to_owned() };
   let parts = [
     (card(asks(None), &[]), (Part::NeedsYou, 0)),
     (card(asks(Some("ada")), &[]), (Part::NeedsYou, 0)),

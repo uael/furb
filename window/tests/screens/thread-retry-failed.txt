@@ -8,9 +8,9 @@
     ✗  claude-cli:opus/high answered nothing:
        ProviderError: the request is malformed
 
+  ‖ This thread is paused. Nothing is lost: a message resumes
 
-
-
+     Change the model
 
 
 
@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → the bench… ▾    opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  This computer · ~/src/furb-try                   ⌃P go to
+  ‖ Paused · a message resumes it                  ⌃P go to

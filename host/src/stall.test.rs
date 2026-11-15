@@ -41,7 +41,7 @@ fn finished(mut one: Act) -> Act {
 }
 
 fn paused(mut one: Act) -> Act {
-  one.pause = Some(Pause { by: "operator".to_owned(), why: None });
+  one.pause = Some(Pause { of: "p".to_owned(), by: "operator".to_owned(), why: None });
   one
 }
 

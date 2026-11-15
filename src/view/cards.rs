@@ -124,11 +124,7 @@ fn standing(node: &ThreadNode, rows: &Rows<'_>) -> Standing {
     || [&thread.prompt].into_iter().chain(&thread.messages).filter_map(|id| rows.get(id.as_str()));
   match node.state {
     State::Asks => Standing::Asks { of: asked(node, rows) },
-    State::Paused => {
-      let by = acts().find_map(|act| act.pause.as_ref()).map(|pause| pause.by.clone());
-      Standing::of(State::Paused, thread.over, by.unwrap_or_default())
-    }
-    state => Standing::of(state, thread.over, String::new()),
+    state => Standing::of(state, thread.over, acts().find_map(|act| act.pause.as_ref())),
   }
 }
 

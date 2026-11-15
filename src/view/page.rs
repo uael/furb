@@ -619,7 +619,6 @@ impl<'a> Reader<'a> {
       State::Runs if working(&work, &[]) == State::Thinks => State::Thinks,
       state => state,
     };
-    let by = prompt.pause.as_ref().map(|pause| pause.by.clone()).unwrap_or_default();
     let model = rungs.iter().rev().find_map(|rung| match &rung.maker {
       Maker::Model { model, .. } => Some(model.clone()),
       _ => None,
@@ -628,7 +627,7 @@ impl<'a> Reader<'a> {
     let card = Card {
       prompt: prompt.id.clone(),
       title: title.lines().find(|line| !line.trim().is_empty()).unwrap_or_default().to_owned(),
-      standing: Standing::of(state, prompt.done(), by),
+      standing: Standing::of(state, prompt.done(), prompt.pause.as_ref()),
       model,
       agents: 0,
       readers: Vec::new(),

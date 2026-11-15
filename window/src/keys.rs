@@ -62,6 +62,7 @@ pub(crate) enum Does {
   Unstash,
   Picture,
   Settings,
+  Pause,
 }
 
 /// One stroke of a key: whether it holds control and alt, and its key.
@@ -141,6 +142,7 @@ const THREAD: &[Bound] = &[
     &[&[plain(KeyCode::Escape), plain(KeyCode::Escape)]],
   ),
   bound(Does::Resolve, "resolve the thread", Some("resolve"), &[&led('r')]),
+  bound(Does::Pause, "pause the thread, or resume it", Some("pause"), &[&led('z')]),
   bound(Does::Running, "pause, kill or keep the session", Some("running"), &[&led('s')]),
   bound(Does::Context, "the context: kinds, cache, folded", Some("context"), &[&led('c')]),
   bound(Does::Rewind, "back in the time of the thread, and to now", Some("rewind"), &[&led('b')]),

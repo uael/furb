@@ -4,7 +4,7 @@
 
 use std::{mem, ops::Range, path::Path};
 
-use furb::view::{Act, Maker, RunState, Standing, timer};
+use furb::view::{Act, Maker, RunState, Standing, operator, timer};
 use furb_host::protocol::{Answer, Card, Model as Offered, Verb};
 use opentui::style::{Color, Span, Style};
 use serde_json::Value;
@@ -91,11 +91,46 @@ impl Model {
     self.fault.is_none()
   }
 
+  /// The control of the open thread that a key asks: the stop of its work, its resolve, or its
+  /// pause or the wake of his pause.
+  pub(crate) fn control(&mut self, does: Does) -> Option<(usize, Verb)> {
+    match does {
+      Does::Stop => self.stop(),
+      Does::Resolve => self.resolve(),
+      Does::Pause => self.pause(),
+      _ => None,
+    }
+  }
+
   /// The stop of the work of the open thread: the cancel of its prompt.
   pub(crate) fn stop(&self) -> Option<(usize, Verb)> {
     let opened = self.client.thread.as_ref().filter(|one| !one.thread.key.2.is_empty())?;
     let (at, life, act) = opened.thread.key.clone();
     Some((at, Verb::Cancel { life, act, why: None }))
+  }
+
+  /// The pause of the work of the open thread, or the wake of a pause that he said. A pause that
+  /// furb said after a failure ends with a message, which asks the model again, and the row says
+  /// so, as it does for a thread that neither works nor is paused.
+  pub(crate) fn pause(&mut self) -> Option<(usize, Verb)> {
+    let opened = self.client.thread.as_ref().filter(|one| !one.thread.key.2.is_empty())?;
+    let key = opened.thread.key.clone();
+    let card = self.client.card(&key);
+    let control = match card.map(|card| &card.thread.standing) {
+      Some(Standing::Paused { by, .. }) if operator(by) => self.client.wake(&key),
+      Some(Standing::Paused { .. }) => None,
+      _ if card.is_some_and(|card| card.thread.works()) => {
+        Some((key.0, Verb::Pause { life: key.1.clone(), act: key.2.clone(), why: None }))
+      }
+      _ => None,
+    };
+    if control.is_none() {
+      let paused = card.is_some_and(|card| matches!(card.thread.standing, Standing::Paused { .. }));
+      let why =
+        if paused { "A message resumes this thread." } else { "Nothing works in this thread." };
+      self.client.notice = Some(why.to_owned());
+    }
+    control
   }
 
   /// The resolve of the open thread, once the daemon made it, with its machine. A thread that works
@@ -687,8 +722,9 @@ impl Model {
   /// The row of hints: why the daemon refused the last message, else the keys of a form, of the
   /// completion or of the bar of the time, else the word of python that the window ran, as it runs
   /// and what it came to, else the state of the open thread while it works, with the key that stops
-  /// it, else the keys of the mode of Python while it is on, else the folder of the window; and at its right how many other threads ask the operator,
-  /// and the key that turns the input, or that refuses the question of a form.
+  /// it, or while a pause holds it, with what resumes it, else the keys of the mode of Python while
+  /// it is on, else the folder of the window; and at its right how many other threads ask the
+  /// operator, and the key that turns the input, or that refuses the question of a form.
   fn hints(&self) -> Row {
     let t = &self.tokens;
     let muted = t.style(Role::Muted);
@@ -699,6 +735,7 @@ impl Model {
       .as_ref()
       .is_some_and(|one| self.client.fault_of(one.thread.key.0, &one.thread.key.1).is_some());
     let works = card.is_some_and(|card| card.thread.works()) && !ended;
+    let stands = card.and_then(|card| self.stands(card)).filter(|_| !ended);
     let mut hot = Vec::new();
     // The thread says why it has no page, so the row says it once more only for another fault.
     let shown = self.client.thread.as_ref().and_then(|one| self.why(one));
@@ -719,8 +756,8 @@ impl Model {
     let room = self.wide().saturating_sub(2).saturating_sub(width(&key) + 2);
     let word = Some(self.word_hints(room)).filter(|(hints, _)| !hints.is_empty());
     let python = self.python_hints().filter(|_| !works);
-    let place = fault.is_none() && says.is_none() && keyed.is_none() && word.is_none() && !works;
-    let place = place && python.is_none();
+    let place = fault.is_none() && says.is_none() && keyed.is_none() && word.is_none();
+    let place = place && python.is_none() && stands.is_none();
     let (left, loaders) = match (fault, says) {
       (Some(fault), _) => (vec![run(format!("  {fault}"), Style::new().fg(t.danger))], vec![]),
       (None, Some((says, color))) => {
@@ -728,11 +765,9 @@ impl Model {
       }
       (None, None) if keyed.is_some() => (keyed.unwrap_or_default(), vec![]),
       (None, None) if let Some((hints, loader)) = word => (hints, loader.into_iter().collect()),
-      (None, None) if works => {
-        let (working, loader) = self.working(card);
-        let at = columns(&working);
-        hot.push((at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop))));
-        (working, vec![(2, loader), (4, Loader::Light(WORKS))])
+      (None, None) if let Some(stands) = stands => {
+        hot.extend(stands.hot);
+        (stands.line, stands.loaders)
       }
       (None, None) if let Some(python) = python => (python, vec![]),
       // The launcher of a new session names its machine, so the row says the folder alone.
@@ -757,18 +792,48 @@ impl Model {
     Row { hot, loaders, ..Row::of(line) }
   }
 
+  /// The hint of the open thread while it works, with the key that stops it, or while a pause holds
+  /// it, with what resumes it, in the color that its card gives it: the key of the pause that he
+  /// said, or a message, for one that furb said. None while it rests.
+  fn stands(&self, card: &Card) -> Option<Row> {
+    let muted = self.tokens.style(Role::Muted);
+    if card.thread.works() {
+      let (line, loader) = self.working(card);
+      let at = columns(&line);
+      let hot = vec![(at[1].start + 3..at[1].end, Some(Click::Key(Does::Stop)))];
+      return Some(Row {
+        hot,
+        loaders: vec![(2, loader), (4, Loader::Light(WORKS))],
+        ..Row::of(line)
+      });
+    }
+    let Standing::Paused { by, .. } = &card.thread.standing else { return None };
+    let key = self.key(Does::Pause);
+    let (color, keyed) =
+      if operator(by) { (self.tokens.muted, true) } else { (self.tokens.attention, false) };
+    let resume = if keyed {
+      format!(" · {key} or a message resumes it")
+    } else {
+      " · a message resumes it".to_owned()
+    };
+    let line = vec![run("  ‖ Paused", Style::new().fg(color)), run(resume, muted)];
+    let at = width(&line[..1]) + 3;
+    let hot = keyed.then(|| (at..at + key.width(), Some(Click::Key(Does::Pause))));
+    Some(Row { hot: hot.into_iter().collect(), ..Row::of(line) })
+  }
+
   /// The hint of the work of the open thread: its time, which counts each second as the time of a
   /// line that runs, where a card says its age in minutes, the key that starts to stop it, whose
   /// second press the row then asks, and the mark of that work: a model, a command or agents.
-  fn working(&self, card: Option<&Card>) -> (Line, Loader) {
+  fn working(&self, card: &Card) -> (Line, Loader) {
     let t = &self.tokens;
-    let worked = card.map(|card| self.second().saturating_sub(card.since)).filter(|one| *one > 0);
+    let worked = Some(self.second().saturating_sub(card.since)).filter(|one| *one > 0);
     let age = worked.map(|seconds| format!(" {}", timer(seconds)));
     let working = format!("    {WORKS}{}", age.unwrap_or_default());
     let stop = format!(" · {} stop", self.key(Does::Close));
-    let loader = match card.map(|card| &card.thread.standing) {
-      Some(Standing::Runs) => Loader::Command,
-      Some(Standing::Delegates) => Loader::Agent,
+    let loader = match &card.thread.standing {
+      Standing::Runs => Loader::Command,
+      Standing::Delegates => Loader::Agent,
       _ => Loader::Model,
     };
     (vec![run(working, Style::new().fg(t.accent)), run(stop, t.style(Role::Muted))], loader)

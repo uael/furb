@@ -184,6 +184,15 @@ impl Client {
     Some((next.at, verb))
   }
 
+  /// The wake of the thread of the first message of the queue, while a pause holds that thread: a
+  /// message wakes a paused thread. It goes right after the message, so the model reads the message
+  /// at the ask that the wake makes.
+  pub fn wake_due(&self) -> Option<Verb> {
+    let next = self.outgoing.front()?;
+    let thread = next.thread.clone()?;
+    self.wake(&(next.at, next.life.clone(), thread)).map(|(_, wake)| wake)
+  }
+
   /// The open of each life that the client holds and did not ask yet, with its machine: the daemon
   /// opens it, in its folder when no life holds its record, and attaches the client past each
   /// event, since the client reads the cards and the pages of the threads, and no event.

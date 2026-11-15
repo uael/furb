@@ -193,9 +193,12 @@ pub enum Phase {
   Done(Value),
 }
 
-/// A pause, as its fact holds it: who said it, and the cause that it gave.
+/// A pause, as its fact holds it: the act or the chain that it names, which a wake names to end it,
+/// who said it, and the cause that it gave.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Pause {
+  #[serde(default)]
+  pub of: String,
   pub by: String,
   pub why: Option<Value>,
 }
@@ -283,6 +286,7 @@ impl Pause {
   /// The pause that a fact of a pause says, and none for any other fact.
   pub fn of(fact: &Value) -> Option<Self> {
     (fact[0] == "pause").then(|| Self {
+      of: fact[1].as_str().unwrap_or_default().to_owned(),
       by: fact[2].as_str().unwrap_or_default().to_owned(),
       why: Some(fact[3].clone()).filter(|why| !why.is_null()),
     })

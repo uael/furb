@@ -190,7 +190,7 @@ fn a_line_that_failed_shows_its_cross_and_its_error_under_it() {
 }
 
 #[test]
-fn a_model_asked_again_says_its_attempt_its_wait_and_why_then_its_failure() {
+fn a_model_asked_again_says_its_attempt_its_wait_and_why_then_its_failure_and_the_way_out() {
   let message = format!("the bench stalls on a cold build\n{RETRIES}");
   let (app, _daemon, _peer) = opened(&message, "Attempt 2 of 10");
   let frame = app.text();
@@ -213,6 +213,16 @@ fn a_model_asked_again_says_its_attempt_its_wait_and_why_then_its_failure() {
   app.advance(AWAY);
   shows(&app, "Needs you 1");
   screen("thread-retry-failed", &app);
+  // The thread and the hint row say that the pause holds, that nothing is lost and what ends it:
+  // a message wakes the thread and asks the model again, which fails again here.
+  let frame = app.text();
+  let way = ["‖ This thread is paused. Nothing is lost: a message", "Change the model"];
+  assert!(way.iter().all(|line| frame.contains(line)), "{frame}");
+  assert!(frame.contains("‖ Paused · a message resumes it"), "{frame}");
+  app.paste("try once more");
+  app.press("enter");
+  let again = app.wait_until(PATIENCE, || app.text().matches(failed).count() == 2);
+  assert!(again, "{}", app.text());
 }
 
 #[test]
