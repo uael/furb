@@ -9,7 +9,7 @@ use std::{
 
 use fancy_regex::{Regex, escape};
 
-use crate::Fault;
+use crate::{Fault, written};
 
 /// The file and the name of a test that proves a part of the promise.
 type Proof = (String, String);
@@ -133,11 +133,6 @@ pub(crate) fn runs(found: &[Proof]) -> Vec<Run> {
     made.push(Run { program: "cargo", args, passed, held });
   }
   made
-}
-
-/// Whether a file is of the language that the extension names.
-fn written(file: &str, language: &str) -> bool {
-  Path::new(file).extension().is_some_and(|one| one == language)
 }
 
 /// The arguments of cargo test that build the target which holds a test of rust in this file.

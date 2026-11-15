@@ -113,9 +113,9 @@ repos:
         pass_filenames: false
       - id: unused
         name: the names that nothing but a test names
-        entry: python3 -I script/unused.py
+        entry: cargo xtask unused
         language: system
-        files: ^(bind/typescript/(src/|README\.md$)|src/|cli/src/|host/src/|window/src/|build/|script/unused\.py$)
+        files: ^(bind/typescript/(src/|README\.md$)|src/|cli/src/|host/src/|window/src/|build/|xtask/src/unused\.rs$)
         pass_filenames: false
       - id: biome
         name: biome

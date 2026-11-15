@@ -12,6 +12,7 @@ mod lives;
 mod paths;
 mod promise;
 mod tree;
+mod unused;
 mod watch;
 mod width;
 #[cfg(test)]
@@ -238,6 +239,21 @@ enum Task {
     #[arg(default_value = "docs/promise.md")]
     page: PathBuf,
   },
+  /// List each exported name of the TypeScript side and each public item of the crates that no
+  /// file but a test names, and fail when the list holds one.
+  ///
+  /// A name of TypeScript is used when a file that is no test, and is not its own, imports it
+  /// through a path that leads to its file, through a barrel or not, or when the README of the
+  /// package names it. An item of Rust is used when a file that is no test, and is not its own,
+  /// names it, an associated item through its type or its method call. An item of the door is used
+  /// when a source of the language of the host names it. A name that its own file names, and a
+  /// name that the declaration of a used name of its file holds, are used too.
+  Unused {
+    /// List each helper that its own file names and a test names too, with those tests: the
+    /// work of the law that a test reaches no file past its public door.
+    #[arg(long)]
+    tests: bool,
+  },
   /// Make, land and close a worktree of this clone.
   Tree {
     #[command(subcommand)]
@@ -351,6 +367,7 @@ fn run() -> Result<ExitCode, Fault> {
     Task::Paths => paths::check(),
     Task::Tree { verb } => tree::run(&root, verb),
     Task::Links { fix } => links::check(&root, fix),
+    Task::Unused { tests } => unused::check(&root, tests),
     Task::Promise { page } => promise::check(&root, &root.join(page)),
     Task::CommentWidth { base, files } => width::check(&root, base.as_deref(), &files),
     Task::Deepswe { places, verb } => Ok(deepswe::run(&root, places, verb)?),
@@ -407,6 +424,11 @@ fn search(command: &Command, words: &[String]) {
       }
     }
   }
+}
+
+/// Whether a file is of the language that its extension names.
+fn written(file: &str, language: &str) -> bool {
+  Path::new(file).extension().is_some_and(|one| one == language)
 }
 
 /// The root of the tree, which holds the workspace of this crate.

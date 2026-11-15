@@ -515,7 +515,7 @@ fix what your change broke, and report what was broken before.
 - `cargo xtask paths`: check that each path of the repository that a file of `script/`, of `xtask/src/` or of
   `.github/workflows/` names is a file or a folder that git holds, or a file that a build makes and git ignores. It
   names the file, the line and the path of each one that stands no more, and it reads git alone. The hooks run it.
-- `python3 -I script/unused.py [--tests]`: list each exported name of the TypeScript side and each public item of the
+- `cargo xtask unused [--tests]`: list each exported name of the TypeScript side and each public item of the
   crates that no file but a test names, its own file included. It fails on a name, and the hooks run it. A name that a
   source reads, that the README of the TypeScript package names, or that a host language calls through the door is
   used. `--tests` lists the helpers that only a test reaches past the public door of their file, which the check does
