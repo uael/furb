@@ -9,9 +9,11 @@ use std::{
   fmt::Write as _,
   fs,
   io::Write as _,
+  num::NonZero,
   path::{Path, PathBuf},
   process::{self, Command as Process, ExitCode, Stdio},
   sync::mpsc::{self, RecvTimeoutError},
+  thread,
   time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -32,8 +34,9 @@ pub(crate) struct Watch {
 }
 
 /// The parts of a check, cheap first: the hooks of a commit on the files that changed since the
-/// head checked before, which take seconds and which a commit with --no-verify skipped, then every
-/// suite at once, then the two hooks of the manual stage that are no suite.
+/// head checked before, which take seconds and which a commit with --no-verify skipped, then each
+/// suite, then the two hooks of the manual stage that are no suite. They run one after the other,
+/// since the suites at once took 137 processes and moved the load of 14 cores from 5 to 18.
 fn parts(before: Option<&str>, head: &str) -> Vec<(&'static str, Vec<String>)> {
   let words = |all: &[&str]| all.iter().map(|one| (*one).to_owned()).collect::<Vec<_>>();
   let hook = ["sh", "script/hooks/pre-commit", "run"];
@@ -43,7 +46,9 @@ fn parts(before: Option<&str>, head: &str) -> Vec<(&'static str, Vec<String>)> {
   );
   vec![
     ("commit", [words(&hook), changed].concat()),
-    ("suites", words(&["cargo", "xtask", "test"])),
+    ("rust", words(&["cargo", "xtask", "test", "rust"])),
+    ("python", words(&["cargo", "xtask", "test", "python"])),
+    ("typescript", words(&["cargo", "xtask", "test", "typescript"])),
     ("clippy", words(&[&hook[..], &["clippy", "--hook-stage", "manual", "--all-files"]].concat())),
     ("biome", words(&[&hook[..], &["biome", "--hook-stage", "manual", "--all-files"]].concat())),
   ]
@@ -66,21 +71,24 @@ impl Watch {
     let mut next = Instant::now();
     loop {
       let head = self.head(root)?;
-      if last(&self.table).is_none_or(|checked| checked != head) {
-        // The checks start at most once in each interval: the moves that come before its end wait
-        // for it, and the check takes the head that stands then.
-        while let Some(left) = next.checked_duration_since(Instant::now()) {
-          if matches!(moves.recv_timeout(left), Err(RecvTimeoutError::Disconnected)) {
-            return Err(Fault::Unwatched);
-          }
+      if last(&self.table).is_some_and(|checked| checked == head) {
+        if self.once {
+          return Ok(ExitCode::SUCCESS);
         }
-        next = Instant::now() + self.every;
-        self.check(root, &self.head(root)?)?;
+        heard(Ok(moves.recv().map_err(|_ended| Fault::Unwatched)?))?;
+        continue;
       }
+      // The checks start at most once in each interval: the moves that come before its end wait for
+      // it, and the check takes the head that stands then. The loop reads the head again after a
+      // check, since the waits of the check take the event of a move that comes during it.
+      while let Some(left) = next.checked_duration_since(Instant::now()) {
+        heard(moves.recv_timeout(left))?;
+      }
+      next = Instant::now() + self.every;
+      self.check(root, &self.head(root)?, &moves)?;
       if self.once {
         return Ok(ExitCode::SUCCESS);
       }
-      moves.recv().map_err(|_ended| Fault::Unwatched)??;
     }
   }
 
@@ -89,7 +97,7 @@ impl Watch {
   }
 
   /// One check of a head: the tree goes to it, each part runs, and the result is written.
-  fn check(&self, root: &Path, head: &str) -> Result<(), Fault> {
+  fn check(&self, root: &Path, head: &str, moves: &Moves) -> Result<(), Fault> {
     let tree = self.tree.as_path();
     if !git(tree, &["status", "--porcelain"])?.trim().is_empty() {
       return self
@@ -99,6 +107,7 @@ impl Watch {
     let began = Instant::now();
     let mut failed = Vec::new();
     for (name, words) in parts(last(&self.table).as_deref(), head) {
+      calm(moves)?;
       let log = tree.join("target").join("xtask").join(format!("watch-{name}.log"));
       if !part(tree, &words, &log)? {
         failed.extend(named(tree, name, &log));
@@ -148,11 +157,17 @@ fn part(tree: &Path, words: &[String], log: &Path) -> Result<bool, Fault> {
   };
   // nice gives the check the cores that no other work takes; Windows has no nice, and runs it as it
   // runs any command.
-  let niced = [&["nice".to_owned(), "-n".to_owned(), "15".to_owned()][..], words].concat();
+  let niced = [&["nice".to_owned(), "-n".to_owned(), "19".to_owned()][..], words].concat();
   let words = if cfg!(unix) { &niced[..] } else { words };
   let Some((program, args)) = words.split_first() else { return Ok(true) };
+  // A quarter of the cores for each runner and each build, so a part adds about that to the load.
+  let jobs =
+    thread::available_parallelism().map_or(1, |cores| (cores.get() / 4).max(1)).to_string();
+  let caps =
+    ["CARGO_BUILD_JOBS", "NEXTEST_TEST_THREADS", "PYTEST_XDIST_AUTO_NUM_WORKERS", "FURB_TEST_JOBS"];
   let status = Process::new(program)
     .args(args)
+    .envs(caps.map(|cap| (cap, jobs.as_str())))
     .current_dir(tree)
     .stdout(out()?)
     .stderr(out()?)
@@ -164,23 +179,24 @@ fn part(tree: &Path, words: &[String], log: &Path) -> Result<bool, Fault> {
 /// The tests that a failed part names, by the lines of each runner, or the part itself when no
 /// line names a test, as a build that fails.
 fn named(tree: &Path, name: &str, log: &Path) -> Vec<String> {
-  let logs = tree.join("target").join("xtask");
-  let read = |path: &Path| fs::read_to_string(path).unwrap_or_default();
+  let text = fs::read_to_string(log).unwrap_or_default();
   let mut found: Vec<String> = Vec::new();
-  if name == "suites" {
-    for line in read(&logs.join("rust.log")).lines().map(str::trim_start) {
+  if name == "rust" {
+    for line in text.lines().map(str::trim_start) {
       if let Some(rest) = line.strip_prefix("FAIL ").or_else(|| line.strip_prefix("TIMEOUT ")) {
         found.extend(rest.split_once(") ").map(|(_, test)| test.trim().to_owned()));
       }
     }
-    for line in read(&logs.join("python.log")).lines() {
+  } else if name == "python" {
+    for line in text.lines() {
       found.extend(
         line
           .strip_prefix("FAILED ")
           .map(|rest| rest.split(" - ").next().unwrap_or(rest).to_owned()),
       );
     }
-    for line in read(&logs.join("typescript.log")).lines() {
+  } else if name == "typescript" {
+    for line in text.lines() {
       if let Some((_, files)) = line.split_once(" runs failed: ") {
         found.extend(files.split(", ").map(|file| file.trim_start_matches("./").to_owned()));
       }
@@ -189,7 +205,7 @@ fn named(tree: &Path, name: &str, log: &Path) -> Vec<String> {
     // A failed hook is named by each file that it names under its line, so the owner of the folder
     // of that file reads it, and by itself when it names none.
     let mut failed: Option<(String, bool)> = None;
-    for line in read(log).lines().chain(["end of the hooks Passed"]) {
+    for line in text.lines().chain(["end of the hooks Passed"]) {
       if ["Passed", "Failed", "Skipped"].iter().any(|end| line.ends_with(end)) {
         if let Some((hook, false)) = failed.take() {
           found.push(format!("hook {hook}"));
@@ -211,6 +227,38 @@ fn named(tree: &Path, name: &str, log: &Path) -> Vec<String> {
     found.push(format!("{name} (no test named: {})", log.display()));
   }
   found
+}
+
+/// The events of the refs folder, by which the watch wakes when the branch moves.
+type Moves = mpsc::Receiver<notify::Result<notify::Event>>;
+
+/// An event of the refs folder, or the fault that ended their watch.
+fn heard(event: Result<notify::Result<notify::Event>, RecvTimeoutError>) -> Result<(), Fault> {
+  match event {
+    Err(RecvTimeoutError::Disconnected) => Err(Fault::Unwatched),
+    Ok(Err(fault)) => Err(fault.into()),
+    Ok(Ok(_)) | Err(RecvTimeoutError::Timeout) => Ok(()),
+  }
+}
+
+/// Wait while the load of the machine is at its count of cores or more, so a part never adds to a
+/// machine that is already full. The load has no event, so it is read again each minute.
+fn calm(moves: &Moves) -> Result<(), Fault> {
+  let cores = thread::available_parallelism().map_or(1, NonZero::get);
+  #[expect(clippy::cast_precision_loss, reason = "a count of cores is far below 2^52")]
+  while load().is_some_and(|load| load >= cores as f64) {
+    heard(moves.recv_timeout(Duration::from_secs(60)))?;
+  }
+  Ok(())
+}
+
+/// The load of the last minute, from Linux or from the sysctl of macOS; none on Windows.
+fn load() -> Option<f64> {
+  let text = fs::read_to_string("/proc/loadavg").ok().or_else(|| {
+    let out = Process::new("sysctl").args(["-n", "vm.loadavg"]).output().ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
+  })?;
+  text.split_whitespace().find_map(|word| word.parse().ok())
 }
 
 /// The owner of each prefix of a test, from a file of lines `<prefix> <owner>`.

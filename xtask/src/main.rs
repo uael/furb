@@ -84,7 +84,7 @@ enum Task {
     uv: Option<PathBuf>,
   },
   /// Check the head of a branch whole when it moved: the hooks of a commit on the files that
-  /// changed, then every suite at once, then clippy and biome.
+  /// changed, then each suite, then clippy and biome.
   ///
   /// The check runs in a tree of its own, detached at the head, at a low priority, and blocks
   /// nothing. A green writes one line in the table; a red writes one entry in the inbox, with the
