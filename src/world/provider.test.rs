@@ -2836,7 +2836,7 @@ fn a_model_at_medium_is_cut_at_a_quarter_of_the_most_thought() {
 }
 
 #[test]
-fn a_local_model_reads_the_end_of_a_thought_that_the_provider_cut_in_its_next_turn_alone() {
+fn a_local_model_reads_the_end_of_a_thought_that_the_provider_cut_the_same_in_each_later_turn() {
   let usage = json!({"id": "c", "object": "chat.completion.chunk", "created": 0, "model": "qwen", "choices": [],
     "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105}});
   let ended = format!("data: {usage}\n\ndata: [DONE]\n\n");
@@ -2866,11 +2866,9 @@ fn a_local_model_reads_the_end_of_a_thought_that_the_provider_cut_in_its_next_tu
       .collect()
   };
   assert_eq!(thoughts(&got[3])[0], json!("abc"), "the next turn reads the thought that was cut");
-  assert_eq!(
-    thoughts(&got[4]).iter().filter(|one| !one.is_null()).count(),
-    0,
-    "a later turn reads it no more"
-  );
+  // A request that phrased an earlier turn otherwise would start with other bytes than the request
+  // before it.
+  assert_eq!(thoughts(&got[4])[..2], [json!("abc"), Value::Null], "a later turn reads it the same");
   assert_eq!(tail("abcdé", 2), "dé", "the end of a thought counts characters");
   assert_eq!(tail("ab", 5), "ab");
 }
@@ -3248,4 +3246,76 @@ fn a_refresh_that_reads_no_settings_refuses_the_stand_with_its_cause() {
     })
   };
   assert!(until(&mut engine, refused), "the stand says why the refresh read nothing");
+}
+
+/// A provider whose roster grows by a second model once the flag is set, as when a stand reads new
+/// settings.
+fn widening(model: &MockCompletionModel, wide: &Arc<AtomicBool>) -> Provider {
+  let (first, wider) =
+    (scripted(model), vec![scripted(model), Model::new("n", 1000, model.clone())]);
+  let flipped = Arc::clone(wide);
+  Provider::new(yard("prefix").display().to_string(), vec![first.clone()]).refreshing(Arc::new(
+    move || {
+      let models = if flipped.load(Ordering::SeqCst) { wider.clone() } else { vec![first.clone()] };
+      Box::pin(async move { Ok((models, None, Thinking::default())) })
+    },
+  ))
+}
+
+/// A prompt on a chain that the model answers with this value, once it is answered.
+fn counted(engine: &mut Engine, on: &str, value: i64) -> String {
+  let with = verbs::Prompt {
+    message: Some("count".to_owned()),
+    on: Some(on.to_owned()),
+    ..Default::default()
+  };
+  let id = engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
+  let got = block_on(Act::<Object>::of(engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(value));
+  id
+}
+
+/// The messages of each request that a model read, as JSON.
+fn histories(model: &MockCompletionModel) -> Vec<Vec<Value>> {
+  let json = |one: &Message| serde_json::to_value(one).expect("a message is json");
+  model.requests().iter().map(|one| one.chat_history.iter().map(json).collect()).collect()
+}
+
+#[test]
+fn each_request_of_a_chain_starts_with_the_request_before_it_across_a_stand_an_edit_and_a_fork() {
+  let words = ["x = 1\ndebug(t'{x}')", "close(1)", "close(2)", "close(3)", "close(4)", "close(5)"];
+  let model = streaming(&words.map(|one| (one, Usage::new())));
+  let wide = Arc::new(AtomicBool::new(false));
+  let mut engine = lived(widening(&model, &wide));
+  let root = engine.root().to_owned();
+  let first = counted(&mut engine, &root, 1);
+  wide.store(true, Ordering::SeqCst);
+  let stand =
+    engine.stand(verbs::Stand { on: Some(root.clone()) }).expect("the life stands").id().to_owned();
+  block_on(Act::<Object>::of(&mut engine, &stand)).expect("the stand is answered");
+  counted(&mut engine, &root, 2);
+  let door = Text::new(first, "x = 4\ndebug(t'{x}')");
+  engine.write(&door, verbs::Write { on: Some(root.clone()) }).expect("the door is written");
+  counted(&mut engine, &root, 3);
+  let fork = verbs::Chain {
+    label: Some("side".to_owned()),
+    source: Some(root.clone()),
+    ..Default::default()
+  };
+  let side = engine.chain(fork).expect("the fork is made").id().to_owned();
+  counted(&mut engine, &side, 4);
+  counted(&mut engine, &root, 5);
+  let requests = histories(&model);
+  assert_eq!(requests.len(), words.len(), "each word answers one request");
+  let holds = |at: usize, word: &str| {
+    requests[at].iter().filter(|one| one.to_string().contains(word)).count()
+  };
+  assert_eq!(holds(2, "stand()"), holds(1, "stand()") + 1, "the stand plays its rung on the root");
+  assert_eq!((holds(2, "x = 4"), holds(3, "x = 4")), (0, 1), "the edit tells its word on the root");
+  // The fork is asked fifth: it reads what the root read before it, then its own turns.
+  for (before, after) in [(0, 1), (1, 2), (2, 3), (3, 5), (3, 4)] {
+    let (was, now) = (&requests[before], &requests[after]);
+    assert!(now.len() > was.len(), "request {after} grows from request {before}");
+    assert_eq!(now[..was.len()], was[..], "request {after} starts with request {before}");
+  }
 }

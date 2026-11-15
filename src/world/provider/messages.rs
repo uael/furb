@@ -24,18 +24,19 @@ use std::mem;
 pub(super) const CUT: &str = "cut";
 
 /// The most characters of a thought that the provider cut that a model that forgets reads again in
-/// its next turn.
+/// each later turn.
 pub(super) const TAIL: usize = 16_384;
 
-/// The blocks of a turn of a model that forgets its thought, less that thought: but for the last
-/// turn, which keeps the end of a thought that the provider cut, [`TAIL`] characters at most, since
-/// the model wrote a word from that thought alone, and with no thought of it in the next turn, it
-/// thinks again to the most of that turn.
-fn forgotten(blocks: Vec<AssistantContent>, latest: bool) -> Vec<AssistantContent> {
+/// The blocks of a turn of a model that forgets its thought, less that thought: but for the end of
+/// a thought that the provider cut, [`TAIL`] characters at most, since the model wrote a word from
+/// that thought alone, and with no thought of it in the next turn, it thinks again to the most of
+/// that turn. Every later request phrases the turn the same, so it starts with the bytes of the
+/// request before it, which a cache of the provider holds.
+fn forgotten(blocks: Vec<AssistantContent>) -> Vec<AssistantContent> {
   blocks
     .into_iter()
     .filter_map(|one| match one {
-      AssistantContent::Reasoning(thought) if latest && thought.id.as_deref() == Some(CUT) => {
+      AssistantContent::Reasoning(thought) if thought.id.as_deref() == Some(CUT) => {
         let text = thought.display_text();
         Some(AssistantContent::Reasoning(Reasoning::new(tail(&text, TAIL)).with_id(CUT.to_owned())))
       }
@@ -75,13 +76,6 @@ pub(super) fn messages(
   // user turn holds under its finding.
   let mut quoted: Option<(String, usize)> = None;
   let all = turns.items().unwrap_or_default();
-  // The last turn that a model wrote, whose thought that the provider cut a model that forgets
-  // still reads. A word that the chain placed in the turns, as a stand, holds no blocks, so it is
-  // no turn of the model.
-  let last = all.iter().rposition(|turn| {
-    entry(turn, 0).and_then(|one| one.as_str()) == Some("assistant")
-      && entry(turn, 3).and_then(|one| one.items()).is_some()
-  });
   for (at, turn) in all.iter().enumerate() {
     let Some(role) = entry(turn, 0).and_then(|one| one.as_str()) else { continue };
     let python = entry(turn, 1).and_then(|one| one.as_str()).unwrap_or_default();
@@ -95,10 +89,9 @@ pub(super) fn messages(
         joins = true;
         continue;
       }
-      let latest = Some(at) == last;
       let blocks = entry(turn, 3)
         .and_then(|one| serde_json::from_value::<Vec<AssistantContent>>(wire::record(one)).ok())
-        .map(|blocks| if model.forgets { forgotten(blocks, latest) } else { blocks })
+        .map(|blocks| if model.forgets { forgotten(blocks) } else { blocks })
         .filter(|blocks| !blocks.is_empty())
         .unwrap_or_else(|| vec![AssistantContent::text(python)]);
       let (blocks, bared) = unmarked(blocks);
