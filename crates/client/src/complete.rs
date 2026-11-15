@@ -6,7 +6,10 @@
 //! row that he takes writes its name in the place of the word with a space after it, so his next
 //! word never joins it, and a command leaves the input as it was before its word, and runs.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+  collections::{HashMap, HashSet},
+  ops::Range,
+};
 
 use furb_wire::{
   card::Skill,
@@ -382,20 +385,30 @@ fn coded() -> impl Iterator<Item = (&'static str, &'static str)> {
 /// The paths that a text mentions, as a mention writes them: `@path`, or `@"path"` for a path with
 /// a blank. A mark that ends a sentence after a path is no part of it.
 fn mentions(text: &str) -> Vec<String> {
+  mentioned(text).into_iter().map(|(_, path)| path.to_owned()).collect()
+}
+
+/// Each mention of a text with the bytes that it takes, from its `@` to the end of its path, and
+/// its path, as `mentions` reads them.
+pub fn mentioned(text: &str) -> Vec<(Range<usize>, &str)> {
   let mut found = Vec::new();
-  let mut rest = text;
-  while let Some(at) = rest.find('@') {
-    rest = &rest[at + 1..];
-    let (path, after) = if let Some(quoted) = rest.strip_prefix('"') {
-      quoted.split_once('"').unwrap_or((quoted, ""))
-    } else {
-      let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-      (rest[..end].trim_end_matches([',', '.', ';', ':', ')', '?', '!']), &rest[end..])
+  let mut from = 0;
+  while let Some(at) = text[from..].find('@').map(|at| from + at) {
+    let rest = &text[at + 1..];
+    // A quoted path takes its two quotes, and one with no closing quote runs to the end.
+    let (path, end) = match rest.strip_prefix('"').map(|quoted| quoted.split_once('"')) {
+      Some(Some((path, _))) => (path, at + path.len() + 3),
+      Some(None) => (&rest[1..], text.len()),
+      None => {
+        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let path = rest[..end].trim_end_matches([',', '.', ';', ':', ')', '?', '!']);
+        (path, at + 1 + path.len())
+      }
     };
     if !path.is_empty() {
-      found.push(path.to_owned());
+      found.push((at..end, path));
     }
-    rest = after;
+    from = end.max(at + 1);
   }
   found
 }

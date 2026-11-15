@@ -32,7 +32,7 @@ use furb_wire::{
 };
 
 pub use changes::{Review, Seen};
-pub use complete::{Completed, Completes, Completion, Kind, Offer};
+pub use complete::{Completed, Completes, Completion, Kind, Offer, mentioned};
 pub use context::{Content, Parts, Split};
 pub use history::{History, Walk};
 pub use input::{ASIDE, Draft};

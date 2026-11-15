@@ -19,11 +19,12 @@ use opentui::{
     MouseButton, MouseEvent, MouseEventKind, ScrollBox, Span, Text, Textarea, TimerId, View,
     Widget, WrapMode,
   },
+  style::Style,
 };
 
 use furb_host::protocol::Verb;
 
-use furb_client::Asked;
+use furb_client::{Asked, mentioned};
 
 use crate::{
   Machine, Options, Screen,
@@ -827,6 +828,8 @@ fn completed(app: &App, window: &Shared, place: Option<usize>) -> bool {
     area.set_cursor_offset(u32::try_from(taken.caret).unwrap_or(u32::MAX));
   }
   tell(app, window, |model| model.client.complete_at(taken.caret));
+  // The editor drops its marks with the text that it took, so the new text takes them again.
+  colored(window);
   if let Some(does) = taken.command.as_deref().and_then(Model::command) {
     act(app, window, does);
   }
@@ -1027,12 +1030,25 @@ fn controlled(
   tell(app, window, |_| ());
 }
 
-/// The text of the input in the colors of python while it is a word, and plain otherwise.
+/// The text of the input in the colors of python while it is a word, and otherwise plain with
+/// each mention of a file marked, so a file that the picker put in the text stands out.
 fn colored(window: &Shared) {
   let held = window.borrow();
   let (area, model) = (&held.area, &held.screen.model);
   area.clear_extmarks();
   if !model.client.draft.python {
+    let text = &model.client.draft.text;
+    let t = &model.tokens;
+    let mark = ExtmarkOptions::default().style(Style::new().fg(t.accent).bg(t.lifted));
+    // The editor counts the cells of the text, and one for each end of a line.
+    let cells = |bytes: &str| {
+      bytes.split('\n').map(UnicodeWidthStr::width).sum::<usize>() + bytes.matches('\n').count()
+    };
+    for (span, _) in mentioned(text) {
+      let start = u32::try_from(cells(&text[..span.start])).unwrap_or_default();
+      let end = start + u32::try_from(cells(&text[span])).unwrap_or_default();
+      area.add_extmark(start..end, mark);
+    }
     return;
   }
   let plain = model.tokens.style(Role::Prose);
