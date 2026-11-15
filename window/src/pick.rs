@@ -225,6 +225,7 @@ impl Model {
       return;
     }
     self.picker = Some(Picker { of, filter, at: 0 });
+    self.chose(0);
     if of == Pick::Sessions {
       let now = match self.client.target() {
         Target::Thread(key) => Target::Session(key.0, key.1),
@@ -533,11 +534,20 @@ impl Model {
 
   /// The chosen row moved by a count of rows on the screen, within the rows that pass the filter.
   /// The history rises from the input, so a row up there is an older one.
+  /// A row that says something and takes nothing is passed over, and none stands chosen while a
+  /// row that takes something stands in that way.
   pub(crate) fn chose(&mut self, by: isize) {
-    let count = self.entries().len();
+    let entries = self.entries();
     if let Some(picker) = self.picker.as_mut() {
       let by = if picker.of == Pick::History { -by } else { by };
-      picker.at = picker.at.saturating_add_signed(by).min(count.saturating_sub(1));
+      let step = if by < 0 { -1 } else { 1 };
+      let takes = |at: usize| entries.get(at).is_some_and(|one| one.choice != Choice::None);
+      let wanted = picker.at.saturating_add_signed(by).min(entries.len().saturating_sub(1));
+      let mut at = Some(wanted);
+      while let Some(one) = at.filter(|one| !takes(*one)) {
+        at = one.checked_add_signed(step).filter(|next| *next < entries.len());
+      }
+      picker.at = at.unwrap_or(picker.at);
     }
   }
 
@@ -547,6 +557,7 @@ impl Model {
       change(&mut picker.filter);
       picker.at = 0;
     }
+    self.chose(0);
   }
 
   /// The row at a place taken, and the part closed, or kept with a filter for a project. A key
@@ -656,17 +667,20 @@ impl Model {
     };
     let rises = picker.of == Pick::History;
     let mut rows = vec![Row::default()];
-    let close = vec![run(self.key(Does::Close), muted)];
+    // The foot names the key that closes the part, so its title stands alone.
     let title = vec![run(picker.of.title(), t.style(Role::Title))];
-    rows.push(Row::of(padded(spread(title, close, room, Style::new()))));
+    rows.push(Row::of(padded(spread(title, Vec::new(), room, Style::new()))));
     let filter = if picker.filter.is_empty() {
       run(picker.of.placeholder(), muted)
     } else {
       run(picker.filter.clone(), prose)
     };
-    let count = match entries.len() {
+    // The count counts the rows that take something, and the place of the chosen one among them.
+    let takes: Vec<usize> =
+      (0..entries.len()).filter(|at| entries[*at].choice != Choice::None).collect();
+    let count = match takes.len() {
       0 => "nothing".to_owned(),
-      many => format!("{} / {many}", picker.at + 1),
+      many => format!("{} / {many}", takes.partition_point(|at| *at < picker.at) + 1),
     };
     let filter = vec![run("▌", Style::new().fg(t.accent)), filter];
     let filter = Row::of(padded(spread(filter, vec![run(count, muted)], room, Style::new())));
@@ -684,8 +698,10 @@ impl Model {
         rows.push(Row::of(padded(line)));
         continue;
       };
-      let clicked = (2..2 + room, Some(Click::Pick(at)));
-      rows.push(Row { hot: vec![clicked], ..Row::of(padded(line)) });
+      // A row that takes nothing takes no click, and the pointer does not light it.
+      let clicked =
+        (entries[at].choice != Choice::None).then(|| (2..2 + room, Some(Click::Pick(at))));
+      rows.push(Row { hot: clicked.into_iter().collect(), ..Row::of(padded(line)) });
     }
     rows.push(Row::default());
     if rises {
@@ -728,9 +744,9 @@ impl Model {
     let (muted, prose) = (t.style(Role::Muted), t.style(Role::Prose));
     let mut all: Vec<(Option<usize>, Line)> = Vec::new();
     let mut part: &str = "";
-    // A part whose rows stand in projects keeps the slot of the badge in each row, so each text
-    // starts in one column.
-    let badged = badged(entries);
+    // A part whose rows stand in projects keeps the slot of the badge in each of its rows, so each
+    // text of the part starts in one column, and a part with no project keeps none.
+    let badged = |part: &str| entries.iter().any(|one| one.part == part && one.project.is_some());
     let under = picker.of.describes();
     for (at, entry) in entries.iter().enumerate() {
       if picker.filter.is_empty() && entry.part != part && !entry.part.is_empty() {
@@ -750,13 +766,15 @@ impl Model {
           let badge = self.badge(project);
           vec![run(badge.content, ground(badge.style)), run(" ", ground(Style::new()))]
         }
-        None if badged => vec![run("   ", ground(Style::new()))],
+        None if badged(&entry.part) => vec![run("   ", ground(Style::new()))],
         None => Vec::new(),
       };
       let indent = 1 + badge.iter().map(|one| one.content.width()).sum::<usize>();
       let mut left = vec![bar.clone()];
       left.extend(badge);
-      left.extend(lit(&entry.left, &entry.lit, ground(prose), ground(prose.fg(t.accent))));
+      // A row that takes nothing reads muted, as a line of information.
+      let plain = if entry.choice == Choice::None { muted } else { prose };
+      left.extend(lit(&entry.left, &entry.lit, ground(plain), ground(prose.fg(t.accent))));
       let says = entry.says.trim();
       // The last run of the left is the one that a narrow row cuts, so an empty one goes.
       if !under && !entry.says.is_empty() {

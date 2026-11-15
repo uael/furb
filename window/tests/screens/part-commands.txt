@@ -2,7 +2,7 @@
 
   Nothing needs you.                                           Working 1
 
-    Go to                                               ⎋       ● run the bench of…     ⠋ Working
+    Go to                                                       ● run the bench of…     ⠋ Working
     ▌hide the list                                  1 / 1         FU furb                    opus
 
     ▌Show or hide the list                          ⌃X L       Resolved 1 ▸

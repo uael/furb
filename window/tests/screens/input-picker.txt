@@ -2,7 +2,7 @@
 ┃
 ┃ where does the time go (the model works on it)               Working 1
 ┃                                                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
-    Send to                                             ⎋     ▐ ● where does the time…  ⠋ Working ▌
+    Send to                                                   ▐ ● where does the time…  ⠋ Working ▌
     ▌Search a session                               2 / 2     ▐   FT furb-try                opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
      FT + new session                           furb-try

@@ -2,8 +2,8 @@
 
   Nothing needs you.
   ● 1 session ru
-                  Each key                                                       ⎋
-  ⌃P          go  ▌Search a key                                             1 / 42
+                  Each key
+  ⌃P          go  ▌Search a key                                             1 / 30
   ⌃X ?        ea
                   Go
                   ▌⌃P or ⌃O    go to anything, or run a command
