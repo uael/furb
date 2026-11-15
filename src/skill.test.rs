@@ -1101,3 +1101,30 @@ fn a_word_that_differs_has_a_copy_of_its_own_which_no_other_word_writes_over() {
   assert_eq!((read(&one), read(&other)), ("x = 1\n".to_owned(), "x = 2\n".to_owned()));
   assert_eq!(copy("note", "note.py", "x = 1\n", &places), one);
 }
+
+/// The crate on crates.io holds the manifest, the word and the interface of each official
+/// extension, which the build of the crate includes: a folder of `.agents/skills` that holds the
+/// file of its word. The other skills of that folder are no part of the crate.
+#[test]
+fn the_crate_holds_each_official_skill() {
+  let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+  let manifest = fs::read_to_string(root.join("Cargo.toml")).unwrap();
+  let folders = fs::read_dir(root.join(".agents").join("skills")).unwrap();
+  let mut lacked = Vec::new();
+  let mut official = 0;
+  for folder in folders {
+    let name = folder.unwrap().file_name().to_string_lossy().into_owned();
+    if !root.join(".agents/skills").join(&name).join(format!("{name}.py")).is_file() {
+      continue;
+    }
+    official += 1;
+    for file in ["SKILL.md".to_owned(), format!("{name}.py*")] {
+      let line = format!("\"/.agents/skills/{name}/{file}\"");
+      if !manifest.contains(&line) {
+        lacked.push(line);
+      }
+    }
+  }
+  assert_eq!(official, super::OFFICIAL.len(), "each official extension has a folder");
+  assert!(lacked.is_empty(), "the include of Cargo.toml lacks {lacked:?}");
+}
