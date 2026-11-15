@@ -17,7 +17,7 @@ use crate::{
   cards::{app, options, shows},
   daemon::{ANSWERS, ASKS, Daemon, PATIENCE, WORKS},
   screens::screen,
-  thread::{at, clicked},
+  thread::{LEFT, at, clicked},
 };
 
 /// The blue of the bar of a new thread.
@@ -120,12 +120,14 @@ fn three_enters_in_a_row_send_three_messages_in_order_and_the_up_arrow_cancels_n
 }
 
 /// The text of an input of one row, which stands above the launcher and the hints, once it shows
-/// a text: the window draws the text that the editor takes at its next frame.
+/// a text: the window draws the text that the editor takes at its next frame. The box of the
+/// context stands at its right.
 fn typed(app: &TestApp, text: &str) -> String {
   let row = || {
     let frame = app.text();
     let lines: Vec<&str> = frame.lines().collect();
-    lines[lines.len() - 3].trim_start_matches(['┃', ' ']).trim_end().to_owned()
+    let input: String = lines[lines.len() - 3].chars().take(LEFT).collect();
+    input.trim_start_matches(['┃', ' ']).trim_end().to_owned()
   };
   let shown = app.wait_until(PATIENCE, || row() == text);
   assert!(shown, "the input never held {text:?}:\n{}", app.text());

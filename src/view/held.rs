@@ -14,6 +14,7 @@ use std::{
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::engine::OPERATOR;
 
@@ -58,6 +59,9 @@ pub struct Held {
   /// that said it: `operator` alone, or `operator/<login>` for the window of a member. A seen that
   /// a later life says again as the journal names no site, so it stands for each of them.
   seen: HashMap<String, HashMap<String, u64>>,
+  /// The place of the last standing that is done, whose roster offers each actor its window.
+  #[serde(default)]
+  stood: Option<usize>,
 }
 
 impl<'a> Lookup<'a> for &'a Held {
@@ -69,8 +73,8 @@ impl<'a> Lookup<'a> for &'a Held {
 impl Held {
   /// A fact of the life at its place: what the operator says that he saw, which marks the threads
   /// that he started and that ended after it.
-  pub fn noted(&mut self, fact: &serde_json::Value, at: u64) {
-    let text = |n: usize| fact.get(n).and_then(serde_json::Value::as_str).unwrap_or_default();
+  pub fn noted(&mut self, fact: &Value, at: u64) {
+    let text = |n: usize| fact.get(n).and_then(Value::as_str).unwrap_or_default();
     if text(0) == "seen" && (super::act::operator(text(2)) || text(2) == "journal") {
       self.seen.entry(text(2).to_owned()).or_default().insert(text(1).to_owned(), at);
     }
@@ -126,7 +130,24 @@ impl Held {
     } else {
       self.live.remove(&at);
     }
+    if self.acts[at].kind == Kind::Stand && self.acts[at].done() {
+      self.stood = self.stood.max(Some(at));
+    }
     before
+  }
+
+  /// The window that the roster of the last standing offers an actor, by its model alone or with
+  /// one of its efforts, as `offered` of the engine reads it, and none when the roster holds no
+  /// such actor.
+  pub fn window(&self, actor: &str) -> Option<u64> {
+    let roster = self.acts.get(self.stood?)?.value()?.get(0)?.as_array()?;
+    roster.iter().find_map(|one| {
+      let name = one.get(0)?.as_str()?;
+      let efforts = one.get(1)?.as_array()?;
+      let leveled =
+        |effort: &Value| effort.as_str().is_some_and(|e| actor == format!("{name}/{e}"));
+      (actor == name || efforts.iter().any(leveled)).then(|| one.get(2)?.as_u64()).flatten()
+    })
   }
 
   /// The act of an id as the last event of it told it.

@@ -31,6 +31,9 @@ use crate::{
 /// beside it.
 const CLAUDE: &str = include_str!("../../src/world/provider/claude/fake-claude.sh");
 
+/// The usage of each request of a capture: 31,840 tokens read, 24,600 of them from the cache.
+const USAGE: &str = r#"{"input_tokens":1340,"output_tokens":420,"cache_read_input_tokens":24600,"cache_creation_input_tokens":5900}"#;
+
 /// The text of the empty input, which a window shows once it is ready for a walk.
 pub(crate) const READY: &str = "Ask for a change";
 
@@ -101,6 +104,10 @@ impl Rig {
     write(root.join("config/workspaces.json"), &listed.to_string())?;
     write(rig.claude(), CLAUDE)?;
     executable(&rig.claude())?;
+    // Each request reads as much as a turn of a real life does, most of it from the cache, and
+    // costs what the price of the model makes of it, so the box of the context shows real counts.
+    write(root.join("fake/usage"), USAGE)?;
+    write(root.join("fake/cost"), "0.11")?;
     // The sessions of the walk take the first turns, with the replies of the claude command line.
     for (n, word) in walk.words.iter().enumerate() {
       write(

@@ -420,7 +420,19 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       ],
     }),
   },
-  Scenario { name: "19-context", has: none("7. The context box") },
+  Scenario {
+    name: "19-context",
+    has: Has::Walk(Walk {
+      sessions: &[],
+      words: &["close('The trace holds the open of each chain, stage by stage.')"],
+      steps: &[
+        step("b", &[Act::Type("Read the trace of the open."), Act::Key("Enter")], "3%"),
+        // The share is the head of the box beside the list, or the ring of the launcher while the
+        // list hides: either opens each part of the box.
+        step("x-top", &[Act::Pointer { on: "3%", button: 0 }], "From the cache"),
+      ],
+    }),
+  },
   Scenario { name: "20-models", has: none("9. The launcher picks the model and its effort") },
   Scenario { name: "21-config", has: none("17. After the first window") },
   Scenario {

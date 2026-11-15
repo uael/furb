@@ -25,6 +25,6 @@
 ┃ How many rows does the form take?
 ┃
 ┃ many
-┃ Refused: "many" is no int: invalid digit found in string
-  This computer   furb ▾               opus/high   ○ Python
+┃ Refused: "many" is no int: invalid digit found in string     Context               No answer yet
+  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ⏎ answer                                        ⌃C refuse

@@ -30,7 +30,7 @@ fn exchange(at: usize) -> Exchange {
 
 /// The page of the exchanges of a thread from one place to another.
 fn page(places: Range<usize>) -> Page {
-  Page { above: places.start, exchanges: places.map(exchange).collect(), agents: Vec::new() }
+  Page { above: places.start, exchanges: places.map(exchange).collect(), ..Page::default() }
 }
 
 /// A window of 100 columns and 30 rows on one machine, whose thread is open on the page of its

@@ -229,7 +229,8 @@ pub struct Answer {
   pub account: Option<String>,
 }
 
-/// What the answers of models cost: their dollars, how many they are, and the actor of the last.
+/// What the answers of models cost: their dollars, how many they are, and the actor of the last
+/// and what it read.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Spend {
   pub dollars: f64,
@@ -238,6 +239,18 @@ pub struct Spend {
   /// The account of the last answer, none when that answer named none.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub account: Option<String>,
+  /// What the last answer read.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub read: Option<Read>,
+}
+
+/// What an answer of a model read: the tokens of its whole prompt, and of them those that it read
+/// from the cache and those that it wrote to it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Read {
+  pub tokens: u64,
+  pub cached: u64,
+  pub written: u64,
 }
 
 impl Spend {
@@ -256,6 +269,20 @@ impl Spend {
     self.answers += 1;
     self.actor = Some(answer.actor.clone());
     self.account.clone_from(&answer.account);
+    self.read = Some(Read::of(&answer.usage));
+  }
+}
+
+impl Read {
+  /// What the usage of an answer says that it read.
+  #[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the usage holds each count of tokens, a whole number of at least 0, as a float"
+  )]
+  fn of(usage: &[f64; 5]) -> Self {
+    let whole = |at: usize| usage[at] as u64;
+    Self { tokens: whole(0), cached: whole(2), written: whole(3) }
   }
 }
 

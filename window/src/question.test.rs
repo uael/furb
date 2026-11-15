@@ -63,7 +63,7 @@ fn asked(shape: &str, system: System) -> Model {
   };
   let key = (0, LIFE.to_owned(), "prompt0".to_owned());
   model.thread = Some(Opened { key, asked: [(1, None)].into(), ..Opened::default() });
-  let page = Page { exchanges: vec![exchange], above: 0, agents: Vec::new() };
+  let page = Page { exchanges: vec![exchange], ..Page::default() };
   assert!(model.answered(0, 1, Ok(page)));
   model.questioned();
   model

@@ -232,6 +232,13 @@ fn the_start_shows_what_waits_and_what_worked_while_no_window_was_open() {
   // The page of the thread that opened came: it holds the second line of its message, which no
   // card holds.
   shows(&app, "┃ (the model works on it)");
+  // The box of the context of the open thread takes the foot of the list, so the list scrolls to
+  // its end to show the head of the resolved threads.
+  let end = app.wait_until(PATIENCE, || {
+    app.scroll(70, 10, true);
+    app.text().contains(" Resolved 1 ▸")
+  });
+  assert!(end, "{}", app.text());
   app.click(70, row(&app, " Resolved 1 ▸"));
   app.hover(70, row(&app, "where does the time go"));
   screen("start-selected", &app);

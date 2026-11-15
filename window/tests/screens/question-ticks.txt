@@ -25,6 +25,6 @@
 ┃   [x] up
 ┃   [ ] down
 ┃ › [x] tab
-┃   type another answer
-  This computer   furb ▾               opus/high   ○ Python
+┃   type another answer                                        Context               No answer yet
+  This computer   furb ▾               opus/high   ○ Python    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · Space tick · ⏎ answer               ⌃C refuse

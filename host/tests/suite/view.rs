@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use std::iter;
 
 use furb::view::{
-  Act, Answer, Attention, ChainThread, Concern, Kind, Maker, NoteRun, Origin, Pause, Phase, Rows,
-  RunState, Spend, State, ThreadNode, Tick, as_of, attention, chain_notes, chain_threads, choices,
-  concerns, desk, hint, moments_of, nest_threads, open, operator, order_threads, restate,
+  Act, Answer, Attention, ChainThread, Concern, Kind, Maker, NoteRun, Origin, Pause, Phase, Read,
+  Rows, RunState, Spend, State, ThreadNode, Tick, as_of, attention, chain_notes, chain_threads,
+  choices, concerns, desk, hint, moments_of, nest_threads, open, operator, order_threads, restate,
   takes_nothing, ticks, wants, working,
 };
 use serde_json::{Value, json};
@@ -625,7 +625,7 @@ fn the_acts_as_they_stood_at_a_moment_hold_what_began_by_then_and_an_act_that_en
 }
 
 #[test]
-fn the_spend_counts_the_answers_sums_their_dollars_and_names_the_actor_of_the_last() {
+fn the_spend_counts_the_answers_sums_their_dollars_and_names_the_actor_of_the_last_and_its_read() {
   let answers = [
     Answer {
       actor: "claude-cli:sonnet/high".to_owned(),
@@ -643,6 +643,7 @@ fn the_spend_counts_the_answers_sums_their_dollars_and_names_the_actor_of_the_la
     answers: 2,
     actor: Some("claude-cli:opus/high".to_owned()),
     account: None,
+    read: Some(Read { tokens: 200, cached: 0, written: 0 }),
   };
   assert_eq!(Spend::of(&answers), want);
 }

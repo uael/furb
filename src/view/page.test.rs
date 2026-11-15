@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
-use super::{Answered, Block, Mark, Reach, Reply, Said, Saying, Streamed, Thought, Work};
-use crate::view::{Fold, Held, Maker, Standing, declined};
+use super::{Answered, Block, Context, Mark, Reach, Reply, Said, Saying, Streamed, Thought, Work};
+use crate::view::{Fold, Held, Maker, Read, Standing, declined};
 
 /// The acts of a list of facts as a host holds them, with what the host heard at the second 100.
 fn held(facts: impl IntoIterator<Item = Value>, streams: &mut Streamed) -> Held {
@@ -502,4 +502,28 @@ fn a_thought_under_a_second_took_no_second_whatever_seconds_it_falls_in() {
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let thought = page.exchanges[0].block.as_ref().unwrap().thought.clone().unwrap();
   assert_eq!(thought.took, Some(0));
+}
+
+#[test]
+fn a_page_gives_the_context_of_its_chain_at_its_last_answer_with_the_window_of_its_actor() {
+  let roster = json!([["claude-cli:opus", ["low", "high"], 200_000], ["operator", ["uael"], 0]]);
+  let mut facts = vec![
+    json!(["stand", "stand1", "operator", "chain1"]),
+    json!(["done", "stand1", "journal", [roster, "/tmp", "claude-cli:opus/high"]]),
+  ];
+  facts.extend(thread());
+  let mut streams = Streamed::default();
+  let before =
+    held(facts.clone(), &mut streams).page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  assert_eq!(before.context, None);
+  facts.extend([
+    json!(["reply", "reply1", "rung2", "chain1", "claude-cli:opus/high"]),
+    json!(["done", "reply1", "journal", ["assistant", "x", [1000, 20, 600, 100, 0.25], []]]),
+    json!(["reply", "reply2", "rung2", "chain1", "claude-cli:opus/high"]),
+    json!(["done", "reply2", "journal", ["assistant", "x", [124_000, 30, 98_000, 8_400, 0.5], []]]),
+  ]);
+  let held = held(facts, &mut streams);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let read = Read { tokens: 124_000, cached: 98_000, written: 8_400 };
+  assert_eq!(page.context, Some(Context { read, window: Some(200_000), dollars: 0.75 }));
 }

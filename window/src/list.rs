@@ -36,6 +36,8 @@ pub(crate) enum Row {
   Card(usize, bool),
   /// The one line of a resolved thread.
   Resolved(usize),
+  /// A row of the box of the context of the open thread, at the foot of the list, by its place.
+  Context(usize),
 }
 
 impl Model {
@@ -94,6 +96,21 @@ impl Model {
         if second { then } else { first }
       }
       Row::Resolved(card) => self.resolved(card, self.ground(card, at(pointed))),
+      Row::Context(at) => {
+        let line = self.context_rows().into_iter().nth(at).unwrap_or_default();
+        // The text of the box goes bright under the pointer, and its colored cells keep their
+        // colors.
+        let lit = |one: Span<'static>| {
+          let cells = one.content.starts_with(['━', '■']);
+          let style = if cells { one.style } else { one.style.fg(t.hover) };
+          run(one.content, style)
+        };
+        if matches!(pointed, Some(Row::Context(_))) {
+          line.into_iter().map(lit).collect()
+        } else {
+          line
+        }
+      }
     }
   }
 

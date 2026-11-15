@@ -1319,7 +1319,8 @@ export interface Pause {
   why?: unknown;
 }
 /**
- * What the answers of models cost: their dollars, how many they are, and the actor of the last.
+ * What the answers of models cost: their dollars, how many they are, and the actor of the last
+ * and what it read.
  */
 export interface Spend {
   dollars: number;
@@ -1329,15 +1330,29 @@ export interface Spend {
    * The account of the last answer, none when that answer named none.
    */
   account?: string | null;
+  /**
+   * What the last answer read.
+   */
+  read?: Read | null;
 }
 /**
- * Some exchanges of a thread, the oldest first, with how many exchanges stand before them, and the
- * agents of the whole thread, in the order the thread made them.
+ * What an answer of a model read: the tokens of its whole prompt, and of them those that it read
+ * from the cache and those that it wrote to it.
+ */
+export interface Read {
+  tokens: number;
+  cached: number;
+  written: number;
+}
+/**
+ * Some exchanges of a thread, the oldest first, with how many exchanges stand before them, the
+ * agents of the whole thread, in the order the thread made them, and the context of its chain.
  */
 export interface Page {
   exchanges: Exchange[];
   above: number;
   agents: Agent[];
+  context?: Context | null;
 }
 /**
  * One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
@@ -1431,6 +1446,16 @@ export interface Agent {
   line?: Line | null;
 }
 /**
+ * The context of a chain at its last answer: what that answer read, the window that the roster of
+ * the standing offers its actor, none when the roster holds no such actor, and the dollars of each
+ * answer on the chain.
+ */
+export interface Context {
+  read: Read;
+  window?: number | null;
+  dollars: number;
+}
+/**
  * One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
  * that its prompt wants, its message, and why its send failed, when it did. A follow-up that
  * failed holds the queue of its chain until the operator takes it out.
@@ -1458,4 +1483,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 26;
+export const PROTOCOL = 27;

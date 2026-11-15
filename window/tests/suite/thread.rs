@@ -11,12 +11,12 @@ use opentui::{native::Capture, style::Color, testing::TestApp};
 
 use crate::{
   cards::{app, options, row, shows},
-  daemon::{ANSWERS, DELEGATES, Daemon, FAILS, LONG, PATIENCE, Peer, RETRIES, THINKS},
+  daemon::{ANSWERS, DELEGATES, Daemon, FAILS, LONG, PATIENCE, Peer, READS, RETRIES, THINKS},
   screens::screen,
 };
 
 /// The columns of the thread, at the left of the list.
-const LEFT: usize = 61;
+pub(crate) const LEFT: usize = 61;
 
 /// A window on a machine with one session whose thread says a message, opened by a click on its
 /// card, once the thread shows a text.
@@ -303,4 +303,54 @@ fn the_dock_says_how_each_agent_stands_and_a_click_opens_its_thread_until_an_esc
   }
   app.press("escape");
   shows(&app, "[ Resolve ]");
+}
+
+/// The rows of the box of the context, from its head to the foot of the window, each cut to the
+/// columns of the box and trimmed.
+fn boxed(app: &TestApp) -> Vec<String> {
+  let frame = app.text();
+  let (x, y) = place(&frame, "Context", LEFT);
+  let rows = frame.lines().skip(usize::from(y));
+  rows
+    .map(|line| line.chars().skip(usize::from(x)).collect::<String>().trim_end().to_owned())
+    .collect()
+}
+
+#[test]
+fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_shows_each_part() {
+  let message = format!("read the trace of the open\n{READS}");
+  let (app, _daemon, _peer) = opened(&message, "each chain.");
+  // The last answer read 124k of the window of 1M of its model: its share, a bar in the colors
+  // of its parts, and its counts in the row of the hints.
+  let got = app.wait_until(PATIENCE, || boxed(&app)[0].contains('%'));
+  assert!(got, "{}", app.text());
+  let bar = "━".repeat(35);
+  let counts = "124k of 1M · 98k cached       $0.75";
+  assert_eq!(boxed(&app), ["Context ▸                       12%", &bar, counts]);
+  // The pointer lights the text of the box and leaves the colors of its bar; a click opens one
+  // row for each part, with its size and its share, and a click folds them again.
+  clicked(&app, "Context", LEFT, 0);
+  shows(&app, "From the cache");
+  let parts = [
+    "Context ▾                       12%",
+    &bar,
+    "■ From the cache          98k   10%",
+    "■ Written to the cache   8.4k    1%",
+    "■ New                     17k    2%",
+    "■ Free                   876k   88%",
+    counts,
+  ];
+  assert_eq!(boxed(&app), parts);
+  screen("thread-context", &app);
+  clicked(&app, "Context", LEFT, 0);
+  let folded = app.wait_until(PATIENCE, || !app.text().contains("From the cache"));
+  assert!(folded, "{}", app.text());
+  // While the list hides, and so its box, the ring of the launcher says the share, and a click on
+  // it shows the list with each part of its box.
+  assert!(!app.text().contains("○ 12%"), "{}", app.text());
+  app.resize(80, 30);
+  shows(&app, "○ Python   ○ 12%");
+  screen("thread-context-ring", &app);
+  clicked(&app, "○ 12%", 0, 0);
+  shows(&app, "From the cache");
 }

@@ -569,21 +569,29 @@ impl Model {
     } else {
       run("○ Python", prose)
     };
+    let ring = self.ring().map(|ring| [run("   ", muted), run(ring, prose)]);
     // The session gives way to the model down to a few words, then the model gives way.
     let room = self.wide().saturating_sub(2);
     let session = width(&left[1..]).min(SESSION);
+    let switched = switch.content.width() + ring.as_ref().map_or(0, |ring| width(ring));
     let model = self.maker().map(|model| run(format!("{model}   "), muted));
-    let fits = |one: &Span<'_>| width(&left[..1]) + session + one.content.width() + 2 + 8 <= room;
+    let fits =
+      |one: &Span<'_>| width(&left[..1]) + session + one.content.width() + 2 + switched <= room;
     let model = model.filter(fits);
-    let right: Line = model.into_iter().chain([switch]).collect();
+    let right: Line = model.into_iter().chain([switch]).chain(ring.into_iter().flatten()).collect();
     let line = spread(left, right, room, Style::new());
-    // The runs of the line: the machine, the session, the fill, the model when it shows, and the
-    // switch.
+    // The runs of the line: the machine, the session, the fill, the model when it shows, the
+    // switch, and the ring of the context when it shows.
     let at = columns(&line);
-    let hot = vec![
+    let ringed = self.ring().is_some();
+    let switch = at.len() - if ringed { 3 } else { 1 };
+    let mut hot = vec![
       (at[1].clone(), Some(Click::Key(Does::Sessions))),
-      (at[at.len() - 1].clone(), Some(Click::Key(Does::Python))),
+      (at[switch].clone(), Some(Click::Key(Does::Python))),
     ];
+    if ringed {
+      hot.push((at[at.len() - 1].clone(), Some(Click::Context)));
+    }
     Row { hot, ..Row::of(line) }
   }
 
