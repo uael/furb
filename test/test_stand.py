@@ -20,6 +20,7 @@ from conftest import (
 )
 from furb import engine
 from furb.engine import OPERATOR, Refused
+from test_chain import TAUGHT_FILES
 
 
 async def test_stand_asks_the_world_what_the_chains_stand_on_and_gives_the_answer() -> None:
@@ -122,3 +123,24 @@ async def test_a_stand_that_names_no_chain_is_on_the_chain_of_the_act_that_makes
   engine.stand(engine.ROOT)
   assert [(a[1], a[3]) for a in said(log, "stand")] == [("stand1", root), ("stand2", two), ("stand3", root)]
   assert engine.get("stand2")[2] == said(log, "rung")[-1][1]
+
+
+async def test_a_stand_appends_to_each_chain_and_changes_no_turn_before_it() -> None:
+  """A stand appends to each chain and changes no turn before it, whether it gives another roster, another directory or another actor, so the model of a chain reads its last request again as the start of its next one."""
+  taught = [STANDS[0], "/w", STANDS[2], "/w/DOCTRINE.md", []]
+  sand, _, root = born(stands=taught, files=TAUGHT_FILES)
+  chains = [root, await chained("two"), await chained("side", root, 300)]
+  assert await engine.rung("k = 1", on=root) is None
+  await settle()
+  roster = [[*STANDS[0], ["p", ["low"], 100000]], *taught[1:]]
+  folder = [roster[0], "/z", *taught[2:]]
+  actor = [*folder[:2], "n/low", *taught[3:]]
+  for standing, word in ((roster, "stand()"), (folder, "stand()\ncd('/z')"), (actor, "stand()")):
+    was = [engine.turns(on=one) for one in chains]
+    sand.stands = standing
+    engine.stand(engine.ROOT)
+    await settle(300)
+    for one, before in zip(chains, was, strict=True):
+      now = engine.turns(on=one)
+      assert now[: len(before)] == before
+      assert [turn[1] for turn in now[len(before) :] if turn[0] == "assistant"] == [word]

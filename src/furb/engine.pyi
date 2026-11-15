@@ -269,6 +269,7 @@ def stand(on: str = "") -> Act[Standing]:
   A stand from inside an act that the World answers at once tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine and no extensions, which the root reads in turns of its own.
   A stand from outside an act tells nothing, so the stand that boot makes tells nothing.
   A stand that names no chain is on the chain of the act that makes it, as every verb, so the operator names the root, as boot does.
+  A stand appends to each chain and changes no turn before it, whether it gives another roster, another directory or another actor, so the model of a chain reads its last request again as the start of its next one.
   """
 
 def clock(on: str = "") -> float:
