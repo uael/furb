@@ -93,6 +93,14 @@ impl Chains {
   }
 }
 
+/// The label of the chain of a rewind, by which the line of its word says that it branches.
+const REWIND: &str = "rewind";
+
+/// Whether the text of a line is the word of a rewind, which branches its thread.
+pub(crate) fn rewinds(line: &str) -> bool {
+  line.contains(&format!("on=chain('{REWIND}'"))
+}
+
 /// Whether a chain rests: its work ended, or never began.
 pub fn resting(state: State) -> bool {
   matches!(state, State::Done | State::Idle | State::Cancelled)
@@ -227,7 +235,7 @@ impl Client {
     thread.time = None;
     thread.moved();
     Some(Ok(format!(
-      "prompt(str, {text}, on=chain('rewind', source=__name__, filter=take({kept})))"
+      "prompt(str, {text}, on=chain('{REWIND}', source=__name__, filter=take({kept})))"
     )))
   }
 

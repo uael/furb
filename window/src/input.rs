@@ -290,9 +290,13 @@ impl Model {
     let Answer::Act(act) = answer else { return };
     let Some(sent) = self.client.outgoing.pop_front() else { return };
     self.client.ask_history();
+    // A word on a thread stands in the feed of that thread, as a rewind does, so the row of hints
+    // keeps only a word that no thread shows.
     if sent.python {
+      let on = sent.thread.filter(|one| !one.is_empty());
       let (at, life, text) = (sent.at, sent.life, sent.text);
-      self.word = Some(Word { at, life, text, rung: act, asked: false, ran: None });
+      self.word =
+        on.is_none().then_some(Word { at, life, text, rung: act, asked: false, ran: None });
       return;
     }
     // A message makes the hints of the last word that ran go, so they never cover its work.

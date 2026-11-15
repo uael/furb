@@ -12,7 +12,7 @@ use furb_wire::{
   protocol::{Card, Verb},
 };
 
-use crate::{Asked, Client, Form, Key, Parts, Time};
+use crate::{Asked, Client, Form, Key, Parts, Time, time::rewinds};
 
 /// How many exchanges a page holds.
 pub const PAGE: usize = 20;
@@ -141,6 +141,16 @@ pub struct Pending {
 }
 
 impl Thread {
+  /// Each agent of the thread that a rewind made, in order: a branch of the thread from one of its
+  /// moments, whose thread is the second branch, the third, and so on.
+  pub fn branches(&self) -> Vec<&Agent> {
+    let lines = self.exchanges.values().filter_map(|one| one.block.as_ref());
+    let lines = lines.flat_map(|block| &block.lines);
+    let words: Vec<usize> =
+      lines.filter(|line| rewinds(&line.text)).map(|line| line.number).collect();
+    self.agents.iter().filter(|one| one.at.is_some_and(|at| words.contains(&at))).collect()
+  }
+
   /// A page that the daemon gave, or a change of the thread that it told: each exchange takes the
   /// place of the one before it, and the agents and the context are those of the thread now.
   pub fn took(&mut self, page: Page) {

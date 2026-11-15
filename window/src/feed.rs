@@ -218,23 +218,27 @@ impl Feed<'_> {
     let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
     let (button, muted) = (self.style(Role::Button), self.style(Role::Muted));
     let title = self.model.title().unwrap_or_default();
-    // The selected card names the thread that an agent came from, so the head names the agent.
-    let (mark, title) = match (&self.opened.from, self.opened.agent()) {
-      (Some(_), Some(_)) => ("agent · ", title),
-      (Some(_), None) => ("", title),
-      (None, _) => ("", named.unwrap_or(title)),
+    let (branch, branches) = self.branch();
+    let (mark, title) = match (&self.opened.from, self.opened.agent(), branch) {
+      (Some(_), _, Some(at)) => (format!("⑂ {} · ", at + 2), title),
+      (Some(_), Some(_), None) => ("agent · ".to_owned(), title),
+      (Some(_), None, None) => (String::new(), title),
+      (None, ..) if branches > 0 => (format!("⑂ 1 of {} · ", branches + 1), named.unwrap_or(title)),
+      (None, ..) => (String::new(), named.unwrap_or(title)),
     };
     // The head marks a session whose life runs as its card does, in the column of the bars of the
     // messages, so its project stands over their text.
     let runs = card.is_some_and(|card| self.model.live(&root.thread.key, card));
-    let left = vec![
+    let mut left = vec![
       run(if runs { "●" } else { " " }, Style::new().fg(t.live)),
-      run(format!(" {project} · {mark}"), muted),
-      run(title, self.style(Role::Title)),
+      run(format!(" {project} · "), muted),
     ];
+    let forks = (width(&left)..width(&left) + mark.width() - 3, branches > 0);
+    left.extend([run(mark, muted), run(title, self.style(Role::Title))]);
     // A life that a fault ended takes no resolve: it only reads.
     let made = !self.opened.thread.key.2.is_empty() && !self.model.leaves() && !self.ended();
     let (mark, button) = match card.map(|card| &card.thread) {
+      _ if branch.is_some() => (None, Some((run(" ⑂ 1 ", button), Does::Close))),
       _ if self.opened.from.is_some() => (None, Some((run(" Back ", button), Does::Close))),
       _ if !made => (None, None),
       Some(thread) if thread.ended() => {
@@ -268,7 +272,22 @@ impl Feed<'_> {
     let line = spread(left, right, self.wide.saturating_sub(2), Style::new());
     let end = width(&line);
     let hot = button.map(|(one, does)| (end - one.content.width()..end, Some(Click::Key(does))));
-    Row { hot: hot.into_iter().collect(), ..Row::of(line) }
+    // The mark of the branches of a thread opens its last branch.
+    let last = self.opened.thread.branches().last().map(|one| one.card.prompt.clone());
+    let fork = last.filter(|_| forks.1).map(|prompt| (forks.0, Some(Click::Agent(prompt))));
+    Row { hot: hot.into_iter().chain(fork).collect(), ..Row::of(line) }
+  }
+
+  /// The place of the thread among the branches of the thread that it came from, when a rewind
+  /// made it, and how many branches the thread itself made. The selected card names the thread
+  /// that an agent came from, so the head names the agent; a rewind is a branch of that thread, the
+  /// first branch being the thread itself, whose head names how many branches it has.
+  fn branch(&self) -> (Option<usize>, usize) {
+    let branch = self.opened.from.as_deref().and_then(|from| {
+      let mine = |one: &&Agent| one.card.prompt == self.opened.thread.key.2;
+      from.thread.branches().iter().position(mine)
+    });
+    (branch, self.opened.thread.branches().len())
   }
 
   /// Who else is on the session of the thread: the login of each other operator whose window holds

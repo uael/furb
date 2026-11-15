@@ -406,7 +406,10 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
           ],
           "Answer of the rewind",
         ),
-        step("x-branch", &[Act::Pointer { on: "└ 'Answer of the rewind", button: 0 }], "agent · "),
+        // The rewind is the second branch of the thread, and its head goes back to the first.
+        step("x-branch", &[Act::Pointer { on: "└ 'Answer of the rewind", button: 0 }], "⑂ 2 · "),
+        // Back on the first branch, its head names how many branches the thread has.
+        step("x-fork", &[Act::Key("Escape")], "⑂ 1 of 2 · "),
         // The chains of the life stand under the bar on its moments: none works once the rewind
         // answered, a text finds the root in grey, and enter opens its thread.
         step("x-chains", &[Act::Key("C-x"), Act::Key("t")], "no chain works now"),
@@ -694,6 +697,9 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         ),
         step("d", &[Act::Pointer { on: "└ report = await", button: 0 }], "· agent · "),
         step("c", &[Act::Key("Escape")], "demo · Measure"),
+        // The chains of the life stand as a tree under the bar of the time: the agents that work,
+        // in color, under the root that made them, and the one that rests is found by a text.
+        step("x-chains", &[Act::Key("C-x"), Act::Key("t")], "type to find a chain"),
       ],
     }),
   },
