@@ -586,7 +586,3 @@ fn changed(before: &[u8], now: &[u8], width: usize) -> Option<Changed> {
     height: bottom + 1 - top,
   })
 }
-
-#[cfg(test)]
-#[path = "motion.test.rs"]
-mod test;

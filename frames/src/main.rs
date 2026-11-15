@@ -15,7 +15,9 @@ mod replay;
 mod scenario;
 
 use std::{
-  env, fs,
+  env,
+  ffi::OsStr,
+  fs,
   path::{Path, PathBuf},
   process::ExitCode,
   sync::Arc,
@@ -118,7 +120,9 @@ enum Does {
     #[arg(long)]
     bin: Option<PathBuf>,
   },
-  /// The findings of the probes on frames of the window, from their cells as JSON.
+  /// The findings of the probes on frames of the window, from their cells as JSON: on each frame,
+  /// then across the sizes of each step that frames of one name in folders of their sizes show, as
+  /// `120x40/05-prompt-box.a.json` and `80x24/05-prompt-box.a.json`.
   Probe { frames: Vec<PathBuf> },
   /// What tmux pipes from the pane of a capture, stamped with its time, into a file.
   #[command(hide = true)]
@@ -152,12 +156,7 @@ async fn main() -> ExitCode {
       Ok(programs) => heroes(&out, &programs).await,
       Err(fault) => Err(fault),
     },
-    Does::Probe { frames } => frames.iter().try_for_each(|path| {
-      for found in probe::probe(&frame::Frame::read(path)?) {
-        println!("{} row {} col {}: {}", path.display(), found.row, found.col, found.says);
-      }
-      Ok(())
-    }),
+    Does::Probe { frames } => probes(&frames),
     Does::Stamp { file } => capture::stamp(&file),
   };
   match done {
@@ -367,6 +366,31 @@ fn probed(scenario: &Scenario, out: &Path) -> Result<Option<String>, Error> {
   let text = if lines.is_empty() { String::new() } else { lines.join("\n") + "\n" };
   put(&path, text.as_bytes())?;
   Ok(Some(format!("{}: {count} findings in {}", scenario.name, path.display())))
+}
+
+/// The findings of the probes on frames, each alone, then across the sizes of each name that the
+/// frames of several folders hold, each folder named after its size.
+fn probes(paths: &[PathBuf]) -> Result<(), Error> {
+  let mut named: Vec<(String, Vec<(String, frame::Frame)>)> = Vec::new();
+  for path in paths {
+    let frame = frame::Frame::read(path)?;
+    for found in probe::probe(&frame) {
+      println!("{} row {} col {}: {}", path.display(), found.row, found.col, found.says);
+    }
+    let name =
+      |one: Option<&OsStr>| one.map_or_else(String::new, |one| one.to_string_lossy().into_owned());
+    let (step, size) = (name(path.file_name()), name(path.parent().and_then(Path::file_name)));
+    match named.iter_mut().find(|one| one.0 == step) {
+      Some((_, frames)) => frames.push((size, frame)),
+      None => named.push((step, vec![(size, frame)])),
+    }
+  }
+  for (step, frames) in named.iter().filter(|one| one.1.len() > 1) {
+    for found in probe::sizes(frames) {
+      println!("sizes {step}: {found}");
+    }
+  }
+  Ok(())
 }
 
 /// The words of the span of a motion, as the command gives them.

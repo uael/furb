@@ -220,7 +220,3 @@ fn beside(columns: &[&Column]) -> String {
   }
   text
 }
-
-#[cfg(test)]
-#[path = "compare.test.rs"]
-mod test;

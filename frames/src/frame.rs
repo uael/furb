@@ -223,7 +223,3 @@ fn rgb(color: Color) -> Rgb {
     }
   }
 }
-
-#[cfg(test)]
-#[path = "frame.test.rs"]
-mod test;

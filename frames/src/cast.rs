@@ -103,7 +103,3 @@ impl What {
     })
   }
 }
-
-#[cfg(test)]
-#[path = "cast.test.rs"]
-mod test;

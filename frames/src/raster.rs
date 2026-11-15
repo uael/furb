@@ -402,7 +402,3 @@ fn to_pixels(length: f32) -> usize {
 fn to_i64(value: usize) -> i64 {
   i64::try_from(value).unwrap_or(i64::MAX)
 }
-
-#[cfg(test)]
-#[path = "raster.test.rs"]
-mod test;

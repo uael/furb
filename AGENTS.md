@@ -162,8 +162,9 @@ API of its own:
   cells as JSON and an image, and every 200 ms where the screen changed, a text and the cells. It then writes the
   findings of the probes, which hold each frame to the tokens of the window, and the compare of each scenario with
   the two winner frames of the other programs that `FURB_RIVALS` names, which stay out of the repository.
-  `furb-frames replay <cast>` gives the key frames of any recording, `probe` the findings of a frame and `compare`
-  the compare of a scenario.
+  `furb-frames replay <cast>` gives the key frames of any recording, `probe` the findings of each frame and across
+  the sizes of a step, `motion` the measures of a span, and `compare` the compare of a scenario. Its tests run the
+  program on recordings and frames that they write, in `frames/tests/suite`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
 of this interpreter, and the engine of monty holds its own. The suite of each extension, `.agents/skills/<name>/test/`, runs

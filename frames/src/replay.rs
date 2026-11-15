@@ -140,7 +140,3 @@ pub(crate) fn write(keys: &[Key], folder: &Path, stem: &str) -> Result<Vec<char>
 pub(crate) fn put(path: &Path, bytes: &[u8]) -> Result<(), Error> {
   fs::write(path, bytes).map_err(|source| Error::Write { path: path.to_owned(), source })
 }
-
-#[cfg(test)]
-#[path = "replay.test.rs"]
-mod test;

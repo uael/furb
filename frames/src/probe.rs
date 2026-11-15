@@ -404,7 +404,3 @@ fn start(cells: &[Vec<Cell>], one: &Boxed) -> String {
   let text = rows.collect::<Vec<_>>().join(" ");
   text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(NAMES).collect()
 }
-
-#[cfg(test)]
-#[path = "probe.test.rs"]
-mod test;
