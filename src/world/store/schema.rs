@@ -28,10 +28,13 @@ pub struct Schema {
   pub minor: i64,
 }
 
-/// The schema of the record that this build writes and reads. The minor 1 keeps the question of
-/// each act that the life makes, so a reader rebuilds each chain and each prompt that a word made;
-/// a reader of the minor 0 tells them as the other questions.
-pub const RECORD_SCHEMA: Schema = Schema { major: 1, minor: 1 };
+/// The schema of the record that this build writes and reads. Its major 2 is the stable cut: from
+/// it each record replays with no drift on each later build of the major. A record of the major 1,
+/// or of a build before the schemas, comes from a build before the cut, which the promise does not
+/// hold: a life that inspects it reads it, and no life works on it or keeps it, as
+/// [`Schema::opens_record`] says. The major 1 keeps the question of each act that the life makes
+/// from its minor 1, as the major 2 does.
+pub const RECORD_SCHEMA: Schema = Schema { major: 2, minor: 0 };
 
 /// The schema of the data of the checkpoint that this build writes and reads. The data of the major
 /// 1 also holds `again`, each word that ran on a chain, which `seed` names as cut, so a build reads
@@ -102,6 +105,22 @@ impl Schema {
   pub fn opens_checkpoint(held: Option<ObjectRef<'_>>) -> Result<(), SchemaError> {
     let older = held.and_then(Self::read).is_some_and(|one| one.major == 1);
     if older { Ok(()) } else { CHECKPOINT_SCHEMA.opens("checkpoint", held) }
+  }
+
+  /// Whether this build opens a record whose fact made names a schema: one of each minor of the
+  /// major of [`RECORD_SCHEMA`], or one from before the stable cut, which it reads alone.
+  pub fn opens_record(held: Option<ObjectRef<'_>>) -> Result<(), SchemaError> {
+    if Self::before_cut(held) { Ok(()) } else { RECORD_SCHEMA.opens("record", held) }
+  }
+
+  /// Whether the fact made of a segment of a record names a schema from before the stable cut of
+  /// [`RECORD_SCHEMA`]: the major 1, or no schema, as a build before the schemas wrote.
+  #[must_use]
+  pub fn before_cut(held: Option<ObjectRef<'_>>) -> bool {
+    match held.filter(|one| one.type_name() != "NoneType") {
+      None => true,
+      Some(one) => Self::read(one).is_some_and(|theirs| theirs.major == 1),
+    }
   }
 
   /// Whether this build, which writes this schema, opens what holds the schema that a value names:

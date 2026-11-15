@@ -60,8 +60,8 @@ pub(crate) use store::{
 };
 pub use store::{
   CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, Tip,
-  checkpoints, engine, keeping, kept, made, readable, release, running, stood, store, texts,
-  unheld,
+  before_cut, checkpoints, engine, keeping, kept, made, readable, release, running, stood, store,
+  texts, unheld,
 };
 pub use time::time;
 

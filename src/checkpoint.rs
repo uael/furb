@@ -57,6 +57,7 @@ use crate::{
   Engine,
   engine::{OPERATOR, ROOT, callable},
   fact::Fact,
+  life::BEFORE_CUT,
   minify::minified,
   skill::definitions,
   value::{Fault, Object, ObjectRef, entry, field},
@@ -233,6 +234,9 @@ impl Engine {
 /// read and is told the lines of the engine that differ. This is the one place where a record
 /// crosses to the texts of a build.
 pub fn crossed(path: &Path, engine: &mut Engine) -> Result<(), Fault> {
+  if world::before_cut(slice::from_ref(engine.running())) {
+    return Err(Fault::refused(BEFORE_CUT));
+  }
   let build = world::running(&[]);
   keep(path, written_before(engine, &build)?)?;
   keep(path, build)

@@ -31,12 +31,13 @@ API of its own:
   `src/image.rs` and `src/checkpoint.rs` say. An image holds those of the build that wrote it, which alone reads it.
   When those of the record are not the ones of this build and the life keeps its record, the open crosses first: a life that inspects reaches the tip on them and writes a checkpoint, which tells each chain
   the lines of the engine that differ, then the fact made of this build, and the life goes on with this build. A
-  life that keeps nothing goes on with the engine that it opened on. A record of an engine that gathers no checkpoint,
-  as each engine before the stable cut of #1290, opens only in a life that inspects it. Each chain reads as its system prompt the engine
+  life that keeps nothing goes on with the engine that it opened on. A record from before the stable cut, the major 2
+  of the schema of the record, opens only in a life that inspects it, which says why, and nothing forks it into a new
+  life. Each chain reads as its system prompt the engine
   that it read first, and a new chain with no source the engine that the life runs. `script/engines.py` gives a copy
   of a record of a build before the
-  texts of its engine from git. `tests/replay` holds the records that each build must replay on their own engines with
-  no drift. `tests/corpus` holds the records of each release, which each later build must open, as
+  texts of its engine from git. `tests/replay` holds records of builds before the stable cut, which a life that
+  inspects reads on their own engines. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as `opened` and as `Engine.open`.
 - `src/view.rs` and `src/view/` fold the facts of a life into its meaning, which every window shows the same way: the
   state of each act and of each chain, the desk of the operator, the threads of a chain, the spend, and the acts as

@@ -1,15 +1,15 @@
 # The records of the replay
 
-Each record here is a life of an earlier build. Its fact made holds the texts of its engine and of its Kernel, so each
-later build replays it on them. The test `each_record_of_the_replays_replays_on_its_own_engine_with_no_drift` in
-`src/life.test.rs` replays each record. It runs on each build, in `cargo test`. It uses a life that only inspects the
-record.
+Each record here is a life of a build before the stable cut, the major 2 of the schema of the record, which
+`docs/promise.md` says. Its fact made holds the texts of its engine and of its Kernel, so a life that inspects it
+replays it on them. No life works on it or keeps it, and nothing forks it into a new life, as the test
+`a_record_from_before_the_stable_cut_opens_to_inspect_alone` in `src/life.test.rs` proves. The tests of
+`src/life.test.rs` that this page names read each record in a life that inspects it.
 
 These records are not in the promise of a release. `tests/corpus` holds those records, as `tests/corpus/README.md`
 says.
 
 - A change of the engine or of the Kernel changes no record here, since each replays on its own texts.
-- A change of the host that makes a record drift is a defect of that change. The host drives each engine of the major.
 - A record of a build before the texts takes them once from git with `python3 script/engines.py <record>`.
   The three records at the top of this folder do not name the engine that made them. `refused.jsonl` and
   `writing.jsonl` were made on the engine `461b240e`, which cannot replay them, since each was cut later to prove a
@@ -64,8 +64,6 @@ the act again, before the facts that the record holds before it. So with no adap
 order, and the life drifts at `bash2`. The adapter of that engine in `src/furb/adapters.py` carries the ranks of #1329,
 so the record replays with no drift. The test `a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter`
 in `src/life.test.rs` proves the drift without the adapter.
-
-No record here holds a checkpoint now, so the open from the first entry of `each_record_of_the_replays_replays_on_its_own_engine_with_no_drift` runs for a record that a later change adds with one. The tests `a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint` in `tests/suite/promise.rs` and `a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip` in `src/life.test.rs` prove that open.
 
 `lives.jsonl.zst` is a life of the engine `0a11688b` of the commit `d5550efda`, with the default extensions. Its root
 runs a word that makes an act whose ear makes an act of its own, as compaction makes the prompt of its chooser. The

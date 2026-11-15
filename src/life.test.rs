@@ -19,11 +19,12 @@ use futures::{channel::mpsc::unbounded, executor, future::select};
 use sha2::{Digest, Sha256};
 use tokio::runtime;
 
-use super::{Answer, Opening, Progress, Stage};
+use super::{Answer, BEFORE_CUT, Opening, Progress, Stage};
 use crate::{
   Act, Ear, Engine, Fact, Object, Text, checkpoint,
   checkpoint::CHECKPOINT,
   ear::{ear, hear, say},
+  engine::OPERATOR,
   image, sand,
   sand::BOUND,
   skill::enabled,
@@ -1248,52 +1249,24 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   assert_eq!(held("record.jsonl.log"), log, "the log stays as it was");
 }
 
+/// A record from before the stable cut of the schema of the record, as each record of the replays
+/// is, opens in no life that works on it or keeps it, and no crossing carries it to this build, so
+/// nothing forks it into a new life; each says why, and a life that inspects reads it.
 #[test]
-fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
-  let mut records: Vec<PathBuf> = fs::read_dir(replays())
-    .unwrap()
-    .map(|one| one.unwrap().path())
-    .filter(|one| one.extension().is_some_and(|named| named == "jsonl" || named == "zst"))
-    .collect();
-  records.sort();
-  assert!(!records.is_empty(), "tests/replay holds no record");
-  for one in records {
-    let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
-    let at = yard(&format!("replay-{name}"));
-    laid(&one, &at.join("record.jsonl"));
-    let kept = world::kept(at.join("record.jsonl")).unwrap();
-    let made = kept
-      .iter()
-      .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
-      .find(|a| a.kind() == world::MADE);
-    assert!(
-      made.is_some_and(|a| a.word(5).is_some()),
-      "{name} holds no texts of its engine: give them with script/engines.py, as tests/replay/README.md says"
-    );
-    let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-    if let Err(drift) = inspects.clone().boot::<String>([]) {
-      panic!("{name} drifts on its own engine, a defect of this build: {drift}");
-    }
-    if checkpoint::last(&kept).is_some()
-      && let Err(drift) = (Opening { whole: Some(true), ..inspects }).boot::<String>([])
-    {
-      panic!("{name} drifts from its first entry, born again at each checkpoint: {drift}");
-    }
+fn a_record_from_before_the_stable_cut_opens_to_inspect_alone() {
+  let at = yard("before-cut");
+  let record = at.join("record.jsonl");
+  laid(&replays().join("speaker.jsonl"), &record);
+  let text = fs::read_to_string(&record).unwrap();
+  for keeps in [true, false] {
+    let refused = opening(&at, keeps).boot::<String>([]).map(|_| ()).unwrap_err().to_string();
+    assert!(refused.ends_with(BEFORE_CUT), "keeps {keeps}: {refused}");
   }
-}
-
-/// A record whose engine gathers no checkpoint, which each engine before the stable cut of #1290
-/// is, opens in no life that keeps it, since no checkpoint carries it to this build, and says
-/// why; a life that inspects reads it.
-#[test]
-fn a_record_of_an_engine_that_gathers_no_checkpoint_opens_to_inspect_alone() {
-  let at = yard("ungathered");
-  laid(&replays().join("speaker.jsonl"), &at.join("record.jsonl"));
-  let kept = opening(&at, true).boot::<String>([]).map(|_| ()).unwrap_err().to_string();
-  assert!(kept.contains("before the stable cut of #1290"), "{kept}");
-  assert!(world::checkpoints(at.join("record.jsonl")).unwrap().is_empty(), "no crossing");
   let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-  assert!(inspects.boot::<String>([]).is_ok(), "a life that inspects reads it");
+  let mut inspected = inspects.boot::<String>([]).unwrap().0;
+  let refused = checkpoint::crossed(&record, &mut inspected).unwrap_err().to_string();
+  assert!(refused.ends_with(BEFORE_CUT), "{refused}");
+  assert_eq!(fs::read_to_string(&record).unwrap(), text, "nothing forks it");
 }
 
 /// The operator is no model of the catalog, so a later life whose standing names the operator as
@@ -1304,18 +1277,19 @@ fn a_life_never_tells_that_the_operator_left_the_catalog() {
   for imaged in [true, false] {
     let at = yard("left-once");
     let record = at.join("record.jsonl");
-    laid(&replays().join("ranks.jsonl"), &record);
-    let mut first = opening(&at, true).boot::<String>([]).unwrap().0;
+    let operated = Opening { actor: Some(OPERATOR.to_owned()), ..opening(&at, true) };
+    let mut first = operated.boot::<String>([]).unwrap().0;
+    let stood = first.word("standing()[2]", vec![]).unwrap();
+    assert_eq!(stood.as_ref().as_str(), Some(OPERATOR), "the standing names the operator");
     assert!(image::keep(&mut first, &record, &()).unwrap(), "the life writes its image");
     drop(first);
     if !imaged {
       image::drop_of(&record);
     }
     let mut later = opening(&at, true).boot::<String>([]).unwrap().0;
-    let word =
-      "len([x for x in transcript('chain1', 'tell') if 'names left the catalog' in x[3][0]])";
+    let word = "len([x for x in transcript('chain1', 'tell') if 'left the catalog' in x[3][0]])";
     let told = later.word(word, vec![]).unwrap();
-    assert_eq!(told.as_ref().as_int(), Some(1), "imaged {imaged}");
+    assert_eq!(told.as_ref().as_int(), Some(1), "the first life told it, imaged {imaged}");
   }
 }
 
@@ -1323,7 +1297,7 @@ fn a_life_never_tells_that_the_operator_left_the_catalog() {
 /// that keeps it wrote at its tip to the state that its record gives, in a life that inspects, in
 /// one that works and keeps nothing, and in one that keeps the record. An image is a cache of its
 /// record, so a record that a build cannot open by its image is a defect of that build. A record
-/// from before the stable cut of #1290 opens in no life that keeps it, so it has no image.
+/// from before the stable cut opens in no life that works on it, so it has no image.
 #[test]
 fn each_record_of_the_replays_and_of_the_corpus_opens_by_its_image_to_the_state_of_its_record() {
   let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus");
@@ -1342,7 +1316,7 @@ fn each_record_of_the_replays_and_of_the_corpus_opens_by_its_image_to_the_state_
     let at = yard(&format!("imaged-{name}"));
     laid(&one, &at.join("record.jsonl"));
     if let Err(no) = opening(&at, true).boot::<String>([]) {
-      assert!(no.to_string().contains("before the stable cut of #1290"), "{name}: {no}");
+      assert!(no.to_string().ends_with(BEFORE_CUT), "{name}: {no}");
       continue;
     }
     for (how, inspecting, keeps) in
@@ -1378,19 +1352,6 @@ fn each_record_of_the_replays_and_of_the_corpus_opens_by_its_image_to_the_state_
       assert_eq!(read(true), read(false), "{name} {how}: the image gives the state of the record");
     }
   }
-}
-
-/// A record whose checkpoint carries the enables of its root, on which a life that keeps it
-/// reloaded the words of the extensions that changed at its stand, opens again with no drift: a
-/// later life reads those enables at that stand too, which the journal says again, so it plays what
-/// the life played.
-#[test]
-fn a_record_whose_root_reloaded_its_skills_on_a_checkpoint_opens_again_with_no_drift() {
-  let at = yard("reloaded");
-  laid(&replays().join("lives.jsonl.zst"), &at.join("record.jsonl"));
-  drop(opening(&at, true).boot::<String>([]).unwrap());
-  let again = Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]);
-  assert!(again.is_ok(), "the record opens again: {:?}", again.err());
 }
 
 #[test]

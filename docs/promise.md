@@ -14,26 +14,24 @@ Each of these acts holds on each build of the major that made the record, with n
 - Share: a person attaches to a life that a daemon holds, or forks it into a new life.
 
 A record replays on the engine that it holds, under the names that it holds. A record of another record is not
-imported. From #1290 on, each record holds the texts of its engine, so each later build of the major replays it with
-no drift. A record that a build before #1290 made holds no such texts and may drift on a later build: a life on it is
-refused with the act that drifts, and a reader still reads each fact of it. An engine from before #1290 can also
-gather no checkpoint, so a life that keeps such a record cannot cross it to a later build and is refused with that
-reason, and a life that inspects still reads it. A drift on the same engine is a defect, never a known limit (R1). Within a major, a later build of the
-engine never makes a record drift. Where a later build fixes a defect of replay at its root, an adapter of the old
-engine holds the record, in the one home of adapters, `src/furb/adapters.py`, keyed by the digest of the engine (R3).
-A life that keeps its record and ran another engine, Kernel or checkpointer of the major first reaches the exact
-state of its tip on them, by its record, then crosses: it writes a checkpoint and the fact made of
-the build that opens it, and goes on with that build. Each chain keeps as its system prompt the engine that it read
-first, and its turns end with one paragraph that holds the lines of the engine that differ, so a chain only grows. A
-build of the major from before the field `systems` of the checkpoint still opens such a record exactly, since no
-system prompt takes part in a replay; its chains then read the engine that the life runs.
+imported. The promise holds from the stable cut, the major 2 of the schema of the record: each record of it holds the
+texts of its engine, so each later build of the major replays it with no drift. A record from before the cut, of the
+major 1 or of no schema, opens only in a life that inspects it: a life that works on it or keeps it is refused with
+that reason, and nothing forks it into a new life. A drift on the same engine is a defect, never a known limit (R1).
+Within a major, a later build of the engine never makes a record drift. Where a later build fixes a defect of replay
+at its root, an adapter of the old engine holds the record, in the one home of adapters, `src/furb/adapters.py`, keyed
+by the digest of the engine (R3). A life that keeps its record and ran another engine, Kernel or checkpointer of the
+major first reaches the exact state of its tip on them, by its record, then crosses: it writes a checkpoint and the
+fact made of the build that opens it, and goes on with that build. Each chain keeps as its system prompt the engine
+that it read first, and its turns end with one paragraph that holds the lines of the engine that differ, so a chain
+only grows.
 
 ## What is frozen within a major
 
 | Part | Where | Version now |
 | --- | --- | --- |
 | The contract: the engine and the interface of each official kit | `src/furb/engine.pyi`, `.agents/skills/<name>/<name>.pyi` | frozen at 1.0.0, as now with the breaks that the last section lists |
-| The schema of the record | `RECORD_SCHEMA` in `src/world/store/schema.rs` | 1.1 |
+| The schema of the record | `RECORD_SCHEMA` in `src/world/store/schema.rs` | 2.0 |
 | The schema of a checkpoint: pure data, which `seed` of `src/furb/checkpoint.py` reads (P7) | `CHECKPOINT_SCHEMA` in `src/world/store/schema.rs` | 2.1 |
 | The protocol of the daemon | `PROTOCOL` in `host/src/protocol.rs`, `host/protocol.schema.json` | 22 |
 | The nodes of a view, a closed set that only grows (P5) | `host/protocol.schema.json` | with the protocol |
@@ -57,7 +55,6 @@ R1, no drift on the same engine:
 - `test/test_boot.py::test_a_fact_that_the_journal_says_again_carries_the_speaker_that_the_record_holds`
 - `test/test_drift.py::test_an_act_whose_words_are_not_the_ones_the_record_holds_is_a_drift`
 - `src/engine.test.rs::a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift`
-- `src/life.test.rs::each_record_of_the_replays_replays_on_its_own_engine_with_no_drift`
 - `tests/suite/promise.rs::a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entries_written_whole`, at a
   random byte of a random line, of the done of the stand of the first word of the root and of the last checkpoint,
   from a seed that it prints
@@ -69,7 +66,6 @@ R2, the exact tip, with a checkpoint and without one (resume and reopen):
 - `src/life.test.rs::a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_prompt_of_each_chain`
 - `src/life.test.rs::a_record_of_another_engine_crosses_to_this_build_at_its_open`
 - `src/life.test.rs::an_image_of_a_build_of_other_texts_does_not_load`
-- `src/life.test.rs::a_record_of_an_engine_that_gathers_no_checkpoint_opens_to_inspect_alone`
 - `src/life.test.rs::a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake`
 - `tests/suite/promise.rs::a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint`
 - `host/tests/suite/daemon.rs::a_life_that_ended_opens_again_from_its_checkpoint`
@@ -95,6 +91,7 @@ The schemas (P7, P8):
 - `src/life.test.rs::a_checkpoint_of_a_later_minor_of_its_schema_with_fields_more_opens_with_each_chain_and_its_prompts`
 - `src/life.test.rs::a_checkpoint_of_another_major_of_its_schema_is_refused_with_both_schemas`
 - `src/life.test.rs::a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keeps_nothing`
+- `src/life.test.rs::a_record_from_before_the_stable_cut_opens_to_inspect_alone`
 - `tests/suite/promise.rs::a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens`
 
 The protocol, the nodes of a view and the contract (P2, P5):

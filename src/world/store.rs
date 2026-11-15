@@ -470,17 +470,21 @@ pub fn release(record: &[Object]) -> Option<String> {
 
 /// Whether this build reads a record from its facts made: each names the schema of the record that
 /// its build wrote, and a record that names a schema of another major is refused, with both
-/// schemas.
+/// schemas, but one from before the stable cut, which a life that inspects reads.
 pub fn readable(record: &[Object]) -> Result<(), SchemaError> {
-  for entry in record {
-    let Some(fact) = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?)) else {
-      continue;
-    };
-    if fact.kind() == MADE {
-      RECORD_SCHEMA.opens("record", fact.word(2))?;
-    }
-  }
-  Ok(())
+  made_facts(record).try_for_each(|fact| Schema::opens_record(fact.word(2)))
+}
+
+/// Whether the last fact made among the entries of a record names a schema from before the stable
+/// cut, so no life works on the record or keeps it.
+pub fn before_cut(record: &[Object]) -> bool {
+  made_facts(record).last().is_some_and(|fact| Schema::before_cut(fact.word(2)))
+}
+
+/// Each fact made among the entries of a record, in order.
+fn made_facts(record: &[Object]) -> impl Iterator<Item = Fact> {
+  let fact = |entry: &Object| entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+  record.iter().filter_map(fact).filter(|one| one.kind() == MADE)
 }
 
 /// The kind of the fact by which a provider says a part of the word of a rung that its model finished.
