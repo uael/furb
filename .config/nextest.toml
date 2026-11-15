@@ -25,3 +25,9 @@ command = [
 platform = "cfg(unix)"
 filter = "all()"
 setup = "claude"
+
+# The census of flaky tests: a test that fails and then passes on a retry counts as failed, and is named as flaky,
+# so a flake never hides behind a retry. `cargo nextest run --profile census`.
+[profile.census]
+retries = 2
+flaky-result = "fail"

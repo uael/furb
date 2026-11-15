@@ -6,6 +6,9 @@ The double answers each verb and pushes the frames that a test gives it. The lin
 
 import asyncio
 import json
+import os
+import sys
+from asyncio.subprocess import PIPE
 from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 
@@ -198,3 +201,64 @@ async def test_a_skill_needs_the_variables_of_its_life_and_its_welcome(life: Lif
   life.answers = lambda _verb: {"frame": "reply", "answer": {"answer": "done"}}
   with pytest.raises(client.Refused, match=r"The life gave done, and no welcome\."):
     await life.attach()
+
+
+async def test_a_fact_goes_to_a_life_that_names_its_capability_and_an_older_life_refuses_it(life: Life) -> None:
+  skill = await life.attach()
+  with pytest.raises(client.Refused, match=r"older than the capability fact"):
+    await skill.fact("k.seen", "chain1", "milk")
+  skill.connection.welcome["capabilities"] = ["fact"]
+  await skill.fact("k.seen", "chain1", "milk", 2)
+  assert life.said[-1] == {
+    "id": 2,
+    "verb": "fact",
+    "kind": "k.seen",
+    "about": "chain1",
+    "words": ['"milk"', "2"],
+    "life": "a.jsonl",
+  }
+
+
+KIT = """
+import asyncio
+from furb.skill import Skill
+
+
+async def main():
+  skill = await Skill.attach(kinds=[])
+  skill.answers("k.add", lambda fact: f"added {fact[4]}")
+  await skill.run("ready")
+  await skill.closed
+  skill.close()
+
+
+asyncio.run(main())
+"""
+"""KIT is a kit whose process answers the acts `k.add`, and says a word once it answers them."""
+
+
+async def test_a_kit_speaks_to_its_life_on_the_stdin_and_the_stdout_of_its_process(tmp_path: Path) -> None:
+  program = tmp_path / "kit.py"
+  program.write_text(KIT, encoding="utf-8")
+  kit = await asyncio.create_subprocess_exec(
+    sys.executable, str(program), env={**os.environ, **ENV}, stdin=PIPE, stdout=PIPE
+  )
+  assert kit.stdin is not None and kit.stdout is not None
+
+  async def said() -> dict[str, object]:
+    return json.loads(await asyncio.wait_for(kit.stdout.readline(), 10))  # ty: ignore[possibly-missing-attribute]
+
+  def told(frame: Mapping[str, object]) -> None:
+    kit.stdin.write(json.dumps(frame).encode() + b"\n")  # ty: ignore[possibly-missing-attribute]
+
+  for _ in range(3):
+    verb = await said()
+    told({"id": verb["id"], **answered(verb)})
+  fact = ["k.add", "k.add1", "rung4", "chain1", "milk"]
+  told({"frame": "event", "life": "a.jsonl", "seq": 0, "event": {"event": "fact", "data": fact}})
+  peek = await said()
+  told({"frame": "refused", "id": peek["id"], "error": {"error": "refused"}, "why": "not done"})
+  close = await said()
+  assert (close["verb"], close["act"], close["value"]) == ("close", "k.add1", json.dumps("added milk"))
+  kit.stdin.close()
+  assert await asyncio.wait_for(kit.wait(), 10) == 0
