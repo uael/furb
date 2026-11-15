@@ -5,6 +5,12 @@ const BASE: u32 = 0x0a_0a0a;
 const RAISED: u32 = 0x1b_1b1b;
 const TEXT: u32 = 0xe4_e4e4;
 
+/// The first hue of a thread that the tokens give, as the bar of a card takes it.
+fn hue() -> u32 {
+  let hue = Tokens::on(None).hues[0];
+  u32::from_be_bytes([0, hue.r, hue.g, hue.b])
+}
+
 /// A frame of rows, each a list of runs of a text, its color and its ground.
 fn frame(rows: &[&[(&str, u32, u32)]]) -> Frame {
   let lines: Vec<Vec<Run>> = rows
@@ -63,7 +69,7 @@ fn a_half_block_of_the_ground_of_a_box_carries_its_side() {
   // one cell inside each.
   let shown = frame(&[&[
     (" ", TEXT, BASE),
-    ("▌", 0xec_b081, RAISED),
+    ("▌", hue(), RAISED),
     ("text", TEXT, RAISED),
     ("▌", RAISED, BASE),
     (" ", TEXT, BASE),
@@ -75,7 +81,7 @@ fn a_half_block_of_the_ground_of_a_box_carries_its_side() {
 fn a_card_on_half_rows_with_its_bar_in_half_a_column_is_one_box_with_its_corners() {
   // The selected card of the list: half a row of its ground above and under its text, its bar in
   // the right half of the column before it, and its ground in the left half of the column after.
-  let hue = 0xec_b081;
+  let hue = hue();
   let band = |[bar, fill, end]: [&'static str; 3]| -> [(&'static str, u32, u32); 5] {
     [
       (" ", TEXT, BASE),
