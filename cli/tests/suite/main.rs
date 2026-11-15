@@ -6,10 +6,13 @@
 #[expect(clippy::expect_used, reason = "a test fails by a panic where its process fails")]
 mod pipes;
 
+#[path = "../../../tests/common/tailscale.rs"]
+mod tailscale;
 #[path = "../../../tests/common/yard.rs"]
 mod yard;
 
 mod furb;
 mod held;
+mod host;
 mod kills;
 mod window;

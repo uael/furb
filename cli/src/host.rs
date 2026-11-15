@@ -246,7 +246,3 @@ fn followed(
   watcher.watch(path.parent().unwrap_or(path), RecursiveMode::NonRecursive)?;
   Ok(watcher)
 }
-
-#[cfg(test)]
-#[path = "host.test.rs"]
-mod test;

@@ -9,7 +9,7 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
-use crate::yard;
+use crate::{tailscale::tailscale, yard};
 
 use std::{
   fs, future,
@@ -27,14 +27,13 @@ use furb_host::{
   access::{Access, Config, Ports},
   protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Peer, Request, Role, Verb},
   run, serve,
-  transport::{Dialer, Identity, Local, LocalApi, Tailscale, Tcp, WebSocket, upgraded},
+  transport::{Dialer, Identity, Local, Tailscale, Tcp, WebSocket, upgraded},
 };
 use serde_json::json;
 use tokio::net::TcpStream;
 use tokio::{
   io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
   net::TcpListener,
-  sync::mpsc,
   task::JoinHandle,
   time,
 };
@@ -86,45 +85,6 @@ fn folder() -> Yard {
   static NEXT: AtomicU32 = AtomicU32::new(0);
   let n = NEXT.fetch_add(1, Ordering::Relaxed);
   Yard::new(format!("fn{}-{n}", process::id()))
-}
-
-/// A fake of the local API of Tailscale on a port of loopback, which gives one login for each
-/// address, and says the path of each request that it heard.
-async fn tailscale(operator: &str) -> (LocalApi, mpsc::UnboundedReceiver<String>) {
-  let listener = TcpListener::bind(loopback()).await.unwrap();
-  let port = listener.local_addr().unwrap().port();
-  let (tell, heard) = mpsc::unbounded_channel();
-  let operator = operator.to_owned();
-  tokio::spawn(async move {
-    loop {
-      let (mut stream, _) = listener.accept().await.unwrap();
-      let (read, mut write) = stream.split();
-      let mut lines = BufReader::new(read);
-      let mut first = String::new();
-      lines.read_line(&mut first).await.unwrap();
-      let mut header = String::from("-");
-      while header.trim() != "" {
-        header.clear();
-        lines.read_line(&mut header).await.unwrap();
-      }
-      let path = first.split(' ').nth(1).unwrap().to_owned();
-      let body = if path.starts_with("/localapi/v0/status") {
-        json!({"TailscaleIPs": ["127.0.0.1"]})
-      } else {
-        json!({"UserProfile": {"ID": 1, "LoginName": operator}})
-      };
-      let body = body.to_string();
-      let answer = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\
-       Connection: close\r\n\r\n{body}",
-        body.len()
-      );
-      write.write_all(answer.as_bytes()).await.unwrap();
-      // A test that heard what it needed drops its receiver.
-      tell.send(path).ok();
-    }
-  });
-  (LocalApi::Port { port, token: "proof".to_owned() }, heard)
 }
 
 fn access(operator: &str, role: Role) -> Access {
