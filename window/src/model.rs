@@ -188,9 +188,9 @@ impl Model {
     for (_, hold) in self.client.holds.iter_mut().filter(|one| one.0.0 == at) {
       hold.ask = Ask::Due;
     }
-    if let Some(opened) = self.thread.as_mut().filter(|one| one.key.0 == at) {
-      opened.asked.clear();
-      opened.again = true;
+    if let Some(opened) = self.thread.as_mut().filter(|one| one.thread.key.0 == at) {
+      opened.thread.asked.clear();
+      opened.thread.again = true;
     }
     // The end of the word comes from the record of its life, so the window asks it again.
     if let Some(word) = self.word.as_mut().filter(|one| one.at == at) {
@@ -237,14 +237,14 @@ impl Model {
   pub(crate) fn settle(&mut self) {
     // Once its machine told the card of a thread that the window started, the machine says how it
     // stands, also when the card goes.
-    let told = self.thread.as_ref().is_some_and(|one| self.client.card(&one.key).is_some());
+    let told = self.thread.as_ref().is_some_and(|one| self.client.card(&one.thread.key).is_some());
     if let Some(opened) = self.thread.as_mut().filter(|_| told) {
-      opened.started = false;
+      opened.thread.started = false;
     }
     let untold = self.untold();
     self.client.settle(untold.as_ref());
     // The thread that the window opened stays selected while its card is not told yet.
-    let open = self.thread.as_ref().map(|one| &one.key);
+    let open = self.thread.as_ref().map(|one| &one.thread.key);
     let stands =
       |key: &Key| open == Some(key) || self.client.settled.iter().any(|one| one.1 == *key);
     self.selected = self.selected.take().filter(stands);

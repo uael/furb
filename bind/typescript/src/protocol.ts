@@ -1468,10 +1468,10 @@ export interface Answered {
 }
 /**
  * An agent of a thread: the thread that a word of the thread started on another chain, as a card,
- * with the millisecond of the epoch at which the host saw it begin, the seconds that it took once it
- * ended, counted from milliseconds as the time of a thought, and the line of its last word where
- * it stands: the line that runs or asks, else the last one. A host that opened the life after the
- * agent began saw it begin at that open.
+ * with the millisecond of the epoch at which the host saw it begin, the seconds that it took once
+ * it ended, counted from milliseconds as the time of a thought, and the line of its last word
+ * where it stands: the line that runs or asks, else the last one. A host that opened the life
+ * after the agent began saw it begin at that open.
  */
 export interface Agent {
   prompt: string;

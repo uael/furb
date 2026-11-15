@@ -5,6 +5,8 @@ use furb_host::protocol::{Card, Verb};
 use jiff::tz::TimeZone;
 
 use super::{HOLD, Keyed};
+use furb_client::Thread;
+
 use crate::{
   Options, System,
   keys::Does,
@@ -63,7 +65,8 @@ fn asked(shape: &str, system: System) -> Model {
     said: vec![said],
   };
   let key = (0, LIFE.to_owned(), "prompt0".to_owned());
-  model.thread = Some(Opened { key, asked: [(1, None)].into(), ..Opened::default() });
+  let thread = Thread { key, asked: [(1, None)].into(), ..Thread::default() };
+  model.thread = Some(Opened { thread, ..Opened::default() });
   let page = Page { exchanges: vec![exchange], ..Page::default() };
   assert!(model.answered(0, 1, Ok(page)));
   model.questioned();

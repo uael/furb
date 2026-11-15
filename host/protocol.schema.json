@@ -4614,7 +4614,7 @@
         "title",
         "standing"
       ],
-      "description": "An agent of a thread: the thread that a word of the thread started on another chain, as a card,\nwith the millisecond of the epoch at which the host saw it begin, the seconds that it took once it\nended, counted from milliseconds as the time of a thought, and the line of its last word where\nit stands: the line that runs or asks, else the last one. A host that opened the life after the\nagent began saw it begin at that open."
+      "description": "An agent of a thread: the thread that a word of the thread started on another chain, as a card,\nwith the millisecond of the epoch at which the host saw it begin, the seconds that it took once\nit ended, counted from milliseconds as the time of a thought, and the line of its last word\nwhere it stands: the line that runs or asks, else the last one. A host that opened the life\nafter the agent began saw it begin at that open."
     },
     "Context": {
       "type": "object",
@@ -5290,7 +5290,7 @@
         {
           "type": "string",
           "const": "find",
-          "description": "The record is read from its last checkpoint, which the read finds from the end of the record,\nfor the build of its last life: the bytes passed, of the bytes of the record. It is the first\nstage that the crate furb tells, at once, and the life then reads its settings and the catalog of\nits models in it. A life that opens from its image reads no entry, and tells each byte passed\nonce the image agrees with the record."
+          "description": "The record is read from its last checkpoint, which the read finds from the end of the record,\nfor the build of its last life: the bytes passed, of the bytes of the record. It is the first\nstage that the crate furb tells, at once, and the life then reads its settings and the catalog\nof its models in it. A life that opens from its image reads no entry, and tells each byte\npassed once the image agrees with the record."
         },
         {
           "type": "string",
@@ -5310,7 +5310,7 @@
         {
           "type": "string",
           "const": "boot",
-          "description": "The life boots: the entries that its journal passed, of the entries that it boots on. It is\nthe last stage that the crate furb tells, and a boot that succeeds ends with each entry counted."
+          "description": "The life boots: the entries that its journal passed, of the entries that it boots on. It is\nthe last stage that the crate furb tells, and a boot that succeeds ends with each entry\ncounted."
         },
         {
           "type": "string",

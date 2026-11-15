@@ -378,12 +378,12 @@ fn pump(window: &Shared) {
     model.client.asked.extend(id.map(|id| ((life.0, id), Asked::Open)));
   }
   if let Some(verb) = model.page_due()
-    && let Some(at) = model.thread.as_ref().map(|one| one.key.0)
+    && let Some(at) = model.thread.as_ref().map(|one| one.thread.key.0)
     && let Some(asker) = asker(askers, model, at)
     && let Some(opened) = model.thread.as_mut()
   {
-    opened.asked.insert(asker.ask(verb), None);
-    opened.again = false;
+    opened.thread.asked.insert(asker.ask(verb), None);
+    opened.thread.again = false;
   }
   if let Some((at, verb)) = model.client.due()
     && let Some(asker) = asker(askers, model, at)
@@ -421,10 +421,10 @@ fn older(window: &Shared, verb: Option<Verb>) {
   let Some(verb @ Verb::Thread { before, .. }) = verb else { return };
   let mut held = window.borrow_mut();
   let Window { askers, screen, .. } = &mut *held;
-  let Some(at) = screen.model.thread.as_ref().map(|one| one.key.0) else { return };
+  let Some(at) = screen.model.thread.as_ref().map(|one| one.thread.key.0) else { return };
   let Some(asker) = asker(askers, &screen.model, at) else { return };
   let Some(opened) = screen.model.thread.as_mut() else { return };
-  opened.asked.insert(asker.ask(verb), before);
+  opened.thread.asked.insert(asker.ask(verb), before);
 }
 
 /// A key of the window, from the one table of the keys, before the editor of the input hears it:

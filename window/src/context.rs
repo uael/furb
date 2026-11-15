@@ -31,7 +31,7 @@ impl Model {
     let Some(opened) = self.thread.as_ref().filter(|_| self.listed()) else { return Vec::new() };
     let t = &self.tokens;
     let (prose, muted) = (t.style(Role::Prose), t.style(Role::Muted));
-    let Some(context) = &opened.context else {
+    let Some(context) = &opened.thread.context else {
       // The box keeps its rows before the first answer, so nothing moves when it comes.
       let free = [Kind { name: "Free", tokens: 1, color: t.border }];
       let head = row(vec![run("Context", prose)], vec![run("No answer yet", muted)]);
@@ -62,7 +62,7 @@ impl Model {
   /// The ring of the context in the launcher, while the list and its box hide: how full the window
   /// of the chain of the open thread is, or what its last answer read when no window is known.
   pub(crate) fn ring(&self) -> Option<String> {
-    let context = self.thread.as_ref().filter(|_| !self.listed())?.context.as_ref()?;
+    let context = self.thread.as_ref().filter(|_| !self.listed())?.thread.context.as_ref()?;
     let read = context.read.tokens;
     let Some(window) = context.window else { return Some(tokens(read)) };
     let share = percent(read, window);

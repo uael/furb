@@ -5,6 +5,8 @@ use furb_host::protocol::{Card, Verb};
 use jiff::tz::TimeZone;
 
 use super::{Anchor, Item, Items, Opened, Row};
+use furb_client::Thread;
+
 use crate::{
   Options, System,
   model::{Link, Model, Told},
@@ -79,7 +81,8 @@ fn opened(end: Page) -> Model {
   };
   let mut model = Model::new(vec![told], (100, 30), Tokens::on(None), &options);
   model.settle();
-  model.thread = Some(Opened { key, asked: [(1, None)].into(), ..Opened::default() });
+  let thread = Thread { key, asked: [(1, None)].into(), ..Thread::default() };
+  model.thread = Some(Opened { thread, ..Opened::default() });
   assert!(model.answered(0, 1, Ok(end)));
   model
 }
@@ -104,7 +107,7 @@ fn a_page_of_older_exchanges_keeps_each_row_that_the_operator_reads_where_it_sta
   let read = texts(&model);
   assert!(!read.iter().any(|row| row.contains("earlier messages")), "{read:#?}");
 
-  model.thread.as_mut().expect("a thread is open").asked.insert(2, Some(10));
+  model.thread.as_mut().expect("a thread is open").thread.asked.insert(2, Some(10));
   assert!(model.answered(0, 2, Ok(page(0..10))));
   assert_eq!(texts(&model), read);
 }

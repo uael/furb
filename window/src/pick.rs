@@ -347,7 +347,7 @@ impl Model {
   /// The input turned to a target: none for the thread that is open, or for a new session when no
   /// thread is.
   fn aimed(&mut self, target: Target) {
-    let open = self.thread.as_ref().map(|one| (one.key.0, one.key.1.clone()));
+    let open = self.thread.as_ref().map(|one| (one.thread.key.0, one.thread.key.1.clone()));
     self.aim = match target {
       Target::Session(at, life) if open == Some((at, life.clone())) => None,
       Target::New(_) if self.thread.is_none() => None,

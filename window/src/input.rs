@@ -16,7 +16,7 @@ use jiff::Timestamp;
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Asked, Outgoing, Target};
+use furb_client::{Asked, Outgoing, Pending, Target, Thread};
 
 use crate::{
   keys::Does,
@@ -72,14 +72,6 @@ pub(crate) enum Back {
   Said(String, String),
 }
 
-/// A message of the operator that the thread shows before the daemon tells it: its text, and the
-/// act that it made once the daemon said it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Pending {
-  pub(crate) act: Option<String>,
-  pub(crate) text: String,
-}
-
 /// The box of the text of the input, which the editor of the window covers: its column, its row,
 /// its columns and its rows, the text that it shows while it is empty, and whether it shows: a
 /// form shows it only on the row of the words of the operator, or for a line.
@@ -99,7 +91,7 @@ impl Model {
   pub(crate) fn target(&self) -> Target {
     match (&self.aim, &self.thread) {
       (Some(target), _) => target.clone(),
-      (None, Some(opened)) => Target::Thread(opened.key.clone()),
+      (None, Some(opened)) => Target::Thread(opened.thread.key.clone()),
       (None, None) => Target::New(0),
     }
   }
@@ -107,7 +99,9 @@ impl Model {
   /// The input turned to a new thread of the session of the open thread, and back.
   pub(crate) fn turn(&mut self) {
     self.aim = match (&self.aim, &self.thread) {
-      (None, Some(opened)) => Some(Target::Session(opened.key.0, opened.key.1.clone())),
+      (None, Some(opened)) => {
+        Some(Target::Session(opened.thread.key.0, opened.thread.key.1.clone()))
+      }
       _ => None,
     };
   }
@@ -134,12 +128,12 @@ impl Model {
     let made = thread.is_none() && !python;
     if made {
       let key = (at, life.clone(), String::new());
-      self.thread =
-        Some(Opened { key: key.clone(), above: Some(0), started: true, ..Opened::default() });
+      let thread = Thread { key: key.clone(), above: Some(0), started: true, ..Thread::default() };
+      self.thread = Some(Opened { thread, ..Opened::default() });
       (self.selected, self.aim) = (Some(key), None);
     }
     if !python && let Some(opened) = self.thread.as_mut() {
-      opened.pending.push(Pending { act: None, text: text.clone() });
+      opened.thread.pending.push(Pending { act: None, text: text.clone() });
     }
     self.client.outgoing.push_back(Outgoing { at, life, thread, text, python });
     self.walk = None;
@@ -178,8 +172,8 @@ impl Model {
 
   /// The stop of the work of the open thread: the cancel of its prompt.
   pub(crate) fn stop(&self) -> Option<(usize, Verb)> {
-    let opened = self.thread.as_ref().filter(|one| !one.key.2.is_empty())?;
-    let (at, life, act) = opened.key.clone();
+    let opened = self.thread.as_ref().filter(|one| !one.thread.key.2.is_empty())?;
+    let (at, life, act) = opened.thread.key.clone();
     Some((at, Verb::Cancel { life, act, why: None }))
   }
 
@@ -187,20 +181,21 @@ impl Model {
   /// asks a confirm first, since a resolve stops its work. A thread that ended takes no resolve: a
   /// reply opens it again, so the input turns to it, as a message, at the end of its feed.
   pub(crate) fn resolve(&mut self) -> Option<(usize, Verb)> {
-    let opened = self.thread.as_ref().filter(|one| !one.key.2.is_empty())?;
-    let card = self.client.card(&opened.key).map(|one| (one.thread.ended(), one.thread.works()));
+    let opened = self.thread.as_ref().filter(|one| !one.thread.key.2.is_empty())?;
+    let card =
+      self.client.card(&opened.thread.key).map(|one| (one.thread.ended(), one.thread.works()));
     let (ended, works) = card.unwrap_or_default();
     let opened = self.thread.as_mut()?;
     if ended {
       (self.aim, self.draft.python, opened.top) = (None, false, None);
       return None;
     }
-    let armed = Armed::Resolve(opened.key.clone());
+    let armed = Armed::Resolve(opened.thread.key.clone());
     if works && self.armed.replace(armed.clone()) != Some(armed) {
       return None;
     }
     self.armed = None;
-    let (at, life, thread) = opened.key.clone();
+    let (at, life, thread) = opened.thread.key.clone();
     Some((at, Verb::Resolve { life, thread }))
   }
 
@@ -226,7 +221,7 @@ impl Model {
   /// A first escape that nothing else takes, while the open thread works: the next escape stops its
   /// work.
   pub(crate) fn arm_stop(&mut self) {
-    let card = self.thread.as_ref().and_then(|one| self.client.card(&one.key));
+    let card = self.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
     if card.is_some_and(|card| card.thread.works()) {
       self.armed = Some(Armed::Stop);
     }
@@ -254,7 +249,7 @@ impl Model {
         None
       }
       Back::Said(act, text) => {
-        let (at, life, _) = self.thread.as_ref()?.key.clone();
+        let (at, life, _) = self.thread.as_ref()?.thread.key.clone();
         Some(((at, Verb::Cancel { life, act, why: None }), text))
       }
     }
@@ -269,13 +264,13 @@ impl Model {
       return Some(Back::Queued(at, one.text.clone()));
     }
     let opened = self.thread.as_ref()?;
-    let login = &self.client.machines[opened.key.0].login;
+    let login = &self.client.machines[opened.thread.key.0].login;
     let his = |by: &Maker| match by {
       Maker::Operator => true,
       Maker::Member { operator: one } => one == login,
       _ => false,
     };
-    let said = opened.exchanges.values().rev().find(|one| one.runs && his(&one.by))?;
+    let said = opened.thread.exchanges.values().rev().find(|one| one.runs && his(&one.by))?;
     Some(Back::Said(said.message.clone(), said.text.clone()))
   }
 
@@ -285,11 +280,11 @@ impl Model {
     self.client.outgoing.remove(at);
     let Some(opened) = self.thread.as_mut() else { return };
     if let Some(shown) =
-      opened.pending.iter().rposition(|one| one.act.is_none() && one.text == text)
+      opened.thread.pending.iter().rposition(|one| one.act.is_none() && one.text == text)
     {
-      opened.pending.remove(shown);
+      opened.thread.pending.remove(shown);
     }
-    if opened.key.2.is_empty() && opened.pending.is_empty() {
+    if opened.thread.key.2.is_empty() && opened.thread.pending.is_empty() {
       self.thread = None;
     }
   }
@@ -364,19 +359,19 @@ impl Model {
   /// prompt of a thread that it made, and the message stays until the thread shows it.
   fn made(&mut self, sent: &Outgoing, thread: &str, act: String) {
     let Some(opened) = self.thread.as_mut() else { return };
-    if opened.key.0 != sent.at || opened.key.1 != sent.life {
+    if opened.thread.key.0 != sent.at || opened.thread.key.1 != sent.life {
       return;
     }
-    if opened.key.2.is_empty() {
-      thread.clone_into(&mut opened.key.2);
-      opened.above = None;
-      self.selected = Some(opened.key.clone());
+    if opened.thread.key.2.is_empty() {
+      thread.clone_into(&mut opened.thread.key.2);
+      opened.thread.above = None;
+      self.selected = Some(opened.thread.key.clone());
     }
-    if opened.key.2 == thread
-      && let Some(pending) = opened.pending.iter_mut().find(|one| one.act.is_none())
+    if opened.thread.key.2 == thread
+      && let Some(pending) = opened.thread.pending.iter_mut().find(|one| one.act.is_none())
     {
       pending.act = Some(act);
-      opened.shown();
+      opened.thread.shown();
     }
   }
 
@@ -388,8 +383,8 @@ impl Model {
     let back: Vec<String> =
       mem::take(&mut self.client.outgoing).into_iter().map(|one| one.text).collect();
     if let Some(opened) = self.thread.as_mut() {
-      opened.pending.retain(|one| one.act.is_some());
-      if opened.key.2.is_empty() {
+      opened.thread.pending.retain(|one| one.act.is_some());
+      if opened.thread.key.2.is_empty() {
         self.thread = None;
       }
     }
@@ -413,9 +408,11 @@ impl Model {
   /// operator writes.
   pub(crate) fn area(&self) -> Area {
     let opens = self.thread.as_ref().is_some_and(|one| self.says_opens(one));
-    let reads =
-      self.thread.as_ref().is_some_and(|one| self.client.fault_of(one.key.0, &one.key.1).is_some());
-    let ended = self.thread.as_ref().and_then(|one| self.client.card(&one.key));
+    let reads = self
+      .thread
+      .as_ref()
+      .is_some_and(|one| self.client.fault_of(one.thread.key.0, &one.thread.key.1).is_some());
+    let ended = self.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
     let ended = ended.is_some_and(|card| card.thread.ended());
     let top = usize::from(self.size.1).saturating_sub(self.input_rows());
     let (x, row, height, placeholder) = match (self.form(), self.form_rows(self.grown()).1) {
@@ -497,8 +494,8 @@ impl Model {
   }
 
   /// The row of the controls of the box of the input: at its left the switch between a message and
-  /// a word of Python, and what the input sends to, which picks another; at its right the model with
-  /// its effort, and the key that turns the input to a new thread and back.
+  /// a word of Python, and what the input sends to, which picks another; at its right the model
+  /// with its effort, and the key that turns the input to a new thread and back.
   fn launcher(&self) -> Row {
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
@@ -634,9 +631,9 @@ impl Model {
   /// that says something, as the daemon titles a card.
   pub(crate) fn title(&self) -> Option<String> {
     let opened = self.thread.as_ref()?;
-    let card = self.client.card(&opened.key).map(|card| card.thread.title.clone());
-    let first = || opened.exchanges.get(&0).map(|one| one.text.clone());
-    let pending = || opened.pending.first().map(|one| one.text.clone());
+    let card = self.client.card(&opened.thread.key).map(|card| card.thread.title.clone());
+    let first = || opened.thread.exchanges.get(&0).map(|one| one.text.clone());
+    let pending = || opened.thread.pending.first().map(|one| one.text.clone());
     let title = card.or_else(first).or_else(pending)?;
     title.lines().find(|line| !line.trim().is_empty()).map(str::to_owned)
   }
@@ -655,7 +652,7 @@ impl Model {
     let (at, life) = match self.target() {
       Target::Thread(key) => {
         let opened = self.thread.as_ref()?;
-        let block = opened.exchanges.values().rev().find_map(|one| one.block.as_ref());
+        let block = opened.thread.exchanges.values().rev().find_map(|one| one.block.as_ref());
         if let Some(Maker::Model { model, effort }) = block.map(|one| &one.maker) {
           return Some((short(model).0, effort.clone()));
         }
@@ -684,9 +681,11 @@ impl Model {
   fn hints(&self) -> Row {
     let t = &self.tokens;
     let muted = t.style(Role::Muted);
-    let card = self.thread.as_ref().and_then(|one| self.client.card(&one.key));
-    let ended =
-      self.thread.as_ref().is_some_and(|one| self.client.fault_of(one.key.0, &one.key.1).is_some());
+    let card = self.thread.as_ref().and_then(|one| self.client.card(&one.thread.key));
+    let ended = self
+      .thread
+      .as_ref()
+      .is_some_and(|one| self.client.fault_of(one.thread.key.0, &one.thread.key.1).is_some());
     let works = card.is_some_and(|card| card.thread.works()) && !ended;
     let mut hot = Vec::new();
     // The thread says why it has no page, so the row says it once more only for another fault.

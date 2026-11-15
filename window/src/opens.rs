@@ -70,9 +70,9 @@ impl Model {
     let life = self.client.holds.iter().find(asked).map(|(key, _)| key.clone())?;
     self.client.holds.remove(&life);
     if let Some(opened) =
-      self.thread.as_mut().filter(|one| (one.key.0, &one.key.1) == (at, &life.1))
+      self.thread.as_mut().filter(|one| (one.thread.key.0, &one.thread.key.1) == (at, &life.1))
     {
-      opened.fault = Some(why.clone());
+      opened.thread.fault = Some(why.clone());
     }
     (!self.client.outgoing.is_empty()).then(|| self.refused(why))
   }
@@ -85,7 +85,8 @@ impl Model {
   /// so the thread shows the same whatever came first.
   pub(crate) fn failed(&mut self, at: usize, life: &str, fault: String) -> bool {
     let key = (at, life.to_owned());
-    let open = self.thread.as_ref().is_some_and(|one| (one.key.0, &one.key.1) == (at, &key.1));
+    let open =
+      self.thread.as_ref().is_some_and(|one| (one.thread.key.0, &one.thread.key.1) == (at, &key.1));
     if !open && !self.client.holds.contains_key(&key) {
       return false;
     }
@@ -102,9 +103,12 @@ impl Model {
   /// page of the thread comes. An open that ended after the thread opened shows until then too, so
   /// the head and the page change in one frame.
   pub(crate) fn open_shown(&self) -> Option<&Hold> {
-    let opened = self.thread.as_ref().filter(|one| one.above.is_none() && one.fault.is_none())?;
-    let hold = self.client.holds.get(&(opened.key.0, opened.key.1.clone()))?;
-    let after = hold.ended().is_none_or(|ended| ended > opened.since);
+    let opened = self
+      .thread
+      .as_ref()
+      .filter(|one| one.thread.above.is_none() && one.thread.fault.is_none())?;
+    let hold = self.client.holds.get(&(opened.thread.key.0, opened.thread.key.1.clone()))?;
+    let after = hold.ended().is_none_or(|ended| ended > opened.thread.since);
     let waited = self.moved.saturating_sub(hold.since) >= QUIET;
     (!hold.stood && after && waited).then_some(hold)
   }

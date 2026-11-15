@@ -54,7 +54,8 @@ fn failed(system: System) -> Vec<String> {
   model.selected = Some((0, life, "prompt0".to_owned()));
   model.open_thread();
   let opened = model.thread.as_mut().expect("the thread opens");
-  opened.fault = Some(format!("Refused: Another process owns {}.", "/home/ada/furb/x.jsonl"));
+  opened.thread.fault =
+    Some(format!("Refused: Another process owns {}.", "/home/ada/furb/x.jsonl"));
   let left = model.left();
   left.rows.iter().map(|row| row.iter().map(|one| one.content.as_ref()).collect()).collect()
 }
@@ -88,7 +89,7 @@ fn a_page_refused_while_its_life_opens_ends_the_open_on_its_card_too() {
   model.open_thread();
   model.moved = Duration::from_secs(1);
   assert!(model.shown_open(0, &life).is_some(), "the card says that the life opens");
-  model.thread.as_mut().expect("the thread opens").asked.insert(7, None);
+  model.thread.as_mut().expect("the thread opens").thread.asked.insert(7, None);
   let why = "Refused: Another process owns the record.".to_owned();
   assert!(model.answered(0, 7, Err(why)));
   assert!(model.shown_open(0, &life).is_none(), "the card says no open once the open failed");

@@ -48,11 +48,11 @@ impl Feed<'_> {
     let mut rows = match item {
       Item::Head => self.before(),
       Item::At(at) => {
-        self.opened.exchanges.get(&at).map(|one| self.exchange(one)).unwrap_or_default()
+        self.opened.thread.exchanges.get(&at).map(|one| self.exchange(one)).unwrap_or_default()
       }
     };
     if self.items().last() == Some(item) {
-      rows.extend(self.opened.pending.iter().flat_map(|one| self.message(&one.text, true)));
+      rows.extend(self.opened.thread.pending.iter().flat_map(|one| self.message(&one.text, true)));
     }
     rows
   }
@@ -63,7 +63,7 @@ impl Feed<'_> {
 
   /// Why a fault ended the life of the thread, which then only reads.
   fn fault(&self) -> Option<&str> {
-    self.model.client.fault_of(self.opened.key.0, &self.opened.key.1)
+    self.model.client.fault_of(self.opened.thread.key.0, &self.opened.thread.key.1)
   }
 
   /// Whether a fault ended the life of the thread.
@@ -76,13 +76,13 @@ impl Feed<'_> {
   /// life of the thread.
   pub(crate) fn items(&self) -> Items<'_, Exchange> {
     let opened = self.opened;
-    let head = self.ended() || opened.fault.is_some() || opened.above != Some(0);
-    Items { held: &opened.exchanges, head: head || opened.exchanges.is_empty() }
+    let head = self.ended() || opened.thread.fault.is_some() || opened.thread.above != Some(0);
+    Items { held: &opened.thread.exchanges, head: head || opened.thread.exchanges.is_empty() }
   }
 
   /// What stands above the exchanges that the window holds: why a fault ended the life, whose
-  /// threads the window still reads, then why the daemon gave no page, the wait for the first page, or how
-  /// many messages come before.
+  /// threads the window still reads, then why the daemon gave no page, the wait for the first page,
+  /// or how many messages come before.
   fn before(&self) -> Vec<Row> {
     let Some(why) = self.fault() else { return self.above() };
     let room = self.wide.saturating_sub(4);
@@ -104,7 +104,7 @@ impl Feed<'_> {
   /// gave no page, the wait for the first page, or how many messages come before.
   fn above(&self) -> Vec<Row> {
     let muted = self.style(Role::Muted);
-    let mut rows: Vec<Row> = match (&self.opened.fault, self.opened.above) {
+    let mut rows: Vec<Row> = match (&self.opened.thread.fault, self.opened.thread.above) {
       (Some(why), _) => {
         let lines = wrapped(&self.model.homed(why), self.wide.saturating_sub(4));
         let danger = Style::new().fg(self.model.tokens.danger);
@@ -116,7 +116,7 @@ impl Feed<'_> {
       }
       // Until its page comes, the thread shows what its card holds: the first line of its message.
       (None, None) => {
-        let card = self.model.client.card(&self.opened.key);
+        let card = self.model.client.card(&self.opened.thread.key);
         return card.map(|card| self.message(&card.thread.title, true)).unwrap_or_default();
       }
       (None, Some(0)) => return Vec::new(),
@@ -139,7 +139,7 @@ impl Feed<'_> {
     let t = &self.model.tokens;
     let root = self.opened.root();
     let untold = self.model.untold();
-    let card = self.model.client.card(&root.key).or(untold.as_ref().map(|one| &one.1));
+    let card = self.model.client.card(&root.thread.key).or(untold.as_ref().map(|one| &one.1));
     let project = card.map(project).unwrap_or_default();
     let named = card.and_then(|card| card.session.clone()).filter(|name| !name.is_empty());
     let (button, muted) = (self.style(Role::Button), self.style(Role::Muted));
@@ -152,7 +152,7 @@ impl Feed<'_> {
     let left =
       vec![run(format!(" {project} · {mark}"), muted), run(title, self.style(Role::Title))];
     // A life that a fault ended takes no resolve: it only reads.
-    let made = !self.opened.key.2.is_empty() && !self.model.leaves() && !self.ended();
+    let made = !self.opened.thread.key.2.is_empty() && !self.model.leaves() && !self.ended();
     let (mark, button) = match card.map(|card| &card.thread) {
       _ if self.opened.from.is_some() => (None, Some((run(" Back ", button), Does::Close))),
       _ if !made => (None, None),
@@ -165,7 +165,8 @@ impl Feed<'_> {
         (Some(mark), Some((run(" Reopen ", button), Does::Resolve)))
       }
       Some(thread)
-        if thread.works() && self.model.armed == Some(Armed::Resolve(self.opened.key.clone())) =>
+        if thread.works()
+          && self.model.armed == Some(Armed::Resolve(self.opened.thread.key.clone())) =>
       {
         (None, Some((run(" Stop and resolve ", button.fg(t.attention)), Does::Resolve)))
       }
@@ -207,7 +208,7 @@ impl Feed<'_> {
   fn message(&self, text: &str, his: bool) -> Vec<Row> {
     let t = &self.model.tokens;
     let band = Style::new().bg(t.raised);
-    let hue = if his { self.model.hue(&self.opened.key) } else { t.muted };
+    let hue = if his { self.model.hue(&self.opened.thread.key) } else { t.muted };
     let bar = run("┃", Style::new().fg(hue).bg(t.raised));
     let banded = |text: Line| {
       let mut line = vec![bar.clone(), run(" ", band)];
@@ -403,7 +404,7 @@ impl Feed<'_> {
         Some(_) => (self.style(Role::Muted), self.style(Role::Muted)),
       };
       let left = vec![run("  ◆ ", mark), run(self.model.homed(first), text)];
-      let login = &self.model.client.machines[self.opened.key.0].login;
+      let login = &self.model.client.machines[self.opened.thread.key.0].login;
       let right =
         answered.iter().map(|one| run(closed(one, login), self.style(Role::Muted))).collect();
       return vec![

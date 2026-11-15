@@ -105,7 +105,7 @@ impl Model {
   /// Each question of the open thread that waits for the operator, in the order of the thread.
   pub(crate) fn questions(&self) -> Vec<Question<'_>> {
     let Some(opened) = &self.thread else { return Vec::new() };
-    let open = opened.exchanges.values().flat_map(|exchange| {
+    let open = opened.thread.exchanges.values().flat_map(|exchange| {
       let by = exchange.block.as_ref().map(|block| &block.maker);
       exchange.said.iter().filter_map(move |said| match &said.kind {
         Saying::Question { shape, answered: None } => {
@@ -228,7 +228,7 @@ impl Model {
   fn answer(&self) -> Option<(usize, Verb)> {
     let (form, question) = self.form().filter(|_| !self.answering())?;
     let opened = self.thread.as_ref()?;
-    let (at, life, act) = (opened.key.0, opened.key.1.clone(), form.act.clone());
+    let (at, life, act) = (opened.thread.key.0, opened.thread.key.1.clone(), form.act.clone());
     let answer = |line: String| Verb::Answer { life: life.clone(), act: act.clone(), line };
     let words = self.draft.text.clone();
     let verb = match Offers::of(question.shape) {
@@ -248,7 +248,7 @@ impl Model {
   fn refuse(&self) -> Option<(usize, Verb)> {
     let (form, _) = self.form().filter(|_| !self.answering())?;
     let opened = self.thread.as_ref()?;
-    let (at, life, act) = (opened.key.0, opened.key.1.clone(), form.act.clone());
+    let (at, life, act) = (opened.thread.key.0, opened.thread.key.1.clone(), form.act.clone());
     Some((at, Verb::Close { life, act, value: declined(REFUSED) }))
   }
 
@@ -384,7 +384,7 @@ impl Model {
   /// How many threads but the open one ask the operator, as the row of hints of a thread says it
   /// in a count of columns: whole, then shorter. The home says what needs him.
   pub(crate) fn others_ask(&self, room: usize) -> Line {
-    let Some(open) = self.thread.as_ref().map(|one| &one.key) else { return Vec::new() };
+    let Some(open) = self.thread.as_ref().map(|one| &one.thread.key) else { return Vec::new() };
     let asks = |one: &&(Part, Key, Card)| {
       one.1 != *open
         && matches!(one.2.thread.standing, Standing::Asks { .. })

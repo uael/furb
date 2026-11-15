@@ -11,21 +11,19 @@ use std::{
   collections::{BTreeMap, HashMap, HashSet},
   mem,
   ops::Range,
-  time::Duration,
 };
 
 use furb::{
   engine::OPERATOR,
-  view::{self, Agent, Context, Exchange, Page, Standing},
+  view::{self, Agent, Page, Standing},
 };
 use furb_host::protocol::{Card, Verb};
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Asked, Hold};
+use furb_client::{Asked, Hold, Thread};
 
 use crate::{
-  input::Pending,
   keys::Does,
   line::Line,
   list::hash,
@@ -35,44 +33,21 @@ use crate::{
   tokens::Loader,
 };
 
-/// How many exchanges a page holds.
-pub(crate) const PAGE: usize = 20;
-
-/// The thread that the operator reads: its card, the exchanges that the daemon gave, how many
-/// stand before them, its agents, where the operator reads it, and what he opened.
+/// The thread that the operator reads: what the client holds of it, where the operator reads it,
+/// what he opened, the form of its question that the input answers, and the thread whose agent it
+/// is.
 #[derive(Debug, Default)]
 pub(crate) struct Opened {
-  pub(crate) key: Key,
-  pub(crate) exchanges: BTreeMap<usize, Exchange>,
-  /// How many exchanges stand before the first that the window holds, and none before the first
-  /// page came.
-  pub(crate) above: Option<usize>,
-  pub(crate) agents: Vec<Agent>,
+  pub(crate) thread: Thread,
   /// The row at the top of the feed while the operator reads away from its end, and none while
   /// the feed follows its end.
   pub(crate) top: Option<Anchor>,
   /// The blocks and the thoughts that the operator opened.
   pub(crate) unfolded: HashSet<Fold>,
-  /// Each page that the window asked and that did not come, by the id of its request: the place
-  /// of the exchange that it stands before, or none for the page of the end.
-  pub(crate) asked: HashMap<u64, Option<usize>>,
-  /// Why the daemon gave no page.
-  pub(crate) fault: Option<String>,
-  /// The messages of the operator that the thread does not show yet, in their order.
-  pub(crate) pending: Vec<Pending>,
-  /// Whether the window started the thread with a message of the operator.
-  pub(crate) started: bool,
-  /// When the window opened the thread, on the clock of its loaders.
-  pub(crate) since: Duration,
   /// The form of the question of the thread that the input answers.
   pub(crate) form: Option<Form>,
-  /// Whether the window asks the page of the end again, since the connection to its machine ended
-  /// and the new one tells no change of the thread until the window reads its end there.
-  pub(crate) again: bool,
   /// The thread whose agent this thread is, which an escape opens again where he read it.
   pub(crate) from: Option<Box<Self>>,
-  /// The context of the chain of the thread at its last answer.
-  pub(crate) context: Option<Context>,
 }
 
 /// A row of the feed as a place that holds when rows come above it: a count of rows from the
@@ -332,33 +307,12 @@ impl Opened {
     }
   }
 
-  /// A page that the daemon gave, or a change of the thread that it told: each exchange takes the
-  /// place of the one before it, and the agents and the context are those of the thread now.
-  fn took(&mut self, page: Page) {
-    self.above = Some(self.above.map_or(page.above, |above| above.min(page.above)));
-    (self.agents, self.context) = (page.agents, page.context);
-    self.fault = None;
-    self.exchanges.extend(page.exchanges.into_iter().map(|one| (one.at, one)));
-    self.shown();
-  }
-
-  /// The messages of the operator that the thread shows now let go.
-  pub(crate) fn shown(&mut self) {
-    let told = |act: &String| self.exchanges.values().any(|one| one.message == *act);
-    self.pending.retain(|one| !one.act.as_ref().is_some_and(told));
-  }
-
-  /// The page of the thread before the exchange at a place, or the page of its end.
-  fn page(&self, before: Option<usize>) -> Verb {
-    let (life, thread) = (self.key.1.clone(), self.key.2.clone());
-    Verb::Thread { life, thread, before, limit: PAGE }
-  }
-
   /// The agents that the dock shows, from the first that does not rest to the last, and how many
   /// stand before them.
   pub(crate) fn docked(&self) -> (usize, &[Agent]) {
-    let first = self.agents.iter().position(|agent| !rests(agent)).unwrap_or(self.agents.len());
-    (first, &self.agents[first..])
+    let first =
+      self.thread.agents.iter().position(|agent| !rests(agent)).unwrap_or(self.thread.agents.len());
+    (first, &self.thread.agents[first..])
   }
 
   /// The thread that the operator opened from the list, whose agent this thread is, or this one.
@@ -372,11 +326,12 @@ impl Model {
   /// life, which opens when no life holds its record.
   pub(crate) fn open_thread(&mut self) {
     let Some(key) = self.selected.clone() else { return };
-    if key.2.is_empty() || self.thread.as_ref().is_some_and(|one| one.root().key == key) {
+    if key.2.is_empty() || self.thread.as_ref().is_some_and(|one| one.root().thread.key == key) {
       return;
     }
     self.client.hold((key.0, key.1.clone()), self.cwd(key.0, &key.1), self.moved);
-    self.thread = Some(Opened { key, since: self.moved, ..Opened::default() });
+    let thread = Thread { key, since: self.moved, ..Thread::default() };
+    self.thread = Some(Opened { thread, ..Opened::default() });
     self.aim = None;
   }
 
@@ -385,10 +340,10 @@ impl Model {
   /// opens again, since the daemon tells a window the changes of one thread at a time.
   fn open_agent(&mut self, prompt: String) {
     let Some(mut from) = self.thread.take() else { return };
-    let key = (from.key.0, from.key.1.clone(), prompt);
-    (from.asked, from.again) = (HashMap::new(), true);
-    self.thread =
-      Some(Opened { key, since: self.moved, from: Some(Box::new(from)), ..Opened::default() });
+    let key = (from.thread.key.0, from.thread.key.1.clone(), prompt);
+    (from.thread.asked, from.thread.again) = (HashMap::new(), true);
+    let thread = Thread { key, since: self.moved, ..Thread::default() };
+    self.thread = Some(Opened { thread, from: Some(Box::new(from)), ..Opened::default() });
     (self.aim, self.armed) = (None, None);
   }
 
@@ -398,7 +353,7 @@ impl Model {
   pub(crate) fn next_agent(&mut self) {
     let Some(opened) = self.thread.as_ref() else { return };
     let (from, at) =
-      opened.from.as_deref().map_or((opened, None), |from| (from, Some(&opened.key.2)));
+      opened.from.as_deref().map_or((opened, None), |from| (from, Some(&opened.thread.key.2)));
     let shown = from.docked().1;
     let after = at.and_then(|at| shown.iter().position(|one| one.card.prompt == *at));
     let Some(next) = shown.get(after.map_or(0, |at| at + 1)).or(shown.first()) else {
@@ -439,20 +394,24 @@ impl Model {
   /// Why the open thread says that it went wrong: the daemon gave no page, or a fault ended its
   /// life.
   pub(crate) fn why<'a>(&'a self, opened: &'a Opened) -> Option<&'a str> {
-    opened.fault.as_deref().or_else(|| self.client.fault_of(opened.key.0, &opened.key.1))
+    opened
+      .thread
+      .fault
+      .as_deref()
+      .or_else(|| self.client.fault_of(opened.thread.key.0, &opened.thread.key.1))
   }
 
   /// Whether the life of an open thread opens and its page did not come. A life that a fault
   /// ended opens no more.
   pub(crate) fn opens(&self, opened: &Opened) -> bool {
-    let hold = self.client.holds.get(&(opened.key.0, opened.key.1.clone()));
-    opened.above.is_none() && hold.is_some_and(|hold| !hold.stood && hold.failed().is_none())
+    let hold = self.client.holds.get(&(opened.thread.key.0, opened.thread.key.1.clone()));
+    opened.thread.above.is_none() && hold.is_some_and(|hold| !hold.stood && hold.failed().is_none())
   }
 
   /// Whether the window says that the open thread opens: from [`QUIET`] on, as the bar of the open,
   /// so an open that takes less than that shows no text that comes and goes.
   pub(crate) fn says_opens(&self, opened: &Opened) -> bool {
-    let hold = self.client.holds.get(&(opened.key.0, opened.key.1.clone()));
+    let hold = self.client.holds.get(&(opened.thread.key.0, opened.thread.key.1.clone()));
     let waited = hold.is_some_and(|hold| self.moved.saturating_sub(hold.since) >= QUIET);
     self.opens(opened) && waited
   }
@@ -468,30 +427,36 @@ impl Model {
   /// the daemon answered the open of its life. The daemon holds it until that life stands.
   pub(crate) fn page_due(&self) -> Option<Verb> {
     let opened = self.thread.as_ref()?;
-    let held =
-      opened.above.is_some() && !opened.again || !opened.asked.is_empty() || opened.fault.is_some();
-    let reads = self.client.reads(opened.key.0, &opened.key.1);
-    (!opened.key.2.is_empty() && !held && reads).then(|| opened.page(None))
+    let held = opened.thread.above.is_some() && !opened.thread.again
+      || !opened.thread.asked.is_empty()
+      || opened.thread.fault.is_some();
+    let reads = self.client.reads(opened.thread.key.0, &opened.thread.key.1);
+    (!opened.thread.key.2.is_empty() && !held && reads).then(|| opened.thread.page(None))
   }
 
   /// The open thread on a machine, while it waits for the page of a request.
   pub(crate) fn waits(&self, at: usize, id: u64) -> bool {
-    self.thread.as_ref().is_some_and(|one| one.key.0 == at && one.asked.contains_key(&id))
+    self
+      .thread
+      .as_ref()
+      .is_some_and(|one| one.thread.key.0 == at && one.thread.asked.contains_key(&id))
   }
 
   /// The answer to a page that the open thread asked: the page, or why the daemon gave none. A
   /// page refused while the open of its life runs says why the open failed, as the refusal of the
   /// open says it, so the window holds that life no more. Whether the open thread changed.
   pub(crate) fn answered(&mut self, at: usize, id: u64, page: Result<Page, String>) -> bool {
-    let Some(opened) = self.thread.as_mut().filter(|one| one.key.0 == at) else { return false };
-    if opened.asked.remove(&id).is_none() {
+    let Some(opened) = self.thread.as_mut().filter(|one| one.thread.key.0 == at) else {
+      return false;
+    };
+    if opened.thread.asked.remove(&id).is_none() {
       return false;
     }
-    let life = (at, opened.key.1.clone());
+    let life = (at, opened.thread.key.1.clone());
     match page {
-      Ok(page) => opened.took(page),
+      Ok(page) => opened.thread.took(page),
       Err(why) => {
-        opened.fault = Some(why);
+        opened.thread.fault = Some(why);
         if self.client.holds.get(&life).is_some_and(Hold::runs) {
           self.client.holds.remove(&life);
         }
@@ -502,9 +467,11 @@ impl Model {
 
   /// A change of a thread that a machine told: whether it is the open thread.
   pub(crate) fn changed(&mut self, at: usize, (life, thread): (&str, &str), page: Page) -> bool {
-    let open = |one: &&mut Opened| one.key.0 == at && one.key.1 == life && one.key.2 == thread;
+    let open = |one: &&mut Opened| {
+      one.thread.key.0 == at && one.thread.key.1 == life && one.thread.key.2 == thread
+    };
     let Some(opened) = self.thread.as_mut().filter(open) else { return false };
-    opened.took(page);
+    opened.thread.took(page);
     true
   }
 
@@ -520,10 +487,10 @@ impl Model {
     let near = then.top.is_none_or(|top| items.above(top, room, |item| feed.rows(item)) < room);
     let opened = self.thread.as_mut()?;
     opened.top = then.top.filter(|_| !then.end);
-    let older = opened.asked.values().any(Option::is_some);
-    let first = opened.exchanges.keys().next().copied();
-    let before = opened.above.is_some_and(|above| above > 0);
-    (near && before && !older).then(|| opened.page(first))
+    let older = opened.thread.asked.values().any(Option::is_some);
+    let first = opened.thread.exchanges.keys().next().copied();
+    let before = opened.thread.above.is_some_and(|above| above > 0);
+    (near && before && !older).then(|| opened.thread.page(first))
   }
 
   /// The feed at its end, which it follows from now on.
@@ -616,13 +583,14 @@ impl Model {
   /// once each time the thread ends. A page with no exchange shows him nothing to see, and a life
   /// that a fault ended takes nothing, this neither.
   pub(crate) fn seen_due(&mut self) -> Option<(usize, Verb)> {
-    let shows =
-      |one: &&Opened| one.top.is_none() && one.above.is_some() && !one.exchanges.is_empty();
+    let shows = |one: &&Opened| {
+      one.top.is_none() && one.thread.above.is_some() && !one.thread.exchanges.is_empty()
+    };
     let opened = self.thread.as_ref().filter(shows)?;
-    if self.client.fault_of(opened.key.0, &opened.key.1).is_some() {
+    if self.client.fault_of(opened.thread.key.0, &opened.thread.key.1).is_some() {
       return None;
     }
-    let key = opened.key.clone();
+    let key = opened.thread.key.clone();
     let login = self.client.machines[key.0].login.clone();
     // A card that the daemon told before it read the last Seen says unread once more.
     let saying =
@@ -646,7 +614,7 @@ impl Model {
   /// tells it only once the life stands and made its prompt, so until then the window shows the
   /// thread as it knows it from his first message, at work, with its machine.
   pub(crate) fn untold(&self) -> Option<(usize, Card)> {
-    let key = self.thread.as_ref().filter(|one| one.started)?.key.clone();
+    let key = self.thread.as_ref().filter(|one| one.thread.started)?.thread.key.clone();
     if self.client.card(&key).is_some() {
       return None;
     }
@@ -678,7 +646,8 @@ impl Model {
   /// The hue of a thread, from its record and its title, which the window knows from the send of
   /// its first message, so the hue stays when the daemon names the prompt of a new thread.
   pub(crate) fn hue(&self, key: &Key) -> Color {
-    let open = || self.thread.as_ref().filter(|one| one.key == *key).and_then(|_| self.title());
+    let open =
+      || self.thread.as_ref().filter(|one| one.thread.key == *key).and_then(|_| self.title());
     let title = self.client.card(key).map(|card| card.thread.title.clone()).or_else(open);
     self.tokens.hues[hued(&key.1, &title.unwrap_or_default()) % self.tokens.hues.len()]
   }

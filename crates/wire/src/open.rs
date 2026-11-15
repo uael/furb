@@ -17,9 +17,9 @@ pub enum Stage {
   Recall,
   /// The record is read from its last checkpoint, which the read finds from the end of the record,
   /// for the build of its last life: the bytes passed, of the bytes of the record. It is the first
-  /// stage that the crate furb tells, at once, and the life then reads its settings and the catalog of
-  /// its models in it. A life that opens from its image reads no entry, and tells each byte passed
-  /// once the image agrees with the record.
+  /// stage that the crate furb tells, at once, and the life then reads its settings and the catalog
+  /// of its models in it. A life that opens from its image reads no entry, and tells each byte
+  /// passed once the image agrees with the record.
   Find,
   /// A life that ran another engine of the major is carried across to this build, by a life that
   /// inspects it and writes its checkpoint. It counts nothing.
@@ -33,7 +33,8 @@ pub enum Stage {
   /// stage, then seeds it. It counts nothing.
   Seed,
   /// The life boots: the entries that its journal passed, of the entries that it boots on. It is
-  /// the last stage that the crate furb tells, and a boot that succeeds ends with each entry counted.
+  /// the last stage that the crate furb tells, and a boot that succeeds ends with each entry
+  /// counted.
   Boot,
   /// A host puts what the open told in the log that its readers read: the events put, of those
   /// events. The crate furb never tells this stage.
