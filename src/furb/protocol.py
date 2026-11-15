@@ -519,9 +519,10 @@ class Request44(TypedDict):
 
 class Request45(TypedDict):
   """
-  A follow-up that the operator queued on a chain, under an entry that the window chose. The
-  life sends it as a prompt of its shape and its message once the chain rests, and a second
-  queue of the same entry, from any window, changes nothing.
+  A follow-up that the operator queued on a chain, or on a thread, under an entry that the
+  window chose. The life sends it as a prompt of its shape and its message once the chain rests,
+  on the chain, or on the thread as a message of it once the chain of the thread rests, and a
+  second queue of the same entry, from any window, changes nothing.
   """
 
   id: int
@@ -2021,13 +2022,15 @@ class Event9(TypedDict):
 
 class FollowUp(TypedDict):
   """
-  One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
-  that its prompt wants, its message, and why its send failed, when it did. A follow-up that
-  failed holds the queue of its chain until the operator takes it out.
+  One follow-up that waits on a chain: its entry, which the window that queued it chose, the
+  thread that it goes to as a message, none for a new thread of the chain, the shape that its
+  prompt wants, its message, and why its send failed, when it did. A follow-up that failed holds
+  the queue of its chain until the operator takes it out.
   """
 
   entry: str
   chain: str
+  thread: NotRequired[str | None]
   shape: str
   message: str
   failed: NotRequired[str | None]
@@ -3103,4 +3106,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 56
+PROTOCOL = 57

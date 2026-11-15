@@ -54,6 +54,8 @@ pub(crate) enum Click {
     at: usize,
   },
   Link(String),
+  /// A follow-up that waits on the thread taken out of its queue, by its entry.
+  Unqueue(String),
   /// A press of a button of a view, by its viewer and its node.
   Press {
     viewer: String,
@@ -457,6 +459,7 @@ impl Model {
       return false;
     }
     opened.thread.took(page);
+    self.client.refollow();
     true
   }
 
@@ -516,6 +519,12 @@ impl Model {
       }
       Click::Chain { row, at } => {
         self.open_chain(row, at);
+        None
+      }
+      Click::Unqueue(entry) => {
+        if let Some(text) = self.client.unqueue(&entry) {
+          self.client.restore = Some(self.before_draft(text));
+        }
         None
       }
       Click::Press { viewer, node } => {

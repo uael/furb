@@ -94,6 +94,16 @@ impl Model {
     self.fault.is_none()
   }
 
+  /// The text of the input queued on the open thread: whether it went, and else why the window
+  /// says.
+  pub(crate) fn queue(&mut self, text: &str) -> bool {
+    match self.client.queue(text) {
+      Ok(()) => self.fault = None,
+      Err(why) => self.fault = Some(why),
+    }
+    self.fault.is_none()
+  }
+
   /// The control of the open thread that a key asks: the stop of its work, its resolve, or its
   /// pause or the wake of his pause.
   pub(crate) fn control(&mut self, does: Does) -> Option<(usize, Verb)> {

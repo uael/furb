@@ -52,7 +52,8 @@ impl Model {
 
 impl Feed<'_> {
   /// The rows of one part of the feed. The last part holds the way out of a pause that holds the
-  /// thread, then each message of the operator that the thread does not show yet.
+  /// thread, then each message of the operator that the thread does not show yet, then each
+  /// follow-up that waits on the thread.
   pub(crate) fn rows(&self, item: Item) -> Vec<Row> {
     let mut rows = match item {
       Item::Head => self.before(),
@@ -63,6 +64,32 @@ impl Feed<'_> {
     if self.items().last() == Some(item) {
       rows.extend(self.paused());
       rows.extend(self.opened.thread.pending.iter().flat_map(|one| self.message(&one.text, true)));
+      rows.extend(self.queued());
+    }
+    rows
+  }
+
+  /// Each follow-up that waits on the thread, which its life sends once the chain of the thread
+  /// rests, as a chip and its message, and the cross that takes it back to the input.
+  fn queued(&self) -> Vec<Row> {
+    let waiting = self.model.client.follow_ups();
+    let mut rows: Vec<Row> = waiting
+      .into_iter()
+      .map(|one| {
+        let chip = run(" queued ", self.style(Role::Button));
+        let back = " ✕";
+        let room = self.wide.saturating_sub(4 + 8 + 2 + back.width());
+        let text = one.message.lines().next().unwrap_or_default();
+        let mut line = vec![run("    ", Style::new()), chip, run("  ", Style::new())];
+        line.push(run(line::cut(text, room), self.style(Role::Muted)));
+        let end = width(&line);
+        line.push(run(back, self.style(Role::Muted)));
+        let hot = vec![(end..end + back.width(), Some(Click::Unqueue(one.entry.clone())))];
+        Row { hot, ..Row::of(line) }
+      })
+      .collect();
+    if !rows.is_empty() {
+      rows.insert(0, Row::default());
     }
     rows
   }

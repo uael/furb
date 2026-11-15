@@ -2,7 +2,7 @@
 //! order of the cards of every machine in one list.
 
 use furb_wire::{
-  Part, Standing,
+  Event, FollowUp, Part, Standing,
   card::Skill,
   protocol::{Answer, Card, Files, Frame, Listed, Model, Present, Project, Verb},
 };
@@ -67,6 +67,10 @@ pub struct Told {
   /// Each operator whose window holds a life, by its record, as the machine last pushed it.
   #[serde(skip)]
   pub presence: HashMap<String, Vec<Present>>,
+  /// The follow-ups that wait on each chain of each life, by its record, then by its chain, as
+  /// the machine last pushed them.
+  #[serde(skip)]
+  pub queued: HashMap<String, HashMap<String, Vec<FollowUp>>>,
 }
 
 /// What a frame changed of what a machine told: its cards or its login, nothing that the list
@@ -94,6 +98,10 @@ impl Client {
       self.staled(at, frame);
       self.retracked(at, frame);
       if self.viewed(at, frame) {
+        return Listing::Changed;
+      }
+      if let Frame::Event { life, event: event @ Event::Queued { .. }, .. } = frame {
+        self.queued(at, life.clone(), event);
         return Listing::Changed;
       }
     }

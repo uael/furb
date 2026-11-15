@@ -199,6 +199,7 @@ impl Model {
       (Asked::Parts(key, read), heard) => self.client.parted(&key, read, replied(heard)),
       (Asked::Moments(key), heard) => self.client.timed(&key, heard.ok()),
       (Asked::Tracks(key), heard) => self.client.tracked(&key, heard.ok()),
+      (Asked::Queued(life, thread), heard) => self.client.followed(at, (life, thread), heard.ok()),
       (asked @ (Asked::Settings | Asked::Setting | Asked::Plays), heard) => {
         self.client.configured(&asked, heard.ok());
       }

@@ -125,6 +125,8 @@ pub enum Asked {
   Settings,
   /// The skills of a session, with how each plays, that the operator reads.
   Plays,
+  /// The follow-ups of a thread, by its life and its prompt.
+  Queued(String, String),
   /// A change of a setting of a session.
   Setting,
   /// Where the operator writes, which each other window of the life shows.
@@ -157,6 +159,7 @@ impl Client {
     due.extend(self.moments_due());
     due.extend(self.tracks_due());
     due.extend(self.settings_due());
+    due.extend(self.follows_due());
     due.extend(self.writes_due());
     if listing {
       due.extend(self.lists_due());

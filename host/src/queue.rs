@@ -134,23 +134,25 @@ impl Queue {
     else {
       return None;
     };
-    let words = (text(5).map(str::to_owned), text(6).map(str::to_owned));
+    let words = [5, 6, 7].map(|at| text(at).map(str::to_owned));
     self.step(chain, step, entry, words)
   }
 
-  /// One step of a follow-up, with the words of its fact after its entry.
+  /// One step of a follow-up, with the words of its fact after its entry: for an add, its shape,
+  /// its message and its thread, which a follow-up of a new thread does not name.
   fn step(
     &mut self,
     chain: &str,
     step: &str,
     entry: &str,
-    words: (Option<String>, Option<String>),
+    words: [Option<String>; 3],
   ) -> Option<Event> {
     match (step, words) {
-      ("add", (Some(shape), Some(message))) if !self.entries.contains_key(entry) => {
+      ("add", [Some(shape), Some(message), thread]) if !self.entries.contains_key(entry) => {
         let follow = FollowUp {
           entry: entry.to_owned(),
           chain: chain.to_owned(),
+          thread,
           shape,
           message,
           failed: None,
@@ -163,8 +165,8 @@ impl Queue {
         self.begun = Some(entry.to_owned());
         self.moved(entry, Step::Sending)?;
       }
-      ("sent", (act, _)) => self.moved(entry, Step::Sent(act))?,
-      ("failed", (why, _)) => {
+      ("sent", [act, ..]) => self.moved(entry, Step::Sent(act))?,
+      ("failed", [why, ..]) => {
         let one = self.entries.get_mut(entry)?;
         one.step = Step::Waits;
         one.follow.failed = why;

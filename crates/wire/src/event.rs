@@ -44,13 +44,16 @@ pub enum Event {
   Ended(Option<String>),
 }
 
-/// One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
-/// that its prompt wants, its message, and why its send failed, when it did. A follow-up that
-/// failed holds the queue of its chain until the operator takes it out.
+/// One follow-up that waits on a chain: its entry, which the window that queued it chose, the
+/// thread that it goes to as a message, none for a new thread of the chain, the shape that its
+/// prompt wants, its message, and why its send failed, when it did. A follow-up that failed holds
+/// the queue of its chain until the operator takes it out.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct FollowUp {
   pub entry: String,
   pub chain: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub thread: Option<String>,
   pub shape: String,
   pub message: String,
   pub failed: Option<String>,

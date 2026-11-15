@@ -1048,7 +1048,7 @@
         },
         {
           "type": "object",
-          "description": "A follow-up that the operator queued on a chain, under an entry that the window chose. The\nlife sends it as a prompt of its shape and its message once the chain rests, and a second\nqueue of the same entry, from any window, changes nothing.",
+          "description": "A follow-up that the operator queued on a chain, or on a thread, under an entry that the\nwindow chose. The life sends it as a prompt of its shape and its message once the chain rests,\non the chain, or on the thread as a message of it once the chain of the thread rests, and a\nsecond queue of the same entry, from any window, changes nothing.",
           "properties": {
             "life": {
               "type": "string"
@@ -1104,7 +1104,7 @@
         },
         {
           "type": "object",
-          "description": "The follow-ups that wait on a chain, in order.",
+          "description": "The follow-ups that wait on a chain, or on a thread, in order.",
           "properties": {
             "life": {
               "type": "string"
@@ -5989,6 +5989,12 @@
         "chain": {
           "type": "string"
         },
+        "thread": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "shape": {
           "type": "string"
         },
@@ -6008,7 +6014,7 @@
         "shape",
         "message"
       ],
-      "description": "One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape\nthat its prompt wants, its message, and why its send failed, when it did. A follow-up that\nfailed holds the queue of its chain until the operator takes it out."
+      "description": "One follow-up that waits on a chain: its entry, which the window that queued it chose, the\nthread that it goes to as a message, none for a new thread of the chain, the shape that its\nprompt wants, its message, and why its send failed, when it did. A follow-up that failed holds\nthe queue of its chain until the operator takes it out."
     },
     "Stage": {
       "oneOf": [
@@ -6071,5 +6077,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 56
+  "x-protocol": 57
 }

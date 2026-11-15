@@ -37,8 +37,8 @@ use furb::{
   skill::ENABLE,
   verbs,
   view::{
-    self, Act, Desk, Fold, Held, Named, Page, Phase, Reach, Rung, SHOWN, Sent, Shown, Streamed,
-    ThreadNode, Threads,
+    self, Act, Desk, Fold, Held, Kind, Named, Page, Phase, Reach, Rung, SHOWN, Sent, Shown,
+    Streamed, ThreadNode, Threads,
   },
   wire::{outward, parsed},
   world::{
@@ -1440,6 +1440,13 @@ async fn pumped(engine: &mut Engine, waits: bool) -> Woke {
   .await
 }
 
+/// The chain whose queue a command of the queue names, and the thread that it names on that
+/// chain: a follow-up on a thread waits on the chain of the thread.
+fn queued_on(life: &Life, on: String) -> (String, Option<String>) {
+  let thread = life.kept.held.shared(&on).filter(|act| act.kind == Kind::Prompt);
+  thread.map_or((on.clone(), None), |act| (act.chain.clone(), Some(on)))
+}
+
 /// What a command comes to: on the configs of the life for a command of its configs, on the home of
 /// its roster for a change of the roster, on the queue of the life for a command of the queue, on
 /// the acts that the life told for a query of their meaning, and else on the engine.
@@ -1456,10 +1463,11 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
       Ok(Reply::Done)
     }
     Command::Queue { entry, shape, message, on } => {
-      let chain = chain(on);
+      let (chain, on) = queued_on(life, chain(on));
       if !life.kept.queue.holds(&entry) {
-        let words = ["add", &entry, &shape, &message].map(Object::string);
-        engine.say(QUEUE, &chain, words.into())?;
+        let mut words: Vec<Object> = ["add", &entry, &shape, &message].map(Object::string).into();
+        words.extend(on.as_deref().map(Object::string));
+        engine.say(QUEUE, &chain, words)?;
       }
       Ok(Reply::Done)
     }
@@ -1471,7 +1479,9 @@ async fn commanded(engine: &mut Engine, life: &Life, command: Command) -> Result
       Ok(Reply::Done)
     }
     Command::Queued { on } => {
-      let waiting = life.kept.queue.waiting(&chain(on));
+      let (chain, on) = queued_on(life, chain(on));
+      let mut waiting = life.kept.queue.waiting(&chain);
+      waiting.retain(|one| on.is_none() || one.thread == on);
       let waiting = waiting.iter().map(serde_json::to_value).collect::<Result<_, _>>();
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
@@ -1720,8 +1730,8 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
 fn sent(engine: &mut Engine, follow: &FollowUp) -> Result<String, LifeError> {
   let chain = follow.chain.as_str();
   engine.say(QUEUE, chain, ["begin", &follow.entry].map(Object::string).into())?;
-  let with =
-    verbs::Prompt { message: Some(follow.message.clone()), to: None, on: Some(chain.to_owned()) };
+  let on = follow.thread.clone().unwrap_or_else(|| chain.to_owned());
+  let with = verbs::Prompt { message: Some(follow.message.clone()), to: None, on: Some(on) };
   let made = engine.prompt(Shape::object(&follow.shape), with)?.id().to_owned();
   engine.say(QUEUE, chain, ["sent", &follow.entry, &made].map(Object::string).into())?;
   Ok(made)

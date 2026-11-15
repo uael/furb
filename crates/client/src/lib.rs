@@ -9,6 +9,7 @@
 mod changes;
 mod complete;
 mod context;
+mod follow;
 mod history;
 mod input;
 mod machine;
@@ -94,6 +95,9 @@ pub struct Client {
   pub filled: Option<Filled>,
   /// The settings of a session, while the operator reads them.
   pub settings: Option<Settings>,
+  /// The thread whose follow-ups the client asks next, after a change of its queue: its machine,
+  /// its life and its prompt.
+  following: Option<(usize, String, String)>,
   /// Where the client last told that the operator writes: the machine, the life, and the thread,
   /// none for a new thread of it.
   wrote: Option<(usize, String, Option<String>)>,

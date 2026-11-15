@@ -667,6 +667,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
       steps: &[
         step("a", &[Act::Type("Wait for the bench."), Act::Key("Enter")], "⎋ stop"),
         step("b", &[Act::Type("Stop after the boot."), Act::Key("Enter")], "Stop after the boot."),
+        // Alt and enter queue a message, which waits as a chip until the thread rests.
+        step("q", &[Act::Type("Then rebase on main."), Act::Key("M-Enter")], " queued "),
         step("c", &[Act::Key("Escape"), Act::Key("Escape")], "Stop after the boot."),
       ],
     }),

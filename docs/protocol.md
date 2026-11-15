@@ -251,11 +251,12 @@ daemon answers requests in any order.
   keeps the thread open, its prompt and each message on it that is not done, the last first, with `None` for a shape
   `None` and with the text `resolved` for a shape that takes a text. A close cancels the work under each act. An act of
   another shape refuses the resolve, since only its model gives that value. A message on the thread opens it again.
-- `queue` puts a follow-up of the operator in the queue of a chain, under an `entry` that the window chooses, and a
+- `queue` puts a follow-up of the operator in the queue of a chain, or of a thread when `on` names its prompt, under
+  an `entry` that the window chooses, and a
   second `queue` of the same entry, from any window, changes nothing. The life sends the first follow-up of a chain as
-  a prompt of its `shape` and its `message` once the chain rests: no pause holds it, it asks the operator nothing, no
+  a prompt of its `shape` and its `message` once the chain rests, on the chain, or on the thread as a message of it: no pause holds it, it asks the operator nothing, no
   work of it lives, and the prompt of its last follow-up is done. `unqueue` takes out a follow-up that waits, and
-  `queued` gives the follow-ups that wait on a chain, in order. A send that fails holds the queue of its chain, with
+  `queued` gives the follow-ups that wait on a chain, or on a thread, in order. A follow-up names its `thread`. A send that fails holds the queue of its chain, with
   its cause in `failed`, until the operator takes the follow-up out. The record keeps each step as a fact `queue` of
   the operator, so a reopen finds the queue as it stood.
 - `desk`, `threads`, `as_of`, `moments` and `tracks` give the meaning of the acts that the life told as events, which

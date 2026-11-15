@@ -474,3 +474,21 @@ fn the_chains_under_the_bar_of_the_time_stand_as_a_tree_under_the_chain_that_mad
   // The chain that rests shows no more, and each agent that works stands under the root.
   assert_eq!(labels, [" root", "   bench", "   boot"].map(str::to_owned), "{frame}");
 }
+
+#[test]
+fn a_message_queued_while_the_chain_works_shows_as_a_chip_and_a_cross_takes_it_back() {
+  let message = format!("why is the seed slow on a big record\n{THINKS}");
+  let (app, _daemon, _peer) = opened(&message, "proof = await bash(");
+  app.type_text("then rebase on main");
+  app.press("alt+enter");
+  // The life holds it until the chain rests, and each window of the life shows it.
+  let frame = shows(&app, " queued   then rebase on main");
+  assert!(!frame.contains("▌then rebase on main"), "the input is empty again:\n{frame}");
+  let row = row(&app, " queued ");
+  let line = app.text().lines().nth(usize::from(row)).unwrap_or_default().to_owned();
+  let cross = u16::try_from(line.chars().position(|one| one == '✕').unwrap()).unwrap();
+  app.click(cross, row);
+  let back = app.wait_until(PATIENCE, || !app.text().contains(" queued "));
+  assert!(back, "the follow-up stays:\n{}", app.text());
+  shows(&app, "then rebase on main");
+}

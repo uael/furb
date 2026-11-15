@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 56;
+pub const PROTOCOL: u32 = 57;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -377,9 +377,10 @@ pub enum Verb {
     life: String,
     thread: String,
   },
-  /// A follow-up that the operator queued on a chain, under an entry that the window chose. The
-  /// life sends it as a prompt of its shape and its message once the chain rests, and a second
-  /// queue of the same entry, from any window, changes nothing.
+  /// A follow-up that the operator queued on a chain, or on a thread, under an entry that the
+  /// window chose. The life sends it as a prompt of its shape and its message once the chain rests,
+  /// on the chain, or on the thread as a message of it once the chain of the thread rests, and a
+  /// second queue of the same entry, from any window, changes nothing.
   Queue {
     life: String,
     entry: String,
@@ -392,7 +393,7 @@ pub enum Verb {
     life: String,
     entry: String,
   },
-  /// The follow-ups that wait on a chain, in order.
+  /// The follow-ups that wait on a chain, or on a thread, in order.
   Queued {
     life: String,
     on: Option<String>,

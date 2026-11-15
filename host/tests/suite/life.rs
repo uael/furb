@@ -667,6 +667,39 @@ async fn went(life: &LifeHandle, entry: &str) -> String {
 }
 
 #[tokio::test]
+async fn a_follow_up_on_a_thread_waits_on_its_chain_and_goes_as_a_message_of_the_thread() {
+  let at = place("queue-thread");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let prompt = Command::Prompt {
+    shape: "str".to_owned(),
+    message: "Which base?".to_owned(),
+    to: Some("operator".to_owned()),
+    on: None,
+  };
+  let thread = made(&life, prompt).await;
+  until(&mut events, stands("chain1".to_owned(), State::Asks)).await;
+  let queue = Command::Queue {
+    entry: "t1".to_owned(),
+    shape: "None".to_owned(),
+    message: "Then rebase.".to_owned(),
+    on: Some(thread.clone()),
+  };
+  assert_eq!(life.send(queue).await.unwrap(), Reply::Done);
+  // The follow-up waits on the chain of the thread, and names the thread.
+  let told = until(&mut events, waits(&["t1"])).await;
+  let Event::Queued { waiting, .. } = &*told.last().unwrap().1 else { unreachable!() };
+  assert_eq!(waiting[0].thread.as_deref(), Some(thread.as_str()));
+  life.send(Command::Answer { id: thread.clone(), line: "main".to_owned() }).await.unwrap();
+  until(&mut events, waits(&[])).await;
+  let sent = went(&life, "t1").await;
+  let Reply::Value(act) = life.send(Command::Get { id: sent.clone() }).await.unwrap() else {
+    panic!("the act of the follow-up is a value")
+  };
+  assert_eq!(act[3], json!(thread), "the message stands on the thread: {act}");
+}
+
+#[tokio::test]
 async fn a_follow_up_waits_while_its_chain_asks_the_operator_and_goes_once_it_rests() {
   let at = place("queue-asks");
   let life = Life::spawn(scripted(&at, &[])).unwrap();

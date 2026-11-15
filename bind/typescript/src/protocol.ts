@@ -1706,13 +1706,15 @@ export interface Context {
   dollars: number;
 }
 /**
- * One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
- * that its prompt wants, its message, and why its send failed, when it did. A follow-up that
- * failed holds the queue of its chain until the operator takes it out.
+ * One follow-up that waits on a chain: its entry, which the window that queued it chose, the
+ * thread that it goes to as a message, none for a new thread of the chain, the shape that its
+ * prompt wants, its message, and why its send failed, when it did. A follow-up that failed holds
+ * the queue of its chain until the operator takes it out.
  */
 export interface FollowUp {
   entry: string;
   chain: string;
+  thread?: string | null;
   shape: string;
   message: string;
   failed?: string | null;
@@ -1733,4 +1735,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 56;
+export const PROTOCOL = 57;

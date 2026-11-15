@@ -965,6 +965,7 @@ fn act(app: &App, window: &Shared, does: Does) {
       return controlled(app, window, |model| Some((model.control(does)?, Asked::Control)));
     }
     Does::Send => return sent(app, window),
+    Does::Queue => return queued(app, window),
     Does::Empty if !window.borrow().area.text().is_empty() => return stashed(app, window, does),
     Does::Unstash => return stashed(app, window, does),
     Does::Picture => return clipboard(app, window),
@@ -1053,6 +1054,16 @@ fn sent(app: &App, window: &Shared) {
   tell(app, window, |model| model.client.draft.text.clear());
   // A thread that the message starts shows in the list at once.
   rest(app, window);
+}
+
+/// The text of the input queued on the open thread, which its life sends once the thread rests.
+fn queued(app: &App, window: &Shared) {
+  let text = window.borrow().area.text();
+  if text.trim().is_empty() || !tell(app, window, |model| model.queue(&text)) {
+    return;
+  }
+  window.borrow().area.set_text("");
+  tell(app, window, |model| model.client.draft.text.clear());
 }
 
 /// An escape: it forgets what a first press of another key named, goes back from a thread that

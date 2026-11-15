@@ -63,6 +63,7 @@ pub(crate) enum Does {
   Picture,
   Settings,
   Skills,
+  Queue,
   Pause,
 }
 
@@ -160,6 +161,7 @@ const THREAD: &[Bound] = &[
 /// The keys of the input.
 const INPUT: &[Bound] = &[
   bound(Does::Send, "send", None, &[&[plain(KeyCode::Enter)]]),
+  bound(Does::Queue, "queue, sent once the thread rests", None, &[&[alt(KeyCode::Enter)]]),
   bound(Does::Empty, "empty the input, then take back the last", None, &[&[ctrl('c')]]),
   bound(Does::Unstash, "the last input that you emptied", Some("unstash"), &[&led('u')]),
   bound(Does::Picture, "paste the image of the clipboard", Some("paste"), &[&[ctrl('v')]]),
