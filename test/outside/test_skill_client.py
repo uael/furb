@@ -284,6 +284,11 @@ async def test_a_kit_reads_its_own_keys_from_a_life_that_gives_config(life: Life
   skill = await life.attach()
   assert await skill.settings() == {"folder": "journal"}
   assert life.said[-1] == {"id": 2, "verb": "config", "config": {"action": "get"}, "life": "a.jsonl"}
+  life.answers = lambda verb: (
+    {"frame": "reply", "answer": {"answer": "done"}} if verb["verb"] == "config" else answers(verb)
+  )
+  with pytest.raises(client.Refused, match="The life gave done, and no values"):
+    await skill.settings()
   life.answers = answered
   older = await Life().attach()
   with pytest.raises(client.Refused, match="older than the capability config"):
