@@ -6,10 +6,10 @@
 //! click. The rules of a card, its part and its place among the others, come from the daemon and
 //! the crate: the window only draws them.
 
-use std::{io, path::PathBuf};
+use std::{io, path::PathBuf, time::Duration};
 
 use furb::view::{Part, age, homed, since};
-use furb_client::{Ask, Asked, Client, Fold, Hold, Listing, Step};
+use furb_client::{Ask, Asked, Client, Fold, HOLD, Hold, Listing, Step};
 pub(crate) use furb_client::{Key, Link, Told};
 use furb_host::{
   Event,
@@ -53,6 +53,10 @@ pub(crate) struct Model {
   pub(crate) system: System,
   /// The opener of an address in the browser of the client.
   pub(crate) browse: fn(&str) -> io::Result<()>,
+  /// How long a form takes no key after it shows: [`HOLD`], which keeps a hand from answering what
+  /// it did not read, and none while the clocks stand still, as in a capture, where a script
+  /// presses each key and the clock that the hold reads never moves.
+  pub(crate) hold: Duration,
   pub(crate) tokens: Tokens,
   /// Why the window could not keep its cards.
   pub(crate) fault: Option<String>,
@@ -86,6 +90,7 @@ impl Model {
       zone: options.zone.clone(),
       system: options.system,
       browse: options.browse,
+      hold: if options.still { Duration::ZERO } else { HOLD },
       tokens,
       fault: None,
       colors: Colors::new(),

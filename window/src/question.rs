@@ -148,7 +148,7 @@ impl Model {
     let mine = typed
       || matches!(does, Some(Does::Send | Does::Empty | Does::NextQuestion | Does::Tick))
       || (values > 0 && matches!(does, Some(Does::Up | Does::Down)));
-    if mine && self.client.moved.saturating_sub(form.since) < HOLD {
+    if mine && self.client.moved.saturating_sub(form.since) < self.hold {
       return Keyed::Taken;
     }
     let says =
