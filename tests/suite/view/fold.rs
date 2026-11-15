@@ -5,10 +5,10 @@ use serde_json::{Value, json};
 
 use std::collections::HashMap;
 
-use super::{Fold, maker_of};
-use crate::engine;
-use crate::view::{Maker, Pause, RunState, State};
-use crate::world::catalog::leveled;
+use furb::{
+  engine,
+  view::{Fold, Maker, Pause, RunState, State},
+};
 
 /// A paused prompt, a rung born under its pause, and a later wake, with what the engine of the live
 /// life finds for each fact: the acts that it covers, and the pause that holds a new act.
@@ -204,22 +204,32 @@ fn an_actor_names_its_model_and_its_effort_unless_the_roster_holds_its_whole_nam
     model: model.to_owned(),
     effort: effort.map(str::to_owned),
   };
-  assert_eq!(maker_of("claude-cli:org/plain", &[], &[]), model("claude-cli:org/plain", None));
-  assert_eq!(
-    maker_of("claude-cli:org/plain/high", &[], &[]),
-    model("claude-cli:org/plain", Some("high"))
-  );
-  let whole = ["claude-cli:org/high".to_owned()];
-  assert_eq!(maker_of("claude-cli:org/high", &whole, &[]), model("claude-cli:org/high", None));
-  // The id of a model of a local server holds a slash, and the one parse of the catalog reads it.
-  for (actor, name, level) in [
-    ("local:org/qwen3", "local:org/qwen3", None),
-    ("local:org/qwen3/low", "local:org/qwen3", Some("low")),
+  let roster = json!([["claude-cli:org/high", ["low"], 200_000]]);
+  let mut fold = Fold::default();
+  for fact in [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["stand", "stand1", "chain1", "chain1"]),
+    json!(["done", "stand1", "journal", [roster, "/tmp", "claude-cli:org/high"]]),
   ] {
-    assert_eq!(leveled(actor), (name, level), "{actor}");
-    assert_eq!(maker_of(actor, &[], &[]), model(name, level), "{actor}");
+    fold.recorded(&fact);
   }
-  assert_eq!(maker_of("", &[], &[]), Maker::Engine);
+  // The id of a model of a local server holds a slash, and the one parse of the catalog reads it.
+  for (at, (actor, maker)) in [
+    ("claude-cli:org/plain", model("claude-cli:org/plain", None)),
+    ("claude-cli:org/plain/high", model("claude-cli:org/plain", Some("high"))),
+    ("claude-cli:org/high", model("claude-cli:org/high", None)),
+    ("local:org/qwen3", model("local:org/qwen3", None)),
+    ("local:org/qwen3/low", model("local:org/qwen3", Some("low"))),
+    ("", Maker::Engine),
+  ]
+  .into_iter()
+  .enumerate()
+  {
+    let rung = format!("rung{at}");
+    let made = fold.recorded(&json!(["rung", rung, "chain1", "chain1", "", "", actor]));
+    let made = made.into_iter().find(|act| act.id == rung).map(|act| act.maker);
+    assert_eq!(made, Some(maker), "{actor}");
+  }
 }
 
 #[test]

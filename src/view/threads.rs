@@ -517,10 +517,6 @@ pub fn attention<S: BuildHasher>(
   count
 }
 
-#[cfg(test)]
-#[path = "threads.test.rs"]
-mod tests;
-
 /// The acts of one chain beside the acts of the life, which say whether an agent works on that
 /// chain with no walk of the whole life.
 struct OnChain<'r, 'a> {

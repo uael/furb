@@ -627,7 +627,3 @@ fn display(value: &Value) -> String {
     one => serde_json::to_string_pretty(one).unwrap_or_default(),
   }
 }
-
-#[cfg(test)]
-#[path = "fold.test.rs"]
-mod test;

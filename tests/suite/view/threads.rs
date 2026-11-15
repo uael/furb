@@ -5,11 +5,11 @@ use std::collections::HashMap;
 
 use serde_json::{Value, json};
 
-use super::{
+use furb::view::{Act, Fold, Held, State};
+use furb::view::{
   Aside, Attention, NoteRun, Rows, ThreadNode, chain_asides, chain_notes, chain_threads,
   chain_tree, open,
 };
-use crate::view::{Act, Fold, Held, State};
 use furb_wire::Began;
 use std::{fs, hint::black_box, iter, slice, time::Instant};
 
