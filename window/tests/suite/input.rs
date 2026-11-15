@@ -196,6 +196,8 @@ fn the_input_shows_in_grey_the_rest_of_what_he_sent_and_the_right_arrow_takes_it
   // One word of it with alt and the right arrow.
   app.press("ctrl+c");
   app.paste("say");
+  // The rest shows in grey once the window holds what he wrote, and only then a key takes it.
+  typed(&app, &second);
   app.press("alt+right");
   app.paste("!");
   typed(&app, "say what!");
@@ -269,6 +271,9 @@ fn a_thread_that_ended_turns_the_input_to_it_and_a_reply_opens_it_and_the_button
   // A reply opens it again, and its model asks him.
   sent(&app, &format!("and which key sends the queue {ASKS}"));
   shows(&app, "Which key sends the queue?");
+  // The card says that the thread asks him once its machine told it, and only then a resolve
+  // needs no confirm of a stop of its work.
+  shows(&app, "◆ Input");
   let frame = shows(&app, " Resolve ");
   assert!(!frame.contains("✓ Resolved"), "{frame}");
   // The button resolves it: its close ends the question, and the head says that it is resolved.
@@ -321,6 +326,8 @@ fn ctrl_c_empties_the_input_then_names_his_last_message_that_runs_and_takes_it_b
   app.press("ctrl+c");
   let frame = shows(&app, "Stopped");
   assert!(frame.contains(&format!("┃ one {WORKS}")), "{frame}");
+  // The card of the thread says that it works no more once its machine heard the stop.
+  assert!(app.wait_until(PATIENCE, || !app.text().contains("Working 1")), "{}", app.text());
   // The first press empties the input, and the second says that nothing of his runs now.
   app.press("ctrl+c");
   app.press("ctrl+c");
