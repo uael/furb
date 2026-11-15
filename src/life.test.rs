@@ -1301,6 +1301,19 @@ fn a_life_never_tells_that_the_operator_left_the_catalog() {
   }
 }
 
+/// A record whose checkpoint carries the enables of its root, on which a life that keeps it
+/// reloaded the words of the extensions that changed at its stand, opens again with no drift: a
+/// later life reads those enables at that stand too, which the journal says again, so it plays what
+/// the life played.
+#[test]
+fn a_record_whose_root_reloaded_its_extensions_on_a_checkpoint_opens_again_with_no_drift() {
+  let at = yard("reloaded");
+  laid(&replays().join("lives.jsonl.zst"), &at.join("record.jsonl"));
+  drop(opening(&at, true).boot::<String>([]).unwrap());
+  let again = Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]);
+  assert!(again.is_ok(), "the record opens again: {:?}", again.err());
+}
+
 #[test]
 fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
   for (record, first) in [("ranks.jsonl", "bash2"), ("speaker.jsonl", "reply4")] {
