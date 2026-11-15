@@ -290,10 +290,18 @@ async fn a_life_that_does_not_open_ends_with_its_fault() {
   let opening = Opening { record: Some(at.display().to_string()), ..scripted(&at, &[]) };
   let life = Life::spawn(opening).unwrap();
   let mut events = Box::pin(life.events(0));
+  // A window that attaches at the tip, past each place of the log, hears the end too.
+  let mut tip = Box::pin(life.events(Seq::MAX));
   let got = until(&mut events, |event| matches!(event, Event::Ended(_))).await;
   let Event::Ended(Some(fault)) = &*got.last().unwrap().1 else { panic!("the end has a fault") };
   assert!(!fault.is_empty());
   assert!(events.next().await.is_none());
+  let heard = time::timeout(
+    Duration::from_secs(10),
+    until(&mut tip, |event| matches!(event, Event::Ended(_))),
+  );
+  let heard = heard.await.expect("a reader at the tip hears the end of the life");
+  assert!(matches!(&*heard.last().unwrap().1, Event::Ended(Some(why)) if why == fault));
   // A command that reaches the life after its end hears the fault that ended it.
   let refused = life.send(Command::Standing).await;
   assert!(matches!(&refused, Err(LifeError::Refused(why)) if why == fault), "{refused:?}");

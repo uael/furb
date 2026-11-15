@@ -777,7 +777,12 @@ impl Life {
       let log = Retell { from: Source::Log(format!("{path}.log")), wanted: wanted(&gone.logged) };
       [record, log].into_iter().filter(|one| !one.wanted.is_empty()).collect()
     });
-    Since { logged: logged.collect(), retells, tip: self.kept.log.len() as Seq }
+    // The tip of a life that ended is its end, so a reader that comes at the tip hears the end.
+    let ended = matches!(
+      self.kept.log.last(),
+      Some(Some(Slot::Told(event))) if matches!(**event, Event::Ended(_))
+    );
+    Since { logged: logged.collect(), retells, tip: self.kept.log.len() as Seq - Seq::from(ended) }
   }
 }
 
@@ -1621,6 +1626,7 @@ impl LifeHandle {
   /// ends the life. A reader that stands too far behind the life reads again from the log of the
   /// life, which holds no event that a later one replaced: of each act its last event, and no part
   /// that a model wrote for a rung that has its word. Such a reader may find a gap in the places.
+  /// A reader from a place past the tip, as a window that reads no event, gives the end alone.
   pub fn events(&self, from: Seq) -> impl Streams<Item = Logged> + Send + 'static {
     stream::unfold(self.reader(self.readers.subscribe(), from, true), Reader::next)
   }
@@ -1665,6 +1671,7 @@ impl LifeHandle {
       ahead: None,
       behind: true,
       over: false,
+      ends: false,
       retells,
     }
   }
@@ -1680,7 +1687,7 @@ impl LifeHandle {
 /// A reader of the events of a life: the place of the next event that it gives, the events that it
 /// read from the log and did not give yet, the facts among them that the log let go as the record
 /// gives them again, with the next of them, whether it stands behind the life, whether it gave
-/// the end, and whether it reads those facts again.
+/// the end, whether it gives the end alone, and whether it reads those facts again.
 struct Reader {
   life: LifeHandle,
   receiver: broadcast::Receiver<Logged>,
@@ -1691,12 +1698,25 @@ struct Reader {
   ahead: Option<Logged>,
   behind: bool,
   over: bool,
+  ends: bool,
 }
 
 impl Reader {
+  /// The next event, and the reader after it, or only the end of the life for a reader that came
+  /// past the tip.
+  async fn next(mut self) -> Option<(Logged, Self)> {
+    loop {
+      let (logged, reader) = self.step().await?;
+      if !reader.ends || reader.over {
+        return Some((logged, reader));
+      }
+      self = reader;
+    }
+  }
+
   /// The next event, and the reader after it: of the events read from the log and the facts that
   /// the record gives again, the one of the first place.
-  async fn next(mut self) -> Option<(Logged, Self)> {
+  async fn step(mut self) -> Option<(Logged, Self)> {
     while !self.over {
       if self.ahead.is_none()
         && let Some(retold) = &mut self.retold
@@ -1724,7 +1744,12 @@ impl Reader {
         }
       } else if self.behind {
         self.behind = false;
-        let Since { logged, retells, .. } = self.life.since(self.next).await?;
+        let Since { logged, retells, tip } = self.life.since(self.next).await?;
+        // A reader from past the tip, as a window that reads no event, still hears the end.
+        if self.next > tip {
+          (self.next, self.behind, self.ends) = (tip, true, true);
+          continue;
+        }
         self.read = logged.into();
         self.retold = if self.retells { retold(retells) } else { None };
         self.ahead = None;

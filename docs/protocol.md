@@ -234,7 +234,9 @@ daemon answers requests in any order.
   passes, and its `retry`: the `attempt` that comes, the `most` attempts, the seconds that the provider `wait`s before
   that attempt and the second of the epoch `at` which it comes, and `why` the attempt before it failed; what the model
   wrote for that rung before it is void. After `reborn`, which a life tells once it told the past of its record, the
-  life goes on from its last checkpoint, and its acts come again as they stand.
+  life goes on from its last checkpoint, and its acts come again as they stand. A peer that attaches from a place past
+  the tip, as a window that reads the cards and the pages and no event, hears the event `ended` alone, so it learns
+  that the life ended and why, as when its open failed.
 - The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
   checkpoint. The log lets go of each of them once it told it, since the record holds it, and of each fact that an open
   told, which the file of the log of the record holds, and a window that attaches before them reads them again from the
