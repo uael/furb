@@ -342,9 +342,9 @@ fn the_box_of_the_context_says_how_full_the_window_of_the_chain_is_and_a_click_s
   let kinds = [
     "Context ▾                       12%",
     &bar,
-    "■ Turns                   226   <1%",
-    "■ Doctrine               1.1k   <1%",
     "■ Engine                 122k   12%",
+    "■ Doctrine               1.1k   <1%",
+    "■ Turns                   226   <1%",
     "■ Free                   876k   88%",
     counts,
   ];

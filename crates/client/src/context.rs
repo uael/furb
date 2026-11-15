@@ -23,15 +23,16 @@ pub enum Content {
 }
 
 impl Content {
-  /// Each kind, in the order of the bar.
+  /// Each kind, in the order of the bar, which is the order in which the chain reads them: its
+  /// system prompt first, then its setup, then the turns of the work at its end.
   pub const ALL: [Self; 7] = [
-    Self::Turns,
+    Self::Engine,
+    Self::Doctrine,
     Self::Extensions,
     Self::Skills,
     Self::Mcp,
     Self::Memory,
-    Self::Doctrine,
-    Self::Engine,
+    Self::Turns,
   ];
 
   /// The name of the kind, as the box writes it.
@@ -148,8 +149,9 @@ fn kinds(turns: &[Value]) -> Vec<(Content, u64)> {
     Content::ALL.into_iter().map(|kind| (kind, tokens(characters[slot(kind)] * rate))).collect();
   kinds[slot(Content::Engine)].1 = tokens(engine);
   // The turns take what the rounding left, so the kinds sum to what the answer read.
-  let others: u64 = kinds.iter().skip(1).map(|one| one.1).sum();
-  kinds[0].1 = tokens(read).saturating_sub(others);
+  let turns = slot(Content::Turns);
+  let others: u64 = kinds.iter().enumerate().filter(|one| one.0 != turns).map(|one| one.1.1).sum();
+  kinds[turns].1 = tokens(read).saturating_sub(others);
   kinds.retain(|one| one.1 > 0);
   kinds
 }

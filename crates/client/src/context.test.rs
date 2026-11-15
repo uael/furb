@@ -28,11 +28,11 @@ fn the_kinds_of_an_answer_sum_to_what_it_read_and_the_engine_takes_what_no_turn_
     turn("assistant", "close('b')", Some(1236.5)),
   ];
   let parted = [
-    (Content::Turns, 36),
+    (Content::Engine, 1000),
+    (Content::Doctrine, 109),
     (Content::Extensions, 53),
     (Content::Memory, 39),
-    (Content::Doctrine, 109),
-    (Content::Engine, 1000),
+    (Content::Turns, 36),
   ];
   assert_eq!(kinds(&turns), parted.to_vec());
 }
