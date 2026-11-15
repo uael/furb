@@ -52,7 +52,7 @@ use furb::{
     config::Change,
   },
 };
-use futures::{SinkExt, Stream, StreamExt, future};
+use futures::{FutureExt, SinkExt, Stream, StreamExt, future};
 use serde_json::Value;
 use tokio::{
   net::{TcpListener, TcpStream},
@@ -1630,18 +1630,25 @@ impl Watch {
     let mut events = pin!(self.life.held(0));
     let mut quiet = Quiet::new(self.stall);
     let mut end = None;
-    loop {
+    'watch: loop {
       tokio::select! {
         biased;
-        next = events.next() => match next {
-          Some((_, event)) => {
+        next = events.next() => {
+          // Each event that is ready now is heard before the watch looks when its next stall
+          // comes, since a look reads each act that lives and a birth tells thousands of events.
+          let mut next = next;
+          loop {
+            let Some((_, event)) = next else { break 'watch };
             if let Event::Ended(fault) = &*event {
               end = Some(fault.clone());
             }
             quiet.heard(&event);
+            match events.next().now_or_never() {
+              Some(ready) => next = ready,
+              None => break,
+            }
           }
-          None => break,
-        },
+        }
         () = until(quiet.due()) => {
           for Stall { acts, notice, chain } in quiet.stalled(Instant::now()) {
             let (life, born) = (self.record.clone(), self.born);

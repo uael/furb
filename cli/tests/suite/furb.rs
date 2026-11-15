@@ -288,7 +288,10 @@ fn a_life_goes_on_from_its_image_and_its_record_replays_with_no_drift() {
   assert_eq!(turns(), imaged, "the turns of the image are the turns of the record");
   assert_eq!(printed(yard.kept(&["run", "close(k)"]), ""), "42\n");
   let held = fs::read(&image).expect("the image of the life that opened by the record");
-  assert!(held.starts_with(b"{\"version\":"), "a life that keeps drops an image that does not agree");
+  assert!(
+    held.starts_with(b"{\"version\":"),
+    "a life that keeps drops an image that does not agree"
+  );
   assert_eq!(printed(yard.kept(&["run", "close(k + 1)"]), ""), "43\n");
 }
 
