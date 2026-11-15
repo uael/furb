@@ -21,12 +21,6 @@ impl Model {
       return vec![Entry { left: "Reading the settings…".to_owned(), ..Entry::default() }];
     };
     let row = |(place, one): (usize, &Setting)| {
-      let layer = match one.layer {
-        Some(Layer::User) => "user",
-        Some(Layer::Project) => "project",
-        Some(Layer::Local) => "local",
-        None => "default",
-      };
       let says = one.property.as_ref().map(|one| format!("  {}", one.description));
       // Each kit names its keys, a name in an object of furb stands with furb, and a key that no
       // schema names stands apart.
@@ -41,7 +35,7 @@ impl Model {
         part,
         left: one.key.join("."),
         says: says.unwrap_or_default(),
-        right: format!("{}  {layer}", one.value),
+        right: stands(one),
         choice: Choice::Setting(place),
         ..Entry::default()
       }
@@ -82,16 +76,30 @@ impl Model {
     rows
   }
 
-  /// The row of the setting whose value he writes: its key, what it does, and what it takes.
+  /// The row of the setting whose value he writes: its key, what it does and what it takes, and
+  /// the value that wins for it now with the layer that gives it.
   pub(crate) fn value(&self, place: usize) -> Vec<Entry> {
     let Some(one) = self.client.setting(place) else { return Vec::new() };
     let property = one.property.as_ref();
+    let takes = property.map_or_else(|| "any value of JSON".to_owned(), Property::wanted);
+    let says = property.map_or_else(String::new, |one| format!("{} ", one.description));
     vec![Entry {
       left: one.key.join("."),
-      says: property.map(|one| format!("  {}", one.description)).unwrap_or_default(),
-      right: property.map_or_else(|| "any value of JSON".to_owned(), Property::wanted),
+      says: format!("  {says}It takes {takes}."),
+      right: stands(one),
       choice: Choice::Value(place),
       ..Entry::default()
     }]
   }
+}
+
+/// The value that wins for a setting and the layer that gives it, as `32768  default`.
+fn stands(one: &Setting) -> String {
+  let layer = match one.layer {
+    Some(Layer::User) => "user",
+    Some(Layer::Project) => "project",
+    Some(Layer::Local) => "local",
+    None => "default",
+  };
+  format!("{}  {layer}", one.value)
 }

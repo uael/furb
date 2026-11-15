@@ -734,10 +734,14 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         // Enter flips a boolean in the local config of the project, as the key `skills` takes it,
         // and the list reads it again.
         step("b", &[Act::Type("naming"), Act::Key("Down"), Act::Key("Enter")], "true  local"),
-        // The kit that the change turned on shows its keys under its name, each with what it does.
-        step("c", &[Act::Key("Escape"), Act::Key("C-x"), Act::Key(",")], "naming.actor"),
+        // The kit that the change turned on lists its keys, each with what it does.
+        step(
+          "c",
+          &[Act::Key("Escape"), Act::Key("C-x"), Act::Key(","), Act::Type("naming")],
+          "naming.actor",
+        ),
         // A key of text takes the value that he writes, in the layer of its scope.
-        step("d", &[Act::Type("actor"), Act::Key("Enter")], "a string"),
+        step("d", &[Act::Type(".actor"), Act::Key("Enter")], "a string"),
         step("e", &[Act::Type("opus"), Act::Key("Enter")], "\"opus\"  user"),
         // A value that the property of its key does not take is refused, with what it takes.
         step(
@@ -778,7 +782,7 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step("x-thread", &[Act::Type("Which skills play here?"), Act::Key("Enter")], "reply 1"),
         // Each skill of the session, the extensions that play first, each with how it plays and
         // where it comes from.
-        step("a", &[Act::Key("C-x"), Act::Key("x")], "On need"),
+        step("a", &[Act::Key("C-x"), Act::Key("x")], "on by default"),
         // Enter turns an extension on, and it plays at once.
         step("b", &[Act::Type("web"), Act::Key("Enter")], "on  furb"),
         // A second enter turns it off for the next session, and it plays on until this one ends.

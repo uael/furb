@@ -45,10 +45,15 @@ fn the_extensions_of_a_session_say_how_each_plays_and_enter_turns_one_on_at_once
   shows(&app, "which skills play here");
   app.press("ctrl+x");
   app.press("x");
-  // The life of the test opens with no skill, so each default one plays at the next session.
-  plays(&app, "web", "off  furb");
+  // The life of the test opens with no skill, so each default one plays at the next session. Each
+  // says what it does under its name, so a filter brings a row in view.
+  app.type_text("memory");
   plays(&app, "memory", "on at the next session  furb");
+  for _ in 0.."memory".len() {
+    app.press("backspace");
+  }
   app.type_text("web");
+  plays(&app, "web", "off  furb");
   app.press("enter");
   plays(&app, "web", " on  furb");
   // A second enter turns it off, and it plays on until the session ends.

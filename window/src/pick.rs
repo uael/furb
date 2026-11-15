@@ -17,11 +17,11 @@ use furb_host::protocol::Model as Offered;
 use crate::{
   input::named,
   keys::{self, Bound, Does},
-  line::{Line, capital, run, spread},
+  line::{Line, capital, run, spread, wrapped},
   list::project,
   model::{Key, Model},
   thread::{Click, Row, hued},
-  tokens::{BESIDE, OVER, PART, Role, SIDE},
+  tokens::{BESIDE, OVER, PART, PARTS, Role, SIDE},
 };
 
 /// What a list part lists.
@@ -118,6 +118,20 @@ pub(crate) struct Entry {
   pub(crate) choice: Choice,
 }
 
+impl Entry {
+  /// The columns that the entry takes on one row: its bar, the slot of a badge when the list has
+  /// badges, its text, what it says, and its right after a gap, with the column after it.
+  fn width(&self, badged: bool) -> usize {
+    let badge = if badged { 3 } else { 0 };
+    1 + badge + self.left.width() + self.says.width() + 2 + self.right.width() + 1
+  }
+}
+
+/// Whether a row of the entries stands in a project, so each row keeps the slot of a badge.
+fn badged(entries: &[Entry]) -> bool {
+  entries.iter().any(|one| one.project.is_some())
+}
+
 /// The list part as the window draws it over the dimmed window: its column, its row, its columns,
 /// and its rows, each row of an entry with the click that takes it.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -136,6 +150,12 @@ const RECENT: usize = 5;
 const FRAME: usize = 7;
 
 impl Pick {
+  /// Whether each entry of the list is a thing that says what it does, as a setting or an
+  /// extension, so what it says stands whole under its name, as a page of settings shows it.
+  fn describes(self) -> bool {
+    matches!(self, Self::Settings | Self::Value(_) | Self::Skills)
+  }
+
   fn title(self) -> &'static str {
     match self {
       Self::GoTo => "Go to",
@@ -605,13 +625,16 @@ impl Model {
   /// The columns where a list part stands at its middle: those of the home while the list stands
   /// beside it, so the part covers no card, else the whole window. The columns of the part, which
   /// leave two on each side at least, or those of the box of the input for the history, which
-  /// grows from it.
-  fn spans(&self) -> (u16, u16) {
+  /// grows from it. A part grows past its least width as far as its widest entry asks, up to its
+  /// most, so each entry stands whole on one row while the window has the room.
+  fn spans(&self, entries: &[Entry]) -> (u16, u16) {
     let beside = self.listed() && self.size.0 >= BESIDE;
     let columns = if beside { self.size.0.saturating_sub(SIDE) } else { self.size.0 };
     let rises = self.picker.as_ref().is_some_and(|one| one.of == Pick::History);
     let input = u16::try_from(self.wide().saturating_sub(2)).unwrap_or(PART);
-    (columns, if rises { input } else { PART.min(columns.saturating_sub(4)) })
+    let asked = entries.iter().map(|one| one.width(badged(entries)) + 4).max().unwrap_or_default();
+    let asked = u16::try_from(asked).unwrap_or(PARTS).clamp(PART, PARTS);
+    (columns, if rises { input } else { asked.min(columns.saturating_sub(4)) })
   }
 
   /// The open list part as the window draws it, at the middle of the columns of the home and under
@@ -622,7 +645,8 @@ impl Model {
     let picker = self.picker.as_ref()?;
     let t = &self.tokens;
     let (muted, prose) = (t.style(Role::Muted), t.style(Role::Prose));
-    let (columns, width) = self.spans();
+    let entries = self.entries();
+    let (columns, width) = self.spans(&entries);
     let room = usize::from(width).saturating_sub(4);
     let padded = |line: Line| {
       let mut row = vec![run("  ", Style::new())];
@@ -630,7 +654,6 @@ impl Model {
       row.push(run("  ", Style::new()));
       row
     };
-    let entries = self.entries();
     let rises = picker.of == Pick::History;
     let mut rows = vec![Row::default()];
     let close = vec![run(self.key(Does::Close), muted)];
@@ -651,7 +674,7 @@ impl Model {
       rows.extend([filter.clone(), Row::default()]);
     }
     let fits = usize::from(self.size.1).saturating_sub(2 * usize::from(OVER) + FRAME).max(1);
-    let mut shown = self.shown_entries(&entries, picker, fits);
+    let mut shown = self.shown_entries(&entries, picker, (room, fits));
     if rises {
       rows.push(Row::default());
       shown.reverse();
@@ -692,22 +715,23 @@ impl Model {
 
   /// The rows of the entries that the part shows: a head before the first entry of each part of the
   /// list while no text filters it, and each entry, the chosen one on the lifted ground with a bar
-  /// in the hue of its thread, as the selected card of the list. A row of an entry carries its
-  /// place. The rows start at the one that keeps the chosen entry in view.
+  /// in the hue of its thread, as the selected card of the list. In a list of things that say what
+  /// they do, what each says stands whole under its name. A row of an entry carries its place. The rows start at the one that keeps the chosen entry in
+  /// view.
   fn shown_entries(
     &self,
     entries: &[Entry],
     picker: &Picker,
-    fits: usize,
+    (room, fits): (usize, usize),
   ) -> Vec<(Option<usize>, Line)> {
     let t = &self.tokens;
     let (muted, prose) = (t.style(Role::Muted), t.style(Role::Prose));
-    let room = usize::from(self.spans().1).saturating_sub(4);
     let mut all: Vec<(Option<usize>, Line)> = Vec::new();
     let mut part: &str = "";
     // A part whose rows stand in projects keeps the slot of the badge in each row, so each text
     // starts in one column.
-    let badged = entries.iter().any(|one| one.project.is_some());
+    let badged = badged(entries);
+    let under = picker.of.describes();
     for (at, entry) in entries.iter().enumerate() {
       if picker.filter.is_empty() && entry.part != part && !entry.part.is_empty() {
         if !all.is_empty() {
@@ -729,14 +753,27 @@ impl Model {
         None if badged => vec![run("   ", ground(Style::new()))],
         None => Vec::new(),
       };
-      let mut left = vec![bar];
+      let indent = 1 + badge.iter().map(|one| one.content.width()).sum::<usize>();
+      let mut left = vec![bar.clone()];
       left.extend(badge);
       left.extend(lit(&entry.left, &entry.lit, ground(prose), ground(prose.fg(t.accent))));
-      left.push(run(entry.says.clone(), ground(muted)));
+      let says = entry.says.trim();
+      if !under {
+        left.push(run(entry.says.clone(), ground(muted)));
+      }
       let right = vec![run(entry.right.clone(), ground(muted)), run(" ", ground(Style::new()))];
       all.push((Some(at), spread(left, right, room, ground(Style::new()))));
+      let lines = if under && !says.is_empty() { wrapped(says, room - indent - 1) } else { vec![] };
+      for line in lines {
+        let line = vec![
+          bar.clone(),
+          run(" ".repeat(indent - 1), ground(Style::new())),
+          run(line, ground(muted)),
+        ];
+        all.push((Some(at), spread(line, Vec::new(), room, ground(Style::new()))));
+      }
     }
-    let chosen = all.iter().position(|one| one.0 == Some(picker.at)).unwrap_or_default();
+    let chosen = all.iter().rposition(|one| one.0 == Some(picker.at)).unwrap_or_default();
     let top = (chosen + 1).saturating_sub(fits);
     let mut shown: Vec<(Option<usize>, Line)> = all.into_iter().skip(top).take(fits).collect();
     // A head or a blank row that the room cuts from the entries under it does not show.

@@ -51,8 +51,12 @@ pub(crate) const KEYS: usize = 12;
 /// list hears while the hand is on it waits until then, so the list moves under no pointer.
 pub const AWAY: Duration = Duration::from_millis(1500);
 
-/// The columns of a list part over the window, as Go to, the commands and each key.
+/// The columns of a list part over the window, as Go to, the commands and each key, at least.
 pub(crate) const PART: u16 = 60;
+
+/// The most columns of a list part, whose entries say more than its least width holds, as the
+/// settings and the extensions with what each does.
+pub(crate) const PARTS: u16 = 100;
 
 /// The rows of the dimmed window that stand above a list part, and under it at least.
 pub(crate) const OVER: u16 = 3;
