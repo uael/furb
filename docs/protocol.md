@@ -339,8 +339,8 @@ daemon answers requests in any order.
   - `exchanges`, each a message of the thread with all that answers it: the prompt of the thread, then each message
     that an operator said on it. A wake or an acknowledgment that the engine says on the thread is no exchange. What
     answers a message is what came after it and before the next message, whichever prompt of the thread each rung
-    advances. An exchange holds `at`, its place in the thread, 0 for the prompt; `message`, its act; `by`, who said
-    it; `text`; `runs`, whether its act still runs, which a `cancel` takes back, since a message said on a thread
+    advances. An exchange holds `at`, its place in the thread, 0 for the prompt; `message`, its act; `said_at`, the
+    moment that it was said; `by`, who said it; `text`; `runs`, whether its act still runs, which a `cancel` takes back, since a message said on a thread
     that works is done at once; `block`, the code that answers it once a model answers; and `said`, what the answer says to the
     operator, in the order it was said: each `notice` and `question` of its words, and each `answer`, the text that
     closed a message there. A `question` holds the `shape` of its answer and, once it is closed,

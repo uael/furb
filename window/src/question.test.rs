@@ -59,6 +59,7 @@ fn asked(shape: &str, system: System) -> Model {
   let exchange = Exchange {
     at: 0,
     message: "prompt0".to_owned(),
+    said_at: 0,
     by: Maker::Operator,
     python: false,
     runs: false,

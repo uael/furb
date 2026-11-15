@@ -28,6 +28,7 @@ fn exchange(at: usize) -> Exchange {
   Exchange {
     at,
     message: format!("prompt{at}"),
+    said_at: 0,
     by: Maker::Operator,
     python: false,
     runs: false,

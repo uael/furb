@@ -2,9 +2,12 @@
 //! which an act that its page shows began or ended, and the thread shows what it was just after
 //! that moment, page by page, as the daemon folds it. A play steps forward on its own until now.
 
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
-use furb_wire::protocol::{Answer, Frame, Verb};
+use furb_wire::{
+  Exchange,
+  protocol::{Answer, Frame, Verb},
+};
 use serde_json::Value;
 
 use crate::{Asked, Client, Key};
@@ -13,14 +16,16 @@ use crate::{Asked, Client, Key};
 const STEP: Duration = Duration::from_millis(120);
 
 /// The bar of the time of a thread: the moments that its machine gave, the one that the thread
-/// shows, none for now, whether they changed since the machine gave them, and when the play last
-/// stepped while it plays.
+/// shows, none for now, whether they changed since the machine gave them, when the play last
+/// stepped while it plays, and the first line of each message that a page of the thread gave, by
+/// the moment that it was said, which the track marks.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Time {
   pub moments: Vec<u64>,
   pub at: Option<usize>,
   pub stale: bool,
   pub played: Option<Duration>,
+  pub messages: BTreeMap<u64, String>,
 }
 
 impl Time {
@@ -28,6 +33,21 @@ impl Time {
   /// after it.
   pub fn moment(&self) -> Option<u64> {
     self.at.and_then(|at| self.moments.get(at).copied())
+  }
+
+  /// The messages of exchanges that a page gave: a word of Python by the first line of its code.
+  pub fn heard<'a>(&mut self, exchanges: impl IntoIterator<Item = &'a Exchange>) {
+    for one in exchanges {
+      let code = one.block.as_ref().and_then(|block| block.lines.first()).map(|line| &line.text);
+      let text = if one.python { code.map_or("", String::as_str) } else { &one.text };
+      self.messages.insert(one.said_at, text.lines().next().unwrap_or_default().to_owned());
+    }
+  }
+
+  /// The message in force at a place among the moments: the last one said by then.
+  pub fn message(&self, at: usize) -> Option<&str> {
+    let moment = *self.moments.get(at)?;
+    self.messages.range(..=moment).next_back().map(|(_, text)| text.as_str())
   }
 
   /// The place of a moment by its place among them: the last is now.
@@ -52,7 +72,9 @@ impl Client {
     if thread.time.take().is_some_and(|time| time.at.is_some()) {
       thread.moved();
     } else if !thread.key.2.is_empty() {
-      thread.time = Some(Time { stale: true, ..Time::default() });
+      let mut time = Time { stale: true, ..Time::default() };
+      time.heard(thread.exchanges.values());
+      thread.time = Some(time);
     }
   }
 

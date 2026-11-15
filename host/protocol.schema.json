@@ -4524,6 +4524,12 @@
         "message": {
           "type": "string"
         },
+        "said_at": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
         "by": {
           "$ref": "#/definitions/Maker"
         },
@@ -4562,7 +4568,7 @@
         "text",
         "said"
       ],
-      "description": "One message of a thread with all that answers it: its place in the thread, 0 for the prompt of\nthe thread, the act of the message, who said it and its text, whether it is a word of Python\nthat an operator ran on the thread, whose block holds its code and which has no text, whether\nthe message still runs, the block of code that answers it once a model answers, and what the\nanswer says to the operator, in the order it was said. A message that the operator said on a\nthread that works is done at once, since its model reads it at its next step, so only one that\nasks still runs. A message is the prompt of the thread, what an operator said on it, or a word\nthat he ran on it, and what answers it is what came after it and before the next message."
+      "description": "One message of a thread with all that answers it: its place in the thread, 0 for the prompt of\nthe thread, the act of the message, the moment that it was said, who said it and its text, whether it is a word of Python\nthat an operator ran on the thread, whose block holds its code and which has no text, whether\nthe message still runs, the block of code that answers it once a model answers, and what the\nanswer says to the operator, in the order it was said. A message that the operator said on a\nthread that works is done at once, since its model reads it at its next step, so only one that\nasks still runs. A message is the prompt of the thread, what an operator said on it, or a word\nthat he ran on it, and what answers it is what came after it and before the next message."
     },
     "Block": {
       "type": "object",
@@ -5802,5 +5808,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 48
+  "x-protocol": 49
 }

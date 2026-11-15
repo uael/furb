@@ -4,13 +4,12 @@
 
 use std::cmp::Ordering;
 
-use furb_client::Time;
 use opentui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
   keys::Does,
-  line::{Line, run},
+  line::{Line, cut, run},
   model::Model,
   thread::{Click, Hot, Row},
   tokens::Role,
@@ -20,15 +19,12 @@ use crate::{
 const BEFORE: usize = 5;
 
 impl Model {
-  /// The row of the bar of the time of the open thread, and a blank under it, while it shows.
+  /// The row of the bar of the time of the open thread while it shows, and under it the first line
+  /// of the message in force at the moment under the pointer, while the pointer is on its track.
   pub(crate) fn time_rows(&self) -> Vec<Row> {
     let Some(time) = self.client.thread.as_ref().and_then(|one| one.thread.time.as_ref()) else {
       return Vec::new();
     };
-    vec![self.time_row(time), Row::default()]
-  }
-
-  fn time_row(&self, time: &Time) -> Row {
     let t = &self.tokens;
     let (accent, muted) = (Style::new().fg(t.accent), self.tokens.style(Role::Muted));
     let count = time.moments.len();
@@ -44,23 +40,40 @@ impl Model {
     let mut line: Line = vec![run("  ", muted), run(play, accent), run(" ", muted)];
     let mut hot: Vec<Hot> = vec![(2..4, Some(Click::Play))];
     // Each column of the track stands for the moment nearest to its share of the track, so a
-    // click takes the thread there; the column of the moment that shows holds the mark.
-    let last = count.saturating_sub(1);
-    let place = |column: usize| (column * last + (room.max(2) - 1) / 2) / (room.max(2) - 1);
-    let mark = if count > 1 { (at * (room.max(2) - 1) + last / 2) / last } else { room };
-    for column in 0..room {
-      let (sign, style) = match column.cmp(&mark) {
-        Ordering::Less => ("━", accent),
-        Ordering::Equal => ("●", accent),
-        Ordering::Greater => ("─", Style::new().fg(t.border)),
+    // click takes the thread there. The column of the moment that shows holds the mark, and the
+    // column of each message a diamond, so the track reads as the history of the thread.
+    let (last, span) = (count.saturating_sub(1), room.max(2) - 1);
+    let place = |column: usize| (column * last + span / 2) / span;
+    let column = |at: usize| (at * span + last / 2).checked_div(last).unwrap_or(room);
+    let said: Vec<usize> = time
+      .messages
+      .keys()
+      .map(|moment| column(time.moments.partition_point(|one| one < moment)))
+      .collect();
+    let mark = column(at);
+    for one in 0..room {
+      let past = one < mark;
+      let (sign, style) = match (one.cmp(&mark), said.contains(&one)) {
+        (Ordering::Equal, _) => ("●", accent),
+        (_, true) => {
+          (if past { "◆" } else { "◇" }, Style::new().fg(if past { t.accent } else { t.muted }))
+        }
+        (Ordering::Less, false) => ("━", accent),
+        (Ordering::Greater, false) => ("─", Style::new().fg(t.border)),
       };
       line.push(run(sign, style));
       if count > 1 {
-        hot.push((BEFORE + column..BEFORE + column + 1, Some(Click::Time(place(column)))));
+        hot.push((BEFORE + one..BEFORE + one + 1, Some(Click::Time(place(one)))));
       }
     }
     line.push(run(says, muted));
-    Row { line, hot, ..Row::default() }
+    let row = 1 + self.open_rows().len();
+    let pointed = self.pointed().filter(|(_, y)| usize::from(*y) == row);
+    let under = pointed
+      .and_then(|(x, _)| usize::from(x).checked_sub(BEFORE).filter(|one| *one < room))
+      .and_then(|one| time.message(place(one)))
+      .map(|text| Row::of(vec![run(format!("{}{}", " ".repeat(BEFORE), cut(text, room)), muted)]));
+    vec![Row { line, hot, ..Row::default() }, under.unwrap_or_default()]
   }
 
   /// The keys of the bar of the time while it shows, for the row of hints.

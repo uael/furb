@@ -433,6 +433,7 @@ impl<'a> Reader<'a> {
     Exchange {
       at,
       message: message.id.clone(),
+      said_at: message.began,
       by: message.maker.clone(),
       text: if python { String::new() } else { text(message.words.get(1)) },
       python,

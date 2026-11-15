@@ -1503,7 +1503,7 @@ export interface Page {
 }
 /**
  * One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
- * the thread, the act of the message, who said it and its text, whether it is a word of Python
+ * the thread, the act of the message, the moment that it was said, who said it and its text, whether it is a word of Python
  * that an operator ran on the thread, whose block holds its code and which has no text, whether
  * the message still runs, the block of code that answers it once a model answers, and what the
  * answer says to the operator, in the order it was said. A message that the operator said on a
@@ -1514,6 +1514,7 @@ export interface Page {
 export interface Exchange {
   at: number;
   message: string;
+  said_at?: number;
   by: Maker;
   text: string;
   python?: boolean;
@@ -1652,4 +1653,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 48;
+export const PROTOCOL = 49;

@@ -85,7 +85,7 @@ pub struct Agent {
 }
 
 /// One message of a thread with all that answers it: its place in the thread, 0 for the prompt of
-/// the thread, the act of the message, who said it and its text, whether it is a word of Python
+/// the thread, the act of the message, the moment that it was said, who said it and its text, whether it is a word of Python
 /// that an operator ran on the thread, whose block holds its code and which has no text, whether
 /// the message still runs, the block of code that answers it once a model answers, and what the
 /// answer says to the operator, in the order it was said. A message that the operator said on a
@@ -96,6 +96,8 @@ pub struct Agent {
 pub struct Exchange {
   pub at: usize,
   pub message: String,
+  #[serde(default)]
+  pub said_at: u64,
   pub by: Maker,
   pub text: String,
   #[serde(default)]

@@ -147,6 +147,9 @@ impl Thread {
     if mem::take(&mut self.replaces) {
       (self.exchanges, self.above) = (BTreeMap::new(), None);
     }
+    if let Some(time) = self.time.as_mut() {
+      time.heard(&page.exchanges);
+    }
     self.above = Some(self.above.map_or(page.above, |above| above.min(page.above)));
     (self.agents, self.context) = (page.agents, page.context);
     self.fault = None;
