@@ -122,11 +122,17 @@ impl Client {
   /// The terminal of the client took the focus again: the operator may have changed files with no
   /// life, as in an editor or with git, so the client asks the changes of each folder again.
   pub fn focused(&mut self) {
-    // An answer on its way read the folder before the focus came back, so the client forgets its
-    // ask and takes no such answer.
-    self.asked.retain(|_, one| !matches!(one, Asked::Changes(_, None)));
-    for seen in self.machines.iter_mut().flat_map(|told| told.changes.values_mut()) {
-      seen.fresh = false;
+    self.stale(|_| true);
+  }
+
+  /// The changes of each folder that matches asked again. An answer on its way read the folder
+  /// before what made it stale, so the client forgets its ask and takes no such answer.
+  fn stale(&mut self, matches: impl Fn(&str) -> bool) {
+    self.asked.retain(|_, one| !matches!(one, Asked::Changes(folder, None) if matches(folder)));
+    for (folder, seen) in self.machines.iter_mut().flat_map(|told| told.changes.iter_mut()) {
+      if matches(folder) {
+        seen.fresh = false;
+      }
     }
   }
 
@@ -137,9 +143,7 @@ impl Client {
       return;
     }
     let Some((at, folder)) = self.target_folder() else { return };
-    if let Some(seen) = self.machines.get_mut(at).and_then(|told| told.changes.get_mut(&folder)) {
-      seen.fresh = false;
-    }
+    self.stale(|one| one == folder);
     self.review = Some(Review { at, folder, chosen: 0, diff: None });
   }
 
