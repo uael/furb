@@ -1,6 +1,8 @@
 # cargo-nextest runs the Rust tests: `cargo nextest run --workspace`, which `cargo xtask test rust` runs. Each test
 # runs in a process of its own, so a test that leans on what another test left in its process fails on its own.
 
+experimental = ["setup-scripts"]
+
 [profile.default]
 # The slowest test takes about 15 s on a loaded machine. One that passes 15 s is named as slow, and one that passes
 # 60 s hangs: the runner ends it and it fails, where a wait with no end held the whole run before.
@@ -8,3 +10,18 @@ slow-timeout = { period = "15s", terminate-after = 4 }
 # A run names each test that failed, at once and again at its end, and goes on to the end of the suite.
 fail-fast = false
 failure-output = "immediate-final"
+
+# A life of a test on a fake claude writes the turns that its command line resumes in the config dir of claude, which
+# is the one of the person unless CLAUDE_CONFIG_DIR names another: each test run gives its tests a folder of its own,
+# under the target of the tree, which goes with it.
+[scripts.setup.claude]
+command = [
+  "sh",
+  "-c",
+  'mkdir -p target/claude && echo "CLAUDE_CONFIG_DIR=$(mktemp -d "$PWD/target/claude/run-XXXXXX")" >> "$NEXTEST_ENV"',
+]
+
+[[profile.default.scripts]]
+platform = "cfg(unix)"
+filter = "all()"
+setup = "claude"

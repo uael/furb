@@ -22,9 +22,10 @@ setDefaultTimeout(30000);
 
 // The temporary directory of the tests of this process is a yard of its own, which each process that a test starts
 // takes too: the one that the runner made for the run, or else a new one that goes after the last test of the
-// process. Each folder that a test makes there goes when the test ends, on a pass and on a failure, unless
-// FURB_KEEP_YARDS is set. The programs that the tests compile stay in the temporary directory of the machine, which
-// every run shares, as FURB_MACHINE_TMPDIR names it.
+// process. A life on a fake claude writes the turns that its command line resumes in the config dir of claude there,
+// and not in the one of the person. Each folder that a test makes there goes when the test ends, on a pass and on a
+// failure, unless FURB_KEEP_YARDS is set. The programs that the tests compile stay in the temporary directory of the
+// machine, which every run shares, as FURB_MACHINE_TMPDIR names it.
 const kept = process.env.FURB_KEEP_YARDS !== undefined;
 const given = process.env.FURB_YARD;
 const machine = process.env.FURB_MACHINE_TMPDIR ?? tmpdir();
@@ -35,6 +36,7 @@ Object.assign(process.env, {
   TMPDIR: yard,
   TMP: yard,
   TEMP: yard,
+  CLAUDE_CONFIG_DIR: join(yard, "claude"),
 });
 // No test writes the config of the machine, whatever the way that it runs. The native part reads the environment that
 // the process started with, so a plain `bun test` gives it the folder of the tests nowhere, and a test that writes a

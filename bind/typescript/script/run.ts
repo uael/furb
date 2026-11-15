@@ -50,6 +50,7 @@ export async function runTest(
     TEMP: yard,
     FURB_MACHINE_TMPDIR: machine,
     FURB_YARD: yard,
+    CLAUDE_CONFIG_DIR: join(yard, "claude"),
     ...(keep ? { FURB_KEEP_YARDS: "1" } : {}),
   };
   const run = Bun.spawn([process.execPath, "test", ...args], { env: own, stdout: "pipe", stderr: "pipe" });

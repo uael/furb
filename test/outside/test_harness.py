@@ -7,6 +7,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from conftest import CONFIG
+
 ROOT = Path(__file__).parents[2]
 
 
@@ -77,3 +79,9 @@ def test_the_suite_finds_no_claude_command_line_of_the_machine() -> None:
   """A World that opens a life asks the claude of the machine for its models, which takes ten seconds in each process
   of the run, so the suite hides it, as the tests of TypeScript do."""
   assert os.environ["FURB_CLAUDE_BIN"] == ""
+
+
+def test_the_suite_keeps_the_conversations_of_claude_out_of_the_config_of_the_person() -> None:
+  """A life on a fake claude writes the turns that its command line resumes in the config dir of claude, so the suite
+  names one of its own, which goes with the config directory of the process."""
+  assert Path(os.environ["CLAUDE_CONFIG_DIR"]).parent == CONFIG

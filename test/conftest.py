@@ -39,6 +39,9 @@ CONFIG = Path(tempfile.mkdtemp(prefix="furb-config-"))
 process and each process that it starts: a provider, an extension or a memory file in the config directory of the
 machine changes no test. A test that needs a config of the user writes it in a directory of its own."""
 os.environ["FURB_CONFIG_DIR"] = str(CONFIG)
+# A life on a fake claude writes the turns that its command line resumes in the config dir of claude, which is the one
+# of the person unless CLAUDE_CONFIG_DIR names another, so the tests keep them in theirs.
+os.environ["CLAUDE_CONFIG_DIR"] = str(CONFIG / "claude")
 # The tests find no claude command line and no local model, as on a machine that has none, as
 # bind/typescript/script/environment.ts says for the tests of TypeScript: a World that opens a life asks the claude of
 # the machine which models it has, and that takes about ten seconds in each process of the run, for each of its tests
