@@ -151,10 +151,10 @@ fn the_up_arrow_walks_what_he_sent_in_the_project_from_the_newest_and_from_what_
   // stands.
   app.press("up");
   typed(&app, &second);
-  shows(&app, "history 1 of 2");
+  shows(&app, "↑↓ history 1 / 2");
   app.press("up");
   typed(&app, &first);
-  shows(&app, "history 2 of 2");
+  shows(&app, "↑↓ history 2 / 2");
   app.press("up");
   typed(&app, &first);
   app.press("down");

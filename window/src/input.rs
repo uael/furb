@@ -458,13 +458,6 @@ impl Model {
       rows.extend([blank(), self.launcher(), blank()]);
       rows
     } else {
-      // The row above the text says where a walk through what he sent stands.
-      let walking = self.client.walking().map(|(at, of)| {
-        vec![run(
-          format!("history {at} of {of}"),
-          self.tokens.style(Role::Muted).bg(self.tokens.raised),
-        )]
-      });
       // A word of Python takes the prompts of the interpreter: `>>>` before its first line and
       // `...` before each other line, as the REPL of Python writes them.
       let prompt = |at: usize| {
@@ -472,7 +465,7 @@ impl Model {
         let python = self.client.draft.python && (1..=self.grown()).contains(&at);
         python.then(|| run(mark, self.tokens.style(Role::Muted).bg(self.tokens.raised))).into_iter()
       };
-      let band = |at| self.band(prompt(at).collect(), if at == 0 { walking.clone() } else { None });
+      let band = |at| self.band(prompt(at).collect(), None);
       let bands = (0..self.grown() + 2).map(band);
       let mut rows: Vec<Row> = self.waiting_row().into_iter().chain(bands).collect();
       rows.extend([self.launcher(), self.band(Vec::new(), None)]);
@@ -808,6 +801,10 @@ impl Model {
     let fault = self.fault.as_ref().filter(|one| Some(one.as_str()) != shown);
     // The keys of what stands over the input: a form, the completion, or the bar of the time.
     let keyed = self.form_hints().or_else(|| self.completion_hints()).or_else(|| self.time_hints());
+    // A walk through what he sent says where it stands, in the form of the place in a list.
+    let walked =
+      self.client.walking().map(|(at, of)| vec![run(format!("  ↑↓ history {at} / {of}"), muted)]);
+    let keyed = keyed.or(walked);
     let room = wide.saturating_sub(width(&key) + 2);
     let word = Some(self.word_hints(room)).filter(|(hints, _)| !hints.is_empty());
     let python = self.python_hints().filter(|_| !works);
