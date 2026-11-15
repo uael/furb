@@ -15,6 +15,7 @@ mod lives;
 mod opens;
 mod paths;
 mod promise;
+mod prove;
 mod tree;
 mod unused;
 mod watch;
@@ -296,19 +297,18 @@ enum Task {
   /// verdict (opens, refused:<code>, bound past --bound seconds, memory past 8 GB), its seconds,
   /// its most MB, and the first line of furb that it wrote. Given the table of a run before, it
   /// fails when a record that opened then does not open now.
-  Opens {
-    /// The program furb of the build to prove.
-    furb: PathBuf,
-    /// The table that the run writes.
-    out: PathBuf,
-    /// The table of a run before.
-    before: Option<PathBuf>,
-    /// A file that names the records, one path on each line.
-    #[arg(long, value_name = "FILE")]
-    list: Option<PathBuf>,
-    /// The most seconds of one open.
-    #[arg(long, default_value_t = 1800)]
-    bound: u64,
+  Opens(opens::Opens),
+  /// Prove the crates of furb as a user will take them from crates.io, from the packed crates
+  /// alone.
+  ///
+  /// It packs the crates of the fork of monty at the revision that Cargo.toml names, and furb-wire,
+  /// furb, furb-host and furb-cli on them by their version, as patches of crates.io, then adds furb
+  /// to a new crate that takes every other crate from crates.io with no lock of furb, runs the
+  /// example chains there on a claude command line that answers from a script, and installs
+  /// furb-cli. It takes about 5 minutes.
+  ProveCrate {
+    /// The folder of the proof, which keeps the packed crates in crates/; a new folder by default.
+    folder: Option<PathBuf>,
   },
   /// Make, land and close a worktree of this clone.
   Tree {
@@ -353,6 +353,8 @@ enum Fault {
   Running { pid: u32, file: PathBuf },
   #[error("the watch of the refs failed: {0}")]
   Watch(#[from] notify::Error),
+  #[error("{0}")]
+  Unproven(String),
   #[error("{url} cannot be fetched: {stderr}")]
   Fetch { url: String, stderr: String },
   #[error("the watch of the refs ended")]
@@ -425,9 +427,8 @@ fn run() -> Result<ExitCode, Fault> {
     Task::Paths => paths::check(),
     Task::Tree { verb } => tree::run(&root, verb),
     Task::Links { fix } => links::check(&root, fix),
-    Task::Opens { furb, out, before, list, bound } => {
-      opens::Opens { furb, out, before, list, bound: Duration::from_secs(bound) }.run(&root)
-    }
+    Task::ProveCrate { folder } => prove::crates(&root, folder),
+    Task::Opens(opens) => opens.run(&root),
     Task::Catalog => catalog::refresh(&root),
     Task::Budget { part, command } => budget::check(&root, &part, &command),
     Task::JobBudgets { runs } => jobs::set(&root, runs),

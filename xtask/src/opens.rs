@@ -23,12 +23,20 @@ const NOWHERE: &str = "http://127.0.0.1:9";
 
 /// A run of the opens: the build, the table that it writes, the table of a run before, the list of
 /// records, and the bound of one open.
+#[derive(clap::Args)]
 pub(crate) struct Opens {
+  /// The program furb of the build to prove.
   pub(crate) furb: PathBuf,
+  /// The table that the run writes.
   pub(crate) out: PathBuf,
+  /// The table of a run before.
   pub(crate) before: Option<PathBuf>,
+  /// A file that names the records, one path on each line.
+  #[arg(long, value_name = "FILE")]
   pub(crate) list: Option<PathBuf>,
-  pub(crate) bound: Duration,
+  /// The most seconds of one open.
+  #[arg(long, default_value_t = 1800)]
+  pub(crate) bound: u64,
 }
 
 impl Opens {
@@ -40,7 +48,7 @@ impl Opens {
     let furb = fs::canonicalize(&self.furb)
       .map_err(|source| Fault::Read { path: self.furb.clone(), source })?;
     for record in self.records(root)? {
-      let (verdict, seconds, peak, said) = opened(&furb, &record, self.bound)?;
+      let (verdict, seconds, peak, said) = opened(&furb, &record, Duration::from_secs(self.bound))?;
       println!(
         "{} {verdict} {seconds}s {peak}MB",
         record.file_name().unwrap_or_default().to_string_lossy()

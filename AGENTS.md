@@ -577,7 +577,7 @@ major version for a breaking change. crates.io holds only the empty crates `furb
 names: it takes no crate that stands on git, and `furb` stands on the fork of monty by git, so the job of crates.io
 publishes nothing while a dependency stands on git, and says why.
 
-- `sh script/prove-crate.sh [folder]`: pack the crates of monty at the revision of the fork that `Cargo.toml` names,
+- `cargo xtask prove-crate [folder]`: pack the crates of monty at the revision of the fork that `Cargo.toml` names,
   and `furb` and `furb-cli` on them by their version, as patches of crates.io, then add `furb` to a new crate that
   takes every other crate from crates.io with no lock of furb, run the example chains there, and install `furb-cli`.
   It proves that the crates pack and build as crates.io will give them once monty stands there. A crate that breaks

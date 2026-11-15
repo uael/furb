@@ -4,7 +4,6 @@ use std::{
   fs,
   os::unix::fs::PermissionsExt,
   process::{ExitCode, id},
-  time::Duration,
 };
 
 use super::Opens;
@@ -30,7 +29,7 @@ fn a_record_that_opened_before_and_opens_no_more_fails_the_run_with_its_line() {
     out: yard.join("out.tsv"),
     before: Some(yard.join("before.tsv")),
     list: Some(yard.join("list")),
-    bound: Duration::from_secs(30),
+    bound: 30,
   };
   assert_eq!(opens.run(&yard).unwrap(), ExitCode::FAILURE);
   let table = fs::read_to_string(yard.join("out.tsv")).unwrap();

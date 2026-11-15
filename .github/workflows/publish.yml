@@ -38,7 +38,7 @@ on:
       - bind/typescript/build.rs
       - bind/typescript/lib.rs
       - bind/typescript/npm/**
-      - script/prove-crate.sh
+      - xtask/src/prove.rs
       - script/prove-npm.sh
       - xtask/src/promise.rs
       - docs/promise.md
@@ -57,7 +57,7 @@ on:
       - bind/typescript/build.rs
       - bind/typescript/lib.rs
       - bind/typescript/npm/**
-      - script/prove-crate.sh
+      - xtask/src/prove.rs
       - script/prove-npm.sh
       - xtask/src/promise.rs
       - docs/promise.md
@@ -210,7 +210,7 @@ jobs:
       - if: github.ref_type == 'tag'
         run: |
           test "v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "furb") | .version')" = "$GITHUB_REF_NAME"
-      - run: sh script/prove-crate.sh "$RUNNER_TEMP/proof"
+      - run: cargo xtask prove-crate "$RUNNER_TEMP/proof"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: crates
