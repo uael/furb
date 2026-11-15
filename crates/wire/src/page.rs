@@ -310,24 +310,29 @@ pub struct Answered {
   pub reply: Reply,
 }
 
-/// What a question came to: a value, as a person reads it, or a refusal with its reason.
+/// What a question came to: a value, as a person reads it, a refusal with its reason, or its
+/// withdrawal, when a cancel ended it before anyone answered, with the reason that the cancel gave.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "is", content = "text", rename_all = "snake_case")]
 pub enum Reply {
   Value(String),
   Refused(String),
+  Withdrawn(Option<String>),
 }
 
 impl Answered {
   /// What closed a question to the operator, once it is done: a text as its text, a truth as the
-  /// choice that answers it, None as nothing, a fault as its first argument, else its value as
-  /// JSON.
+  /// choice that answers it, None as nothing, a cancel as its withdrawal, another fault as its
+  /// first argument, else its value as JSON.
   pub fn of(asked: &Act) -> Option<Self> {
     let reply = match asked.value()? {
       Value::String(text) => Reply::Value(text.clone()),
       Value::Bool(yes) => Reply::Value(if *yes { "yes" } else { "no" }.to_owned()),
       Value::Null => Reply::Value("nothing".to_owned()),
       value => match fault(value) {
+        Some(("CancelledError", args)) => {
+          Reply::Withdrawn(args.first().and_then(Value::as_str).map(str::to_owned))
+        }
         Some((is, args)) => {
           Reply::Refused(args.first().and_then(Value::as_str).unwrap_or(is).to_owned())
         }

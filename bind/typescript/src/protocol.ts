@@ -934,7 +934,8 @@ export type Saying =
       };
     };
 /**
- * What a question came to: a value, as a person reads it, or a refusal with its reason.
+ * What a question came to: a value, as a person reads it, a refusal with its reason, or its
+ * withdrawal, when a cancel ended it before anyone answered, with the reason that the cancel gave.
  */
 export type Reply =
   | {
@@ -944,6 +945,10 @@ export type Reply =
   | {
       is: "refused";
       text: string;
+    }
+  | {
+      is: "withdrawn";
+      text: string | null;
     };
 /**
  * Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text.
@@ -1710,4 +1715,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 53;
+export const PROTOCOL = 54;

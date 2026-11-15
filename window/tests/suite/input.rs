@@ -315,7 +315,10 @@ fn a_thread_that_ended_turns_the_input_to_it_and_a_reply_opens_it_and_the_button
   // The button resolves it: its close ends the question, and the head says that it is resolved.
   clicked(&app, " Resolve ", 0, 2);
   shows(&app, "✓ Resolved");
-  shows(&app, "◆ Which key sends the…     refused");
+  // The close withdrew the question, which no one answered, and its line says so.
+  let withdrawn = |line: &str| line.contains("◆ Which key") && line.contains("withdrawn · ");
+  let shown = app.wait_until(PATIENCE, || app.text().lines().any(withdrawn));
+  assert!(shown, "{}", app.text());
   assert_eq!(told(&daemon, &sessions).len(), 2);
 }
 

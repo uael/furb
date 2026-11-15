@@ -1667,9 +1667,13 @@ Reply1 = TypedDict("Reply1", {"is": Literal["value"], "text": str})
 Reply2 = TypedDict("Reply2", {"is": Literal["refused"], "text": str})
 
 
-type Reply = Reply1 | Reply2
+Reply3 = TypedDict("Reply3", {"is": Literal["withdrawn"], "text": str | None})
+
+
+type Reply = Reply1 | Reply2 | Reply3
 """
-What a question came to: a value, as a person reads it, or a refusal with its reason.
+What a question came to: a value, as a person reads it, a refusal with its reason, or its
+withdrawal, when a cancel ended it before anyone answered, with the reason that the cancel gave.
 """
 
 
@@ -2112,8 +2116,8 @@ class Request61(TypedDict):
 class Config2(TypedDict):
   """
   A key of a layer, the layer of the scope of the key when none is named, set to a value, or
-  taken out with no value, then a stand of the life on the configs. A change that the catalog refuses puts its
-  config back as it was, and the life does not stand.
+  taken out with no value, then a stand of the life on the configs. A change that the catalog
+  refuses puts its config back as it was, and the life does not stand.
   """
 
   key: list[str]
@@ -3081,4 +3085,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 53
+PROTOCOL = 54
