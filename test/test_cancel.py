@@ -105,3 +105,18 @@ async def test_a_cancel_of_a_name_of_no_act_raises_refused_that_names_it() -> No
     engine.cancel("nothing9")
   await settle()
   assert log[before:] == []
+
+
+async def test_a_word_cannot_cancel_a_question_of_a_person_that_is_open() -> None:
+  """A word cannot cancel a question of a person that is open, or an act whose cancel is over one, since a question of a person ends with its answer or by a person: the call raises Refused, which names the question and says that it waits for the answer, and says nothing."""
+  first = "[x[1] for x in transcript(of='prompt') if x[5] == 'count'][0]"
+  asked = "[x[1] for x in transcript(of='prompt') if x[5] == 'why?'][0]"
+  words = ("await wait(600, __name__)", f"cancel({asked})", f"cancel({first})", "close('because')", "close(2)")
+  _, log, root = born(*words, auto=False)
+  one = engine.prompt(int, "count", on=root)
+  await settle()
+  why = engine.prompt(str, "why?", on=one)
+  assert (await why, await one) == ("because", 2)
+  refused = [str(engine.peek(a[1])) for a in said(log, "rung") if isinstance(engine.peek(a[1]), Refused)]
+  assert refused == [f"{why} waits for your answer", f"{one} waits for your answer"]
+  assert said(log, "cancel") == []

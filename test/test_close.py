@@ -195,13 +195,13 @@ async def test_a_close_in_the_wrong_shape_is_a_raise_of_its_step_which_is_barren
 async def test_a_close_of_a_prompt_that_a_word_under_that_prompt_says_raises_refused_while_an_act_under_it_runs() -> (
   None
 ):
-  """A close of a prompt that a word under that prompt says raises Refused in that word while a command or a prompt under the prompt is not over and no cancel or close was said over it, and the refusal names each such act, so the prompt stays open and the word awaits or cancels each."""
+  """A close of a prompt that a word under that prompt says raises Refused in that word while a command or a prompt under the prompt is not over and no cancel or close was said over it, and the refusal names each such act, so the prompt stays open and the word answers, awaits or cancels each."""
   _, log, root = born("x = bash('slow')\nclose(1)", "cancel(x)\nclose(2)", auto=False)
   act = engine.prompt(int, "count", on=root)
   await settle()
   first, _ = (a[1] for a in said(log, "rung") if a[2] == act)
   command = said(log, "bash")[0][1]
-  assert str(engine.peek(first)) == f"{act} runs [{command!r}]: await or cancel each"
+  assert str(engine.peek(first)) == f"{act} runs [{command!r}]: answer, await or cancel each"
   assert await act == 2 and isinstance(engine.peek(command), CancelledError)
 
 
@@ -248,7 +248,7 @@ async def test_for_a_close_a_question_on_a_prompt_is_under_that_prompt() -> None
   why = engine.prompt(str, "why?", on=one)
   assert (await why, await one) == ("because", 2)
   refused = [engine.peek(a[1]) for a in said(log, "rung") if isinstance(engine.peek(a[1]), Refused)]
-  assert [str(x) for x in refused] == [f"{one} runs [{why!r}]: await or cancel each"]
+  assert [str(x) for x in refused] == [f"{one} runs [{why!r}]: answer, await or cancel each"]
 
 
 async def test_a_close_on_an_act_that_is_over_reaches_only_the_words_that_still_run_under_it() -> None:

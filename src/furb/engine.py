@@ -141,6 +141,9 @@ def wake(id: str):
 
 
 def cancel(id: str, why=None):
+  for x in listening():
+    if question(("rung", acting())) and prompted(x) and operated(get(x)[2]) and covers(("cancel", id), x):
+      raise Refused(x + " waits for your answer")
   control("cancel", "cancelled", id, why)
 
 
@@ -173,7 +176,7 @@ def close(value: object, id=""):
   ]
   inside = under(who, id) or any(under(who, x) for x in left)
   if left and inside:
-    raise Refused(f"{id} runs {left}: await or cancel each")
+    raise Refused(f"{id} runs {left}: answer, await or cancel each")
   [cancel(x) for x in left]
   control("close", "closed", id, value)
   if inside:

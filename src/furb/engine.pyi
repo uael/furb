@@ -347,6 +347,7 @@ def cancel(id: str, why: object = None) -> None:
   A cancel touches nothing else on the chain.
   The awaiter of a cancelled command raises CancelledError in its step.
   A cancel of a name of no act of the life raises Refused, which names it, and says nothing.
+  A word cannot cancel a question of a person that is open, or an act whose cancel is over one, since a question of a person ends with its answer or by a person: the call raises Refused, which names the question and says that it waits for the answer, and says nothing.
   """
 
 def close(value: object, id: str = "") -> None:
@@ -365,7 +366,7 @@ def close(value: object, id: str = "") -> None:
   A value closes an act with that value, and a prompt with a value that has its shape.
   A close that answers a prompt with a value that does not have the shape of the prompt raises Refused in the word that said it, so the prompt asks again.
   A close in the wrong shape is a raise of its step, which is barren, so the third such step in a row pauses the thread when no act of it is open, and else the thread rests until an act of it ends.
-  A close of a prompt that a word under that prompt says raises Refused in that word while a command or a prompt under the prompt is not over and no cancel or close was said over it, and the refusal names each such act, so the prompt stays open and the word awaits or cancels each.
+  A close of a prompt that a word under that prompt says raises Refused in that word while a command or a prompt under the prompt is not over and no cancel or close was said over it, and the refusal names each such act, so the prompt stays open and the word answers, awaits or cancels each.
   A wait under the prompt neither refuses its close nor is cancelled by it, since a wait does no work: each act that it waits for counts by itself, and the close ends the word that awaits it.
   A close of a prompt that another says, the operator, an ear or a word that is not under the prompt, first cancels each command and each prompt under the prompt that is not over, so the transcript shows the cancel of each, and then ends the prompt.
   For a close, a question on a prompt is under that prompt, with what is under that question, so a word cannot close a thread while a question on the thread waits for its answer, and a word of that question is a word under the thread.

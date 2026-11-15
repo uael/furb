@@ -116,13 +116,15 @@ meanings. The entry of such a name here gives only its form in the engine.
 - acknowledgment: the prompt of nothing that a chain of an earlier build made on a thread that was over when an act
   that a rung of that thread made failed. A chain makes none now, since a thread closes only once no command, wait or
   prompt under it runs, and the view of the crate still reads those prompts in an older record.
-- due: the state of an open thread that a model answers once a new fact for it came that no reply read, as a message
-  on it or the end of an act of it that no word awaits; the chain makes one rung of a due thread, and asks it one reply.
-- barren: a step that raises, that makes nothing and changes no name of its module, that repeats a word of its thread
-  or that leaves a message of a person owed; the third in a row pauses its thread, or lets it rest on its open acts.
+- due: the state of an open thread that a model answers once a new fact for it came that no reply read, as a notice
+  on it, the end of an act of it that no word awaits, or the answer of a question on it; the chain makes one rung of
+  a due thread, and asks it one reply.
+- barren: a step that raises, that makes nothing and changes no name of its module, or that repeats a word of its
+  thread; the third in a row pauses its thread, or lets it rest on its open acts.
 - thread: a prompt and the prompts on it, in order, each of which names the one before it as its on; a prompt of
-  None on a thread that is open is a message of it, and any other prompt on it is answered in steps, and opens it
-  again when it closed.
+  None on a thread that is open is a notice of it, and any other prompt on it is a question, as a message of a
+  person that waits for its answer: its own rung answers it in steps, the thread goes on after the answer, and no
+  word closes the thread while it waits.
 - rung: the run of one word on a chain, and the verb that makes it: with a word its caller wrote, or with no word,
   for a turn of a model.
 - reply: the act a chain makes, under the site of a rung, to ask the model of that rung for its word, which the
