@@ -1197,7 +1197,7 @@ Standing1 = TypedDict("Standing1", {"of": NotRequired[str | None], "is": Literal
 Standing2 = TypedDict("Standing2", {"is": Literal["failed"]})
 
 
-Standing3 = TypedDict("Standing3", {"by": str, "is": Literal["paused"]})
+Standing3 = TypedDict("Standing3", {"by": str, "of": NotRequired[str], "is": Literal["paused"]})
 
 
 Standing4 = TypedDict("Standing4", {"is": Literal["thinks"]})
@@ -1223,8 +1223,8 @@ type Standing = (
 )
 """
 How the thread of a card stands. It asks one member by his login, or each operator. A pause
-names who said it. A thread whose model closed its prompt is resolved, and one that a cancel
-ended is stopped.
+names who said it and the act or the chain that it holds, which a wake names. A thread whose
+model closed its prompt is resolved, and one that a cancel ended is stopped.
 """
 
 
@@ -1495,9 +1495,11 @@ Where an act stands: asked, started by the ear that owns it, or done, with what 
 
 class Pause(TypedDict):
   """
-  A pause, as its fact holds it: who said it, and the cause that it gave.
+  A pause, as its fact holds it: the act or the chain that it names, which a wake names to end it,
+  who said it, and the cause that it gave.
   """
 
+  of: NotRequired[str]
   by: str
   why: NotRequired[object]
 
@@ -3079,4 +3081,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 52
+PROTOCOL = 53

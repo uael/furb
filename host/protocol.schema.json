@@ -3531,6 +3531,10 @@
             "by": {
               "type": "string"
             },
+            "of": {
+              "type": "string",
+              "default": ""
+            },
             "is": {
               "type": "string",
               "const": "paused"
@@ -3614,7 +3618,7 @@
           ]
         }
       ],
-      "description": "How the thread of a card stands. It asks one member by his login, or each operator. A pause\nnames who said it. A thread whose model closed its prompt is resolved, and one that a cancel\nended is stopped."
+      "description": "How the thread of a card stands. It asks one member by his login, or each operator. A pause\nnames who said it and the act or the chain that it holds, which a wake names. A thread whose\nmodel closed its prompt is resolved, and one that a cancel ended is stopped."
     },
     "Sent": {
       "type": "object",
@@ -4468,6 +4472,10 @@
     "Pause": {
       "type": "object",
       "properties": {
+        "of": {
+          "type": "string",
+          "default": ""
+        },
         "by": {
           "type": "string"
         },
@@ -4476,7 +4484,7 @@
       "required": [
         "by"
       ],
-      "description": "A pause, as its fact holds it: who said it, and the cause that it gave."
+      "description": "A pause, as its fact holds it: the act or the chain that it names, which a wake names to end it,\nwho said it, and the cause that it gave."
     },
     "RunState": {
       "oneOf": [
@@ -6002,5 +6010,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 52
+  "x-protocol": 53
 }

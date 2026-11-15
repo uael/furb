@@ -717,8 +717,8 @@ export type Answer =
 export type Change = ("added" | "modified" | "deleted" | "renamed") | "untracked";
 /**
  * How the thread of a card stands. It asks one member by his login, or each operator. A pause
- * names who said it. A thread whose model closed its prompt is resolved, and one that a cancel
- * ended is stopped.
+ * names who said it and the act or the chain that it holds, which a wake names. A thread whose
+ * model closed its prompt is resolved, and one that a cancel ended is stopped.
  */
 export type Standing =
   | {
@@ -730,6 +730,7 @@ export type Standing =
     }
   | {
       by: string;
+      of?: string;
       is: "paused";
     }
   | {
@@ -1491,9 +1492,11 @@ export interface Act {
   state: State;
 }
 /**
- * A pause, as its fact holds it: who said it, and the cause that it gave.
+ * A pause, as its fact holds it: the act or the chain that it names, which a wake names to end it,
+ * who said it, and the cause that it gave.
  */
 export interface Pause {
+  of?: string;
   by: string;
   why?: unknown;
 }
@@ -1707,4 +1710,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 52;
+export const PROTOCOL = 53;
