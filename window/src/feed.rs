@@ -411,11 +411,12 @@ impl Feed<'_> {
   }
 
   /// What the command of a line wrote, under it at the column of the code: how many lines came
-  /// before its last ones, as the block says the lines above it, then those, muted, cut to the box.
+  /// before its last ones, as the block says the lines above it, then those, muted, cut to the box,
+  /// with the home folder written `~`, as the code above them writes it.
   fn output(&self, output: &Output, gutter: usize, room: usize) -> Vec<Row> {
     let muted = self.style(Role::Muted);
     let more = (output.more > 0).then(|| format!("… {}", lines(output.more)));
-    let lines = more.into_iter().chain(output.tail.iter().cloned());
+    let lines = more.into_iter().chain(output.tail.iter().map(|line| self.model.homed(line)));
     let row = |text: String| {
       let mut shown = vec![run(format!("{:gutter$}  ", ""), muted)];
       shown.extend(clipped(vec![run(text, muted)], room, muted));
