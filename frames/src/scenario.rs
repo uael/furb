@@ -18,6 +18,48 @@ impl Size {
   }
 }
 
+/// The walk of the image of the README that moves: the window at work on a fan out of three
+/// prompts over a project, the light over each word of work, until the thread closes with what each
+/// found. `furb-frames hero` walks it.
+pub(crate) const HERO: Walk = Walk {
+  sessions: &[],
+  words: &[
+    "tests = prompt(str, 'Run the tests of the storage', on=chain('tests'))\nawait wait(1, tests)\nreview = prompt(str, 'Review the JSON backend for bugs', on=chain('review'))\nawait wait(1, review)\ndocs = prompt(str, 'Check that the README names each backend', on=chain('docs'))\nfound = [await tests, await review, await docs]\nclose(f'Tests: {found[0]}\\nReview: {found[1]}\\nDocs: {found[2]}')",
+    "files = await bash('git ls-files src/inventory/storage')\nclose(f'{len(files.stdout.content.split())} modules of the storage, and no test yet.')",
+    "log = await bash('git log --oneline -- src/inventory/storage')\nsource = read('src/inventory/storage/backends/json_backend.py')\nclose('the JSON backend writes with no lock, so two writers can lose an item.')",
+    "readme = read('README.md')\nclose('the README names no backend yet.')",
+  ],
+  steps: &[
+    step("o", &[], "Ask for a change"),
+    step("a", &[Act::Type("Check the storage before the release."), Act::Key("Enter")], "Working"),
+    step("c", &[], "Docs: the README"),
+  ],
+};
+
+/// The walk of the still image of the cards of a machine: a thread that works, one that answered
+/// and that he did not read, one that asks him, and sessions that rest.
+pub(crate) const CARDS: Walk = Walk {
+  sessions: &["Measure the open of a large record.", "Write the docs of the protocol."],
+  words: &[
+    "await bash('sleep 60')\nclose('slept')",
+    "close('The boot reads the record once, then each tail.')",
+    ASKS,
+  ],
+  steps: &[
+    step("a", &[Act::Type("Run the bench of the replay."), Act::Key("Enter")], "⎋ stop"),
+    step(
+      "b",
+      &[Act::Key("C-n"), Act::Type("Read the boot of the host."), Act::Key("Enter")],
+      "each tail",
+    ),
+    step(
+      "c",
+      &[Act::Key("C-n"), Act::Type("Place the list of cards."), Act::Key("Enter")],
+      "Where does the list",
+    ),
+  ],
+};
+
 /// The sizes of the captures of the other programs: the common one first, then narrow and wide.
 pub(crate) const SIZES: [Size; 3] =
   [Size { cols: 120, rows: 40 }, Size { cols: 80, rows: 24 }, Size { cols: 200, rows: 60 }];

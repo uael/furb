@@ -107,6 +107,17 @@ enum Does {
     #[arg(long, default_value = "target/frames")]
     out: PathBuf,
   },
+  /// Walk the images of the README again, at 120 by 40 with the clocks moving: the window at
+  /// work as a GIF, a still of it, and the cards of a machine, each in the frame of a window on a
+  /// ground that shows through, in `<out>/window.gif`, `<out>/window.png` and
+  /// `<out>/window-cards.png`.
+  Hero {
+    #[arg(long, default_value = "docs")]
+    out: PathBuf,
+    /// The folder of the programs `furb-window` and `furb`: by default the folder of this one.
+    #[arg(long)]
+    bin: Option<PathBuf>,
+  },
   /// The findings of the probes on frames of the window, from their cells as JSON.
   Probe { frames: Vec<PathBuf> },
   /// What tmux pipes from the pane of a capture, stamped with its time, into a file.
@@ -137,6 +148,10 @@ async fn main() -> ExitCode {
     Does::Motion { cast, from, until, every, rows, out } => {
       moved(&cast, &Words { from, until, every, rows }, out.as_deref())
     }
+    Does::Hero { out, bin } => match programs(bin, true) {
+      Ok(programs) => heroes(&out, &programs).await,
+      Err(fault) => Err(fault),
+    },
     Does::Probe { frames } => frames.iter().try_for_each(|path| {
       for found in probe::probe(&frame::Frame::read(path)?) {
         println!("{} row {} col {}: {}", path.display(), found.row, found.col, found.says);
@@ -212,6 +227,29 @@ async fn captured(
   }
   println!("all in {:.1} s", started.elapsed().as_secs_f64());
   if failed == 0 { Ok(()) } else { Err(Error::Failed(failed)) }
+}
+
+/// The images of the README, from their walks: the span of the GIF from the first message until
+/// a moment after the thread closed, and each still at a moment that shows the most.
+async fn heroes(out: &Path, programs: &Programs) -> Result<(), Error> {
+  let size = scenario::SIZES[0];
+  let hero = capture::capture(&scenario::HERO, size, programs, Path::new("/tmp/ffhero")).await?;
+  let cast = &hero.cast;
+  let span = motion::Span {
+    from: point(cast, "o")?,
+    until: point(cast, "c+1500")?,
+    every: Duration::from_millis(50),
+    rows: None,
+  };
+  // The recording stays in the temporary folder, so `motion` reads how the GIF moves.
+  let kept = env::temp_dir().join("furb-hero.cast");
+  put(&kept, cast.write().as_bytes())?;
+  motion::hero(cast, span, &out.join("window.gif"))?;
+  motion::still(cast, point(cast, "c+500")?, &out.join("window.png"))?;
+  let cards = capture::capture(&scenario::CARDS, size, programs, Path::new("/tmp/ffcards")).await?;
+  motion::still(&cards.cast, point(&cards.cast, "c+500")?, &out.join("window-cards.png"))?;
+  println!("{}: window.gif, window.png, window-cards.png", out.display());
+  Ok(())
 }
 
 /// What each walk stands on: the folder of the programs of the build and the folder of the frames.

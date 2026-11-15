@@ -6,7 +6,7 @@
 
 [![gates](https://github.com/uael/furb/actions/workflows/gates.yml/badge.svg)](https://github.com/uael/furb/actions/workflows/gates.yml)
 
-<img src="https://raw.githubusercontent.com/uael/furb/main/docs/window.png" alt="The window of furb: a thread whose model runs the Python that it wrote, beside the list of the threads of the machine" width="880">
+<img src="https://raw.githubusercontent.com/uael/furb/main/docs/window.gif" alt="The window of furb: a model writes Python that starts three agents at once, one to run the tests, one to review a file and one to check the docs, then the thread closes with what each found" width="880">
 
 </div>
 

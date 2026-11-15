@@ -184,6 +184,10 @@ work of the open thread, Ctrl+C empties the input, and Ctrl+D on an empty input 
 
 ![The list of the threads of the machine beside an open thread](docs/window-cards.png)
 
+`target/debug/furb-frames hero`, after `cargo build -p furb-cli -p furb-window -p furb-frames`, makes the images of
+the README again, `docs/window.gif`, `docs/window.png` and `docs/window-cards.png`, from two scripted walks of the
+window, so run it when a change shows on them.
+
 | File | What it holds |
 | --- | --- |
 | `window/Cargo.toml`, `window/build.rs` | The commit of OpenTUI that the window stands on, and its native library, which the build makes with Zig from that commit into `target/opentui`, once for each commit. `.cargo/config.toml` turns off the build script of `opentui-sys`, which only links a library that stands already. |

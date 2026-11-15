@@ -18,7 +18,7 @@ use crate::{
   cast::{Cast, What},
   error::Error,
   frame::{Cell, Frame, Rgb},
-  raster::{self, Image},
+  raster::{self, Framed, Image},
   replay::{Screen, put},
 };
 
@@ -113,7 +113,7 @@ pub(crate) fn motion(cast: &Cast, span: Span, out: &Path) -> Result<String, Erro
       .map_err(|source| Error::Write { path: folder.to_owned(), source })?;
   }
   put(&path("sheet.png"), &raster::image(&sheet).0.png()?)?;
-  animated(&screens, span, &path("gif"))?;
+  animated(&screens, span, &path("gif"), None)?;
   put(&path("motion.txt"), measures.as_bytes())?;
   Ok(measures)
 }
@@ -401,23 +401,53 @@ fn label_row(label: &str, width: usize, ground: &impl Fn(&str, Rgb) -> Cell) -> 
   row
 }
 
-/// The GIF of the whole screen over the span: each screen for as long as it showed, and a screen
-/// that showed less than 5 ms left out, since a GIF counts its delays in hundredths of a second.
-fn animated(screens: &[Shown], span: Span, path: &Path) -> Result<(), Error> {
+/// The window at work over a span, as a README shows it: the GIF of each screen in the frame of a
+/// window on a ground that shows through. The words of a walk come at once, where a model takes
+/// seconds to write each, so the GIF plays [`PACE`] times slower, which stays faster than a model.
+pub(crate) fn hero(cast: &Cast, span: Span, path: &Path) -> Result<(), Error> {
+  animated(&shown(cast, span)?.0, span, path, Some(PACE))
+}
+
+/// How many times slower the GIF of a README plays than its walk ran.
+const PACE: u128 = 3;
+
+/// The screen at a moment of a recording in the frame of a window, as a PNG.
+pub(crate) fn still(cast: &Cast, at: Duration, path: &Path) -> Result<(), Error> {
+  let span = Span { from: at, until: at, every: Duration::ZERO, rows: None };
+  let screens = shown(cast, span)?.0;
+  put(path, &raster::image(&screens[0].frame).0.framed().png()?)
+}
+
+/// The GIF of the whole screen over the span, bare, or in the frame of a window at a pace: each
+/// screen for as long as it showed, and a screen that showed less than 5 ms left out, since a GIF
+/// counts its delays in hundredths of a second.
+fn animated(screens: &[Shown], span: Span, path: &Path, framed: Option<u128>) -> Result<(), Error> {
   let wrote = |source| Error::Write { path: path.to_owned(), source };
   let file = File::create(path).map_err(wrote)?;
-  let first = raster::image(&screens[0].frame).0;
+  // The pixels of a screen with an alpha after each color.
+  let pixels = |frame: &Frame| {
+    let image = raster::image(frame).0;
+    if framed.is_some() {
+      let Framed { width, height, pixels } = image.framed();
+      return (width, height, pixels);
+    }
+    let Image { width, height, pixels } = image;
+    let opaque = pixels.chunks(3).flat_map(|one| [one[0], one[1], one[2], 255]).collect();
+    (width, height, opaque)
+  };
+  let (width, height, _) = pixels(&screens[0].frame);
   let size = |pixels: usize| u16::try_from(pixels).unwrap_or(u16::MAX);
-  let mut encoder = Encoder::new(BufWriter::new(file), size(first.width), size(first.height), &[])?;
+  let mut encoder = Encoder::new(BufWriter::new(file), size(width), size(height), &[])?;
   encoder.set_repeat(Repeat::Infinite)?;
   for (at, screen) in screens.iter().enumerate() {
     let next = screens.get(at + 1).map_or(span.until, |next| next.at);
-    let hundredths = (next.saturating_sub(screen.at).as_millis() + 5) / 10;
+    let pace = framed.unwrap_or(1);
+    let hundredths = (next.saturating_sub(screen.at).as_millis() * pace + 5) / 10;
     if hundredths == 0 {
       continue;
     }
-    let Image { width, height, pixels } = raster::image(&screen.frame).0;
-    let mut frame = gif::Frame::from_rgb_speed(size(width), size(height), &pixels, 10);
+    let (width, height, mut pixels) = pixels(&screen.frame);
+    let mut frame = gif::Frame::from_rgba_speed(size(width), size(height), &mut pixels, 10);
     frame.delay = u16::try_from(hundredths).unwrap_or(u16::MAX);
     encoder.write_frame(&frame)?;
   }

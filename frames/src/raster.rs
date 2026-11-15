@@ -286,6 +286,82 @@ impl Image {
   }
 }
 
+/// An image whose pixels each hold an alpha after their color, as the window in its frame on a
+/// ground that shows through.
+pub(crate) struct Framed {
+  pub(crate) width: usize,
+  pub(crate) height: usize,
+  pub(crate) pixels: Vec<u8>,
+}
+
+/// The margin around the frame of a window, the height of its bar of title, the radius of its
+/// corners, and the colors of its bar, of its dots and of its edge, in the greys of the window.
+const MARGIN: usize = 24;
+const BAR: usize = 30;
+const RADIUS: usize = 10;
+const TITLE: Rgb = Rgb::hex(0x16_1616);
+const DOT: Rgb = Rgb::hex(0x3a_3a3a);
+const EDGE: Rgb = Rgb::hex(0x2a_2a2a);
+
+impl Image {
+  /// The image as a terminal window shows it: in a frame with round corners and a bar of title
+  /// with three dots, on a ground that shows through, as a README shows a program.
+  pub(crate) fn framed(&self) -> Framed {
+    let (inner, tall) = (self.width + 2, self.height + BAR + 1);
+    let (width, height) = (inner + 2 * MARGIN, tall + 2 * MARGIN);
+    let mut pixels = vec![0; width * height * 4];
+    for y in 0..tall {
+      for x in 0..inner {
+        let Some(color) = self.framed_at(x, y) else { continue };
+        let at = ((y + MARGIN) * width + x + MARGIN) * 4;
+        pixels[at..at + 4].copy_from_slice(&[color.0[0], color.0[1], color.0[2], 255]);
+      }
+    }
+    Framed { width, height, pixels }
+  }
+
+  /// The color of a pixel of the frame, none outside its round corners: its edge, its bar with its
+  /// dots, or the image under the bar.
+  fn framed_at(&self, x: usize, y: usize) -> Option<Rgb> {
+    let (inner, tall) = (self.width + 2, self.height + BAR + 1);
+    let away = |at: usize, size: usize| RADIUS.saturating_sub(at.min(size - 1 - at));
+    let (dx, dy) = (away(x, inner), away(y, tall));
+    if dx * dx + dy * dy > RADIUS * RADIUS {
+      return None;
+    }
+    let edge = x == 0 || y == 0 || x == inner - 1 || y == tall - 1;
+    let ring = (dx + 1) * (dx + 1) + (dy + 1) * (dy + 1) > RADIUS * RADIUS && dx > 0 && dy > 0;
+    if edge || ring {
+      return Some(EDGE);
+    }
+    if y < BAR {
+      let dot = (0..3).any(|n| {
+        let (cx, cy) = (18 + 20 * n, BAR / 2);
+        let (ex, ey) = (x.abs_diff(cx), y.abs_diff(cy));
+        ex * ex + ey * ey <= 36
+      });
+      return Some(if dot { DOT } else { TITLE });
+    }
+    let (ix, iy) = (x - 1, y - BAR);
+    let at = (iy.min(self.height - 1) * self.width + ix.min(self.width - 1)) * 3;
+    Some(Rgb([self.pixels[at], self.pixels[at + 1], self.pixels[at + 2]]))
+  }
+}
+
+impl Framed {
+  pub(crate) fn png(&self) -> Result<Vec<u8>, png::EncodingError> {
+    let mut bytes = Vec::new();
+    let size = |pixels: usize| u32::try_from(pixels).unwrap_or(u32::MAX);
+    let mut encoder = png::Encoder::new(&mut bytes, size(self.width), size(self.height));
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header()?;
+    writer.write_image_data(&self.pixels)?;
+    writer.finish()?;
+    Ok(bytes)
+  }
+}
+
 fn to_pixels(length: f32) -> usize {
   // A length of a face at this size is a few dozen pixels.
   #[expect(
