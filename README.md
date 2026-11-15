@@ -41,7 +41,7 @@ choose what to do with a result. In furb, the model writes the choice. Here is o
 the tests, from start to end with no turn in between:
 
 ```python
-changed = (await bash("git diff --name-only main")).stdout.split()
+changed = (await bash("git diff --name-only main")).stdout.content.split()
 reviews = [prompt(str, f"Find the bugs in {path}.", on=chain(path)) for path in changed]
 found = []
 for review in reviews:
