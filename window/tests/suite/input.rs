@@ -111,10 +111,12 @@ fn three_enters_in_a_row_send_three_messages_in_order_and_the_up_arrow_cancels_n
   // The card of the thread, which works, and its page came.
   shows(&app, " Working 1");
   paged(&app);
-  // The up arrow moves in the input: the text stays, and the thread still works.
+  // The up arrow walks the history from the draft: no message starts so, so the text stays once
+  // the history came, and the thread still works.
   app.paste("a draft");
   app.press("up");
-  let frame = shows(&app, "┃ a draft");
+  let frame = shows(&app, "Nothing that you sent here starts so.");
+  assert!(frame.contains("┃ a draft"), "{frame}");
   assert!(frame.contains(" Working 1") && !frame.contains("Stopped"), "{frame}");
   screen("input-in-order", &app);
 }
