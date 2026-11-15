@@ -62,7 +62,7 @@ const USAGE: &str = r#"{"input_tokens":1340,"output_tokens":420,"cache_read_inpu
 pub(crate) const READY: &str = "Ask for a change";
 
 /// What the window shows once it is ready, when it only reads.
-const READS: &str = "Nothing that you write here goes";
+const READS: &str = "Read only · you watch";
 
 /// The second at which the clocks of the window stand still, 09:12 of the first day of 2026, so two
 /// captures of one walk are equal: no mark of the window moves, and no time passes in it.

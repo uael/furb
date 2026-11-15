@@ -412,9 +412,6 @@ impl Model {
       (Some(_), Some(at)) => (4, at, 1, "type another answer".to_owned()),
       (None, _) => {
         let says = match self.client.target() {
-          target if self.client.only_reads(target.machine()).is_some() => {
-            "Nothing that you write here goes"
-          }
           _ if self.client.draft.python => "A word of Python to run",
           Target::Thread(_) if reads => "The window sends nothing to this session",
           Target::Thread(_) if opens => "Your message goes once the session is open",
@@ -435,7 +432,9 @@ impl Model {
         (x, waits + 1, self.grown(), says.to_owned())
       }
     };
-    let shown = self.form().is_none() || self.form_rows(self.grown()).1.is_some();
+    // A window that only reads has no field to write in.
+    let shown = (self.form().is_none() || self.form_rows(self.grown()).1.is_some())
+      && self.client.only_reads(self.client.target().machine()).is_none();
     let number = |one: usize| u16::try_from(one).unwrap_or_default();
     Area {
       x: number(x),
@@ -452,7 +451,9 @@ impl Model {
   /// feed, with a bar in the color of its target: a blank row, a band for each row of its text,
   /// which the editor covers, a blank row, the row of its controls, and a blank row.
   pub(crate) fn input(&self) -> Vec<Row> {
-    let mut rows = if self.form().is_some() {
+    let mut rows = if self.client.only_reads(self.client.target().machine()).is_some() {
+      vec![self.reader()]
+    } else if self.form().is_some() {
       let mut rows = self.form_rows(self.grown()).0;
       let blank = || self.band(Vec::new(), None);
       rows.extend([blank(), self.launcher(), blank()]);
@@ -500,9 +501,6 @@ impl Model {
   /// a word of Python, and what the input sends to, which picks another; at its right the model
   /// with its effort, and the key that turns the input to a new thread and back.
   fn launcher(&self) -> Row {
-    if let Some(why) = self.client.only_reads(self.client.target().machine()) {
-      return self.reader(&why);
-    }
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
     let muted = t.style(Role::Muted).bg(t.raised);
@@ -543,19 +541,20 @@ impl Model {
     Row { hot, ..Row::of(line) }
   }
 
-  /// The row of the controls where the login only reads: no control that writes, what the login
-  /// may do, and the ring of the context, which only reads.
-  fn reader(&self, why: &str) -> Row {
+  /// The one row of the input of a window that only reads: no field to write in and no control
+  /// that writes, a muted line that says so, and the ring of the context, which only reads.
+  fn reader(&self) -> Row {
     let t = &self.tokens;
-    let raised = Style::new().bg(t.raised);
-    let left = vec![run(format!("◌ {why}"), t.style(Role::Muted).bg(t.raised))];
-    let ring =
-      self.ring().map(|ring| (run(ring, t.style(Role::Prose).bg(t.raised)), Some(Click::Context)));
+    let watched = if self.client.thread.is_some() { "this session" } else { "each session live" };
+    let left = vec![run(format!("Read only · you watch {watched}"), t.style(Role::Muted))];
+    let ring = self.ring().map(|ring| (run(ring, t.style(Role::Prose)), Some(Click::Context)));
     let (right, clicks): (Line, Vec<_>) = ring.into_iter().unzip();
-    let line = spread(left, right, self.wide().saturating_sub(6), raised);
+    // The line stands where the text of a box of the input stands, two columns in.
+    let line = spread(left, right, self.wide().saturating_sub(6), Style::new());
     let hot = clicked(&columns(&line), clicks);
-    let Row { line, .. } = self.band(line, None);
-    Row { hot, ..Row::of(line) }
+    let mut row = vec![run("  ", Style::new())];
+    row.extend(line);
+    Row { hot, ..Row::of(row) }
   }
 
   /// The launcher of a new session: after the switch, where it will run, the machine and then the

@@ -882,10 +882,8 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
         step(
           "b",
           &[Act::Key("C-p"), Act::Type("bench"), Act::Key("Enter")],
-          "Nothing that you write here goes",
+          "Read only · you watch this session",
         ),
-        // A message stays in the input, and the window says why nothing went.
-        step("c", &[Act::Type("try the image"), Act::Key("Enter")], "Nothing went"),
       ],
     }),
   },

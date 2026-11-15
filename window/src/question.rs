@@ -129,7 +129,10 @@ impl Model {
 
   /// The form that shows, with its question.
   pub(crate) fn form(&self) -> Option<(&Form, Question<'_>)> {
-    let form = self.client.thread.as_ref()?.form.as_ref()?;
+    let opened = self.client.thread.as_ref()?;
+    // A window that only reads answers nothing.
+    let form =
+      opened.form.as_ref().filter(|_| self.client.only_reads(opened.thread.key.0).is_none())?;
     let question = self.questions().into_iter().find(|one| one.act == form.act)?;
     Some((form, question))
   }

@@ -486,7 +486,8 @@ fn a_login_that_only_reads_sees_the_session_live_and_sends_nothing() {
   let prompt = rex.said(&life, "where does the time of a resume go");
   open(&app, vec![daemon.machine("mac")], options(&daemon.file("cards.json")));
   app.click(80, row(&app, "where does the t"));
-  shows(&app, "Nothing that you write here goes");
+  let frame = shows(&app, "Read only · you watch this session");
+  assert!(!frame.contains("Reply to this thread"), "a field to write in shows:\n{frame}");
   screen("thread-reads-only", &app);
   // What rex says later on the thread shows live, and its model works on it.
   let message = format!("and the seed of a large record {WORKS}");
@@ -499,16 +500,14 @@ fn a_login_that_only_reads_sees_the_session_live_and_sends_nothing() {
   };
   assert!(matches!(rex.ask(more), Answer::Done | Answer::Act(_)));
   shows(&app, "and the seed of a large record");
+  // A key goes to no field.
   app.type_text("try the image");
   app.press("enter");
-  shows(&app, "Nothing went: this window only reads.");
-  shows(&app, "Working");
+  let frame = shows(&app, "Working");
+  assert!(!frame.contains("try the image"), "{frame}");
   // Rex leaves, so this window is the last view of the session that works.
   assert_eq!(rex.ask(Verb::Detach { life: life.clone() }), Answer::Done);
-  // The draft stays for him. A leave asks nothing of a session that the login cannot keep, pause
-  // or stop.
-  shows(&app, "┃ try the image");
-  app.press("ctrl+c");
+  // A leave asks nothing of a session that the login cannot keep, pause or stop.
   app.press("ctrl+d");
   app.press("ctrl+d");
   assert!(app.wait_until(PATIENCE, || app.app().is_quitting()), "{}", app.text());
@@ -526,8 +525,11 @@ fn a_window_that_asks_to_read_only_reads_a_session_its_login_may_write() {
   let mac = Machine { reads: true, ..daemon.machine("mac") };
   open(&app, vec![mac], options(&daemon.file("cards.json")));
   app.click(80, row(&app, "where does the t"));
-  let frame = shows(&app, "only reads on this computer");
-  assert!(!frame.contains("+ ⌃N"), "a control that writes shows:\n{frame}");
+  let frame = shows(&app, "Read only · you watch this session");
+  assert!(
+    !frame.contains("+ ⌃N") && !frame.contains(" Resolve "),
+    "a control that writes:\n{frame}"
+  );
 }
 
 #[test]
