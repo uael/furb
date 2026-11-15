@@ -11,7 +11,6 @@ use std::{
   fs::{self, OpenOptions},
   io::{self, Write},
   path::{Path, PathBuf},
-  sync::Arc,
 };
 
 use furb::{
@@ -53,19 +52,12 @@ enum Line {
   Flush(oneshot::Sender<Result<(), JournalError>>),
 }
 
-/// How a journal appends one change at a path. The tests give one that a test holds.
-type Append = Arc<dyn Fn(&Path, &str) -> io::Result<()> + Send + Sync>;
-
 impl Journal {
   /// The journal of a life that stands on a folder, appended at a path, which tells each fault of
   /// the disk as a notice at once.
   pub(crate) fn spawn(folder: PathBuf, at: PathBuf, told: UnboundedSender<Event>) -> Self {
-    Self::appending(folder, at, told, Arc::new(appended))
-  }
-
-  fn appending(folder: PathBuf, at: PathBuf, told: UnboundedSender<Event>, append: Append) -> Self {
     let (lines, heard) = mpsc::unbounded_channel();
-    tokio::spawn(written(at, heard, told, append));
+    tokio::spawn(written(at, heard, told));
     Self { folder, lines }
   }
 
@@ -109,12 +101,7 @@ impl Journal {
 
 /// The task of a journal: each line taken in order, until the journal and each of its ears are
 /// gone.
-async fn written(
-  at: PathBuf,
-  mut heard: UnboundedReceiver<Line>,
-  told: UnboundedSender<Event>,
-  append: Append,
-) {
+async fn written(at: PathBuf, mut heard: UnboundedReceiver<Line>, told: UnboundedSender<Event>) {
   let mut lost: Option<JournalError> = None;
   // The journal tells the operator when it begins to lose changes and when it takes changes again,
   // not each change.
@@ -128,8 +115,8 @@ async fn written(
         continue;
       }
     };
-    let (path, append) = (at.clone(), Arc::clone(&append));
-    let fault = match task::spawn_blocking(move || append(&path, &change)).await {
+    let path = at.clone();
+    let fault = match task::spawn_blocking(move || appended(&path, &change)).await {
       // The chain of the write hears that its changes changed only now: a window that read the
       // journal at the fact of the write could find it without the change, and hear nothing after.
       Ok(Ok(())) => {
@@ -218,7 +205,3 @@ fn appended(at: &Path, line: &str) -> io::Result<()> {
   file.write_all(format!("{line}\n").as_bytes())?;
   file.sync_all()
 }
-
-#[cfg(test)]
-#[path = "changes.test.rs"]
-mod tests;

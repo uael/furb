@@ -823,6 +823,51 @@ async fn each_write_keeps_its_change_in_the_journal_beside_the_record_once_the_l
   let scratch = Scratch::of(Path::new(&record)).unwrap().unwrap();
   fs::remove_dir_all(scratch.path()).unwrap();
 }
+
+#[tokio::test]
+async fn a_journal_that_the_disk_refuses_is_told_once_as_it_fails_and_once_as_it_recovers() {
+  let at = place("lost");
+  let notices = |got: &[Logged], says: &str| {
+    got.iter().filter(|one| matches!(&*one.1, Event::Notice(text) if text.contains(says))).count()
+  };
+  let notice = |says: &'static str| move |event: &Event| matches!(event, Event::Notice(text) if text.contains(says));
+  let write = |name: &str| rung(&format!("write(Text('{name}', 'x\\n'))"));
+  // A folder in the place of the journal makes the disk refuse each change.
+  let refused = |name: &str| {
+    let record = at.join(name).display().to_string();
+    let journal = PathBuf::from(format!("{record}.changes.jsonl"));
+    fs::create_dir(&journal).unwrap();
+    (Life::spawn(Opening { record: Some(record), ..scripted(&at, &[]) }).unwrap(), journal)
+  };
+  let lost = |end: &Result<Reply, LifeError>, journal: &Path, count: usize| {
+    let says = format!("the journal of file changes at {} lost {count} of them", journal.display());
+    matches!(end, Err(LifeError::Refused(why)) if why.starts_with(&format!("{says}, the first for: ")))
+  };
+  let (life, journal) = refused("a.jsonl");
+  let mut events = Box::pin(life.events(0));
+  let id = made(&life, write("a.txt")).await;
+  let mut got = until(&mut events, done(&id)).await;
+  let id = made(&life, write("b.txt")).await;
+  got.extend(until(&mut events, done(&id)).await);
+  // The end replies once the journal took each change, so it says each change that it lost.
+  let end = life.send(Command::End).await;
+  assert!(lost(&end, &journal, 2), "{end:?}");
+  got.extend(until(&mut events, |event| matches!(event, Event::Ended(_))).await);
+  assert_eq!(notices(&got, "took no change"), 1, "the life hears the first fault alone");
+  let (life, journal) = refused("b.jsonl");
+  let mut events = Box::pin(life.events(0));
+  made(&life, write("c.txt")).await;
+  until(&mut events, notice("took no change")).await;
+  fs::remove_dir(&journal).unwrap();
+  made(&life, write("d.txt")).await;
+  let got = until(&mut events, notice("takes changes again")).await;
+  assert_eq!(notices(&got, "took no change"), 0, "the life hears the fault once");
+  let end = life.send(Command::End).await;
+  assert!(lost(&end, &journal, 1), "{end:?}");
+  let kept = fs::read_to_string(&journal).unwrap();
+  assert_eq!(kept.lines().count(), 1, "the journal keeps the change after its recovery: {kept}");
+}
+
 #[tokio::test]
 async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
   let at = place("words");

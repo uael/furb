@@ -48,7 +48,7 @@ use furb_host::{
   transport::{Accepted, Dialer, Identity, Local, LocalApi, Tailscale, Who},
   upgrade,
 };
-use futures::{SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, future};
 use serde_json::{Value, json};
 use tokio::{task, task::JoinHandle, time, time::timeout};
 use tokio_util::codec::{Framed, LinesCodec};
@@ -2127,6 +2127,17 @@ async fn a_command_that_a_window_feeds_reads_each_line_that_it_writes() {
 /// stays far below it on a loaded machine.
 const QUIET: Duration = Duration::from_millis(1500);
 
+/// A daemon of a test whose watch tells a stall after [`QUIET`].
+async fn watched(at: &Path, opening: Opening) -> Local {
+  let local = Local::new(at.join("sock"));
+  let listener = local.listen().await.unwrap();
+  let settings =
+    Settings { opening, grace: SHORT, first: STARTING, stall: QUIET, tailnet: None, door: None };
+  let served = local.clone();
+  tokio::spawn(async move { run(&served, listener, settings).await });
+  local
+}
+
 /// Whether a frame tells that a life stalled.
 fn stall(frame: &Frame) -> bool {
   matches!(frame, Frame::Stalled { .. })
@@ -2162,18 +2173,7 @@ impl Window {
 #[tokio::test]
 async fn a_life_that_holds_an_open_act_and_says_no_fact_is_told_once_to_its_windows_and_root() {
   let at = place();
-  let local = Local::new(at.join("sock"));
-  let listener = local.listen().await.unwrap();
-  let settings = Settings {
-    opening: opening(&at),
-    grace: SHORT,
-    first: STARTING,
-    stall: QUIET,
-    tailnet: None,
-    door: None,
-  };
-  let served = local.clone();
-  tokio::spawn(async move { run(&served, listener, settings).await });
+  let local = watched(&at, opening(&at)).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
@@ -2266,18 +2266,7 @@ async fn a_window_that_dials_again_hears_the_end_of_a_word_that_ended_while_it_w
 #[tokio::test]
 async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_crossing_left_open() {
   let at = place();
-  let local = Local::new(at.join("sock"));
-  let listener = local.listen().await.unwrap();
-  let settings = Settings {
-    opening: opening(&at),
-    grace: SHORT,
-    first: STARTING,
-    stall: QUIET,
-    tailnet: None,
-    door: None,
-  };
-  let served = local.clone();
-  tokio::spawn(async move { run(&served, listener, settings).await });
+  let local = watched(&at, opening(&at)).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
@@ -2299,18 +2288,7 @@ async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_crossing_lef
 #[tokio::test]
 async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() {
   let at = place();
-  let local = Local::new(at.join("sock"));
-  let listener = local.listen().await.unwrap();
-  let settings = Settings {
-    opening: opening(&at),
-    grace: SHORT,
-    first: STARTING,
-    stall: QUIET,
-    tailnet: None,
-    door: None,
-  };
-  let served = local.clone();
-  tokio::spawn(async move { run(&served, listener, settings).await });
+  let local = watched(&at, opening(&at)).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
@@ -2336,18 +2314,7 @@ async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() 
 #[tokio::test]
 async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_notice() {
   let at = place();
-  let local = Local::new(at.join("sock"));
-  let listener = local.listen().await.unwrap();
-  let settings = Settings {
-    opening: opening(&at),
-    grace: SHORT,
-    first: STARTING,
-    stall: QUIET,
-    tailnet: None,
-    door: None,
-  };
-  let served = local.clone();
-  tokio::spawn(async move { run(&served, listener, settings).await });
+  let local = watched(&at, opening(&at)).await;
   let mut window = Window::dialed(&local).await;
   let life = opened(&mut window, &at, "a.jsonl").await;
   window.attach(&life).await;
@@ -2369,6 +2336,102 @@ async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_not
     unreachable!()
   };
   assert_eq!(sent[5], notice.as_str(), "the stuck chain takes the notice as its message");
+  window.left(&life).await;
+}
+
+#[tokio::test]
+async fn work_that_rests_or_waits_for_the_operator_never_stalls_and_stalls_once_he_answered() {
+  let at = place();
+  let local = watched(&at, opening(&at)).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  let rests = window.during(QUIET * 2).await;
+  assert!(!rests.iter().any(stall), "a life that rests tells no stall");
+  // A command on a chain of its own writes for a while, a rung that awaits it is paused, a rung
+  // and the run of the root await a prompt to the operator, and the root then waits on a command.
+  let word = "long = bash(\"for i in $(seq 20); do echo $i; sleep 0.1; done\", on=chain(\"far\"))\n\
+              stopped = rung(\"x = 2\", long, on=chain(\"stopped\"))\npause(stopped)\n\
+              q = prompt(str, \"q\", to=OPERATOR)\nrung(\"x = 1\", q, on=chain(\"held\"))\n\
+              await q\nawait bash(\"sleep 20\", timeout=60)";
+  let verb = Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
+  let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
+  let asked = |frame: &Frame| matches!(frame, Frame::Event { event: Event::Fact(fact), .. } if fact[0] == "prompt" && fact[5] == "q");
+  let mut heard = window.heard_until(asked).await;
+  let Some(Frame::Event { event: Event::Fact(q), .. }) = heard.last().cloned() else {
+    unreachable!()
+  };
+  let waits = window.during(QUIET * 2).await;
+  assert!(!waits.iter().any(stall), "work that waits for the operator never stalls: {waits:?}");
+  heard.extend(waits);
+  let stopped = heard.iter().find_map(|frame| match frame {
+    Frame::Event { event: Event::Fact(fact), .. } if fact[0] == "rung" && fact[4] == "x = 2" => {
+      fact[3].as_str().map(str::to_owned)
+    }
+    _ => None,
+  });
+  let stopped = stopped.expect("the paused rung is told");
+  let act = q[1].as_str().unwrap().to_owned();
+  let said = Verb::Answer { life: life.clone(), act, line: "a".to_owned() };
+  assert_eq!(window.ask(said).await, Ok(Answer::Done));
+  let answered = Instant::now();
+  let Frame::Stalled { acts, .. } = window.until(stall).await else { unreachable!() };
+  assert!(answered.elapsed() >= QUIET, "the daemon tells a stall after its bound alone");
+  assert!(acts.iter().any(|one| one.kind == "run" && one.chain == "chain1"), "{acts:?}");
+  assert!(!acts.iter().any(|one| one.chain == stopped), "a paused rung waits on purpose: {acts:?}");
+  window.left(&life).await;
+}
+
+#[tokio::test]
+async fn a_reply_that_writes_nothing_for_the_bound_stalls_its_chain_and_what_it_writes_is_progress()
+{
+  let at = place();
+  // The model of the chain `side` writes a word each tenth of a second for twice the bound, then
+  // nothing; the root closes each prompt at once.
+  let wrote = Arc::new(Mutex::new(Instant::now()));
+  let (last, root) = (Arc::clone(&wrote), opening(&at).answer.expect("a model"));
+  let answer = Answered(Arc::new(move |request: Value, told| {
+    if request["chain"] == "chain1" {
+      return (root.0)(request, told);
+    }
+    let last = Arc::clone(&last);
+    Box::pin(async move {
+      for _ in 0..30 {
+        told("a", "");
+        *last.lock().unwrap() = Instant::now();
+        time::sleep(QUIET / 15).await;
+      }
+      future::pending().await
+    })
+  }));
+  let local = watched(&at, Opening { answer: Some(answer), ..opening(&at) }).await;
+  let mut window = Window::dialed(&local).await;
+  let life = opened(&mut window, &at, "a.jsonl").await;
+  window.attach(&life).await;
+  let word = "prompt(None, 'go', on=chain('side'))".to_owned();
+  let Ok(Answer::Act(_)) = window.ask(Verb::Run { life: life.clone(), word, on: None }).await
+  else {
+    panic!("no rung")
+  };
+  let began = Instant::now();
+  let Frame::Stalled { acts, .. } = window.until(stall).await else { unreachable!() };
+  assert!(began.elapsed() >= QUIET * 2, "what a model writes is progress");
+  assert!(
+    wrote.lock().unwrap().elapsed() >= QUIET,
+    "the reply stalls after the bound with no word"
+  );
+  let side = acts.iter().find(|one| one.kind == "reply").map(|one| one.chain.clone());
+  let side = side.expect("the stall names the reply");
+  assert!(side != "chain1" && acts.iter().all(|one| one.chain == side), "{acts:?}");
+  let taken = |frame: &Frame| {
+    matches!(frame, Frame::Event { event: Event::Fact(fact), .. }
+      if fact[0] == "prompt" && fact[3] == side.as_str() && fact[4] == "None")
+  };
+  let heard = window.heard_until(taken).await;
+  let Some(Frame::Event { event: Event::Fact(sent), .. }) = heard.last() else { unreachable!() };
+  let chain =
+    |frame: &Frame| matches!(frame, Frame::Stalled { notice, .. } if sent[5] == notice.as_str());
+  assert!(heard.iter().any(chain), "the chain of the reply takes the notice of its own stall");
   window.left(&life).await;
 }
 
