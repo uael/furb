@@ -7,7 +7,7 @@
   • seed reads each chain once
   • the image skips the boot
 
-       python
+                                                   python
     1  open = boot + seed
 
   See the trace.

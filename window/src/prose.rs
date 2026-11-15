@@ -266,7 +266,8 @@ impl Prose<'_> {
   }
 
   /// A block of code as each block of code of the window: on the raised ground, as wide as the
-  /// prose, its language as its head, and each line with its number close to the left of the box.
+  /// prose, its language as its head on the row above the box at its right, as the model of a block
+  /// of the feed, and each line with its number close to the left of the box.
   fn block(&mut self, text: &str, language: &str) {
     let ground = self.tokens.raised;
     let (plain, muted) = (self.tokens.style(Role::Prose), self.tokens.style(Role::Muted));
@@ -277,15 +278,17 @@ impl Prose<'_> {
     };
     let numbers = Gutter::of(lines.len());
     let gutter = numbers.width;
-    let head =
-      (!language.is_empty()).then(|| vec![run(format!("{:gutter$}  {language}", ""), muted)]);
+    let head = vec![run(language, muted)];
+    let head = (!language.is_empty())
+      .then(|| line::spread(Vec::new(), head, self.room.saturating_sub(2), Style::new()));
     let room = Gutter::inside(self.room.saturating_sub(2)).saturating_sub(gutter + 2);
     let numbered = lines.into_iter().zip(1..).map(|(line, number)| {
       let mut line = line::clipped(line, room, muted);
       line.insert(0, run(format!("{number:>gutter$}  "), muted));
       line
     });
-    for line in head.into_iter().chain(numbered) {
+    self.out.extend(head);
+    for line in numbered {
       self.out.push(line::boxed(line, self.room, ground));
     }
     self.gap();

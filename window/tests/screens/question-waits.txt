@@ -5,7 +5,7 @@
   • seed reads each chain once                                ▐ ● how long does an open…  ◆ Input ▌
   • the image skips the boot                                  ▐   FU furb                    opus ▌
                                                               ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
-       python
+                                                   python
     1  open = boot + seed
 
   See the trace.
