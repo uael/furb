@@ -151,7 +151,45 @@ fn a_part_with_another_padding_at_another_size_is_named() {
   assert_eq!(
     found,
     [
-      "the part #1b1b1b number 1 from the top has other insets at another size: 120x40 left 2 right 8 above 0 below 1, 80x24 left 1 right 5 above 0 below 1"
+      "the part #1b1b1b that starts `text` has other insets at another size: 120x40 left 2 right 8 above 0 below 1, 80x24 left 1 right 5 above 0 below 1"
     ]
   );
+}
+
+#[test]
+fn the_inset_above_a_part_that_the_scroll_of_the_feed_cuts_says_nothing() {
+  // Under the head of the window, a part whose first row the feed scrolled away at one size.
+  let blank = "             ";
+  let head: &[(&str, u32, u32)] = &[(blank, TEXT, BASE)];
+  let whole = frame(&[
+    head,
+    &[(blank, TEXT, RAISED)],
+    &[("  one        ", TEXT, RAISED)],
+    &[(blank, TEXT, RAISED)],
+  ]);
+  let cut = frame(&[head, &[("  one        ", TEXT, RAISED)], &[(blank, TEXT, RAISED)], head]);
+  assert_eq!(
+    sizes(&[("120x40".to_owned(), whole), ("80x24".to_owned(), cut)]),
+    Vec::<String>::new()
+  );
+}
+
+#[test]
+fn a_part_is_the_same_part_at_each_size_by_its_text_and_not_by_its_place() {
+  // Two parts of one ground, in one order at one size and in the other at another, as a feed that
+  // scrolled shows them: each keeps its insets.
+  let parts = |first: &'static str, second: &'static str| {
+    let blank = "             ";
+    frame(&[
+      &[(first, TEXT, RAISED)],
+      &[(blank, TEXT, RAISED)],
+      &[(blank, TEXT, BASE)],
+      &[(second, TEXT, RAISED)],
+      &[(blank, TEXT, RAISED)],
+    ])
+  };
+  let (one, other) = ("  one        ", " other       ");
+  let found =
+    sizes(&[("120x40".to_owned(), parts(one, other)), ("80x24".to_owned(), parts(other, one))]);
+  assert_eq!(found, Vec::<String>::new());
 }
