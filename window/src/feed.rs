@@ -10,6 +10,7 @@ use opentui::style::{Color, Style};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::{
+  code,
   input::Armed,
   keys::Does,
   line::{self, Line, run, spread, wrapped},
@@ -198,9 +199,7 @@ impl Feed<'_> {
   fn block(&self, message: &str, block: &Block) -> Vec<Row> {
     let t = &self.model.tokens;
     let muted = self.style(Role::Muted);
-    let numbers = block.lines.iter().map(|one| one.number).max().unwrap_or_default();
-    // Two columns at least, so the code moves no cell as the block grows past its ninth line.
-    let gutter = numbers.to_string().len().max(2);
+    let gutter = code::gutter(block.lines.iter().map(|one| one.number).max().unwrap_or_default());
     let head = vec![run(format!("{:gutter$}  {}", "", maker(&block.maker)), muted)];
     let mut rows = vec![Row::of(self.boxed(head, t.raised))];
     let code = self.style(Role::Prose).bg(t.raised);

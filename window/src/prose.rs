@@ -8,7 +8,7 @@ use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-  code::Colors,
+  code::{self, Colors},
   line::{self, Line, run},
   tokens::{Role, Tokens},
 };
@@ -199,7 +199,7 @@ impl Prose<'_> {
     } else {
       text.split('\n').map(|one| vec![run(one, plain)]).collect()
     };
-    let gutter = lines.len().to_string().len();
+    let gutter = code::gutter(lines.len());
     let head =
       (!language.is_empty()).then(|| vec![run(format!("{:gutter$}  {language}", ""), muted)]);
     let numbered = lines.into_iter().zip(1..).map(|(mut line, number)| {

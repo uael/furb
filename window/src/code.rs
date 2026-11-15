@@ -11,6 +11,13 @@ use crate::{
   tokens::SYNTAX,
 };
 
+/// The columns of the numbers of a block of code, by its last number: two at least, so each block
+/// of the window starts its code in one column, and the code of a block that grows moves no cell
+/// past its ninth line.
+pub(crate) fn gutter(last: usize) -> usize {
+  last.to_string().len().max(2)
+}
+
 /// How many texts the colors keep before they forget them all.
 const KEPT: usize = 256;
 
