@@ -25,6 +25,6 @@
 ┃
 ┃ A reply opens this thread again
 ┃
-┃  Message  Python    → read the trace of the… ▾   opus  high   + ⌃N   ○ 12%
+┃  Message  Python    → read the… ▾     opus  high   + New thread ⌃N   ○ 12%
 ┃
   This computer · ~/src/furb-try                                      ⌃P go to

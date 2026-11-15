@@ -515,16 +515,15 @@ impl Model {
     left.extend([gap(), run(mark, muted), run(target, raised.fg(color))]);
     let room = self.wide().saturating_sub(6);
     let wanted = left.last().map_or(0, |one| one.content.width());
-    // The target says where the message goes, so it keeps its words first: the turn gives way to
-    // its mark and its key, then the effort, then the target to a few words.
+    // The turn keeps its label, as on each other launcher: the target gives way first, down to a
+    // few words, then the turn to its mark and its key, then the effort.
     let right = |short| self.controls(short);
     // The target leaves room for the mark before it and the arrow of its picker after it.
     let fits =
       |right: &(Line, _)| room.saturating_sub(width(&right.0) + 2 + width(&left[..3]) + 2 + 2);
-    let (right, clicks) = [right(0), right(1)]
+    let (right, clicks) = [right(0), right(1), right(2)]
       .into_iter()
-      .find(|one| fits(one) >= wanted)
-      .or_else(|| [right(1), right(2)].into_iter().find(|one| fits(one) >= SESSION))
+      .find(|one| fits(one) >= wanted.min(SESSION))
       .unwrap_or_else(|| right(2));
     let fits = room.saturating_sub(width(&right) + 2 + width(&left[..3]) + 2 + 2);
     let target = left.pop().map(|one| run(cut(&one.content, fits), one.style));
