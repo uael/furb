@@ -635,6 +635,19 @@ fn a_prompt_the_record_already_holds_is_taken_up_and_never_asked_again() {
 }
 
 #[test]
+fn a_prompt_said_again_under_another_key_is_asked_again_and_under_its_key_is_taken_up() {
+  let yard = Yard::new("keyed");
+  let asked = |key| ["prompt", "say a number", "--to", "operator", "--shape", "int", "--key", key];
+  assert_eq!(printed(yard.kept(&asked("1")), "7\n"), "7\n");
+  assert_eq!(
+    printed(yard.kept(&asked("2")), "8\n"),
+    "8\n",
+    "one message under a new key asks again"
+  );
+  assert_eq!(printed(yard.kept(&asked("1")), ""), "7\n", "the key takes up its own prompt");
+}
+
+#[test]
 fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_taken_up() {
   let yard = Yard::new("paused");
   let counted = ["prompt", "count the lines", "--shape", "int"];

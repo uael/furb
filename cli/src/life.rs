@@ -16,10 +16,18 @@ use furb::{
   skill::{self, Skill},
   verbs,
   wire::outward,
-  world::Catalog,
+  world::{Catalog, Shape},
 };
 
 use crate::{console, error::CliError};
+
+/// A prompt of the operator on the root, as a command says it: the shape that it wants, its
+/// message and its actor.
+pub(crate) struct Asked<'a> {
+  pub(crate) shape: &'a str,
+  pub(crate) message: &'a str,
+  pub(crate) to: &'a str,
+}
 
 /// One life, as the operator holds it: its engine, its root, the record that it keeps, when it
 /// keeps one, and what the operator hears of its root.
@@ -66,19 +74,26 @@ impl Life {
   ///
   /// The engine matches nothing the operator says again, so a life stood up on its own record would open a second
   /// prompt beside the one that record stands on, and ask a model for what it was answered once.
-  pub(crate) fn again(
-    &mut self,
-    shape: &str,
-    message: &str,
-    to: &str,
-  ) -> Result<Option<String>, CliError> {
-    let wanted = [OPERATOR, self.root.as_str(), shape, message, to];
+  pub(crate) fn again(&mut self, asked: &Asked<'_>) -> Result<Option<String>, CliError> {
+    let wanted = [OPERATOR, self.root.as_str(), asked.shape, asked.message, asked.to];
     let prompts = verbs::Transcript { on: Some(self.root.clone()), of: Some("prompt".to_owned()) };
     Ok(self.engine.transcript(prompts)?.iter().find_map(|a| {
       let words =
         a.0.as_ref().items()?.iter().map(furb::ObjectRef::as_str).collect::<Option<Vec<_>>>()?;
       (words.len() == 7 && words[2..] == wanted).then(|| a.about().to_owned())
     }))
+  }
+
+  /// The prompt of a key of the caller on the root, made when the record holds none, and whether
+  /// the record held it.
+  pub(crate) fn keyed(&mut self, key: &str, asked: &Asked<'_>) -> Result<(String, bool), CliError> {
+    let prompts = verbs::Transcript { on: Some(self.root.clone()), of: Some("prompt".to_owned()) };
+    let held: Vec<String> =
+      self.engine.transcript(prompts)?.iter().map(|a| a.about().to_owned()).collect();
+    let words = vec![Shape::object(asked.shape), Object::string(asked.message)];
+    let id = self.engine.keyed(key, "prompt", words, vec![("to", Object::string(asked.to))])?;
+    let taken = held.contains(&id);
+    Ok((id, taken))
   }
 
   /// Whether a pause stands over an act of the operator on the root, or over the root, as the
