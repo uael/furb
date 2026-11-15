@@ -330,7 +330,8 @@ fn a_resolve_of_a_thread_that_works_waits_for_its_confirm() {
   paged(&app);
   app.press("ctrl+x");
   app.press("r");
-  shows(&app, " Stop and resolve ");
+  let frame = shows(&app, " Stop and resolve ");
+  assert!(frame.contains("⌃X R again stops and resolves the thread"), "{frame}");
   screen("input-resolve-confirm", &app);
   // Another key leaves the confirm, and the thread still works.
   app.press("escape");

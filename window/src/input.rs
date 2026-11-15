@@ -281,7 +281,9 @@ impl Model {
       }
       Armed::Stop => Some(format!("{} again stops the work", self.key(Does::Close))),
       Armed::Leave => Some(format!("{} again leaves the window", self.key(Does::Leave))),
-      Armed::Resolve(_) => None,
+      Armed::Resolve(_) => {
+        Some(format!("{} again stops and resolves the thread", self.key(Does::Resolve)))
+      }
     }
   }
 
