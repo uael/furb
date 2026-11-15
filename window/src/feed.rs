@@ -67,21 +67,22 @@ impl Feed<'_> {
     rows
   }
 
-  /// What a pause that holds the thread leaves him: that it holds, and the way out as a button. A
-  /// pause that he said takes his resume, which lets the work that it held go on. One that furb
-  /// said after a failure, which the line above shows, ends with a message, which asks the model
-  /// again, on the model that he chose, and nothing is lost.
+  /// What a pause that holds the thread leaves him: that it holds, and the way out as buttons. His
+  /// resume wakes it: the work that a pause of his held goes on, and a pause that furb said after a
+  /// failure, which the line above shows, asks the model again. A message resumes it too, and
+  /// nothing is lost. A pause of furb offers another model as well.
   fn paused(&self) -> Vec<Row> {
     let card = self.model.client.card(&self.opened.thread.key);
     let Some(Standing::Paused { by, .. }) = card.map(|one| &one.thread.standing) else {
       return Vec::new();
     };
     let (t, his) = (&self.model.tokens, operator(by));
-    let (mark, said, chip) = if his {
-      (t.muted, "You paused this thread.", (" Resume ", Does::Pause))
+    let resume = (" Resume ", Does::Pause);
+    let (mark, said, chips) = if his {
+      (t.muted, "You paused this thread.", vec![resume])
     } else {
-      let said = "This thread is paused. Nothing is lost: a message resumes it.";
-      (t.attention, said, (" Change the model ", Does::Model))
+      let said = "This thread is paused. Nothing is lost.";
+      (t.attention, said, vec![resume, (" Change the model ", Does::Model)])
     };
     let mut rows: Vec<Row> = wrapped(said, self.wide.saturating_sub(6))
       .into_iter()
@@ -91,8 +92,12 @@ impl Feed<'_> {
         Row::of(vec![lead, run(text, self.style(Role::Prose))])
       })
       .collect();
-    let line = vec![run("    ", Style::new()), run(chip.0, self.style(Role::Button))];
-    let hot = vec![(4..width(&line), Some(Click::Key(chip.1)))];
+    let (mut line, mut hot) = (vec![run("    ", Style::new())], Vec::new());
+    for (label, does) in chips {
+      let at = width(&line);
+      line.extend([run(label, self.style(Role::Button)), run("  ", Style::new())]);
+      hot.push((at..at + label.width(), Some(Click::Key(does))));
+    }
     rows.extend([Row::default(), Row { hot, ..Row::of(line) }, Row::default()]);
     rows
   }

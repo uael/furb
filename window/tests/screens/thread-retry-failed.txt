@@ -7,10 +7,10 @@
     ✗  claude-cli:opus/high answered nothing:                 ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
        ProviderError: the request is malformed
 
-  ‖ This thread is paused. Nothing is lost: a message
-    resumes it.
+  ‖ This thread is paused. Nothing is lost.
 
-     Change the model
+     Resume    Change the model
+
 
 
 
@@ -27,4 +27,4 @@
 ┃
 ┃  Message  Python    → the bench… ▾    opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ‖ Paused · a message resumes it                  ⌃P go to
+  ‖ Paused · ⌃X Z or a message resumes it          ⌃P go to

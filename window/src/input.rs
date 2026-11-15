@@ -112,26 +112,21 @@ impl Model {
     Some((at, Verb::Cancel { life, act, why: None }))
   }
 
-  /// The pause of the work of the open thread, or the wake of a pause that he said. A pause that
-  /// furb said after a failure ends with a message, which asks the model again, and the row says
-  /// so, as it does for a thread that neither works nor is paused.
+  /// The pause of the work of the open thread, or the wake of its pause: the work that a pause of
+  /// his held goes on, and a pause that furb said after a failure asks the model again.
   pub(crate) fn pause(&mut self) -> Option<(usize, Verb)> {
     let opened = self.client.thread.as_ref().filter(|one| !one.thread.key.2.is_empty())?;
     let key = opened.thread.key.clone();
     let card = self.client.card(&key);
     let control = match card.map(|card| &card.thread.standing) {
-      Some(Standing::Paused { by, .. }) if operator(by) => self.client.wake(&key),
-      Some(Standing::Paused { .. }) => None,
+      Some(Standing::Paused { .. }) => self.client.wake(&key),
       _ if card.is_some_and(|card| card.thread.works()) => {
         Some((key.0, Verb::Pause { life: key.1.clone(), act: key.2.clone(), why: None }))
       }
       _ => None,
     };
     if control.is_none() {
-      let paused = card.is_some_and(|card| matches!(card.thread.standing, Standing::Paused { .. }));
-      let why =
-        if paused { "A message resumes this thread." } else { "Nothing works in this thread." };
-      self.client.notice = Some(why.to_owned());
+      self.client.notice = Some("Nothing works in this thread.".to_owned());
     }
     control
   }
@@ -826,17 +821,13 @@ impl Model {
     }
     let Standing::Paused { by, .. } = &card.thread.standing else { return None };
     let key = self.key(Does::Pause);
-    let (color, keyed) =
-      if operator(by) { (self.tokens.muted, true) } else { (self.tokens.attention, false) };
-    let resume = if keyed {
-      format!(" · {key} or a message resumes it")
-    } else {
-      " · a message resumes it".to_owned()
-    };
-    let line = vec![run("  ‖ Paused", Style::new().fg(color)), run(resume, muted)];
+    let color = if operator(by) { self.tokens.muted } else { self.tokens.attention };
+    let line = vec![
+      run("  ‖ Paused", Style::new().fg(color)),
+      run(format!(" · {key} or a message resumes it"), muted),
+    ];
     let at = width(&line[..1]) + 3;
-    let hot = keyed.then(|| (at..at + key.width(), Some(Click::Key(Does::Pause))));
-    Some(Row { hot: hot.into_iter().collect(), ..Row::of(line) })
+    Some(Row { hot: vec![(at..at + key.width(), Some(Click::Key(Does::Pause)))], ..Row::of(line) })
   }
 
   /// The hint of the work of the open thread: its time, which counts each second as the time of a

@@ -192,7 +192,7 @@ fn a_line_that_failed_shows_its_cross_and_its_error_under_it() {
 #[test]
 fn a_model_asked_again_says_its_attempt_its_wait_and_why_then_its_failure_and_the_way_out() {
   let message = format!("the bench stalls on a cold build\n{RETRIES}");
-  let (app, _daemon, _peer) = opened(&message, "Attempt 2 of 10");
+  let (app, _daemon, mut peer) = opened(&message, "Attempt 2 of 10");
   let frame = app.text();
   // The attempt and its wait on the line that the model writes, and why under it.
   let lines = ["⠋  Attempt 2 of 10 in 4 s", "   the provider is overloaded"];
@@ -213,16 +213,31 @@ fn a_model_asked_again_says_its_attempt_its_wait_and_why_then_its_failure_and_th
   app.advance(AWAY);
   shows(&app, "Needs you 1");
   screen("thread-retry-failed", &app);
-  // The thread and the hint row say that the pause holds, that nothing is lost and what ends it:
-  // a message wakes the thread and asks the model again, which fails again here.
+  // The thread and the hint row say that the pause holds, that nothing is lost and what ends it.
   let frame = app.text();
-  let way =
-    ["‖ This thread is paused. Nothing is lost: a message", "resumes it.", "Change the model"];
+  let way = ["‖ This thread is paused. Nothing is lost.", "Resume", "Change the model"];
   assert!(way.iter().all(|line| frame.contains(line)), "{frame}");
-  assert!(frame.contains("‖ Paused · a message resumes it"), "{frame}");
+  assert!(frame.contains("‖ Paused · ⌃X Z or a message resumes it"), "{frame}");
+  // The key wakes the thread, which asks the model again: the daemon says the wake of the
+  // operator, then a reply of the model, which fails again here, so furb pauses the chain again.
+  app.press("ctrl+x");
+  app.press("z");
+  let fact = |name: &'static str, operator: bool| {
+    move |frame: &Frame| {
+      let data = &serde_json::json!(frame)["event"]["data"];
+      data[0] == name && (!operator || data[2] != "provider")
+    }
+  };
+  for (name, operator) in [("wake", true), ("reply", false), ("pause", false)] {
+    peer.heard(&app, fact(name, operator));
+  }
+  // A message wakes it too, and asks a line of its own, which fails again.
   app.paste("try once more");
   app.press("enter");
-  let again = app.wait_until(PATIENCE, || app.text().matches(failed).count() == 2);
+  let again = app.wait_until(PATIENCE, || {
+    let frame = app.text();
+    frame.matches(failed).count() == 2 && frame.contains("‖ Paused")
+  });
   assert!(again, "{}", app.text());
 }
 
