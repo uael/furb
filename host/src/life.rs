@@ -1670,8 +1670,7 @@ impl LifeHandle {
       retold: None,
       ahead: None,
       behind: true,
-      over: false,
-      ends: false,
+      gives: Gives::Each,
       retells,
     }
   }
@@ -1686,8 +1685,8 @@ impl LifeHandle {
 
 /// A reader of the events of a life: the place of the next event that it gives, the events that it
 /// read from the log and did not give yet, the facts among them that the log let go as the record
-/// gives them again, with the next of them, whether it stands behind the life, whether it gave
-/// the end, whether it gives the end alone, and whether it reads those facts again.
+/// gives them again, with the next of them, whether it stands behind the life, what it gives
+/// still, and whether it reads those facts again.
 struct Reader {
   life: LifeHandle,
   receiver: broadcast::Receiver<Logged>,
@@ -1697,8 +1696,18 @@ struct Reader {
   retells: bool,
   ahead: Option<Logged>,
   behind: bool,
-  over: bool,
-  ends: bool,
+  gives: Gives,
+}
+
+/// What a reader of the events of a life gives still.
+#[derive(PartialEq, Eq)]
+enum Gives {
+  /// Each event from its place.
+  Each,
+  /// The end of the life alone, for a reader that came past the tip.
+  End,
+  /// Nothing, since it gave the end.
+  Nothing,
 }
 
 impl Reader {
@@ -1707,7 +1716,7 @@ impl Reader {
   async fn next(mut self) -> Option<(Logged, Self)> {
     loop {
       let (logged, reader) = self.step().await?;
-      if !reader.ends || reader.over {
+      if reader.gives != Gives::End {
         return Some((logged, reader));
       }
       self = reader;
@@ -1717,7 +1726,7 @@ impl Reader {
   /// The next event, and the reader after it: of the events read from the log and the facts that
   /// the record gives again, the one of the first place.
   async fn step(mut self) -> Option<(Logged, Self)> {
-    while !self.over {
+    while self.gives != Gives::Nothing {
       if self.ahead.is_none()
         && let Some(retold) = &mut self.retold
       {
@@ -1747,7 +1756,7 @@ impl Reader {
         let Since { logged, retells, tip } = self.life.since(self.next).await?;
         // A reader from past the tip, as a window that reads no event, still hears the end.
         if self.next > tip {
-          (self.next, self.behind, self.ends) = (tip, true, true);
+          (self.next, self.behind, self.gives) = (tip, true, Gives::End);
           continue;
         }
         self.read = logged.into();
@@ -1768,7 +1777,9 @@ impl Reader {
   /// One event given, and the reader after it.
   fn given(mut self, logged: Logged) -> (Logged, Self) {
     self.next = logged.0 + 1;
-    self.over = matches!(*logged.1, Event::Ended(_));
+    if matches!(*logged.1, Event::Ended(_)) {
+      self.gives = Gives::Nothing;
+    }
     (logged, self)
   }
 }
