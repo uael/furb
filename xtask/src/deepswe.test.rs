@@ -5,7 +5,7 @@
 mod yard;
 
 #[cfg(unix)]
-use std::{collections::BTreeMap, env, os::unix::fs::symlink};
+use std::{collections::BTreeMap, env, os::unix::fs::symlink, path::PathBuf};
 use std::{
   fs,
   process::{self, Command},
@@ -28,6 +28,11 @@ fn a_copy_uses_the_image_environment_and_its_own_python_and_source() {
   let rig = rig(&yard);
   let python = env::split_paths(&rig.path).map(|one| one.join("python3")).find(|one| one.is_file());
   let python = python.expect("a python3 stands on PATH");
+  // The python3 of macOS is a shim that finds its interpreter by the name it runs as, which a link
+  // named python does not give, so the link goes to the interpreter itself.
+  let python =
+    Command::new(python).args(["-c", "import sys; print(sys.executable)"]).output().unwrap();
+  let python = PathBuf::from(String::from_utf8_lossy(&python.stdout).trim());
   let (base, copy) = (yard.join("base"), yard.join("copy"));
   for (repo, value) in [(&base, "base"), (&copy, "copy")] {
     fs::create_dir_all(repo.join("pkg")).unwrap();
