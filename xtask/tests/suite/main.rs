@@ -17,11 +17,9 @@ mod tree;
 mod unused;
 mod width;
 
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::{
   env,
-  ffi::OsStr,
+  ffi::{OsStr, OsString},
   fs,
   path::Path,
   process::{Command, Output},
@@ -74,19 +72,26 @@ fn held(folder: &Path, files: &[(&str, &str)]) {
   git(folder, &["add", "-A"]);
 }
 
-/// A program of the shell in the folder `shim` of a yard, which a task finds before the program of
-/// the machine of that name, as the PATH of [`shimmed`] says.
-#[cfg(unix)]
-fn shim(yard: &Path, name: &str, script: &str) {
-  let path = yard.join("shim").join(name);
+/// The stand-in program under a name in the folder `shim` of a yard, which a task finds before the
+/// program of the machine of that name by the PATH of [`shimmed`]: it prints the file of the first
+/// word of its command that `answers` names.
+fn stand_in(yard: &Path, name: &str, answers: &[(&str, &Path)]) {
+  let program = yard.join("shim").join(name).with_extension(env::consts::EXE_EXTENSION);
+  let answers: serde_json::Map<String, serde_json::Value> = answers
+    .iter()
+    .map(|(word, file)| ((*word).to_owned(), file.to_string_lossy().into()))
+    .collect();
   let made = fs::create_dir_all(yard.join("shim"))
-    .and_then(|()| fs::write(&path, format!("#!/bin/sh\n{script}")))
-    .and_then(|()| fs::set_permissions(&path, fs::Permissions::from_mode(0o755)));
-  made.unwrap_or_else(|no| panic!("the shim {name} was not made: {no}"));
+    .and_then(|()| fs::copy(env!("CARGO_BIN_EXE_stand-in"), &program))
+    .and_then(|_| {
+      fs::write(program.with_extension("json"), serde_json::Value::from(answers).to_string())
+    });
+  made.unwrap_or_else(|no| panic!("the stand-in {name} was not made: {no}"));
 }
 
-/// The PATH that finds the shims of a yard first.
-#[cfg(unix)]
-fn shimmed(yard: &Path) -> String {
-  format!("{}:{}", yard.join("shim").display(), env::var("PATH").unwrap_or_default())
+/// The PATH that finds the programs of the folder `shim` of a yard first.
+fn shimmed(yard: &Path) -> OsString {
+  let paths = env::var_os("PATH").unwrap_or_default();
+  let paths = [yard.join("shim")].into_iter().chain(env::split_paths(&paths));
+  env::join_paths(paths).unwrap_or_else(|no| panic!("the PATH: {no}"))
 }

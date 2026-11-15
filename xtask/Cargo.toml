@@ -6,6 +6,15 @@ rust-version = "1.95"
 description = "The tasks of a developer of furb, as `cargo xtask`."
 license = "AGPL-3.0-only"
 publish = false
+# The program of the tasks, which `cargo xtask` runs, beside the stand-in of the tests.
+default-run = "xtask"
+
+# A program that stands in for curl or gh in the tests of the tasks, so they run with no network.
+[[bin]]
+name = "stand-in"
+path = "tests/bin/stand_in.rs"
+test = false
+doc = false
 
 [lints]
 workspace = true

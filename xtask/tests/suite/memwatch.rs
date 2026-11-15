@@ -5,13 +5,13 @@
 
 use std::{
   env, fs,
-  os::unix::process::ExitStatusExt,
+  os::unix::{fs::PermissionsExt, process::ExitStatusExt},
   path::{Path, PathBuf},
   process::{self, Child, Command, Output},
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use crate::{shim, shimmed, yard::Yard};
+use crate::{shimmed, yard::Yard};
 use wait_timeout::ChildExt;
 
 const MB: u64 = 1024;
@@ -72,6 +72,16 @@ fn me() -> u64 {
     .trim()
     .parse()
     .unwrap_or_else(|no| panic!("id gives a number: {no}"))
+}
+
+/// A program of the shell in the folder `shim` of a yard, which the watch finds before the program
+/// of the machine of that name.
+fn shim(yard: &Path, name: &str, script: &str) {
+  let path = yard.join("shim").join(name);
+  let made = fs::create_dir_all(yard.join("shim"))
+    .and_then(|()| fs::write(&path, format!("#!/bin/sh\n{script}")))
+    .and_then(|()| fs::set_permissions(&path, fs::Permissions::from_mode(0o755)));
+  made.unwrap_or_else(|no| panic!("the shim {name} was not made: {no}"));
 }
 
 /// A fake machine: ps lists the given processes as pid, size in KB, command and user, with no

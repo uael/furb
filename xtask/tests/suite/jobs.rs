@@ -1,13 +1,11 @@
-//! The task `job-budgets`, on a yard whose gh serves the runs of the gates from files, so it asks
-//! no network.
+//! The task `job-budgets`, on a yard where a stand-in of gh serves the runs of the gates from
+//! files, so it asks no network.
 
-#![cfg(unix)]
-
-use std::{fs, process};
+use std::{fs, path::Path, process};
 
 use serde_json::{Value, json};
 
-use crate::{ended, held, shim, shimmed, xtask, yard::Yard};
+use crate::{ended, held, shimmed, stand_in, xtask, yard::Yard};
 
 /// The gates: a job that calls a workflow for each system, a job of its own, and the job that
 /// only holds the check of the others.
@@ -51,16 +49,16 @@ fn the_budgets_are_set_for_the_jobs_that_the_gates_name_and_for_no_other() {
       ("jobs2.json", &second),
     ],
   );
-  let here = yard.display();
-  shim(
-    &yard,
-    "gh",
-    &format!(
-      "case \"$2\" in\n*workflows/gates.yml/runs*) echo '[1, 2]' ;;\n\
-       */runs/1/jobs*) cat {here}/jobs1.json ;;\n*/runs/2/jobs*) cat {here}/jobs2.json ;;\n\
-       *) echo \"no file for $2\" >&2; exit 1 ;;\nesac\n"
-    ),
-  );
+  let asked = |path: &str| format!("repos/{{owner}}/{{repo}}/actions/{path}");
+  let runs = (asked("workflows/gates.yml/runs?branch=main&status=success&per_page=2"), "[1, 2]");
+  let made = fs::write(yard.join("runs.json"), runs.1);
+  made.unwrap_or_else(|no| panic!("the runs were not written: {no}"));
+  let jobs = |run: u32| {
+    (asked(&format!("runs/{run}/jobs?per_page=100")), yard.join(format!("jobs{run}.json")))
+  };
+  let (one, two, green) = (jobs(1), jobs(2), yard.join("runs.json"));
+  let served: [(&str, &Path); 3] = [(&runs.0, &green), (&one.0, &one.1), (&two.0, &two.1)];
+  stand_in(&yard, "gh", &served);
   let (code, out, err) =
     ended(xtask(&yard, ["job-budgets", "--runs", "2"]).env("PATH", shimmed(&yard)));
   assert_eq!(

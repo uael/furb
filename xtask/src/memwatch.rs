@@ -240,4 +240,3 @@ fn names(command: &str, trees: &[String]) -> bool {
       .any(|(at, _)| matches!(command[at + tree.len()..].chars().next(), None | Some('/' | ' ')))
   })
 }
-

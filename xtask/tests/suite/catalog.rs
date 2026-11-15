@@ -1,19 +1,36 @@
-//! The task `catalog`, on a yard whose curl serves a catalog of models.dev and a release of pi-ai
-//! from files, so it asks no network.
+//! The task `catalog`, on a yard where a stand-in of curl serves a catalog of models.dev and a
+//! release of pi-ai from files, so it asks no network.
 
-#![cfg(unix)]
+use std::{
+  fs,
+  path::Path,
+  process,
+  time::{SystemTime, UNIX_EPOCH},
+};
 
-use std::{fs, path::Path, process};
-
+use flate2::{Compression, write::GzEncoder};
 use serde_json::{Value, json};
 
-use crate::{ended, git, program, shim, shimmed, xtask, yard::Yard};
+use crate::{ended, git, shimmed, stand_in, xtask, yard::Yard};
 
-/// The time of this moment as the sources write it, from the clock of the machine.
-fn now(yard: &Path) -> String {
-  let (code, out, _) = ended(program("date", yard).args(["-u", "+%Y-%m-%dT%H:%M:%SZ"]));
-  assert_eq!(code, Some(0));
-  out.trim().to_owned()
+/// The seconds of the epoch now.
+fn now() -> u64 {
+  SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs())
+}
+
+/// A release of pi-ai as its registry gives it: a gzipped tar that holds the folder `package`.
+fn release(path: &Path) {
+  let mut archive = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
+  let mut header = tar::Header::new_gnu();
+  header.set_size(0);
+  header.set_mode(0o644);
+  header.set_cksum();
+  let gzipped = archive
+    .append_data(&mut header, "package/README.md", &[][..])
+    .and_then(|()| archive.into_inner())
+    .and_then(GzEncoder::finish)
+    .and_then(|bytes| fs::write(path, bytes));
+  gzipped.unwrap_or_else(|no| panic!("the release was not made: {no}"));
 }
 
 #[test]
@@ -29,31 +46,23 @@ fn the_snapshot_writes_each_value_as_python_writes_its_json_and_its_sources_say_
   });
   let catalog = json!({"anthropic": {"models": {"claude-haiku-9-9": model}}});
   let latest = json!({"version": "9.9.9", "dist": {"tarball": "https://example.com/pi.tgz"}});
-  let made = fs::create_dir_all(yard.join("pi/package"))
-    .and_then(|()| fs::create_dir_all(yard.join("src/world/provider")))
+  let made = fs::create_dir_all(yard.join("src/world/provider"))
     .and_then(|()| fs::write(yard.join("api.json"), catalog.to_string()))
-    .and_then(|()| fs::write(yard.join("latest.json"), latest.to_string()))
-    .and_then(|()| fs::write(yard.join("pi/package/README.md"), ""));
+    .and_then(|()| fs::write(yard.join("latest.json"), latest.to_string()));
   made.unwrap_or_else(|no| panic!("the sources were not made: {no}"));
-  let (code, _, err) =
-    ended(program("tar", &yard.join("pi")).args(["czf", "../pi.tgz", "package"]));
-  assert_eq!(code, Some(0), "{err}");
-  let at = yard.display();
-  shim(
-    &yard,
-    "curl",
-    &format!(
-      "for url; do :; done\ncase \"$url\" in\n\
-       https://models.dev/api.json) cat {at}/api.json ;;\n\
-       https://registry.npmjs.org/@earendil-works/pi-ai/latest) cat {at}/latest.json ;;\n\
-       https://example.com/pi.tgz) cat {at}/pi.tgz ;;\n\
-       *) echo \"no file for $url\" >&2; exit 22 ;;\nesac\n"
-    ),
-  );
+  release(&yard.join("pi.tgz"));
+  let served = [
+    ("https://models.dev/api.json", yard.join("api.json")),
+    ("https://registry.npmjs.org/@earendil-works/pi-ai/latest", yard.join("latest.json")),
+    ("https://example.com/pi.tgz", yard.join("pi.tgz")),
+  ];
+  let served: Vec<(&str, &Path)> =
+    served.iter().map(|(url, file)| (*url, file.as_path())).collect();
+  stand_in(&yard, "curl", &served);
   git(&yard, &["init", "-q"]);
-  let before = now(&yard);
+  let before = now();
   let (code, _, err) = ended(xtask(&yard, ["catalog"]).env("PATH", shimmed(&yard)));
-  let after = now(&yard);
+  let after = now();
   assert_eq!(code, Some(0), "{err}");
   let read =
     |file: &str| fs::read_to_string(yard.join("src/world/provider").join(file)).unwrap_or_default();
@@ -67,6 +76,9 @@ fn the_snapshot_writes_each_value_as_python_writes_its_json_and_its_sources_say_
   assert_eq!(parsed["claude-cli"]["models"]["haiku"], json!({"class": "dear"}), "{snapshot}");
   let sources: Value = serde_json::from_str(&read("catalog.sources.json")).unwrap_or_default();
   assert_eq!(sources["pi-ai"]["version"], "9.9.9");
+  // git reads the time of the stamp, as a reader of the sources does, into seconds of the epoch.
   let stamp = sources["models.dev"]["fetched"].as_str().unwrap_or_default();
-  assert!(before.as_str() <= stamp && stamp <= after.as_str(), "{before} {stamp} {after}");
+  let since = git(&yard, &["rev-parse", &format!("--since={stamp}")]);
+  let at: u64 = since.trim_start_matches("--max-age=").parse().unwrap_or_default();
+  assert!(before <= at && at <= after, "{before} {stamp} {after}");
 }
