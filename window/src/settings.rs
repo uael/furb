@@ -7,6 +7,7 @@ use std::borrow::Cow;
 
 use furb::view::Skill;
 use furb::world::config::{Layer, Property, Setting};
+use serde_json::Value;
 
 use crate::{
   model::Model,
@@ -56,8 +57,8 @@ impl Model {
         (false, ..) => ("Skills", "read on need"),
         (true, true, true) if one.default => ("Play", "on by default"),
         (true, true, true) => ("Play", "on"),
-        (true, true, false) => ("Play", "off at the next session"),
-        (true, false, true) => ("On need", "on at the next session"),
+        (true, true, false) => ("Play", "on · off at the next session"),
+        (true, false, true) => ("On need", "off · on at the next session"),
         (true, false, false) => ("On need", "off"),
       };
       Entry {
@@ -93,7 +94,8 @@ impl Model {
   }
 }
 
-/// The value that wins for a setting and the layer that gives it, as `32768  default`.
+/// The value that wins for a setting and the layer that gives it, as `32768  default`. An empty
+/// value reads `none`, as the description of a key that takes one says it.
 fn stands(one: &Setting) -> String {
   let layer = match one.layer {
     Some(Layer::User) => "user",
@@ -101,5 +103,10 @@ fn stands(one: &Setting) -> String {
     Some(Layer::Local) => "local",
     None => "default",
   };
-  format!("{}  {layer}", one.value)
+  let value = match &one.value {
+    Value::Null => "none".to_owned(),
+    Value::String(text) if text.is_empty() => "none".to_owned(),
+    value => value.to_string(),
+  };
+  format!("{value}  {layer}")
 }
