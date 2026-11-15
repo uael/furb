@@ -38,7 +38,7 @@ Never open a life on a real record, and never run the engine against the record,
 owner. A replay of a record is a live run: its ears write files and run commands. Give a test a directory of its
 own, as `Sand` and `tmp_path` do.
 
-`script/smoke.py`, `script/play.py` and `cargo xtask deepswe run` ask a real model. Each spends prompts, so
+`cargo xtask smoke`, `cargo xtask play`, `cargo xtask compaction` and `cargo xtask deepswe run` ask a real model. Each spends prompts, so
 run one only when the owner asks, or when the change touches the provider and no scripted model can prove it.
 `cargo xtask deepswe --help` says how to run the rig of DeepSWE.
 

@@ -17,13 +17,16 @@
 use crate::yard;
 
 use std::{
+  cell::RefCell,
   fs,
   path::{MAIN_SEPARATOR, Path, PathBuf},
+  rc::Rc,
   sync::Arc,
 };
 
 use furb::{
-  Engine, Object,
+  Ear, Engine, Object,
+  ear::{ear, hear},
   life::{Answer, Opening},
   verbs, world,
 };
@@ -238,9 +241,48 @@ fn spoken(at: &Path) {
   }
 }
 
-/// A life that only inspects the record of a directory, or why it refused.
+/// A life that only inspects the record of a directory, or why it refused. Its replay is inert:
+/// it puts no act that the record answers on to the outside, and no ear of the World says that it
+/// started one, as [`spy`] hears.
 fn inspected(at: &Path) -> Result<Engine, furb::Fault> {
-  Ok(Opening { inspecting: Some(true), ..scripted(at, true, &SCRIPT) }.boot::<String>([])?.0)
+  let put = Rc::new(RefCell::new(Vec::new()));
+  let opening = Opening { inspecting: Some(true), ..scripted(at, true, &SCRIPT) };
+  let engine = opening.boot([("spy", spy(Rc::clone(&put)))])?.0;
+  let record = fs::read_to_string(at.join("record.jsonl")).unwrap_or_default();
+  let answered: Vec<String> = record
+    .lines()
+    .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+    .filter(|entry| ["started", "done"].contains(&entry[0][0].as_str().unwrap_or("")))
+    .filter_map(|entry| entry[0][1].as_str().map(str::to_owned))
+    .collect();
+  let put: Vec<String> =
+    put.take().into_iter().filter(|one| answered.contains(&one.1)).map(|one| one.0).collect();
+  assert_eq!(put, Vec::<String>::new(), "{}: the replay is inert", at.display());
+  Ok(engine)
+}
+
+/// An ear of the host that keeps each act that the life puts on to the outside and each start
+/// that an ear of the World says, with the name of its act: a run, which the Kernel takes, and a
+/// writing, which it runs, are no work of the World.
+fn spy(put: Rc<RefCell<Vec<(String, String)>>>) -> Box<dyn Ear> {
+  ear(move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      let worked =
+        kind_of(a.about()) == Some(a.kind()) && !["chain", "run", "writing"].contains(&a.kind());
+      let world = !["journal", "kernel", ""].contains(&a.by()) && kind_of(a.by()).is_none();
+      if worked || a.kind() == "started" && world {
+        let said = format!("{} {} by {}", a.kind(), a.about(), a.by());
+        put.borrow_mut().push((said, a.about().to_owned()));
+      }
+    }
+  })
+}
+
+/// The kind of the name of an act, as bash for bash3, and nothing for a name of no act.
+fn kind_of(name: &str) -> Option<&str> {
+  let kind = name.trim_end_matches(|one: char| one.is_ascii_digit());
+  (!kind.is_empty() && kind.len() < name.len()).then_some(kind)
 }
 
 /// A life that only inspects the record of a directory from its first entry, born again at each of
@@ -424,6 +466,15 @@ fn each_record_of_each_folder_of_the_corpus_opens_gives_back_its_modules_and_tak
       .unwrap_or_else(|_| panic!("{folder}/{stem} has no file .modules beside it"));
     holds(&format!("{folder}-{stem}"), &fs::read_to_string(&one).unwrap(), &shown);
   }
+}
+
+#[test]
+#[ignore = "it proves the record that FURB_INERT names, which cargo xtask inert gives"]
+fn the_record_that_furb_inert_names_replays_inert() {
+  let given = PathBuf::from(env::var_os("FURB_INERT").expect("FURB_INERT names a record"));
+  let at = place("inert");
+  fs::copy(&given, at.join("record.jsonl")).unwrap();
+  inspected(&at).unwrap_or_else(|why| panic!("{} does not replay: {why}", given.display()));
 }
 
 #[test]

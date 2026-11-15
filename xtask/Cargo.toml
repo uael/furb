@@ -21,6 +21,8 @@ serde_json = { version = "1", features = ["preserve_order"] }
 flate2 = "1"
 tar = "0.4"
 toml = "1"
+# The draw of the points of the kills of the rig.
+fastrand = "2"
 # The bound of each step of the rig, which waits on its child with no poll.
 wait-timeout = "0.2"
 thiserror = "2"

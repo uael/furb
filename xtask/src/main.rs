@@ -7,6 +7,7 @@
 
 mod caches;
 mod deepswe;
+mod lives;
 mod paths;
 mod watch;
 
@@ -141,6 +142,52 @@ enum Task {
     #[command(subcommand)]
     verb: deepswe::Verb,
   },
+  /// Run one real life on a model, then a second life on its record, which the record answers.
+  ///
+  /// It runs `furb prompt` twice on one record in a folder of its own, under a grant of a dollar,
+  /// so it spends one answer of one model: the model reads a file to answer, and the second life
+  /// takes the answer from the record and asks no model.
+  Smoke {
+    /// The actor, as provider:model/effort; the default actor of furb when unsaid.
+    #[arg(long)]
+    to: Option<String>,
+  },
+  /// Run one real life that uses each part of its runtime, hold it to what it did, and take one
+  /// prompt more on its record.
+  ///
+  /// The model reads the engine, writes and runs a module, opens a chain on its own and prompts
+  /// it, asks the operator, who answers from a line, debugs, peeks and moves its directory. A word
+  /// on the record then checks each of those, in a life that asks no model, and a last prompt asks
+  /// the life how many items it gave back. It spends a few dollars at most.
+  Play {
+    /// The actor, as provider:model/effort; the default actor of furb when unsaid.
+    #[arg(long)]
+    to: Option<String>,
+  },
+  /// Compact one chain of a copy of a record with the skill compaction, and print the share of the
+  /// window that the chain read before the cut and after it.
+  ///
+  /// The task copies the record into a folder of its own and never changes the record. A life on
+  /// the copy plays the skill and condenses the chain, as `compacted()` does once: the model of the
+  /// chain chooses what it keeps, and a prompt on the chain after the cut reads what stays.
+  Compaction {
+    /// The record, which stays as it is.
+    record: PathBuf,
+    /// The chain to compact, as chain3.
+    chain: String,
+    /// Stop at the cut, and ask no model on the chain after it.
+    #[arg(long)]
+    dry: bool,
+  },
+  /// Prove that a record replays inert: before its tip, a life that only inspects it puts no act
+  /// on to the World, and no ear of the World says that it started one.
+  ///
+  /// The test of the corpus proves it on each record of tests/corpus. This task runs that proof on
+  /// the record given, as an ignored test of the suite of the crate.
+  Inert {
+    /// The record, which stays as it is.
+    record: PathBuf,
+  },
   /// Fail on each path of the repository that a tool of a developer or a workflow names and that
   /// git does not hold, with its file and its line.
   ///
@@ -248,6 +295,10 @@ fn run() -> Result<ExitCode, Fault> {
     Task::CleanCaches { scratch, uv } => caches::clean(&root, scratch, uv.as_deref()),
     Task::Paths => paths::check(),
     Task::Deepswe { places, verb } => Ok(deepswe::run(&root, places, verb)?),
+    Task::Smoke { to } => Ok(lives::smoke(&root, to)?),
+    Task::Play { to } => Ok(lives::play(&root, to)?),
+    Task::Compaction { record, chain, dry } => Ok(lives::compaction(&root, &record, &chain, dry)?),
+    Task::Inert { record } => inert(&root, &record),
     Task::Search { words } => {
       search(&command, &words);
       Ok(ExitCode::SUCCESS)
@@ -258,6 +309,21 @@ fn run() -> Result<ExitCode, Fault> {
       &[&["run", "--quiet", "-p", "furb-frames", "--"], &strs(&words)[..]].concat(),
     ),
   }
+}
+
+/// The proof that a record replays inert, the ignored test of the suite of the crate that reads the
+/// record that `FURB_INERT` names.
+fn inert(root: &Path, record: &Path) -> Result<ExitCode, Fault> {
+  let record =
+    fs::canonicalize(record).map_err(|source| Fault::Read { path: record.to_owned(), source })?;
+  let test = "promise::the_record_that_furb_inert_names_replays_inert";
+  let status = Process::new("cargo")
+    .args(["nextest", "run", "--package", "furb", "--test", "suite", "--run-ignored", "only", test])
+    .env("FURB_INERT", record)
+    .current_dir(root)
+    .status()
+    .map_err(|source| Fault::Spawn { program: "cargo".to_owned(), source })?;
+  Ok(if status.success() { ExitCode::SUCCESS } else { ExitCode::FAILURE })
 }
 
 /// Print each task and each option of a task whose name or help holds each word, as a line of its
@@ -469,9 +535,7 @@ fn is_doc(line: &str) -> bool {
 }
 
 fn imports_furb(line: &str) -> bool {
-  ["import furb", "from furb", "import real", "from real"]
-    .iter()
-    .any(|start| line.starts_with(start))
+  ["import furb", "from furb"].iter().any(|start| line.starts_with(start))
 }
 
 fn words_of(matches: &ArgMatches) -> Vec<String> {

@@ -22,7 +22,7 @@ large change, open an issue first, so we can agree on its shape before you do th
 | [cargo-nextest](https://nexte.st) 0.9.131 or later, as `cargo binstall cargo-nextest` installs it | The runner of the Rust tests, each in a process of its own, as `.config/nextest.toml` sets it. |
 | [Zig](https://ziglang.org/download/) 0.17.1, as `zig` on PATH | The native library of OpenTUI, which the build of the window makes once, in about two minutes, and keeps in `target/opentui`. Each cargo command over the workspace builds the window; `uv sync` and `bun run build` do not. The build refuses another version of Zig. |
 | [Git for Windows](https://gitforwindows.org), on Windows | Its sh runs the commands of a life, as /bin/sh does on Linux and on macOS. |
-| The credential of a provider of the network, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as the window, `furb prompt` or `script/smoke.py`, as [`docs/models.md`](docs/models.md) says. The demo and the suite need no model. |
+| The credential of a provider of the network, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as the window, `furb prompt` or `cargo xtask smoke`, as [`docs/models.md`](docs/models.md) says. The demo and the suite need no model. |
 
 ## Set up a clone
 

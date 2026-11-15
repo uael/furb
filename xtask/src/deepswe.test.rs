@@ -15,7 +15,7 @@ use std::{
 use serde_json::json;
 use yard::Yard;
 
-use super::{Mark, Numbers, Places, Rig, compacted, seed::requirements};
+use super::{Mark, Numbers, Places, Rig, Watched, compacted, seed::requirements};
 
 fn rig(yard: &Yard) -> Rig {
   Rig::of(yard, Places::default(), &yard.join("home"))
@@ -99,12 +99,12 @@ fn the_watch_ends_a_run_when_its_checkout_or_its_record_vanishes() {
   let (app, record) = (yard.join("app"), yard.join(".run/record.jsonl"));
   fs::create_dir_all(&app).unwrap();
   let why = Mark::default().watched(&record, &app, Instant::now()).unwrap();
-  assert_eq!(why, Some(format!("the life record vanished: {}", record.display())));
+  assert_eq!(why, Watched::Stops(format!("the life record vanished: {}", record.display())));
   fs::create_dir_all(yard.join(".run")).unwrap();
   fs::write(&record, "").unwrap();
   fs::remove_dir(&app).unwrap();
   let why = Mark::default().watched(&record, &app, Instant::now()).unwrap();
-  assert_eq!(why, Some(format!("the app checkout vanished: {}", app.display())));
+  assert_eq!(why, Watched::Stops(format!("the app checkout vanished: {}", app.display())));
 }
 
 /// A record of one answer that cost half a dollar and of one refused reply, as the store writes it.
@@ -123,10 +123,8 @@ fn the_watch_ends_a_run_when_its_record_numbers_fall_below_an_earlier_mark() {
   fs::write(&record, RECORD).unwrap();
   let mut mark = Mark { seen: Some([2, 1, 0, 0]), ..Mark::default() };
   let why = mark.watched(&record, &app, Instant::now()).unwrap();
-  assert_eq!(
-    why.as_deref(),
-    Some("the life record went backwards: answers, commands fell below an earlier mark")
-  );
+  let fell = "the life record went backwards: answers, commands fell below an earlier mark";
+  assert_eq!(why, Watched::Stops(fell.to_owned()));
 }
 
 #[test]

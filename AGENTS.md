@@ -459,16 +459,19 @@ fix what your change broke, and report what was broken before.
   its own, `XDG_CACHE_HOME` in `/tmp`, and fails when a test leaves a file there: a test that makes the scratch
   directory of a record holding a file removes that directory at its end. It runs only when a file that the crate or
   its tests read is among the files of the run.
-- `uv run python script/smoke.py`: one real life on the default actor of the crate, the first model that the catalog
-  offers, which may cost dollars. `--model` names the actor, as `--model local:qwen3` on the local server that
-  `FURB_LOCAL_URL` names. It is no test of the suite and spends one prompt.
-- `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
-  record.
+- `cargo xtask smoke [--to <actor>]`: one real life through `furb prompt`, on the default actor of furb or on the actor
+  that `--to` names, as `--to local:qwen3` on the local server that `FURB_LOCAL_URL` names, then a second life that
+  its record answers. It is no test of the suite and spends one answer, under a grant of a dollar.
+- `cargo xtask play [--to <actor>]`: one real life that uses every part of the runtime, a word on its record that
+  holds it to what it did, and a second life that takes one prompt more. It spends a few dollars at most.
+- `cargo xtask compaction <record> <chain> [--dry]`: the bench of compaction. On a copy of a record, a life plays the
+  skill compaction and condenses the chain, and the task prints the share of the window that the chain read before
+  the cut and after it. It asks the model of the chain for its choice, and for one answer after the cut unless `--dry`.
 - `cargo xtask deepswe`: the DeepSWE rig, whose `--help` says its verbs and its one law, and whose module doc,
-  `xtask/src/deepswe.rs`, says where each thing stands.
-- `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
-  works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
-  Code on the same model works the task as the baseline. Its docstring says how to run it.
+  `xtask/src/deepswe.rs`, says where each thing stands. `run --kills <n>` is the bench of a crash: it kills the life
+  at random points and opens it again on its record. `baseline <task>` puts the task to the claude command line, the
+  baseline of a bench. A later life on the record of a run is `turns <task>`, a life that only inspects its record:
+  it asks no model, and its ears that do work are silent.
 - `python script/bench/audit.py <record> <sha256>`: the audit of a record. It checks the sha256 of the record, replays
   it in a life that only inspects it, with no model and no network, and checks that each word and each answer hashes
   as the record says. It imports furb alone, so an outsider runs it on `pip install furb`, as `docs/audit.md` says.
@@ -476,17 +479,14 @@ fix what your change broke, and report what was broken before.
   or of each path of the file that `OPENS_LIST` names, with `furb turns` of the given build, with no model and no
   network, one record at a time, and write one line for each to `out.tsv`. Given the table of a run before, it fails
   when a record that opened then opens no more.
-- `uv run python script/bench/inert.py <record>`: the proof that a replay is inert. It replays a copy of the record
-  in a life that only inspects it, and fails when, before the tip, the life puts an act on to the World that the
-  record answers, an ear of the World says that it started an act, or the journal keeps a fact.
+- `cargo xtask inert <record>`: the proof that a replay is inert. It replays a copy of the record in a life that only
+  inspects it, and fails when the life puts an act on to the World that the record answers, or an ear of the World
+  says that it started one. The test of the corpus proves the same on each record of `tests/corpus`.
 - `python script/bench/loop.py make|furb|furb-own|furb-batch|claude|score <dir>`: the bench of a loop, which its
   docstring says how to run. It makes support tickets from a seed with a known label each, triages them on the same
   local server with a word of furb that asks one prompt per ticket, with a life of furb whose model writes its own
   words, with a word of furb that asks one prompt per batch, and with the claude command line, and scores each arm on
   the totals of the server and the share of right labels. It asks a model and spends what the server serves.
-- `script/real.py` is no command: it holds what `smoke.py`, `play.py` and the benches of DeepSWE share, which is the
-  life they open on the engine of this interpreter, the actor they ask, what the answers of a record cost, and the
-  verbs of `cargo xtask deepswe` that a bench calls.
 - `uv run python script/catalog.py`: make the snapshot of the catalog, `src/world/provider/catalog.json`, again from
   models.dev and from the data of pi-ai. A life updates its own copy of models.dev and of the providers of
   pi-ai in the cache of furb once a day, and the newer of the cache and the snapshot holds for each provider.

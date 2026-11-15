@@ -29,7 +29,8 @@ the pull request changes a line of `Cargo.toml` that names monty, since a move o
 stored definition gives.
 For each record of each folder, it does these steps:
 
-1. It opens the record. It gets no refusal and no drift.
+1. It opens the record in a life that only inspects it. It gets no refusal and no drift, and the life puts on to the
+   World no act that the record answers.
 2. It gets back each value of each module, and what each definition gives, as `<name>.modules` shows.
 3. It reads the record with the reader of a record, with no life, and finds each chain.
 4. It takes one more turn on the model of the script.
