@@ -1,4 +1,5 @@
 # ruff: noqa: S603
+import importlib.util
 import os
 import subprocess
 import sys
@@ -140,9 +141,10 @@ def test_a_line_of_the_guard_whose_program_is_a_bare_name_that_the_run_prints_na
 
 
 def test_a_run_of_cargo_nextest_names_its_slowest_tests_once() -> None:
-  sys.path.insert(0, str(SCRIPT.parent))
-  import budget as script  # noqa: PLC0415
-
+  spec = importlib.util.spec_from_file_location("budget", SCRIPT)
+  assert spec is not None and spec.loader is not None
+  script = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(script)
   lines = [
     "        PASS [   0.223s] (   1/1036) furb engine::test::quick",
     "        FAIL [  12.500s] (   2/1036) furb-host::suite daemon::slow",
