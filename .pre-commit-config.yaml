@@ -83,7 +83,7 @@ repos:
         types_or: [rust]
         pass_filenames: false
       - id: cargo-test
-        name: cargo test
+        name: cargo nextest
         entry: python3 script/hooks/reach.py cargo
         language: system
         stages: [manual]

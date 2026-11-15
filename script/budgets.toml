@@ -12,11 +12,13 @@
 # its binaries add up to about 70 s of wall on a quiet machine (the unit tests of furb 22 s, daemon 14 s, life 9 s). The limits
 # below hold that measure with a margin, so a slower run fails; they are not the 60 s that the owner asks, which the causes
 # named in the report of suite-time-regression-r1 stand in the way of.
+# cargo nextest run --workspace, 11-15, warm, at a load of 5 to 20 on 14 cores: 38 to 49 s of wall and 281 s of CPU, since
+# each test runs in a process of its own and no test program waits for another.
 [local]
 pytest = 60
 pytest_cpu = 240
-cargo = 300
-cargo_cpu = 450
+cargo = 75
+cargo_cpu = 360
 
 [ci]
 pytest = 180

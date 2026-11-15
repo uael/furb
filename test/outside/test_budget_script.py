@@ -137,3 +137,16 @@ def test_a_line_of_the_guard_whose_program_is_a_bare_name_that_the_run_prints_na
   )
   got = budget(tmp_path, "bun", 100, sys.executable, "-c", body)
   assert got.returncode != 0 and "bun test v1.3.14" in got.stdout and "guard of memory" not in got.stdout
+
+
+def test_a_run_of_cargo_nextest_names_its_slowest_tests_once() -> None:
+  sys.path.insert(0, str(SCRIPT.parent))
+  import budget as script  # noqa: PLC0415
+
+  lines = [
+    "        PASS [   0.223s] (   1/1036) furb engine::test::quick",
+    "        FAIL [  12.500s] (   2/1036) furb-host::suite daemon::slow",
+    "     Summary [  45.726s] 1036 tests run: 1035 passed, 1 failed",
+    "        FAIL [  12.500s] (   2/1036) furb-host::suite daemon::slow",
+  ]
+  assert script.slowest(lines) == [(12.5, "furb-host::suite daemon::slow"), (0.223, "furb engine::test::quick")]

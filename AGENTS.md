@@ -443,13 +443,14 @@ fix what your change broke, and report what was broken before.
   whatever the files, since a move of a file leaves its old path in a script that the change does not touch.
 - `sh script/hooks/pre-commit run --all-files --hook-stage manual`: every gate of this machine in one command, which
   takes minutes. The stage `manual` runs every hook of `.pre-commit-config.yaml`: those of the command above, and the
-  four that stand at that stage alone, `pytest`, `clippy`, `cargo-test` and `biome`, which are the suite, the clippy and
-  the tests of the crate and the lint of TypeScript. The gates run each of the four in a job of its own. It exits with 1
-  when a hook fails, and names that hook as the command above does. Name `--files <files>` in place of `--all-files` in
-  each of the two commands to run some files: the hooks `pytest` and `cargo-test` then run the tests that those files
-  reach, as `script/hooks/reach.py` says. The hook `cargo test` runs on a cache of its own, `XDG_CACHE_HOME` in `/tmp`,
-  and fails when a test leaves a file there: a test that makes the scratch directory of a record holding a file removes
-  that directory at its end. It runs only when a file that the crate or its tests read is among the files of the run.
+  four that stand at that stage alone, `pytest`, `clippy`, `cargo-test` and `biome`, which are the suite, the clippy
+  and the tests of the crate and the lint of TypeScript. The gates run each of the four in a job of its own. It exits
+  with 1 when a hook fails, and names that hook as the command above does. Name `--files <files>` in place of
+  `--all-files` in each of the two commands to run some files: the hooks `pytest` and `cargo-test` then run the tests
+  that those files reach, as `script/hooks/reach.py` says. The hook `cargo-test` runs `cargo nextest` on a cache of
+  its own, `XDG_CACHE_HOME` in `/tmp`, and fails when a test leaves a file there: a test that makes the scratch
+  directory of a record holding a file removes that directory at its end. It runs only when a file that the crate or
+  its tests read is among the files of the run.
 - `uv run python script/smoke.py`: one real life on the default actor of the crate, the first model that the catalog
   offers, which may cost dollars. `--model` names the actor, as `--model local:qwen3` on the local server that
   `FURB_LOCAL_URL` names. It is no test of the suite and spends one prompt.

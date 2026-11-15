@@ -70,8 +70,8 @@ def test_each_hook_of_the_tests_starts_at_once_while_the_memory_is_tight(tmp_pat
   assert [line.split()[:3] for line in lines] == [
     ["uv", "sync", "--inexact"],
     ["uv", "run", "--no-sync"],
-    ["cargo", "test", "-p"],
-    ["cargo", "test", "-p"],
+    ["cargo", "nextest", "run"],
+    ["cargo", "nextest", "run"],
     ["cargo", "clippy", "--workspace"],
   ]
   assert lines[2].endswith("--no-run") and not lines[3].endswith("--no-run")

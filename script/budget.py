@@ -13,7 +13,7 @@ passes its wall limit while the load average at its start is over the cores is j
 has a limit of it.
 On a quiet machine, and for a part with no limit of CPU, the wall time judges: a test that waits on a clock shows only
 there. A run past its CPU limit fails whatever the load. A run that fails names its slowest tests, as its runner prints
-them with their times (pytest with --durations, cargo test with --report-time). A command that fails gives its own exit
+them with their times (pytest with --durations, cargo nextest with each result). A command that fails gives its own exit
 code. FURB_BUDGET_LOAD gives the load, for a test.
 """
 # ruff: noqa: T201
@@ -37,9 +37,10 @@ except ImportError:  # Windows has no resource module: a job object counts the C
   resource = None
 
 HOME = Path(os.environ.get("FURB_BUDGETS") or Path(__file__).with_name("budgets.toml"))
-# A line of a test with its time: pytest gives `12.34s call path::name`, cargo test `test name ... ok <1.234s>`.
+# A line of a test with its time: pytest gives `12.34s call path::name`, cargo nextest `PASS [   1.234s] (  1/9) crate
+# path::name`, and again at its end for each test that was slow or failed.
 TIME = re.compile(
-  r"^\s*(?P<lead>\d+\.\d+)s\s+\w+\s+(?P<a>\S+)|^(?:\s*\d+\.\d+ )?test (?P<b>\S+) \.\.\. \w+ <(?P<trail>\d+\.\d+)s>"
+  r"^\s*(?P<lead>\d+\.\d+)s\s+\w+\s+(?P<a>\S+)|^\s*[A-Z]+ +\[ *(?P<trail>\d+\.\d+)s\] +\( *\d+/\d+\) (?P<b>\S+ \S+)"
 )
 
 
@@ -70,7 +71,7 @@ def watched(since: float, until: float, root: Path, said: str) -> list[str]:
 
 def slowest(lines: list[str], count: int = 10) -> list[tuple[float, str]]:
   found = [(float(hit["lead"] or hit["trail"]), hit["a"] or hit["b"]) for line in lines if (hit := TIME.match(line))]
-  return sorted(found, reverse=True)[:count]
+  return sorted(set(found), reverse=True)[:count]
 
 
 def limits(text: str, table: str) -> dict[str, int]:

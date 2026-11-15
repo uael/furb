@@ -1,6 +1,6 @@
 """Run the tests that the files of a change reach, and leave the whole set to the gates.
 
-The hook of pytest and the hook of cargo test call it with the files that a run by hand names, at the stage manual: no
+The hook of pytest and the hook of the Rust tests call it with the files that a run by hand names, at the stage manual: no
 commit and no push runs them. A file of the engine, of its Kernel, of the crate that the suite builds, of a manifest or
 of the harness reaches every test, so the whole suite runs. A test file reaches itself, a file of an extension reaches
 the tests of that extension, and a script reaches the test of its own beside the tests of the other scripts. A file of a
@@ -107,7 +107,7 @@ def command(kind: str, files: list[str]) -> list[str] | None:
     return ["uv", "run", "--no-sync", "pytest", "-q", *(["--no-cov", *reached] if reached else [])]
   packages = crates(files)
   chosen = ["--workspace"] if packages is None else [x for one in packages for x in ("-p", one)]
-  return ["cargo", "test", *chosen, "--features", "furb/typescript"]
+  return ["cargo", "nextest", "run", *chosen, "--features", "furb/typescript"]
 
 
 def leaks(cache: Path) -> list[str]:
