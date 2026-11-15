@@ -25,6 +25,6 @@
 ┃
 ┃ A reply opens this thread again
 ┃
-┃  Message  Python    → how long does an… ▾   opus   + ⌃N      Context               No answer yet
+┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb-try                    ⌃P commands

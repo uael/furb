@@ -26,5 +26,5 @@
 ┃
 ┃ many
 ┃ Refused: "many" is no int: invalid digit found in string     Context               No answer yet
-┃  Message  Python    → how many rows ▾       opus   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃  Message  Python    → how many… ▾     opus  high   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ⏎ answer                                        ⌃C refuse

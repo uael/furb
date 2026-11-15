@@ -1509,6 +1509,7 @@ version = "0.4.2"
 dependencies = [
  "furb-wire",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

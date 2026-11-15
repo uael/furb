@@ -25,6 +25,6 @@
 ┃
 ┃ fix the build (the model answers)
 ┃
-┃  Message  Python    → fix the build… ▾      opus   + ⌃N      Context               No answer yet
+┃  Message  Python    → fix the… ▾      opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/furb-try                    ⌃P commands

@@ -25,6 +25,6 @@
 ┃
 ┃ A reply opens this thread again                               ✓ which fold reads the whole…  2d
 ┃
-┃  Message  Python    → Debug stuck TUI… ▾    opus   + ⌃N      Context               No answer yet
+┃  Message  Python    → Debug stuck… ▾  opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ~/src/furb-try        ◆ 1 other thread asks   ⌃P commands

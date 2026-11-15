@@ -26,5 +26,5 @@
 ┃   right
 ┃   left
 ┃ › at the top                                                 Context               No answer yet
-┃  Message  Python    → where does the… ▾     opus   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃  Message  Python    → where does… ▾   opus  high   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · ⏎ answer                            ⌃C refuse

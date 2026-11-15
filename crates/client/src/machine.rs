@@ -3,7 +3,7 @@
 
 use furb_wire::{
   Part,
-  protocol::{Answer, Card, Frame, Listed, Model},
+  protocol::{Answer, Card, Frame, Listed, Model, Project},
 };
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +46,9 @@ pub struct Told {
   /// them.
   #[serde(skip)]
   pub models: Option<Vec<Model>>,
+  /// The projects of the machine, the one used last first, as it last gave them.
+  #[serde(skip)]
+  pub projects: Vec<Project>,
 }
 
 /// What a frame changed of what a machine told: its cards or its login, nothing that the list

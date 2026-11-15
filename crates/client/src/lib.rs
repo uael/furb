@@ -15,7 +15,7 @@ use furb_wire::{Part, protocol::Card};
 
 pub use machine::{Heard, Key, Link, Listing, Told};
 pub use opens::{Ask, Hold, Life, Step};
-pub use outbox::{Asked, Outgoing, Target, greeting};
+pub use outbox::{Asked, Chosen, Outgoing, Target, greeting};
 pub use thread::{PAGE, Pending, Thread};
 
 /// What each machine told, the cards of all of them in the order of the list as it last settled,
@@ -28,6 +28,8 @@ pub struct Client {
   pub settled: Vec<(Part, Key, Card)>,
   pub holds: HashMap<Life, Hold>,
   pub outgoing: VecDeque<Outgoing>,
+  /// The actor that the operator chose last, for its target.
+  pub chosen: Option<Chosen>,
   pub asked: HashMap<(usize, u64), Asked>,
   /// The id of the next request, which no request of the client took.
   next: u64,

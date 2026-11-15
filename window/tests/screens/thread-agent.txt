@@ -25,6 +25,6 @@
 ┃
 ┃ Write to this agent
 ┃
-┃  Message  Python    → Run the bench of… ▾   opus   + ⌃N      Context               No answer yet
+┃  Message  Python    → Run the… ▾      opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/src/furb-try                     ⎋ back

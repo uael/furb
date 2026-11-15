@@ -25,6 +25,6 @@
 ┃
 ┃ A reply opens this thread again
 ┃
-┃  Message  Python    → where does the… ▾     opus   + ⌃N      Context               No answer yet
+┃  Message  Python    → where does… ▾   opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/src/furb-try                ⌃P commands

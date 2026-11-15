@@ -76,7 +76,7 @@ impl Model {
     let (at, life) = match target.clone() {
       Target::Thread(key) => (key.0, key.1),
       Target::Session(at, life) => (at, life),
-      Target::New(at) => (at, self.record()),
+      Target::New(at, folder) => (at, self.record(&folder)),
     };
     Some((at, Verb::History { life }, target))
   }

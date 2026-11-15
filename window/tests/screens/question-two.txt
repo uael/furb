@@ -26,5 +26,5 @@
 ┃ › yes
 ┃   no
 ┃   type another answer                                        Context               No answer yet
-┃  Message  Python    → what does the… ▾      opus   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃  Message  Python    → what does… ▾    opus  high   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · ⏎ answer · ⇥ next                   ⌃C refuse

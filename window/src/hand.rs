@@ -406,6 +406,11 @@ fn pump(window: &Shared) {
   {
     model.client.asked.insert((at, id), Asked::Seen);
   }
+  if let Some((at, verb)) = model.client.chosen_due()
+    && let Some(id) = ask(askers, model, at, verb)
+  {
+    model.client.asked.insert((at, id), Asked::Control);
+  }
   if let Some((at, verb)) = model.ended_due()
     && let Some(id) = ask(askers, model, at, verb)
     && let Some(word) = model.word.as_mut()
@@ -562,6 +567,7 @@ fn answered(app: &App, window: &Shared, does: Option<Does>, typed: bool) -> bool
 /// a key named, and what the key before did not do.
 fn act(app: &App, window: &Shared, does: Does) {
   let forgot = window.borrow_mut().screen.model.pressed(does);
+  asked(window, does);
   let change: fn(&mut Model) = match does {
     Does::Next => |model| model.step(1),
     Does::Previous => |model| model.step(-1),
@@ -570,11 +576,12 @@ fn act(app: &App, window: &Shared, does: Does) {
     Does::Jump => Model::jump,
     Does::NewThread => Model::turn,
     Does::Sessions => |model| model.pick(Pick::Sessions),
-    Does::GoTo => {
-      listed(window);
-      |model| model.pick(Pick::GoTo)
-    }
+    Does::GoTo => |model| model.pick(Pick::GoTo),
     Does::Commands => |model| model.pick(Pick::Commands),
+    Does::Machines => |model| model.pick(Pick::Machines),
+    Does::Projects => |model| model.pick(Pick::Projects),
+    Does::Model => |model| model.pick(Pick::Models),
+    Does::Effort => Model::effort,
     Does::Keys => |model| model.pick(Pick::Keys),
     Does::Python => |model| model.draft.python = !model.draft.python,
     Does::Agent => Model::next_agent,
@@ -620,6 +627,20 @@ fn act(app: &App, window: &Shared, does: Does) {
   colored(window);
 }
 
+/// What a list part shows asked of each machine as it opens: the records of each machine for Go
+/// to, and the projects of each machine, or of the machine of the input, for their pickers.
+fn asked(window: &Shared, does: Does) {
+  match does {
+    Does::GoTo => listed(window),
+    Does::Machines => projected(window, None),
+    Does::Projects => {
+      let at = window.borrow().screen.model.target().machine();
+      projected(window, Some(at));
+    }
+    _ => {}
+  }
+}
+
 /// The records of each machine that lists its cards asked, for Go to.
 fn listed(window: &Shared) {
   let mut held = window.borrow_mut();
@@ -627,6 +648,18 @@ fn listed(window: &Shared) {
   for at in 0..askers.len() {
     if let Some(id) = ask(askers, &mut screen.model, at, Verb::List { config: None }) {
       screen.model.client.asked.insert((at, id), Asked::List);
+    }
+  }
+}
+
+/// The projects of a machine asked, or of each machine that lists its cards, for the parts that
+/// choose where a new session runs.
+fn projected(window: &Shared, of: Option<usize>) {
+  let mut held = window.borrow_mut();
+  let Window { askers, screen, .. } = &mut *held;
+  for at in (0..askers.len()).filter(|at| of.is_none_or(|of| of == *at)) {
+    if let Some(id) = ask(askers, &mut screen.model, at, Verb::Projects { config: None }) {
+      screen.model.client.asked.insert((at, id), Asked::Projects);
     }
   }
 }
@@ -727,10 +760,7 @@ fn mouse(app: &App, window: &Shared, event: MouseEvent) {
     model.pointer = Some((event.x, event.y));
     let on = model.on_list(event.x);
     let (does, verb) = match (event.kind, on) {
-      (MouseEventKind::Down(MouseButton::Left), true) => {
-        model.clicked(y);
-        (None, None)
-      }
+      (MouseEventKind::Down(MouseButton::Left), true) => (model.clicked(y), None),
       (MouseEventKind::Down(MouseButton::Left), false) => (model.clicked_left(x, y), None),
       (MouseEventKind::ScrollUp, true) => {
         model.scrolled(-WHEEL);

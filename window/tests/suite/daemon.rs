@@ -112,6 +112,17 @@ impl Daemon {
     go
   }
 
+  /// The claude command line of each life and of the catalog says nothing and ends at once, so the
+  /// catalog offers the models of claude that it knows.
+  #[cfg(unix)]
+  pub(crate) fn catalog(&mut self) {
+    use std::os::unix::fs::PermissionsExt;
+    let program = self.yard.join("claude");
+    fs::write(&program, "#!/bin/sh\n").unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    self.claude = program;
+  }
+
   /// A daemon that took the dial of a window, read its hello and its ask of the cards, and is gone
   /// before it answered: the window reads the end of the stream.
   pub(crate) fn lost(&mut self) {

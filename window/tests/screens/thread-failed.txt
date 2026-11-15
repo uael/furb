@@ -25,6 +25,6 @@
 ┃
 ┃ A reply opens this thread again
 ┃
-┃  Message  Python    → why is the window… ▾  opus   + ⌃N      Context               No answer yet
+┃  Message  Python    → why is the… ▾   opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   This computer · ~/src/furb-try                ⌃P commands

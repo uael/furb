@@ -24,12 +24,13 @@ pub enum Ask {
   Failed(String),
 }
 
-/// A life that the client holds: the folder that it opens in when no life holds its record, where
-/// its open stands with the daemon, when the client asked it, whether its life stood then, and
-/// each stage that its open reached.
+/// A life that the client holds: the folder that it opens in when no life holds its record, the
+/// actor that a new life takes, where its open stands with the daemon, when the client asked it,
+/// whether its life stood then, and each stage that its open reached.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hold {
   pub cwd: Option<String>,
+  pub actor: Option<String>,
   pub ask: Ask,
   pub since: Duration,
   pub stood: bool,
@@ -100,7 +101,7 @@ impl Client {
     }
     let cards = self.machines.get(key.0).map(|told| &told.cards[..]).unwrap_or_default();
     let stood = cards.iter().any(|card| card.life == key.1 && card.held);
-    let hold = Hold { cwd, ask: Ask::Due, since, stood, steps: Vec::new() };
+    let hold = Hold { cwd, actor: None, ask: Ask::Due, since, stood, steps: Vec::new() };
     self.holds.insert(key, hold);
   }
 

@@ -26,5 +26,5 @@
 ┃   [ ] down
 ┃ › [x] tab
 ┃   type another answer                                        Context               No answer yet
-┃  Message  Python    → which keys does… ▾    opus   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┃  Message  Python    → which keys… ▾   opus  high   + ⌃N      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ↑↓ choose · Space tick · ⏎ answer               ⌃C refuse

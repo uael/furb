@@ -3,7 +3,9 @@
 
 #![cfg(test)]
 
-use furb_window::open;
+use std::fs;
+
+use furb_window::{Options, open};
 use opentui::testing::TestApp;
 
 use crate::{
@@ -87,4 +89,96 @@ fn the_commands_run_from_their_list_and_each_key_shows_its_forms() {
   // A click beside the part closes it.
   app.click(1, 1);
   assert!(gone(&app, "Search a key"), "{}", app.text());
+}
+
+#[test]
+fn a_click_on_the_scope_of_the_list_opens_go_to() {
+  let (app, _daemon, _peer) = machine();
+  clicked(&app, "All projects ▾", 0, 0);
+  shows(&app, "Search a thread, a session, a project");
+}
+
+#[test]
+fn a_click_on_the_project_of_a_new_session_lists_the_projects_and_one_aims_the_input() {
+  let (app, _daemon, _peer) = machine();
+  clicked(&app, "furb-try ▾", 0, 0);
+  let frame = shows(&app, "Search a project");
+  assert!(!frame.contains("Send to"), "{frame}");
+  // The project of the daemon is a row of the part, with its count of sessions.
+  shows(&app, "3 sessions");
+  let (x, y) = cell(&app, "FU furb", "3 sessions");
+  app.click(x, y);
+  shows(&app, "FU furb ▾");
+}
+
+/// A window in a project with no session, in a folder that stands, on a machine whose catalog
+/// offers the models of claude, once its launcher shows the default actor of that catalog.
+#[cfg(unix)]
+fn offered() -> (TestApp, Daemon) {
+  let app = app();
+  let mut daemon = Daemon::bound(&app);
+  daemon.catalog();
+  daemon.served();
+  let folder = daemon.file("furb-try");
+  fs::create_dir_all(&folder).unwrap();
+  let options = Options { folder, ..options(&daemon.file("cards.json")) };
+  open(&app, vec![daemon.machine("mac")], options);
+  shows(&app, "opus  high");
+  (app, daemon)
+}
+
+#[cfg(unix)]
+#[test]
+fn a_click_on_the_model_lists_the_models_of_each_provider_and_one_is_the_model_of_the_next_session()
+{
+  let (app, _daemon) = offered();
+  clicked(&app, "opus  high", 0, 0);
+  let frame = shows(&app, "Search a model");
+  assert!(frame.contains("Claude") && frame.contains("sonnet"), "{frame}");
+  let (x, y) = cell(&app, "sonnet", "high");
+  app.click(x, y);
+  shows(&app, "sonnet  high");
+  shows(&app, "with sonnet at high effort.");
+  // The session that his message starts stands on that model: its block names it.
+  app.paste(&format!("how long does an open take {ANSWERS}"));
+  app.press("enter");
+  shows(&app, "sonnet/high");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_model_chosen_on_a_thread_answers_its_next_message() {
+  let (app, _daemon) = offered();
+  app.paste(&format!("how long does an open take {ANSWERS}"));
+  app.press("enter");
+  shows(&app, "Two stages hold most");
+  clicked(&app, "opus  high", 0, 0);
+  shows(&app, "Search a model");
+  let (x, y) = cell(&app, "sonnet", "high");
+  app.click(x, y);
+  shows(&app, "sonnet  high");
+  app.paste(&format!("and the seed {ANSWERS}"));
+  app.press("enter");
+  shows(&app, "sonnet/high");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_click_on_the_effort_takes_the_next_effort_of_the_model() {
+  let (app, _daemon) = offered();
+  // The home names the effort in its words first, at the left of the launcher.
+  clicked(&app, "high", 40, 0);
+  let frame = shows(&app, "with opus at xhigh effort.");
+  assert!(frame.contains("opus  xhigh"), "{frame}");
+}
+
+/// The first cell of a text in the first row of the window that holds another text too.
+fn cell(app: &TestApp, text: &str, beside: &str) -> (u16, u16) {
+  let frame = app.text();
+  let found = frame.lines().enumerate().find_map(|(y, line)| {
+    let at = line.find(text).filter(|_| line.contains(beside))?;
+    Some((line[..at].chars().count(), y))
+  });
+  let (x, y) = found.unwrap_or_else(|| panic!("no row holds {text:?} beside {beside:?}:\n{frame}"));
+  (u16::try_from(x).unwrap(), u16::try_from(y).unwrap())
 }

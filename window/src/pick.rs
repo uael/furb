@@ -4,6 +4,8 @@
 //! closes it and gives the focus back to the input. The pointer does the same: a click takes a row,
 //! and a click beside the part closes it.
 
+use std::path::Path;
+
 use furb::view::Part;
 use furb_host::protocol::Card;
 use nucleo_matcher::{
@@ -12,9 +14,11 @@ use nucleo_matcher::{
 };
 use opentui::style::Style;
 
-use furb_client::Target;
+use furb_client::{Link, Target, Told};
+use furb_host::protocol::Model as Offered;
 
 use crate::{
+  input::named,
   keys::{self, Bound, Does},
   line::{Line, capital, run, spread},
   list::project,
@@ -35,6 +39,12 @@ pub(crate) enum Pick {
   Keys,
   /// The sessions that the input can send to.
   Sessions,
+  /// The machines that a new session runs on.
+  Machines,
+  /// The projects of the machine of the input, where a new session runs.
+  Projects,
+  /// The models of the machine of the input, each provider once.
+  Models,
 }
 
 /// The list part, while it is open: what it lists, the text that filters it, and the place of the
@@ -55,6 +65,8 @@ pub(crate) enum Choice {
   Session(Target),
   /// A project, whose sessions the list then shows.
   Project(String),
+  /// An actor of a model, which the target of the input takes.
+  Actor(String),
   /// What a key does.
   Key(Does),
   /// Nothing: a key that only a form or a list hears.
@@ -97,6 +109,9 @@ impl Pick {
       Self::Commands => "Commands",
       Self::Keys => "Each key",
       Self::Sessions => "Send to",
+      Self::Machines => "Machines",
+      Self::Projects => "Projects",
+      Self::Models => "Models",
     }
   }
 
@@ -106,6 +121,9 @@ impl Pick {
       Self::Commands => "Search a command",
       Self::Keys => "Search a key",
       Self::Sessions => "Search a session",
+      Self::Machines => "Search a machine",
+      Self::Projects => "Search a project",
+      Self::Models => "Search a model",
     }
   }
 
@@ -114,7 +132,8 @@ impl Pick {
     match self {
       Self::GoTo => "open",
       Self::Commands | Self::Keys => "run",
-      Self::Sessions => "send there",
+      Self::Sessions | Self::Machines | Self::Projects => "send there",
+      Self::Models => "take it",
     }
   }
 }
@@ -149,6 +168,9 @@ impl Model {
       Pick::Commands => self.commands(),
       Pick::Keys => self.each_key(),
       Pick::Sessions => self.sessions(),
+      Pick::Machines => self.machines(),
+      Pick::Projects => self.projects(),
+      Pick::Models => self.models(),
     };
     if picker.filter.is_empty() {
       return all;
@@ -274,7 +296,7 @@ impl Model {
   /// The sessions that the input can send to: a new session on this machine, then each session
   /// of the cards once, by its machine and its record, with its name and its project.
   fn sessions(&self) -> Vec<Entry> {
-    let new = Choice::Session(Target::New(0));
+    let new = Choice::Session(Target::New(0, self.folder.display().to_string()));
     let left = "+ new session".to_owned();
     let here = self.project();
     let mut all = vec![Entry {
@@ -302,6 +324,77 @@ impl Model {
       });
     }
     all
+  }
+
+  /// The machines that a new session runs on: this computer first, each with its state, and a new
+  /// session on each runs in the project that it used last, or in the folder of the window here.
+  fn machines(&self) -> Vec<Entry> {
+    let here = self.folder.display().to_string();
+    let entry = |(at, told): (usize, &Told)| {
+      let name = if at == 0 { "This computer".to_owned() } else { told.name.clone() };
+      let folder = told.projects.first().map(|one| one.folder.clone());
+      let folder = if at == 0 { Some(here.clone()) } else { folder };
+      let state = match (&told.link, &folder) {
+        (Link::Lost(_), _) => "offline".to_owned(),
+        (Link::Dialing, _) => "dialing".to_owned(),
+        (Link::Listed, Some(folder)) => named(folder),
+        (Link::Listed, None) => "no project yet".to_owned(),
+      };
+      let choice = folder.map_or(Choice::None, |folder| Choice::Session(Target::New(at, folder)));
+      Entry { left: name, right: state, choice, ..Entry::default() }
+    };
+    self.client.machines.iter().enumerate().map(entry).collect()
+  }
+
+  /// The projects of the machine of the input, where a new session runs: the project of the
+  /// folder of the window first on this computer, then each that the machine gave, the one used
+  /// last first, with its count of sessions.
+  fn projects(&self) -> Vec<Entry> {
+    let at = self.target().machine();
+    let Some(told) = self.client.machines.get(at) else { return Vec::new() };
+    let here = self.folder.display().to_string();
+    let first = (at == 0 && !told.projects.iter().any(|one| one.folder == here)).then_some(&here);
+    let counted = told.projects.iter().map(|one| (&one.folder, Some(one.sessions)));
+    let all = first.map(|one| (one, None)).into_iter().chain(counted);
+    let entry = |(folder, sessions): (&String, Option<usize>)| {
+      let count = match sessions {
+        None | Some(0) => "no session yet".to_owned(),
+        Some(1) => "1 session".to_owned(),
+        Some(many) => format!("{many} sessions"),
+      };
+      Entry {
+        project: Some(named(folder)),
+        left: named(folder),
+        says: format!("  {}", self.homed(folder)),
+        right: count,
+        choice: Choice::Session(Target::New(at, folder.clone())),
+        ..Entry::default()
+      }
+    };
+    all.map(entry).collect()
+  }
+
+  /// The models of the machine of the input, under each provider once, each with its effort, the
+  /// one that it takes when the operator names none. A model takes the effort that the input
+  /// speaks at when it offers it.
+  fn models(&self) -> Vec<Entry> {
+    let at = self.target().machine();
+    let offered = self.client.machines.get(at).and_then(|told| told.models.as_ref());
+    let effort = self.actor().and_then(|one| one.1);
+    let entry = |model: &Offered| {
+      let (provider, name) = model.name.split_once(':').unwrap_or(("", &model.name));
+      let taken =
+        effort.as_ref().filter(|one| model.efforts.contains(one)).or(model.effort.as_ref());
+      let actor = taken.map_or_else(|| model.name.clone(), |one| format!("{}/{one}", model.name));
+      Entry {
+        part: provider_named(provider),
+        left: name.to_owned(),
+        right: taken.cloned().unwrap_or_default(),
+        choice: Choice::Actor(actor),
+        ..Entry::default()
+      }
+    };
+    offered.into_iter().flatten().map(entry).collect()
   }
 
   /// The chosen row moved by a count of rows, within the rows that pass the filter.
@@ -332,6 +425,7 @@ impl Model {
       Choice::Project(name) => {
         self.picker = Some(Picker { of, filter: name, at: 0 });
       }
+      Choice::Actor(actor) => self.took_actor(actor),
       Choice::Key(does) => return Some(does),
       Choice::None => self.picker = Some(Picker { of, filter: String::new(), at }),
     }
@@ -350,7 +444,9 @@ impl Model {
     let open = self.thread.as_ref().map(|one| (one.thread.key.0, one.thread.key.1.clone()));
     self.aim = match target {
       Target::Session(at, life) if open == Some((at, life.clone())) => None,
-      Target::New(_) if self.thread.is_none() => None,
+      Target::New(0, ref folder) if self.thread.is_none() && Path::new(folder) == self.folder => {
+        None
+      }
       other => Some(other),
     };
   }
@@ -527,6 +623,18 @@ impl AsRef<str> for Haystack<'_> {
 fn place(card: &Card) -> String {
   let named = card.session.as_ref().filter(|name| !name.is_empty() && **name != card.thread.title);
   named.map_or_else(|| project(card), |name| format!("{} · {name}", project(card)))
+}
+
+/// The name of a provider as a head of the models says it.
+fn provider_named(provider: &str) -> &'static str {
+  match provider {
+    "claude-cli" => "Claude",
+    "codex" => "Codex",
+    "anthropic" => "Anthropic",
+    "openai" => "OpenAI",
+    "local" => "Local",
+    _ => "Other",
+  }
 }
 
 /// The name of a record with no name: its file, with no extension.

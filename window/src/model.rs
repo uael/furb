@@ -210,11 +210,19 @@ impl Model {
       (Asked::Ended, Ok(Frame::Reply { answer: Answer::Acts(acts), .. })) => self.ran(acts),
       (Asked::Ended, Ok(Frame::Refused { why, .. })) => (self.word, self.fault) = (None, Some(why)),
       (
-        Asked::Seen | Asked::List | Asked::Control | Asked::Back(_) | Asked::History(_),
+        Asked::Seen
+        | Asked::List
+        | Asked::Projects
+        | Asked::Control
+        | Asked::Back(_)
+        | Asked::History(_),
         Ok(Frame::Refused { why, .. }),
       ) => self.fault = Some(why),
       (Asked::List, Ok(Frame::Reply { answer: Answer::Lives(lives), .. })) => {
         self.client.machines[at].lives = lives;
+      }
+      (Asked::Projects, Ok(Frame::Reply { answer: Answer::Projects(projects), .. })) => {
+        self.client.machines[at].projects = projects;
       }
       (Asked::Models, Ok(Frame::Reply { answer: Answer::Models(models), .. })) => {
         self.client.machines[at].models = Some(models);
@@ -294,10 +302,13 @@ impl Model {
     }
   }
 
-  /// A click on a row of the window, in the list: a card is selected and its thread opens, and the
-  /// head of the resolved threads shows or folds their rows.
-  pub(crate) fn clicked(&mut self, y: usize) {
+  /// A click on a row of the window, in the list: a card is selected and its thread opens, the head
+  /// of the resolved threads shows or folds their rows, and the scope and a key do what their key
+  /// does, which this gives.
+  pub(crate) fn clicked(&mut self, y: usize) -> Option<Does> {
     match self.row(y) {
+      Some(Row::Scope) => return Some(Does::GoTo),
+      Some(Row::Key(does)) => return Some(does),
       Some(Row::Card(at, _) | Row::Resolved(at)) => {
         self.selected = self.client.settled.get(at).map(|one| one.1.clone());
         self.open_thread();
@@ -314,6 +325,7 @@ impl Model {
       }
       _ => {}
     }
+    None
   }
 
   /// The list moved by a count of rows, as far as it has rows.

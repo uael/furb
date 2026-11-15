@@ -49,6 +49,10 @@ pub(crate) enum Does {
   Agent,
   Take,
   TakeWord,
+  Machines,
+  Projects,
+  Model,
+  Effort,
 }
 
 /// One stroke of a key: whether it holds control and alt, and its key.
@@ -138,6 +142,10 @@ const INPUT: &[Bound] = &[
   bound(Does::Leave, "leave, twice on an empty input", true, &[&[ctrl('d')]]),
   bound(Does::Sessions, "the session that the input sends to", true, &[&led('o')]),
   bound(Does::Python, "a word of Python, and back to a message", true, &[&led('y')]),
+  bound(Does::Machines, "the machine of a new session", true, &[&led('h')]),
+  bound(Does::Projects, "the project of a new session", true, &[&led('p')]),
+  bound(Does::Model, "the model of the input", true, &[&led('m')]),
+  bound(Does::Effort, "the next effort of the model", true, &[&led('e')]),
   bound(
     Does::Take,
     "take the grey rest of what you sent",

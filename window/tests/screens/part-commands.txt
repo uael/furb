@@ -3,7 +3,7 @@
   Nothing needs you.                                           Working 1
 
     Commands                                            ⎋       run the bench of…       ⠋ Working
-    ▌Search a command                              1 / 14       FU furb                      opus
+    ▌Search a command                              1 / 18       FU furb                      opus
 
     Go                                                         Resolved 1 ▸
     ▌Go to a project or a session                     ⌃O

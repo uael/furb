@@ -25,6 +25,6 @@
 ┃
 ┃ A word of Python to run
 ┃
-┃  Message  Python    → how long does an… ▾   opus   + ⌃N      Context               No answer yet
+┃  Message  Python    → how long… ▾     opus  high   + ⌃N      Context               No answer yet
 ┃                                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ✓ await wait(1, __name__)\nanswer = 41 + 1    ⌃P commands

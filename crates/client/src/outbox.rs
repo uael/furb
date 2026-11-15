@@ -8,6 +8,7 @@
 use std::time::Duration;
 
 use furb_wire::protocol::{Hello, Kind, PROTOCOL, Request, Verb};
+use serde_json::Value;
 
 use crate::{
   Client, Key, Life, Link, Pending, Thread,
@@ -29,12 +30,50 @@ pub fn greeting(kind: Kind) -> [Request; 2] {
 }
 
 /// Where the input sends: the open thread, a new thread of a session on a machine, or a new
-/// session on a machine in the project of the folder of the client.
+/// session on a machine in the project of a folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
   Thread(Key),
   Session(usize, String),
-  New(usize),
+  New(usize, String),
+}
+
+impl Target {
+  /// The machine that the target stands on.
+  pub fn machine(&self) -> usize {
+    match self {
+      Self::Thread(key) => key.0,
+      Self::Session(at, _) | Self::New(at, _) => *at,
+    }
+  }
+}
+
+/// An actor that the operator chose for a target of the input: its machine, the record of its life,
+/// none for a new session, which opens on it, and whether the client asked the life to take it,
+/// as a word of the operator on its root.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Chosen {
+  pub at: usize,
+  pub life: Option<String>,
+  pub actor: String,
+  pub asked: bool,
+}
+
+impl Chosen {
+  /// The actor chosen for a target.
+  pub fn of(target: &Target, actor: String) -> Self {
+    let (at, life) = match target {
+      Target::Thread(key) => (key.0, Some(key.1.clone())),
+      Target::Session(at, life) => (*at, Some(life.clone())),
+      Target::New(at, _) => (*at, None),
+    };
+    Self { at, life, actor, asked: false }
+  }
+
+  /// Whether the actor stands for a target.
+  pub fn aims(&self, target: &Target) -> bool {
+    *self == Self { asked: self.asked, ..Self::of(target, self.actor.clone()) }
+  }
 }
 
 /// A message that waits to be sent: its machine, its record, its thread, which is none for a new
@@ -51,8 +90,8 @@ pub struct Outgoing {
 
 /// What a request of the client asked of a daemon: the open of a life, a message, a control of a
 /// thread, as a stop or a resolve, the take back of a message with its text, the answer to a
-/// question, what the operator saw, the records of the machine, the models of its catalog, the end
-/// of the rung of a word, or the history of the input.
+/// question, what the operator saw, the records of the machine, the models of its catalog, its
+/// projects, the end of the rung of a word, or the history of the input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Asked {
   Open,
@@ -63,6 +102,7 @@ pub enum Asked {
   Seen,
   List,
   Models,
+  Projects,
   Ended,
   History(Target),
 }
@@ -148,7 +188,7 @@ impl Client {
       let open = Verb::Open {
         life: key.1.clone(),
         cwd: hold.cwd.clone(),
-        actor: None,
+        actor: hold.actor.clone(),
         roster: None,
         skills: None,
         config: None,
@@ -177,5 +217,16 @@ impl Client {
       (at, Verb::Models { cwd, config: None, claude: None })
     };
     due.map(ask).collect()
+  }
+
+  /// The word that gives the root of a life that stands the actor that the operator chose for it,
+  /// once the daemon answered the open of its life.
+  pub fn chosen_due(&mut self) -> Option<(usize, Verb)> {
+    let chosen = self.chosen.as_ref().filter(|one| !one.asked)?;
+    let life = chosen.life.clone().filter(|life| self.stands(chosen.at, life))?;
+    let word = format!("actor = {}", Value::String(chosen.actor.clone()));
+    let at = chosen.at;
+    self.chosen.as_mut()?.asked = true;
+    Some((at, Verb::Run { life, word, on: None }))
   }
 }

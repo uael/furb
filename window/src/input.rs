@@ -8,7 +8,7 @@
 //! message shows in the thread at once, and a message that the daemon refuses comes back to the
 //! input with the message after it.
 
-use std::mem;
+use std::{mem, ops::Range, path::Path};
 
 use furb::view::{Act, Maker, RunState, Standing, timer};
 use furb_host::protocol::{Answer, Card, Verb};
@@ -16,22 +16,27 @@ use jiff::Timestamp;
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
-use furb_client::{Asked, Outgoing, Target};
+use furb_client::{Asked, Chosen, Outgoing, Target};
 
 use crate::{
   keys::Does,
   line::{Line, clipped, cut, run, spread, wrapped},
   list::project,
   model::{Key, Model},
-  thread::{Click, Opened, Row, columns, width},
+  thread::{Click, Hot, Opened, Row, columns, width},
   tokens::{APART, Loader, Role},
 };
 
 /// How many rows of text the input grows to before its text scrolls.
 const GROWS: usize = 6;
 
-/// The fewest columns of the session in the launcher before the model gives way to it.
-const SESSION: usize = 16;
+/// The fewest columns of the target in the launcher before the effort gives way to it: the head
+/// names the open thread whole, and the effort is a control that a click turns.
+const SESSION: usize = 10;
+
+/// The fewest columns of the name of a project in the launcher of a new session before it gives
+/// way to its badge alone.
+const SHORTEST: usize = 4;
 
 /// The text of the input, as its editor holds it, and whether it is a word of python that runs.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -92,7 +97,7 @@ impl Model {
     match (&self.aim, &self.thread) {
       (Some(target), _) => target.clone(),
       (None, Some(opened)) => Target::Thread(opened.thread.key.clone()),
-      (None, None) => Target::New(0),
+      (None, None) => Target::New(0, self.folder.display().to_string()),
     }
   }
 
@@ -111,13 +116,12 @@ impl Model {
   /// goes to it. A machine that the window dials again takes nothing, and the text stays in the
   /// input. Whether the text went.
   pub(crate) fn send(&mut self, text: String) -> bool {
-    let (at, life, thread) = match self.target() {
-      Target::Thread(key) => (key.0, key.1, Some(key.2)),
-      Target::Session(at, life) => (at, life, None),
-      Target::New(at) => (at, self.record(), None),
+    let (at, life, thread, cwd) = match self.target() {
+      Target::Thread(key) => (key.0, key.1.clone(), Some(key.2), self.cwd(key.0, &key.1)),
+      Target::Session(at, life) => (at, life.clone(), None, self.cwd(at, &life)),
+      Target::New(at, folder) => (at, self.record(&folder), None, Some(folder)),
     };
-    let cwd = self.cwd(at, &life);
-    let sent = Outgoing { at, life, thread, text, python: self.draft.python };
+    let sent = Outgoing { at, life: life.clone(), thread, text, python: self.draft.python };
     let open = self.thread.as_mut().map(|one| &mut one.thread);
     let made = match self.client.send(sent, cwd, self.moved, open) {
       Ok(made) => made,
@@ -126,6 +130,11 @@ impl Model {
         return false;
       }
     };
+    // A new session opens on the actor that the operator chose for it.
+    let chosen = self.client.chosen.take_if(|one| one.life.is_none() && one.at == at);
+    if let (Some(chosen), Some(hold)) = (chosen, self.client.holds.get_mut(&(at, life))) {
+      hold.actor = Some(chosen.actor);
+    }
     if let Some(thread) = made {
       (self.selected, self.aim) = (Some(thread.key.clone()), None);
       self.thread = Some(Opened { thread, ..Opened::default() });
@@ -144,14 +153,13 @@ impl Model {
     }
   }
 
-  /// The record of a new session, in the sessions of the project of the folder of the window,
-  /// named by the second and the moment of the window, so no two windows share it, and past each
-  /// record that the window knows, so no two sessions of one window share it when its clocks stand
-  /// still.
-  pub(crate) fn record(&self) -> String {
+  /// The record of a new session, in the sessions of the project of a folder, named by the second
+  /// and the moment of the window, so no two windows share it, and past each record that the
+  /// window knows, so no two sessions of one window share it when its clocks stand still.
+  pub(crate) fn record(&self, folder: &str) -> String {
     let second = Timestamp::from_second(i64::try_from(self.second()).unwrap_or_default());
     let stamp = second.unwrap_or_default().strftime("%Y-%m-%dT%H-%M-%S");
-    let sessions = self.folder.join(".furb").join("sessions");
+    let sessions = Path::new(folder).join(".furb").join("sessions");
     let named = |n: u128| sessions.join(format!("{stamp}-{:04x}.jsonl", n % 0x1_0000));
     let known = |life: &str| {
       self.client.holds.keys().any(|held| held.1 == life)
@@ -428,7 +436,7 @@ impl Model {
           }
           Target::Thread(_) => "Reply to this thread",
           Target::Session(..) => "Ask in a new thread",
-          Target::New(_) => "Ask for a change, a review or an answer",
+          Target::New(..) => "Ask for a change, a review or an answer",
         };
         // The text stands under the blank row that opens the box, as in the box of a message.
         let waits = usize::from(self.waiting_row().is_some());
@@ -472,7 +480,7 @@ impl Model {
   fn bar(&self) -> Color {
     match self.target() {
       Target::Thread(key) => self.hue(&key),
-      Target::Session(..) | Target::New(_) => self.tokens.accent,
+      Target::Session(..) | Target::New(..) => self.tokens.accent,
     }
   }
 
@@ -501,24 +509,24 @@ impl Model {
     let (mark, target, color) = match self.target() {
       Target::Thread(key) => ("→ ", self.title().unwrap_or_default(), self.hue(&key)),
       Target::Session(..) => ("+ ", format!("new thread in {}", self.session()), t.accent),
-      Target::New(at) => return self.launch(at, switch),
+      Target::New(at, folder) => return self.launch(at, &folder, switch),
     };
     let mut left: Line = switch.into();
     left.extend([gap(), run(mark, muted), run(target, raised.fg(color))]);
-    let (turn, ring) = (self.turned(), self.ring());
     let room = self.wide().saturating_sub(6);
     let wanted = left.last().map_or(0, |one| one.content.width());
     // The target says where the message goes, so it keeps its words first: the turn gives way to
     // its mark and its key, then the effort, then the target to a few words.
     let right = |short| self.controls(short);
     // The target leaves room for the mark before it and the arrow of its picker after it.
-    let fits = |right: &Line| room.saturating_sub(width(right) + 2 + width(&left[..3]) + 2 + 2);
-    let right = [right(0), right(1)]
+    let fits =
+      |right: &(Line, _)| room.saturating_sub(width(&right.0) + 2 + width(&left[..3]) + 2 + 2);
+    let (right, clicks) = [right(0), right(1)]
       .into_iter()
       .find(|one| fits(one) >= wanted)
       .or_else(|| [right(1), right(2)].into_iter().find(|one| fits(one) >= SESSION))
       .unwrap_or_else(|| right(2));
-    let fits = fits(&right);
+    let fits = room.saturating_sub(width(&right) + 2 + width(&left[..3]) + 2 + 2);
     let target = left.pop().map(|one| run(cut(&one.content, fits), one.style));
     left.extend(target.into_iter().chain([run(" ▾", raised.fg(color))]));
     let line = spread(left, right, room, raised);
@@ -527,16 +535,7 @@ impl Model {
       (at[0].start + 2..at[1].end + 2, Some(Click::Key(Does::Python))),
       (at[3].start + 2..at[5].end + 2, Some(Click::Key(Does::Sessions))),
     ];
-    // The runs at the end of the line: the turn and its key, then the ring when it shows.
-    let end = at.len() - if ring.is_some() { 2 } else { 0 };
-    if turn.is_some() {
-      let (turn, key) = (&at[end - 2], &at[end - 1]);
-      hot.push((turn.start + 2..key.end + 2, Some(Click::Key(Does::NewThread))));
-    }
-    if ring.is_some() {
-      let ring = &at[at.len() - 1];
-      hot.push((ring.start + 2..ring.end + 2, Some(Click::Context)));
-    }
+    hot.extend(clicked(&at, clicks));
     let Row { line, .. } = self.band(line);
     Row { hot, ..Row::of(line) }
   }
@@ -544,30 +543,53 @@ impl Model {
   /// The launcher of a new session: after the switch, where it will run, the machine and then the
   /// project with its badge, each with the arrow of the part that chooses it, and at the right the
   /// model and the effort that it will take, as the row under the prompt of a desktop app says.
-  fn launch(&self, at: usize, switch: [Span<'static>; 2]) -> Row {
+  fn launch(&self, at: usize, folder: &str, switch: [Span<'static>; 2]) -> Row {
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
     let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
     let machine = if at == 0 { "This computer" } else { &self.client.machines[at].name };
-    let project = self.project();
+    let project = named(folder);
     let badge = self.badge(&project);
+    let gap = || run(" ".repeat(APART), raised);
     let mut left: Line = switch.into();
+    let fixed = width(&left) + APART + 2 + APART + badge.content.width() + 2;
+    // The names give way before the effort: the turn gives way to its mark, then the name of the
+    // project to its badge alone, then the name of the machine to a few letters.
+    let room = self.wide().saturating_sub(6);
+    let spare = |right: &(Line, _)| room.checked_sub(width(&right.0) + 2 + fixed);
+    let wanted = machine.width() + 1 + project.width();
+    let (right, clicks) = [self.controls(0), self.controls(1)]
+      .into_iter()
+      .find(|one| spare(one).is_some_and(|spare| spare >= wanted))
+      .or_else(|| {
+        let some = |one: &(Line, _)| spare(one).is_some_and(|spare| spare >= SHORTEST);
+        [self.controls(1), self.controls(2)].into_iter().find(some)
+      })
+      .unwrap_or_else(|| self.controls(2));
+    let spare = room.saturating_sub(width(&right) + 2 + fixed);
+    let machine = cut(machine, spare);
+    // A name cut to less than a few letters says nothing that the badge does not.
+    let name = match spare.saturating_sub(machine.width()) {
+      rest if rest > SHORTEST => format!(" {}", cut(&project, rest - 1)),
+      _ => String::new(),
+    };
     left.extend([
-      run(" ".repeat(APART), raised),
-      run(machine.to_owned(), prose),
+      gap(),
+      run(machine, prose),
       run(" ▾", muted),
-      run(" ".repeat(APART), raised),
+      gap(),
       run(badge.content.to_string(), badge.style.bg(t.raised)),
-      run(format!(" {project}"), prose),
+      run(name, prose),
       run(" ▾", muted),
     ]);
-    let line = spread(left, self.controls(0), self.wide().saturating_sub(6), raised);
+    let line = spread(left, right, room, raised);
     let at = columns(&line);
-    let hot = vec![
+    let mut hot = vec![
       (at[0].start + 2..at[1].end + 2, Some(Click::Key(Does::Python))),
-      (at[3].start + 2..at[4].end + 2, Some(Click::Key(Does::Sessions))),
-      (at[6].start + 2..at[8].end + 2, Some(Click::Key(Does::Sessions))),
+      (at[3].start + 2..at[4].end + 2, Some(Click::Key(Does::Machines))),
+      (at[6].start + 2..at[8].end + 2, Some(Click::Key(Does::Projects))),
     ];
+    hot.extend(clicked(&at, clicks));
     let Row { line, .. } = self.band(line);
     Row { hot, ..Row::of(line) }
   }
@@ -584,24 +606,28 @@ impl Model {
   /// The controls at the right of the launcher: the model and its effort, the turn to a new thread
   /// and its key, and the ring of the context while the list hides. A short form gives the turn its
   /// mark alone, and a shorter one drops the effort too.
-  fn controls(&self, short: usize) -> Line {
+  fn controls(&self, short: usize) -> (Line, Vec<Option<Click>>) {
     let t = &self.tokens;
     let raised = Style::new().bg(t.raised);
     let (muted, prose) = (t.style(Role::Muted).bg(t.raised), t.style(Role::Prose).bg(t.raised));
-    let gap = || run(" ".repeat(APART), raised);
-    let mut right: Line = Vec::new();
+    let gap = || (run(" ".repeat(APART), raised), None);
+    let key = |does| Some(Click::Key(does));
+    let mut right = Vec::new();
     if let Some((model, effort)) = self.maker() {
-      right.push(run(model, prose));
-      right.extend(effort.filter(|_| short < 2).map(|one| run(format!("  {one}"), muted)));
+      right.push((run(model, prose), key(Does::Model)));
+      if let Some(effort) = effort.filter(|_| short < 2) {
+        right.extend([(run("  ", raised), None), (run(effort, muted), key(Does::Effort))]);
+      }
     }
     if let Some((words, mark)) = self.turned() {
-      let key = run(format!(" {}", self.key(Does::NewThread)), muted);
-      right.extend([gap(), run(if short > 0 { mark } else { words }, raised.fg(t.accent)), key]);
+      let turn = run(if short > 0 { mark } else { words }, raised.fg(t.accent));
+      let named = run(format!(" {}", self.key(Does::NewThread)), muted);
+      right.extend([gap(), (turn, key(Does::NewThread)), (named, key(Does::NewThread))]);
     }
     if let Some(ring) = self.ring() {
-      right.extend([gap(), run(ring, prose)]);
+      right.extend([gap(), (run(ring, prose), Some(Click::Context))]);
     }
-    right
+    right.into_iter().unzip()
   }
 
   /// The project and the session that the input sends to.
@@ -609,7 +635,7 @@ impl Model {
     let (at, life, open) = match self.target() {
       Target::Thread(key) => (key.0, key.1, true),
       Target::Session(at, life) => (at, life, false),
-      Target::New(_) => return format!("{} · new session", self.project()),
+      Target::New(_, folder) => return format!("{} · new session", named(&folder)),
     };
     let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     let card = cards.iter().find(|card| card.life == life);
@@ -632,42 +658,72 @@ impl Model {
     title.lines().find(|line| !line.trim().is_empty()).map(str::to_owned)
   }
 
-  /// The model that the target of the input speaks to: the one of the last block of the open
-  /// thread with its effort, else the one that its card or the last card of its session names. A
-  /// new session names none until its life stands.
+  /// The model that the target of the input speaks to, by its name alone, and its effort.
   pub(crate) fn maker(&self) -> Option<(String, Option<String>)> {
-    // An actor names its model after its provider, and its effort after a slash.
-    let short = |model: &str| {
-      let model = model.rsplit(':').next().unwrap_or(model);
+    let (model, effort) = self.actor()?;
+    Some((model.rsplit(':').next().unwrap_or(&model).to_owned(), effort))
+  }
+
+  /// The model that the target of the input speaks to, by its whole name, and its effort: the one
+  /// that the operator chose for it, else the one of the last block of the open thread, else the
+  /// one that its card or the last card of its session names. A new session stands on the model
+  /// of the last session of its project, as it reads its skills, and a project with no session on
+  /// the default actor of the catalog of its machine.
+  pub(crate) fn actor(&self) -> Option<(String, Option<String>)> {
+    // An actor names its effort after its last slash.
+    let leveled = |actor: &str| {
       let (name, effort) =
-        model.split_once('/').map_or((model, None), |(one, two)| (one, Some(two)));
+        actor.rsplit_once('/').map_or((actor, None), |(one, two)| (one, Some(two)));
       (name.to_owned(), effort.map(str::to_owned))
     };
-    let (at, life) = match self.target() {
+    let target = self.target();
+    if let Some(chosen) = self.client.chosen.as_ref().filter(|one| one.aims(&target)) {
+      return Some(leveled(&chosen.actor));
+    }
+    let (at, life) = match target {
       Target::Thread(key) => {
         let opened = self.thread.as_ref()?;
         let block = opened.thread.exchanges.values().rev().find_map(|one| one.block.as_ref());
         if let Some(Maker::Model { model, effort }) = block.map(|one| &one.maker) {
-          return Some((short(model).0, effort.clone()));
+          return Some((model.clone(), effort.clone()));
         }
         (key.0, key.1)
       }
       Target::Session(at, life) => (at, life),
-      // A new session stands on the model of the last session of its project, as it reads its
-      // skills.
-      // A project with no session stands on the default actor of the catalog of its machine.
-      Target::New(at) => {
+      Target::New(at, folder) => {
         let told = self.client.machines.get(at)?;
-        let here = self.project();
+        let here = named(&folder);
         let mut ours = told.cards.iter().rev().filter(|card| project(card) == here);
-        let last = ours.find_map(|card| card.thread.model.as_deref()).map(short);
+        let last = ours.find_map(|card| card.thread.model.as_deref()).map(leveled);
         let first = || told.models.as_ref()?.first();
-        return last.or_else(|| first().map(|one| (short(&one.name).0, one.effort.clone())));
+        return last.or_else(|| first().map(|one| (one.name.clone(), one.effort.clone())));
       }
     };
     let cards = self.client.machines.get(at).map(|told| &told.cards[..]).unwrap_or_default();
     let mut ours = cards.iter().rev().filter(|card| card.life == life);
-    ours.find_map(|card| card.thread.model.as_deref()).map(short)
+    ours.find_map(|card| card.thread.model.as_deref()).map(leveled)
+  }
+
+  /// The model of the target of the input at its next effort, from the least again after the
+  /// most, as the catalog of its machine gives its efforts.
+  pub(crate) fn effort(&mut self) {
+    let at = self.target().machine();
+    let Some((model, effort)) = self.actor() else { return };
+    let offered = self.client.machines.get(at).and_then(|told| told.models.as_ref());
+    let efforts = offered.and_then(|all| all.iter().find(|one| one.name == model));
+    let Some(efforts) = efforts.map(|one| &one.efforts).filter(|all| !all.is_empty()) else {
+      self.notice = Some("This model takes no effort.".to_owned());
+      return;
+    };
+    let now = effort.and_then(|effort| efforts.iter().position(|one| *one == effort));
+    let next = &efforts[now.map_or(0, |now| (now + 1) % efforts.len())];
+    self.took_actor(format!("{model}/{next}"));
+  }
+
+  /// An actor that the operator chose for the target of the input: a new session opens on it, and
+  /// a life that stands takes it on its root, as a word of the operator.
+  pub(crate) fn took_actor(&mut self, actor: String) {
+    self.client.chosen = Some(Chosen::of(&self.target(), actor));
   }
 
   /// The row of hints: why the daemon refused the last message, else the keys of a form, else the
@@ -715,7 +771,7 @@ impl Model {
         (working, Some((2, loader)))
       }
       // The launcher of a new session names its machine, so the row says the folder alone.
-      (None, None) => (self.place(!matches!(self.target(), Target::New(_))), None),
+      (None, None) => (self.place(!matches!(self.target(), Target::New(..))), None),
     };
     // The machine and the folder of a thread that rests give way to the threads that ask him, which
     // the row never hides.
@@ -757,7 +813,7 @@ impl Model {
   fn place(&self, machine: bool) -> Line {
     let at = match self.target() {
       Target::Thread(key) => key.0,
-      Target::Session(at, _) | Target::New(at) => at,
+      Target::Session(at, _) | Target::New(at, _) => at,
     };
     let name = if at == 0 { "This computer" } else { &self.client.machines[at].name };
     let text = if machine {
@@ -786,4 +842,19 @@ impl Model {
     };
     (clipped([head, vec![run(text, muted)]].concat(), room, muted), loader)
   }
+}
+
+/// The parts of a row of the box of the input that take a click: the runs at its end, by their
+/// columns in the line, each with its click. The box draws the line two columns in.
+fn clicked(at: &[Range<usize>], clicks: Vec<Option<Click>>) -> Vec<Hot> {
+  let first = at.len() - clicks.len();
+  let each = clicks.into_iter().enumerate();
+  each
+    .filter_map(|(n, click)| Some((at[first + n].start + 2..at[first + n].end + 2, Some(click?))))
+    .collect()
+}
+
+/// The name of a project, from its folder.
+pub(crate) fn named(folder: &str) -> String {
+  Path::new(folder).file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
 }

@@ -373,14 +373,11 @@ fn a_session_that_a_fault_ended_shows_its_thread_and_why_and_takes_no_message() 
   let before = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/replay/speaker.jsonl");
   fs::copy(before, record(&daemon, 0)).unwrap();
   open(&app, vec![daemon.machine("mac")], homed(&daemon));
-  // The launcher of a new session names the project too, with the arrow of its picker.
-  let mut at = None;
-  let carded = app.wait_until(PATIENCE, || {
-    at = app.text().lines().position(|line| line.contains("FU furb") && !line.contains('▾'));
-    at.is_some()
-  });
-  assert!(carded, "the card never showed:\n{}", app.text());
-  app.click(70, u16::try_from(at.unwrap()).unwrap() - 1);
+  // Its cards rest with the resolved ones, which a click on their head unfolds, and each says
+  // that the window only reads it.
+  shows(&app, "Resolved 4 ▸");
+  clicked(&app, "Resolved 4 ▸", 0, 0);
+  clicked(&app, "read only", 0, 0);
   shows(&app, "1  b = await bash('echo a')");
   let frame = shows(&app, "The window reads this session and sends it nothing.");
   let left: Vec<String> = frame.lines().map(|line| line.chars().take(LEFT).collect()).collect();
@@ -390,7 +387,9 @@ fn a_session_that_a_fault_ended_shows_its_thread_and_why_and_takes_no_message() 
     "{frame}"
   );
   assert!(frame.contains("The window sends nothing to this session"), "{frame}");
-  assert!(!frame.contains("Working") && !frame.contains("Resolve"), "{frame}");
+  // The thread shows no work and no button that resolves it; the list beside it keeps its parts.
+  let left = left.join("\n");
+  assert!(!left.contains("Working") && !left.contains("Resolve"), "{frame}");
   app.paste("Run it.");
   app.press("enter");
   shows(&app, "Nothing went: the record comes from");

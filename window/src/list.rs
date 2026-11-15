@@ -85,10 +85,14 @@ impl Model {
       _ => None,
     };
     match row {
-      Row::Scope => self.scope(),
+      Row::Scope => self.scope(pointed == Some(row)),
       Row::Blank => Vec::new(),
       Row::Says(text, role) => vec![run(format!("  {text}"), t.style(role))],
-      Row::Key(does) => vec![run(format!("  {}", self.key(does)), t.style(Role::Muted))],
+      Row::Key(does) => {
+        let style = t.style(Role::Muted);
+        let style = if pointed == Some(row) { style.fg(t.hover) } else { style };
+        vec![run("  ", Style::new()), run(self.key(does), style)]
+      }
       Row::Head(part) => self.head(part, pointed == Some(row)),
       Row::Gap(above, under) => self.gap(above, under),
       Row::Card(card, second) => {
@@ -126,8 +130,9 @@ impl Model {
     Ground { bg, hover: (pointed == Some(at)).then_some(self.tokens.hover) }
   }
 
-  /// The first row of the list: what it shows, and how the machines stand.
-  fn scope(&self) -> Line {
+  /// The first row of the list: what it shows, which takes a click and lights under the pointer,
+  /// and how the machines stand.
+  fn scope(&self, pointed: bool) -> Line {
     let t = &self.tokens;
     let project = self.folder.file_name().map(|name| name.to_string_lossy().into_owned());
     let scope = if self.client.settled.is_empty() {
@@ -148,7 +153,8 @@ impl Model {
       (0, None, 1) => "this machine".to_owned(),
       (0, None, count) => format!("{count} machines"),
     };
-    let left = vec![run(" ", Style::new()), run(format!("{scope} ▾"), t.style(Role::Prose))];
+    let style = if pointed { t.style(Role::Prose).fg(t.hover) } else { t.style(Role::Prose) };
+    let left = vec![run(" ", Style::new()), run(format!("{scope} ▾"), style)];
     spread(left, vec![run(machines, t.style(Role::Muted))], usize::from(LIST) - 2, Style::new())
   }
 

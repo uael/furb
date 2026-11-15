@@ -91,10 +91,17 @@ impl Model {
       return false;
     }
     let since = self.moved;
-    let gone = || Hold { cwd: None, ask: Ask::Due, since, stood: true, steps: Vec::new() };
-    self.client.holds.entry(key).or_insert_with(gone).ask = Ask::Failed(fault.clone());
+    let gone =
+      || Hold { cwd: None, actor: None, ask: Ask::Due, since, stood: true, steps: Vec::new() };
+    let hold = self.client.holds.entry(key).or_insert_with(gone);
+    hold.ask = Ask::Failed(fault.clone());
+    let actor = hold.actor.clone();
     if !self.client.outgoing.is_empty() {
       self.restore = Some(self.refused(fault));
+      // The model that he chose for the session that did not open stays his choice.
+      if let Some(actor) = actor {
+        self.took_actor(actor);
+      }
     }
     true
   }
