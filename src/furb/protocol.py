@@ -944,6 +944,17 @@ class Frame11(TypedDict):
 
 class Frame12(TypedDict):
   """
+  The skills attached to a life, each by its name, which a window mounts a view of: pushed to
+  each window of the life when it attaches, and after each attach and each end of a skill.
+  """
+
+  life: str
+  skills: list[str]
+  frame: Literal["served"]
+
+
+class Frame13(TypedDict):
+  """
   A view that a window mounts in a slot of a life, which the process of a skill serves.
   """
 
@@ -954,7 +965,7 @@ class Frame12(TypedDict):
   frame: Literal["view.mount"]
 
 
-class Frame14(TypedDict):
+class Frame15(TypedDict):
   """
   What a person did to a node of a view, with the value of an input.
   """
@@ -966,7 +977,7 @@ class Frame14(TypedDict):
   frame: Literal["view.event"]
 
 
-class Frame15(TypedDict):
+class Frame16(TypedDict):
   """
   What a skill asks of the one window of a view.
   """
@@ -976,7 +987,7 @@ class Frame15(TypedDict):
   frame: Literal["view.effect"]
 
 
-class Frame16(TypedDict):
+class Frame17(TypedDict):
   """
   The end of a view in its window.
   """
@@ -2892,7 +2903,7 @@ One node of a view, under an id that an event names.
 """
 
 
-class Frame13(TypedDict):
+class Frame14(TypedDict):
   """
   The tree of a view, which takes the place of each tree of a lower version.
   """
@@ -2921,13 +2932,14 @@ type Frame = (
   | Frame14
   | Frame15
   | Frame16
+  | Frame17
 )
 """
 What the daemon says to a peer.
 """
 
-type Mount = Frame12
-type ViewEvent = Frame14
-type Dispose = Frame16
+type Mount = Frame13
+type ViewEvent = Frame15
+type Dispose = Frame17
 
-PROTOCOL = 44
+PROTOCOL = 45
