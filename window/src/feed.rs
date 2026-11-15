@@ -11,7 +11,10 @@ use furb::view::{
   Standing, Thought, Work, lines, operator, timer,
 };
 use furb_client::{Fold, Opened, Target, rests};
-use furb_host::protocol::{Card, Present};
+use furb_host::{
+  FollowUp,
+  protocol::{Card, Present},
+};
 use opentui::style::{Color, Span, Style};
 use unicode_width::UnicodeWidthStr;
 
@@ -72,26 +75,23 @@ impl Feed<'_> {
   }
 
   /// Each follow-up that waits on the thread, which its life sends once the chain of the thread
-  /// rests, as a chip and its message, and the cross that takes it back to the input. The part
-  /// above it ends with a blank row.
+  /// rests: his message where it will stand, its bar and its text muted, with a chip that says
+  /// that it waits and the cross that takes it back to the input at its right. Once it goes, it
+  /// stands there in its colors.
   fn queued(&self) -> Vec<Row> {
-    let waiting = self.model.client.follow_ups();
-    waiting
-      .into_iter()
-      .map(|one| {
-        let chip = run(" queued ", self.style(Role::Button));
-        let back = " ✕";
-        let room = self.wide.saturating_sub(2 + 8 + 2 + back.width());
-        let text = one.message.lines().next().unwrap_or_default();
-        // The chip starts at the column of the text of a message and of what a model said.
-        let mut line = vec![run("  ", Style::new()), chip, run("  ", Style::new())];
-        line.push(run(line::cut(text, room), self.style(Role::Muted)));
-        let end = width(&line);
-        line.push(run(back, self.style(Role::Muted)));
-        let hot = vec![(end..end + back.width(), Some(Click::Unqueue(one.entry.clone())))];
-        Row { hot, ..Row::of(line) }
-      })
-      .collect()
+    let t = &self.model.tokens;
+    let muted = self.style(Role::Muted).bg(t.raised);
+    // The cross ends where the time of a line of a block ends, two columns in from the band.
+    let right = vec![run(" queued ", self.style(Role::Button)), run(" ✕", muted), run("  ", muted)];
+    let chip = |one: &FollowUp| {
+      let mut rows = self.band(&one.message, (t.border, muted), right.clone());
+      if let Some(row) = rows.get_mut(1) {
+        let end = width(&row.line) - 2;
+        row.hot = vec![(end - 1..end, Some(Click::Unqueue(one.entry.clone())))];
+      }
+      rows
+    };
+    self.model.client.follow_ups().into_iter().flat_map(chip).collect()
   }
 
   /// What a pause that holds the thread leaves him: that it holds, and the way out as buttons. His
@@ -374,28 +374,37 @@ impl Feed<'_> {
   /// A message on a raised band, with a bar in the color of the thread when an operator said it,
   /// and muted when a model gave it to its agent, and a blank row under it.
   fn message(&self, text: &str, his: bool) -> Vec<Row> {
+    let hue = if his { self.model.hue(&self.opened.thread.key) } else { self.model.tokens.muted };
+    self.band(text, (hue, self.style(Role::Prose)), Vec::new())
+  }
+
+  /// A text on the raised band of a message, after the bar in a hue, in a style, with a line at
+  /// the right of its first row, and a blank row under it.
+  fn band(&self, text: &str, (hue, style): (Color, Style), right: Line) -> Vec<Row> {
     let t = &self.model.tokens;
     let band = Style::new().bg(t.raised);
-    let hue = if his { self.model.hue(&self.opened.thread.key) } else { t.muted };
     let bar = run("┃", Style::new().fg(hue).bg(t.raised));
-    let banded = |text: Line| {
+    let banded = |text: Line, right: Line| {
       let mut line = vec![bar.clone(), run(" ", band)];
-      line.extend(spread(text, Vec::new(), self.wide.saturating_sub(4), band));
+      line.extend(spread(text, right, self.wide.saturating_sub(4), band));
       Row::of(line)
     };
+    let room = self.wide.saturating_sub(6 + width(&right) + 2 * usize::from(!right.is_empty()));
     let lines = picture::shown(&self.model.homed(text))
       .lines()
-      .flat_map(|line| wrapped(line, self.wide.saturating_sub(6)))
+      .flat_map(|line| wrapped(line, room))
       .collect::<Vec<_>>();
     // An image that the message names, and a file that it mentions, stand as marks, as the input
     // shows them.
-    let (plain, mark) =
-      (self.style(Role::Prose).bg(t.raised), Style::new().fg(t.accent).bg(t.lifted));
-    let text = lines.into_iter().map(|line| banded(picture::marked(&line, plain, mark)));
-    [banded(Vec::new())]
+    let (plain, mark) = (style.bg(t.raised), Style::new().fg(t.accent).bg(t.lifted));
+    let mut right = Some(right);
+    let text = lines
+      .into_iter()
+      .map(|line| banded(picture::marked(&line, plain, mark), right.take().unwrap_or_default()));
+    [banded(Vec::new(), Vec::new())]
       .into_iter()
       .chain(text)
-      .chain([banded(Vec::new()), Row::default()])
+      .chain([banded(Vec::new(), Vec::new()), Row::default()])
       .collect()
   }
 

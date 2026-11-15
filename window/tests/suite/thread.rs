@@ -643,8 +643,10 @@ fn a_message_queued_while_the_chain_works_shows_as_a_chip_and_a_cross_takes_it_b
   let (app, _daemon, _peer) = opened(&message, "proof = await bash(");
   app.type_text("then rebase on main");
   app.press("alt+enter");
-  // The life holds it until the chain rests, and each window of the life shows it.
-  let frame = shows(&app, " queued   then rebase on main");
+  // The life holds it until the chain rests, and each window of the life shows it where it will
+  // stand, as a message of his with a chip.
+  let frame = shows(&app, " queued ");
+  assert!(frame.contains("┃ then rebase on main"), "{frame}");
   assert!(!frame.contains("▌then rebase on main"), "the input is empty again:\n{frame}");
   let row = row(&app, " queued ");
   let line = app.text().lines().nth(usize::from(row)).unwrap_or_default().to_owned();
