@@ -264,7 +264,7 @@ pub fn stood(record: &[Object]) -> bool {
 /// answered.
 pub(crate) fn standing(record: &[Object]) -> Option<Object> {
   let said = |entries: &[Object]| entries.iter().rev().find_map(world::stood);
-  said(record).or_else(|| {
+  said(segment(record)).or_else(|| {
     let checkpoint = &record[last(record)?];
     said(&carried(checkpoint)).or_else(|| {
       let data = fact(checkpoint)?.word(0)?.to_owned();
