@@ -3,6 +3,7 @@
 
 #![cfg(test)]
 
+#[cfg(unix)]
 use std::fs;
 
 use furb_window::{Options, open};
