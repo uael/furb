@@ -343,8 +343,10 @@ pub(crate) const SCENARIOS: &[Scenario] = &[
     name: "15-failure",
     has: Has::Walk(Walk {
       sessions: &[],
+      // The word that fails is one line: a line after it joins the rung or not as the World
+      // times the fault, so the failed line would differ between two captures.
       words: &[
-        "await bash(\"sh -c 'for i in 1 2 3 4 5; do echo error line $i >&2; done; exit 2'\")\nclose('done')",
+        "await bash(\"sh -c 'for i in 1 2 3 4 5; do echo error line $i >&2; done; exit 2'\")",
         "close('The command failed with exit 2.')",
       ],
       steps: &[
