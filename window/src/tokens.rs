@@ -133,7 +133,7 @@ impl Tokens {
     let dark = terminal.filter(|told| ThemeMode::from_background(*told) == ThemeMode::Dark);
     let base = dark.map_or(BASE, |told| Color::default_with(told.r, told.g, told.b));
     let [panel, raised, lifted, border] = STEPS.map(|share| mixed(base, WHITE, share));
-    let (orange, text) = (Color::hex(0xfa_b283), Color::hex(0xe4_e4e4));
+    let (orange, text) = (Color::hex(0xfa_b283), Color::hex(READS));
     let hues = [0xa3_83e2, 0xe8_89a8, 0xd6_b860].map(Color::hex);
     let projects = [0xa9_c4d9, 0x7f_9dd0, 0xc0_8a6e]
       .map(|hue| Badge { letters: Color::hex(hue), ground: mixed(base, Color::hex(hue), 24) });
@@ -227,10 +227,14 @@ pub(crate) fn mixed(from: Color, to: Color, share: u16) -> Color {
   Color::rgb(channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b))
 }
 
+/// The color of what a person reads, prose and code.
+const READS: u32 = 0xe4_e4e4;
+
 /// The colors of python inside a block of code, by the name of a capture of its grammar, from the
 /// syntax of `OpenCode` v2, less its green: a string takes a pale cyan. A name that this list does
-/// not hold takes the text.
-pub const SYNTAX: [(&str, u32); 9] = [
+/// not hold takes the color of what holds it, so the code between the braces of an f-string, which
+/// stands in its string, takes the text again.
+pub const SYNTAX: [(&str, u32); 10] = [
   ("comment", 0x80_8080),
   ("keyword", 0x9d_7cd8),
   ("function", 0xfa_b283),
@@ -240,6 +244,7 @@ pub const SYNTAX: [(&str, u32); 9] = [
   ("number", 0xf5_a742),
   ("constant", 0xf5_a742),
   ("escape", 0x56_b6c2),
+  ("embedded", READS),
 ];
 
 /// The role of a text, which gives its look.
