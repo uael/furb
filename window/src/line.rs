@@ -101,15 +101,29 @@ fn broken(word: &str, room: usize) -> Vec<String> {
 }
 
 /// The runs of a line of code cut to a count of columns: a cut line ends with `…+` and the count of
-/// the characters that it hides, in a muted look.
+/// the characters that it hides, in a muted look, at the last column where the count leaves it.
 pub(crate) fn clipped(line: Line, room: usize, muted: Style) -> Line {
   if line.iter().map(|one| one.content.width()).sum::<usize>() <= room {
     return line;
   }
   let chars: usize = line.iter().map(|one| one.content.chars().count()).sum();
-  // The mark is as wide as the count of all the characters at most, so the cut leaves it room.
-  let mut left = room.saturating_sub(format!("…+{chars}").width());
-  let (mut out, mut kept) = (Vec::new(), 0);
+  // The mark takes the room of the count of all the characters first, then of the count that it
+  // hides, which has as many digits or fewer, so the cut ends at the column of the room.
+  let mut mark = format!("…+{chars}").width();
+  loop {
+    let (out, kept) = kept(&line, room.saturating_sub(mark));
+    let hidden = format!("…+{}", chars - kept);
+    if hidden.width() == mark {
+      return out.into_iter().chain([run(hidden, muted)]).collect();
+    }
+    mark = hidden.width();
+  }
+}
+
+/// The runs of a line that fit a count of columns, and how many characters they keep. A cut never
+/// ends on blanks, so the mark after it stands right after what it kept.
+fn kept(line: &Line, room: usize) -> (Line, usize) {
+  let (mut out, mut kept, mut left) = (Vec::new(), 0, room);
   for one in line {
     let fits = |char: &char| {
       let wide = char.width().unwrap_or_default();
@@ -125,14 +139,12 @@ pub(crate) fn clipped(line: Line, room: usize, muted: Style) -> Line {
       break;
     }
   }
-  // A cut never ends on blanks, so its mark stands right after what it kept.
   if let Some(last) = out.pop() {
     let trimmed = last.content.trim_end();
     kept -= last.content.chars().count() - trimmed.chars().count();
     out.push(run(trimmed.to_owned(), last.style));
   }
-  out.push(run(format!("…+{}", chars - kept), muted));
-  out
+  (out, kept)
 }
 
 /// The column of the mark that says how many characters a cut line lost, as `clipped` writes it.

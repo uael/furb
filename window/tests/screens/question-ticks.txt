@@ -4,7 +4,7 @@
 ┃ (the model asks ticks)                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
 ┃                                                             ▐ ● which keys does the…    ◆ Input ▌
                                                 opus/high     ▐   FU furb                    opus ▌
-    ◆  keys = await prompt(list[Literal['up', 'down'…+57      ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
+    ◆  keys = await prompt(list[Literal['up', 'down',…+56     ▝▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▘
     2  close(' '.join(keys))
     …
 
