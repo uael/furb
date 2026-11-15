@@ -19,6 +19,11 @@ fn cloned(yard: &Yard) -> PathBuf {
   let first = ["-c", "init.defaultBranch=main"];
   git(yard, &[&first[..], &["init", "-q", "--bare", "origin.git"]].concat());
   git(yard, &[&first[..], &["clone", "-q", &origin.to_string_lossy(), "main"]].concat());
+  // A runner names no person, so the clone names one for each commit that a task makes, as a
+  // rebase does.
+  for (key, value) in [("user.name", "t"), ("user.email", "t@t"), ("commit.gpgsign", "false")] {
+    git(&main, &["config", key, value]);
+  }
   committed(&main, "first");
   git(&main, &["push", "-q", "origin", "HEAD:refs/heads/main"]);
   git(&main, &["fetch", "-q", "origin"]);

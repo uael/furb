@@ -304,7 +304,7 @@ fn land(tree: &Path, branch: &str) -> Result<(), Fault> {
 
 fn close(root: &Path, path: &Path, into: &str, own: bool) -> Result<(), Fault> {
   let path =
-    fs::canonicalize(path).map_err(|source| Fault::Read { path: path.to_owned(), source })?;
+    dunce::canonicalize(path).map_err(|source| Fault::Read { path: path.to_owned(), source })?;
   let kept = |why| Err(Fault::Kept { path: path.clone(), why });
   let changed = git(&path, &["status", "--porcelain"])?;
   if !changed.trim().is_empty() {

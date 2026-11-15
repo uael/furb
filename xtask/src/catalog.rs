@@ -6,7 +6,7 @@
 
 use std::{
   collections::BTreeSet,
-  fs,
+  env, fs,
   io::Read,
   path::Path,
   process::{Command as Process, ExitCode},
@@ -409,7 +409,10 @@ fn data(package: &[u8], name: &str) -> Result<Vec<Value>, Fault> {
 /// What an address serves. The catalog refuses an agent that it does not know, so the task names
 /// itself as the crate does.
 fn fetched(url: &str) -> Result<Vec<u8>, Fault> {
+  // Windows looks for a program in its own folders before PATH, unless the command names a PATH:
+  // so the curl that PATH names first runs, as on every other system.
   let out = Process::new("curl")
+    .env("PATH", env::var_os("PATH").unwrap_or_default())
     .args(["-fsSL", "--max-time", "60", "-A", "furb", url])
     .output()
     .map_err(|source| Fault::Spawn { program: "curl".to_owned(), source })?;

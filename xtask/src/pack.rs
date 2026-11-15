@@ -44,7 +44,8 @@ pub(crate) fn check() -> Result<ExitCode, Fault> {
   for package in published {
     let (name, home) = (package["name"].as_str().unwrap_or_default(), folder(package));
     let listed = cargo(&["package", "--list", "--allow-dirty", "--quiet", "-p", name])?;
-    let listed: BTreeSet<&str> = listed.lines().collect();
+    // cargo lists each path with the separator of the system, which Windows writes `\\`.
+    let listed: BTreeSet<String> = listed.lines().map(|one| one.replace('\\', "/")).collect();
     for read in
       package["targets"].as_array().into_iter().flatten().filter_map(|one| built(&target, one))
     {
@@ -63,7 +64,7 @@ pub(crate) fn check() -> Result<ExitCode, Fault> {
           .map(|one| one.as_os_str().to_string_lossy())
           .collect::<Vec<_>>()
           .join("/");
-        if !listed.contains(path.as_str()) {
+        if !listed.contains(&path) {
           left.push(format!("{name}: {path}"));
         }
       }

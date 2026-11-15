@@ -39,6 +39,9 @@ thiserror = "2"
 pulldown-cmark = { version = "0.13", default-features = false }
 # The task comment-width: the lexer of rustc, which tells a comment from a string.
 ra-ap-rustc_lexer = "0.185.0"
+# The task tree: the real path of a tree, which Windows gives with no verbatim prefix that git and
+# a person cannot read.
+dunce = "1"
 
 # The task budget: the CPU time of the waited children of a run.
 [target.'cfg(unix)'.dependencies]
