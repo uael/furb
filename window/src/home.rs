@@ -12,21 +12,34 @@ use crate::{
   line::{self, Line, run, spread},
   list::project,
   model::{Link, Model},
-  thread::Row,
+  thread::{Click, Row, width},
   tokens::{KEYS, Role},
 };
 
 impl Model {
   /// The rows of the home, above the input.
   pub(crate) fn home(&self) -> Vec<Row> {
-    let mut rows = self.says();
+    let mut rows: Vec<Row> = self.says().into_iter().map(Row::of).collect();
+    // A key of the home does on a click what it does on its key.
+    if rows.len() > 2 {
+      rows.extend([Does::GoTo, Does::Commands, Does::Keys].map(|does| self.key_row(does)));
+    }
     // With no thread, what the home says stands just above the input, where the eye goes next.
     if self.client.settled.is_empty() && self.known() {
       let room = usize::from(self.size.1).saturating_sub(self.input_rows() + 1);
       let pad = room.saturating_sub(rows.len());
-      rows.splice(2..2, iter::repeat_n(Vec::new(), pad));
+      rows.splice(2..2, iter::repeat_n(Row::default(), pad));
     }
-    rows.into_iter().map(Row::of).collect()
+    rows
+  }
+
+  /// A row of the home that names a key and what it does, which a click does too.
+  fn key_row(&self, does: Does) -> Row {
+    let (prose, muted) = (self.tokens.style(Role::Prose), self.tokens.style(Role::Muted));
+    let key = run(format!("{:<KEYS$}", self.key(does)), prose);
+    let line = vec![run("  ", Style::new()), key, run(keys::says(does), muted)];
+    let hot = vec![(2..width(&line), Some(Click::Key(does)))];
+    Row { hot, ..Row::of(line) }
   }
 
   /// The name of the project of the folder of the window.
@@ -97,12 +110,6 @@ impl Model {
         rows.extend(wrapped(&says, muted));
       }
     }
-    let key = |does: Does| {
-      let line =
-        vec![run(format!("  {:<KEYS$}", self.key(does)), prose), run(keys::says(does), muted)];
-      spread(line, Vec::new(), room + 2, Style::new())
-    };
-    rows.extend([Does::GoTo, Does::Commands, Does::Keys].map(key));
     rows
   }
 
