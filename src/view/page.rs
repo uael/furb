@@ -162,7 +162,7 @@ impl Answered {
 /// thought for a rung, and the second of the epoch at which each act that lives began. The record
 /// holds neither: the turn of a reply keeps its thought sealed, and a fact tells no time, so a
 /// host keeps it in the image of the life.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Streamed {
   wrote: HashMap<String, Wrote>,
   began: HashMap<String, u64>,
@@ -170,7 +170,7 @@ pub struct Streamed {
 
 /// What a model wrote for a rung: its text until the rung has its word, its thought, and the
 /// seconds at which it began and at which its thought ended.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Wrote {
   text: String,
   thinking: String,

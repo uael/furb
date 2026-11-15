@@ -7,14 +7,21 @@
 //! read its whole record. An image keeps each act in flight, so no act holds it. A later open goes
 //! on from that image and feeds only the entries that the record took after it.
 //!
+//! The thread of the life only takes the image, as [`image::take`] says, and a thread of the
+//! blocking pool writes it, as [`Imaging`] says, so no window waits for the write.
+//!
 //! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
 //! each fact up to the fault, and a later open goes on from the last image, or replays them. A life
 //! that ends with no fault writes its image and no checkpoint, as [`ended`] says.
 
-use std::path::Path;
+use std::{future, path::Path};
 
-use furb::{Engine, Fault, image};
+use furb::{
+  Engine, Fault,
+  image::{self, Taken},
+};
 use serde::{Deserialize, Serialize};
+use tokio::task::{JoinHandle, spawn_blocking};
 
 use crate::event::Event;
 
@@ -26,7 +33,7 @@ pub(crate) const TAIL: u64 = 10_000;
 
 /// What the actor watches of a life since it opened: the facts that it said, those that it said
 /// up to its last image, and whether it stands on an image.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Watch {
   facts: u64,
   imaged: u64,
@@ -58,6 +65,32 @@ impl Watch {
   /// fact said.
   pub(crate) fn reborn(&mut self) {
     *self = Self::default();
+  }
+}
+
+/// The image that a life writes as it goes, on a thread of the blocking pool, while the life goes
+/// on. One write stands at a time, so an image never lands over a later one, and the life awaits
+/// it before it writes the image of its end.
+#[derive(Default)]
+pub(crate) struct Imaging(Option<JoinHandle<Result<(), Fault>>>);
+
+impl Imaging {
+  /// Whether a write stands.
+  pub(crate) fn writes(&self) -> bool {
+    self.0.is_some()
+  }
+
+  /// The write of an image that the life took, with what its host kept when it took it.
+  pub(crate) fn start(&mut self, taken: Taken, kept: impl Serialize + Send + 'static) {
+    self.0 = Some(spawn_blocking(move || taken.write(&kept)));
+  }
+
+  /// The outcome of the write that stands, once it ends. With no write, it never ends.
+  pub(crate) async fn written(&mut self) -> Result<(), Fault> {
+    let Some(write) = &mut self.0 else { return future::pending().await };
+    let written = write.await;
+    self.0 = None;
+    written.unwrap_or_else(|no| Err(Fault::refused(format!("the image was not written: {no}"))))
   }
 }
 

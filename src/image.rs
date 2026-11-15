@@ -216,39 +216,69 @@ fn agreed(record: &Path, file: File) -> io::Result<Option<Image>> {
 /// The image of the life of an engine, written beside its record, which stands at its tip: each
 /// entry that the life said is in the record. `host` is what the host of the life keeps of it
 /// beside its engine, which the open of a later life gives back to that host. It says whether it
-/// wrote one: a life that cannot stand again from an image writes none, as [`Engine::image`] says,
-/// and neither does a life whose record lacks an entry that it said, as on a full disk.
+/// wrote one, as [`take`] says.
 pub fn keep(engine: &mut Engine, record: &Path, host: &impl Serialize) -> Result<bool, Fault> {
+  let Some(taken) = take(engine, record)? else { return Ok(false) };
+  taken.write(host)?;
+  Ok(true)
+}
+
+/// The image of the life of an engine as it stands now, at the tip of its record, which a host
+/// writes later, from any thread, while the life goes on: the life is needed only to take it. A
+/// life that cannot stand again from an image gives none, as [`Engine::image`] says, and neither
+/// does a life whose record lacks an entry that it said, as on a full disk.
+pub fn take(engine: &mut Engine, record: &Path) -> Result<Option<Taken>, Fault> {
   if engine.unkept() > 0 || !matches!(Format::of(record), Format::Lines) {
-    return Ok(false);
+    return Ok(None);
   }
-  let Some((half, session)) = engine.image()? else { return Ok(false) };
-  let unkept = |no: &dyn Display| Fault::refused(format!("the life keeps no image: {no}"));
-  // The key stands before the body and names its digest and its parts, which only the write of
-  // the body gives. So the file takes a line as wide as the widest key first, then each part of
-  // the body in turn, which no second buffer holds, then the key over that line: the spaces that
-  // stay after it are a part of no value.
+  let Some((half, session)) = engine.image()? else { return Ok(None) };
   let widest =
     Parts { body: format!("{:x}", Sha256::digest([])), session: usize::MAX, half: usize::MAX };
-  let mut key = Key::of(record, None, widest).map_err(|no| unkept(&no))?;
-  let filled = disk::filled(&path(record), disk::Access::Owner, |file| {
-    let mut line = vec![b' '; serde_json::to_vec(&key)?.len()];
-    line.push(b'\n');
-    file.write_all(&line)?;
-    let mut body = BufWriter::with_capacity(BUFFER, Summed::new(&mut *file));
-    body.write_all(&session)?;
-    serde_json::to_writer(&mut body, &half)?;
-    body.flush()?;
-    let half = body.get_ref().bytes - session.len();
-    serde_json::to_writer(&mut body, host)?;
-    let summed = body.into_inner().map_err(IntoInnerError::into_error)?;
-    let body = format!("{:x}", summed.digest.finalize());
-    key.parts = Parts { body, session: session.len(), half };
-    file.seek(SeekFrom::Start(0))?;
-    file.write_all(&serde_json::to_vec(&key)?)
-  });
-  filled.map_err(|no| unkept(&no))?;
-  Ok(true)
+  let key = Key::of(record, None, widest).map_err(|no| unkept(&no))?;
+  Ok(Some(Taken { key, half, session, path: path(record) }))
+}
+
+/// The image of a life that [`take`] took and no file holds yet: its key names the tip of the
+/// record when the life stood there.
+pub struct Taken {
+  key: Key,
+  half: Half,
+  session: Vec<u8>,
+  path: PathBuf,
+}
+
+impl Taken {
+  /// The image written beside its record, with `host`, what the host of the life kept of it when
+  /// the image was taken.
+  pub fn write(self, host: &impl Serialize) -> Result<(), Fault> {
+    let Self { mut key, half, session, path } = self;
+    // The key stands before the body and names its digest and its parts, which only the write of
+    // the body gives. So the file takes a line as wide as the widest key first, then each part of
+    // the body in turn, which no second buffer holds, then the key over that line: the spaces that
+    // stay after it are a part of no value.
+    let filled = disk::filled(&path, disk::Access::Owner, |file| {
+      let mut line = vec![b' '; serde_json::to_vec(&key)?.len()];
+      line.push(b'\n');
+      file.write_all(&line)?;
+      let mut body = BufWriter::with_capacity(BUFFER, Summed::new(&mut *file));
+      body.write_all(&session)?;
+      serde_json::to_writer(&mut body, &half)?;
+      body.flush()?;
+      let half = body.get_ref().bytes - session.len();
+      serde_json::to_writer(&mut body, host)?;
+      let summed = body.into_inner().map_err(IntoInnerError::into_error)?;
+      let body = format!("{:x}", summed.digest.finalize());
+      key.parts = Parts { body, session: session.len(), half };
+      file.seek(SeekFrom::Start(0))?;
+      file.write_all(&serde_json::to_vec(&key)?)
+    });
+    filled.map_err(|no| unkept(&no))
+  }
+}
+
+/// Why a life keeps no image.
+fn unkept(no: &dyn Display) -> Fault {
+  Fault::refused(format!("the life keeps no image: {no}"))
 }
 
 /// How many bytes of a body wait for the file and for the digest at a time.

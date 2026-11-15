@@ -21,7 +21,7 @@ pub(crate) const UNKEPT: usize = 20_000;
 const WHY: &str = "the record of this life does not hold its facts yet";
 
 /// Whether the life holds its work for its record, and each chain that it paused for it.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Backlog {
   holding: bool,
   paused: Vec<String>,

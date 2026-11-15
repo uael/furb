@@ -67,7 +67,7 @@ use crate::{
   event::{Event, Seq},
   opens::{Heard, Opens, Told},
   queue::{FollowUp, QUEUE, Queue},
-  rebirth::{self, Watch},
+  rebirth::{self, Imaging, Watch},
 };
 
 /// How many events a reader may stand behind the life before it reads them again from the log of
@@ -338,7 +338,7 @@ pub struct Life {
 /// that the log let go since the record holds them, as [`Life::let_go`] says, and what the models
 /// wrote and thought and when each act that lives began, which no fact holds and a page of a
 /// thread reads. The image holds it as a [`Part`].
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 struct Kept {
   log: Vec<Option<Slot>>,
   spent: Spent,
@@ -358,7 +358,7 @@ struct Kept {
 /// A place of the log that holds an event. The place of the last event of an act names the act that
 /// `Held` holds, which is that event, so the life and its image hold each act once. When a later
 /// event of the act comes, the place takes the act as `Held` held it, as an event told.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 enum Slot {
   Told(Arc<Event>),
   Held(String),
@@ -394,7 +394,7 @@ const BUILD: &str = env!("FURB_KEPT");
 /// of the record holds, so a log holds the facts of one birth and not those of a whole life, and
 /// no fact that an open says again. The log keeps the place and the digest of each, and a reader
 /// behind them reads them again from the record or from that file, as [`Retell`] says.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 struct Gone {
   /// The place in the log of each fact let go that the record holds, in order, with its digest.
   places: Vec<(Seq, Digest)>,
@@ -414,7 +414,7 @@ struct Gone {
 /// wrote for it. A life that holds an act for each fact, and a part
 /// for each few words that a model streams, would else hold every state of each act and every part
 /// of each reply for its whole life.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 struct Spent {
   /// The place of the last event of each act.
   acts: HashMap<String, Seq>,
@@ -1136,6 +1136,8 @@ enum Woke {
   /// The record holds each fact that the life waited for it to hold, or the life told its cards,
   /// which were due.
   Kept,
+  /// The image that the life wrote as it goes landed, or did not.
+  Imaged(Result<(), Fault>),
 }
 
 /// The engine driven while it hears each command, until a client ends it, each handle is gone, or
@@ -1154,8 +1156,9 @@ async fn driven(
   record: Option<&str>,
 ) -> (Option<Fault>, Vec<Replier>) {
   let (mut gone, mut asked) = (false, Vec::new());
+  let mut imaging = Imaging::default();
   // A life that opened on no image may owe one before anything wakes it.
-  owed_image(&mut engine, life, record);
+  owed_image(&mut engine, life, record, &mut imaging);
   loop {
     let ends = gone || !asked.is_empty();
     let owed = life.kept.watch.images(life.kept.said);
@@ -1167,21 +1170,23 @@ async fn driven(
       () = sleep_until(life.due), if life.stale => { life.carded(); Woke::Kept }
       woke = pumped(&mut engine, waits) => woke,
       message = received.recv(), if !gone => Woke::Said(message),
+      written = imaging.written(), if imaging.writes() => Woke::Imaged(written),
     };
     match woke {
       Woke::Told(event) => life.told(Some(event)),
-      Woke::Kept => {}
+      Woke::Kept | Woke::Imaged(Ok(())) => {}
+      Woke::Imaged(Err(no)) => life.put(unimaged(&no)),
       Woke::Stopped(fault) => {
         drop(engine);
         return (Some(fault), asked);
       }
       Woke::Said(None) if engine.unkept() > 0 => gone = true,
-      Woke::Said(None) => return (ended(engine, life), asked),
+      Woke::Said(None) => return (ended(engine, life, imaging).await, asked),
       Woke::Said(Some(Message::Read(read))) => read.answered(Some(&mut engine), life).await,
       Woke::Said(Some(Message::Command(Command::End, reply))) => {
         asked.push(reply);
         if engine.unkept() == 0 {
-          return (ended(engine, life), asked);
+          return (ended(engine, life, imaging).await, asked);
         }
         life.put(Event::Notice(backlog::unkept(engine.unkept())));
       }
@@ -1201,15 +1206,21 @@ async fn driven(
       return (Some(fault), asked);
     }
     if (gone || !asked.is_empty()) && engine.unkept() == 0 {
-      return (ended(engine, life), asked);
+      return (ended(engine, life, imaging).await, asked);
     }
-    owed_image(&mut engine, life, record);
+    owed_image(&mut engine, life, record, &mut imaging);
   }
 }
 
 /// The engine of a life dropped at the end of the life, as [`rebirth::ended`] says, with what the
-/// life keeps once the log took each event that the ears told.
-fn ended(engine: Engine, life: &mut Life) -> Option<Fault> {
+/// life keeps once the log took each event that the ears told, and once the image that it wrote as
+/// it went landed.
+async fn ended(engine: Engine, life: &mut Life, mut imaging: Imaging) -> Option<Fault> {
+  if imaging.writes()
+    && let Err(no) = imaging.written().await
+  {
+    life.put(unimaged(&no));
+  }
   life.told(None);
   // The index stands before the image: a daemon that ends between them leaves a record whose
   // next daemon reads its cards from the index, where none would fold the whole record for them.
@@ -1222,18 +1233,25 @@ fn ended(engine: Engine, life: &mut Life) -> Option<Fault> {
 }
 
 /// The image of a life that keeps its record and passed its tail, as [`rebirth::TAIL`] says,
-/// written beside its record once the record holds each fact. The life goes on, with no
-/// checkpoint: a later open goes on from the image and feeds what the record took after it. A life
-/// that cannot write an image tries again past its next tail.
-fn owed_image(engine: &mut Engine, life: &mut Life, record: Option<&str>) {
-  let owed = life.kept.watch.images(life.kept.said) && engine.unkept() == 0;
+/// taken once the record holds each fact, and written as the life goes on, with no checkpoint: a
+/// later open goes on from the image and feeds what the record took after it. A life that cannot
+/// take or write an image tries again past its next tail, and one whose last image is still being
+/// written takes none.
+fn owed_image(engine: &mut Engine, life: &mut Life, record: Option<&str>, imaging: &mut Imaging) {
+  let owed = life.kept.watch.images(life.kept.said) && engine.unkept() == 0 && !imaging.writes();
   let Some(record) = record.filter(|_| owed) else { return };
   life.told(None);
   life.kept.watch.imaged();
-  let part = Part { build: BUILD.into(), kept: &life.kept };
-  if let Err(no) = image::keep(engine, Path::new(record), &part) {
-    life.put(Event::Notice(format!("The life wrote no image at its rest: {no}")));
+  match image::take(engine, Path::new(record)) {
+    Ok(Some(taken)) => imaging.start(taken, Part { build: BUILD.into(), kept: life.kept.clone() }),
+    Ok(None) => {}
+    Err(no) => life.put(unimaged(&no)),
   }
+}
+
+/// The notice of an image that the life did not write.
+fn unimaged(no: &Fault) -> Event {
+  Event::Notice(format!("The life wrote no image at its rest: {no}"))
 }
 
 /// The work of a life paused or woken as its record lacks facts or holds each again, as

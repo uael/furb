@@ -46,7 +46,7 @@ enum Step {
 }
 
 /// A follow-up and where it stands.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Entry {
   follow: FollowUp,
   step: Step,
@@ -54,7 +54,7 @@ struct Entry {
 
 /// What the queue knows of a chain from its act: the state of its work, whether a pause holds it,
 /// and the prompt of the last follow-up that it sent while that prompt lives.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Chain {
   state: Option<State>,
   paused: bool,
@@ -62,7 +62,7 @@ struct Chain {
 }
 
 /// The queue of each chain of a life.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Queue {
   entries: HashMap<String, Entry>,
   /// The entries of each chain, in the order that the operator queued them.

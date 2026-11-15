@@ -42,7 +42,7 @@ pub struct Threads {
 
 /// Each act of a life, as the last event of it told it, in the order the acts were first told. An
 /// act is shared, so a host that keeps the event of an act beside it holds the act once.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Held {
   acts: Vec<Arc<Act>>,
   at: HashMap<String, usize>,
