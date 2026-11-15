@@ -104,11 +104,13 @@ impl Holders {
         Some(held) => {
           held.role = held.role.max(*role);
           held.writes = one.writes.clone().or(held.writes.take());
+          held.windows += 1;
         }
         None => present.push(Present {
           operator: operator.clone(),
           role: *role,
           writes: one.writes.clone(),
+          windows: 1,
         }),
       }
     }

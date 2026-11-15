@@ -396,8 +396,9 @@ daemon answers requests in any order.
   the words before it.
 - After each `attach`, `detach` and `writes`, the daemon pushes to each window of the life a frame `presence` with
   the `life` and its `operators`, each operator whose window holds it now, once, in the order that his first window
-  attached: his `operator`, the greatest `role` of his windows, and `writes`, the draft that one of his windows
-  writes, in the thread `on`, or for a new thread when `on` is null, or null when none writes. A window says `writes`
+  attached: his `operator`, the greatest `role` of his windows, `windows`, the count of his windows that hold it, so
+  a window knows whether it is the last view of the life, and `writes`, the draft that one of his windows writes, in
+  the thread `on`, or for a new thread when `on` is null, or null when none writes. A window says `writes`
   when its draft starts and again with null when it empties, and the daemon drops the draft of a window that leaves.
   Presence is no fact of the record, and no model is told of a connect or a leave. A model is told of an operator that
   the access list adds or drops, as the stand that follows names it in the roster.

@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the protocol. A peer of another version is refused at its hello, but for a
 /// skill of a version from [`KITS`].
-pub const PROTOCOL: u32 = 57;
+pub const PROTOCOL: u32 = 58;
 
 /// The first version of the protocol whose skills each later daemon takes, since a kit works from
 /// the moment that it is written: what the process of a skill says keeps its meaning from that
@@ -70,12 +70,20 @@ pub struct Peer {
 }
 
 /// An operator whose window holds a life now: the operator, the greatest role of his windows,
-/// and the draft that he writes, when one of his windows writes one.
+/// the draft that he writes, when one of his windows writes one, and how many of his windows hold
+/// the life, so a window knows whether it is the last view of the life.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Present {
   pub operator: String,
   pub role: Role,
   pub writes: Option<Draft>,
+  #[serde(default = "one")]
+  pub windows: usize,
+}
+
+/// One window, which a peer of a version before the count of the windows of an operator means.
+fn one() -> usize {
+  1
 }
 
 /// Where a person writes a draft: in a thread, or for a new thread when it names none.

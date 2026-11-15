@@ -3710,13 +3710,19 @@
               "type": "null"
             }
           ]
+        },
+        "windows": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 1
         }
       },
       "required": [
         "operator",
         "role"
       ],
-      "description": "An operator whose window holds a life now: the operator, the greatest role of his windows,\nand the draft that he writes, when one of his windows writes one."
+      "description": "An operator whose window holds a life now: the operator, the greatest role of his windows,\nthe draft that he writes, when one of his windows writes one, and how many of his windows hold\nthe life, so a window knows whether it is the last view of the life."
     },
     "Handed": {
       "type": "object",
@@ -6077,5 +6083,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 57
+  "x-protocol": 58
 }

@@ -675,7 +675,7 @@ async fn the_presence_names_each_profile_once_and_the_draft_that_one_of_its_wind
   };
   let Frame::Presence { operators, .. } = first.until(writing(true)).await else { panic!() };
   let operator = operators[0].operator.clone();
-  assert_eq!(operators, [Present { operator, role: Role::Write, writes: draft }]);
+  assert_eq!(operators, [Present { operator, role: Role::Write, writes: draft, windows: 2 }]);
   let cleared = Verb::Writes { life: life.clone(), draft: None };
   assert_eq!(second.ask(cleared).await, Ok(Answer::Done));
   first.until(writing(false)).await;

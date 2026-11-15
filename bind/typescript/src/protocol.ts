@@ -1306,12 +1306,14 @@ export interface Skill {
 }
 /**
  * An operator whose window holds a life now: the operator, the greatest role of his windows,
- * and the draft that he writes, when one of his windows writes one.
+ * the draft that he writes, when one of his windows writes one, and how many of his windows hold
+ * the life, so a window knows whether it is the last view of the life.
  */
 export interface Present {
   operator: string;
   role: Role;
   writes?: Draft | null;
+  windows?: number;
 }
 /**
  * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
@@ -1735,4 +1737,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 57;
+export const PROTOCOL = 58;

@@ -547,7 +547,7 @@ class Request46(TypedDict):
 
 class Request47(TypedDict):
   """
-  The follow-ups that wait on a chain, in order.
+  The follow-ups that wait on a chain, or on a thread, in order.
   """
 
   id: int
@@ -1269,12 +1269,14 @@ Skill = TypedDict(
 class Present(TypedDict):
   """
   An operator whose window holds a life now: the operator, the greatest role of his windows,
-  and the draft that he writes, when one of his windows writes one.
+  the draft that he writes, when one of his windows writes one, and how many of his windows hold
+  the life, so a window knows whether it is the last view of the life.
   """
 
   operator: str
   role: Role
   writes: NotRequired[Draft | None]
+  windows: NotRequired[int]
 
 
 class Handed(TypedDict):
@@ -3106,4 +3108,4 @@ type Mount = Frame13
 type ViewEvent = Frame15
 type Dispose = Frame17
 
-PROTOCOL = 57
+PROTOCOL = 58

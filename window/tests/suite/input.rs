@@ -690,6 +690,25 @@ fn a_leave_while_a_session_works_asks_and_keeps_it_running_in_the_background() {
 }
 
 #[test]
+fn a_leave_asks_nothing_of_a_session_that_another_window_still_views() {
+  let (app, daemon, sessions) = started();
+  sent(&app, &format!("work on it {WORKS}"));
+  paged(&app);
+  let mut records = fs::read_dir(&sessions).unwrap().flatten().map(|one| one.path());
+  let life = records.find(|one| one.extension().is_some_and(|ext| ext == "jsonl")).unwrap();
+  // A second window of the operator views the session, so the window that leaves is not its last.
+  let mut other = daemon.peer();
+  other.opened(&life, true);
+  // The daemon pushed the presence of both windows to this one before it answered the open: the
+  // app reads that frame in a tick.
+  app.wait_until(Duration::from_millis(200), || false);
+  app.press("ctrl+d");
+  app.press("ctrl+d");
+  let left = app.wait_until(PATIENCE, || app.app().is_quitting());
+  assert!(left, "the leave asked:\n{}", app.text());
+}
+
+#[test]
 fn a_slash_offers_the_commands_and_runs_the_one_that_he_takes() {
   let (app, _daemon, _) = started();
   app.type_text("/mod");

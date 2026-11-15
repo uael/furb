@@ -67,13 +67,19 @@ impl Client {
     }
   }
 
-  /// The sessions that this client holds whose work runs, which a leave of the client asks about:
-  /// the thread that the client started works too while its machine did not tell its card yet.
+  /// The sessions that this client holds whose work runs, which a leave of the client asks about,
+  /// while its window is their last view: another window that holds one keeps it as it is. The
+  /// thread that the client started works too while its machine did not tell its card yet.
   pub fn leaving(&self) -> Vec<Running> {
-    let mut all: Vec<Running> =
-      self.running().into_iter().filter(|one| one.here && one.works && !one.background).collect();
+    let last = |at: usize, life: &str| {
+      let present = self.machines.get(at).and_then(|told| told.presence.get(life));
+      present.is_none_or(|all| all.iter().map(|one| one.windows).sum::<usize>() <= 1)
+    };
+    let held = |one: &Running| one.here && one.works && !one.background && last(one.at, &one.life);
+    let mut all: Vec<Running> = self.running().into_iter().filter(held).collect();
     let started = self.thread.as_ref().filter(|one| one.thread.started).map(|one| &one.thread.key);
     if let Some((at, life, _)) = started
+      && last(*at, life)
       && !all.iter().any(|one| one.at == *at && one.life == *life)
     {
       all.push(Running {
