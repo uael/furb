@@ -519,7 +519,8 @@ impl Feed<'_> {
   /// before them. A click on an agent opens its thread in place.
   fn agents(&self, under: Option<(usize, Gutter)>) -> Vec<Row> {
     let (done, shown) = self.opened.made(under.map(|(line, _)| line));
-    let mut rows: Vec<Row> = shown.into_iter().flat_map(|agent| self.agent(agent, under)).collect();
+    let mut rows: Vec<Row> =
+      shown.into_iter().map(|agent| self.agent(agent, under.map(|(_, gutter)| gutter))).collect();
     if done > 0 {
       let noun = if done == 1 { "agent" } else { "agents" };
       let (muted, ground) = (self.style(Role::Muted), self.model.tokens.raised);
@@ -537,11 +538,11 @@ impl Feed<'_> {
     rows
   }
 
-  /// The rows of one agent, each a click that opens its thread. In the dock its title leads, with
-  /// the line where it stands on a row under it while it lives. Under the line that made it, which
-  /// says its prompt already, it takes one row in the box at the column of the code, which says the
-  /// line where it stands while it has one, and else its title.
-  fn agent(&self, agent: &Agent, under: Option<(usize, Gutter)>) -> Vec<Row> {
+  /// The row of one agent, a click that opens its thread, with its state, its time and its model
+  /// at the right. In the dock its title leads, then the line where it stands while it lives. Under
+  /// the line that made it, which says its prompt already, the row stands in the box at the column
+  /// of the code, and says the line where the agent stands while it has one, and else its title.
+  fn agent(&self, agent: &Agent, under: Option<Gutter>) -> Row {
     let (muted, rest) = (self.style(Role::Muted), rests(agent));
     let (mark, right) = self.status(agent);
     // The line that its model has not begun to write says nothing that its state does not say.
@@ -550,24 +551,24 @@ impl Feed<'_> {
     let title = if rest { muted } else { self.style(Role::Prose) };
     let title = vec![run(agent.card.title.clone(), title)];
     let open = Click::Agent(agent.card.prompt.clone());
-    let Some((_, numbers)) = under else {
-      let left = [run("  └ ", muted)].into_iter().chain(title).collect();
-      let line = spread(left, right.clone(), self.wide.saturating_sub(2), Style::new());
+    let Some(numbers) = under else {
+      let room = self.wide.saturating_sub(2);
+      let said = title
+        .into_iter()
+        .chain(stands.into_iter().flat_map(|text| [run("  ", muted)].into_iter().chain(text)));
+      let fits = room.saturating_sub(width(&right) + 6);
+      let left = [run("  └ ", muted)].into_iter().chain(clipped(said.collect(), fits, muted));
+      let line = spread(left.collect(), right.clone(), room, Style::new());
       let x = width(&line) - width(&right);
-      let mut rows = vec![titled(Row::clicked(line, open.clone()), x, &right, mark)];
-      if let Some(text) = stands {
-        let mut line = vec![run("    ", Style::new())];
-        line.extend(clipped(text, self.wide.saturating_sub(8), muted));
-        rows.push(Row::clicked(line, open));
-      }
-      return rows;
+      return titled(Row::clicked(line, open), x, &right, mark);
     };
     let lead = vec![run(format!("{:>width$}  └ ", "", width = numbers.width), muted)];
     let room = numbers.inside(self.inner());
-    let left = lead.into_iter().chain(clipped(stands.unwrap_or(title), room, muted)).collect();
+    let text = stands.unwrap_or(title);
+    let left = lead.into_iter().chain(clipped(text, room, muted)).collect();
     let line = spread(left, right.clone(), room, Style::new());
     let x = PAD + width(&line) - width(&right);
-    vec![titled(Row::clicked(self.boxed(line, self.model.tokens.raised), open), x, &right, mark)]
+    titled(Row::clicked(self.boxed(line, self.model.tokens.raised), open), x, &right, mark)
   }
 
   /// The state of an agent with its time and its model, and the mark that moves before its word
