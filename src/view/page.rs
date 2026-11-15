@@ -522,7 +522,11 @@ impl<'a> Reader<'a> {
         .filter(|(act, _)| act.asks_operator() && !act.done())
         .filter_map(|(_, place)| place.and_then(|source| at_line(&lines, before, source)))
         .collect();
-      if let Some(at) = line(&lines, open.and_then(|at| made[at].1)) {
+      // With no act open, the word runs the code after its last act, and its first line before
+      // any: a line that has not run yet never shows as running.
+      let next = made.iter().rev().find_map(|(_, place)| place.map(|source| source + 1));
+      let source = open.map_or(Some(next.unwrap_or_default()), |at| made[at].1);
+      if let Some(at) = line(&lines, source) {
         lines[at].mark = mark;
       }
       for at in asking {
@@ -581,7 +585,12 @@ impl<'a> Reader<'a> {
         made: Vec::new(),
       })
       .collect();
-    let mark = mark.unwrap_or(Mark::Runs { work: Work::Writes, began });
+    // A model whose reply is done writes no line: its word waits to run, from its first line.
+    let whole = mark.is_none() && reply.is_some_and(Act::done);
+    let mark = match mark {
+      _ if whole => Mark::Ran,
+      mark => mark.unwrap_or(Mark::Runs { work: Work::Writes, began }),
+    };
     lines.push(Line {
       number: before + came.count + 1,
       text: came.tail,
@@ -589,6 +598,10 @@ impl<'a> Reader<'a> {
       output: None,
       made: Vec::new(),
     });
+    if whole {
+      lines[0].mark =
+        Mark::Runs { work: Work::Command, began: self.streams.began.get(&rung.id).copied() };
+    }
     lines
   }
 

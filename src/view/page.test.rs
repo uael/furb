@@ -118,6 +118,21 @@ fn a_model_that_writes_shows_the_lines_that_came_the_line_that_comes_and_its_tho
 }
 
 #[test]
+fn a_word_that_came_whole_waits_from_its_first_line_and_no_line_is_written() {
+  let mut streams = Streamed::default();
+  let mut facts = thread();
+  facts.push(json!(["rung", "rung3", "prompt3", "chain1", "", "", "claude-cli:opus/high"]));
+  facts.push(json!(["reply", "reply1", "rung3", "chain1", "claude-cli:opus/high"]));
+  facts.push(json!(["done", "reply1", "chain1", null]));
+  let held = held(facts, &mut streams);
+  streams.wrote("rung3", ["d = 4\ne = 5", ""], 101_000);
+  let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
+  let block = page.exchanges[0].block.clone().unwrap();
+  let runs = Mark::Runs { work: Work::Command, began: streams.began.get("rung3").copied() };
+  assert_eq!(&texts(&block)[3..], [(6, "d = 4", &runs), (7, "e = 5", &Mark::Ran)]);
+}
+
+#[test]
 fn a_line_that_failed_carries_its_reason() {
   let mut streams = Streamed::default();
   let mut facts = thread();
@@ -450,6 +465,28 @@ fn looped(more: impl IntoIterator<Item = Value>) -> Vec<Value> {
   ];
   facts.extend(more);
   facts
+}
+
+#[test]
+fn a_word_with_no_act_open_runs_the_line_after_its_last_act_and_its_first_line_before_any() {
+  let mut facts = thread();
+  // The command of the second word is done, and its word runs on.
+  facts.push(json!(["done", "bash1", "chain1", {"is": "Exit", "code": 0}]));
+  let mut streams = Streamed::default();
+  let ran = held(facts.clone(), &mut streams);
+  let page = ran.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let block = page.exchanges[1].block.as_ref().unwrap();
+  let runs = Mark::Runs { work: Work::Command, began: Some(100_000) };
+  let marks: Vec<&Mark> = block.lines.iter().map(|line| &line.mark).collect();
+  assert_eq!(marks, [&Mark::Ran, &Mark::Ran, &runs]);
+  // A word that made no act yet runs its first line, never its last.
+  facts.truncate(facts.len() - 2);
+  let mut streams = Streamed::default();
+  let none = held(facts, &mut streams);
+  let page = none.page(&streams, "prompt1", Reach { before: None, limit: 10 });
+  let block = page.exchanges[1].block.as_ref().unwrap();
+  let marks: Vec<&Mark> = block.lines.iter().map(|line| &line.mark).collect();
+  assert_eq!(marks, [&runs, &Mark::Ran, &Mark::Ran]);
 }
 
 #[test]
