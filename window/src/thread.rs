@@ -60,12 +60,14 @@ pub(crate) enum Click {
 /// The columns of a row that go bright under the pointer, and what a click there does.
 pub(crate) type Hot = (Range<usize>, Option<Click>);
 
-/// A row of the left side: its runs, the parts that go bright under the pointer, and the column of
-/// each of its loaders, which a widget of its own draws over the cells of the row.
+/// A row of the left side: its runs, the parts that go bright under the pointer, the columns among
+/// them that keep their color, as the word of a state, and the column of each of its loaders,
+/// which a widget of its own draws over the cells of the row.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct Row {
   pub(crate) line: Line,
   pub(crate) hot: Vec<Hot>,
+  pub(crate) keeps: Option<Range<usize>>,
   pub(crate) loaders: Vec<(usize, Loader)>,
 }
 
@@ -77,7 +79,7 @@ impl Row {
   /// A row that takes a click in each column of its text.
   pub(crate) fn clicked(line: Line, click: Click) -> Self {
     let wide = width(&line);
-    Self { line, hot: vec![(0..wide, Some(click))], loaders: Vec::new() }
+    Self { line, hot: vec![(0..wide, Some(click))], ..Self::default() }
   }
 
   /// What a click on a column of the row does: what its hot columns say, else the open of the
@@ -96,7 +98,7 @@ impl Row {
   }
 
   /// The row with its text bright where the pointer is on a thing that takes a click: its hot
-  /// columns, or each word of the link there.
+  /// columns but those that keep their color, or each word of the link there.
   pub(crate) fn lit(mut self, x: usize, hover: Color) -> Self {
     let hot = self.hot.iter().map(|hot| hot.0.clone()).find(|hot| hot.contains(&x));
     let link = self.link(x).map(str::to_owned);
@@ -104,7 +106,9 @@ impl Row {
     for one in &mut self.line {
       let end = start + one.content.width();
       let on = |range: &Range<usize>| range.start < end && start < range.end;
-      if hot.as_ref().map_or(link.is_some() && one.link.as_deref() == link.as_deref(), on) {
+      let kept = self.keeps.as_ref().is_some_and(on);
+      if !kept && hot.as_ref().map_or(link.is_some() && one.link.as_deref() == link.as_deref(), on)
+      {
         one.style = one.style.fg(hover);
       }
       start = end;

@@ -551,7 +551,10 @@ impl Feed<'_> {
     let line = spread(left, right.clone(), self.wide.saturating_sub(2), Style::new());
     let x = width(&line) - width(&right);
     let open = Click::Agent(card.prompt.clone());
+    // Under the pointer the title goes bright, and the state keeps the color that says it.
+    let keeps = x..x + width(&right[..1]);
     let mut rows = vec![Row {
+      keeps: Some(keeps),
       loaders: mark.map(|one| (x, one)).into_iter().collect(),
       ..Row::clicked(line, open.clone())
     }];
