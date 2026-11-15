@@ -197,7 +197,12 @@ impl Rig {
     let tmux = Tmux { socket: format!("ff{name}-{}", process::id()) };
     let walked = self.walked(&tmux, walk, size).await;
     let ended = tmux.run(&["kill-server"]).await;
-    daemon.kill().await.map_err(|source| Error::Process { what: "the daemon", source })?;
+    // The daemon ends by its grace once the window is gone. A kill before that lets a window that
+    // still dies dial again, find no daemon and start one of its own, which no peer reaches and
+    // which outlives the capture: so the kill comes only when the daemon outlived its patience.
+    if timeout(PATIENCE, daemon.wait()).await.is_err() {
+      daemon.kill().await.map_err(|source| Error::Process { what: "the daemon", source })?;
+    }
     let (shown, marks, start) = walked?;
     ended?;
     Ok(Captured { cast: self.cast(size, start, marks)?, shown })
