@@ -30,7 +30,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from real import AGAIN, ASKED, CONFIDENT, TASKS, WORK, deepswe, lived, outside, say, seeded
+from real import deepswe, lived, outside, say, seeded
 
 from furb import engine
 from furb.world import answered, kept
@@ -83,8 +83,8 @@ def asked(root: str) -> str:
 async def life(args: argparse.Namespace) -> int:
   """One life of a run: a new one asks the task, and a later one wakes the work of its record and waits for it."""
   run = args.out / args.task
-  app = WORK / args.task / "app"
-  told = (TASKS / args.task / "instruction.md").read_text(encoding="utf-8").rstrip()
+  seed = json.loads((run / "seed.json").read_text(encoding="utf-8"))
+  app = Path(seed["app"])
   if (app / ".venv" / "bin").is_dir():
     os.environ["PATH"] = os.pathsep.join([str(app / ".venv" / "bin"), os.environ["PATH"]])
   os.chdir(app)
@@ -94,7 +94,7 @@ async def life(args: argparse.Namespace) -> int:
   pending = sorted({str(x[1]) for x in facts if x[0] == "started"} - {str(x[1]) for x in facts if x[0] == "done"})
   for chain in dict.fromkeys([root, *(engine.scope(one) for one in pending)]):
     engine.wake(chain)
-  act = asked(root) or engine.prompt(float, told + ASKED, ACTOR, on=root)
+  act = asked(root) or engine.prompt(float, seed["instruction"] + seed["asked"], ACTOR, on=root)
   line(run / "lives.jsonl", life=args.life, ready=time.time(), entries=len(held), pending=pending, act=act)
   began, got, stopped = time.monotonic(), None, ""
   try:
@@ -110,9 +110,9 @@ async def life(args: argparse.Namespace) -> int:
       if stopped:
         break
       got = engine.peek(act)
-      if not isinstance(got, (int, float)) or float(got) >= CONFIDENT:
+      if not isinstance(got, (int, float)) or float(got) >= seed["confident"]:
         break
-      act = engine.prompt(float, AGAIN.format(got), ACTOR, on=root)
+      act = engine.prompt(float, seed["again"].format(got), ACTOR, on=root)
   except Exception as no:
     stopped = f"the task was refused: {no!r}"
   finally:
@@ -155,7 +155,8 @@ def crash(args: argparse.Namespace) -> int:
   run.mkdir(parents=True)
   seed = args.seed if args.seed is not None else random.randrange(1 << 30)  # noqa: S311
   draw = random.Random(seed)  # noqa: S311
-  seeded(args.task)
+  seed = seeded(args.task)
+  (run / "seed.json").write_text(json.dumps(seed), encoding="utf-8")
   record = run / "record.jsonl"
   before, worked = server(), 0.0
   say(f"[crash] {args.task}: {args.kills} kills, a cap of {args.cap:.0f} seconds, seed {seed}")
@@ -201,7 +202,7 @@ def crash(args: argparse.Namespace) -> int:
   graded = subprocess.run(["cargo", "xtask", "deepswe", "grade", args.task], check=False)  # noqa: S603, S607
   say(f"[crash] the grade exited {graded.returncode}")
   for name in ("model.patch", "reward.json"):
-    shutil.copy(WORK / args.task / ".run" / name, run / name)
+    shutil.copy(Path(seed["work"]) / ".run" / name, run / name)
   reward = json.loads((run / "reward.json").read_text(encoding="utf-8"))
   line(run / "run.jsonl", seed=seed, server=spent, answers=len(answered(kept(record))), reward=reward)
   return 0

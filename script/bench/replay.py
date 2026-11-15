@@ -28,7 +28,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from real import AGAIN, ASKED, CONFIDENT, lived, outside, say, seeded
+from real import Seed, lived, outside, say, seeded
 
 from furb import engine
 from furb.world import answered, kept
@@ -63,17 +63,12 @@ def counted(before: dict[str, float]) -> dict[str, float]:
   return {name: after[name] - before[name] for name in COUNTS}
 
 
-def told(task: str) -> tuple[Path, str, str]:
-  """A fresh checkout of the task, its instruction as the task wrote it, and the commit of its base."""
-  return seeded(task)
-
-
-async def first(app: Path, message: str, record: Path, cap: float) -> object:
+async def first(seed: Seed, record: Path, cap: float) -> object:
   """The life that works the task, as the rig puts it: a float that says how sure the model is, and the same chain
   asked to go on under the confidence that the rig wants. At the cap, the bench cancels the prompt, so the record
   ends with no question open and a later life asks the model nothing."""
-  world, root, _ = lived(record, app, ACTOR, keeps=True, skills=False)
-  began, got = time.monotonic(), None
+  world, root, _ = lived(record, Path(seed["app"]), ACTOR, keeps=True, skills=False)
+  began, got, message = time.monotonic(), None, seed["instruction"] + seed["asked"]
   try:
     while (left := cap - (time.monotonic() - began)) > 0:
       act = engine.prompt(float, message, ACTOR, on=root)
@@ -87,9 +82,9 @@ async def first(app: Path, message: str, record: Path, cap: float) -> object:
         engine.cancel(act)
         await asyncio.sleep(10)
         return None
-      if not isinstance(got, (int, float)) or float(got) >= CONFIDENT:
+      if not isinstance(got, (int, float)) or float(got) >= seed["confident"]:
         return got
-      message = AGAIN.format(got)
+      message = seed["again"].format(got)
     return got
   finally:
     world.end()
@@ -142,7 +137,8 @@ def drifted(record: Path, app: Path, base: str) -> dict[str, object]:
 
 def baseline(task: str, cap: float) -> dict[str, object]:
   """Claude Code on the same model, on a fresh checkout of the task, and what it cost."""
-  app, message, _ = told(task)
+  seed = seeded(task)
+  app, message = Path(seed["app"]), seed["instruction"]
   before, began = server(), time.monotonic()
   try:
     ran = subprocess.run(  # noqa: S603
@@ -181,13 +177,14 @@ def main() -> int:
   def keep() -> None:
     results.write_text(json.dumps(found, indent=2, default=repr) + "\n", encoding="utf-8")
 
-  app, message, base = told(args.task)
+  seed = seeded(args.task)
+  app, base = Path(seed["app"]), seed["base"]
   if (app / ".venv" / "bin").is_dir():
     os.environ["PATH"] = os.pathsep.join([str(app / ".venv" / "bin"), os.environ["PATH"]])
   os.chdir(app)
   say(f"[replay] the first life works {args.task} on {ACTOR}, for {args.cap:.0f} seconds at most")
   before, began = server(), time.monotonic()
-  got = asyncio.run(first(app, message + ASKED, record, args.cap))
+  got = asyncio.run(first(seed, record, args.cap))
   usage = [one[3][2] for one in answered(kept(record)) if one[3][2]]
   found["first"] = {
     "value": got,

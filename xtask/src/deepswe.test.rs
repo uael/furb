@@ -5,11 +5,9 @@
 mod yard;
 
 #[cfg(unix)]
-use std::os::unix::fs::symlink;
+use std::{collections::BTreeMap, env, os::unix::fs::symlink};
 use std::{
-  collections::BTreeMap,
-  env, fs,
-  path::Path,
+  fs,
   process::{self, Command},
   time::Instant,
 };
@@ -93,15 +91,6 @@ fn a_python_checkout_gets_each_requirements_file_that_names_dev_or_test_and_no_o
     fs::write(yard.join(name), "").unwrap();
   }
   assert_eq!(requirements(&yard).unwrap(), ["requirements-dev.txt", "requirements_test.txt"]);
-}
-
-#[test]
-fn the_default_work_and_collection_roots_stand_in_the_home_and_not_in_the_temporary_directory() {
-  let home = Path::new("/home/someone");
-  let rig = Rig::of(Path::new("/tree"), Places::default(), home);
-  assert_eq!(rig.collection, home.join(".cache/furb/deep-swe"));
-  assert_eq!(rig.work, home.join(".cache/furb/deepswe-work"));
-  assert!(!rig.collection.starts_with(env::temp_dir()) && !rig.work.starts_with(env::temp_dir()));
 }
 
 #[test]

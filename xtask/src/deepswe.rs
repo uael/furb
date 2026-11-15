@@ -58,7 +58,7 @@ use toml::de;
 use wait_timeout::ChildExt;
 
 use grade::Mode;
-use seed::short;
+use seed::{Seeded, short};
 
 /// The seconds that one step of the rig may take, since a step that waits for ever holds the whole
 /// of it.
@@ -82,9 +82,10 @@ const AGAIN: &str = "confidence level {} is too low, continue";
 /// change.
 const NOTHING: &str = "your tree has no diff against the base, so nothing is submitted. Change the files that the task asks for, then close again.";
 
+/// One line of the log of the rig, on stderr, since stdout holds what a verb gives a program.
 macro_rules! say {
   ($($told:tt)*) => {
-    println!("[deepswe] {}", format_args!($($told)*))
+    eprintln!("[deepswe] {}", format_args!($($told)*))
   };
 }
 use say;
@@ -97,7 +98,9 @@ pub(crate) enum Verb {
   /// cargo-nextest is missing, without which a go or a rust task cannot be graded.
   Tools,
   /// Stand the workroot of a task up, and stop before any model is asked, so a run that costs
-  /// money starts warm.
+  /// money starts warm. It prints one object of JSON, which a bench of DeepSWE reads: the
+  /// workroot, the checkout, the commit of the base, the instruction of the task, and the words of
+  /// the rig, `asked`, `again` and `confident`.
   Seed {
     /// The task, as the collection names it.
     task: String,
@@ -239,7 +242,12 @@ pub(crate) fn run(root: &Path, places: Places, verb: Verb) -> Result<ExitCode, F
     Verb::Tools => rig.tools().map(|()| ExitCode::SUCCESS),
     Verb::Seed { task } => {
       let seeded = rig.seeded(&task, false)?;
-      say!("the workroot stands at {}", seeded.work.display());
+      let words = json!({
+        "work": seeded.work, "app": seeded.app(), "base": seeded.syn,
+        "instruction": instruction(&seeded)?, "asked": ASKED, "again": AGAIN,
+        "confident": CONFIDENT,
+      });
+      println!("{words}");
       Ok(ExitCode::SUCCESS)
     }
     Verb::Validate { task } => rig.validate(&task),
@@ -362,9 +370,7 @@ impl Rig {
       removed(&runs)?;
     }
     fs::create_dir_all(&runs).map_err(|source| Fault::File { path: runs.clone(), source })?;
-    let told = String::from_utf8_lossy(&read(&seeded.task.dir.join("instruction.md"))?)
-      .trim_end()
-      .to_owned();
+    let told = instruction(&seeded)?;
     let app = seeded.app();
     compacted(&app)?;
     let life = Life {
@@ -480,12 +486,15 @@ enum Asked {
 impl Life<'_> {
   /// The life asked again on its chain while it closes under `CONFIDENT`, and once more when it
   /// closes sure of itself with no change: the value that it closed with last, and why the rig
-  /// stopped it, if it did.
+  /// stopped it, if it did. Each round is a prompt under the key of its number, so a model that
+  /// closes twice at one level is asked again, and a resume takes up the rounds of its record.
   fn worked(&self, first: &str) -> Result<(Value, String), Fault> {
     let (mut message, mut empty, mut mark, mut value) =
       (first.to_owned(), false, Mark::default(), Value::Null);
+    let mut round = 0_u32;
     loop {
-      let got = match self.prompt(&message, &mut mark)? {
+      round += 1;
+      let got = match self.prompt(&message, round, &mut mark)? {
         Asked::Answered(got) => got,
         Asked::Other(said) => return Ok((Value::from(said), String::new())),
         Asked::Stopped(why) => return Ok((value, why)),
@@ -525,12 +534,12 @@ impl Life<'_> {
     if ran(run.arg(word))? { Ok(()) } else { Err(Fault::Word(word.to_owned())) }
   }
 
-  /// One prompt of a float on the root, watched until it closes, the cap of the run ends it, or
-  /// the rig reads the life as going nowhere.
-  fn prompt(&self, message: &str, mark: &mut Mark) -> Result<Asked, Fault> {
+  /// One prompt of a float on the root, under the key of its round, watched until it closes, the
+  /// cap of the run ends it, or the rig reads the life as going nowhere.
+  fn prompt(&self, message: &str, round: u32, mark: &mut Mark) -> Result<Asked, Fault> {
     let answer = self.runs.join("answer.txt");
     let mut prompt = self.furb("prompt")?;
-    prompt.args(["--shape", "float", message]);
+    prompt.args(["--shape", "float", "--key", &round.to_string(), "--", message]);
     prompt.stdout(
       fs::File::create(&answer).map_err(|source| Fault::File { path: answer.clone(), source })?,
     );
@@ -750,6 +759,12 @@ fn stood(record: &Path) -> Option<String> {
       fact[0] == "done" && fact[1].as_str().is_some_and(|about| about.starts_with("stand"));
     stand.then(|| items(&fact[3])?.get(2)?.as_str().map(str::to_owned)).flatten()
   })
+}
+
+/// The instruction of a task as the task wrote it, which the rig asks with `ASKED`.
+fn instruction(seeded: &Seeded) -> Result<String, Fault> {
+  let told = read(&seeded.task.dir.join("instruction.md"))?;
+  Ok(String::from_utf8_lossy(&told).trim_end().to_owned())
 }
 
 /// The skill compaction turned on in the local config of a checkout, with the other settings kept:

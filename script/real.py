@@ -6,11 +6,13 @@ the ears of the crate, the provider of the crate among them, and on the Kernel o
 line `furb` runs the engine of the crate; a script runs it as a program of its own.
 """
 
+import json
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 from furb import engine, python
 from furb.checkpoint import journal
@@ -79,31 +81,33 @@ def spent(record: Path) -> float:
   return sum(one[3][2][4] for one in bought(record) if one[3][2])
 
 
-WORK = Path(os.environ.get("DEEPSWE_WORK") or Path.home() / ".cache/furb/deepswe-work")
-"""WORK is where `cargo xtask deepswe` stands the checkout of each task."""
-TASKS = Path(os.environ.get("DEEPSWE_DIR") or Path.home() / ".cache/furb/deep-swe") / "tasks"
-"""TASKS is the folder of the tasks of the collection that `cargo xtask deepswe` fetches."""
-# The words of the rig of `cargo xtask deepswe`, in xtask/src/deepswe.rs, which a bench puts to its own life.
-ASKED = "\n\nWhen the work is done, close with a float from 0 to 1: how sure you are that this task is complete."
-AGAIN = "confidence level {} is too low, continue"
-CONFIDENT = 0.9
-
-
-def deepswe(*words: str) -> None:
-  """One verb of `cargo xtask deepswe`, which seeds, freezes and grades a task, and stops the script when it fails."""
+def deepswe(*words: str) -> str:
+  """One verb of `cargo xtask deepswe`, which seeds, freezes and grades a task, and what it printed on stdout, while
+  its log goes to stderr. It stops the script when the verb fails."""
   root = Path(__file__).resolve().parent.parent
-  if subprocess.run(["cargo", "xtask", "deepswe", *words], cwd=root, check=False).returncode:  # noqa: S603, S607
+  ran = subprocess.run(["cargo", "xtask", "deepswe", *words], cwd=root, stdout=subprocess.PIPE, text=True, check=False)  # noqa: S603, S607
+  if ran.returncode:
     say(f"cargo xtask deepswe {' '.join(words)} failed, so the script stops here")
     raise SystemExit(1)
+  return ran.stdout
 
 
-def seeded(task: str) -> tuple[Path, str, str]:
-  """A fresh checkout of a task, its instruction as the task wrote it, and the commit of its base."""
-  deepswe("seed", task)
-  base = WORK / task / "base"
-  head = ["git", "-C", str(base), "--git-dir", ".git", "rev-parse", "HEAD"]
-  syn = subprocess.run(head, capture_output=True, text=True, check=True).stdout.strip()  # noqa: S603
-  return WORK / task / "app", (TASKS / task / "instruction.md").read_text(encoding="utf-8").rstrip(), syn
+class Seed(TypedDict):
+  """A seeded task, as `cargo xtask deepswe seed` gives it: its workroot, its checkout, the commit of its base, its
+  instruction as the task wrote it, and the words of the rig, which a bench puts to its own life."""
+
+  work: str
+  app: str
+  base: str
+  instruction: str
+  asked: str
+  again: str
+  confident: float
+
+
+def seeded(task: str) -> Seed:
+  """A fresh checkout of a task."""
+  return json.loads(deepswe("seed", task))
 
 
 def outside() -> None:

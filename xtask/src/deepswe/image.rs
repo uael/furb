@@ -14,6 +14,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{Fault, Rig, captured};
 
+/// The bounds of each read of a registry: a read that moves nothing for a minute ends, as a read
+/// that stalls would hold the rig for ever, and a layer of gigabytes still reads whole.
+const BOUNDS: [&str; 6] = ["--connect-timeout", "60", "--speed-limit", "1", "--speed-time", "60"];
 /// The two forms of the manifest of one image that a registry is asked for.
 const MANIFEST: &str = "application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json";
 
@@ -151,6 +154,7 @@ impl<'a> Registry<'a> {
     let probe = captured(
       rig
         .command("curl")
+        .args(BOUNDS)
         .args(["-sS", "-o", "/dev/null", "-D", "-"])
         .arg(format!("https://{host}/v2/")),
     )?;
@@ -168,6 +172,7 @@ impl<'a> Registry<'a> {
         let got = captured(
           rig
             .command("curl")
+            .args(BOUNDS)
             .args(["-fsSG", &field("realm"), "--data-urlencode"])
             .arg(format!("service={}", field("service")))
             .arg("--data-urlencode")
@@ -192,7 +197,7 @@ impl<'a> Registry<'a> {
 
   fn curl(&self, path: &str, accept: &str) -> Command {
     let mut curl = self.rig.command("curl");
-    curl.args(["-fsSL", "-H", &format!("Accept: {accept}")]);
+    curl.args(BOUNDS).args(["-fsSL", "-H", &format!("Accept: {accept}")]);
     if let Some(token) = &self.token {
       curl.args(["-H", &format!("Authorization: Bearer {token}")]);
     }
