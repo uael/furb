@@ -162,7 +162,12 @@ const THREAD: &[Bound] = &[
   bound(Does::Context, "the context: kinds, cache, folded", Some("context"), &[&led('c')]),
   bound(Does::Rewind, "back in the time of the thread, and to now", Some("rewind"), &[&led('b')]),
   bound(Does::Chains, "the chains of the life on the time", Some("chains"), &[&led('t')]),
-  bound(Does::Aside, "ask aside, in a fork the thread keeps nothing of", Some("btw"), &[&led('q')]),
+  bound(
+    Does::Aside,
+    "ask aside, in a fork that the thread does not keep",
+    Some("btw"),
+    &[&led('q')],
+  ),
   bound(
     Does::Agent,
     "the next agent of the thread",
