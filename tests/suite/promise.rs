@@ -18,7 +18,7 @@ use crate::yard;
 
 use std::{
   fs,
-  path::{Path, PathBuf},
+  path::{MAIN_SEPARATOR, Path, PathBuf},
   sync::Arc,
 };
 
@@ -727,10 +727,8 @@ fn a_life_that_a_replay_opens_with_no_checkpoint_holds_the_transcript_that_it_he
 /// path of Windows has its backslashes doubled by the repr of a text, and again by the repr of that
 /// repr, as a module value that holds a path is shown.
 fn placing(shown: String, at: &[&Path]) -> String {
-  let home = env::var("HOME").unwrap_or_default();
   at.iter().fold(shown, |shown, one| {
-    let path = one.display().to_string();
-    let tilded = path.strip_prefix(&home).map_or_else(|| path.clone(), |rest| format!("~{rest}"));
+    let (path, tilded) = (one.display().to_string(), tilded(one));
     (0..4).rev().fold(shown, |shown, doubled| {
       let said =
         |text: &str| (0..doubled).fold(text.to_owned(), |text, _| text.replace('\\', "\\\\"));
@@ -843,9 +841,19 @@ fn a_record_that_a_kill_tore_in_a_write_or_in_its_checkpoint_opens_as_the_entrie
 fn stands_in(at: &Path) {
   let mut life = inspected(at).unwrap();
   let cwd = life.word("cwd('chain1')", vec![]).unwrap().as_ref().as_str().map(str::to_owned);
-  let (home, ours) = (env::var("HOME").unwrap_or_default(), at.display().to_string());
-  let tilded = ours.strip_prefix(&home).map(|rest| format!("~{rest}"));
-  assert!(cwd == Some(ours) || cwd == tilded, "the life goes on in its own directory: {cwd:?}");
+  let shown = [at.display().to_string(), tilded(at)];
+  let own = cwd.as_ref().is_some_and(|cwd| shown.contains(cwd));
+  assert!(own, "the life goes on in its own directory: {cwd:?}");
+}
+
+/// A directory as the World tells it to a model: under the home of the user, which the World reads
+/// as the system gives it, as `~` and the separator of the system, as `~\AppData` on Windows.
+fn tilded(at: &Path) -> String {
+  let home = env::home_dir().filter(|home| home.parent().is_some());
+  match home.and_then(|home| at.strip_prefix(home).ok().map(Path::to_owned)) {
+    Some(rest) => format!("~{MAIN_SEPARATOR}{}", rest.display()),
+    None => at.display().to_string(),
+  }
 }
 
 /// What the root of the life of a directory kept, as python shows it.
