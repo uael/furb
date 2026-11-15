@@ -9,11 +9,12 @@ use furb_wire::{
   act::{Act, Kind, Maker, Phase, operator},
   card::{Card, Sent, Skill, Standing},
   state::State,
+  threads::ThreadNode,
 };
 
 use super::{
   held::Held,
-  threads::{Lookup, Rows, ThreadNode, unseen},
+  threads::{Lookup, Rows, unseen},
 };
 use crate::{
   engine::{OPERATOR, ROOT},

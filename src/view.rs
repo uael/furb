@@ -14,26 +14,24 @@ mod quote;
 mod threads;
 mod time;
 
-pub use desk::{
-  Ask, Desk, REFUSED, Tick, choices, declined, desk, hint, takes_nothing, ticks, wants,
-};
+pub use desk::{REFUSED, choices, declined, desk, hint, takes_nothing, ticks, wants};
 pub use fold::{Fold, followed, timed};
 pub use furb_wire::{
-  Act, Agent, Answer, Answered, Block, Card, Context, Exchange, Kind, Line, Maker, Mark, Output,
-  Page, Part, Pause, Phase, Portion, ROLLS, Reach, Read, Reply, Retrying, RunState, Said, Saying,
-  Sent, Skill, Spend, Standing, State, Thought, WATCH, Work, age, chain_state, elapsed, grouped,
-  homed, lines, operator, percent, restate, share, since, size, timer, tokens, working, wrote,
+  Act, Agent, Answer, Answered, Aside, Ask, Attention, Block, Card, ChainAside, ChainThread,
+  Concern, Context, Desk, Exchange, Kind, Line, Maker, Mark, NoteRun, Origin, Output, Page, Part,
+  Pause, Phase, Portion, ROLLS, Reach, Read, Reply, Retrying, RunState, Rung, SHOWN, Said, Saying,
+  Sent, Shown, Skill, Spend, Standing, State, Thought, ThreadNode, Threads, Tick, WATCH, Work, age,
+  chain_state, elapsed, grouped, homed, lines, operator, percent, restate, share, since, size,
+  timer, tokens, working, wrote,
 };
-pub use held::{Held, Threads};
-pub use ladder::{Rung, SHOWN, Shown};
+pub use held::Held;
 #[cfg(test)]
 pub use named::word;
 pub use named::{NAME, Named, said};
 pub use page::Streamed;
 pub use quote::{Quote, Writing, quotes, writing};
 pub use threads::{
-  Aside, Attention, ChainAside, ChainThread, Concern, NoteRun, Origin, Rows, ThreadNode, attention,
-  chain_asides, chain_notes, chain_threads, chain_tree, concerns, nest_threads, open,
-  order_threads, root_of, thread_of,
+  Rows, attention, chain_asides, chain_notes, chain_threads, chain_tree, concerns, nest_threads,
+  open, order_threads, root_of, thread_of,
 };
 pub use time::{as_of, moments_of};

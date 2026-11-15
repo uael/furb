@@ -12,7 +12,6 @@ use std::{
   sync::Arc,
 };
 
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -20,29 +19,21 @@ use crate::engine::OPERATOR;
 
 use furb_wire::{
   act::{Act, Kind},
+  desk::Desk,
+  ladder::{Rung, Shown},
   state::State,
+  threads::{ThreadNode, Threads},
 };
 
 use super::{
-  desk::{Desk, desk},
-  ladder::{Index, Rung, Shown, folded, lives},
+  desk::desk,
+  ladder::{Index, folded, lives},
   threads::{
-    Attention, ChainAside, Lookup, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
-    chain_threads, chain_tree, nest_threads, order_threads,
+    Lookup, Rows, attention, chain_asides, chain_notes, chain_threads, chain_tree, nest_threads,
+    order_threads,
   },
   time::{as_of, moments_of},
 };
-
-/// The threads of one chain as a window draws them: the tree of its threads, its asides, the runs
-/// of its notes, what the tree says to the operator, and the state of the chain.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Threads {
-  pub threads: Vec<ThreadNode>,
-  pub asides: Vec<ChainAside>,
-  pub notes: Vec<NoteRun>,
-  pub attention: Attention,
-  pub state: State,
-}
 
 /// Each act of a life, as the last event of it told it, in the order the acts were first told. An
 /// act is shared, so a host that keeps the event of an act beside it holds the act once.

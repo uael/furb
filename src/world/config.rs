@@ -15,7 +15,6 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -25,20 +24,12 @@ use super::{
   provider::{KEY_AUTOMATIC, KEY_CLASSES, KEY_THINKING, THINKING, catalog::switched},
   scratch,
 };
+pub use furb_wire::Layer;
+
 use crate::{
   skill::{self, Places, configs},
   value::Fault,
 };
-
-/// A layer of the configs, from the one that wins least to the one that wins most.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum Layer {
-  User,
-  #[default]
-  Project,
-  Local,
-}
 
 const LAYERS: [Layer; 3] = [Layer::User, Layer::Project, Layer::Local];
 

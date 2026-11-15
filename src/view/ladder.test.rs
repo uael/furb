@@ -4,8 +4,7 @@ use std::collections::HashMap;
 
 use serde_json::{Value, json};
 
-use super::{Rung, SHOWN, Shown};
-use crate::view::{Act, Fold, Held};
+use crate::view::{Act, Fold, Held, Rung, SHOWN, Shown};
 
 fn folded(facts: impl IntoIterator<Item = Value>) -> Vec<Act> {
   let mut fold = Fold::default();
