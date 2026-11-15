@@ -211,16 +211,18 @@ ruff_text_size = "0.0.9"
 # The digest of what an image of a life depends on in the build, which the key of an image names.
 sha2 = "0.10"
 
-# A crate of the workspace keeps the lines of its code, so a backtrace names a source line, and drops the rest of the
-# debug information, which only a debugger reads and which costs compile and link time at each sync.
+# A build for development keeps no debug information: a panic names its file and line by itself, and a backtrace names
+# each function. On macOS the line tables of a program stay in its object files, beside it in target/*/deps, and cargo
+# does not remove them, so each link of a test program left hundreds of files there. A test that builds a client of
+# HTTP asks the system for its proxies, which reads the whole folder of the program once in each process: at 445,000
+# files, 5 s for each such test, which nextest runs in a process of its own.
 [profile.dev]
-debug = "line-tables-only"
+debug = false
 
 # A dependency is built once and run many times: the interpreter runs every word of every test. A build for
 # development builds each dependency as a release does, so a test runs them as a user does, and the crates of the
 # workspace stay quick to build again.
 [profile.dev.package."*"]
 opt-level = 3
-debug = false
 debug-assertions = false
 overflow-checks = false

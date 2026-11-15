@@ -1,6 +1,5 @@
 # cargo-nextest runs the Rust tests: `cargo nextest run --workspace`, which `cargo xtask test rust` runs. Each test
 # runs in a process of its own, so a test that leans on what another test left in its process fails on its own.
-experimental = ["setup-scripts"]
 
 [profile.default]
 # The slowest test takes about 15 s on a loaded machine. One that passes 15 s is named as slow, and one that passes
@@ -10,12 +9,3 @@ slow-timeout = { period = "15s", terminate-after = 4 }
 fail-fast = false
 failure-output = "immediate-final"
 
-# A test talks to servers of this machine alone, so it reads no proxy of the system: on macOS each process that builds
-# a client of HTTP asks the system for its proxies, which took 3 s in each process, so in each test.
-[scripts.setup.no-proxy]
-command = ["sh", "-c", "echo NO_PROXY=* >> \"$NEXTEST_ENV\""]
-
-[[profile.default.scripts]]
-platform = 'cfg(target_os = "macos")'
-filter = 'all()'
-setup = "no-proxy"

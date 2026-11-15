@@ -360,9 +360,11 @@ fix what your change broke, and report what was broken before.
   `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any case. This build,
   `cargo test` and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them,
   so a word runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the
-  release. The project sets `no-cache` for uv, so a sync that builds them keeps no copy of the wheel in `~/.cache/uv`, where
-  each copy took 110 MB and uv never removed it. A build keeps no debug information of a dependency (`Cargo.toml`), which holds a target to about a third of
-  its bytes. A tree keeps the incremental state of its crates (`.cargo/config.toml`), which a job of CI does not keep.
+  release. The project sets `no-cache` for uv, so a sync that builds them keeps no copy of the wheel in `~/.cache/uv`,
+  where each copy took 110 MB and uv never removed it. A build for development keeps no debug information
+  (`Cargo.toml`), which holds a target to about a third of its bytes and keeps no object file beside each test
+  program; a panic still names its file and line. A tree keeps the incremental state of its crates
+  (`.cargo/config.toml`), which a job of CI does not keep.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
   `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
