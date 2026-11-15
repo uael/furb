@@ -29,18 +29,18 @@ pub struct Running {
   pub background: bool,
 }
 
-/// A thread of a session that lives while the life holds it: its title, and whether it works,
-/// else it asks the operator.
+/// A thread of a session that lives while the life holds it: its title, and how it stands, as it
+/// works or asks the operator.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Live {
   pub title: String,
-  pub works: bool,
+  pub standing: Standing,
 }
 
 impl Running {
   /// Whether a thread of the session works.
   pub fn works(&self) -> bool {
-    self.live.iter().any(|one| one.works)
+    self.live.iter().any(|one| one.standing.works())
   }
 }
 
@@ -66,9 +66,10 @@ impl Client {
           all.push(self.runs(at, card));
           all.len() - 1
         });
-        let works = card.thread.works();
-        if works || matches!(card.thread.standing, Standing::Asks { .. }) {
-          all[place].live.push(Live { title: card.thread.title.clone(), works });
+        let standing = &card.thread.standing;
+        if standing.works() || matches!(standing, Standing::Asks { .. }) {
+          let title = card.thread.title.clone();
+          all[place].live.push(Live { title, standing: standing.clone() });
         }
       }
     }
@@ -114,7 +115,7 @@ impl Client {
         life: life.clone(),
         name: title.clone(),
         project: self.cwd(*at, life),
-        live: vec![Live { title, works: true }],
+        live: vec![Live { title, standing: Standing::Thinks }],
         here: true,
         viewers: Vec::new(),
         background: false,

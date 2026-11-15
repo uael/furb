@@ -8,7 +8,7 @@ use std::{borrow::Cow, cmp::Reverse};
 
 use furb::view::{Part, Sent, Skill};
 use furb_host::protocol::Card;
-use opentui::style::Style;
+use opentui::style::{Color, Style};
 use unicode_width::UnicodeWidthStr;
 
 use furb_client::{Client, Control, Link, Matched, Target, Told, ranked};
@@ -104,8 +104,9 @@ pub(crate) enum Choice {
 
 /// A row of a list part: the part of the list that it stands in, the project that it stands in,
 /// whose badge leads it as it leads a card, its text, the places of the letters of its text that
-/// the filter matched, what follows its text in the column after it, what its right says, the hue
-/// of its bar while it is chosen, and what it takes.
+/// the filter matched, what follows its text in the column after it, what its right says and its
+/// color when it says a state as a card says it, the hue of its bar while it is chosen, and what it
+/// takes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct Entry {
   pub(crate) part: Cow<'static, str>,
@@ -114,6 +115,7 @@ pub(crate) struct Entry {
   pub(crate) lit: Vec<usize>,
   pub(crate) says: String,
   pub(crate) right: String,
+  pub(crate) tone: Option<Color>,
   pub(crate) hue: Option<usize>,
   pub(crate) choice: Choice,
 }
@@ -780,7 +782,8 @@ impl Model {
       if !under && !entry.says.is_empty() {
         left.push(run(entry.says.clone(), ground(muted)));
       }
-      let right = vec![run(entry.right.clone(), ground(muted)), run(" ", ground(Style::new()))];
+      let tone = entry.tone.map_or(muted, |tone| Style::new().fg(tone));
+      let right = vec![run(entry.right.clone(), ground(tone)), run(" ", ground(Style::new()))];
       all.push((Some(at), spread(left, right, room, ground(Style::new()))));
       let lines = if under && !says.is_empty() { wrapped(says, room - indent - 1) } else { vec![] };
       for line in lines {

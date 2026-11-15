@@ -315,7 +315,9 @@ impl Model {
     let working =
       |loader: Loader| (loader.frame(self.client.moved), WORKS.into(), Some(t.accent), age.clone());
     // The mark, the word, the color of both, and the time of the state.
-    let (mark, word, color, time) = match &card.thread.standing {
+    let standing = &card.thread.standing;
+    let (mark, word, color, time) = match standing {
+      _ if let Some(loader) = loader(standing) => working(loader),
       Standing::Asks { .. } if needs => ("◆", "Input".into(), Some(t.attention), None),
       Standing::Asks { of } => {
         ("", format!("Waits for {}", of.as_deref().unwrap_or_default()), None, None)
@@ -323,14 +325,16 @@ impl Model {
       Standing::Failed => ("✗", "Failed".into(), Some(t.danger), None),
       Standing::Paused { .. } if needs => ("‖", "Paused".into(), Some(t.attention), None),
       Standing::Paused { .. } => ("‖", "Paused".into(), None, age.clone()),
-      Standing::Thinks => working(Loader::Model),
-      Standing::Runs => working(Loader::Command),
-      Standing::Delegates => working(Loader::Agent),
       Standing::Stopped => ("", "Stopped".into(), None, age.clone()),
       Standing::Resolved if card.thread.unread(&self.client.machines[key.0].login) => {
         ("●", String::new(), Some(t.attention), since())
       }
-      Standing::Rests | Standing::Resolved => ("", String::new(), None, since()),
+      // A thread that works took its loader above.
+      Standing::Thinks
+      | Standing::Runs
+      | Standing::Delegates
+      | Standing::Rests
+      | Standing::Resolved => ("", String::new(), None, since()),
     };
     if !confirmed {
       let heard = format!("as of {}", self.hour(self.client.machines[key.0].heard));
@@ -411,4 +415,14 @@ pub(crate) fn hash(text: &str) -> usize {
     .bytes()
     .fold(0x811c_9dc5_u32, |hash, byte| (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193))
     as usize
+}
+
+/// The loader of a thread that works, by its work: a model, a command or agents.
+pub(crate) fn loader(standing: &Standing) -> Option<Loader> {
+  match standing {
+    Standing::Thinks => Some(Loader::Model),
+    Standing::Runs => Some(Loader::Command),
+    Standing::Delegates => Some(Loader::Agent),
+    _ => None,
+  }
 }

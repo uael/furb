@@ -6,8 +6,10 @@ use furb_client::{Control, Running, Target};
 
 use crate::{
   input::named,
+  list::loader,
   model::{Acts, Model},
   pick::{Choice, Entry, Pick, Picker},
+  tokens::WORKS,
 };
 
 impl Model {
@@ -72,7 +74,16 @@ impl Model {
       all.extend(one.live.into_iter().map(|thread| Entry {
         part: "Still live".into(),
         project: project.clone(),
-        right: (if thread.works { "works" } else { "asks you" }).to_owned(),
+        // A thread says its state as its card does: its mark, its word and its color.
+        right: loader(&thread.standing).map_or_else(
+          || "◆ Input".to_owned(),
+          |loader| format!("{} {WORKS}", loader.frame(self.client.moved)),
+        ),
+        tone: Some(if thread.standing.works() {
+          self.tokens.accent
+        } else {
+          self.tokens.attention
+        }),
         left: thread.title,
         ..Entry::default()
       }));

@@ -93,6 +93,11 @@ pub enum Part {
 }
 
 impl Standing {
+  /// Whether a thread that stands so works: a model thinks, a command runs, or agents work.
+  pub fn works(&self) -> bool {
+    matches!(self, Self::Thinks | Self::Runs | Self::Delegates)
+  }
+
   /// How a thread stands from its state, whether it is over, and the pause that holds it. A
   /// question asks each operator.
   pub fn of(state: State, over: bool, pause: Option<&Pause>) -> Self {
@@ -125,7 +130,7 @@ impl Card {
 
   /// Whether the thread works.
   pub fn works(&self) -> bool {
-    matches!(self.standing, Standing::Thinks | Standing::Runs | Standing::Delegates)
+    self.standing.works()
   }
 
   /// Whether the thread ended: it is resolved, stopped or failed, and a message of the operator

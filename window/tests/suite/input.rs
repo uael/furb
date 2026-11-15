@@ -697,8 +697,8 @@ fn a_leave_names_a_thread_that_asks_him_and_keeps_its_session_in_the_background(
   app.press("ctrl+d");
   app.press("ctrl+d");
   let asked = shows(&app, "Leave the window");
-  let row = asked.lines().find(|line| line.contains("asks you"));
-  assert!(row.is_some_and(|line| line.contains("FT which key sends the queue")), "{asked}");
+  let row = asked.lines().find(|line| line.contains("FT which key sends the queue"));
+  assert!(row.is_some_and(|line| line.contains("◆ Input")), "{asked}");
   assert!(asked.contains("keep it running in the background"), "{asked}");
   app.press("enter");
   assert!(app.wait_until(PATIENCE, || app.app().is_quitting()), "{}", app.text());
