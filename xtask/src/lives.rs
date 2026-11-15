@@ -86,9 +86,8 @@ pub(crate) fn smoke(root: &Path, to: Option<String>) -> Result<ExitCode, Fault> 
   life.word("await skill('grant')", &mut mark)?;
   life.word("grant(1.0, 0.5)", &mut mark)?;
   for which in ["first", "second"] {
-    let got = answered(
-      life.prompt(&Ask { message: SMOKE, shape: "int", key: None, operator: "" }, &mut mark)?,
-    )?;
+    let got =
+      answered(life.prompt(&Ask { message: SMOKE, shape: "int", operator: "" }, &mut mark)?)?;
     let answers = Numbers::of(&life.record)?.answers;
     println!("the {which} life gave {got}, and the record holds {answers} answer(s) of a model");
     if got != LINES.lines().count().to_string() {
@@ -115,10 +114,9 @@ pub(crate) fn play(root: &Path, to: Option<String>) -> Result<ExitCode, Fault> {
   let engine = root.join("src").join("furb").join("engine.py");
   let message = PLAY.replace("{engine}", &engine.display().to_string());
   let operator = format!("{SAID}\n");
-  answered(life.prompt(
-    &Ask { message: &message, shape: "list", key: None, operator: &operator },
-    &mut mark,
-  )?)?;
+  answered(
+    life.prompt(&Ask { message: &message, shape: "list", operator: &operator }, &mut mark)?,
+  )?;
   let answers = Numbers::of(&life.record)?.answers;
   let folder = format!("{:?}", life.app.display().to_string());
   println!("{}", life.word(&PLAYED.replace("{folder}", &folder), &mut mark)?);
@@ -127,9 +125,8 @@ pub(crate) fn play(root: &Path, to: Option<String>) -> Result<ExitCode, Fault> {
       "the life on the record asked a model for what it holds".to_owned(),
     ));
   }
-  let more = answered(
-    life.prompt(&Ask { message: AGAIN, shape: "int", key: None, operator: "" }, &mut mark)?,
-  )?;
+  let more =
+    answered(life.prompt(&Ask { message: AGAIN, shape: "int", operator: "" }, &mut mark)?)?;
   if more != "7" {
     return Err(Fault::Unproven(format!("the second life counted {more} items, not 7")));
   }

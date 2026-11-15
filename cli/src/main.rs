@@ -98,11 +98,6 @@ enum Command {
     /// that the operator does not answer.
     #[arg(long, default_value = life::SHAPE)]
     shape: String,
-    /// A key of the caller that names this prompt on the record: the command said again with the
-    /// key takes up the prompt of the key, and with another key asks again, so a loop that says one
-    /// message twice asks twice. A key opens the life here, and not through the daemon.
-    #[arg(long)]
-    key: Option<String>,
     #[command(flatten)]
     place: Place,
     #[command(flatten)]
@@ -252,14 +247,14 @@ fn commanded(furb: Furb) -> Result<(), CliError> {
 /// The command that the operator gave, or the window when he gave none.
 async fn command(furb: Furb) -> Result<(), CliError> {
   match furb.command {
-    Some(Command::Prompt { message, to, shape, key, place, mut stand }) => {
+    Some(Command::Prompt { message, to, shape, place, mut stand }) => {
       // The actor of the prompt is one the life offers, which a roster that names models must
       // name too.
       if !stand.roster.is_empty() {
         stand.roster.extend(life::actor(&to).await.model);
       }
       let asked = Asked { shape: &shape, message: &message, to: &to };
-      prompt(stand.on(place.opening(true)), asked, key.as_deref()).await
+      prompt(stand.on(place.opening(true)), asked).await
     }
     Some(Command::Turns { record, cwd, stand }) => {
       let place = Place { record: Some(record), cwd };
@@ -305,12 +300,11 @@ async fn catalog(update: bool) -> Result<(), CliError> {
 /// life opens here.
 ///
 /// A prompt the record already holds is taken up and never asked twice, so a command said again on a kept record
-/// reads the answer of the life before it and asks no model for it: the prompt of its key, or with
-/// no key the prompt of its message. A prompt it holds that is not done goes on: the open resumes
-/// it, and the command wakes it only when a pause holds it, so it is woken once.
-async fn prompt(opening: Opening, said: Asked<'_>, key: Option<&str>) -> Result<(), CliError> {
-  if key.is_none()
-    && let Some(record) = opening.record.as_deref()
+/// reads the answer of the life before it and asks no model for it. A prompt it holds that is not
+/// done goes on: the open resumes it, and the command wakes it only when a pause holds it, so it is
+/// woken once.
+async fn prompt(opening: Opening, said: Asked<'_>) -> Result<(), CliError> {
+  if let Some(record) = opening.record.as_deref()
     && let Some(value) =
       host::said(Path::new(record), said.shape, said.message.to_owned(), said.to).await?
   {
@@ -319,12 +313,8 @@ async fn prompt(opening: Opening, said: Asked<'_>, key: Option<&str>) -> Result<
   let mut life = Life::lived(opening).await?;
   let to = life::actor(said.to).await.name;
   let asked = Asked { to: &to, ..said };
-  let held = match key {
-    Some(key) => Some(life.keyed(key, &asked)?),
-    None => life.again(&asked)?.map(|id| (id, true)),
-  };
-  let id = if let Some((id, taken)) = held {
-    if taken && life.paused(&id)? {
+  let id = if let Some(id) = life.again(&asked)? {
+    if life.paused(&id)? {
       life.engine.wake(&id)?;
     }
     id

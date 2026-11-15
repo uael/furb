@@ -422,8 +422,8 @@ impl Rig {
 
   /// The life asked again on its chain while it closes under `CONFIDENT`, and once more when it
   /// closes sure of itself with no change: the value that it closed with last, and why the rig
-  /// stopped it, if it did. Each round is a prompt under the key of its number, so a model that
-  /// closes twice at one level is asked again, and a resume takes up the rounds of its record.
+  /// stopped it, if it did. Each round after the first says its number, so a model that closes
+  /// twice at one level is asked again, and a resume takes up the rounds of its record.
   fn worked(
     &self,
     life: &Life,
@@ -435,8 +435,8 @@ impl Rig {
     let mut round = 0_u32;
     loop {
       round += 1;
-      let key = round.to_string();
-      let ask = Ask { message: &message, shape: "float", key: Some(&key), operator: "" };
+      let said = if round == 1 { message.clone() } else { format!("Round {round}: {message}") };
+      let ask = Ask { message: &said, shape: "float", operator: "" };
       let got = match life.prompt(&ask, mark)? {
         Asked::Answered(said) => match said.parse::<f64>() {
           Ok(got) => got,
@@ -552,9 +552,6 @@ pub(crate) struct Ask<'a> {
   pub(crate) message: &'a str,
   /// The shape of the answer, as python names it.
   pub(crate) shape: &'a str,
-  /// The key of the prompt on the record, for a message that the life says more than once; with
-  /// no key, the same message takes up the prompt that the record holds, after a kill too.
-  pub(crate) key: Option<&'a str>,
   /// What the operator answers, a line for each prompt that the life puts to him.
   pub(crate) operator: &'a str,
 }
@@ -592,12 +589,12 @@ impl Life {
     }
   }
 
-  /// One prompt on the root under its key, watched until it closes, the cap of the life ends it,
-  /// or the watch reads the life as going nowhere.
+  /// One prompt on the root, watched until it closes, the cap of the life ends it, or the watch
+  /// reads the life as going nowhere. The record takes up the prompt of its message, after a kill
+  /// too.
   pub(crate) fn prompt(&self, ask: &Ask<'_>, mark: &mut Mark) -> Result<Asked, Fault> {
     let mut prompt = self.furb("prompt")?;
     prompt.args(["--shape", ask.shape]);
-    prompt.args(ask.key.iter().flat_map(|key| ["--key", key]));
     prompt.args(["--", ask.message]);
     self.watched(prompt, ask.operator, mark)
   }

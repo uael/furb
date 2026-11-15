@@ -16,7 +16,7 @@ use furb::{
   skill::{self, Skill},
   verbs,
   wire::outward,
-  world::{Catalog, Shape},
+  world::Catalog,
 };
 
 use crate::{console, error::CliError};
@@ -82,18 +82,6 @@ impl Life {
         a.0.as_ref().items()?.iter().map(furb::ObjectRef::as_str).collect::<Option<Vec<_>>>()?;
       (words.len() == 7 && words[2..] == wanted).then(|| a.about().to_owned())
     }))
-  }
-
-  /// The prompt of a key of the caller on the root, made when the record holds none, and whether
-  /// the record held it.
-  pub(crate) fn keyed(&mut self, key: &str, asked: &Asked<'_>) -> Result<(String, bool), CliError> {
-    let prompts = verbs::Transcript { on: Some(self.root.clone()), of: Some("prompt".to_owned()) };
-    let held: Vec<String> =
-      self.engine.transcript(prompts)?.iter().map(|a| a.about().to_owned()).collect();
-    let words = vec![Shape::object(asked.shape), Object::string(asked.message)];
-    let id = self.engine.keyed(key, "prompt", words, vec![("to", Object::string(asked.to))])?;
-    let taken = held.contains(&id);
-    Ok((id, taken))
   }
 
   /// Whether a pause stands over an act of the operator on the root, or over the root, as the
