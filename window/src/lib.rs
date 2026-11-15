@@ -64,7 +64,7 @@ pub struct Options {
   pub kept: PathBuf,
   /// The zone of each hour that the window writes.
   pub zone: TimeZone,
-  /// The second of the clock, from the epoch of unix.
+  /// The millisecond of the clock, from the epoch of unix.
   pub clock: fn() -> u64,
   /// Whether the clocks of the window stand still, as a capture of its frames asks with
   /// `FURB_STILL_CLOCK`, the second of its clock: no mark moves and no time passes, so two
@@ -83,7 +83,10 @@ impl Options {
     let folder = dunce::canonicalize(&folder).unwrap_or(folder);
     let kept = world::cache().ok_or(Error::NoCache)?.join("window").join("cards.json");
     let clock = || {
-      let wall = || SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs());
+      let wall = || {
+        let since = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+        u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+      };
       still().unwrap_or_else(wall)
     };
     let (zone, system) = (TimeZone::system(), System::here());
@@ -93,9 +96,10 @@ impl Options {
   }
 }
 
-/// The second at which the clocks of the window stand still, from `FURB_STILL_CLOCK`.
+/// The millisecond at which the clocks of the window stand still, from the second that
+/// `FURB_STILL_CLOCK` names.
 fn still() -> Option<u64> {
-  env::var("FURB_STILL_CLOCK").ok()?.parse().ok()
+  env::var("FURB_STILL_CLOCK").ok()?.parse::<u64>().ok().map(|second| second * 1000)
 }
 
 /// The window on the terminal of the program, on the daemon of this machine, until the operator

@@ -824,9 +824,9 @@ export type RunState =
     };
 /**
  * How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
- * second of the epoch since which it does when the host saw it begin; it asks the operator; its
- * model is asked again after a call that failed; or it failed, with the reason that a person
- * reads.
+ * millisecond of the epoch at which the host saw it begin, so a time of a second shows after a
+ * whole second; it asks the operator; its model is asked again after a call that failed; or it
+ * failed, with the reason that a person reads.
  */
 export type Mark =
   | {
@@ -834,7 +834,7 @@ export type Mark =
     }
   | {
       work: Work;
-      since?: number | null;
+      began?: number | null;
       is: "runs";
     }
   | {
@@ -1421,12 +1421,12 @@ export interface Retrying {
   why: string;
 }
 /**
- * What a model thought before it wrote: the second of the epoch since which it thinks, as the
- * host saw it begin, and in how many seconds it thought, which is none while it thinks.
+ * What a model thought before it wrote: the millisecond of the epoch at which it began to think,
+ * as the host saw it begin, and in how many seconds it thought, which is none while it thinks.
  */
 export interface Thought {
   text: string;
-  since: number;
+  began: number;
   took?: number | null;
 }
 /**
@@ -1447,7 +1447,7 @@ export interface Answered {
 }
 /**
  * An agent of a thread: the thread that a word of the thread started on another chain, as a card,
- * with the second of the epoch at which the host saw it begin, the seconds that it took once it
+ * with the millisecond of the epoch at which the host saw it begin, the seconds that it took once it
  * ended, counted from milliseconds as the time of a thought, and the line of its last word where
  * it stands: the line that runs or asks, else the last one. A host that opened the life after the
  * agent began saw it begin at that open.
@@ -1501,4 +1501,4 @@ export type ViewEvent = Omit<Extract<Request1, { verb: "view.event" }>, "verb">;
 export type ViewEffect = Omit<Extract<Request1, { verb: "view.effect" }>, "verb">;
 export type Dispose = Omit<Extract<Request1, { verb: "view.dispose" }>, "verb">;
 
-export const PROTOCOL = 29;
+export const PROTOCOL = 30;

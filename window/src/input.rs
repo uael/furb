@@ -198,7 +198,7 @@ impl Model {
   /// record that the window knows, so no two sessions of one window share it when its clocks stand
   /// still.
   pub(crate) fn record(&self) -> String {
-    let second = Timestamp::from_second(i64::try_from(self.now).unwrap_or_default());
+    let second = Timestamp::from_second(i64::try_from(self.second()).unwrap_or_default());
     let stamp = second.unwrap_or_default().strftime("%Y-%m-%dT%H-%M-%S");
     let sessions = self.folder.join(".furb").join("sessions");
     let named = |n: u128| sessions.join(format!("{stamp}-{:04x}.jsonl", n % 0x1_0000));
@@ -779,7 +779,7 @@ impl Model {
   /// that work: a model, a command or agents.
   fn working(&self, card: Option<&Card>) -> (Line, Loader) {
     let t = &self.tokens;
-    let worked = card.map(|card| self.now.saturating_sub(card.since)).filter(|one| *one > 0);
+    let worked = card.map(|card| self.second().saturating_sub(card.since)).filter(|one| *one > 0);
     let age = worked.map(|seconds| format!(" {}", timer(seconds)));
     let working = format!("    Working{}", age.unwrap_or_default());
     let stop = format!(" · {} stop", self.key(Does::Stop));

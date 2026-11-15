@@ -303,16 +303,16 @@ daemon answers requests in any order.
     A question that is not closed waits for the operator: `answer` closes it with a line of its shape, and `close`
     with a refusal, `{"is": "Refused", "args": ["why"]}`, closes it with words that its model reads;
   - a `block` holds `maker`, the model that wrote its last word, `more`, whether more comes since the answer works,
-    `thought`, the `text` that its model thought before it wrote and the seconds that it `took`, null while it thinks,
-    and `lines`. A line has its `number` in the thread, which goes on from block to block, its `text`, in which a quote
-    stands as the binding that it makes and a string of many lines as one line with its escapes, and its `mark`: `ran`;
-    `runs` with the `work` that it waits for, `writes` while its model writes it, `command` or `agent`, and `since`, the
-    second of the epoch at which the daemon saw that work begin; `asks`; `retries`, the line that its model writes while
-    its provider waits to ask it again, with the `attempt`, the `most`, the `wait`, the `at` and the `why` of the retry;
-    or `failed` with `why`, which the line that its model writes takes when the call of its model failed and no attempt
-    is left;
+    `thought`, the `text` that its model thought before it wrote, `began`, the millisecond of the epoch at which the
+    daemon saw it begin, and the seconds that it `took`, null while it thinks, and `lines`. A line has its `number` in
+    the thread, which goes on from block to block, its `text`, in which a quote stands as the binding that it makes and
+    a string of many lines as one line with its escapes, and its `mark`: `ran`; `runs` with the `work` that it waits
+    for, `writes` while its model writes it, `command` or `agent`, and `began`, the millisecond of the epoch at which
+    the daemon saw that work begin; `asks`; `retries`, the line that its model writes while its provider waits to ask it
+    again, with the `attempt`, the `most`, the `wait`, the `at` and the `why` of the retry; or `failed` with `why`,
+    which the line that its model writes takes when the call of its model failed and no attempt is left;
   - `agents`, each thread that a word of the thread started on another chain, in the order the thread made them, as
-    a card without its life, with `began`, the second of the epoch at which the daemon saw it begin, `took`, the
+    a card without its life, with `began`, the millisecond of the epoch at which the daemon saw it begin, `took`, the
     seconds that it took once it ended, and `line`, the line of its last word where it stands: the line that runs or
     asks, else its last line. A note to a chain that works is no agent: its model reads it at its next step;
   - `context`, null before the first answer on the chain of the thread: what its last answer `read`, its `tokens` in

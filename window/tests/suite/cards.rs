@@ -37,7 +37,7 @@ pub(crate) fn options(kept: &Path) -> Options {
     home: Some(PathBuf::from("/home/ada")),
     kept: kept.to_owned(),
     zone: TimeZone::UTC,
-    clock: || CLOCK,
+    clock: || CLOCK * 1000,
     still: false,
     system: System::MacOs,
   }

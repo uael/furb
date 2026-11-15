@@ -42,7 +42,7 @@ pub struct Context {
 }
 
 /// An agent of a thread: the thread that a word of the thread started on another chain, as a card,
-/// with the second of the epoch at which the host saw it begin, the seconds that it took once it
+/// with the millisecond of the epoch at which the host saw it begin, the seconds that it took once it
 /// ended, counted from milliseconds as the time of a thought, and the line of its last word where
 /// it stands: the line that runs or asks, else the last one. A host that opened the life after the
 /// agent began saw it begin at that open.
@@ -97,14 +97,14 @@ pub struct Line {
 }
 
 /// How a line stands: it ran, or will not run; it runs, with the work that it waits for and the
-/// second of the epoch since which it does when the host saw it begin; it asks the operator; its
-/// model is asked again after a call that failed; or it failed, with the reason that a person
-/// reads.
+/// millisecond of the epoch at which the host saw it begin, so a time of a second shows after a
+/// whole second; it asks the operator; its model is asked again after a call that failed; or it
+/// failed, with the reason that a person reads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "is", rename_all = "snake_case")]
 pub enum Mark {
   Ran,
-  Runs { work: Work, since: Option<u64> },
+  Runs { work: Work, began: Option<u64> },
   Asks,
   Retries(Retrying),
   Failed { why: String },
@@ -132,12 +132,12 @@ pub enum Work {
   Agent,
 }
 
-/// What a model thought before it wrote: the second of the epoch since which it thinks, as the
-/// host saw it begin, and in how many seconds it thought, which is none while it thinks.
+/// What a model thought before it wrote: the millisecond of the epoch at which it began to think,
+/// as the host saw it begin, and in how many seconds it thought, which is none while it thinks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Thought {
   pub text: String,
-  pub since: u64,
+  pub began: u64,
   pub took: Option<u64>,
 }
 
@@ -206,8 +206,8 @@ impl Answered {
 
 /// What a host heard of a life beside its facts, which a page reads: what each model wrote and
 /// thought for a rung and the retry of its call that waits, the millisecond of the epoch at which
-/// each act that lives began, and at which each prompt began and ended, which a page gives in
-/// seconds, so an agent that ended says how long it took. The record holds none of it: the turn
+/// each act that lives began, and at which each prompt began and ended, so an agent that ended
+/// says how long it took. The record holds none of it: the turn
 /// of a reply keeps its thought sealed, and a fact tells no time, so a host keeps it in the image
 /// of the life, once [`Held::shown`] let go of each thought that no page shows.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -474,10 +474,9 @@ impl<'a> Reader<'a> {
     let streamed = self.thinker(answers).and_then(|rung| self.streams.wrote.get(&rung.id));
     let thought = streamed.and_then(|wrote| {
       let took = wrote.thought.map(|ended| ended.saturating_sub(wrote.began) / 1000);
-      let since = wrote.began / 1000;
       (!wrote.thinking.trim().is_empty()).then(|| Thought {
         text: wrote.thinking.clone(),
-        since,
+        began: wrote.began,
         took,
       })
     });
@@ -502,7 +501,7 @@ impl<'a> Reader<'a> {
   /// The lines of the word of a rung, numbered from the count of the lines of the thread before
   /// it. While its model writes the word, the lines that came ran and the line that comes runs.
   fn lines(self, rung: &Act, before: usize) -> Vec<Line> {
-    let began = |id: &str| self.streams.began.get(id).map(|at| at / 1000);
+    let began = |id: &str| self.streams.began.get(id).copied();
     let Some(word) = &rung.word else { return self.writing(rung, before) };
     let mut lines: Vec<Line> = shown(word)
       .into_iter()
@@ -532,10 +531,10 @@ impl<'a> Reader<'a> {
       let mark = match open.map(|at| made[at]) {
         Some(act) if act.asks_operator() => Mark::Asks,
         Some(act) if act.kind == Kind::Prompt => {
-          Mark::Runs { work: Work::Agent, since: began(&act.id) }
+          Mark::Runs { work: Work::Agent, began: began(&act.id) }
         }
-        Some(act) => Mark::Runs { work: Work::Command, since: began(&act.id) },
-        None => Mark::Runs { work: Work::Command, since: began(&rung.id) },
+        Some(act) => Mark::Runs { work: Work::Command, began: began(&act.id) },
+        None => Mark::Runs { work: Work::Command, began: began(&rung.id) },
       };
       // Each line that asks the operator a question that waits says so, the last one or not.
       let asks = made.iter().zip(places).filter(|(act, _)| act.asks_operator() && !act.done());
@@ -570,7 +569,7 @@ impl<'a> Reader<'a> {
     let mut lines: Vec<Line> = ran
       .map(|(text, at)| Line { number: before + at, text: text.to_owned(), mark: Mark::Ran })
       .collect();
-    let mark = mark.unwrap_or(Mark::Runs { work: Work::Writes, since: Some(began / 1000) });
+    let mark = mark.unwrap_or(Mark::Runs { work: Work::Writes, began: Some(began) });
     lines.push(Line { number: before + came.count + 1, text: came.tail, mark });
     lines
   }
@@ -609,7 +608,7 @@ impl<'a> Reader<'a> {
     let ended = self.streams.ended.get(&prompt.id);
     Agent {
       card,
-      began: began.map(|at| at / 1000),
+      began: began.copied(),
       took: began.zip(ended).map(|(began, ended)| ended.saturating_sub(*began) / 1000),
       line: stands.or(lines.len().checked_sub(1)).map(|at| lines[at].clone()),
     }

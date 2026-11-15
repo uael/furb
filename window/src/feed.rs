@@ -253,9 +253,7 @@ impl Feed<'_> {
     let t = &self.model.tokens;
     let (gutter, inner) = (numbers.width, numbers.inside(self.inner()));
     let since = match line.mark {
-      Mark::Runs { since: Some(since), .. } if self.model.now > since => {
-        Some(self.model.now - since)
-      }
+      Mark::Runs { began: Some(began), .. } => self.model.since(began),
       _ => None,
     };
     let (number, color, loader) = match &line.mark {
@@ -299,7 +297,7 @@ impl Feed<'_> {
   /// window that stands behind the host shows the wait.
   fn retry(&self, retry: &Retrying) -> Line {
     let Retrying { attempt, most, wait, at, .. } = retry;
-    let left = at.saturating_sub(self.model.now).min(*wait);
+    let left = at.saturating_sub(self.model.second()).min(*wait);
     let wait = if left > 0 { format!(" in {}", timer(left)) } else { String::new() };
     vec![run(
       format!("Attempt {attempt} of {most}{wait}"),
@@ -327,12 +325,11 @@ impl Feed<'_> {
       // The last words keep room for the word before them and a time of eight columns after.
       None => {
         let words = tail(&thought.text, room.saturating_sub(" thinks · ".len() + 2 + 8));
-        ("thinks", words, self.model.now.saturating_sub(thought.since))
+        ("thinks", words, self.model.since(thought.began))
       }
-      Some(took) => ("thought", thought.first().to_owned(), took),
+      Some(took) => ("thought", thought.first().to_owned(), Some(took).filter(|one| *one > 0)),
     };
-    // A time shows from one second on, as the time of a line that runs.
-    let time = (seconds > 0).then(|| run(timer(seconds), muted));
+    let time = seconds.map(|seconds| run(timer(seconds), muted));
     let said = vec![run(format!("  {word} · "), muted), run(text, style)];
     let line = spread(said, time.into_iter().collect(), room + 2, Style::new());
     vec![Row::clicked(line, Click::Fold(fold))]
@@ -399,10 +396,9 @@ impl Feed<'_> {
     let t = &self.model.tokens;
     let card = &agent.card;
     let (muted, rest) = (self.style(Role::Muted), rests(agent));
-    // A time shows from one second on, as the time of a line that runs.
-    let since =
-      agent.began.filter(|began| self.model.now > *began).map(|began| self.model.now - began);
-    let time = agent.took.or(since).filter(|seconds| *seconds > 0).map(timer);
+    // An agent that ended says how long it took, from one second on, as one that works does.
+    let since = agent.began.and_then(|began| self.model.since(began));
+    let time = agent.took.map_or(since, |took| Some(took).filter(|one| *one > 0)).map(timer);
     let working = |loader| (Some(loader), "  Working", t.accent);
     let (mark, word, color) = match &card.standing {
       Standing::Asks { .. } => (None, "◆ Input", t.attention),

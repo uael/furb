@@ -4310,7 +4310,7 @@
             "work": {
               "$ref": "#/definitions/Work"
             },
-            "since": {
+            "began": {
               "type": [
                 "integer",
                 "null"
@@ -4374,7 +4374,7 @@
           ]
         }
       ],
-      "description": "How a line stands: it ran, or will not run; it runs, with the work that it waits for and the\nsecond of the epoch since which it does when the host saw it begin; it asks the operator; its\nmodel is asked again after a call that failed; or it failed, with the reason that a person\nreads."
+      "description": "How a line stands: it ran, or will not run; it runs, with the work that it waits for and the\nmillisecond of the epoch at which the host saw it begin, so a time of a second shows after a\nwhole second; it asks the operator; its model is asked again after a call that failed; or it\nfailed, with the reason that a person reads."
     },
     "Work": {
       "type": "string",
@@ -4427,7 +4427,7 @@
         "text": {
           "type": "string"
         },
-        "since": {
+        "began": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0
@@ -4443,9 +4443,9 @@
       },
       "required": [
         "text",
-        "since"
+        "began"
       ],
-      "description": "What a model thought before it wrote: the second of the epoch since which it thinks, as the\nhost saw it begin, and in how many seconds it thought, which is none while it thinks."
+      "description": "What a model thought before it wrote: the millisecond of the epoch at which it began to think,\nas the host saw it begin, and in how many seconds it thought, which is none while it thinks."
     },
     "Said": {
       "type": "object",
@@ -4628,7 +4628,7 @@
         "title",
         "standing"
       ],
-      "description": "An agent of a thread: the thread that a word of the thread started on another chain, as a card,\nwith the second of the epoch at which the host saw it begin, the seconds that it took once it\nended, counted from milliseconds as the time of a thought, and the line of its last word where\nit stands: the line that runs or asks, else the last one. A host that opened the life after the\nagent began saw it begin at that open."
+      "description": "An agent of a thread: the thread that a word of the thread started on another chain, as a card,\nwith the millisecond of the epoch at which the host saw it begin, the seconds that it took once it\nended, counted from milliseconds as the time of a thought, and the line of its last word where\nit stands: the line that runs or asks, else the last one. A host that opened the life after the\nagent began saw it begin at that open."
     },
     "Context": {
       "type": "object",
@@ -5338,5 +5338,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 29
+  "x-protocol": 30
 }

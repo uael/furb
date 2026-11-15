@@ -67,7 +67,7 @@ fn a_page_gives_each_message_with_its_block_numbered_through_the_thread_and_what
   // The block of the second message goes on from the lines of the first, and its line that awaits
   // the command runs since the host saw the command begin.
   let block = second.block.as_ref().unwrap();
-  let runs = Mark::Runs { work: Work::Command, since: Some(100) };
+  let runs = Mark::Runs { work: Work::Command, began: Some(100_000) };
   assert_eq!(
     texts(block),
     [(3, "a = 2", &Mark::Ran), (4, "b = await bash('ls')", &runs), (5, "c = 3", &Mark::Ran)]
@@ -99,7 +99,7 @@ fn a_model_that_writes_shows_the_lines_that_came_the_line_that_comes_and_its_tho
   let held = held(facts, &mut streams);
   streams.wrote("rung3", ["", "The seed is read once. Then"], 101_000);
   let text = "The seed is read once. Then".to_owned();
-  let thought = |took| Some(Thought { text: text.clone(), since: 101, took });
+  let thought = |took| Some(Thought { text: text.clone(), began: 101_000, took });
   let block = |streams: &Streamed| {
     held.page(streams, "prompt1", Reach { before: None, limit: 1 }).exchanges[0]
       .block
@@ -111,7 +111,7 @@ fn a_model_that_writes_shows_the_lines_that_came_the_line_that_comes_and_its_tho
   let block = block(&streams);
   assert_eq!(block.thought, thought(Some(3)));
   assert_eq!(block.thought.as_ref().unwrap().first(), "The seed is read once.");
-  let writes = Mark::Runs { work: Work::Writes, since: Some(101) };
+  let writes = Mark::Runs { work: Work::Writes, began: Some(101_000) };
   assert_eq!(&texts(&block)[3..], [(6, "d = 4", &Mark::Ran), (7, "e = rea", &writes)]);
 }
 
@@ -208,11 +208,11 @@ fn an_agent_says_when_it_began_when_it_ended_and_the_line_where_it_stands_and_a_
   let [counts, bench] = page.agents.as_slice() else { panic!("{page:?}") };
   // It began at 107.8 s and ended at 112.6 s: it took 4.8 s, so 4, though its seconds differ by 5.
   let times = (counts.card.title.as_str(), counts.began, counts.took);
-  assert_eq!(times, ("count the lines", Some(107), Some(4)));
+  assert_eq!(times, ("count the lines", Some(107_800), Some(4)));
   let line = counts.line.as_ref().map(|line| (line.text.as_str(), &line.mark));
   assert_eq!(line, Some(("close('3 lines')", &Mark::Ran)));
-  assert_eq!((bench.began, bench.took), (Some(110), None));
-  let runs = Mark::Runs { work: Work::Command, since: Some(112) };
+  assert_eq!((bench.began, bench.took), (Some(110_200), None));
+  let runs = Mark::Runs { work: Work::Command, began: Some(112_000) };
   let line = bench.line.as_ref().map(|line| (line.text.as_str(), &line.mark));
   assert_eq!(line, Some(("out = await bash('make')", &runs)));
 }
@@ -394,7 +394,7 @@ fn each_act_that_a_loop_makes_marks_the_line_that_makes_it() {
   let held = held(looped([]), &mut streams);
   let page = held.page(&streams, "prompt1", Reach { before: None, limit: 1 });
   let block = page.exchanges[0].block.as_ref().unwrap();
-  let runs = Mark::Runs { work: Work::Command, since: Some(100) };
+  let runs = Mark::Runs { work: Work::Command, began: Some(100_000) };
   assert_eq!(
     texts(block),
     [

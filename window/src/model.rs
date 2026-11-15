@@ -86,7 +86,7 @@ pub(crate) struct Model {
   pub(crate) pointer: Option<(u16, u16)>,
   /// How many rows of the list stand above the first row that shows.
   pub(crate) scroll: usize,
-  /// The second of the clock of the machine.
+  /// The millisecond of the clock of the machine.
   pub(crate) now: u64,
   /// For how long the loaders moved.
   pub(crate) moved: Duration,
@@ -203,7 +203,7 @@ impl Model {
       }
       _ => {}
     }
-    let (now, told) = (self.now, &mut self.machines[at]);
+    let (now, told) = (self.second(), &mut self.machines[at]);
     let welcome = matches!(heard, Ok(Frame::Reply { answer: Answer::Welcome { .. }, .. }));
     if matches!(told.link, Link::Lost(_)) && !welcome {
       return false;
@@ -469,9 +469,20 @@ impl Model {
     at.to_zoned(self.zone.clone()).strftime("%H:%M").to_string()
   }
 
+  /// The second of the clock of the machine.
+  pub(crate) fn second(&self) -> u64 {
+    self.now / 1000
+  }
+
+  /// How many whole seconds passed since a millisecond of the epoch, from one second on: a time of
+  /// a work shows only after a whole second of it.
+  pub(crate) fn since(&self, began: u64) -> Option<u64> {
+    Some(self.now.saturating_sub(began) / 1000).filter(|seconds| *seconds > 0)
+  }
+
   /// How long ago a second was, from one minute on.
   pub(crate) fn age(&self, since: u64) -> Option<String> {
-    match self.now.saturating_sub(since) {
+    match self.second().saturating_sub(since) {
       ..60 => None,
       age @ ..3600 => Some(format!("{}m", age / 60)),
       age @ ..86400 => Some(format!("{}h", age / 3600)),
