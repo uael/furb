@@ -183,7 +183,7 @@ fn each_act_names_the_role_of_its_maker_live_and_from_its_record_alike() {
   let want = [
     ("rung1", opus.clone()),
     ("bash1", opus),
-    ("rung2", Maker::Member { login: "uael".to_owned() }),
+    ("rung2", Maker::Member { profile: "uael".to_owned() }),
     ("rung3", Maker::Operator),
     ("rung4", Maker::Operator),
     ("rung5", Maker::Skill),

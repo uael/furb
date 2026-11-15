@@ -282,7 +282,7 @@
         },
         {
           "type": "object",
-          "description": "Who is attached to a life now.",
+          "description": "Each profile that a window of a life holds now.",
           "properties": {
             "life": {
               "type": "string"
@@ -2094,7 +2094,7 @@
             "life": {
               "type": "string"
             },
-            "peers": {
+            "profiles": {
               "type": "array",
               "items": {
                 "$ref": "#/definitions/Present"
@@ -2108,9 +2108,9 @@
           "required": [
             "frame",
             "life",
-            "peers"
+            "profiles"
           ],
-          "description": "Who is attached to a life now, pushed to each of its windows after each attach and detach."
+          "description": "Each profile that a window of a life holds now, pushed to each of its windows after each\nattach, detach and draft."
         },
         {
           "type": "object",
@@ -2809,7 +2809,7 @@
     "Peer": {
       "type": "object",
       "properties": {
-        "login": {
+        "profile": {
           "type": "string"
         },
         "role": {
@@ -2823,20 +2823,14 @@
             "string",
             "null"
           ]
-        },
-        "view": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
         }
       },
       "required": [
-        "login",
+        "profile",
         "role",
-        "kind",
-        "view"
+        "kind"
       ],
-      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, the name of a skill, and the id of its view, which names this connection among those\nof its login, so two windows of one person are two views. The id stands in no record."
+      "description": "A peer as the daemon knows it after its hello: its profile, which is the login that its\ntransport proved, its role, its kind, and the name of a skill. No window is named apart from its\nprofile: two windows of one profile are one operator."
     },
     "Listed": {
       "type": "object",
@@ -2961,7 +2955,7 @@
         "title",
         "standing"
       ],
-      "description": "A card of the machine: one thread that an operator started, in the record of its session. It\nholds the name of the session when it has one, the main checkout of the project whose sessions\nhold the record, when the list of the machine names one, else the checkout whose\n`.furb/sessions` holds a record that a life holds, whether a life holds the record now,\nthe login of each person whose window holds that life, and the second of the epoch since which\nthe thread stands as it does. A record that has no index of its threads yet gives no card until\nthe daemon made its index."
+      "description": "A card of the machine: one thread that an operator started, in the record of its session. It\nholds the name of the session when it has one, the main checkout of the project whose sessions\nhold the record, when the list of the machine names one, else the checkout whose\n`.furb/sessions` holds a record that a life holds, whether a life holds the record now,\nthe profile of each person whose window holds that life, and the second of the epoch since which\nthe thread stands as it does. A record that has no index of its threads yet gives no card until\nthe daemon made its index."
     },
     "Standing": {
       "oneOf": [
@@ -3084,7 +3078,7 @@
           ]
         }
       ],
-      "description": "How the thread of a card stands. It asks one member by his login, or each operator. A pause\nnames who said it. A thread whose model closed its prompt is resolved, and one that a cancel\nended is stopped."
+      "description": "How the thread of a card stands. It asks one member by his profile, or each operator. A pause\nnames who said it. A thread whose model closed its prompt is resolved, and one that a cancel\nended is stopped."
     },
     "Sent": {
       "type": "object",
@@ -3104,7 +3098,7 @@
         "by",
         "text"
       ],
-      "description": "What an operator sent to a life: a message, or a word of Python, with the site that sent it,\n`operator` or `operator/<login>`."
+      "description": "What an operator sent to a life: a message, or a word of Python, with the site that sent it,\n`operator` or `operator/<profile>`."
     },
     "Skill": {
       "type": "object",
@@ -3125,25 +3119,11 @@
     "Present": {
       "type": "object",
       "properties": {
-        "login": {
+        "profile": {
           "type": "string"
         },
         "role": {
           "$ref": "#/definitions/Role"
-        },
-        "kind": {
-          "$ref": "#/definitions/Kind"
-        },
-        "name": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "view": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
         },
         "writes": {
           "anyOf": [
@@ -3157,12 +3137,10 @@
         }
       },
       "required": [
-        "login",
-        "role",
-        "kind",
-        "view"
+        "profile",
+        "role"
       ],
-      "description": "A window on a life now: its peer, and the draft that its person writes, when he writes one."
+      "description": "A profile that a window of a life holds now: the profile, the greatest role of its windows, and\nthe draft that it writes, when one of its windows writes one."
     },
     "Handed": {
       "type": "object",
@@ -3846,7 +3824,7 @@
         {
           "type": "object",
           "properties": {
-            "login": {
+            "profile": {
               "type": "string"
             },
             "role": {
@@ -3856,7 +3834,7 @@
           },
           "required": [
             "role",
-            "login"
+            "profile"
           ]
         },
         {
@@ -3906,7 +3884,7 @@
           ]
         }
       ],
-      "description": "Who made an act, as a window names it: the operator, a member who answers as him by his login,\na model with its effort when its actor names one, a skill, or the engine itself."
+      "description": "Who made an act, as a window names it: the operator, a member who answers as him by his profile,\na model with its effort when its actor names one, a skill, or the engine itself."
     },
     "Phase": {
       "oneOf": [
@@ -5320,5 +5298,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 33
+  "x-protocol": 34
 }

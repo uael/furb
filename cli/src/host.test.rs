@@ -9,14 +9,14 @@ use tokio::time::timeout;
 
 use super::followed;
 
-/// An access list of the logins that write.
-fn list(logins: &[&str]) -> Access {
-  logins.iter().map(|one| ((*one).to_owned(), Role::Write)).collect()
+/// An access list of the profiles that write.
+fn list(profiles: &[&str]) -> Access {
+  profiles.iter().map(|one| ((*one).to_owned(), Role::Write)).collect()
 }
 
 /// The file of the roles of a list.
-fn written(logins: &[&str]) -> String {
-  let roles: Vec<String> = logins.iter().map(|one| format!("\"{one}\": \"write\"")).collect();
+fn written(profiles: &[&str]) -> String {
+  let roles: Vec<String> = profiles.iter().map(|one| format!("\"{one}\": \"write\"")).collect();
   format!("{{\"roles\": {{{}}}}}", roles.join(", "))
 }
 
@@ -25,7 +25,7 @@ fn written(logins: &[&str]) -> String {
   reason = "the test blocks on the runtime that tokio starts for it"
 )]
 #[tokio::test]
-async fn a_change_of_host_json_gives_its_logins_and_a_file_that_does_not_parse_keeps_them() {
+async fn a_change_of_host_json_gives_its_profiles_and_a_file_that_does_not_parse_keeps_them() {
   let folder = env::temp_dir().join(format!("furb-host-json-{}", process::id()));
   fs::create_dir_all(&folder).unwrap();
   let path = folder.join("host.json");
@@ -38,11 +38,19 @@ async fn a_change_of_host_json_gives_its_logins_and_a_file_that_does_not_parse_k
   let mut changes = identity.changes();
   fs::write(&path, written(&["ann", "bob", "cat"])).unwrap();
   timeout(Duration::from_secs(20), changes.changed()).await.expect("the list changes").unwrap();
-  assert!(changes.borrow().role("cat").is_ok(), "the door gives the new login its role");
-  assert_eq!(identity.logins(), ["ann", "bob", "cat"], "a life opened after it names the login");
+  assert!(changes.borrow().role("cat").is_ok(), "the door gives the new profile its role");
+  assert_eq!(
+    identity.profiles(),
+    ["ann", "bob", "cat"],
+    "a life opened after it names the profile"
+  );
   fs::write(&path, "{ not json").unwrap();
   let why = heard.recv_timeout(Duration::from_secs(20)).expect("the daemon says why");
   assert!(why.contains("keeps the access list"), "{why}");
-  assert_eq!(identity.logins(), ["ann", "bob", "cat"], "a file that does not parse keeps the list");
+  assert_eq!(
+    identity.profiles(),
+    ["ann", "bob", "cat"],
+    "a file that does not parse keeps the list"
+  );
   fs::remove_dir_all(&folder).ok();
 }

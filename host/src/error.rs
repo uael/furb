@@ -201,9 +201,9 @@ pub enum AccessError {
   Read { path: PathBuf, source: io::Error },
   #[error("{} holds no settings of the host", path.display())]
   Parse { path: PathBuf, source: serde_json::Error },
-  /// The access list gives no role to the login, so the daemon refuses its peer.
-  #[error("the access list gives no role to {login}")]
-  Unlisted { login: String },
+  /// The access list gives no role to the profile, so the daemon refuses its peer.
+  #[error("the access list gives no role to {profile}")]
+  Unlisted { profile: String },
   #[error("the local API of Tailscale does not answer at {place}")]
   Api { place: String, source: io::Error },
   #[error("the local API of Tailscale broke the exchange")]

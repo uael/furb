@@ -188,7 +188,7 @@ pub enum Command {
   /// once the record holds them: the reply comes then.
   End,
   /// A command of the engine said by a speaker other than the life itself, a skill as
-  /// `skill/<name>` or a window as `operator/<login>`: each act and each fact that the command
+  /// `skill/<name>` or a window as `operator/<profile>`: each act and each fact that the command
   /// says is of that speaker, so a fact seen names the person who read.
   By { speaker: String, command: Box<Self> },
 }

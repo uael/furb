@@ -176,7 +176,7 @@ impl<T: Clone> Shared<T> {
   }
 }
 
-/// The one home of the logins of the members who answer as the operator, which a host changes
+/// The one home of the profiles of the members who answer as the operator, which a host changes
 /// as its access list changes.
 pub type Members = Shared<Vec<String>>;
 
@@ -316,9 +316,9 @@ impl Provider {
     (models, self.actor, self.thinking)
   }
 
-  /// The home of the logins of the members who answer as the operator, which the operator entry of
-  /// the roster lists in place of its efforts at each stand, so a prompt asks one person with
-  /// `to="operator/<login>"`.
+  /// The home of the profiles of the members who answer as the operator, which the operator entry
+  /// of the roster lists in place of its efforts at each stand, so a prompt asks one person with
+  /// `to="operator/<profile>"`.
   #[must_use]
   pub fn members(mut self, members: Members) -> Self {
     self.members = members;

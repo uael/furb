@@ -10,7 +10,7 @@ use std::{
   future::Future,
   sync::{
     Arc,
-    atomic::{AtomicU64, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
   },
 };
 
@@ -104,7 +104,7 @@ impl Outbox {
 }
 
 /// The role that a peer holds now: the one that its transport gave, which an access list that
-/// changes moves, or none once the list drops its login.
+/// changes moves, or none once the list drops its profile.
 pub type Granted = watch::Receiver<Option<Role>>;
 
 /// The role of a peer that no access list moves.
@@ -125,7 +125,7 @@ pub trait Host {
 
 /// One peer served on a stream until it ends: its hello first, then each verb that its role
 /// allows, answered at once and in any order. The role is the one that `granted` gives at the
-/// moment of the verb, so a role that moves holds from the next verb, and a login that the list
+/// moment of the verb, so a role that moves holds from the next verb, and a profile that the list
 /// drops is refused and closed at once. A hello of another protocol, a first frame that is no
 /// hello, and a frame past the bound close the peer, each with its refusal.
 pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
@@ -145,8 +145,7 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
     Some(Ok(Request { id, verb: Verb::Hello(hello) })) if hello.protocol == PROTOCOL => {
       let asked = hello.role;
       let role = asked.map_or(who.role, |asked| asked.min(who.role));
-      let view = VIEWS.fetch_add(1, Ordering::Relaxed);
-      let peer = Peer { login: who.login, role, kind: hello.kind, name: hello.name, view };
+      let peer = Peer { profile: who.profile, role, kind: hello.kind, name: hello.name };
       send(&mut out, &Frame::Reply { id, answer: welcome(&peer) }).await?;
       (peer, asked)
     }
@@ -175,7 +174,7 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
       Ok(()) = granted.changed() => {
         let now = *granted.borrow_and_update();
         let Some(role) = now else {
-          let why = format!("the access list no longer names {}", peer.login);
+          let why = format!("the access list no longer names {}", peer.profile);
           return closed(&mut out, None, ProtocolError::Refused { why }).await;
         };
         peer.role = asked.map_or(role, |asked| asked.min(role));
@@ -189,9 +188,6 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
     }
   }
 }
-
-/// The count of the peers that the daemon welcomed, which gives each of them the id of its view.
-static VIEWS: AtomicU64 = AtomicU64::new(1);
 
 /// The welcome of a peer: who it is to the daemon, the machine and its build.
 fn welcome(peer: &Peer) -> Answer {

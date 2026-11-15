@@ -382,7 +382,7 @@ pub(super) fn standing(
     Object::list(fields.into_iter().chain([Object::string(class.name())]).chain(place))
   });
   // The operator answers in person, reads the window of the engine, and costs no dollar. In place
-  // of efforts it lists the logins of its members, so `operator/<login>` names one person, as
+  // of efforts it lists the profiles of its members, so `operator/<profile>` names one person, as
   // `<model>/<effort>` names an effort.
   let operator = Object::list([
     Object::string(OPERATOR),

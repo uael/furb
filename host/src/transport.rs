@@ -26,10 +26,11 @@ use windows as local;
 pub(crate) use net::{Door, Ticket};
 pub use net::{LocalApi, Messages, Tailscale, Tcp, WebSocket, upgraded};
 
-/// Who a peer is, as its transport proved it: its login, and the role that it holds.
+/// Who a peer is, as its transport proved it: its profile, which is the login that the transport
+/// proved, and the role that it holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Who {
-  pub login: String,
+  pub profile: String,
   pub role: Role,
 }
 
@@ -107,6 +108,6 @@ impl Identity for Local {
     &self,
     stream: &Accepted,
   ) -> impl Future<Output = Result<Who, TransportError>> + Send {
-    future::ready(local::login(stream).map(|login| Who { login, role: Role::Write }))
+    future::ready(local::login(stream).map(|profile| Who { profile, role: Role::Write }))
   }
 }

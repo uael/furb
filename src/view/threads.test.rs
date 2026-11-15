@@ -604,7 +604,7 @@ fn the_seen_of_one_operator_does_not_clear_the_unread_mark_of_another() {
     json!(["seen", "chain1", "operator/ann"]),
   ];
   let got = held(facts);
-  let unread = |login: &str| got.threads_as(login, "chain1", None, 0).attention.unread;
+  let unread = |profile: &str| got.threads_as(profile, "chain1", None, 0).attention.unread;
   // Ann read the chain, so it is no unread mark of hers, and Bob has not read it, so it stays his.
   assert_eq!(unread("operator/ann"), 0);
   assert_eq!(unread("operator/bob"), 1);

@@ -406,7 +406,7 @@ impl Model {
 /// is the operator himself when it is the login that he has on the machine of the thread.
 pub(crate) fn closed(answered: &Answered, login: &str) -> String {
   let who = match &answered.by {
-    Maker::Member { login: member } if member != login => member.clone(),
+    Maker::Member { profile: member } if member != login => member.clone(),
     Maker::Operator | Maker::Member { .. } => "you".to_owned(),
     other => maker(other),
   };

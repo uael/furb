@@ -77,7 +77,7 @@ pub struct Fold {
   /// Each pause and each wake that the fold heard, in order, which [`Fold::recorded`] reads to find
   /// what a pause or a wake covers and the pause that holds a new act.
   pauses: Vec<Value>,
-  /// The models of the roster and the logins of the members of the operator, as the last stand
+  /// The models of the roster and the profiles of the members of the operator, as the last stand
   /// gave them, which the role of an actor reads.
   models: Vec<String>,
   members: Vec<String>,
@@ -258,15 +258,15 @@ impl Fold {
     }
   }
 
-  /// What a stand gave: the models of its roster, and the logins that the entry of the operator
+  /// What a stand gave: the models of its roster, and the profiles that the entry of the operator
   /// lists in place of its efforts.
   fn stood(&mut self, standing: &Value) {
     let Some(roster) = standing.get(0).and_then(Value::as_array) else { return };
     let name = |one: &Value| one.get(0).and_then(Value::as_str).unwrap_or_default().to_owned();
     self.models = roster.iter().map(name).filter(|one| !operator(one)).collect();
     let listed = roster.iter().filter(|one| operator(&name(one)));
-    let logins = listed.filter_map(|one| one.get(1).and_then(Value::as_array)).flatten();
-    self.members = logins.filter_map(Value::as_str).map(str::to_owned).collect();
+    let profiles = listed.filter_map(|one| one.get(1).and_then(Value::as_array)).flatten();
+    self.members = profiles.filter_map(Value::as_str).map(str::to_owned).collect();
   }
 
   /// The messages that a chain with a source takes from it: its fact names the acts of the source

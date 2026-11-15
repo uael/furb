@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 33;
+pub const PROTOCOL: u32 = 34;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -54,23 +54,23 @@ pub struct Hello {
   pub role: Option<Role>,
 }
 
-/// A peer as the daemon knows it after its hello: the login that its transport proved, its role,
-/// its kind, the name of a skill, and the id of its view, which names this connection among those
-/// of its login, so two windows of one person are two views. The id stands in no record.
+/// A peer as the daemon knows it after its hello: its profile, which is the login that its
+/// transport proved, its role, its kind, and the name of a skill. No window is named apart from its
+/// profile: two windows of one profile are one operator.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Peer {
-  pub login: String,
+  pub profile: String,
   pub role: Role,
   pub kind: Kind,
   pub name: Option<String>,
-  pub view: u64,
 }
 
-/// A window on a life now: its peer, and the draft that its person writes, when he writes one.
+/// A profile that a window of a life holds now: the profile, the greatest role of its windows, and
+/// the draft that it writes, when one of its windows writes one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Present {
-  #[serde(flatten)]
-  pub peer: Peer,
+  pub profile: String,
+  pub role: Role,
   pub writes: Option<Draft>,
 }
 
@@ -165,7 +165,7 @@ pub enum Verb {
   End {
     life: String,
   },
-  /// Who is attached to a life now.
+  /// Each profile that a window of a life holds now.
   Presence {
     life: String,
   },
@@ -560,8 +560,9 @@ pub enum Frame {
   Refused { id: Option<u64>, error: ProtocolError, why: String },
   /// One event of a life that the peer attached, under its place in the log of the life.
   Event { life: String, seq: Seq, event: Event },
-  /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
-  Presence { life: String, peers: Vec<Present> },
+  /// Each profile that a window of a life holds now, pushed to each of its windows after each
+  /// attach, detach and draft.
+  Presence { life: String, profiles: Vec<Present> },
   /// A change of the cards of one record, pushed to each peer that asked the cards: each card that
   /// is new or that changed, and the prompt of each card that the record holds no more.
   Cards { life: String, changed: Vec<Card>, gone: Vec<String> },
@@ -700,7 +701,7 @@ pub struct Listed {
 /// holds the name of the session when it has one, the main checkout of the project whose sessions
 /// hold the record, when the list of the machine names one, else the checkout whose
 /// `.furb/sessions` holds a record that a life holds, whether a life holds the record now,
-/// the login of each person whose window holds that life, and the second of the epoch since which
+/// the profile of each person whose window holds that life, and the second of the epoch since which
 /// the thread stands as it does. A record that has no index of its threads yet gives no card until
 /// the daemon made its index.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -720,8 +721,8 @@ pub struct Card {
 impl Card {
   /// Where a member finds the card in a list: its part, its rank in that part, and its time. What
   /// needs him waits the longest first, and each other part shows the newest first.
-  pub fn place(&self, login: &str) -> (view::Part, u8, i64) {
-    let (part, rank) = self.thread.part(login);
+  pub fn place(&self, profile: &str) -> (view::Part, u8, i64) {
+    let (part, rank) = self.thread.part(profile);
     let since = i64::try_from(self.since).unwrap_or(i64::MAX);
     (part, rank, if part == view::Part::NeedsYou { since } else { -since })
   }

@@ -94,16 +94,31 @@ impl Holders {
     held
   }
 
-  /// Each window with its draft, in the order that they attached.
+  /// Each profile that a window holds, in the order that its first window attached, with the
+  /// greatest role of its windows and the draft that the last of them that writes writes.
   pub(crate) fn presence(&self) -> Vec<Present> {
-    let present = |one: &Window| Present { peer: one.peer.clone(), writes: one.writes.clone() };
-    self.windows.iter().map(present).collect()
+    let mut present: Vec<Present> = Vec::new();
+    for one in &self.windows {
+      let Peer { profile, role, .. } = &one.peer;
+      match present.iter_mut().find(|held| held.profile == *profile) {
+        Some(held) => {
+          held.role = held.role.max(*role);
+          held.writes = one.writes.clone().or(held.writes.take());
+        }
+        None => present.push(Present {
+          profile: profile.clone(),
+          role: *role,
+          writes: one.writes.clone(),
+        }),
+      }
+    }
+    present
   }
 
-  /// Who is attached now, pushed to each window of the life. A peer that is gone takes no frame,
-  /// and the task that pushes its events tells the daemon that it left.
+  /// Each profile that a window holds now, pushed to each window of the life. A peer that is gone
+  /// takes no frame, and the task that pushes its events tells the daemon that it left.
   pub(crate) fn present(&self, life: &str) {
-    self.tell(&Frame::Presence { life: life.to_owned(), peers: self.presence() });
+    self.tell(&Frame::Presence { life: life.to_owned(), profiles: self.presence() });
   }
 
   /// A frame pushed to each window of the life. A peer that is gone takes no frame.

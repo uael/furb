@@ -45,11 +45,10 @@ impl Kit {
   pub(crate) async fn served(self, end: oneshot::Receiver<()>) {
     let (outbox, mut frames) = Outbox::new();
     let peer = Peer {
-      login: String::new(),
+      profile: String::new(),
       role: Role::Write,
       kind: Kind::Skill,
       name: Some(self.name.clone()),
-      view: 0,
     };
     let attach = Verb::Attach { life: self.life.clone(), from: Seq::MAX };
     if self.inside.answer(&peer, attach, &outbox).await.is_err() {

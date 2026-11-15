@@ -90,11 +90,11 @@ fn folder() -> Yard {
 
 /// A fake of the local API of Tailscale on a port of loopback, which gives one login for each
 /// address, and says the path of each request that it heard.
-async fn tailscale(login: &str) -> (LocalApi, mpsc::UnboundedReceiver<String>) {
+async fn tailscale(profile: &str) -> (LocalApi, mpsc::UnboundedReceiver<String>) {
   let listener = TcpListener::bind(loopback()).await.unwrap();
   let port = listener.local_addr().unwrap().port();
   let (tell, heard) = mpsc::unbounded_channel();
-  let login = login.to_owned();
+  let profile = profile.to_owned();
   tokio::spawn(async move {
     loop {
       let (mut stream, _) = listener.accept().await.unwrap();
@@ -111,7 +111,7 @@ async fn tailscale(login: &str) -> (LocalApi, mpsc::UnboundedReceiver<String>) {
       let body = if path.starts_with("/localapi/v0/status") {
         json!({"TailscaleIPs": ["127.0.0.1"]})
       } else {
-        json!({"UserProfile": {"ID": 1, "LoginName": login}})
+        json!({"UserProfile": {"ID": 1, "LoginName": profile}})
       };
       let body = body.to_string();
       let answer = format!(
@@ -127,26 +127,23 @@ async fn tailscale(login: &str) -> (LocalApi, mpsc::UnboundedReceiver<String>) {
   (LocalApi::Port { port, token: "proof".to_owned() }, heard)
 }
 
-fn access(login: &str, role: Role) -> Access {
-  [(login.to_owned(), role)].into_iter().collect()
+fn access(profile: &str, role: Role) -> Access {
+  [(profile.to_owned(), role)].into_iter().collect()
 }
 
 fn loopback() -> SocketAddr {
   "127.0.0.1:0".parse().unwrap()
 }
 
-/// The peer of a window as a welcome names it, with no view: the daemon counts the views, and a
-/// test of the daemon holds that two peers have two views.
-fn welcomed(login: &str, role: Role) -> Peer {
-  Peer { login: login.to_owned(), role, kind: Kind::Window, name: None, view: 0 }
+/// The peer of a window as a welcome names it.
+fn welcomed(profile: &str, role: Role) -> Peer {
+  Peer { profile: profile.to_owned(), role, kind: Kind::Window, name: None }
 }
 
-/// The peer that the welcome of a daemon of this protocol names, with no view.
+/// The peer that the welcome of a daemon of this protocol names.
 fn peer(frame: Frame) -> Peer {
   match frame {
-    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => {
-      Peer { view: 0, ..peer }
-    }
+    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => peer,
     other => panic!("no welcome: {other:?}"),
   }
 }
@@ -175,7 +172,7 @@ async fn door(identity: Tailscale, websocket: bool) -> SocketAddr {
 }
 
 #[tokio::test]
-async fn a_peer_of_tcp_is_the_login_that_tailscale_gives_for_its_address() {
+async fn a_peer_of_tcp_is_the_profile_that_tailscale_gives_for_its_address() {
   let (api, mut heard) = tailscale("alice@github").await;
   let addr = door(Tailscale::new(api, access("alice@github", Role::Write)), false).await;
   let stream = Tcp::new(addr).dial().await.unwrap();
@@ -202,7 +199,7 @@ async fn a_peer_of_websocket_says_each_frame_as_a_message() {
 }
 
 #[tokio::test]
-async fn a_login_with_no_entry_is_refused() {
+async fn a_profile_with_no_entry_is_refused() {
   let (api, _) = tailscale("mallory@github").await;
   let identity = Tailscale::new(api, access("alice@github", Role::Write));
   let listener = Tcp::new(loopback()).listen().await.unwrap();
@@ -212,7 +209,7 @@ async fn a_login_with_no_entry_is_refused() {
   assert!(
     matches!(
       &refused,
-      Err(TransportError::Access(AccessError::Unlisted { login })) if login == "mallory@github"
+      Err(TransportError::Access(AccessError::Unlisted { profile })) if profile == "mallory@github"
     ),
     "{refused:?}"
   );
@@ -238,7 +235,7 @@ async fn plain_tcp_listens_on_no_address_off_loopback_and_the_tailnet() {
 }
 
 #[test]
-fn host_json_gives_the_ports_of_the_tailnet_and_the_role_of_each_login() {
+fn host_json_gives_the_ports_of_the_tailnet_and_the_role_of_each_profile() {
   let held = folder();
   let path = held.join("host.json");
   assert_eq!(Config::load(&path).unwrap(), Config::default());
@@ -322,7 +319,7 @@ fn written() -> Verb {
 }
 
 #[tokio::test]
-async fn a_peer_of_the_tailnet_holds_the_new_role_of_its_login_at_once() {
+async fn a_peer_of_the_tailnet_holds_the_new_role_of_its_profile_at_once() {
   let (api, _) = tailscale("alice@github").await;
   let identity = Tailscale::new(api, access("alice@github", Role::Write));
   let (ports, _held) = tailed(identity.clone()).await;
@@ -348,7 +345,7 @@ async fn a_peer_of_the_tailnet_holds_the_new_role_of_its_login_at_once() {
 }
 
 #[tokio::test]
-async fn a_peer_of_the_tailnet_whose_login_the_list_drops_is_refused_and_closed_at_once() {
+async fn a_peer_of_the_tailnet_whose_profile_the_list_drops_is_refused_and_closed_at_once() {
   let (api, _) = tailscale("alice@github").await;
   let identity = Tailscale::new(api, access("alice@github", Role::Write));
   let (ports, _held) = tailed(identity.clone()).await;

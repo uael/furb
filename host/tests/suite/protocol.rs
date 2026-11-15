@@ -293,7 +293,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Client<S> {
 /// A peer served on a stream in memory, under a role.
 fn served(role: Role) -> Client<DuplexStream> {
   let (ours, theirs) = duplex(1 << 16);
-  let who = Who { login: "uael".to_owned(), role };
+  let who = Who { profile: "uael".to_owned(), role };
   tokio::spawn(async move { serve(&Echo, theirs, who, fixed(role)).await });
   Client { lines: BufReader::new(ours) }
 }
@@ -303,18 +303,15 @@ async fn hello_asking(client: &mut Client<DuplexStream>, role: Role) -> Frame {
   client.ask(0, Verb::Hello(hello)).await
 }
 
-/// The peer of a window as a welcome names it, with no view: the daemon counts the views, and a
-/// test of the daemon holds that two peers have two views.
+/// The peer of a window as a welcome names it.
 fn welcomed(role: Role) -> Peer {
-  Peer { login: "uael".to_owned(), role, kind: Kind::Window, name: None, view: 0 }
+  Peer { profile: "uael".to_owned(), role, kind: Kind::Window, name: None }
 }
 
-/// The peer that the welcome of a daemon of this protocol names, with no view.
+/// The peer that the welcome of a daemon of this protocol names.
 fn peer(frame: Frame) -> Peer {
   match frame {
-    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => {
-      Peer { view: 0, ..peer }
-    }
+    Frame::Reply { id: 0, answer: Answer::Welcome { protocol: PROTOCOL, peer, .. } } => peer,
     other => panic!("no welcome: {other:?}"),
   }
 }
@@ -464,6 +461,7 @@ const SCHEMAS: [&str; PROTOCOL as usize] = [
   "7d3c9dbf00b91ac7e84589fbef485f85aa2f5541ea30e82ca975b0514208d2b9",
   "ea708f4ddfeb6f4f9f9ea7d609c28e6efd38fbea622ecebf32a0c49444ce7cc4",
   "9dfb40bcf853f5a09baf707eaf62dbd84bb296e272d15e14c6dee5d3409f147f",
+  "9ae47cfaaabc1ce821ce560227303a7fc4d613e2b4862ad2707e8d39df1eaab1",
 ];
 
 /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
@@ -600,7 +598,7 @@ async fn each_verb_makes_a_round_trip_on_the_local_transport() {
   else {
     panic!("no welcome");
   };
-  assert_eq!((peer.role, peer.login.is_empty()), (Role::Write, false));
+  assert_eq!((peer.role, peer.profile.is_empty()), (Role::Write, false));
   for (id, verb) in (1..).zip(verbs()) {
     let answer = Answer::Value(serde_json::to_value(&verb).unwrap());
     assert_eq!(client.ask(id, verb).await, Frame::Reply { id, answer });

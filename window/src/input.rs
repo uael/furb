@@ -356,7 +356,7 @@ impl Model {
     let login = &self.machines[opened.key.0].login;
     let his = |by: &Maker| match by {
       Maker::Operator => true,
-      Maker::Member { login: one } => one == login,
+      Maker::Member { profile: one } => one == login,
       _ => false,
     };
     let said = opened.exchanges.values().rev().find(|one| one.runs && his(&one.by))?;

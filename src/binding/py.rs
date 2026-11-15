@@ -267,7 +267,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Stream {
 impl<'a, 'py> FromPyObject<'a, 'py> for Members {
   type Error = PyErr;
 
-  /// A list of logins of python, as a home that the life alone changes.
+  /// A list of profiles of python, as a home that the life alone changes.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     Ok(Self::new(value.extract()?))
   }
