@@ -25,6 +25,6 @@
 ┃
 ┃ how long does an open take
 ┃
-┃  Message  Python    This computer ▾   BR ▾   opus  high
+┃  Message  Python    This… ▾   BR broken ▾    opus  high
 ┃
   Refused: Could not use…                          ⌃P go to

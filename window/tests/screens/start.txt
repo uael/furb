@@ -25,6 +25,6 @@
 ┃                                                                 FU furb                    opus
 ┃ Ask for a change, a review or an answer
 ┃                                                                 Ground the…        ‖ Paused 11h
-┃  Message  Python    This computer ▾   FT ▾   opus  high         FU furb                    opus
+┃  Message  Python    This… ▾   FT furb-try ▾  opus  high         FU furb                    opus
 ┃
   ~/src/furb-try                                   ⌃P go to    Resolved 1 ▸

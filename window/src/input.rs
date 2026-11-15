@@ -482,21 +482,22 @@ impl Model {
     let gap = || run(" ".repeat(APART), raised);
     let mut left: Line = switch.into();
     let fixed = width(&left) + APART + 2 + APART + badge.content.width() + 2;
-    // The names give way before the effort: the turn gives way to its mark, then the name of the
-    // project to its badge alone, then the name of the machine to a few letters.
+    // The names give way before the effort, the one control whose label is its value, which a
+    // click changes in place: the turn gives way to its mark, then the name of the machine to a
+    // few letters, then the name of the project to its badge, and the effort goes last.
     let room = self.wide().saturating_sub(6);
     let spare = |right: &(Line, _)| room.checked_sub(width(&right.0) + 2 + fixed);
-    let wanted = machine.width() + 1 + project.width();
-    let (right, clicks) = [self.controls(0), self.controls(1)]
+    let (whole, least) = (machine.width() + 1 + project.width(), SHORTEST + 2 + project.width());
+    let tries = [(0, whole), (1, whole), (1, least), (1, SHORTEST), (2, whole), (2, least)];
+    let (short, need) = tries
       .into_iter()
-      .find(|one| spare(one).is_some_and(|spare| spare >= wanted))
-      .or_else(|| {
-        let some = |one: &(Line, _)| spare(one).is_some_and(|spare| spare >= SHORTEST);
-        [self.controls(1), self.controls(2)].into_iter().find(some)
-      })
-      .unwrap_or_else(|| self.controls(2));
+      .find(|(short, need)| spare(&self.controls(*short)).is_some_and(|spare| spare >= *need))
+      .unwrap_or((2, SHORTEST));
+    let (right, clicks) = self.controls(short);
     let spare = room.saturating_sub(width(&right) + 2 + fixed);
-    let machine = cut(machine, spare);
+    // The machine leaves the name of the project its room while the name stays.
+    let kept = if need > SHORTEST { project.width() + 1 } else { 0 };
+    let machine = cut(machine, spare.saturating_sub(kept));
     // A name cut to less than a few letters says nothing that the badge does not.
     let name = match spare.saturating_sub(machine.width()) {
       rest if rest > SHORTEST => format!(" {}", cut(&project, rest - 1)),

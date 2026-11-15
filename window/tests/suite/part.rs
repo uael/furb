@@ -5,6 +5,8 @@
 
 #[cfg(unix)]
 use std::fs;
+#[cfg(unix)]
+use std::time::Duration;
 
 use furb_window::{Options, open};
 use opentui::testing::TestApp;
@@ -115,10 +117,7 @@ fn a_click_on_the_project_of_a_new_session_lists_the_projects_and_one_aims_the_i
   shows(&app, "3 sessions");
   let (x, y) = cell(&app, "FU furb", "3 sessions");
   app.click(x, y);
-  // The project opens for a new session at once, and no session of it that he did not pick. The
-  // window is wide enough that the launcher keeps the name of the project beside the effort, which
-  // the catalog of the machine gives or not.
-  app.resize(160, 40);
+  // The project opens for a new session at once, and no session of it that he did not pick.
   let frame = shows(&app, "FU furb ▾");
   assert!(frame.contains("Ask for a change, a review or an answer"), "{frame}");
 }
@@ -137,6 +136,34 @@ fn offered() -> (TestApp, Daemon) {
   open(&app, vec![daemon.machine("mac")], options);
   shows(&app, "opus  high");
   (app, daemon)
+}
+
+#[cfg(unix)]
+#[test]
+fn where_room_is_short_the_names_of_the_launcher_give_way_and_its_effort_stays() {
+  let (app, _daemon) = offered();
+  // The launcher row at a width, once it is the one that the test expects, or as it stands then.
+  let launcher = |wide: u16, expected: &str| {
+    app.resize(wide, 40);
+    let row = || {
+      let frame = app.text();
+      let row = frame.lines().find(|one| one.contains("Python")).unwrap_or_default().to_owned();
+      row.split_whitespace().collect::<Vec<_>>().join(" ")
+    };
+    app.wait_until(Duration::from_secs(10), || row() == expected);
+    row()
+  };
+  // With room for each, the launcher names the machine, the project, the model and its effort.
+  let wide = "┃ Message Python This computer ▾ FT furb-try ▾ opus high";
+  assert_eq!(launcher(110, wide), wide);
+  // Where the room runs short, the machine gives way to a few letters first, then the project to
+  // its badge, and the effort, which a click changes in place, stays.
+  let short = "┃ Message Python This… ▾ FT furb-try ▾ opus high";
+  assert_eq!(launcher(100, short), short);
+  // Where even a few letters of the machine leave the project no room, the project gives way to its
+  // badge, and the machine takes its name back.
+  let shorter = "┃ Message Python This computer ▾ FT ▾ opus high";
+  assert_eq!(launcher(60, shorter), shorter);
 }
 
 #[cfg(unix)]
@@ -212,7 +239,8 @@ fn a_new_session_on_the_model_of_the_last_card_of_its_project_shows_its_default_
   open(&app, vec![daemon.machine("mac")], options);
   shows(&app, "Resolved 1");
   // The card names its model alone; the launcher names the effort that a new session takes.
-  shows(&app, "FU ▾   opus  high");
+  let both = || app.text().contains("FU furb ▾") && app.text().contains("opus  high");
+  assert!(app.wait_until(PATIENCE, both), "{}", app.text());
 }
 
 #[test]

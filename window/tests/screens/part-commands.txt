@@ -25,6 +25,6 @@
 ┃
 ┃ Ask for a change, a review or an answer
 ┃
-┃  Message  Python    This computer ▾   FT ▾   opus  high
+┃  Message  Python    This… ▾   FT furb-try ▾  opus  high
 ┃
   ~/src/furb-try                                   ⌃P go to
