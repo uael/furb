@@ -18,6 +18,7 @@ mod opens;
 mod paths;
 mod promise;
 mod prove;
+mod targets;
 mod tree;
 mod unused;
 mod watch;
@@ -215,6 +216,13 @@ enum Task {
   /// a build makes. A path with a variable or a pattern in it is not checked, and a path after
   /// `$root/` is a path of the repository.
   Paths,
+  /// Lint the workspace on Linux and Windows, which this machine does not build, so code under a
+  /// cfg of those systems shows its warnings before the gates of CI fail on it.
+  ///
+  /// zig compiles the C of the dependencies for each system. It needs zig on PATH and the targets
+  /// of rust: `rustup target add x86_64-unknown-linux-gnu x86_64-pc-windows-gnu`. A first run in a
+  /// tree checks every crate for both systems, in minutes; a run after a change takes seconds.
+  Targets,
   /// Fail on each comment line of Rust that a change adds past 100 characters, which rustfmt does
   /// not wrap.
   ///
@@ -473,43 +481,49 @@ fn run() -> Result<ExitCode, Fault> {
   {
     return script.run(&root, &words_of(words));
   }
-  let task = Xtask::from_arg_matches(&matches).unwrap_or_else(|error| error.exit()).task;
-  match task {
-    Task::Check { base, all } => check(&root, (!all).then_some(base.as_str())),
-    Task::Test { suite: Some(suite), words } => suite.run(&root, &words),
-    Task::Test { suite: None, .. } => every(&root),
-    Task::Watch { branch, tree, every, table, inbox, owners, pid, once } => {
-      let every = Duration::from_secs(every * 60);
-      watch::Watch { branch, tree, every, table, inbox, owners, pid, once }.run(&root)
+  Xtask::from_arg_matches(&matches).unwrap_or_else(|error| error.exit()).task.run(&root, &command)
+}
+
+impl Task {
+  fn run(self, root: &Path, command: &Command) -> Result<ExitCode, Fault> {
+    match self {
+      Self::Check { base, all } => check(root, (!all).then_some(base.as_str())),
+      Self::Test { suite: Some(suite), words } => suite.run(root, &words),
+      Self::Test { suite: None, .. } => every(root),
+      Self::Watch { branch, tree, every, table, inbox, owners, pid, once } => {
+        let every = Duration::from_secs(every * 60);
+        watch::Watch { branch, tree, every, table, inbox, owners, pid, once }.run(root)
+      }
+      Self::CleanCaches { scratch, uv } => caches::clean(root, scratch, uv.as_deref()),
+      Self::Paths => paths::check(),
+      Self::Tree { verb } => tree::run(root, verb),
+      Self::Links { fix } => links::check(root, fix),
+      Self::BenchLoop(bench) => bench.run(root),
+      Self::Memwatch { once } => memwatch::watch(once),
+      Self::ProveCrate { folder } => prove::crates(root, folder),
+      Self::Opens(opens) => opens.run(root),
+      Self::Catalog => catalog::refresh(root),
+      Self::Budget { part, command } => budget::check(root, &part, &command),
+      Self::JobBudgets { runs } => jobs::set(root, runs),
+      Self::Unused { tests } => unused::check(root, tests),
+      Self::Promise { page } => promise::check(root, &root.join(page)),
+      Self::Targets => targets::lint(root),
+      Self::CommentWidth { base, files } => width::check(root, base.as_deref(), &files),
+      Self::Deepswe { places, verb } => Ok(deepswe::run(root, places, verb)?),
+      Self::Smoke { to } => Ok(lives::smoke(root, to)?),
+      Self::Play { to } => Ok(lives::play(root, to)?),
+      Self::Compaction { record, chain, dry } => Ok(lives::compaction(root, &record, &chain, dry)?),
+      Self::Inert { record } => inert(root, &record),
+      Self::Search { words } => {
+        search(command, &words);
+        Ok(ExitCode::SUCCESS)
+      }
+      Self::Frames { words } => spawn(
+        root,
+        "cargo",
+        &[&["run", "--quiet", "-p", "furb-frames", "--"], &strs(&words)[..]].concat(),
+      ),
     }
-    Task::CleanCaches { scratch, uv } => caches::clean(&root, scratch, uv.as_deref()),
-    Task::Paths => paths::check(),
-    Task::Tree { verb } => tree::run(&root, verb),
-    Task::Links { fix } => links::check(&root, fix),
-    Task::BenchLoop(bench) => bench.run(&root),
-    Task::Memwatch { once } => memwatch::watch(once),
-    Task::ProveCrate { folder } => prove::crates(&root, folder),
-    Task::Opens(opens) => opens.run(&root),
-    Task::Catalog => catalog::refresh(&root),
-    Task::Budget { part, command } => budget::check(&root, &part, &command),
-    Task::JobBudgets { runs } => jobs::set(&root, runs),
-    Task::Unused { tests } => unused::check(&root, tests),
-    Task::Promise { page } => promise::check(&root, &root.join(page)),
-    Task::CommentWidth { base, files } => width::check(&root, base.as_deref(), &files),
-    Task::Deepswe { places, verb } => Ok(deepswe::run(&root, places, verb)?),
-    Task::Smoke { to } => Ok(lives::smoke(&root, to)?),
-    Task::Play { to } => Ok(lives::play(&root, to)?),
-    Task::Compaction { record, chain, dry } => Ok(lives::compaction(&root, &record, &chain, dry)?),
-    Task::Inert { record } => inert(&root, &record),
-    Task::Search { words } => {
-      search(&command, &words);
-      Ok(ExitCode::SUCCESS)
-    }
-    Task::Frames { words } => spawn(
-      &root,
-      "cargo",
-      &[&["run", "--quiet", "-p", "furb-frames", "--"], &strs(&words)[..]].concat(),
-    ),
   }
 }
 
