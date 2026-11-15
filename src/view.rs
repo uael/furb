@@ -21,8 +21,8 @@ pub use furb_wire::{
   Concern, Context, Desk, Exchange, Kind, LITERAL, Line, Made, Maker, Mark, NoteRun, Origin,
   Output, Page, Part, Pause, Phase, Portion, ROLLS, Reach, Read, Reply, Retrying, RunState, Rung,
   SHOWN, Said, Saying, Sent, Shown, Skill, Spend, Standing, State, Thought, ThreadNode, Threads,
-  Tick, WATCH, Work, age, chain_state, elapsed, grouped, homed, lines, operator, percent, restate,
-  share, since, size, timer, tokens, working, wrote,
+  Tick, WATCH, Work, age, chain_state, elapsed, grouped, homed, lines, operator, percent, reason,
+  restate, share, since, size, timer, tokens, working, wrote,
 };
 pub use held::Held;
 #[cfg(test)]

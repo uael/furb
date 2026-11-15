@@ -449,6 +449,23 @@ fn a_word_of_python_shows_in_its_thread_as_his_code_and_a_line_that_raised_says_
 }
 
 #[test]
+fn a_message_takes_the_place_of_the_hints_of_the_word_that_ran_before_it() {
+  let (app, _daemon, _sessions) = started();
+  sent(&app, &format!("how long does an open take {ANSWERS}"));
+  shows(&app, "Resolved 1");
+  // A word for a new thread runs on the root of the session, so only the hint row says it.
+  app.press("ctrl+n");
+  clicked(&app, " Python ", 0, 1);
+  sent(&app, "raise ValueError('no')");
+  let hint = |frame: &str| frame.lines().last().is_some_and(|one| one.contains("ValueError"));
+  assert!(app.wait_until(PATIENCE, || hint(&app.text())), "{}", app.text());
+  clicked(&app, " Message ", 0, 1);
+  sent(&app, "and now a message");
+  shows(&app, "and now a message");
+  assert!(app.wait_until(PATIENCE, || !hint(&app.text())), "{}", app.text());
+}
+
+#[test]
 fn the_picker_of_the_sessions_filters_and_picks_the_session_that_the_input_sends_to() {
   let (app, _daemon, _sessions) = started();
   sent(&app, &format!("where does the time go {WORKS}"));

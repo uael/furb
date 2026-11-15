@@ -293,6 +293,12 @@ impl Pause {
   }
 }
 
+/// Why a word failed, as a person reads it: a refusal of furb says its reason alone, with no name
+/// of its class.
+pub fn reason(why: &str) -> &str {
+  why.strip_prefix("Refused: ").unwrap_or(why)
+}
+
 /// The class and the arguments of a value that is a fault, as the engine gives one.
 pub fn fault(value: &Value) -> Option<(&str, &[Value])> {
   Some((value.get("is")?.as_str()?, value.get("args")?.as_array()?.as_slice()))

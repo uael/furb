@@ -4,7 +4,7 @@
 
 use std::{mem, ops::Range, path::Path};
 
-use furb::view::{Act, Maker, RunState, Standing, operator, timer};
+use furb::view::{Act, Maker, RunState, Standing, operator, reason, timer};
 use furb_host::protocol::{Answer, Card, Model as Offered, Verb};
 use opentui::style::{Color, Span, Style};
 use serde_json::Value;
@@ -290,6 +290,8 @@ impl Model {
       self.word = Some(Word { at, life, text, rung: act, asked: false, ran: None });
       return;
     }
+    // A message makes the hints of the last word that ran go, so they never cover its work.
+    self.word = None;
     let thread = sent.thread.clone().filter(|one| !one.is_empty()).unwrap_or_else(|| act.clone());
     for next in self.client.outgoing.iter_mut().filter(|one| one.life == sent.life) {
       if next.thread.as_deref() == Some("") {
@@ -907,6 +909,7 @@ impl Model {
       Some(RunState::Running | RunState::Done) => (vec![run("  ✓ ", muted)], None),
       Some(RunState::Cancelled(_)) => (vec![run("  ✗ Cancelled · ", muted)], None),
       Some(RunState::Failed(why)) => {
+        let why = reason(why);
         (vec![run(format!("  ✗ {why}"), Style::new().fg(t.danger)), run(" · ", muted)], None)
       }
     };

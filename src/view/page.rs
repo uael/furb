@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use furb_wire::{
-  act::{Act, Kind, Maker, Phase, RunState, fault, operator},
+  act::{Act, Kind, Maker, Phase, RunState, fault, operator, reason},
   card::{Card, Standing},
   page::{
     Agent, Answered, Block, Context, Exchange, LITERAL, Line, Made, Mark, Output, Page, Reach,
@@ -650,13 +650,12 @@ impl<'a> Reader<'a> {
   }
 }
 
-/// Why a word failed, as a person reads it at the line that raised: a refusal of furb says its
-/// reason alone, with no name of its class, and with no name of the act that the line made, which
-/// the line shows as code.
+/// Why a word failed, as a person reads it at the line that raised: its reason, with no name of
+/// the act that the line made, which the line shows as code.
 fn readable(why: &str, made: &[(&Act, Option<usize>)]) -> String {
-  let reason = why.strip_prefix("Refused: ").unwrap_or(why);
-  let named = made.iter().find_map(|(act, _)| reason.strip_prefix(&format!("{} ", act.id)));
-  named.unwrap_or(reason).to_owned()
+  let why = reason(why);
+  let named = made.iter().find_map(|(act, _)| why.strip_prefix(&format!("{} ", act.id)));
+  named.unwrap_or(why).to_owned()
 }
 
 /// The text of a word of an act, or nothing.
