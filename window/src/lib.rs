@@ -73,10 +73,12 @@ impl Options {
   /// and on the clock of this machine.
   pub fn here() -> Result<Self, Error> {
     let folder = env::current_dir().map_err(Error::Folder)?;
+    // The daemon names a record by its path with no link, so a new record of the folder takes it.
+    let folder = dunce::canonicalize(&folder).unwrap_or(folder);
     let kept = world::cache().ok_or(Error::NoCache)?.join("window").join("cards.json");
     let clock = || SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs());
     let (zone, system) = (TimeZone::system(), System::here());
-    // The folder of a process holds no link, so the home that a path of it shows as `~` holds none.
+    // The home holds no link either, so a path of the folder shows its home as `~`.
     let home = env::home_dir().map(|home| dunce::canonicalize(&home).unwrap_or(home));
     Ok(Self { folder, home, kept, zone, clock, system })
   }

@@ -39,15 +39,18 @@ pub(crate) fn recorded(config: &Path) -> Vec<Sessions> {
 }
 
 /// The one name of a record: its path with no link in it, as the system resolves it, so that each
-/// path of one record, as `/var` and `/private/var` on macOS, gives one key. A record that the disk
-/// does not hold yet takes the resolved path of its folder. A relative path, or one whose folder is
-/// not there, stays as it is given.
+/// path of one record, as `/var` and `/private/var` on macOS or a short name on Windows, gives one
+/// key. The part of the path that the disk does not hold yet, as the folder of the sessions of a
+/// new project and the record in it, joins the resolved part that it holds, so the key of a record
+/// stays the same once the daemon made it. A relative path stays as it is given.
 pub(crate) fn key(life: &str) -> String {
   let path = Path::new(life);
   let real = || {
-    let whole = dunce::canonicalize(path);
-    let folder = || Some(dunce::canonicalize(path.parent()?).ok()?.join(path.file_name()?));
-    whole.ok().or_else(folder)
+    let (held, real) =
+      path.ancestors().find_map(|one| Some((one, dunce::canonicalize(one).ok()?)))?;
+    let rest = path.strip_prefix(held).ok()?;
+    // A join of an empty rest would end the key with a separator.
+    Some(if rest.as_os_str().is_empty() { real } else { real.join(rest) })
   };
   let real = if path.is_absolute() { real() } else { None };
   real.map_or_else(|| life.to_owned(), |one| one.display().to_string())

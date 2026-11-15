@@ -47,11 +47,16 @@ impl Yard {
 }
 
 /// The temporary directory with no link in it, as a process that starts there reads its folder and
-/// as the daemon names a record: on macOS it stands under `/var`, a link to `/private/var`. Windows
-/// keeps it as it is, since its resolved path takes a prefix that no folder of a process has.
+/// as the daemon names a record: on macOS it stands under `/var`, a link to `/private/var`, and
+/// on a runner of Windows under a short name of the user, as `RUNNER~1`.
 fn temp() -> PathBuf {
   let temp = env::temp_dir();
-  if cfg!(unix) { fs::canonicalize(&temp).unwrap_or(temp) } else { temp }
+  let Ok(real) = fs::canonicalize(&temp) else { return temp };
+  // Windows gives a resolved path the prefix `\\?\`, which no folder of a process has.
+  match real.to_str().and_then(|one| one.strip_prefix(r"\\?\")) {
+    Some(plain) => PathBuf::from(plain),
+    None => real,
+  }
 }
 
 impl Deref for Yard {

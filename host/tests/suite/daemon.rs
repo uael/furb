@@ -2381,6 +2381,33 @@ async fn a_record_that_a_link_names_has_one_key_in_the_daemon() {
   assert_eq!(seen_by(&mut window, &life, "chain1").await.len(), 1);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn a_new_record_that_a_link_names_keeps_one_key_once_the_daemon_made_its_folder() {
+  use std::os::unix::fs::symlink;
+  let at = place();
+  let (main, _) = project(&at);
+  let link = at.join("link");
+  symlink(&main, &link).unwrap();
+  // No folder holds the sessions of the project yet when the window names a new record through the
+  // link, and the daemon makes it at the open.
+  let fresh = link.join("fresh").join("sessions");
+  let (local, _daemon) = started(&at, GRACE).await;
+  let mut window = Window::dialed(&local).await;
+  cards(&mut window).await;
+  let life = held(&mut window, &fresh, "one.jsonl").await;
+  messaged(&mut window, &life, "ground the branch").await;
+  card(&mut window, |card| card.thread.standing == Standing::Resolved).await;
+  let real = Path::new(&main).join("fresh").join("sessions").join("one.jsonl");
+  let lives: Vec<String> = window.listed().await.into_iter().map(|one| one.life).collect();
+  assert_eq!(lives, vec![real.display().to_string()]);
+  // The record stands now, and each of its names reaches the one life.
+  for name in [&life, &real.display().to_string()] {
+    let seen = Verb::Seen { life: name.clone(), about: "chain1".to_owned() };
+    assert_eq!(window.ask(seen).await, Ok(Answer::Done));
+  }
+}
+
 /// The opening of the lives of a test whose model asks the operator at each prompt, so a thread
 /// waits for him, and closes its prompt once he answers.
 fn asking(at: &Path) -> Opening {
