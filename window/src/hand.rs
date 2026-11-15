@@ -62,9 +62,9 @@ const MOVES: Duration = Duration::from_millis(40);
 /// How often the window reads the clock for the age of each card.
 const AGES: Duration = Duration::from_secs(20);
 
-/// How many loaders move at once at most: the line that runs, the agents of the dock, and the
-/// row of hints.
-const LOADERS: usize = 8;
+/// How many loaders move at once at most: the line that runs and its light, the thought, the mark
+/// and the word of each agent of the dock, and the row of hints.
+const LOADERS: usize = 16;
 
 /// How many rows one step of the wheel moves the list, the feed or a diff.
 const WHEEL: u8 = 3;

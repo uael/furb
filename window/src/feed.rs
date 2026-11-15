@@ -951,11 +951,13 @@ impl Feed<'_> {
   }
 }
 
-/// The row of an agent whose state stands at a column: its mark moves there, and under the pointer
-/// its text goes bright while its state keeps the color that says it.
+/// The row of an agent whose state stands at a column: its mark moves there, and the light passes
+/// over the word after it while it works, as over each word of work; under the pointer its text
+/// goes bright while its state keeps the color that says it.
 fn titled(row: Row, x: usize, right: &Line, mark: Option<Loader>) -> Row {
   let keeps = x..x + width(&right[..1]);
-  Row { keeps: Some(keeps), loaders: mark.map(|one| (x, one)).into_iter().collect(), ..row }
+  let loaders = mark.map(|one| [(x, one), (x + 2, Loader::Light(WORKS))]).into_iter().flatten();
+  Row { keeps: Some(keeps), loaders: loaders.collect(), ..row }
 }
 
 /// A row of prose from the column of the text.
