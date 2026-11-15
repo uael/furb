@@ -1,11 +1,17 @@
 //! The tests of the limit of time of a part, each on a machine that the test gives.
 
-use std::{fs, path::Path, process::id, time::SystemTime};
+use std::fs;
+#[cfg(unix)]
+use std::{path::Path, process::id, time::SystemTime};
 
+#[cfg(unix)]
 use super::{Machine, Verdict};
-use crate::{root, yard::Yard};
+use crate::root;
+#[cfg(unix)]
+use crate::yard::Yard;
 
 /// A machine of this load whose table of limits holds these lines.
+#[cfg(unix)]
 fn machine(yard: &Path, limits: &str, load: f64) -> Machine {
   fs::write(yard.join("budgets.toml"), format!("[local]\n{limits}")).unwrap();
   Machine {
@@ -18,11 +24,13 @@ fn machine(yard: &Path, limits: &str, load: f64) -> Machine {
   }
 }
 
+#[cfg(unix)]
 fn sh(script: &str) -> Vec<String> {
   ["sh", "-c", script].map(str::to_owned).into()
 }
 
 /// A command that uses 1.2 s of CPU, just over the limit of 1 s of the tests.
+#[cfg(unix)]
 fn busy() -> Vec<String> {
   [
     "python3",
@@ -33,6 +41,7 @@ fn busy() -> Vec<String> {
   .into()
 }
 
+#[cfg(unix)]
 fn ran(machine: &Machine, part: &str, command: &[String]) -> (u8, String) {
   let Verdict { code, said } = machine.run(part, command).unwrap();
   (code, said.join("\n"))

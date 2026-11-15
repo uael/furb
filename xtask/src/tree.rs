@@ -269,9 +269,9 @@ fn clone(from: &Path, to: &Path) -> io::Result<()> {
     return Ok(());
   }
   if to.is_dir() {
-    fs::remove_dir_all(to)?
+    fs::remove_dir_all(to)?;
   } else if to.exists() {
-    fs::remove_file(to)?
+    fs::remove_file(to)?;
   }
   Err(io::Error::other("cp --reflink=always refused"))
 }

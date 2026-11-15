@@ -946,6 +946,7 @@ fn spoke(command: &mut Command) -> Result<String, Fault> {
 }
 
 /// A command in a process group of its own, so its end ends each process that it started.
+#[cfg_attr(not(unix), expect(unused_variables, reason = "Windows has no process group"))]
 fn grouped(command: &mut Command) {
   #[cfg(unix)]
   {
