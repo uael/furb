@@ -358,6 +358,8 @@ fn a_refused_message_comes_back_to_the_input_with_why() {
   // test of a refused open proves that a draft stays after the text that comes back.
   let frame = shows(&app, "  Refused: ");
   assert!(frame.contains("┃ how long does an open take"), "{frame}");
+  // The launcher names the model of a new session once the machine gave its models.
+  shows(&app, "opus  high");
   screen("input-refused", &app);
   assert!(!frame.contains("Reply to this thread"), "{frame}");
 }

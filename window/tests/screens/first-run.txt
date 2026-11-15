@@ -14,9 +14,9 @@
 
 
 
-
   Write below to start a thread.
-  It runs in a new session of furb-try on this computer.
+  It runs in a new session of furb-try on this computer,
+  with opus at high effort.
 
   ⌃O          go to a project or a session
   ⌃P          commands
@@ -25,6 +25,6 @@
 ┃
 ┃ Ask for a change, a review or an answer
 ┃
-┃  Message  Python    This computer ▾   FT furb-try ▾
+┃  Message  Python    This computer ▾   FT ▾   opus  high
 ┃
   ~/src/furb-try                                ⌃P commands

@@ -161,6 +161,8 @@ fn the_first_run_says_what_the_window_is_for() {
   assert!(!app.text().contains("No thread yet"), "{}", app.text());
   daemon.served();
   shows(&app, "No thread yet in this project.");
+  // The launcher names the model of a new session once the machine gave its models.
+  shows(&app, "opus  high");
   screen("first-run", &app);
 }
 

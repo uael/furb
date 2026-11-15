@@ -14,9 +14,9 @@
 
 
 
-
   Write below to start a thread.
-  It runs in a new session of broken on this computer.
+  It runs in a new session of broken on this computer, with
+  opus at high effort.
 
   ⌃O          go to a project or a session
   ⌃P          commands
@@ -25,6 +25,6 @@
 ┃
 ┃ how long does an open take
 ┃
-┃  Message  Python    This computer ▾   BR broken ▾
+┃  Message  Python    This computer ▾   BR ▾   opus  high
 ┃
   Refused: Could not use…                       ⌃P commands

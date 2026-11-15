@@ -24,20 +24,14 @@ pub(crate) fn screen(name: &str, app: &TestApp) {
     fs::write(Path::new(&folder).join(name).with_extension("json"), cells(&app.render())).unwrap();
   }
   let capture = Path::new("tests/screens").join(name).with_extension("txt");
-  let frame = app.text().trim_end().to_owned() + "\n";
+  // A capture holds the frame where the window settles, drawn and compared the same way: a frame
+  // that only passes by, before an answer that the test does not wait for, never matches it.
+  let frame = still(app);
   if env::var_os("FURB_DRAW").is_some() {
-    fs::write(&capture, still(app)).unwrap();
+    fs::write(&capture, frame).unwrap();
     return;
   }
   let kept = fs::read_to_string(&capture).unwrap_or_default();
-  // A frame of the daemon that the test does not wait for, as the models of a machine, may come
-  // after the frame that the test read: the capture holds the frame where the window settles.
-  let settled = |frame: &mut String| {
-    *frame = app.text().trim_end().to_owned() + "\n";
-    *frame == kept
-  };
-  let mut frame = frame;
-  app.wait_until(PATIENCE, || settled(&mut frame));
   let how = "`FURB_DRAW=1 cargo test -p furb-window` draws it again";
   assert_eq!(frame, kept, "the frame is not the capture {}: {how}", capture.display());
 }
